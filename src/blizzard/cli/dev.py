@@ -12,7 +12,8 @@ from pathlib import Path
 import click
 
 from blizzard.hub.config import ConfigError, HubConfig
-from blizzard.runner.config import RunnerConfig
+from blizzard.runner.config_table import ConfigError as RunnerConfigError
+from blizzard.runner.host_config import HostConfig
 from blizzard.tools.invariants import Invariants
 
 
@@ -22,7 +23,7 @@ def dev() -> None:
 
 
 @dev.command("check-invariants")
-@click.option("--runner-dir", "runner_dir", default=None, help="Runner runtime directory to check.")
+@click.option("--runner-dir", "runner_dir", default=None, help="Host directory whose runner store to check.")
 @click.option("--hub-dir", "hub_dir", default=None, help="Hub runtime directory to check.")
 @click.option(
     "--allow-external-db",
@@ -34,13 +35,16 @@ def dev() -> None:
 def check_invariants_cmd(runner_dir: str | None, hub_dir: str | None, allow_external_db: bool) -> None:
     """Assert both stores' durable invariants (``bzh:invariant-checker``).
 
-    Point at a runner runtime (``--runner-dir``), a hub runtime (``--hub-dir``), or both.
+    Point at a host directory (``--runner-dir``), a hub runtime (``--hub-dir``), or both.
     Exit 0 when every invariant holds; exit 1 listing each violation's slug and detail.
     """
     if runner_dir is None and hub_dir is None:
         raise click.UsageError("pass --runner-dir and/or --hub-dir")
 
-    runner_db = RunnerConfig.load(Path(runner_dir)).db_url if runner_dir is not None else None
+    try:
+        runner_db = HostConfig.load_for_store(Path(runner_dir)).db_url if runner_dir is not None else None
+    except RunnerConfigError as exc:
+        raise click.ClickException(str(exc)) from exc
     try:
         hub_config = HubConfig.load(Path(hub_dir), allow_external_db=allow_external_db) if hub_dir is not None else None
     except ConfigError as exc:

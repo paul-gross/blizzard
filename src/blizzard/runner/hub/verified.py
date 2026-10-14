@@ -1,6 +1,6 @@
 """The hub client a runner drives its leases through, gated on its identity verdict.
 
-Until the runner has verified that its token resolves to the runner its store belongs to, every call
+Until the runner has verified that its token resolves to the configured runner, every call
 answers :class:`~blizzard.runner.hub.client.HubClientError`, so each step takes the path it already
 takes while the hub is unreachable: an unverified runner does only what it does during an outage."""
 
@@ -10,6 +10,7 @@ from collections.abc import Iterable, Sequence
 
 from blizzard.runner.harness.capability_snapshot import HarnessCapability
 from blizzard.runner.hub.client import (
+    BindingDeclaration,
     ClaimRequest,
     FactPushAck,
     HubClientError,
@@ -31,7 +32,7 @@ from blizzard.wire.chunk import HubAdvanceResponse
 
 
 class IdentityNotVerified(HubClientError):
-    """A hub call refused locally: the runner has not verified its token names its store's runner."""
+    """A hub call refused locally: the runner has not verified its token names the configured runner."""
 
 
 class VerifiedHubClient:
@@ -89,6 +90,8 @@ class VerifiedHubClient:
         subscriptions: tuple[SubscriptionDeclaration, ...] = (),
         gates: tuple[str, ...] = (),
         projects: tuple[str, ...] | None = None,
+        bindings: tuple[BindingDeclaration, ...] | None = None,
+        subscription: str | None = None,
     ) -> RegistrationReply:
         hub = self._inner if self._verdict.registration_checks() else self._verified()
         return hub.register_runner(
@@ -101,6 +104,8 @@ class VerifiedHubClient:
             subscriptions=subscriptions,
             gates=gates,
             projects=projects,
+            bindings=bindings,
+            subscription=subscription,
         )
 
     def fetch_runner_paused(self, runner_id: str) -> bool:

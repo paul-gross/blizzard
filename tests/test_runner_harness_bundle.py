@@ -13,7 +13,7 @@ import pytest
 from click.testing import CliRunner
 
 from blizzard.runner.cli import runner as runner_group
-from blizzard.runner.config import CONFIG_FILENAME, ConfigError, RunnerConfig
+from blizzard.runner.config import ConfigError
 from blizzard.runner.harness.autonomy import Autonomy
 from blizzard.runner.harness.bundle import CompanionEscapes, HarnessBundleError, companion_path
 from blizzard.runner.harness.claude_code.section import ClaudeCodeSection
@@ -22,7 +22,10 @@ from blizzard.runner.harness.internal.bundle_publisher import published_snapshot
 from blizzard.runner.harness.opencode.bundle import check_ambient_plugins, plugin_identity
 from blizzard.runner.harness.opencode.section import OpenCodeSection
 from blizzard.runner.harness.wiring import publish_harness_bundle
+from blizzard.runner.host_config import HostConfig
+from blizzard.runner.host_layout import HOST_CONFIG_FILENAME
 from tests.harness_sections import sections
+from tests.host_files import load_runner_config
 from tests.runner_init_fakes import FakeInitHub, init_runner
 
 pytestmark = pytest.mark.component
@@ -194,8 +197,10 @@ def _runtime(tmp_path: Path, config_dir: Path | str | None = None, hub: FakeInit
     runtime = tmp_path / "runner"
     assert init_runner(hub).invoke(runner_group, ["init", str(runtime)]).exit_code == 0
     if config_dir is not None:
-        path = runtime / CONFIG_FILENAME
-        path.write_text(path.read_text().replace("[harness]\n", f'[harness]\nconfig_dir = "{config_dir}"\n', 1))
+        path = runtime / HOST_CONFIG_FILENAME
+        path.write_text(
+            path.read_text().replace("[runner.harness]\n", f'[runner.harness]\nconfig_dir = "{config_dir}"\n', 1)
+        )
     return runtime
 
 
@@ -212,51 +217,53 @@ def _fingerprint(root: Path) -> dict[str, tuple[str, int, int]]:
 
 
 def test_config_dir_absent_is_none(tmp_path: Path) -> None:
-    assert RunnerConfig.load(_runtime(tmp_path)).harness_config_dir is None
+    assert load_runner_config(_runtime(tmp_path)).harness_config_dir is None
 
 
 def test_config_dir_expands_tilde(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("HOME", str(tmp_path))
-    config = RunnerConfig.load(_runtime(tmp_path, "~/harness"))
+    config = load_runner_config(_runtime(tmp_path, "~/harness"))
     assert config.harness_config_dir == tmp_path / "harness"
 
 
 def test_relative_config_dir_names_key_and_toml(tmp_path: Path) -> None:
     runtime = _runtime(tmp_path, "rel/dir")
-    with pytest.raises(ConfigError, match=r"\[harness\] config_dir.*rel/dir.*blizzard-runner\.toml"):
-        RunnerConfig.load(runtime)
+    with pytest.raises(ConfigError, match=r"\[harness\] config_dir.*rel/dir.*blizzard-host\.toml"):
+        load_runner_config(runtime)
 
 
 @pytest.mark.unit
 @pytest.mark.parametrize("value", ['""', "5"])
 def test_an_empty_or_non_string_config_dir_is_not_a_path_string(tmp_path: Path, value: str) -> None:
     runtime = _runtime(tmp_path)
-    path = runtime / CONFIG_FILENAME
-    path.write_text(path.read_text().replace("[harness]\n", f"[harness]\nconfig_dir = {value}\n", 1))
+    path = runtime / HOST_CONFIG_FILENAME
+    path.write_text(path.read_text().replace("[runner.harness]\n", f"[runner.harness]\nconfig_dir = {value}\n", 1))
     with pytest.raises(ConfigError, match="config_dir must be a non-empty path string"):
-        RunnerConfig.load(runtime)
+        load_runner_config(runtime)
 
 
 def test_config_dir_inside_effective_root_is_rejected(tmp_path: Path) -> None:
     runtime = _runtime(tmp_path)
     inside = runtime.resolve() / "harness-config" / "snapshots"
-    path = runtime / CONFIG_FILENAME
-    path.write_text(path.read_text().replace("[harness]\n", f'[harness]\nconfig_dir = "{inside}"\n', 1))
+    path = runtime / HOST_CONFIG_FILENAME
+    path.write_text(path.read_text().replace("[runner.harness]\n", f'[runner.harness]\nconfig_dir = "{inside}"\n', 1))
     with pytest.raises(ConfigError, match="inside it"):
-        RunnerConfig.load(runtime)
+        load_runner_config(runtime)
 
 
 def test_scaffold_round_trip_has_no_bundle(tmp_path: Path) -> None:
     runtime = _runtime(tmp_path)
-    assert "# config_dir =" in (runtime / CONFIG_FILENAME).read_text()
-    config = RunnerConfig.load(runtime)
+    assert "config_dir" not in (runtime / HOST_CONFIG_FILENAME).read_text()
+    config = load_runner_config(runtime)
     assert config.harness_config_dir is None
-    assert RunnerConfig.load(runtime).to_toml() == config.to_toml()
+    written = HostConfig.load(runtime).to_toml()
+    (runtime / HOST_CONFIG_FILENAME).write_text(written)
+    assert HostConfig.load(runtime).to_toml() == written
 
 
 def test_to_toml_writes_a_set_config_dir(tmp_path: Path) -> None:
-    config = RunnerConfig.load(_runtime(tmp_path, tmp_path / "b"))
-    assert f'config_dir = "{tmp_path / "b"}"' in config.to_toml()
+    runtime = _runtime(tmp_path, tmp_path / "b")
+    assert f'config_dir = "{tmp_path / "b"}"' in HostConfig.load(runtime).to_toml()
 
 
 # --------------------------------------------------------------------------- #
@@ -470,6 +477,19 @@ def test_host_publishes_before_building_the_process(tmp_path: Path, monkeypatch:
     assert isinstance(result.exception, RuntimeError)
     assert seen[0] is not None
     assert "harness config bundle" in result.output
+
+
+def test_a_tick_refused_over_a_foreign_store_publishes_no_bundle(tmp_path: Path, fake_init_hub: FakeInitHub) -> None:
+    bundle = _bundle(tmp_path)
+    runtime = _runtime(tmp_path, bundle, fake_init_hub)
+    path = runtime / HOST_CONFIG_FILENAME
+    path.write_text(path.read_text().replace('id = "rn_init1"', 'id = "rn_other"'))
+
+    result = init_runner(fake_init_hub).invoke(runner_group, ["tick", "--dir", str(runtime)])
+
+    assert result.exit_code != 0
+    assert "the store belongs to runner rn_init1" in result.output
+    assert published_snapshot(runtime) is None
 
 
 def test_no_config_dir_creates_no_effective_directory(tmp_path: Path) -> None:

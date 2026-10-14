@@ -27,6 +27,7 @@ from blizzard.runner.loop.tick import tick
 from blizzard.runner.node_steps.chunk_state import ChunkState
 from tests import support
 from tests.runner_fakes import (
+    FIXTURE_RUNNER_ID,
     FakeHarness,
     FakeHub,
     FakeProbe,
@@ -104,7 +105,7 @@ def _run(tmp_path: Path, n: int, seed: Callable[[SqlAlchemyRunnerStore, FakeHub,
         harness=FakeHarness(handle=handle, verdict="pass"),
         probe=FakeProbe(alive={(2000 + i, f"p{i}") for i in range(n)}),
         clock=FixedClock(_NOW),
-        config=LoopConfig(runner_name="r1", workspace_id="ws1", max_agents=n),
+        config=LoopConfig(runner_name="r1", workspace_id="ws1", runner_id=FIXTURE_RUNNER_ID, max_agents=n),
     )
     return _Run(lambda: tick(ctx), engine, hub)
 

@@ -23,7 +23,7 @@ from blizzard.runner import runtime as runner_runtime
 from blizzard.runner.store import MIGRATIONS_DIR as RUNNER_MIGRATIONS_DIR
 from blizzard.runner.store import schema as runner_schema
 from tests.conftest import Daemon
-from tests.support import MIGRATION_CLOCK, migrate_to, seed_chunk, seed_graph
+from tests.support import MIGRATION_CLOCK, migrate_to, seed_chunk, seed_graph, upgrade_runner_store_as_registered
 
 pytestmark = pytest.mark.unit
 
@@ -973,7 +973,7 @@ def test_usage_facts_reported_cost_backfills_every_historical_row_from_its_cost(
     finally:
         engine.dispose()
 
-    runner.upgrade("head")
+    upgrade_runner_store_as_registered(runner, config.db_url)
     assert _rows() == [(2.00, 2.00), (None, None)]
 
 
@@ -1616,8 +1616,11 @@ def test_frozen_table_lacks_a_later_revisions_columns(
             assert column not in after
 
 
-def _spawn_cwd_round_trip(config, runner, parent: str, row: dict[str, object]) -> list[object]:  # type: ignore[no-untyped-def]
-    """Downgrade to ``parent``, seed one segment row there, upgrade — the column's value on that row."""
+def _spawn_cwd_round_trip(  # type: ignore[no-untyped-def]
+    config, runner, parent: str, row: dict[str, object], *, registered: bool = False
+) -> list[object]:
+    """Downgrade to ``parent``, seed one segment row there, upgrade — the column's value on that row. A runner store
+    upgrades with a runner registered (``registered``)."""
     runner.downgrade(parent)
     engine = create_engine_from_url(config.db_url)
     try:
@@ -1628,7 +1631,10 @@ def _spawn_cwd_round_trip(config, runner, parent: str, row: dict[str, object]) -
             conn.execute(sa.text(f"INSERT INTO transcript_segments ({columns}) VALUES ({params})"), row)
     finally:
         engine.dispose()
-    runner.upgrade("head")
+    if registered:
+        upgrade_runner_store_as_registered(runner, config.db_url)
+    else:
+        runner.upgrade("head")
     engine = create_engine_from_url(config.db_url)
     try:
         with engine.connect() as conn:
@@ -1655,7 +1661,11 @@ def test_runner_transcript_segments_spawn_cwd_leaves_a_preexisting_row_null(tmp_
     }
 
     values = _spawn_cwd_round_trip(
-        config, runner_runtime.migration_runner(config), "20261002_1300_runner_lease_tokens_token_hash_index", row
+        config,
+        runner_runtime.migration_runner(config),
+        "20261002_1300_runner_lease_tokens_token_hash_index",
+        row,
+        registered=True,
     )
 
     assert values == [None]

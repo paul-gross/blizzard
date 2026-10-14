@@ -65,8 +65,53 @@ def test_add_posts_the_name_and_prints_the_id_and_the_token_once(monkeypatch: py
     assert calls[0]["url"] == f"{_HUB_URL}/api/runners"
     assert calls[0]["json"] == {"name": "r-claude"}
     assert f"added runner {_ADDED['runner_id']} (r-claude) — never connected" in result.output
-    assert "BZ_HUB_TOKEN=sekrit-token" in result.output.splitlines()
+    assert "BZ_HUB_TOKEN_R_CLAUDE=sekrit-token" in result.output.splitlines()
     assert result.output.count("sekrit-token") == 1
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("name", "variable"),
+    [("r-chatgpt", "BZ_HUB_TOKEN_R_CHATGPT"), ("Mixed.Case 9", "BZ_HUB_TOKEN_MIXED_CASE_9")],
+)
+def test_add_prints_the_variable_its_runners_name_derives(
+    monkeypatch: pytest.MonkeyPatch, name: str, variable: str
+) -> None:
+    _stub(monkeypatch, "post", _respond(201, {**_ADDED, "runner_name": name}))
+
+    result = CliRunner().invoke(hub_group, ["runner", "add", name], env=_ENV)
+
+    assert f"{variable}=sekrit-token" in result.output.splitlines()
+
+
+@pytest.mark.unit
+def test_enroll_prints_the_variable_of_the_name_the_registry_entry_holds(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The enrollment answers no name, so the line's variable comes from the registry entry the verb reads beside it."""
+    runner_id = str(_ADDED["runner_id"])
+    posted = _stub(monkeypatch, "post", _respond(201, {"runner_id": runner_id, "token": "rotated"}))
+    read = _stub(monkeypatch, "get", _respond(200, _row(runner_id, "r-chatgpt")))
+
+    result = CliRunner().invoke(hub_group, ["runner", "enroll", runner_id], env=_ENV)
+
+    assert result.exit_code == 0, result.output
+    assert posted[0]["url"] == f"{_HUB_URL}/api/runners/{runner_id}/enrollments"
+    assert read[0]["url"] == f"{_HUB_URL}/api/runners/{runner_id}"
+    assert "BZ_HUB_TOKEN_R_CHATGPT=rotated" in result.output.splitlines()
+    assert "BZ_HUB_TOKEN=rotated" not in result.output.splitlines()
+
+
+@pytest.mark.unit
+def test_enroll_rotates_nothing_when_the_registry_entry_cannot_be_read(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The name is read before the token is rotated, so a token is never minted that no line shows."""
+    runner_id = str(_ADDED["runner_id"])
+    posted = _stub(monkeypatch, "post", _respond(201, {"runner_id": runner_id, "token": "rotated"}))
+    _stub(monkeypatch, "get", _respond(503, {"detail": "unavailable"}))
+
+    result = CliRunner().invoke(hub_group, ["runner", "enroll", runner_id], env=_ENV)
+
+    assert result.exit_code != 0
+    assert posted == []
+    assert "rotated" not in result.output
 
 
 @pytest.mark.unit

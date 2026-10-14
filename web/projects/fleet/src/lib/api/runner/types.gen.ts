@@ -1823,11 +1823,11 @@ export type HubConnectivityView = {
 /**
  * IdentityVerdictView
  *
- * Whether the runner's token resolves to the runner its store belongs to.
+ * Whether the runner's token resolves to the runner its host file configures (``store_runner_id``).
  *
  * ``unchecked`` until the hub first answers the check, ``matched`` while it does, ``mismatched``
  * while the token names another runner — the runner then drives no lease until the right token
- * returns or the store is cleared with ``reset_command``.
+ * returns. ``reset_command`` names how to restore it: the token variable and the configured id.
  */
 export type IdentityVerdictView = {
     /**
@@ -5077,7 +5077,7 @@ export type PatchRunnerApiRunnerPatchErrors = {
      */
     422: HttpValidationError;
     /**
-     * The runner has not registered yet, so its store is bound to no runner.
+     * The runner's store is bound to no runner id.
      */
     503: unknown;
 };
@@ -5106,7 +5106,7 @@ export type StartSelftestApiSelftestsPostErrors = {
      */
     422: HttpValidationError;
     /**
-     * The requested harness is known but unavailable, or the runner has not registered yet, so its store is bound to no runner to record the result for.
+     * The requested harness is known but unavailable, or the runner's store is bound to no runner id to record the result for.
      */
     503: unknown;
 };

@@ -13,11 +13,7 @@ from typing import IO, Any
 
 import pytest
 
-from blizzard.runner.config import (
-    CONFIG_FILENAME,
-    ConfigError,
-    RunnerConfig,
-)
+from blizzard.runner.config import ConfigError, RunnerConfig
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.harness.adapter import HarnessSpawnError, WorkerPreamble
 from blizzard.runner.harness.autonomy import Autonomy
@@ -35,8 +31,10 @@ from blizzard.runner.harness.opencode.permissions.permission_resolver import (
 from blizzard.runner.harness.opencode.section import OPENCODE_WORKER_CONFIG_FILENAME
 from blizzard.runner.harness.opencode.shapes import OpenCodePermissionRule
 from blizzard.runner.harness.process_launch import LaunchedProcess
+from blizzard.runner.host_layout import HOST_CONFIG_FILENAME
 from blizzard.runner.runtime import Runtime
 from tests.harness_sections import claude_code
+from tests.host_files import load_runner_config, write_minimal_host
 from tests.runner_fakes import FakeProbe, make_envelope
 
 pytestmark = pytest.mark.unit
@@ -335,13 +333,13 @@ def test_opencode_takeover_never_carries_auto(autonomy: Autonomy) -> None:
 
 
 def _load(root: Path, body: str) -> RunnerConfig:
-    (root / CONFIG_FILENAME).write_text(f'db_url = "{RunnerConfig.default_db_url(root)}"\n{body}')
-    return RunnerConfig.load(root)
+    write_minimal_host(root, runner=body)
+    return load_runner_config(root)
 
 
 @pytest.mark.parametrize("autonomy", _ALL)
 def test_each_autonomy_value_parses(tmp_path: Path, autonomy: Autonomy) -> None:
-    config = _load(tmp_path, f'[harness]\nautonomy = "{autonomy.value}"\n')
+    config = _load(tmp_path, f'[runner.harness]\nautonomy = "{autonomy.value}"\n')
 
     assert config.autonomy is autonomy
     assert claude_code(config).permission_mode is None
@@ -367,7 +365,7 @@ def test_legacy_empty_stays_distinguishable_from_absent(tmp_path: Path) -> None:
 
 @pytest.mark.parametrize("legacy", ["bypassPermissions", ""])
 def test_both_keys_fail_naming_both_and_the_path(tmp_path: Path, legacy: str) -> None:
-    body = f'harness_permission_mode = "{legacy}"\n[harness]\nautonomy = "auto"\n'
+    body = f'harness_permission_mode = "{legacy}"\n[runner.harness]\nautonomy = "auto"\n'
 
     with pytest.raises(ConfigError) as caught:
         _load(tmp_path, body)
@@ -375,26 +373,26 @@ def test_both_keys_fail_naming_both_and_the_path(tmp_path: Path, legacy: str) ->
     message = str(caught.value)
     assert "harness_permission_mode" in message
     assert "[harness] autonomy" in message
-    assert str(tmp_path / CONFIG_FILENAME) in message
+    assert str(tmp_path / HOST_CONFIG_FILENAME) in message
 
 
 def test_an_unknown_autonomy_fails_with_the_value_the_allowed_set_and_the_path(tmp_path: Path) -> None:
     with pytest.raises(ConfigError) as caught:
-        _load(tmp_path, '[harness]\nautonomy = "bogus"\n')
+        _load(tmp_path, '[runner.harness]\nautonomy = "bogus"\n')
 
     message = str(caught.value)
     assert "'bogus'" in message
     assert all(f"'{value.value}'" in message for value in Autonomy)
-    assert str(tmp_path / CONFIG_FILENAME) in message
+    assert str(tmp_path / HOST_CONFIG_FILENAME) in message
 
 
 def test_the_scaffold_writes_dangerous_and_no_legacy_key(tmp_path: Path) -> None:
     config = Runtime(tmp_path).init()
 
-    text = config.config_path.read_text()
-    assert '[harness]\nautonomy = "dangerous"\n' in text
+    text = config.layout.config_path.read_text()
+    assert '[runner.harness]\nautonomy = "dangerous"\n' in text
     assert "harness_permission_mode" not in text
-    assert RunnerConfig.load(tmp_path).autonomy is Autonomy.Dangerous
+    assert load_runner_config(tmp_path).autonomy is Autonomy.Dangerous
 
 
 # --------------------------------------------------------------------------- #
@@ -404,10 +402,10 @@ def test_the_scaffold_writes_dangerous_and_no_legacy_key(tmp_path: Path) -> None
 @pytest.mark.parametrize("autonomy", _ALL)
 def test_runner_owned_denials_hold_under_every_autonomy(tmp_path: Path, autonomy: Autonomy) -> None:
     Runtime(tmp_path).init()
-    path = tmp_path / CONFIG_FILENAME
+    path = tmp_path / HOST_CONFIG_FILENAME
     path.write_text(path.read_text().replace('autonomy = "dangerous"', f'autonomy = "{autonomy.value}"'))
 
-    config = Runtime(tmp_path).init()
+    config = Runtime(tmp_path).init().runner_config()
 
     assert config.autonomy is autonomy
     settings = json.loads((tmp_path / WORKER_SETTINGS_FILENAME).read_text())
@@ -488,7 +486,7 @@ def test_takeover_command_carries_no_bundle_flags(tmp_path: Path) -> None:
 @pytest.mark.parametrize("make", [_claude, _opencode], ids=["claude-code", "opencode"])
 def test_argv_and_env_ignore_the_bundle_key(tmp_path: Path, make: Callable[..., Any]) -> None:
     plain = _load(tmp_path, "")
-    keyed = _load(tmp_path, f'[harness]\nconfig_dir = "{tmp_path}"\n')
+    keyed = _load(tmp_path, f'[runner.harness]\nconfig_dir = "{tmp_path}"\n')
     launches = []
     for config in (plain, keyed):
         launcher = _RecordingLauncher()
@@ -553,11 +551,10 @@ def test_opencode_without_a_preamble_launches_with_the_bare_config_env(tmp_path:
 
 
 def test_loading_records_where_the_autonomy_posture_comes_from(tmp_path: Path) -> None:
-    path = tmp_path / CONFIG_FILENAME
-    path.write_text(f'db_url = "sqlite:///{tmp_path}/r.db"\n')
-    assert RunnerConfig.load(tmp_path).autonomy_source == "default"
+    write_minimal_host(tmp_path)
+    assert load_runner_config(tmp_path).autonomy_source == "default"
 
-    path.write_text(f'db_url = "sqlite:///{tmp_path}/r.db"\n[harness]\nautonomy = "normal"\n')
-    loaded = RunnerConfig.load(tmp_path)
+    write_minimal_host(tmp_path, runner='[runner.harness]\nautonomy = "normal"\n')
+    loaded = load_runner_config(tmp_path)
     assert loaded.autonomy is Autonomy.Normal
     assert loaded.autonomy_source == "[harness] autonomy"

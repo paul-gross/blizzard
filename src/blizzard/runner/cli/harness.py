@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import click
 
+from blizzard.runner.cli.directory import load_runner
 from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
-from blizzard.runner.config import ConfigError, RunnerConfig
+from blizzard.runner.config_table import ConfigError
 from blizzard.runner.environments.factory import build_workspace_provider
 from blizzard.runner.harness.bundle import HarnessBundleNotPublished, require_published
 from blizzard.runner.harness.wiring import (
@@ -37,8 +36,8 @@ def harness_status(directory: str) -> None:
 
     Prints names and paths only, never file contents. Exits 1 when a bundle is configured
     but no snapshot is published."""
+    config = load_runner(directory)
     try:
-        config = RunnerConfig.load(Path(directory))
         click.echo(f"autonomy: {config.autonomy} (from {config.autonomy_source})")
         shared = shared_inputs(config.harness_settings)
         spawn_root = build_workspace_provider(config.workspace_settings).spawn_root()

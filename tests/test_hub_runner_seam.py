@@ -26,6 +26,7 @@ from blizzard.runner.loop.context import LoopConfig, LoopContext
 from blizzard.runner.loop.steps import Pull
 from blizzard.runner.process.internal.worker_scratch_dirs import WorkerScratchDirs
 from tests.runner_fakes import (
+    FIXTURE_RUNNER_ID,
     FakeHarness,
     FakeProbe,
     FakeProvider,
@@ -148,7 +149,7 @@ def test_detach_at_the_real_hub_is_learned_by_a_real_pull_tick(tmp_path: Path) -
         provider=provider,
         process=probe,
         worktree_git=FakeWorktreeGit(),
-        config=LoopConfig(runner_name="r1", workspace_id="ws1", max_agents=1),
+        config=LoopConfig(runner_name="r1", workspace_id="ws1", runner_id=FIXTURE_RUNNER_ID, max_agents=1),
         # The id the hub resolves the fleet client's token to.
         identity=registered_identity("r1", "r1"),
         worker_files=WorkerStdoutFiles("", store),
@@ -245,7 +246,7 @@ def test_stop_at_the_real_hub_is_learned_by_a_real_pull_tick(tmp_path: Path) -> 
         provider=provider,
         process=probe,
         worktree_git=FakeWorktreeGit(),
-        config=LoopConfig(runner_name="r1", workspace_id="ws1", max_agents=1),
+        config=LoopConfig(runner_name="r1", workspace_id="ws1", runner_id=FIXTURE_RUNNER_ID, max_agents=1),
         # The id the hub resolves the fleet client's token to.
         identity=registered_identity("r1", "r1"),
         worker_files=WorkerStdoutFiles("", store),

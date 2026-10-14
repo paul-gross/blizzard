@@ -20,6 +20,7 @@ from blizzard.runner.subscriptions.credential_renewer import RenewalOutcome, Ren
 from blizzard.runner.usage.credential_renewal import CredentialRenewalPass, RenewableSubscription
 from blizzard.runner.usage.periodic_pass_driver import PeriodicPassDriver
 from tests.runner_fakes import (
+    FIXTURE_RUNNER_ID,
     FakeCredentialRenewer,
     FakeHarness,
     FakeHub,
@@ -202,7 +203,7 @@ def test_a_renewal_blocked_on_its_driver_never_delays_a_concurrent_tick(tmp_path
         harness=FakeHarness(handle=WorkerHandle(session_id="s", pid=1, process_start_time="t", pgid=1), verdict="pass"),
         probe=FakeProbe(),
         clock=FixedClock(_NOW),
-        config=LoopConfig(runner_name="r1", workspace_id="ws1", max_agents=1),
+        config=LoopConfig(runner_name="r1", workspace_id="ws1", runner_id=FIXTURE_RUNNER_ID, max_agents=1),
     )
     driver.start()
     try:

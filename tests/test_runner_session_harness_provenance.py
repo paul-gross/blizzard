@@ -16,6 +16,7 @@ from blizzard.runner.harness.usage import UsageSample
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.store import MIGRATIONS_DIR
 from tests.runner_fakes import make_store, record_usage
+from tests.support import upgrade_runner_store_as_registered
 
 pytestmark = pytest.mark.component
 
@@ -89,7 +90,7 @@ def test_session_owner_migration_stamps_old_runner_observations_without_inventin
     finally:
         engine.dispose()
 
-    migrations.upgrade("head")
+    upgrade_runner_store_as_registered(migrations, url)
     engine = create_engine_from_url(url)
     try:
         with engine.connect() as conn:

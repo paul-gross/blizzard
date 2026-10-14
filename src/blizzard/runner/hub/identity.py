@@ -92,12 +92,11 @@ def _conforms_current_runner_identity(x: RunnerIdentityHolder) -> ICurrentRunner
 
 
 class IdentityState(StrEnum):
-    """Whether this process has verified that its token resolves to the runner its store belongs to."""
+    """Whether this process has verified that its token resolves to the configured runner."""
 
     #: Not yet verified since the process started: every hub call answers as during an outage.
     UNCHECKED = "unchecked"
-    #: The token resolves to the store's runner, or the store names none yet and its first registration
-    #: adopts the id.
+    #: The token resolves to the configured runner.
     MATCHED = "matched"
     #: The token resolves to a different runner: the runner refuses to work until it matches again.
     MISMATCHED = "mismatched"
@@ -106,8 +105,8 @@ class IdentityState(StrEnum):
 @domain_model
 @dataclass(frozen=True)
 class IdentityVerdict:
-    """The latest identity check: its ``state``, the runner the store belongs to, the runner the token
-    resolved to, when the hub last answered the check, and the command that clears the store."""
+    """The latest identity check: its ``state``, the configured runner, the runner the token
+    resolved to, when the hub last answered the check, and the remedy that restores the token or the id."""
 
     state: IdentityState
     store_runner_id: str | None
@@ -122,7 +121,7 @@ class ICurrentIdentityVerdict(Protocol):
     def verdict(self) -> IdentityVerdict: ...
 
     def matched(self) -> bool:
-        """Whether the token is verified to resolve to the store's runner."""
+        """Whether the token is verified to resolve to the configured runner."""
         ...
 
     def registration_checks(self) -> bool:

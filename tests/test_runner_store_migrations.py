@@ -211,8 +211,9 @@ def test_identity_migration_downgrades_onto_the_identity_rows_name_and_upgrades_
         assert _rows(engine, "SELECT DISTINCT runner_id FROM leases") == [("r-claude",)]
         assert not next(c for c in sa.inspect(engine).get_columns("leases") if c["name"] == "runner_id")["nullable"]
 
-        migration.upgrade("head")
-        # Up again the store holds no identity, so no runner stamps the rows: they are read unscoped.
+        # Up again the store holds no identity to claim its rows for, so the tightening revision refuses them.
+        with pytest.raises(RuntimeError, match="name no runner"):
+            migration.upgrade("head")
         assert _rows(engine, "SELECT count(*) FROM runner_identity") == [(0,)]
         assert _rows(engine, "SELECT paused FROM hub_control") == [(1,)]
         with engine.connect() as conn:
@@ -260,14 +261,14 @@ def test_rebuilt_store_holds_no_identity_until_a_registration_records_the_hubs(t
     rebuilt = runner_runtime.init_environment(tmp_path / "rebuilt")
     rebuilt_engine = create_engine_from_url(rebuilt.db_url)
     try:
-        store = SqlAlchemyRunnerStore(first_engine, runner_store_errors(), None)
+        store = SqlAlchemyRunnerStore(first_engine, runner_store_errors(), identity.runner_id)
         store.record_runner_identity(identity)
         renamed = RunnerIdentity(identity.runner_id, "r-claude-2", _LATER)
         store.record_runner_identity(renamed)
         assert store.runner_identity() == renamed
         assert _rows(first_engine, "SELECT count(*) FROM runner_identity") == [(1,)]
 
-        again = SqlAlchemyRunnerStore(rebuilt_engine, runner_store_errors(), None)
+        again = SqlAlchemyRunnerStore(rebuilt_engine, runner_store_errors(), identity.runner_id)
         assert again.runner_identity() is None
         assert _rows(rebuilt_engine, "SELECT count(*) FROM runner_identity") == [(0,)]
         again.record_runner_identity(identity)

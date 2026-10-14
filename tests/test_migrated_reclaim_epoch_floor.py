@@ -25,6 +25,7 @@ from blizzard.runner.loop.context import LoopConfig, LoopContext
 from blizzard.runner.loop.steps import Fill
 from blizzard.runner.process.internal.worker_scratch_dirs import WorkerScratchDirs
 from tests.runner_fakes import (
+    FIXTURE_RUNNER_ID,
     FakeHarness,
     FakeProbe,
     FakeProvider,
@@ -144,7 +145,7 @@ def test_migrated_chunk_reclaimed_by_a_fresh_runner_mints_above_the_hub_floor(tm
         provider=provider,
         process=FakeProbe(alive={(200, "start-200")}),
         worktree_git=FakeWorktreeGit(),
-        config=LoopConfig(runner_name="r2", workspace_id="w2", max_agents=1),
+        config=LoopConfig(runner_name="r2", workspace_id="w2", runner_id=FIXTURE_RUNNER_ID, max_agents=1),
         identity=registered_identity("r2", "r2"),
         worker_files=WorkerStdoutFiles("", store),
         elicitation_files=ElicitationFiles(str(tmp_path / "elicit")),

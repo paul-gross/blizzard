@@ -84,11 +84,12 @@ entry back instead, with that same hold-or-pass-over choice already applied hub-
 capability eligibility together — there is no local list left to scan, so the runner's own reach-ahead plays no part on
 that path.
 
-`[queue] strict = true` in a runner's config is the hold half of that choice on either verb: set, a runner filling from
-the legacy order lets a marked head yield no entry and idles the tick rather than trying a later one, and a runner
-peeking matched gets the same outcome because the hub itself stops at the first unusable entry rather than scanning past
-it. Left at its default, both verbs pass over instead. Either way the claim-time denial above still stands as the
-structural guarantee: reach-ahead — local or hub-side — is an efficiency over the peek, never a replacement for it.
+`[runner.queue] strict = true` under the runner's `[[runner]]` is the hold half of that choice on either verb: set,
+a runner filling from the legacy order lets a marked head yield no entry and idles the tick rather than trying a later
+one, and a runner peeking matched gets the same outcome because the hub itself stops at the first unusable entry rather
+than scanning past it. Left at its default, both verbs pass over instead. Either way the claim-time denial above still
+stands as the structural guarantee: reach-ahead — local or hub-side — is an efficiency over the peek, never a
+replacement for it.
 
 ## On the board
 

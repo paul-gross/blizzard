@@ -12,13 +12,14 @@
 4. Install the units by copying [packaging/systemd/blizzard-hub.service](../../packaging/systemd/blizzard-hub.service)
    and [blizzard-runner.service](../../packaging/systemd/blizzard-runner.service) into `/etc/systemd/system`, then
    `systemctl daemon-reload` and `systemctl enable --now blizzard-hub`; `enable` is what starts it at boot.
-5. With the hub answering, seed the runner's runtime directory as the service account:
-   `blizzard-runner init /var/lib/blizzard/runner` scaffolds it the same way, then adds the runner at the hub its config
-   names and writes the runner's token to `/var/lib/blizzard/runner/.env`. Against a hub that requires sign-in, first
-   run `blizzard hub runner add <name>` as an operator and put the `BZ_HUB_TOKEN=…` line it prints in that `.env`,
-   created owner-only (`0600`) as the service account ([remote-runner.md](../remote-runner.md#add)); init then keeps the
-   token ([runner-auth.md](./runner-auth.md#adding-a-runner)). Re-running init adds nothing while the hub still knows
-   the token. Then `systemctl enable --now blizzard-runner`.
+5. With the hub answering, seed the runner's runtime directory as the service account: `blizzard-runner init
+   /var/lib/blizzard/runner` scaffolds it the same way, then adds the runner at the hub its config names and writes the
+   runner's token to `/var/lib/blizzard/runner/.env`. Against a hub that requires sign-in, first run `blizzard hub
+   runner add runner-local` as an operator — the name a fresh init scaffolds — and put the
+   `BZ_HUB_TOKEN_RUNNER_LOCAL=…` line it prints in that `.env`, created owner-only (`0600`) as the service account
+   ([remote-runner.md](../remote-runner.md#add)); init then keeps the token
+   ([runner-auth.md](./runner-auth.md#adding-a-runner)). Re-running init keeps the runner while the hub still knows the
+   token. Then `systemctl enable --now blizzard-runner`.
 
 ## Configuration and credentials
 
@@ -26,7 +27,7 @@ The hub's forge credentials are stored secrets, not environment variables: its w
 [work-sources.md](./work-sources.md), the repositories it delivers to are records owned by
 [repositories.md](./repositories.md), and each names a secret owned by [secrets.md](./secrets.md) — create them with
 `blizzard hub secret`, `source` and `repo` once the hub answers. `/etc/blizzard/hub.env` carries deployment values only.
-The runner's workspace and harness bindings live in its own `blizzard-runner.toml` and carry no credentials.
+The runner's workspace and harness bindings live in its host directory's `blizzard-host.toml` and carry no credentials.
 
 The hub's deployment-varying values — db_url, host, port — also resolve from the environment at load, precedence CLI
 flag over env var over toml over default: `BZ_HUB_DB_URL` (no flag exists), `BZ_HUB_HOST`, `BZ_HUB_PORT`, with
@@ -38,8 +39,8 @@ with a `ConfigError` naming the variable, from `hub init` and from every later l
 
 Every verb that takes a runtime directory resolves it from three rungs, highest first: the explicit flag or argument,
 then the daemon's environment variable, then the current working directory. `BZ_HUB_DIR` names the hub runtime dir
-(`blizzard-hub.toml` plus `data/hub.db`); `BZ_RUNNER_DIR` names the runner runtime dir (`blizzard-runner.toml` plus
-`data/runner.db` and `runner.sock`). The packaged units pass `--dir` explicitly; the variables exist for callers that
+(`blizzard-hub.toml` plus `data/hub.db`); `BZ_RUNNER_DIR` names the runner's host directory (`blizzard-host.toml` plus
+`data/host.db` and `host.sock`). The packaged units pass `--dir` explicitly; the variables exist for callers that
 cannot write a flag per invocation. Which runtime-dir flags and positionals each verb takes is that verb's own `--help`
 contract.
 

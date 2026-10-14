@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 from datetime import timedelta
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -14,6 +15,7 @@ from blizzard.foundation.fact_kinds import EVENT_RECORDED
 from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.runner.composition import RunnerProcess, build_runner_process
 from blizzard.runner.config import RunnerConfig
+from blizzard.runner.host_layout import HostLayout
 from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.loop_wiring import LoopWiring
 from blizzard.runner.tracing.sweep import LeaseTraceSweep, announce_rejected_tracing
@@ -29,7 +31,7 @@ _ENDPOINT = {"OTEL_EXPORTER_OTLP_ENDPOINT": "http://127.0.0.1:4318"}
 def _config(tmp_path: Path) -> tuple[RunnerConfig, SqlAlchemyRunnerStore]:
     config = RunnerConfig(
         root=tmp_path,
-        db_url=RunnerConfig.default_db_url(tmp_path),
+        db_url=HostLayout(tmp_path).default_db_url,
         hub_url="http://127.0.0.1:9",
         tracing=TracingConfig(settle_seconds=0),
     )
@@ -52,7 +54,9 @@ def _events(store: SqlAlchemyRunnerStore) -> list[dict]:  # type: ignore[type-ar
 
 def test_no_endpoint_builds_no_sweep_and_writes_no_cursor_row(tmp_path: Path) -> None:
     config, store = _config(tmp_path)
-    graph = build_runner_process(config, environ={}, trace_exporter=InMemoryTraceExporter())
+    graph = build_runner_process(
+        config, environ={}, trace_exporter=InMemoryTraceExporter(), runner_id=FIXTURE_RUNNER_ID
+    )
     try:
         assert graph.trace_settings.state == "disabled"
         assert graph.trace_sweep is None
@@ -66,7 +70,9 @@ def test_no_endpoint_builds_no_sweep_and_writes_no_cursor_row(tmp_path: Path) ->
 def test_grpc_is_rejected_and_announced_once_with_no_sweep(tmp_path: Path) -> None:
     config, store = _config(tmp_path)
     environ = {**_ENDPOINT, "OTEL_EXPORTER_OTLP_PROTOCOL": "grpc"}
-    graph = build_runner_process(config, environ=environ, trace_exporter=InMemoryTraceExporter())
+    graph = build_runner_process(
+        config, environ=environ, trace_exporter=InMemoryTraceExporter(), runner_id=FIXTURE_RUNNER_ID
+    )
     try:
         assert graph.trace_settings.state == "rejected"
         assert graph.trace_sweep is None
@@ -82,7 +88,7 @@ def test_grpc_is_rejected_and_announced_once_with_no_sweep(tmp_path: Path) -> No
 def test_an_endpoint_builds_a_sweep_over_the_injected_exporter(tmp_path: Path) -> None:
     config, store = _config(tmp_path)
     exporter = InMemoryTraceExporter()
-    graph = build_runner_process(config, environ=_ENDPOINT, trace_exporter=exporter)
+    graph = build_runner_process(config, environ=_ENDPOINT, trace_exporter=exporter, runner_id=FIXTURE_RUNNER_ID)
     try:
         assert graph.trace_settings.state == "enabled"
         assert isinstance(graph.trace_sweep, LeaseTraceSweep)
@@ -98,7 +104,7 @@ def test_an_endpoint_builds_a_sweep_over_the_injected_exporter(tmp_path: Path) -
 
 def test_an_endpoint_without_an_injected_exporter_binds_otlp(tmp_path: Path) -> None:
     config, _ = _config(tmp_path)
-    graph = build_runner_process(config, environ=_ENDPOINT)
+    graph = build_runner_process(config, environ=_ENDPOINT, runner_id=FIXTURE_RUNNER_ID)
     try:
         assert isinstance(graph.trace_sweep, LeaseTraceSweep)
     finally:
@@ -110,8 +116,10 @@ def test_runner_tick_never_drives_the_sweep(tmp_path: Path, monkeypatch: pytest.
     exporter = InMemoryTraceExporter()
     built: list[RunnerProcess] = []
 
-    def traced(config: RunnerConfig, **kwargs: object) -> RunnerProcess:
-        graph = build_runner_process(config, environ=_ENDPOINT, trace_exporter=exporter, **kwargs)  # type: ignore[arg-type]
+    def traced(config: RunnerConfig, **kwargs: Any) -> RunnerProcess:
+        graph = build_runner_process(
+            config, environ=_ENDPOINT, trace_exporter=exporter, **kwargs, runner_id=FIXTURE_RUNNER_ID
+        )
         built.append(graph)
         return graph
 

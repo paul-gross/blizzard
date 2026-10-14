@@ -17,12 +17,9 @@ import sqlalchemy as sa
 from click.testing import CliRunner
 
 from blizzard.cli.main import blizzard
-from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.migrations import MigrationRunner
 from blizzard.runner import runtime as runner_runtime
-from blizzard.runner.composition import build_host_stores
-from tests.runner_fakes import runner_store_errors
 from tests.runner_scope_seeding import KEYED, T0, reflect, seed_every_keyed_table
 
 pytestmark = pytest.mark.component
@@ -236,10 +233,8 @@ def test_the_cli_migrates_a_copied_store_down_to_the_parent_and_back(tmp_path: P
         engine.dispose()
     copy = tmp_path / "copy"
     shutil.copytree(original, copy)
-    # The scaffold names its store by absolute path, so the copy is repointed at its own, as a rehearsal must be.
-    copy_url = f"sqlite:///{copy / 'data' / 'runner.db'}"
-    config_path = copy / "blizzard-runner.toml"
-    config_path.write_text(config_path.read_text().replace(f'db_url = "{config.db_url}"', f'db_url = "{copy_url}"'))
+    # The host file names no store, so the copy opens its own.
+    copy_url = f"sqlite:///{copy / 'data' / 'host.db'}"
     cli = CliRunner()
 
     def migrate(*args: str) -> None:
@@ -267,11 +262,8 @@ def test_the_cli_migrates_a_copied_store_down_to_the_parent_and_back(tmp_path: P
 
 
 def _copy_with_db_url(original: Path, config_db_url: str, copy: Path) -> None:
-    """Copy a runtime dir and repoint its config at the copy's own store, as a rehearsal on a store copy must."""
+    """Copy a host directory for a rehearsal: its host file names no store, so the copy opens its own."""
     shutil.copytree(original, copy)
-    config_path = copy / "blizzard-runner.toml"
-    copy_url = f"sqlite:///{copy / 'data' / 'runner.db'}"
-    config_path.write_text(config_path.read_text().replace(f'db_url = "{config_db_url}"', f'db_url = "{copy_url}"'))
 
 
 def _check_invariants(runtime_dir: Path):  # type: ignore[no-untyped-def]
@@ -311,28 +303,3 @@ def test_a_migrated_copy_of_a_previous_release_store_holds_every_invariant(
     checked = _check_invariants(copy)
     assert checked.exit_code == 0, checked.output
     assert "invariants hold" in checked.output
-
-
-def test_a_never_registered_store_with_rows_fails_the_check_until_its_runner_binds(tmp_path: Path) -> None:
-    """A store with rows but no identity keeps every ``runner_id`` NULL through the migration, so the strict invariant
-    names them; the stamp its runner's bind runs leaves the store holding every invariant."""
-    original = tmp_path / "original"
-    db_url = _fixture_at_parent(original, registered=False, seeded=True)
-    copy = tmp_path / "copy"
-    _copy_with_db_url(original, db_url, copy)
-    assert CliRunner().invoke(blizzard, ["runner", "migrate", "--dir", str(copy)]).exit_code == 0
-
-    unbound = _check_invariants(copy)
-    assert unbound.exit_code != 0
-    assert "runner:rows-name-registered-runner" in unbound.output
-
-    engine = create_engine_from_url(f"sqlite:///{copy / 'data' / 'runner.db'}")
-    try:
-        _seed_identity(engine)
-        build_host_stores(engine, errors=runner_store_errors(), clock=FixedClock(T0)).unowned_row_stamp.stamp(
-            _RUNNER_ID
-        )
-    finally:
-        engine.dispose()
-    bound = _check_invariants(copy)
-    assert bound.exit_code == 0, bound.output

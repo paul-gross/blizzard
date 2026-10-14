@@ -14,7 +14,12 @@ from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.batching import id_batches
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.store.errors import RunnerStoreConnections
-from blizzard.runner.store.internal.base import NO_NORMALIZER_VERSION, enqueue_transcript_final, lease_select
+from blizzard.runner.store.internal.base import (
+    NO_NORMALIZER_VERSION,
+    enqueue_transcript_final,
+    insert_outbox_row,
+    lease_select,
+)
 from blizzard.runner.store.schema import leases, transcript_outbound_buffer, transcript_segments
 from blizzard.runner.transcripts.ledger import (
     BufferedTranscriptDelta,
@@ -270,17 +275,17 @@ class TranscriptLedgerStore:
             )
             seqs: list[int] = []
             for payload in payloads:
-                result = conn.execute(
-                    self._store.insert(transcript_outbound_buffer).values(
-                        segment_id=segment_id,
-                        chunk_id=chunk_id,
-                        final=False,
-                        payload=payload,
-                        created_at=created_at,
-                    )
+                seq = insert_outbox_row(
+                    self._store,
+                    conn,
+                    transcript_outbound_buffer,
+                    segment_id=segment_id,
+                    chunk_id=chunk_id,
+                    final=False,
+                    payload=payload,
+                    created_at=created_at,
                 )
-                key = result.inserted_primary_key
-                seqs.append(int(key[0]) if key is not None else 0)
+                seqs.append(seq)
         return seqs
 
     def open_transcript_segment(

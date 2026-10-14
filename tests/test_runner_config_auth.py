@@ -1,6 +1,6 @@
-"""Runner config's federation identity + local role knobs round-trip through ``to_toml``/``load``
- — ``public_url`` (its bare-string and multi-origin list forms, its derived
-``redirect_uris``, its load-time validation), ``[auth]``, and ``[auth.users]``."""
+"""The host file's federation identity + local role knobs round-trip through ``to_toml``/``load`` — ``public_url``
+(its bare-string and multi-origin list forms, its derived ``redirect_uris``, its load-time validation), ``[auth]``,
+and ``[auth.users]`` — and a runner's per-harness aliases and binaries."""
 
 from __future__ import annotations
 
@@ -13,19 +13,17 @@ import pytest
 from blizzard.runner.config import ENV_PUBLIC_URL, ConfigError, RunnerConfig
 from blizzard.runner.harness.claude_code.section import ClaudeCodeSection
 from blizzard.runner.harness.opencode.section import OpenCodeSection
+from blizzard.runner.host_config import HostConfig
 from tests.harness_sections import claude_code, opencode, sections
+from tests.host_files import host_config_of, load_runner_config, write_host_file, write_minimal_host
 
 pytestmark = pytest.mark.unit
 
 
 def _round_trip(tmp_path: Path, config: RunnerConfig) -> RunnerConfig:
-    root = tmp_path
-    root.mkdir(exist_ok=True)
-    toml = config.to_toml()
-    (root / "blizzard-runner.toml").write_text(
-        toml.replace('db_url = "sqlite://"', f'db_url = "sqlite:///{root}/r.db"')
-    )
-    return RunnerConfig.load(root)
+    tmp_path.mkdir(exist_ok=True)
+    write_host_file(config)
+    return load_runner_config(tmp_path)
 
 
 def test_public_url_round_trips(tmp_path: Path) -> None:
@@ -36,7 +34,7 @@ def test_public_url_round_trips(tmp_path: Path) -> None:
 
 def test_a_lone_origin_round_trips_as_a_bare_string_not_a_list(tmp_path: Path) -> None:
     config = RunnerConfig(root=tmp_path, db_url="sqlite://", public_urls=("https://runner-a.example",))
-    assert 'public_url = "https://runner-a.example"' in config.to_toml()
+    assert 'public_url = "https://runner-a.example"' in host_config_of(config).to_toml()
     assert _round_trip(tmp_path, config).public_urls == ("https://runner-a.example",)
 
 
@@ -52,8 +50,8 @@ def test_no_public_url_means_no_redirect_uris() -> None:
 
 
 def test_an_empty_authored_public_url_reads_as_no_identity_rather_than_failing(tmp_path: Path) -> None:
-    (tmp_path / "blizzard-runner.toml").write_text(f'db_url = "sqlite:///{tmp_path}/r.db"\npublic_url = ""\n')
-    config = RunnerConfig.load(tmp_path)
+    write_minimal_host(tmp_path, top='public_url = ""\n')
+    config = load_runner_config(tmp_path)
     assert config.public_urls == ()
     assert config.public_url == ""
     assert config.redirect_uris == ()
@@ -79,17 +77,15 @@ def test_the_first_declared_origin_is_the_canonical_one() -> None:
 
 def test_several_origins_round_trip_as_a_list(tmp_path: Path) -> None:
     config = RunnerConfig(root=tmp_path, db_url="sqlite://", public_urls=_THREE)
-    assert f"public_url = [{', '.join(chr(34) + u + chr(34) for u in _THREE)}]" in config.to_toml()
+    assert f"public_url = [{', '.join(chr(34) + u + chr(34) for u in _THREE)}]" in host_config_of(config).to_toml()
     reloaded = _round_trip(tmp_path, config)
     assert reloaded.public_urls == _THREE
     assert len(reloaded.redirect_uris) == 3
 
 
 def test_a_single_origin_may_be_authored_as_a_bare_string(tmp_path: Path) -> None:
-    (tmp_path / "blizzard-runner.toml").write_text(
-        f'db_url = "sqlite:///{tmp_path}/r.db"\npublic_url = "https://runner-a.example"\n'
-    )
-    config = RunnerConfig.load(tmp_path)
+    write_minimal_host(tmp_path, top='public_url = "https://runner-a.example"\n')
+    config = load_runner_config(tmp_path)
     assert config.public_urls == ("https://runner-a.example",)
     assert config.redirect_uris == ("https://runner-a.example/api/auth/callback",)
 
@@ -101,39 +97,33 @@ def test_a_scaffold_declaring_no_origins_reads_back_empty(tmp_path: Path) -> Non
 
 
 def test_a_malformed_origin_fails_at_config_load(tmp_path: Path) -> None:
-    (tmp_path / "blizzard-runner.toml").write_text(
-        f'db_url = "sqlite:///{tmp_path}/r.db"\npublic_url = ["localhost:8431"]\n'
-    )
+    write_minimal_host(tmp_path, top='public_url = ["localhost:8431"]\n')
     with pytest.raises(ConfigError):
-        RunnerConfig.load(tmp_path)
+        load_runner_config(tmp_path)
 
 
 def test_a_malformed_bare_string_origin_fails_at_config_load(tmp_path: Path) -> None:
-    (tmp_path / "blizzard-runner.toml").write_text(
-        f'db_url = "sqlite:///{tmp_path}/r.db"\npublic_url = "localhost:8431"\n'
-    )
+    write_minimal_host(tmp_path, top='public_url = "localhost:8431"\n')
     with pytest.raises(ConfigError):
-        RunnerConfig.load(tmp_path)
+        load_runner_config(tmp_path)
 
 
 def test_origins_declaring_one_authority_twice_fails_at_config_load(tmp_path: Path) -> None:
-    (tmp_path / "blizzard-runner.toml").write_text(
-        f'db_url = "sqlite:///{tmp_path}/r.db"\npublic_url = ["https://t.example:8431", "https://T.Example:8431"]\n'
-    )
+    write_minimal_host(tmp_path, top='public_url = ["https://t.example:8431", "https://T.Example:8431"]\n')
     with pytest.raises(ConfigError):
-        RunnerConfig.load(tmp_path)
+        load_runner_config(tmp_path)
 
 
 def test_several_origins_are_settable_by_env_var_for_a_fresh_scaffold(tmp_path: Path) -> None:
     with mock.patch.dict(os.environ, {ENV_PUBLIC_URL: ", ".join(_THREE)}, clear=False):
-        config = RunnerConfig.scaffold(tmp_path)
+        config = HostConfig.scaffold(tmp_path)
     assert config.public_urls == _THREE
-    assert len(config.redirect_uris) == 3
+    assert len(config.host_view().redirect_uris) == 3
 
 
 def test_one_env_declared_origin_still_works(tmp_path: Path) -> None:
     with mock.patch.dict(os.environ, {ENV_PUBLIC_URL: "https://runner-a.example"}, clear=False):
-        config = RunnerConfig.scaffold(tmp_path)
+        config = HostConfig.scaffold(tmp_path)
     assert config.public_urls == ("https://runner-a.example",)
 
 
@@ -142,7 +132,7 @@ def test_a_malformed_env_declared_origin_fails_rather_than_being_dropped(tmp_pat
         mock.patch.dict(os.environ, {ENV_PUBLIC_URL: "localhost:8431"}, clear=False),
         pytest.raises(ConfigError),
     ):
-        RunnerConfig.scaffold(tmp_path)
+        HostConfig.scaffold(tmp_path)
 
 
 def test_auth_block_round_trips(tmp_path: Path) -> None:
@@ -244,14 +234,12 @@ def test_opencode_worker_config_path_round_trips(tmp_path: Path) -> None:
 
 
 def test_an_upgraded_runner_with_no_opencode_table_still_resolves_a_worker_config_path(tmp_path: Path) -> None:
-    """A pre-``[opencode]`` ``blizzard-runner.toml`` carries no ``worker_config_path``
-    at all — loading it must still resolve the same default a fresh ``init`` would,
-    never ``None``, so nothing falls back to OpenCode's own on-disk discovery."""
-    tmp_path.mkdir(exist_ok=True)
-    (tmp_path / "blizzard-runner.toml").write_text(f'db_url = "sqlite:///{tmp_path}/r.db"\n')
-
-    loaded = RunnerConfig.load(tmp_path)
-    fresh = RunnerConfig.scaffold(tmp_path)
+    """A host file whose runner carries no ``[runner.opencode]`` has no ``worker_config_path`` at all — loading it must
+    still resolve a default, never ``None``, so nothing falls back to OpenCode's own on-disk discovery."""
+    write_minimal_host(tmp_path / "upgraded")
+    loaded = load_runner_config(tmp_path / "upgraded")
+    fresh = HostConfig.scaffold(tmp_path / "fresh").runner_config()
 
     assert opencode(loaded).worker_config_path is not None
-    assert opencode(loaded).worker_config_path == opencode(fresh).worker_config_path
+    assert opencode(loaded).worker_config_path == str(tmp_path / "upgraded" / "opencode-worker-config.json")
+    assert opencode(fresh).worker_config_path == str(tmp_path / "fresh" / "opencode-worker-config.json")

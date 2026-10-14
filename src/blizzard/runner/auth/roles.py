@@ -1,6 +1,6 @@
 """Runner-local role resolution, keyed by hub **username**.
 
-Runner roles live **only** in ``blizzard-runner.toml``. Precedence: ``auth.superuser``
+Runner roles live **only** in ``blizzard-host.toml``'s ``[auth]``. Precedence: ``auth.superuser``
 wins outright, then a ``[auth.users]`` override, then ``hub_role_default``. **No
 identity is ever denied** — every branch resolves to a concrete :class:`Role`, keyed on
 ``username`` only, never ``email``, which is mutable and may be null."""

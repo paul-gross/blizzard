@@ -11,8 +11,8 @@ import pytest
 from click.testing import CliRunner
 
 from blizzard.runner.cli import runner as runner_group
-from blizzard.runner.config import CONFIG_FILENAME
 from blizzard.runner.harness.internal.bundle_publisher import published_snapshot
+from blizzard.runner.host_layout import HOST_CONFIG_FILENAME
 from tests.runner_init_fakes import init_runner
 
 pytestmark = pytest.mark.component
@@ -31,7 +31,7 @@ def _runtime(tmp_path: Path, *, edit: tuple[str, str] | None = None) -> Path:
     runtime = tmp_path / "runner"
     assert init_runner().invoke(runner_group, ["init", str(runtime)]).exit_code == 0
     if edit is not None:
-        path = runtime / CONFIG_FILENAME
+        path = runtime / HOST_CONFIG_FILENAME
         path.write_text(path.read_text().replace(edit[0], edit[1], 1))
     return runtime
 
@@ -54,8 +54,8 @@ def test_status_without_a_bundle_prints_each_harness_file_in_catalog_order(tmp_p
 
 
 def test_status_names_the_legacy_permission_mode_as_the_autonomy_source(tmp_path: Path) -> None:
-    runtime = _runtime(tmp_path, edit=("[harness]\n", 'harness_permission_mode = "auto"\n[harness]\n'))
-    path = runtime / CONFIG_FILENAME
+    runtime = _runtime(tmp_path, edit=("[runner.harness]\n", 'harness_permission_mode = "auto"\n[runner.harness]\n'))
+    path = runtime / HOST_CONFIG_FILENAME
     path.write_text(path.read_text().replace('autonomy = "dangerous"\n', "", 1))
 
     assert _status(runtime)[0] == "autonomy: dangerous (from legacy harness_permission_mode)"
@@ -79,7 +79,9 @@ def test_a_disabled_claude_code_reports_no_conflict(tmp_path: Path, monkeypatch:
     managed = tmp_path / "managed-settings.json"
     managed.write_text(json.dumps({"disableAllHooks": True}))
     monkeypatch.setattr("blizzard.runner.harness.claude_code.ambient_conflicts.MANAGED_SETTINGS_PATHS", (managed,))
-    runtime = _runtime(tmp_path, edit=("[claude_code]\nenabled = true\n", "[claude_code]\nenabled = false\n"))
+    runtime = _runtime(
+        tmp_path, edit=("[runner.claude_code]\nenabled = true\n", "[runner.claude_code]\nenabled = false\n")
+    )
 
     assert not any("config conflict" in line for line in _status(runtime))
 
@@ -91,7 +93,7 @@ def test_status_with_a_published_bundle_prints_sources_snapshot_and_delivery(tmp
     (bundle / "claude-code" / "mcp.json").write_text("{}")
     (bundle / "opencode").mkdir()
     (bundle / "opencode" / "opencode.json").write_text("{}")
-    runtime = _runtime(tmp_path, edit=("[harness]\n", f'[harness]\nconfig_dir = "{bundle}"\n'))
+    runtime = _runtime(tmp_path, edit=("[runner.harness]\n", f'[runner.harness]\nconfig_dir = "{bundle}"\n'))
     assert CliRunner().invoke(runner_group, ["tick", "--dir", str(runtime)]) is not None
     snapshot = published_snapshot(runtime)
     assert snapshot is not None

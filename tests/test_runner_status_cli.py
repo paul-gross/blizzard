@@ -23,8 +23,9 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.app import build_hosted_app
 from blizzard.runner.cli import runner as runner_group
 from blizzard.runner.cli.daemon import RunnerDaemon
-from blizzard.runner.config import RunnerConfig
+from blizzard.runner.composition import build_host_process
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
+from blizzard.runner.host_config import BuiltRunner, HaltedRunner, HostConfig
 from blizzard.runner.hub.identity import IdentityState, RunnerIdentity
 from blizzard.runner.hub.served_projects import ServedProject
 from blizzard.runner.leases.model import NewLease
@@ -34,15 +35,18 @@ from blizzard.runner.subscriptions.credential_renewer import (
     RenewalOutcome,
     RenewalOutcomeKind,
 )
-from tests.runner_fakes import FIXTURE_RUNNER_ID, SqlAlchemyRunnerStore, runner_store_errors
+from tests.host_files import load_runner_config
+from tests.runner_fakes import SqlAlchemyRunnerStore, runner_store_errors
 from tests.runner_init_fakes import init_runner
 
 _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
 
 
-def _store(root: Path, runner_id: str | None = FIXTURE_RUNNER_ID) -> SqlAlchemyRunnerStore:
+def _store(root: Path, runner_id: str | None = None) -> SqlAlchemyRunnerStore:
+    """The host's store, bound to ``runner_id`` — by default the runner its host file configures."""
+    config = load_runner_config(root)
     return SqlAlchemyRunnerStore(
-        create_engine_from_url(RunnerConfig.load(root).db_url), runner_store_errors(), runner_id=runner_id
+        create_engine_from_url(config.db_url), runner_store_errors(), runner_id=runner_id or config.runner_id
     )
 
 
@@ -50,9 +54,23 @@ def _registered_store(root: Path) -> SqlAlchemyRunnerStore:
     """The store with an identity row recorded — the local API reads only a registered runner's rows."""
     store = _store(root)
     store.record_runner_identity(
-        RunnerIdentity(runner_id=FIXTURE_RUNNER_ID, runner_name="runner-local", registered_at=_NOW)
+        RunnerIdentity(runner_id=store.connections.runner_id or "", runner_name="runner-local", registered_at=_NOW)
     )
     return store
+
+
+def _configure_runner_id(root: Path, runner_id: str) -> None:
+    """Point the host file's runner at ``runner_id``, as an operator renames the hub id a runner is configured with."""
+    config = load_runner_config(root)
+    _edit_host_file(root, f'id = "{config.runner_id}"', f'id = "{runner_id}"')
+
+
+def _edit_host_file(root: Path, old: str, new: str) -> None:
+    """Replace ``old`` with ``new`` in the host directory's host file, which must hold it."""
+    path = root / "blizzard-host.toml"
+    text = path.read_text()
+    assert old in text, f"{old!r} is not in the scaffolded host file:\n{text}"
+    path.write_text(text.replace(old, new))
 
 
 def _init_runner(tmp_path: Path) -> Path:
@@ -61,10 +79,7 @@ def _init_runner(tmp_path: Path) -> Path:
     assert result.exit_code == 0, result.output
     # These fixtures seed winter-style /ws/e* workdirs, rather than the new basic
     # provider's per-chunk folders. Pin the provider so takeover cwd stays /ws/e*.
-    config_path = root / "blizzard-runner.toml"
-    config_path.write_text(
-        config_path.read_text().replace('workspace_provider = "basic"', 'workspace_provider = "winter"')
-    )
+    _edit_host_file(root, 'provider = "basic"', 'provider = "winter"')
     return root
 
 
@@ -72,7 +87,7 @@ def _init_runner(tmp_path: Path) -> Path:
 def _serve_local_api(
     root: Path, *, trace_status: bool = True, refusing: tuple[str, str] | None = None
 ) -> Iterator[tuple[Path, str]]:
-    config = RunnerConfig.load(root, port=0)
+    config = load_runner_config(root, port=0)
     app = build_hosted_app(config).app
     if refusing is not None:  # (store runner, token runner): the verdict the loop's check would hold
         app.state.identity_verdict.record(
@@ -259,9 +274,8 @@ def test_status_headline_names_no_tenant_before_a_hub_names_one(
 ) -> None:
     root = _init_runner(tmp_path)
     _no_hub(monkeypatch)
-    _store(root, runner_id=None).record_runner_identity(
-        RunnerIdentity(runner_id="rn_1", runner_name="r-one", registered_at=_NOW)
-    )
+    _configure_runner_id(root, "rn_1")
+    _store(root).record_runner_identity(RunnerIdentity(runner_id="rn_1", runner_name="r-one", registered_at=_NOW))
     with _serve_local_api(root):
         result = CliRunner().invoke(runner_group, ["status", "--dir", str(root)])
 
@@ -275,7 +289,8 @@ def test_status_headline_names_no_tenant_before_a_hub_names_one(
 def test_status_headline_names_the_tenant_beside_the_runner(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     root = _init_runner(tmp_path)
     _no_hub(monkeypatch)
-    _store(root, runner_id=None).record_runner_identity(
+    _configure_runner_id(root, "rn_1")
+    _store(root).record_runner_identity(
         RunnerIdentity(
             runner_id="rn_1", runner_name="r-one", registered_at=_NOW, tenant_id="tn_bravo", tenant_name="bravo"
         )
@@ -292,14 +307,16 @@ def test_status_names_the_served_projects_unresolved_and_not_yet_answered_with_t
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     root = _init_runner(tmp_path)
-    config_path = root / "blizzard-runner.toml"
-    config_path.write_text(
-        config_path.read_text().replace(
-            'projects = ["default"]', 'projects = ["blizzard", "old-slug", "blizzard-context"]'
-        )
+    _edit_host_file(
+        root,
+        'projects = [{ project = "default", workspace = "workspace-local", agents = 1 }]',
+        'projects = [{ project = "blizzard", workspace = "workspace-local", agents = 1 }, '
+        '{ project = "old-slug", workspace = "workspace-local", agents = 1 }, '
+        '{ project = "blizzard-context", workspace = "workspace-local", agents = 1 }]',
     )
     _no_hub(monkeypatch)
-    store = _store(root, runner_id=None)
+    _configure_runner_id(root, "rn_1")
+    store = _store(root)
     store.record_runner_identity(RunnerIdentity(runner_id="rn_1", runner_name="r-one", registered_at=_NOW))
     store.record_served_projects(
         (ServedProject("blizzard", "prj_1", "blizzard", "Blizzard"), ServedProject("old-slug")), at=_NOW
@@ -334,8 +351,9 @@ def test_status_names_both_runners_and_the_reset_command_while_refusing(
     assert result.exit_code == 0, result.output
     refusing = next(line for line in result.output.splitlines() if "REFUSING" in line)
     assert "token belongs to runner rn_other" in refusing
-    assert "store belongs to runner rn_store" in refusing
-    assert f"blizzard runner store reset {root}" in refusing
+    assert "the configured runner is rn_store" in refusing
+    assert "BZ_HUB_TOKEN_RUNNER_LOCAL" in refusing and "`[[runner]] id`" in refusing
+    assert "store reset" not in refusing
 
 
 @pytest.mark.component
@@ -343,8 +361,7 @@ def test_status_renders_the_configured_gates_with_the_hub_unreachable(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     root = _init_runner(tmp_path)
-    config_path = root / "blizzard-runner.toml"
-    config_path.write_text(config_path.read_text().replace("gates = []", 'gates = ["build", "review"]'))
+    _edit_host_file(root, "gates = []", 'gates = ["build", "review"]')
     _no_hub(monkeypatch)
     with _serve_local_api(root):
         result = CliRunner().invoke(runner_group, ["status", "--dir", str(root)])
@@ -436,8 +453,7 @@ def test_status_omits_an_unheld_pool_slot_from_held_environments(
     """``GET /api/environments`` carries the whole configured pool; an
     unheld slot must not leak into the CLI's held-environments section."""
     root = _init_runner(tmp_path)
-    config_path = root / "blizzard-runner.toml"
-    config_path.write_text(config_path.read_text().replace('workspace_envs = ["e1"]', 'workspace_envs = ["e1", "e2"]'))
+    _edit_host_file(root, 'envs = ["e1"]', 'envs = ["e1", "e2"]')
     _no_hub(monkeypatch)
     store = _registered_store(root)
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
@@ -577,3 +593,65 @@ def test_status_names_a_held_binding_matching_no_workspace(tmp_path: Path, monke
     assert result.exit_code == 0, result.output
     assert "held bindings matching no workspace (1):" in result.output
     assert "e9  chunk=ch_9  workdir=/elsewhere/e9" in result.output
+
+
+@contextmanager
+def _serve_host_of_halted_runners(root: Path) -> Iterator[Path]:
+    """The real host composition over ``root``: each runner its file declares is built or left halted, and the app
+    is the one a host with none built serves."""
+    config = HostConfig.load(root, port=0)
+    projections = config.projections()
+    halted = [p for p in projections if isinstance(p, HaltedRunner)]
+    built = [p for p in projections if isinstance(p, BuiltRunner)]
+    host = build_host_process(config, built, halted=halted)
+    hosted = build_hosted_app(config.host_view(), host)
+    sockets = host.listeners.bound()
+    server = uvicorn.Server(uvicorn.Config(hosted.app, log_level="warning"))
+    thread = threading.Thread(target=lambda: server.run(sockets=sockets), daemon=True)
+    thread.start()
+    try:
+        _await_socket(config.layout.socket_path)
+        yield config.layout.socket_path
+    finally:
+        server.should_exit = True
+        thread.join(timeout=10.0)
+        Uds(config.layout.socket_path).unlink()
+        hosted.close()
+        host.close()
+
+
+@pytest.mark.component
+def test_status_of_a_host_that_built_no_runner_prints_why_each_one_was_left_unbuilt(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _init_runner(tmp_path)
+    _edit_host_file(root, 'subscription = "anthropic"', 'subscription = "missing"')
+    _no_hub(monkeypatch)
+    with _serve_host_of_halted_runners(root):
+        result = CliRunner().invoke(runner_group, ["status", "--dir", str(root)])
+        health = httpx.Client(transport=httpx.HTTPTransport(uds=str(root / "host.sock")), base_url="http://host")
+        served = health.get("/api/health").status_code
+
+    assert served == 200  # the host serves while its only runner is halted
+    assert result.exit_code != 0
+    assert "serves no runner" in result.output
+    assert "runner runner-local" in result.output and "names subscription 'missing'" in result.output
+
+
+@pytest.mark.component
+@pytest.mark.parametrize("answered", [404, 500])
+def test_status_fails_on_any_runner_read_status_but_the_one_a_runnerless_host_answers(
+    answered: int, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Only the 503 of a host that built no runner reads as "serves no runner"; any other refusal surfaces as it is."""
+    client = httpx.Client(
+        transport=httpx.MockTransport(lambda request: httpx.Response(answered, json={"detail": "refused"})),
+        base_url="http://host",
+    )
+    monkeypatch.setattr(RunnerDaemon, "reach", classmethod(lambda cls, *_args: RunnerDaemon("status", client, "host")))
+
+    result = CliRunner().invoke(runner_group, ["status", "--dir", str(tmp_path)])
+
+    assert result.exit_code != 0
+    assert str(answered) in result.output
+    assert "serves no runner" not in result.output

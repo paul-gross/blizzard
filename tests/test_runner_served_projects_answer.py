@@ -19,7 +19,7 @@ from click.testing import Result
 
 from blizzard.cli.main import blizzard
 from blizzard.foundation.claim_denials import ClaimDenialReason
-from blizzard.runner.config import CONFIG_FILENAME, RunnerConfig
+from blizzard.runner.host_config import HostConfig
 from blizzard.runner.hub.client import ClaimRequest, HubClientError, RunnerAddRefusalReason, RunnerAddRefused
 from blizzard.runner.hub.identity import RunnerIdentity, RunnerIdentityHolder
 from blizzard.runner.hub.internal.http_hub import HttpHubClient, HttpHubRunnerAdmin
@@ -32,6 +32,7 @@ from blizzard.runner.hub.served_projects import (
 from blizzard.runner.lifecycle.model import ClaimVerdict, claim_denial_fields, claim_verdict
 from blizzard.runner.lifecycle.registration import Registration
 from blizzard.runner.loop.context import LoopConfig, LoopContext
+from tests.host_files import load_runner_config
 from tests.runner_fakes import (
     FIXTURE_RUNNER_ID,
     FakeHarness,
@@ -98,7 +99,9 @@ def _ctx(tmp_path: Path, hub: FakeHub, projects: tuple[str, ...] | None) -> Loop
         provider=FakeProvider({"e1": "/ws/e1"}),
         harness=FakeHarness(handle=None, verdict=None),  # type: ignore[arg-type]
         probe=FakeProbe(alive=set()),
-        config=LoopConfig(runner_name="r", workspace_id="ws1", max_agents=1, projects=projects),
+        config=LoopConfig(
+            runner_name="r", workspace_id="ws1", runner_id=FIXTURE_RUNNER_ID, max_agents=1, projects=projects
+        ),
     )
     return type(ctx)(**{**ctx.__dict__, "identity": RunnerIdentityHolder(store.runner_identity())})
 
@@ -294,7 +297,7 @@ def test_init_scaffolds_and_adds_with_every_project_named(tmp_path: Path, fake_i
     result = _init(fake_init_hub, root, "--project", "blizzard", "--project", "blizzard-context")
     assert result.exit_code == 0, result.output
     assert fake_init_hub.admin.declared == [("blizzard", "blizzard-context")]
-    assert RunnerConfig.load(root).projects == ("blizzard", "blizzard-context")
+    assert load_runner_config(root).projects == ("blizzard", "blizzard-context")
 
 
 @pytest.mark.component
@@ -305,7 +308,7 @@ def test_init_naming_no_project_scaffolds_default_and_adds_naming_none(
     result = _init(fake_init_hub, root)
     assert result.exit_code == 0, result.output
     assert fake_init_hub.admin.declared == [None]
-    assert RunnerConfig.load(root).projects == ("default",)
+    assert load_runner_config(root).projects == ("default",)
 
 
 @pytest.mark.component
@@ -314,7 +317,7 @@ def test_init_naming_projects_its_config_does_not_hold_stops_and_adds_nothing(
 ) -> None:
     root = tmp_path / "runner"
     root.mkdir()
-    (root / CONFIG_FILENAME).write_text(RunnerConfig.scaffold(root, hub_url=_HUB, projects=("blizzard",)).to_toml())
+    (root / "blizzard-host.toml").write_text(HostConfig.scaffold(root, hub_url=_HUB, projects=("blizzard",)).to_toml())
     result = _init(fake_init_hub, root, "--project", "other")
     assert result.exit_code != 0
     assert "edit its `projects`" in result.output

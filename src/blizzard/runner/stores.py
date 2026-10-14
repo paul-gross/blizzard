@@ -6,8 +6,8 @@ twin, over the same adapter instances. ``IReadRunnerStore``/``IWriteRunnerStore`
 Protocol into one seam.
 
 ``HostStores`` is its host-scoped sibling, built once per process beside it: the adapters over the tables that belong
-to this host rather than to the runner it is bound to, and the closed list of members exempt from the runner statement
-guard — the start-up stamp and the invariant checker's runner audit. ``HostReadStores`` is its read-only narrowing.
+to this host rather than to the runner it is bound to, and the one member exempt from the runner statement guard — the
+runner audit, which reads across runners. ``HostReadStores`` is its read-only narrowing.
 Host tables are reached only through it.
 
 This module, not ``runner/store/``, is their home, since no Protocol may be declared there."""
@@ -71,7 +71,6 @@ __all__ = [
     "IReadRunnerStore",
     "IRunnerAudit",
     "IRunnerBinding",
-    "IUnownedRowStamp",
     "IWriteRunnerStore",
     "RunnerReadStores",
     "RunnerStores",
@@ -79,7 +78,7 @@ __all__ = [
 
 
 class IRunnerBinding(Protocol):
-    """The runner a store is bound to: the hub-minted id, or ``None`` until registration first adopts one."""
+    """The runner a store is bound to: the id the host file configures for it, or ``None`` while it is bound to none."""
 
     @property
     def runner_id(self) -> str | None: ...
@@ -238,44 +237,38 @@ class RunnerReadStores:
         )
 
 
-class IUnownedRowStamp(Protocol):
-    """The start-up stamp: every runner-scoped row that names no runner, given the bound runner's id."""
-
-    def stamp(self, runner_id: str) -> int:
-        """Stamp ``runner_id`` on every runner-scoped row naming no runner, in a transaction of its own; answer how
-        many were stamped. Idempotent: a second call stamps nothing."""
-        ...
-
-
 class IRunnerAudit(Protocol):
-    """The invariant checker's audit: read connections over every runner's rows at once."""
+    """The reads that span every runner: the invariant checker's audit, and which runners the store's identity rows
+    name."""
 
     def connect(self) -> AbstractContextManager[Any]:
         """A store connection whose statements are exempt from the runner statement guard, closed on leaving the
         ``with``. Typed ``Any``: the audit runs driver statements of its own, and no driver type is named here."""
         ...
 
+    def named_runners(self) -> tuple[str, ...]:
+        """The ids of the runners the store's identity rows name, oldest first — empty for a store none has joined."""
+        ...
+
 
 @dataclass(frozen=True)
 class HostStores:
-    """The wired host-scoped collaborators, each typed to its write Protocol, plus the two named members exempt from
-    the runner statement guard."""
+    """The wired host-scoped collaborators, each typed to its write Protocol, plus the named member exempt from the
+    runner statement guard."""
 
     workspace_prompt: IWriteWorkspacePromptRepository
     graph_artifacts: IWriteGraphArtifactRepository
     jti_cache: IJtiCache
     daemon_liveness: IWriteDaemonLivenessRepository
     external_usage: IWriteExternalUsageRepository
-    #: Exempt: matches rows by the absence of a runner.
-    unowned_row_stamp: IUnownedRowStamp
-    #: Exempt: reads every runner's rows at once.
+    #: Exempt: reads every runner's rows at once — the invariant audit and ``init``'s which-runners read.
     runner_audit: IRunnerAudit
 
 
 @dataclass(frozen=True)
 class HostReadStores:
     """The read-only host-store bundle — the host-scoped concepts typed to their read Protocols, over the same
-    instances :meth:`of` is given; neither exempt member is carried."""
+    instances :meth:`of` is given; the exempt member is not carried."""
 
     workspace_prompt: IReadWorkspacePromptRepository
     graph_artifacts: IReadGraphArtifactRepository

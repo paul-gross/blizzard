@@ -19,6 +19,7 @@ from blizzard.runner.loop.context import LoopConfig
 from blizzard.runner.transcripts.transcript_backfill import TranscriptBackfill, TranscriptReshipError
 from blizzard.runner.transcripts.transcript_pump import MAX_BUFFERED_BYTES
 from tests.runner_fakes import (
+    FIXTURE_RUNNER_ID,
     FakeHarness,
     FakeHub,
     FakeProbe,
@@ -84,7 +85,7 @@ def _ctx(*, sessions: dict[str, list[NormalizedTurn]], on_disk: set[str] | None 
             transcript_source=source,
         ),
         probe=FakeProbe(),
-        config=LoopConfig(runner_name="r1", workspace_id="ws1", transcripts_ship=True),
+        config=LoopConfig(runner_name="r1", workspace_id="ws1", runner_id=FIXTURE_RUNNER_ID, transcripts_ship=True),
     )
     return ctx, source
 

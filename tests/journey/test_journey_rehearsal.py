@@ -18,7 +18,6 @@ import httpx
 import pytest
 
 from blizzard.hub.config import HubConfig
-from blizzard.runner.config import RunnerConfig
 from blizzard.tools.invariants import Invariants
 from blizzard.wire.work_source import WorkSourceDocument
 from tests.crash.support import (
@@ -34,6 +33,7 @@ from tests.crash.support import (
     winter_source,
     write_runner_config,
 )
+from tests.host_files import load_runner_config, write_host_file
 from tests.support import fixture_work_source, free_port
 
 pytestmark = [
@@ -304,7 +304,7 @@ def _restart_daemons(*, hub_dir: Path, forge_port: int, hub_port: int, hub: http
 
 def _assert_invariants(runner_dir: Path, hub_dir: Path, *, when: str) -> None:
     violations = Invariants(
-        runner_db_url=RunnerConfig.load(runner_dir).db_url,
+        runner_db_url=load_runner_config(runner_dir).db_url,
         hub_db_url=HubConfig.load(hub_dir).db_url,
     ).run()
     assert not violations, f"invariant violations {when}:\n" + "\n".join(str(v) for v in violations)
@@ -479,9 +479,9 @@ def _widen_runner_pool(runner_dir: Path) -> None:
     """
     import dataclasses
 
-    config = RunnerConfig.load(runner_dir)
+    config = load_runner_config(runner_dir)
     config = dataclasses.replace(config, workspace_envs=RUNNER_ENVS, max_agents=MAX_AGENTS)
-    config.config_path.write_text(config.to_toml())
+    write_host_file(config)
 
 
 def _session_state_path(workspace: Path, session_id: str) -> Path:

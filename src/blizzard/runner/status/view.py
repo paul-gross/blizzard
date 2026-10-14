@@ -138,7 +138,7 @@ class RunnerStatusSummary:
     last_tick_at: datetime | None
     #: The node names this runner's loaded configuration holds for a human decision.
     gates: tuple[str, ...] = ()
-    #: Whether the token resolves to the store's runner; ``None`` where no loop checks it.
+    #: Whether the token resolves to the configured runner; ``None`` where no loop checks it.
     identity: IdentityVerdict | None = None
     #: The tenant the runner serves, as its hub last answered; ``None`` until a hub that names it answers.
     tenant_id: str | None = None

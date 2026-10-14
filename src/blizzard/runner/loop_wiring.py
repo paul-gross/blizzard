@@ -25,7 +25,7 @@ from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.harness.bundle import BundleSnapshot
 from blizzard.runner.harness.capability_snapshot import HarnessVersionCache, default_harness_id
 from blizzard.runner.hub.chunk_status_cache import ReadThroughChunkViews
-from blizzard.runner.hub.client import IHubClient, ITokenIdentityReader
+from blizzard.runner.hub.client import BindingDeclaration, IHubClient, ITokenIdentityReader
 from blizzard.runner.hub.internal.http_hub import HeldTokenAuth, HttpHubClient
 from blizzard.runner.hub.verified import VerifiedHubClient
 from blizzard.runner.leases.internal.worker_stdout_files import WorkerStdoutFiles
@@ -152,6 +152,7 @@ class LoopWiring:
         loop_config = LoopConfig(
             runner_name=config.name,
             workspace_id=config.workspace_id,
+            runner_id=graph.runner_id,
             max_agents=config.max_agents,
             base_branch=config.base_branch,
             env_capacity=provider.capacity(),
@@ -160,6 +161,12 @@ class LoopWiring:
             local_api_url=config.local_api_url,
             gates=config.gates,
             projects=config.projects,
+            bindings=(
+                None
+                if config.bindings is None
+                else tuple(BindingDeclaration(b.project, b.workspace, b.agents) for b in config.bindings)
+            ),
+            subscription=resolved_subscriptions[0].slug if resolved_subscriptions else None,
             workspace_root=provider.spawn_root(),
             workspace_prompt=self.workspace_prompt,
             runner_prompt=self.runner_prompt,

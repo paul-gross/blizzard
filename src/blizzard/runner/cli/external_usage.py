@@ -1,14 +1,12 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 import click
 import httpx
 
 from blizzard.foundation.clock import SystemClock
 from blizzard.foundation.store.utc import iso_utc
+from blizzard.runner.cli.directory import load_host
 from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
-from blizzard.runner.config import LEGACY_ANTHROPIC_SLUG, ConfigError, RunnerConfig
 from blizzard.runner.subscriptions.internal.subscription_sampler_factory import select_sampler
 from blizzard.runner.subscriptions.subscription_sampler import MISS_REASON_TEXT, SampleMiss
 
@@ -30,14 +28,13 @@ def external_usage_group() -> None:
 def external_usage_probe(slug: str | None, directory: str) -> None:
     """Sample one declared subscription's rate-limit usage, by SLUG, and print it.
 
-    Read-only, writes nothing. SLUG defaults to the legacy ``anthropic`` declaration
-    every runner still carries."""
-    slug = slug or LEGACY_ANTHROPIC_SLUG
-    try:
-        config = RunnerConfig.load(Path(directory))
-    except ConfigError as exc:
-        raise click.ClickException(str(exc)) from exc
-    declared = {declaration.slug: declaration for declaration in config.resolved_subscriptions()}
+    Read-only, writes nothing. It reads the subscriptions the host declares; SLUG may be left out
+    when the host declares exactly one."""
+    declared = {declaration.slug: declaration for declaration in load_host(directory).subscriptions}
+    if slug is None and len(declared) == 1:
+        (slug,) = declared
+    if slug is None:
+        raise click.ClickException(f"name the subscription to sample (declared: {sorted(declared)})")
     if slug not in declared:
         raise click.ClickException(f"no declared subscription with slug {slug!r} (declared: {sorted(declared)})")
     declaration = declared[slug]

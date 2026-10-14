@@ -29,6 +29,7 @@ from tests.e2e.test_acceptance_loop import (
     _terminate,
     _winter_source,
 )
+from tests.host_files import write_host_file
 from tests.runner_join import runner_spawn_env
 from tests.support import daemon_log_sink
 
@@ -97,7 +98,7 @@ def test_runner_panel_updates_live_over_sse_with_no_reload(tmp_path: Path, chrom
         # `blizzard-runner host --dir` subprocess can load it.
         runner_dir = tmp_path / "runner"
         config = _runner_config(runner_dir, workspace, bin_dir, hub_port)
-        config.config_path.write_text(config.to_toml())
+        write_host_file(config)
 
         log = runner_dir / "daemon.log"
         env = runner_spawn_env(

@@ -117,7 +117,7 @@ def _ctx(store: SqlAlchemyRunnerStore, hub: FakeHub, *, checked: bool = False) -
         harness=FakeHarness(handle=None, verdict=None),  # type: ignore[arg-type]
         probe=FakeProbe(alive=set()),
         clock=FixedClock(_NOW),
-        config=LoopConfig(runner_name="r-claude", workspace_id="ws1", max_agents=1),
+        config=LoopConfig(runner_name="r-claude", workspace_id="ws1", runner_id=_RUNNER, max_agents=1),
         registered=False,
         identity_verdict=None if checked else IdentityVerdictHolder("blizzard runner store reset /runner"),
     )
@@ -227,8 +227,9 @@ def test_a_runner_upgraded_from_before_tenants_adopts_its_tenant_at_its_first_co
 
 
 def test_an_empty_row_takes_the_registered_runner_with_its_tenant(tmp_path: Path) -> None:
-    """The check adopts nothing into an empty row; the registration after it records the runner and its tenant."""
-    store = make_store(f"sqlite:///{tmp_path / 'runner.db'}", runner_id=None)
+    """The check writes nothing into an empty row; the registration after it records the configured runner and its
+    tenant."""
+    store = make_store(f"sqlite:///{tmp_path / 'runner.db'}", runner_id=_RUNNER)
     ctx = _ctx(store, _tenant_hub())
 
     IdentityCheck(ctx).run()

@@ -9,17 +9,17 @@ from pathlib import Path
 
 import pytest
 
-from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.opencode.plugin import PLUGIN_DIRNAME, PLUGIN_FILENAME, render_plugin_source
 from blizzard.runner.harness.opencode.shapes import parse_worker_config
 from blizzard.runner.runtime import Runtime, init_environment
 from tests.harness_sections import opencode, with_opencode
+from tests.host_files import init_runner_environment, load_runner_config, write_host_file
 
 pytestmark = pytest.mark.unit
 
 
 def test_init_scaffolds_the_plugin_and_references_it_from_the_worker_config(tmp_path: Path) -> None:
-    config = init_environment(tmp_path)
+    config = init_runner_environment(tmp_path)
 
     plugin_path = tmp_path / PLUGIN_DIRNAME / PLUGIN_FILENAME
     assert plugin_path.read_text(encoding="utf-8") == render_plugin_source()
@@ -33,13 +33,14 @@ def test_init_scaffolds_the_plugin_and_references_it_from_the_worker_config(tmp_
 def test_init_scaffolds_a_repointed_worker_config_path_not_the_default(tmp_path: Path) -> None:
     """A configured ``opencode.worker_config_path`` is where ``init`` scaffolds to, and
     the default path is left unwritten."""
-    default_config = RunnerConfig.scaffold(tmp_path)
+    default_config = init_runner_environment(tmp_path)
+    (tmp_path / "opencode-worker-config.json").unlink()
     custom_path = tmp_path / "custom" / "opencode-config.json"
     custom_path.parent.mkdir(parents=True)
-    repointed = with_opencode(default_config, worker_config_path=str(custom_path))
-    default_config.config_path.write_text(repointed.to_toml())
+    write_host_file(with_opencode(default_config, worker_config_path=str(custom_path)))
 
-    config = Runtime(tmp_path).init()
+    Runtime(tmp_path).init()
+    config = load_runner_config(tmp_path)
 
     assert opencode(config).worker_config_path == str(custom_path)
     document = json.loads(custom_path.read_text())

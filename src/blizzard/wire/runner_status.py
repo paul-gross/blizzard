@@ -46,11 +46,11 @@ class HubConnectivityView(BaseModel):
 
 
 class IdentityVerdictView(BaseModel):
-    """Whether the runner's token resolves to the runner its store belongs to.
+    """Whether the runner's token resolves to the runner its host file configures (``store_runner_id``).
 
     ``unchecked`` until the hub first answers the check, ``matched`` while it does, ``mismatched``
     while the token names another runner — the runner then drives no lease until the right token
-    returns or the store is cleared with ``reset_command``."""
+    returns. ``reset_command`` names how to restore it: the token variable and the configured id."""
 
     state: Literal["unchecked", "matched", "mismatched"]
     store_runner_id: str | None

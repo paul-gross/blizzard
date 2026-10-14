@@ -320,7 +320,7 @@ def test_hosted_winter_reacquire_updates_worker_declarations_on_the_shared_provi
         winter.worktrees = [{"kind": "worktree", "env": "e1", "repo": repo, "path": str(tmp_path / "e1" / repo)}]
 
     membership("old")
-    graph = build_runner_process(config)
+    graph = build_runner_process(config, runner_id=FIXTURE_RUNNER_ID)
     hosted = build_hosted_app(config, process_graph=graph)
     try:
         loop = LoopWiring(config, "", "").context(FakeHub(), graph)

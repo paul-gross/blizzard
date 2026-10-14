@@ -35,6 +35,7 @@ from blizzard.runner.lifecycle.claim import InterruptedClaims, ReadyQueue
 from blizzard.runner.loop.context import LoopConfig
 from blizzard.runner.node_steps.chunk_state import ChunkPause, ChunkState
 from tests.runner_fakes import (
+    FIXTURE_RUNNER_ID,
     FakeHarness,
     FakeHub,
     FakeProbe,
@@ -116,7 +117,9 @@ def _setup(
     store = make_store("sqlite://")
     hub = _ScriptedClaimHub(outcomes)
     views = _RecordingChunkViews(hub=hub)
-    config = LoopConfig(runner_name="r1", workspace_id="ws1", max_agents=1, queue_strict=strict)
+    config = LoopConfig(
+        runner_name="r1", workspace_id="ws1", runner_id=FIXTURE_RUNNER_ID, max_agents=1, queue_strict=strict
+    )
     ctx = make_context(
         store,
         hub=hub,

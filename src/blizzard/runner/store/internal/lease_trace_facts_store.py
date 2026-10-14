@@ -20,7 +20,7 @@ from blizzard.foundation.event_log import EventLogKind
 from blizzard.foundation.roles import adapter_model
 from blizzard.foundation.store.batching import id_batches
 from blizzard.runner.store.errors import RunnerStoreConnections
-from blizzard.runner.store.internal.base import decode_work_refs
+from blizzard.runner.store.internal.base import decode_work_refs, insert_outbox_row
 from blizzard.runner.store.schema import (
     check_results,
     checks_ran,
@@ -440,13 +440,16 @@ class LeaseTraceFactsStore:
         # One transaction: a kill between the two would either re-announce after restart or never announce.
         with self._store.begin() as conn:
             conn.execute(self._store.insert(trace_export_latch).values(kind=kind, recorded_at=at))
-            result = conn.execute(
-                self._store.insert(outbound_buffer).values(
-                    kind=report_kind, chunk_id=None, lease_id=None, payload=report_payload, created_at=at
-                )
+            return insert_outbox_row(
+                self._store,
+                conn,
+                outbound_buffer,
+                kind=report_kind,
+                chunk_id=None,
+                lease_id=None,
+                payload=report_payload,
+                created_at=at,
             )
-        key = result.inserted_primary_key
-        return int(key[0]) if key is not None else 0
 
 
 def _conforms_lease_trace_facts_store(x: LeaseTraceFactsStore) -> IWriteLeaseTraces:

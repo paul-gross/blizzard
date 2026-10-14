@@ -18,6 +18,7 @@ from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.batching import id_batches
 from blizzard.foundation.store.utc import as_utc
 from blizzard.runner.store.errors import RunnerStoreConnections
+from blizzard.runner.store.internal.base import insert_outbox_row
 from blizzard.runner.store.schema import (
     credential_renewal_claims,
     credential_renewal_outcomes,
@@ -179,13 +180,16 @@ class ExternalUsageStore:
             # A report buffers whenever the attempt carries one (`report_kind` non-empty), not
             # only with a sample `payload`: a miss buffers its `missed` report with a NULL payload.
             if report_kind:
-                result = conn.execute(
-                    self._store.insert(outbound_buffer).values(
-                        kind=report_kind, chunk_id=None, lease_id=None, payload=report_payload, created_at=sampled_at
-                    )
+                seq = insert_outbox_row(
+                    self._store,
+                    conn,
+                    outbound_buffer,
+                    kind=report_kind,
+                    chunk_id=None,
+                    lease_id=None,
+                    payload=report_payload,
+                    created_at=sampled_at,
                 )
-                key = result.inserted_primary_key
-                seq = int(key[0]) if key is not None else 0
         _log.info("external subscription usage attempt recorded", slug=slug, sampled=payload is not None)
         return seq
 

@@ -10,7 +10,7 @@ from click.testing import CliRunner, Result
 
 from blizzard.cli.main import blizzard
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.runner.config import RunnerConfig
+from tests.host_files import load_runner_config
 from tests.runner_fakes import SqlAlchemyRunnerStore, runner_store_errors
 from tests.test_runner_status_cli import _init_runner, _serve_local_api
 
@@ -23,7 +23,7 @@ def _run(*args: str) -> Result:
 
 def test_clear_drops_the_override_through_the_daemon(tmp_path: Path) -> None:
     root = _init_runner(tmp_path)
-    config = RunnerConfig.load(root)
+    config = load_runner_config(root)
     store = SqlAlchemyRunnerStore(create_engine_from_url(config.db_url), runner_store_errors())
     store.set_workspace_prompt(config.workspace_id, prompt="AN OVERRIDE", at=datetime(2026, 1, 1, tzinfo=UTC))
     standing = _run("status", "--dir", str(root))

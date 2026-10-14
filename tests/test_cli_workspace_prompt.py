@@ -15,8 +15,8 @@ from click.testing import CliRunner, Result
 
 from blizzard.cli.main import blizzard
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.workspace_prompts import WORKSPACE_PROMPT_FILENAME
+from tests.host_files import load_runner_config
 from tests.runner_fakes import SqlAlchemyRunnerStore, runner_store_errors
 from tests.runner_init_fakes import init_runner
 
@@ -55,18 +55,18 @@ def test_show_names_the_corpus_when_the_sample_is_unknown() -> None:
 def test_install_forks_the_sample_and_repoints_the_config(tmp_path: Path) -> None:
     """The fork lands as a file knob, and the rest of the config file survives the rewrite."""
     root = _runtime(tmp_path)
-    config_text = (root / "blizzard-runner.toml").read_text()
-    assert "# Reconciliation-loop seams." in config_text
+    config_text = (root / "blizzard-host.toml").read_text()
+    assert "# blizzard host configuration" in config_text
 
     result = _run("install", "winter", "--dir", str(root))
     assert result.exit_code == 0, result.output
 
-    reloaded = RunnerConfig.load(root)
+    reloaded = load_runner_config(root)
     assert reloaded.workspace_prompt_file == str(root / WORKSPACE_PROMPT_FILENAME)
     assert reloaded.workspace_prompt_package == ""
     assert reloaded.resolved_workspace_prompt() == (root / WORKSPACE_PROMPT_FILENAME).read_text()
     # An operator's comments and tables are not collateral of setting one knob.
-    assert "# Reconciliation-loop seams." in (root / "blizzard-runner.toml").read_text()
+    assert "# blizzard host configuration" in (root / "blizzard-host.toml").read_text()
 
 
 def test_install_refuses_to_overwrite_without_force(tmp_path: Path) -> None:
@@ -102,7 +102,7 @@ def test_status_names_the_source_for_each_configured_knob(tmp_path: Path) -> Non
     assert unset.exit_code == 0, unset.output
     assert "from none" in unset.output
 
-    _write_knob(root, "workspace_prompt_package", '"winter"')
+    _write_knob(root, "prompt_package", '"winter"')
     packaged = _run("status", "--dir", str(root))
     assert packaged.exit_code == 0, packaged.output
     assert 'from package "winter"' in packaged.output
@@ -112,7 +112,7 @@ def test_status_fails_when_a_configured_source_resolves_to_nothing(tmp_path: Pat
     """The shape a rollback to a wheel that ignores the configured knob leaves behind."""
     root = _runtime(tmp_path)
     (root / WORKSPACE_PROMPT_FILENAME).write_text("   \n")
-    _write_knob(root, "workspace_prompt_file", f'"{root / WORKSPACE_PROMPT_FILENAME}"')
+    _write_knob(root, "prompt_file", f'"{root / WORKSPACE_PROMPT_FILENAME}"')
     result = _run("status", "--dir", str(root))
     assert result.exit_code != 0
     assert "resolves to nothing" in result.output
@@ -122,19 +122,19 @@ def test_install_into_a_config_predating_the_package_knob_keeps_it_parseable(tmp
     """The branch every pre-#344 config takes: the absent knob is spliced in beside its sibling,
     not between a table's comment block and its header."""
     root = _runtime(tmp_path)
-    path = root / "blizzard-runner.toml"
-    path.write_text(path.read_text().replace('workspace_prompt_package = ""\n', ""))
+    path = root / "blizzard-host.toml"
+    path.write_text(path.read_text().replace('prompt_package = ""\n', ""))
 
     result = _run("install", "winter", "--dir", str(root))
     assert result.exit_code == 0, result.output
 
-    reloaded = RunnerConfig.load(root)  # would raise TOMLDecodeError on a mangled rewrite
+    reloaded = load_runner_config(root)  # would raise TOMLDecodeError on a mangled rewrite
     assert reloaded.workspace_prompt_file == str(root / WORKSPACE_PROMPT_FILENAME)
     assert reloaded.workspace_prompt_package == ""
     keys = [line.split("=", 1)[0].strip() for line in path.read_text().splitlines()]
     # The spliced knob joins its siblings as one contiguous run, not adrift above a table header.
-    at = [i for i, key in enumerate(keys) if key.startswith("workspace_prompt")]
-    assert [keys[i] for i in at] == ["workspace_prompt", "workspace_prompt_file", "workspace_prompt_package"]
+    at = [i for i, key in enumerate(keys) if key in ("prompt", "prompt_file", "prompt_package")]
+    assert [keys[i] for i in at] == ["prompt", "prompt_file", "prompt_package"]
     assert at == list(range(at[0], at[0] + 3))
 
 
@@ -143,7 +143,7 @@ def test_a_standing_override_is_what_diff_and_status_report(tmp_path: Path) -> N
     prompt must not answer from config while one stands."""
     root = _runtime(tmp_path)
     assert _run("install", "winter", "--dir", str(root)).exit_code == 0
-    config = RunnerConfig.load(root)
+    config = load_runner_config(root)
     store = SqlAlchemyRunnerStore(create_engine_from_url(config.db_url), runner_store_errors())
     store.set_workspace_prompt(config.workspace_id, prompt="AN OVERRIDE", at=datetime(2026, 1, 1, tzinfo=UTC))
 
@@ -161,7 +161,7 @@ def test_a_standing_override_is_what_diff_and_status_report(tmp_path: Path) -> N
 
 
 def _write_knob(root: Path, key: str, value: str) -> None:
-    path = root / "blizzard-runner.toml"
+    path = root / "blizzard-host.toml"
     lines = [
         f"{key} = {value}\n" if line.split("=", 1)[0].strip() == key else line
         for line in path.read_text().splitlines(keepends=True)

@@ -17,7 +17,9 @@ from sqlalchemy.engine import make_url
 
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.hub.identity import RunnerIdentity
+from blizzard.runner.hub.internal.token_file import HubTokenFile
 from tests.e2e.test_acceptance_loop import _await_http, _free_port, _terminate
+from tests.host_files import load_runner_config, sampler_without_credentials, write_host_file
 from tests.runner_fakes import make_store
 from tests.runner_join import (
     RUNNER_BIN,
@@ -58,19 +60,19 @@ def _hub(hub_dir: Path, port: int) -> Iterator[httpx.Client]:
 
 
 def _identity(config: RunnerConfig) -> RunnerIdentity | None:
-    """The runner store's identity row — written only by a registration the hub accepted."""
-    return make_store(config.db_url, runner_id=None).runner_identity()
+    """The configured runner's identity row — recorded by ``init`` and refreshed by each registration the hub accepts."""
+    return make_store(config.db_url, runner_id=config.runner_id).runner_identity()
 
 
 @contextlib.contextmanager
 def _runner(runner_dir: Path, hub_url: str) -> Iterator[RunnerConfig]:
-    """``blizzard runner host`` over a joined ``runner_dir``, yielded once its store holds the identity
-    row; the external-usage sampler reads a credentials path that is never created."""
+    """``blizzard runner host`` over a joined ``runner_dir``, yielded once its hub holds the runner online; the
+    external-usage sampler reads a credentials path that is never created."""
     config = dataclasses.replace(
-        RunnerConfig.load(runner_dir),
-        external_usage_credentials_path=str(runner_dir / "no-such-credentials.json"),
+        load_runner_config(runner_dir),
+        subscriptions=sampler_without_credentials(runner_dir),
     )
-    config.config_path.write_text(config.to_toml())
+    write_host_file(config)
     log = runner_dir / "daemon.log"
     proc = subprocess.Popen(
         [str(RUNNER_BIN), "host", "--dir", str(runner_dir), "--host", "127.0.0.1", "--port", str(_free_port())],
@@ -80,10 +82,15 @@ def _runner(runner_dir: Path, hub_url: str) -> Iterator[RunnerConfig]:
         text=True,
     )
     try:
-        assert poll_until(lambda: _identity(config) is not None, timeout=30.0), read_daemon_log(log)
+        assert poll_until(lambda: _online(hub_url, config), timeout=30.0), read_daemon_log(log)
         yield config
     finally:
         _terminate(proc)
+
+
+def _online(hub_url: str, config: RunnerConfig) -> bool:
+    answer = httpx.get(f"{hub_url}/api/runners/{config.runner_id}", timeout=15.0)
+    return answer.status_code == 200 and answer.json()["connection"] == "online"
 
 
 def _runner_ids(hub: httpx.Client) -> list[str]:
@@ -104,7 +111,7 @@ def test_init_adds_a_runner_at_a_hub_without_sign_in_and_its_daemon_connects_und
     runner_dir = tmp_path / "runner"
     with _hub(tmp_path / "hub", port) as hub:
         joined = join_runner(runner_dir, hub_url)
-        name = RunnerConfig.load(runner_dir).name
+        name = load_runner_config(runner_dir).name
         assert joined.runner_id.startswith("rn_"), joined
         assert joined.runner_name == name
         assert _view(hub, joined.runner_id)["connection"] == "never_connected"
@@ -132,8 +139,12 @@ def test_a_runner_renamed_in_its_config_shows_the_new_name_under_the_same_id_aft
         with _runner(runner_dir, hub_url):
             pass
 
-        config = RunnerConfig.load(runner_dir)
-        config.config_path.write_text(dataclasses.replace(config, name="renamed-runner").to_toml())
+        # Renaming a runner is editing its name and its token variable's name together.
+        config = load_runner_config(runner_dir)
+        token = held_token(runner_dir)
+        renamed_config = dataclasses.replace(config, name="renamed-runner")
+        write_host_file(renamed_config)
+        HubTokenFile.of(runner_dir, renamed_config.token_env).write(token)
         with _runner(runner_dir, hub_url) as renamed:
             assert poll_until(lambda: _view(hub, joined.runner_id)["runner_name"] == "renamed-runner")
             assert poll_until(lambda: getattr(_identity(renamed), "runner_name", None) == "renamed-runner")

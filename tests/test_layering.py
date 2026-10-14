@@ -458,8 +458,8 @@ def test_hub_scoped_seam_check_refuses_a_member_taken_apart(tmp_path: Path, text
 
 
 _RUNNER_SCOPED_NAMES = frozenset({"RUNNER_SCOPED_OPTION", "blizzard_runner_unscoped"})
-#: ``HostStores``' two guard-exempt members, each in its own module: the start-up stamp and the invariant audit.
-_HOST_EXEMPT_MEMBER_MODULES = frozenset({"host_unowned_row_stamp.py", "host_runner_audit.py"})
+#: ``HostStores``' guard-exempt member, in its own module: the invariant audit.
+_HOST_EXEMPT_MEMBER_MODULES = frozenset({"host_runner_audit.py"})
 #: The single cross-kind write: a host-scoped sample and its runner-scoped outbound report in one transaction —
 #: (host module, method, the runner table it may name there).
 _CROSS_KIND_WRITE = ("host_external_usage_store.py", "record_external_usage_attempt", "outbound_buffer")
@@ -504,9 +504,9 @@ def _table_names_in(tree: ast.AST) -> Iterator[tuple[ast.AST, str, str | None]]:
 def _host_store_breaches(src_root: Path) -> list[str]:
     """Each place under ``src_root`` (a ``blizzard`` package root) that reaches across the runner store's two kinds:
     a runner adapter module (``runner/store/internal/`` but not ``host_*``) naming a host-scoped table; a host adapter
-    module naming a runner-scoped table, bar :data:`_CROSS_KIND_WRITE`'s outbound report (the exempt members, which
-    stamp or audit runner rows by design, are confined by :func:`_runner_seam_breaches` instead); and the runner-scoped
-    exemption named anywhere but the seam that declares it, the guard that honours it, the exempt members' modules, and
+    module naming a runner-scoped table, bar :data:`_CROSS_KIND_WRITE`'s outbound report (the exempt member, which
+    audits runner rows by design, is confined by :func:`_runner_seam_breaches` instead); and the runner-scoped
+    exemption named anywhere but the seam that declares it, the guard that honours it, the exempt member's module, and
     runner migrations."""
     store = src_root / "runner" / "store"
     internal = store / "internal"
@@ -562,7 +562,7 @@ def _runner_seam_breaches(src_root: Path) -> list[str]:
 def test_host_tables_are_reached_only_through_the_host_stores() -> None:
     """``bzh:host-stores-confined``: a runner adapter names no host-scoped table and a host adapter no runner-scoped
     one, bar the single cross-kind write (``record_external_usage_attempt``'s outbound report); the exemption from the
-    runner statement guard is named only by its seam, the guard, ``HostStores``' two exempt members, and runner
+    runner statement guard is named only by its seam, the guard, ``HostStores``' exempt member, and runner
     migrations — the invariant checker reaches the store through the audit member, never spelling it."""
     breaches = _host_store_breaches(_SRC_DIR)
     assert not breaches, f"host stores — a store kind reached from outside its own doors: {breaches}"
@@ -599,7 +599,7 @@ def _plant_host_store(tmp_path: Path, rel: str, text: str) -> list[str]:
         ("runner/store/internal/pause_store.py", 'OPTIONS = {"blizzard_runner_unscoped": True}\n'),
         (
             "runner/store/internal/identity_store.py",
-            "from blizzard.runner.store.internal.host_unowned_row_stamp import stamp_unowned_rows\n",
+            "from blizzard.runner.store.internal.host_runner_audit import RunnerAudit\n",
         ),
         (
             "runner/store/internal/host_daemon_liveness_store.py",
@@ -622,7 +622,7 @@ def test_host_store_check_catches_every_breach(tmp_path: Path, rel: str, text: s
             "from blizzard.runner.store.schema import outbound_buffer\n"
             "def record_external_usage_attempt(self):\n    return outbound_buffer.insert()\n",
         ),
-        ("runner/store/internal/host_unowned_row_stamp.py", "OPTIONS = {RUNNER_SCOPED_OPTION: True}\nleases\n"),
+        ("runner/store/internal/host_runner_audit.py", "OPTIONS = {RUNNER_SCOPED_OPTION: True}\nleases\n"),
         (
             "runner/store/internal/host_runner_audit.py",
             "from blizzard.runner.store.errors import RUNNER_SCOPED_OPTION\n",
@@ -634,6 +634,129 @@ def test_host_store_check_catches_every_breach(tmp_path: Path, rel: str, text: s
 )
 def test_host_store_check_admits_its_own_doors(tmp_path: Path, rel: str, text: str) -> None:
     assert _plant_host_store(tmp_path, rel, text) == []
+
+
+_OUTBOX_TABLES = frozenset({"outbound_buffer", "transcript_outbound_buffer"})
+_INSERT_BUILDERS = frozenset({"insert", "insert_rows", "insert_from_select"})
+_OUTBOX_INSERT_SQL = re.compile(r"insert\s+(or\s+\w+\s+)?into\s+\W*(transcript_)?outbound_buffer\b", re.IGNORECASE)
+_OUTBOX_SEAM_FILE = Path("runner") / "store" / "internal" / "base.py"
+
+
+def _outbox_insert_breaches(src_root: Path) -> list[str]:
+    """Each place under ``src_root`` (a ``blizzard`` package root) that inserts into ``outbound_buffer`` or
+    ``transcript_outbound_buffer`` other than through the seam in ``src/blizzard/runner/store/internal/base.py``: an
+    insert builder (``insert``, ``insert_rows``, ``insert_from_select``, called on a store, on ``sqlalchemy``, or on the
+    table itself) given either table, under any name it was imported as, or raw ``INSERT INTO`` text naming one. Runner
+    migrations write the tables as they were and are not judged."""
+    breaches: list[str] = []
+    for path in sorted(src_root.rglob("*.py")):
+        relative = path.relative_to(src_root)
+        if relative == _OUTBOX_SEAM_FILE or relative.is_relative_to(Path("runner") / "store" / "migrations"):
+            continue
+        tree = ast.parse(path.read_text(), filename=str(path))
+        names = set(_OUTBOX_TABLES)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom):
+                names |= {alias.asname for alias in node.names if alias.name in _OUTBOX_TABLES and alias.asname}
+        where = path.relative_to(src_root.parent)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call) and _terminal(node.func) in _INSERT_BUILDERS:
+                receiver = node.func.value if isinstance(node.func, ast.Attribute) else None
+                if any(_terminal(arg) in names for arg in (receiver, *node.args)):
+                    breaches.append(f"{where}:{node.lineno} inserts into an outbox table outside the seam")
+            elif (
+                isinstance(node, ast.Constant) and isinstance(node.value, str) and _OUTBOX_INSERT_SQL.search(node.value)
+            ):
+                breaches.append(f"{where}:{node.lineno} inserts into an outbox table outside the seam")
+    return breaches
+
+
+def test_every_outbox_row_is_inserted_through_the_seam() -> None:
+    """Every outbox ``seq`` comes from the runner's durable counter (``src/blizzard/runner/store/internal/base.py``'s
+    ``insert_outbox_row``), advanced in the transaction that writes the row: an adapter that inserts into
+    ``outbound_buffer`` or ``transcript_outbound_buffer`` any other way would mint a ``seq`` the counter never saw."""
+    breaches = _outbox_insert_breaches(_SRC_DIR)
+    assert not breaches, f"outbox inserts — a row written around its counter: {breaches}"
+
+
+#: Tables whose dialect-specific table option is an admitted exception in
+#: blizzard-context:/standards/persistence.md — every other table stays inside the portable surface.
+_DIALECT_OPTION_ALLOWLIST = {"in_flight_elicitations", "host_outbound_buffer"}
+
+
+def _tables_with_dialect_options() -> set[str]:
+    from blizzard.hub.store.schema import metadata as hub_metadata
+    from blizzard.runner.store.schema import metadata as runner_metadata
+
+    return {
+        table.name for metadata in (runner_metadata, hub_metadata) for table in metadata.tables.values() if table.kwargs
+    }
+
+
+def test_dialect_table_options_are_all_admitted() -> None:
+    """A table that sets a dialect-specific option (``sqlite_autoincrement``) must be named by the persistence
+    standard's Exception, so the allowlist and the standard move together."""
+    unadmitted = _tables_with_dialect_options() - _DIALECT_OPTION_ALLOWLIST
+    assert not unadmitted, f"dialect-specific table options outside the persistence Exception: {sorted(unadmitted)}"
+    assert _tables_with_dialect_options() == _DIALECT_OPTION_ALLOWLIST, (
+        "the allowlist names a table that no longer sets one"
+    )
+
+
+def _plant_outbox_insert(tmp_path: Path, rel: str, text: str) -> list[str]:
+    src = tmp_path / "blizzard"
+    (src / rel).parent.mkdir(parents=True, exist_ok=True)
+    (src / rel).write_text(text)
+    return _outbox_insert_breaches(src)
+
+
+@pytest.mark.parametrize(
+    ("rel", "text"),
+    [
+        (
+            "runner/store/internal/pause_store.py",
+            "def f(self, conn):\n    conn.execute(self._store.insert(outbound_buffer).values(kind='k'))\n",
+        ),
+        (
+            "runner/store/internal/usage_store.py",
+            "def f(self, conn):\n    conn.execute(sa.insert(schema.transcript_outbound_buffer))\n",
+        ),
+        ("runner/store/internal/usage_store.py", "def f(conn):\n    conn.execute(outbound_buffer.insert())\n"),
+        (
+            "runner/store/internal/usage_store.py",
+            "from blizzard.runner.store.schema import outbound_buffer as ob\ndef f(s):\n    return s.insert_rows(ob, [])\n",
+        ),
+        ("runner/store/internal/usage_store.py", "SQL = 'INSERT INTO outbound_buffer (kind) VALUES (1)'\n"),
+        ("tools/invariants.py", "def f(c):\n    c.execute(insert(transcript_outbound_buffer))\n"),
+    ],
+)
+def test_outbox_insert_check_catches_a_bypass(tmp_path: Path, rel: str, text: str) -> None:
+    assert _plant_outbox_insert(tmp_path, rel, text)
+
+
+@pytest.mark.parametrize(
+    ("rel", "text"),
+    [
+        (
+            "runner/store/internal/base.py",
+            "def f(store, conn):\n    conn.execute(store.insert(outbound_buffer).values(seq=1))\n",
+        ),
+        (
+            "runner/store/internal/pause_store.py",
+            "def f(self, conn):\n    insert_outbox_row(self._store, conn, outbound_buffer, kind='k')\n",
+        ),
+        (
+            "runner/store/internal/pause_store.py",
+            "def f(self, conn):\n    conn.execute(self._store.insert(pause_parks))\n",
+        ),
+        (
+            "runner/store/migrations/versions/x.py",
+            "def upgrade(bind):\n    bind.execute(sa.insert(outbound_buffer))\n",
+        ),
+    ],
+)
+def test_outbox_insert_check_admits_the_seam_and_other_tables(tmp_path: Path, rel: str, text: str) -> None:
+    assert _plant_outbox_insert(tmp_path, rel, text) == []
 
 
 _EVENT_LOG_SERVICE_FILE = _HUB_DIR / "domain" / "chunk" / "event_log.py"
@@ -2002,7 +2125,9 @@ _RUNNER_PACKAGE_LAYERS: dict[str, frozenset[str]] = {
 }
 _RUNNER_EDGE_PACKAGES = frozenset({"api", "cli", "store"})
 #: Top-level runner modules that assemble or serve the graph (composition roots, config loader, runtime).
-_RUNNER_EDGE_MODULES = frozenset({"app", "composition", "config", "listeners", "loop_wiring", "runtime"})
+_RUNNER_EDGE_MODULES = frozenset(
+    {"app", "composition", "config", "host_config", "host_layout", "listeners", "loop_wiring", "runtime"}
+)
 _RUNNER_SUBNODES = frozenset({"harness/claude_code", "harness/opencode", "harness/wiring"})
 
 

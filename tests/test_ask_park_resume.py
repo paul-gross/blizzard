@@ -22,7 +22,16 @@ from blizzard.runner.leases.model import NewLease
 from blizzard.runner.loop.context import LoopConfig
 from blizzard.runner.loop.steps import Advance, Pull, Reap
 from blizzard.runner.node_steps.chunk_state import ChunkState
-from tests.runner_fakes import FakeHarness, FakeHub, FakeProbe, FakeProvider, make_context, make_envelope, make_store
+from tests.runner_fakes import (
+    FIXTURE_RUNNER_ID,
+    FakeHarness,
+    FakeHub,
+    FakeProbe,
+    FakeProvider,
+    make_context,
+    make_envelope,
+    make_store,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -277,7 +286,13 @@ def test_answer_resumes_the_dormant_session_under_the_same_lease(tmp_path, works
         provider=FakeProvider({"e1": "/ws/e1"}),
         harness=harness,
         probe=FakeProbe(),
-        config=LoopConfig(runner_name="r1", workspace_id="ws1", max_agents=1, workspace_root=workspace_root),
+        config=LoopConfig(
+            runner_name="r1",
+            workspace_id="ws1",
+            runner_id=FIXTURE_RUNNER_ID,
+            max_agents=1,
+            workspace_root=workspace_root,
+        ),
     )
 
     Advance(ctx).run()

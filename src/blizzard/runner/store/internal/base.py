@@ -13,18 +13,23 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import ColumnElement, Connection, Select, and_, join
+from sqlalchemy import ColumnElement, Connection, Select, Table, and_, join
+from sqlalchemy.exc import IntegrityError
 
 from blizzard.foundation.roles import domain_model
 from blizzard.runner.leases.model import Lease, WorkRefStamp
 from blizzard.runner.store.errors import RunnerStoreConnections
 from blizzard.runner.store.schema import (
+    OUTBOX_LANE_OUTBOUND,
+    OUTBOX_LANE_TRANSCRIPT,
     binding_releases,
     env_bindings,
     escalation_closures,
     lease_closures,
     lease_context,
     leases,
+    outbound_buffer,
+    outbox_counters,
     pause_park_resumes,
     pause_parks,
     resume_clears,
@@ -199,18 +204,60 @@ def row_to_lease(r) -> Lease:  # type: ignore[no-untyped-def]
     )
 
 
+#: Each outbox table's lane in ``outbox_counters``.
+_OUTBOX_LANES: dict[Table, str] = {
+    outbound_buffer: OUTBOX_LANE_OUTBOUND,
+    transcript_outbound_buffer: OUTBOX_LANE_TRANSCRIPT,
+}
+
+
+def insert_outbox_row(store: RunnerStoreConnections, conn: Connection, table: Table, **values: Any) -> int:
+    """Insert one row into an outbox table, ``outbound_buffer`` or ``transcript_outbound_buffer``, on ``conn`` — the
+    caller's transaction — under the next ``seq`` of the bound runner's lane; answer that ``seq``.
+
+    The one door every outbox write passes through: the lane's counter in ``outbox_counters`` advances in the same
+    transaction as the row, so a rollback returns the seq, and a counter never moves backwards, so a pruned row's seq is
+    never issued again. ``tests/test_layering.py`` fails an insert into either table that goes around it."""
+    seq = _next_outbox_seq(store, conn, _OUTBOX_LANES[table])
+    conn.execute(store.insert(table).values(seq=seq, **values))
+    return seq
+
+
+def _next_outbox_seq(store: RunnerStoreConnections, conn: Connection, lane: str) -> int:
+    """Advance the bound runner's counter for ``lane`` and answer its new value. The advance takes the counter's row
+    lock, so concurrent writers of one lane queue behind it; the first allocation creates the row, and a writer that
+    loses that race advances the row the winner created."""
+    advance = (
+        store.update(outbox_counters)
+        .where(outbox_counters.c.lane == lane)
+        .values(last_seq=outbox_counters.c.last_seq + 1)
+    )
+    if not conn.execute(advance).rowcount:
+        try:
+            with conn.begin_nested():
+                conn.execute(store.insert(outbox_counters).values(lane=lane, last_seq=1))
+        except IntegrityError:
+            conn.execute(advance)
+        else:
+            return 1
+    return conn.execute(
+        store.select(outbox_counters, outbox_counters.c.last_seq).where(outbox_counters.c.lane == lane)
+    ).scalar_one()
+
+
 def enqueue_transcript_final(store: RunnerStoreConnections, conn: Connection, segment: Any, *, at: datetime) -> None:
     """Enqueue a marker noting ``segment`` is finalized — a minimal row; the
     wire-shaped ``TranscriptSegmentRecord`` itself is rendered at the drain boundary from
     the ledger row (``bzh:dependency-inversion``). Ships unconditionally. Shared by the
     leases adapter (a spawn/closure boundary implicitly finalizes) and the transcripts
     adapter (an explicit finalize)."""
-    conn.execute(
-        store.insert(transcript_outbound_buffer).values(
-            segment_id=str(segment.segment_id),
-            chunk_id=str(segment.chunk_id),
-            final=True,
-            payload=json.dumps({"segment_id": str(segment.segment_id)}),
-            created_at=at,
-        )
+    insert_outbox_row(
+        store,
+        conn,
+        transcript_outbound_buffer,
+        segment_id=str(segment.segment_id),
+        chunk_id=str(segment.chunk_id),
+        final=True,
+        payload=json.dumps({"segment_id": str(segment.segment_id)}),
+        created_at=at,
     )

@@ -6,44 +6,30 @@ from __future__ import annotations
 
 import base64
 import binascii
-import json
 import os
 import re
-import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from blizzard.foundation.forwarded import TrustedProxies
 from blizzard.foundation.public_origins import PublicOrigins
 from blizzard.foundation.roles import domain_model
+from blizzard.foundation.runner_token_names import hub_token_variable
 from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.foundation.trace_export.settings import TracingSettings
 from blizzard.runner.auth.roles import RolePolicy
 from blizzard.runner.auth.session import CALLBACK_PATH
 from blizzard.runner.config_table import ConfigError, Table
-from blizzard.runner.environments.factory import WORKSPACE_PROVIDERS, WorkspaceSettings
+from blizzard.runner.environments.factory import WorkspaceSettings
 from blizzard.runner.environments.provider import WorkspaceRepo
 from blizzard.runner.harness.autonomy import Autonomy
 from blizzard.runner.harness.bundle import HARNESS_CONFIG_DIRNAME
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.wiring import HarnessSections, HarnessSettings
 from blizzard.runner.harness.workspace_prompts import PACKAGED, UnknownWorkspacePromptSample
-from blizzard.runner.hub.token_file import ENV_FILENAME, assigned_token
-from blizzard.runner.subscriptions.subscription_sampler import PROVIDER_ANTHROPIC
-from blizzard.runner.transcripts.caps import CHUNK_TRANSCRIPT_MAX_BYTES, TRANSCRIPT_RECORD_MAX_BYTES
-
-# Default declaration synthesized from the retained `[external_subscription_usage]` configuration.
-LEGACY_ANTHROPIC_SLUG = "anthropic"
-LEGACY_ANTHROPIC_NAME = "Anthropic"
+from blizzard.runner.host_layout import HostLayout
 
 #: Winter's own exporter variables; only the runner sets them, and only under `worker_programs`.
 _WINTER_OTEL_PREFIX = "WINTER_OTEL_"
-
-CONFIG_FILENAME = "blizzard-runner.toml"
-DATA_DIRNAME = "data"
-# The local API's unix socket, under the state dir beside the store; filesystem
-# permissions are its access control.
-SOCKET_FILENAME = "runner.sock"
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8431
@@ -75,9 +61,6 @@ DEFAULT_RUNNER_NAME = "runner-local"
 DEFAULT_WORKSPACE_ID = "workspace-local"
 DEFAULT_MAX_AGENTS = 1
 DEFAULT_BASE_BRANCH = "main"
-# The env var NAMING this runner's hub bearer token — the toml round-trips the
-# variable name only, never the secret.
-DEFAULT_TOKEN_ENV = "BZ_HUB_TOKEN"
 # The env var NAMING the secret that signs this runner's session cookie, likewise name-only in the toml.
 DEFAULT_SESSION_SECRET_ENV = "BZ_RUNNER_SESSION_SECRET"
 # HMAC-SHA256's block-safe floor: a decoded secret shorter than this is refused at load.
@@ -157,33 +140,6 @@ def _parse_harness_config_dir(value: object, root: Path, path: Path) -> Path | N
     return expanded
 
 
-def _hub_token(root: Path, token_env: str) -> str:
-    """The hub bearer token: the process environment's ``token_env``, else the runtime dir's
-    ``.env`` assignment of it — so a token ``runner init`` wrote is read with no environment set,
-    and one the environment supplies overrides it."""
-    if token := os.environ.get(token_env, ""):
-        return token
-    try:
-        return assigned_token((root / ENV_FILENAME).read_text(), token_env)
-    except FileNotFoundError:
-        return ""
-
-
-def _runner_name(raw: dict[str, object], path: Path) -> tuple[str, str | None]:
-    """The runner's name, stripped, and the legacy ``runner_id`` it shadows, if any: ``name`` wins, a toml
-    declaring only the legacy ``runner_id`` reads it as the name, and neither falls back to the default."""
-    if "name" in raw:
-        key, shadowed = "name", raw.get("runner_id")
-    elif "runner_id" in raw:
-        key, shadowed = "runner_id", None
-    else:
-        return DEFAULT_RUNNER_NAME, None
-    value = raw[key]
-    if not isinstance(value, str) or not value.strip():
-        raise ConfigError(f"{key} must be a non-blank name, got {value!r} (in {path})")
-    return value.strip(), None if shadowed is None else str(shadowed)
-
-
 def _workspace_repos(raw: object) -> tuple[WorkspaceRepo, ...]:
     if not isinstance(raw, list):
         raise ConfigError("[[workspace_repo]] must be an array of tables")
@@ -214,35 +170,6 @@ def _expanded_path_prepend(raw: tuple[str, ...]) -> tuple[str, ...]:
             raise ConfigError(f"[worker] path_prepend entries must be absolute (~ allowed), got {entry!r}")
         expanded.append(str(path))
     return tuple(expanded)
-
-
-def _projects(raw: dict[str, object], path: Path) -> tuple[str, ...] | None:
-    """The configured ``projects``: ``None`` when the key is absent — never an empty tuple, which is
-    an explicit ``projects = []`` — else each entry, a project id or slug."""
-    if "projects" not in raw:
-        return None
-    value = raw["projects"]
-    if not isinstance(value, list) or not all(isinstance(entry, str) and entry.strip() for entry in value):
-        raise ConfigError(f"{path}: projects must be a list of project ids or slugs, got {value!r}")
-    return tuple(str(entry).strip() for entry in value)
-
-
-def _projects_toml(projects: tuple[str, ...] | None) -> str:
-    """The ``projects`` key and its comment — written only when set, so a config naming none still names
-    none after a round trip, unchanged."""
-    if projects is None:
-        return ""
-    return (
-        "\n# The projects this runner serves, by id or slug. Without this key the runner declares\n"
-        "# none and its hub keeps the projects it already holds for it; [] serves none.\n"
-        f"projects = [{', '.join(json.dumps(p) for p in projects)}]\n"
-    )
-
-
-def _cap_line(key: str, value: int | None, default: int) -> str:
-    """One ``[transcripts]`` ceiling: live once overridden, commented at its default so the
-    scaffolded file always shows an operator what the ceiling IS."""
-    return f"{key} = {value}\n" if value is not None else f"# {key} = {default}\n"
 
 
 @domain_model
@@ -297,31 +224,11 @@ class Context:
 
 @domain_model
 @dataclass(frozen=True)
-class ExternalUsage:
-    """The ``[external_subscription_usage]`` table."""
-
-    table: Table
-
-    @classmethod
-    def of(cls, raw: object) -> ExternalUsage:
-        return cls(Table.of(raw))
-
-    @property
-    def sample_interval_seconds(self) -> int:
-        return self.table.count("sample_interval_seconds", DEFAULT_EXTERNAL_USAGE_SAMPLE_INTERVAL_SECONDS)
-
-    @property
-    def credentials_path(self) -> str | None:
-        return self.table.text("credentials_path")
-
-
-@domain_model
-@dataclass(frozen=True)
 class SubscriptionDeclaration:
     """One declared provider subscription — the runner-unique, immutable
     join key everything downstream keys on is ``slug``; ``name`` is operator-facing only.
 
-    :meth:`RunnerConfig.resolved_subscriptions` owns how declarations and the legacy table combine."""
+    The host declares them; a runner names the one it spends (:attr:`RunnerConfig.subscriptions`)."""
 
     slug: str
     name: str
@@ -334,9 +241,8 @@ class SubscriptionDeclaration:
     @classmethod
     def declared(cls, raw_declarations: object) -> tuple[SubscriptionDeclaration, ...]:
         """Validate and project ``[[subscription]]`` entries; each rejection names the
-        offending entry. An empty list (none authored) is zero declarations, filled in by
-        :meth:`synthesized_from_legacy`; anything else non-list (e.g. a singular
-        ``[subscription]`` table) is rejected rather than silently read as zero."""
+        offending entry. An empty list (none authored) is zero declarations; anything else
+        non-list (e.g. a singular ``[subscription]`` table) is rejected rather than silently read as zero."""
         if not isinstance(raw_declarations, list):
             raise ConfigError(
                 f"[[subscription]] must be an array of tables, got {type(raw_declarations).__name__}: "
@@ -369,21 +275,6 @@ class SubscriptionDeclaration:
                 )
             )
         return tuple(declarations)
-
-    @classmethod
-    def synthesized_from_legacy(
-        cls, *, credentials_path: str | None, sample_interval_seconds: int
-    ) -> SubscriptionDeclaration:
-        """The one declaration a runner with no ``[[subscription]]`` entries runs with —
-        carrying the legacy ``[external_subscription_usage]`` table's own cadence and
-        credential path forward unchanged."""
-        return cls(
-            slug=LEGACY_ANTHROPIC_SLUG,
-            name=LEGACY_ANTHROPIC_NAME,
-            provider=PROVIDER_ANTHROPIC,
-            credentials_path=credentials_path,
-            sample_interval_seconds=sample_interval_seconds,
-        )
 
 
 @domain_model
@@ -490,6 +381,16 @@ class Auth:
 
 @domain_model
 @dataclass(frozen=True)
+class ProjectBinding:
+    """One ``[[runner]] projects`` binding: a project, the workspace it runs in, and its agent count."""
+
+    project: str
+    workspace: str
+    agents: int
+
+
+@domain_model
+@dataclass(frozen=True)
 class RunnerConfig:
     """Resolved runner runtime configuration."""
 
@@ -501,13 +402,11 @@ class RunnerConfig:
     hub_url: str = DEFAULT_HUB_URL
     #: This runner's display name at the hub — not unique, and never its identity.
     name: str = DEFAULT_RUNNER_NAME
-    #: A legacy ``runner_id`` key the toml declares beside ``name``, which wins.
-    shadowed_runner_id: str | None = None
+    #: The hub-minted id the host file's ``[[runner]]`` names; the runner's store binds to it before anything runs.
+    runner_id: str | None = None
     workspace_id: str = DEFAULT_WORKSPACE_ID
-    #: Names the env var carrying the hub bearer token; :attr:`hub_token` is the resolved secret —
-    #: the process environment's, else the runtime dir's ``.env`` — and empty is a valid state.
-    token_env: str = DEFAULT_TOKEN_ENV
-    hub_token: str = ""
+    #: The resolved hub bearer token (see :attr:`token_env` for its variable); empty is a valid state.
+    hub_token: str = field(default="", repr=False)
     #: Names the env var carrying the session-signing secret; :attr:`session_secret` is the
     #: resolved bytes, empty when the variable is unset.
     session_secret_env: str = DEFAULT_SESSION_SECRET_ENV
@@ -566,15 +465,11 @@ class RunnerConfig:
     #: The runner ceiling's rolling window length in hours — unused while
     #: :attr:`runner_ceiling_usd` is ``None``.
     runner_ceiling_window_hours: float = DEFAULT_RUNNER_CEILING_WINDOW_HOURS
-    #: The external-usage sample cadence in seconds — a diagnostic cadence,
-    #: not a spend control, so absent means the default rather than never.
-    external_usage_sample_interval_seconds: int = DEFAULT_EXTERNAL_USAGE_SAMPLE_INTERVAL_SECONDS
-    #: An override for the credential file the external-usage sampler reads;
-    #: ``None`` means the adapter's own default.
-    external_usage_credentials_path: str | None = None
-    #: Every authored ``[[subscription]]`` entry, verbatim — empty when none is declared.
-    #: Callers read :meth:`resolved_subscriptions`, not this.
+    #: The declared subscription this runner names — none or one — which it samples and reports.
     subscriptions: tuple[SubscriptionDeclaration, ...] = ()
+    #: The projects this runner serves, each bound to a workspace of its host with its agent count, in file order;
+    #: sent at every registration beside :attr:`projects`. ``None`` — a config built without a host file — sends none.
+    bindings: tuple[ProjectBinding, ...] | None = None
     #: The session-context warn line; ``None`` disables the lane — nothing is sampled, nothing gated.
     context_warn_tokens: int | None = None
     #: How often a running lease's context is re-read — unused while the lane is off.
@@ -662,12 +557,13 @@ class RunnerConfig:
         return self.public_origins.callback_uris(CALLBACK_PATH)
 
     @property
-    def config_path(self) -> Path:
-        return self.root / CONFIG_FILENAME
+    def token_env(self) -> str:
+        """The variable carrying this runner's hub token, derived from its name."""
+        return hub_token_variable(self.name)
 
     @property
     def data_dir(self) -> Path:
-        return self.root / DATA_DIRNAME
+        return HostLayout(self.root).data_dir
 
     @property
     def effective_workspace_root(self) -> str:  # ast-grep-ignore: bzh:property-delegates
@@ -703,14 +599,8 @@ class RunnerConfig:
 
     @property
     def socket_path(self) -> Path:
-        return self.socket_path_for(self.root)
-
-    @staticmethod
-    def socket_path_for(root: Path) -> Path:
-        """The local API's unix socket, under the state dir with the store — derivable from
-        the path alone, so a local verb can address the daemon from ``--dir`` without
-        reading the toml or opening the store."""
-        return root / SOCKET_FILENAME
+        """The local API's unix socket in the host directory; filesystem permissions are its access control."""
+        return HostLayout(self.root).socket_path
 
     @property
     def local_api_url(self) -> str:
@@ -718,10 +608,6 @@ class RunnerConfig:
         a worker or taken-over session is handed, shared by the loop context and the
         takeover service so the two cannot drift."""
         return f"http://{self.host}:{self.port}"
-
-    @staticmethod
-    def default_db_url(root: Path) -> str:
-        return f"sqlite:///{(root / DATA_DIRNAME / 'runner.db').resolve()}"
 
     def resolved_workspace_prompt(self) -> str:
         """The effective static workspace prompt, resolved from its three knobs.
@@ -777,19 +663,9 @@ class RunnerConfig:
         return self.runner_prompt
 
     def resolved_subscriptions(self) -> tuple[SubscriptionDeclaration, ...]:
-        """Every declared provider subscription, resolved — the runtime list callers read.
-
-        Declarations win over the legacy ``[external_subscription_usage]`` table: any authored
-        ``[[subscription]]`` (:attr:`subscriptions`) replaces it entirely; none present
-        synthesizes the sole legacy-Anthropic declaration from this config's own
-        already-resolved :attr:`external_usage_credentials_path` /
-        :attr:`external_usage_sample_interval_seconds` — never both, and never empty."""
-        return self.subscriptions or (
-            SubscriptionDeclaration.synthesized_from_legacy(
-                credentials_path=self.external_usage_credentials_path,
-                sample_interval_seconds=self.external_usage_sample_interval_seconds,
-            ),
-        )
+        """The subscriptions this runner names — what every reader samples, reports and lists. A runner naming none
+        declares, samples and reports none."""
+        return self.subscriptions
 
     def auth_headers(self) -> dict[str, str]:
         """The outbound ``Authorization`` header every runner->hub call carries.
@@ -799,338 +675,3 @@ class RunnerConfig:
         if not self.hub_token:
             return {}
         return {"Authorization": f"Bearer {self.hub_token}"}
-
-    def token_from_process_env(self) -> bool:
-        """Whether the process environment supplies :attr:`hub_token`, overriding the runtime dir's
-        ``.env`` — so a token corrected in that file takes effect only after a restart."""
-        return bool(os.environ.get(self.token_env))
-
-    @classmethod
-    def scaffold(
-        cls, root: Path, *, hub_url: str | None = None, projects: tuple[str, ...] | None = None
-    ) -> RunnerConfig:
-        """The default config for a fresh runtime root (used by ``init``).
-
-        The loop seams are read from the injected environment when present, so ``init``
-        produces a runnable config; each falls back to its dataclass default. ``hub_url``,
-        when given, wins over ``BZ_HUB_URL``. A fresh runner serves ``projects``, else the
-        ``default`` project every tenant holds."""
-        envs = os.environ.get(ENV_WORKSPACE_ENVS)
-        gates = os.environ.get(ENV_GATES)
-        passthrough = os.environ.get(ENV_ENV_PASSTHROUGH, "")
-        public_urls = os.environ.get(ENV_PUBLIC_URL, "")
-        return cls(
-            root=root,
-            db_url=cls.default_db_url(root),
-            host=os.environ.get(ENV_HOST, DEFAULT_HOST),
-            port=int(os.environ.get(ENV_PORT, DEFAULT_PORT)),
-            hub_url=hub_url or os.environ.get(ENV_HUB_URL, DEFAULT_HUB_URL),
-            token_env=DEFAULT_TOKEN_ENV,
-            hub_token=_hub_token(root, DEFAULT_TOKEN_ENV),
-            workspace_root=os.environ.get(ENV_WORKSPACE_ROOT, ""),
-            workspace_provider="basic" if not os.environ.get(ENV_WORKSPACE_ROOT) else "winter",
-            workspace_envs=tuple(e.strip() for e in envs.split(",") if e.strip()) if envs else DEFAULT_ENV_POOL,
-            base_branch=os.environ.get(ENV_BASE_BRANCH, DEFAULT_BASE_BRANCH),
-            gates=tuple(g.strip() for g in gates.split(",") if g.strip()) if gates else (),
-            projects=projects if projects is not None else SCAFFOLD_PROJECTS,
-            harness_sections=HarnessSections.scaffold(root, os.environ),
-            # Empty on a fresh scaffold; seeded from the environment so `init` can inject
-            # a default without hand-editing.
-            workspace_prompt=os.environ.get(ENV_WORKSPACE_PROMPT, ""),
-            # Seeded the same way, so `init` can adopt a packaged sample by name.
-            workspace_prompt_package=os.environ.get(ENV_WORKSPACE_PROMPT_PACKAGE, ""),
-            # Empty on a fresh scaffold means the baked-in preamble is used.
-            runner_prompt=os.environ.get(ENV_RUNNER_PROMPT, ""),
-            transcripts_root=os.environ.get(ENV_TRANSCRIPTS_ROOT, ""),
-            worker_env_passthrough=tuple(n.strip() for n in passthrough.split(",") if n.strip()),
-            public_urls=PublicOrigins.entries(public_urls.split(","), ConfigError),
-        )
-
-    def to_toml(self) -> str:
-        envs = ", ".join(f'"{e}"' for e in self.workspace_envs)
-        gates = ", ".join(f'"{g}"' for g in self.gates)
-        # A lone origin stays a bare string, the shape the common single-origin deployment authors;
-        # several become a list. Both round-trip back through `load`.
-        public_url = (
-            "[" + ", ".join(f'"{u}"' for u in self.public_urls) + "]"
-            if len(self.public_urls) > 1
-            else f'"{self.public_url}"'
-        )
-        # `json.dumps` emits a valid TOML basic string: TOML shares JSON's escapes
-        # (\n, \t, \", \\, \uXXXX), so a multi-line inline prompt round-trips intact.
-        workspace_prompt = json.dumps(self.workspace_prompt)
-        workspace_prompt_file = json.dumps(self.workspace_prompt_file)
-        workspace_prompt_package = json.dumps(self.workspace_prompt_package)
-        runner_prompt = json.dumps(self.runner_prompt)
-        runner_prompt_file = json.dumps(self.runner_prompt_file)
-        return (
-            "# blizzard-runner runtime configuration (blizzard runner init)\n"
-            f'db_url = "{self.db_url}"\n'
-            f'host = "{self.host}"\n'
-            f"port = {self.port}\n"
-            "\n# Reconciliation-loop seams.\n"
-            f'hub_url = "{self.hub_url}"\n'
-            "\n# The browser-reachable origins this runner answers on — one bare origin, or a list.\n"
-            "# Empty registers no federation identity, so the human web surface stays unreachable.\n"
-            "# The browser follows these, so a loopback-only value answers on this host alone; a\n"
-            "# non-loopback origin must be https fronted by a proxy. First is canonical. See the\n"
-            '# "Runner-side federation" section of the deployment guide before changing this.\n'
-            f"public_url = {public_url}\n"
-            "\n# Reverse-proxy trust set: proxy IPs/CIDRs whose X-Forwarded-Proto is\n"
-            "# honored when minting the SSO session cookie's Secure flag. Empty = header ignored.\n"
-            "# Required for any https origin above, and the proxy must also pass the browser's\n"
-            "# original Host through — selection reads it, and nginx replaces it by default.\n"
-            f"trusted_proxies = [{', '.join(f'"{p}"' for p in self.trusted_proxies)}]\n"
-            "\n# Names the env var carrying this runner's hub bearer token;\n"
-            "# the secret itself lives in the runtime env file, never here.\n"
-            f'token_env = "{self.token_env}"\n'
-            "\n# Names the env var carrying the secret that signs this runner's session cookie\n"
-            "# (base64, >= 32 bytes decoded; unique per runner). Unset = a fresh secret each start.\n"
-            f'session_secret_env = "{self.session_secret_env}"\n'
-            f"name = {json.dumps(self.name)}\n"
-            f'workspace_id = "{self.workspace_id}"\n'
-            f'workspace_root = "{self.workspace_root}"\n'
-            f'workspace_provider = "{self.workspace_provider}"\n'
-            f"max_environments = {self.max_environments}\n"
-            f"workspace_envs = [{envs}]\n"
-            "# Basic: add a [[workspace_repo]] for each git origin (name and url).\n"
-            "# Released folders remain for inspection until the cap needs room; oldest\n"
-            "# unheld folders are evicted first. Reacquisition resets all repo worktrees.\n"
-            "# A commented [[workspace_repo]] example is at the end of this file.\n"
-            + "".join(section.root_toml() for section in self.harness_sections)
-            + f"max_agents = {self.max_agents}\n"
-            f'base_branch = "{self.base_branch}"\n'
-            "\n# Human gates this runner imposes by node name; empty = none.\n"
-            f"gates = [{gates}]\n"
-            + _projects_toml(self.projects)
-            + "\n# The runner-owned workspace prompt prepended to a worker spawn.\n"
-            "# `workspace_prompt` is inline text; `workspace_prompt_file` (a path) wins when set.\n"
-            "# `workspace_prompt_package` names a sample shipped in the wheel and may not be\n"
-            "# combined with either (`blizzard runner prompt list` names them).\n"
-            "# Empty = table-only injection. Replace at runtime via PUT /api/workspace-prompt.\n"
-            "# A resumed spawn re-sends this only when it changed, announced as updated.\n"
-            f"workspace_prompt = {workspace_prompt}\n"
-            f"workspace_prompt_file = {workspace_prompt_file}\n"
-            f"workspace_prompt_package = {workspace_prompt_package}\n"
-            "\n# The operator's override of the baked-in blizzard preamble — layer 1\n"
-            "# of the spawn preamble, ahead of `workspace_prompt` above. `runner_prompt` is inline\n"
-            "# text; `runner_prompt_file` (a path) wins when set. Empty = the baked default\n"
-            "# (DEFAULT_BLIZZARD_PREAMBLE) is used instead; config/startup only, no runtime override.\n"
-            f"runner_prompt = {runner_prompt}\n"
-            f"runner_prompt_file = {runner_prompt_file}\n"
-            "\n# Where the coding harness writes session transcripts;\n"
-            "# empty = ~/.claude/projects.\n"
-            f'transcripts_root = "{self.transcripts_root}"\n'
-            "\n# How freely an unattended worker may act without a human approving tool use:\n"
-            '# "normal", "auto", or "dangerous". Each harness translates it into its own terms.\n'
-            "[harness]\n"
-            f'autonomy = "{self.autonomy}"\n'
-            "# An operator-owned bundle of harness configuration: optional `claude-code/` and\n"
-            "# `opencode/` directories, read at startup. Absolute path (~ allowed); absent = no bundle.\n"
-            + (
-                f"config_dir = {json.dumps(str(self.harness_config_dir))}\n"
-                if self.harness_config_dir
-                else '# config_dir = "~/.config/blizzard/harness"\n'
-            )
-            + "\n# The transcript outbound lane — off by default; the hub's own\n"
-            "# durable, compressed-at-rest segment store is already landed, so\n"
-            "# turning this on is a rollout decision, not a bandwidth-for-nothing one.\n"
-            "[transcripts]\n"
-            f"ship = {'true' if self.transcripts_ship else 'false'}\n"
-            "# This lane's own byte ceilings, shown at their defaults;\n"
-            "# uncomment to override. Widen `chunk_max_bytes` for a backfill window — a\n"
-            "# `blizzard runner transcript reship` spends that budget a SECOND time over the\n"
-            "# same chunk — then restore it. Keep `record_max_bytes` at or BELOW the hub's own\n"
-            "# `record_max_bytes`: over the hub's, a record loses its turns whole; over this\n"
-            "# one, the pump merely shrinks them.\n"
-            + _cap_line("record_max_bytes", self.transcript_record_max_bytes, TRANSCRIPT_RECORD_MAX_BYTES)
-            + _cap_line("chunk_max_bytes", self.transcript_chunk_max_bytes, CHUNK_TRANSCRIPT_MAX_BYTES)
-            + "\n# This runner's selection over the peeked ready queue; off by\n"
-            "# default reaches past a marked head for the first unmarked entry. `true` holds\n"
-            "# at a marked head instead and idles rather than falling through.\n"
-            "[queue]\n"
-            f"strict = {'true' if self.queue_strict else 'false'}\n"
-            + "\n# How long (days) a worker's captured stdout/stderr survive after being\n"
-            "# written, before the periodic sweep prunes them. A released lease's files are NOT\n"
-            "# deleted at release — only this age-based sweep removes them, both streams alike.\n"
-            "# Look up one invocation's own output at\n"
-            "# worker-stdout/<lease_id>.<generation>.{stdout,stderr}.\n"
-            "[worker_stdout]\n"
-            f"retention_days = {self.worker_stdout_retention_days}\n"
-            + "".join(self.tracing.to_toml(unit="closed leases", receiver=True))
-            + "\n# Spend controls (epic #57); absent = no cap. `chunk_cap_usd` parks a chunk\n"
-            "# needs_human at its next step boundary once its derived spend reaches this cap.\n"
-            "# `runner_ceiling_usd` engages this runner's own local pause brake (the same one\n"
-            "# `blizzard runner pause` sets) once its rolling `window_hours`-long spend reaches\n"
-            "# this value; `blizzard runner start` is the only clear — it does not lift itself\n"
-            "# when the window later rolls the spend back under the ceiling.\n"
-            "[cost]\n"
-            + (
-                f"chunk_cap_usd = {self.chunk_cap_usd}\n"
-                if self.chunk_cap_usd is not None
-                else "# chunk_cap_usd = 5.0\n"
-            )
-            + (
-                f"runner_ceiling_usd = {self.runner_ceiling_usd}\n"
-                if self.runner_ceiling_usd is not None
-                else "# runner_ceiling_usd = 50.0\n"
-            )
-            + f"window_hours = {self.runner_ceiling_window_hours}\n"
-            + (
-                "\n# The live session-context warn lane; absent = off, and nothing is sampled.\n"
-                "# `warn_tokens` is the context a RUNNING worker's session is warned about\n"
-                "# crossing — observation only, distinct from a graph's own `rotate` bounds,\n"
-                "# which decide whether the NEXT node-step resumes that session at all.\n"
-                "[context]\n"
-            )
-            + (
-                f"warn_tokens = {self.context_warn_tokens}\n"
-                if self.context_warn_tokens is not None
-                else "# warn_tokens = 300000\n"
-            )
-            + f"sample_interval_seconds = {self.context_sample_interval_seconds}\n"
-            + "\n# How often (seconds) the tick re-samples the harness's own subscription rate-limit\n"
-            + "# windows — a diagnostic, best-effort read, not a spend control.\n"
-            + "[external_subscription_usage]\n"
-            + f"sample_interval_seconds = {self.external_usage_sample_interval_seconds}\n"
-            + (
-                f'credentials_path = "{self.external_usage_credentials_path}"\n'
-                if self.external_usage_credentials_path is not None
-                else '# credentials_path = "/path/to/.credentials.json"  # defaults to ~/.claude/.credentials.json\n'
-            )
-            + "\n# Declared provider subscriptions — the join key everything\n"
-            + "# downstream keys on is `slug`, runner-unique and immutable once observed. Absent\n"
-            + "# entirely (the default): the `[external_subscription_usage]` table above is the\n"
-            + '# sole subscription, synthesized under the reserved slug "'
-            + LEGACY_ANTHROPIC_SLUG
-            + '". Any\n'
-            + "# `[[subscription]]` present here instead takes over completely — the legacy table\n"
-            + "# is no longer consulted for the runtime list.\n"
-            + "".join(
-                "\n[[subscription]]\n"
-                f'slug = "{d.slug}"\n'
-                f'name = "{d.name}"\n'
-                f'provider = "{d.provider}"\n'
-                f"sample_interval_seconds = {d.sample_interval_seconds}\n"
-                + (f'credentials_path = "{d.credentials_path}"\n' if d.credentials_path is not None else "")
-                for d in self.subscriptions
-            )
-            + "\n# The worker spawn-environment allowlist's operator extension (`bzh:worker-env-allowlist`).\n"
-            + "# The base allowlist (PATH/HOME/USER/LANG/LC_*/TERM/TMPDIR) always reaches a worker;\n"
-            + "# name additional vars here to forward them too. Empty = base allowlist only. The\n"
-            + "# BLIZZARD_* identity vars are injected per spawn/judge/resume, not passed through.\n"
-            + "[worker]\n"
-            + f"env_passthrough = [{', '.join(f'"{v}"' for v in self.worker_env_passthrough)}]\n"
-            + "# Absolute directories (~ allowed) led onto every worker's PATH, ahead of the\n"
-            + "# daemon's own — e.g. a mise shims dir, so a spawned worker resolves the same\n"
-            + "# version-manager tools an operator's shell does. A relative entry fails config\n"
-            + "# load. `runner host` warns at startup for any entry missing on disk, but still\n"
-            + "# starts. Empty = the daemon's own PATH, unchanged.\n"
-            + f"path_prepend = [{', '.join(f'"{p}"' for p in self.worker_path_prepend)}]\n"
-            + "\n# Runner-local role resolution, keyed by hub username — lives only here,\n"
-            + '# never in the hub store/admin page. `hub_role_default` is "mirror" or a fixed cap\n'
-            + '# ("contributor"/"guest"/"pending"); `superuser` names this runner\'s own sovereign.\n'
-            + "[auth]\n"
-            + (f'superuser = "{self.auth_superuser}"\n' if self.auth_superuser else '# superuser = "<hub-username>"\n')
-            + f'hub_role_default = "{self.auth_hub_role_default}"\n'
-            + "\n[auth.users]\n"
-            + "".join(f'{username} = "{role}"\n' for username, role in self.auth_users)
-            + "".join(section.table_toml() for section in self.harness_sections)
-            + "".join(
-                f"\n[[workspace_repo]]\nname = {json.dumps(repo.name)}\nurl = {json.dumps(repo.url)}\n"
-                for repo in self.workspace_repos
-            )
-            + (
-                '\n# [[workspace_repo]]\n# name = "my-repo"\n# url = "https://github.com/you/my-repo.git"\n'
-                if not self.workspace_repos
-                else ""
-            )
-        )
-
-    @classmethod
-    def load(cls, root: Path, *, host: str | None = None, port: int | None = None) -> RunnerConfig:
-        """Read a runtime root's config file; overlay CLI host/port when given."""
-        root = root.resolve()
-        path = root / CONFIG_FILENAME
-        if not path.exists():
-            raise ConfigError(f"{root} is not an initialized runner runtime (run `blizzard runner init {root}`)")
-        raw = tomllib.loads(path.read_text())
-        token_env = str(raw.get("token_env", DEFAULT_TOKEN_ENV))
-        session_secret_env = str(raw.get("session_secret_env", DEFAULT_SESSION_SECRET_ENV))
-        spend = Spend.of(raw.get("cost"))
-        usage = ExternalUsage.of(raw.get("external_subscription_usage"))
-        context = Context.of(raw.get("context"))
-        auth = Auth.of(raw.get("auth"))
-        transcripts = Transcripts.of(raw.get("transcripts"))
-        queue = Queue.of(raw.get("queue"))
-        worker_stdout = WorkerStdout.of(raw.get("worker_stdout"))
-        # Authored entries only; `resolved_subscriptions()` combines them with the legacy table.
-        subscriptions = SubscriptionDeclaration.declared(raw.get("subscription", []))
-        harness_sections = HarnessSections.parse(raw, root=root, path=path)
-        harness = Table.of(raw.get("harness"))
-        autonomy = _parse_autonomy(harness.body.get("autonomy"), path)
-        autonomy_source = effective_autonomy_source(harness_sections, "autonomy" in harness.body)
-        harness_config_dir = _parse_harness_config_dir(harness.body.get("config_dir"), root, path)
-        provider = raw.get("workspace_provider", "winter")
-        if provider not in WORKSPACE_PROVIDERS:
-            names = " or ".join(repr(name) for name in WORKSPACE_PROVIDERS)
-            raise ConfigError(f"workspace_provider must be {names}, got {provider!r}")
-        cap = raw.get("max_environments", DEFAULT_MAX_ENVIRONMENTS)
-        if isinstance(cap, bool) or not isinstance(cap, int) or cap < 1:
-            raise ConfigError(f"max_environments must be a positive integer, got {cap!r}")
-        repos = _workspace_repos(raw.get("workspace_repo", []))
-        name, shadowed_runner_id = _runner_name(raw, path)
-        return cls(
-            root=root,
-            db_url=str(raw["db_url"]),
-            host=host or str(raw.get("host", DEFAULT_HOST)),
-            port=port if port is not None else int(raw.get("port", DEFAULT_PORT)),
-            hub_url=str(raw.get("hub_url", DEFAULT_HUB_URL)),
-            token_env=token_env,
-            hub_token=_hub_token(root, token_env),
-            session_secret_env=session_secret_env,
-            session_secret=resolve_session_secret(session_secret_env),
-            name=name,
-            shadowed_runner_id=shadowed_runner_id,
-            workspace_id=str(raw.get("workspace_id", DEFAULT_WORKSPACE_ID)),
-            workspace_root=str(raw.get("workspace_root", "")),
-            workspace_provider=provider,
-            workspace_repos=repos,
-            max_environments=cap,
-            workspace_envs=Table.of(raw).listed("workspace_envs", DEFAULT_ENV_POOL),
-            harness_sections=harness_sections,
-            autonomy=autonomy,
-            autonomy_source=autonomy_source,
-            harness_config_dir=harness_config_dir,
-            max_agents=int(raw.get("max_agents", DEFAULT_MAX_AGENTS)),
-            base_branch=str(raw.get("base_branch", DEFAULT_BASE_BRANCH)),
-            gates=tuple(str(g) for g in raw.get("gates", ())),
-            projects=_projects(raw, path),
-            workspace_prompt=str(raw.get("workspace_prompt", "")),
-            workspace_prompt_file=str(raw.get("workspace_prompt_file", "")),
-            workspace_prompt_package=str(raw.get("workspace_prompt_package", "")),
-            runner_prompt=str(raw.get("runner_prompt", "")),
-            runner_prompt_file=str(raw.get("runner_prompt_file", "")),
-            transcripts_root=str(raw.get("transcripts_root", "")),
-            transcripts_ship=transcripts.ship,
-            transcript_record_max_bytes=transcripts.record_max_bytes,
-            transcript_chunk_max_bytes=transcripts.chunk_max_bytes,
-            queue_strict=queue.strict,
-            chunk_cap_usd=spend.chunk_cap_usd,
-            runner_ceiling_usd=spend.ceiling_usd,
-            runner_ceiling_window_hours=spend.window_hours,
-            external_usage_sample_interval_seconds=usage.sample_interval_seconds,
-            external_usage_credentials_path=usage.credentials_path,
-            subscriptions=subscriptions,
-            context_warn_tokens=context.warn_tokens,
-            context_sample_interval_seconds=context.sample_interval_seconds,
-            worker_env_passthrough=Table.of(raw.get("worker")).names("env_passthrough"),
-            worker_path_prepend=_expanded_path_prepend(Table.of(raw.get("worker")).names("path_prepend")),
-            public_urls=PublicOrigins.entries(raw.get("public_url"), ConfigError),
-            auth_superuser=auth.superuser,
-            auth_hub_role_default=auth.hub_role_default,
-            auth_users=auth.users,
-            trusted_proxies=TrustedProxies.entries(raw.get("trusted_proxies"), ConfigError),
-            worker_stdout_retention_days=worker_stdout.retention_days,
-            tracing=TracingConfig.of(raw.get("tracing", {}), ConfigError),
-        )

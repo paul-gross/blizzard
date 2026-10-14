@@ -15,10 +15,18 @@ from blizzard.runner import runtime as runner_runtime
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.store.errors import (
+    RUNNER_SCOPED_OPTION,
     RunnerStoreError,
     RunnerStoreErrorFactory,
 )
-from blizzard.runner.store.schema import binding_releases, park_facts, pause_parks
+from blizzard.runner.store.schema import (
+    OUTBOX_LANE_OUTBOUND,
+    OUTBOX_LANE_TRANSCRIPT,
+    binding_releases,
+    outbox_counters,
+    park_facts,
+    pause_parks,
+)
 from tests.runner_fakes import FIXTURE_RUNNER_ID, SqlAlchemyRunnerStore, make_store, runner_store_errors
 
 _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
@@ -218,11 +226,21 @@ def test_declaration_environment_id_migration_discards_the_pre_revision_rows(tmp
     assert "forge" not in columns
 
 
+def _counter(engine: sa.Engine, lane: str) -> int:
+    counters = outbox_counters
+    with engine.connect() as conn:
+        return conn.execute(
+            sa.select(counters.c.last_seq)
+            .where(counters.c.runner_id == FIXTURE_RUNNER_ID, counters.c.lane == lane)
+            .execution_options(**{RUNNER_SCOPED_OPTION: True})
+        ).scalar_one()
+
+
 @pytest.mark.component
 def test_a_migrated_transcript_outbound_seq_is_never_reissued_after_a_prune(tmp_path: Path) -> None:
-    """``sqlite_autoincrement`` is declared twice, and only ``src/blizzard/runner/store/schema.py``'s copy is on the
-    path a test store takes. Production migrates (`bzh:gating-tier-pins-production-paths`),
-    so the revision's own copy is pinned here: dropping it reissues a pruned seq."""
+    """The lane's ``seq`` comes from its durable counter, not the table: pruning the table's only, and highest, row
+    leaves the counter on it, so the next delta takes the next ``seq``. Production migrates
+    (`bzh:gating-tier-pins-production-paths`), so the pin runs on a migrated store."""
     config = runner_runtime.init_environment(tmp_path)
     engine = create_engine_from_url(config.db_url)
     try:
@@ -249,19 +267,19 @@ def test_a_migrated_transcript_outbound_seq_is_never_reissued_after_a_prune(tmp_
         segment_id = store.open_transcript_segments()[0].segment_id
         first = _delta(store, segment_id, cursor="tok-1")
         store.ack_transcript_outbound(first, acked_at=_NOW)  # prunes the table's only, and highest, row
+        assert _counter(engine, OUTBOX_LANE_TRANSCRIPT) == first
         second = _delta(store, segment_id, cursor="tok-2")
     finally:
         engine.dispose()
 
-    assert second != first
+    assert second == first + 1
 
 
 @pytest.mark.component
 def test_a_migrated_outbound_seq_is_never_reissued_after_a_prune(tmp_path: Path) -> None:
-    """``outbound_buffer`` carries the same ``sqlite_autoincrement`` fix as its sibling
-    ``transcript_outbound_buffer`` — now load-bearing for it too, since retention
-    prunes it as well. Production migrates
-    (`bzh:gating-tier-pins-production-paths`), so the revision's own copy is pinned here."""
+    """``outbound_buffer`` counts the same way, and retention prunes it too: with every issued ``seq`` acked and pruned,
+    the counter still holds the highest, and the next fact takes the one after it. Production migrates
+    (`bzh:gating-tier-pins-production-paths`), so the pin runs on a migrated store."""
     config = runner_runtime.init_environment(tmp_path)
     engine = create_engine_from_url(config.db_url)
     try:
@@ -276,6 +294,7 @@ def test_a_migrated_outbound_seq_is_never_reissued_after_a_prune(tmp_path: Path)
 
         pruned = store.prune_outbound(now=_NOW)
         assert pruned == len(seqs)  # every acked row, including the table's own highest seq, is gone
+        assert _counter(engine, OUTBOX_LANE_OUTBOUND) == max(seqs)
 
         fresh = store.enqueue_outbound(
             kind="lease.minted", chunk_id="ch_1", lease_id="l", payload="{}", created_at=_NOW
@@ -283,7 +302,30 @@ def test_a_migrated_outbound_seq_is_never_reissued_after_a_prune(tmp_path: Path)
     finally:
         engine.dispose()
 
-    assert fresh > max(seqs)
+    assert seqs == [1, 2, 3]
+    assert fresh == max(seqs) + 1
+
+
+@pytest.mark.component
+def test_each_runner_counts_its_own_outbound_seq_in_one_store(tmp_path: Path) -> None:
+    """Two runners over one file each take ``seq`` 1, 2, ... from a counter of their own."""
+    config = runner_runtime.init_environment(tmp_path)
+    engine = create_engine_from_url(config.db_url)
+    try:
+        first = SqlAlchemyRunnerStore(engine, runner_store_errors(), "rn_first")
+        second = SqlAlchemyRunnerStore(engine, runner_store_errors(), "rn_second")
+        enqueue = {"kind": "lease.minted", "chunk_id": None, "lease_id": None, "payload": "{}", "created_at": _NOW}
+        seqs = (
+            [first.enqueue_outbound(**enqueue) for _ in range(2)],
+            [second.enqueue_outbound(**enqueue) for _ in range(3)],
+            [first.enqueue_outbound(**enqueue)],
+        )
+        pending = ([f.seq for f in first.pending_outbound()], [f.seq for f in second.pending_outbound()])
+    finally:
+        engine.dispose()
+
+    assert seqs == ([1, 2], [1, 2, 3], [3])
+    assert pending == ([1, 2, 3], [1, 2, 3])
 
 
 def _delta(store: SqlAlchemyRunnerStore, segment_id: str, *, cursor: str) -> int:

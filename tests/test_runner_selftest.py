@@ -14,7 +14,7 @@ import time
 from collections.abc import Iterator, Sequence
 from concurrent.futures import Executor
 from contextlib import contextmanager
-from datetime import UTC, datetime
+from datetime import datetime
 from pathlib import Path
 
 import httpx
@@ -24,7 +24,6 @@ from click.testing import CliRunner
 from fastapi.testclient import TestClient
 
 from blizzard.foundation.clock import SystemClock
-from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.app import build_hosted_app, create_app
 from blizzard.runner.cli import runner as runner_group
 from blizzard.runner.config import RunnerConfig
@@ -40,7 +39,6 @@ from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource, NullTranscriptSource
 from blizzard.runner.harness.usage import UsageKind, UsageLimit, UsageSample
 from blizzard.runner.harness.wiring import build_production_harness_registry
-from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.lifecycle.judgement.internal.elicitation_files import ElicitationFiles
 from blizzard.runner.listeners import Listeners, Uds
 from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
@@ -49,7 +47,7 @@ from blizzard.runner.selftest.internal.subprocess_scratch_git import SubprocessS
 from blizzard.runner.selftest.scratch_git import ScratchRepo
 from blizzard.runner.selftest.service import SelfTestService
 from tests.harness_sections import sections
-from tests.runner_fakes import SqlAlchemyRunnerStore, runner_store_errors
+from tests.host_files import load_runner_config
 from tests.runner_init_fakes import init_runner
 
 # A fake harness binary mimicking `mock-claude-code`'s CLI surface, extended to actually
@@ -718,14 +716,8 @@ def _serve_local_api(root: Path) -> Iterator[Path]:
     """A live runner daemon's local API on its real unix socket.
 
     The CLI verb is a pure client of this API, driven against a real server over a
-    real socket rather than a stubbed transport. The store holds a registration, as a daemon's would
-    once it has registered: an unregistered runner refuses a selftest until it binds."""
-    config = RunnerConfig.load(root, port=0)
-    registered = SqlAlchemyRunnerStore(create_engine_from_url(config.db_url), runner_store_errors(), runner_id=None)
-    try:
-        registered.record_runner_identity(RunnerIdentity("rn_selftest", config.name, datetime.now(UTC)))
-    finally:
-        registered._engine.dispose()
+    real socket rather than a stubbed transport. The runner is bound to the id its host file configures."""
+    config = load_runner_config(root, port=0)
     app = build_hosted_app(config).app
     sockets = Listeners.of(config).bound()
     server = uvicorn.Server(uvicorn.Config(app, log_level="warning"))

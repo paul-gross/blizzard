@@ -1,5 +1,5 @@
-"""The registration step and the gates it opens — the runner's identity comes from its hub, never
-from its configuration or its store, and claiming, reaping, resuming and reconciling wait for it."""
+"""The registration step and the gates it opens — the runner is the one its host file configures, its hub confirms it
+at registration and records its name and tenant, and claiming, reaping, resuming and reconciling wait for that."""
 
 from __future__ import annotations
 
@@ -13,6 +13,7 @@ from structlog.testing import capture_logs
 from blizzard.foundation.clock import FixedClock, SystemClock
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.registry import HarnessRegistry
+from blizzard.runner.hub.client import BindingDeclaration
 from blizzard.runner.hub.identity import IdentityState, RunnerIdentityHolder
 from blizzard.runner.leases.activity import HEARTBEAT_STALENESS_THRESHOLD
 from blizzard.runner.leases.model import NewLease
@@ -33,18 +34,21 @@ from tests.runner_fakes import (
 pytestmark = pytest.mark.component
 
 
-def _ctx(db: Path, hub: FakeHub, *, name: str = "r-claude", registered: bool = False) -> LoopContext:
-    """A context over the store at ``db``, its holder seeded from the store's identity row as
-    composition seeds it at boot — so a second call over the same file is a restart."""
-    store = make_store(f"sqlite:///{db}", runner_id=None)
-    store.connections.bind_to_stored()  # as composition binds the store at boot
+def _ctx(
+    db: Path, hub: FakeHub, *, name: str = "r-claude", registered: bool = False, runner_id: str | None = None
+) -> LoopContext:
+    """A context over the store at ``db``, bound to the configured ``runner_id`` — the runner the hub's token names
+    unless a test configures another — its holder seeded from the store's identity row as composition seeds it at
+    boot, so a second call over the same file is a restart."""
+    configured = runner_id or hub.default_runner_id
+    store = make_store(f"sqlite:///{db}", runner_id=configured)
     ctx = make_context(
         store,
         hub=hub,
         provider=FakeProvider({"e1": "/ws/e1"}),
         harness=FakeHarness(handle=None, verdict=None),  # type: ignore[arg-type]
         probe=FakeProbe(alive=set()),
-        config=LoopConfig(runner_name=name, workspace_id="ws1", max_agents=1),
+        config=LoopConfig(runner_name=name, workspace_id="ws1", max_agents=1, runner_id=configured),
         registered=registered,
     )
     return type(ctx)(**{**ctx.__dict__, "identity": RunnerIdentityHolder(store.runner_identity())})
@@ -137,7 +141,7 @@ def test_a_rename_by_restart_reaches_the_identity_row_the_holder_and_the_status_
     assert renamed.stores.pause.hub_paused() is paused
 
 
-def test_a_rebuilt_store_learns_the_same_id_back_from_the_same_token(tmp_path: Path) -> None:
+def test_a_rebuilt_store_records_the_configured_id_again_at_its_next_registration(tmp_path: Path) -> None:
     hub = FakeHub(default_runner_id="rn_minted")
     Registration(_ctx(tmp_path / "first.db", hub)).run()
 
@@ -146,6 +150,35 @@ def test_a_rebuilt_store_learns_the_same_id_back_from_the_same_token(tmp_path: P
 
     held = rebuilt.stores.identity.runner_identity()
     assert held is not None and held.runner_id == "rn_minted"
+
+
+def test_a_registration_declares_the_bindings_and_subscription_its_config_carries(tmp_path: Path) -> None:
+    hub = FakeHub()
+    ctx = _ctx(tmp_path / "runner.db", hub)
+    bindings = (BindingDeclaration("blizzard", "ws1", 2), BindingDeclaration("docs", "ws1", 1))
+    ctx = replace(
+        ctx, config=replace(ctx.config, bindings=bindings, subscription="anthropic", projects=("blizzard", "docs"))
+    )
+
+    Registration(ctx).run()
+
+    assert hub.registered_bindings == [bindings]
+    assert hub.registered_subscription == ["anthropic"]
+    assert hub.registered_projects == [("blizzard", "docs")]
+
+
+def test_a_runner_serving_nothing_registers_an_empty_declaration_and_claims_nothing(tmp_path: Path) -> None:
+    hub = FakeHub()
+    ctx = _ctx(tmp_path / "runner.db", hub)
+    ctx = replace(ctx, config=replace(ctx.config, bindings=(), projects=(), max_agents=0))
+
+    Pull(ctx).run()
+    Fill(ctx).run()
+
+    assert hub.registered_bindings == [()]
+    assert hub.registered_projects == [()]
+    assert hub.registered_subscription == [None]
+    assert hub.claims == []
 
 
 def test_a_token_the_hub_does_not_hold_registers_nothing_and_claims_nothing(tmp_path: Path) -> None:

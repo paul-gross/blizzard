@@ -120,19 +120,19 @@ counts, the queue and backlog, runs, spend, the analytics reads, the event feed 
 ## Runners serve projects
 
 A runner is offered only the chunks of the projects it serves, and the hub rechecks the project when the runner claims
-one. The runner's `blizzard-runner.toml` names them, by id or by slug:
+one. The runner's `[[runner]]` in `blizzard-host.toml` names them as bindings, each a project by id or by slug, the
+`[[workspace]]` it works in, and the `agents` that may work it at once:
 
 ```toml
-# The projects this runner serves, by id or slug. Without this key the runner declares
-# none and its hub keeps the projects it already holds for it; [] serves none.
-projects = ["default"]
+[[runner]]
+# The projects this runner serves; [] serves none. The key is required.
+projects = [{ project = "default", workspace = "workspace-local", agents = 1 }]
 ```
 
-The runner sends the list at every registration. **Leaving the key out is not declaring none.** A configuration with no
-`projects` key declares nothing, and the hub keeps whatever it holds for the runner. Only `projects = []` sends an
-empty list, and that runner serves nothing.
+The runner sends the project list at every registration. A `[[runner]]` with no `projects` key is halted, naming the
+key, and only `projects = []` declares that the runner serves nothing.
 
-`blizzard-runner init` writes `projects = ["default"]` into a fresh configuration, so a new runner is offered work on
+`blizzard-runner init` writes a binding of `default` into a fresh host file, so a new runner is offered work on
 its first registration with no edit. A repeated `--project <id|slug>` names other projects instead, and the runner is
 added serving them; a project the tenant does not hold refuses the add, and nothing is added. `blizzard hub runner add
 <name>` takes the same repeatable `--project`. Without one, the runner is added serving the tenant's project when the

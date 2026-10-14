@@ -2884,7 +2884,7 @@
         "type": "object"
       },
       "IdentityVerdictView": {
-        "description": "Whether the runner's token resolves to the runner its store belongs to.\n\n``unchecked`` until the hub first answers the check, ``matched`` while it does, ``mismatched``\nwhile the token names another runner \u2014 the runner then drives no lease until the right token\nreturns or the store is cleared with ``reset_command``.",
+        "description": "Whether the runner's token resolves to the runner its host file configures (``store_runner_id``).\n\n``unchecked`` until the hub first answers the check, ``matched`` while it does, ``mismatched``\nwhile the token names another runner \u2014 the runner then drives no lease until the right token\nreturns. ``reset_command`` names how to restore it: the token variable and the configured id.",
         "properties": {
           "checked_at": {
             "anyOf": [
@@ -8027,7 +8027,7 @@
         ]
       },
       "patch": {
-        "description": "Set this runner's own pause brake \u2014 it starts no new workers.\n\nIndependent of the hub's brake: it works with the hub unreachable, and neither reads nor\nwrites the hub's flag. Not a drain: a live worker is left running. Refused with 503 until the\nrunner first registers, since the brake is a fact of the runner the store is bound to.",
+        "description": "Set this runner's own pause brake \u2014 it starts no new workers.\n\nIndependent of the hub's brake: it works with the hub unreachable, and neither reads nor\nwrites the hub's flag. Not a drain: a live worker is left running. Refused with 503 while the\nstore is bound to no runner id, since the brake is a fact of the runner the store is bound to.",
         "operationId": "patch_runner_api_runner_patch",
         "requestBody": {
           "content": {
@@ -8061,7 +8061,7 @@
             "description": "Validation Error"
           },
           "503": {
-            "description": "The runner has not registered yet, so its store is bound to no runner."
+            "description": "The runner's store is bound to no runner id."
           }
         },
         "summary": "Patch Runner",
@@ -8106,7 +8106,7 @@
             "description": "Validation Error"
           },
           "503": {
-            "description": "The requested harness is known but unavailable, or the runner has not registered yet, so its store is bound to no runner to record the result for."
+            "description": "The requested harness is known but unavailable, or the runner's store is bound to no runner id to record the result for."
           }
         },
         "summary": "Start Selftest",

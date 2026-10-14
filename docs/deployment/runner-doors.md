@@ -1,10 +1,10 @@
 # Runner doors
 
-The runner daemon serves one API on two listeners — same app, same routes; the door depends on who the client is.
+The host daemon serves one API on two listeners — same app, same routes; the door depends on who the client is.
 
 ## The two listeners
 
-The unix socket `runner.sock`, mode 0600 in the runtime dir, is the CLI local verbs' door (`runner pause`, `start`,
+The unix socket `host.sock`, mode 0600 in the host directory, is the CLI local verbs' door (`runner pause`, `start`,
 `takeover`), addressed via `--dir` or `$BZ_RUNNER_DIR` — no port, no config file read. The TCP port (8431 by default) is
 the door for the runner's web panel (same-origin `/api/*` on the page's own host) and for worker hooks such as heartbeat
 and ask, which address it via the spawn-injected `BLIZZARD_RUNNER_URL`. The TCP listener exists because a browser cannot
@@ -28,8 +28,8 @@ pasted command can land on the wrong machine entirely.
 
 `systemctl stop` or SIGTERM unlinks the socket on the way out, so a client verb reports no daemon serving; `kill -9`,
 OOM, or reboot leaves the socket file behind, so the verb reports a connection error against the corpse. Either way the
-next host start is clean: it clears a socket nothing is serving, and refuses to start beside one still live, the store
-being single-writer.
+next host start is clean: it clears a socket nothing is serving, and refuses to start beside a live host — one holding
+the directory's `data/host.lock` — or a pre-host daemon still answering on `runner.sock`, the store being single-writer.
 
 With no daemon running, client verbs report that rather than reading the store behind its back — a client verb reaches
 the store only through the daemon that owns it. The writing offline maintenance verbs — `migrate`, `tick`,

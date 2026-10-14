@@ -157,23 +157,8 @@ def test_the_composed_payload_includes_all_nine_sections_with_real_data(tmp_path
     # No harness is wired onto `create_app` itself here (only `RunnerStatusService`'s own
     # registry above carries one) — an empty configured set reports no health entries.
     assert body["harness_health"] == {"items": []}
-    # No `[[subscription]]` is declared, so this synthesizes the sole legacy Anthropic
-    # entry (`RunnerConfig.resolved_subscriptions`) — never sampled, so `ok` is `None`.
-    assert body["subscriptions"] == {
-        "items": [
-            {
-                "slug": "anthropic",
-                "name": "Anthropic",
-                "provider": "anthropic",
-                "sampled_at": None,
-                "ok": None,
-                "miss_reason": None,
-                "renewal_attempted_at": None,
-                "renewal_result": None,
-                "renewal_failure_reason": None,
-            }
-        ]
-    }
+    # No subscription is named, so the panel lists none.
+    assert body["subscriptions"] == {"items": []}
     assert body["fleet_summary"] == _COUNTS
 
 

@@ -2,13 +2,9 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
-
-from sqlalchemy import Connection
-
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.hub.identity import IWriteRunnerIdentityRepository, RunnerIdentity
-from blizzard.runner.store.errors import RunnerStoreConnections
+from blizzard.runner.store.errors import RunnerAlreadyBound, RunnerStoreConnections, RunnerUnbound
 from blizzard.runner.store.schema import runner_identity
 
 _log = get_logger("blizzard.runner.store")
@@ -17,10 +13,8 @@ _log = get_logger("blizzard.runner.store")
 class RunnerIdentityStore:
     """Read-write adapter over the runner store's single identity row."""
 
-    def __init__(self, store: RunnerStoreConnections, stamp_unowned: Callable[[Connection, str], int]) -> None:
-        # The stamp is a ``HostStores`` member's, handed in: a runner adapter holds no door to the exempt statements.
+    def __init__(self, store: RunnerStoreConnections) -> None:
         self._store = store
-        self._stamp_unowned = stamp_unowned
 
     def runner_identity(self) -> RunnerIdentity | None:
         rows = self._store.all(
@@ -53,13 +47,12 @@ class RunnerIdentityStore:
             "tenant_id": identity.tenant_id,
             "tenant_name": identity.tenant_name,
         }
-        # Registration's adoption binds an unbound store, and the rows written before it are stamped with the identity
-        # row in one commit; a bound one refuses another runner's id.
-        binding = self._store.runner_id is None
-        self._store.bind(identity.runner_id)
+        bound = self._store.runner_id
+        if bound is None:
+            raise RunnerUnbound(runner_identity.name)
+        if bound != identity.runner_id:
+            raise RunnerAlreadyBound(bound, identity.runner_id)
         with self._store.begin() as conn:
-            if binding:
-                self._stamp_unowned(conn, identity.runner_id)
             # The bound runner's row is updated in place, so the served-projects answer's marker on it stays.
             kept = conn.execute(self._store.update(runner_identity).values(**values)).rowcount
             if not kept:

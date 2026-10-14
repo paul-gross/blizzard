@@ -109,12 +109,12 @@ def test_one_signal_is_yielded_through_the_published_bundles_settings_env(tmp_pa
 
 def test_runner_init_erases_an_opt_out_edited_into_the_default_worker_settings(tmp_path: Path) -> None:
     """The default worker settings file is rewritten by every ``init``, so it is no durable home for an opt-out."""
-    config = Runtime(tmp_path).init()
+    config = Runtime(tmp_path).init().runner_config()
     path = tmp_path / WORKER_SETTINGS_FILENAME
     path.write_text(json.dumps({**json.loads(path.read_text()), "env": {"OTEL_METRICS_EXPORTER": "none"}}))
     assert _plan(config).metrics is YIELDED
 
-    assert _plan(Runtime(tmp_path).init()) == _all(CAPTURED)
+    assert _plan(Runtime(tmp_path).init().runner_config()) == _all(CAPTURED)
 
 
 def test_a_generic_endpoint_yields_every_signal(tmp_path: Path) -> None:

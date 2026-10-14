@@ -42,6 +42,7 @@ from tests.e2e.test_acceptance_loop import (
 )
 from tests.e2e.test_ask_answer_e2e import _tick_until
 from tests.egress_recipes import FILES_A_STATION_READ_LAST_WEEK, recipe
+from tests.host_files import write_host_file
 
 pytestmark = [
     pytest.mark.e2e,
@@ -336,7 +337,7 @@ def test_the_exported_events_agree_with_the_hubs_own_counts(tmp_path: Path, monk
             transcripts_root=str(transcripts_root),
             transcripts_ship=True,
         )
-        config.config_path.write_text(config.to_toml())
+        write_host_file(config)
         world = World(hub, forge, f"http://127.0.0.1:{hub_port}", config, fenced)
         with _runner_api(config):
             reads = world.ingest(_reads_graph(), "reads")

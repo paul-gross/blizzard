@@ -138,26 +138,36 @@ blizzard hub graph sync     # mint the packaged graphs; idempotent, re-run after
 Set up a runner on the machine that will run the agents. The same wheel carries it, and with the hub still up:
 
 ```bash
-blizzard runner init .      # scaffold blizzard-runner.toml + its own sqlite store, then add this runner at the hub
+blizzard runner init .      # scaffold blizzard-host.toml + its own sqlite store, then add this runner at the hub
 ```
 
 `init` adds the runner at the local hub above and writes the token the hub issues to `.env`; for a hub elsewhere, pass
 `--hub <url>`.
 
-Edit `blizzard-runner.toml` to declare a git origin. A new runner defaults to the built-in `basic` workspace: it clones
-repos into `workspace/projects/` under the runner directory and creates one worktree per repo under each chunk's folder.
-No winter installation is needed. Add a `[[workspace_repo]]` at the **end** of the config:
+Edit `blizzard-host.toml` to declare a git origin. A new runner defaults to the built-in `basic` workspace: it clones
+repos into `workspace/projects/` under the host directory and creates one worktree per repo under each chunk's folder.
+No winter installation is needed. Add a `[[workspace.repo]]` to the scaffolded `[[workspace]]`, and set the runner's
+`agents` in its `projects` binding. The excerpt below shows the scaffolded file's `[[workspace]]` and `[[runner]]`
+tables with those additions, not the whole file:
 
 ```toml
-workspace_provider = "basic"
-workspace_root = "workspace"           # relative to blizzard-runner.toml; empty uses this default
+[[workspace]]
+id = "workspace-local"
+provider = "basic"
+root = "workspace"                     # relative to the host directory; empty uses this default
 max_environments = 10
-max_agents = 2
 
-[[workspace_repo]]
+[[workspace.repo]]
 name = "todo-mvc"
 url = "https://github.com/you/todo-mvc.git"
+
+[[runner]]
+name = "runner-local"                  # as scaffolded; keep it
+id = "rn_..."                          # written by init; keep it
+projects = [{ project = "default", workspace = "workspace-local", agents = 2 }]
 ```
+
+Keep the scaffolded `[[runner]]`'s `name` and `id`; edit only its `projects`.
 
 ```bash
 blizzard runner host .      # register with the hub and start pulling work
@@ -165,8 +175,8 @@ blizzard runner host .      # register with the hub and start pulling work
 
 Released environments stay on disk for inspection until the cap needs room; the oldest unheld folders are evicted first.
 On reacquisition their worktrees are reset. To use a [winter](https://github.com/paul-gross/winter) workspace instead,
-set `workspace_provider = "winter"`, `workspace_root` to its absolute root, and `workspace_envs = ["alpha", "beta"]`;
-the winter CLI must be available. Winter also provides provisioning and service orchestration for those environments.
+set the workspace's `provider = "winter"`, `root` to its absolute root, and `envs = ["alpha", "beta"]`; the winter CLI
+must be available. Winter also provides provisioning and service orchestration for those environments.
 
 Work does not need a forge to exist. The built-in `hub` work source is always seated, needs no credential, and authoring
 an item at it mints that item's chunk in the same call:

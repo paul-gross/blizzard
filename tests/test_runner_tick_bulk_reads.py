@@ -312,6 +312,7 @@ def _tick_statement_count(
         config=LoopConfig(
             runner_name="r1",
             workspace_id="ws1",
+            runner_id="rn_1",
             max_agents=n,
             context_warn_tokens=300_000,
             context_sample_interval_seconds=60,

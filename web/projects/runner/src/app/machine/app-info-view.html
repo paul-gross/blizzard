@@ -8,16 +8,16 @@
     <span>not registered</span>
   }
 </ng-template>
-<!-- Whether the token resolves to the runner the store belongs to; a refusing runner names both ids
-     and the command that clears its store. -->
+<!-- Whether the token resolves to the runner the host file configures; a refusing runner names both ids
+     and the remedy that restores it. -->
 <ng-template #verdictValue>
   @if (view().identity; as verdict) {
     @switch (verdict.state) {
       @case ('mismatched') {
-        <span class="link down">REFUSING</span> token belongs to
-        <span class="rid" data-testid="verdict-token">{{ verdict.token_runner_id }}</span>, store to
-        <span class="rid" data-testid="verdict-store">{{ verdict.store_runner_id }}</span> — clear with
-        <span class="path" data-testid="verdict-reset">{{ verdict.reset_command }}</span>
+        <span class="link down">REFUSING</span> token belongs to runner
+        <span class="rid" data-testid="verdict-token">{{ verdict.token_runner_id }}</span>, the configured runner is
+        <span class="rid" data-testid="verdict-store">{{ verdict.store_runner_id }}</span> —
+        <span data-testid="verdict-reset">{{ verdict.reset_command }}</span>
       }
       @case ('matched') {
         <span class="link up">VERIFIED</span>

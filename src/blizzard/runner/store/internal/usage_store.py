@@ -19,6 +19,7 @@ from blizzard.foundation.store.utc import as_utc
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.usage import SessionCostBasis, UsageSample
 from blizzard.runner.store.errors import RunnerStoreConnections
+from blizzard.runner.store.internal.base import insert_outbox_row
 from blizzard.runner.store.schema import (
     context_samples,
     leases,
@@ -203,14 +204,15 @@ class UsageStore:
                     "estimated_cost_usd": cost.estimated_cost_usd,
                 }
             )
-            result = conn.execute(
-                self._store.insert(outbound_buffer).values(
-                    kind=USAGE_RECORDED,
-                    chunk_id=chunk_id,
-                    lease_id=lease_id,
-                    payload=payload,
-                    created_at=recorded_at,
-                )
+            seq = insert_outbox_row(
+                self._store,
+                conn,
+                outbound_buffer,
+                kind=USAGE_RECORDED,
+                chunk_id=chunk_id,
+                lease_id=lease_id,
+                payload=payload,
+                created_at=recorded_at,
             )
         _log.info(
             "usage fact recorded",
@@ -220,8 +222,7 @@ class UsageStore:
             kind=sample.kind,
             cost_usd=cost.cost_usd,
         )
-        key = result.inserted_primary_key
-        return int(key[0]) if key is not None else 0
+        return seq
 
     def record_context_sample(
         self,
@@ -248,17 +249,16 @@ class UsageStore:
                 )
             )
             if report_kind:
-                result = conn.execute(
-                    self._store.insert(outbound_buffer).values(
-                        kind=report_kind,
-                        chunk_id=chunk_id,
-                        lease_id=lease_id,
-                        payload=report_payload,
-                        created_at=sampled_at,
-                    )
+                seq = insert_outbox_row(
+                    self._store,
+                    conn,
+                    outbound_buffer,
+                    kind=report_kind,
+                    chunk_id=chunk_id,
+                    lease_id=lease_id,
+                    payload=report_payload,
+                    created_at=sampled_at,
                 )
-                key = result.inserted_primary_key
-                seq = int(key[0]) if key is not None else 0
         if report_kind:
             _log.warning(
                 "session context crossed the warn line",

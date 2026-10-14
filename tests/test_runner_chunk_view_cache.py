@@ -24,6 +24,7 @@ from blizzard.runner.loop.tick import tick
 from blizzard.runner.node_steps.chunk_state import ChunkSpend, ChunkState
 from blizzard.runner.node_steps.submissions import ApplyReply, Completion
 from tests.runner_fakes import (
+    FIXTURE_RUNNER_ID,
     FakeHarness,
     FakeHub,
     FakeProbe,
@@ -232,7 +233,9 @@ def test_tick_re_reads_a_chunk_once_after_its_own_write_lands(tmp_path):  # type
         provider=provider,
         harness=harness,
         probe=probe,
-        config=LoopConfig(runner_name="r1", workspace_id="ws1", max_agents=1, chunk_cap_usd=5.0),
+        config=LoopConfig(
+            runner_name="r1", workspace_id="ws1", runner_id=FIXTURE_RUNNER_ID, max_agents=1, chunk_cap_usd=5.0
+        ),
     )
 
     tick(ctx)

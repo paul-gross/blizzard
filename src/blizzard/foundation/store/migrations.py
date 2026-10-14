@@ -34,6 +34,11 @@ class MigrationConnectionError(RuntimeError):
     runtime should catch, not sqlalchemy's own driver-specific ``OperationalError``."""
 
 
+class MigrationRefused(RuntimeError):
+    """Raised by a revision that refuses a store it cannot carry across safely, leaving the store as it was; the
+    message tells the operator what to repair or restore, so a CLI shows it as the error, not as a traceback."""
+
+
 class MigrationClockMissingError(RuntimeError):
     """Raised when a revision that stamps a time runs without a clock to read it from."""
 

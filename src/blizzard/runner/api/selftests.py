@@ -58,8 +58,8 @@ def _view(run: SelfTestRun) -> SelfTestView:
     status_code=status.HTTP_201_CREATED,
     responses={
         503: {
-            "description": "The requested harness is known but unavailable, or the runner has not registered yet, so"
-            " its store is bound to no runner to record the result for."
+            "description": "The requested harness is known but unavailable, or the runner's store is bound to no"
+            " runner id to record the result for."
         }
     },
 )

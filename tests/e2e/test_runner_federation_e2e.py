@@ -22,8 +22,9 @@ import pytest
 
 from blizzard.hub.config import AuthConfig, HubConfig, OAuthProviderConfig
 from blizzard.runner.auth.session import CookieNames
-from blizzard.runner.config import RunnerConfig
+from blizzard.runner.hub.internal.token_file import HubTokenFile
 from tests.e2e.test_acceptance_loop import _await_http, _free_port, _terminate
+from tests.host_files import load_runner_config, sampler_without_credentials, write_host_file
 from tests.runner_join import add_runner, adopt_runner, runner_spawn_env
 from tests.service.support import poll_until, require_stub_idp, stub_idp
 from tests.support import daemon_log_sink
@@ -117,7 +118,7 @@ def _spawn_runner(runner_dir: Path, *, port: int) -> subprocess.Popen[str]:
     log = runner_dir / "daemon.log"
     proc = subprocess.Popen(
         [_runner_bin(), "host", "--dir", str(runner_dir), "--host", "127.0.0.1", "--port", str(port)],
-        env=runner_spawn_env(RunnerConfig.load(runner_dir).hub_url),
+        env=runner_spawn_env(load_runner_config(runner_dir).hub_url),
         stdout=daemon_log_sink(log),
         stderr=subprocess.STDOUT,
         text=True,
@@ -146,19 +147,25 @@ def _federated_runner(runner_dir: Path, *, hub_port: int, port: int, name: str) 
         operator.get(f"/api/auth/{_PROVIDER_NAME}/authorize", follow_redirects=True)
         runner_id, token = add_runner(operator, name)
     adopt_runner(runner_dir, hub_url, token)
-    config = RunnerConfig.load(runner_dir)
+    config = load_runner_config(runner_dir)
     config = dataclasses.replace(
         config,
         name=name,
         public_urls=(public_url,),
         # A path that is never created — the sampler's missing-credentials soft failure
         # trips before any request is built.
-        external_usage_credentials_path=str(runner_dir / "no-such-credentials.json"),
+        subscriptions=sampler_without_credentials(runner_dir),
     )
-    config.config_path.write_text(config.to_toml())
+    write_host_file(config)
+    HubTokenFile.of(runner_dir, config.token_env).write(token)  # a rename moves the token's variable too
 
     proc = _spawn_runner(runner_dir, port=port)
     try:
+        with httpx.Client(base_url=hub_url, timeout=15.0) as operator:
+            operator.get(f"/api/auth/{_PROVIDER_NAME}/authorize", follow_redirects=True)
+            assert poll_until(lambda: operator.get(f"/api/runners/{runner_id}").json()["registered_at"] is not None), (
+                "the runner never registered at its hub"
+            )
         yield _FederatedRunner(proc, CookieNames(runner_id))
     finally:
         _terminate(proc)

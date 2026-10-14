@@ -20,6 +20,7 @@ from blizzard.runner.loop.steps import Advance, Fill, Pull
 from blizzard.runner.node_steps.chunk_state import ChunkGate, ChunkState
 from blizzard.runner.node_steps.submissions import ApplyReply
 from tests.runner_fakes import (
+    FIXTURE_RUNNER_ID,
     FakeHarness,
     FakeHub,
     FakeProbe,
@@ -89,7 +90,7 @@ def test_runner_config_gate_buffers_a_decision_not_a_completion(tmp_path):  # ty
         harness=harness,
         probe=FakeProbe(),  # worker exited
         worktree_git=wt,
-        config=LoopConfig(runner_name="r1", workspace_id="ws1", gates=("build",)),
+        config=LoopConfig(runner_name="r1", workspace_id="ws1", runner_id=FIXTURE_RUNNER_ID, gates=("build",)),
     )
 
     Advance(ctx).run()  # gated -> the declared commit is verified, a decision is buffered, no verdict elicited
@@ -136,7 +137,7 @@ def test_gated_node_decision_elicited_exactly_once_while_flush_pending(tmp_path)
         harness=FakeHarness(handle=_HANDLE, verdict="pass"),
         probe=FakeProbe(),
         worktree_git=wt,
-        config=LoopConfig(runner_name="r1", workspace_id="ws1", gates=("build",)),
+        config=LoopConfig(runner_name="r1", workspace_id="ws1", runner_id=FIXTURE_RUNNER_ID, gates=("build",)),
     )
 
     Advance(ctx).run()

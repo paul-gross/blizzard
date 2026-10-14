@@ -15,9 +15,10 @@ from pathlib import Path
 import pytest
 
 from blizzard.runner.cli.runtime import read_stores
-from blizzard.runner.config import RunnerConfig
+from blizzard.runner.host_layout import HostLayout
 from tests.e2e.test_acceptance_loop import REPO, REPO_NAME, _forge, _free_port, _hub, _mock_bin_dir
 from tests.e2e.test_basic_workspace import bare_origin
+from tests.host_files import load_runner_config
 from tests.runner_join import RUNNER_BIN, join_runner, runner_spawn_env
 
 pytestmark = [
@@ -51,9 +52,9 @@ def test_a_freshly_initialized_runner_is_offered_a_default_chunk_on_first_regist
 
         runner_dir = tmp_path / "runner"
         joined = join_runner(runner_dir, hub_url)
-        config = RunnerConfig.load(runner_dir)
+        config = load_runner_config(runner_dir)
         assert config.projects == ("default",)
-        scaffolded = config.config_path.read_bytes()
+        scaffolded = HostLayout(runner_dir).config_path.read_bytes()
         added = hub.get(f"/api/runners/{joined.runner_id}")
         assert added.status_code == 200, added.text
         assert added.json()["registered_at"] is None
@@ -67,7 +68,7 @@ def test_a_freshly_initialized_runner_is_offered_a_default_chunk_on_first_regist
             timeout=120,
         )
         assert ticked.returncode == 0, f"runner tick failed ({ticked.returncode}):\n{ticked.stdout}\n{ticked.stderr}"
-        assert config.config_path.read_bytes() == scaffolded
+        assert HostLayout(runner_dir).config_path.read_bytes() == scaffolded
 
         registered = hub.get(f"/api/runners/{joined.runner_id}").json()
         assert registered["registered_at"] is not None

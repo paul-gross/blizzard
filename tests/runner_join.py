@@ -17,10 +17,16 @@ from pathlib import Path
 
 import httpx
 
-from blizzard.runner.config import DEFAULT_TOKEN_ENV, ENV_HUB_URL
+from blizzard.foundation.runner_token_names import HUB_TOKEN_VARIABLE_PREFIX, hub_token_variable
+from blizzard.runner.config import DEFAULT_RUNNER_NAME, ENV_HUB_URL
+from blizzard.runner.host_layout import HostLayout, write_runner_id
 from blizzard.runner.hub.internal.token_file import HubTokenFile
+from blizzard.runner.runtime import init_environment
 
 RUNNER_BIN = Path(sys.executable).parent / "blizzard-runner"
+
+#: The variable the token of the runner ``runner init`` scaffolds is held in: that runner's name is the default.
+DEFAULT_TOKEN_ENV = hub_token_variable(DEFAULT_RUNNER_NAME)
 
 
 @dataclass(frozen=True)
@@ -65,7 +71,11 @@ def runner_spawn_env(
     """``base`` (this process's environment by default) with ``hub_url`` pinned as ``BZ_HUB_URL`` and any
     ambient hub token scrubbed, then ``extra`` laid over — so a runner presents only its ``.env`` token. The
     pin seeds only a fresh scaffold: ``runner host`` takes its hub from the directory's config."""
-    env = {key: value for key, value in (os.environ if base is None else base).items() if key != DEFAULT_TOKEN_ENV}
+    env = {
+        key: value
+        for key, value in (os.environ if base is None else base).items()
+        if key != HUB_TOKEN_VARIABLE_PREFIX.rstrip("_") and not key.startswith(HUB_TOKEN_VARIABLE_PREFIX)
+    }
     env[ENV_HUB_URL] = hub_url
     env.update(extra or {})
     return env
@@ -114,10 +124,13 @@ def adopt_runner(runner_dir: Path, hub_url: str, token: str) -> JoinedRunner:
 
 def pin_runner(runner_dir: Path, *, runner_id: str, name: str) -> JoinedRunner:
     """Fix a runner's id and token up front, for a blizzard-mock hub that comes up — or comes back with
-    its in-memory state gone — only after the runner directory exists: the token goes into the
-    directory's ``.env`` now, and :func:`seed_pinned_runner` adds the same pair at each such hub."""
+    its in-memory state gone — only after the host directory exists: the directory is scaffolded with the
+    runner's id in its host file and its token in ``.env`` now, and :func:`seed_pinned_runner` adds the same
+    pair at each such hub."""
     runner_dir.mkdir(parents=True, exist_ok=True)
     pinned = JoinedRunner(runner_id=runner_id, runner_name=name, token=f"tok_{runner_id}")
+    config = init_environment(runner_dir)
+    write_runner_id(HostLayout(config.root), config.sole_runner().name, runner_id)
     HubTokenFile.of(runner_dir, DEFAULT_TOKEN_ENV).write(pinned.token)
     return pinned
 

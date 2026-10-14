@@ -123,6 +123,16 @@ class SubscriptionDeclaration:
 
 @domain_model
 @dataclass(frozen=True)
+class BindingDeclaration:
+    """One project this runner serves through a workspace of its host, with the agents it runs there at once."""
+
+    project: str
+    workspace_id: str
+    agents: int
+
+
+@domain_model
+@dataclass(frozen=True)
 class HubQuestion:
     """A worker's question as the hub holds it, with its derived answer and delivery state."""
 
@@ -438,6 +448,8 @@ class IHubClient(IChunkStatusReader, Protocol):
         subscriptions: tuple[SubscriptionDeclaration, ...] = (),
         gates: tuple[str, ...] = (),
         projects: tuple[str, ...] | None = None,
+        bindings: tuple[BindingDeclaration, ...] | None = None,
+        subscription: str | None = None,
     ) -> RegistrationReply:
         """``POST /api/fleet/runners`` — register the runner this client's token names under its
         declared ``name``, and learn its hub-minted id from the reply. Idempotent, and refreshes the
@@ -446,7 +458,9 @@ class IHubClient(IChunkStatusReader, Protocol):
         ``gates`` is the runner's own configured human-gate node names — reported for display, never
         read back to enforce. ``projects`` is the projects the runner serves, by id or slug: sent as
         given, ``None`` as null — never ``[]`` — so the hub keeps the declaration it holds, where
-        ``()`` declares that the runner serves none. A refused token raises :class:`HubClientError`."""
+        ``()`` declares that the runner serves none. ``bindings`` is the same declaration by workspace and agent count,
+        which a hub that reads it takes over ``projects`` for; ``subscription`` is the slug of the declared
+        subscription the runner spends, ``None`` naming none. A refused token raises :class:`HubClientError`."""
         ...
 
     def fetch_runner_paused(self, runner_id: str) -> bool:

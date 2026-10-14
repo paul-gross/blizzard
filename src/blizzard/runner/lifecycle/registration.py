@@ -1,16 +1,15 @@
 """The registration step — register at the hub, keep the identity and the served projects its reply
 names, mirror the hub's pause brake.
 
-The hub resolves who this runner is from its bearer token; the runner only declares its configured
-name. The store's identity row keeps the id of the runner the store belongs to: a registration adopts
-the reply's id only into a store that names none, and otherwise refreshes the name and the tenant
-the reply names (a reply naming none, from a hub that predates tenants, keeps the row's). A reply
-naming another runner — a token rotated since the tick's identity check, or a hub with no identity
-read — turns the verdict to a mismatch and mirrors no brake. The registration declares the configured
-projects (``None`` when the configuration names none, so the hub keeps its declaration), and a reply
-answering them replaces the stored answer whole once the identity row is recorded; a reply answering
-none, from a hub that predates projects, keeps it. A failed registration leaves the row, the answer,
-the holder and the mirrored brake as they stood."""
+The hub resolves who this runner is from its bearer token; the runner declares its configured name and
+the bindings and subscription its host file gives it. The runner's id is configured and its store is bound to
+it, so a registration never adopts one: it records the reply's name and tenant against the configured id (a
+reply naming no tenant, from a hub that predates tenants, keeps the row's). A reply naming another runner — a
+token rotated since the tick's identity check, or a hub with no identity read — turns the verdict to a mismatch
+and mirrors no brake. The registration declares the configured projects, and a reply answering them replaces the
+stored answer whole once the identity row is recorded; a reply answering none, from a hub that predates
+projects, keeps it. A failed registration leaves the row, the answer, the holder and the mirrored brake as they
+stood."""
 
 from __future__ import annotations
 
@@ -21,7 +20,7 @@ from typing import Protocol
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.harness.capability_snapshot import HarnessCapability
-from blizzard.runner.hub.client import HubClientError, IHubClient, SubscriptionDeclaration
+from blizzard.runner.hub.client import BindingDeclaration, HubClientError, IHubClient, SubscriptionDeclaration
 from blizzard.runner.hub.held_token import HubTokenHolder
 from blizzard.runner.hub.identity import (
     ICurrentRunnerIdentity,
@@ -68,6 +67,8 @@ class RegistrationStores(Protocol):
 
 class RegistrationConfig(Protocol):
     @property
+    def runner_id(self) -> str: ...
+    @property
     def runner_name(self) -> str: ...
     @property
     def workspace_id(self) -> str: ...
@@ -81,6 +82,10 @@ class RegistrationConfig(Protocol):
     def gates(self) -> tuple[str, ...]: ...
     @property
     def projects(self) -> tuple[str, ...] | None: ...
+    @property
+    def bindings(self) -> tuple[BindingDeclaration, ...] | None: ...
+    @property
+    def subscription(self) -> str | None: ...
 
 
 class RegistrationContext(Protocol):
@@ -127,15 +132,17 @@ class Registration:
                 ),
                 gates=ctx.config.gates,
                 projects=ctx.config.projects,
+                bindings=ctx.config.bindings,
+                subscription=ctx.config.subscription,
             )
         except HubClientError:
             return  # hub unreachable — the last identity and the last-mirrored brake hold
         now = ctx.clock.now()
         stored = ctx.stores.identity.runner_identity()
-        if stored is not None and stored.runner_id != reply.runner_id:
+        if reply.runner_id != ctx.config.runner_id:
             was = ctx.identity_verdict.record(
                 IdentityState.MISMATCHED,
-                store_runner_id=stored.runner_id,
+                store_runner_id=ctx.config.runner_id,
                 token_runner_id=reply.runner_id,
                 checked_at=now,
             )

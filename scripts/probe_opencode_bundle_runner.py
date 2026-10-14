@@ -138,7 +138,8 @@ def _runtime(root: Path, scratch: Path, env: dict[str, str], proxy_url: str) -> 
     env["BZ_HARNESS_BINARY"] = str(Path.cwd().parent / "blizzard-mock/.venv/bin/mock-claude-code")
     # The disposable runner joins the hub as a runner of its own: init adds it under its own token, never the
     # standing runner's from the shell exports.
-    env.pop("BZ_HUB_TOKEN", None)
+    for name in [name for name in env if name.startswith("BZ_HUB_TOKEN")]:
+        del env[name]
     subprocess.run(
         ["uv", "run", "blizzard", "runner", "init", str(root), "--hub", env["BZ_HUB_URL"]],
         env=env,
@@ -147,15 +148,21 @@ def _runtime(root: Path, scratch: Path, env: dict[str, str], proxy_url: str) -> 
     )
     auth = root / "auth.json"
     auth.write_text('{"mock":"present"}')
-    config = root / "blizzard-runner.toml"
+    config = root / "blizzard-host.toml"
     text = config.read_text()
     text = text.replace('name = "runner-local"', 'name = "runner-bundle-probe"')
-    text = text.replace("[claude_code]\nenabled = true", "[claude_code]\nenabled = false")
+    # The token variable follows the runner's name, so the token init wrote follows the rename.
+    dotenv = root / ".env"
+    dotenv.write_text(dotenv.read_text().replace("BZ_HUB_TOKEN_RUNNER_LOCAL=", "BZ_HUB_TOKEN_RUNNER_BUNDLE_PROBE="))
+    text = text.replace("[runner.claude_code]\nenabled = true", "[runner.claude_code]\nenabled = false")
     text = text.replace(
-        '[opencode]\nenabled = true\nbinary = "opencode"',
-        f'[opencode]\nenabled = true\nbinary = "{worker}"\nauth_path = "{auth}"',
+        '[runner.opencode]\nenabled = true\nbinary = "opencode"',
+        f'[runner.opencode]\nenabled = true\nbinary = "{worker}"\nauth_path = "{auth}"',
     )
-    text = text.replace('# config_dir = "~/.config/blizzard/harness"', f'config_dir = "{bundle.parent}"')
+    text = text.replace(
+        '[runner.harness]\nautonomy = "dangerous"',
+        f'[runner.harness]\nautonomy = "dangerous"\nconfig_dir = "{bundle.parent}"',
+    )
     direct_hub = f'hub_url = "{env["BZ_HUB_URL"]}"'
     assert text.count(direct_hub) == 1
     text = text.replace(direct_hub, f'hub_url = "{proxy_url}"')
@@ -183,7 +190,7 @@ def main() -> None:
     root.mkdir()
     base = f"http://127.0.0.1:{args.port}"
     # The runner presents the token `runner init` adds it with at the env-local hub, never one from this shell.
-    env = {name: value for name, value in os.environ.items() if name != "BZ_HUB_TOKEN"}
+    env = {name: value for name, value in os.environ.items() if not name.startswith("BZ_HUB_TOKEN")}
     proxy = _guarded_hub(hub_url, args.chunk_id)
     proxy_url = f"http://127.0.0.1:{proxy.server_port}"
     proxy_thread = threading.Thread(target=proxy.serve_forever, name="bundle-probe-hub", daemon=True)

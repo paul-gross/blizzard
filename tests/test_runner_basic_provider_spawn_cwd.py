@@ -42,7 +42,7 @@ def test_basic_takeover_escalation_and_transcript_resolve_to_the_environment_wor
     # The process graph binds to the stored identity at build — a registered runner's store.
     store = make_store(config.db_url)
     store.record_runner_identity(RunnerIdentity(FIXTURE_RUNNER_ID, "runner-local", _NOW))
-    graph = build_runner_process(config, events=EventBroker())
+    graph = build_runner_process(config, events=EventBroker(), runner_id=FIXTURE_RUNNER_ID)
     hosted = build_hosted_app(config, process_graph=graph)
     try:
         ctx = LoopWiring(config, "", "", graph.events).context(FakeHub(), graph)
