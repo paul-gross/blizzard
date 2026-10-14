@@ -2,12 +2,33 @@
 
 The host daemon serves one API on two listeners — same app, same routes; the door depends on who the client is.
 
+## The host's routes and each runner's
+
+The host serves one origin. What belongs to the host answers at the root:
+
+- `GET /api/health` — the host's version.
+- `GET /api/ready` — the store's readiness, beside a `runners` list naming each runner the host holds, its id, name, and
+  whether it is `serving` or `halted`.
+- `/api/auth/*` — the panel's one sign-in.
+- `GET /api/events/stream` — the host's one event stream.
+- `/api/host/*` — the host's own reads: `runners` (each runner's brake, bindings, and agents in use, or a halted one's
+  reasons), `workspaces`, `environments` (grouped by workspace, each held one naming its runner and project), and
+  `subscriptions` (each naming the runners that spend it); and `workspaces/{workspace_id}/prompt`, the runtime
+  workspace-prompt override (`GET`, `PUT`, `DELETE`), which answers `404` for a workspace the host does not declare.
+
+Everything that belongs to one runner — its leases, dashboard, asks, control verbs, takeovers, traces, worker hooks, and
+OTLP receiver — answers under `/runners/{runner_id}/`, keyed by the hub-minted id: `/runners/{runner_id}/api/...` and
+`/runners/{runner_id}/v1/{traces,metrics,logs}`. An id the host does not hold answers `404`; a runner it holds halted
+answers `503` naming its reasons. Nothing answers at the unprefixed paths a lone runner once served: an API path no
+route matches answers a JSON `404`, never the panel. `openapi/runner.openapi.json` documents both halves in one document,
+with `runner_id` a path parameter on every runner operation.
+
 ## The two listeners
 
 The unix socket `host.sock`, mode 0600 in the host directory, is the CLI local verbs' door (`runner pause`, `start`,
 `takeover`), addressed via `--dir` or `$BZ_RUNNER_DIR` — no port, no config file read. The TCP port (8431 by default) is
-the door for the runner's web panel (same-origin `/api/*` on the page's own host) and for worker hooks such as heartbeat
-and ask, which address it via the spawn-injected `BLIZZARD_RUNNER_URL`. The TCP listener exists because a browser cannot
+the door for the host's web panel (same-origin on the page's own host) and for worker hooks such as heartbeat and ask,
+which address their runner via the spawn-injected `BLIZZARD_RUNNER_URL`, `http://<host>:<port>/runners/<runner_id>`. The TCP listener exists because a browser cannot
 open a unix socket; the socket exists so operator controls depend on no port, filesystem permissions being their access
 control.
 
@@ -35,19 +56,25 @@ With no daemon running, client verbs report that rather than reading the store b
 the store only through the daemon that owns it. The writing offline maintenance verbs — `migrate`, `tick`,
 `transcript backfill` and `reship` ([transcripts.md](./transcripts.md)) — open the store directly and run with the
 daemon stopped, enforced by their own refusal; the read-only `prompt status`, `diff`, and `install` open it for one
-query and need no refusal, the single-writer constraint binding writers only. `prompt clear` is the one `prompt` verb that is a client verb: it writes the store, so it goes through the daemon.
+query and need no refusal, the single-writer constraint binding writers only. `prompt clear` is the one `prompt` verb
+that is a client verb: it writes the store, so it goes through the daemon, at
+`DELETE /api/host/workspaces/{workspace_id}/prompt` for the workspace the other `prompt` verbs resolve.
+
+A local verb that reaches a runner reads the host's `GET /api/host/runners` and addresses the one runner it serves under
+its prefix; a host serving none fails naming why each runner is halted.
 
 ## The web panel and its stream
 
 The TCP door also carries `GET /api/events/stream`, a `text/event-stream` route deliberately absent from the OpenAPI
 spec (no generated client calls it): it publishes lease, ask, escalation, takeover, environment, and fact changes the
 instant they happen, replaying from `Last-Event-ID` on reconnect like the hub's own stream
-([observability.md](./observability.md)). The panel renders leases, environments, asks, escalations, takeovers, and
+([observability.md](./observability.md)). Every runner-scoped frame carries its runner's `runner_id`; an
+`environment-changed` frame is the host's and carries none. The panel renders leases, environments, asks, escalations, takeovers, and
 facts live off that stream; dashboard and leases reads keep a one-minute poll only as a backstop, and the session read
 has no poll — a stream 401 routes into the same recovery seam as any read's 401.
 
-The panel's top-bar Pause/Resume control issues the identical `PATCH /api/runner` the CLI's local verbs use — the same
-write path, not a second one.
+The panel's top-bar Pause/Resume control issues the identical `PATCH /runners/{runner_id}/api/runner` the CLI's local
+verbs use — the same write path, not a second one.
 
 ## The two brakes
 

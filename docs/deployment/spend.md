@@ -201,8 +201,8 @@ idle Anthropic runner whose token lapses shows the lapsed condition below until 
 A sample that produces nothing carries one of four reasons: `credential_lapsed` (a token past its own expiry, or a 401
 from the provider), `credential_unreadable` (a missing or unparseable credential file), `endpoint_unreachable` (a
 connection failure, a timeout, or any other non-2xx status), and `response_unparseable` (a body the binding could not
-read). Every reason surfaces on the runner: `blizzard runner status`, the runner panel's subscriptions rail, and
-`GET /api/subscriptions` show the newest attempt's outcome and its miss reason, and beside it the newest renewal: when
+read). Every reason surfaces on the host: `blizzard runner status`, the panel's subscriptions, and
+`GET /api/host/subscriptions` (each subscription naming the runners that spend it) show the newest attempt's outcome and its miss reason, and beside it the newest renewal: when
 it was attempted, and whether it renewed, failed (with its reason: vendor CLI unavailable, timed out, vendor refused, or
 an unreadable vendor response), or has no outcome recorded. The probe below prints the miss reason in operator words.
 Every miss crosses to the hub the same way a sample does — reporting `{slug, name, missed_at, reason}`, never a token, a

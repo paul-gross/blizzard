@@ -27,10 +27,10 @@ The hub stores accepted content compressed at rest behind an operator-only read 
 sink. Reads through the hub's API are operator-only, requiring `transcript:read` (contributor and above); a runner's
 fleet token can push to ingest but never read back through it. A runner's own local panel is a separate case: it reads
 its own chunk-scoped segments straight from that runner's local store, through the runner daemon's own
-`GET /api/chunks/{chunk_id}/transcripts[/{segment_id}]` pair (`src/blizzard/runner/api/transcript_segments.py`) — a
+`GET /runners/{runner_id}/api/chunks/{chunk_id}/transcripts[/{segment_id}]` pair (`src/blizzard/runner/api/transcript_segments.py`) — a
 runner-local read never routed through the hub or gated by `transcript:read`, since it never crosses the fleet token
 boundary the hub's API guards. Both content reads — the segment-content read and the lease-keyed
-`GET /api/leases/{lease_id}/transcript` — are `503` when the recorded harness owner is unknown or bound but
+`GET /runners/{runner_id}/api/leases/{lease_id}/transcript` — are `503` when the recorded harness owner is unknown or bound but
 unavailable on this runner — the same unresolvable-owner shape that escalates a chunk in place elsewhere; the index
 read is unaffected, since it serves metadata off the local ledger alone, never the owner's own content.
 
