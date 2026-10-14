@@ -7,6 +7,7 @@ import { vi } from 'vitest';
 
 import { injectRunnerLeasesQuery } from './leases.query';
 import { runnerLeasesKey } from './query-keys';
+import { provideActiveRunner } from './active-runner';
 
 const LEASES = {
   items: [
@@ -44,16 +45,18 @@ describe('injectRunnerLeasesQuery', () => {
 
   afterEach(() => stub?.restore());
 
-  it('is namespaced under runner (fleet/local split)', () => {
-    expect(runnerLeasesKey).toEqual(['runner', 'leases']);
+  it('leads with the runner id, so two runners never share a cache entry', () => {
+    expect(runnerLeasesKey('rn_1')).toEqual(['rn_1', 'leases']);
+    expect(runnerLeasesKey('rn_1')).not.toEqual(runnerLeasesKey('rn_2'));
   });
 
-  it('reads GET /api/leases through the generated runner client and returns its items', async () => {
-    stub = stubRequestClient(runnerClient, (method, path) => (method === 'GET' && path === '/api/leases' ? LEASES : {}));
+  it('reads GET /runners/{runner_id}/api/leases through the generated runner client and returns its items', async () => {
+    stub = stubRequestClient(runnerClient, (method, path) => (method === 'GET' && path === '/runners/rn_1/api/leases' ? LEASES : {}));
     await TestBed.configureTestingModule({
       imports: [LeasesQueryHost],
       providers: [
         provideZonelessChangeDetection(),
+        provideActiveRunner('rn_1'),
         provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
       ],
     }).compileComponents();
@@ -61,15 +64,16 @@ describe('injectRunnerLeasesQuery', () => {
     await settle(fixture);
 
     expect(fixture.componentInstance.query.data()).toEqual(LEASES.items);
-    expect(stub.forRoute('/api/leases', 'GET')).toHaveLength(1);
+    expect(stub.forRoute('/runners/rn_1/api/leases', 'GET')).toHaveLength(1);
   });
 
   it('returns an empty array when the runner genuinely holds no active leases', async () => {
-    stub = stubRequestClient(runnerClient, (method, path) => (method === 'GET' && path === '/api/leases' ? { items: [] } : {}));
+    stub = stubRequestClient(runnerClient, (method, path) => (method === 'GET' && path === '/runners/rn_1/api/leases' ? { items: [] } : {}));
     await TestBed.configureTestingModule({
       imports: [LeasesQueryHost],
       providers: [
         provideZonelessChangeDetection(),
+        provideActiveRunner('rn_1'),
         provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
       ],
     }).compileComponents();
@@ -88,11 +92,12 @@ describe('injectRunnerLeasesQuery', () => {
     // on RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS), not as a bare constant equality.
     vi.useFakeTimers();
     try {
-      stub = stubRequestClient(runnerClient, (method, path) => (method === 'GET' && path === '/api/leases' ? LEASES : {}));
+      stub = stubRequestClient(runnerClient, (method, path) => (method === 'GET' && path === '/runners/rn_1/api/leases' ? LEASES : {}));
       await TestBed.configureTestingModule({
         imports: [LeasesQueryHost],
         providers: [
           provideZonelessChangeDetection(),
+          provideActiveRunner('rn_1'),
           provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
         ],
       }).compileComponents();
@@ -100,18 +105,18 @@ describe('injectRunnerLeasesQuery', () => {
       fixture.detectChanges();
       await vi.advanceTimersByTimeAsync(0);
 
-      expect(stub.forRoute('/api/leases', 'GET')).toHaveLength(1);
+      expect(stub.forRoute('/runners/rn_1/api/leases', 'GET')).toHaveLength(1);
 
       // Just shy of the interval: still the one initial read.
       await vi.advanceTimersByTimeAsync(RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS - 1_000);
-      expect(stub.forRoute('/api/leases', 'GET')).toHaveLength(1);
+      expect(stub.forRoute('/runners/rn_1/api/leases', 'GET')).toHaveLength(1);
 
       // Crossing the interval fires the poll, and it keeps firing.
       await vi.advanceTimersByTimeAsync(1_000);
-      expect(stub.forRoute('/api/leases', 'GET')).toHaveLength(2);
+      expect(stub.forRoute('/runners/rn_1/api/leases', 'GET')).toHaveLength(2);
 
       await vi.advanceTimersByTimeAsync(RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS);
-      expect(stub.forRoute('/api/leases', 'GET')).toHaveLength(3);
+      expect(stub.forRoute('/runners/rn_1/api/leases', 'GET')).toHaveLength(3);
     } finally {
       vi.useRealTimers();
     }
@@ -119,13 +124,14 @@ describe('injectRunnerLeasesQuery', () => {
 
   it('surfaces a 503 (store unwired) as an error — never a silent empty list', async () => {
     stub = stubRequestClient(runnerClient, (method, path) => {
-      if (method === 'GET' && path === '/api/leases') return stubError(503, { detail: 'lease store not wired' });
+      if (method === 'GET' && path === '/runners/rn_1/api/leases') return stubError(503, { detail: 'lease store not wired' });
       return {};
     });
     await TestBed.configureTestingModule({
       imports: [LeasesQueryHost],
       providers: [
         provideZonelessChangeDetection(),
+        provideActiveRunner('rn_1'),
         provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
       ],
     }).compileComponents();

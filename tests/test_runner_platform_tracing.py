@@ -83,6 +83,7 @@ from blizzard.runner.tracing.receiving import TelemetryReceiver
 from blizzard.runner.tracing.status import LeaseTraceStatusReader
 from tests import claude_code_telemetry
 from tests.harness_sections import sections
+from tests.runner_client import runner_client
 from tests.runner_fakes import (
     REGISTERED_AT,
     FakeHarness,
@@ -249,10 +250,10 @@ def test_a_lease_scoped_request_is_a_worker_server_span_and_a_hub_call_propagate
     exporter = InMemorySpanExporter()
     handle = _handle(exporter)
     seen: list[httpx.Request] = []
-    with TestClient(_app(tmp_path, handle, seen)) as client:
+    with runner_client(_app(tmp_path, handle, seen)) as client:
         assert _history(client).status_code == 200
     spans = _finished(handle, exporter)
-    server = [s for s in spans if s.name.startswith("GET /api/leases/")]
+    server = [s for s in spans if s.name.startswith("GET /runners/{runner_id}/api/leases/")]
     assert len(server) == 1
     assert _attr(server[0], _CALLER) == "worker"
     http_children = [s for s in spans if s.kind.name == "CLIENT" and s.parent is not None]
@@ -267,14 +268,16 @@ def test_no_platform_span_leaves_before_the_first_registration_and_a_rename_show
     exporter = InMemorySpanExporter()
     identity = RunnerIdentityHolder()
     handle = _handle(exporter, identity)
-    with TestClient(_app(tmp_path, handle, [], identity=identity)) as client:
+    with runner_client(_app(tmp_path, handle, [], identity=identity)) as client:
         assert _history(client).status_code == 200
         identity.hold(RunnerIdentity("rn_01JRUNNER", "runner-a", REGISTERED_AT))
         assert _history(client).status_code == 200
         identity.hold(RunnerIdentity("rn_01JRUNNER", "runner-b", REGISTERED_AT))
         assert _history(client).status_code == 200
     spans = _finished(handle, exporter)
-    server = sorted((s for s in spans if s.name.startswith("GET /api/leases/")), key=lambda s: s.start_time or 0)
+    server = sorted(
+        (s for s in spans if s.name.startswith("GET /runners/{runner_id}/api/leases/")), key=lambda s: s.start_time or 0
+    )
     assert [_stamped(s) for s in server] == [("rn_01JRUNNER", "runner-a"), ("rn_01JRUNNER", "runner-b")]
     assert all(_attr(s, RUNNER_ID) == "rn_01JRUNNER" for s in spans)
 
@@ -282,7 +285,7 @@ def test_no_platform_span_leaves_before_the_first_registration_and_a_rename_show
 def test_heartbeat_and_the_trace_receiver_path_yield_no_span_at_all(tmp_path: Path) -> None:
     exporter = InMemorySpanExporter()
     handle = _handle(exporter)
-    with TestClient(_app(tmp_path, handle, [])) as client:
+    with runner_client(_app(tmp_path, handle, [])) as client:
         beat = client.post("/api/heartbeat", json={"lease_id": "lease_1"})
         assert beat.status_code == 200
         client.post("/v1/traces", content=b"")
@@ -292,7 +295,7 @@ def test_heartbeat_and_the_trace_receiver_path_yield_no_span_at_all(tmp_path: Pa
 def test_no_planted_secret_reaches_any_span(tmp_path: Path) -> None:
     exporter = InMemorySpanExporter()
     handle = _handle(exporter)
-    with TestClient(_app(tmp_path, handle, [])) as client:
+    with runner_client(_app(tmp_path, handle, [])) as client:
         _history(client)
         client.get("/api/leases/lease_1/history", headers={"X-Blizzard-Lease-Token": "wrong"})
     spans = _finished(handle, exporter)
@@ -435,7 +438,7 @@ def _worker_spans(spans: list[ReadableSpan]) -> list[ReadableSpan]:
 def test_an_otlp_json_post_with_the_lease_token_exports_a_rebuilt_span(tmp_path: Path) -> None:
     exporter = InMemorySpanExporter()
     handle = _handle(exporter)
-    with TestClient(_app(tmp_path, handle, [])) as client:
+    with runner_client(_app(tmp_path, handle, [])) as client:
         response = _post_json(client, _export(_own_trace()))
         assert response.status_code == 200
         assert "partialSuccess" not in response.json()
@@ -453,7 +456,7 @@ def test_an_otlp_json_post_with_the_lease_token_exports_a_rebuilt_span(tmp_path:
 def test_an_otlp_protobuf_post_exports_the_same_span(tmp_path: Path) -> None:
     exporter = InMemorySpanExporter()
     handle = _handle(exporter)
-    with TestClient(_app(tmp_path, handle, [])) as client:
+    with runner_client(_app(tmp_path, handle, [])) as client:
         response = client.post(
             "/v1/traces",
             content=_protobuf(_export(_own_trace())),
@@ -471,7 +474,7 @@ def test_an_otlp_protobuf_post_exports_the_same_span(tmp_path: Path) -> None:
 def test_a_request_without_a_valid_lease_token_is_refused_403(tmp_path: Path, headers: dict[str, str]) -> None:
     exporter = InMemorySpanExporter()
     handle = _handle(exporter)
-    with TestClient(_app(tmp_path, handle, [])) as client:
+    with runner_client(_app(tmp_path, handle, [])) as client:
         assert _post_json(client, _export(_own_trace()), headers).status_code == 403
     assert _worker_spans(_finished(handle, exporter)) == []
 
@@ -484,7 +487,7 @@ def test_an_app_built_without_a_receiver_refuses_a_valid_token_503_naming_it(tmp
         runner_stores=make_stores(store),
         host_stores=make_host_stores(store),
     )
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         refused = _post_json(client, _export(_own_trace()))
         assert refused.status_code == 503
         assert "telemetry receiver" in refused.json()["detail"]
@@ -493,7 +496,7 @@ def test_an_app_built_without_a_receiver_refuses_a_valid_token_503_naming_it(tmp
 
 def test_the_trace_status_reader_reads_the_tally_the_receiver_writes(tmp_path: Path) -> None:
     counter = ReceiverCounter()
-    with TestClient(_app(tmp_path, _handle(InMemorySpanExporter()), [], counter=counter)) as client:
+    with runner_client(_app(tmp_path, _handle(InMemorySpanExporter()), [], counter=counter)) as client:
         assert _post_json(client, _export(_own_trace())).status_code == 200
         received = client.get("/api/traces/status").json()["receiver"]
     assert received == {"accepted_spans": counter.count().accepted, "dropped_spans": counter.count().dropped}
@@ -506,7 +509,7 @@ def test_a_closed_leases_token_is_refused_403(tmp_path: Path) -> None:
     app = _app(tmp_path, handle, [])
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="done", closed_at=_NOW)
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         assert _post_json(client, _export(_own_trace())).status_code == 403
 
 
@@ -514,7 +517,7 @@ def test_another_chunks_span_is_dropped_reported_and_counted(tmp_path: Path) -> 
     exporter = InMemorySpanExporter()
     handle = _handle(exporter)
     counter = ReceiverCounter()
-    with TestClient(_app(tmp_path, handle, [], counter)) as client:
+    with runner_client(_app(tmp_path, handle, [], counter)) as client:
         foreign = trace_id(StepKey.attempt("ch_other", 1))
         response = _post_json(client, _export(foreign))
         assert response.status_code == 200
@@ -528,7 +531,7 @@ def test_another_chunks_span_is_dropped_reported_and_counted(tmp_path: Path) -> 
 def test_a_foreign_scope_is_dropped(tmp_path: Path) -> None:
     exporter = InMemorySpanExporter()
     handle = _handle(exporter)
-    with TestClient(_app(tmp_path, handle, [])) as client:
+    with runner_client(_app(tmp_path, handle, [])) as client:
         response = _post_json(client, _export(_own_trace(), scope="some.library"))
         assert int(response.json()["partialSuccess"]["rejectedSpans"]) == 1
     assert _finished(handle, exporter) == []
@@ -537,7 +540,7 @@ def test_a_foreign_scope_is_dropped(tmp_path: Path) -> None:
 def test_worker_programs_keeps_another_scope_inside_the_step_and_still_drops_another_chunks(tmp_path: Path) -> None:
     exporter = InMemorySpanExporter()
     handle = _handle(exporter)
-    with TestClient(_app(tmp_path, handle, [], worker_programs=True)) as client:
+    with runner_client(_app(tmp_path, handle, [], worker_programs=True)) as client:
         ours = _post_json(
             client,
             _export(
@@ -582,7 +585,7 @@ def test_worker_programs_caps_a_program_span_but_a_cli_span_keeps_its_declared_a
     )
     exporter = InMemorySpanExporter()
     handle = _handle(exporter)
-    with TestClient(_app(tmp_path, handle, [], worker_programs=True)) as client:
+    with runner_client(_app(tmp_path, handle, [], worker_programs=True)) as client:
         assert "partialSuccess" not in _post_json(client, document).json()
     by_scope = {
         (span.instrumentation_scope.name if span.instrumentation_scope else ""): dict(span.attributes or {})
@@ -610,7 +613,7 @@ def test_a_mapped_scope_leaves_under_its_service_name_and_the_rest_keep_theirs(t
         _export(_own_trace(), scope=scope)["resourceSpans"][0]["scopeSpans"][0]  # type: ignore[index]
         for scope in scopes[1:]
     ]
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         assert "partialSuccess" not in _post_json(client, document).json()
     names = {
         (span.instrumentation_scope.name if span.instrumentation_scope else ""): span.resource.attributes[
@@ -628,7 +631,7 @@ def test_a_mapped_scope_leaves_under_its_service_name_and_the_rest_keep_theirs(t
 def test_winters_command_span_lands_in_the_step_and_another_chunks_is_dropped(tmp_path: Path) -> None:
     exporter = InMemorySpanExporter()
     handle = _handle(exporter)
-    with TestClient(_app(tmp_path, handle, [], worker_programs=True)) as client:
+    with runner_client(_app(tmp_path, handle, [], worker_programs=True)) as client:
         ours = _post_json(client, _export(_own_trace(), scope="winter_cli"))
         assert "partialSuccess" not in ours.json()
         foreign = trace_id(StepKey.attempt("ch_other", 1))
@@ -640,7 +643,7 @@ def test_winters_command_span_lands_in_the_step_and_another_chunks_is_dropped(tm
 
 def test_a_body_past_the_size_cap_is_refused_413(tmp_path: Path) -> None:
     handle = _handle(InMemorySpanExporter())
-    with TestClient(_app(tmp_path, handle, [])) as client:
+    with runner_client(_app(tmp_path, handle, [])) as client:
         declared = client.post(
             "/v1/traces", content=b"x" * (MAX_BODY_BYTES + 1), headers={"Content-Type": "application/json", **_TOKEN}
         )
@@ -659,7 +662,7 @@ def test_a_request_past_the_span_rate_is_refused_429_and_counted(tmp_path: Path)
     limiter = SpanRateLimiter(FixedClock(_NOW), capacity=1, refill_per_second=0.001)
     document = _export(_own_trace())
     document["resourceSpans"][0]["scopeSpans"][0]["spans"] *= 2  # type: ignore[index]
-    with TestClient(_app(tmp_path, handle, [], counter, limiter)) as client:
+    with runner_client(_app(tmp_path, handle, [], counter, limiter)) as client:
         assert _post_json(client, document).status_code == 429
         assert counter.count().dropped == 2
 
@@ -677,13 +680,13 @@ def test_an_unsupported_or_malformed_request_is_refused(
     tmp_path: Path, headers: dict[str, str], body: bytes, expected: int
 ) -> None:
     handle = _handle(InMemorySpanExporter())
-    with TestClient(_app(tmp_path, handle, [])) as client:
+    with runner_client(_app(tmp_path, handle, [])) as client:
         assert client.post("/v1/traces", content=body, headers={**headers, **_TOKEN}).status_code == expected
 
 
 def test_the_receiver_is_404_while_platform_tracing_is_off(tmp_path: Path) -> None:
     disabled = build_platform_tracing(TracingConfig(), {}, resource=_RESOURCE_OFF, scope="s", scope_version="1")
-    with TestClient(_app(tmp_path, disabled, [])) as client:
+    with runner_client(_app(tmp_path, disabled, [])) as client:
         assert _post_json(client, _export(_own_trace())).status_code == 404
 
 
@@ -693,7 +696,7 @@ _RESOURCE_OFF = {"service.name": "blizzard-runner"}
 def test_the_receiver_makes_no_server_span_of_its_own(tmp_path: Path) -> None:
     exporter = InMemorySpanExporter()
     handle = _handle(exporter)
-    with TestClient(_app(tmp_path, handle, [])) as client:
+    with runner_client(_app(tmp_path, handle, [])) as client:
         _post_json(client, _export(_own_trace()))
     spans = _finished(handle, exporter)
     assert [s for s in spans if s not in _worker_spans(spans)] == []
@@ -705,7 +708,7 @@ def test_a_non_404_lease_failure_propagates_and_an_unknown_hash_is_403(tmp_path:
     from blizzard.runner.api.wiring import RunnerWiring
 
     handle = _handle(InMemorySpanExporter())
-    with TestClient(_app(tmp_path, handle, []), raise_server_exceptions=False) as client:
+    with runner_client(_app(tmp_path, handle, []), raise_server_exceptions=False) as client:
         assert _post_json(client, _export(_own_trace()), {"X-Blizzard-Lease-Token": "unknown"}).status_code == 403
 
         def failing(self, lease_id):  # type: ignore[no-untyped-def]
@@ -1009,7 +1012,7 @@ def test_claude_code_metrics_export_stamped_under_its_service_name(tmp_path: Pat
     telemetry = _Telemetry()
     handle = _handle(InMemorySpanExporter())
     app = _app(tmp_path, handle, [], harness_telemetry=True, received=telemetry.handle)
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         response = _post(client, "/v1/metrics", _metrics_body(encoding=encoding), encoding)
         assert response.status_code == 200
         assert "partialSuccess" not in response.json() if encoding == "json" else response.content == b""
@@ -1036,7 +1039,7 @@ def test_claude_code_logs_export_stamped_under_its_service_name(tmp_path: Path, 
     telemetry = _Telemetry()
     handle = _handle(InMemorySpanExporter())
     app = _app(tmp_path, handle, [], harness_telemetry=True, received=telemetry.handle)
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         assert _post(client, "/v1/logs", _logs_body(trace=_own_trace(), encoding=encoding), encoding).status_code == 200
     records = telemetry.log_records()
     assert len(records) == 6
@@ -1053,7 +1056,7 @@ def test_a_log_record_naming_another_trace_loses_its_trace_context(tmp_path: Pat
     telemetry = _Telemetry()
     handle = _handle(InMemorySpanExporter())
     app = _app(tmp_path, handle, [], harness_telemetry=True, received=telemetry.handle)
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         assert _post(client, "/v1/logs", _logs_body()).status_code == 200
     records = telemetry.log_records()
     assert len(records) == 6
@@ -1070,7 +1073,7 @@ def test_claude_codes_identity_attributes_reach_the_exporter_unchanged(tmp_path:
         "user.id": "user-1",
         "organization.id": "org-1",
     }
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         assert _post(client, "/v1/metrics", _metrics_body(extra=identity)).status_code == 200
         assert _post(client, "/v1/logs", _logs_body(extra=identity)).status_code == 200
     points = telemetry.metric_points()
@@ -1089,7 +1092,7 @@ def test_the_new_receivers_refuse_a_missing_or_unknown_token_403(
 ) -> None:
     telemetry = _Telemetry()
     app = _app(tmp_path, _handle(InMemorySpanExporter()), [], harness_telemetry=True, received=telemetry.handle)
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         response = client.post(
             path, content=_body_for(path), headers={"Content-Type": "application/x-protobuf", **headers}
         )
@@ -1103,17 +1106,17 @@ def test_the_new_receivers_refuse_a_closed_leases_token_403(tmp_path: Path, path
     app = _app(tmp_path, _handle(InMemorySpanExporter()), [], harness_telemetry=True, received=telemetry.handle)
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="done", closed_at=_NOW)
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         assert _post(client, path, _body_for(path)).status_code == 403
 
 
 @pytest.mark.parametrize("path", _NEW_PATHS)
 def test_the_new_receivers_are_404_while_either_switch_is_off(tmp_path: Path, path: str) -> None:
     off = build_platform_tracing(TracingConfig(), {}, resource=_RESOURCE_OFF, scope="s", scope_version="1")
-    with TestClient(_app(tmp_path, off, [], harness_telemetry=True)) as client:
+    with runner_client(_app(tmp_path, off, [], harness_telemetry=True)) as client:
         assert _post(client, path, _body_for(path)).status_code == 404
     (tmp_path / "second").mkdir()
-    with TestClient(_app(tmp_path / "second", _handle(InMemorySpanExporter()), [])) as client:
+    with runner_client(_app(tmp_path / "second", _handle(InMemorySpanExporter()), [])) as client:
         assert _post(client, path, _body_for(path)).status_code == 404
 
 
@@ -1122,7 +1125,7 @@ def test_every_otlp_receiver_is_404_before_the_first_registration(tmp_path: Path
     handle = _handle(exporter)
     telemetry = _Telemetry()
     app = _app(tmp_path, handle, [], harness_telemetry=True, received=telemetry.handle, identity=RunnerIdentityHolder())
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         assert _post_json(client, _export(_own_trace())).status_code == 404
         for path in _NEW_PATHS:
             assert _post(client, path, _body_for(path)).status_code == 404
@@ -1133,7 +1136,7 @@ def test_every_otlp_receiver_is_404_before_the_first_registration(tmp_path: Path
 @pytest.mark.parametrize("path", _NEW_PATHS)
 def test_the_new_receivers_refuse_a_body_past_the_size_cap_413(tmp_path: Path, path: str) -> None:
     app = _app(tmp_path, _handle(InMemorySpanExporter()), [], harness_telemetry=True)
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         headers = {"Content-Type": "application/json", **_TOKEN}
         assert client.post(path, content=b"x" * (MAX_BODY_BYTES + 1), headers=headers).status_code == 413
         streamed = client.post(path, content=iter([b"x" * MAX_BODY_BYTES, b"x"]), headers=headers)
@@ -1154,7 +1157,7 @@ def test_the_new_receivers_refuse_an_unsupported_or_malformed_request(
     tmp_path: Path, path: str, headers: dict[str, str], body: bytes, expected: int
 ) -> None:
     app = _app(tmp_path, _handle(InMemorySpanExporter()), [], harness_telemetry=True)
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         assert client.post(path, content=body, headers={**headers, **_TOKEN}).status_code == expected
 
 
@@ -1169,7 +1172,7 @@ def test_the_new_receivers_refuse_a_request_past_the_rate_429_and_count_it(tmp_p
         metric_bounds=bounds,
         log_bounds=bounds,
     )
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         refused = _post(client, path, _body_for(path, repeat=2))
         assert (refused.status_code, refused.headers.get("Retry-After")) == (429, "1")
     assert bounds.counter.count().accepted == 0
@@ -1191,7 +1194,7 @@ def test_each_signal_is_limited_and_counted_on_its_own(tmp_path: Path) -> None:
         metric_bounds=metric_bounds,
         log_bounds=log_bounds,
     )
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         assert _post(client, "/v1/metrics", _metrics_body()).status_code == 200
         assert _post(client, "/v1/logs", _logs_body(scope="some.library")).status_code == 200
     assert (metric_bounds.counter.count().accepted, metric_bounds.counter.count().dropped) == (2, 0)
@@ -1210,7 +1213,7 @@ def test_a_foreign_scope_flood_does_not_spend_the_kept_scopes_budget(tmp_path: P
         metric_bounds=bounds,
         log_bounds=bounds,
     )
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         flood = _post(client, path, _body_for(path, scope="some.library", repeat=50))
         assert flood.status_code == 200
         assert _post(client, path, _body_for(path)).status_code == 200
@@ -1219,7 +1222,7 @@ def test_a_foreign_scope_flood_does_not_spend_the_kept_scopes_budget(tmp_path: P
 def test_a_foreign_scope_flood_does_not_spend_the_trace_receivers_budget(tmp_path: Path) -> None:
     handle = _handle(InMemorySpanExporter())
     limiter = SpanRateLimiter(FixedClock(_NOW), capacity=2, refill_per_second=0.001)
-    with TestClient(_app(tmp_path, handle, [], limiter=limiter, harness_telemetry=True)) as client:
+    with runner_client(_app(tmp_path, handle, [], limiter=limiter, harness_telemetry=True)) as client:
         flood = _post(client, "/v1/traces", _claude_spans_body(scope="some.library", repeat=50))
         assert flood.status_code == 200
         assert _post(client, "/v1/traces", _claude_spans_body()).status_code == 200
@@ -1228,7 +1231,7 @@ def test_a_foreign_scope_flood_does_not_spend_the_trace_receivers_budget(tmp_pat
 def test_claude_code_spans_export_under_its_service_name_with_the_runner_id(tmp_path: Path) -> None:
     exporter = InMemorySpanExporter()
     handle = _handle(exporter)
-    with TestClient(_app(tmp_path, handle, [], harness_telemetry=True)) as client:
+    with runner_client(_app(tmp_path, handle, [], harness_telemetry=True)) as client:
         assert _post(client, "/v1/traces", _claude_spans_body()).status_code == 200
         assert _post(client, "/v1/traces", _claude_spans_body(encoding="json"), "json").status_code == 200
     spans = _finished(handle, exporter)
@@ -1243,7 +1246,7 @@ def test_claude_codes_spans_are_tallied_apart_from_the_worker_spans(tmp_path: Pa
     handle = _handle(InMemorySpanExporter())
     counter, claude_counter = ReceiverCounter(), ReceiverCounter()
     app = _app(tmp_path, handle, [], counter, claude_counter=claude_counter, harness_telemetry=True)
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         assert _post_json(client, _export(_own_trace())).status_code == 200
         assert _post(client, "/v1/traces", _claude_spans_body()).status_code == 200
     assert counter.count() == ReceiverCount(accepted=1, dropped=0)
@@ -1253,7 +1256,7 @@ def test_claude_codes_spans_are_tallied_apart_from_the_worker_spans(tmp_path: Pa
 def test_claude_code_spans_are_dropped_while_harness_telemetry_is_off(tmp_path: Path) -> None:
     exporter = InMemorySpanExporter()
     handle = _handle(exporter)
-    with TestClient(_app(tmp_path, handle, [])) as client:
+    with runner_client(_app(tmp_path, handle, [])) as client:
         response = _post(client, "/v1/traces", _claude_spans_body())
         assert ExportTraceServiceResponse.FromString(response.content).partial_success.rejected_spans == 2
     assert _finished(handle, exporter) == []
@@ -1269,14 +1272,14 @@ def test_a_mapped_scope_renames_claude_codes_spans_and_worker_programs_no_longer
         worker_programs=True,
         services={_CLAUDE_TRACING_SCOPE: "claude-fleet"},
     )
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         assert _post(client, "/v1/traces", _claude_spans_body()).status_code == 200
     assert [span.resource.attributes["service.name"] for span in _finished(handle, exporter)] == ["claude-fleet"] * 2
     (tmp_path / "second").mkdir()
     unmapped_exporter = InMemorySpanExporter()
     unmapped = _handle(unmapped_exporter)
     unmapped_app = _app(tmp_path / "second", unmapped, [], worker_programs=True)
-    with TestClient(unmapped_app) as client:
+    with runner_client(unmapped_app) as client:
         assert _post(client, "/v1/traces", _claude_spans_body()).status_code == 200
     names = [span.resource.attributes["service.name"] for span in _finished(unmapped, unmapped_exporter)]
     assert names == [_CLAUDE_SERVICE] * 2
@@ -1297,7 +1300,7 @@ def test_claude_code_spans_are_kept_and_counted_while_traces_are_operator_config
     handle = _handle(exporter)
     claude_counter = ReceiverCounter()
     app = _app(tmp_path, handle, [], claude_counter=claude_counter, worker_programs=True, harness_telemetry=True)
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         assert _post(client, "/v1/traces", _claude_spans_body()).status_code == 200
     assert [span.resource.attributes["service.name"] for span in _finished(handle, exporter)] == [_CLAUDE_SERVICE] * 2
     assert claude_counter.count() == ReceiverCount(accepted=2, dropped=0)
@@ -1313,7 +1316,7 @@ def test_a_mapped_scope_renames_claude_codes_metrics(tmp_path: Path) -> None:
         received=telemetry.handle,
         services={_CLAUDE_METRICS_SCOPE: "claude-fleet"},
     )
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         assert _post(client, "/v1/metrics", _metrics_body()).status_code == 200
     names = [resource.attributes["service.name"] for resource, _, _, _ in telemetry.metric_points()]
     assert names == ["claude-fleet"] * 2
@@ -1324,7 +1327,7 @@ def test_the_otlp_receivers_make_no_server_span(tmp_path: Path, path: str) -> No
     exporter = InMemorySpanExporter()
     handle = _handle(exporter)
     telemetry = _Telemetry()
-    with TestClient(_app(tmp_path, handle, [], harness_telemetry=True, received=telemetry.handle)) as client:
+    with runner_client(_app(tmp_path, handle, [], harness_telemetry=True, received=telemetry.handle)) as client:
         _post(client, path, _body_for(path) if path != "/v1/traces" else _claude_spans_body())
     assert [s for s in _finished(handle, exporter) if (s.attributes or {}).get("http.route")] == []
 
@@ -1376,7 +1379,7 @@ def test_a_slow_destination_does_not_hold_the_receivers_response(tmp_path: Path)
         log_exporter=logs,
     )
     app = _app(tmp_path, _handle(InMemorySpanExporter()), [], harness_telemetry=True, received=received)
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         for _ in range(2):
             assert _post(client, "/v1/metrics", _metrics_body()).status_code == 200
             assert _post(client, "/v1/logs", _logs_body()).status_code == 200
@@ -1404,7 +1407,7 @@ def test_a_summary_point_is_refused_and_counted_not_lost(tmp_path: Path) -> None
         received=telemetry.handle,
         metric_bounds=bounds,
     )
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         response = _post(client, "/v1/metrics", message.SerializeToString())
         assert response.status_code == 200
     assert ExportMetricsServiceResponse.FromString(response.content).partial_success.rejected_data_points == 2

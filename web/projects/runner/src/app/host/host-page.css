@@ -1,0 +1,22 @@
+:host {
+  display: block;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: var(--fs-base);
+}
+.host {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr);
+  align-items: start;
+  gap: 6px;
+  padding: 6px;
+}
+@media (max-width: 900px) {
+  .host {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

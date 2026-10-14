@@ -1,0 +1,11 @@
+<div class="wrap" data-testid="host-runners">
+  <fleet-kit-async-state
+    [state]="triadState()"
+    loadingText="LOADING…"
+    errorText="RUNNERS UNAVAILABLE"
+    emptyText="NO RUNNERS ON THIS HOST"
+    emptyTestid="host-runners-empty"
+  >
+    <app-host-runners-view [runners]="rows()" />
+  </fleet-kit-async-state>
+</div>

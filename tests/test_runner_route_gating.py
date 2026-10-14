@@ -11,11 +11,11 @@ from pathlib import Path
 
 import httpx
 import pytest
-from fastapi.routing import APIRoute, _IncludedRouter
 from fastapi.testclient import TestClient
 
 from blizzard.runner.app import create_app
 from blizzard.runner.config import RunnerConfig
+from tests.runner_client import live_api_routes
 from tests.runner_fakes import registered_identity
 
 pytestmark = pytest.mark.unit
@@ -25,35 +25,37 @@ pytestmark = pytest.mark.unit
 #: Human web lane — the panel's own reads/writes; ``require_human_api`` gates each so an
 #: unauthenticated TCP request under an oauth-mode hub is ``401``.
 _HUMAN: set[tuple[str, str]] = {
-    ("GET", "/api/asks"),
-    ("GET", "/api/leases"),
-    ("GET", "/api/leases/{lease_id}/transcript"),
-    ("GET", "/api/chunks/{chunk_id}/transcripts"),
-    ("GET", "/api/chunks/{chunk_id}/transcripts/{segment_id}"),
-    ("POST", "/api/selftests"),
-    ("GET", "/api/selftests/{selftest_id}"),
-    ("GET", "/api/fleet-summary"),
-    ("GET", "/api/workspace-prompt"),
-    ("PUT", "/api/workspace-prompt"),
-    ("DELETE", "/api/workspace-prompt"),
-    ("GET", "/api/runner"),
-    ("PATCH", "/api/runner"),
-    ("GET", "/api/environments"),
-    ("GET", "/api/escalations"),
-    ("GET", "/api/facts"),
-    ("GET", "/api/harness-health"),
-    ("POST", "/api/chunks/{chunk_id}/takeovers"),
-    ("PATCH", "/api/chunks/{chunk_id}/takeovers/{takeover_id}"),
-    ("GET", "/api/takeovers"),
-    ("GET", "/api/dashboard"),
-    ("GET", "/api/subscriptions"),
+    ("GET", "/runners/{runner_id}/api/asks"),
+    ("GET", "/runners/{runner_id}/api/leases"),
+    ("GET", "/runners/{runner_id}/api/leases/{lease_id}/transcript"),
+    ("GET", "/runners/{runner_id}/api/chunks/{chunk_id}/transcripts"),
+    ("GET", "/runners/{runner_id}/api/chunks/{chunk_id}/transcripts/{segment_id}"),
+    ("POST", "/runners/{runner_id}/api/selftests"),
+    ("GET", "/runners/{runner_id}/api/selftests/{selftest_id}"),
+    ("GET", "/runners/{runner_id}/api/fleet-summary"),
+    ("GET", "/api/host/workspaces/{workspace_id}/prompt"),
+    ("PUT", "/api/host/workspaces/{workspace_id}/prompt"),
+    ("DELETE", "/api/host/workspaces/{workspace_id}/prompt"),
+    ("GET", "/runners/{runner_id}/api/runner"),
+    ("PATCH", "/runners/{runner_id}/api/runner"),
+    ("GET", "/api/host/environments"),
+    ("GET", "/api/host/runners"),
+    ("GET", "/api/host/workspaces"),
+    ("GET", "/runners/{runner_id}/api/escalations"),
+    ("GET", "/runners/{runner_id}/api/facts"),
+    ("GET", "/runners/{runner_id}/api/harness-health"),
+    ("POST", "/runners/{runner_id}/api/chunks/{chunk_id}/takeovers"),
+    ("PATCH", "/runners/{runner_id}/api/chunks/{chunk_id}/takeovers/{takeover_id}"),
+    ("GET", "/runners/{runner_id}/api/takeovers"),
+    ("GET", "/runners/{runner_id}/api/dashboard"),
+    ("GET", "/api/host/subscriptions"),
     ("GET", "/api/events/stream"),
-    ("POST", "/api/chunks/{chunk_id}/requeues"),
-    ("GET", "/api/chunks/{chunk_id}"),
-    ("POST", "/api/chunks/{chunk_id}/pause"),
-    ("POST", "/api/chunks/{chunk_id}/resume"),
-    ("GET", "/api/traces/status"),
-    ("POST", "/api/traces/replay"),
+    ("POST", "/runners/{runner_id}/api/chunks/{chunk_id}/requeues"),
+    ("GET", "/runners/{runner_id}/api/chunks/{chunk_id}"),
+    ("POST", "/runners/{runner_id}/api/chunks/{chunk_id}/pause"),
+    ("POST", "/runners/{runner_id}/api/chunks/{chunk_id}/resume"),
+    ("GET", "/runners/{runner_id}/api/traces/status"),
+    ("POST", "/runners/{runner_id}/api/traces/replay"),
 }
 
 #: Open — the worker-hook lane (workers call over TCP and cannot SSO-bounce) plus the
@@ -65,35 +67,38 @@ _OPEN: set[tuple[str, str]] = {
     ("POST", "/api/auth/callback"),
     ("POST", "/api/auth/logout"),
     ("GET", "/api/auth/session"),
-    ("POST", "/api/heartbeat"),
-    ("POST", "/v1/traces"),
-    ("POST", "/v1/metrics"),
-    ("POST", "/v1/logs"),
-    ("POST", "/api/leases/{lease_id}/session-end"),
-    ("POST", "/api/leases/{lease_id}/asks"),
-    ("POST", "/api/leases/{lease_id}/attachments"),
-    ("GET", "/api/leases/{lease_id}/attachments"),
-    ("POST", "/api/leases/{lease_id}/git-commits"),
-    ("GET", "/api/leases/{lease_id}/artifacts"),
-    ("GET", "/api/leases/{lease_id}/artifacts/{name:path}"),
-    ("GET", "/api/leases/{lease_id}/history"),
-    ("GET", "/api/leases/{lease_id}/asks"),
-    ("GET", "/api/leases/{lease_id}/garden/findings"),
-    ("GET", "/api/leases/{lease_id}/garden/proposals"),
-    ("GET", "/api/leases/{lease_id}/findings"),
-    ("GET", "/api/leases/{lease_id}/findings/{finding_id}"),
-    ("GET", "/api/leases/{lease_id}/scopes"),
-    ("GET", "/api/leases/{lease_id}/analytics/counts/files"),
-    ("GET", "/api/leases/{lease_id}/analytics/counts/skills"),
-    ("GET", "/api/leases/{lease_id}/analytics/counts/agent-types"),
-    ("GET", "/api/leases/{lease_id}/analytics/counts/nodes"),
-    ("GET", "/api/leases/{lease_id}/analytics/spend/nodes"),
-    ("GET", "/api/leases/{lease_id}/analytics/spend/graphs"),
-    ("GET", "/api/chunks/{chunk_id}/work-items"),
+    ("POST", "/runners/{runner_id}/api/heartbeat"),
+    ("POST", "/runners/{runner_id}/v1/traces"),
+    ("POST", "/runners/{runner_id}/v1/metrics"),
+    ("POST", "/runners/{runner_id}/v1/logs"),
+    ("POST", "/runners/{runner_id}/api/leases/{lease_id}/session-end"),
+    ("POST", "/runners/{runner_id}/api/leases/{lease_id}/asks"),
+    ("POST", "/runners/{runner_id}/api/leases/{lease_id}/attachments"),
+    ("GET", "/runners/{runner_id}/api/leases/{lease_id}/attachments"),
+    ("POST", "/runners/{runner_id}/api/leases/{lease_id}/git-commits"),
+    ("GET", "/runners/{runner_id}/api/leases/{lease_id}/artifacts"),
+    ("GET", "/runners/{runner_id}/api/leases/{lease_id}/artifacts/{name:path}"),
+    ("GET", "/runners/{runner_id}/api/leases/{lease_id}/history"),
+    ("GET", "/runners/{runner_id}/api/leases/{lease_id}/asks"),
+    ("GET", "/runners/{runner_id}/api/leases/{lease_id}/garden/findings"),
+    ("GET", "/runners/{runner_id}/api/leases/{lease_id}/garden/proposals"),
+    ("GET", "/runners/{runner_id}/api/leases/{lease_id}/findings"),
+    ("GET", "/runners/{runner_id}/api/leases/{lease_id}/findings/{finding_id}"),
+    ("GET", "/runners/{runner_id}/api/leases/{lease_id}/scopes"),
+    ("GET", "/runners/{runner_id}/api/leases/{lease_id}/analytics/counts/files"),
+    ("GET", "/runners/{runner_id}/api/leases/{lease_id}/analytics/counts/skills"),
+    ("GET", "/runners/{runner_id}/api/leases/{lease_id}/analytics/counts/agent-types"),
+    ("GET", "/runners/{runner_id}/api/leases/{lease_id}/analytics/counts/nodes"),
+    ("GET", "/runners/{runner_id}/api/leases/{lease_id}/analytics/spend/nodes"),
+    ("GET", "/runners/{runner_id}/api/leases/{lease_id}/analytics/spend/graphs"),
+    ("GET", "/runners/{runner_id}/api/chunks/{chunk_id}/work-items"),
     # The issue-#55 deprecated alias onto the same handler — classified into the same
     # lane, because an alias that landed in a different one would be a gating hole.
-    ("GET", "/api/chunks/{chunk_id}/pm-items"),
+    ("GET", "/runners/{runner_id}/api/chunks/{chunk_id}/pm-items"),
 }
+
+
+_RUNNER_ID = "runner-guard"
 
 
 def _oauth_hub_client() -> httpx.Client:
@@ -118,29 +123,13 @@ def _oauth_app() -> TestClient:
     return TestClient(create_app(config, hub_http_client=_oauth_hub_client(), identity=registered_identity()))
 
 
-def _live_routes(client: TestClient) -> list[APIRoute]:
-    def collect(routes: object) -> list[APIRoute]:
-        out: list[APIRoute] = []
-        for route in routes:  # type: ignore[attr-defined]
-            if isinstance(route, APIRoute):
-                # The web root is the SPA shell, not an API surface, and is
-                # environment-dependent, so it stays out of the lane table.
-                if route.path == "/":
-                    continue
-                out.append(route)
-            elif isinstance(route, _IncludedRouter):
-                out.extend(collect(route.original_router.routes))
-        return out
-
-    return collect(client.app.routes)  # type: ignore[attr-defined]
-
-
 def _request(client: TestClient, method: str, path_template: str) -> int:
     """Issue ``method`` against ``path_template`` with placeholders substituted, returning
     the status. A body-carrying verb sends ``{}`` — a gated route ``401``s before body
     validation; an open worker-hook route reaches its handler (a ``422``/``404``/``503``,
     all non-``401``), which is exactly the distinction under test."""
-    path = path_template.replace("{lease_id}", "lease-x").replace("{chunk_id}", "chunk-x")
+    path = path_template.replace("{runner_id}", _RUNNER_ID).replace("{workspace_id}", "default")
+    path = path.replace("{lease_id}", "lease-x").replace("{chunk_id}", "chunk-x")
     path = path.replace("{takeover_id}", "takeover-x").replace("{selftest_id}", "selftest-x")
     path = path.replace("{name}", "artifact-x")
     return client.request(method, path, json={}).status_code
@@ -150,7 +139,7 @@ def test_every_live_route_is_classified() -> None:
     """No route is unclassified: every live ``(method, path)`` appears in exactly one
     lane — a newly added, unnamed route fails here."""
     client = _oauth_app()
-    live = {(m, r.path) for r in _live_routes(client) for m in (r.methods or set()) if m != "HEAD"}
+    live = {(m, path) for path, r in live_api_routes(client.app) for m in (r.methods or set()) if m != "HEAD"}  # type: ignore[arg-type]
     classified = _HUMAN | _OPEN
     assert not (live - classified), f"unclassified route(s): {sorted(live - classified)}"
     assert not (classified - live), f"lane entry naming a route no longer mounted: {sorted(classified - live)}"
@@ -176,12 +165,19 @@ def test_open_lane_routes_reach_their_handler_over_tcp_under_oauth() -> None:
 
 @pytest.mark.parametrize("path", ["/v1/traces", "/v1/metrics", "/v1/logs"])
 def test_the_otlp_receiver_paths_are_never_redirected_to_the_login_bounce(path: str) -> None:
-    """The OTLP receivers' paths are OTLP/HTTP's fixed ones, outside ``/api`` — the web gate exempts them, so a
-    worker's export meets its own token check, not a browser bounce."""
+    """The OTLP receivers' paths are OTLP/HTTP's fixed ones under the runner's prefix, outside ``/api`` — the web gate
+    exempts them, so a worker's export meets its own token check, not a browser bounce."""
     client = _oauth_app()
-    refused = client.post(path, content=b"", follow_redirects=False)
+    refused = client.post(f"/runners/{_RUNNER_ID}{path}", content=b"", follow_redirects=False)
     assert refused.status_code == 403
-    assert client.get("/v1/other", follow_redirects=False).status_code == 307
+    assert client.get(f"/runners/{_RUNNER_ID}/v1/other", follow_redirects=False).status_code == 307
+    assert client.post(path, content=b"", follow_redirects=False).status_code == 307
+
+
+def test_a_worker_heartbeat_under_the_runner_prefix_is_never_redirected_to_the_login_bounce() -> None:
+    client = _oauth_app()
+    reached = client.post(f"/runners/{_RUNNER_ID}/api/heartbeat", json={}, follow_redirects=False)
+    assert reached.status_code not in (307, 401)
 
 
 def test_a_gated_served_shell_request_to_an_app_with_no_federation_settings_is_503() -> None:

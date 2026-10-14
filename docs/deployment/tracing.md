@@ -373,8 +373,8 @@ step's root, as described under **Nesting under a step** below. The [Spans](#spa
   as the span starts, so a rename by restart shows from the first span after it; a span started before the runner's
   first registration is never exported. The hub stamps a request a runner bearer authenticated with that runner's id
   and the name the hub holds for it.
-- **What is left out.** The runner's worker `POST /api/heartbeat` and any `/v1/traces` path make no span, and neither do
-  the store queries they run.
+- **What is left out.** A worker's `POST /runners/{runner_id}/api/heartbeat` and any `/v1/traces`, `/v1/metrics` or
+  `/v1/logs` path make no span, and neither do the store queries they run.
 - **Names.** `service.name` follows the rule in [Resource attributes](#resource-attributes). Sweep and tick spans carry
   the scope `blizzard.hub.platform` or `blizzard.runner.platform`, each at version `1`; request, query and outbound-call
   spans carry the scope of the library that opened them. Request spans follow the stable HTTP semantic conventions,
@@ -420,11 +420,11 @@ parent that is never exported, so a backend shows them grouped under a root that
 ### Worker spans
 
 A worker's own tools can send spans to the runner that spawned them. The runner serves OTLP over HTTP at
-`POST /v1/traces` on the same TCP port and unix socket as its API, and forwards what it accepts through its own platform
+`POST /runners/{runner_id}/v1/traces` on the same TCP port and unix socket as its API, and forwards what it accepts through its own platform
 pipeline, so the spans leave to the same endpoint, through the same redacting export, as its own. The receiver exists
 only while platform tracing is on and the runner has registered with its hub; otherwise the path answers `404`, and a
 sender is expected to carry on.
-[Harness telemetry](#harness-telemetry) adds `POST /v1/metrics` and `POST /v1/logs`, which follow the same
+[Harness telemetry](#harness-telemetry) adds `/v1/metrics` and `/v1/logs` under the same prefix, which follow the same
 authentication, encodings and caps, with the exceptions listed there.
 
 - **Authentication.** The worker's lease token, in `X-Blizzard-Lease-Token` or as an `Authorization: Bearer` header. The
@@ -462,10 +462,10 @@ authentication, encodings and caps, with the exceptions listed there.
 
 With `worker_programs = true` in the `[tracing]` block of `blizzard-host.toml`, default `false` and effective only
 alongside `platform = true`, the runner also lets the programs a worker runs send their own spans. Each invocation's
-environment then carries `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` (the runner's `/v1/traces`),
+environment then carries `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` (`$BLIZZARD_RUNNER_URL/v1/traces`),
 `OTEL_EXPORTER_OTLP_TRACES_PROTOCOL=http/protobuf` and `OTEL_EXPORTER_OTLP_TRACES_HEADERS` (the lease token). It also
-sets winter's own switch, which ignores the generic names: `WINTER_OTEL_EXPORTER_OTLP_ENDPOINT` (the runner's base URL;
-winter appends `/v1/traces`) and `WINTER_OTEL_EXPORTER_OTLP_HEADERS` (the lease token), so `winter` command spans nest
+sets winter's own switch, which ignores the generic names: `WINTER_OTEL_EXPORTER_OTLP_ENDPOINT` (`$BLIZZARD_RUNNER_URL`,
+the runner's base under its prefix; winter appends `/v1/traces`) and `WINTER_OTEL_EXPORTER_OTLP_HEADERS` (the lease token), so `winter` command spans nest
 under the step. With it off, no `WINTER_OTEL_*` variable and none of these `OTEL_EXPORTER_*` variables reaches a worker
 (a Claude Code worker may still get its own under [harness telemetry](#harness-telemetry)), and `WINTER_OTEL_*` names in
 `env_passthrough` are always withheld.
@@ -499,7 +499,7 @@ alongside `platform = true`, a Claude Code worker exports its metrics, logs and 
 `claude` 2.1.288 to 2.1.289; the managed-settings behavior below is read from `claude`'s code, not run.
 
 - **What a worker gets.** For each signal you have not configured, each invocation's environment carries that signal's
-  exporter (`otlp`), endpoint (the runner's `/v1/traces`, `/v1/metrics` or `/v1/logs`), protocol `http/protobuf` and
+  exporter (`otlp`), endpoint (`$BLIZZARD_RUNNER_URL/v1/traces`, `/v1/metrics` or `/v1/logs`), protocol `http/protobuf` and
   header (the lease token), plus `CLAUDE_CODE_ENABLE_TELEMETRY=1` and `CLAUDE_CODE_ENHANCED_TELEMETRY_BETA=1`. Only a
   worker holding a lease token is pointed at the runner, and a takeover's attended session never is.
 - **What the runner keeps.** Claude Code's scopes only: `com.anthropic.claude_code` for metrics, `.events` for logs,

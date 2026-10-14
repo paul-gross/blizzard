@@ -203,7 +203,7 @@ prompt replaced with an empty one is announced as a withdrawal. Whatever became 
 prior node is known and differs from the current one carries a role-change line naming both nodes, first in the render;
 with no recorded prior node there is nothing to name, and no line renders.
 
-That announcement is why `PUT /api/workspace-prompt` is trustworthy mid-chunk: a replace applies at the chunk's next
+That announcement is why `PUT /api/host/workspaces/{workspace_id}/prompt` is trustworthy mid-chunk: a replace applies at the chunk's next
 resumed node-step, and the worker is told it is reading something new. The workspace-prompt override is standing: it
 wins over every config knob until removed, and replacing it with empty text sets a standing empty prompt rather than
 restoring the configured one; `blizzard runner prompt clear` drops the override so config resolves again.
@@ -290,7 +290,7 @@ authentication, a config conflict, an unmapped configured tier, or a recorded se
 `HarnessSelector` skips an unavailable member with its own `"unhealthy"` reason ([observability.md](./observability.md))
 rather than selecting it, so a node whose acceptable set includes `opencode` falls back to another member instead of
 failing at spawn, and escalates only once every member is exhausted. The binding stays visible, with its cause, in this
-runner's own `GET /api/harness-health` diagnostics; the hub sees only the boolean flag, never the cause. Claude Code's
+runner's own `GET /runners/{runner_id}/api/harness-health` diagnostics; the hub sees only the boolean flag, never the cause. Claude Code's
 own health check is the same evaluation, membership-only: an incompatible or unobserved version withholds availability
 exactly as OpenCode's does, but since Claude Code declares no compatibility corpus, an admitted version is never itself
 a cause — there is no `unknown_version` an admitted-but-unclassified Claude Code version could read.
@@ -327,6 +327,12 @@ neither number comes from measured compaction data — none exists yet.
 default) means base allowlist only, and a daemon credential such as a runner's `BZ_HUB_TOKEN_<NAME>` is absent from
 every worker child by construction unless deliberately named there. `runner init` seeds the list from
 `BZ_RUNNER_ENV_PASSTHROUGH` (comma-separated names), the way it seeds `BZ_RUNNER_GATES`.
+
+Every worker, judge, resume, and takeover environment carries `BLIZZARD_RUNNER_URL`, its runner's base on the host's
+TCP door: `http://<host>:<port>/runners/<runner_id>`. A worker reaches its own runner's hooks and OTLP receiver under it
+— `$BLIZZARD_RUNNER_URL/api/heartbeat`, `$BLIZZARD_RUNNER_URL/v1/traces` — never the host's root, so a worker alive
+across a host restart is resumed with the address of the runner whose lease token it carries; an open takeover keeps
+the address it was opened with.
 
 With `[tracing] harness_telemetry` on, a Claude Code worker's environment also carries the variables that point its
 metrics, logs and traces at the runner; [tracing.md](./tracing.md#harness-telemetry) owns them.

@@ -8,6 +8,11 @@ its own framing constants, `reserved_comment` included — each daemon's stream 
 each `<kind>.json` holds the named cases for that kind — the exact JSON payload object the owning daemon emits for that
 call.
 
+The runner scope is the runner host's one stream, carrying every runner it serves: each runner-scoped frame —
+`lease-changed`, `ask-changed`, `escalation-changed`, `takeover-changed`, and `fact-changed` — carries `runner_id`, its
+runner's hub-minted id, so a consumer routes it to that runner's state; `environment-changed` is the host's own and
+carries none.
+
 Both the Python producer-side contract test (`tests/test_sse_contract.py`) and the TypeScript consumer-side contract
 spec (`web/projects/fleet/src/lib/sse/sse-contract.spec.ts`) read these same files directly, over both scopes — there is
 no per-side copy. Moving a golden reddens whichever side has not caught up to the change; changing a side's shape

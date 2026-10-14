@@ -230,6 +230,10 @@ export type AskChangedPayload = {
      * Question Id
      */
     question_id: string;
+    /**
+     * Runner Id
+     */
+    runner_id: string;
 };
 
 /**
@@ -920,20 +924,18 @@ export type ChunkUsageView = {
 /**
  * DashboardView
  *
- * ``GET /api/dashboard`` — nine status reads composed into one response.
+ * ``GET /runners/{runner_id}/api/dashboard`` — seven status reads composed into one response.
  * ``fleet_summary`` alone is a hub pass-through and the only nullable section —
- * ``None`` on a hub failure or an unwired runner, while the eight local sections
- * still populate.
+ * ``None`` on a hub failure or an unwired runner, while the six local sections
+ * still populate. The host's environments and subscriptions are its own reads, under ``/api/host``.
  */
 export type DashboardView = {
     asks: AskListResponse;
-    environments: EnvironmentListResponse;
     escalations: EscalationListResponse;
     facts: FactListResponse;
     fleet_summary: FleetSummaryView | null;
     harness_health: HarnessHealthListResponse;
     runner: RunnerStatusView;
-    subscriptions: SubscriptionListResponse;
     takeovers: OpenTakeoverListResponse;
 };
 
@@ -1038,45 +1040,6 @@ export type EnvironmentChangedPayload = {
     environment_id: string;
 };
 
-/**
- * EnvironmentListResponse
- *
- * Every environment in the runner's configured pool, held or free.
- */
-export type EnvironmentListResponse = {
-    /**
-     * Items
-     */
-    items?: Array<EnvironmentView>;
-};
-
-/**
- * EnvironmentView
- *
- * One environment in the runner's configured pool — ``GET /api/environments``.
- * ``chunk_id``/``held_since`` are present only while the environment
- * is currently bound; an unused pool environment carries both as ``None``. ``held`` is the
- * runner's own reading of whether a chunk holds it, so no client re-derives it.
- */
-export type EnvironmentView = {
-    /**
-     * Chunk Id
-     */
-    chunk_id?: string | null;
-    /**
-     * Environment Id
-     */
-    environment_id: string;
-    /**
-     * Held
-     */
-    held?: boolean;
-    /**
-     * Held Since
-     */
-    held_since?: string | null;
-};
-
 export const EscalationChangeCause = { OPENED: 'opened', CLOSED: 'closed' } as const;
 
 export type EscalationChangeCause = typeof EscalationChangeCause[keyof typeof EscalationChangeCause];
@@ -1097,6 +1060,10 @@ export type EscalationChangedPayload = {
      * Lease Id
      */
     lease_id?: string | null;
+    /**
+     * Runner Id
+     */
+    runner_id: string;
 };
 
 /**
@@ -1192,6 +1159,10 @@ export type FactChangedPayload = {
      * Lease Id
      */
     lease_id: string | null;
+    /**
+     * Runner Id
+     */
+    runner_id: string;
     /**
      * Seq
      */
@@ -1795,6 +1766,226 @@ export type HistoryRowView = {
 };
 
 /**
+ * HostEnvironmentListResponse
+ *
+ * Every workspace's environments, held or free, grouped by workspace.
+ */
+export type HostEnvironmentListResponse = {
+    /**
+     * Workspaces
+     */
+    workspaces?: Array<HostWorkspaceEnvironmentsView>;
+};
+
+/**
+ * HostEnvironmentView
+ *
+ * One environment of a workspace; a held one names the runner holding it and its chunk's project.
+ */
+export type HostEnvironmentView = {
+    /**
+     * Chunk Id
+     */
+    chunk_id?: string | null;
+    /**
+     * Environment Id
+     */
+    environment_id: string;
+    /**
+     * Held
+     */
+    held?: boolean;
+    /**
+     * Held Since
+     */
+    held_since?: string | null;
+    /**
+     * Project
+     */
+    project?: string | null;
+    /**
+     * Runner Id
+     */
+    runner_id?: string | null;
+};
+
+/**
+ * HostRunnerBindingView
+ *
+ * One project a runner serves, the workspace it runs in, and the agents it runs there at once.
+ */
+export type HostRunnerBindingView = {
+    /**
+     * Agents
+     */
+    agents: number;
+    /**
+     * Project
+     */
+    project: string;
+    /**
+     * Workspace Id
+     */
+    workspace_id: string;
+};
+
+/**
+ * HostRunnerListResponse
+ */
+export type HostRunnerListResponse = {
+    /**
+     * Items
+     */
+    items?: Array<HostRunnerView>;
+};
+
+/**
+ * HostRunnerStateView
+ *
+ * One runner as the host's readiness names it.
+ */
+export type HostRunnerStateView = {
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Runner Id
+     */
+    runner_id: string | null;
+    /**
+     * State
+     */
+    state: 'serving' | 'halted';
+};
+
+/**
+ * HostRunnerView
+ *
+ * One runner on the host: a served runner's brake, bindings and agents in use, or a halted one's reasons.
+ */
+export type HostRunnerView = {
+    /**
+     * Agents In Use
+     */
+    agents_in_use?: number;
+    /**
+     * Bindings
+     */
+    bindings?: Array<HostRunnerBindingView>;
+    /**
+     * Halted Reasons
+     */
+    halted_reasons?: Array<string>;
+    /**
+     * Max Agents
+     */
+    max_agents?: number;
+    /**
+     * Name
+     */
+    name: string;
+    pause?: PauseStateView | null;
+    /**
+     * Runner Id
+     */
+    runner_id: string | null;
+    /**
+     * State
+     */
+    state: 'serving' | 'halted';
+};
+
+/**
+ * HostSubscriptionListResponse
+ */
+export type HostSubscriptionListResponse = {
+    /**
+     * Items
+     */
+    items?: Array<HostSubscriptionView>;
+};
+
+/**
+ * HostSubscriptionView
+ *
+ * One declared subscription's diagnostics, naming the runners that spend it.
+ */
+export type HostSubscriptionView = {
+    miss_reason?: SampleMissReason | null;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Ok
+     */
+    ok?: boolean | null;
+    /**
+     * Provider
+     */
+    provider: string;
+    /**
+     * Renewal Attempted At
+     */
+    renewal_attempted_at?: string | null;
+    renewal_failure_reason?: RenewalFailureReason | null;
+    renewal_result?: RenewalResult | null;
+    /**
+     * Sampled At
+     */
+    sampled_at?: string | null;
+    /**
+     * Slug
+     */
+    slug: string;
+    /**
+     * Spenders
+     */
+    spenders?: Array<string>;
+};
+
+/**
+ * HostWorkspaceEnvironmentsView
+ */
+export type HostWorkspaceEnvironmentsView = {
+    /**
+     * Items
+     */
+    items?: Array<HostEnvironmentView>;
+    /**
+     * Workspace Id
+     */
+    workspace_id: string;
+};
+
+/**
+ * HostWorkspaceListResponse
+ */
+export type HostWorkspaceListResponse = {
+    /**
+     * Items
+     */
+    items?: Array<HostWorkspaceView>;
+};
+
+/**
+ * HostWorkspaceView
+ *
+ * One workspace the host declares, with the environments it may hold at once.
+ */
+export type HostWorkspaceView = {
+    /**
+     * Max Environments
+     */
+    max_environments: number;
+    /**
+     * Workspace Id
+     */
+    workspace_id: string;
+};
+
+/**
  * HubConnectivityView
  *
  * Hub reachability (derived, not probed) plus the outbound backlog depth.
@@ -1927,6 +2118,10 @@ export type LeaseChangedPayload = {
      * Lease Id
      */
     lease_id: string;
+    /**
+     * Runner Id
+     */
+    runner_id: string;
 };
 
 /**
@@ -2363,6 +2558,10 @@ export type ReadinessResponse = {
      * Ready
      */
     ready: boolean;
+    /**
+     * Runners
+     */
+    runners?: Array<HostRunnerStateView>;
     /**
      * Store Reachable
      */
@@ -2995,55 +3194,6 @@ export type StagedAttachment = {
     name: string;
 };
 
-/**
- * SubscriptionListResponse
- *
- * Every declared subscription's own newest sampling attempt.
- */
-export type SubscriptionListResponse = {
-    /**
-     * Items
-     */
-    items?: Array<SubscriptionView>;
-};
-
-/**
- * SubscriptionView
- *
- * One declared subscription's runner-local diagnostics, served by
- * ``GET /api/subscriptions``. The sampling fields are ``None`` until a first attempt, the
- * ``renewal_*`` fields until a first renewal; each ``*_reason`` is set only on a miss or failure.
- */
-export type SubscriptionView = {
-    miss_reason?: SampleMissReason | null;
-    /**
-     * Name
-     */
-    name: string;
-    /**
-     * Ok
-     */
-    ok?: boolean | null;
-    /**
-     * Provider
-     */
-    provider: string;
-    /**
-     * Renewal Attempted At
-     */
-    renewal_attempted_at?: string | null;
-    renewal_failure_reason?: RenewalFailureReason | null;
-    renewal_result?: RenewalResult | null;
-    /**
-     * Sampled At
-     */
-    sampled_at?: string | null;
-    /**
-     * Slug
-     */
-    slug: string;
-};
-
 export const TakeoverChangeCause = { OPENED: 'opened', CLOSED: 'closed' } as const;
 
 export type TakeoverChangeCause = typeof TakeoverChangeCause[keyof typeof TakeoverChangeCause];
@@ -3060,6 +3210,10 @@ export type TakeoverChangedPayload = {
      * Chunk Id
      */
     chunk_id: string;
+    /**
+     * Runner Id
+     */
+    runner_id: string;
     /**
      * Takeover Id
      */
@@ -3702,36 +3856,6 @@ export type WorkspacePromptResponse = {
     source?: 'override' | 'config';
 };
 
-export type ListAsksApiAsksGetData = {
-    body?: never;
-    path?: never;
-    query?: {
-        /**
-         * Open
-         */
-        open?: boolean;
-    };
-    url: '/api/asks';
-};
-
-export type ListAsksApiAsksGetErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type ListAsksApiAsksGetError = ListAsksApiAsksGetErrors[keyof ListAsksApiAsksGetErrors];
-
-export type ListAsksApiAsksGetResponses = {
-    /**
-     * Successful Response
-     */
-    200: AskListResponse;
-};
-
-export type ListAsksApiAsksGetResponse = ListAsksApiAsksGetResponses[keyof ListAsksApiAsksGetResponses];
-
 export type CallbackApiAuthCallbackPostData = {
     body?: never;
     path?: never;
@@ -3806,428 +3930,6 @@ export type ReadSessionApiAuthSessionGetResponses = {
 
 export type ReadSessionApiAuthSessionGetResponse = ReadSessionApiAuthSessionGetResponses[keyof ReadSessionApiAuthSessionGetResponses];
 
-export type GetChunkApiChunksChunkIdGetData = {
-    body?: never;
-    path: {
-        /**
-         * Chunk Id
-         */
-        chunk_id: string;
-    };
-    query?: never;
-    url: '/api/chunks/{chunk_id}';
-};
-
-export type GetChunkApiChunksChunkIdGetErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type GetChunkApiChunksChunkIdGetError = GetChunkApiChunksChunkIdGetErrors[keyof GetChunkApiChunksChunkIdGetErrors];
-
-export type GetChunkApiChunksChunkIdGetResponses = {
-    /**
-     * Successful Response
-     */
-    200: ChunkDetail;
-};
-
-export type GetChunkApiChunksChunkIdGetResponse = GetChunkApiChunksChunkIdGetResponses[keyof GetChunkApiChunksChunkIdGetResponses];
-
-export type PauseChunkApiChunksChunkIdPausePostData = {
-    body?: never;
-    path: {
-        /**
-         * Chunk Id
-         */
-        chunk_id: string;
-    };
-    query?: never;
-    url: '/api/chunks/{chunk_id}/pause';
-};
-
-export type PauseChunkApiChunksChunkIdPausePostErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type PauseChunkApiChunksChunkIdPausePostError = PauseChunkApiChunksChunkIdPausePostErrors[keyof PauseChunkApiChunksChunkIdPausePostErrors];
-
-export type PauseChunkApiChunksChunkIdPausePostResponses = {
-    /**
-     * Successful Response
-     */
-    202: ChunkSummary;
-};
-
-export type PauseChunkApiChunksChunkIdPausePostResponse = PauseChunkApiChunksChunkIdPausePostResponses[keyof PauseChunkApiChunksChunkIdPausePostResponses];
-
-export type RunnerGetPmItemsDeprecatedAliasApiChunksChunkIdPmItemsGetData = {
-    body?: never;
-    path: {
-        /**
-         * Chunk Id
-         */
-        chunk_id: string;
-    };
-    query?: never;
-    url: '/api/chunks/{chunk_id}/pm-items';
-};
-
-export type RunnerGetPmItemsDeprecatedAliasApiChunksChunkIdPmItemsGetErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type RunnerGetPmItemsDeprecatedAliasApiChunksChunkIdPmItemsGetError = RunnerGetPmItemsDeprecatedAliasApiChunksChunkIdPmItemsGetErrors[keyof RunnerGetPmItemsDeprecatedAliasApiChunksChunkIdPmItemsGetErrors];
-
-export type RunnerGetPmItemsDeprecatedAliasApiChunksChunkIdPmItemsGetResponses = {
-    /**
-     * Successful Response
-     */
-    200: WorkItemsView;
-};
-
-export type RunnerGetPmItemsDeprecatedAliasApiChunksChunkIdPmItemsGetResponse = RunnerGetPmItemsDeprecatedAliasApiChunksChunkIdPmItemsGetResponses[keyof RunnerGetPmItemsDeprecatedAliasApiChunksChunkIdPmItemsGetResponses];
-
-export type RequeueChunkApiChunksChunkIdRequeuesPostData = {
-    body?: never;
-    path: {
-        /**
-         * Chunk Id
-         */
-        chunk_id: string;
-    };
-    query?: never;
-    url: '/api/chunks/{chunk_id}/requeues';
-};
-
-export type RequeueChunkApiChunksChunkIdRequeuesPostErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type RequeueChunkApiChunksChunkIdRequeuesPostError = RequeueChunkApiChunksChunkIdRequeuesPostErrors[keyof RequeueChunkApiChunksChunkIdRequeuesPostErrors];
-
-export type RequeueChunkApiChunksChunkIdRequeuesPostResponses = {
-    /**
-     * Successful Response
-     */
-    202: RequeueResponse;
-};
-
-export type RequeueChunkApiChunksChunkIdRequeuesPostResponse = RequeueChunkApiChunksChunkIdRequeuesPostResponses[keyof RequeueChunkApiChunksChunkIdRequeuesPostResponses];
-
-export type ResumeChunkApiChunksChunkIdResumePostData = {
-    body?: never;
-    path: {
-        /**
-         * Chunk Id
-         */
-        chunk_id: string;
-    };
-    query?: never;
-    url: '/api/chunks/{chunk_id}/resume';
-};
-
-export type ResumeChunkApiChunksChunkIdResumePostErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type ResumeChunkApiChunksChunkIdResumePostError = ResumeChunkApiChunksChunkIdResumePostErrors[keyof ResumeChunkApiChunksChunkIdResumePostErrors];
-
-export type ResumeChunkApiChunksChunkIdResumePostResponses = {
-    /**
-     * Successful Response
-     */
-    202: ChunkSummary;
-};
-
-export type ResumeChunkApiChunksChunkIdResumePostResponse = ResumeChunkApiChunksChunkIdResumePostResponses[keyof ResumeChunkApiChunksChunkIdResumePostResponses];
-
-export type OpenTakeoverApiChunksChunkIdTakeoversPostData = {
-    body: TakeoverRequest;
-    path: {
-        /**
-         * Chunk Id
-         */
-        chunk_id: string;
-    };
-    query?: never;
-    url: '/api/chunks/{chunk_id}/takeovers';
-};
-
-export type OpenTakeoverApiChunksChunkIdTakeoversPostErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type OpenTakeoverApiChunksChunkIdTakeoversPostError = OpenTakeoverApiChunksChunkIdTakeoversPostErrors[keyof OpenTakeoverApiChunksChunkIdTakeoversPostErrors];
-
-export type OpenTakeoverApiChunksChunkIdTakeoversPostResponses = {
-    /**
-     * Successful Response
-     */
-    201: TakeoverOpenResponse;
-};
-
-export type OpenTakeoverApiChunksChunkIdTakeoversPostResponse = OpenTakeoverApiChunksChunkIdTakeoversPostResponses[keyof OpenTakeoverApiChunksChunkIdTakeoversPostResponses];
-
-export type EndTakeoverApiChunksChunkIdTakeoversTakeoverIdPatchData = {
-    body?: never;
-    path: {
-        /**
-         * Chunk Id
-         */
-        chunk_id: string;
-        /**
-         * Takeover Id
-         */
-        takeover_id: string;
-    };
-    query?: never;
-    url: '/api/chunks/{chunk_id}/takeovers/{takeover_id}';
-};
-
-export type EndTakeoverApiChunksChunkIdTakeoversTakeoverIdPatchErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type EndTakeoverApiChunksChunkIdTakeoversTakeoverIdPatchError = EndTakeoverApiChunksChunkIdTakeoversTakeoverIdPatchErrors[keyof EndTakeoverApiChunksChunkIdTakeoversTakeoverIdPatchErrors];
-
-export type EndTakeoverApiChunksChunkIdTakeoversTakeoverIdPatchResponses = {
-    /**
-     * Successful Response
-     */
-    200: TakeoverEndResponse;
-};
-
-export type EndTakeoverApiChunksChunkIdTakeoversTakeoverIdPatchResponse = EndTakeoverApiChunksChunkIdTakeoversTakeoverIdPatchResponses[keyof EndTakeoverApiChunksChunkIdTakeoversTakeoverIdPatchResponses];
-
-export type ListTranscriptSegmentsApiChunksChunkIdTranscriptsGetData = {
-    body?: never;
-    path: {
-        /**
-         * Chunk Id
-         */
-        chunk_id: string;
-    };
-    query?: never;
-    url: '/api/chunks/{chunk_id}/transcripts';
-};
-
-export type ListTranscriptSegmentsApiChunksChunkIdTranscriptsGetErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type ListTranscriptSegmentsApiChunksChunkIdTranscriptsGetError = ListTranscriptSegmentsApiChunksChunkIdTranscriptsGetErrors[keyof ListTranscriptSegmentsApiChunksChunkIdTranscriptsGetErrors];
-
-export type ListTranscriptSegmentsApiChunksChunkIdTranscriptsGetResponses = {
-    /**
-     * Successful Response
-     */
-    200: TranscriptSegmentIndexView;
-};
-
-export type ListTranscriptSegmentsApiChunksChunkIdTranscriptsGetResponse = ListTranscriptSegmentsApiChunksChunkIdTranscriptsGetResponses[keyof ListTranscriptSegmentsApiChunksChunkIdTranscriptsGetResponses];
-
-export type GetTranscriptSegmentApiChunksChunkIdTranscriptsSegmentIdGetData = {
-    body?: never;
-    path: {
-        /**
-         * Chunk Id
-         */
-        chunk_id: string;
-        /**
-         * Segment Id
-         */
-        segment_id: string;
-    };
-    query?: never;
-    url: '/api/chunks/{chunk_id}/transcripts/{segment_id}';
-};
-
-export type GetTranscriptSegmentApiChunksChunkIdTranscriptsSegmentIdGetErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-    /**
-     * The recorded harness owner is unavailable.
-     */
-    503: unknown;
-};
-
-export type GetTranscriptSegmentApiChunksChunkIdTranscriptsSegmentIdGetError = GetTranscriptSegmentApiChunksChunkIdTranscriptsSegmentIdGetErrors[keyof GetTranscriptSegmentApiChunksChunkIdTranscriptsSegmentIdGetErrors];
-
-export type GetTranscriptSegmentApiChunksChunkIdTranscriptsSegmentIdGetResponses = {
-    /**
-     * Successful Response
-     */
-    200: TranscriptSegmentContentView;
-};
-
-export type GetTranscriptSegmentApiChunksChunkIdTranscriptsSegmentIdGetResponse = GetTranscriptSegmentApiChunksChunkIdTranscriptsSegmentIdGetResponses[keyof GetTranscriptSegmentApiChunksChunkIdTranscriptsSegmentIdGetResponses];
-
-export type GetWorkItemsApiChunksChunkIdWorkItemsGetData = {
-    body?: never;
-    path: {
-        /**
-         * Chunk Id
-         */
-        chunk_id: string;
-    };
-    query?: never;
-    url: '/api/chunks/{chunk_id}/work-items';
-};
-
-export type GetWorkItemsApiChunksChunkIdWorkItemsGetErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type GetWorkItemsApiChunksChunkIdWorkItemsGetError = GetWorkItemsApiChunksChunkIdWorkItemsGetErrors[keyof GetWorkItemsApiChunksChunkIdWorkItemsGetErrors];
-
-export type GetWorkItemsApiChunksChunkIdWorkItemsGetResponses = {
-    /**
-     * Successful Response
-     */
-    200: WorkItemsView;
-};
-
-export type GetWorkItemsApiChunksChunkIdWorkItemsGetResponse = GetWorkItemsApiChunksChunkIdWorkItemsGetResponses[keyof GetWorkItemsApiChunksChunkIdWorkItemsGetResponses];
-
-export type GetDashboardApiDashboardGetData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/dashboard';
-};
-
-export type GetDashboardApiDashboardGetResponses = {
-    /**
-     * Successful Response
-     */
-    200: DashboardView;
-};
-
-export type GetDashboardApiDashboardGetResponse = GetDashboardApiDashboardGetResponses[keyof GetDashboardApiDashboardGetResponses];
-
-export type ListEnvironmentsApiEnvironmentsGetData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/environments';
-};
-
-export type ListEnvironmentsApiEnvironmentsGetResponses = {
-    /**
-     * Successful Response
-     */
-    200: EnvironmentListResponse;
-};
-
-export type ListEnvironmentsApiEnvironmentsGetResponse = ListEnvironmentsApiEnvironmentsGetResponses[keyof ListEnvironmentsApiEnvironmentsGetResponses];
-
-export type ListEscalationsApiEscalationsGetData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/escalations';
-};
-
-export type ListEscalationsApiEscalationsGetResponses = {
-    /**
-     * Successful Response
-     */
-    200: EscalationListResponse;
-};
-
-export type ListEscalationsApiEscalationsGetResponse = ListEscalationsApiEscalationsGetResponses[keyof ListEscalationsApiEscalationsGetResponses];
-
-export type ListFactsApiFactsGetData = {
-    body?: never;
-    path?: never;
-    query?: {
-        /**
-         * Limit
-         */
-        limit?: number;
-    };
-    url: '/api/facts';
-};
-
-export type ListFactsApiFactsGetErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type ListFactsApiFactsGetError = ListFactsApiFactsGetErrors[keyof ListFactsApiFactsGetErrors];
-
-export type ListFactsApiFactsGetResponses = {
-    /**
-     * Successful Response
-     */
-    200: FactListResponse;
-};
-
-export type ListFactsApiFactsGetResponse = ListFactsApiFactsGetResponses[keyof ListFactsApiFactsGetResponses];
-
-export type GetFleetSummaryApiFleetSummaryGetData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/fleet-summary';
-};
-
-export type GetFleetSummaryApiFleetSummaryGetResponses = {
-    /**
-     * Successful Response
-     */
-    200: FleetSummaryView;
-};
-
-export type GetFleetSummaryApiFleetSummaryGetResponse = GetFleetSummaryApiFleetSummaryGetResponses[keyof GetFleetSummaryApiFleetSummaryGetResponses];
-
-export type ListHarnessHealthApiHarnessHealthGetData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/harness-health';
-};
-
-export type ListHarnessHealthApiHarnessHealthGetResponses = {
-    /**
-     * Successful Response
-     */
-    200: HarnessHealthListResponse;
-};
-
-export type ListHarnessHealthApiHarnessHealthGetResponse = ListHarnessHealthApiHarnessHealthGetResponses[keyof ListHarnessHealthApiHarnessHealthGetResponses];
-
 export type HealthApiHealthGetData = {
     body?: never;
     path?: never;
@@ -4248,789 +3950,171 @@ export type HealthApiHealthGetResponses = {
 
 export type HealthApiHealthGetResponse = HealthApiHealthGetResponses[keyof HealthApiHealthGetResponses];
 
-export type HeartbeatApiHeartbeatPostData = {
-    body: HeartbeatRequest;
-    path?: never;
-    query?: never;
-    url: '/api/heartbeat';
-};
-
-export type HeartbeatApiHeartbeatPostErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type HeartbeatApiHeartbeatPostError = HeartbeatApiHeartbeatPostErrors[keyof HeartbeatApiHeartbeatPostErrors];
-
-export type HeartbeatApiHeartbeatPostResponses = {
-    /**
-     * Successful Response
-     */
-    200: HeartbeatResponse;
-};
-
-export type HeartbeatApiHeartbeatPostResponse = HeartbeatApiHeartbeatPostResponses[keyof HeartbeatApiHeartbeatPostResponses];
-
-export type ListLeasesApiLeasesGetData = {
+export type ListEnvironmentsApiHostEnvironmentsGetData = {
     body?: never;
     path?: never;
     query?: never;
-    url: '/api/leases';
+    url: '/api/host/environments';
 };
 
-export type ListLeasesApiLeasesGetResponses = {
+export type ListEnvironmentsApiHostEnvironmentsGetResponses = {
     /**
      * Successful Response
      */
-    200: LeaseListResponse;
+    200: HostEnvironmentListResponse;
 };
 
-export type ListLeasesApiLeasesGetResponse = ListLeasesApiLeasesGetResponses[keyof ListLeasesApiLeasesGetResponses];
+export type ListEnvironmentsApiHostEnvironmentsGetResponse = ListEnvironmentsApiHostEnvironmentsGetResponses[keyof ListEnvironmentsApiHostEnvironmentsGetResponses];
 
-export type GetAnalyticsCountsAgentTypesApiLeasesLeaseIdAnalyticsCountsAgentTypesGetData = {
+export type ListRunnersApiHostRunnersGetData = {
     body?: never;
-    path: {
-        /**
-         * Lease Id
-         */
-        lease_id: string;
-    };
-    query?: {
-        /**
-         * Since
-         */
-        since?: string | null;
-        /**
-         * Until
-         */
-        until?: string | null;
-    };
-    url: '/api/leases/{lease_id}/analytics/counts/agent-types';
+    path?: never;
+    query?: never;
+    url: '/api/host/runners';
 };
 
-export type GetAnalyticsCountsAgentTypesApiLeasesLeaseIdAnalyticsCountsAgentTypesGetErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type GetAnalyticsCountsAgentTypesApiLeasesLeaseIdAnalyticsCountsAgentTypesGetError = GetAnalyticsCountsAgentTypesApiLeasesLeaseIdAnalyticsCountsAgentTypesGetErrors[keyof GetAnalyticsCountsAgentTypesApiLeasesLeaseIdAnalyticsCountsAgentTypesGetErrors];
-
-export type GetAnalyticsCountsAgentTypesApiLeasesLeaseIdAnalyticsCountsAgentTypesGetResponses = {
+export type ListRunnersApiHostRunnersGetResponses = {
     /**
      * Successful Response
      */
-    200: AnalyticsCountsResponse;
+    200: HostRunnerListResponse;
 };
 
-export type GetAnalyticsCountsAgentTypesApiLeasesLeaseIdAnalyticsCountsAgentTypesGetResponse = GetAnalyticsCountsAgentTypesApiLeasesLeaseIdAnalyticsCountsAgentTypesGetResponses[keyof GetAnalyticsCountsAgentTypesApiLeasesLeaseIdAnalyticsCountsAgentTypesGetResponses];
+export type ListRunnersApiHostRunnersGetResponse = ListRunnersApiHostRunnersGetResponses[keyof ListRunnersApiHostRunnersGetResponses];
 
-export type GetAnalyticsCountsFilesApiLeasesLeaseIdAnalyticsCountsFilesGetData = {
+export type ListSubscriptionsApiHostSubscriptionsGetData = {
     body?: never;
-    path: {
-        /**
-         * Lease Id
-         */
-        lease_id: string;
-    };
-    query?: {
-        /**
-         * Since
-         */
-        since?: string | null;
-        /**
-         * Until
-         */
-        until?: string | null;
-    };
-    url: '/api/leases/{lease_id}/analytics/counts/files';
+    path?: never;
+    query?: never;
+    url: '/api/host/subscriptions';
 };
 
-export type GetAnalyticsCountsFilesApiLeasesLeaseIdAnalyticsCountsFilesGetErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type GetAnalyticsCountsFilesApiLeasesLeaseIdAnalyticsCountsFilesGetError = GetAnalyticsCountsFilesApiLeasesLeaseIdAnalyticsCountsFilesGetErrors[keyof GetAnalyticsCountsFilesApiLeasesLeaseIdAnalyticsCountsFilesGetErrors];
-
-export type GetAnalyticsCountsFilesApiLeasesLeaseIdAnalyticsCountsFilesGetResponses = {
+export type ListSubscriptionsApiHostSubscriptionsGetResponses = {
     /**
      * Successful Response
      */
-    200: AnalyticsCountsResponse;
+    200: HostSubscriptionListResponse;
 };
 
-export type GetAnalyticsCountsFilesApiLeasesLeaseIdAnalyticsCountsFilesGetResponse = GetAnalyticsCountsFilesApiLeasesLeaseIdAnalyticsCountsFilesGetResponses[keyof GetAnalyticsCountsFilesApiLeasesLeaseIdAnalyticsCountsFilesGetResponses];
+export type ListSubscriptionsApiHostSubscriptionsGetResponse = ListSubscriptionsApiHostSubscriptionsGetResponses[keyof ListSubscriptionsApiHostSubscriptionsGetResponses];
 
-export type GetAnalyticsCountsNodesApiLeasesLeaseIdAnalyticsCountsNodesGetData = {
+export type ListWorkspacesApiHostWorkspacesGetData = {
     body?: never;
-    path: {
-        /**
-         * Lease Id
-         */
-        lease_id: string;
-    };
-    query?: {
-        /**
-         * Since
-         */
-        since?: string | null;
-        /**
-         * Until
-         */
-        until?: string | null;
-        /**
-         * By Name
-         */
-        by_name?: boolean;
-    };
-    url: '/api/leases/{lease_id}/analytics/counts/nodes';
+    path?: never;
+    query?: never;
+    url: '/api/host/workspaces';
 };
 
-export type GetAnalyticsCountsNodesApiLeasesLeaseIdAnalyticsCountsNodesGetErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type GetAnalyticsCountsNodesApiLeasesLeaseIdAnalyticsCountsNodesGetError = GetAnalyticsCountsNodesApiLeasesLeaseIdAnalyticsCountsNodesGetErrors[keyof GetAnalyticsCountsNodesApiLeasesLeaseIdAnalyticsCountsNodesGetErrors];
-
-export type GetAnalyticsCountsNodesApiLeasesLeaseIdAnalyticsCountsNodesGetResponses = {
+export type ListWorkspacesApiHostWorkspacesGetResponses = {
     /**
      * Successful Response
      */
-    200: AnalyticsCountsResponse;
+    200: HostWorkspaceListResponse;
 };
 
-export type GetAnalyticsCountsNodesApiLeasesLeaseIdAnalyticsCountsNodesGetResponse = GetAnalyticsCountsNodesApiLeasesLeaseIdAnalyticsCountsNodesGetResponses[keyof GetAnalyticsCountsNodesApiLeasesLeaseIdAnalyticsCountsNodesGetResponses];
+export type ListWorkspacesApiHostWorkspacesGetResponse = ListWorkspacesApiHostWorkspacesGetResponses[keyof ListWorkspacesApiHostWorkspacesGetResponses];
 
-export type GetAnalyticsCountsSkillsApiLeasesLeaseIdAnalyticsCountsSkillsGetData = {
+export type ClearWorkspacePromptApiHostWorkspacesWorkspaceIdPromptDeleteData = {
     body?: never;
     path: {
         /**
-         * Lease Id
+         * Workspace Id
          */
-        lease_id: string;
-    };
-    query?: {
-        /**
-         * Since
-         */
-        since?: string | null;
-        /**
-         * Until
-         */
-        until?: string | null;
-    };
-    url: '/api/leases/{lease_id}/analytics/counts/skills';
-};
-
-export type GetAnalyticsCountsSkillsApiLeasesLeaseIdAnalyticsCountsSkillsGetErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type GetAnalyticsCountsSkillsApiLeasesLeaseIdAnalyticsCountsSkillsGetError = GetAnalyticsCountsSkillsApiLeasesLeaseIdAnalyticsCountsSkillsGetErrors[keyof GetAnalyticsCountsSkillsApiLeasesLeaseIdAnalyticsCountsSkillsGetErrors];
-
-export type GetAnalyticsCountsSkillsApiLeasesLeaseIdAnalyticsCountsSkillsGetResponses = {
-    /**
-     * Successful Response
-     */
-    200: AnalyticsCountsResponse;
-};
-
-export type GetAnalyticsCountsSkillsApiLeasesLeaseIdAnalyticsCountsSkillsGetResponse = GetAnalyticsCountsSkillsApiLeasesLeaseIdAnalyticsCountsSkillsGetResponses[keyof GetAnalyticsCountsSkillsApiLeasesLeaseIdAnalyticsCountsSkillsGetResponses];
-
-export type GetAnalyticsSpendGraphsApiLeasesLeaseIdAnalyticsSpendGraphsGetData = {
-    body?: never;
-    path: {
-        /**
-         * Lease Id
-         */
-        lease_id: string;
-    };
-    query?: {
-        /**
-         * Since
-         */
-        since?: string | null;
-        /**
-         * Until
-         */
-        until?: string | null;
-        /**
-         * By Name
-         */
-        by_name?: boolean;
-    };
-    url: '/api/leases/{lease_id}/analytics/spend/graphs';
-};
-
-export type GetAnalyticsSpendGraphsApiLeasesLeaseIdAnalyticsSpendGraphsGetErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type GetAnalyticsSpendGraphsApiLeasesLeaseIdAnalyticsSpendGraphsGetError = GetAnalyticsSpendGraphsApiLeasesLeaseIdAnalyticsSpendGraphsGetErrors[keyof GetAnalyticsSpendGraphsApiLeasesLeaseIdAnalyticsSpendGraphsGetErrors];
-
-export type GetAnalyticsSpendGraphsApiLeasesLeaseIdAnalyticsSpendGraphsGetResponses = {
-    /**
-     * Successful Response
-     */
-    200: AnalyticsSpendResponse;
-};
-
-export type GetAnalyticsSpendGraphsApiLeasesLeaseIdAnalyticsSpendGraphsGetResponse = GetAnalyticsSpendGraphsApiLeasesLeaseIdAnalyticsSpendGraphsGetResponses[keyof GetAnalyticsSpendGraphsApiLeasesLeaseIdAnalyticsSpendGraphsGetResponses];
-
-export type GetAnalyticsSpendNodesApiLeasesLeaseIdAnalyticsSpendNodesGetData = {
-    body?: never;
-    path: {
-        /**
-         * Lease Id
-         */
-        lease_id: string;
-    };
-    query?: {
-        /**
-         * Since
-         */
-        since?: string | null;
-        /**
-         * Until
-         */
-        until?: string | null;
-        /**
-         * By Name
-         */
-        by_name?: boolean;
-    };
-    url: '/api/leases/{lease_id}/analytics/spend/nodes';
-};
-
-export type GetAnalyticsSpendNodesApiLeasesLeaseIdAnalyticsSpendNodesGetErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type GetAnalyticsSpendNodesApiLeasesLeaseIdAnalyticsSpendNodesGetError = GetAnalyticsSpendNodesApiLeasesLeaseIdAnalyticsSpendNodesGetErrors[keyof GetAnalyticsSpendNodesApiLeasesLeaseIdAnalyticsSpendNodesGetErrors];
-
-export type GetAnalyticsSpendNodesApiLeasesLeaseIdAnalyticsSpendNodesGetResponses = {
-    /**
-     * Successful Response
-     */
-    200: AnalyticsSpendResponse;
-};
-
-export type GetAnalyticsSpendNodesApiLeasesLeaseIdAnalyticsSpendNodesGetResponse = GetAnalyticsSpendNodesApiLeasesLeaseIdAnalyticsSpendNodesGetResponses[keyof GetAnalyticsSpendNodesApiLeasesLeaseIdAnalyticsSpendNodesGetResponses];
-
-export type ListArtifactsApiLeasesLeaseIdArtifactsGetData = {
-    body?: never;
-    path: {
-        /**
-         * Lease Id
-         */
-        lease_id: string;
-    };
-    query?: {
-        /**
-         * Scope
-         */
-        scope?: ArtifactScope | null;
-    };
-    url: '/api/leases/{lease_id}/artifacts';
-};
-
-export type ListArtifactsApiLeasesLeaseIdArtifactsGetErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type ListArtifactsApiLeasesLeaseIdArtifactsGetError = ListArtifactsApiLeasesLeaseIdArtifactsGetErrors[keyof ListArtifactsApiLeasesLeaseIdArtifactsGetErrors];
-
-export type ListArtifactsApiLeasesLeaseIdArtifactsGetResponses = {
-    /**
-     * Response List Artifacts Api Leases  Lease Id  Artifacts Get
-     *
-     * Successful Response
-     */
-    200: Array<WorkerArtifact>;
-};
-
-export type ListArtifactsApiLeasesLeaseIdArtifactsGetResponse = ListArtifactsApiLeasesLeaseIdArtifactsGetResponses[keyof ListArtifactsApiLeasesLeaseIdArtifactsGetResponses];
-
-export type GetArtifactApiLeasesLeaseIdArtifactsNameGetData = {
-    body?: never;
-    path: {
-        /**
-         * Lease Id
-         */
-        lease_id: string;
-        /**
-         * Name
-         */
-        name: string;
-    };
-    query?: {
-        /**
-         * Node
-         */
-        node?: string | null;
-        /**
-         * Scope
-         */
-        scope?: ArtifactScope | null;
-    };
-    url: '/api/leases/{lease_id}/artifacts/{name}';
-};
-
-export type GetArtifactApiLeasesLeaseIdArtifactsNameGetErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type GetArtifactApiLeasesLeaseIdArtifactsNameGetError = GetArtifactApiLeasesLeaseIdArtifactsNameGetErrors[keyof GetArtifactApiLeasesLeaseIdArtifactsNameGetErrors];
-
-export type GetArtifactApiLeasesLeaseIdArtifactsNameGetResponses = {
-    /**
-     * Successful Response
-     */
-    200: WorkerArtifact;
-};
-
-export type GetArtifactApiLeasesLeaseIdArtifactsNameGetResponse = GetArtifactApiLeasesLeaseIdArtifactsNameGetResponses[keyof GetArtifactApiLeasesLeaseIdArtifactsNameGetResponses];
-
-export type GetChunkAsksApiLeasesLeaseIdAsksGetData = {
-    body?: never;
-    path: {
-        /**
-         * Lease Id
-         */
-        lease_id: string;
+        workspace_id: string;
     };
     query?: never;
-    url: '/api/leases/{lease_id}/asks';
+    url: '/api/host/workspaces/{workspace_id}/prompt';
 };
 
-export type GetChunkAsksApiLeasesLeaseIdAsksGetErrors = {
+export type ClearWorkspacePromptApiHostWorkspacesWorkspaceIdPromptDeleteErrors = {
+    /**
+     * The host declares no such workspace.
+     */
+    404: unknown;
     /**
      * Validation Error
      */
     422: HttpValidationError;
 };
 
-export type GetChunkAsksApiLeasesLeaseIdAsksGetError = GetChunkAsksApiLeasesLeaseIdAsksGetErrors[keyof GetChunkAsksApiLeasesLeaseIdAsksGetErrors];
+export type ClearWorkspacePromptApiHostWorkspacesWorkspaceIdPromptDeleteError = ClearWorkspacePromptApiHostWorkspacesWorkspaceIdPromptDeleteErrors[keyof ClearWorkspacePromptApiHostWorkspacesWorkspaceIdPromptDeleteErrors];
 
-export type GetChunkAsksApiLeasesLeaseIdAsksGetResponses = {
-    /**
-     * Response Get Chunk Asks Api Leases  Lease Id  Asks Get
-     *
-     * Successful Response
-     */
-    200: Array<ChunkAskView>;
-};
-
-export type GetChunkAsksApiLeasesLeaseIdAsksGetResponse = GetChunkAsksApiLeasesLeaseIdAsksGetResponses[keyof GetChunkAsksApiLeasesLeaseIdAsksGetResponses];
-
-export type RecordAskApiLeasesLeaseIdAsksPostData = {
-    body: AskRequest;
-    path: {
-        /**
-         * Lease Id
-         */
-        lease_id: string;
-    };
-    query?: never;
-    url: '/api/leases/{lease_id}/asks';
-};
-
-export type RecordAskApiLeasesLeaseIdAsksPostErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type RecordAskApiLeasesLeaseIdAsksPostError = RecordAskApiLeasesLeaseIdAsksPostErrors[keyof RecordAskApiLeasesLeaseIdAsksPostErrors];
-
-export type RecordAskApiLeasesLeaseIdAsksPostResponses = {
+export type ClearWorkspacePromptApiHostWorkspacesWorkspaceIdPromptDeleteResponses = {
     /**
      * Successful Response
      */
-    201: AskResponse;
+    200: WorkspacePromptResponse;
 };
 
-export type RecordAskApiLeasesLeaseIdAsksPostResponse = RecordAskApiLeasesLeaseIdAsksPostResponses[keyof RecordAskApiLeasesLeaseIdAsksPostResponses];
+export type ClearWorkspacePromptApiHostWorkspacesWorkspaceIdPromptDeleteResponse = ClearWorkspacePromptApiHostWorkspacesWorkspaceIdPromptDeleteResponses[keyof ClearWorkspacePromptApiHostWorkspacesWorkspaceIdPromptDeleteResponses];
 
-export type ListStagedAttachmentsApiLeasesLeaseIdAttachmentsGetData = {
+export type ReadWorkspacePromptApiHostWorkspacesWorkspaceIdPromptGetData = {
     body?: never;
     path: {
         /**
-         * Lease Id
+         * Workspace Id
          */
-        lease_id: string;
+        workspace_id: string;
     };
     query?: never;
-    url: '/api/leases/{lease_id}/attachments';
+    url: '/api/host/workspaces/{workspace_id}/prompt';
 };
 
-export type ListStagedAttachmentsApiLeasesLeaseIdAttachmentsGetErrors = {
+export type ReadWorkspacePromptApiHostWorkspacesWorkspaceIdPromptGetErrors = {
+    /**
+     * The host declares no such workspace.
+     */
+    404: unknown;
     /**
      * Validation Error
      */
     422: HttpValidationError;
 };
 
-export type ListStagedAttachmentsApiLeasesLeaseIdAttachmentsGetError = ListStagedAttachmentsApiLeasesLeaseIdAttachmentsGetErrors[keyof ListStagedAttachmentsApiLeasesLeaseIdAttachmentsGetErrors];
+export type ReadWorkspacePromptApiHostWorkspacesWorkspaceIdPromptGetError = ReadWorkspacePromptApiHostWorkspacesWorkspaceIdPromptGetErrors[keyof ReadWorkspacePromptApiHostWorkspacesWorkspaceIdPromptGetErrors];
 
-export type ListStagedAttachmentsApiLeasesLeaseIdAttachmentsGetResponses = {
+export type ReadWorkspacePromptApiHostWorkspacesWorkspaceIdPromptGetResponses = {
     /**
-     * Response List Staged Attachments Api Leases  Lease Id  Attachments Get
-     *
      * Successful Response
      */
-    200: Array<StagedAttachment>;
+    200: WorkspacePromptResponse;
 };
 
-export type ListStagedAttachmentsApiLeasesLeaseIdAttachmentsGetResponse = ListStagedAttachmentsApiLeasesLeaseIdAttachmentsGetResponses[keyof ListStagedAttachmentsApiLeasesLeaseIdAttachmentsGetResponses];
+export type ReadWorkspacePromptApiHostWorkspacesWorkspaceIdPromptGetResponse = ReadWorkspacePromptApiHostWorkspacesWorkspaceIdPromptGetResponses[keyof ReadWorkspacePromptApiHostWorkspacesWorkspaceIdPromptGetResponses];
 
-export type RecordAttachmentApiLeasesLeaseIdAttachmentsPostData = {
-    body: AttachmentRequest;
+export type ReplaceWorkspacePromptApiHostWorkspacesWorkspaceIdPromptPutData = {
+    body: WorkspacePromptReplacement;
     path: {
         /**
-         * Lease Id
+         * Workspace Id
          */
-        lease_id: string;
+        workspace_id: string;
     };
     query?: never;
-    url: '/api/leases/{lease_id}/attachments';
+    url: '/api/host/workspaces/{workspace_id}/prompt';
 };
 
-export type RecordAttachmentApiLeasesLeaseIdAttachmentsPostErrors = {
+export type ReplaceWorkspacePromptApiHostWorkspacesWorkspaceIdPromptPutErrors = {
+    /**
+     * The host declares no such workspace.
+     */
+    404: unknown;
     /**
      * Validation Error
      */
     422: HttpValidationError;
 };
 
-export type RecordAttachmentApiLeasesLeaseIdAttachmentsPostError = RecordAttachmentApiLeasesLeaseIdAttachmentsPostErrors[keyof RecordAttachmentApiLeasesLeaseIdAttachmentsPostErrors];
+export type ReplaceWorkspacePromptApiHostWorkspacesWorkspaceIdPromptPutError = ReplaceWorkspacePromptApiHostWorkspacesWorkspaceIdPromptPutErrors[keyof ReplaceWorkspacePromptApiHostWorkspacesWorkspaceIdPromptPutErrors];
 
-export type RecordAttachmentApiLeasesLeaseIdAttachmentsPostResponses = {
+export type ReplaceWorkspacePromptApiHostWorkspacesWorkspaceIdPromptPutResponses = {
     /**
      * Successful Response
      */
-    200: AttachmentResponse;
+    200: WorkspacePromptResponse;
 };
 
-export type RecordAttachmentApiLeasesLeaseIdAttachmentsPostResponse = RecordAttachmentApiLeasesLeaseIdAttachmentsPostResponses[keyof RecordAttachmentApiLeasesLeaseIdAttachmentsPostResponses];
-
-export type ListFindingsApiLeasesLeaseIdFindingsGetData = {
-    body?: never;
-    path: {
-        /**
-         * Lease Id
-         */
-        lease_id: string;
-    };
-    query?: never;
-    url: '/api/leases/{lease_id}/findings';
-};
-
-export type ListFindingsApiLeasesLeaseIdFindingsGetErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type ListFindingsApiLeasesLeaseIdFindingsGetError = ListFindingsApiLeasesLeaseIdFindingsGetErrors[keyof ListFindingsApiLeasesLeaseIdFindingsGetErrors];
-
-export type ListFindingsApiLeasesLeaseIdFindingsGetResponses = {
-    /**
-     * Response List Findings Api Leases  Lease Id  Findings Get
-     *
-     * Successful Response
-     */
-    200: Array<FindingView>;
-};
-
-export type ListFindingsApiLeasesLeaseIdFindingsGetResponse = ListFindingsApiLeasesLeaseIdFindingsGetResponses[keyof ListFindingsApiLeasesLeaseIdFindingsGetResponses];
-
-export type GetFindingApiLeasesLeaseIdFindingsFindingIdGetData = {
-    body?: never;
-    path: {
-        /**
-         * Lease Id
-         */
-        lease_id: string;
-        /**
-         * Finding Id
-         */
-        finding_id: string;
-    };
-    query?: never;
-    url: '/api/leases/{lease_id}/findings/{finding_id}';
-};
-
-export type GetFindingApiLeasesLeaseIdFindingsFindingIdGetErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type GetFindingApiLeasesLeaseIdFindingsFindingIdGetError = GetFindingApiLeasesLeaseIdFindingsFindingIdGetErrors[keyof GetFindingApiLeasesLeaseIdFindingsFindingIdGetErrors];
-
-export type GetFindingApiLeasesLeaseIdFindingsFindingIdGetResponses = {
-    /**
-     * Successful Response
-     */
-    200: FindingView;
-};
-
-export type GetFindingApiLeasesLeaseIdFindingsFindingIdGetResponse = GetFindingApiLeasesLeaseIdFindingsFindingIdGetResponses[keyof GetFindingApiLeasesLeaseIdFindingsFindingIdGetResponses];
-
-export type ListGardenFindingsApiLeasesLeaseIdGardenFindingsGetData = {
-    body?: never;
-    path: {
-        /**
-         * Lease Id
-         */
-        lease_id: string;
-    };
-    query?: never;
-    url: '/api/leases/{lease_id}/garden/findings';
-};
-
-export type ListGardenFindingsApiLeasesLeaseIdGardenFindingsGetErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type ListGardenFindingsApiLeasesLeaseIdGardenFindingsGetError = ListGardenFindingsApiLeasesLeaseIdGardenFindingsGetErrors[keyof ListGardenFindingsApiLeasesLeaseIdGardenFindingsGetErrors];
-
-export type ListGardenFindingsApiLeasesLeaseIdGardenFindingsGetResponses = {
-    /**
-     * Response List Garden Findings Api Leases  Lease Id  Garden Findings Get
-     *
-     * Successful Response
-     */
-    200: Array<FindingView>;
-};
-
-export type ListGardenFindingsApiLeasesLeaseIdGardenFindingsGetResponse = ListGardenFindingsApiLeasesLeaseIdGardenFindingsGetResponses[keyof ListGardenFindingsApiLeasesLeaseIdGardenFindingsGetResponses];
-
-export type ListGardenProposalsApiLeasesLeaseIdGardenProposalsGetData = {
-    body?: never;
-    path: {
-        /**
-         * Lease Id
-         */
-        lease_id: string;
-    };
-    query?: {
-        /**
-         * State
-         */
-        state?: string;
-    };
-    url: '/api/leases/{lease_id}/garden/proposals';
-};
-
-export type ListGardenProposalsApiLeasesLeaseIdGardenProposalsGetErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type ListGardenProposalsApiLeasesLeaseIdGardenProposalsGetError = ListGardenProposalsApiLeasesLeaseIdGardenProposalsGetErrors[keyof ListGardenProposalsApiLeasesLeaseIdGardenProposalsGetErrors];
-
-export type ListGardenProposalsApiLeasesLeaseIdGardenProposalsGetResponses = {
-    /**
-     * Response List Garden Proposals Api Leases  Lease Id  Garden Proposals Get
-     *
-     * Successful Response
-     */
-    200: Array<GardenProposalView>;
-};
-
-export type ListGardenProposalsApiLeasesLeaseIdGardenProposalsGetResponse = ListGardenProposalsApiLeasesLeaseIdGardenProposalsGetResponses[keyof ListGardenProposalsApiLeasesLeaseIdGardenProposalsGetResponses];
-
-export type RecordGitCommitDeclarationApiLeasesLeaseIdGitCommitsPostData = {
-    body: GitCommitDeclarationRequest;
-    path: {
-        /**
-         * Lease Id
-         */
-        lease_id: string;
-    };
-    query?: never;
-    url: '/api/leases/{lease_id}/git-commits';
-};
-
-export type RecordGitCommitDeclarationApiLeasesLeaseIdGitCommitsPostErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type RecordGitCommitDeclarationApiLeasesLeaseIdGitCommitsPostError = RecordGitCommitDeclarationApiLeasesLeaseIdGitCommitsPostErrors[keyof RecordGitCommitDeclarationApiLeasesLeaseIdGitCommitsPostErrors];
-
-export type RecordGitCommitDeclarationApiLeasesLeaseIdGitCommitsPostResponses = {
-    /**
-     * Successful Response
-     */
-    200: GitCommitDeclarationResponse;
-};
-
-export type RecordGitCommitDeclarationApiLeasesLeaseIdGitCommitsPostResponse = RecordGitCommitDeclarationApiLeasesLeaseIdGitCommitsPostResponses[keyof RecordGitCommitDeclarationApiLeasesLeaseIdGitCommitsPostResponses];
-
-export type GetHistoryApiLeasesLeaseIdHistoryGetData = {
-    body?: never;
-    path: {
-        /**
-         * Lease Id
-         */
-        lease_id: string;
-    };
-    query?: never;
-    url: '/api/leases/{lease_id}/history';
-};
-
-export type GetHistoryApiLeasesLeaseIdHistoryGetErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type GetHistoryApiLeasesLeaseIdHistoryGetError = GetHistoryApiLeasesLeaseIdHistoryGetErrors[keyof GetHistoryApiLeasesLeaseIdHistoryGetErrors];
-
-export type GetHistoryApiLeasesLeaseIdHistoryGetResponses = {
-    /**
-     * Response Get History Api Leases  Lease Id  History Get
-     *
-     * Successful Response
-     */
-    200: Array<HistoryRowView>;
-};
-
-export type GetHistoryApiLeasesLeaseIdHistoryGetResponse = GetHistoryApiLeasesLeaseIdHistoryGetResponses[keyof GetHistoryApiLeasesLeaseIdHistoryGetResponses];
-
-export type ListScopesApiLeasesLeaseIdScopesGetData = {
-    body?: never;
-    path: {
-        /**
-         * Lease Id
-         */
-        lease_id: string;
-    };
-    query?: never;
-    url: '/api/leases/{lease_id}/scopes';
-};
-
-export type ListScopesApiLeasesLeaseIdScopesGetErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type ListScopesApiLeasesLeaseIdScopesGetError = ListScopesApiLeasesLeaseIdScopesGetErrors[keyof ListScopesApiLeasesLeaseIdScopesGetErrors];
-
-export type ListScopesApiLeasesLeaseIdScopesGetResponses = {
-    /**
-     * Response List Scopes Api Leases  Lease Id  Scopes Get
-     *
-     * Successful Response
-     */
-    200: Array<ScopeView>;
-};
-
-export type ListScopesApiLeasesLeaseIdScopesGetResponse = ListScopesApiLeasesLeaseIdScopesGetResponses[keyof ListScopesApiLeasesLeaseIdScopesGetResponses];
-
-export type SessionEndApiLeasesLeaseIdSessionEndPostData = {
-    body?: never;
-    path: {
-        /**
-         * Lease Id
-         */
-        lease_id: string;
-    };
-    query?: never;
-    url: '/api/leases/{lease_id}/session-end';
-};
-
-export type SessionEndApiLeasesLeaseIdSessionEndPostErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type SessionEndApiLeasesLeaseIdSessionEndPostError = SessionEndApiLeasesLeaseIdSessionEndPostErrors[keyof SessionEndApiLeasesLeaseIdSessionEndPostErrors];
-
-export type SessionEndApiLeasesLeaseIdSessionEndPostResponses = {
-    /**
-     * Successful Response
-     */
-    200: SessionEndResponse;
-};
-
-export type SessionEndApiLeasesLeaseIdSessionEndPostResponse = SessionEndApiLeasesLeaseIdSessionEndPostResponses[keyof SessionEndApiLeasesLeaseIdSessionEndPostResponses];
-
-export type GetTranscriptApiLeasesLeaseIdTranscriptGetData = {
-    body?: never;
-    path: {
-        /**
-         * Lease Id
-         */
-        lease_id: string;
-    };
-    query?: never;
-    url: '/api/leases/{lease_id}/transcript';
-};
-
-export type GetTranscriptApiLeasesLeaseIdTranscriptGetErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-    /**
-     * The recorded harness owner is unavailable.
-     */
-    503: unknown;
-};
-
-export type GetTranscriptApiLeasesLeaseIdTranscriptGetError = GetTranscriptApiLeasesLeaseIdTranscriptGetErrors[keyof GetTranscriptApiLeasesLeaseIdTranscriptGetErrors];
-
-export type GetTranscriptApiLeasesLeaseIdTranscriptGetResponses = {
-    /**
-     * Successful Response
-     */
-    200: TranscriptResponse;
-};
-
-export type GetTranscriptApiLeasesLeaseIdTranscriptGetResponse = GetTranscriptApiLeasesLeaseIdTranscriptGetResponses[keyof GetTranscriptApiLeasesLeaseIdTranscriptGetResponses];
+export type ReplaceWorkspacePromptApiHostWorkspacesWorkspaceIdPromptPutResponse = ReplaceWorkspacePromptApiHostWorkspacesWorkspaceIdPromptPutResponses[keyof ReplaceWorkspacePromptApiHostWorkspacesWorkspaceIdPromptPutResponses];
 
 export type ReadyApiReadyGetData = {
     body?: never;
@@ -5048,30 +4132,1560 @@ export type ReadyApiReadyGetResponses = {
 
 export type ReadyApiReadyGetResponse = ReadyApiReadyGetResponses[keyof ReadyApiReadyGetResponses];
 
-export type GetRunnerApiRunnerGetData = {
+export type ListAsksRunnersRunnerIdApiAsksGetData = {
     body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/runner';
+    path: {
+        /**
+         * Runner Id
+         *
+         * The runner's hub-minted id.
+         */
+        runner_id: string;
+    };
+    query?: {
+        /**
+         * Open
+         */
+        open?: boolean;
+    };
+    url: '/runners/{runner_id}/api/asks';
 };
 
-export type GetRunnerApiRunnerGetResponses = {
+export type ListAsksRunnersRunnerIdApiAsksGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListAsksRunnersRunnerIdApiAsksGetError = ListAsksRunnersRunnerIdApiAsksGetErrors[keyof ListAsksRunnersRunnerIdApiAsksGetErrors];
+
+export type ListAsksRunnersRunnerIdApiAsksGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: AskListResponse;
+};
+
+export type ListAsksRunnersRunnerIdApiAsksGetResponse = ListAsksRunnersRunnerIdApiAsksGetResponses[keyof ListAsksRunnersRunnerIdApiAsksGetResponses];
+
+export type GetChunkRunnersRunnerIdApiChunksChunkIdGetData = {
+    body?: never;
+    path: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+        /**
+         * Runner Id
+         *
+         * The runner's hub-minted id.
+         */
+        runner_id: string;
+    };
+    query?: never;
+    url: '/runners/{runner_id}/api/chunks/{chunk_id}';
+};
+
+export type GetChunkRunnersRunnerIdApiChunksChunkIdGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetChunkRunnersRunnerIdApiChunksChunkIdGetError = GetChunkRunnersRunnerIdApiChunksChunkIdGetErrors[keyof GetChunkRunnersRunnerIdApiChunksChunkIdGetErrors];
+
+export type GetChunkRunnersRunnerIdApiChunksChunkIdGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: ChunkDetail;
+};
+
+export type GetChunkRunnersRunnerIdApiChunksChunkIdGetResponse = GetChunkRunnersRunnerIdApiChunksChunkIdGetResponses[keyof GetChunkRunnersRunnerIdApiChunksChunkIdGetResponses];
+
+export type PauseChunkRunnersRunnerIdApiChunksChunkIdPausePostData = {
+    body?: never;
+    path: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+        /**
+         * Runner Id
+         *
+         * The runner's hub-minted id.
+         */
+        runner_id: string;
+    };
+    query?: never;
+    url: '/runners/{runner_id}/api/chunks/{chunk_id}/pause';
+};
+
+export type PauseChunkRunnersRunnerIdApiChunksChunkIdPausePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type PauseChunkRunnersRunnerIdApiChunksChunkIdPausePostError = PauseChunkRunnersRunnerIdApiChunksChunkIdPausePostErrors[keyof PauseChunkRunnersRunnerIdApiChunksChunkIdPausePostErrors];
+
+export type PauseChunkRunnersRunnerIdApiChunksChunkIdPausePostResponses = {
+    /**
+     * Successful Response
+     */
+    202: ChunkSummary;
+};
+
+export type PauseChunkRunnersRunnerIdApiChunksChunkIdPausePostResponse = PauseChunkRunnersRunnerIdApiChunksChunkIdPausePostResponses[keyof PauseChunkRunnersRunnerIdApiChunksChunkIdPausePostResponses];
+
+export type RunnerGetPmItemsDeprecatedAliasRunnersRunnerIdApiChunksChunkIdPmItemsGetData = {
+    body?: never;
+    path: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+        /**
+         * Runner Id
+         *
+         * The runner's hub-minted id.
+         */
+        runner_id: string;
+    };
+    query?: never;
+    url: '/runners/{runner_id}/api/chunks/{chunk_id}/pm-items';
+};
+
+export type RunnerGetPmItemsDeprecatedAliasRunnersRunnerIdApiChunksChunkIdPmItemsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RunnerGetPmItemsDeprecatedAliasRunnersRunnerIdApiChunksChunkIdPmItemsGetError = RunnerGetPmItemsDeprecatedAliasRunnersRunnerIdApiChunksChunkIdPmItemsGetErrors[keyof RunnerGetPmItemsDeprecatedAliasRunnersRunnerIdApiChunksChunkIdPmItemsGetErrors];
+
+export type RunnerGetPmItemsDeprecatedAliasRunnersRunnerIdApiChunksChunkIdPmItemsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: WorkItemsView;
+};
+
+export type RunnerGetPmItemsDeprecatedAliasRunnersRunnerIdApiChunksChunkIdPmItemsGetResponse = RunnerGetPmItemsDeprecatedAliasRunnersRunnerIdApiChunksChunkIdPmItemsGetResponses[keyof RunnerGetPmItemsDeprecatedAliasRunnersRunnerIdApiChunksChunkIdPmItemsGetResponses];
+
+export type RequeueChunkRunnersRunnerIdApiChunksChunkIdRequeuesPostData = {
+    body?: never;
+    path: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+        /**
+         * Runner Id
+         *
+         * The runner's hub-minted id.
+         */
+        runner_id: string;
+    };
+    query?: never;
+    url: '/runners/{runner_id}/api/chunks/{chunk_id}/requeues';
+};
+
+export type RequeueChunkRunnersRunnerIdApiChunksChunkIdRequeuesPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RequeueChunkRunnersRunnerIdApiChunksChunkIdRequeuesPostError = RequeueChunkRunnersRunnerIdApiChunksChunkIdRequeuesPostErrors[keyof RequeueChunkRunnersRunnerIdApiChunksChunkIdRequeuesPostErrors];
+
+export type RequeueChunkRunnersRunnerIdApiChunksChunkIdRequeuesPostResponses = {
+    /**
+     * Successful Response
+     */
+    202: RequeueResponse;
+};
+
+export type RequeueChunkRunnersRunnerIdApiChunksChunkIdRequeuesPostResponse = RequeueChunkRunnersRunnerIdApiChunksChunkIdRequeuesPostResponses[keyof RequeueChunkRunnersRunnerIdApiChunksChunkIdRequeuesPostResponses];
+
+export type ResumeChunkRunnersRunnerIdApiChunksChunkIdResumePostData = {
+    body?: never;
+    path: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+        /**
+         * Runner Id
+         *
+         * The runner's hub-minted id.
+         */
+        runner_id: string;
+    };
+    query?: never;
+    url: '/runners/{runner_id}/api/chunks/{chunk_id}/resume';
+};
+
+export type ResumeChunkRunnersRunnerIdApiChunksChunkIdResumePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ResumeChunkRunnersRunnerIdApiChunksChunkIdResumePostError = ResumeChunkRunnersRunnerIdApiChunksChunkIdResumePostErrors[keyof ResumeChunkRunnersRunnerIdApiChunksChunkIdResumePostErrors];
+
+export type ResumeChunkRunnersRunnerIdApiChunksChunkIdResumePostResponses = {
+    /**
+     * Successful Response
+     */
+    202: ChunkSummary;
+};
+
+export type ResumeChunkRunnersRunnerIdApiChunksChunkIdResumePostResponse = ResumeChunkRunnersRunnerIdApiChunksChunkIdResumePostResponses[keyof ResumeChunkRunnersRunnerIdApiChunksChunkIdResumePostResponses];
+
+export type OpenTakeoverRunnersRunnerIdApiChunksChunkIdTakeoversPostData = {
+    body: TakeoverRequest;
+    path: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+        /**
+         * Runner Id
+         *
+         * The runner's hub-minted id.
+         */
+        runner_id: string;
+    };
+    query?: never;
+    url: '/runners/{runner_id}/api/chunks/{chunk_id}/takeovers';
+};
+
+export type OpenTakeoverRunnersRunnerIdApiChunksChunkIdTakeoversPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type OpenTakeoverRunnersRunnerIdApiChunksChunkIdTakeoversPostError = OpenTakeoverRunnersRunnerIdApiChunksChunkIdTakeoversPostErrors[keyof OpenTakeoverRunnersRunnerIdApiChunksChunkIdTakeoversPostErrors];
+
+export type OpenTakeoverRunnersRunnerIdApiChunksChunkIdTakeoversPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: TakeoverOpenResponse;
+};
+
+export type OpenTakeoverRunnersRunnerIdApiChunksChunkIdTakeoversPostResponse = OpenTakeoverRunnersRunnerIdApiChunksChunkIdTakeoversPostResponses[keyof OpenTakeoverRunnersRunnerIdApiChunksChunkIdTakeoversPostResponses];
+
+export type EndTakeoverRunnersRunnerIdApiChunksChunkIdTakeoversTakeoverIdPatchData = {
+    body?: never;
+    path: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+        /**
+         * Takeover Id
+         */
+        takeover_id: string;
+        /**
+         * Runner Id
+         *
+         * The runner's hub-minted id.
+         */
+        runner_id: string;
+    };
+    query?: never;
+    url: '/runners/{runner_id}/api/chunks/{chunk_id}/takeovers/{takeover_id}';
+};
+
+export type EndTakeoverRunnersRunnerIdApiChunksChunkIdTakeoversTakeoverIdPatchErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type EndTakeoverRunnersRunnerIdApiChunksChunkIdTakeoversTakeoverIdPatchError = EndTakeoverRunnersRunnerIdApiChunksChunkIdTakeoversTakeoverIdPatchErrors[keyof EndTakeoverRunnersRunnerIdApiChunksChunkIdTakeoversTakeoverIdPatchErrors];
+
+export type EndTakeoverRunnersRunnerIdApiChunksChunkIdTakeoversTakeoverIdPatchResponses = {
+    /**
+     * Successful Response
+     */
+    200: TakeoverEndResponse;
+};
+
+export type EndTakeoverRunnersRunnerIdApiChunksChunkIdTakeoversTakeoverIdPatchResponse = EndTakeoverRunnersRunnerIdApiChunksChunkIdTakeoversTakeoverIdPatchResponses[keyof EndTakeoverRunnersRunnerIdApiChunksChunkIdTakeoversTakeoverIdPatchResponses];
+
+export type ListTranscriptSegmentsRunnersRunnerIdApiChunksChunkIdTranscriptsGetData = {
+    body?: never;
+    path: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+        /**
+         * Runner Id
+         *
+         * The runner's hub-minted id.
+         */
+        runner_id: string;
+    };
+    query?: never;
+    url: '/runners/{runner_id}/api/chunks/{chunk_id}/transcripts';
+};
+
+export type ListTranscriptSegmentsRunnersRunnerIdApiChunksChunkIdTranscriptsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListTranscriptSegmentsRunnersRunnerIdApiChunksChunkIdTranscriptsGetError = ListTranscriptSegmentsRunnersRunnerIdApiChunksChunkIdTranscriptsGetErrors[keyof ListTranscriptSegmentsRunnersRunnerIdApiChunksChunkIdTranscriptsGetErrors];
+
+export type ListTranscriptSegmentsRunnersRunnerIdApiChunksChunkIdTranscriptsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: TranscriptSegmentIndexView;
+};
+
+export type ListTranscriptSegmentsRunnersRunnerIdApiChunksChunkIdTranscriptsGetResponse = ListTranscriptSegmentsRunnersRunnerIdApiChunksChunkIdTranscriptsGetResponses[keyof ListTranscriptSegmentsRunnersRunnerIdApiChunksChunkIdTranscriptsGetResponses];
+
+export type GetTranscriptSegmentRunnersRunnerIdApiChunksChunkIdTranscriptsSegmentIdGetData = {
+    body?: never;
+    path: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+        /**
+         * Segment Id
+         */
+        segment_id: string;
+        /**
+         * Runner Id
+         *
+         * The runner's hub-minted id.
+         */
+        runner_id: string;
+    };
+    query?: never;
+    url: '/runners/{runner_id}/api/chunks/{chunk_id}/transcripts/{segment_id}';
+};
+
+export type GetTranscriptSegmentRunnersRunnerIdApiChunksChunkIdTranscriptsSegmentIdGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+    /**
+     * The recorded harness owner is unavailable.
+     */
+    503: unknown;
+};
+
+export type GetTranscriptSegmentRunnersRunnerIdApiChunksChunkIdTranscriptsSegmentIdGetError = GetTranscriptSegmentRunnersRunnerIdApiChunksChunkIdTranscriptsSegmentIdGetErrors[keyof GetTranscriptSegmentRunnersRunnerIdApiChunksChunkIdTranscriptsSegmentIdGetErrors];
+
+export type GetTranscriptSegmentRunnersRunnerIdApiChunksChunkIdTranscriptsSegmentIdGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: TranscriptSegmentContentView;
+};
+
+export type GetTranscriptSegmentRunnersRunnerIdApiChunksChunkIdTranscriptsSegmentIdGetResponse = GetTranscriptSegmentRunnersRunnerIdApiChunksChunkIdTranscriptsSegmentIdGetResponses[keyof GetTranscriptSegmentRunnersRunnerIdApiChunksChunkIdTranscriptsSegmentIdGetResponses];
+
+export type GetWorkItemsRunnersRunnerIdApiChunksChunkIdWorkItemsGetData = {
+    body?: never;
+    path: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+        /**
+         * Runner Id
+         *
+         * The runner's hub-minted id.
+         */
+        runner_id: string;
+    };
+    query?: never;
+    url: '/runners/{runner_id}/api/chunks/{chunk_id}/work-items';
+};
+
+export type GetWorkItemsRunnersRunnerIdApiChunksChunkIdWorkItemsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetWorkItemsRunnersRunnerIdApiChunksChunkIdWorkItemsGetError = GetWorkItemsRunnersRunnerIdApiChunksChunkIdWorkItemsGetErrors[keyof GetWorkItemsRunnersRunnerIdApiChunksChunkIdWorkItemsGetErrors];
+
+export type GetWorkItemsRunnersRunnerIdApiChunksChunkIdWorkItemsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: WorkItemsView;
+};
+
+export type GetWorkItemsRunnersRunnerIdApiChunksChunkIdWorkItemsGetResponse = GetWorkItemsRunnersRunnerIdApiChunksChunkIdWorkItemsGetResponses[keyof GetWorkItemsRunnersRunnerIdApiChunksChunkIdWorkItemsGetResponses];
+
+export type GetDashboardRunnersRunnerIdApiDashboardGetData = {
+    body?: never;
+    path: {
+        /**
+         * Runner Id
+         *
+         * The runner's hub-minted id.
+         */
+        runner_id: string;
+    };
+    query?: never;
+    url: '/runners/{runner_id}/api/dashboard';
+};
+
+export type GetDashboardRunnersRunnerIdApiDashboardGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetDashboardRunnersRunnerIdApiDashboardGetError = GetDashboardRunnersRunnerIdApiDashboardGetErrors[keyof GetDashboardRunnersRunnerIdApiDashboardGetErrors];
+
+export type GetDashboardRunnersRunnerIdApiDashboardGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: DashboardView;
+};
+
+export type GetDashboardRunnersRunnerIdApiDashboardGetResponse = GetDashboardRunnersRunnerIdApiDashboardGetResponses[keyof GetDashboardRunnersRunnerIdApiDashboardGetResponses];
+
+export type ListEscalationsRunnersRunnerIdApiEscalationsGetData = {
+    body?: never;
+    path: {
+        /**
+         * Runner Id
+         *
+         * The runner's hub-minted id.
+         */
+        runner_id: string;
+    };
+    query?: never;
+    url: '/runners/{runner_id}/api/escalations';
+};
+
+export type ListEscalationsRunnersRunnerIdApiEscalationsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListEscalationsRunnersRunnerIdApiEscalationsGetError = ListEscalationsRunnersRunnerIdApiEscalationsGetErrors[keyof ListEscalationsRunnersRunnerIdApiEscalationsGetErrors];
+
+export type ListEscalationsRunnersRunnerIdApiEscalationsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: EscalationListResponse;
+};
+
+export type ListEscalationsRunnersRunnerIdApiEscalationsGetResponse = ListEscalationsRunnersRunnerIdApiEscalationsGetResponses[keyof ListEscalationsRunnersRunnerIdApiEscalationsGetResponses];
+
+export type ListFactsRunnersRunnerIdApiFactsGetData = {
+    body?: never;
+    path: {
+        /**
+         * Runner Id
+         *
+         * The runner's hub-minted id.
+         */
+        runner_id: string;
+    };
+    query?: {
+        /**
+         * Limit
+         */
+        limit?: number;
+    };
+    url: '/runners/{runner_id}/api/facts';
+};
+
+export type ListFactsRunnersRunnerIdApiFactsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListFactsRunnersRunnerIdApiFactsGetError = ListFactsRunnersRunnerIdApiFactsGetErrors[keyof ListFactsRunnersRunnerIdApiFactsGetErrors];
+
+export type ListFactsRunnersRunnerIdApiFactsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: FactListResponse;
+};
+
+export type ListFactsRunnersRunnerIdApiFactsGetResponse = ListFactsRunnersRunnerIdApiFactsGetResponses[keyof ListFactsRunnersRunnerIdApiFactsGetResponses];
+
+export type GetFleetSummaryRunnersRunnerIdApiFleetSummaryGetData = {
+    body?: never;
+    path: {
+        /**
+         * Runner Id
+         *
+         * The runner's hub-minted id.
+         */
+        runner_id: string;
+    };
+    query?: never;
+    url: '/runners/{runner_id}/api/fleet-summary';
+};
+
+export type GetFleetSummaryRunnersRunnerIdApiFleetSummaryGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetFleetSummaryRunnersRunnerIdApiFleetSummaryGetError = GetFleetSummaryRunnersRunnerIdApiFleetSummaryGetErrors[keyof GetFleetSummaryRunnersRunnerIdApiFleetSummaryGetErrors];
+
+export type GetFleetSummaryRunnersRunnerIdApiFleetSummaryGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: FleetSummaryView;
+};
+
+export type GetFleetSummaryRunnersRunnerIdApiFleetSummaryGetResponse = GetFleetSummaryRunnersRunnerIdApiFleetSummaryGetResponses[keyof GetFleetSummaryRunnersRunnerIdApiFleetSummaryGetResponses];
+
+export type ListHarnessHealthRunnersRunnerIdApiHarnessHealthGetData = {
+    body?: never;
+    path: {
+        /**
+         * Runner Id
+         *
+         * The runner's hub-minted id.
+         */
+        runner_id: string;
+    };
+    query?: never;
+    url: '/runners/{runner_id}/api/harness-health';
+};
+
+export type ListHarnessHealthRunnersRunnerIdApiHarnessHealthGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListHarnessHealthRunnersRunnerIdApiHarnessHealthGetError = ListHarnessHealthRunnersRunnerIdApiHarnessHealthGetErrors[keyof ListHarnessHealthRunnersRunnerIdApiHarnessHealthGetErrors];
+
+export type ListHarnessHealthRunnersRunnerIdApiHarnessHealthGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: HarnessHealthListResponse;
+};
+
+export type ListHarnessHealthRunnersRunnerIdApiHarnessHealthGetResponse = ListHarnessHealthRunnersRunnerIdApiHarnessHealthGetResponses[keyof ListHarnessHealthRunnersRunnerIdApiHarnessHealthGetResponses];
+
+export type HeartbeatRunnersRunnerIdApiHeartbeatPostData = {
+    body: HeartbeatRequest;
+    path: {
+        /**
+         * Runner Id
+         *
+         * The runner's hub-minted id.
+         */
+        runner_id: string;
+    };
+    query?: never;
+    url: '/runners/{runner_id}/api/heartbeat';
+};
+
+export type HeartbeatRunnersRunnerIdApiHeartbeatPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type HeartbeatRunnersRunnerIdApiHeartbeatPostError = HeartbeatRunnersRunnerIdApiHeartbeatPostErrors[keyof HeartbeatRunnersRunnerIdApiHeartbeatPostErrors];
+
+export type HeartbeatRunnersRunnerIdApiHeartbeatPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: HeartbeatResponse;
+};
+
+export type HeartbeatRunnersRunnerIdApiHeartbeatPostResponse = HeartbeatRunnersRunnerIdApiHeartbeatPostResponses[keyof HeartbeatRunnersRunnerIdApiHeartbeatPostResponses];
+
+export type ListLeasesRunnersRunnerIdApiLeasesGetData = {
+    body?: never;
+    path: {
+        /**
+         * Runner Id
+         *
+         * The runner's hub-minted id.
+         */
+        runner_id: string;
+    };
+    query?: never;
+    url: '/runners/{runner_id}/api/leases';
+};
+
+export type ListLeasesRunnersRunnerIdApiLeasesGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListLeasesRunnersRunnerIdApiLeasesGetError = ListLeasesRunnersRunnerIdApiLeasesGetErrors[keyof ListLeasesRunnersRunnerIdApiLeasesGetErrors];
+
+export type ListLeasesRunnersRunnerIdApiLeasesGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: LeaseListResponse;
+};
+
+export type ListLeasesRunnersRunnerIdApiLeasesGetResponse = ListLeasesRunnersRunnerIdApiLeasesGetResponses[keyof ListLeasesRunnersRunnerIdApiLeasesGetResponses];
+
+export type GetAnalyticsCountsAgentTypesRunnersRunnerIdApiLeasesLeaseIdAnalyticsCountsAgentTypesGetData = {
+    body?: never;
+    path: {
+        /**
+         * Lease Id
+         */
+        lease_id: string;
+        /**
+         * Runner Id
+         *
+         * The runner's hub-minted id.
+         */
+        runner_id: string;
+    };
+    query?: {
+        /**
+         * Since
+         */
+        since?: string | null;
+        /**
+         * Until
+         */
+        until?: string | null;
+    };
+    url: '/runners/{runner_id}/api/leases/{lease_id}/analytics/counts/agent-types';
+};
+
+export type GetAnalyticsCountsAgentTypesRunnersRunnerIdApiLeasesLeaseIdAnalyticsCountsAgentTypesGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetAnalyticsCountsAgentTypesRunnersRunnerIdApiLeasesLeaseIdAnalyticsCountsAgentTypesGetError = GetAnalyticsCountsAgentTypesRunnersRunnerIdApiLeasesLeaseIdAnalyticsCountsAgentTypesGetErrors[keyof GetAnalyticsCountsAgentTypesRunnersRunnerIdApiLeasesLeaseIdAnalyticsCountsAgentTypesGetErrors];
+
+export type GetAnalyticsCountsAgentTypesRunnersRunnerIdApiLeasesLeaseIdAnalyticsCountsAgentTypesGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: AnalyticsCountsResponse;
+};
+
+export type GetAnalyticsCountsAgentTypesRunnersRunnerIdApiLeasesLeaseIdAnalyticsCountsAgentTypesGetResponse = GetAnalyticsCountsAgentTypesRunnersRunnerIdApiLeasesLeaseIdAnalyticsCountsAgentTypesGetResponses[keyof GetAnalyticsCountsAgentTypesRunnersRunnerIdApiLeasesLeaseIdAnalyticsCountsAgentTypesGetResponses];
+
+export type GetAnalyticsCountsFilesRunnersRunnerIdApiLeasesLeaseIdAnalyticsCountsFilesGetData = {
+    body?: never;
+    path: {
+        /**
+         * Lease Id
+         */
+        lease_id: string;
+        /**
+         * Runner Id
+         *
+         * The runner's hub-minted id.
+         */
+        runner_id: string;
+    };
+    query?: {
+        /**
+         * Since
+         */
+        since?: string | null;
+        /**
+         * Until
+         */
+        until?: string | null;
+    };
+    url: '/runners/{runner_id}/api/leases/{lease_id}/analytics/counts/files';
+};
+
+export type GetAnalyticsCountsFilesRunnersRunnerIdApiLeasesLeaseIdAnalyticsCountsFilesGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetAnalyticsCountsFilesRunnersRunnerIdApiLeasesLeaseIdAnalyticsCountsFilesGetError = GetAnalyticsCountsFilesRunnersRunnerIdApiLeasesLeaseIdAnalyticsCountsFilesGetErrors[keyof GetAnalyticsCountsFilesRunnersRunnerIdApiLeasesLeaseIdAnalyticsCountsFilesGetErrors];
+
+export type GetAnalyticsCountsFilesRunnersRunnerIdApiLeasesLeaseIdAnalyticsCountsFilesGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: AnalyticsCountsResponse;
+};
+
+export type GetAnalyticsCountsFilesRunnersRunnerIdApiLeasesLeaseIdAnalyticsCountsFilesGetResponse = GetAnalyticsCountsFilesRunnersRunnerIdApiLeasesLeaseIdAnalyticsCountsFilesGetResponses[keyof GetAnalyticsCountsFilesRunnersRunnerIdApiLeasesLeaseIdAnalyticsCountsFilesGetResponses];
+
+export type GetAnalyticsCountsNodesRunnersRunnerIdApiLeasesLeaseIdAnalyticsCountsNodesGetData = {
+    body?: never;
+    path: {
+        /**
+         * Lease Id
+         */
+        lease_id: string;
+        /**
+         * Runner Id
+         *
+         * The runner's hub-minted id.
+         */
+        runner_id: string;
+    };
+    query?: {
+        /**
+         * Since
+         */
+        since?: string | null;
+        /**
+         * Until
+         */
+        until?: string | null;
+        /**
+         * By Name
+         */
+        by_name?: boolean;
+    };
+    url: '/runners/{runner_id}/api/leases/{lease_id}/analytics/counts/nodes';
+};
+
+export type GetAnalyticsCountsNodesRunnersRunnerIdApiLeasesLeaseIdAnalyticsCountsNodesGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetAnalyticsCountsNodesRunnersRunnerIdApiLeasesLeaseIdAnalyticsCountsNodesGetError = GetAnalyticsCountsNodesRunnersRunnerIdApiLeasesLeaseIdAnalyticsCountsNodesGetErrors[keyof GetAnalyticsCountsNodesRunnersRunnerIdApiLeasesLeaseIdAnalyticsCountsNodesGetErrors];
+
+export type GetAnalyticsCountsNodesRunnersRunnerIdApiLeasesLeaseIdAnalyticsCountsNodesGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: AnalyticsCountsResponse;
+};
+
+export type GetAnalyticsCountsNodesRunnersRunnerIdApiLeasesLeaseIdAnalyticsCountsNodesGetResponse = GetAnalyticsCountsNodesRunnersRunnerIdApiLeasesLeaseIdAnalyticsCountsNodesGetResponses[keyof GetAnalyticsCountsNodesRunnersRunnerIdApiLeasesLeaseIdAnalyticsCountsNodesGetResponses];
+
+export type GetAnalyticsCountsSkillsRunnersRunnerIdApiLeasesLeaseIdAnalyticsCountsSkillsGetData = {
+    body?: never;
+    path: {
+        /**
+         * Lease Id
+         */
+        lease_id: string;
+        /**
+         * Runner Id
+         *
+         * The runner's hub-minted id.
+         */
+        runner_id: string;
+    };
+    query?: {
+        /**
+         * Since
+         */
+        since?: string | null;
+        /**
+         * Until
+         */
+        until?: string | null;
+    };
+    url: '/runners/{runner_id}/api/leases/{lease_id}/analytics/counts/skills';
+};
+
+export type GetAnalyticsCountsSkillsRunnersRunnerIdApiLeasesLeaseIdAnalyticsCountsSkillsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetAnalyticsCountsSkillsRunnersRunnerIdApiLeasesLeaseIdAnalyticsCountsSkillsGetError = GetAnalyticsCountsSkillsRunnersRunnerIdApiLeasesLeaseIdAnalyticsCountsSkillsGetErrors[keyof GetAnalyticsCountsSkillsRunnersRunnerIdApiLeasesLeaseIdAnalyticsCountsSkillsGetErrors];
+
+export type GetAnalyticsCountsSkillsRunnersRunnerIdApiLeasesLeaseIdAnalyticsCountsSkillsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: AnalyticsCountsResponse;
+};
+
+export type GetAnalyticsCountsSkillsRunnersRunnerIdApiLeasesLeaseIdAnalyticsCountsSkillsGetResponse = GetAnalyticsCountsSkillsRunnersRunnerIdApiLeasesLeaseIdAnalyticsCountsSkillsGetResponses[keyof GetAnalyticsCountsSkillsRunnersRunnerIdApiLeasesLeaseIdAnalyticsCountsSkillsGetResponses];
+
+export type GetAnalyticsSpendGraphsRunnersRunnerIdApiLeasesLeaseIdAnalyticsSpendGraphsGetData = {
+    body?: never;
+    path: {
+        /**
+         * Lease Id
+         */
+        lease_id: string;
+        /**
+         * Runner Id
+         *
+         * The runner's hub-minted id.
+         */
+        runner_id: string;
+    };
+    query?: {
+        /**
+         * Since
+         */
+        since?: string | null;
+        /**
+         * Until
+         */
+        until?: string | null;
+        /**
+         * By Name
+         */
+        by_name?: boolean;
+    };
+    url: '/runners/{runner_id}/api/leases/{lease_id}/analytics/spend/graphs';
+};
+
+export type GetAnalyticsSpendGraphsRunnersRunnerIdApiLeasesLeaseIdAnalyticsSpendGraphsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetAnalyticsSpendGraphsRunnersRunnerIdApiLeasesLeaseIdAnalyticsSpendGraphsGetError = GetAnalyticsSpendGraphsRunnersRunnerIdApiLeasesLeaseIdAnalyticsSpendGraphsGetErrors[keyof GetAnalyticsSpendGraphsRunnersRunnerIdApiLeasesLeaseIdAnalyticsSpendGraphsGetErrors];
+
+export type GetAnalyticsSpendGraphsRunnersRunnerIdApiLeasesLeaseIdAnalyticsSpendGraphsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: AnalyticsSpendResponse;
+};
+
+export type GetAnalyticsSpendGraphsRunnersRunnerIdApiLeasesLeaseIdAnalyticsSpendGraphsGetResponse = GetAnalyticsSpendGraphsRunnersRunnerIdApiLeasesLeaseIdAnalyticsSpendGraphsGetResponses[keyof GetAnalyticsSpendGraphsRunnersRunnerIdApiLeasesLeaseIdAnalyticsSpendGraphsGetResponses];
+
+export type GetAnalyticsSpendNodesRunnersRunnerIdApiLeasesLeaseIdAnalyticsSpendNodesGetData = {
+    body?: never;
+    path: {
+        /**
+         * Lease Id
+         */
+        lease_id: string;
+        /**
+         * Runner Id
+         *
+         * The runner's hub-minted id.
+         */
+        runner_id: string;
+    };
+    query?: {
+        /**
+         * Since
+         */
+        since?: string | null;
+        /**
+         * Until
+         */
+        until?: string | null;
+        /**
+         * By Name
+         */
+        by_name?: boolean;
+    };
+    url: '/runners/{runner_id}/api/leases/{lease_id}/analytics/spend/nodes';
+};
+
+export type GetAnalyticsSpendNodesRunnersRunnerIdApiLeasesLeaseIdAnalyticsSpendNodesGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetAnalyticsSpendNodesRunnersRunnerIdApiLeasesLeaseIdAnalyticsSpendNodesGetError = GetAnalyticsSpendNodesRunnersRunnerIdApiLeasesLeaseIdAnalyticsSpendNodesGetErrors[keyof GetAnalyticsSpendNodesRunnersRunnerIdApiLeasesLeaseIdAnalyticsSpendNodesGetErrors];
+
+export type GetAnalyticsSpendNodesRunnersRunnerIdApiLeasesLeaseIdAnalyticsSpendNodesGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: AnalyticsSpendResponse;
+};
+
+export type GetAnalyticsSpendNodesRunnersRunnerIdApiLeasesLeaseIdAnalyticsSpendNodesGetResponse = GetAnalyticsSpendNodesRunnersRunnerIdApiLeasesLeaseIdAnalyticsSpendNodesGetResponses[keyof GetAnalyticsSpendNodesRunnersRunnerIdApiLeasesLeaseIdAnalyticsSpendNodesGetResponses];
+
+export type ListArtifactsRunnersRunnerIdApiLeasesLeaseIdArtifactsGetData = {
+    body?: never;
+    path: {
+        /**
+         * Lease Id
+         */
+        lease_id: string;
+        /**
+         * Runner Id
+         *
+         * The runner's hub-minted id.
+         */
+        runner_id: string;
+    };
+    query?: {
+        /**
+         * Scope
+         */
+        scope?: ArtifactScope | null;
+    };
+    url: '/runners/{runner_id}/api/leases/{lease_id}/artifacts';
+};
+
+export type ListArtifactsRunnersRunnerIdApiLeasesLeaseIdArtifactsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListArtifactsRunnersRunnerIdApiLeasesLeaseIdArtifactsGetError = ListArtifactsRunnersRunnerIdApiLeasesLeaseIdArtifactsGetErrors[keyof ListArtifactsRunnersRunnerIdApiLeasesLeaseIdArtifactsGetErrors];
+
+export type ListArtifactsRunnersRunnerIdApiLeasesLeaseIdArtifactsGetResponses = {
+    /**
+     * Response List Artifacts Runners  Runner Id  Api Leases  Lease Id  Artifacts Get
+     *
+     * Successful Response
+     */
+    200: Array<WorkerArtifact>;
+};
+
+export type ListArtifactsRunnersRunnerIdApiLeasesLeaseIdArtifactsGetResponse = ListArtifactsRunnersRunnerIdApiLeasesLeaseIdArtifactsGetResponses[keyof ListArtifactsRunnersRunnerIdApiLeasesLeaseIdArtifactsGetResponses];
+
+export type GetArtifactRunnersRunnerIdApiLeasesLeaseIdArtifactsNameGetData = {
+    body?: never;
+    path: {
+        /**
+         * Lease Id
+         */
+        lease_id: string;
+        /**
+         * Name
+         */
+        name: string;
+        /**
+         * Runner Id
+         *
+         * The runner's hub-minted id.
+         */
+        runner_id: string;
+    };
+    query?: {
+        /**
+         * Node
+         */
+        node?: string | null;
+        /**
+         * Scope
+         */
+        scope?: ArtifactScope | null;
+    };
+    url: '/runners/{runner_id}/api/leases/{lease_id}/artifacts/{name}';
+};
+
+export type GetArtifactRunnersRunnerIdApiLeasesLeaseIdArtifactsNameGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetArtifactRunnersRunnerIdApiLeasesLeaseIdArtifactsNameGetError = GetArtifactRunnersRunnerIdApiLeasesLeaseIdArtifactsNameGetErrors[keyof GetArtifactRunnersRunnerIdApiLeasesLeaseIdArtifactsNameGetErrors];
+
+export type GetArtifactRunnersRunnerIdApiLeasesLeaseIdArtifactsNameGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: WorkerArtifact;
+};
+
+export type GetArtifactRunnersRunnerIdApiLeasesLeaseIdArtifactsNameGetResponse = GetArtifactRunnersRunnerIdApiLeasesLeaseIdArtifactsNameGetResponses[keyof GetArtifactRunnersRunnerIdApiLeasesLeaseIdArtifactsNameGetResponses];
+
+export type GetChunkAsksRunnersRunnerIdApiLeasesLeaseIdAsksGetData = {
+    body?: never;
+    path: {
+        /**
+         * Lease Id
+         */
+        lease_id: string;
+        /**
+         * Runner Id
+         *
+         * The runner's hub-minted id.
+         */
+        runner_id: string;
+    };
+    query?: never;
+    url: '/runners/{runner_id}/api/leases/{lease_id}/asks';
+};
+
+export type GetChunkAsksRunnersRunnerIdApiLeasesLeaseIdAsksGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetChunkAsksRunnersRunnerIdApiLeasesLeaseIdAsksGetError = GetChunkAsksRunnersRunnerIdApiLeasesLeaseIdAsksGetErrors[keyof GetChunkAsksRunnersRunnerIdApiLeasesLeaseIdAsksGetErrors];
+
+export type GetChunkAsksRunnersRunnerIdApiLeasesLeaseIdAsksGetResponses = {
+    /**
+     * Response Get Chunk Asks Runners  Runner Id  Api Leases  Lease Id  Asks Get
+     *
+     * Successful Response
+     */
+    200: Array<ChunkAskView>;
+};
+
+export type GetChunkAsksRunnersRunnerIdApiLeasesLeaseIdAsksGetResponse = GetChunkAsksRunnersRunnerIdApiLeasesLeaseIdAsksGetResponses[keyof GetChunkAsksRunnersRunnerIdApiLeasesLeaseIdAsksGetResponses];
+
+export type RecordAskRunnersRunnerIdApiLeasesLeaseIdAsksPostData = {
+    body: AskRequest;
+    path: {
+        /**
+         * Lease Id
+         */
+        lease_id: string;
+        /**
+         * Runner Id
+         *
+         * The runner's hub-minted id.
+         */
+        runner_id: string;
+    };
+    query?: never;
+    url: '/runners/{runner_id}/api/leases/{lease_id}/asks';
+};
+
+export type RecordAskRunnersRunnerIdApiLeasesLeaseIdAsksPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RecordAskRunnersRunnerIdApiLeasesLeaseIdAsksPostError = RecordAskRunnersRunnerIdApiLeasesLeaseIdAsksPostErrors[keyof RecordAskRunnersRunnerIdApiLeasesLeaseIdAsksPostErrors];
+
+export type RecordAskRunnersRunnerIdApiLeasesLeaseIdAsksPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: AskResponse;
+};
+
+export type RecordAskRunnersRunnerIdApiLeasesLeaseIdAsksPostResponse = RecordAskRunnersRunnerIdApiLeasesLeaseIdAsksPostResponses[keyof RecordAskRunnersRunnerIdApiLeasesLeaseIdAsksPostResponses];
+
+export type ListStagedAttachmentsRunnersRunnerIdApiLeasesLeaseIdAttachmentsGetData = {
+    body?: never;
+    path: {
+        /**
+         * Lease Id
+         */
+        lease_id: string;
+        /**
+         * Runner Id
+         *
+         * The runner's hub-minted id.
+         */
+        runner_id: string;
+    };
+    query?: never;
+    url: '/runners/{runner_id}/api/leases/{lease_id}/attachments';
+};
+
+export type ListStagedAttachmentsRunnersRunnerIdApiLeasesLeaseIdAttachmentsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListStagedAttachmentsRunnersRunnerIdApiLeasesLeaseIdAttachmentsGetError = ListStagedAttachmentsRunnersRunnerIdApiLeasesLeaseIdAttachmentsGetErrors[keyof ListStagedAttachmentsRunnersRunnerIdApiLeasesLeaseIdAttachmentsGetErrors];
+
+export type ListStagedAttachmentsRunnersRunnerIdApiLeasesLeaseIdAttachmentsGetResponses = {
+    /**
+     * Response List Staged Attachments Runners  Runner Id  Api Leases  Lease Id  Attachments Get
+     *
+     * Successful Response
+     */
+    200: Array<StagedAttachment>;
+};
+
+export type ListStagedAttachmentsRunnersRunnerIdApiLeasesLeaseIdAttachmentsGetResponse = ListStagedAttachmentsRunnersRunnerIdApiLeasesLeaseIdAttachmentsGetResponses[keyof ListStagedAttachmentsRunnersRunnerIdApiLeasesLeaseIdAttachmentsGetResponses];
+
+export type RecordAttachmentRunnersRunnerIdApiLeasesLeaseIdAttachmentsPostData = {
+    body: AttachmentRequest;
+    path: {
+        /**
+         * Lease Id
+         */
+        lease_id: string;
+        /**
+         * Runner Id
+         *
+         * The runner's hub-minted id.
+         */
+        runner_id: string;
+    };
+    query?: never;
+    url: '/runners/{runner_id}/api/leases/{lease_id}/attachments';
+};
+
+export type RecordAttachmentRunnersRunnerIdApiLeasesLeaseIdAttachmentsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RecordAttachmentRunnersRunnerIdApiLeasesLeaseIdAttachmentsPostError = RecordAttachmentRunnersRunnerIdApiLeasesLeaseIdAttachmentsPostErrors[keyof RecordAttachmentRunnersRunnerIdApiLeasesLeaseIdAttachmentsPostErrors];
+
+export type RecordAttachmentRunnersRunnerIdApiLeasesLeaseIdAttachmentsPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: AttachmentResponse;
+};
+
+export type RecordAttachmentRunnersRunnerIdApiLeasesLeaseIdAttachmentsPostResponse = RecordAttachmentRunnersRunnerIdApiLeasesLeaseIdAttachmentsPostResponses[keyof RecordAttachmentRunnersRunnerIdApiLeasesLeaseIdAttachmentsPostResponses];
+
+export type ListFindingsRunnersRunnerIdApiLeasesLeaseIdFindingsGetData = {
+    body?: never;
+    path: {
+        /**
+         * Lease Id
+         */
+        lease_id: string;
+        /**
+         * Runner Id
+         *
+         * The runner's hub-minted id.
+         */
+        runner_id: string;
+    };
+    query?: never;
+    url: '/runners/{runner_id}/api/leases/{lease_id}/findings';
+};
+
+export type ListFindingsRunnersRunnerIdApiLeasesLeaseIdFindingsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListFindingsRunnersRunnerIdApiLeasesLeaseIdFindingsGetError = ListFindingsRunnersRunnerIdApiLeasesLeaseIdFindingsGetErrors[keyof ListFindingsRunnersRunnerIdApiLeasesLeaseIdFindingsGetErrors];
+
+export type ListFindingsRunnersRunnerIdApiLeasesLeaseIdFindingsGetResponses = {
+    /**
+     * Response List Findings Runners  Runner Id  Api Leases  Lease Id  Findings Get
+     *
+     * Successful Response
+     */
+    200: Array<FindingView>;
+};
+
+export type ListFindingsRunnersRunnerIdApiLeasesLeaseIdFindingsGetResponse = ListFindingsRunnersRunnerIdApiLeasesLeaseIdFindingsGetResponses[keyof ListFindingsRunnersRunnerIdApiLeasesLeaseIdFindingsGetResponses];
+
+export type GetFindingRunnersRunnerIdApiLeasesLeaseIdFindingsFindingIdGetData = {
+    body?: never;
+    path: {
+        /**
+         * Lease Id
+         */
+        lease_id: string;
+        /**
+         * Finding Id
+         */
+        finding_id: string;
+        /**
+         * Runner Id
+         *
+         * The runner's hub-minted id.
+         */
+        runner_id: string;
+    };
+    query?: never;
+    url: '/runners/{runner_id}/api/leases/{lease_id}/findings/{finding_id}';
+};
+
+export type GetFindingRunnersRunnerIdApiLeasesLeaseIdFindingsFindingIdGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetFindingRunnersRunnerIdApiLeasesLeaseIdFindingsFindingIdGetError = GetFindingRunnersRunnerIdApiLeasesLeaseIdFindingsFindingIdGetErrors[keyof GetFindingRunnersRunnerIdApiLeasesLeaseIdFindingsFindingIdGetErrors];
+
+export type GetFindingRunnersRunnerIdApiLeasesLeaseIdFindingsFindingIdGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: FindingView;
+};
+
+export type GetFindingRunnersRunnerIdApiLeasesLeaseIdFindingsFindingIdGetResponse = GetFindingRunnersRunnerIdApiLeasesLeaseIdFindingsFindingIdGetResponses[keyof GetFindingRunnersRunnerIdApiLeasesLeaseIdFindingsFindingIdGetResponses];
+
+export type ListGardenFindingsRunnersRunnerIdApiLeasesLeaseIdGardenFindingsGetData = {
+    body?: never;
+    path: {
+        /**
+         * Lease Id
+         */
+        lease_id: string;
+        /**
+         * Runner Id
+         *
+         * The runner's hub-minted id.
+         */
+        runner_id: string;
+    };
+    query?: never;
+    url: '/runners/{runner_id}/api/leases/{lease_id}/garden/findings';
+};
+
+export type ListGardenFindingsRunnersRunnerIdApiLeasesLeaseIdGardenFindingsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListGardenFindingsRunnersRunnerIdApiLeasesLeaseIdGardenFindingsGetError = ListGardenFindingsRunnersRunnerIdApiLeasesLeaseIdGardenFindingsGetErrors[keyof ListGardenFindingsRunnersRunnerIdApiLeasesLeaseIdGardenFindingsGetErrors];
+
+export type ListGardenFindingsRunnersRunnerIdApiLeasesLeaseIdGardenFindingsGetResponses = {
+    /**
+     * Response List Garden Findings Runners  Runner Id  Api Leases  Lease Id  Garden Findings Get
+     *
+     * Successful Response
+     */
+    200: Array<FindingView>;
+};
+
+export type ListGardenFindingsRunnersRunnerIdApiLeasesLeaseIdGardenFindingsGetResponse = ListGardenFindingsRunnersRunnerIdApiLeasesLeaseIdGardenFindingsGetResponses[keyof ListGardenFindingsRunnersRunnerIdApiLeasesLeaseIdGardenFindingsGetResponses];
+
+export type ListGardenProposalsRunnersRunnerIdApiLeasesLeaseIdGardenProposalsGetData = {
+    body?: never;
+    path: {
+        /**
+         * Lease Id
+         */
+        lease_id: string;
+        /**
+         * Runner Id
+         *
+         * The runner's hub-minted id.
+         */
+        runner_id: string;
+    };
+    query?: {
+        /**
+         * State
+         */
+        state?: string;
+    };
+    url: '/runners/{runner_id}/api/leases/{lease_id}/garden/proposals';
+};
+
+export type ListGardenProposalsRunnersRunnerIdApiLeasesLeaseIdGardenProposalsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListGardenProposalsRunnersRunnerIdApiLeasesLeaseIdGardenProposalsGetError = ListGardenProposalsRunnersRunnerIdApiLeasesLeaseIdGardenProposalsGetErrors[keyof ListGardenProposalsRunnersRunnerIdApiLeasesLeaseIdGardenProposalsGetErrors];
+
+export type ListGardenProposalsRunnersRunnerIdApiLeasesLeaseIdGardenProposalsGetResponses = {
+    /**
+     * Response List Garden Proposals Runners  Runner Id  Api Leases  Lease Id  Garden Proposals Get
+     *
+     * Successful Response
+     */
+    200: Array<GardenProposalView>;
+};
+
+export type ListGardenProposalsRunnersRunnerIdApiLeasesLeaseIdGardenProposalsGetResponse = ListGardenProposalsRunnersRunnerIdApiLeasesLeaseIdGardenProposalsGetResponses[keyof ListGardenProposalsRunnersRunnerIdApiLeasesLeaseIdGardenProposalsGetResponses];
+
+export type RecordGitCommitDeclarationRunnersRunnerIdApiLeasesLeaseIdGitCommitsPostData = {
+    body: GitCommitDeclarationRequest;
+    path: {
+        /**
+         * Lease Id
+         */
+        lease_id: string;
+        /**
+         * Runner Id
+         *
+         * The runner's hub-minted id.
+         */
+        runner_id: string;
+    };
+    query?: never;
+    url: '/runners/{runner_id}/api/leases/{lease_id}/git-commits';
+};
+
+export type RecordGitCommitDeclarationRunnersRunnerIdApiLeasesLeaseIdGitCommitsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RecordGitCommitDeclarationRunnersRunnerIdApiLeasesLeaseIdGitCommitsPostError = RecordGitCommitDeclarationRunnersRunnerIdApiLeasesLeaseIdGitCommitsPostErrors[keyof RecordGitCommitDeclarationRunnersRunnerIdApiLeasesLeaseIdGitCommitsPostErrors];
+
+export type RecordGitCommitDeclarationRunnersRunnerIdApiLeasesLeaseIdGitCommitsPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: GitCommitDeclarationResponse;
+};
+
+export type RecordGitCommitDeclarationRunnersRunnerIdApiLeasesLeaseIdGitCommitsPostResponse = RecordGitCommitDeclarationRunnersRunnerIdApiLeasesLeaseIdGitCommitsPostResponses[keyof RecordGitCommitDeclarationRunnersRunnerIdApiLeasesLeaseIdGitCommitsPostResponses];
+
+export type GetHistoryRunnersRunnerIdApiLeasesLeaseIdHistoryGetData = {
+    body?: never;
+    path: {
+        /**
+         * Lease Id
+         */
+        lease_id: string;
+        /**
+         * Runner Id
+         *
+         * The runner's hub-minted id.
+         */
+        runner_id: string;
+    };
+    query?: never;
+    url: '/runners/{runner_id}/api/leases/{lease_id}/history';
+};
+
+export type GetHistoryRunnersRunnerIdApiLeasesLeaseIdHistoryGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetHistoryRunnersRunnerIdApiLeasesLeaseIdHistoryGetError = GetHistoryRunnersRunnerIdApiLeasesLeaseIdHistoryGetErrors[keyof GetHistoryRunnersRunnerIdApiLeasesLeaseIdHistoryGetErrors];
+
+export type GetHistoryRunnersRunnerIdApiLeasesLeaseIdHistoryGetResponses = {
+    /**
+     * Response Get History Runners  Runner Id  Api Leases  Lease Id  History Get
+     *
+     * Successful Response
+     */
+    200: Array<HistoryRowView>;
+};
+
+export type GetHistoryRunnersRunnerIdApiLeasesLeaseIdHistoryGetResponse = GetHistoryRunnersRunnerIdApiLeasesLeaseIdHistoryGetResponses[keyof GetHistoryRunnersRunnerIdApiLeasesLeaseIdHistoryGetResponses];
+
+export type ListScopesRunnersRunnerIdApiLeasesLeaseIdScopesGetData = {
+    body?: never;
+    path: {
+        /**
+         * Lease Id
+         */
+        lease_id: string;
+        /**
+         * Runner Id
+         *
+         * The runner's hub-minted id.
+         */
+        runner_id: string;
+    };
+    query?: never;
+    url: '/runners/{runner_id}/api/leases/{lease_id}/scopes';
+};
+
+export type ListScopesRunnersRunnerIdApiLeasesLeaseIdScopesGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListScopesRunnersRunnerIdApiLeasesLeaseIdScopesGetError = ListScopesRunnersRunnerIdApiLeasesLeaseIdScopesGetErrors[keyof ListScopesRunnersRunnerIdApiLeasesLeaseIdScopesGetErrors];
+
+export type ListScopesRunnersRunnerIdApiLeasesLeaseIdScopesGetResponses = {
+    /**
+     * Response List Scopes Runners  Runner Id  Api Leases  Lease Id  Scopes Get
+     *
+     * Successful Response
+     */
+    200: Array<ScopeView>;
+};
+
+export type ListScopesRunnersRunnerIdApiLeasesLeaseIdScopesGetResponse = ListScopesRunnersRunnerIdApiLeasesLeaseIdScopesGetResponses[keyof ListScopesRunnersRunnerIdApiLeasesLeaseIdScopesGetResponses];
+
+export type SessionEndRunnersRunnerIdApiLeasesLeaseIdSessionEndPostData = {
+    body?: never;
+    path: {
+        /**
+         * Lease Id
+         */
+        lease_id: string;
+        /**
+         * Runner Id
+         *
+         * The runner's hub-minted id.
+         */
+        runner_id: string;
+    };
+    query?: never;
+    url: '/runners/{runner_id}/api/leases/{lease_id}/session-end';
+};
+
+export type SessionEndRunnersRunnerIdApiLeasesLeaseIdSessionEndPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type SessionEndRunnersRunnerIdApiLeasesLeaseIdSessionEndPostError = SessionEndRunnersRunnerIdApiLeasesLeaseIdSessionEndPostErrors[keyof SessionEndRunnersRunnerIdApiLeasesLeaseIdSessionEndPostErrors];
+
+export type SessionEndRunnersRunnerIdApiLeasesLeaseIdSessionEndPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: SessionEndResponse;
+};
+
+export type SessionEndRunnersRunnerIdApiLeasesLeaseIdSessionEndPostResponse = SessionEndRunnersRunnerIdApiLeasesLeaseIdSessionEndPostResponses[keyof SessionEndRunnersRunnerIdApiLeasesLeaseIdSessionEndPostResponses];
+
+export type GetTranscriptRunnersRunnerIdApiLeasesLeaseIdTranscriptGetData = {
+    body?: never;
+    path: {
+        /**
+         * Lease Id
+         */
+        lease_id: string;
+        /**
+         * Runner Id
+         *
+         * The runner's hub-minted id.
+         */
+        runner_id: string;
+    };
+    query?: never;
+    url: '/runners/{runner_id}/api/leases/{lease_id}/transcript';
+};
+
+export type GetTranscriptRunnersRunnerIdApiLeasesLeaseIdTranscriptGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+    /**
+     * The recorded harness owner is unavailable.
+     */
+    503: unknown;
+};
+
+export type GetTranscriptRunnersRunnerIdApiLeasesLeaseIdTranscriptGetError = GetTranscriptRunnersRunnerIdApiLeasesLeaseIdTranscriptGetErrors[keyof GetTranscriptRunnersRunnerIdApiLeasesLeaseIdTranscriptGetErrors];
+
+export type GetTranscriptRunnersRunnerIdApiLeasesLeaseIdTranscriptGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: TranscriptResponse;
+};
+
+export type GetTranscriptRunnersRunnerIdApiLeasesLeaseIdTranscriptGetResponse = GetTranscriptRunnersRunnerIdApiLeasesLeaseIdTranscriptGetResponses[keyof GetTranscriptRunnersRunnerIdApiLeasesLeaseIdTranscriptGetResponses];
+
+export type GetRunnerRunnersRunnerIdApiRunnerGetData = {
+    body?: never;
+    path: {
+        /**
+         * Runner Id
+         *
+         * The runner's hub-minted id.
+         */
+        runner_id: string;
+    };
+    query?: never;
+    url: '/runners/{runner_id}/api/runner';
+};
+
+export type GetRunnerRunnersRunnerIdApiRunnerGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetRunnerRunnersRunnerIdApiRunnerGetError = GetRunnerRunnersRunnerIdApiRunnerGetErrors[keyof GetRunnerRunnersRunnerIdApiRunnerGetErrors];
+
+export type GetRunnerRunnersRunnerIdApiRunnerGetResponses = {
     /**
      * Successful Response
      */
     200: RunnerStatusView;
 };
 
-export type GetRunnerApiRunnerGetResponse = GetRunnerApiRunnerGetResponses[keyof GetRunnerApiRunnerGetResponses];
+export type GetRunnerRunnersRunnerIdApiRunnerGetResponse = GetRunnerRunnersRunnerIdApiRunnerGetResponses[keyof GetRunnerRunnersRunnerIdApiRunnerGetResponses];
 
-export type PatchRunnerApiRunnerPatchData = {
+export type PatchRunnerRunnersRunnerIdApiRunnerPatchData = {
     body: RunnerControlPatch;
-    path?: never;
+    path: {
+        /**
+         * Runner Id
+         *
+         * The runner's hub-minted id.
+         */
+        runner_id: string;
+    };
     query?: never;
-    url: '/api/runner';
+    url: '/runners/{runner_id}/api/runner';
 };
 
-export type PatchRunnerApiRunnerPatchErrors = {
+export type PatchRunnerRunnersRunnerIdApiRunnerPatchErrors = {
     /**
      * Validation Error
      */
@@ -5082,25 +5696,32 @@ export type PatchRunnerApiRunnerPatchErrors = {
     503: unknown;
 };
 
-export type PatchRunnerApiRunnerPatchError = PatchRunnerApiRunnerPatchErrors[keyof PatchRunnerApiRunnerPatchErrors];
+export type PatchRunnerRunnersRunnerIdApiRunnerPatchError = PatchRunnerRunnersRunnerIdApiRunnerPatchErrors[keyof PatchRunnerRunnersRunnerIdApiRunnerPatchErrors];
 
-export type PatchRunnerApiRunnerPatchResponses = {
+export type PatchRunnerRunnersRunnerIdApiRunnerPatchResponses = {
     /**
      * Successful Response
      */
     200: RunnerControlView;
 };
 
-export type PatchRunnerApiRunnerPatchResponse = PatchRunnerApiRunnerPatchResponses[keyof PatchRunnerApiRunnerPatchResponses];
+export type PatchRunnerRunnersRunnerIdApiRunnerPatchResponse = PatchRunnerRunnersRunnerIdApiRunnerPatchResponses[keyof PatchRunnerRunnersRunnerIdApiRunnerPatchResponses];
 
-export type StartSelftestApiSelftestsPostData = {
+export type StartSelftestRunnersRunnerIdApiSelftestsPostData = {
     body: SelfTestStartRequest;
-    path?: never;
+    path: {
+        /**
+         * Runner Id
+         *
+         * The runner's hub-minted id.
+         */
+        runner_id: string;
+    };
     query?: never;
-    url: '/api/selftests';
+    url: '/runners/{runner_id}/api/selftests';
 };
 
-export type StartSelftestApiSelftestsPostErrors = {
+export type StartSelftestRunnersRunnerIdApiSelftestsPostErrors = {
     /**
      * Validation Error
      */
@@ -5111,87 +5732,100 @@ export type StartSelftestApiSelftestsPostErrors = {
     503: unknown;
 };
 
-export type StartSelftestApiSelftestsPostError = StartSelftestApiSelftestsPostErrors[keyof StartSelftestApiSelftestsPostErrors];
+export type StartSelftestRunnersRunnerIdApiSelftestsPostError = StartSelftestRunnersRunnerIdApiSelftestsPostErrors[keyof StartSelftestRunnersRunnerIdApiSelftestsPostErrors];
 
-export type StartSelftestApiSelftestsPostResponses = {
+export type StartSelftestRunnersRunnerIdApiSelftestsPostResponses = {
     /**
      * Successful Response
      */
     201: SelfTestView;
 };
 
-export type StartSelftestApiSelftestsPostResponse = StartSelftestApiSelftestsPostResponses[keyof StartSelftestApiSelftestsPostResponses];
+export type StartSelftestRunnersRunnerIdApiSelftestsPostResponse = StartSelftestRunnersRunnerIdApiSelftestsPostResponses[keyof StartSelftestRunnersRunnerIdApiSelftestsPostResponses];
 
-export type GetSelftestApiSelftestsSelftestIdGetData = {
+export type GetSelftestRunnersRunnerIdApiSelftestsSelftestIdGetData = {
     body?: never;
     path: {
         /**
          * Selftest Id
          */
         selftest_id: string;
+        /**
+         * Runner Id
+         *
+         * The runner's hub-minted id.
+         */
+        runner_id: string;
     };
     query?: never;
-    url: '/api/selftests/{selftest_id}';
+    url: '/runners/{runner_id}/api/selftests/{selftest_id}';
 };
 
-export type GetSelftestApiSelftestsSelftestIdGetErrors = {
+export type GetSelftestRunnersRunnerIdApiSelftestsSelftestIdGetErrors = {
     /**
      * Validation Error
      */
     422: HttpValidationError;
 };
 
-export type GetSelftestApiSelftestsSelftestIdGetError = GetSelftestApiSelftestsSelftestIdGetErrors[keyof GetSelftestApiSelftestsSelftestIdGetErrors];
+export type GetSelftestRunnersRunnerIdApiSelftestsSelftestIdGetError = GetSelftestRunnersRunnerIdApiSelftestsSelftestIdGetErrors[keyof GetSelftestRunnersRunnerIdApiSelftestsSelftestIdGetErrors];
 
-export type GetSelftestApiSelftestsSelftestIdGetResponses = {
+export type GetSelftestRunnersRunnerIdApiSelftestsSelftestIdGetResponses = {
     /**
      * Successful Response
      */
     200: SelfTestView;
 };
 
-export type GetSelftestApiSelftestsSelftestIdGetResponse = GetSelftestApiSelftestsSelftestIdGetResponses[keyof GetSelftestApiSelftestsSelftestIdGetResponses];
+export type GetSelftestRunnersRunnerIdApiSelftestsSelftestIdGetResponse = GetSelftestRunnersRunnerIdApiSelftestsSelftestIdGetResponses[keyof GetSelftestRunnersRunnerIdApiSelftestsSelftestIdGetResponses];
 
-export type ListSubscriptionsApiSubscriptionsGetData = {
+export type ListOpenTakeoversRunnersRunnerIdApiTakeoversGetData = {
     body?: never;
-    path?: never;
+    path: {
+        /**
+         * Runner Id
+         *
+         * The runner's hub-minted id.
+         */
+        runner_id: string;
+    };
     query?: never;
-    url: '/api/subscriptions';
+    url: '/runners/{runner_id}/api/takeovers';
 };
 
-export type ListSubscriptionsApiSubscriptionsGetResponses = {
+export type ListOpenTakeoversRunnersRunnerIdApiTakeoversGetErrors = {
     /**
-     * Successful Response
+     * Validation Error
      */
-    200: SubscriptionListResponse;
+    422: HttpValidationError;
 };
 
-export type ListSubscriptionsApiSubscriptionsGetResponse = ListSubscriptionsApiSubscriptionsGetResponses[keyof ListSubscriptionsApiSubscriptionsGetResponses];
+export type ListOpenTakeoversRunnersRunnerIdApiTakeoversGetError = ListOpenTakeoversRunnersRunnerIdApiTakeoversGetErrors[keyof ListOpenTakeoversRunnersRunnerIdApiTakeoversGetErrors];
 
-export type ListOpenTakeoversApiTakeoversGetData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/takeovers';
-};
-
-export type ListOpenTakeoversApiTakeoversGetResponses = {
+export type ListOpenTakeoversRunnersRunnerIdApiTakeoversGetResponses = {
     /**
      * Successful Response
      */
     200: OpenTakeoverListResponse;
 };
 
-export type ListOpenTakeoversApiTakeoversGetResponse = ListOpenTakeoversApiTakeoversGetResponses[keyof ListOpenTakeoversApiTakeoversGetResponses];
+export type ListOpenTakeoversRunnersRunnerIdApiTakeoversGetResponse = ListOpenTakeoversRunnersRunnerIdApiTakeoversGetResponses[keyof ListOpenTakeoversRunnersRunnerIdApiTakeoversGetResponses];
 
-export type TraceReplayApiTracesReplayPostData = {
+export type TraceReplayRunnersRunnerIdApiTracesReplayPostData = {
     body: TraceReplayRequest;
-    path?: never;
+    path: {
+        /**
+         * Runner Id
+         *
+         * The runner's hub-minted id.
+         */
+        runner_id: string;
+    };
     query?: never;
-    url: '/api/traces/replay';
+    url: '/runners/{runner_id}/api/traces/replay';
 };
 
-export type TraceReplayApiTracesReplayPostErrors = {
+export type TraceReplayRunnersRunnerIdApiTracesReplayPostErrors = {
     /**
      * Validation Error
      */
@@ -5202,86 +5836,45 @@ export type TraceReplayApiTracesReplayPostErrors = {
     502: RunnerTraceReplayFailure;
 };
 
-export type TraceReplayApiTracesReplayPostError = TraceReplayApiTracesReplayPostErrors[keyof TraceReplayApiTracesReplayPostErrors];
+export type TraceReplayRunnersRunnerIdApiTracesReplayPostError = TraceReplayRunnersRunnerIdApiTracesReplayPostErrors[keyof TraceReplayRunnersRunnerIdApiTracesReplayPostErrors];
 
-export type TraceReplayApiTracesReplayPostResponses = {
+export type TraceReplayRunnersRunnerIdApiTracesReplayPostResponses = {
     /**
      * Successful Response
      */
     200: RunnerTraceReplayResponse;
 };
 
-export type TraceReplayApiTracesReplayPostResponse = TraceReplayApiTracesReplayPostResponses[keyof TraceReplayApiTracesReplayPostResponses];
+export type TraceReplayRunnersRunnerIdApiTracesReplayPostResponse = TraceReplayRunnersRunnerIdApiTracesReplayPostResponses[keyof TraceReplayRunnersRunnerIdApiTracesReplayPostResponses];
 
-export type TraceStatusApiTracesStatusGetData = {
+export type TraceStatusRunnersRunnerIdApiTracesStatusGetData = {
     body?: never;
-    path?: never;
+    path: {
+        /**
+         * Runner Id
+         *
+         * The runner's hub-minted id.
+         */
+        runner_id: string;
+    };
     query?: never;
-    url: '/api/traces/status';
+    url: '/runners/{runner_id}/api/traces/status';
 };
 
-export type TraceStatusApiTracesStatusGetResponses = {
-    /**
-     * Successful Response
-     */
-    200: RunnerTraceStatusResponse;
-};
-
-export type TraceStatusApiTracesStatusGetResponse = TraceStatusApiTracesStatusGetResponses[keyof TraceStatusApiTracesStatusGetResponses];
-
-export type ClearWorkspacePromptApiWorkspacePromptDeleteData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/workspace-prompt';
-};
-
-export type ClearWorkspacePromptApiWorkspacePromptDeleteResponses = {
-    /**
-     * Successful Response
-     */
-    200: WorkspacePromptResponse;
-};
-
-export type ClearWorkspacePromptApiWorkspacePromptDeleteResponse = ClearWorkspacePromptApiWorkspacePromptDeleteResponses[keyof ClearWorkspacePromptApiWorkspacePromptDeleteResponses];
-
-export type ReadWorkspacePromptApiWorkspacePromptGetData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/workspace-prompt';
-};
-
-export type ReadWorkspacePromptApiWorkspacePromptGetResponses = {
-    /**
-     * Successful Response
-     */
-    200: WorkspacePromptResponse;
-};
-
-export type ReadWorkspacePromptApiWorkspacePromptGetResponse = ReadWorkspacePromptApiWorkspacePromptGetResponses[keyof ReadWorkspacePromptApiWorkspacePromptGetResponses];
-
-export type ReplaceWorkspacePromptApiWorkspacePromptPutData = {
-    body: WorkspacePromptReplacement;
-    path?: never;
-    query?: never;
-    url: '/api/workspace-prompt';
-};
-
-export type ReplaceWorkspacePromptApiWorkspacePromptPutErrors = {
+export type TraceStatusRunnersRunnerIdApiTracesStatusGetErrors = {
     /**
      * Validation Error
      */
     422: HttpValidationError;
 };
 
-export type ReplaceWorkspacePromptApiWorkspacePromptPutError = ReplaceWorkspacePromptApiWorkspacePromptPutErrors[keyof ReplaceWorkspacePromptApiWorkspacePromptPutErrors];
+export type TraceStatusRunnersRunnerIdApiTracesStatusGetError = TraceStatusRunnersRunnerIdApiTracesStatusGetErrors[keyof TraceStatusRunnersRunnerIdApiTracesStatusGetErrors];
 
-export type ReplaceWorkspacePromptApiWorkspacePromptPutResponses = {
+export type TraceStatusRunnersRunnerIdApiTracesStatusGetResponses = {
     /**
      * Successful Response
      */
-    200: WorkspacePromptResponse;
+    200: RunnerTraceStatusResponse;
 };
 
-export type ReplaceWorkspacePromptApiWorkspacePromptPutResponse = ReplaceWorkspacePromptApiWorkspacePromptPutResponses[keyof ReplaceWorkspacePromptApiWorkspacePromptPutResponses];
+export type TraceStatusRunnersRunnerIdApiTracesStatusGetResponse = TraceStatusRunnersRunnerIdApiTracesStatusGetResponses[keyof TraceStatusRunnersRunnerIdApiTracesStatusGetResponses];

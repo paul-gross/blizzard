@@ -65,8 +65,14 @@
  *     headline, detail copy, and retry control hold their layout with no
  *     horizontal overflow at phone widths.
  *   - projects/runner/src/app/shell/nav/app-nav.shell-sweep.spec.ts — the runner
- *     shell's own top tab strip (issue #313, `AppNav`): the Board/Events
- *     labels never force the strip to overflow its own width.
+ *     shell's own top tab strip (`AppNav`): the Host/Board/Events/Machine
+ *     labels and the runner switcher never force the strip to overflow its own width.
+ *   - projects/runner/src/app/shell/nav/runner-switcher.shell-sweep.spec.ts — the
+ *     runner switcher's mobile row: long-named, braked runners scroll inside the
+ *     row at phone widths, the active runner's chip still hit-testable.
+ *   - projects/runner/src/app/host/host-page.shell-sweep.spec.ts — the host page:
+ *     its runners, environments, and subscriptions panels sit side by side when
+ *     wide and genuinely stack at phone widths, with no horizontal overflow.
  *   - projects/runner/src/app/board/chunk/chunk-page-runner-layout.shell-sweep.spec.ts —
  *     the shared chunk page through the runner's own route: each of its four
  *     tabs — General, Node history, Artifacts, Transcripts — genuinely stacks its own
@@ -294,6 +300,8 @@ const SWEEPS = [
   { project: 'runner', spec: 'projects/runner/src/app/machine/app-info-view.shell-sweep.spec.ts' },
   { project: 'runner', spec: 'projects/runner/src/app/core/identity/session-recovery-view.shell-sweep.spec.ts' },
   { project: 'runner', spec: 'projects/runner/src/app/shell/nav/app-nav.shell-sweep.spec.ts' },
+  { project: 'runner', spec: 'projects/runner/src/app/shell/nav/runner-switcher.shell-sweep.spec.ts' },
+  { project: 'runner', spec: 'projects/runner/src/app/host/host-page.shell-sweep.spec.ts' },
   { project: 'runner', spec: 'projects/runner/src/app/board/chunk/chunk-page-runner-layout.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/events/events-scroll.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/board/hover-tint.shell-sweep.spec.ts' },

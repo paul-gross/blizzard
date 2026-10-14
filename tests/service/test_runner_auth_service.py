@@ -85,7 +85,7 @@ def test_runner_presents_the_bearer_token_on_every_hub_call(tmp_path: Path) -> N
         # `src/blizzard/runner/api/work_items.py` — carries the same credential, not a patched one.
         api_config = dataclasses.replace(config, host="127.0.0.1", port=_free_port())
         with _runner_api(api_config):
-            runner_client = httpx.Client(base_url=f"http://{api_config.host}:{api_config.port}", timeout=10.0)
+            runner_client = httpx.Client(base_url=api_config.local_api_url, timeout=10.0)
             try:
                 proxied = runner_client.get(f"/api/chunks/{chunk_id}/work-items")
             finally:

@@ -2,14 +2,15 @@ import { inject } from '@angular/core';
 import { QueryClient, injectMutation, injectQuery } from '@tanstack/angular-query-experimental';
 import { RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS, runnerApi } from 'fleet';
 
+import { injectActiveRunner } from './active-runner';
 import { localPauseMutationKey } from './mutation-keys';
-import { runnerDashboardKey } from './query-keys';
+import { hostKey, runnerDashboardKey } from './query-keys';
 
 /**
- * The panel's whole machine-local status read, composed into one poll —
- * `GET /api/dashboard`, through the generated runner client
- * (`bzh:generated-client`). Six of its seven sections (`runner`,
- * `environments`, `asks`, `escalations`, `takeovers`, `facts`) are largely
+ * The active runner's whole status read, composed into one poll —
+ * `GET /runners/{runner_id}/api/dashboard`, through the generated runner client
+ * (`bzh:generated-client`); disabled on a host page, where no runner is active. Most of
+ * its sections (`runner`, `asks`, `escalations`, `takeovers`, `facts`) are largely
  * covered by the runner's own SSE stream — every
  * event kind `RunnerLiveUpdates` dispatches stales this read
  * (`runner-live-updates.ts`'s registry), so the interval below is mostly a
@@ -20,8 +21,8 @@ import { runnerDashboardKey } from './query-keys';
  * `fleet_summary`, the seventh section, is a hub pass-through no runner event
  * can prove, and rides the same backstop for a different reason. Nests
  * every section the panel's rails read: `runner`
- * (identity, capacities, hub connectivity, last tick), `environments`, `asks`,
- * `escalations`, `takeovers`, `facts`, and `fleet_summary` (the one section
+ * (identity, capacities, hub connectivity, last tick), `asks`,
+ * `escalations`, `takeovers`, `facts`, `harness_health`, and `fleet_summary` (the one section
  * that can be `null` — a hub outage or an unwired runner, never a
  * client-visible error for that case). Every consumer injects this same query
  * directly rather than threading it down as an input — TanStack's own
@@ -29,27 +30,35 @@ import { runnerDashboardKey } from './query-keys';
  * network request, so this is still one poll for the whole panel, not seven.
  */
 export function injectRunnerDashboardQuery() {
-  return injectQuery(() => ({
-    queryKey: runnerDashboardKey,
-    queryFn: async (): Promise<runnerApi.DashboardView> => {
-      const { data, error } = await runnerApi.getDashboardApiDashboardGet({ throwOnError: false });
-      if (error) throw error;
-      return data!;
-    },
-    // See RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS.
-    refetchInterval: RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS,
-  }));
+  const runnerId = injectActiveRunner();
+  return injectQuery(() => {
+    const id = runnerId();
+    return {
+      queryKey: runnerDashboardKey(id),
+      enabled: id !== null,
+      queryFn: async (): Promise<runnerApi.DashboardView> => {
+        const { data, error } = await runnerApi.getDashboardRunnersRunnerIdApiDashboardGet({
+          path: { runner_id: id! },
+          throwOnError: false,
+        });
+        if (error) throw error;
+        return data!;
+      },
+      // See RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS.
+      refetchInterval: RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS,
+    };
+  });
 }
 
 /** `injectLocalPauseMutation`'s variables — `paused` is the PATCH payload; `runnerId`
- * identifies the runner pausing itself and is never sent on the wire. */
+ * addresses the runner pausing itself, as its route's `runner_id`. */
 export interface LocalPauseVars {
   readonly runnerId: string;
   readonly paused: boolean;
 }
 
 /**
- * `PATCH /api/runner` — the local pause brake's only mutation
+ * `PATCH /runners/{runner_id}/api/runner` — the local pause brake's only mutation
  * surface in the web UI, through the generated runner client
  * (`bzh:generated-client`). Sets `paused` declaratively on the runner
  * singleton; the hub's own brake (`hub_paused`) is untouched — this route
@@ -66,21 +75,28 @@ export interface LocalPauseVars {
  * where a fast second click would compute its flip off the pre-PATCH `local` value
  * and send the opposite of what the operator just asked for. `onSettled` rather than
  * `onSuccess` so pending survives a failed invalidation attempt too, not just a
- * successful one. Invalidates {@link runnerDashboardKey} — the read the panel's pause
- * state comes from — so the stale-toggle race stays closed.
+ * successful one. Invalidates the paused runner's {@link runnerDashboardKey} — the read
+ * the panel's pause state comes from — so the stale-toggle race stays closed, and the
+ * host's reads, whose runner rows and switcher show the brake.
  */
 export function injectLocalPauseMutation() {
   const queryClient = inject(QueryClient);
+  const runnerId = injectActiveRunner();
   return injectMutation(() => ({
-    mutationKey: localPauseMutationKey,
+    mutationKey: localPauseMutationKey(runnerId()),
     mutationFn: async (vars: LocalPauseVars): Promise<runnerApi.RunnerControlView> => {
-      const { data, error } = await runnerApi.patchRunnerApiRunnerPatch({
+      const { data, error } = await runnerApi.patchRunnerRunnersRunnerIdApiRunnerPatch({
+        path: { runner_id: vars.runnerId },
         body: { paused: vars.paused },
         throwOnError: false,
       });
       if (error) throw error;
       return data!;
     },
-    onSettled: () => queryClient.invalidateQueries({ queryKey: runnerDashboardKey }),
+    onSettled: (_data, _error, vars) =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: runnerDashboardKey(vars.runnerId) }),
+        queryClient.invalidateQueries({ queryKey: hostKey }),
+      ]),
   }));
 }

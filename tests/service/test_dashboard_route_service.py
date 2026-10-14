@@ -108,23 +108,21 @@ def test_dashboard_matches_the_individual_reads_over_a_real_running_daemon(tmp_p
             engine.dispose()
 
         with _runner_api(config):
-            client = httpx.Client(base_url=f"http://{config.host}:{config.port}", timeout=10.0)
+            client = httpx.Client(base_url=config.local_api_url, timeout=10.0)
             try:
                 dashboard = client.get("/api/dashboard")
                 assert dashboard.status_code == 200, dashboard.text
                 body = dashboard.json()
 
                 runner = client.get("/api/runner")
-                environments = client.get("/api/environments")
                 asks = client.get("/api/asks", params={"open": True})
                 escalations = client.get("/api/escalations")
                 takeovers = client.get("/api/takeovers")
                 facts = client.get("/api/facts")
-                for resp in (runner, environments, asks, escalations, takeovers, facts):
+                for resp in (runner, asks, escalations, takeovers, facts):
                     assert resp.status_code == 200, resp.text
 
                 assert body["runner"] == runner.json()
-                assert body["environments"] == environments.json()
                 assert body["asks"] == asks.json()
                 assert body["escalations"] == escalations.json()
                 assert body["takeovers"] == takeovers.json()
@@ -132,7 +130,6 @@ def test_dashboard_matches_the_individual_reads_over_a_real_running_daemon(tmp_p
 
                 # Sanity: this proves real, non-empty data round-tripped — not two empty
                 # bodies trivially equal to each other.
-                assert body["environments"]["items"], "no environments came back for real"
                 assert body["asks"]["items"], "no asks came back for real"
                 assert body["escalations"]["items"], "no escalations came back for real"
                 assert body["takeovers"]["items"], "no takeovers came back for real"
@@ -147,13 +144,12 @@ def test_dashboard_matches_the_individual_reads_over_a_real_running_daemon(tmp_p
             # A genuine hub outage (503 via the mock's own lever) — a second, distinct
             # real-HTTP failure mode than the "route not implemented" case above.
             assert hub.post("/_levers/unreachable", json={"remaining": 10_000}).status_code == 200
-            client2 = httpx.Client(base_url=f"http://{config.host}:{config.port}", timeout=10.0)
+            client2 = httpx.Client(base_url=config.local_api_url, timeout=10.0)
             try:
                 degraded = client2.get("/api/dashboard")
                 assert degraded.status_code == 200, degraded.text
                 degraded_body = degraded.json()
                 assert degraded_body["fleet_summary"] is None
-                assert degraded_body["environments"]["items"], "local sections must stay populated on a hub outage"
-                assert degraded_body["asks"]["items"]
+                assert degraded_body["asks"]["items"], "local sections must stay populated on a hub outage"
             finally:
                 client2.close()

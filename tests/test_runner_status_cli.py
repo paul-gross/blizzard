@@ -36,6 +36,7 @@ from blizzard.runner.subscriptions.credential_renewer import (
     RenewalOutcomeKind,
 )
 from tests.host_files import load_runner_config
+from tests.runner_client import runner_seams
 from tests.runner_fakes import SqlAlchemyRunnerStore, runner_store_errors
 from tests.runner_init_fakes import init_runner
 
@@ -90,14 +91,14 @@ def _serve_local_api(
     config = load_runner_config(root, port=0)
     app = build_hosted_app(config).app
     if refusing is not None:  # (store runner, token runner): the verdict the loop's check would hold
-        app.state.identity_verdict.record(
+        runner_seams(app).identity_verdict.record(
             IdentityState.MISMATCHED,
             store_runner_id=refusing[0],
             token_runner_id=refusing[1],
             checked_at=datetime(2026, 7, 16, 12, 0, tzinfo=UTC),
         )
     if not trace_status:
-        app.state.trace_status = None  # `GET /api/traces/status` then refuses with a 503
+        runner_seams(app).trace_status = None  # `GET /api/traces/status` then refuses with a 503
     sockets = Listeners.of(config).bound()
     tcp_url = f"http://{sockets[1].getsockname()[0]}:{sockets[1].getsockname()[1]}"
     server = uvicorn.Server(uvicorn.Config(app, log_level="warning"))
@@ -549,7 +550,8 @@ def test_status_prints_harness_health_under_a_no_acceptable_harness_escalation(
     paths = _record_daemon_paths(monkeypatch)
 
     with _serve_local_api(root) as (_, tcp_url):
-        health = httpx.get(f"{tcp_url}/api/harness-health").json()["items"]
+        (runner,) = httpx.get(f"{tcp_url}/api/host/runners").json()["items"]
+        health = httpx.get(f"{tcp_url}/runners/{runner['runner_id']}/api/harness-health").json()["items"]
         result = CliRunner().invoke(runner_group, ["status", "--dir", str(root)])
 
     assert result.exit_code == 0, result.output
@@ -655,3 +657,101 @@ def test_status_fails_on_any_runner_read_status_but_the_one_a_runnerless_host_an
     assert result.exit_code != 0
     assert str(answered) in result.output
     assert "serves no runner" not in result.output
+
+
+@pytest.mark.component
+def test_status_selects_a_host_of_ones_runner_by_name_by_id_or_unnamed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _init_runner(tmp_path)
+    _no_hub(monkeypatch)
+    with _serve_local_api(root) as (_, tcp_url):
+        (runner,) = httpx.get(f"{tcp_url}/api/host/runners").json()["items"]
+        results = [
+            CliRunner().invoke(runner_group, ["status", "--dir", str(root), *selector])
+            for selector in ([], ["--runner", runner["name"]], ["--runner", runner["runner_id"]])
+        ]
+
+    for result in results:
+        assert result.exit_code == 0, result.output
+    assert results[1].output == results[0].output == results[2].output
+
+
+@pytest.mark.component
+def test_an_unmatched_runner_fails_naming_the_hosts_runners(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    root = _init_runner(tmp_path)
+    _no_hub(monkeypatch)
+    with _serve_local_api(root) as (_, tcp_url):
+        (runner,) = httpx.get(f"{tcp_url}/api/host/runners").json()["items"]
+        result = CliRunner().invoke(runner_group, ["pause", "--dir", str(root), "--runner", "nope"])
+
+    assert result.exit_code != 0
+    assert "holds no runner 'nope'" in result.output
+    assert f"{runner['name']} ({runner['runner_id']}, serving)" in result.output
+
+
+def _host_of(items: list[dict[str, object]], monkeypatch: pytest.MonkeyPatch, paths: list[str]) -> None:
+    """Every verb reaches a mock host whose runner list is ``items`` and which answers any other call as runner ``beta``."""
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        paths.append(request.url.path)
+        if request.url.path == "/api/host/runners":
+            return httpx.Response(200, json={"items": items})
+        return httpx.Response(200, json={"runner_name": "beta"})
+
+    def reach(
+        cls: type[RunnerDaemon], verb: str, _dir: str, _url: str | None, _trace: object, runner: str | None = None
+    ) -> RunnerDaemon:
+        client = httpx.Client(transport=httpx.MockTransport(answer), base_url="http://host")
+        return RunnerDaemon(verb, client, "host", runner)
+
+    monkeypatch.setattr(RunnerDaemon, "reach", classmethod(reach))
+
+
+_TWO_RUNNERS: list[dict[str, object]] = [
+    {"runner_id": "rn_a", "name": "alpha", "state": "serving", "halted_reasons": []},
+    {"runner_id": "rn_b", "name": "beta", "state": "serving", "halted_reasons": []},
+]
+
+
+@pytest.mark.component
+def test_an_unnamed_runner_on_a_host_of_several_fails_naming_them(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    paths: list[str] = []
+    _host_of(_TWO_RUNNERS, monkeypatch, paths)
+
+    result = CliRunner().invoke(runner_group, ["requeue", "ch_1", "--dir", str(tmp_path)])
+
+    assert result.exit_code != 0
+    assert "holds several runners" in result.output and "--runner" in result.output
+    assert "alpha (rn_a, serving)" in result.output and "beta (rn_b, serving)" in result.output
+    assert paths == ["/api/host/runners"]
+
+
+@pytest.mark.component
+@pytest.mark.parametrize("selector", ["beta", "rn_b"])
+def test_a_named_runner_on_a_host_of_several_is_the_one_addressed(
+    selector: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    paths: list[str] = []
+    _host_of(_TWO_RUNNERS, monkeypatch, paths)
+
+    result = CliRunner().invoke(runner_group, ["start", "--dir", str(tmp_path), "--runner", selector])
+
+    assert result.exit_code == 0, result.output
+    assert paths == ["/api/host/runners", "/runners/rn_b/api/runner"]
+
+
+@pytest.mark.component
+def test_a_name_shared_by_two_runners_fails_naming_their_ids(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    paths: list[str] = []
+    twins = [{**item, "name": "alpha"} for item in _TWO_RUNNERS]
+    _host_of(twins, monkeypatch, paths)
+
+    result = CliRunner().invoke(runner_group, ["start", "--dir", str(tmp_path), "--runner", "alpha"])
+
+    assert result.exit_code != 0
+    assert "matches several runners" in result.output
+    assert "rn_a" in result.output and "rn_b" in result.output
+    assert paths == ["/api/host/runners"]

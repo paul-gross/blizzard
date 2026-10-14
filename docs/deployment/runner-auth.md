@@ -8,8 +8,9 @@ Every outbound runner-to-hub call — the reconciliation loop and the work-items
 from that token alone. A fleet call with no token, or with one the hub never issued, is refused with a `401` under every
 configuration: no runner joins without being added.
 
-A worker's lease token, which it presents to the runner's own API, also authorizes its `POST /v1/traces` span export,
-and under `harness_telemetry` its `POST /v1/metrics` and `POST /v1/logs` exports;
+A worker's lease token, which it presents to its runner's own API under `/runners/{runner_id}/` on the host, also
+authorizes its `POST /runners/{runner_id}/v1/traces` span export, and under `harness_telemetry` its `/v1/metrics` and
+`/v1/logs` exports under the same prefix;
 [tracing.md](./tracing.md#worker-spans) owns what the runner keeps from them.
 
 A runner reading back its own shipped transcript segments (`GET /api/fleet/chunks/{chunk_id}/transcript-segments`) is

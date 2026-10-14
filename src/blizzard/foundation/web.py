@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel, TypeAdapter
 from pydantic.json_schema import models_json_schema
 from starlette.exceptions import HTTPException
@@ -34,15 +34,22 @@ _PLACEHOLDER_HTML = """<!doctype html>
 
 
 class SpaStaticFiles(StaticFiles):
-    """StaticFiles that falls back to ``index.html`` for unmatched paths (SPA routing)."""
+    """StaticFiles that falls back to ``index.html`` for unmatched paths (SPA routing) — bar an unmatched API path,
+    which ``is_api_path`` names and which answers a JSON ``404``."""
+
+    def __init__(self, *, directory: str, is_api_path: Callable[[str], bool] | None = None) -> None:
+        super().__init__(directory=directory, html=True)
+        self._is_api_path = is_api_path
 
     async def get_response(self, path: str, scope: Any) -> Response:
         try:
             return await super().get_response(path, scope)
         except HTTPException as exc:
-            if exc.status_code == 404:
-                return await super().get_response("index.html", scope)
-            raise
+            if exc.status_code != 404:
+                raise
+            if self._is_api_path is not None and self._is_api_path(str(scope.get("path", ""))):
+                return JSONResponse({"detail": "Not Found"}, status_code=404)
+            return await super().get_response("index.html", scope)
 
 
 @collaborator
@@ -52,18 +59,20 @@ class Frontend:
 
     directory: Path
     app_name: str
+    #: The API paths the SPA fallback answers ``404`` for rather than the shell; ``None`` falls back on every path.
+    is_api_path: Callable[[str], bool] | None = None
 
     @classmethod
-    def embedded(cls, app: str, *, app_name: str) -> Frontend:
+    def embedded(cls, app: str, *, app_name: str, is_api_path: Callable[[str], bool] | None = None) -> Frontend:
         """The wheel-embedded bundle for ``app`` (``hub`` / ``runner``)."""
-        return cls(EmbeddedFrontend(app).directory, app_name)
+        return cls(EmbeddedFrontend(app).directory, app_name, is_api_path)
 
     def mount(self, app: FastAPI) -> None:
         """Serves a placeholder when ``index.html`` is absent, so the mount point is
         always live. Call **after** the API routers."""
         index = self.directory / "index.html"
         if index.exists():
-            app.mount("/", SpaStaticFiles(directory=str(self.directory), html=True), name="web")
+            app.mount("/", SpaStaticFiles(directory=str(self.directory), is_api_path=self.is_api_path), name="web")
             return
 
         placeholder = _PLACEHOLDER_HTML.format(app_name=self.app_name)

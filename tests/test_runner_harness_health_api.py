@@ -14,7 +14,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
-from fastapi.testclient import TestClient
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.runner.app import create_app
@@ -39,6 +38,7 @@ from blizzard.runner.harness.opencode.section import OpenCodeSection
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
 from tests.harness_sections import claude_code, opencode, sections
+from tests.runner_client import runner_client
 
 pytestmark = pytest.mark.component
 
@@ -94,7 +94,7 @@ def test_reports_missing_binary_for_an_unresolvable_configured_path(tmp_path: Pa
         selftest_results=None,
     )
     health.refresh(CLAUDE_CODE_HARNESS_ID, adapter=adapter, observed_version=adapter.observe_version())
-    client = TestClient(create_app(config, harnesses=harnesses, harness_health=health))
+    client = runner_client(create_app(config, harnesses=harnesses, harness_health=health))
 
     resp = client.get("/api/harness-health")
 
@@ -123,7 +123,7 @@ def test_reports_available_with_a_declared_degradation(tmp_path: Path, spawn_exe
         selftest_results=None,
     )
     health.refresh(CLAUDE_CODE_HARNESS_ID, adapter=adapter, observed_version=None)
-    client = TestClient(create_app(config, harnesses=harnesses, harness_health=health))
+    client = runner_client(create_app(config, harnesses=harnesses, harness_health=health))
 
     resp = client.get("/api/harness-health")
 
@@ -172,7 +172,7 @@ def test_a_misconfigured_opencode_corpus_degrades_only_opencode(tmp_path: Path, 
     )
     health.refresh(CLAUDE_CODE_HARNESS_ID, adapter=claude_adapter, observed_version=None)
     health.refresh(OPENCODE_HARNESS_ID, adapter=opencode_adapter, observed_version="1.18.25")
-    client = TestClient(create_app(config, harnesses=harnesses, harness_health=health))
+    client = runner_client(create_app(config, harnesses=harnesses, harness_health=health))
 
     resp = client.get("/api/harness-health")
 
@@ -215,7 +215,7 @@ def test_admitted_range_surfaces_per_binding(tmp_path: Path, spawn_executor: Exe
     )
     health.refresh(CLAUDE_CODE_HARNESS_ID, adapter=claude_adapter, observed_version=None)
     health.refresh(OPENCODE_HARNESS_ID, adapter=opencode_adapter, observed_version=None)
-    client = TestClient(create_app(config, harnesses=harnesses, harness_health=health))
+    client = runner_client(create_app(config, harnesses=harnesses, harness_health=health))
 
     resp = client.get("/api/harness-health")
 

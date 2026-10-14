@@ -18,26 +18,32 @@ from blizzard.foundation.runner_event_types import (
 from blizzard.wire.sse import SseFramePayload
 
 
-class LeaseChangedPayload(SseFramePayload):
+class RunnerScopedPayload(SseFramePayload):
+    """A frame about one runner's state, naming the runner it belongs to on the host's one stream."""
+
+    runner_id: str
+
+
+class LeaseChangedPayload(RunnerScopedPayload):
     lease_id: str
     chunk_id: str
     cause: LeaseChangeCause
 
 
-class AskChangedPayload(SseFramePayload):
+class AskChangedPayload(RunnerScopedPayload):
     lease_id: str
     chunk_id: str
     question_id: str
     cause: AskChangeCause
 
 
-class EscalationChangedPayload(SseFramePayload):
+class EscalationChangedPayload(RunnerScopedPayload):
     chunk_id: str
     cause: EscalationChangeCause
     lease_id: str | None = None
 
 
-class TakeoverChangedPayload(SseFramePayload):
+class TakeoverChangedPayload(RunnerScopedPayload):
     chunk_id: str
     takeover_id: str
     cause: TakeoverChangeCause
@@ -49,7 +55,7 @@ class EnvironmentChangedPayload(SseFramePayload):
     cause: EnvironmentChangeCause
 
 
-class FactChangedPayload(SseFramePayload):
+class FactChangedPayload(RunnerScopedPayload):
     """A hub-bound fact was enqueued or acked — mirrors the hub's own ``event-logged``
     shape: ``chunk_id``/``lease_id`` ride as a present ``null`` rather than omitted,
     since a runner-wide fact (e.g. a chunk-less ``event.recorded``) legitimately carries

@@ -10,7 +10,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
-from fastapi.testclient import TestClient
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.runner.app import create_app
@@ -18,6 +17,7 @@ from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.operator.requeue import RequeueService
+from tests.runner_client import runner_client
 from tests.runner_fakes import make_host_stores, make_store, make_stores
 
 _NOW = datetime(2026, 7, 17, 12, 0, 0, tzinfo=UTC)
@@ -60,7 +60,7 @@ def _seed_escalated_chunk(store) -> None:  # type: ignore[no-untyped-def]
 @pytest.mark.component
 def test_503_when_requeue_service_unwired(tmp_path: Path) -> None:
     config = RunnerConfig(root=tmp_path, db_url="sqlite://")
-    with TestClient(create_app(config)) as client:
+    with runner_client(create_app(config)) as client:
         assert client.post("/api/chunks/ch_1/requeues").status_code == 503
 
 
@@ -69,7 +69,7 @@ def test_requeue_over_an_escalated_chunk_returns_202(tmp_path: Path) -> None:
     app, store = _app_with_requeue(tmp_path)
     _seed_escalated_chunk(store)
 
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.post("/api/chunks/ch_1/requeues")
 
     assert resp.status_code == 202, resp.text
@@ -91,7 +91,7 @@ def test_requeue_while_a_takeover_is_open_is_409(tmp_path: Path) -> None:
         opened_at=_NOW,
     )
 
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.post("/api/chunks/ch_1/requeues")
 
     assert resp.status_code == 409, resp.text
@@ -114,7 +114,7 @@ def test_requeue_a_chunk_that_is_not_needs_human_is_409(tmp_path: Path) -> None:
         )
     )  # active, never closed — not needs_human
 
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.post("/api/chunks/ch_1/requeues")
 
     assert resp.status_code == 409, resp.text
@@ -128,7 +128,7 @@ def test_requeue_a_needs_human_chunk_holding_no_environment_is_409(tmp_path: Pat
     _seed_escalated_chunk(store)
     store.record_release(chunk_id="ch_1", environment_id="e1", released_at=_NOW)
 
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.post("/api/chunks/ch_1/requeues")
 
     assert resp.status_code == 409, resp.text
@@ -152,7 +152,7 @@ def test_requeue_after_an_ended_takeover_returns_202(tmp_path: Path) -> None:
     )
     store.record_takeover_end(takeover_id="tko_1", ended_at=_NOW)
 
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.post("/api/chunks/ch_1/requeues")
 
     assert resp.status_code == 202, resp.text

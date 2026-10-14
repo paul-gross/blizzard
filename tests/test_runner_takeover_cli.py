@@ -11,6 +11,7 @@ import shlex
 import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import click
 import httpx
@@ -92,15 +93,15 @@ def test_takeover_hands_the_resumed_session_a_worker_verb_that_reaches_the_runne
     assert store.active_lease("lease_1") is None  # the closed-lease shape the bug reproduced against
 
     reached: dict[str, httpx.Response] = {}
-    # `BLIZZARD_RUNNER_URL` is unreachable here (`port=0` ephemeral binding), so this reaches
-    # the daemon the same way the CLI's worker-verb commands do: over the UDS socket `--dir` names.
+    # `BLIZZARD_RUNNER_URL`'s host is unreachable here (`port=0` ephemeral binding), so this reaches the daemon over
+    # the UDS socket `--dir` names, at the runner prefix the forwarded URL carries.
     transport = httpx.HTTPTransport(uds=str(HostLayout(root).socket_path))
 
     def fake_call(command: str, shell: bool = False, cwd: str | None = None, env: dict[str, str] | None = None) -> int:
         assert env is not None
         with httpx.Client(transport=transport, base_url="http://runner", timeout=5.0) as client:
             reached["attachments"] = client.get(
-                f"/api/leases/{env['BLIZZARD_LEASE_ID']}/attachments",
+                f"{urlsplit(env['BLIZZARD_RUNNER_URL']).path}/api/leases/{env['BLIZZARD_LEASE_ID']}/attachments",
                 headers={"X-Blizzard-Lease-Token": env["BLIZZARD_LEASE_TOKEN"]},
             )
         return 0

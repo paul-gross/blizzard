@@ -12,7 +12,6 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
-from fastapi.testclient import TestClient
 
 from blizzard.runner.app import create_app
 from blizzard.runner.config import RunnerConfig
@@ -21,6 +20,7 @@ from blizzard.runner.leases.model import NewLease
 from blizzard.runner.transcripts.archived_repository import ArchivedTranscript
 from blizzard.runner.transcripts.repository import Transcript, Turn
 from blizzard.runner.transcripts.service import TranscriptService
+from tests.runner_client import runner_client
 from tests.runner_fakes import StaticTranscriptRepositoryResolver, make_host_stores, make_store, make_stores
 from tests.support import assert_all_timestamps_utc
 
@@ -93,7 +93,7 @@ def test_index_returns_the_chunks_segments(tmp_path: Path) -> None:
         spawned_at=_NOW,
     )
 
-    resp = TestClient(app).get("/api/chunks/ch_1/transcripts")
+    resp = runner_client(app).get("/api/chunks/ch_1/transcripts")
 
     assert resp.status_code == 200
     body = resp.json()
@@ -118,7 +118,7 @@ def test_index_is_empty_for_a_chunk_this_runner_never_held(tmp_path: Path) -> No
         spawned_at=_NOW,
     )
 
-    resp = TestClient(app).get("/api/chunks/ch_other/transcripts")
+    resp = runner_client(app).get("/api/chunks/ch_other/transcripts")
 
     assert resp.status_code == 200
     assert resp.json() == {"chunk_id": "ch_other", "segments": []}
@@ -149,7 +149,7 @@ def test_index_includes_every_segment_under_the_chunk_regardless_of_which_runner
         spawned_at=_NOW,
     )
 
-    resp = TestClient(app).get("/api/chunks/ch_1/transcripts")
+    resp = runner_client(app).get("/api/chunks/ch_1/transcripts")
 
     assert resp.status_code == 200
     node_ids = {entry["node_id"] for entry in resp.json()["segments"]}
@@ -182,7 +182,7 @@ def test_content_returns_turns_for_a_known_segment(tmp_path: Path) -> None:
     )
     [segment] = store.transcript_segments_for_chunk("ch_1")
 
-    resp = TestClient(app).get(f"/api/chunks/ch_1/transcripts/{segment.segment_id}")
+    resp = runner_client(app).get(f"/api/chunks/ch_1/transcripts/{segment.segment_id}")
 
     assert resp.status_code == 200
     body = resp.json()
@@ -257,7 +257,7 @@ def test_content_windows_a_same_session_resume_to_each_segments_own_turns(tmp_pa
         created_at=_NOW,
     )
 
-    client = TestClient(app)
+    client = runner_client(app)
     gen1_body = client.get(f"/api/chunks/ch_1/transcripts/{gen1.segment_id}").json()
     gen2_body = client.get(f"/api/chunks/ch_1/transcripts/{gen2.segment_id}").json()
 
@@ -278,7 +278,7 @@ def test_content_reports_unavailability_rather_than_404_when_the_session_file_is
     )
     [segment] = store.transcript_segments_for_chunk("ch_1")
 
-    resp = TestClient(app).get(f"/api/chunks/ch_1/transcripts/{segment.segment_id}")
+    resp = runner_client(app).get(f"/api/chunks/ch_1/transcripts/{segment.segment_id}")
 
     assert resp.status_code == 200
     body = resp.json()
@@ -290,7 +290,7 @@ def test_content_reports_unavailability_rather_than_404_when_the_session_file_is
 def test_content_404s_for_an_unknown_segment_id(tmp_path: Path) -> None:
     app, _store = _app_with_segments(tmp_path)
 
-    resp = TestClient(app).get("/api/chunks/ch_1/transcripts/seg_nope")
+    resp = runner_client(app).get("/api/chunks/ch_1/transcripts/seg_nope")
 
     assert resp.status_code == 404
 
@@ -308,7 +308,7 @@ def test_content_404s_when_the_segment_belongs_to_a_different_chunk_in_the_url(t
     )
     [segment] = store.transcript_segments_for_chunk("ch_1")
 
-    resp = TestClient(app).get(f"/api/chunks/ch_other/transcripts/{segment.segment_id}")
+    resp = runner_client(app).get(f"/api/chunks/ch_other/transcripts/{segment.segment_id}")
 
     assert resp.status_code == 404
 
@@ -341,7 +341,7 @@ def test_a_segment_that_stopped_shipping_reads_truncated_in_the_index_and_its_co
     )
     [segment] = store.transcript_segments_for_chunk("ch_1")
     store.stop_transcript_segment_shipping(segment.segment_id, reason="chunk_budget_exceeded")
-    client = TestClient(app)
+    client = runner_client(app)
 
     [entry] = client.get("/api/chunks/ch_1/transcripts").json()["segments"]
     content = client.get(f"/api/chunks/ch_1/transcripts/{segment.segment_id}").json()

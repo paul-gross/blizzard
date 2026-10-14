@@ -29,6 +29,7 @@ from blizzard.runner.status.view import RunnerStatusService
 from blizzard.runner.store.errors import RunnerStoreConnections
 from blizzard.runner.store.internal.host_jti_cache_store import JtiCacheRepository
 from blizzard.runner.store.schema import metadata
+from tests.runner_client import runner_base_url
 from tests.runner_fakes import (
     SqlAlchemyRunnerStore,
     make_host_stores,
@@ -77,6 +78,12 @@ def _hub_client(*, oauth_enabled: bool, jwk: dict[str, str] | None = None) -> ht
         return httpx.Response(200, json={"keys": [jwk]})
 
     return httpx.Client(transport=httpx.MockTransport(handler), base_url="http://hub.example")
+
+
+def _runner_paths(client: TestClient, *paths: str) -> tuple[str, ...]:
+    """``paths`` under the prefix of the one runner ``client``'s app serves."""
+    prefix = runner_base_url(client.app, "")  # type: ignore[arg-type]
+    return tuple(prefix + path for path in paths)
 
 
 def _build_app(
@@ -161,9 +168,12 @@ def test_the_worker_hook_lane_stays_ungated_over_tcp_even_with_the_idp_surface_a
     an oauth-mode hub, since workers call it over TCP and cannot SSO-bounce."""
     _private_key, jwk = _keypair()
     client = _build_app(tmp_path, oauth_enabled=True, jwk=jwk)
-    assert client.post("/api/heartbeat", json={}).status_code != 401  # reaches the route, not the gate
-    assert client.post("/api/leases/l1/asks", json={"question": "?"}).status_code != 401
-    assert client.post("/api/leases/l1/attachments", json={"name": "n", "content": "c"}).status_code != 401
+    heartbeat, asks, attachments = _runner_paths(
+        client, "/api/heartbeat", "/api/leases/l1/asks", "/api/leases/l1/attachments"
+    )
+    assert client.post(heartbeat, json={}).status_code not in (401, 404)  # reaches the route, not the gate
+    assert client.post(asks, json={"question": "?"}).status_code != 401
+    assert client.post(attachments, json={"name": "n", "content": "c"}).status_code != 401
 
 
 def test_the_human_lane_api_is_gated_401_over_tcp_under_oauth(tmp_path: Path) -> None:
@@ -171,7 +181,10 @@ def test_the_human_lane_api_is_gated_401_over_tcp_under_oauth(tmp_path: Path) ->
     unauthenticated TCP request is refused with ``401``, not served."""
     _private_key, jwk = _keypair()
     client = _build_app(tmp_path, oauth_enabled=True, jwk=jwk)
-    for path in ("/api/facts", "/api/asks", "/api/environments", "/api/runner", "/api/leases"):
+    for path in (
+        *_runner_paths(client, "/api/facts", "/api/asks", "/api/runner", "/api/leases"),
+        "/api/host/environments",
+    ):
         assert client.get(path).status_code == 401, path
 
 
@@ -179,14 +192,17 @@ def test_the_human_lane_api_is_open_when_the_hub_runs_no_idp_surface(tmp_path: P
     """Under a ``none``-mode hub the runner's human surface is authless: the
     same reads reach their handler, never ``401``."""
     client = _build_app(tmp_path, oauth_enabled=False)
-    for path in ("/api/facts", "/api/asks", "/api/environments", "/api/runner", "/api/leases"):
+    for path in (
+        *_runner_paths(client, "/api/facts", "/api/asks", "/api/runner", "/api/leases"),
+        "/api/host/environments",
+    ):
         assert client.get(path).status_code != 401, path
 
 
 def test_login_redirects_to_the_hub_authorize_endpoint_with_this_runners_own_callback(tmp_path: Path) -> None:
     _private_key, jwk = _keypair()
     client = _build_app(tmp_path, oauth_enabled=True, jwk=jwk)
-    resp = client.get("/api/auth/login?return_to=/api/environments", follow_redirects=False)
+    resp = client.get("/api/auth/login?return_to=/api/host/environments", follow_redirects=False)
     assert resp.status_code == 307 or resp.status_code == 302
     location = urlparse(resp.headers["location"])
     assert location.path == "/api/auth/authorize"
@@ -306,7 +322,7 @@ def test_logout_clears_the_session_and_the_next_visit_bounces(tmp_path: Path) ->
 
     # The session is live: the served shell renders and the JSON API answers.
     assert client.get("/").status_code == 200
-    assert client.get("/api/environments").status_code != 401
+    assert client.get("/api/host/environments").status_code != 401
 
     logout_resp = client.post("/api/auth/logout")
     assert logout_resp.status_code == 204
@@ -319,7 +335,7 @@ def test_logout_clears_the_session_and_the_next_visit_bounces(tmp_path: Path) ->
     bounce = client.get("/", follow_redirects=False)
     assert bounce.status_code in (302, 307)
     assert bounce.headers["location"].startswith("/api/auth/login?return_to=")
-    assert client.get("/api/environments").status_code == 401
+    assert client.get("/api/host/environments").status_code == 401
 
 
 def test_logout_is_a_harmless_no_op_without_a_session(tmp_path: Path) -> None:
@@ -625,11 +641,11 @@ def test_two_runners_mint_differently_named_session_cookies_and_ignore_each_othe
     cookie_a = next(c.value for c in client_a.cookies.jar if c.name == _NAMES.session)
     # Runner B ignores A's cookie, even replayed under A's name.
     client_b.cookies.set(_NAMES.session, cookie_a)
-    assert client_b.get("/api/environments").status_code == 401
+    assert client_b.get("/api/host/environments").status_code == 401
     # Nor does A's session value authenticate when presented under B's name.
     client_b.cookies.clear()
     client_b.cookies.set(names_b.session, cookie_a)
-    assert client_b.get("/api/environments").status_code == 401
+    assert client_b.get("/api/host/environments").status_code == 401
 
 
 def test_two_same_host_runners_sharing_a_name_stay_signed_in_through_one_cookie_jar(tmp_path: Path) -> None:
@@ -650,13 +666,13 @@ def test_two_same_host_runners_sharing_a_name_stay_signed_in_through_one_cookie_
         client.cookies.clear()
         for name, value in jar.items():
             client.cookies.set(name, value)
-    assert [client.get("/api/environments").status_code for client in clients] == [200, 200]
+    assert [client.get("/api/host/environments").status_code for client in clients] == [200, 200]
 
 
 def test_before_its_first_registration_a_runner_reads_no_session_and_sign_in_waits(tmp_path: Path) -> None:
     _private_key, jwk = _keypair()
     client = _build_app(tmp_path, oauth_enabled=True, jwk=jwk, registered=False)
     client.cookies.set(_NAMES.session, "any")
-    assert client.get("/api/environments").status_code == 401
+    assert client.get("/api/host/environments").status_code == 401
     assert client.get("/api/auth/login", follow_redirects=False).status_code == 503
     assert client.post("/api/auth/logout").status_code == 204

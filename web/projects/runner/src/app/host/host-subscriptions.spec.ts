@@ -5,55 +5,37 @@ import { runnerClient, type runnerApi } from 'fleet';
 import { type RequestClientStub, settle, stubRequestClient } from 'fleet/testing';
 import { vi } from 'vitest';
 
-import { LocalSubscriptions } from './app-subscriptions';
+import { HostSubscriptions } from './host-subscriptions';
 
 let stub: RequestClientStub | undefined;
 
 afterEach(() => stub?.restore());
 
-/** A full `DashboardView` body, `subscriptions.items` set to `subscriptions` and every
- * other section its empty default — `LocalSubscriptions` reads off the shared
- * `/api/dashboard` poll, not a `/api/subscriptions` route of its own. */
-function dashboardBody(subscriptions: readonly runnerApi.SubscriptionView[]): runnerApi.DashboardView {
-  return {
-    runner: {
-      runner_id: 'runner-local',
-      workspace_id: 'workspace-local',
-      pause: { local: false, hub: false, effective: false },
-      capacities: { max_agents: 4, used: 0, free: 4 },
-      hub: { endpoint: 'http://127.0.0.1:8421', reachable: true, last_contact_at: null, buffer_depth: 0 },
-      last_tick_at: null,
-    },
-    environments: { items: [] },
-    asks: { items: [] },
-    escalations: { items: [] },
-    takeovers: { items: [] },
-    fleet_summary: null,
-    facts: { items: [] },
-    harness_health: { items: [] },
-    subscriptions: { items: [...subscriptions] },
-  };
-}
+/** The host's runner list the spender names resolve against. */
+const RUNNERS = { items: [{ runner_id: 'rn_1', name: 'r-claude', state: 'serving' }] };
 
 async function render(
-  subscriptions: readonly runnerApi.SubscriptionView[],
-): Promise<{ el: HTMLElement; fixture: ComponentFixture<LocalSubscriptions> }> {
-  stub = stubRequestClient(runnerClient, (method, path) =>
-    method === 'GET' && path === '/api/dashboard' ? dashboardBody(subscriptions) : {},
-  );
+  subscriptions: readonly runnerApi.HostSubscriptionView[],
+): Promise<{ el: HTMLElement; fixture: ComponentFixture<HostSubscriptions> }> {
+  stub = stubRequestClient(runnerClient, (method, path) => {
+    if (method !== 'GET') return {};
+    if (path === '/api/host/subscriptions') return { items: [...subscriptions] };
+    if (path === '/api/host/runners') return RUNNERS;
+    return {};
+  });
   await TestBed.configureTestingModule({
-    imports: [LocalSubscriptions],
+    imports: [HostSubscriptions],
     providers: [
       provideZonelessChangeDetection(),
       provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
     ],
   }).compileComponents();
-  const fixture = TestBed.createComponent(LocalSubscriptions);
+  const fixture = TestBed.createComponent(HostSubscriptions);
   await settle(fixture);
   return { el: fixture.nativeElement as HTMLElement, fixture };
 }
 
-const NEVER_SAMPLED: runnerApi.SubscriptionView = {
+const NEVER_SAMPLED: runnerApi.HostSubscriptionView = {
   slug: 'anthropic',
   name: 'Anthropic',
   provider: 'anthropic',
@@ -62,7 +44,7 @@ const NEVER_SAMPLED: runnerApi.SubscriptionView = {
   miss_reason: null,
 };
 
-const OK: runnerApi.SubscriptionView = {
+const OK: runnerApi.HostSubscriptionView = {
   slug: 'anthropic',
   name: 'Anthropic',
   provider: 'anthropic',
@@ -71,7 +53,7 @@ const OK: runnerApi.SubscriptionView = {
   miss_reason: null,
 };
 
-const MISS: runnerApi.SubscriptionView = {
+const MISS: runnerApi.HostSubscriptionView = {
   slug: 'codex',
   name: 'Codex',
   provider: 'openai',
@@ -80,7 +62,7 @@ const MISS: runnerApi.SubscriptionView = {
   miss_reason: 'credential_lapsed',
 };
 
-const RENEWED: runnerApi.SubscriptionView = {
+const RENEWED: runnerApi.HostSubscriptionView = {
   slug: 'codex',
   name: 'Codex',
   provider: 'openai',
@@ -92,7 +74,15 @@ const RENEWED: runnerApi.SubscriptionView = {
   renewal_failure_reason: null,
 };
 
-describe('LocalSubscriptions', () => {
+describe('HostSubscriptions', () => {
+  it('names the runners spending a subscription', async () => {
+    const { el } = await render([{ ...OK, spenders: ['rn_1', 'rn_9'] }]);
+
+    expect(el.querySelector('[data-testid="subscription-pace-group-spenders"]')?.textContent?.trim()).toBe(
+      'spent by r-claude, rn_9',
+    );
+  });
+
   it('renders a never-sampled subscription', async () => {
     const { el } = await render([NEVER_SAMPLED]);
 

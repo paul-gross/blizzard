@@ -952,6 +952,18 @@
           "type": "text"
         },
         {
+          "help": "The host's runner to address, by name or id; may be omitted on a host of one runner.",
+          "hidden": false,
+          "kind": "option",
+          "name": "runner",
+          "opts": [
+            "--runner"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "type": "text"
+        },
+        {
           "help": "Who is pausing (recorded on the fact).",
           "hidden": false,
           "kind": "option",
@@ -1176,6 +1188,18 @@
           "required": false,
           "secondary_opts": [],
           "type": "text"
+        },
+        {
+          "help": "The host's runner to address, by name or id; may be omitted on a host of one runner.",
+          "hidden": false,
+          "kind": "option",
+          "name": "runner",
+          "opts": [
+            "--runner"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "type": "text"
         }
       ],
       "path": "runner requeue",
@@ -1232,6 +1256,18 @@
           "required": false,
           "secondary_opts": [],
           "type": "text"
+        },
+        {
+          "help": "The host's runner to address, by name or id; may be omitted on a host of one runner.",
+          "hidden": false,
+          "kind": "option",
+          "name": "runner",
+          "opts": [
+            "--runner"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "type": "text"
         }
       ],
       "path": "runner selftest",
@@ -1265,6 +1301,18 @@
           "name": "runner_url",
           "opts": [
             "--runner-url"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "type": "text"
+        },
+        {
+          "help": "The host's runner to address, by name or id; may be omitted on a host of one runner.",
+          "hidden": false,
+          "kind": "option",
+          "name": "runner",
+          "opts": [
+            "--runner"
           ],
           "required": false,
           "secondary_opts": [],
@@ -1308,6 +1356,18 @@
           "name": "runner_url",
           "opts": [
             "--runner-url"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "type": "text"
+        },
+        {
+          "help": "The host's runner to address, by name or id; may be omitted on a host of one runner.",
+          "hidden": false,
+          "kind": "option",
+          "name": "runner",
+          "opts": [
+            "--runner"
           ],
           "required": false,
           "secondary_opts": [],
@@ -1400,6 +1460,18 @@
           "name": "runner_url",
           "opts": [
             "--runner-url"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "type": "text"
+        },
+        {
+          "help": "The host's runner to address, by name or id; may be omitted on a host of one runner.",
+          "hidden": false,
+          "kind": "option",
+          "name": "runner",
+          "opts": [
+            "--runner"
           ],
           "required": false,
           "secondary_opts": [],
@@ -1504,6 +1576,18 @@
               "required": false,
               "secondary_opts": [],
               "type": "text"
+            },
+            {
+              "help": "The host's runner to address, by name or id; may be omitted on a host of one runner.",
+              "hidden": false,
+              "kind": "option",
+              "name": "runner",
+              "opts": [
+                "--runner"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
             }
           ],
           "path": "runner traces replay",
@@ -1543,6 +1627,18 @@
               "name": "runner_url",
               "opts": [
                 "--runner-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "The host's runner to address, by name or id; may be omitted on a host of one runner.",
+              "hidden": false,
+              "kind": "option",
+              "name": "runner",
+              "opts": [
+                "--runner"
               ],
               "required": false,
               "secondary_opts": [],

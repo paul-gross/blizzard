@@ -60,7 +60,6 @@ function dashboard(facts: {
         question: 'Which branch?',
       })),
     },
-    environments: { items: [] },
     escalations: { items: facts.escalations ?? [] },
     facts: { items: [] },
     fleet_summary: null,
@@ -73,7 +72,6 @@ function dashboard(facts: {
       hub: { endpoint: 'http://127.0.0.1:8421', reachable: true, last_contact_at: null, buffer_depth: 0 },
       last_tick_at: null,
     },
-    subscriptions: { items: [] },
     takeovers: {
       items: (facts.takeoverChunkIds ?? []).map((chunkId, i) => ({
         takeover_id: `tk_${i}`,

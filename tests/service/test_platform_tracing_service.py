@@ -211,8 +211,9 @@ def test_a_worker_span_posted_over_tcp_and_the_socket_reaches_the_real_exporter(
             )
             store.record_lease_token("lease_svc", TokenHash(token).hex, now)
             body = _cli_export(trace_id(StepKey.attempt("ch_svc", 1)))
-            assert tcp.post("/v1/traces", content=body, headers=headers).status_code == 200
-            assert uds.post("/v1/traces", content=body, headers=headers).status_code == 200
+            traces = f"/runners/{config.runner_id}/v1/traces"
+            assert tcp.post(traces, content=body, headers=headers).status_code == 200
+            assert uds.post(traces, content=body, headers=headers).status_code == 200
         finally:
             tcp.close()
             uds.close()
@@ -268,7 +269,10 @@ def test_claude_code_metrics_and_logs_posted_over_tcp_and_the_socket_reach_the_r
             )
             store.record_lease_token("lease_svc", TokenHash(token).hex, now)
             for client in (tcp, uds):
-                for path, signal in (("/v1/metrics", "metrics"), ("/v1/logs", "logs")):
+                for path, signal in (
+                    (f"/runners/{config.runner_id}/v1/metrics", "metrics"),
+                    (f"/runners/{config.runner_id}/v1/logs", "logs"),
+                ):
                     for content_type, body in (
                         ("application/x-protobuf", claude_code_telemetry.protobuf_body(signal)),
                         ("application/json", claude_code_telemetry.json_body(signal)),

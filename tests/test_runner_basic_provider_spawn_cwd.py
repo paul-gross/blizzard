@@ -10,7 +10,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
-from fastapi.testclient import TestClient
 
 from blizzard.runner.app import build_hosted_app
 from blizzard.runner.composition import build_runner_process
@@ -22,6 +21,7 @@ from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.loop_wiring import LoopWiring
+from tests.runner_client import runner_client, runner_seams
 from tests.runner_fakes import FIXTURE_RUNNER_ID, FakeHub, make_store, migrated_store_at
 
 _NOW = datetime(2026, 7, 17, 12, 0, 0, tzinfo=UTC)
@@ -45,7 +45,7 @@ def test_basic_takeover_escalation_and_transcript_resolve_to_the_environment_wor
     graph = build_runner_process(config, events=EventBroker(), runner_id=FIXTURE_RUNNER_ID)
     hosted = build_hosted_app(config, process_graph=graph)
     try:
-        ctx = LoopWiring(config, "", "", graph.events).context(FakeHub(), graph)
+        ctx = LoopWiring(config, "", "", graph.host.events).context(FakeHub(), graph)
         try:
             for lease_id, chunk_id in (("lease_1", "ch_1"), ("lease_2", "ch_2")):
                 store.record_lease(
@@ -78,7 +78,7 @@ def test_basic_takeover_escalation_and_transcript_resolve_to_the_environment_wor
             loop_cwd = SpawnCwd.of_session(ctx.config.workspace_root, workdir)
             assert loop_cwd == workdir
 
-            with TestClient(hosted.app) as client:
+            with runner_client(hosted.app) as client:
                 takeover = client.post("/api/chunks/ch_1/takeovers", json={})
                 escalations = client.get("/api/escalations")
             assert takeover.status_code == 201, takeover.text
@@ -86,7 +86,7 @@ def test_basic_takeover_escalation_and_transcript_resolve_to_the_environment_wor
             (escalation,) = escalations.json()["items"]
             assert escalation["resume_command"].startswith(f"cd {workdir} && ")
 
-            assert hosted.app.state.transcripts._spawn_cwd("ch_1") == workdir
+            assert runner_seams(hosted.app).transcripts._spawn_cwd("ch_1") == workdir
         finally:
             ctx.usage_http_client.close()
     finally:

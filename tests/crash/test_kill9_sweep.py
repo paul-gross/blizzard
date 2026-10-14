@@ -48,6 +48,7 @@ from tests.crash.support import (
     REPO_NAME,
     RUNNER_ENV,
     CrashEnv,
+    await_host,
     await_http,
     build_script,
     checks_graph_yaml,
@@ -62,6 +63,7 @@ from tests.crash.support import (
     opencode_build_script,
     opencode_graph_yaml,
     pre_declare_build_script,
+    runner_api,
     sigint_trap_hang_script,
     start_hub,
     start_runner,
@@ -763,10 +765,10 @@ def test_kill9_at_attach_crash_point(crash_env: CrashEnv, tmp_path: Path, point:
     store.record_park(lease_id="lease_attach", chunk_id="ch_attach", question_id="q_park", parked_at=_ATTACH_NOW)
     engine.dispose()
 
-    runner = httpx.Client(base_url=f"http://127.0.0.1:{runner_port}", timeout=30.0)
+    runner = runner_api(runner_dir, runner_port)
     runner_proc = start_runner(runner_dir, crash_point=point)
     try:
-        await_http(runner, "/api/health", proc=runner_proc)
+        await_host(runner_port, runner_proc)
 
         # The runner records the attachment durably, then self-SIGKILLs before the response —
         # the client sees the killed connection, never a 200.
@@ -810,7 +812,7 @@ def test_kill9_at_attach_crash_point(crash_env: CrashEnv, tmp_path: Path, point:
 
         # Restart the runner UNARMED; the attachment is still readable against the same store.
         runner_proc = start_runner(runner_dir, crash_point=None)
-        await_http(runner, "/api/health", proc=runner_proc)
+        await_host(runner_port, runner_proc)
         engine3 = create_engine_from_url(db_url)
         try:
             assert SqlAlchemyRunnerStore(engine3, runner_store_errors()).attachments_for_lease("lease_attach") == {
@@ -898,10 +900,10 @@ def test_kill9_at_declare_commit_crash_point(crash_env: CrashEnv, tmp_path: Path
     )
     engine.dispose()
 
-    runner = httpx.Client(base_url=f"http://127.0.0.1:{runner_port}", timeout=30.0)
+    runner = runner_api(runner_dir, runner_port)
     runner_proc = start_runner(runner_dir, crash_point=point)
     try:
-        await_http(runner, "/api/health", proc=runner_proc)
+        await_host(runner_port, runner_proc)
 
         # The runner records the declaration durably, then self-SIGKILLs before the
         # response — the client sees the killed connection, never a 200.
@@ -956,7 +958,7 @@ def test_kill9_at_declare_commit_crash_point(crash_env: CrashEnv, tmp_path: Path
 
         # Restart the runner UNARMED; the declaration is still readable against the same store.
         runner_proc = start_runner(runner_dir, crash_point=None)
-        await_http(runner, "/api/health", proc=runner_proc)
+        await_host(runner_port, runner_proc)
         engine3 = create_engine_from_url(db_url)
         try:
             declarations = SqlAlchemyRunnerStore(engine3, runner_store_errors()).git_commit_declarations_for_lease(
@@ -2270,7 +2272,7 @@ def test_kill9_at_usage_limit_crash_point(crash_env: CrashEnv, tmp_path: Path, p
     hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=None)
     runner_proc = None
     hub = httpx.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
-    runner = httpx.Client(base_url=f"http://127.0.0.1:{runner_port}", timeout=30.0)
+    runner: httpx.Client | None = None
     try:
         await_http(hub, "/api/health", proc=hub_proc)
         if is_judge:
@@ -2316,7 +2318,8 @@ def test_kill9_at_usage_limit_crash_point(crash_env: CrashEnv, tmp_path: Path, p
         # This is the runner's own LOCAL brake, not a hub-side per-chunk pause — the hub still
         # sees the chunk as running, unlike the operator pause-park scenario's `"paused"`.
         assert hub.get(f"/api/chunks/{chunk_id}").json()["status"] == "running"
-        await_http(runner, "/api/health", proc=runner_proc)
+        await_host(runner_port, runner_proc)
+        runner = runner_api(runner_dir, runner_port)
         view = runner.get("/api/runner").json()
         assert view["pause"]["local"] is True, "the local brake was not durably engaged"
         _assert_invariants(
@@ -2340,7 +2343,8 @@ def test_kill9_at_usage_limit_crash_point(crash_env: CrashEnv, tmp_path: Path, p
         assert len(commits) == 1, f"{landed_file} landed {len(commits)} times on bare main:\n{tree}"
     finally:
         hub.close()
-        runner.close()
+        if runner is not None:
+            runner.close()
         terminate(runner_proc)
         terminate(hub_proc)
 

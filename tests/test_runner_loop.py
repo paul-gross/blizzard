@@ -2204,7 +2204,7 @@ def test_resume_with_unchanged_prose_elides_and_keeps_eliding(tmp_path):  # type
 
 @pytest.mark.component
 def test_resume_after_a_live_workspace_prompt_replace_announces_the_new_prose(tmp_path):  # type: ignore[no-untyped-def]
-    """Scenario 3 — the correctness half of the issue. `PUT /api/workspace-prompt` between
+    """Scenario 3 — the correctness half of the issue. `PUT /api/host/workspaces/{id}/prompt` between
     two spawns of one session: the replacement reaches the worker announced, not disguised
     as the block it was handed a spawn ago."""
     store = _store(tmp_path)
@@ -3876,7 +3876,7 @@ def test_spawn_prefixes_static_workspace_prompt_and_sets_workspace_root(tmp_path
 
 @pytest.mark.unit
 def test_spawn_reflects_runtime_prompt_override_with_no_restart(tmp_path):  # type: ignore[no-untyped-def]
-    """A store override (the PUT /api/workspace-prompt write) wins over static at the next spawn."""
+    """A store override (the PUT /api/host/workspaces/{id}/prompt write) wins over static at the next spawn."""
     store = _store(tmp_path)
     # Simulate the local-API replace landing before this spawn.
     store.set_workspace_prompt("ws1", prompt="OVERRIDDEN", at=datetime(2026, 7, 13, tzinfo=UTC))

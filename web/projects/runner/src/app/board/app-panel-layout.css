@@ -51,11 +51,10 @@
   min-height: 0;
   flex: 1.15;
 }
-/* The mock's split weights: leases over envs 60/40; chunks under detail 1:1.15. */
+/* The mock's split weights: chunks under detail 1:1.15. */
 fleet-kit-panel.leases-panel {
-  flex: 1.5;
+  flex: 1;
 }
-fleet-kit-panel.envs-panel,
 fleet-kit-panel.chunks-panel,
 fleet-kit-panel.asks-panel {
   flex: 1;

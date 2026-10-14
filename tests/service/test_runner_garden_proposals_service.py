@@ -59,7 +59,7 @@ def test_a_workers_garden_proposals_read_proxies_through_to_the_mock_hubs_bucket
         config = dataclasses.replace(config, host="127.0.0.1", port=_free_port())
 
         with _runner_api(config):
-            runner_client = httpx.Client(base_url=f"http://{config.host}:{config.port}", timeout=10.0)
+            runner_client = httpx.Client(base_url=config.local_api_url, timeout=10.0)
             try:
                 lease_id = _mint_lease(config, fenced, runner_client, chunk_id)
                 worker = _worker_credential(config, lease_id)
@@ -105,7 +105,7 @@ def test_a_workers_state_flag_reaches_the_mock_hubs_closed_bucket(tmp_path: Path
         config = dataclasses.replace(config, host="127.0.0.1", port=_free_port())
 
         with _runner_api(config):
-            runner_client = httpx.Client(base_url=f"http://{config.host}:{config.port}", timeout=10.0)
+            runner_client = httpx.Client(base_url=config.local_api_url, timeout=10.0)
             try:
                 lease_id = _mint_lease(config, fenced, runner_client, chunk_id)
                 worker = _worker_credential(config, lease_id)
@@ -138,7 +138,7 @@ def test_a_leases_chunk_with_no_run_context_is_a_legible_refusal_not_an_empty_li
         config = dataclasses.replace(config, host="127.0.0.1", port=_free_port())
 
         with _runner_api(config):
-            runner_client = httpx.Client(base_url=f"http://{config.host}:{config.port}", timeout=10.0)
+            runner_client = httpx.Client(base_url=config.local_api_url, timeout=10.0)
             try:
                 lease_id = _mint_lease(config, fenced, runner_client, chunk_id)
                 worker = _worker_credential(config, lease_id)

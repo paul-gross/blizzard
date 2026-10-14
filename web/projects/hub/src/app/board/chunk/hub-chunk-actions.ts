@@ -1,5 +1,5 @@
 import { type Provider, computed, inject, signal } from '@angular/core';
-import { type AnswerQuestionEvent, type ChunkPageActions, type EditGraphEvent, type ResolveDecisionEvent, FLEET_CLOCK, errorMessage, hubClient, injectPendingMutationVariables, provideChunkPageDaemon } from 'fleet';
+import { type AnswerQuestionEvent, type ChunkPageActions, type DaemonTarget, type EditGraphEvent, type ResolveDecisionEvent, FLEET_CLOCK, errorMessage, hubClient, injectPendingMutationVariables, provideChunkPageDaemon } from 'fleet';
 import { type AnswerVars, injectAnswerQuestionMutation, injectResolveDecisionMutation, readAnswerFailure, readDecisionFailure } from '../chunks/human.mutations';
 import { answerQuestionMutationKey, chunkSetGraphMutationKey } from '../../core/mutation-keys';
 import { hasPermission, injectMeQuery } from '../../core/auth/me.query';
@@ -86,8 +86,19 @@ export function injectHubChunkActions(): ChunkPageActions {
   };
 }
 
-/** The hub's daemon for the shared chunk page — its own client and plane, and the
+/** The board view's own path segments — the chunk page links back there, and its chunk
+ * links sit under `/board/chunk`. */
+const BOARD_LINK_BASE: readonly string[] = ['/board'];
+
+/** The hub's own target for the shared chunk page's reads. */
+const HUB_TARGET: DaemonTarget = { plane: 'hub', client: hubClient };
+
+/** The hub's daemon for the shared chunk page — its own target and board, and the
  * operator-action port above. */
 export const HUB_CHUNK_PAGE_PROVIDERS: Provider[] = [
-  provideChunkPageDaemon({ client: hubClient, plane: 'hub', actions: injectHubChunkActions }),
+  provideChunkPageDaemon(() => ({
+    target: () => HUB_TARGET,
+    boardLinkBase: () => BOARD_LINK_BASE,
+    actions: injectHubChunkActions,
+  })),
 ];

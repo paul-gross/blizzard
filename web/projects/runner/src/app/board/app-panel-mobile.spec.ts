@@ -7,6 +7,7 @@ import { type RequestClientStub, settle, stubRequestClient } from 'fleet/testing
 
 import { LocalPanelMobile } from './app-panel-mobile';
 import type { MachineChunkRow } from './app-panel.model';
+import { provideActiveRunner } from '../core/active-runner';
 
 const LEASE = (overrides: Partial<runnerApi.LeaseView> = {}): runnerApi.LeaseView => ({
   lease_id: 'lease_01KXKVVF1J3D6H6VYZ3XYNZPRR',
@@ -35,6 +36,7 @@ async function render(overrides: Record<string, unknown> = {}) {
     imports: [LocalPanelMobile],
     providers: [
       provideZonelessChangeDetection(),
+      provideActiveRunner('rn_1'),
       // LocalPanelMobile renders `ChunkCard` and `LocalAsks`/`LocalInfo`, all of
       // whose own reads need a TanStack Query context to construct at all.
       provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
@@ -67,7 +69,7 @@ describe('LocalPanelMobile', () => {
 
   afterEach(() => stub.restore());
 
-  it('stacks the five sections in attention order — info, agents, chunks, asks, subscriptions', async () => {
+  it('stacks the four sections in attention order — info, agents, chunks, asks', async () => {
     const fixture = await render();
     const el = fixture.nativeElement as HTMLElement;
 
@@ -76,7 +78,6 @@ describe('LocalPanelMobile', () => {
       'mobile-agents-pane',
       'mobile-chunks-pane',
       'mobile-asks-pane',
-      'mobile-subscriptions-pane',
     ].map((testid) => el.querySelector(`[data-testid="${testid}"]`));
     expect(panes.every((pane) => pane !== null)).toBe(true);
 
@@ -88,7 +89,6 @@ describe('LocalPanelMobile', () => {
       'mobile-agents-pane',
       'mobile-chunks-pane',
       'mobile-asks-pane',
-      'mobile-subscriptions-pane',
     ]);
   });
 

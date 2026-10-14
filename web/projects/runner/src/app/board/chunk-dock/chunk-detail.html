@@ -3,6 +3,7 @@
     <app-machine-detail-header
       fleetKitPanelHeader
       [chunkId]="l.chunk_id"
+      [linkBase]="linkBase()"
       [workRefs]="workRefs()"
       [statusLabel]="status()?.label ?? null"
       [statusTone]="status()?.tone"

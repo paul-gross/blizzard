@@ -22,7 +22,8 @@ class _FakeRequest:
     """The minimal request surface ``events_stream`` reads (app.state, headers, query)."""
 
     def __init__(self, broker: EventBroker | None) -> None:
-        self.app = SimpleNamespace(state=SimpleNamespace(events=broker))
+        self.app = SimpleNamespace(state=SimpleNamespace(event_broker=broker))
+        self.state = SimpleNamespace()
         self.headers: dict[str, str] = {}
         self.query_params: dict[str, str] = {}
 
@@ -44,7 +45,7 @@ async def test_stream_endpoint_returns_an_sse_response() -> None:
 
 async def test_stream_endpoint_degrades_cleanly_with_no_broker() -> None:
     """Every composer with no stream to feed (``blizzard runner
-    tick``, the store-free/export app) leaves ``app.state.events`` absent — the route
+    tick``, the store-free/export app) leaves ``app.state.event_broker`` absent — the route
     still opens cleanly rather than 500ing."""
     response = await events_stream(_FakeRequest(None))  # type: ignore[arg-type]
     assert response.status_code == 200
@@ -75,4 +76,4 @@ def test_events_stream_excluded_from_openapi() -> None:
     assert "/api/events/stream" not in paths
     # A route this same schema *does* carry — the exclusion is deliberate, not an
     # export that lost its routes wholesale.
-    assert "/api/leases" in paths
+    assert "/runners/{runner_id}/api/leases" in paths

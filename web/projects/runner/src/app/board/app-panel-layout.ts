@@ -6,11 +6,9 @@ import { AgentRow } from '../machine/agent-row';
 import { MachineDetail } from './chunk-dock/chunk-detail';
 import type { MachineChunkStatus } from './chunk-list/chunk-status';
 import { ChunkRow } from './chunk-list/chunk-row';
-import { EnvList } from '../environments/env-list';
 import { LocalAsks } from '../asks/app-asks';
 import { LocalInfo } from '../machine/app-info';
 import type { MachineChunkRow } from './app-panel.model';
-import { LocalSubscriptions } from '../status/app-subscriptions';
 
 /**
  * The runner's machine-local panel's layout half — shaped like
@@ -20,13 +18,13 @@ import { LocalSubscriptions } from '../status/app-subscriptions';
  *
  * - **Left (340px)** — liveness: the *active* leases (closed rows are history,
  *   not liveness — they live on the chunks list), each with a heartbeat
- *   freshness bar, over the held-environments rail, split 60/40.
+ *   freshness bar. The host's environments are the host page's, not this runner's.
  * - **Center (1fr)** — work: the chunks on this machine (one row per chunk,
  *   work-item-enriched, derived status in the hub board's colors) over the machine
  *   detail dock for the selected chunk's execution facts.
  * - **Right (330px)** — the machine's account of itself: the hub link
- *   (endpoint, reachability, last flush, buffer), the open local asks, and
- *   each declared subscription's own newest sampling attempt.
+ *   (endpoint, reachability, last flush, buffer) and the open local asks. The
+ *   host's subscriptions are the host page's.
  *
  * Presentational only: it renders exactly the leases/chunks/selection it is
  * handed and emits `selectLease`/`selectChunk`; the derived-status fold and
@@ -43,14 +41,12 @@ import { LocalSubscriptions } from '../status/app-subscriptions';
     AgentRow,
     MachineDetail,
     ChunkRow,
-    EnvList,
     KitAsyncState,
     KitCheckbox,
     KitPanel,
     KitPanelHeader,
     LocalAsks,
     LocalInfo,
-    LocalSubscriptions,
   ],
   templateUrl: './app-panel-layout.html',
   styleUrl: './app-panel-layout.css',

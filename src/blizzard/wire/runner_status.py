@@ -111,7 +111,7 @@ class RunnerStatusView(BaseModel):
 
 
 class EnvironmentView(BaseModel):
-    """One environment in the runner's configured pool — ``GET /api/environments``.
+    """One environment in a workspace's pool, as ``GET /api/host/environments`` lists it.
     ``chunk_id``/``held_since`` are present only while the environment
     is currently bound; an unused pool environment carries both as ``None``. ``held`` is the
     runner's own reading of whether a chunk holds it, so no client re-derives it."""
@@ -120,12 +120,6 @@ class EnvironmentView(BaseModel):
     chunk_id: str | None = None
     held_since: str | None = None
     held: bool = False
-
-
-class EnvironmentListResponse(BaseModel):
-    """Every environment in the runner's configured pool, held or free."""
-
-    items: list[EnvironmentView] = []
 
 
 class AskView(BaseModel):
@@ -238,8 +232,8 @@ class HarnessHealthListResponse(BaseModel):
 
 
 class SubscriptionView(BaseModel):
-    """One declared subscription's runner-local diagnostics, served by
-    ``GET /api/subscriptions``. The sampling fields are ``None`` until a first attempt, the
+    """One declared subscription's host-local diagnostics, served by
+    ``GET /api/host/subscriptions``. The sampling fields are ``None`` until a first attempt, the
     ``renewal_*`` fields until a first renewal; each ``*_reason`` is set only on a miss or failure."""
 
     slug: str
@@ -253,24 +247,16 @@ class SubscriptionView(BaseModel):
     renewal_failure_reason: RenewalFailureReason | None = None
 
 
-class SubscriptionListResponse(BaseModel):
-    """Every declared subscription's own newest sampling attempt."""
-
-    items: list[SubscriptionView] = []
-
-
 class DashboardView(BaseModel):
-    """``GET /api/dashboard`` — nine status reads composed into one response.
+    """``GET /runners/{runner_id}/api/dashboard`` — seven status reads composed into one response.
     ``fleet_summary`` alone is a hub pass-through and the only nullable section —
-    ``None`` on a hub failure or an unwired runner, while the eight local sections
-    still populate."""
+    ``None`` on a hub failure or an unwired runner, while the six local sections
+    still populate. The host's environments and subscriptions are its own reads, under ``/api/host``."""
 
     runner: RunnerStatusView
-    environments: EnvironmentListResponse
     asks: AskListResponse
     escalations: EscalationListResponse
     takeovers: OpenTakeoverListResponse
     facts: FactListResponse
     harness_health: HarnessHealthListResponse
-    subscriptions: SubscriptionListResponse
     fleet_summary: FleetSummaryView | None

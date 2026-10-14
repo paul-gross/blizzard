@@ -15,7 +15,7 @@ from structlog.testing import capture_logs
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.fact_kinds import USAGE_RECORDED
-from blizzard.runner.events.broker import EventBroker
+from blizzard.runner.events.broker import EventBroker, RunnerEventPublisher
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.usage import UsageKind, UsageSample
 from blizzard.runner.leases.model import Lease, NewLease
@@ -65,7 +65,9 @@ def _setup(tmp_path: Path) -> tuple[UsageRecorder, EventBroker, Lease]:
         spawned_at=_NOW,
     )
     events = EventBroker()
-    recorder = replace(make_usage_recorder(store, FixedClock(_NOW)), events=events)
+    recorder = replace(
+        make_usage_recorder(store, FixedClock(_NOW)), events=RunnerEventPublisher(events, FIXTURE_RUNNER_ID)
+    )
     lease = store.active_lease("lease_1")
     assert lease is not None
     return recorder, events, lease

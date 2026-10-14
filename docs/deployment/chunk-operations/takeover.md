@@ -5,9 +5,10 @@ terminal.
 
 ## Running the verb
 
-Run it as the service account, like every socket verb — [runner-doors.md](../runner-doors.md) owns that and the
-`--dir`/`--runner-url` transports. On a split deployment, run it on the runner's own host: the wrong host refuses with
-the not-held message even while the session is alive elsewhere.
+Run it as the service account, like every socket verb — [runner-doors.md](../runner-doors.md) owns that, the
+`--dir`/`--runner-url` transports, and `--runner`, which names the host's runner holding the chunk. On a split
+deployment, run it on the runner's own host: the wrong host refuses with the not-held message even while the session is
+alive elsewhere.
 
 Every refusal is a 409. `ChunkNotTakeable` when this runner does not hold the chunk, when no resumable session sits
 behind its most recent lease, or when a takeover is already open; `LiveWorkerConflict` when the chunk has a live worker

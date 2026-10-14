@@ -1,11 +1,13 @@
 {
   "asked": {
+    "runner_id": "rn_1",
     "lease_id": "ls_1",
     "chunk_id": "ch_1",
     "question_id": "qn_1",
     "cause": "asked"
   },
   "answered": {
+    "runner_id": "rn_1",
     "lease_id": "ls_1",
     "chunk_id": "ch_1",
     "question_id": "qn_1",

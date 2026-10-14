@@ -11,7 +11,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
-from fastapi.testclient import TestClient
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.tokens import TokenHash
@@ -27,6 +26,7 @@ from blizzard.runner.lifecycle.judgement.git_commit_declaration import (
     GitCommitDeclarationService,
 )
 from blizzard.runner.loop_wiring import LoopWiring
+from tests.runner_client import runner_client
 from tests.runner_fakes import (
     FIXTURE_RUNNER_ID,
     FakeHub,
@@ -75,7 +75,7 @@ def _seed_lease(store, **overrides: object) -> None:  # type: ignore[no-untyped-
 @pytest.mark.component
 def test_503_when_declaration_service_unwired(tmp_path: Path) -> None:
     config = RunnerConfig(root=tmp_path, db_url="sqlite://")
-    with TestClient(create_app(config)) as client:
+    with runner_client(create_app(config)) as client:
         resp = client.post("/api/leases/lease_1/git-commits", json=_BODY)
     assert resp.status_code == 503
 
@@ -88,7 +88,7 @@ def test_503_when_store_unwired(tmp_path: Path) -> None:
     # The service is wired, but ``runner_stores`` — the controller's own read-only
     # resolution seam — is not: the edge must still answer 503, not raise.
     app = create_app(config, git_commit_declarations=service)
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.post("/api/leases/lease_1/git-commits", json=_BODY)
     assert resp.status_code == 503
 
@@ -96,7 +96,7 @@ def test_503_when_store_unwired(tmp_path: Path) -> None:
 @pytest.mark.component
 def test_404_for_an_unknown_lease(tmp_path: Path) -> None:
     app, _store = _app_with_declarations(tmp_path)
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.post(
             "/api/leases/lease_ghost/git-commits", json=_BODY, headers={"X-Blizzard-Lease-Token": _TOKEN}
         )
@@ -107,7 +107,7 @@ def test_404_for_an_unknown_lease(tmp_path: Path) -> None:
 def test_403_for_a_missing_token(tmp_path: Path) -> None:
     app, store = _app_with_declarations(tmp_path)
     _seed_lease(store)
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.post("/api/leases/lease_1/git-commits", json=_BODY)
     assert resp.status_code == 403
     assert store.git_commit_declarations_for_lease("lease_1") == {}
@@ -117,7 +117,7 @@ def test_403_for_a_missing_token(tmp_path: Path) -> None:
 def test_403_for_a_wrong_token(tmp_path: Path) -> None:
     app, store = _app_with_declarations(tmp_path)
     _seed_lease(store)
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.post(
             "/api/leases/lease_1/git-commits", json=_BODY, headers={"X-Blizzard-Lease-Token": "not-the-real-token"}
         )
@@ -129,7 +129,7 @@ def test_403_for_a_wrong_token(tmp_path: Path) -> None:
 def test_200_records_the_declaration_with_the_dedicated_header(tmp_path: Path) -> None:
     app, store = _app_with_declarations(tmp_path)
     _seed_lease(store)
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.post("/api/leases/lease_1/git-commits", json=_BODY, headers={"X-Blizzard-Lease-Token": _TOKEN})
     assert resp.status_code == 200, resp.text
     assert resp.json() == {"recorded": True, "lease_id": "lease_1", "repo": "toy-api", "environment_id": "e1"}
@@ -146,7 +146,7 @@ def test_200_records_the_declaration_with_the_dedicated_header(tmp_path: Path) -
 def test_200_records_the_declaration_with_a_bearer_authorization_header(tmp_path: Path) -> None:
     app, store = _app_with_declarations(tmp_path)
     _seed_lease(store)
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.post("/api/leases/lease_1/git-commits", json=_BODY, headers={"Authorization": f"Bearer {_TOKEN}"})
     assert resp.status_code == 200, resp.text
     assert ("e1", "toy-api") in store.git_commit_declarations_for_lease("lease_1")
@@ -156,7 +156,7 @@ def test_200_records_the_declaration_with_a_bearer_authorization_header(tmp_path
 def test_re_declare_of_the_same_repo_overwrites_the_prior_declaration(tmp_path: Path) -> None:
     app, store = _app_with_declarations(tmp_path)
     _seed_lease(store)
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         first = client.post("/api/leases/lease_1/git-commits", json=_BODY, headers={"X-Blizzard-Lease-Token": _TOKEN})
         second_body = {**_BODY, "commit": "def456"}
         second = client.post(
@@ -175,7 +175,7 @@ def test_a_closed_lease_is_404_not_403(tmp_path: Path) -> None:
     app, store = _app_with_declarations(tmp_path)
     _seed_lease(store)
     store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="transitioned", closed_at=_NOW)
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.post("/api/leases/lease_1/git-commits", json=_BODY, headers={"X-Blizzard-Lease-Token": _TOKEN})
     assert resp.status_code == 404
 
@@ -200,7 +200,7 @@ def test_an_open_takeover_authorizes_a_closed_reference_lease(tmp_path: Path) ->
     )
     store.record_lease_token("lease_1", TokenHash(takeover_token).hex, _NOW)
 
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.post(
             "/api/leases/lease_1/git-commits", json=_BODY, headers={"X-Blizzard-Lease-Token": takeover_token}
         )
@@ -214,7 +214,7 @@ def test_400_for_a_repo_the_environment_does_not_hold(tmp_path: Path) -> None:
     detail names the repos the env does hold."""
     app, store = _app_with_declarations(tmp_path)
     _seed_lease(store)
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.post(
             "/api/leases/lease_1/git-commits",
             json={**_BODY, "repo": "not-a-repo"},
@@ -229,7 +229,7 @@ def test_400_for_a_repo_the_environment_does_not_hold(tmp_path: Path) -> None:
 def test_400_for_an_environment_the_chunk_does_not_hold(tmp_path: Path) -> None:
     app, store = _app_with_declarations(tmp_path)
     _seed_lease(store)
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.post(
             "/api/leases/lease_1/git-commits",
             json={**_BODY, "environment_id": "e9"},
@@ -255,7 +255,7 @@ def test_400_when_several_environments_are_held_and_none_is_named(tmp_path: Path
     _seed_lease(store)
     store.record_binding(chunk_id="ch_1", environment_id="e2", workdir="/ws/e2", bound_at=_NOW)
 
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         ambiguous = client.post(
             "/api/leases/lease_1/git-commits", json=_BODY, headers={"X-Blizzard-Lease-Token": _TOKEN}
         )
@@ -284,7 +284,7 @@ def test_the_same_repo_in_two_environments_is_two_declarations(tmp_path: Path) -
     _seed_lease(store)
     store.record_binding(chunk_id="ch_1", environment_id="e2", workdir="/ws/e2", bound_at=_NOW)
 
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         for env, commit in (("e1", "aaa111"), ("e2", "bbb222")):
             resp = client.post(
                 "/api/leases/lease_1/git-commits",
@@ -329,8 +329,8 @@ def test_hosted_winter_reacquire_updates_worker_declarations_on_the_shared_provi
             loop.provider.acquire("ch_1", 1, held_ids=[])
             _seed_lease(store)
             headers = {"X-Blizzard-Lease-Token": _TOKEN}
-            with TestClient(hosted.app) as client:
-                assert client.get("/api/health").status_code == 200
+            with runner_client(hosted.app) as client:
+                assert client.get("/api/runner").status_code == 200
                 old = client.post("/api/leases/lease_1/git-commits", json={**_BODY, "repo": "old"}, headers=headers)
                 assert old.status_code == 200, old.text
 
@@ -365,7 +365,7 @@ def test_409_once_the_leases_outcome_is_buffered(tmp_path: Path) -> None:
     store.enqueue_outbound(
         kind="completion.submitted", chunk_id="ch_1", lease_id="lease_1", payload="{}", created_at=_NOW
     )
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.post("/api/leases/lease_1/git-commits", json=_BODY, headers={"X-Blizzard-Lease-Token": _TOKEN})
     assert resp.status_code == 409, resp.text
     assert "lease lease_1's outcome is already buffered" in resp.json()["detail"]
@@ -389,7 +389,7 @@ def test_a_declaration_against_a_closed_takeover_lease_says_it_rides_no_completi
     )
     store.record_lease_token("lease_1", TokenHash(takeover_token).hex, _NOW)
 
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.post(
             "/api/leases/lease_1/git-commits", json=_BODY, headers={"X-Blizzard-Lease-Token": takeover_token}
         )

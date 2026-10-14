@@ -19,6 +19,7 @@ from pathlib import Path
 
 import httpx
 
+from blizzard.foundation.runner_paths import runner_prefix
 from blizzard.runner.config import RunnerConfig
 from blizzard.wire.work_source import WorkSourceDocument
 from tests.harness_sections import claude_code, opencode, sections
@@ -886,6 +887,18 @@ def write_runner_config(
     )
     write_host_file(config)
     return config
+
+
+def runner_api(runner_dir: Path, port: int) -> httpx.Client:
+    """A client addressing the runner ``runner_dir`` configures, under its prefix on the host at ``port``."""
+    prefix = runner_prefix(load_runner_config(runner_dir).served_id())
+    return httpx.Client(base_url=f"http://127.0.0.1:{port}{prefix}", timeout=30.0)
+
+
+def await_host(port: int, proc: subprocess.Popen[str]) -> None:
+    """Wait until the host at ``port`` answers its root health probe."""
+    with httpx.Client(base_url=f"http://127.0.0.1:{port}", timeout=30.0) as host:
+        await_http(host, "/api/health", proc=proc)
 
 
 def start_runner(

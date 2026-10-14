@@ -7,6 +7,7 @@ import { vi } from 'vitest';
 
 import { injectRunnerLogoutMutation, readRunnerSession } from './auth.query';
 import { SessionRecovery } from './session-recovery';
+import { provideActiveRunner } from '../active-runner';
 
 type Restore = () => void;
 
@@ -27,7 +28,7 @@ function unauthorized() {
  */
 function setUp(route: (method: string, path: string) => unknown) {
   TestBed.configureTestingModule({
-    providers: [provideZonelessChangeDetection(), provideTanStackQuery(new QueryClient())],
+    providers: [provideZonelessChangeDetection(), provideActiveRunner('rn_1'), provideTanStackQuery(new QueryClient())],
   });
   const recovery = TestBed.inject(SessionRecovery);
   const navigateSpy = vi
@@ -61,7 +62,7 @@ describe('SessionRecovery (issue #312)', () => {
     );
     restore = r;
 
-    await runnerApi.listLeasesApiLeasesGet({ throwOnError: false });
+    await runnerApi.listLeasesRunnersRunnerIdApiLeasesGet({ path: { runner_id: 'rn_1' }, throwOnError: false });
 
     expect(navigateSpy).toHaveBeenCalledTimes(1);
     expect(navigateSpy).toHaveBeenCalledWith(`/api/auth/login?return_to=${encodeURIComponent('/?chunk=ch_1')}`);
@@ -74,7 +75,7 @@ describe('SessionRecovery (issue #312)', () => {
     );
     restore = r;
 
-    await Promise.all(Array.from({ length: 10 }, () => runnerApi.listLeasesApiLeasesGet({ throwOnError: false })));
+    await Promise.all(Array.from({ length: 10 }, () => runnerApi.listLeasesRunnersRunnerIdApiLeasesGet({ path: { runner_id: 'rn_1' }, throwOnError: false })));
 
     expect(navigateSpy).toHaveBeenCalledTimes(1);
   });
@@ -113,7 +114,7 @@ describe('SessionRecovery (issue #312)', () => {
     );
     restore = r;
 
-    const result = await runnerApi.listLeasesApiLeasesGet({ throwOnError: false });
+    const result = await runnerApi.listLeasesRunnersRunnerIdApiLeasesGet({ path: { runner_id: 'rn_1' }, throwOnError: false });
 
     expect(navigateSpy).not.toHaveBeenCalled();
     expect(recovery.recovering()).toBe(false);
@@ -126,7 +127,7 @@ describe('SessionRecovery (issue #312)', () => {
     );
     restore = r;
 
-    const result = await runnerApi.listLeasesApiLeasesGet({ throwOnError: false });
+    const result = await runnerApi.listLeasesRunnersRunnerIdApiLeasesGet({ path: { runner_id: 'rn_1' }, throwOnError: false });
 
     expect(navigateSpy).not.toHaveBeenCalled();
     expect(recovery.recovering()).toBe(false);
@@ -136,12 +137,12 @@ describe('SessionRecovery (issue #312)', () => {
   it('acts on neither a 403 nor a success', async () => {
     const { navigateSpy, restore: r } = setUp((_method, path) => {
       if (path === '/api/auth/session') return { auth_enabled: true, username: null };
-      if (path === '/api/leases') return stubError(403, { detail: 'forbidden' });
+      if (path === '/runners/rn_1/api/leases') return stubError(403, { detail: 'forbidden' });
       return {};
     });
     restore = r;
 
-    await runnerApi.listLeasesApiLeasesGet({ throwOnError: false });
+    await runnerApi.listLeasesRunnersRunnerIdApiLeasesGet({ path: { runner_id: 'rn_1' }, throwOnError: false });
     await readRunnerSession();
 
     expect(navigateSpy).not.toHaveBeenCalled();
@@ -154,7 +155,7 @@ describe('SessionRecovery (issue #312)', () => {
     );
 
     // The initial attempt: mark set, one navigation.
-    await runnerApi.listLeasesApiLeasesGet({ throwOnError: false });
+    await runnerApi.listLeasesRunnersRunnerIdApiLeasesGet({ path: { runner_id: 'rn_1' }, throwOnError: false });
     expect(first.navigateSpy).toHaveBeenCalledTimes(1);
     first.restore();
 
@@ -174,7 +175,7 @@ describe('SessionRecovery (issue #312)', () => {
 
     // A further no-session 401: the mark still stands, so this sets `recovering`
     // rather than firing a second navigation.
-    await runnerApi.listLeasesApiLeasesGet({ throwOnError: false });
+    await runnerApi.listLeasesRunnersRunnerIdApiLeasesGet({ path: { runner_id: 'rn_1' }, throwOnError: false });
 
     expect(second.navigateSpy).not.toHaveBeenCalled();
     expect(second.recovery.recovering()).toBe(true);
@@ -188,7 +189,7 @@ describe('SessionRecovery (issue #312)', () => {
     );
     restore = r;
 
-    await runnerApi.listLeasesApiLeasesGet({ throwOnError: false });
+    await runnerApi.listLeasesRunnersRunnerIdApiLeasesGet({ path: { runner_id: 'rn_1' }, throwOnError: false });
     expect(navigateSpy).toHaveBeenCalledTimes(1);
 
     sessionBody = { auth_enabled: true, username: 'alice' };
@@ -198,14 +199,14 @@ describe('SessionRecovery (issue #312)', () => {
     // The mark itself is now clear too — proven by a fresh no-session 401 firing a
     // second, independent navigation rather than setting `recovering`.
     sessionBody = { auth_enabled: true, username: null };
-    await runnerApi.listLeasesApiLeasesGet({ throwOnError: false });
+    await runnerApi.listLeasesRunnersRunnerIdApiLeasesGet({ path: { runner_id: 'rn_1' }, throwOnError: false });
     expect(navigateSpy).toHaveBeenCalledTimes(2);
     expect(recovery.recovering()).toBe(false);
   });
 
   it('does not navigate on a 401 while a logout is in flight', async () => {
     TestBed.configureTestingModule({
-      providers: [provideZonelessChangeDetection(), provideTanStackQuery(new QueryClient())],
+      providers: [provideZonelessChangeDetection(), provideActiveRunner('rn_1'), provideTanStackQuery(new QueryClient())],
     });
     const recovery = TestBed.inject(SessionRecovery);
     const navigateSpy = vi
@@ -246,7 +247,7 @@ describe('SessionRecovery (issue #312)', () => {
     // does not await it.
     await Promise.resolve();
 
-    await runnerApi.listLeasesApiLeasesGet({ throwOnError: false });
+    await runnerApi.listLeasesRunnersRunnerIdApiLeasesGet({ path: { runner_id: 'rn_1' }, throwOnError: false });
     expect(navigateSpy).not.toHaveBeenCalled();
 
     resolveLogout();

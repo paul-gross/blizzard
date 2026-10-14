@@ -25,8 +25,8 @@ import { LensLink } from '../../core/lens-link';
 /**
  * The chunk detail page (`/board/chunk/:chunkId`), written once for both daemons — the
  * hub's board and a runner's panel each mount it on their own route, handing it their
- * daemon through {@link CHUNK_PAGE_DAEMON}: the generated `client` and cache-key `plane`
- * every read on the page crosses, and an optional operator-action port. One shell serves
+ * daemon through {@link CHUNK_PAGE_DAEMON}: the target every read on the page crosses,
+ * the board it links back to, and an optional operator-action port. One shell serves
  * both widths; at phone width the tab bodies opt into the list/detail drill-down.
  *
  * Four tabs, selected through {@link injectChunkDetailSelection} (`?tab`, so
@@ -72,9 +72,16 @@ export class ChunkPage {
   private readonly viewport = inject(ViewportService);
   private readonly element = inject(ElementRef<HTMLElement>);
 
-  /** The daemon this page reads from — its `client`/`plane` are exposed to the
+  /** The daemon this page reads from — its `target` is exposed to the
    * template for {@link ChunkTranscriptsContainer}'s own seam. */
   protected readonly daemon = inject(CHUNK_PAGE_DAEMON);
+
+  /** The board view this page's back link and edge links lead to. */
+  protected readonly boardLinkBase = computed(() => this.daemon.boardLinkBase());
+
+  /** The chunk page's own path segments under {@link boardLinkBase} — a blocked-by or
+   * blocking edge links there. */
+  protected readonly chunkLinkBase = computed(() => [...this.boardLinkBase(), 'chunk']);
 
   /** The daemon's operator-action port for this visit, or `null` — read-only. */
   protected readonly actions = this.daemon.actions?.() ?? null;
@@ -197,14 +204,12 @@ export class ChunkPage {
   }
 
   private readonly detailQuery = injectChunkDetailQuery(
-    () => this.daemon.client,
-    () => this.daemon.plane,
+    () => this.daemon.target(),
     () => this.chunkId(),
   );
 
   private readonly workItemsQuery = injectChunkWorkItemsQuery(
-    () => this.daemon.client,
-    () => this.daemon.plane,
+    () => this.daemon.target(),
     () => this.chunkId(),
   );
 

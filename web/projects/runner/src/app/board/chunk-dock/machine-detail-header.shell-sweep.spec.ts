@@ -4,6 +4,7 @@ import { provideRouter } from '@angular/router';
 import { commands, page, userEvent } from 'vitest/browser';
 
 import { MachineDetailHeader } from './machine-detail-header';
+import { provideActiveRunner } from '../../core/active-runner';
 
 /**
  * The machine detail dock header's own half of `web:shell-sweep` covers
@@ -48,7 +49,7 @@ async function renderHeader(width: number): Promise<{ root: HTMLElement; fixture
   TestBed.resetTestingModule();
   await TestBed.configureTestingModule({
     imports: [MachineDetailHeader],
-    providers: [provideZonelessChangeDetection(), provideRouter([])],
+    providers: [provideZonelessChangeDetection(), provideActiveRunner('rn_1'), provideRouter([])],
   }).compileComponents();
   const fixture = TestBed.createComponent(MachineDetailHeader);
   fixture.componentRef.setInput('chunkId', 'ch_01dockwidth0000000000000000');

@@ -10,7 +10,7 @@ import asyncio
 import contextlib
 import secrets
 from collections.abc import AsyncIterator, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from urllib.parse import quote
 
@@ -19,6 +19,7 @@ from fastapi import APIRouter, Depends, FastAPI, Request, params
 from fastapi.exceptions import HTTPException
 from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy import Engine
+from starlette.datastructures import State
 
 from blizzard import __version__
 from blizzard.foundation.clock import IClock, IMonotonicClock, SystemClock, SystemMonotonicClock
@@ -26,6 +27,7 @@ from blizzard.foundation.forwarded import TrustedProxies
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.platform_tracing.handle import DISABLED_TELEMETRY, IPlatformTracing
 from blizzard.foundation.roles import collaborator
+from blizzard.foundation.runner_paths import RUNNER_ROUTE_PREFIX, is_api_path
 from blizzard.foundation.store.readiness import ReadinessService
 from blizzard.foundation.web import Frontend, install_schema_components
 from blizzard.runner.api.analytics import router as analytics_router
@@ -36,7 +38,6 @@ from blizzard.runner.api.chunk_asks import router as chunk_asks_router
 from blizzard.runner.api.chunk_detail import router as chunk_detail_router
 from blizzard.runner.api.control import router as control_router
 from blizzard.runner.api.dashboard import router as dashboard_router
-from blizzard.runner.api.environments import router as environments_router
 from blizzard.runner.api.escalations import router as escalations_router
 from blizzard.runner.api.events import router as events_router
 from blizzard.runner.api.facts import router as facts_router
@@ -56,6 +57,7 @@ from blizzard.runner.api.harness_health import router as harness_health_router
 from blizzard.runner.api.health import router as health_router
 from blizzard.runner.api.heartbeat import router as heartbeat_router
 from blizzard.runner.api.history import router as history_router
+from blizzard.runner.api.host import router as host_router
 from blizzard.runner.api.leases import router as leases_router
 from blizzard.runner.api.otlp_receiver import router as otlp_receiver_router
 from blizzard.runner.api.readiness import router as readiness_router
@@ -63,22 +65,23 @@ from blizzard.runner.api.requeues import router as requeues_router
 from blizzard.runner.api.scope import router as scope_router
 from blizzard.runner.api.selftests import router as selftests_router
 from blizzard.runner.api.session_end import router as session_end_router
-from blizzard.runner.api.subscriptions import router as subscriptions_router
 from blizzard.runner.api.takeovers import router as takeovers_router
 from blizzard.runner.api.traces import router as traces_router
 from blizzard.runner.api.transcript_segments import router as transcript_segments_router
 from blizzard.runner.api.transcripts import router as transcripts_router
+from blizzard.runner.api.wiring import RunnerRegistry, ServedRunner, ServedWorkspace, bind_runner
 from blizzard.runner.api.work_items import router as work_items_router
 from blizzard.runner.api.workspace_prompt import router as workspace_prompt_router
 from blizzard.runner.auth.internal.http_jwks_cache import JwksCache
 from blizzard.runner.auth.jti_cache import IJtiCache
 from blizzard.runner.composition import HostProcess, RunnerProcess, build_runner_process
-from blizzard.runner.config import RunnerConfig
+from blizzard.runner.config import RunnerConfig, SubscriptionDeclaration
 from blizzard.runner.environments.provider import IWorkspaceProvider
-from blizzard.runner.events.broker import EventBroker
+from blizzard.runner.events.broker import EventBroker, RunnerEventPublisher
 from blizzard.runner.harness.health_cache import HarnessHealthCache, IReadHarnessHealth
 from blizzard.runner.harness.registry import HarnessRegistry, IHarnessRegistry
 from blizzard.runner.harness.workspace_prompts import WorkspacePromptService
+from blizzard.runner.host_config import HaltedRunner
 from blizzard.runner.hub.held_token import ICurrentHubToken
 from blizzard.runner.hub.identity import ICurrentIdentityVerdict, ICurrentRunnerIdentity, IIdentityOnContact
 from blizzard.runner.hub.internal.http_hub import HeldTokenAuth
@@ -117,22 +120,29 @@ class Lane:
     """One tenant of the three-tenant partition — a router set and the gate it
     mounts behind. Only the human web lane is session-gated, and that gate covers the served
     shell as well as the JSON API it reads; the other two cannot be gated, being respectively
-    what *establishes* a session and what workers call over TCP where they cannot bounce."""
+    what *establishes* a session and what workers call over TCP where they cannot bounce.
+    A runner's lane mounts under its runner's prefix, behind the dependency that binds the runner it names."""
 
-    gate: Sequence[params.Depends] | None
+    gate: Sequence[params.Depends]
     routers: tuple[APIRouter, ...]
+    per_runner: bool = False
 
     def mount(self, app: FastAPI) -> None:
+        dependencies = [*self.gate, Depends(bind_runner)] if self.per_runner else list(self.gate)
+        prefix = RUNNER_ROUTE_PREFIX if self.per_runner else ""
         for router in self.routers:
-            app.include_router(router, dependencies=self.gate)
+            app.include_router(router, prefix=prefix, dependencies=dependencies)
 
 
-# Ungated, in mount order: liveness, the SSO bounce, then the worker hooks. `asks_router` is
-# the one mixed router — its POST is ungated, its GET carries the human gate at the route.
-_UNGATED = (
-    health_router,
-    readiness_router,
-    auth_router,
+_HUMAN_GATE = (Depends(require_human_api),)
+
+# The host's own routes, at the root. Ungated: liveness and the SSO bounce.
+_HOST_UNGATED = (health_router, readiness_router, auth_router)
+# The host's human web lane: its own reads, the workspace prompts, and the one event stream.
+_HOST_HUMAN = (host_router, workspace_prompt_router, events_router)
+# Each runner's ungated routes, in mount order: the worker hooks. `asks_router` is the one mixed router — its
+# POST is ungated, its GET carries the human gate at the route.
+_RUNNER_UNGATED = (
     heartbeat_router,
     session_end_router,
     asks_router,
@@ -148,32 +158,24 @@ _UNGATED = (
     analytics_router,
     otlp_receiver_router,
 )
-# The human web lane: the local panel's own reads and writes, the runner's own
-# pause brake reachable with the hub down (#43), and the pass-throughs proxied to the hub.
-_HUMAN = (
+# Each runner's human web lane: the panel's reads and writes of one runner, its own
+# pause brake reachable with the hub down, and the pass-throughs proxied to the hub.
+_RUNNER_HUMAN = (
     chunk_detail_router,
     leases_router,
     transcripts_router,
     transcript_segments_router,
     selftests_router,
     fleet_summary_router,
-    workspace_prompt_router,
     control_router,
-    environments_router,
     escalations_router,
     facts_router,
     takeovers_router,
     traces_router,
     harness_health_router,
-    subscriptions_router,
     dashboard_router,
     requeues_router,
-    events_router,
 )
-
-
-# OTLP/HTTP's fixed paths: authenticated by the worker's lease token, where a browser session cannot bounce.
-_OTLP_PATHS = frozenset({"/v1/traces", "/v1/metrics", "/v1/logs"})
 
 
 @contextlib.asynccontextmanager
@@ -185,9 +187,101 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.shutdown.set()
 
 
+def runner_seams(
+    config: RunnerConfig,
+    *,
+    clock: IClock,
+    process: LinuxProcessProbe,
+    events: EventBroker | None = None,
+    harnesses: IHarnessRegistry | None = None,
+    runner_stores: RunnerStores | None = None,
+    leases: LocalLeaseService | None = None,
+    transcripts: TranscriptService | None = None,
+    runner_status: RunnerStatusService | None = None,
+    trace_status: LeaseTraceStatusReader | None = None,
+    trace_replay: LeaseTraceReplay | None = None,
+    takeover: TakeoverService | None = None,
+    requeue: RequeueService | None = None,
+    selftests: SelfTestService | None = None,
+    harness_health: IReadHarnessHealth | None = None,
+    attachments: AttachmentService | None = None,
+    git_commit_declarations: GitCommitDeclarationService | None = None,
+    asks: AskService | None = None,
+    pause: PauseService | None = None,
+    lease_liveness: LeaseLivenessService | None = None,
+    lease_sessions: LeaseSessionService | None = None,
+    hub_proxy_client: httpx.Client | None = None,
+    identity_verdict: ICurrentIdentityVerdict | None = None,
+    identity_check: IIdentityOnContact | None = None,
+    hub_token: ICurrentHubToken | None = None,
+    binding: IRunnerBinding | None = None,
+) -> ServedRunner:
+    """One runner's seams, served under :attr:`RunnerConfig.served_id()`. Every store-backed seam is optional, so a
+    store-free runner is possible; its routes then answer 503. ``selftests`` is always wired. ``identity_check`` gates
+    the hub proxy, which forwards only once it verifies the token names the configured runner; absent, the proxy
+    forwards ungated. ``hub_token`` is the token the proxy presents; absent, the proxy presents ``config``'s.
+    ``binding`` is the store's runner binding; should it name no runner, the routes that write runner-scoped rows
+    answer 503."""
+    runner_id = config.served_id()
+    publisher = RunnerEventPublisher.over(events, runner_id)
+    seams = State()
+    seams.config = config
+    seams.identity_verdict = identity_verdict
+    seams.identity_check = identity_check
+    seams.hub_token = hub_token
+    seams.binding = binding
+    seams.harnesses = harnesses if harnesses is not None else HarnessRegistry({})
+    # The controller-facing narrowing of `runner_stores`; the write bundle itself is never stashed.
+    seams.runner_read_stores = RunnerReadStores.of(runner_stores) if runner_stores is not None else None
+    # The runner's publish seam, stamping its id on every runner-scoped event.
+    seams.events = publisher
+    seams.leases = leases
+    seams.transcripts = transcripts
+    seams.runner_status = runner_status
+    seams.trace_status = trace_status
+    seams.trace_replay = trace_replay
+    seams.takeover = takeover
+    seams.requeue = requeue
+    seams.attachments = attachments
+    seams.git_commit_declarations = git_commit_declarations
+    # Each single-concept, no cross-collaborator beyond its own write seam and the clock
+    # — built here, like `selftests` below, rather than requiring
+    # every composer to repeat the derivation `runner_stores` already makes trivial.
+    seams.asks = asks or (AskService(runner_stores.asks, clock, events=publisher) if runner_stores else None)
+    seams.pause = pause or (PauseService(runner_stores.pause, clock, events=publisher) if runner_stores else None)
+    seams.lease_liveness = lease_liveness or (
+        LeaseLivenessService(runner_stores.liveness, clock) if runner_stores else None
+    )
+    seams.lease_sessions = lease_sessions or (
+        LeaseSessionService(runner_stores.session, clock) if runner_stores else None
+    )
+    # The adapter-drift canary: wired unconditionally regardless of `runner_stores` —
+    # only `results` needs one, and stays `None` (no durable outcome) without it.
+    seams.selftests = selftests or SelfTestService(
+        scratch_git=SubprocessScratchGit(),
+        process=process,
+        elicitation_replies=ElicitationFiles(root=""),
+        clock=clock,
+        results=runner_stores.selftest_results if runner_stores else None,
+    )
+    # The runner's own health diagnostics; absent, the route and dashboard refuse.
+    seams.harness_health = harness_health
+    # This default must **not** reach the network — pinned by
+    # tests/test_pin_runner_misc.py::test_the_default_hub_client_never_reaches_the_configured_hub_url
+    seams.hub_proxy_client = hub_proxy_client or httpx.Client(
+        transport=httpx.MockTransport(lambda _request: httpx.Response(404)),
+        base_url="http://runner-hub-proxy-client-hermetic-default.invalid",
+    )
+    return ServedRunner(runner_id, config.name, seams)
+
+
 def create_app(
     config: RunnerConfig,
     *,
+    runners: Sequence[ServedRunner] | None = None,
+    halted: Sequence[HaltedRunner] = (),
+    workspaces: Sequence[ServedWorkspace] | None = None,
+    subscriptions: Sequence[SubscriptionDeclaration] | None = None,
     readiness: ReadinessService | None = None,
     workspace_provider: IWorkspaceProvider | None = None,
     harnesses: IHarnessRegistry | None = None,
@@ -224,23 +318,60 @@ def create_app(
     hub_token: ICurrentHubToken | None = None,
     binding: IRunnerBinding | None = None,
 ) -> FastAPI:
-    """Build a fully wired runner app from resolved config.
+    """Build the host's app from resolved config: its own routes at the root, and each of ``runners`` under its
+    prefix, keyed by id; ``halted`` are the runners the host holds unbuilt.
 
-    Every store-backed seam is optional, so a store-free build is possible; those routes
-    then answer 503 and ``/api/ready`` reports ``ready=false``. ``selftests`` is always
-    wired; ``events`` defaults absent, leaving the route silent. ``platform_tracing`` is off unless the
-    composition root passes a handle. ``telemetry_receiver`` is the process's worker telemetry receiver;
-    absent, the OTLP routes answer 503. ``identity`` is the process's holder; absent, the federation
-    routes answer 503. ``identity_verdict`` is the verdict the status reports. ``identity_check`` gates
-    the hub proxy, which forwards only once it verifies the token names the configured runner; absent, the
-    proxy forwards ungated. ``hub_token`` is the token the proxy presents; absent, the proxy
-    presents ``config``'s. ``binding`` is the store's runner binding, bound from the configured id before the app
-    serves; should it name no runner, the routes that write runner-scoped rows answer 503.
-    ``host_stores`` are the host-scoped stores; ``jti_cache`` defaults to theirs."""
+    With ``runners`` omitted, the app serves one runner composed from the runner seams passed here by
+    :func:`runner_seams` — a host of one. ``workspaces`` defaults to ``config``'s one workspace over
+    ``workspace_provider``'s pool, and ``subscriptions`` to ``config``'s. A store-free build is possible; the
+    store-backed routes then answer 503 and ``/api/ready`` reports ``ready=false``. ``events`` defaults absent, leaving
+    the stream silent. ``platform_tracing`` is off unless the composition root passes a handle.
+    ``telemetry_receiver`` is the host's worker telemetry receiver; absent, the OTLP routes answer 503. ``identity`` is
+    the process's holder; absent, the federation routes answer 503. ``host_stores`` are the host-scoped stores;
+    ``jti_cache`` defaults to theirs."""
     log = get_logger("blizzard.runner")
     clock = clock or SystemClock()
     process = process or LinuxProcessProbe()
-    resolved_harnesses: IHarnessRegistry = harnesses if harnesses is not None else HarnessRegistry({})
+    if runners is None:
+        runners = (
+            runner_seams(
+                config,
+                clock=clock,
+                process=process,
+                events=events,
+                harnesses=harnesses,
+                runner_stores=runner_stores,
+                leases=leases,
+                transcripts=transcripts,
+                runner_status=runner_status,
+                trace_status=trace_status,
+                trace_replay=trace_replay,
+                takeover=takeover,
+                requeue=requeue,
+                selftests=selftests,
+                harness_health=harness_health,
+                attachments=attachments,
+                git_commit_declarations=git_commit_declarations,
+                asks=asks,
+                pause=pause,
+                lease_liveness=lease_liveness,
+                lease_sessions=lease_sessions,
+                hub_proxy_client=hub_proxy_client,
+                identity_verdict=identity_verdict,
+                identity_check=identity_check,
+                hub_token=hub_token,
+                binding=binding,
+            ),
+        )
+    if workspaces is None:
+        workspaces = (
+            ServedWorkspace(
+                workspace_id=config.workspace_id,
+                env_pool=workspace_provider.pool() if workspace_provider else (),
+                max_environments=config.max_environments,
+                prompt_config=config,
+            ),
+        )
 
     # No framework exporters: tests/test_apps.py::test_an_otlp_endpoint_installs_no_framework_exporters.
     app = FastAPI(
@@ -250,9 +381,9 @@ def create_app(
         telemetry=platform_tracing.fastapi_telemetry(exclude=is_excluded) if platform_tracing else DISABLED_TELEMETRY,
     )
     app.state.config = config
-    app.state.identity_verdict = identity_verdict
-    app.state.identity_check = identity_check
-    app.state.hub_token = hub_token
+    app.state.runners = RunnerRegistry(tuple(runners), tuple(halted))
+    app.state.workspaces = tuple(workspaces)
+    app.state.subscriptions = tuple(subscriptions if subscriptions is not None else config.subscriptions)
     if identity is not None:
         app.state.federation = FederationSettings(
             public_origins=config.public_origins,
@@ -261,58 +392,21 @@ def create_app(
             role_policy=config.role_policy,
         )
     app.state.readiness = readiness
-    app.state.binding = binding
-    # The seams below are None on the store-free app.
     app.state.workspace_provider = workspace_provider
-    app.state.harnesses = resolved_harnesses
-    # The controller-facing narrowing of `runner_stores`; the write bundle itself is never
-    # stashed on `app.state`.
-    app.state.runner_read_stores = RunnerReadStores.of(runner_stores) if runner_stores is not None else None
-    # The host-scoped twin, narrowed the same way.
+    # The host-scoped stores, narrowed for controllers the way each runner's are.
     app.state.host_read_stores = HostReadStores.of(host_stores) if host_stores is not None else None
     # The SSE broker; `None` when no stream is wired.
-    app.state.events = events
+    app.state.event_broker = events
     # Set on shutdown by `_lifespan`; the stream route's live wait races it.
     app.state.shutdown = asyncio.Event()
     # Unconditional: a stateless wrapper over the wall clock (``bzh:injected-clock``),
     # needed whether or not a store is wired.
     app.state.clock = clock
-    app.state.leases = leases
-    app.state.transcripts = transcripts
-    app.state.runner_status = runner_status
-    app.state.trace_status = trace_status
-    app.state.trace_replay = trace_replay
-    # The worker telemetry receiver, built once by the composition root.
+    # The worker telemetry receiver, built once by the composition root and shared by every runner.
     app.state.telemetry_receiver = telemetry_receiver
-    app.state.takeover = takeover
-    app.state.requeue = requeue
-    app.state.attachments = attachments
-    app.state.git_commit_declarations = git_commit_declarations
-    # Each single-concept, no cross-collaborator beyond its own write seam and the clock
-    # — built here, like `selftests` below, rather than requiring
-    # every composer to repeat the derivation `runner_stores` already makes trivial.
-    app.state.asks = asks or (AskService(runner_stores.asks, clock, events=events) if runner_stores else None)
-    app.state.pause = pause or (PauseService(runner_stores.pause, clock, events=events) if runner_stores else None)
-    app.state.lease_liveness = lease_liveness or (
-        LeaseLivenessService(runner_stores.liveness, clock) if runner_stores else None
-    )
-    app.state.lease_sessions = lease_sessions or (
-        LeaseSessionService(runner_stores.session, clock) if runner_stores else None
-    )
     app.state.workspace_prompts = workspace_prompts or (
         WorkspacePromptService(host_stores.workspace_prompt, clock) if host_stores else None
     )
-    # The adapter-drift canary: wired unconditionally regardless of `runner_stores` —
-    # only `results` needs one, and stays `None` (no durable outcome) without it.
-    app.state.selftests = selftests or SelfTestService(
-        scratch_git=SubprocessScratchGit(),
-        process=process,
-        elicitation_replies=ElicitationFiles(root=""),
-        clock=clock,
-        results=runner_stores.selftest_results if runner_stores else None,
-    )
-    # The runner's own health diagnostics; absent, the route and dashboard refuse.
-    app.state.harness_health = harness_health
     # This default must **not** reach the network — pinned by
     # tests/test_pin_runner_misc.py::test_the_default_hub_client_never_reaches_the_configured_hub_url
     hub_http_client = hub_http_client or httpx.Client(
@@ -323,12 +417,6 @@ def create_app(
     )
     app.state.hub_auth_mode = HubAuthModeCache(hub_http_client)
     app.state.jwks_cache = JwksCache(hub_http_client, "/api/auth/jwks.json")
-    # This default must **not** reach the network either — pinned alongside `hub_http_client`
-    # by tests/test_pin_runner_misc.py::test_the_default_hub_client_never_reaches_the_configured_hub_url
-    app.state.hub_proxy_client = hub_proxy_client or httpx.Client(
-        transport=httpx.MockTransport(lambda _request: httpx.Response(404)),
-        base_url="http://runner-hub-proxy-client-hermetic-default.invalid",
-    )
     # The monotonic clock the hub retry schedule reads — the system clock unless one is injected.
     app.state.hub_retry_clock = hub_retry_clock or SystemMonotonicClock()
     app.state.jti_cache = jti_cache or (host_stores.jti_cache if host_stores else None)
@@ -364,7 +452,7 @@ def create_app(
     # The served shell's half of the human web lane's gate — see :class:`Lane`.
     @app.middleware("http")
     async def _gate_web_surface(request: Request, call_next):  # type: ignore[no-untyped-def]
-        if not (request.url.path.startswith("/api") or request.url.path in _OTLP_PATHS):
+        if not is_api_path(request.url.path):
             try:
                 require_human_session(request)
             except NeedsFederationBounce as exc:
@@ -374,13 +462,15 @@ def create_app(
                 return JSONResponse({"detail": exc.detail}, status_code=exc.status_code, headers=exc.headers)
         return await call_next(request)
 
-    # API routers first, so /api/* always wins over the web mount at /.
-    Lane(None, _UNGATED).mount(app)
-    Lane([Depends(require_human_api)], _HUMAN).mount(app)
+    # API routers first, so the API always wins over the web mount at /.
+    Lane((), _HOST_UNGATED).mount(app)
+    Lane(_HUMAN_GATE, _HOST_HUMAN).mount(app)
+    Lane((), _RUNNER_UNGATED, per_runner=True).mount(app)
+    Lane(_HUMAN_GATE, _RUNNER_HUMAN, per_runner=True).mount(app)
 
-    # The runner-served web app: the human web lane the middleware above gates
+    # The host-served web app: the human web lane the middleware above gates
     # — the only browser-facing surface this daemon serves.
-    Frontend.embedded("runner", app_name="blizzard-runner").mount(app)
+    Frontend.embedded("runner", app_name="blizzard-runner", is_api_path=is_api_path).mount(app)
     install_schema_components(app, RUNNER_SCHEMA_COMPONENTS.models, RUNNER_SCHEMA_COMPONENTS.enums)
 
     log.info("runner app created", db_url=config.db_url, readiness_wired=readiness is not None)
@@ -450,8 +540,9 @@ def _wire_hosted_app(
     readiness = host.readiness
     if not host.runners:
         return _wire_runnerless_app(config, host, startup, owned_host=owned_host)
-    # One runner's services mount at the unprefixed paths; a second runner has no route prefix to mount under yet.
+    # The host serves one runner for now; its routes mount under its id, so a second only adds a registry entry.
     (graph,) = host.runners
+    config = replace(config, runner_id=graph.runner_id)
     runner_stores = graph.stores
     connections = graph.connections
     harness_health = graph.health
@@ -531,7 +622,7 @@ def _wire_hosted_app(
         local_api_url=config.local_api_url,
         harnesses=harnesses,
         workspace_root=spawn_root,
-        events=events,
+        events=graph.events,
     )
     requeue = RequeueService(runner_stores.requeue, clock)
     attachments = AttachmentService(runner_stores.attachments, clock)
@@ -547,20 +638,18 @@ def _wire_hosted_app(
     # The real, network-reaching hub client — only `host` wires one.
     hub_http_client = startup.enter_context(httpx.Client(base_url=config.hub_url, timeout=5.0))
     platform_tracing.instrument_client(hub_http_client)
-    app = create_app(
+    served = runner_seams(
         config,
+        clock=clock,
+        process=process,
+        events=events,
         binding=connections,
-        platform_tracing=platform_tracing,
-        identity=graph.identity,
         identity_verdict=graph.identity_verdict,
         # The proxy's forward is a first contact with the hub: it asks which runner its token names.
         identity_check=ProxyIdentityCheck(graph.runner_id, graph.identity_verdict, clock),
         hub_token=graph.hub_token,
-        readiness=readiness,
-        workspace_provider=workspace_provider,
         harnesses=harnesses,
         runner_stores=runner_stores,
-        host_stores=host.host_stores,
         leases=leases,
         transcripts=transcripts,
         runner_status=runner_status,
@@ -576,14 +665,25 @@ def _wire_hosted_app(
             log_receiver=host.log_bounds.counter,
         ),
         trace_replay=graph.trace_replay,
-        telemetry_receiver=host.telemetry_receiver,
         takeover=takeover,
         requeue=requeue,
         attachments=attachments,
         git_commit_declarations=git_commit_declarations,
         harness_health=harness_health,
-        hub_http_client=hub_http_client,
         hub_proxy_client=hub_proxy_client,
+    )
+    app = create_app(
+        config,
+        runners=(served,),
+        halted=host.halted,
+        subscriptions=host.subscriptions,
+        platform_tracing=platform_tracing,
+        identity=graph.identity,
+        readiness=readiness,
+        workspace_provider=workspace_provider,
+        host_stores=host.host_stores,
+        telemetry_receiver=host.telemetry_receiver,
+        hub_http_client=hub_http_client,
         events=events,
         clock=clock,
         process=process,
@@ -605,11 +705,14 @@ def _wire_runnerless_app(
     config: RunnerConfig, host: HostProcess, startup: contextlib.ExitStack, *, owned_host: HostProcess | None
 ) -> HostedApp:
     """The app of a host that built no runner: what answers for the host itself — its health, and its readiness,
-    whose detail names each halted runner. The runner routes are not mounted, so they answer 503."""
+    which names each halted runner. A halted runner's routes answer 503 naming its reasons."""
     hub_http_client = startup.enter_context(httpx.Client(base_url=config.hub_url, timeout=5.0))
     host.platform_tracing.instrument_client(hub_http_client)
     app = create_app(
         config,
+        runners=(),
+        halted=host.halted,
+        subscriptions=host.subscriptions,
         platform_tracing=host.platform_tracing,
         readiness=host.readiness,
         workspace_provider=host.provider,

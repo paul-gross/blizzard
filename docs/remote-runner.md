@@ -121,6 +121,11 @@ An unreachable hub is routine, not an incident — the runner rides it out; what
 Two machines upgrade at two times, so version skew becomes possible; the supported window is
 [`docs/versioning.md`](./versioning.md)'s.
 
+The host's panel opens at its root, `/`, on the host page: each runner the host serves with its brake and agents in
+use, the environments of each workspace and who holds them, and the subscriptions with the runners spending them. Each
+runner's own pages sit under `/runners/<id>/` — its board at `/runners/<id>/board`, then `events` and `machine` — and the
+switcher in the panel's navigation moves between runners.
+
 A runner whose machine-local panel is opened from a browser on another machine needs the runner-side federation
 configuration owned by [`docs/deployment/human-auth.md`](./deployment/human-auth.md)'s "Federating a runner's web
 surface" — the origins `public_url` must declare, and the proxy settings an off-host origin needs. A runner driven

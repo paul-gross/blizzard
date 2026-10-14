@@ -7,6 +7,7 @@ import { type RequestClientStub, stubRequestClient } from 'fleet/testing';
 
 import { LocalPanelLayout } from './app-panel-layout';
 import type { MachineChunkRow } from './app-panel.model';
+import { provideActiveRunner } from '../core/active-runner';
 
 const LEASE = (overrides: Partial<runnerApi.LeaseView> = {}): runnerApi.LeaseView => ({
   lease_id: 'lease_01KXKVVF1J3D6H6VYZ3XYNZPRR',
@@ -35,6 +36,7 @@ async function render(overrides: Record<string, unknown> = {}) {
     imports: [LocalPanelLayout],
     providers: [
       provideZonelessChangeDetection(),
+      provideActiveRunner('rn_1'),
       // `LocalPanelLayout` itself is presentational, but it composes several
       // self-fetching mini-containers that inject their own queries/mutations —
       // `ChunkRow`'s severable work-item-title read —

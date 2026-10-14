@@ -1,6 +1,6 @@
-"""The composed dashboard read — ``GET /api/dashboard``.
+"""The composed dashboard read — ``GET /runners/{runner_id}/api/dashboard``.
 
-Proves the eight local sections populate the same way their own individual routes do,
+Proves the six local sections populate the same way their own individual routes do,
 ``fleet_summary`` alone degrades to ``None`` on a hub outage or an unwired runner, and
 this route's own hub call carries a bounded, below-the-poll-floor timeout distinct from
 ``/api/fleet-summary``'s untouched 15s default."""
@@ -25,6 +25,7 @@ from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionRefe
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.status.view import RunnerStatusService
+from tests.runner_client import runner_client
 from tests.runner_fakes import (
     FakeHarness,
     FakeHarnessHealth,
@@ -76,7 +77,7 @@ def _app_with_status(
         hub_proxy_client=hub_proxy_client,
         hub_retry_clock=no_retry_clock(),
     )
-    return TestClient(app), store
+    return runner_client(app), store
 
 
 def _seed_lease(store, **overrides: object) -> None:  # type: ignore[no-untyped-def]
@@ -136,7 +137,7 @@ def _seed_all_sections(store) -> None:  # type: ignore[no-untyped-def]
 
 
 @pytest.mark.component
-def test_the_composed_payload_includes_all_nine_sections_with_real_data(tmp_path: Path) -> None:
+def test_the_composed_payload_includes_all_seven_sections_with_real_data(tmp_path: Path) -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json=_COUNTS)
 
@@ -149,7 +150,6 @@ def test_the_composed_payload_includes_all_nine_sections_with_real_data(tmp_path
     assert resp.status_code == 200, resp.text
     body = resp.json()
     assert (body["runner"]["runner_id"], body["runner"]["runner_name"]) == ("rn_status", "runner-local")
-    assert [e["chunk_id"] for e in body["environments"]["items"]] == ["ch_1", "ch_2"]
     assert [a["question_id"] for a in body["asks"]["items"]] == ["qn_1"]
     assert [e["chunk_id"] for e in body["escalations"]["items"]] == ["ch_2"]
     assert [t["takeover_id"] for t in body["takeovers"]["items"]] == ["tko_1"]
@@ -157,8 +157,8 @@ def test_the_composed_payload_includes_all_nine_sections_with_real_data(tmp_path
     # No harness is wired onto `create_app` itself here (only `RunnerStatusService`'s own
     # registry above carries one) — an empty configured set reports no health entries.
     assert body["harness_health"] == {"items": []}
-    # No subscription is named, so the panel lists none.
-    assert body["subscriptions"] == {"items": []}
+    # The host's environments and subscriptions are its own reads, not this runner's.
+    assert "environments" not in body and "subscriptions" not in body
     assert body["fleet_summary"] == _COUNTS
 
 
@@ -176,7 +176,6 @@ def test_fleet_summary_is_none_on_a_hub_outage_and_the_local_sections_still_popu
     assert resp.status_code == 200, resp.text
     body = resp.json()
     assert body["fleet_summary"] is None
-    assert body["environments"]["items"] != []
     assert body["asks"]["items"] != []
     assert body["escalations"]["items"] != []
     assert body["takeovers"]["items"] != []
@@ -204,7 +203,6 @@ def test_fleet_summary_is_none_when_the_runner_is_unwired_to_a_hub_and_the_local
     body = resp.json()
     assert body["fleet_summary"] is None
     assert attempted is False
-    assert body["environments"]["items"] != []
     assert body["asks"]["items"] != []
     assert body["escalations"]["items"] != []
     assert body["takeovers"]["items"] != []

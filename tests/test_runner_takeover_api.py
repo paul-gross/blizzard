@@ -11,7 +11,6 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
-from fastapi.testclient import TestClient
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.runner.app import create_app
@@ -21,6 +20,7 @@ from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionRefe
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.lifecycle.takeover import TakeoverService
+from tests.runner_client import runner_client
 from tests.runner_fakes import FakeHarness, FakeProbe, make_host_stores, make_store, make_stores
 
 _NOW = datetime(2026, 7, 17, 12, 0, 0, tzinfo=UTC)
@@ -85,7 +85,7 @@ def _seed_lease(store, **overrides: object) -> None:  # type: ignore[no-untyped-
 @pytest.mark.component
 def test_503_when_takeover_service_unwired(tmp_path: Path) -> None:
     config = RunnerConfig(root=tmp_path, db_url="sqlite://")
-    with TestClient(create_app(config)) as client:
+    with runner_client(create_app(config)) as client:
         assert client.post("/api/chunks/ch_1/takeovers", json={}).status_code == 503
         assert client.patch("/api/chunks/ch_1/takeovers/tko_1").status_code == 503
 
@@ -96,7 +96,7 @@ def test_open_over_a_parked_chunk_returns_the_interactive_command(tmp_path: Path
     _seed_lease(store)
     store.record_park(lease_id="lease_1", chunk_id="ch_1", question_id="qn_1", parked_at=_NOW)
 
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.post("/api/chunks/ch_1/takeovers", json={})
 
     assert resp.status_code == 201, resp.text
@@ -123,7 +123,7 @@ def test_open_without_force_over_a_live_worker_is_409(tmp_path: Path) -> None:
     app, store = _app_with_takeover(tmp_path)
     _seed_lease(store)  # active, not parked — a live attempt
 
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.post("/api/chunks/ch_1/takeovers", json={})
 
     assert resp.status_code == 409, resp.text
@@ -138,7 +138,7 @@ def test_unknown_recorded_owner_blocks_takeover_as_409_without_opening_one(tmp_p
         conn.exec_driver_sql("UPDATE leases SET harness_id = 'missing' WHERE lease_id = 'lease_1'")
     store.record_park(lease_id="lease_1", chunk_id="ch_1", question_id="qn_1", parked_at=_NOW)
 
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.post("/api/chunks/ch_1/takeovers", json={})
 
     assert resp.status_code == 409
@@ -152,7 +152,7 @@ def test_open_with_force_over_a_live_worker_kills_it_and_fences_the_epoch(tmp_pa
     app, store = _app_with_takeover(tmp_path, probe=probe)
     _seed_lease(store)
 
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.post("/api/chunks/ch_1/takeovers", json={"force": True})
 
     assert resp.status_code == 201, resp.text
@@ -169,7 +169,7 @@ def test_open_over_a_needs_human_chunk_with_a_requeue_pending_is_409(tmp_path: P
     store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="escalated", closed_at=_NOW)
     store.record_requeue(chunk_id="ch_1", at=_NOW + timedelta(seconds=1))  # after the lease: not yet consumed
 
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.post("/api/chunks/ch_1/takeovers", json={})
 
     assert resp.status_code == 409, resp.text
@@ -185,7 +185,7 @@ def test_forced_open_over_a_buffered_submission_is_409(tmp_path: Path) -> None:
         kind="completion.submitted", chunk_id="ch_1", lease_id="lease_1", payload="{}", created_at=_NOW
     )
 
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.post("/api/chunks/ch_1/takeovers", json={"force": True})
 
     assert resp.status_code == 409, resp.text
@@ -199,7 +199,7 @@ def test_a_second_open_while_one_is_open_is_409(tmp_path: Path) -> None:
     _seed_lease(store)
     store.record_park(lease_id="lease_1", chunk_id="ch_1", question_id="qn_1", parked_at=_NOW)
 
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         first = client.post("/api/chunks/ch_1/takeovers", json={})
         assert first.status_code == 201, first.text
         second = client.post("/api/chunks/ch_1/takeovers", json={})
@@ -213,7 +213,7 @@ def test_end_marks_the_takeover_closed(tmp_path: Path) -> None:
     _seed_lease(store)
     store.record_park(lease_id="lease_1", chunk_id="ch_1", question_id="qn_1", parked_at=_NOW)
 
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         opened = client.post("/api/chunks/ch_1/takeovers", json={}).json()
         end = client.patch(f"/api/chunks/ch_1/takeovers/{opened['takeover_id']}")
 
@@ -229,7 +229,7 @@ def test_end_with_no_open_takeover_on_the_chunk_succeeds_idempotently(tmp_path: 
     exit cleanly after ``Pull`` closes the takeover first."""
     app, _store = _app_with_takeover(tmp_path)
 
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.patch("/api/chunks/ch_1/takeovers/tko_bogus")
 
     assert resp.status_code == 200, resp.text
@@ -244,7 +244,7 @@ def test_end_with_a_different_takeover_open_on_the_chunk_is_404(tmp_path: Path) 
     _seed_lease(store)
     store.record_park(lease_id="lease_1", chunk_id="ch_1", question_id="qn_1", parked_at=_NOW)
 
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         client.post("/api/chunks/ch_1/takeovers", json={})
         resp = client.patch("/api/chunks/ch_1/takeovers/tko_bogus")
 
@@ -260,7 +260,7 @@ def test_end_already_ended_by_someone_else_succeeds_idempotently(tmp_path: Path)
     _seed_lease(store)
     store.record_park(lease_id="lease_1", chunk_id="ch_1", question_id="qn_1", parked_at=_NOW)
 
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         opened = client.post("/api/chunks/ch_1/takeovers", json={}).json()
         store.record_takeover_end(takeover_id=opened["takeover_id"], ended_at=_NOW)
         resp = client.patch(f"/api/chunks/ch_1/takeovers/{opened['takeover_id']}")

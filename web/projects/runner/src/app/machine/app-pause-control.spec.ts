@@ -6,6 +6,7 @@ import { type RequestClientStub, settle, stubError, stubRequestClient } from 'fl
 import { vi } from 'vitest';
 
 import { LocalPauseControl } from './app-pause-control';
+import { provideActiveRunner } from '../core/active-runner';
 
 /** Render `LocalPauseControl` with `GET /api/dashboard`'s `runner.pause` triad
  * answered by `pause`, and `PATCH /api/runner` echoing the flipped local brake
@@ -16,7 +17,7 @@ async function render(
   patchError?: ReturnType<typeof stubError>,
 ) {
   const stub = stubRequestClient(runnerClient, (method, path) => {
-    if (method === 'GET' && path === '/api/dashboard') {
+    if (method === 'GET' && path === '/runners/rn_1/api/dashboard') {
       return {
         runner: {
           pause: {
@@ -26,17 +27,15 @@ async function render(
             local_reason: pause.local_reason ?? null,
           },
         },
-        environments: { items: [] },
         asks: { items: [] },
         escalations: { items: [] },
         takeovers: { items: [] },
         facts: { items: [] },
         harness_health: { items: [] },
-        subscriptions: { items: [] },
         fleet_summary: null,
       };
     }
-    if (method === 'PATCH' && path === '/api/runner') {
+    if (method === 'PATCH' && path === '/runners/rn_1/api/runner') {
       if (patchError) return patchError;
       const flipped = !pause.local;
       return { runner_id: 'runner-1', local_paused: flipped, hub_paused: pause.hub, paused: flipped || pause.hub };
@@ -47,6 +46,7 @@ async function render(
     imports: [LocalPauseControl],
     providers: [
       provideZonelessChangeDetection(),
+      provideActiveRunner('rn_1'),
       provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
     ],
   }).compileComponents();
@@ -70,7 +70,7 @@ describe('LocalPauseControl', () => {
     toggle?.click();
     await settle(fixture);
 
-    const patches = stub.forRoute('/api/runner', 'PATCH');
+    const patches = stub.forRoute('/runners/rn_1/api/runner', 'PATCH');
     expect(patches).toHaveLength(1);
     expect(patches[0].body).toMatchObject({ paused: true });
   });
@@ -86,7 +86,7 @@ describe('LocalPauseControl', () => {
     toggle?.click();
     await settle(fixture);
 
-    const patches = stub.forRoute('/api/runner', 'PATCH');
+    const patches = stub.forRoute('/runners/rn_1/api/runner', 'PATCH');
     expect(patches).toHaveLength(1);
     expect(patches[0].body).toMatchObject({ paused: false });
   });
@@ -265,7 +265,7 @@ describe('LocalPauseControl', () => {
 
     // The retry itself still fails (same stubbed error), but the notice was cleared
     // and reset by the new attempt rather than lingering stale from the first.
-    expect(stub.forRoute('/api/runner', 'PATCH')).toHaveLength(2);
+    expect(stub.forRoute('/runners/rn_1/api/runner', 'PATCH')).toHaveLength(2);
     expect(el.querySelector('[data-testid="pause-error"]')).not.toBeNull();
   });
 });

@@ -42,6 +42,9 @@ export interface MobileTabItem {
   readonly active?: boolean;
   /** Dims the tab and disables its click/nav — no screen of its own yet. */
   readonly inert?: boolean;
+  /** Highlights a routed tab only on its exact route — for a root route every other
+   * route sits under. */
+  readonly exact?: boolean;
 }
 
 /**

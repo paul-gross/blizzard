@@ -1,9 +1,11 @@
 {
   "opened": {
+    "runner_id": "rn_1",
     "chunk_id": "ch_1",
     "cause": "opened"
   },
   "closed": {
+    "runner_id": "rn_1",
     "chunk_id": "ch_1",
     "cause": "closed",
     "lease_id": "ls_1"

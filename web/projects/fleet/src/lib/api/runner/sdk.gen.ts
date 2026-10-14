@@ -2,7 +2,7 @@
 
 import type { Client, ClientMeta, Options as Options2, RequestResult, TDataShape } from './client';
 import { client } from './client.gen';
-import type { CallbackApiAuthCallbackPostData, CallbackApiAuthCallbackPostResponses, ClearWorkspacePromptApiWorkspacePromptDeleteData, ClearWorkspacePromptApiWorkspacePromptDeleteResponses, EndTakeoverApiChunksChunkIdTakeoversTakeoverIdPatchData, EndTakeoverApiChunksChunkIdTakeoversTakeoverIdPatchErrors, EndTakeoverApiChunksChunkIdTakeoversTakeoverIdPatchResponses, GetAnalyticsCountsAgentTypesApiLeasesLeaseIdAnalyticsCountsAgentTypesGetData, GetAnalyticsCountsAgentTypesApiLeasesLeaseIdAnalyticsCountsAgentTypesGetErrors, GetAnalyticsCountsAgentTypesApiLeasesLeaseIdAnalyticsCountsAgentTypesGetResponses, GetAnalyticsCountsFilesApiLeasesLeaseIdAnalyticsCountsFilesGetData, GetAnalyticsCountsFilesApiLeasesLeaseIdAnalyticsCountsFilesGetErrors, GetAnalyticsCountsFilesApiLeasesLeaseIdAnalyticsCountsFilesGetResponses, GetAnalyticsCountsNodesApiLeasesLeaseIdAnalyticsCountsNodesGetData, GetAnalyticsCountsNodesApiLeasesLeaseIdAnalyticsCountsNodesGetErrors, GetAnalyticsCountsNodesApiLeasesLeaseIdAnalyticsCountsNodesGetResponses, GetAnalyticsCountsSkillsApiLeasesLeaseIdAnalyticsCountsSkillsGetData, GetAnalyticsCountsSkillsApiLeasesLeaseIdAnalyticsCountsSkillsGetErrors, GetAnalyticsCountsSkillsApiLeasesLeaseIdAnalyticsCountsSkillsGetResponses, GetAnalyticsSpendGraphsApiLeasesLeaseIdAnalyticsSpendGraphsGetData, GetAnalyticsSpendGraphsApiLeasesLeaseIdAnalyticsSpendGraphsGetErrors, GetAnalyticsSpendGraphsApiLeasesLeaseIdAnalyticsSpendGraphsGetResponses, GetAnalyticsSpendNodesApiLeasesLeaseIdAnalyticsSpendNodesGetData, GetAnalyticsSpendNodesApiLeasesLeaseIdAnalyticsSpendNodesGetErrors, GetAnalyticsSpendNodesApiLeasesLeaseIdAnalyticsSpendNodesGetResponses, GetArtifactApiLeasesLeaseIdArtifactsNameGetData, GetArtifactApiLeasesLeaseIdArtifactsNameGetErrors, GetArtifactApiLeasesLeaseIdArtifactsNameGetResponses, GetChunkApiChunksChunkIdGetData, GetChunkApiChunksChunkIdGetErrors, GetChunkApiChunksChunkIdGetResponses, GetChunkAsksApiLeasesLeaseIdAsksGetData, GetChunkAsksApiLeasesLeaseIdAsksGetErrors, GetChunkAsksApiLeasesLeaseIdAsksGetResponses, GetDashboardApiDashboardGetData, GetDashboardApiDashboardGetResponses, GetFindingApiLeasesLeaseIdFindingsFindingIdGetData, GetFindingApiLeasesLeaseIdFindingsFindingIdGetErrors, GetFindingApiLeasesLeaseIdFindingsFindingIdGetResponses, GetFleetSummaryApiFleetSummaryGetData, GetFleetSummaryApiFleetSummaryGetResponses, GetHistoryApiLeasesLeaseIdHistoryGetData, GetHistoryApiLeasesLeaseIdHistoryGetErrors, GetHistoryApiLeasesLeaseIdHistoryGetResponses, GetRunnerApiRunnerGetData, GetRunnerApiRunnerGetResponses, GetSelftestApiSelftestsSelftestIdGetData, GetSelftestApiSelftestsSelftestIdGetErrors, GetSelftestApiSelftestsSelftestIdGetResponses, GetTranscriptApiLeasesLeaseIdTranscriptGetData, GetTranscriptApiLeasesLeaseIdTranscriptGetErrors, GetTranscriptApiLeasesLeaseIdTranscriptGetResponses, GetTranscriptSegmentApiChunksChunkIdTranscriptsSegmentIdGetData, GetTranscriptSegmentApiChunksChunkIdTranscriptsSegmentIdGetErrors, GetTranscriptSegmentApiChunksChunkIdTranscriptsSegmentIdGetResponses, GetWorkItemsApiChunksChunkIdWorkItemsGetData, GetWorkItemsApiChunksChunkIdWorkItemsGetErrors, GetWorkItemsApiChunksChunkIdWorkItemsGetResponses, HealthApiHealthGetData, HealthApiHealthGetResponses, HeartbeatApiHeartbeatPostData, HeartbeatApiHeartbeatPostErrors, HeartbeatApiHeartbeatPostResponses, ListArtifactsApiLeasesLeaseIdArtifactsGetData, ListArtifactsApiLeasesLeaseIdArtifactsGetErrors, ListArtifactsApiLeasesLeaseIdArtifactsGetResponses, ListAsksApiAsksGetData, ListAsksApiAsksGetErrors, ListAsksApiAsksGetResponses, ListEnvironmentsApiEnvironmentsGetData, ListEnvironmentsApiEnvironmentsGetResponses, ListEscalationsApiEscalationsGetData, ListEscalationsApiEscalationsGetResponses, ListFactsApiFactsGetData, ListFactsApiFactsGetErrors, ListFactsApiFactsGetResponses, ListFindingsApiLeasesLeaseIdFindingsGetData, ListFindingsApiLeasesLeaseIdFindingsGetErrors, ListFindingsApiLeasesLeaseIdFindingsGetResponses, ListGardenFindingsApiLeasesLeaseIdGardenFindingsGetData, ListGardenFindingsApiLeasesLeaseIdGardenFindingsGetErrors, ListGardenFindingsApiLeasesLeaseIdGardenFindingsGetResponses, ListGardenProposalsApiLeasesLeaseIdGardenProposalsGetData, ListGardenProposalsApiLeasesLeaseIdGardenProposalsGetErrors, ListGardenProposalsApiLeasesLeaseIdGardenProposalsGetResponses, ListHarnessHealthApiHarnessHealthGetData, ListHarnessHealthApiHarnessHealthGetResponses, ListLeasesApiLeasesGetData, ListLeasesApiLeasesGetResponses, ListOpenTakeoversApiTakeoversGetData, ListOpenTakeoversApiTakeoversGetResponses, ListScopesApiLeasesLeaseIdScopesGetData, ListScopesApiLeasesLeaseIdScopesGetErrors, ListScopesApiLeasesLeaseIdScopesGetResponses, ListStagedAttachmentsApiLeasesLeaseIdAttachmentsGetData, ListStagedAttachmentsApiLeasesLeaseIdAttachmentsGetErrors, ListStagedAttachmentsApiLeasesLeaseIdAttachmentsGetResponses, ListSubscriptionsApiSubscriptionsGetData, ListSubscriptionsApiSubscriptionsGetResponses, ListTranscriptSegmentsApiChunksChunkIdTranscriptsGetData, ListTranscriptSegmentsApiChunksChunkIdTranscriptsGetErrors, ListTranscriptSegmentsApiChunksChunkIdTranscriptsGetResponses, LoginApiAuthLoginGetData, LoginApiAuthLoginGetErrors, LoginApiAuthLoginGetResponses, LogoutApiAuthLogoutPostData, LogoutApiAuthLogoutPostResponses, OpenTakeoverApiChunksChunkIdTakeoversPostData, OpenTakeoverApiChunksChunkIdTakeoversPostErrors, OpenTakeoverApiChunksChunkIdTakeoversPostResponses, PatchRunnerApiRunnerPatchData, PatchRunnerApiRunnerPatchErrors, PatchRunnerApiRunnerPatchResponses, PauseChunkApiChunksChunkIdPausePostData, PauseChunkApiChunksChunkIdPausePostErrors, PauseChunkApiChunksChunkIdPausePostResponses, ReadSessionApiAuthSessionGetData, ReadSessionApiAuthSessionGetResponses, ReadWorkspacePromptApiWorkspacePromptGetData, ReadWorkspacePromptApiWorkspacePromptGetResponses, ReadyApiReadyGetData, ReadyApiReadyGetResponses, RecordAskApiLeasesLeaseIdAsksPostData, RecordAskApiLeasesLeaseIdAsksPostErrors, RecordAskApiLeasesLeaseIdAsksPostResponses, RecordAttachmentApiLeasesLeaseIdAttachmentsPostData, RecordAttachmentApiLeasesLeaseIdAttachmentsPostErrors, RecordAttachmentApiLeasesLeaseIdAttachmentsPostResponses, RecordGitCommitDeclarationApiLeasesLeaseIdGitCommitsPostData, RecordGitCommitDeclarationApiLeasesLeaseIdGitCommitsPostErrors, RecordGitCommitDeclarationApiLeasesLeaseIdGitCommitsPostResponses, ReplaceWorkspacePromptApiWorkspacePromptPutData, ReplaceWorkspacePromptApiWorkspacePromptPutErrors, ReplaceWorkspacePromptApiWorkspacePromptPutResponses, RequeueChunkApiChunksChunkIdRequeuesPostData, RequeueChunkApiChunksChunkIdRequeuesPostErrors, RequeueChunkApiChunksChunkIdRequeuesPostResponses, ResumeChunkApiChunksChunkIdResumePostData, ResumeChunkApiChunksChunkIdResumePostErrors, ResumeChunkApiChunksChunkIdResumePostResponses, RunnerGetPmItemsDeprecatedAliasApiChunksChunkIdPmItemsGetData, RunnerGetPmItemsDeprecatedAliasApiChunksChunkIdPmItemsGetErrors, RunnerGetPmItemsDeprecatedAliasApiChunksChunkIdPmItemsGetResponses, SessionEndApiLeasesLeaseIdSessionEndPostData, SessionEndApiLeasesLeaseIdSessionEndPostErrors, SessionEndApiLeasesLeaseIdSessionEndPostResponses, StartSelftestApiSelftestsPostData, StartSelftestApiSelftestsPostErrors, StartSelftestApiSelftestsPostResponses, TraceReplayApiTracesReplayPostData, TraceReplayApiTracesReplayPostErrors, TraceReplayApiTracesReplayPostResponses, TraceStatusApiTracesStatusGetData, TraceStatusApiTracesStatusGetResponses } from './types.gen';
+import type { CallbackApiAuthCallbackPostData, CallbackApiAuthCallbackPostResponses, ClearWorkspacePromptApiHostWorkspacesWorkspaceIdPromptDeleteData, ClearWorkspacePromptApiHostWorkspacesWorkspaceIdPromptDeleteErrors, ClearWorkspacePromptApiHostWorkspacesWorkspaceIdPromptDeleteResponses, EndTakeoverRunnersRunnerIdApiChunksChunkIdTakeoversTakeoverIdPatchData, EndTakeoverRunnersRunnerIdApiChunksChunkIdTakeoversTakeoverIdPatchErrors, EndTakeoverRunnersRunnerIdApiChunksChunkIdTakeoversTakeoverIdPatchResponses, GetAnalyticsCountsAgentTypesRunnersRunnerIdApiLeasesLeaseIdAnalyticsCountsAgentTypesGetData, GetAnalyticsCountsAgentTypesRunnersRunnerIdApiLeasesLeaseIdAnalyticsCountsAgentTypesGetErrors, GetAnalyticsCountsAgentTypesRunnersRunnerIdApiLeasesLeaseIdAnalyticsCountsAgentTypesGetResponses, GetAnalyticsCountsFilesRunnersRunnerIdApiLeasesLeaseIdAnalyticsCountsFilesGetData, GetAnalyticsCountsFilesRunnersRunnerIdApiLeasesLeaseIdAnalyticsCountsFilesGetErrors, GetAnalyticsCountsFilesRunnersRunnerIdApiLeasesLeaseIdAnalyticsCountsFilesGetResponses, GetAnalyticsCountsNodesRunnersRunnerIdApiLeasesLeaseIdAnalyticsCountsNodesGetData, GetAnalyticsCountsNodesRunnersRunnerIdApiLeasesLeaseIdAnalyticsCountsNodesGetErrors, GetAnalyticsCountsNodesRunnersRunnerIdApiLeasesLeaseIdAnalyticsCountsNodesGetResponses, GetAnalyticsCountsSkillsRunnersRunnerIdApiLeasesLeaseIdAnalyticsCountsSkillsGetData, GetAnalyticsCountsSkillsRunnersRunnerIdApiLeasesLeaseIdAnalyticsCountsSkillsGetErrors, GetAnalyticsCountsSkillsRunnersRunnerIdApiLeasesLeaseIdAnalyticsCountsSkillsGetResponses, GetAnalyticsSpendGraphsRunnersRunnerIdApiLeasesLeaseIdAnalyticsSpendGraphsGetData, GetAnalyticsSpendGraphsRunnersRunnerIdApiLeasesLeaseIdAnalyticsSpendGraphsGetErrors, GetAnalyticsSpendGraphsRunnersRunnerIdApiLeasesLeaseIdAnalyticsSpendGraphsGetResponses, GetAnalyticsSpendNodesRunnersRunnerIdApiLeasesLeaseIdAnalyticsSpendNodesGetData, GetAnalyticsSpendNodesRunnersRunnerIdApiLeasesLeaseIdAnalyticsSpendNodesGetErrors, GetAnalyticsSpendNodesRunnersRunnerIdApiLeasesLeaseIdAnalyticsSpendNodesGetResponses, GetArtifactRunnersRunnerIdApiLeasesLeaseIdArtifactsNameGetData, GetArtifactRunnersRunnerIdApiLeasesLeaseIdArtifactsNameGetErrors, GetArtifactRunnersRunnerIdApiLeasesLeaseIdArtifactsNameGetResponses, GetChunkAsksRunnersRunnerIdApiLeasesLeaseIdAsksGetData, GetChunkAsksRunnersRunnerIdApiLeasesLeaseIdAsksGetErrors, GetChunkAsksRunnersRunnerIdApiLeasesLeaseIdAsksGetResponses, GetChunkRunnersRunnerIdApiChunksChunkIdGetData, GetChunkRunnersRunnerIdApiChunksChunkIdGetErrors, GetChunkRunnersRunnerIdApiChunksChunkIdGetResponses, GetDashboardRunnersRunnerIdApiDashboardGetData, GetDashboardRunnersRunnerIdApiDashboardGetErrors, GetDashboardRunnersRunnerIdApiDashboardGetResponses, GetFindingRunnersRunnerIdApiLeasesLeaseIdFindingsFindingIdGetData, GetFindingRunnersRunnerIdApiLeasesLeaseIdFindingsFindingIdGetErrors, GetFindingRunnersRunnerIdApiLeasesLeaseIdFindingsFindingIdGetResponses, GetFleetSummaryRunnersRunnerIdApiFleetSummaryGetData, GetFleetSummaryRunnersRunnerIdApiFleetSummaryGetErrors, GetFleetSummaryRunnersRunnerIdApiFleetSummaryGetResponses, GetHistoryRunnersRunnerIdApiLeasesLeaseIdHistoryGetData, GetHistoryRunnersRunnerIdApiLeasesLeaseIdHistoryGetErrors, GetHistoryRunnersRunnerIdApiLeasesLeaseIdHistoryGetResponses, GetRunnerRunnersRunnerIdApiRunnerGetData, GetRunnerRunnersRunnerIdApiRunnerGetErrors, GetRunnerRunnersRunnerIdApiRunnerGetResponses, GetSelftestRunnersRunnerIdApiSelftestsSelftestIdGetData, GetSelftestRunnersRunnerIdApiSelftestsSelftestIdGetErrors, GetSelftestRunnersRunnerIdApiSelftestsSelftestIdGetResponses, GetTranscriptRunnersRunnerIdApiLeasesLeaseIdTranscriptGetData, GetTranscriptRunnersRunnerIdApiLeasesLeaseIdTranscriptGetErrors, GetTranscriptRunnersRunnerIdApiLeasesLeaseIdTranscriptGetResponses, GetTranscriptSegmentRunnersRunnerIdApiChunksChunkIdTranscriptsSegmentIdGetData, GetTranscriptSegmentRunnersRunnerIdApiChunksChunkIdTranscriptsSegmentIdGetErrors, GetTranscriptSegmentRunnersRunnerIdApiChunksChunkIdTranscriptsSegmentIdGetResponses, GetWorkItemsRunnersRunnerIdApiChunksChunkIdWorkItemsGetData, GetWorkItemsRunnersRunnerIdApiChunksChunkIdWorkItemsGetErrors, GetWorkItemsRunnersRunnerIdApiChunksChunkIdWorkItemsGetResponses, HealthApiHealthGetData, HealthApiHealthGetResponses, HeartbeatRunnersRunnerIdApiHeartbeatPostData, HeartbeatRunnersRunnerIdApiHeartbeatPostErrors, HeartbeatRunnersRunnerIdApiHeartbeatPostResponses, ListArtifactsRunnersRunnerIdApiLeasesLeaseIdArtifactsGetData, ListArtifactsRunnersRunnerIdApiLeasesLeaseIdArtifactsGetErrors, ListArtifactsRunnersRunnerIdApiLeasesLeaseIdArtifactsGetResponses, ListAsksRunnersRunnerIdApiAsksGetData, ListAsksRunnersRunnerIdApiAsksGetErrors, ListAsksRunnersRunnerIdApiAsksGetResponses, ListEnvironmentsApiHostEnvironmentsGetData, ListEnvironmentsApiHostEnvironmentsGetResponses, ListEscalationsRunnersRunnerIdApiEscalationsGetData, ListEscalationsRunnersRunnerIdApiEscalationsGetErrors, ListEscalationsRunnersRunnerIdApiEscalationsGetResponses, ListFactsRunnersRunnerIdApiFactsGetData, ListFactsRunnersRunnerIdApiFactsGetErrors, ListFactsRunnersRunnerIdApiFactsGetResponses, ListFindingsRunnersRunnerIdApiLeasesLeaseIdFindingsGetData, ListFindingsRunnersRunnerIdApiLeasesLeaseIdFindingsGetErrors, ListFindingsRunnersRunnerIdApiLeasesLeaseIdFindingsGetResponses, ListGardenFindingsRunnersRunnerIdApiLeasesLeaseIdGardenFindingsGetData, ListGardenFindingsRunnersRunnerIdApiLeasesLeaseIdGardenFindingsGetErrors, ListGardenFindingsRunnersRunnerIdApiLeasesLeaseIdGardenFindingsGetResponses, ListGardenProposalsRunnersRunnerIdApiLeasesLeaseIdGardenProposalsGetData, ListGardenProposalsRunnersRunnerIdApiLeasesLeaseIdGardenProposalsGetErrors, ListGardenProposalsRunnersRunnerIdApiLeasesLeaseIdGardenProposalsGetResponses, ListHarnessHealthRunnersRunnerIdApiHarnessHealthGetData, ListHarnessHealthRunnersRunnerIdApiHarnessHealthGetErrors, ListHarnessHealthRunnersRunnerIdApiHarnessHealthGetResponses, ListLeasesRunnersRunnerIdApiLeasesGetData, ListLeasesRunnersRunnerIdApiLeasesGetErrors, ListLeasesRunnersRunnerIdApiLeasesGetResponses, ListOpenTakeoversRunnersRunnerIdApiTakeoversGetData, ListOpenTakeoversRunnersRunnerIdApiTakeoversGetErrors, ListOpenTakeoversRunnersRunnerIdApiTakeoversGetResponses, ListRunnersApiHostRunnersGetData, ListRunnersApiHostRunnersGetResponses, ListScopesRunnersRunnerIdApiLeasesLeaseIdScopesGetData, ListScopesRunnersRunnerIdApiLeasesLeaseIdScopesGetErrors, ListScopesRunnersRunnerIdApiLeasesLeaseIdScopesGetResponses, ListStagedAttachmentsRunnersRunnerIdApiLeasesLeaseIdAttachmentsGetData, ListStagedAttachmentsRunnersRunnerIdApiLeasesLeaseIdAttachmentsGetErrors, ListStagedAttachmentsRunnersRunnerIdApiLeasesLeaseIdAttachmentsGetResponses, ListSubscriptionsApiHostSubscriptionsGetData, ListSubscriptionsApiHostSubscriptionsGetResponses, ListTranscriptSegmentsRunnersRunnerIdApiChunksChunkIdTranscriptsGetData, ListTranscriptSegmentsRunnersRunnerIdApiChunksChunkIdTranscriptsGetErrors, ListTranscriptSegmentsRunnersRunnerIdApiChunksChunkIdTranscriptsGetResponses, ListWorkspacesApiHostWorkspacesGetData, ListWorkspacesApiHostWorkspacesGetResponses, LoginApiAuthLoginGetData, LoginApiAuthLoginGetErrors, LoginApiAuthLoginGetResponses, LogoutApiAuthLogoutPostData, LogoutApiAuthLogoutPostResponses, OpenTakeoverRunnersRunnerIdApiChunksChunkIdTakeoversPostData, OpenTakeoverRunnersRunnerIdApiChunksChunkIdTakeoversPostErrors, OpenTakeoverRunnersRunnerIdApiChunksChunkIdTakeoversPostResponses, PatchRunnerRunnersRunnerIdApiRunnerPatchData, PatchRunnerRunnersRunnerIdApiRunnerPatchErrors, PatchRunnerRunnersRunnerIdApiRunnerPatchResponses, PauseChunkRunnersRunnerIdApiChunksChunkIdPausePostData, PauseChunkRunnersRunnerIdApiChunksChunkIdPausePostErrors, PauseChunkRunnersRunnerIdApiChunksChunkIdPausePostResponses, ReadSessionApiAuthSessionGetData, ReadSessionApiAuthSessionGetResponses, ReadWorkspacePromptApiHostWorkspacesWorkspaceIdPromptGetData, ReadWorkspacePromptApiHostWorkspacesWorkspaceIdPromptGetErrors, ReadWorkspacePromptApiHostWorkspacesWorkspaceIdPromptGetResponses, ReadyApiReadyGetData, ReadyApiReadyGetResponses, RecordAskRunnersRunnerIdApiLeasesLeaseIdAsksPostData, RecordAskRunnersRunnerIdApiLeasesLeaseIdAsksPostErrors, RecordAskRunnersRunnerIdApiLeasesLeaseIdAsksPostResponses, RecordAttachmentRunnersRunnerIdApiLeasesLeaseIdAttachmentsPostData, RecordAttachmentRunnersRunnerIdApiLeasesLeaseIdAttachmentsPostErrors, RecordAttachmentRunnersRunnerIdApiLeasesLeaseIdAttachmentsPostResponses, RecordGitCommitDeclarationRunnersRunnerIdApiLeasesLeaseIdGitCommitsPostData, RecordGitCommitDeclarationRunnersRunnerIdApiLeasesLeaseIdGitCommitsPostErrors, RecordGitCommitDeclarationRunnersRunnerIdApiLeasesLeaseIdGitCommitsPostResponses, ReplaceWorkspacePromptApiHostWorkspacesWorkspaceIdPromptPutData, ReplaceWorkspacePromptApiHostWorkspacesWorkspaceIdPromptPutErrors, ReplaceWorkspacePromptApiHostWorkspacesWorkspaceIdPromptPutResponses, RequeueChunkRunnersRunnerIdApiChunksChunkIdRequeuesPostData, RequeueChunkRunnersRunnerIdApiChunksChunkIdRequeuesPostErrors, RequeueChunkRunnersRunnerIdApiChunksChunkIdRequeuesPostResponses, ResumeChunkRunnersRunnerIdApiChunksChunkIdResumePostData, ResumeChunkRunnersRunnerIdApiChunksChunkIdResumePostErrors, ResumeChunkRunnersRunnerIdApiChunksChunkIdResumePostResponses, RunnerGetPmItemsDeprecatedAliasRunnersRunnerIdApiChunksChunkIdPmItemsGetData, RunnerGetPmItemsDeprecatedAliasRunnersRunnerIdApiChunksChunkIdPmItemsGetErrors, RunnerGetPmItemsDeprecatedAliasRunnersRunnerIdApiChunksChunkIdPmItemsGetResponses, SessionEndRunnersRunnerIdApiLeasesLeaseIdSessionEndPostData, SessionEndRunnersRunnerIdApiLeasesLeaseIdSessionEndPostErrors, SessionEndRunnersRunnerIdApiLeasesLeaseIdSessionEndPostResponses, StartSelftestRunnersRunnerIdApiSelftestsPostData, StartSelftestRunnersRunnerIdApiSelftestsPostErrors, StartSelftestRunnersRunnerIdApiSelftestsPostResponses, TraceReplayRunnersRunnerIdApiTracesReplayPostData, TraceReplayRunnersRunnerIdApiTracesReplayPostErrors, TraceReplayRunnersRunnerIdApiTracesReplayPostResponses, TraceStatusRunnersRunnerIdApiTracesStatusGetData, TraceStatusRunnersRunnerIdApiTracesStatusGetErrors, TraceStatusRunnersRunnerIdApiTracesStatusGetResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -17,17 +17,6 @@ export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends 
      */
     meta?: keyof ClientMeta extends never ? Record<string, unknown> : ClientMeta;
 };
-
-/**
- * List Asks
- *
- * Every ask still awaiting an answer — ``GET /api/asks?open=true``.
- *
- * The one **human-web-lane** route on this otherwise worker-hook router, so it carries
- * ``require_human_api``. An ask reads open while its ``question_id`` carries
- * no answer fact. No closed-ask history is kept, so ``open=false`` is refused.
- */
-export const listAsksApiAsksGet = <ThrowOnError extends boolean = false>(options?: Options<ListAsksApiAsksGetData, ThrowOnError>): RequestResult<ListAsksApiAsksGetResponses, ListAsksApiAsksGetErrors, ThrowOnError> => (options?.client ?? client).get<ListAsksApiAsksGetResponses, ListAsksApiAsksGetErrors, ThrowOnError>({ url: '/api/asks', ...options });
 
 /**
  * Callback
@@ -60,19 +49,101 @@ export const logoutApiAuthLogoutPost = <ThrowOnError extends boolean = false>(op
 export const readSessionApiAuthSessionGet = <ThrowOnError extends boolean = false>(options?: Options<ReadSessionApiAuthSessionGetData, ThrowOnError>): RequestResult<ReadSessionApiAuthSessionGetResponses, unknown, ThrowOnError> => (options?.client ?? client).get<ReadSessionApiAuthSessionGetResponses, unknown, ThrowOnError>({ url: '/api/auth/session', ...options });
 
 /**
+ * Health
+ */
+export const healthApiHealthGet = <ThrowOnError extends boolean = false>(options?: Options<HealthApiHealthGetData, ThrowOnError>): RequestResult<HealthApiHealthGetResponses, unknown, ThrowOnError> => (options?.client ?? client).get<HealthApiHealthGetResponses, unknown, ThrowOnError>({ url: '/api/health', ...options });
+
+/**
+ * List Environments
+ *
+ * Every workspace's environments, held or free; a held one names its runner and its chunk's project.
+ */
+export const listEnvironmentsApiHostEnvironmentsGet = <ThrowOnError extends boolean = false>(options?: Options<ListEnvironmentsApiHostEnvironmentsGetData, ThrowOnError>): RequestResult<ListEnvironmentsApiHostEnvironmentsGetResponses, unknown, ThrowOnError> => (options?.client ?? client).get<ListEnvironmentsApiHostEnvironmentsGetResponses, unknown, ThrowOnError>({ url: '/api/host/environments', ...options });
+
+/**
+ * List Runners
+ *
+ * Every runner the host holds — a served one with its brake, bindings and agents in use, a halted one with its
+ * reasons.
+ */
+export const listRunnersApiHostRunnersGet = <ThrowOnError extends boolean = false>(options?: Options<ListRunnersApiHostRunnersGetData, ThrowOnError>): RequestResult<ListRunnersApiHostRunnersGetResponses, unknown, ThrowOnError> => (options?.client ?? client).get<ListRunnersApiHostRunnersGetResponses, unknown, ThrowOnError>({ url: '/api/host/runners', ...options });
+
+/**
+ * List Subscriptions
+ *
+ * Every declared subscription's own newest sampling attempt and credential renewal, with the runners that spend
+ * it.
+ */
+export const listSubscriptionsApiHostSubscriptionsGet = <ThrowOnError extends boolean = false>(options?: Options<ListSubscriptionsApiHostSubscriptionsGetData, ThrowOnError>): RequestResult<ListSubscriptionsApiHostSubscriptionsGetResponses, unknown, ThrowOnError> => (options?.client ?? client).get<ListSubscriptionsApiHostSubscriptionsGetResponses, unknown, ThrowOnError>({ url: '/api/host/subscriptions', ...options });
+
+/**
+ * List Workspaces
+ *
+ * Every workspace the host declares.
+ */
+export const listWorkspacesApiHostWorkspacesGet = <ThrowOnError extends boolean = false>(options?: Options<ListWorkspacesApiHostWorkspacesGetData, ThrowOnError>): RequestResult<ListWorkspacesApiHostWorkspacesGetResponses, unknown, ThrowOnError> => (options?.client ?? client).get<ListWorkspacesApiHostWorkspacesGetResponses, unknown, ThrowOnError>({ url: '/api/host/workspaces', ...options });
+
+/**
+ * Clear Workspace Prompt
+ *
+ * Drop the runtime override so the workspace's configured prompt resolves again.
+ *
+ * Distinct from overriding with empty text, which is itself a standing override; the response
+ * carries whatever the config now resolves to, effective on subsequent spawns.
+ */
+export const clearWorkspacePromptApiHostWorkspacesWorkspaceIdPromptDelete = <ThrowOnError extends boolean = false>(options: Options<ClearWorkspacePromptApiHostWorkspacesWorkspaceIdPromptDeleteData, ThrowOnError>): RequestResult<ClearWorkspacePromptApiHostWorkspacesWorkspaceIdPromptDeleteResponses, ClearWorkspacePromptApiHostWorkspacesWorkspaceIdPromptDeleteErrors, ThrowOnError> => (options.client ?? client).delete<ClearWorkspacePromptApiHostWorkspacesWorkspaceIdPromptDeleteResponses, ClearWorkspacePromptApiHostWorkspacesWorkspaceIdPromptDeleteErrors, ThrowOnError>({ url: '/api/host/workspaces/{workspace_id}/prompt', ...options });
+
+/**
+ * Read Workspace Prompt
+ *
+ * The effective spawn preamble prompt: the runtime override if set, else static config.
+ */
+export const readWorkspacePromptApiHostWorkspacesWorkspaceIdPromptGet = <ThrowOnError extends boolean = false>(options: Options<ReadWorkspacePromptApiHostWorkspacesWorkspaceIdPromptGetData, ThrowOnError>): RequestResult<ReadWorkspacePromptApiHostWorkspacesWorkspaceIdPromptGetResponses, ReadWorkspacePromptApiHostWorkspacesWorkspaceIdPromptGetErrors, ThrowOnError> => (options.client ?? client).get<ReadWorkspacePromptApiHostWorkspacesWorkspaceIdPromptGetResponses, ReadWorkspacePromptApiHostWorkspacesWorkspaceIdPromptGetErrors, ThrowOnError>({ url: '/api/host/workspaces/{workspace_id}/prompt', ...options });
+
+/**
+ * Replace Workspace Prompt
+ *
+ * Replace the runtime workspace-prompt override — effective on subsequent spawns.
+ */
+export const replaceWorkspacePromptApiHostWorkspacesWorkspaceIdPromptPut = <ThrowOnError extends boolean = false>(options: Options<ReplaceWorkspacePromptApiHostWorkspacesWorkspaceIdPromptPutData, ThrowOnError>): RequestResult<ReplaceWorkspacePromptApiHostWorkspacesWorkspaceIdPromptPutResponses, ReplaceWorkspacePromptApiHostWorkspacesWorkspaceIdPromptPutErrors, ThrowOnError> => (options.client ?? client).put<ReplaceWorkspacePromptApiHostWorkspacesWorkspaceIdPromptPutResponses, ReplaceWorkspacePromptApiHostWorkspacesWorkspaceIdPromptPutErrors, ThrowOnError>({
+    url: '/api/host/workspaces/{workspace_id}/prompt',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Ready
+ */
+export const readyApiReadyGet = <ThrowOnError extends boolean = false>(options?: Options<ReadyApiReadyGetData, ThrowOnError>): RequestResult<ReadyApiReadyGetResponses, unknown, ThrowOnError> => (options?.client ?? client).get<ReadyApiReadyGetResponses, unknown, ThrowOnError>({ url: '/api/ready', ...options });
+
+/**
+ * List Asks
+ *
+ * Every ask still awaiting an answer — ``GET /api/asks?open=true``.
+ *
+ * The one **human-web-lane** route on this otherwise worker-hook router, so it carries
+ * ``require_human_api``. An ask reads open while its ``question_id`` carries
+ * no answer fact. No closed-ask history is kept, so ``open=false`` is refused.
+ */
+export const listAsksRunnersRunnerIdApiAsksGet = <ThrowOnError extends boolean = false>(options: Options<ListAsksRunnersRunnerIdApiAsksGetData, ThrowOnError>): RequestResult<ListAsksRunnersRunnerIdApiAsksGetResponses, ListAsksRunnersRunnerIdApiAsksGetErrors, ThrowOnError> => (options.client ?? client).get<ListAsksRunnersRunnerIdApiAsksGetResponses, ListAsksRunnersRunnerIdApiAsksGetErrors, ThrowOnError>({ url: '/runners/{runner_id}/api/asks', ...options });
+
+/**
  * Get Chunk
  *
  * Forward a chunk's detail read to the hub — the whole aggregate, including
  * transition history, artifacts, and the open escalation.
  */
-export const getChunkApiChunksChunkIdGet = <ThrowOnError extends boolean = false>(options: Options<GetChunkApiChunksChunkIdGetData, ThrowOnError>): RequestResult<GetChunkApiChunksChunkIdGetResponses, GetChunkApiChunksChunkIdGetErrors, ThrowOnError> => (options.client ?? client).get<GetChunkApiChunksChunkIdGetResponses, GetChunkApiChunksChunkIdGetErrors, ThrowOnError>({ url: '/api/chunks/{chunk_id}', ...options });
+export const getChunkRunnersRunnerIdApiChunksChunkIdGet = <ThrowOnError extends boolean = false>(options: Options<GetChunkRunnersRunnerIdApiChunksChunkIdGetData, ThrowOnError>): RequestResult<GetChunkRunnersRunnerIdApiChunksChunkIdGetResponses, GetChunkRunnersRunnerIdApiChunksChunkIdGetErrors, ThrowOnError> => (options.client ?? client).get<GetChunkRunnersRunnerIdApiChunksChunkIdGetResponses, GetChunkRunnersRunnerIdApiChunksChunkIdGetErrors, ThrowOnError>({ url: '/runners/{runner_id}/api/chunks/{chunk_id}', ...options });
 
 /**
  * Pause Chunk
  *
  * Forward a chunk pause to the hub. ``409`` when the chunk is not in a pausable state.
  */
-export const pauseChunkApiChunksChunkIdPausePost = <ThrowOnError extends boolean = false>(options: Options<PauseChunkApiChunksChunkIdPausePostData, ThrowOnError>): RequestResult<PauseChunkApiChunksChunkIdPausePostResponses, PauseChunkApiChunksChunkIdPausePostErrors, ThrowOnError> => (options.client ?? client).post<PauseChunkApiChunksChunkIdPausePostResponses, PauseChunkApiChunksChunkIdPausePostErrors, ThrowOnError>({ url: '/api/chunks/{chunk_id}/pause', ...options });
+export const pauseChunkRunnersRunnerIdApiChunksChunkIdPausePost = <ThrowOnError extends boolean = false>(options: Options<PauseChunkRunnersRunnerIdApiChunksChunkIdPausePostData, ThrowOnError>): RequestResult<PauseChunkRunnersRunnerIdApiChunksChunkIdPausePostResponses, PauseChunkRunnersRunnerIdApiChunksChunkIdPausePostErrors, ThrowOnError> => (options.client ?? client).post<PauseChunkRunnersRunnerIdApiChunksChunkIdPausePostResponses, PauseChunkRunnersRunnerIdApiChunksChunkIdPausePostErrors, ThrowOnError>({ url: '/runners/{runner_id}/api/chunks/{chunk_id}/pause', ...options });
 
 /**
  * Deprecated alias for GET /chunks/{chunk_id}/work-items
@@ -81,7 +152,7 @@ export const pauseChunkApiChunksChunkIdPausePost = <ThrowOnError extends boolean
  *
  * @deprecated
  */
-export const runnerGetPmItemsDeprecatedAliasApiChunksChunkIdPmItemsGet = <ThrowOnError extends boolean = false>(options: Options<RunnerGetPmItemsDeprecatedAliasApiChunksChunkIdPmItemsGetData, ThrowOnError>): RequestResult<RunnerGetPmItemsDeprecatedAliasApiChunksChunkIdPmItemsGetResponses, RunnerGetPmItemsDeprecatedAliasApiChunksChunkIdPmItemsGetErrors, ThrowOnError> => (options.client ?? client).get<RunnerGetPmItemsDeprecatedAliasApiChunksChunkIdPmItemsGetResponses, RunnerGetPmItemsDeprecatedAliasApiChunksChunkIdPmItemsGetErrors, ThrowOnError>({ url: '/api/chunks/{chunk_id}/pm-items', ...options });
+export const runnerGetPmItemsDeprecatedAliasRunnersRunnerIdApiChunksChunkIdPmItemsGet = <ThrowOnError extends boolean = false>(options: Options<RunnerGetPmItemsDeprecatedAliasRunnersRunnerIdApiChunksChunkIdPmItemsGetData, ThrowOnError>): RequestResult<RunnerGetPmItemsDeprecatedAliasRunnersRunnerIdApiChunksChunkIdPmItemsGetResponses, RunnerGetPmItemsDeprecatedAliasRunnersRunnerIdApiChunksChunkIdPmItemsGetErrors, ThrowOnError> => (options.client ?? client).get<RunnerGetPmItemsDeprecatedAliasRunnersRunnerIdApiChunksChunkIdPmItemsGetResponses, RunnerGetPmItemsDeprecatedAliasRunnersRunnerIdApiChunksChunkIdPmItemsGetErrors, ThrowOnError>({ url: '/runners/{runner_id}/api/chunks/{chunk_id}/pm-items', ...options });
 
 /**
  * Requeue Chunk
@@ -91,14 +162,14 @@ export const runnerGetPmItemsDeprecatedAliasApiChunksChunkIdPmItemsGet = <ThrowO
  * ``409`` while the chunk's takeover is still open (end the interactive session first),
  * or while the chunk carries no open escalation (nothing needs_human to clear).
  */
-export const requeueChunkApiChunksChunkIdRequeuesPost = <ThrowOnError extends boolean = false>(options: Options<RequeueChunkApiChunksChunkIdRequeuesPostData, ThrowOnError>): RequestResult<RequeueChunkApiChunksChunkIdRequeuesPostResponses, RequeueChunkApiChunksChunkIdRequeuesPostErrors, ThrowOnError> => (options.client ?? client).post<RequeueChunkApiChunksChunkIdRequeuesPostResponses, RequeueChunkApiChunksChunkIdRequeuesPostErrors, ThrowOnError>({ url: '/api/chunks/{chunk_id}/requeues', ...options });
+export const requeueChunkRunnersRunnerIdApiChunksChunkIdRequeuesPost = <ThrowOnError extends boolean = false>(options: Options<RequeueChunkRunnersRunnerIdApiChunksChunkIdRequeuesPostData, ThrowOnError>): RequestResult<RequeueChunkRunnersRunnerIdApiChunksChunkIdRequeuesPostResponses, RequeueChunkRunnersRunnerIdApiChunksChunkIdRequeuesPostErrors, ThrowOnError> => (options.client ?? client).post<RequeueChunkRunnersRunnerIdApiChunksChunkIdRequeuesPostResponses, RequeueChunkRunnersRunnerIdApiChunksChunkIdRequeuesPostErrors, ThrowOnError>({ url: '/runners/{runner_id}/api/chunks/{chunk_id}/requeues', ...options });
 
 /**
  * Resume Chunk
  *
  * Forward a chunk resume to the hub.
  */
-export const resumeChunkApiChunksChunkIdResumePost = <ThrowOnError extends boolean = false>(options: Options<ResumeChunkApiChunksChunkIdResumePostData, ThrowOnError>): RequestResult<ResumeChunkApiChunksChunkIdResumePostResponses, ResumeChunkApiChunksChunkIdResumePostErrors, ThrowOnError> => (options.client ?? client).post<ResumeChunkApiChunksChunkIdResumePostResponses, ResumeChunkApiChunksChunkIdResumePostErrors, ThrowOnError>({ url: '/api/chunks/{chunk_id}/resume', ...options });
+export const resumeChunkRunnersRunnerIdApiChunksChunkIdResumePost = <ThrowOnError extends boolean = false>(options: Options<ResumeChunkRunnersRunnerIdApiChunksChunkIdResumePostData, ThrowOnError>): RequestResult<ResumeChunkRunnersRunnerIdApiChunksChunkIdResumePostResponses, ResumeChunkRunnersRunnerIdApiChunksChunkIdResumePostErrors, ThrowOnError> => (options.client ?? client).post<ResumeChunkRunnersRunnerIdApiChunksChunkIdResumePostResponses, ResumeChunkRunnersRunnerIdApiChunksChunkIdResumePostErrors, ThrowOnError>({ url: '/runners/{runner_id}/api/chunks/{chunk_id}/resume', ...options });
 
 /**
  * Open Takeover
@@ -108,8 +179,8 @@ export const resumeChunkApiChunksChunkIdResumePost = <ThrowOnError extends boole
  * ``force`` supersedes a live worker attempt instead of refusing, consuming no retry
  * and recording no escalation.
  */
-export const openTakeoverApiChunksChunkIdTakeoversPost = <ThrowOnError extends boolean = false>(options: Options<OpenTakeoverApiChunksChunkIdTakeoversPostData, ThrowOnError>): RequestResult<OpenTakeoverApiChunksChunkIdTakeoversPostResponses, OpenTakeoverApiChunksChunkIdTakeoversPostErrors, ThrowOnError> => (options.client ?? client).post<OpenTakeoverApiChunksChunkIdTakeoversPostResponses, OpenTakeoverApiChunksChunkIdTakeoversPostErrors, ThrowOnError>({
-    url: '/api/chunks/{chunk_id}/takeovers',
+export const openTakeoverRunnersRunnerIdApiChunksChunkIdTakeoversPost = <ThrowOnError extends boolean = false>(options: Options<OpenTakeoverRunnersRunnerIdApiChunksChunkIdTakeoversPostData, ThrowOnError>): RequestResult<OpenTakeoverRunnersRunnerIdApiChunksChunkIdTakeoversPostResponses, OpenTakeoverRunnersRunnerIdApiChunksChunkIdTakeoversPostErrors, ThrowOnError> => (options.client ?? client).post<OpenTakeoverRunnersRunnerIdApiChunksChunkIdTakeoversPostResponses, OpenTakeoverRunnersRunnerIdApiChunksChunkIdTakeoversPostErrors, ThrowOnError>({
+    url: '/runners/{runner_id}/api/chunks/{chunk_id}/takeovers',
     ...options,
     headers: {
         'Content-Type': 'application/json',
@@ -122,7 +193,7 @@ export const openTakeoverApiChunksChunkIdTakeoversPost = <ThrowOnError extends b
  *
  * Mark a takeover ended.
  */
-export const endTakeoverApiChunksChunkIdTakeoversTakeoverIdPatch = <ThrowOnError extends boolean = false>(options: Options<EndTakeoverApiChunksChunkIdTakeoversTakeoverIdPatchData, ThrowOnError>): RequestResult<EndTakeoverApiChunksChunkIdTakeoversTakeoverIdPatchResponses, EndTakeoverApiChunksChunkIdTakeoversTakeoverIdPatchErrors, ThrowOnError> => (options.client ?? client).patch<EndTakeoverApiChunksChunkIdTakeoversTakeoverIdPatchResponses, EndTakeoverApiChunksChunkIdTakeoversTakeoverIdPatchErrors, ThrowOnError>({ url: '/api/chunks/{chunk_id}/takeovers/{takeover_id}', ...options });
+export const endTakeoverRunnersRunnerIdApiChunksChunkIdTakeoversTakeoverIdPatch = <ThrowOnError extends boolean = false>(options: Options<EndTakeoverRunnersRunnerIdApiChunksChunkIdTakeoversTakeoverIdPatchData, ThrowOnError>): RequestResult<EndTakeoverRunnersRunnerIdApiChunksChunkIdTakeoversTakeoverIdPatchResponses, EndTakeoverRunnersRunnerIdApiChunksChunkIdTakeoversTakeoverIdPatchErrors, ThrowOnError> => (options.client ?? client).patch<EndTakeoverRunnersRunnerIdApiChunksChunkIdTakeoversTakeoverIdPatchResponses, EndTakeoverRunnersRunnerIdApiChunksChunkIdTakeoversTakeoverIdPatchErrors, ThrowOnError>({ url: '/runners/{runner_id}/api/chunks/{chunk_id}/takeovers/{takeover_id}', ...options });
 
 /**
  * List Transcript Segments
@@ -130,77 +201,65 @@ export const endTakeoverApiChunksChunkIdTakeoversTakeoverIdPatch = <ThrowOnError
  * The chunk's segment index, straight off the local ledger — metadata and byte counts
  * only, never turns. A chunk this runner never held a lease for returns ``[]``.
  */
-export const listTranscriptSegmentsApiChunksChunkIdTranscriptsGet = <ThrowOnError extends boolean = false>(options: Options<ListTranscriptSegmentsApiChunksChunkIdTranscriptsGetData, ThrowOnError>): RequestResult<ListTranscriptSegmentsApiChunksChunkIdTranscriptsGetResponses, ListTranscriptSegmentsApiChunksChunkIdTranscriptsGetErrors, ThrowOnError> => (options.client ?? client).get<ListTranscriptSegmentsApiChunksChunkIdTranscriptsGetResponses, ListTranscriptSegmentsApiChunksChunkIdTranscriptsGetErrors, ThrowOnError>({ url: '/api/chunks/{chunk_id}/transcripts', ...options });
+export const listTranscriptSegmentsRunnersRunnerIdApiChunksChunkIdTranscriptsGet = <ThrowOnError extends boolean = false>(options: Options<ListTranscriptSegmentsRunnersRunnerIdApiChunksChunkIdTranscriptsGetData, ThrowOnError>): RequestResult<ListTranscriptSegmentsRunnersRunnerIdApiChunksChunkIdTranscriptsGetResponses, ListTranscriptSegmentsRunnersRunnerIdApiChunksChunkIdTranscriptsGetErrors, ThrowOnError> => (options.client ?? client).get<ListTranscriptSegmentsRunnersRunnerIdApiChunksChunkIdTranscriptsGetResponses, ListTranscriptSegmentsRunnersRunnerIdApiChunksChunkIdTranscriptsGetErrors, ThrowOnError>({ url: '/runners/{runner_id}/api/chunks/{chunk_id}/transcripts', ...options });
 
 /**
  * Get Transcript Segment
  *
  * One segment's turns, local-only — 404 iff absent; 503 iff its owner is unavailable.
  */
-export const getTranscriptSegmentApiChunksChunkIdTranscriptsSegmentIdGet = <ThrowOnError extends boolean = false>(options: Options<GetTranscriptSegmentApiChunksChunkIdTranscriptsSegmentIdGetData, ThrowOnError>): RequestResult<GetTranscriptSegmentApiChunksChunkIdTranscriptsSegmentIdGetResponses, GetTranscriptSegmentApiChunksChunkIdTranscriptsSegmentIdGetErrors, ThrowOnError> => (options.client ?? client).get<GetTranscriptSegmentApiChunksChunkIdTranscriptsSegmentIdGetResponses, GetTranscriptSegmentApiChunksChunkIdTranscriptsSegmentIdGetErrors, ThrowOnError>({ url: '/api/chunks/{chunk_id}/transcripts/{segment_id}', ...options });
+export const getTranscriptSegmentRunnersRunnerIdApiChunksChunkIdTranscriptsSegmentIdGet = <ThrowOnError extends boolean = false>(options: Options<GetTranscriptSegmentRunnersRunnerIdApiChunksChunkIdTranscriptsSegmentIdGetData, ThrowOnError>): RequestResult<GetTranscriptSegmentRunnersRunnerIdApiChunksChunkIdTranscriptsSegmentIdGetResponses, GetTranscriptSegmentRunnersRunnerIdApiChunksChunkIdTranscriptsSegmentIdGetErrors, ThrowOnError> => (options.client ?? client).get<GetTranscriptSegmentRunnersRunnerIdApiChunksChunkIdTranscriptsSegmentIdGetResponses, GetTranscriptSegmentRunnersRunnerIdApiChunksChunkIdTranscriptsSegmentIdGetErrors, ThrowOnError>({ url: '/runners/{runner_id}/api/chunks/{chunk_id}/transcripts/{segment_id}', ...options });
 
 /**
  * Get Work Items
  *
  * Forward a chunk's work-items read to the hub — the layered pass-through.
  */
-export const getWorkItemsApiChunksChunkIdWorkItemsGet = <ThrowOnError extends boolean = false>(options: Options<GetWorkItemsApiChunksChunkIdWorkItemsGetData, ThrowOnError>): RequestResult<GetWorkItemsApiChunksChunkIdWorkItemsGetResponses, GetWorkItemsApiChunksChunkIdWorkItemsGetErrors, ThrowOnError> => (options.client ?? client).get<GetWorkItemsApiChunksChunkIdWorkItemsGetResponses, GetWorkItemsApiChunksChunkIdWorkItemsGetErrors, ThrowOnError>({ url: '/api/chunks/{chunk_id}/work-items', ...options });
+export const getWorkItemsRunnersRunnerIdApiChunksChunkIdWorkItemsGet = <ThrowOnError extends boolean = false>(options: Options<GetWorkItemsRunnersRunnerIdApiChunksChunkIdWorkItemsGetData, ThrowOnError>): RequestResult<GetWorkItemsRunnersRunnerIdApiChunksChunkIdWorkItemsGetResponses, GetWorkItemsRunnersRunnerIdApiChunksChunkIdWorkItemsGetErrors, ThrowOnError> => (options.client ?? client).get<GetWorkItemsRunnersRunnerIdApiChunksChunkIdWorkItemsGetResponses, GetWorkItemsRunnersRunnerIdApiChunksChunkIdWorkItemsGetErrors, ThrowOnError>({ url: '/runners/{runner_id}/api/chunks/{chunk_id}/work-items', ...options });
 
 /**
  * Get Dashboard
  *
- * The panel's nine reads composed into one — the eight local sections always
+ * The panel's seven reads composed into one — the six local sections always
  * populate; ``fleet_summary`` is ``None`` on a hub outage or an unwired runner.
  */
-export const getDashboardApiDashboardGet = <ThrowOnError extends boolean = false>(options?: Options<GetDashboardApiDashboardGetData, ThrowOnError>): RequestResult<GetDashboardApiDashboardGetResponses, unknown, ThrowOnError> => (options?.client ?? client).get<GetDashboardApiDashboardGetResponses, unknown, ThrowOnError>({ url: '/api/dashboard', ...options });
-
-/**
- * List Environments
- *
- * Every environment in this runner's configured pool, held or free.
- */
-export const listEnvironmentsApiEnvironmentsGet = <ThrowOnError extends boolean = false>(options?: Options<ListEnvironmentsApiEnvironmentsGetData, ThrowOnError>): RequestResult<ListEnvironmentsApiEnvironmentsGetResponses, unknown, ThrowOnError> => (options?.client ?? client).get<ListEnvironmentsApiEnvironmentsGetResponses, unknown, ThrowOnError>({ url: '/api/environments', ...options });
+export const getDashboardRunnersRunnerIdApiDashboardGet = <ThrowOnError extends boolean = false>(options: Options<GetDashboardRunnersRunnerIdApiDashboardGetData, ThrowOnError>): RequestResult<GetDashboardRunnersRunnerIdApiDashboardGetResponses, GetDashboardRunnersRunnerIdApiDashboardGetErrors, ThrowOnError> => (options.client ?? client).get<GetDashboardRunnersRunnerIdApiDashboardGetResponses, GetDashboardRunnersRunnerIdApiDashboardGetErrors, ThrowOnError>({ url: '/runners/{runner_id}/api/dashboard', ...options });
 
 /**
  * List Escalations
  *
  * Every escalation still open — no later lease mint, and the hub has not ended the chunk.
  */
-export const listEscalationsApiEscalationsGet = <ThrowOnError extends boolean = false>(options?: Options<ListEscalationsApiEscalationsGetData, ThrowOnError>): RequestResult<ListEscalationsApiEscalationsGetResponses, unknown, ThrowOnError> => (options?.client ?? client).get<ListEscalationsApiEscalationsGetResponses, unknown, ThrowOnError>({ url: '/api/escalations', ...options });
+export const listEscalationsRunnersRunnerIdApiEscalationsGet = <ThrowOnError extends boolean = false>(options: Options<ListEscalationsRunnersRunnerIdApiEscalationsGetData, ThrowOnError>): RequestResult<ListEscalationsRunnersRunnerIdApiEscalationsGetResponses, ListEscalationsRunnersRunnerIdApiEscalationsGetErrors, ThrowOnError> => (options.client ?? client).get<ListEscalationsRunnersRunnerIdApiEscalationsGetResponses, ListEscalationsRunnersRunnerIdApiEscalationsGetErrors, ThrowOnError>({ url: '/runners/{runner_id}/api/escalations', ...options });
 
 /**
  * List Facts
  *
  * The newest ``limit`` hub-bound facts recorded by this runner, newest first.
  */
-export const listFactsApiFactsGet = <ThrowOnError extends boolean = false>(options?: Options<ListFactsApiFactsGetData, ThrowOnError>): RequestResult<ListFactsApiFactsGetResponses, ListFactsApiFactsGetErrors, ThrowOnError> => (options?.client ?? client).get<ListFactsApiFactsGetResponses, ListFactsApiFactsGetErrors, ThrowOnError>({ url: '/api/facts', ...options });
+export const listFactsRunnersRunnerIdApiFactsGet = <ThrowOnError extends boolean = false>(options: Options<ListFactsRunnersRunnerIdApiFactsGetData, ThrowOnError>): RequestResult<ListFactsRunnersRunnerIdApiFactsGetResponses, ListFactsRunnersRunnerIdApiFactsGetErrors, ThrowOnError> => (options.client ?? client).get<ListFactsRunnersRunnerIdApiFactsGetResponses, ListFactsRunnersRunnerIdApiFactsGetErrors, ThrowOnError>({ url: '/runners/{runner_id}/api/facts', ...options });
 
 /**
  * Get Fleet Summary
  *
  * Forward the fleet-summary read to the hub — the layered pass-through.
  */
-export const getFleetSummaryApiFleetSummaryGet = <ThrowOnError extends boolean = false>(options?: Options<GetFleetSummaryApiFleetSummaryGetData, ThrowOnError>): RequestResult<GetFleetSummaryApiFleetSummaryGetResponses, unknown, ThrowOnError> => (options?.client ?? client).get<GetFleetSummaryApiFleetSummaryGetResponses, unknown, ThrowOnError>({ url: '/api/fleet-summary', ...options });
+export const getFleetSummaryRunnersRunnerIdApiFleetSummaryGet = <ThrowOnError extends boolean = false>(options: Options<GetFleetSummaryRunnersRunnerIdApiFleetSummaryGetData, ThrowOnError>): RequestResult<GetFleetSummaryRunnersRunnerIdApiFleetSummaryGetResponses, GetFleetSummaryRunnersRunnerIdApiFleetSummaryGetErrors, ThrowOnError> => (options.client ?? client).get<GetFleetSummaryRunnersRunnerIdApiFleetSummaryGetResponses, GetFleetSummaryRunnersRunnerIdApiFleetSummaryGetErrors, ThrowOnError>({ url: '/runners/{runner_id}/api/fleet-summary', ...options });
 
 /**
  * List Harness Health
  *
  * Every configured harness binding's own computed health.
  */
-export const listHarnessHealthApiHarnessHealthGet = <ThrowOnError extends boolean = false>(options?: Options<ListHarnessHealthApiHarnessHealthGetData, ThrowOnError>): RequestResult<ListHarnessHealthApiHarnessHealthGetResponses, unknown, ThrowOnError> => (options?.client ?? client).get<ListHarnessHealthApiHarnessHealthGetResponses, unknown, ThrowOnError>({ url: '/api/harness-health', ...options });
-
-/**
- * Health
- */
-export const healthApiHealthGet = <ThrowOnError extends boolean = false>(options?: Options<HealthApiHealthGetData, ThrowOnError>): RequestResult<HealthApiHealthGetResponses, unknown, ThrowOnError> => (options?.client ?? client).get<HealthApiHealthGetResponses, unknown, ThrowOnError>({ url: '/api/health', ...options });
+export const listHarnessHealthRunnersRunnerIdApiHarnessHealthGet = <ThrowOnError extends boolean = false>(options: Options<ListHarnessHealthRunnersRunnerIdApiHarnessHealthGetData, ThrowOnError>): RequestResult<ListHarnessHealthRunnersRunnerIdApiHarnessHealthGetResponses, ListHarnessHealthRunnersRunnerIdApiHarnessHealthGetErrors, ThrowOnError> => (options.client ?? client).get<ListHarnessHealthRunnersRunnerIdApiHarnessHealthGetResponses, ListHarnessHealthRunnersRunnerIdApiHarnessHealthGetErrors, ThrowOnError>({ url: '/runners/{runner_id}/api/harness-health', ...options });
 
 /**
  * Heartbeat
  *
  * Record a lease heartbeat, stamped with the injected clock.
  */
-export const heartbeatApiHeartbeatPost = <ThrowOnError extends boolean = false>(options: Options<HeartbeatApiHeartbeatPostData, ThrowOnError>): RequestResult<HeartbeatApiHeartbeatPostResponses, HeartbeatApiHeartbeatPostErrors, ThrowOnError> => (options.client ?? client).post<HeartbeatApiHeartbeatPostResponses, HeartbeatApiHeartbeatPostErrors, ThrowOnError>({
-    url: '/api/heartbeat',
+export const heartbeatRunnersRunnerIdApiHeartbeatPost = <ThrowOnError extends boolean = false>(options: Options<HeartbeatRunnersRunnerIdApiHeartbeatPostData, ThrowOnError>): RequestResult<HeartbeatRunnersRunnerIdApiHeartbeatPostResponses, HeartbeatRunnersRunnerIdApiHeartbeatPostErrors, ThrowOnError> => (options.client ?? client).post<HeartbeatRunnersRunnerIdApiHeartbeatPostResponses, HeartbeatRunnersRunnerIdApiHeartbeatPostErrors, ThrowOnError>({
+    url: '/runners/{runner_id}/api/heartbeat',
     ...options,
     headers: {
         'Content-Type': 'application/json',
@@ -213,49 +272,49 @@ export const heartbeatApiHeartbeatPost = <ThrowOnError extends boolean = false>(
  *
  * Active leases, then recently-closed ones, derived at read time.
  */
-export const listLeasesApiLeasesGet = <ThrowOnError extends boolean = false>(options?: Options<ListLeasesApiLeasesGetData, ThrowOnError>): RequestResult<ListLeasesApiLeasesGetResponses, unknown, ThrowOnError> => (options?.client ?? client).get<ListLeasesApiLeasesGetResponses, unknown, ThrowOnError>({ url: '/api/leases', ...options });
+export const listLeasesRunnersRunnerIdApiLeasesGet = <ThrowOnError extends boolean = false>(options: Options<ListLeasesRunnersRunnerIdApiLeasesGetData, ThrowOnError>): RequestResult<ListLeasesRunnersRunnerIdApiLeasesGetResponses, ListLeasesRunnersRunnerIdApiLeasesGetErrors, ThrowOnError> => (options.client ?? client).get<ListLeasesRunnersRunnerIdApiLeasesGetResponses, ListLeasesRunnersRunnerIdApiLeasesGetErrors, ThrowOnError>({ url: '/runners/{runner_id}/api/leases', ...options });
 
 /**
  * Get Analytics Counts Agent Types
  *
  * Forward this lease's chunk's counts-by-agent-type read to the hub over the window.
  */
-export const getAnalyticsCountsAgentTypesApiLeasesLeaseIdAnalyticsCountsAgentTypesGet = <ThrowOnError extends boolean = false>(options: Options<GetAnalyticsCountsAgentTypesApiLeasesLeaseIdAnalyticsCountsAgentTypesGetData, ThrowOnError>): RequestResult<GetAnalyticsCountsAgentTypesApiLeasesLeaseIdAnalyticsCountsAgentTypesGetResponses, GetAnalyticsCountsAgentTypesApiLeasesLeaseIdAnalyticsCountsAgentTypesGetErrors, ThrowOnError> => (options.client ?? client).get<GetAnalyticsCountsAgentTypesApiLeasesLeaseIdAnalyticsCountsAgentTypesGetResponses, GetAnalyticsCountsAgentTypesApiLeasesLeaseIdAnalyticsCountsAgentTypesGetErrors, ThrowOnError>({ url: '/api/leases/{lease_id}/analytics/counts/agent-types', ...options });
+export const getAnalyticsCountsAgentTypesRunnersRunnerIdApiLeasesLeaseIdAnalyticsCountsAgentTypesGet = <ThrowOnError extends boolean = false>(options: Options<GetAnalyticsCountsAgentTypesRunnersRunnerIdApiLeasesLeaseIdAnalyticsCountsAgentTypesGetData, ThrowOnError>): RequestResult<GetAnalyticsCountsAgentTypesRunnersRunnerIdApiLeasesLeaseIdAnalyticsCountsAgentTypesGetResponses, GetAnalyticsCountsAgentTypesRunnersRunnerIdApiLeasesLeaseIdAnalyticsCountsAgentTypesGetErrors, ThrowOnError> => (options.client ?? client).get<GetAnalyticsCountsAgentTypesRunnersRunnerIdApiLeasesLeaseIdAnalyticsCountsAgentTypesGetResponses, GetAnalyticsCountsAgentTypesRunnersRunnerIdApiLeasesLeaseIdAnalyticsCountsAgentTypesGetErrors, ThrowOnError>({ url: '/runners/{runner_id}/api/leases/{lease_id}/analytics/counts/agent-types', ...options });
 
 /**
  * Get Analytics Counts Files
  *
  * Forward this lease's chunk's counts-by-file read to the hub over the window.
  */
-export const getAnalyticsCountsFilesApiLeasesLeaseIdAnalyticsCountsFilesGet = <ThrowOnError extends boolean = false>(options: Options<GetAnalyticsCountsFilesApiLeasesLeaseIdAnalyticsCountsFilesGetData, ThrowOnError>): RequestResult<GetAnalyticsCountsFilesApiLeasesLeaseIdAnalyticsCountsFilesGetResponses, GetAnalyticsCountsFilesApiLeasesLeaseIdAnalyticsCountsFilesGetErrors, ThrowOnError> => (options.client ?? client).get<GetAnalyticsCountsFilesApiLeasesLeaseIdAnalyticsCountsFilesGetResponses, GetAnalyticsCountsFilesApiLeasesLeaseIdAnalyticsCountsFilesGetErrors, ThrowOnError>({ url: '/api/leases/{lease_id}/analytics/counts/files', ...options });
+export const getAnalyticsCountsFilesRunnersRunnerIdApiLeasesLeaseIdAnalyticsCountsFilesGet = <ThrowOnError extends boolean = false>(options: Options<GetAnalyticsCountsFilesRunnersRunnerIdApiLeasesLeaseIdAnalyticsCountsFilesGetData, ThrowOnError>): RequestResult<GetAnalyticsCountsFilesRunnersRunnerIdApiLeasesLeaseIdAnalyticsCountsFilesGetResponses, GetAnalyticsCountsFilesRunnersRunnerIdApiLeasesLeaseIdAnalyticsCountsFilesGetErrors, ThrowOnError> => (options.client ?? client).get<GetAnalyticsCountsFilesRunnersRunnerIdApiLeasesLeaseIdAnalyticsCountsFilesGetResponses, GetAnalyticsCountsFilesRunnersRunnerIdApiLeasesLeaseIdAnalyticsCountsFilesGetErrors, ThrowOnError>({ url: '/runners/{runner_id}/api/leases/{lease_id}/analytics/counts/files', ...options });
 
 /**
  * Get Analytics Counts Nodes
  *
  * Forward this lease's chunk's counts-by-node read to the hub over the window.
  */
-export const getAnalyticsCountsNodesApiLeasesLeaseIdAnalyticsCountsNodesGet = <ThrowOnError extends boolean = false>(options: Options<GetAnalyticsCountsNodesApiLeasesLeaseIdAnalyticsCountsNodesGetData, ThrowOnError>): RequestResult<GetAnalyticsCountsNodesApiLeasesLeaseIdAnalyticsCountsNodesGetResponses, GetAnalyticsCountsNodesApiLeasesLeaseIdAnalyticsCountsNodesGetErrors, ThrowOnError> => (options.client ?? client).get<GetAnalyticsCountsNodesApiLeasesLeaseIdAnalyticsCountsNodesGetResponses, GetAnalyticsCountsNodesApiLeasesLeaseIdAnalyticsCountsNodesGetErrors, ThrowOnError>({ url: '/api/leases/{lease_id}/analytics/counts/nodes', ...options });
+export const getAnalyticsCountsNodesRunnersRunnerIdApiLeasesLeaseIdAnalyticsCountsNodesGet = <ThrowOnError extends boolean = false>(options: Options<GetAnalyticsCountsNodesRunnersRunnerIdApiLeasesLeaseIdAnalyticsCountsNodesGetData, ThrowOnError>): RequestResult<GetAnalyticsCountsNodesRunnersRunnerIdApiLeasesLeaseIdAnalyticsCountsNodesGetResponses, GetAnalyticsCountsNodesRunnersRunnerIdApiLeasesLeaseIdAnalyticsCountsNodesGetErrors, ThrowOnError> => (options.client ?? client).get<GetAnalyticsCountsNodesRunnersRunnerIdApiLeasesLeaseIdAnalyticsCountsNodesGetResponses, GetAnalyticsCountsNodesRunnersRunnerIdApiLeasesLeaseIdAnalyticsCountsNodesGetErrors, ThrowOnError>({ url: '/runners/{runner_id}/api/leases/{lease_id}/analytics/counts/nodes', ...options });
 
 /**
  * Get Analytics Counts Skills
  *
  * Forward this lease's chunk's counts-by-skill read to the hub over the window.
  */
-export const getAnalyticsCountsSkillsApiLeasesLeaseIdAnalyticsCountsSkillsGet = <ThrowOnError extends boolean = false>(options: Options<GetAnalyticsCountsSkillsApiLeasesLeaseIdAnalyticsCountsSkillsGetData, ThrowOnError>): RequestResult<GetAnalyticsCountsSkillsApiLeasesLeaseIdAnalyticsCountsSkillsGetResponses, GetAnalyticsCountsSkillsApiLeasesLeaseIdAnalyticsCountsSkillsGetErrors, ThrowOnError> => (options.client ?? client).get<GetAnalyticsCountsSkillsApiLeasesLeaseIdAnalyticsCountsSkillsGetResponses, GetAnalyticsCountsSkillsApiLeasesLeaseIdAnalyticsCountsSkillsGetErrors, ThrowOnError>({ url: '/api/leases/{lease_id}/analytics/counts/skills', ...options });
+export const getAnalyticsCountsSkillsRunnersRunnerIdApiLeasesLeaseIdAnalyticsCountsSkillsGet = <ThrowOnError extends boolean = false>(options: Options<GetAnalyticsCountsSkillsRunnersRunnerIdApiLeasesLeaseIdAnalyticsCountsSkillsGetData, ThrowOnError>): RequestResult<GetAnalyticsCountsSkillsRunnersRunnerIdApiLeasesLeaseIdAnalyticsCountsSkillsGetResponses, GetAnalyticsCountsSkillsRunnersRunnerIdApiLeasesLeaseIdAnalyticsCountsSkillsGetErrors, ThrowOnError> => (options.client ?? client).get<GetAnalyticsCountsSkillsRunnersRunnerIdApiLeasesLeaseIdAnalyticsCountsSkillsGetResponses, GetAnalyticsCountsSkillsRunnersRunnerIdApiLeasesLeaseIdAnalyticsCountsSkillsGetErrors, ThrowOnError>({ url: '/runners/{runner_id}/api/leases/{lease_id}/analytics/counts/skills', ...options });
 
 /**
  * Get Analytics Spend Graphs
  *
  * Forward this lease's chunk's spend-by-graph read to the hub over the window.
  */
-export const getAnalyticsSpendGraphsApiLeasesLeaseIdAnalyticsSpendGraphsGet = <ThrowOnError extends boolean = false>(options: Options<GetAnalyticsSpendGraphsApiLeasesLeaseIdAnalyticsSpendGraphsGetData, ThrowOnError>): RequestResult<GetAnalyticsSpendGraphsApiLeasesLeaseIdAnalyticsSpendGraphsGetResponses, GetAnalyticsSpendGraphsApiLeasesLeaseIdAnalyticsSpendGraphsGetErrors, ThrowOnError> => (options.client ?? client).get<GetAnalyticsSpendGraphsApiLeasesLeaseIdAnalyticsSpendGraphsGetResponses, GetAnalyticsSpendGraphsApiLeasesLeaseIdAnalyticsSpendGraphsGetErrors, ThrowOnError>({ url: '/api/leases/{lease_id}/analytics/spend/graphs', ...options });
+export const getAnalyticsSpendGraphsRunnersRunnerIdApiLeasesLeaseIdAnalyticsSpendGraphsGet = <ThrowOnError extends boolean = false>(options: Options<GetAnalyticsSpendGraphsRunnersRunnerIdApiLeasesLeaseIdAnalyticsSpendGraphsGetData, ThrowOnError>): RequestResult<GetAnalyticsSpendGraphsRunnersRunnerIdApiLeasesLeaseIdAnalyticsSpendGraphsGetResponses, GetAnalyticsSpendGraphsRunnersRunnerIdApiLeasesLeaseIdAnalyticsSpendGraphsGetErrors, ThrowOnError> => (options.client ?? client).get<GetAnalyticsSpendGraphsRunnersRunnerIdApiLeasesLeaseIdAnalyticsSpendGraphsGetResponses, GetAnalyticsSpendGraphsRunnersRunnerIdApiLeasesLeaseIdAnalyticsSpendGraphsGetErrors, ThrowOnError>({ url: '/runners/{runner_id}/api/leases/{lease_id}/analytics/spend/graphs', ...options });
 
 /**
  * Get Analytics Spend Nodes
  *
  * Forward this lease's chunk's spend-by-node read to the hub over the window.
  */
-export const getAnalyticsSpendNodesApiLeasesLeaseIdAnalyticsSpendNodesGet = <ThrowOnError extends boolean = false>(options: Options<GetAnalyticsSpendNodesApiLeasesLeaseIdAnalyticsSpendNodesGetData, ThrowOnError>): RequestResult<GetAnalyticsSpendNodesApiLeasesLeaseIdAnalyticsSpendNodesGetResponses, GetAnalyticsSpendNodesApiLeasesLeaseIdAnalyticsSpendNodesGetErrors, ThrowOnError> => (options.client ?? client).get<GetAnalyticsSpendNodesApiLeasesLeaseIdAnalyticsSpendNodesGetResponses, GetAnalyticsSpendNodesApiLeasesLeaseIdAnalyticsSpendNodesGetErrors, ThrowOnError>({ url: '/api/leases/{lease_id}/analytics/spend/nodes', ...options });
+export const getAnalyticsSpendNodesRunnersRunnerIdApiLeasesLeaseIdAnalyticsSpendNodesGet = <ThrowOnError extends boolean = false>(options: Options<GetAnalyticsSpendNodesRunnersRunnerIdApiLeasesLeaseIdAnalyticsSpendNodesGetData, ThrowOnError>): RequestResult<GetAnalyticsSpendNodesRunnersRunnerIdApiLeasesLeaseIdAnalyticsSpendNodesGetResponses, GetAnalyticsSpendNodesRunnersRunnerIdApiLeasesLeaseIdAnalyticsSpendNodesGetErrors, ThrowOnError> => (options.client ?? client).get<GetAnalyticsSpendNodesRunnersRunnerIdApiLeasesLeaseIdAnalyticsSpendNodesGetResponses, GetAnalyticsSpendNodesRunnersRunnerIdApiLeasesLeaseIdAnalyticsSpendNodesGetErrors, ThrowOnError>({ url: '/runners/{runner_id}/api/leases/{lease_id}/analytics/spend/nodes', ...options });
 
 /**
  * List Artifacts
@@ -265,7 +324,7 @@ export const getAnalyticsSpendNodesApiLeasesLeaseIdAnalyticsSpendNodesGet = <Thr
  * kind-discriminated. ``scope`` narrows to one; omitted, all three are read. ``scope=graph``
  * never reaches the hub; ``scope=system`` always does.
  */
-export const listArtifactsApiLeasesLeaseIdArtifactsGet = <ThrowOnError extends boolean = false>(options: Options<ListArtifactsApiLeasesLeaseIdArtifactsGetData, ThrowOnError>): RequestResult<ListArtifactsApiLeasesLeaseIdArtifactsGetResponses, ListArtifactsApiLeasesLeaseIdArtifactsGetErrors, ThrowOnError> => (options.client ?? client).get<ListArtifactsApiLeasesLeaseIdArtifactsGetResponses, ListArtifactsApiLeasesLeaseIdArtifactsGetErrors, ThrowOnError>({ url: '/api/leases/{lease_id}/artifacts', ...options });
+export const listArtifactsRunnersRunnerIdApiLeasesLeaseIdArtifactsGet = <ThrowOnError extends boolean = false>(options: Options<ListArtifactsRunnersRunnerIdApiLeasesLeaseIdArtifactsGetData, ThrowOnError>): RequestResult<ListArtifactsRunnersRunnerIdApiLeasesLeaseIdArtifactsGetResponses, ListArtifactsRunnersRunnerIdApiLeasesLeaseIdArtifactsGetErrors, ThrowOnError> => (options.client ?? client).get<ListArtifactsRunnersRunnerIdApiLeasesLeaseIdArtifactsGetResponses, ListArtifactsRunnersRunnerIdApiLeasesLeaseIdArtifactsGetErrors, ThrowOnError>({ url: '/runners/{runner_id}/api/leases/{lease_id}/artifacts', ...options });
 
 /**
  * Get Artifact
@@ -276,7 +335,7 @@ export const listArtifactsApiLeasesLeaseIdArtifactsGet = <ThrowOnError extends b
  * ``scope=graph``/``scope=system`` is ``400``. More than one candidate — several upstream
  * nodes, or a name colliding across scopes — is ``409`` naming them.
  */
-export const getArtifactApiLeasesLeaseIdArtifactsNameGet = <ThrowOnError extends boolean = false>(options: Options<GetArtifactApiLeasesLeaseIdArtifactsNameGetData, ThrowOnError>): RequestResult<GetArtifactApiLeasesLeaseIdArtifactsNameGetResponses, GetArtifactApiLeasesLeaseIdArtifactsNameGetErrors, ThrowOnError> => (options.client ?? client).get<GetArtifactApiLeasesLeaseIdArtifactsNameGetResponses, GetArtifactApiLeasesLeaseIdArtifactsNameGetErrors, ThrowOnError>({ url: '/api/leases/{lease_id}/artifacts/{name}', ...options });
+export const getArtifactRunnersRunnerIdApiLeasesLeaseIdArtifactsNameGet = <ThrowOnError extends boolean = false>(options: Options<GetArtifactRunnersRunnerIdApiLeasesLeaseIdArtifactsNameGetData, ThrowOnError>): RequestResult<GetArtifactRunnersRunnerIdApiLeasesLeaseIdArtifactsNameGetResponses, GetArtifactRunnersRunnerIdApiLeasesLeaseIdArtifactsNameGetErrors, ThrowOnError> => (options.client ?? client).get<GetArtifactRunnersRunnerIdApiLeasesLeaseIdArtifactsNameGetResponses, GetArtifactRunnersRunnerIdApiLeasesLeaseIdArtifactsNameGetErrors, ThrowOnError>({ url: '/runners/{runner_id}/api/leases/{lease_id}/artifacts/{name}', ...options });
 
 /**
  * Get Chunk Asks
@@ -284,7 +343,7 @@ export const getArtifactApiLeasesLeaseIdArtifactsNameGet = <ThrowOnError extends
  * Every question asked on the worker's own chunk, oldest-first — open, answered, and
  * restart-superseded alike. An answer a person gave binds every later session on the chunk.
  */
-export const getChunkAsksApiLeasesLeaseIdAsksGet = <ThrowOnError extends boolean = false>(options: Options<GetChunkAsksApiLeasesLeaseIdAsksGetData, ThrowOnError>): RequestResult<GetChunkAsksApiLeasesLeaseIdAsksGetResponses, GetChunkAsksApiLeasesLeaseIdAsksGetErrors, ThrowOnError> => (options.client ?? client).get<GetChunkAsksApiLeasesLeaseIdAsksGetResponses, GetChunkAsksApiLeasesLeaseIdAsksGetErrors, ThrowOnError>({ url: '/api/leases/{lease_id}/asks', ...options });
+export const getChunkAsksRunnersRunnerIdApiLeasesLeaseIdAsksGet = <ThrowOnError extends boolean = false>(options: Options<GetChunkAsksRunnersRunnerIdApiLeasesLeaseIdAsksGetData, ThrowOnError>): RequestResult<GetChunkAsksRunnersRunnerIdApiLeasesLeaseIdAsksGetResponses, GetChunkAsksRunnersRunnerIdApiLeasesLeaseIdAsksGetErrors, ThrowOnError> => (options.client ?? client).get<GetChunkAsksRunnersRunnerIdApiLeasesLeaseIdAsksGetResponses, GetChunkAsksRunnersRunnerIdApiLeasesLeaseIdAsksGetErrors, ThrowOnError>({ url: '/runners/{runner_id}/api/leases/{lease_id}/asks', ...options });
 
 /**
  * Record Ask
@@ -294,8 +353,8 @@ export const getChunkAsksApiLeasesLeaseIdAsksGet = <ThrowOnError extends boolean
  * Token-authorized like every other worker verb, since activeness alone would admit an open takeover's
  * closed reference lease too. ``409`` when the lease is that closed reference lease.
  */
-export const recordAskApiLeasesLeaseIdAsksPost = <ThrowOnError extends boolean = false>(options: Options<RecordAskApiLeasesLeaseIdAsksPostData, ThrowOnError>): RequestResult<RecordAskApiLeasesLeaseIdAsksPostResponses, RecordAskApiLeasesLeaseIdAsksPostErrors, ThrowOnError> => (options.client ?? client).post<RecordAskApiLeasesLeaseIdAsksPostResponses, RecordAskApiLeasesLeaseIdAsksPostErrors, ThrowOnError>({
-    url: '/api/leases/{lease_id}/asks',
+export const recordAskRunnersRunnerIdApiLeasesLeaseIdAsksPost = <ThrowOnError extends boolean = false>(options: Options<RecordAskRunnersRunnerIdApiLeasesLeaseIdAsksPostData, ThrowOnError>): RequestResult<RecordAskRunnersRunnerIdApiLeasesLeaseIdAsksPostResponses, RecordAskRunnersRunnerIdApiLeasesLeaseIdAsksPostErrors, ThrowOnError> => (options.client ?? client).post<RecordAskRunnersRunnerIdApiLeasesLeaseIdAsksPostResponses, RecordAskRunnersRunnerIdApiLeasesLeaseIdAsksPostErrors, ThrowOnError>({
+    url: '/runners/{runner_id}/api/leases/{lease_id}/asks',
     ...options,
     headers: {
         'Content-Type': 'application/json',
@@ -309,15 +368,15 @@ export const recordAskApiLeasesLeaseIdAsksPost = <ThrowOnError extends boolean =
  * The lease's currently staged submissions — newest content per ``name``, not yet
  * published into any envelope.
  */
-export const listStagedAttachmentsApiLeasesLeaseIdAttachmentsGet = <ThrowOnError extends boolean = false>(options: Options<ListStagedAttachmentsApiLeasesLeaseIdAttachmentsGetData, ThrowOnError>): RequestResult<ListStagedAttachmentsApiLeasesLeaseIdAttachmentsGetResponses, ListStagedAttachmentsApiLeasesLeaseIdAttachmentsGetErrors, ThrowOnError> => (options.client ?? client).get<ListStagedAttachmentsApiLeasesLeaseIdAttachmentsGetResponses, ListStagedAttachmentsApiLeasesLeaseIdAttachmentsGetErrors, ThrowOnError>({ url: '/api/leases/{lease_id}/attachments', ...options });
+export const listStagedAttachmentsRunnersRunnerIdApiLeasesLeaseIdAttachmentsGet = <ThrowOnError extends boolean = false>(options: Options<ListStagedAttachmentsRunnersRunnerIdApiLeasesLeaseIdAttachmentsGetData, ThrowOnError>): RequestResult<ListStagedAttachmentsRunnersRunnerIdApiLeasesLeaseIdAttachmentsGetResponses, ListStagedAttachmentsRunnersRunnerIdApiLeasesLeaseIdAttachmentsGetErrors, ThrowOnError> => (options.client ?? client).get<ListStagedAttachmentsRunnersRunnerIdApiLeasesLeaseIdAttachmentsGetResponses, ListStagedAttachmentsRunnersRunnerIdApiLeasesLeaseIdAttachmentsGetErrors, ThrowOnError>({ url: '/runners/{runner_id}/api/leases/{lease_id}/attachments', ...options });
 
 /**
  * Record Attachment
  *
  * Record a worker's explicit artifact for ``request_body.name`` against its lease.
  */
-export const recordAttachmentApiLeasesLeaseIdAttachmentsPost = <ThrowOnError extends boolean = false>(options: Options<RecordAttachmentApiLeasesLeaseIdAttachmentsPostData, ThrowOnError>): RequestResult<RecordAttachmentApiLeasesLeaseIdAttachmentsPostResponses, RecordAttachmentApiLeasesLeaseIdAttachmentsPostErrors, ThrowOnError> => (options.client ?? client).post<RecordAttachmentApiLeasesLeaseIdAttachmentsPostResponses, RecordAttachmentApiLeasesLeaseIdAttachmentsPostErrors, ThrowOnError>({
-    url: '/api/leases/{lease_id}/attachments',
+export const recordAttachmentRunnersRunnerIdApiLeasesLeaseIdAttachmentsPost = <ThrowOnError extends boolean = false>(options: Options<RecordAttachmentRunnersRunnerIdApiLeasesLeaseIdAttachmentsPostData, ThrowOnError>): RequestResult<RecordAttachmentRunnersRunnerIdApiLeasesLeaseIdAttachmentsPostResponses, RecordAttachmentRunnersRunnerIdApiLeasesLeaseIdAttachmentsPostErrors, ThrowOnError> => (options.client ?? client).post<RecordAttachmentRunnersRunnerIdApiLeasesLeaseIdAttachmentsPostResponses, RecordAttachmentRunnersRunnerIdApiLeasesLeaseIdAttachmentsPostErrors, ThrowOnError>({
+    url: '/runners/{runner_id}/api/leases/{lease_id}/attachments',
     ...options,
     headers: {
         'Content-Type': 'application/json',
@@ -330,21 +389,21 @@ export const recordAttachmentApiLeasesLeaseIdAttachmentsPost = <ThrowOnError ext
  *
  * Forward this lease's chunk's answered-findings read to the hub; its refusals pass through verbatim.
  */
-export const listFindingsApiLeasesLeaseIdFindingsGet = <ThrowOnError extends boolean = false>(options: Options<ListFindingsApiLeasesLeaseIdFindingsGetData, ThrowOnError>): RequestResult<ListFindingsApiLeasesLeaseIdFindingsGetResponses, ListFindingsApiLeasesLeaseIdFindingsGetErrors, ThrowOnError> => (options.client ?? client).get<ListFindingsApiLeasesLeaseIdFindingsGetResponses, ListFindingsApiLeasesLeaseIdFindingsGetErrors, ThrowOnError>({ url: '/api/leases/{lease_id}/findings', ...options });
+export const listFindingsRunnersRunnerIdApiLeasesLeaseIdFindingsGet = <ThrowOnError extends boolean = false>(options: Options<ListFindingsRunnersRunnerIdApiLeasesLeaseIdFindingsGetData, ThrowOnError>): RequestResult<ListFindingsRunnersRunnerIdApiLeasesLeaseIdFindingsGetResponses, ListFindingsRunnersRunnerIdApiLeasesLeaseIdFindingsGetErrors, ThrowOnError> => (options.client ?? client).get<ListFindingsRunnersRunnerIdApiLeasesLeaseIdFindingsGetResponses, ListFindingsRunnersRunnerIdApiLeasesLeaseIdFindingsGetErrors, ThrowOnError>({ url: '/runners/{runner_id}/api/leases/{lease_id}/findings', ...options });
 
 /**
  * Get Finding
  *
  * Forward one finding of this lease's chunk's answered set to the hub; its refusals pass through verbatim.
  */
-export const getFindingApiLeasesLeaseIdFindingsFindingIdGet = <ThrowOnError extends boolean = false>(options: Options<GetFindingApiLeasesLeaseIdFindingsFindingIdGetData, ThrowOnError>): RequestResult<GetFindingApiLeasesLeaseIdFindingsFindingIdGetResponses, GetFindingApiLeasesLeaseIdFindingsFindingIdGetErrors, ThrowOnError> => (options.client ?? client).get<GetFindingApiLeasesLeaseIdFindingsFindingIdGetResponses, GetFindingApiLeasesLeaseIdFindingsFindingIdGetErrors, ThrowOnError>({ url: '/api/leases/{lease_id}/findings/{finding_id}', ...options });
+export const getFindingRunnersRunnerIdApiLeasesLeaseIdFindingsFindingIdGet = <ThrowOnError extends boolean = false>(options: Options<GetFindingRunnersRunnerIdApiLeasesLeaseIdFindingsFindingIdGetData, ThrowOnError>): RequestResult<GetFindingRunnersRunnerIdApiLeasesLeaseIdFindingsFindingIdGetResponses, GetFindingRunnersRunnerIdApiLeasesLeaseIdFindingsFindingIdGetErrors, ThrowOnError> => (options.client ?? client).get<GetFindingRunnersRunnerIdApiLeasesLeaseIdFindingsFindingIdGetResponses, GetFindingRunnersRunnerIdApiLeasesLeaseIdFindingsFindingIdGetErrors, ThrowOnError>({ url: '/runners/{runner_id}/api/leases/{lease_id}/findings/{finding_id}', ...options });
 
 /**
  * List Garden Findings
  *
  * Forward this lease's chunk's finding-bucket read to the hub; its refusals pass through verbatim.
  */
-export const listGardenFindingsApiLeasesLeaseIdGardenFindingsGet = <ThrowOnError extends boolean = false>(options: Options<ListGardenFindingsApiLeasesLeaseIdGardenFindingsGetData, ThrowOnError>): RequestResult<ListGardenFindingsApiLeasesLeaseIdGardenFindingsGetResponses, ListGardenFindingsApiLeasesLeaseIdGardenFindingsGetErrors, ThrowOnError> => (options.client ?? client).get<ListGardenFindingsApiLeasesLeaseIdGardenFindingsGetResponses, ListGardenFindingsApiLeasesLeaseIdGardenFindingsGetErrors, ThrowOnError>({ url: '/api/leases/{lease_id}/garden/findings', ...options });
+export const listGardenFindingsRunnersRunnerIdApiLeasesLeaseIdGardenFindingsGet = <ThrowOnError extends boolean = false>(options: Options<ListGardenFindingsRunnersRunnerIdApiLeasesLeaseIdGardenFindingsGetData, ThrowOnError>): RequestResult<ListGardenFindingsRunnersRunnerIdApiLeasesLeaseIdGardenFindingsGetResponses, ListGardenFindingsRunnersRunnerIdApiLeasesLeaseIdGardenFindingsGetErrors, ThrowOnError> => (options.client ?? client).get<ListGardenFindingsRunnersRunnerIdApiLeasesLeaseIdGardenFindingsGetResponses, ListGardenFindingsRunnersRunnerIdApiLeasesLeaseIdGardenFindingsGetErrors, ThrowOnError>({ url: '/runners/{runner_id}/api/leases/{lease_id}/garden/findings', ...options });
 
 /**
  * List Garden Proposals
@@ -354,7 +413,7 @@ export const listGardenFindingsApiLeasesLeaseIdGardenFindingsGet = <ThrowOnError
  * step compares what it found against every proposal in ``state``, so a window would change what it
  * dedups against. Each hub request is bounded by its page; the whole read is that consumer's need.
  */
-export const listGardenProposalsApiLeasesLeaseIdGardenProposalsGet = <ThrowOnError extends boolean = false>(options: Options<ListGardenProposalsApiLeasesLeaseIdGardenProposalsGetData, ThrowOnError>): RequestResult<ListGardenProposalsApiLeasesLeaseIdGardenProposalsGetResponses, ListGardenProposalsApiLeasesLeaseIdGardenProposalsGetErrors, ThrowOnError> => (options.client ?? client).get<ListGardenProposalsApiLeasesLeaseIdGardenProposalsGetResponses, ListGardenProposalsApiLeasesLeaseIdGardenProposalsGetErrors, ThrowOnError>({ url: '/api/leases/{lease_id}/garden/proposals', ...options });
+export const listGardenProposalsRunnersRunnerIdApiLeasesLeaseIdGardenProposalsGet = <ThrowOnError extends boolean = false>(options: Options<ListGardenProposalsRunnersRunnerIdApiLeasesLeaseIdGardenProposalsGetData, ThrowOnError>): RequestResult<ListGardenProposalsRunnersRunnerIdApiLeasesLeaseIdGardenProposalsGetResponses, ListGardenProposalsRunnersRunnerIdApiLeasesLeaseIdGardenProposalsGetErrors, ThrowOnError> => (options.client ?? client).get<ListGardenProposalsRunnersRunnerIdApiLeasesLeaseIdGardenProposalsGetResponses, ListGardenProposalsRunnersRunnerIdApiLeasesLeaseIdGardenProposalsGetErrors, ThrowOnError>({ url: '/runners/{runner_id}/api/leases/{lease_id}/garden/proposals', ...options });
 
 /**
  * Record Git Commit Declaration
@@ -362,8 +421,8 @@ export const listGardenProposalsApiLeasesLeaseIdGardenProposalsGet = <ThrowOnErr
  * Record a worker's explicit git-commit declaration for ``request_body.repo`` against
  * its lease.
  */
-export const recordGitCommitDeclarationApiLeasesLeaseIdGitCommitsPost = <ThrowOnError extends boolean = false>(options: Options<RecordGitCommitDeclarationApiLeasesLeaseIdGitCommitsPostData, ThrowOnError>): RequestResult<RecordGitCommitDeclarationApiLeasesLeaseIdGitCommitsPostResponses, RecordGitCommitDeclarationApiLeasesLeaseIdGitCommitsPostErrors, ThrowOnError> => (options.client ?? client).post<RecordGitCommitDeclarationApiLeasesLeaseIdGitCommitsPostResponses, RecordGitCommitDeclarationApiLeasesLeaseIdGitCommitsPostErrors, ThrowOnError>({
-    url: '/api/leases/{lease_id}/git-commits',
+export const recordGitCommitDeclarationRunnersRunnerIdApiLeasesLeaseIdGitCommitsPost = <ThrowOnError extends boolean = false>(options: Options<RecordGitCommitDeclarationRunnersRunnerIdApiLeasesLeaseIdGitCommitsPostData, ThrowOnError>): RequestResult<RecordGitCommitDeclarationRunnersRunnerIdApiLeasesLeaseIdGitCommitsPostResponses, RecordGitCommitDeclarationRunnersRunnerIdApiLeasesLeaseIdGitCommitsPostErrors, ThrowOnError> => (options.client ?? client).post<RecordGitCommitDeclarationRunnersRunnerIdApiLeasesLeaseIdGitCommitsPostResponses, RecordGitCommitDeclarationRunnersRunnerIdApiLeasesLeaseIdGitCommitsPostErrors, ThrowOnError>({
+    url: '/runners/{runner_id}/api/leases/{lease_id}/git-commits',
     ...options,
     headers: {
         'Content-Type': 'application/json',
@@ -377,7 +436,7 @@ export const recordGitCommitDeclarationApiLeasesLeaseIdGitCommitsPost = <ThrowOn
  * The worker's own chunk's timeline — transitions, migrations, and bounces merged
  * oldest-first into one kind-discriminated read. Excludes the in-flight node-step.
  */
-export const getHistoryApiLeasesLeaseIdHistoryGet = <ThrowOnError extends boolean = false>(options: Options<GetHistoryApiLeasesLeaseIdHistoryGetData, ThrowOnError>): RequestResult<GetHistoryApiLeasesLeaseIdHistoryGetResponses, GetHistoryApiLeasesLeaseIdHistoryGetErrors, ThrowOnError> => (options.client ?? client).get<GetHistoryApiLeasesLeaseIdHistoryGetResponses, GetHistoryApiLeasesLeaseIdHistoryGetErrors, ThrowOnError>({ url: '/api/leases/{lease_id}/history', ...options });
+export const getHistoryRunnersRunnerIdApiLeasesLeaseIdHistoryGet = <ThrowOnError extends boolean = false>(options: Options<GetHistoryRunnersRunnerIdApiLeasesLeaseIdHistoryGetData, ThrowOnError>): RequestResult<GetHistoryRunnersRunnerIdApiLeasesLeaseIdHistoryGetResponses, GetHistoryRunnersRunnerIdApiLeasesLeaseIdHistoryGetErrors, ThrowOnError> => (options.client ?? client).get<GetHistoryRunnersRunnerIdApiLeasesLeaseIdHistoryGetResponses, GetHistoryRunnersRunnerIdApiLeasesLeaseIdHistoryGetErrors, ThrowOnError>({ url: '/runners/{runner_id}/api/leases/{lease_id}/history', ...options });
 
 /**
  * List Scopes
@@ -386,26 +445,21 @@ export const getHistoryApiLeasesLeaseIdHistoryGet = <ThrowOnError extends boolea
  * lease authorizes the caller and names its chunk, so the hub answers that chunk's project's
  * scopes; a hub that predates projects ignores the chunk and answers every scope.
  */
-export const listScopesApiLeasesLeaseIdScopesGet = <ThrowOnError extends boolean = false>(options: Options<ListScopesApiLeasesLeaseIdScopesGetData, ThrowOnError>): RequestResult<ListScopesApiLeasesLeaseIdScopesGetResponses, ListScopesApiLeasesLeaseIdScopesGetErrors, ThrowOnError> => (options.client ?? client).get<ListScopesApiLeasesLeaseIdScopesGetResponses, ListScopesApiLeasesLeaseIdScopesGetErrors, ThrowOnError>({ url: '/api/leases/{lease_id}/scopes', ...options });
+export const listScopesRunnersRunnerIdApiLeasesLeaseIdScopesGet = <ThrowOnError extends boolean = false>(options: Options<ListScopesRunnersRunnerIdApiLeasesLeaseIdScopesGetData, ThrowOnError>): RequestResult<ListScopesRunnersRunnerIdApiLeasesLeaseIdScopesGetResponses, ListScopesRunnersRunnerIdApiLeasesLeaseIdScopesGetErrors, ThrowOnError> => (options.client ?? client).get<ListScopesRunnersRunnerIdApiLeasesLeaseIdScopesGetResponses, ListScopesRunnersRunnerIdApiLeasesLeaseIdScopesGetErrors, ThrowOnError>({ url: '/runners/{runner_id}/api/leases/{lease_id}/scopes', ...options });
 
 /**
  * Session End
  *
  * Record a lease's session-end, stamped with the injected clock.
  */
-export const sessionEndApiLeasesLeaseIdSessionEndPost = <ThrowOnError extends boolean = false>(options: Options<SessionEndApiLeasesLeaseIdSessionEndPostData, ThrowOnError>): RequestResult<SessionEndApiLeasesLeaseIdSessionEndPostResponses, SessionEndApiLeasesLeaseIdSessionEndPostErrors, ThrowOnError> => (options.client ?? client).post<SessionEndApiLeasesLeaseIdSessionEndPostResponses, SessionEndApiLeasesLeaseIdSessionEndPostErrors, ThrowOnError>({ url: '/api/leases/{lease_id}/session-end', ...options });
+export const sessionEndRunnersRunnerIdApiLeasesLeaseIdSessionEndPost = <ThrowOnError extends boolean = false>(options: Options<SessionEndRunnersRunnerIdApiLeasesLeaseIdSessionEndPostData, ThrowOnError>): RequestResult<SessionEndRunnersRunnerIdApiLeasesLeaseIdSessionEndPostResponses, SessionEndRunnersRunnerIdApiLeasesLeaseIdSessionEndPostErrors, ThrowOnError> => (options.client ?? client).post<SessionEndRunnersRunnerIdApiLeasesLeaseIdSessionEndPostResponses, SessionEndRunnersRunnerIdApiLeasesLeaseIdSessionEndPostErrors, ThrowOnError>({ url: '/runners/{runner_id}/api/leases/{lease_id}/session-end', ...options });
 
 /**
  * Get Transcript
  *
  * The lease's resolved transcript — 404 iff absent; 503 iff its owner is unavailable.
  */
-export const getTranscriptApiLeasesLeaseIdTranscriptGet = <ThrowOnError extends boolean = false>(options: Options<GetTranscriptApiLeasesLeaseIdTranscriptGetData, ThrowOnError>): RequestResult<GetTranscriptApiLeasesLeaseIdTranscriptGetResponses, GetTranscriptApiLeasesLeaseIdTranscriptGetErrors, ThrowOnError> => (options.client ?? client).get<GetTranscriptApiLeasesLeaseIdTranscriptGetResponses, GetTranscriptApiLeasesLeaseIdTranscriptGetErrors, ThrowOnError>({ url: '/api/leases/{lease_id}/transcript', ...options });
-
-/**
- * Ready
- */
-export const readyApiReadyGet = <ThrowOnError extends boolean = false>(options?: Options<ReadyApiReadyGetData, ThrowOnError>): RequestResult<ReadyApiReadyGetResponses, unknown, ThrowOnError> => (options?.client ?? client).get<ReadyApiReadyGetResponses, unknown, ThrowOnError>({ url: '/api/ready', ...options });
+export const getTranscriptRunnersRunnerIdApiLeasesLeaseIdTranscriptGet = <ThrowOnError extends boolean = false>(options: Options<GetTranscriptRunnersRunnerIdApiLeasesLeaseIdTranscriptGetData, ThrowOnError>): RequestResult<GetTranscriptRunnersRunnerIdApiLeasesLeaseIdTranscriptGetResponses, GetTranscriptRunnersRunnerIdApiLeasesLeaseIdTranscriptGetErrors, ThrowOnError> => (options.client ?? client).get<GetTranscriptRunnersRunnerIdApiLeasesLeaseIdTranscriptGetResponses, GetTranscriptRunnersRunnerIdApiLeasesLeaseIdTranscriptGetErrors, ThrowOnError>({ url: '/runners/{runner_id}/api/leases/{lease_id}/transcript', ...options });
 
 /**
  * Get Runner
@@ -416,7 +470,7 @@ export const readyApiReadyGet = <ThrowOnError extends boolean = false>(options?:
  * Derived entirely from local store facts plus the injected clock — no hub call, so it
  * is truthful with the hub unreachable. An unwired service answers 503.
  */
-export const getRunnerApiRunnerGet = <ThrowOnError extends boolean = false>(options?: Options<GetRunnerApiRunnerGetData, ThrowOnError>): RequestResult<GetRunnerApiRunnerGetResponses, unknown, ThrowOnError> => (options?.client ?? client).get<GetRunnerApiRunnerGetResponses, unknown, ThrowOnError>({ url: '/api/runner', ...options });
+export const getRunnerRunnersRunnerIdApiRunnerGet = <ThrowOnError extends boolean = false>(options: Options<GetRunnerRunnersRunnerIdApiRunnerGetData, ThrowOnError>): RequestResult<GetRunnerRunnersRunnerIdApiRunnerGetResponses, GetRunnerRunnersRunnerIdApiRunnerGetErrors, ThrowOnError> => (options.client ?? client).get<GetRunnerRunnersRunnerIdApiRunnerGetResponses, GetRunnerRunnersRunnerIdApiRunnerGetErrors, ThrowOnError>({ url: '/runners/{runner_id}/api/runner', ...options });
 
 /**
  * Patch Runner
@@ -427,8 +481,8 @@ export const getRunnerApiRunnerGet = <ThrowOnError extends boolean = false>(opti
  * writes the hub's flag. Not a drain: a live worker is left running. Refused with 503 while the
  * store is bound to no runner id, since the brake is a fact of the runner the store is bound to.
  */
-export const patchRunnerApiRunnerPatch = <ThrowOnError extends boolean = false>(options: Options<PatchRunnerApiRunnerPatchData, ThrowOnError>): RequestResult<PatchRunnerApiRunnerPatchResponses, PatchRunnerApiRunnerPatchErrors, ThrowOnError> => (options.client ?? client).patch<PatchRunnerApiRunnerPatchResponses, PatchRunnerApiRunnerPatchErrors, ThrowOnError>({
-    url: '/api/runner',
+export const patchRunnerRunnersRunnerIdApiRunnerPatch = <ThrowOnError extends boolean = false>(options: Options<PatchRunnerRunnersRunnerIdApiRunnerPatchData, ThrowOnError>): RequestResult<PatchRunnerRunnersRunnerIdApiRunnerPatchResponses, PatchRunnerRunnersRunnerIdApiRunnerPatchErrors, ThrowOnError> => (options.client ?? client).patch<PatchRunnerRunnersRunnerIdApiRunnerPatchResponses, PatchRunnerRunnersRunnerIdApiRunnerPatchErrors, ThrowOnError>({
+    url: '/runners/{runner_id}/api/runner',
     ...options,
     headers: {
         'Content-Type': 'application/json',
@@ -441,8 +495,8 @@ export const patchRunnerApiRunnerPatch = <ThrowOnError extends boolean = false>(
  *
  * Mint a selftest run against ``harness`` and begin it off the request thread.
  */
-export const startSelftestApiSelftestsPost = <ThrowOnError extends boolean = false>(options: Options<StartSelftestApiSelftestsPostData, ThrowOnError>): RequestResult<StartSelftestApiSelftestsPostResponses, StartSelftestApiSelftestsPostErrors, ThrowOnError> => (options.client ?? client).post<StartSelftestApiSelftestsPostResponses, StartSelftestApiSelftestsPostErrors, ThrowOnError>({
-    url: '/api/selftests',
+export const startSelftestRunnersRunnerIdApiSelftestsPost = <ThrowOnError extends boolean = false>(options: Options<StartSelftestRunnersRunnerIdApiSelftestsPostData, ThrowOnError>): RequestResult<StartSelftestRunnersRunnerIdApiSelftestsPostResponses, StartSelftestRunnersRunnerIdApiSelftestsPostErrors, ThrowOnError> => (options.client ?? client).post<StartSelftestRunnersRunnerIdApiSelftestsPostResponses, StartSelftestRunnersRunnerIdApiSelftestsPostErrors, ThrowOnError>({
+    url: '/runners/{runner_id}/api/selftests',
     ...options,
     headers: {
         'Content-Type': 'application/json',
@@ -455,21 +509,14 @@ export const startSelftestApiSelftestsPost = <ThrowOnError extends boolean = fal
  *
  * Read back a selftest run's current state.
  */
-export const getSelftestApiSelftestsSelftestIdGet = <ThrowOnError extends boolean = false>(options: Options<GetSelftestApiSelftestsSelftestIdGetData, ThrowOnError>): RequestResult<GetSelftestApiSelftestsSelftestIdGetResponses, GetSelftestApiSelftestsSelftestIdGetErrors, ThrowOnError> => (options.client ?? client).get<GetSelftestApiSelftestsSelftestIdGetResponses, GetSelftestApiSelftestsSelftestIdGetErrors, ThrowOnError>({ url: '/api/selftests/{selftest_id}', ...options });
-
-/**
- * List Subscriptions
- *
- * Every declared subscription's own newest sampling attempt and credential renewal.
- */
-export const listSubscriptionsApiSubscriptionsGet = <ThrowOnError extends boolean = false>(options?: Options<ListSubscriptionsApiSubscriptionsGetData, ThrowOnError>): RequestResult<ListSubscriptionsApiSubscriptionsGetResponses, unknown, ThrowOnError> => (options?.client ?? client).get<ListSubscriptionsApiSubscriptionsGetResponses, unknown, ThrowOnError>({ url: '/api/subscriptions', ...options });
+export const getSelftestRunnersRunnerIdApiSelftestsSelftestIdGet = <ThrowOnError extends boolean = false>(options: Options<GetSelftestRunnersRunnerIdApiSelftestsSelftestIdGetData, ThrowOnError>): RequestResult<GetSelftestRunnersRunnerIdApiSelftestsSelftestIdGetResponses, GetSelftestRunnersRunnerIdApiSelftestsSelftestIdGetErrors, ThrowOnError> => (options.client ?? client).get<GetSelftestRunnersRunnerIdApiSelftestsSelftestIdGetResponses, GetSelftestRunnersRunnerIdApiSelftestsSelftestIdGetErrors, ThrowOnError>({ url: '/runners/{runner_id}/api/selftests/{selftest_id}', ...options });
 
 /**
  * List Open Takeovers
  *
  * Every takeover still open — the recovery surface for a stranded one.
  */
-export const listOpenTakeoversApiTakeoversGet = <ThrowOnError extends boolean = false>(options?: Options<ListOpenTakeoversApiTakeoversGetData, ThrowOnError>): RequestResult<ListOpenTakeoversApiTakeoversGetResponses, unknown, ThrowOnError> => (options?.client ?? client).get<ListOpenTakeoversApiTakeoversGetResponses, unknown, ThrowOnError>({ url: '/api/takeovers', ...options });
+export const listOpenTakeoversRunnersRunnerIdApiTakeoversGet = <ThrowOnError extends boolean = false>(options: Options<ListOpenTakeoversRunnersRunnerIdApiTakeoversGetData, ThrowOnError>): RequestResult<ListOpenTakeoversRunnersRunnerIdApiTakeoversGetResponses, ListOpenTakeoversRunnersRunnerIdApiTakeoversGetErrors, ThrowOnError> => (options.client ?? client).get<ListOpenTakeoversRunnersRunnerIdApiTakeoversGetResponses, ListOpenTakeoversRunnersRunnerIdApiTakeoversGetErrors, ThrowOnError>({ url: '/runners/{runner_id}/api/takeovers', ...options });
 
 /**
  * Trace Replay
@@ -478,8 +525,8 @@ export const listOpenTakeoversApiTakeoversGet = <ThrowOnError extends boolean = 
  * A bad window is 422; a replay that must export while tracing is off, or any replay before the runner's first
  * registration, is 409; and an exporter that refuses is 502 with the counts it accepted before.
  */
-export const traceReplayApiTracesReplayPost = <ThrowOnError extends boolean = false>(options: Options<TraceReplayApiTracesReplayPostData, ThrowOnError>): RequestResult<TraceReplayApiTracesReplayPostResponses, TraceReplayApiTracesReplayPostErrors, ThrowOnError> => (options.client ?? client).post<TraceReplayApiTracesReplayPostResponses, TraceReplayApiTracesReplayPostErrors, ThrowOnError>({
-    url: '/api/traces/replay',
+export const traceReplayRunnersRunnerIdApiTracesReplayPost = <ThrowOnError extends boolean = false>(options: Options<TraceReplayRunnersRunnerIdApiTracesReplayPostData, ThrowOnError>): RequestResult<TraceReplayRunnersRunnerIdApiTracesReplayPostResponses, TraceReplayRunnersRunnerIdApiTracesReplayPostErrors, ThrowOnError> => (options.client ?? client).post<TraceReplayRunnersRunnerIdApiTracesReplayPostResponses, TraceReplayRunnersRunnerIdApiTracesReplayPostErrors, ThrowOnError>({
+    url: '/runners/{runner_id}/api/traces/replay',
     ...options,
     headers: {
         'Content-Type': 'application/json',
@@ -493,35 +540,4 @@ export const traceReplayApiTracesReplayPost = <ThrowOnError extends boolean = fa
  * Tracing on or off, the redacted endpoint, the cursor and its lag, the last export and the last error,
  * and the bindings' combined harness-telemetry plan with each signal's receiver counts.
  */
-export const traceStatusApiTracesStatusGet = <ThrowOnError extends boolean = false>(options?: Options<TraceStatusApiTracesStatusGetData, ThrowOnError>): RequestResult<TraceStatusApiTracesStatusGetResponses, unknown, ThrowOnError> => (options?.client ?? client).get<TraceStatusApiTracesStatusGetResponses, unknown, ThrowOnError>({ url: '/api/traces/status', ...options });
-
-/**
- * Clear Workspace Prompt
- *
- * Drop the runtime override so the runner's configured prompt resolves again.
- *
- * Distinct from overriding with empty text, which is itself a standing override; the response
- * carries whatever the config now resolves to, effective on subsequent spawns.
- */
-export const clearWorkspacePromptApiWorkspacePromptDelete = <ThrowOnError extends boolean = false>(options?: Options<ClearWorkspacePromptApiWorkspacePromptDeleteData, ThrowOnError>): RequestResult<ClearWorkspacePromptApiWorkspacePromptDeleteResponses, unknown, ThrowOnError> => (options?.client ?? client).delete<ClearWorkspacePromptApiWorkspacePromptDeleteResponses, unknown, ThrowOnError>({ url: '/api/workspace-prompt', ...options });
-
-/**
- * Read Workspace Prompt
- *
- * The effective spawn preamble prompt: the runtime override if set, else static config.
- */
-export const readWorkspacePromptApiWorkspacePromptGet = <ThrowOnError extends boolean = false>(options?: Options<ReadWorkspacePromptApiWorkspacePromptGetData, ThrowOnError>): RequestResult<ReadWorkspacePromptApiWorkspacePromptGetResponses, unknown, ThrowOnError> => (options?.client ?? client).get<ReadWorkspacePromptApiWorkspacePromptGetResponses, unknown, ThrowOnError>({ url: '/api/workspace-prompt', ...options });
-
-/**
- * Replace Workspace Prompt
- *
- * Replace the runtime workspace-prompt override — effective on subsequent spawns.
- */
-export const replaceWorkspacePromptApiWorkspacePromptPut = <ThrowOnError extends boolean = false>(options: Options<ReplaceWorkspacePromptApiWorkspacePromptPutData, ThrowOnError>): RequestResult<ReplaceWorkspacePromptApiWorkspacePromptPutResponses, ReplaceWorkspacePromptApiWorkspacePromptPutErrors, ThrowOnError> => (options.client ?? client).put<ReplaceWorkspacePromptApiWorkspacePromptPutResponses, ReplaceWorkspacePromptApiWorkspacePromptPutErrors, ThrowOnError>({
-    url: '/api/workspace-prompt',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
+export const traceStatusRunnersRunnerIdApiTracesStatusGet = <ThrowOnError extends boolean = false>(options: Options<TraceStatusRunnersRunnerIdApiTracesStatusGetData, ThrowOnError>): RequestResult<TraceStatusRunnersRunnerIdApiTracesStatusGetResponses, TraceStatusRunnersRunnerIdApiTracesStatusGetErrors, ThrowOnError> => (options.client ?? client).get<TraceStatusRunnersRunnerIdApiTracesStatusGetResponses, TraceStatusRunnersRunnerIdApiTracesStatusGetErrors, ThrowOnError>({ url: '/runners/{runner_id}/api/traces/status', ...options });

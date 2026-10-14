@@ -56,8 +56,9 @@ export class ChunkPageHeader {
 
   /** The chunk detail route's own path segments, before the chunk id — this routed
    * page has no dock to select a chunk into, so its own blocked marking navigates
-   * instead ({@link ChunkDetailHeader}'s own `linkBase` follows the same convention). */
-  readonly linkBase = input<readonly string[]>(['/board', 'chunk']);
+   * instead ({@link ChunkDetailHeader}'s own `linkBase` follows the same convention).
+   * Required: each daemon mounts the page under its own board. */
+  readonly linkBase = input.required<readonly string[]>();
 
   /** The status text's own color, resolved off {@link tone} (`kit-badge.ts` owns the
    * mapping). */

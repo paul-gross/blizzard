@@ -11,7 +11,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
-from fastapi.testclient import TestClient
 
 from blizzard.runner.app import create_app
 from blizzard.runner.config import RunnerConfig
@@ -22,6 +21,7 @@ from blizzard.runner.transcripts.archived_repository import ArchivedTranscript
 from blizzard.runner.transcripts.internal.harness_transcript_repositories import HarnessTranscriptRepositories
 from blizzard.runner.transcripts.repository import Transcript, Turn
 from blizzard.runner.transcripts.service import TranscriptService
+from tests.runner_client import runner_client
 from tests.runner_fakes import (
     FakeArchivedTranscriptRepository,
     StaticTranscriptRepositoryResolver,
@@ -120,7 +120,7 @@ def test_200_with_turns_for_an_active_lease(tmp_path: Path) -> None:
         spawned_at=_NOW,
     )
 
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get("/api/leases/lease_1/transcript")
 
     assert resp.status_code == 200, resp.text
@@ -162,7 +162,7 @@ def test_unknown_recorded_owner_returns_503_without_reading_default_transcript_s
     with store._engine.begin() as conn:
         conn.exec_driver_sql("UPDATE leases SET harness_id = 'missing' WHERE lease_id = 'lease_1'")
 
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get("/api/leases/lease_1/transcript")
 
     assert resp.status_code == 503
@@ -174,7 +174,7 @@ def test_unknown_recorded_owner_returns_503_without_reading_default_transcript_s
 def test_transcript_openapi_declares_the_owner_unavailable_response(tmp_path: Path) -> None:
     app, _store, _repo = _app_with_transcripts(tmp_path)
 
-    responses = app.openapi()["paths"]["/api/leases/{lease_id}/transcript"]["get"]["responses"]
+    responses = app.openapi()["paths"]["/runners/{runner_id}/api/leases/{lease_id}/transcript"]["get"]["responses"]
 
     assert responses["503"]["description"] == "The recorded harness owner is unavailable."
 
@@ -185,7 +185,7 @@ def test_200_spawning_when_no_session_id_yet(tmp_path: Path) -> None:
     _seed_lease(store)
     # No record_spawn — session_id stays unset.
 
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get("/api/leases/lease_1/transcript")
 
     assert resp.status_code == 200, resp.text
@@ -209,7 +209,7 @@ def test_200_not_found_when_the_file_is_missing(tmp_path: Path) -> None:
         spawned_at=_NOW,
     )
 
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get("/api/leases/lease_1/transcript")
 
     assert resp.status_code == 200, resp.text
@@ -238,7 +238,7 @@ def test_200_for_a_closed_lease_with_no_hub_segments_falls_back_to_local(tmp_pat
     store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="transitioned", closed_at=_NOW)
     assert store.active_lease("lease_1") is None  # the cliff `active_lease()` would hit
 
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get("/api/leases/lease_1/transcript")
 
     assert resp.status_code == 200, resp.text
@@ -281,7 +281,7 @@ def test_200_for_a_closed_lease_with_hub_segments_serves_them(tmp_path: Path) ->
     )
     store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="transitioned", closed_at=_NOW)
 
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get("/api/leases/lease_1/transcript")
 
     assert resp.status_code == 200, resp.text
@@ -297,7 +297,7 @@ def test_200_for_a_closed_lease_with_hub_segments_serves_them(tmp_path: Path) ->
 def test_404_for_a_lease_that_never_existed(tmp_path: Path) -> None:
     app, _store, _repo = _app_with_transcripts(tmp_path)
 
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get("/api/leases/no-such-lease/transcript")
 
     assert resp.status_code == 404
@@ -307,6 +307,6 @@ def test_404_for_a_lease_that_never_existed(tmp_path: Path) -> None:
 @pytest.mark.component
 def test_503_when_transcript_service_unwired(tmp_path: Path) -> None:
     config = RunnerConfig(root=tmp_path, db_url="sqlite://")
-    with TestClient(create_app(config)) as client:
+    with runner_client(create_app(config)) as client:
         resp = client.get("/api/leases/lease_1/transcript")
     assert resp.status_code == 503

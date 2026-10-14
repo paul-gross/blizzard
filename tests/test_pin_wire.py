@@ -96,7 +96,7 @@ def test_the_lease_history_route_still_answers_a_flat_history_row_view() -> None
     the chunk-detail proxy's own ``history`` field, which legitimately carries the board's own views."""
     spec = create_app_for_export().openapi()
     schemas = spec["components"]["schemas"]
-    route = spec["paths"]["/api/leases/{lease_id}/history"]["get"]
+    route = spec["paths"]["/runners/{runner_id}/api/leases/{lease_id}/history"]["get"]
     response_schema = route["responses"]["200"]["content"]["application/json"]["schema"]
     assert response_schema["items"] == {"$ref": "#/components/schemas/HistoryRowView"}
     assert "HistoryRowView" in schemas

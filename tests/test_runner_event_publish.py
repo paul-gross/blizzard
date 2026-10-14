@@ -12,7 +12,6 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
-from fastapi.testclient import TestClient
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
@@ -27,7 +26,7 @@ from blizzard.foundation.tokens import TokenHash
 from blizzard.runner.app import create_app
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.environments.provider import AcquiredEnvironment
-from blizzard.runner.events.broker import EventBroker
+from blizzard.runner.events.broker import EventBroker, RunnerEventPublisher
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
@@ -47,6 +46,7 @@ from blizzard.runner.subscriptions.subscription_sampler import (
     ExternalSubscriptionUsageWindow,
     SampleMissReason,
 )
+from tests.runner_client import runner_client
 from tests.runner_fakes import (
     FIXTURE_RUNNER_ID,
     FakeHarness,
@@ -75,8 +75,16 @@ def _store(tmp_path: Path):  # type: ignore[no-untyped-def]
     return make_store(f"sqlite:///{tmp_path / 'runner.db'}")
 
 
-def _frames(events: EventBroker, kind: str) -> list[dict[str, object]]:
-    return [json.loads(e.data) for e in events.snapshot() if e.type == kind]
+#: The host-scoped kind; every other kind names the runner it belongs to.
+_HOST_SCOPED = "environment-changed"
+
+
+def _frames(events: EventBroker, kind: str, *, runner_id: str = FIXTURE_RUNNER_ID) -> list[dict[str, object]]:
+    """``kind``'s frames, each runner-scoped one's ``runner_id`` checked and set aside."""
+    frames = [json.loads(e.data) for e in events.snapshot() if e.type == kind]
+    if kind != _HOST_SCOPED:
+        assert [frame.pop("runner_id") for frame in frames] == [runner_id] * len(frames)
+    return frames
 
 
 def _seed_lease(store, *, retries_max: int, chunk="ch_1", lease="lease_1", epoch=1):  # type: ignore[no-untyped-def]
@@ -281,7 +289,7 @@ def test_asks_api_route_publishes_ask_asked(tmp_path: Path) -> None:
     config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}")
     app = create_app(config, runner_stores=make_stores(store), host_stores=make_host_stores(store), events=events)
 
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.post(
             "/api/leases/lease_1/asks",
             json={"question": "Which API?", "options": ["rest", "graphql"]},
@@ -290,7 +298,7 @@ def test_asks_api_route_publishes_ask_asked(tmp_path: Path) -> None:
 
     assert resp.status_code == 201, resp.text
     question_id = resp.json()["question_id"]
-    ask_frames = _frames(events, "ask-changed")
+    ask_frames = _frames(events, "ask-changed", runner_id=config.served_id())
     assert ask_frames == [
         {
             "lease_id": "lease_1",
@@ -532,7 +540,7 @@ def test_takeover_open_and_close_publish_takeover_changed(tmp_path: Path) -> Non
         harnesses=HarnessRegistry(
             {CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=FakeHarness(handle=_HANDLE, verdict=None))}
         ),
-        events=events,
+        events=RunnerEventPublisher(events, FIXTURE_RUNNER_ID),
     )
 
     opened = service.open(_open_scope(store), force=False)
@@ -571,7 +579,7 @@ def test_takeover_force_open_over_a_live_worker_publishes_the_fence_bump_as_fact
         harnesses=HarnessRegistry(
             {CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=FakeHarness(handle=_HANDLE, verdict=None))}
         ),
-        events=events,
+        events=RunnerEventPublisher(events, FIXTURE_RUNNER_ID),
     )
 
     service.open(_open_scope(store), force=True)
@@ -723,11 +731,11 @@ def test_patch_runner_route_publishes_fact_changed(tmp_path: Path) -> None:
         events=events,
     )
 
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.patch("/api/runner", json={"paused": True, "by": "operator"})
 
     assert resp.status_code == 200, resp.text
-    fact_frames = _frames(events, "fact-changed")
+    fact_frames = _frames(events, "fact-changed", runner_id=config.served_id())
     assert len(fact_frames) == 1
     assert fact_frames[0]["kind"] == RUNNER_LOCALLY_PAUSED
     assert fact_frames[0]["chunk_id"] is None

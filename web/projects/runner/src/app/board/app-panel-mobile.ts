@@ -8,15 +8,13 @@ import type { MachineChunkStatus } from './chunk-list/chunk-status';
 import { LocalAsks } from '../asks/app-asks';
 import { LocalInfo } from '../machine/app-info';
 import type { MachineChunkRow } from './app-panel.model';
-import { LocalSubscriptions } from '../status/app-subscriptions';
 
 /**
  * The runner local panel's mobile shell (mobile mockups, `../docs/designs/mobile/README.md`)
  * — a single scrolling column stacking the glance-relevant pieces in attention
  * order: machine info/status first (the hub link, `app-info`), then
  * agents/leases (`AgentRow` already carries its own heartbeat-freshness bar
- * per row), then chunks on this machine, then local asks, then subscriptions
- * (the per-provider sampling diagnostics). Every section is a
+ * per row), then chunks on this machine, then local asks. Every section is a
  * desktop-layout component reused verbatim (`bzh:frontend-kit`) — this shell
  * only orders and stacks them, it never forks or re-styles their internals.
  *
@@ -51,7 +49,6 @@ import { LocalSubscriptions } from '../status/app-subscriptions';
     KitPanelHeader,
     LocalAsks,
     LocalInfo,
-    LocalSubscriptions,
     MachineDetail,
   ],
   templateUrl: './app-panel-mobile.html',

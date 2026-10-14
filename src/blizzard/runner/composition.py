@@ -9,6 +9,7 @@ asserted by
 from __future__ import annotations
 
 import contextlib
+import functools
 import os
 from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
@@ -34,7 +35,8 @@ from blizzard.runner.config import RunnerConfig, SubscriptionDeclaration
 from blizzard.runner.config_table import ConfigError
 from blizzard.runner.environments.factory import build_workspace_provider
 from blizzard.runner.environments.provider import IWorkspaceProvider
-from blizzard.runner.events.broker import EventBroker
+from blizzard.runner.events.broker import EventBroker, RunnerEventPublisher
+from blizzard.runner.events.publisher import IRunnerEventPublisher
 from blizzard.runner.harness.bundle import BundleSnapshot
 from blizzard.runner.harness.capability_snapshot import default_harness_id
 from blizzard.runner.harness.harness_telemetry_plan import HarnessTelemetryNames, HarnessTelemetryPlan
@@ -161,6 +163,8 @@ class HostProcess:
     runners: tuple[RunnerProcess, ...] = ()
     #: The runners the host file declares that were left unbuilt by their own errors; the host serves without them.
     halted: tuple[HaltedRunner, ...] = ()
+    #: The subscriptions the host declares, whichever runners spend them.
+    subscriptions: tuple[SubscriptionDeclaration, ...] = ()
 
     def close(self) -> None:
         with contextlib.ExitStack() as closing:
@@ -220,9 +224,10 @@ class RunnerProcess:
     def provider(self) -> IWorkspaceProvider:
         return self.host.provider
 
-    @property
-    def events(self) -> EventBroker | None:
-        return self.host.events
+    @functools.cached_property
+    def events(self) -> IRunnerEventPublisher | None:
+        """The host's broker, stamping this runner's id on every runner-scoped event."""
+        return RunnerEventPublisher.over(self.host.events, self.runner_id)
 
     @property
     def clock(self) -> SystemClock:
@@ -577,6 +582,7 @@ def _build_host_graph(
             log_bounds=log_bounds,
             harness_telemetry_names=telemetry_names,
             host_tick=HostTick(credential_renewal=_credential_renewal_pass(subscriptions, host_stores, clock)),
+            subscriptions=tuple(subscriptions),
             platform_tracing=platform_tracing,
             received_telemetry=received_telemetry,
         )

@@ -11,7 +11,6 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
-from fastapi.testclient import TestClient
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.runner.app import create_app
@@ -20,6 +19,7 @@ from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionRefe
 from blizzard.runner.leases.activity import LocalLeaseService
 from blizzard.runner.leases.model import NewLease
 from blizzard.wire.lease import LeaseView
+from tests.runner_client import runner_client
 from tests.runner_fakes import FakeProbe, make_host_stores, make_store, make_stores
 from tests.support import assert_all_timestamps_utc
 
@@ -62,7 +62,7 @@ def _seed_lease(store, **overrides: object) -> None:  # type: ignore[no-untyped-
 @pytest.mark.component
 def test_empty_store_returns_empty_items_not_an_error(tmp_path: Path) -> None:
     app, _store = _app_with_leases(tmp_path)
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get("/api/leases")
     assert resp.status_code == 200, resp.text
     assert resp.json() == {"items": []}
@@ -72,7 +72,7 @@ def test_empty_store_returns_empty_items_not_an_error(tmp_path: Path) -> None:
 def test_503_when_store_and_leases_unwired(tmp_path: Path) -> None:
     """The store-free app (OpenAPI export / unit boot) refuses to serve rather than pretend."""
     config = RunnerConfig(root=tmp_path, db_url="sqlite://")
-    with TestClient(create_app(config)) as client:
+    with runner_client(create_app(config)) as client:
         resp = client.get("/api/leases")
     assert resp.status_code == 503
 
@@ -92,7 +92,7 @@ def test_running_lease_shape_and_binding_join(tmp_path: Path) -> None:
     beat_at = _NOW + timedelta(minutes=1)
     store.record_heartbeat(lease_id="lease_1", beat_at=beat_at)
 
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get("/api/leases")
 
     assert resp.status_code == 200, resp.text
@@ -137,7 +137,7 @@ def test_timestamps_serialize_with_an_explicit_utc_offset(tmp_path: Path) -> Non
     )
     store.record_heartbeat(lease_id="lease_1", beat_at=_NOW + timedelta(minutes=1))
 
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get("/api/leases")
 
     body = resp.json()
@@ -158,7 +158,7 @@ def test_spawning_state_reaches_the_wire_via_a_null_pid(tmp_path: Path) -> None:
     _seed_lease(store)
     # No record_spawn — pid/session_id stay unset, so the lease derives `spawning`.
 
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get("/api/leases")
 
     items = resp.json()["items"]
@@ -186,7 +186,7 @@ def test_closed_lease_appears_after_active_with_state_and_reason(tmp_path: Path)
     closed_at = _NOW + timedelta(minutes=5)
     store.record_closure(lease_id="lease_2", chunk_id="ch_2", node_id="nd_build", reason="failed", closed_at=closed_at)
 
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get("/api/leases")
 
     assert resp.status_code == 200, resp.text
@@ -217,7 +217,7 @@ def test_parked_state_reaches_the_wire_via_real_park_facts(tmp_path: Path) -> No
     )
     store.record_park(lease_id="lease_1", chunk_id="ch_1", question_id="q_1", parked_at=_NOW)
 
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get("/api/leases")
 
     items = resp.json()["items"]
@@ -269,7 +269,7 @@ def test_every_lease_state_serializes_the_same_ordered_keys(tmp_path: Path, seed
     _seed_lease(store)
     seed(store)
 
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get("/api/leases")
 
     assert resp.status_code == 200, resp.text

@@ -9,7 +9,7 @@ from __future__ import annotations
 import threading
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Protocol, TypeVar
 
 import httpx
@@ -158,7 +158,7 @@ class LoopWiring:
             env_capacity=provider.capacity(),
             public_url=config.public_url,  # this runner's own federation identity
             redirect_uris=config.redirect_uris,
-            local_api_url=config.local_api_url,
+            local_api_url=replace(config, runner_id=graph.runner_id).local_api_url,
             gates=config.gates,
             projects=config.projects,
             bindings=(
@@ -221,7 +221,7 @@ class LoopWiring:
                 harnesses=harnesses,
                 invocation_boundaries=stores.invocation_boundaries,
                 transcripts_wired=True,
-                events=self.events,
+                events=graph.events,
             ),
             sessions=SessionResolver(
                 leases=stores.session,
@@ -233,12 +233,12 @@ class LoopWiring:
                 environments=stores.environments,
                 clock=clock,
                 provider=provider,
-                events=self.events,
+                events=graph.events,
             ),
             # The startup guard above already resolved the default harness's transcript
             # source (or raised) — this composition's transcripts lane is always wired.
             transcripts_wired=True,
-            events=self.events,
+            events=graph.events,
             harnesses=harnesses,
             # Built once here, long-lived across every tick `PeriodicDriver._run` drives on this context.
             harness_versions=HarnessVersionCache(clock=clock),
@@ -353,7 +353,7 @@ class PeriodicDriver:
     ) -> None:
         # Wired eagerly on the constructing (``host``) thread so a missing prompt file
         # fails startup rather than the loop thread (`tests/test_runner_loop_build.py`).
-        self._wiring = LoopWiring.of(config, broker=process_graph.events)
+        self._wiring = LoopWiring.of(config, broker=process_graph.host.events)
         self._graph = process_graph
         self._interval = interval_seconds
         self._stop = threading.Event()

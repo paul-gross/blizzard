@@ -7,6 +7,7 @@ import { vi } from 'vitest';
 
 import { RunnerLogout } from './runner-logout';
 import { LocalIdentity } from './app-identity';
+import { provideActiveRunner } from '../active-runner';
 
 /** Render `LocalIdentity` with `GET /api/auth/session` answered by `session` and
  * `POST /api/auth/logout` a 204 no-op. */
@@ -20,6 +21,7 @@ async function render(session: unknown) {
     imports: [LocalIdentity],
     providers: [
       provideZonelessChangeDetection(),
+      provideActiveRunner('rn_1'),
       provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
     ],
   }).compileComponents();

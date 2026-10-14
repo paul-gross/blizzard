@@ -1,0 +1,26 @@
+@for (runner of runners(); track $index) {
+  <div class="runner" data-testid="host-runner-row" [attr.data-runner-id]="runner.runnerId" [attr.data-serving]="runner.serving">
+    <div class="head">
+      @if (runner.boardLink; as link) {
+        <a class="name" [routerLink]="link" data-testid="host-runner-link">{{ runner.name }}</a>
+      } @else {
+        <span class="name" data-testid="host-runner-name">{{ runner.name }}</span>
+      }
+      @if (runner.agents; as agents) {
+        <span class="agents" data-testid="host-runner-agents">{{ agents }}</span>
+      }
+      @if (runner.brake; as brake) {
+        <fleet-kit-badge tone="waiting" variant="pill" data-testid="host-runner-brake">{{ brake }}</fleet-kit-badge>
+      }
+      @if (!runner.serving) {
+        <fleet-kit-badge tone="needs" variant="pill" data-testid="host-runner-halted">halted</fleet-kit-badge>
+      }
+    </div>
+    @for (binding of runner.bindings; track $index) {
+      <div class="line" data-testid="host-runner-binding">{{ binding }}</div>
+    }
+    @for (reason of runner.haltedReasons; track $index) {
+      <div class="line reason" data-testid="host-runner-halted-reason">{{ reason }}</div>
+    }
+  </div>
+}

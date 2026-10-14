@@ -305,9 +305,14 @@
           "question_id": {
             "title": "Question Id",
             "type": "string"
+          },
+          "runner_id": {
+            "title": "Runner Id",
+            "type": "string"
           }
         },
         "required": [
+          "runner_id",
           "lease_id",
           "chunk_id",
           "question_id",
@@ -1473,13 +1478,10 @@
         "type": "object"
       },
       "DashboardView": {
-        "description": "``GET /api/dashboard`` \u2014 nine status reads composed into one response.\n``fleet_summary`` alone is a hub pass-through and the only nullable section \u2014\n``None`` on a hub failure or an unwired runner, while the eight local sections\nstill populate.",
+        "description": "``GET /runners/{runner_id}/api/dashboard`` \u2014 seven status reads composed into one response.\n``fleet_summary`` alone is a hub pass-through and the only nullable section \u2014\n``None`` on a hub failure or an unwired runner, while the six local sections\nstill populate. The host's environments and subscriptions are its own reads, under ``/api/host``.",
         "properties": {
           "asks": {
             "$ref": "#/components/schemas/AskListResponse"
-          },
-          "environments": {
-            "$ref": "#/components/schemas/EnvironmentListResponse"
           },
           "escalations": {
             "$ref": "#/components/schemas/EscalationListResponse"
@@ -1503,22 +1505,17 @@
           "runner": {
             "$ref": "#/components/schemas/RunnerStatusView"
           },
-          "subscriptions": {
-            "$ref": "#/components/schemas/SubscriptionListResponse"
-          },
           "takeovers": {
             "$ref": "#/components/schemas/OpenTakeoverListResponse"
           }
         },
         "required": [
           "runner",
-          "environments",
           "asks",
           "escalations",
           "takeovers",
           "facts",
           "harness_health",
-          "subscriptions",
           "fleet_summary"
         ],
         "title": "DashboardView",
@@ -1685,62 +1682,6 @@
         "title": "EnvironmentChangedPayload",
         "type": "object"
       },
-      "EnvironmentListResponse": {
-        "description": "Every environment in the runner's configured pool, held or free.",
-        "properties": {
-          "items": {
-            "default": [],
-            "items": {
-              "$ref": "#/components/schemas/EnvironmentView"
-            },
-            "title": "Items",
-            "type": "array"
-          }
-        },
-        "title": "EnvironmentListResponse",
-        "type": "object"
-      },
-      "EnvironmentView": {
-        "description": "One environment in the runner's configured pool \u2014 ``GET /api/environments``.\n``chunk_id``/``held_since`` are present only while the environment\nis currently bound; an unused pool environment carries both as ``None``. ``held`` is the\nrunner's own reading of whether a chunk holds it, so no client re-derives it.",
-        "properties": {
-          "chunk_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Chunk Id"
-          },
-          "environment_id": {
-            "title": "Environment Id",
-            "type": "string"
-          },
-          "held": {
-            "default": false,
-            "title": "Held",
-            "type": "boolean"
-          },
-          "held_since": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Held Since"
-          }
-        },
-        "required": [
-          "environment_id"
-        ],
-        "title": "EnvironmentView",
-        "type": "object"
-      },
       "EscalationChangeCause": {
         "enum": [
           "opened",
@@ -1774,9 +1715,14 @@
             ],
             "default": null,
             "title": "Lease Id"
+          },
+          "runner_id": {
+            "title": "Runner Id",
+            "type": "string"
           }
         },
         "required": [
+          "runner_id",
           "chunk_id",
           "cause"
         ],
@@ -1944,12 +1890,17 @@
             ],
             "title": "Lease Id"
           },
+          "runner_id": {
+            "title": "Runner Id",
+            "type": "string"
+          },
           "seq": {
             "title": "Seq",
             "type": "integer"
           }
         },
         "required": [
+          "runner_id",
           "seq",
           "kind",
           "chunk_id",
@@ -2847,6 +2798,388 @@
         "title": "HistoryRowView",
         "type": "object"
       },
+      "HostEnvironmentListResponse": {
+        "description": "Every workspace's environments, held or free, grouped by workspace.",
+        "properties": {
+          "workspaces": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/HostWorkspaceEnvironmentsView"
+            },
+            "title": "Workspaces",
+            "type": "array"
+          }
+        },
+        "title": "HostEnvironmentListResponse",
+        "type": "object"
+      },
+      "HostEnvironmentView": {
+        "description": "One environment of a workspace; a held one names the runner holding it and its chunk's project.",
+        "properties": {
+          "chunk_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chunk Id"
+          },
+          "environment_id": {
+            "title": "Environment Id",
+            "type": "string"
+          },
+          "held": {
+            "default": false,
+            "title": "Held",
+            "type": "boolean"
+          },
+          "held_since": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Held Since"
+          },
+          "project": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project"
+          },
+          "runner_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Runner Id"
+          }
+        },
+        "required": [
+          "environment_id"
+        ],
+        "title": "HostEnvironmentView",
+        "type": "object"
+      },
+      "HostRunnerBindingView": {
+        "description": "One project a runner serves, the workspace it runs in, and the agents it runs there at once.",
+        "properties": {
+          "agents": {
+            "title": "Agents",
+            "type": "integer"
+          },
+          "project": {
+            "title": "Project",
+            "type": "string"
+          },
+          "workspace_id": {
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project",
+          "workspace_id",
+          "agents"
+        ],
+        "title": "HostRunnerBindingView",
+        "type": "object"
+      },
+      "HostRunnerListResponse": {
+        "properties": {
+          "items": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/HostRunnerView"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "title": "HostRunnerListResponse",
+        "type": "object"
+      },
+      "HostRunnerStateView": {
+        "description": "One runner as the host's readiness names it.",
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "runner_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Runner Id"
+          },
+          "state": {
+            "enum": [
+              "serving",
+              "halted"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "runner_id",
+          "name",
+          "state"
+        ],
+        "title": "HostRunnerStateView",
+        "type": "object"
+      },
+      "HostRunnerView": {
+        "description": "One runner on the host: a served runner's brake, bindings and agents in use, or a halted one's reasons.",
+        "properties": {
+          "agents_in_use": {
+            "default": 0,
+            "title": "Agents In Use",
+            "type": "integer"
+          },
+          "bindings": {
+            "items": {
+              "$ref": "#/components/schemas/HostRunnerBindingView"
+            },
+            "title": "Bindings",
+            "type": "array"
+          },
+          "halted_reasons": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Halted Reasons",
+            "type": "array"
+          },
+          "max_agents": {
+            "default": 0,
+            "title": "Max Agents",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "pause": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PauseStateView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "runner_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Runner Id"
+          },
+          "state": {
+            "enum": [
+              "serving",
+              "halted"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "runner_id",
+          "name",
+          "state"
+        ],
+        "title": "HostRunnerView",
+        "type": "object"
+      },
+      "HostSubscriptionListResponse": {
+        "properties": {
+          "items": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/HostSubscriptionView"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "title": "HostSubscriptionListResponse",
+        "type": "object"
+      },
+      "HostSubscriptionView": {
+        "description": "One declared subscription's diagnostics, naming the runners that spend it.",
+        "properties": {
+          "miss_reason": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SampleMissReason"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "ok": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ok"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "renewal_attempted_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Renewal Attempted At"
+          },
+          "renewal_failure_reason": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RenewalFailureReason"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "renewal_result": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RenewalResult"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sampled_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sampled At"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "spenders": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Spenders",
+            "type": "array"
+          }
+        },
+        "required": [
+          "slug",
+          "name",
+          "provider"
+        ],
+        "title": "HostSubscriptionView",
+        "type": "object"
+      },
+      "HostWorkspaceEnvironmentsView": {
+        "properties": {
+          "items": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/HostEnvironmentView"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "workspace_id": {
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "workspace_id"
+        ],
+        "title": "HostWorkspaceEnvironmentsView",
+        "type": "object"
+      },
+      "HostWorkspaceListResponse": {
+        "properties": {
+          "items": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/HostWorkspaceView"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "title": "HostWorkspaceListResponse",
+        "type": "object"
+      },
+      "HostWorkspaceView": {
+        "description": "One workspace the host declares, with the environments it may hold at once.",
+        "properties": {
+          "max_environments": {
+            "title": "Max Environments",
+            "type": "integer"
+          },
+          "workspace_id": {
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "workspace_id",
+          "max_environments"
+        ],
+        "title": "HostWorkspaceView",
+        "type": "object"
+      },
       "HubConnectivityView": {
         "description": "Hub reachability (derived, not probed) plus the outbound backlog depth.\n\n``endpoint`` is the configured hub base URL \u2014 connectivity facts, not a probe.",
         "properties": {
@@ -3054,9 +3387,14 @@
           "lease_id": {
             "title": "Lease Id",
             "type": "string"
+          },
+          "runner_id": {
+            "title": "Runner Id",
+            "type": "string"
           }
         },
         "required": [
+          "runner_id",
           "lease_id",
           "chunk_id",
           "cause"
@@ -3712,6 +4050,14 @@
           "ready": {
             "title": "Ready",
             "type": "boolean"
+          },
+          "runners": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/HostRunnerStateView"
+            },
+            "title": "Runners",
+            "type": "array"
           },
           "store_reachable": {
             "title": "Store Reachable",
@@ -4707,108 +5053,6 @@
         "title": "StagedAttachment",
         "type": "object"
       },
-      "SubscriptionListResponse": {
-        "description": "Every declared subscription's own newest sampling attempt.",
-        "properties": {
-          "items": {
-            "default": [],
-            "items": {
-              "$ref": "#/components/schemas/SubscriptionView"
-            },
-            "title": "Items",
-            "type": "array"
-          }
-        },
-        "title": "SubscriptionListResponse",
-        "type": "object"
-      },
-      "SubscriptionView": {
-        "description": "One declared subscription's runner-local diagnostics, served by\n``GET /api/subscriptions``. The sampling fields are ``None`` until a first attempt, the\n``renewal_*`` fields until a first renewal; each ``*_reason`` is set only on a miss or failure.",
-        "properties": {
-          "miss_reason": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/SampleMissReason"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "name": {
-            "title": "Name",
-            "type": "string"
-          },
-          "ok": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Ok"
-          },
-          "provider": {
-            "title": "Provider",
-            "type": "string"
-          },
-          "renewal_attempted_at": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Renewal Attempted At"
-          },
-          "renewal_failure_reason": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/RenewalFailureReason"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "renewal_result": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/RenewalResult"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "sampled_at": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Sampled At"
-          },
-          "slug": {
-            "title": "Slug",
-            "type": "string"
-          }
-        },
-        "required": [
-          "slug",
-          "name",
-          "provider"
-        ],
-        "title": "SubscriptionView",
-        "type": "object"
-      },
       "TakeoverChangeCause": {
         "enum": [
           "opened",
@@ -4831,12 +5075,17 @@
             "title": "Chunk Id",
             "type": "string"
           },
+          "runner_id": {
+            "title": "Runner Id",
+            "type": "string"
+          },
           "takeover_id": {
             "title": "Takeover Id",
             "type": "string"
           }
         },
         "required": [
+          "runner_id",
           "chunk_id",
           "takeover_id",
           "cause"
@@ -5874,50 +6123,6 @@
   },
   "openapi": "3.1.0",
   "paths": {
-    "/api/asks": {
-      "get": {
-        "description": "Every ask still awaiting an answer \u2014 ``GET /api/asks?open=true``.\n\nThe one **human-web-lane** route on this otherwise worker-hook router, so it carries\n``require_human_api``. An ask reads open while its ``question_id`` carries\nno answer fact. No closed-ask history is kept, so ``open=false`` is refused.",
-        "operationId": "list_asks_api_asks_get",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "open",
-            "required": false,
-            "schema": {
-              "default": true,
-              "title": "Open",
-              "type": "boolean"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AskListResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "List Asks",
-        "tags": [
-          "runner"
-        ]
-      }
-    },
     "/api/auth/callback": {
       "post": {
         "operationId": "callback_api_auth_callback_post",
@@ -6015,10 +6220,343 @@
         ]
       }
     },
-    "/api/chunks/{chunk_id}": {
+    "/api/health": {
+      "get": {
+        "operationId": "health_api_health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Health Api Health Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Health",
+        "tags": [
+          "meta"
+        ]
+      }
+    },
+    "/api/host/environments": {
+      "get": {
+        "description": "Every workspace's environments, held or free; a held one names its runner and its chunk's project.",
+        "operationId": "list_environments_api_host_environments_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HostEnvironmentListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Environments",
+        "tags": [
+          "host"
+        ]
+      }
+    },
+    "/api/host/runners": {
+      "get": {
+        "description": "Every runner the host holds \u2014 a served one with its brake, bindings and agents in use, a halted one with its\nreasons.",
+        "operationId": "list_runners_api_host_runners_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HostRunnerListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Runners",
+        "tags": [
+          "host"
+        ]
+      }
+    },
+    "/api/host/subscriptions": {
+      "get": {
+        "description": "Every declared subscription's own newest sampling attempt and credential renewal, with the runners that spend\nit.",
+        "operationId": "list_subscriptions_api_host_subscriptions_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HostSubscriptionListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Subscriptions",
+        "tags": [
+          "host"
+        ]
+      }
+    },
+    "/api/host/workspaces": {
+      "get": {
+        "description": "Every workspace the host declares.",
+        "operationId": "list_workspaces_api_host_workspaces_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HostWorkspaceListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Workspaces",
+        "tags": [
+          "host"
+        ]
+      }
+    },
+    "/api/host/workspaces/{workspace_id}/prompt": {
+      "delete": {
+        "description": "Drop the runtime override so the workspace's configured prompt resolves again.\n\nDistinct from overriding with empty text, which is itself a standing override; the response\ncarries whatever the config now resolves to, effective on subsequent spawns.",
+        "operationId": "clear_workspace_prompt_api_host_workspaces__workspace_id__prompt_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspacePromptResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "The host declares no such workspace."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Clear Workspace Prompt",
+        "tags": [
+          "host"
+        ]
+      },
+      "get": {
+        "description": "The effective spawn preamble prompt: the runtime override if set, else static config.",
+        "operationId": "read_workspace_prompt_api_host_workspaces__workspace_id__prompt_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspacePromptResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "The host declares no such workspace."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Read Workspace Prompt",
+        "tags": [
+          "host"
+        ]
+      },
+      "put": {
+        "description": "Replace the runtime workspace-prompt override \u2014 effective on subsequent spawns.",
+        "operationId": "replace_workspace_prompt_api_host_workspaces__workspace_id__prompt_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkspacePromptReplacement"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspacePromptResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "The host declares no such workspace."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Replace Workspace Prompt",
+        "tags": [
+          "host"
+        ]
+      }
+    },
+    "/api/ready": {
+      "get": {
+        "operationId": "ready_api_ready_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadinessResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Ready",
+        "tags": [
+          "meta"
+        ]
+      }
+    },
+    "/runners/{runner_id}/api/asks": {
+      "get": {
+        "description": "Every ask still awaiting an answer \u2014 ``GET /api/asks?open=true``.\n\nThe one **human-web-lane** route on this otherwise worker-hook router, so it carries\n``require_human_api``. An ask reads open while its ``question_id`` carries\nno answer fact. No closed-ask history is kept, so ``open=false`` is refused.",
+        "operationId": "list_asks_runners__runner_id__api_asks_get",
+        "parameters": [
+          {
+            "description": "The runner's hub-minted id.",
+            "in": "path",
+            "name": "runner_id",
+            "required": true,
+            "schema": {
+              "description": "The runner's hub-minted id.",
+              "title": "Runner Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "open",
+            "required": false,
+            "schema": {
+              "default": true,
+              "title": "Open",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AskListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Asks",
+        "tags": [
+          "runner"
+        ]
+      }
+    },
+    "/runners/{runner_id}/api/chunks/{chunk_id}": {
       "get": {
         "description": "Forward a chunk's detail read to the hub \u2014 the whole aggregate, including\ntransition history, artifacts, and the open escalation.",
-        "operationId": "get_chunk_api_chunks__chunk_id__get",
+        "operationId": "get_chunk_runners__runner_id__api_chunks__chunk_id__get",
         "parameters": [
           {
             "in": "path",
@@ -6026,6 +6564,17 @@
             "required": true,
             "schema": {
               "title": "Chunk Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The runner's hub-minted id.",
+            "in": "path",
+            "name": "runner_id",
+            "required": true,
+            "schema": {
+              "description": "The runner's hub-minted id.",
+              "title": "Runner Id",
               "type": "string"
             }
           }
@@ -6058,10 +6607,10 @@
         ]
       }
     },
-    "/api/chunks/{chunk_id}/pause": {
+    "/runners/{runner_id}/api/chunks/{chunk_id}/pause": {
       "post": {
         "description": "Forward a chunk pause to the hub. ``409`` when the chunk is not in a pausable state.",
-        "operationId": "pause_chunk_api_chunks__chunk_id__pause_post",
+        "operationId": "pause_chunk_runners__runner_id__api_chunks__chunk_id__pause_post",
         "parameters": [
           {
             "in": "path",
@@ -6069,6 +6618,17 @@
             "required": true,
             "schema": {
               "title": "Chunk Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The runner's hub-minted id.",
+            "in": "path",
+            "name": "runner_id",
+            "required": true,
+            "schema": {
+              "description": "The runner's hub-minted id.",
+              "title": "Runner Id",
               "type": "string"
             }
           }
@@ -6101,11 +6661,11 @@
         ]
       }
     },
-    "/api/chunks/{chunk_id}/pm-items": {
+    "/runners/{runner_id}/api/chunks/{chunk_id}/pm-items": {
       "get": {
         "deprecated": true,
         "description": "Deprecated: use `GET /chunks/{chunk_id}/work-items`, which this path aliases onto the identical handler and returns the identical view.",
-        "operationId": "runner_get_pm_items_deprecated_alias_api_chunks__chunk_id__pm_items_get",
+        "operationId": "runner_get_pm_items_deprecated_alias_runners__runner_id__api_chunks__chunk_id__pm_items_get",
         "parameters": [
           {
             "in": "path",
@@ -6113,6 +6673,17 @@
             "required": true,
             "schema": {
               "title": "Chunk Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The runner's hub-minted id.",
+            "in": "path",
+            "name": "runner_id",
+            "required": true,
+            "schema": {
+              "description": "The runner's hub-minted id.",
+              "title": "Runner Id",
               "type": "string"
             }
           }
@@ -6145,10 +6716,10 @@
         ]
       }
     },
-    "/api/chunks/{chunk_id}/requeues": {
+    "/runners/{runner_id}/api/chunks/{chunk_id}/requeues": {
       "post": {
         "description": "Clear a needs_human chunk's local hold.\n\n``409`` while the chunk's takeover is still open (end the interactive session first),\nor while the chunk carries no open escalation (nothing needs_human to clear).",
-        "operationId": "requeue_chunk_api_chunks__chunk_id__requeues_post",
+        "operationId": "requeue_chunk_runners__runner_id__api_chunks__chunk_id__requeues_post",
         "parameters": [
           {
             "in": "path",
@@ -6156,6 +6727,17 @@
             "required": true,
             "schema": {
               "title": "Chunk Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The runner's hub-minted id.",
+            "in": "path",
+            "name": "runner_id",
+            "required": true,
+            "schema": {
+              "description": "The runner's hub-minted id.",
+              "title": "Runner Id",
               "type": "string"
             }
           }
@@ -6188,10 +6770,10 @@
         ]
       }
     },
-    "/api/chunks/{chunk_id}/resume": {
+    "/runners/{runner_id}/api/chunks/{chunk_id}/resume": {
       "post": {
         "description": "Forward a chunk resume to the hub.",
-        "operationId": "resume_chunk_api_chunks__chunk_id__resume_post",
+        "operationId": "resume_chunk_runners__runner_id__api_chunks__chunk_id__resume_post",
         "parameters": [
           {
             "in": "path",
@@ -6199,6 +6781,17 @@
             "required": true,
             "schema": {
               "title": "Chunk Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The runner's hub-minted id.",
+            "in": "path",
+            "name": "runner_id",
+            "required": true,
+            "schema": {
+              "description": "The runner's hub-minted id.",
+              "title": "Runner Id",
               "type": "string"
             }
           }
@@ -6231,10 +6824,10 @@
         ]
       }
     },
-    "/api/chunks/{chunk_id}/takeovers": {
+    "/runners/{runner_id}/api/chunks/{chunk_id}/takeovers": {
       "post": {
         "description": "Open a takeover over a parked chunk with no running attempt (``409`` otherwise).\n\n``force`` supersedes a live worker attempt instead of refusing, consuming no retry\nand recording no escalation.",
-        "operationId": "open_takeover_api_chunks__chunk_id__takeovers_post",
+        "operationId": "open_takeover_runners__runner_id__api_chunks__chunk_id__takeovers_post",
         "parameters": [
           {
             "in": "path",
@@ -6242,6 +6835,17 @@
             "required": true,
             "schema": {
               "title": "Chunk Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The runner's hub-minted id.",
+            "in": "path",
+            "name": "runner_id",
+            "required": true,
+            "schema": {
+              "description": "The runner's hub-minted id.",
+              "title": "Runner Id",
               "type": "string"
             }
           }
@@ -6284,10 +6888,10 @@
         ]
       }
     },
-    "/api/chunks/{chunk_id}/takeovers/{takeover_id}": {
+    "/runners/{runner_id}/api/chunks/{chunk_id}/takeovers/{takeover_id}": {
       "patch": {
         "description": "Mark a takeover ended.",
-        "operationId": "end_takeover_api_chunks__chunk_id__takeovers__takeover_id__patch",
+        "operationId": "end_takeover_runners__runner_id__api_chunks__chunk_id__takeovers__takeover_id__patch",
         "parameters": [
           {
             "in": "path",
@@ -6304,6 +6908,17 @@
             "required": true,
             "schema": {
               "title": "Takeover Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The runner's hub-minted id.",
+            "in": "path",
+            "name": "runner_id",
+            "required": true,
+            "schema": {
+              "description": "The runner's hub-minted id.",
+              "title": "Runner Id",
               "type": "string"
             }
           }
@@ -6336,10 +6951,10 @@
         ]
       }
     },
-    "/api/chunks/{chunk_id}/transcripts": {
+    "/runners/{runner_id}/api/chunks/{chunk_id}/transcripts": {
       "get": {
         "description": "The chunk's segment index, straight off the local ledger \u2014 metadata and byte counts\nonly, never turns. A chunk this runner never held a lease for returns ``[]``.",
-        "operationId": "list_transcript_segments_api_chunks__chunk_id__transcripts_get",
+        "operationId": "list_transcript_segments_runners__runner_id__api_chunks__chunk_id__transcripts_get",
         "parameters": [
           {
             "in": "path",
@@ -6347,6 +6962,17 @@
             "required": true,
             "schema": {
               "title": "Chunk Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The runner's hub-minted id.",
+            "in": "path",
+            "name": "runner_id",
+            "required": true,
+            "schema": {
+              "description": "The runner's hub-minted id.",
+              "title": "Runner Id",
               "type": "string"
             }
           }
@@ -6379,10 +7005,10 @@
         ]
       }
     },
-    "/api/chunks/{chunk_id}/transcripts/{segment_id}": {
+    "/runners/{runner_id}/api/chunks/{chunk_id}/transcripts/{segment_id}": {
       "get": {
         "description": "One segment's turns, local-only \u2014 404 iff absent; 503 iff its owner is unavailable.",
-        "operationId": "get_transcript_segment_api_chunks__chunk_id__transcripts__segment_id__get",
+        "operationId": "get_transcript_segment_runners__runner_id__api_chunks__chunk_id__transcripts__segment_id__get",
         "parameters": [
           {
             "in": "path",
@@ -6399,6 +7025,17 @@
             "required": true,
             "schema": {
               "title": "Segment Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The runner's hub-minted id.",
+            "in": "path",
+            "name": "runner_id",
+            "required": true,
+            "schema": {
+              "description": "The runner's hub-minted id.",
+              "title": "Runner Id",
               "type": "string"
             }
           }
@@ -6434,10 +7071,10 @@
         ]
       }
     },
-    "/api/chunks/{chunk_id}/work-items": {
+    "/runners/{runner_id}/api/chunks/{chunk_id}/work-items": {
       "get": {
         "description": "Forward a chunk's work-items read to the hub \u2014 the layered pass-through.",
-        "operationId": "get_work_items_api_chunks__chunk_id__work_items_get",
+        "operationId": "get_work_items_runners__runner_id__api_chunks__chunk_id__work_items_get",
         "parameters": [
           {
             "in": "path",
@@ -6445,6 +7082,17 @@
             "required": true,
             "schema": {
               "title": "Chunk Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The runner's hub-minted id.",
+            "in": "path",
+            "name": "runner_id",
+            "required": true,
+            "schema": {
+              "description": "The runner's hub-minted id.",
+              "title": "Runner Id",
               "type": "string"
             }
           }
@@ -6477,10 +7125,23 @@
         ]
       }
     },
-    "/api/dashboard": {
+    "/runners/{runner_id}/api/dashboard": {
       "get": {
-        "description": "The panel's nine reads composed into one \u2014 the eight local sections always\npopulate; ``fleet_summary`` is ``None`` on a hub outage or an unwired runner.",
-        "operationId": "get_dashboard_api_dashboard_get",
+        "description": "The panel's seven reads composed into one \u2014 the six local sections always\npopulate; ``fleet_summary`` is ``None`` on a hub outage or an unwired runner.",
+        "operationId": "get_dashboard_runners__runner_id__api_dashboard_get",
+        "parameters": [
+          {
+            "description": "The runner's hub-minted id.",
+            "in": "path",
+            "name": "runner_id",
+            "required": true,
+            "schema": {
+              "description": "The runner's hub-minted id.",
+              "title": "Runner Id",
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -6491,6 +7152,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "Get Dashboard",
@@ -6499,32 +7170,23 @@
         ]
       }
     },
-    "/api/environments": {
-      "get": {
-        "description": "Every environment in this runner's configured pool, held or free.",
-        "operationId": "list_environments_api_environments_get",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/EnvironmentListResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "List Environments",
-        "tags": [
-          "runner"
-        ]
-      }
-    },
-    "/api/escalations": {
+    "/runners/{runner_id}/api/escalations": {
       "get": {
         "description": "Every escalation still open \u2014 no later lease mint, and the hub has not ended the chunk.",
-        "operationId": "list_escalations_api_escalations_get",
+        "operationId": "list_escalations_runners__runner_id__api_escalations_get",
+        "parameters": [
+          {
+            "description": "The runner's hub-minted id.",
+            "in": "path",
+            "name": "runner_id",
+            "required": true,
+            "schema": {
+              "description": "The runner's hub-minted id.",
+              "title": "Runner Id",
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -6535,6 +7197,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "List Escalations",
@@ -6543,11 +7215,22 @@
         ]
       }
     },
-    "/api/facts": {
+    "/runners/{runner_id}/api/facts": {
       "get": {
         "description": "The newest ``limit`` hub-bound facts recorded by this runner, newest first.",
-        "operationId": "list_facts_api_facts_get",
+        "operationId": "list_facts_runners__runner_id__api_facts_get",
         "parameters": [
+          {
+            "description": "The runner's hub-minted id.",
+            "in": "path",
+            "name": "runner_id",
+            "required": true,
+            "schema": {
+              "description": "The runner's hub-minted id.",
+              "title": "Runner Id",
+              "type": "string"
+            }
+          },
           {
             "in": "query",
             "name": "limit",
@@ -6589,10 +7272,23 @@
         ]
       }
     },
-    "/api/fleet-summary": {
+    "/runners/{runner_id}/api/fleet-summary": {
       "get": {
         "description": "Forward the fleet-summary read to the hub \u2014 the layered pass-through.",
-        "operationId": "get_fleet_summary_api_fleet_summary_get",
+        "operationId": "get_fleet_summary_runners__runner_id__api_fleet_summary_get",
+        "parameters": [
+          {
+            "description": "The runner's hub-minted id.",
+            "in": "path",
+            "name": "runner_id",
+            "required": true,
+            "schema": {
+              "description": "The runner's hub-minted id.",
+              "title": "Runner Id",
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -6603,6 +7299,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "Get Fleet Summary",
@@ -6611,10 +7317,23 @@
         ]
       }
     },
-    "/api/harness-health": {
+    "/runners/{runner_id}/api/harness-health": {
       "get": {
         "description": "Every configured harness binding's own computed health.",
-        "operationId": "list_harness_health_api_harness_health_get",
+        "operationId": "list_harness_health_runners__runner_id__api_harness_health_get",
+        "parameters": [
+          {
+            "description": "The runner's hub-minted id.",
+            "in": "path",
+            "name": "runner_id",
+            "required": true,
+            "schema": {
+              "description": "The runner's hub-minted id.",
+              "title": "Runner Id",
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -6625,6 +7344,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "List Harness Health",
@@ -6633,35 +7362,23 @@
         ]
       }
     },
-    "/api/health": {
-      "get": {
-        "operationId": "health_api_health_get",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": {
-                    "type": "string"
-                  },
-                  "title": "Response Health Api Health Get",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "Health",
-        "tags": [
-          "meta"
-        ]
-      }
-    },
-    "/api/heartbeat": {
+    "/runners/{runner_id}/api/heartbeat": {
       "post": {
         "description": "Record a lease heartbeat, stamped with the injected clock.",
-        "operationId": "heartbeat_api_heartbeat_post",
+        "operationId": "heartbeat_runners__runner_id__api_heartbeat_post",
+        "parameters": [
+          {
+            "description": "The runner's hub-minted id.",
+            "in": "path",
+            "name": "runner_id",
+            "required": true,
+            "schema": {
+              "description": "The runner's hub-minted id.",
+              "title": "Runner Id",
+              "type": "string"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -6700,10 +7417,23 @@
         ]
       }
     },
-    "/api/leases": {
+    "/runners/{runner_id}/api/leases": {
       "get": {
         "description": "Active leases, then recently-closed ones, derived at read time.",
-        "operationId": "list_leases_api_leases_get",
+        "operationId": "list_leases_runners__runner_id__api_leases_get",
+        "parameters": [
+          {
+            "description": "The runner's hub-minted id.",
+            "in": "path",
+            "name": "runner_id",
+            "required": true,
+            "schema": {
+              "description": "The runner's hub-minted id.",
+              "title": "Runner Id",
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -6714,6 +7444,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "List Leases",
@@ -6722,10 +7462,10 @@
         ]
       }
     },
-    "/api/leases/{lease_id}/analytics/counts/agent-types": {
+    "/runners/{runner_id}/api/leases/{lease_id}/analytics/counts/agent-types": {
       "get": {
         "description": "Forward this lease's chunk's counts-by-agent-type read to the hub over the window.",
-        "operationId": "get_analytics_counts_agent_types_api_leases__lease_id__analytics_counts_agent_types_get",
+        "operationId": "get_analytics_counts_agent_types_runners__runner_id__api_leases__lease_id__analytics_counts_agent_types_get",
         "parameters": [
           {
             "in": "path",
@@ -6733,6 +7473,17 @@
             "required": true,
             "schema": {
               "title": "Lease Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The runner's hub-minted id.",
+            "in": "path",
+            "name": "runner_id",
+            "required": true,
+            "schema": {
+              "description": "The runner's hub-minted id.",
+              "title": "Runner Id",
               "type": "string"
             }
           },
@@ -6797,10 +7548,10 @@
         ]
       }
     },
-    "/api/leases/{lease_id}/analytics/counts/files": {
+    "/runners/{runner_id}/api/leases/{lease_id}/analytics/counts/files": {
       "get": {
         "description": "Forward this lease's chunk's counts-by-file read to the hub over the window.",
-        "operationId": "get_analytics_counts_files_api_leases__lease_id__analytics_counts_files_get",
+        "operationId": "get_analytics_counts_files_runners__runner_id__api_leases__lease_id__analytics_counts_files_get",
         "parameters": [
           {
             "in": "path",
@@ -6808,6 +7559,17 @@
             "required": true,
             "schema": {
               "title": "Lease Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The runner's hub-minted id.",
+            "in": "path",
+            "name": "runner_id",
+            "required": true,
+            "schema": {
+              "description": "The runner's hub-minted id.",
+              "title": "Runner Id",
               "type": "string"
             }
           },
@@ -6872,10 +7634,10 @@
         ]
       }
     },
-    "/api/leases/{lease_id}/analytics/counts/nodes": {
+    "/runners/{runner_id}/api/leases/{lease_id}/analytics/counts/nodes": {
       "get": {
         "description": "Forward this lease's chunk's counts-by-node read to the hub over the window.",
-        "operationId": "get_analytics_counts_nodes_api_leases__lease_id__analytics_counts_nodes_get",
+        "operationId": "get_analytics_counts_nodes_runners__runner_id__api_leases__lease_id__analytics_counts_nodes_get",
         "parameters": [
           {
             "in": "path",
@@ -6883,6 +7645,17 @@
             "required": true,
             "schema": {
               "title": "Lease Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The runner's hub-minted id.",
+            "in": "path",
+            "name": "runner_id",
+            "required": true,
+            "schema": {
+              "description": "The runner's hub-minted id.",
+              "title": "Runner Id",
               "type": "string"
             }
           },
@@ -6957,10 +7730,10 @@
         ]
       }
     },
-    "/api/leases/{lease_id}/analytics/counts/skills": {
+    "/runners/{runner_id}/api/leases/{lease_id}/analytics/counts/skills": {
       "get": {
         "description": "Forward this lease's chunk's counts-by-skill read to the hub over the window.",
-        "operationId": "get_analytics_counts_skills_api_leases__lease_id__analytics_counts_skills_get",
+        "operationId": "get_analytics_counts_skills_runners__runner_id__api_leases__lease_id__analytics_counts_skills_get",
         "parameters": [
           {
             "in": "path",
@@ -6968,6 +7741,17 @@
             "required": true,
             "schema": {
               "title": "Lease Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The runner's hub-minted id.",
+            "in": "path",
+            "name": "runner_id",
+            "required": true,
+            "schema": {
+              "description": "The runner's hub-minted id.",
+              "title": "Runner Id",
               "type": "string"
             }
           },
@@ -7032,10 +7816,10 @@
         ]
       }
     },
-    "/api/leases/{lease_id}/analytics/spend/graphs": {
+    "/runners/{runner_id}/api/leases/{lease_id}/analytics/spend/graphs": {
       "get": {
         "description": "Forward this lease's chunk's spend-by-graph read to the hub over the window.",
-        "operationId": "get_analytics_spend_graphs_api_leases__lease_id__analytics_spend_graphs_get",
+        "operationId": "get_analytics_spend_graphs_runners__runner_id__api_leases__lease_id__analytics_spend_graphs_get",
         "parameters": [
           {
             "in": "path",
@@ -7043,6 +7827,17 @@
             "required": true,
             "schema": {
               "title": "Lease Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The runner's hub-minted id.",
+            "in": "path",
+            "name": "runner_id",
+            "required": true,
+            "schema": {
+              "description": "The runner's hub-minted id.",
+              "title": "Runner Id",
               "type": "string"
             }
           },
@@ -7117,10 +7912,10 @@
         ]
       }
     },
-    "/api/leases/{lease_id}/analytics/spend/nodes": {
+    "/runners/{runner_id}/api/leases/{lease_id}/analytics/spend/nodes": {
       "get": {
         "description": "Forward this lease's chunk's spend-by-node read to the hub over the window.",
-        "operationId": "get_analytics_spend_nodes_api_leases__lease_id__analytics_spend_nodes_get",
+        "operationId": "get_analytics_spend_nodes_runners__runner_id__api_leases__lease_id__analytics_spend_nodes_get",
         "parameters": [
           {
             "in": "path",
@@ -7128,6 +7923,17 @@
             "required": true,
             "schema": {
               "title": "Lease Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The runner's hub-minted id.",
+            "in": "path",
+            "name": "runner_id",
+            "required": true,
+            "schema": {
+              "description": "The runner's hub-minted id.",
+              "title": "Runner Id",
               "type": "string"
             }
           },
@@ -7202,10 +8008,10 @@
         ]
       }
     },
-    "/api/leases/{lease_id}/artifacts": {
+    "/runners/{runner_id}/api/leases/{lease_id}/artifacts": {
       "get": {
         "description": "The worker's own artifacts \u2014 every node-step input resolved latest-by-epoch, the graph\nmint's own baked-in declarations, and blizzard's published system-artifact set, all\nkind-discriminated. ``scope`` narrows to one; omitted, all three are read. ``scope=graph``\nnever reaches the hub; ``scope=system`` always does.",
-        "operationId": "list_artifacts_api_leases__lease_id__artifacts_get",
+        "operationId": "list_artifacts_runners__runner_id__api_leases__lease_id__artifacts_get",
         "parameters": [
           {
             "in": "path",
@@ -7213,6 +8019,17 @@
             "required": true,
             "schema": {
               "title": "Lease Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The runner's hub-minted id.",
+            "in": "path",
+            "name": "runner_id",
+            "required": true,
+            "schema": {
+              "description": "The runner's hub-minted id.",
+              "title": "Runner Id",
               "type": "string"
             }
           },
@@ -7241,7 +8058,7 @@
                   "items": {
                     "$ref": "#/components/schemas/WorkerArtifact"
                   },
-                  "title": "Response List Artifacts Api Leases  Lease Id  Artifacts Get",
+                  "title": "Response List Artifacts Runners  Runner Id  Api Leases  Lease Id  Artifacts Get",
                   "type": "array"
                 }
               }
@@ -7265,10 +8082,10 @@
         ]
       }
     },
-    "/api/leases/{lease_id}/artifacts/{name}": {
+    "/runners/{runner_id}/api/leases/{lease_id}/artifacts/{name}": {
       "get": {
         "description": "One artifact by name, optionally narrowed by ``scope`` and, for node scope, by ``node``;\n``404`` when nothing matches. A supplied ``node`` settles scope to node on its own \u2014 neither\na graph declaration nor a system artifact has a producing node \u2014 so pairing it with\n``scope=graph``/``scope=system`` is ``400``. More than one candidate \u2014 several upstream\nnodes, or a name colliding across scopes \u2014 is ``409`` naming them.",
-        "operationId": "get_artifact_api_leases__lease_id__artifacts__name__get",
+        "operationId": "get_artifact_runners__runner_id__api_leases__lease_id__artifacts__name__get",
         "parameters": [
           {
             "in": "path",
@@ -7285,6 +8102,17 @@
             "required": true,
             "schema": {
               "title": "Name",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The runner's hub-minted id.",
+            "in": "path",
+            "name": "runner_id",
+            "required": true,
+            "schema": {
+              "description": "The runner's hub-minted id.",
+              "title": "Runner Id",
               "type": "string"
             }
           },
@@ -7349,10 +8177,10 @@
         ]
       }
     },
-    "/api/leases/{lease_id}/asks": {
+    "/runners/{runner_id}/api/leases/{lease_id}/asks": {
       "get": {
         "description": "Every question asked on the worker's own chunk, oldest-first \u2014 open, answered, and\nrestart-superseded alike. An answer a person gave binds every later session on the chunk.",
-        "operationId": "get_chunk_asks_api_leases__lease_id__asks_get",
+        "operationId": "get_chunk_asks_runners__runner_id__api_leases__lease_id__asks_get",
         "parameters": [
           {
             "in": "path",
@@ -7360,6 +8188,17 @@
             "required": true,
             "schema": {
               "title": "Lease Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The runner's hub-minted id.",
+            "in": "path",
+            "name": "runner_id",
+            "required": true,
+            "schema": {
+              "description": "The runner's hub-minted id.",
+              "title": "Runner Id",
               "type": "string"
             }
           }
@@ -7372,7 +8211,7 @@
                   "items": {
                     "$ref": "#/components/schemas/ChunkAskView"
                   },
-                  "title": "Response Get Chunk Asks Api Leases  Lease Id  Asks Get",
+                  "title": "Response Get Chunk Asks Runners  Runner Id  Api Leases  Lease Id  Asks Get",
                   "type": "array"
                 }
               }
@@ -7397,7 +8236,7 @@
       },
       "post": {
         "description": "Record a worker's ask against its lease, minting the question id.\n\nToken-authorized like every other worker verb, since activeness alone would admit an open takeover's\nclosed reference lease too. ``409`` when the lease is that closed reference lease.",
-        "operationId": "record_ask_api_leases__lease_id__asks_post",
+        "operationId": "record_ask_runners__runner_id__api_leases__lease_id__asks_post",
         "parameters": [
           {
             "in": "path",
@@ -7405,6 +8244,17 @@
             "required": true,
             "schema": {
               "title": "Lease Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The runner's hub-minted id.",
+            "in": "path",
+            "name": "runner_id",
+            "required": true,
+            "schema": {
+              "description": "The runner's hub-minted id.",
+              "title": "Runner Id",
               "type": "string"
             }
           }
@@ -7447,10 +8297,10 @@
         ]
       }
     },
-    "/api/leases/{lease_id}/attachments": {
+    "/runners/{runner_id}/api/leases/{lease_id}/attachments": {
       "get": {
         "description": "The lease's currently staged submissions \u2014 newest content per ``name``, not yet\npublished into any envelope.",
-        "operationId": "list_staged_attachments_api_leases__lease_id__attachments_get",
+        "operationId": "list_staged_attachments_runners__runner_id__api_leases__lease_id__attachments_get",
         "parameters": [
           {
             "in": "path",
@@ -7458,6 +8308,17 @@
             "required": true,
             "schema": {
               "title": "Lease Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The runner's hub-minted id.",
+            "in": "path",
+            "name": "runner_id",
+            "required": true,
+            "schema": {
+              "description": "The runner's hub-minted id.",
+              "title": "Runner Id",
               "type": "string"
             }
           }
@@ -7470,7 +8331,7 @@
                   "items": {
                     "$ref": "#/components/schemas/StagedAttachment"
                   },
-                  "title": "Response List Staged Attachments Api Leases  Lease Id  Attachments Get",
+                  "title": "Response List Staged Attachments Runners  Runner Id  Api Leases  Lease Id  Attachments Get",
                   "type": "array"
                 }
               }
@@ -7495,7 +8356,7 @@
       },
       "post": {
         "description": "Record a worker's explicit artifact for ``request_body.name`` against its lease.",
-        "operationId": "record_attachment_api_leases__lease_id__attachments_post",
+        "operationId": "record_attachment_runners__runner_id__api_leases__lease_id__attachments_post",
         "parameters": [
           {
             "in": "path",
@@ -7503,6 +8364,17 @@
             "required": true,
             "schema": {
               "title": "Lease Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The runner's hub-minted id.",
+            "in": "path",
+            "name": "runner_id",
+            "required": true,
+            "schema": {
+              "description": "The runner's hub-minted id.",
+              "title": "Runner Id",
               "type": "string"
             }
           }
@@ -7545,10 +8417,10 @@
         ]
       }
     },
-    "/api/leases/{lease_id}/findings": {
+    "/runners/{runner_id}/api/leases/{lease_id}/findings": {
       "get": {
         "description": "Forward this lease's chunk's answered-findings read to the hub; its refusals pass through verbatim.",
-        "operationId": "list_findings_api_leases__lease_id__findings_get",
+        "operationId": "list_findings_runners__runner_id__api_leases__lease_id__findings_get",
         "parameters": [
           {
             "in": "path",
@@ -7556,6 +8428,17 @@
             "required": true,
             "schema": {
               "title": "Lease Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The runner's hub-minted id.",
+            "in": "path",
+            "name": "runner_id",
+            "required": true,
+            "schema": {
+              "description": "The runner's hub-minted id.",
+              "title": "Runner Id",
               "type": "string"
             }
           }
@@ -7568,7 +8451,7 @@
                   "items": {
                     "$ref": "#/components/schemas/FindingView"
                   },
-                  "title": "Response List Findings Api Leases  Lease Id  Findings Get",
+                  "title": "Response List Findings Runners  Runner Id  Api Leases  Lease Id  Findings Get",
                   "type": "array"
                 }
               }
@@ -7592,10 +8475,10 @@
         ]
       }
     },
-    "/api/leases/{lease_id}/findings/{finding_id}": {
+    "/runners/{runner_id}/api/leases/{lease_id}/findings/{finding_id}": {
       "get": {
         "description": "Forward one finding of this lease's chunk's answered set to the hub; its refusals pass through verbatim.",
-        "operationId": "get_finding_api_leases__lease_id__findings__finding_id__get",
+        "operationId": "get_finding_runners__runner_id__api_leases__lease_id__findings__finding_id__get",
         "parameters": [
           {
             "in": "path",
@@ -7612,6 +8495,17 @@
             "required": true,
             "schema": {
               "title": "Finding Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The runner's hub-minted id.",
+            "in": "path",
+            "name": "runner_id",
+            "required": true,
+            "schema": {
+              "description": "The runner's hub-minted id.",
+              "title": "Runner Id",
               "type": "string"
             }
           }
@@ -7644,10 +8538,10 @@
         ]
       }
     },
-    "/api/leases/{lease_id}/garden/findings": {
+    "/runners/{runner_id}/api/leases/{lease_id}/garden/findings": {
       "get": {
         "description": "Forward this lease's chunk's finding-bucket read to the hub; its refusals pass through verbatim.",
-        "operationId": "list_garden_findings_api_leases__lease_id__garden_findings_get",
+        "operationId": "list_garden_findings_runners__runner_id__api_leases__lease_id__garden_findings_get",
         "parameters": [
           {
             "in": "path",
@@ -7655,6 +8549,17 @@
             "required": true,
             "schema": {
               "title": "Lease Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The runner's hub-minted id.",
+            "in": "path",
+            "name": "runner_id",
+            "required": true,
+            "schema": {
+              "description": "The runner's hub-minted id.",
+              "title": "Runner Id",
               "type": "string"
             }
           }
@@ -7667,7 +8572,7 @@
                   "items": {
                     "$ref": "#/components/schemas/FindingView"
                   },
-                  "title": "Response List Garden Findings Api Leases  Lease Id  Garden Findings Get",
+                  "title": "Response List Garden Findings Runners  Runner Id  Api Leases  Lease Id  Garden Findings Get",
                   "type": "array"
                 }
               }
@@ -7691,10 +8596,10 @@
         ]
       }
     },
-    "/api/leases/{lease_id}/garden/proposals": {
+    "/runners/{runner_id}/api/leases/{lease_id}/garden/proposals": {
       "get": {
         "description": "Forward this lease's chunk's garden-proposals read to the hub, ``state`` unvalidated;\nits refusals pass through verbatim. Answers the whole docket, not a page: the worker's reconcile\nstep compares what it found against every proposal in ``state``, so a window would change what it\ndedups against. Each hub request is bounded by its page; the whole read is that consumer's need.",
-        "operationId": "list_garden_proposals_api_leases__lease_id__garden_proposals_get",
+        "operationId": "list_garden_proposals_runners__runner_id__api_leases__lease_id__garden_proposals_get",
         "parameters": [
           {
             "in": "path",
@@ -7702,6 +8607,17 @@
             "required": true,
             "schema": {
               "title": "Lease Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The runner's hub-minted id.",
+            "in": "path",
+            "name": "runner_id",
+            "required": true,
+            "schema": {
+              "description": "The runner's hub-minted id.",
+              "title": "Runner Id",
               "type": "string"
             }
           },
@@ -7724,7 +8640,7 @@
                   "items": {
                     "$ref": "#/components/schemas/GardenProposalView"
                   },
-                  "title": "Response List Garden Proposals Api Leases  Lease Id  Garden Proposals Get",
+                  "title": "Response List Garden Proposals Runners  Runner Id  Api Leases  Lease Id  Garden Proposals Get",
                   "type": "array"
                 }
               }
@@ -7748,10 +8664,10 @@
         ]
       }
     },
-    "/api/leases/{lease_id}/git-commits": {
+    "/runners/{runner_id}/api/leases/{lease_id}/git-commits": {
       "post": {
         "description": "Record a worker's explicit git-commit declaration for ``request_body.repo`` against\nits lease.",
-        "operationId": "record_git_commit_declaration_api_leases__lease_id__git_commits_post",
+        "operationId": "record_git_commit_declaration_runners__runner_id__api_leases__lease_id__git_commits_post",
         "parameters": [
           {
             "in": "path",
@@ -7759,6 +8675,17 @@
             "required": true,
             "schema": {
               "title": "Lease Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The runner's hub-minted id.",
+            "in": "path",
+            "name": "runner_id",
+            "required": true,
+            "schema": {
+              "description": "The runner's hub-minted id.",
+              "title": "Runner Id",
               "type": "string"
             }
           }
@@ -7801,10 +8728,10 @@
         ]
       }
     },
-    "/api/leases/{lease_id}/history": {
+    "/runners/{runner_id}/api/leases/{lease_id}/history": {
       "get": {
         "description": "The worker's own chunk's timeline \u2014 transitions, migrations, and bounces merged\noldest-first into one kind-discriminated read. Excludes the in-flight node-step.",
-        "operationId": "get_history_api_leases__lease_id__history_get",
+        "operationId": "get_history_runners__runner_id__api_leases__lease_id__history_get",
         "parameters": [
           {
             "in": "path",
@@ -7812,6 +8739,17 @@
             "required": true,
             "schema": {
               "title": "Lease Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The runner's hub-minted id.",
+            "in": "path",
+            "name": "runner_id",
+            "required": true,
+            "schema": {
+              "description": "The runner's hub-minted id.",
+              "title": "Runner Id",
               "type": "string"
             }
           }
@@ -7824,7 +8762,7 @@
                   "items": {
                     "$ref": "#/components/schemas/HistoryRowView"
                   },
-                  "title": "Response Get History Api Leases  Lease Id  History Get",
+                  "title": "Response Get History Runners  Runner Id  Api Leases  Lease Id  History Get",
                   "type": "array"
                 }
               }
@@ -7848,10 +8786,10 @@
         ]
       }
     },
-    "/api/leases/{lease_id}/scopes": {
+    "/runners/{runner_id}/api/leases/{lease_id}/scopes": {
       "get": {
         "description": "Forward this lease's scope-list read to the hub \u2014 the layered pass-through. The\nlease authorizes the caller and names its chunk, so the hub answers that chunk's project's\nscopes; a hub that predates projects ignores the chunk and answers every scope.",
-        "operationId": "list_scopes_api_leases__lease_id__scopes_get",
+        "operationId": "list_scopes_runners__runner_id__api_leases__lease_id__scopes_get",
         "parameters": [
           {
             "in": "path",
@@ -7859,6 +8797,17 @@
             "required": true,
             "schema": {
               "title": "Lease Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The runner's hub-minted id.",
+            "in": "path",
+            "name": "runner_id",
+            "required": true,
+            "schema": {
+              "description": "The runner's hub-minted id.",
+              "title": "Runner Id",
               "type": "string"
             }
           }
@@ -7871,7 +8820,7 @@
                   "items": {
                     "$ref": "#/components/schemas/ScopeView"
                   },
-                  "title": "Response List Scopes Api Leases  Lease Id  Scopes Get",
+                  "title": "Response List Scopes Runners  Runner Id  Api Leases  Lease Id  Scopes Get",
                   "type": "array"
                 }
               }
@@ -7895,10 +8844,10 @@
         ]
       }
     },
-    "/api/leases/{lease_id}/session-end": {
+    "/runners/{runner_id}/api/leases/{lease_id}/session-end": {
       "post": {
         "description": "Record a lease's session-end, stamped with the injected clock.",
-        "operationId": "session_end_api_leases__lease_id__session_end_post",
+        "operationId": "session_end_runners__runner_id__api_leases__lease_id__session_end_post",
         "parameters": [
           {
             "in": "path",
@@ -7906,6 +8855,17 @@
             "required": true,
             "schema": {
               "title": "Lease Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The runner's hub-minted id.",
+            "in": "path",
+            "name": "runner_id",
+            "required": true,
+            "schema": {
+              "description": "The runner's hub-minted id.",
+              "title": "Runner Id",
               "type": "string"
             }
           }
@@ -7938,10 +8898,10 @@
         ]
       }
     },
-    "/api/leases/{lease_id}/transcript": {
+    "/runners/{runner_id}/api/leases/{lease_id}/transcript": {
       "get": {
         "description": "The lease's resolved transcript \u2014 404 iff absent; 503 iff its owner is unavailable.",
-        "operationId": "get_transcript_api_leases__lease_id__transcript_get",
+        "operationId": "get_transcript_runners__runner_id__api_leases__lease_id__transcript_get",
         "parameters": [
           {
             "in": "path",
@@ -7949,6 +8909,17 @@
             "required": true,
             "schema": {
               "title": "Lease Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The runner's hub-minted id.",
+            "in": "path",
+            "name": "runner_id",
+            "required": true,
+            "schema": {
+              "description": "The runner's hub-minted id.",
+              "title": "Runner Id",
               "type": "string"
             }
           }
@@ -7984,31 +8955,23 @@
         ]
       }
     },
-    "/api/ready": {
-      "get": {
-        "operationId": "ready_api_ready_get",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ReadinessResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "Ready",
-        "tags": [
-          "meta"
-        ]
-      }
-    },
-    "/api/runner": {
+    "/runners/{runner_id}/api/runner": {
       "get": {
         "description": "The runner's machine-local summary: identity, pause states, capacities, hub\nconnectivity, last tick.\n\nDerived entirely from local store facts plus the injected clock \u2014 no hub call, so it\nis truthful with the hub unreachable. An unwired service answers 503.",
-        "operationId": "get_runner_api_runner_get",
+        "operationId": "get_runner_runners__runner_id__api_runner_get",
+        "parameters": [
+          {
+            "description": "The runner's hub-minted id.",
+            "in": "path",
+            "name": "runner_id",
+            "required": true,
+            "schema": {
+              "description": "The runner's hub-minted id.",
+              "title": "Runner Id",
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -8019,6 +8982,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "Get Runner",
@@ -8028,7 +9001,20 @@
       },
       "patch": {
         "description": "Set this runner's own pause brake \u2014 it starts no new workers.\n\nIndependent of the hub's brake: it works with the hub unreachable, and neither reads nor\nwrites the hub's flag. Not a drain: a live worker is left running. Refused with 503 while the\nstore is bound to no runner id, since the brake is a fact of the runner the store is bound to.",
-        "operationId": "patch_runner_api_runner_patch",
+        "operationId": "patch_runner_runners__runner_id__api_runner_patch",
+        "parameters": [
+          {
+            "description": "The runner's hub-minted id.",
+            "in": "path",
+            "name": "runner_id",
+            "required": true,
+            "schema": {
+              "description": "The runner's hub-minted id.",
+              "title": "Runner Id",
+              "type": "string"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -8070,10 +9056,23 @@
         ]
       }
     },
-    "/api/selftests": {
+    "/runners/{runner_id}/api/selftests": {
       "post": {
         "description": "Mint a selftest run against ``harness`` and begin it off the request thread.",
-        "operationId": "start_selftest_api_selftests_post",
+        "operationId": "start_selftest_runners__runner_id__api_selftests_post",
+        "parameters": [
+          {
+            "description": "The runner's hub-minted id.",
+            "in": "path",
+            "name": "runner_id",
+            "required": true,
+            "schema": {
+              "description": "The runner's hub-minted id.",
+              "title": "Runner Id",
+              "type": "string"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -8115,10 +9114,10 @@
         ]
       }
     },
-    "/api/selftests/{selftest_id}": {
+    "/runners/{runner_id}/api/selftests/{selftest_id}": {
       "get": {
         "description": "Read back a selftest run's current state.",
-        "operationId": "get_selftest_api_selftests__selftest_id__get",
+        "operationId": "get_selftest_runners__runner_id__api_selftests__selftest_id__get",
         "parameters": [
           {
             "in": "path",
@@ -8126,6 +9125,17 @@
             "required": true,
             "schema": {
               "title": "Selftest Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The runner's hub-minted id.",
+            "in": "path",
+            "name": "runner_id",
+            "required": true,
+            "schema": {
+              "description": "The runner's hub-minted id.",
+              "title": "Runner Id",
               "type": "string"
             }
           }
@@ -8158,32 +9168,23 @@
         ]
       }
     },
-    "/api/subscriptions": {
-      "get": {
-        "description": "Every declared subscription's own newest sampling attempt and credential renewal.",
-        "operationId": "list_subscriptions_api_subscriptions_get",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SubscriptionListResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "List Subscriptions",
-        "tags": [
-          "runner"
-        ]
-      }
-    },
-    "/api/takeovers": {
+    "/runners/{runner_id}/api/takeovers": {
       "get": {
         "description": "Every takeover still open \u2014 the recovery surface for a stranded one.",
-        "operationId": "list_open_takeovers_api_takeovers_get",
+        "operationId": "list_open_takeovers_runners__runner_id__api_takeovers_get",
+        "parameters": [
+          {
+            "description": "The runner's hub-minted id.",
+            "in": "path",
+            "name": "runner_id",
+            "required": true,
+            "schema": {
+              "description": "The runner's hub-minted id.",
+              "title": "Runner Id",
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -8194,6 +9195,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "List Open Takeovers",
@@ -8202,10 +9213,23 @@
         ]
       }
     },
-    "/api/traces/replay": {
+    "/runners/{runner_id}/api/traces/replay": {
       "post": {
         "description": "Tell every lease closed in ``[since, until)`` again, inside the request, without moving the live cursor.\nA bad window is 422; a replay that must export while tracing is off, or any replay before the runner's first\nregistration, is 409; and an exporter that refuses is 502 with the counts it accepted before.",
-        "operationId": "trace_replay_api_traces_replay_post",
+        "operationId": "trace_replay_runners__runner_id__api_traces_replay_post",
+        "parameters": [
+          {
+            "description": "The runner's hub-minted id.",
+            "in": "path",
+            "name": "runner_id",
+            "required": true,
+            "schema": {
+              "description": "The runner's hub-minted id.",
+              "title": "Runner Id",
+              "type": "string"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -8254,88 +9278,29 @@
         ]
       }
     },
-    "/api/traces/status": {
+    "/runners/{runner_id}/api/traces/status": {
       "get": {
         "description": "Tracing on or off, the redacted endpoint, the cursor and its lag, the last export and the last error,\nand the bindings' combined harness-telemetry plan with each signal's receiver counts.",
-        "operationId": "trace_status_api_traces_status_get",
+        "operationId": "trace_status_runners__runner_id__api_traces_status_get",
+        "parameters": [
+          {
+            "description": "The runner's hub-minted id.",
+            "in": "path",
+            "name": "runner_id",
+            "required": true,
+            "schema": {
+              "description": "The runner's hub-minted id.",
+              "title": "Runner Id",
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/RunnerTraceStatusResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "Trace Status",
-        "tags": [
-          "traces"
-        ]
-      }
-    },
-    "/api/workspace-prompt": {
-      "delete": {
-        "description": "Drop the runtime override so the runner's configured prompt resolves again.\n\nDistinct from overriding with empty text, which is itself a standing override; the response\ncarries whatever the config now resolves to, effective on subsequent spawns.",
-        "operationId": "clear_workspace_prompt_api_workspace_prompt_delete",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/WorkspacePromptResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "Clear Workspace Prompt",
-        "tags": [
-          "runner"
-        ]
-      },
-      "get": {
-        "description": "The effective spawn preamble prompt: the runtime override if set, else static config.",
-        "operationId": "read_workspace_prompt_api_workspace_prompt_get",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/WorkspacePromptResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "Read Workspace Prompt",
-        "tags": [
-          "runner"
-        ]
-      },
-      "put": {
-        "description": "Replace the runtime workspace-prompt override \u2014 effective on subsequent spawns.",
-        "operationId": "replace_workspace_prompt_api_workspace_prompt_put",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/WorkspacePromptReplacement"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/WorkspacePromptResponse"
                 }
               }
             },
@@ -8352,9 +9317,9 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Replace Workspace Prompt",
+        "summary": "Trace Status",
         "tags": [
-          "runner"
+          "traces"
         ]
       }
     }

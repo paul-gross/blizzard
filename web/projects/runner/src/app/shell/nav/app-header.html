@@ -1,5 +1,7 @@
 <fleet-board-header [connection]="connection()" connectionLabel="Runner" tagline="runner · machine panel" [stats]="headerStats()">
-  <app-pause-control header-trailing />
+  @if (runnerActive()) {
+    <app-pause-control header-trailing />
+  }
   <!-- Display-only: this shell's logout is the menu item below, so it does
        not vanish with the header cell at the narrow tier, and all three of
        the app's profile menus carry the same two items. -->

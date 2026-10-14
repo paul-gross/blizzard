@@ -13,7 +13,6 @@ from pathlib import Path
 import httpx
 import pytest
 from fastapi import FastAPI
-from fastapi.testclient import TestClient
 
 from blizzard.foundation.tokens import TokenHash
 from blizzard.runner.api.analytics import _ANALYTICS_HUB_TIMEOUT
@@ -21,6 +20,7 @@ from blizzard.runner.api.hub_proxy import _HUB_TIMEOUT
 from blizzard.runner.app import create_app
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.leases.model import NewLease
+from tests.runner_client import runner_client
 from tests.runner_fakes import make_host_stores, make_store, make_stores, no_retry_clock
 
 pytestmark = pytest.mark.component
@@ -124,7 +124,7 @@ def _stub_hub(app: FastAPI, status_code: int, payload: object, seen: list[str] |
 @pytest.mark.parametrize("suffix", _ROUTES)
 def test_503_when_store_unwired(tmp_path: Path, suffix: str) -> None:
     config = RunnerConfig(root=tmp_path, db_url="sqlite://", hub_url=_HUB_URL)
-    with TestClient(create_app(config)) as client:
+    with runner_client(create_app(config)) as client:
         resp = client.get(
             f"/api/leases/lease_1/analytics/{suffix}",
             params={"since": "2020-01-01T00:00:00Z"},
@@ -136,7 +136,7 @@ def test_503_when_store_unwired(tmp_path: Path, suffix: str) -> None:
 @pytest.mark.parametrize("suffix", _ROUTES)
 def test_404_for_an_unknown_lease(tmp_path: Path, suffix: str) -> None:
     app, _store = _app_with_store(tmp_path)
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get(
             f"/api/leases/lease_ghost/analytics/{suffix}",
             params={"since": "2020-01-01T00:00:00Z"},
@@ -149,7 +149,7 @@ def test_404_for_an_unknown_lease(tmp_path: Path, suffix: str) -> None:
 def test_403_for_a_missing_token(tmp_path: Path, suffix: str) -> None:
     app, store = _app_with_store(tmp_path)
     _seed_lease(store)
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get(f"/api/leases/lease_1/analytics/{suffix}", params={"since": "2020-01-01T00:00:00Z"})
     assert resp.status_code == 403
 
@@ -158,7 +158,7 @@ def test_403_for_a_missing_token(tmp_path: Path, suffix: str) -> None:
 def test_403_for_a_wrong_token(tmp_path: Path, suffix: str) -> None:
     app, store = _app_with_store(tmp_path)
     _seed_lease(store)
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get(
             f"/api/leases/lease_1/analytics/{suffix}",
             params={"since": "2020-01-01T00:00:00Z"},
@@ -173,7 +173,7 @@ def test_503_when_hub_unwired_even_for_an_authorized_lease(tmp_path: Path, suffi
     never learns the hub-wiring state — mirrors the garden-findings proxy."""
     app, store = _app_with_store(tmp_path, hub_url="")
     _seed_lease(store)
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         authed = client.get(
             f"/api/leases/lease_1/analytics/{suffix}",
             params={"since": "2020-01-01T00:00:00Z"},
@@ -195,7 +195,7 @@ def test_forwards_the_window_params_and_returns_the_hub_body(tmp_path: Path, suf
     seen: list[str] = []
     body = _body_for(suffix)
     _stub_hub(app, 200, body, seen)
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get(
             f"/api/leases/lease_1/analytics/{suffix}",
             params={"since": "2020-01-01T00:00:00Z", "until": "2030-01-01T00:00:00Z"},
@@ -215,7 +215,7 @@ def test_forwards_by_name_to_the_hub(tmp_path: Path, suffix: str) -> None:
     _seed_lease(store)
     seen: list[str] = []
     _stub_hub(app, 200, _body_for(suffix), seen)
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get(
             f"/api/leases/lease_1/analytics/{suffix}",
             params={"since": "2020-01-01T00:00:00Z", "by_name": "true"},
@@ -244,7 +244,7 @@ def test_a_scan_that_runs_the_whole_attempt_is_not_retried(tmp_path: Path, suffi
         raise httpx.ReadTimeout("the scan ran the whole attempt")
 
     app.state.hub_router.handler = handler
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get(
             f"/api/leases/lease_1/analytics/{suffix}",
             params={"since": "2020-01-01T00:00:00Z"},
@@ -264,7 +264,7 @@ def test_502_when_the_hub_is_unreachable(tmp_path: Path, suffix: str) -> None:
         raise httpx.ConnectError("refused")
 
     app.state.hub_router.handler = handler
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get(
             f"/api/leases/lease_1/analytics/{suffix}",
             params={"since": "2020-01-01T00:00:00Z"},
@@ -280,7 +280,7 @@ def test_hub_refusal_of_a_non_routine_chunk_passes_through_verbatim(tmp_path: Pa
     app, store = _app_with_store(tmp_path)
     _seed_lease(store)
     _stub_hub(app, 404, {"detail": f"chunk {_CHUNK} carries no run context"})
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get(
             f"/api/leases/lease_1/analytics/{suffix}",
             params={"since": "2020-01-01T00:00:00Z"},

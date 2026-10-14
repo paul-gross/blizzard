@@ -555,7 +555,7 @@ def test_two_session_lineages_interleave_on_one_dispatch_loop_with_no_cross_talk
             assert {u["lease_id"] for u in opencode_usage} <= opencode_lease_ids
 
             # --- transcript pumping produced segments, correctly attributed, per lineage ---
-            runner_client = httpx.Client(base_url=f"http://{config.host}:{config.port}", timeout=15.0)
+            runner_client = httpx.Client(base_url=config.local_api_url, timeout=15.0)
             try:
                 claude_segments = runner_client.get(f"/api/chunks/{claude_id}/transcripts").json()["segments"]
                 opencode_segments = runner_client.get(f"/api/chunks/{opencode_id}/transcripts").json()["segments"]

@@ -30,44 +30,80 @@ describe('heldForLabel', () => {
   });
 });
 
+/** Resolves the two runners these specs name to their display names. */
+const RUNNER_NAMES: Readonly<Record<string, string>> = { rn_1: 'r-claude', rn_2: 'r-chatgpt' };
+const runnerName = (runnerId: string): string => RUNNER_NAMES[runnerId] ?? runnerId;
+
 describe('runnerEnvironmentRows', () => {
-  it('maps a held and an unheld environment in wire order', () => {
-    const envs: runnerApi.EnvironmentView[] = [
-      { environment_id: 'e1', chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9', held_since: '2026-07-16T11:59:18.000Z' },
-      { environment_id: 'e2', chunk_id: null, held_since: null },
+  it('maps a held and an unheld environment in wire order, naming the holder runner and project', () => {
+    const envs: runnerApi.HostEnvironmentView[] = [
+      {
+        environment_id: 'e1',
+        held: true,
+        chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9',
+        held_since: '2026-07-16T11:59:18.000Z',
+        runner_id: 'rn_1',
+        project: 'blizzard',
+      },
+      { environment_id: 'e2', held: false, chunk_id: null, held_since: null, runner_id: null, project: null },
     ];
-    expect(runnerEnvironmentRows(envs, NOW)).toEqual([
-      { environmentId: 'e1', isHeld: true, chunkRef: compactRef('ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9'), heldFor: '42s', holder: null },
+    expect(runnerEnvironmentRows(envs, NOW, runnerName)).toEqual([
+      {
+        environmentId: 'e1',
+        isHeld: true,
+        chunkRef: compactRef('ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9'),
+        heldFor: '42s',
+        holder: 'r-claude · blizzard',
+      },
       { environmentId: 'e2', isHeld: false, chunkRef: '', heldFor: '', holder: null },
     ]);
   });
 
-  it('treats an absent chunk_id as unheld', () => {
-    expect(runnerEnvironmentRows([{ environment_id: 'e3' }], NOW)).toEqual([
+  it('treats an absent chunk_id and held flag as unheld', () => {
+    expect(runnerEnvironmentRows([{ environment_id: 'e3' }], NOW, runnerName)).toEqual([
       { environmentId: 'e3', isHeld: false, chunkRef: '', heldFor: '', holder: null },
     ]);
   });
 
-  it('maps an empty pool to no rows', () => {
-    expect(runnerEnvironmentRows([], NOW)).toEqual([]);
+  it('names the runner alone when the holding chunk names no project', () => {
+    const [row] = runnerEnvironmentRows([{ environment_id: 'e4', held: true, chunk_id: 'ch_1', runner_id: 'rn_2' }], NOW, runnerName);
+    expect(row.holder).toBe('r-chatgpt');
   });
 });
 
 describe('runnerWorkspaceRows', () => {
-  it('folds the pool into one workspace with no heading, counting its held environments', () => {
+  it('renders one row per declared workspace with its capacity and held count', () => {
     const rows = runnerWorkspaceRows(
       [
-        { environment_id: 'e1', chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9', held_since: '2026-07-16T11:59:18.000Z' },
-        { environment_id: 'e2', chunk_id: null, held_since: null },
+        { workspace_id: 'ws-a', max_environments: 3 },
+        { workspace_id: 'ws-b', max_environments: 1 },
+      ],
+      [
+        {
+          workspace_id: 'ws-a',
+          items: [
+            { environment_id: 'e1', held: true, chunk_id: 'ch_1', held_since: '2026-07-16T11:59:18.000Z', runner_id: 'rn_1' },
+            { environment_id: 'e2', held: false },
+          ],
+        },
       ],
       NOW,
+      runnerName,
     );
-    expect(rows).toHaveLength(1);
-    expect(rows[0]).toMatchObject({ workspaceId: null, capacity: 2, inUse: 1, flag: null });
+    expect(rows.map((row) => [row.workspaceId, row.capacity, row.inUse])).toEqual([
+      ['ws-a', 3, 1],
+      ['ws-b', 1, 0],
+    ]);
     expect(rows[0].environments.map((env) => env.environmentId)).toEqual(['e1', 'e2']);
+    expect(rows[1].environments).toEqual([]);
+  });
+
+  it('still renders an environment group whose workspace is not declared, with no capacity', () => {
+    const rows = runnerWorkspaceRows([], [{ workspace_id: 'ws-x', items: [{ environment_id: 'e9' }] }], NOW, runnerName);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ workspaceId: 'ws-x', capacity: null, inUse: 0 });
   });
 });
-
 
 describe('sampledAgoLabel', () => {
   it('renders the age of the newest attempt', () => {
@@ -130,7 +166,7 @@ describe('runnerSubscriptionPaces', () => {
   const UNPACED = { paceBars: [], condition: null, sampledAt: null, refreshedLabel: null, freshness: null, missReason: null };
 
   it('maps each subscription to its row, defaulting absent optionals to null', () => {
-    const subs: runnerApi.SubscriptionView[] = [
+    const subs: runnerApi.HostSubscriptionView[] = [
       {
         slug: 'claude-max',
         name: 'Claude Max',
@@ -141,10 +177,11 @@ describe('runnerSubscriptionPaces', () => {
         renewal_attempted_at: '2026-07-16T11:59:26.000Z',
         renewal_result: 'failed',
         renewal_failure_reason: 'vendor_refused',
+        spenders: ['rn_1', 'rn_2'],
       },
       { slug: 'chatgpt', name: 'ChatGPT', provider: 'openai' },
     ];
-    expect(runnerSubscriptionPaces(subs, NOW)).toEqual([
+    expect(runnerSubscriptionPaces(subs, NOW, runnerName)).toEqual([
       {
         slug: 'claude-max',
         name: 'Claude Max',
@@ -152,6 +189,7 @@ describe('runnerSubscriptionPaces', () => {
         ...UNPACED,
         sample: { conditionLabel: 'miss: endpoint unreachable', sampledAgo: '-34s ago', ok: false },
         renewalLabel: 'failed (vendor refused) -34s ago',
+        spenders: ['r-claude', 'r-chatgpt'],
       },
       {
         slug: 'chatgpt',
@@ -160,6 +198,7 @@ describe('runnerSubscriptionPaces', () => {
         ...UNPACED,
         sample: { conditionLabel: 'never sampled', sampledAgo: 'never', ok: null },
         renewalLabel: null,
+        spenders: [],
       },
     ]);
   });

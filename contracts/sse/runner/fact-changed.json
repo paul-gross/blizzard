@@ -1,11 +1,13 @@
 {
   "lease-scoped": {
+    "runner_id": "rn_1",
     "seq": 1,
     "kind": "completion.submitted",
     "chunk_id": "ch_1",
     "lease_id": "ls_1"
   },
   "runner-scoped": {
+    "runner_id": "rn_1",
     "seq": 2,
     "kind": "event.recorded",
     "chunk_id": null,

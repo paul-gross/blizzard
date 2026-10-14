@@ -634,7 +634,7 @@ def test_transcript_is_read_back_through_the_runner_http_api(tmp_path: Path) -> 
             landed = poll_until(lambda: _run_and_check(config, fenced, hub, chunk_id, "done"), timeout=90.0)
             assert landed, f"chunk did not land (status {_status(hub, chunk_id)!r})"
 
-            runner_client = httpx.Client(base_url=f"http://{config.host}:{config.port}", timeout=10.0)
+            runner_client = httpx.Client(base_url=config.local_api_url, timeout=10.0)
             try:
                 leases = runner_client.get("/api/leases")
                 assert leases.status_code == 200, leases.text
@@ -737,7 +737,7 @@ def test_graph_scoped_artifact_reads_from_the_runners_own_pin_with_the_hub_unrea
             # 40s, not 10s: the node-scope read below now rides HubProxy's bounded-backoff
             # retry before its 503 surfaces, so the client must outwait the
             # retry ceiling rather than the old single-attempt latency.
-            runner_client = httpx.Client(base_url=f"http://{config.host}:{config.port}", timeout=40.0)
+            runner_client = httpx.Client(base_url=config.local_api_url, timeout=40.0)
             try:
 
                 def _lease_minted() -> bool:
@@ -802,7 +802,7 @@ def test_a_closed_leases_transcript_resolves_to_the_hub_through_the_runner_api(t
     # The runner daemon deliberately outlives the mock hub: the last leg reads the panel
     # route with the hub process already terminated.
     with _runner_api(config):
-        panel = httpx.Client(base_url=f"http://{config.host}:{config.port}", timeout=15.0)
+        panel = httpx.Client(base_url=config.local_api_url, timeout=15.0)
         try:
             with mock_hub(bin_dir, hub_port) as hub:
                 seed_pinned_runner(hub, runner)
@@ -930,8 +930,10 @@ def test_runner_stream_delivers_live_and_replays_from_last_event_id(tmp_path: Pa
 
     with _runner_api(config, events=broker):
         with sse_tap(config.port) as tap:
-            first_id = broker.publish_lease_changed("ls_1", "ch_1", cause="created")
-            second_id = broker.publish_lease_changed("ls_1", "ch_1", cause=LeaseClosureReason.TRANSITIONED)
+            first_id = broker.publish_lease_changed("ls_1", "ch_1", cause="created", runner_id="rn_1")
+            second_id = broker.publish_lease_changed(
+                "ls_1", "ch_1", cause=LeaseClosureReason.TRANSITIONED, runner_id="rn_1"
+            )
             live = tap.collect(window=3.0)
         assert live.count("lease-changed") == 2, live
 
@@ -966,12 +968,12 @@ def test_runner_stream_resumes_live_after_a_restart_reset_the_broker_ids(tmp_pat
     first = EventBroker()
     with _runner_api(config, events=first), sse_tap(config.port) as tap:
         for cause in ("created", LeaseClosureReason.TRANSITIONED, LeaseClosureReason.RELEASED):
-            stale_cursor = first.publish_lease_changed("ls_1", "ch_1", cause=cause)
+            stale_cursor = first.publish_lease_changed("ls_1", "ch_1", cause=cause, runner_id="rn_1")
         assert tap.collect(window=3.0).count("lease-changed") == 3
 
     second = EventBroker()  # the restart: a fresh instance, its ids starting over
     with _runner_api(config, events=second), sse_tap(config.port, last_event_id=stale_cursor) as tap:
-        live_id = second.publish_lease_changed("ls_2", "ch_2", cause="created")
+        live_id = second.publish_lease_changed("ls_2", "ch_2", cause="created", runner_id="rn_1")
         assert live_id < stale_cursor, "the fresh broker must mint an id below the stale cursor"
         assert tap.collect(window=5.0).count("lease-changed") == 1
 
@@ -984,11 +986,11 @@ def test_runner_stream_replays_a_restarted_brokers_buffered_tail_past_a_stale_cu
 
     first = EventBroker()
     for cause in ("created", LeaseClosureReason.TRANSITIONED, LeaseClosureReason.RELEASED):
-        stale_cursor = first.publish_lease_changed("ls_1", "ch_1", cause=cause)
+        stale_cursor = first.publish_lease_changed("ls_1", "ch_1", cause=cause, runner_id="rn_1")
 
     second = EventBroker()  # the restart, already carrying buffered events before reconnect
-    second.publish_lease_changed("ls_2", "ch_2", cause="created")
-    second.publish_lease_changed("ls_2", "ch_2", cause=LeaseClosureReason.TRANSITIONED)
+    second.publish_lease_changed("ls_2", "ch_2", cause="created", runner_id="rn_1")
+    second.publish_lease_changed("ls_2", "ch_2", cause=LeaseClosureReason.TRANSITIONED, runner_id="rn_1")
     assert second.latest_id() < stale_cursor, "the fresh broker's buffered ids must stay below the stale cursor"
 
     with _runner_api(config, events=second):

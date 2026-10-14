@@ -8,6 +8,7 @@ import { settle, stubError, stubRequestClient } from 'fleet/testing';
 import { page } from 'vitest/browser';
 
 import { CHUNK_PAGE_ROUTES } from './chunk-page.routes';
+import { provideActiveRunner } from '../../core/active-runner';
 
 /**
  * The shared chunk page, mounted through the runner's own route table, as its half of
@@ -76,9 +77,9 @@ const DETAIL = {
 
 function routes(method: string, path: string): unknown {
   if (method !== 'GET') return {};
-  if (path === `/api/chunks/${CHUNK_ID}`) return DETAIL;
-  if (path === `/api/chunks/${CHUNK_ID}/work-items`) return { items: [] };
-  if (path === `/api/chunks/${CHUNK_ID}/transcripts`) return { chunk_id: CHUNK_ID, segments: [] };
+  if (path === `/runners/rn_1/api/chunks/${CHUNK_ID}`) return DETAIL;
+  if (path === `/runners/rn_1/api/chunks/${CHUNK_ID}/work-items`) return { items: [] };
+  if (path === `/runners/rn_1/api/chunks/${CHUNK_ID}/transcripts`) return { chunk_id: CHUNK_ID, segments: [] };
   return {};
 }
 
@@ -103,6 +104,7 @@ describe('runner chunk page shell sweep (web:shell-sweep)', () => {
     await TestBed.configureTestingModule({
       providers: [
         provideZonelessChangeDetection(),
+        provideActiveRunner('rn_1'),
         provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
         provideRouter([{ path: 'board/chunk/:chunkId', children: CHUNK_PAGE_ROUTES }]),
       ],
@@ -165,12 +167,13 @@ describe('runner chunk page shell sweep (web:shell-sweep)', () => {
    */
   it('keeps the page-level error status clear of the back bar', async () => {
     const stub = stubRequestClient(runnerClient, (method: string, path: string): unknown => {
-      if (method === 'GET' && path === `/api/chunks/${CHUNK_ID}`) return stubError(404, { detail: 'unknown chunk' });
+      if (method === 'GET' && path === `/runners/rn_1/api/chunks/${CHUNK_ID}`) return stubError(404, { detail: 'unknown chunk' });
       return routes(method, path);
     });
     await TestBed.configureTestingModule({
       providers: [
         provideZonelessChangeDetection(),
+        provideActiveRunner('rn_1'),
         provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
         provideRouter([{ path: 'board/chunk/:chunkId', children: CHUNK_PAGE_ROUTES }]),
       ],
@@ -219,13 +222,14 @@ describe('runner chunk page shell sweep (web:shell-sweep)', () => {
   it('keeps the issue pane error status text within its section at phone widths', async () => {
     const stub = stubRequestClient(runnerClient, (method: string, path: string): unknown => {
       if (method !== 'GET') return {};
-      if (path === `/api/chunks/${CHUNK_ID}`) return DETAIL;
-      if (path === `/api/chunks/${CHUNK_ID}/work-items`) return stubError(503, { detail: 'no work source is configured' });
+      if (path === `/runners/rn_1/api/chunks/${CHUNK_ID}`) return DETAIL;
+      if (path === `/runners/rn_1/api/chunks/${CHUNK_ID}/work-items`) return stubError(503, { detail: 'no work source is configured' });
       return {};
     });
     await TestBed.configureTestingModule({
       providers: [
         provideZonelessChangeDetection(),
+        provideActiveRunner('rn_1'),
         provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
         provideRouter([{ path: 'board/chunk/:chunkId', children: CHUNK_PAGE_ROUTES }]),
       ],

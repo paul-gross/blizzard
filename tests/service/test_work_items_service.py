@@ -37,7 +37,7 @@ def test_work_items_proxy_carries_the_widened_fields_unchanged_over_a_real_hop(t
         config = _runner_config(tmp_path / "runner", tmp_path / "workspace", bin_dir, hub_port)
 
         with _runner_api(config):
-            client = httpx.Client(base_url=f"http://{config.host}:{config.port}", timeout=10.0)
+            client = httpx.Client(base_url=config.local_api_url, timeout=10.0)
             try:
                 resp = client.get(f"/api/chunks/{chunk_id}/work-items")
             finally:
@@ -100,7 +100,7 @@ def test_a_worker_lane_proxied_read_rides_out_a_real_mock_hub_restart(tmp_path: 
 
     with _runner_api(config):
         respawn_thread.start()
-        client = httpx.Client(base_url=f"http://{config.host}:{config.port}", timeout=40.0)
+        client = httpx.Client(base_url=config.local_api_url, timeout=40.0)
         try:
             resp = client.get(f"/api/chunks/{chunk_id}/work-items")
         finally:

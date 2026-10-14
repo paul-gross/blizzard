@@ -1,20 +1,24 @@
 {
   "created": {
+    "runner_id": "rn_1",
     "lease_id": "ls_1",
     "chunk_id": "ch_1",
     "cause": "created"
   },
   "transitioned": {
+    "runner_id": "rn_1",
     "lease_id": "ls_1",
     "chunk_id": "ch_1",
     "cause": "transitioned"
   },
   "spawned": {
+    "runner_id": "rn_1",
     "lease_id": "ls_1",
     "chunk_id": "ch_1",
     "cause": "spawned"
   },
   "dormant": {
+    "runner_id": "rn_1",
     "lease_id": "ls_1",
     "chunk_id": "ch_1",
     "cause": "dormant"

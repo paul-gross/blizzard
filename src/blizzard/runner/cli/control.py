@@ -8,14 +8,13 @@ import time
 from dataclasses import dataclass
 
 import click
-import httpx
 
 from blizzard.cli.operator_trace import ITraceHeaders, OperatorTrace
 from blizzard.foundation.credential_renewal import RenewalFailureReason, RenewalResult
 from blizzard.foundation.escalation_causes import EscalationCause
 from blizzard.foundation.roles import dto
 from blizzard.foundation.subscription_miss import SampleMissReason
-from blizzard.runner.cli.daemon import RunnerDaemon
+from blizzard.runner.cli.daemon import RunnerDaemon, runner_option
 from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
 from blizzard.runner.cli.traces import harness_telemetry_lines
 from blizzard.runner.subscriptions.credential_renewer import RENEWAL_FAILURE_TEXT
@@ -32,9 +31,11 @@ _SELFTEST_POLL_INTERVAL = 0.2
 _SELFTEST_POLL_TIMEOUT = 600.0
 
 
-def _set_local_paused(*, paused: bool, by: str, directory: str, runner_url: str | None, trace: ITraceHeaders) -> None:
+def _set_local_paused(
+    *, paused: bool, by: str, directory: str, runner_url: str | None, runner: str | None, trace: ITraceHeaders
+) -> None:
     """PATCH the runner singleton's own pause brake — the declarative pattern applied locally."""
-    with RunnerDaemon.reach("pause" if paused else "start", directory, runner_url, trace) as daemon:
+    with RunnerDaemon.reach("pause" if paused else "start", directory, runner_url, trace, runner) as daemon:
         view = daemon.patch("/api/runner", json_body={"paused": paused, "by": by}).json()
     if paused:
         click.echo(f"runner {view['runner_name']} is now locally paused — it starts no new workers")
@@ -118,27 +119,22 @@ class SessionLabel:
     envvar=ENV_LOCAL_API_URL,
     help="Runner local API over TCP (overrides $BZ_RUNNER_URL).",
 )
+@runner_option
 @click.pass_context
-def status(ctx: click.Context, directory: str, runner_url: str | None) -> None:
+def status(ctx: click.Context, directory: str, runner_url: str | None, runner: str | None) -> None:
     """The machine-local view: capacities, held environments, open asks, escalations, open takeovers.
     Every section is this runner's own local read, so the view renders fully with the
     hub unreachable; hub reachability is itself reported, not assumed."""
-    with RunnerDaemon.reach("status", directory, runner_url, OperatorTrace.source(ctx)) as daemon:
-        runner_resp = daemon.send("get", "/api/runner")
-        if runner_resp.status_code == httpx.codes.SERVICE_UNAVAILABLE:
-            # The host built no runner to serve: its readiness detail names each one it left unbuilt, and why.
-            ready = daemon.send("get", "/api/ready").json()
-            raise click.ClickException(
-                f"the host at {daemon.where} serves no runner ({runner_resp.status_code}): {ready['detail']}"
-            )
-        runner_resp.raise_for_status()
-        view = runner_resp.json()
+    with RunnerDaemon.reach("status", directory, runner_url, OperatorTrace.source(ctx), runner) as daemon:
+        # A host serving no runner fails here, naming why each one is halted.
+        runner_id = daemon.runner_id()
+        view = daemon.get("/api/runner").json()
         leases_resp = daemon.get("/api/leases")
-        envs_resp = daemon.get("/api/environments")
+        envs_resp = daemon.get_from_host("/api/host/environments")
         asks_resp = daemon.get("/api/asks", params={"open": "true"})
         escalations_resp = daemon.get("/api/escalations")
         takeovers_resp = daemon.get("/api/takeovers")
-        subscriptions_resp = daemon.get("/api/subscriptions")
+        subscriptions_resp = daemon.get_from_host("/api/host/subscriptions")
         escalations = escalations_resp.json().get("items", [])
         harness_health = (
             daemon.get("/api/harness-health").json().get("items", [])
@@ -182,9 +178,14 @@ def status(ctx: click.Context, directory: str, runner_url: str | None) -> None:
     for lease in leases:
         click.echo(f"  {lease['lease_id']}  {lease['state']:<12} chunk={lease['chunk_id']} node={lease['node_name']}")
 
-    # `GET /api/environments` carries the full configured pool; this section
-    # is the *held*-environments view, so it keeps the slots the runner reports held.
-    envs = [env for env in envs_resp.json().get("items", []) if env.get("held")]
+    # `GET /api/host/environments` carries every workspace's whole pool; this section
+    # is this runner's *held*-environments view, so it keeps the slots this runner holds.
+    envs = [
+        env
+        for workspace in envs_resp.json().get("workspaces", [])
+        for env in workspace.get("items", [])
+        if env.get("held") and env.get("runner_id") == runner_id
+    ]
     click.echo(f"\nheld environments ({len(envs)}):")
     for env in envs:
         click.echo(f"  {env['environment_id']}  chunk={env['chunk_id']}  held since {env['held_since']}")
@@ -224,7 +225,7 @@ def status(ctx: click.Context, directory: str, runner_url: str | None) -> None:
     for tko in takeovers:
         click.echo(f"  chunk {tko['chunk_id']}  takeover={tko['takeover_id']}  held since {tko['held_since']}")
 
-    subscriptions = subscriptions_resp.json().get("items", [])
+    subscriptions = [sub for sub in subscriptions_resp.json().get("items", []) if runner_id in sub.get("spenders", [])]
     click.echo(f"\nsubscriptions ({len(subscriptions)}):")
     for sub in subscriptions:
         if sub["sampled_at"] is None:
@@ -262,15 +263,18 @@ def status(ctx: click.Context, directory: str, runner_url: str | None) -> None:
     envvar=ENV_LOCAL_API_URL,
     help="Runner local API over TCP (overrides $BZ_RUNNER_URL).",
 )
+@runner_option
 @click.option("--by", "by", default="operator", help="Who is pausing (recorded on the fact).")
 @click.pass_context
-def pause(ctx: click.Context, directory: str, runner_url: str | None, by: str) -> None:
+def pause(ctx: click.Context, directory: str, runner_url: str | None, runner: str | None, by: str) -> None:
     """Declarative control: pause this runner — it starts no new workers. This runner's
     **own** brake, a pure client of its local API, so it works with the hub unreachable: a stalled
     worker is not killed, and an exhausted retry budget does not escalate, until it is cleared. No
     retry is consumed, and a live worker is left alone — this is not a drain. Distinct from the hub's
     brake, and each is cleared where it was set."""
-    _set_local_paused(paused=True, by=by, directory=directory, runner_url=runner_url, trace=OperatorTrace.source(ctx))
+    _set_local_paused(
+        paused=True, by=by, directory=directory, runner_url=runner_url, runner=runner, trace=OperatorTrace.source(ctx)
+    )
 
 
 @click.command()
@@ -288,15 +292,18 @@ def pause(ctx: click.Context, directory: str, runner_url: str | None, by: str) -
     envvar=ENV_LOCAL_API_URL,
     help="Runner local API over TCP (overrides $BZ_RUNNER_URL).",
 )
+@runner_option
 @click.option("--by", "by", default="operator", help="Who is starting it (recorded on the fact).")
 @click.pass_context
-def start(ctx: click.Context, directory: str, runner_url: str | None, by: str) -> None:
+def start(ctx: click.Context, directory: str, runner_url: str | None, runner: str | None, by: str) -> None:
     """Declarative control: clear this runner's own pause brake — it resumes spawning.
 
     The counterpart to ``blizzard runner pause``, and local in the same way. It clears only
     the local brake: a runner also paused at the hub stays paused until ``blizzard hub
     runner resume <runner_id>`` clears that one too."""
-    _set_local_paused(paused=False, by=by, directory=directory, runner_url=runner_url, trace=OperatorTrace.source(ctx))
+    _set_local_paused(
+        paused=False, by=by, directory=directory, runner_url=runner_url, runner=runner, trace=OperatorTrace.source(ctx)
+    )
 
 
 @click.command()
@@ -325,8 +332,17 @@ def start(ctx: click.Context, directory: str, runner_url: str | None, by: str) -
     envvar=ENV_LOCAL_API_URL,
     help="Runner local API over TCP (overrides $BZ_RUNNER_URL).",
 )
+@runner_option
 @click.pass_context
-def takeover(ctx: click.Context, chunk_id: str, force: bool, end: bool, directory: str, runner_url: str | None) -> None:
+def takeover(
+    ctx: click.Context,
+    chunk_id: str,
+    force: bool,
+    end: bool,
+    directory: str,
+    runner_url: str | None,
+    runner: str | None,
+) -> None:
     """Take over a parked chunk: exec the interactive resume command in this terminal. The
     takeover fact is recorded before anything else runs, so no loop step can respawn or judge the
     session while it is open; the lease token travels only in the response body and the exec, never
@@ -335,9 +351,9 @@ def takeover(ctx: click.Context, chunk_id: str, force: bool, end: bool, director
     if end and force:
         raise click.UsageError("--end and --force are mutually exclusive: --end starts no session")
     if end:
-        _end_open_takeover(chunk_id, directory, runner_url, OperatorTrace.source(ctx))
+        _end_open_takeover(chunk_id, directory, runner_url, runner, OperatorTrace.source(ctx))
         return
-    with RunnerDaemon.reach("takeover", directory, runner_url, OperatorTrace.source(ctx)) as daemon:
+    with RunnerDaemon.reach("takeover", directory, runner_url, OperatorTrace.source(ctx), runner) as daemon:
         resp = daemon.send("post", f"/api/chunks/{chunk_id}/takeovers", json_body={"force": force})
         if resp.status_code == 409:
             raise click.ClickException(f"takeover: {resp.json().get('detail', 'chunk is not takeable')}")
@@ -355,9 +371,11 @@ def takeover(ctx: click.Context, chunk_id: str, force: bool, end: bool, director
         raise SystemExit(exit_code)
 
 
-def _end_open_takeover(chunk_id: str, directory: str, runner_url: str | None, trace: ITraceHeaders) -> None:
+def _end_open_takeover(
+    chunk_id: str, directory: str, runner_url: str | None, runner: str | None, trace: ITraceHeaders
+) -> None:
     """Close the chunk's open takeover through the runner's own API; idempotent when none is open."""
-    with RunnerDaemon.reach("takeover", directory, runner_url, trace) as daemon:
+    with RunnerDaemon.reach("takeover", directory, runner_url, trace, runner) as daemon:
         open_for_chunk = [t for t in daemon.get("/api/takeovers").json().get("items", []) if t["chunk_id"] == chunk_id]
         if not open_for_chunk:
             click.echo(f"no open takeover for chunk {chunk_id}")
@@ -387,13 +405,14 @@ def _end_open_takeover(chunk_id: str, directory: str, runner_url: str | None, tr
     envvar=ENV_LOCAL_API_URL,
     help="Runner local API over TCP (overrides $BZ_RUNNER_URL).",
 )
+@runner_option
 @click.pass_context
-def requeue(ctx: click.Context, chunk_id: str, directory: str, runner_url: str | None) -> None:
+def requeue(ctx: click.Context, chunk_id: str, directory: str, runner_url: str | None, runner: str | None) -> None:
     """Hand a needs_human chunk back to the fleet: a fresh attempt at its current node.
     Clears the chunk's local needs_human hold; a fresh attempt spawns at the current node on the
     fleet's next pass. The route is never released and the chunk never re-enters the hub's queue.
     Refused ``409`` while its takeover is still open, or while it is not parked needs_human."""
-    with RunnerDaemon.reach("requeue", directory, runner_url, OperatorTrace.source(ctx)) as daemon:
+    with RunnerDaemon.reach("requeue", directory, runner_url, OperatorTrace.source(ctx), runner) as daemon:
         resp = daemon.send("post", f"/api/chunks/{chunk_id}/requeues")
         if resp.status_code == 409:
             raise click.ClickException(f"requeue: {resp.json().get('detail', 'chunk is not requeueable')}")
@@ -417,13 +436,16 @@ def requeue(ctx: click.Context, chunk_id: str, directory: str, runner_url: str |
     envvar=ENV_LOCAL_API_URL,
     help="Runner local API over TCP (overrides $BZ_RUNNER_URL).",
 )
+@runner_option
 @click.pass_context
-def selftest(ctx: click.Context, coding_harness: str, directory: str, runner_url: str | None) -> None:
+def selftest(
+    ctx: click.Context, coding_harness: str, directory: str, runner_url: str | None, runner: str | None
+) -> None:
     """Adapter-drift canary before an unattended period: exercises CODING_HARNESS against a
     throwaway scratch repo — spawn with a pre-assigned session id, a trivial edit+commit, verdict
     elicitation, an automated follow-up resume, and resume-command composition — touching no chunk,
     lease, environment, or hub. Posts the run, polls it, prints each check, exits non-zero on failure."""
-    with RunnerDaemon.reach("selftest", directory, runner_url, OperatorTrace.source(ctx)) as daemon:
+    with RunnerDaemon.reach("selftest", directory, runner_url, OperatorTrace.source(ctx), runner) as daemon:
         resp = daemon.send("post", "/api/selftests", json_body={"harness": coding_harness})
         if resp.status_code == 422:
             raise click.ClickException(resp.json().get("detail", "unknown coding harness"))

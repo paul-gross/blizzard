@@ -7,9 +7,10 @@ import { type RequestClientStub, settle, stubError, stubRequestClient } from 'fl
 import { type MockInstance, vi } from 'vitest';
 
 import { LocalPanel } from './app-panel';
+import { provideActiveRunner } from '../core/active-runner';
 
 /** Matches `GET /api/chunks/{chunk_id}/work-items` for any chunk id. */
-const WORK_ITEMS_ROUTE = /^\/api\/chunks\/[^/]+\/work-items$/;
+const WORK_ITEMS_ROUTE = /^\/runners\/rn_1\/api\/chunks\/[^/]+\/work-items$/;
 
 const REF = Date.parse('2026-07-16T12:00:00.000Z');
 
@@ -47,13 +48,11 @@ function dashboardBody(overrides: Partial<runnerApi.DashboardView> = {}): runner
       hub: { endpoint: 'http://127.0.0.1:8421', reachable: true, last_contact_at: null, buffer_depth: 0 },
       last_tick_at: null,
     },
-    environments: { items: [] },
     asks: { items: [] },
     escalations: { items: [] },
     takeovers: { items: [] },
     facts: { items: [] },
     harness_health: { items: [] },
-    subscriptions: { items: [] },
     fleet_summary: null,
     ...overrides,
   };
@@ -61,11 +60,11 @@ function dashboardBody(overrides: Partial<runnerApi.DashboardView> = {}): runner
 
 /**
  * A route table for the shell's whole read surface. Leases come from `leases`;
- * the panel's other seven-sections-in-one read (`/api/dashboard`) defaults to
+ * the panel's other seven-sections-in-one read (`/runners/rn_1/api/dashboard`) defaults to
  * {@link dashboardBody}'s empty shape, overridable per section via
  * `dashboard`. Override any other path via `extra` (return `undefined` to
- * fall through to the defaults) — still needed for `/api/leases/{id}
- * /transcript` and `/api/chunks/{id}/work-items`, whose own reads are out of
+ * fall through to the defaults) — still needed for `/runners/rn_1/api/leases/{id}
+ * /transcript` and `/runners/rn_1/api/chunks/{id}/work-items`, whose own reads are out of
  * this issue's scope.
  */
 function routes(
@@ -77,8 +76,8 @@ function routes(
     const special = extra(method, path);
     if (special !== undefined) return special;
     if (method !== 'GET') return {};
-    if (path === '/api/leases') return { items: leases };
-    if (path === '/api/dashboard') return dashboardBody(dashboard);
+    if (path === '/runners/rn_1/api/leases') return { items: leases };
+    if (path === '/runners/rn_1/api/dashboard') return dashboardBody(dashboard);
     return { items: [] };
   };
 }
@@ -101,6 +100,7 @@ async function setUp(initialQuery: Record<string, string> = {}): Promise<void> {
     imports: [LocalPanel],
     providers: [
       provideZonelessChangeDetection(),
+      provideActiveRunner('rn_1'),
       provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
       provideRouter([{ path: '**', children: [] }]),
     ],
@@ -140,8 +140,8 @@ describe('LocalPanel', () => {
     stub = stubRequestClient(runnerClient, routes([LEASE()]));
     await render();
 
-    expect(stub.forRoute('/api/dashboard', 'GET')).toHaveLength(1);
-    for (const path of ['/api/runner', '/api/environments', '/api/asks', '/api/escalations', '/api/takeovers', '/api/facts', '/api/fleet-summary']) {
+    expect(stub.forRoute('/runners/rn_1/api/dashboard', 'GET')).toHaveLength(1);
+    for (const path of ['/runners/rn_1/api/runner', '/api/environments', '/api/asks', '/api/escalations', '/api/takeovers', '/api/facts', '/api/fleet-summary']) {
       expect(stub.forRoute(path, 'GET')).toHaveLength(0);
     }
   });
@@ -171,7 +171,7 @@ describe('LocalPanel', () => {
 
   it('shows a distinct degraded line on a 503 — the empty state must never appear on a failed read', async () => {
     stub = stubRequestClient(runnerClient, (method, path) => {
-      if (method === 'GET' && path === '/api/leases') return stubError(503, { detail: 'stubbed route error (503)' });
+      if (method === 'GET' && path === '/runners/rn_1/api/leases') return stubError(503, { detail: 'stubbed route error (503)' });
       return { items: [] };
     });
     const fixture = await render();
@@ -559,77 +559,6 @@ describe('LocalPanel', () => {
       expect(ask?.textContent).toContain('C-3YJ9');
       expect(ask?.textContent).toContain('which branch?');
       expect(ask?.textContent).toContain('20m');
-    });
-
-    it('renders the held environments with chunk ref and held-for age', async () => {
-      stub = stubRequestClient(runnerClient,
-        routes([], {
-          environments: {
-            items: [
-              {
-                environment_id: 'beta',
-                chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9',
-                held_since: '2026-07-16T11:18:00.000Z',
-              },
-            ],
-          },
-        }),
-      );
-      const fixture = await render();
-      const el = fixture.nativeElement as HTMLElement;
-
-      const row = el.querySelector('[data-testid="env-row"]');
-      expect(row?.getAttribute('data-env-id')).toBe('beta');
-      expect(row?.textContent).toContain('C-3YJ9');
-      expect(row?.querySelector('[data-testid="env-held-for"]')?.textContent).toContain('42m');
-    });
-
-    it('renders a mixed pool — a held row throbbing amber beside a static grey unused row', async () => {
-      stub = stubRequestClient(runnerClient,
-        routes([], {
-          environments: {
-            items: [
-              {
-                environment_id: 'beta',
-                chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9',
-                held_since: '2026-07-16T11:18:00.000Z',
-              },
-              { environment_id: 'gamma', chunk_id: null, held_since: null },
-            ],
-          },
-        }),
-      );
-      const fixture = await render();
-      const el = fixture.nativeElement as HTMLElement;
-
-      const rows = el.querySelectorAll('[data-testid="env-row"]');
-      expect(rows).toHaveLength(2);
-
-      const heldRow = rows[0];
-      expect(heldRow.getAttribute('data-env-id')).toBe('beta');
-      expect(heldRow.getAttribute('data-held')).toBe('true');
-      expect(
-        heldRow.querySelector('[data-testid="env-beacon"] .beacon')?.classList.contains('active'),
-      ).toBe(true);
-      expect(heldRow.querySelector('[data-testid="env-held-for"]')?.textContent).toContain('42m');
-
-      const unusedRow = rows[1];
-      expect(unusedRow.getAttribute('data-env-id')).toBe('gamma');
-      expect(unusedRow.getAttribute('data-held')).toBe('false');
-      expect(
-        unusedRow.querySelector('[data-testid="env-beacon"] .beacon')?.classList.contains('active'),
-      ).toBe(false);
-      expect(unusedRow.textContent).not.toContain('C-3YJ9');
-      expect(unusedRow.querySelector('[data-testid="env-held-for"]')?.textContent).toBe('');
-    });
-
-    it('renders the empty state only when the pool itself is empty', async () => {
-      stub = stubRequestClient(runnerClient, routes([], { environments: { items: [] } }));
-      const fixture = await render();
-      const el = fixture.nativeElement as HTMLElement;
-
-      expect(el.querySelector('[data-testid="env-empty"]')).toBeTruthy();
-      expect(el.querySelector('[data-testid="env-row"]')).toBeNull();
     });
   });
 

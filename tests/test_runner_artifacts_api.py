@@ -15,7 +15,6 @@ from urllib.parse import quote
 import httpx
 import pytest
 from fastapi import FastAPI
-from fastapi.testclient import TestClient
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.tokens import TokenHash
@@ -24,6 +23,7 @@ from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.lifecycle.judgement.artifacts import PinnedGraphArtifact
+from tests.runner_client import runner_client
 from tests.runner_fakes import make_host_stores, make_store, make_stores, no_retry_clock
 
 _NOW = datetime(2026, 7, 21, 12, 0, 0, tzinfo=UTC)
@@ -164,7 +164,7 @@ def _stub_hub(
 @pytest.mark.component
 def test_503_when_store_unwired(tmp_path: Path) -> None:
     config = RunnerConfig(root=tmp_path, db_url="sqlite://", hub_url=_HUB_URL)
-    with TestClient(create_app(config)) as client:
+    with runner_client(create_app(config)) as client:
         resp = client.get("/api/leases/lease_1/artifacts", headers={"X-Blizzard-Lease-Token": _TOKEN})
     assert resp.status_code == 503
 
@@ -172,7 +172,7 @@ def test_503_when_store_unwired(tmp_path: Path) -> None:
 @pytest.mark.component
 def test_404_for_an_unknown_lease(tmp_path: Path) -> None:
     app, _store = _app_with_store(tmp_path)
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get("/api/leases/lease_ghost/artifacts", headers={"X-Blizzard-Lease-Token": _TOKEN})
     assert resp.status_code == 404
 
@@ -181,7 +181,7 @@ def test_404_for_an_unknown_lease(tmp_path: Path) -> None:
 def test_403_for_a_missing_token(tmp_path: Path) -> None:
     app, store = _app_with_store(tmp_path)
     _seed_lease(store)
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get("/api/leases/lease_1/artifacts")
     assert resp.status_code == 403
 
@@ -190,7 +190,7 @@ def test_403_for_a_missing_token(tmp_path: Path) -> None:
 def test_403_for_a_wrong_token(tmp_path: Path) -> None:
     app, store = _app_with_store(tmp_path)
     _seed_lease(store)
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get("/api/leases/lease_1/artifacts", headers={"X-Blizzard-Lease-Token": "nope"})
     assert resp.status_code == 403
 
@@ -202,7 +202,7 @@ def test_a_closed_lease_is_404_not_403(tmp_path: Path) -> None:
     app, store = _app_with_store(tmp_path)
     _seed_lease(store)
     store.record_closure(lease_id="lease_1", chunk_id=_CHUNK, node_id="nd_build", reason="transitioned", closed_at=_NOW)
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get("/api/leases/lease_1/artifacts", headers={"X-Blizzard-Lease-Token": _TOKEN})
     assert resp.status_code == 404
 
@@ -228,7 +228,7 @@ def test_an_open_takeover_authorizes_a_closed_reference_lease(tmp_path: Path) ->
     store.record_lease_token("lease_1", TokenHash(takeover_token).hex, _NOW)
     _stub_hub(app, _FakeHubResponse(200, _ENVELOPE))
 
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get("/api/leases/lease_1/artifacts", headers={"X-Blizzard-Lease-Token": takeover_token})
     assert resp.status_code == 200, resp.text
 
@@ -239,7 +239,7 @@ def test_503_when_hub_unwired_even_for_an_authorized_lease(tmp_path: Path) -> No
     unauthorized caller never learns the hub-wiring state."""
     app, store = _app_with_store(tmp_path, hub_url="")
     _seed_lease(store)
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         authed = client.get("/api/leases/lease_1/artifacts", headers={"X-Blizzard-Lease-Token": _TOKEN})
         unauthed = client.get("/api/leases/lease_1/artifacts", headers={"X-Blizzard-Lease-Token": "nope"})
     assert authed.status_code == 503
@@ -255,7 +255,7 @@ def test_list_forwards_to_the_hub_envelope_and_returns_both_kinds(tmp_path: Path
     _seed_lease(store)
     seen: list[str] = []
     _stub_hub(app, _FakeHubResponse(200, _ENVELOPE), seen)
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get("/api/leases/lease_1/artifacts", headers={"X-Blizzard-Lease-Token": _TOKEN})
     assert resp.status_code == 200, resp.text
     # It forwarded to the hub's runner-authenticated envelope route for the resolved chunk,
@@ -287,7 +287,7 @@ def test_list_forwards_the_runner_bearer_when_a_token_is_configured(tmp_path: Pa
         return httpx.Response(200, json=_ENVELOPE)
 
     hub_proxy_client = httpx.Client(transport=httpx.MockTransport(handler))
-    with TestClient(
+    with runner_client(
         create_app(
             config,
             runner_stores=make_stores(store),
@@ -306,7 +306,7 @@ def test_get_returns_one_artifact_by_name(tmp_path: Path) -> None:
     app, store = _app_with_store(tmp_path)
     _seed_lease(store)
     _stub_hub(app, _FakeHubResponse(200, _ENVELOPE))
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get("/api/leases/lease_1/artifacts/plan", headers={"X-Blizzard-Lease-Token": _TOKEN})
     assert resp.status_code == 200, resp.text
     assert resp.json() == {
@@ -335,7 +335,7 @@ def test_get_resolves_a_slash_containing_name(tmp_path: Path) -> None:
     app, store = _app_with_store(tmp_path)
     _seed_lease(store)
     _stub_hub(app, _FakeHubResponse(200, envelope))
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get(
             f"/api/leases/lease_1/artifacts/{quote('merged/blizzard', safe='/')}",
             headers={"X-Blizzard-Lease-Token": _TOKEN},
@@ -349,7 +349,7 @@ def test_get_404_for_an_unknown_artifact_name(tmp_path: Path) -> None:
     app, store = _app_with_store(tmp_path)
     _seed_lease(store)
     _stub_hub(app, _FakeHubResponse(200, _ENVELOPE))
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get("/api/leases/lease_1/artifacts/ghost", headers={"X-Blizzard-Lease-Token": _TOKEN})
     assert resp.status_code == 404
     assert "ghost" in resp.json()["detail"]
@@ -371,7 +371,7 @@ def test_get_409_when_a_bare_name_resolves_to_more_than_one_node(tmp_path: Path)
     app, store = _app_with_store(tmp_path)
     _seed_lease(store)
     _stub_hub(app, _FakeHubResponse(200, _ENVELOPE_WITH_DUPLICATE_NAME))
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get("/api/leases/lease_1/artifacts/retrospective", headers={"X-Blizzard-Lease-Token": _TOKEN})
     assert resp.status_code == 409, resp.text
     detail = resp.json()["detail"]
@@ -384,7 +384,7 @@ def test_get_node_query_param_disambiguates(tmp_path: Path) -> None:
     app, store = _app_with_store(tmp_path)
     _seed_lease(store)
     _stub_hub(app, _FakeHubResponse(200, _ENVELOPE_WITH_DUPLICATE_NAME))
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get(
             "/api/leases/lease_1/artifacts/retrospective",
             params={"node": "build"},
@@ -400,7 +400,7 @@ def test_get_node_query_param_404_when_that_node_never_produced_the_name(tmp_pat
     app, store = _app_with_store(tmp_path)
     _seed_lease(store)
     _stub_hub(app, _FakeHubResponse(200, _ENVELOPE_WITH_DUPLICATE_NAME))
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get(
             "/api/leases/lease_1/artifacts/retrospective",
             params={"node": "review"},
@@ -416,7 +416,7 @@ def test_passes_through_the_hub_status(tmp_path: Path) -> None:
     app, store = _app_with_store(tmp_path)
     _seed_lease(store)
     _stub_hub(app, _FakeHubResponse(404, {"detail": "unknown chunk ch_1"}))
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get("/api/leases/lease_1/artifacts", headers={"X-Blizzard-Lease-Token": _TOKEN})
     assert resp.status_code == 404
     assert resp.json()["detail"] == "unknown chunk ch_1"
@@ -431,7 +431,7 @@ def test_502_when_the_hub_is_unreachable(tmp_path: Path) -> None:
         raise httpx.ConnectError("connection refused")
 
     app.state.hub_router.handler = handler
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get("/api/leases/lease_1/artifacts", headers={"X-Blizzard-Lease-Token": _TOKEN})
     assert resp.status_code == 502
     assert "unreachable" in resp.json()["detail"]
@@ -454,7 +454,7 @@ def test_list_with_no_scope_combines_node_and_graph_rows_each_carrying_its_scope
     _seed_lease(store)
     _seed_graph_artifacts(store)
     _stub_hub(app, _FakeHubResponse(200, _ENVELOPE))
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get("/api/leases/lease_1/artifacts", headers={"X-Blizzard-Lease-Token": _TOKEN})
     assert resp.status_code == 200, resp.text
     body = resp.json()
@@ -474,7 +474,7 @@ def test_list_scope_node_excludes_graph_rows(tmp_path: Path) -> None:
     _seed_lease(store)
     _seed_graph_artifacts(store)
     _stub_hub(app, _FakeHubResponse(200, _ENVELOPE))
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get(
             "/api/leases/lease_1/artifacts", params={"scope": "node"}, headers={"X-Blizzard-Lease-Token": _TOKEN}
         )
@@ -492,7 +492,7 @@ def test_list_scope_graph_returns_only_graph_rows_and_never_calls_the_hub(tmp_pa
     _seed_graph_artifacts(store)
     seen: list[str] = []
     _stub_hub(app, _FakeHubResponse(200, _ENVELOPE), seen)
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get(
             "/api/leases/lease_1/artifacts", params={"scope": "graph"}, headers={"X-Blizzard-Lease-Token": _TOKEN}
         )
@@ -508,7 +508,7 @@ def test_get_scope_graph_resolves_from_the_store_and_never_calls_the_hub(tmp_pat
     _seed_graph_artifacts(store)
     seen: list[str] = []
     _stub_hub(app, _FakeHubResponse(200, _ENVELOPE), seen)
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get(
             "/api/leases/lease_1/artifacts/docket",
             params={"scope": "graph"},
@@ -536,7 +536,7 @@ def test_get_scope_graph_404s_naming_the_pinned_mint_without_falling_back_to_nod
     _seed_graph_artifacts(store)
     seen: list[str] = []
     _stub_hub(app, _FakeHubResponse(200, _ENVELOPE), seen)
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get(
             "/api/leases/lease_1/artifacts/plan",
             params={"scope": "graph"},
@@ -556,7 +556,7 @@ def test_get_node_under_scope_graph_is_refused_not_silently_dropped(tmp_path: Pa
     _seed_graph_artifacts(store)
     seen: list[str] = []
     _stub_hub(app, _FakeHubResponse(200, _ENVELOPE), seen)
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get(
             "/api/leases/lease_1/artifacts/docket",
             params={"node": "plan", "scope": "graph"},
@@ -584,7 +584,7 @@ def test_get_bare_name_ambiguous_across_both_scopes_names_them(tmp_path: Path) -
     _seed_lease(store)
     _seed_graph_artifacts(store)
     _stub_hub(app, _FakeHubResponse(200, _ENVELOPE_WITH_A_GRAPH_COLLIDING_NAME))
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get("/api/leases/lease_1/artifacts/docket", headers={"X-Blizzard-Lease-Token": _TOKEN})
     assert resp.status_code == 409, resp.text
     detail = resp.json()["detail"]
@@ -601,7 +601,7 @@ def test_get_node_alone_settles_a_cross_scope_collision(tmp_path: Path) -> None:
     _seed_lease(store)
     _seed_graph_artifacts(store)
     _stub_hub(app, _FakeHubResponse(200, _ENVELOPE_WITH_A_GRAPH_COLLIDING_NAME))
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get(
             "/api/leases/lease_1/artifacts/docket",
             params={"node": "plan"},
@@ -625,7 +625,7 @@ def test_get_409_across_graph_and_system_never_advises_node(tmp_path: Path) -> N
         _FakeHubResponse(200, _ENVELOPE),
         system_get=_FakeHubResponse(200, {"name": "docket", "content": "blizzard's own docket"}),
     )
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get("/api/leases/lease_1/artifacts/docket", headers={"X-Blizzard-Lease-Token": _TOKEN})
     assert resp.status_code == 409, resp.text
     detail = resp.json()["detail"]
@@ -641,7 +641,7 @@ def test_get_409_names_only_the_levers_the_caller_has_left(tmp_path: Path) -> No
     app, store = _app_with_store(tmp_path)
     _seed_lease(store)
     _stub_hub(app, _FakeHubResponse(200, _ENVELOPE_WITH_DUPLICATE_NAME))
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get(
             "/api/leases/lease_1/artifacts/retrospective",
             params={"scope": "node"},
@@ -661,7 +661,7 @@ def test_get_404_after_searching_both_scopes_says_so(tmp_path: Path) -> None:
     _seed_lease(store)
     _seed_graph_artifacts(store)
     _stub_hub(app, _FakeHubResponse(200, _ENVELOPE))
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         bare = client.get("/api/leases/lease_1/artifacts/ghost", headers={"X-Blizzard-Lease-Token": _TOKEN})
         narrowed = client.get(
             "/api/leases/lease_1/artifacts/ghost",
@@ -686,7 +686,7 @@ def test_list_scope_system_forwards_to_the_hub_and_returns_the_set(tmp_path: Pat
     _seed_lease(store)
     seen: list[str] = []
     _stub_hub(app, _FakeHubResponse(200, _ENVELOPE), seen, system_list=_FakeHubResponse(200, [_SYSTEM_ARTIFACT]))
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get(
             "/api/leases/lease_1/artifacts", params={"scope": "system"}, headers={"X-Blizzard-Lease-Token": _TOKEN}
         )
@@ -719,7 +719,7 @@ def test_get_scope_system_returns_the_named_artifact(tmp_path: Path) -> None:
         seen,
         system_get=_FakeHubResponse(200, _SYSTEM_ARTIFACT),
     )
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get(
             f"/api/leases/lease_1/artifacts/{quote('garden/finding-format', safe='/')}",
             params={"scope": "system"},
@@ -736,7 +736,7 @@ def test_get_scope_system_404_for_an_unpublished_name(tmp_path: Path) -> None:
     app, store = _app_with_store(tmp_path)
     _seed_lease(store)
     _stub_hub(app, _FakeHubResponse(200, _ENVELOPE))
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get(
             "/api/leases/lease_1/artifacts/ghost",
             params={"scope": "system"},
@@ -752,7 +752,7 @@ def test_get_node_under_scope_system_is_refused_not_silently_dropped(tmp_path: P
     _seed_lease(store)
     seen: list[str] = []
     _stub_hub(app, _FakeHubResponse(200, _ENVELOPE), seen)
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get(
             "/api/leases/lease_1/artifacts/docket",
             params={"node": "plan", "scope": "system"},
@@ -784,7 +784,7 @@ def test_get_bare_name_ambiguous_across_node_and_system_names_both(tmp_path: Pat
         _FakeHubResponse(200, _ENVELOPE_WITH_A_SYSTEM_COLLIDING_NAME),
         system_get=_FakeHubResponse(200, {"name": "docket", "content": "blizzard's own docket"}),
     )
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get("/api/leases/lease_1/artifacts/docket", headers={"X-Blizzard-Lease-Token": _TOKEN})
     assert resp.status_code == 409, resp.text
     detail = resp.json()["detail"]
@@ -803,7 +803,7 @@ def test_get_node_alone_settles_a_system_collision(tmp_path: Path) -> None:
         _FakeHubResponse(200, _ENVELOPE_WITH_A_SYSTEM_COLLIDING_NAME),
         system_get=_FakeHubResponse(200, {"name": "docket", "content": "blizzard's own docket"}),
     )
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get(
             "/api/leases/lease_1/artifacts/docket",
             params={"node": "plan"},

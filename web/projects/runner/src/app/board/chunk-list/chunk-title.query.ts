@@ -1,15 +1,16 @@
 import { injectQuery } from '@tanstack/angular-query-experimental';
 import { runnerApi } from 'fleet';
 
+import { injectActiveRunner } from '../../core/active-runner';
 import { runnerChunkWorkItemsKey } from '../../core/query-keys';
 
-/** The `GET /api/chunks/{chunk_id}/work-items` fetch behind {@link injectChunkTitleQuery}.
+/** The `GET /runners/{runner_id}/api/chunks/{chunk_id}/work-items` fetch behind {@link injectChunkTitleQuery}.
  * The chunk page's full-fidelity read of the same endpoint is `fleet`'s plane-generic
  * `injectChunkWorkItemsQuery`, which differs in cache key and observer options (the real
  * severability distinction between them), never in what it fetches. */
-async function fetchWorkItems(chunkId: string): Promise<runnerApi.WorkItemsView> {
-  const { data, error } = await runnerApi.getWorkItemsApiChunksChunkIdWorkItemsGet({
-    path: { chunk_id: chunkId },
+async function fetchWorkItems(runnerId: string, chunkId: string): Promise<runnerApi.WorkItemsView> {
+  const { data, error } = await runnerApi.getWorkItemsRunnersRunnerIdApiChunksChunkIdWorkItemsGet({
+    path: { runner_id: runnerId, chunk_id: chunkId },
     throwOnError: false,
   });
   if (error) throw error;
@@ -17,7 +18,7 @@ async function fetchWorkItems(chunkId: string): Promise<runnerApi.WorkItemsView>
 }
 
 /**
- * Runner `GET /api/chunks/{chunk_id}/work-items` read — the layered pass-through
+ * The active runner's `GET /runners/{runner_id}/api/chunks/{chunk_id}/work-items` read — the layered pass-through
  * (panel → its own runner → hub → vendor, with the hub's credentials) that
  * carries the issue title layered onto a lease row. This is a strictly
  * **severable, volatile** read, never the panel's critical path: the leases route
@@ -42,12 +43,14 @@ async function fetchWorkItems(chunkId: string): Promise<runnerApi.WorkItemsView>
  * *is*; the title is decoration that *arrived*.
  */
 export function injectChunkTitleQuery(chunkId: () => string) {
+  const activeRunner = injectActiveRunner();
   return injectQuery(() => {
     const id = chunkId();
+    const runnerId = activeRunner();
     return {
-      queryKey: runnerChunkWorkItemsKey(id),
-      enabled: !!id,
-      queryFn: () => fetchWorkItems(id),
+      queryKey: runnerChunkWorkItemsKey(runnerId, id),
+      enabled: !!id && runnerId !== null,
+      queryFn: () => fetchWorkItems(runnerId!, id),
       refetchInterval: false as const,
       staleTime: 5 * 60_000,
       gcTime: 30 * 60_000,

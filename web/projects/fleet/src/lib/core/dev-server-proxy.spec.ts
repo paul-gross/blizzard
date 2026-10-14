@@ -35,6 +35,44 @@ describe('dev-server proxy wiring', () => {
     });
   }
 
+  describe('the runner host’s entries', () => {
+    // A CJS config whose port guard throws without the variable, so the module is evaluated
+    // with one set rather than imported.
+    function runnerEntries(): Record<string, { target: string }> {
+      const source = readFileSync('proxy.conf.runner.js', 'utf8');
+      const module = { exports: {} as Record<string, { target: string }> };
+      new Function('module', 'process', source)(module, { env: { BZ_RUNNER_PORT: '4583' } });
+      return module.exports;
+    }
+
+    /** Whether the dev server forwards `path`, by its own rule: a `^` key is a regular
+     * expression, any other key a path prefix. */
+    function forwarded(path: string): boolean {
+      return Object.keys(runnerEntries()).some((key) =>
+        key.startsWith('^') ? new RegExp(key).test(path) : path.startsWith(key),
+      );
+    }
+
+    it('forwards exactly the host’s root API and each runner’s API-shaped paths', () => {
+      expect(Object.keys(runnerEntries())).toEqual(['/api', '^/runners/[^/]+/(api|v1)/']);
+      for (const entry of Object.values(runnerEntries())) expect(entry.target).toBe('http://127.0.0.1:4583');
+    });
+
+    it('forwards the host’s root API and a runner’s API and OTLP paths', () => {
+      expect(forwarded('/api/host/runners')).toBe(true);
+      expect(forwarded('/api/events/stream')).toBe(true);
+      expect(forwarded('/runners/rn_1/api/dashboard')).toBe(true);
+      expect(forwarded('/runners/rn_1/v1/traces')).toBe(true);
+    });
+
+    it('keeps a runner’s panel routes on the dev build', () => {
+      expect(forwarded('/runners/rn_1/board')).toBe(false);
+      expect(forwarded('/runners/rn_1/board/chunk/ch_1')).toBe(false);
+      expect(forwarded('/runners/rn_1/machine')).toBe(false);
+      expect(forwarded('/runners/api/board')).toBe(false);
+    });
+  });
+
   it('gives each app its own config — both request /api but must reach different daemons', () => {
     const configs = APPS.map((a) => angularJson.projects[a.app].architect?.serve?.options?.proxyConfig);
     expect(new Set(configs).size).toBe(APPS.length);
