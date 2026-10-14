@@ -1,0 +1,40 @@
+:host {
+  display: block;
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+.runner {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--line);
+  font-size: var(--fs-sm);
+}
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.name {
+  color: var(--cyan);
+  overflow-wrap: anywhere;
+}
+a.name {
+  text-decoration: none;
+}
+a.name:hover {
+  text-decoration: underline;
+}
+.agents {
+  color: var(--label);
+  font-size: var(--fs-xs);
+}
+.line {
+  padding-left: 20px;
+  color: var(--label-dim);
+  font-size: var(--fs-xs);
+  overflow-wrap: anywhere;
+}
+.reason {
+  color: var(--red);
+}

@@ -740,12 +740,11 @@ const HUB_LAYERS = {
 const RUNNER_LAYERS = {
   core: [],
   asks: [],
-  environments: [],
   events: [],
+  host: [],
   machine: [],
-  status: [],
-  board: ['asks', 'environments', 'machine', 'status'],
-  shell: ['board', 'events', 'machine'],
+  board: ['asks', 'machine'],
+  shell: ['board', 'events', 'host', 'machine'],
 };
 
 /**

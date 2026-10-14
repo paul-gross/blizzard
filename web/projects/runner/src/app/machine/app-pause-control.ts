@@ -1,13 +1,14 @@
 import { ChangeDetectionStrategy, Component, computed, signal } from '@angular/core';
 import { errorMessage, injectPendingMutationVariables, KitBadge, KitButton } from 'fleet';
 
+import { injectActiveRunner } from '../core/active-runner';
 import { localPauseMutationKey } from '../core/mutation-keys';
 import { injectLocalPauseMutation, injectRunnerDashboardQuery, type LocalPauseVars } from '../core/status.query';
 import { pendingLocalPause } from './app-pause-control.model';
 
 /**
- * The runner's pause/unpause control. The toggle flips only the **local** brake
- * (`PATCH /api/runner`); the hub's brake (`hub_paused`) is shown as a badge when
+ * The active runner's pause/unpause control. The toggle flips only the **local** brake
+ * (`PATCH /runners/{runner_id}/api/runner`); the hub's brake (`hub_paused`) is shown as a badge when
  * set, regardless of the local toggle. Reads the `pause` triad off
  * {@link injectRunnerDashboardQuery}, and its own mutation invalidates that read
  * directly.
@@ -23,16 +24,17 @@ import { pendingLocalPause } from './app-pause-control.model';
   styleUrl: './app-pause-control.css',
 })
 export class LocalPauseControl {
+  private readonly activeRunner = injectActiveRunner();
   private readonly dashboardQuery = injectRunnerDashboardQuery();
   private readonly pauseMutation = injectLocalPauseMutation();
 
-  /** This runner's own id — the pause target {@link overridePaused} scopes to;
-   * `''` before the first read resolves. */
-  private readonly runnerId = computed<string>(() => this.dashboardQuery.data()?.runner?.runner_id ?? '');
+  /** The active runner's id — the pause target {@link overridePaused} scopes to;
+   * `''` where no runner is active. */
+  private readonly runnerId = computed<string>(() => this.activeRunner() ?? '');
 
-  /** Every runner id a local-pause mutation is currently pending for, with its
+  /** Every local-pause mutation currently pending for the active runner, with its
    * variables (`bzh:frontend-pending-override`). */
-  private readonly pendingLocalPauses = injectPendingMutationVariables<LocalPauseVars>(localPauseMutationKey);
+  private readonly pendingLocalPauses = injectPendingMutationVariables<LocalPauseVars>(() => localPauseMutationKey(this.activeRunner()));
 
   /** This runner's brake as it will read once a currently pending flip settles for
    * *this* runner, or `null` while nothing overrides it (`bzh:frontend-pending-
@@ -71,6 +73,7 @@ export class LocalPauseControl {
   protected readonly error = signal<string | null>(null);
 
   protected toggle(): void {
+    if (this.runnerId() === '') return;
     const next = !this.localPaused();
     this.error.set(null);
     this.pauseMutation.mutate(

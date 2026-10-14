@@ -1,9 +1,8 @@
 import { InjectionToken, type Provider, type Signal } from '@angular/core';
 
-import type { Client } from '../../api/hub/client';
 import type { AnswerQuestionEvent, ResolveDecisionEvent } from '../chunk-detail/chunk-awaiting-human';
 import type { EditGraphEvent } from '../chunk-detail/chunk-facts';
-import type { TranscriptPlane } from '../../core/query-keys';
+import type { DaemonTarget } from '../../core/daemon-target/daemon-target';
 
 /**
  * The operator-action port a daemon may hand {@link ChunkPage} — everything about the
@@ -49,13 +48,18 @@ export interface ChunkPageActions {
 /**
  * The daemon {@link ChunkPage} reads its chunk from — each app provides one on its own
  * `board/chunk/:chunkId` route, so the page is written once and both daemons serve it.
- * `client` and `plane` are the same seam `ChunkTranscriptsContainer` takes: the generated
- * transport, and the cache-key namespace whose live-update registry keeps the reads
- * current.
+ * `target` is the same seam `ChunkTranscriptsContainer` takes: the generated transport,
+ * the `runner_id` a runner's routes are addressed under, and the key root whose
+ * live-update registry keeps the reads current. Both members are accessors because a
+ * route's providers outlive one visit — a runner's panel reads them off its active
+ * runner, which changes without remounting the route.
  */
 export interface ChunkPageDaemon {
-  readonly client: Client;
-  readonly plane: TranscriptPlane;
+  /** The daemon every read on the page crosses to, or `null` — every read held. */
+  readonly target: () => DaemonTarget | null;
+  /** The board view's path segments the page links back to; its chunk links sit under
+   * `<base>/chunk`. */
+  readonly boardLinkBase: () => readonly string[];
   /** The operator-action port's factory, called from the page's injection context;
    * absent renders the page read-only. */
   readonly actions?: () => ChunkPageActions;
@@ -63,7 +67,9 @@ export interface ChunkPageDaemon {
 
 export const CHUNK_PAGE_DAEMON = new InjectionToken<ChunkPageDaemon>('CHUNK_PAGE_DAEMON');
 
-/** The provider a `board/chunk/:chunkId` route carries to mount {@link ChunkPage}. */
-export function provideChunkPageDaemon(daemon: ChunkPageDaemon): Provider {
-  return { provide: CHUNK_PAGE_DAEMON, useValue: daemon };
+/** The provider a `board/chunk/:chunkId` route carries to mount {@link ChunkPage} — the
+ * factory runs in the route's injection context, so a daemon may inject what it reads its
+ * target from. */
+export function provideChunkPageDaemon(daemon: () => ChunkPageDaemon): Provider {
+  return { provide: CHUNK_PAGE_DAEMON, useFactory: daemon };
 }

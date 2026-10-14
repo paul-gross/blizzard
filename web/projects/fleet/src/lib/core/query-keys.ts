@@ -247,57 +247,56 @@ export function hubGraphKey(graphId: string | null): readonly unknown[] {
   return ['hub', 'graph', graphId];
 }
 
-/** Which daemon a transcript-segment query reads from (runner-node-grouped-transcripts)
- * — namespaced so a plane's own live-invalidation event, where one exists, only ever
- * refetches that plane's own cache entries, even though both planes answer the identical
- * wire shape. Only the hub plane has such an event; see
- * {@link chunkTranscriptsKey} for the runner plane's own gap. */
+/** Which generated module a plane-generic read calls through — the hub's or a runner's.
+ * Picks the module only; a read's cache key leads with the target's own key root
+ * (`'hub'` or a runner id, `daemon-target.ts`'s `targetKeyRoot`), so one runner's live
+ * events refetch only that runner's entries. */
 export type TranscriptPlane = 'hub' | 'runner';
 
-/** One chunk's full aggregate on either plane, keyed by plane and id — each plane's
- * key sits under the prefix its own live-update registry already invalidates: the hub's
- * {@link hubChunkKey}, and the runner's `[runner, chunk, id, detail]`. */
-export function chunkDetailKey(plane: TranscriptPlane, chunkId: string | null): readonly unknown[] {
-  return plane === 'hub' ? hubChunkKey(chunkId) : ['runner', 'chunk', chunkId, 'detail'];
+/** One chunk's full aggregate under a key root — `'hub'` or a runner id. Each sits under
+ * the prefix its own live-update registry invalidates: the hub's {@link hubChunkKey}, and
+ * a runner's `[runnerId, chunk, id, detail]`. */
+export function chunkDetailKey(root: string, chunkId: string | null): readonly unknown[] {
+  return root === 'hub' ? hubChunkKey(chunkId) : [root, 'chunk', chunkId, 'detail'];
 }
 
-/** One chunk's related work items on either plane, keyed by plane and id. The runner's
- * entry is its own `work-items-detail` key so it never shares a cache entry or observer
- * options with another read of the same endpoint. */
-export function chunkWorkItemsKey(plane: TranscriptPlane, chunkId: string | null): readonly unknown[] {
-  return plane === 'hub' ? hubChunkWorkItemsKey(chunkId) : ['runner', 'chunk', chunkId, 'work-items-detail'];
+/** One chunk's related work items under a key root. A runner's entry is its own
+ * `work-items-detail` key so it never shares a cache entry or observer options with
+ * another read of the same endpoint. */
+export function chunkWorkItemsKey(root: string, chunkId: string | null): readonly unknown[] {
+  return root === 'hub' ? hubChunkWorkItemsKey(chunkId) : [root, 'chunk', chunkId, 'work-items-detail'];
 }
 
-/** One chunk's transcript-segment index, keyed by plane and id —
- * deliberately under the plane's own chunk-key prefix (`[plane, 'chunk', chunkId]`), so
+/** One chunk's transcript-segment index under a key root —
+ * deliberately under that root's chunk-key prefix (`[root, 'chunk', chunkId]`), so
  * the hub's `chunk-changed` SSE event refetches it: new segments genuinely appear here as
- * the chunk's steps progress. The runner plane carries no equivalent event — no
- * `RunnerEventType` names a transcript change — so a runner-plane read sees new
+ * the chunk's steps progress. A runner carries no equivalent event — no
+ * `RunnerEventType` names a transcript change — so a runner's read sees new
  * segments only on reload. */
-export function chunkTranscriptsKey(plane: TranscriptPlane, chunkId: string | null): readonly unknown[] {
-  return [plane, 'chunk', chunkId, 'transcripts'];
+export function chunkTranscriptsKey(root: string, chunkId: string | null): readonly unknown[] {
+  return [root, 'chunk', chunkId, 'transcripts'];
 }
 
-/** One segment's decompressed turns, keyed by plane, chunk, and segment id, plus
+/** One segment's decompressed turns, keyed by root, chunk, and segment id, plus
  * whether the segment is `final`. A `final` segment sits under its own top-level
- * prefix and an open one under the plane's chunk-key prefix, so only the open one
+ * prefix and an open one under the root's chunk-key prefix, so only the open one
  * refetches on a `chunk-changed` event; pinned by `transcript-segments.query.spec.ts`'s
  * "refetches an open segment on the chunk key's invalidation, but never a final one".
  * A caller that has not resolved finality yet passes `final: false`. */
 export function chunkTranscriptSegmentKey(
-  plane: TranscriptPlane,
+  root: string,
   chunkId: string | null,
   segmentId: string | null,
   final: boolean,
 ): readonly unknown[] {
   return final
-    ? [plane, 'chunk-transcript-segment', chunkId, segmentId]
-    : [plane, 'chunk', chunkId, 'transcript-segment', segmentId];
+    ? [root, 'chunk-transcript-segment', chunkId, segmentId]
+    : [root, 'chunk', chunkId, 'transcript-segment', segmentId];
 }
 
 /** The hub-plane transcript-segment index key — a thin, permanently-hub-bound alias of
  * {@link chunkTranscriptsKey} for callers (e.g. the Node History tab) that only ever read
- * the hub's own transcripts and have no reason to thread a plane through. */
+ * the hub's own transcripts and have no reason to thread a target through. */
 export function hubChunkTranscriptsKey(chunkId: string | null): readonly unknown[] {
   return chunkTranscriptsKey('hub', chunkId);
 }

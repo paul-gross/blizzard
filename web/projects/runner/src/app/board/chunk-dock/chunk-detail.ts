@@ -5,13 +5,13 @@ import {
   injectNowSignal,
   KitPanel,
   KitPanelHeader,
-  runnerClient,
   type runnerApi,
 } from 'fleet';
 
 import { injectChunkPauseMutation } from './chunk-pause.mutations';
 import { heartbeatLabel, leaseRefLabel, ownRunnerLabel } from './chunk-detail.model';
 import { MachineDetailView } from './chunk-detail-view';
+import { injectActiveRunner, injectActiveRunnerTarget } from '../../core/active-runner';
 import { injectRunnerDashboardQuery } from '../../core/status.query';
 import type { MachineChunkStatus } from '../chunk-list/chunk-status';
 import { MachineDetailHeader } from './machine-detail-header';
@@ -85,9 +85,11 @@ export class MachineDetail {
    * this, the same self-fetching shape `injectChunkTitleQuery` established for the
    * chunks list (`chunk-title.query.ts`, `chunk-row.ts`).
    */
+  private readonly runnerId = injectActiveRunner();
+  private readonly target = injectActiveRunnerTarget();
+
   protected readonly detailQuery = injectChunkDetailQuery(
-    () => runnerClient,
-    () => 'runner',
+    () => this.target(),
     () => this.chunkId(),
   );
 
@@ -155,9 +157,11 @@ export class MachineDetail {
    * refusal (already paused, a status the hub's `PauseService` won't pause) is reported
    * on {@link actionError} rather than swallowed. */
   protected onPause(chunkId: string): void {
+    const runnerId = this.runnerId();
+    if (runnerId === null) return;
     this.actionError.set(null);
     this.pauseMutation.mutate(
-      { chunkId, paused: true },
+      { runnerId, chunkId, paused: true },
       { onError: (error) => this.actionError.set(errorMessage(error, 'Pause failed.')) },
     );
   }
@@ -165,9 +169,11 @@ export class MachineDetail {
   /** Resume the given chunk — the header's `resumeChunk` output, once the operator has
    * already confirmed. Mirrors the hub's `board/chunk-dock/chunk-detail.ts`'s own `onResume`. */
   protected onResume(chunkId: string): void {
+    const runnerId = this.runnerId();
+    if (runnerId === null) return;
     this.actionError.set(null);
     this.pauseMutation.mutate(
-      { chunkId, paused: false },
+      { runnerId, chunkId, paused: false },
       { onError: (error) => this.actionError.set(errorMessage(error, 'Resume failed.')) },
     );
   }

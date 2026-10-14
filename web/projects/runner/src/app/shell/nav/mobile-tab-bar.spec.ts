@@ -6,6 +6,7 @@ import { runnerClient } from 'fleet';
 import { type RequestClientStub, settle, stubRequestClient } from 'fleet/testing';
 
 import { MobileTabBar } from './mobile-tab-bar';
+import { provideActiveRunner } from '../../core/active-runner';
 
 describe('MobileTabBar', () => {
   let stub: RequestClientStub;
@@ -14,13 +15,14 @@ describe('MobileTabBar', () => {
 
   async function render(asks: readonly unknown[]) {
     stub = stubRequestClient(runnerClient, (method, path) => {
-      if (method === 'GET' && path === '/api/dashboard') return { asks: { items: asks } };
+      if (method === 'GET' && path === '/runners/rn_1/api/dashboard') return { asks: { items: asks } };
       return {};
     });
     await TestBed.configureTestingModule({
       imports: [MobileTabBar],
       providers: [
         provideZonelessChangeDetection(),
+        provideActiveRunner('rn_1'),
         provideRouter([]),
         provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
       ],
@@ -30,20 +32,18 @@ describe('MobileTabBar', () => {
     return fixture;
   }
 
-  it('renders Board, Asks, Transcripts, and Events, with Asks and Transcripts inert', async () => {
+  it('renders Host, then the active runner’s Board, Events, and Machine routed, with Asks inert', async () => {
     const fixture = await render([]);
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('[data-testid="tab-board"]')?.textContent).toContain('Board');
-    expect(el.querySelector('[data-testid="tab-events"]')?.textContent).toContain('Events');
+    expect(el.querySelector('[data-testid="tab-host"]')?.getAttribute('href')).toBe('/');
+    expect(el.querySelector('[data-testid="tab-board"]')?.getAttribute('href')).toBe('/runners/rn_1/board');
+    expect(el.querySelector('[data-testid="tab-events"]')?.getAttribute('href')).toBe('/runners/rn_1/events');
+    expect(el.querySelector('[data-testid="tab-machine"]')?.getAttribute('href')).toBe('/runners/rn_1/machine');
     const asks = el.querySelector('[data-testid="tab-asks-runner"]');
-    const transcripts = el.querySelector('[data-testid="tab-transcripts-runner"]');
     expect(asks?.textContent).toContain('Asks');
-    expect(transcripts?.textContent).toContain('Transcripts');
     expect(asks?.hasAttribute('disabled')).toBe(true);
-    expect(transcripts?.hasAttribute('disabled')).toBe(true);
     expect(asks?.classList.contains('inert')).toBe(true);
-    expect(transcripts?.classList.contains('inert')).toBe(true);
   });
 
   it('omits the Asks badge when there are no open asks', async () => {

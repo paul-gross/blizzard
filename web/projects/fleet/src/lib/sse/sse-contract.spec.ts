@@ -258,19 +258,19 @@ interface RunnerFrameFieldSpecs {
 
 const RUNNER_FRAME_FIELD_SPECS: RunnerFrameFieldSpecs = {
   'lease-changed': {
-    required: exactRequired<LeaseChanged>()({ lease_id: true, chunk_id: true, cause: true }),
+    required: exactRequired<LeaseChanged>()({ runner_id: true, lease_id: true, chunk_id: true, cause: true }),
     optional: exactOptional<LeaseChanged>()({}),
   },
   'ask-changed': {
-    required: exactRequired<AskChanged>()({ lease_id: true, chunk_id: true, question_id: true, cause: true }),
+    required: exactRequired<AskChanged>()({ runner_id: true, lease_id: true, chunk_id: true, question_id: true, cause: true }),
     optional: exactOptional<AskChanged>()({}),
   },
   'escalation-changed': {
-    required: exactRequired<EscalationChanged>()({ chunk_id: true, cause: true }),
+    required: exactRequired<EscalationChanged>()({ runner_id: true, chunk_id: true, cause: true }),
     optional: exactOptional<EscalationChanged>()({ lease_id: true }),
   },
   'takeover-changed': {
-    required: exactRequired<TakeoverChanged>()({ chunk_id: true, takeover_id: true, cause: true }),
+    required: exactRequired<TakeoverChanged>()({ runner_id: true, chunk_id: true, takeover_id: true, cause: true }),
     optional: exactOptional<TakeoverChanged>()({}),
   },
   'environment-changed': {
@@ -278,7 +278,7 @@ const RUNNER_FRAME_FIELD_SPECS: RunnerFrameFieldSpecs = {
     optional: exactOptional<EnvironmentChanged>()({}),
   },
   'fact-changed': {
-    required: exactRequired<FactChanged>()({ seq: true, kind: true, chunk_id: true, lease_id: true }),
+    required: exactRequired<FactChanged>()({ runner_id: true, seq: true, kind: true, chunk_id: true, lease_id: true }),
     optional: exactOptional<FactChanged>()({}),
   },
 };

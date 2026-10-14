@@ -6,6 +6,7 @@
         [routerLink]="item.route | lensLink"
         [queryParamsHandling]="item.queryParamsHandling ?? ''"
         routerLinkActive="on"
+        [routerLinkActiveOptions]="{ exact: item.exact ?? false }"
         [attr.data-testid]="item.testid"
       >
         {{ item.label }}

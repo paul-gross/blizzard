@@ -7,9 +7,10 @@ import { commands, page } from 'vitest/browser';
 
 import { LocalPanelMobile } from './app-panel-mobile';
 import type { MachineChunkRow } from './app-panel.model';
+import { provideActiveRunner } from '../core/active-runner';
 
 /** Matches `GET /api/chunks/{chunk_id}/work-items` for any chunk id. */
-const WORK_ITEMS_ROUTE = /^\/api\/chunks\/[^/]+\/work-items$/;
+const WORK_ITEMS_ROUTE = /^\/runners\/rn_1\/api\/chunks\/[^/]+\/work-items$/;
 
 const LEASE = (overrides: Partial<runnerApi.LeaseView> = {}): runnerApi.LeaseView => ({
   lease_id: 'lease_01KXKVVF1J3D6H6VYZ3XYNZPRR',
@@ -74,7 +75,7 @@ const LONG_ASK = {
 
 /** A full `DashboardView` body, `asks` set to `asks` and every other section a
  * plausible/empty default — `LocalPanelMobile` and its children
- * (`app-info`, `app-asks`) all read one shared `/api/dashboard` poll, so
+ * (`app-info`, `app-asks`) all read one shared `/runners/rn_1/api/dashboard` poll, so
  * this shell's default fallback cannot leave them pending/malformed. */
 function dashboardBody(asks: unknown) {
   return {
@@ -86,13 +87,11 @@ function dashboardBody(asks: unknown) {
       hub: { endpoint: 'http://127.0.0.1:8421', reachable: true, last_contact_at: null, buffer_depth: 0 },
       last_tick_at: null,
     },
-    environments: { items: [] },
     asks,
     escalations: { items: [] },
     takeovers: { items: [] },
     facts: { items: [] },
     harness_health: { items: [] },
-    subscriptions: { items: [] },
     fleet_summary: null,
   };
 }
@@ -100,13 +99,14 @@ function dashboardBody(asks: unknown) {
 async function render(asks: unknown = { items: [] }) {
   const stub = stubRequestClient(runnerClient, (method, path) => {
     if (method === 'GET' && WORK_ITEMS_ROUTE.test(path)) return FIVE_WORK_ITEMS;
-    if (method === 'GET' && path === '/api/dashboard') return dashboardBody(asks);
+    if (method === 'GET' && path === '/runners/rn_1/api/dashboard') return dashboardBody(asks);
     return { items: [] };
   });
   await TestBed.configureTestingModule({
     imports: [LocalPanelMobile],
     providers: [
       provideZonelessChangeDetection(),
+      provideActiveRunner('rn_1'),
       provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
     ],
   }).compileComponents();

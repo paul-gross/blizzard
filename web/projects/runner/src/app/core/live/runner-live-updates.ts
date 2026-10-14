@@ -7,25 +7,29 @@ import {
   RUNNER_EVENT_STREAM_URL,
   RUNNER_EVENT_TYPES,
   type RunnerEventPayload,
+  type RunnerEventPayloads,
   type RunnerEventType,
   SseService,
   type SseStatus,
 } from 'fleet';
 
-import { runnerChunkDetailKey, runnerDashboardKey, runnerLeasesKey } from '../query-keys';
+import { hostKey, runnerChunkDetailKey, runnerDashboardKey, runnerLeasesKey } from '../query-keys';
 import { SessionRecovery } from '../identity/session-recovery';
 
 /** Cap on the stream's own re-arm attempts after a `401` whose session read itself
  * failed: a session that never resolves must not be retried forever. */
 export const STREAM_REARM_MAX_ATTEMPTS = 3;
 
-/**
- * A runner event that names a chunk stales that chunk's own detail key: no runner
- * event proves the hub-sourced pause fact directly, but a frame naming the chunk is
- * the closest local signal that something about it moved.
- */
-function chunkDetailKeys(data: RunnerEventPayload): readonly (readonly unknown[])[] {
-  return data.chunk_id ? [runnerChunkDetailKey(data.chunk_id)] : [];
+/** A runner-scoped frame's own keys — each under the runner id the frame names, so a
+ * frame from one runner never stales another's. Every kind stales that runner's
+ * dashboard, since the dashboard read folds each kind's section, and a frame naming a
+ * chunk stales that chunk's detail on that runner: no runner event proves the
+ * hub-sourced pause fact directly, but a frame naming the chunk is the closest local
+ * signal that something about it moved. */
+function runnerKeys(data: { readonly runner_id: string; readonly chunk_id?: string | null }): readonly (readonly unknown[])[] {
+  const keys: (readonly unknown[])[] = [runnerDashboardKey(data.runner_id)];
+  if (data.chunk_id) keys.push(runnerChunkDetailKey(data.runner_id, data.chunk_id));
+  return keys;
 }
 
 /**
@@ -33,19 +37,20 @@ function chunkDetailKeys(data: RunnerEventPayload): readonly (readonly unknown[]
  * exhaustive over {@link RUNNER_EVENT_TYPES}: a new event type is a compile error
  * here until it is given a row.
  *
- * Every kind stales {@link runnerDashboardKey}, since the dashboard read folds each
- * kind's section. `lease-changed` alone also stales {@link runnerLeasesKey}.
+ * The host serves one stream for every runner it holds. A runner-scoped frame carries
+ * its `runner_id` and stales only that runner's keys ({@link runnerKeys});
+ * `lease-changed` alone also stales that runner's {@link runnerLeasesKey}. Every frame,
+ * `environment-changed` (host-scoped, naming no runner) included, stales {@link hostKey},
+ * which keeps the host page's environments, subscriptions, and runner rows as fresh as
+ * every frame.
  */
-const RUNNER_EVENT_INVALIDATION_REGISTRY: Record<
-  RunnerEventType,
-  (data: RunnerEventPayload) => readonly (readonly unknown[])[]
-> = {
-  'lease-changed': (data) => [runnerLeasesKey, runnerDashboardKey, ...chunkDetailKeys(data)],
-  'ask-changed': (data) => [runnerDashboardKey, ...chunkDetailKeys(data)],
-  'escalation-changed': (data) => [runnerDashboardKey, ...chunkDetailKeys(data)],
-  'takeover-changed': (data) => [runnerDashboardKey, ...chunkDetailKeys(data)],
-  'environment-changed': (data) => [runnerDashboardKey, ...chunkDetailKeys(data)],
-  'fact-changed': (data) => [runnerDashboardKey, ...chunkDetailKeys(data)],
+const RUNNER_EVENT_INVALIDATION_REGISTRY: { [K in RunnerEventType]: (data: RunnerEventPayloads[K]) => readonly (readonly unknown[])[] } = {
+  'lease-changed': (data) => [runnerLeasesKey(data.runner_id), ...runnerKeys(data), hostKey],
+  'ask-changed': (data) => [...runnerKeys(data), hostKey],
+  'escalation-changed': (data) => [...runnerKeys(data), hostKey],
+  'takeover-changed': (data) => [...runnerKeys(data), hostKey],
+  'environment-changed': () => [hostKey],
+  'fact-changed': (data) => [...runnerKeys(data), hostKey],
 };
 
 /**
@@ -72,7 +77,10 @@ export class RunnerLiveUpdates {
     destroyRef: this.destroyRef,
     streamUrl: RUNNER_EVENT_STREAM_URL,
     eventTypes: RUNNER_EVENT_TYPES,
-    registry: RUNNER_EVENT_INVALIDATION_REGISTRY,
+    registry: RUNNER_EVENT_INVALIDATION_REGISTRY as Record<
+      RunnerEventType,
+      (data: RunnerEventPayload) => readonly (readonly unknown[])[]
+    >,
     coalesceWindowMs: INVALIDATION_COALESCE_WINDOW_MS,
     onAuthFailed: () => void this.handleAuthFailed(),
   });

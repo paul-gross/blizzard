@@ -1,5 +1,5 @@
 <fleet-chunk-page-shell>
-  <a chunk-page-back class="back-row" [routerLink]="'/board' | lensLink" [queryParams]="{ chunk: chunkId() }" data-testid="mobile-chunk-back">
+  <a chunk-page-back class="back-row" [routerLink]="boardLinkBase() | lensLink" [queryParams]="{ chunk: chunkId() }" data-testid="mobile-chunk-back">
     <fleet-kit-back-bar label="Board" />
   </a>
   @if (actionError(); as err) {
@@ -17,6 +17,7 @@
       chunk-page-header
       data-testid="board-chunk-detail"
       [chunkId]="chunkId() ?? ''"
+      [linkBase]="chunkLinkBase()"
       [status]="d.status"
       [tone]="tone()"
       [pointers]="d.work_refs ?? []"
@@ -75,8 +76,7 @@
       }
       @case ('transcripts') {
         <fleet-chunk-transcripts-container
-          [client]="daemon.client"
-          [plane]="daemon.plane"
+          [target]="daemon.target()"
           [chunkId]="chunkId()"
           [history]="d.history ?? []"
           [currentNodeId]="d.current_node_id"

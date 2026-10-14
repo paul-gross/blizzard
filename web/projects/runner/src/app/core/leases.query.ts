@@ -1,10 +1,11 @@
 import { injectQuery } from '@tanstack/angular-query-experimental';
 import { RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS, runnerApi } from 'fleet';
 
+import { injectActiveRunner } from './active-runner';
 import { runnerLeasesKey } from './query-keys';
 
 /**
- * Runner `GET /api/leases` read — the hub-free local surface: every
+ * The active runner's `GET /runners/{runner_id}/api/leases` read — the hub-free local surface: every
  * active lease with its joined binding facts and read-time-derived state
  * (`running`/`stale`/`parked`/`spawning`/`exited`), through TanStack Query and the
  * generated runner client (bzh:generated-client). Modeled on `fleet`'s
@@ -16,14 +17,22 @@ import { runnerLeasesKey } from './query-keys';
  * not the primary signal a fresh lease/transition/close is covered by.
  */
 export function injectRunnerLeasesQuery() {
-  return injectQuery(() => ({
-    queryKey: runnerLeasesKey,
-    queryFn: async (): Promise<runnerApi.LeaseView[]> => {
-      const { data, error } = await runnerApi.listLeasesApiLeasesGet({ throwOnError: false });
-      if (error) throw error;
-      return data?.items ?? [];
-    },
-    // See RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS.
-    refetchInterval: RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS,
-  }));
+  const runnerId = injectActiveRunner();
+  return injectQuery(() => {
+    const id = runnerId();
+    return {
+      queryKey: runnerLeasesKey(id),
+      enabled: id !== null,
+      queryFn: async (): Promise<runnerApi.LeaseView[]> => {
+        const { data, error } = await runnerApi.listLeasesRunnersRunnerIdApiLeasesGet({
+          path: { runner_id: id! },
+          throwOnError: false,
+        });
+        if (error) throw error;
+        return data?.items ?? [];
+      },
+      // See RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS.
+      refetchInterval: RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS,
+    };
+  });
 }

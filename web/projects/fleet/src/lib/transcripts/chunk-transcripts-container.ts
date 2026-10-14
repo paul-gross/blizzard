@@ -1,10 +1,9 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 
-import type { Client } from '../api/hub/client';
 import type { TransitionView } from '../api/hub';
 import { asyncState, restingAsyncState } from '../core/query-state';
 import type { KitAsyncStateValue } from '../kit/kit-async-state';
-import type { TranscriptPlane } from '../core/query-keys';
+import type { DaemonTarget } from '../core/daemon-target/daemon-target';
 import { ChunkTranscriptsTab } from './chunk-transcripts-tab';
 import { injectChunkTranscriptSegmentQuery, injectChunkTranscriptsQuery, TranscriptFetchError } from './transcript-segments.query';
 import { segmentFinal } from './transcript-selection.model';
@@ -14,9 +13,9 @@ import { segmentFinal } from './transcript-selection.model';
  * — owns its two queries (the index on open, one segment's turns only
  * once opened) and maps their loading/error state, forwarding resolved data down to the
  * presentational {@link ChunkTranscriptsTab}, which carries the tab's markup and injects
- * nothing. {@link client}/{@link plane} are the seam a mounting app crosses to reach its
- * own copy of the identically-shaped route — required
- * inputs, never defaulted, so a mounting app states which plane it reads from rather than
+ * nothing. {@link target} is the seam a mounting app crosses to reach its
+ * own copy of the identically-shaped route — a required
+ * input, never defaulted, so a mounting app states which daemon it reads from rather than
  * this component guessing or branching on it.
  *
  * `:host { display: contents }` — this component
@@ -36,12 +35,10 @@ import { segmentFinal } from './transcript-selection.model';
   styleUrl: './chunk-transcripts-container.css',
 })
 export class ChunkTranscriptsContainer {
-  /** The generated API client this instance reads transcripts through
-   * (`bzh:generated-client`). */
-  readonly client = input.required<Client>();
-
-  /** Namespaces this instance's TanStack cache keys — see {@link client}'s own doc. */
-  readonly plane = input.required<TranscriptPlane>();
+  /** The daemon this instance reads transcripts from — its generated client
+   * (`bzh:generated-client`) and the key root its TanStack cache keys lead with; `null`
+   * holds both reads disabled. */
+  readonly target = input.required<DaemonTarget | null>();
 
   /** The chunk whose transcripts to read, or `null` while none is known — nullable
    * so the query's own `enabled: id !== null` stays the real gate
@@ -62,8 +59,7 @@ export class ChunkTranscriptsContainer {
   readonly pickSidechain = output<string | null>();
 
   protected readonly indexQuery = injectChunkTranscriptsQuery(
-    () => this.client(),
-    () => this.plane(),
+    () => this.target(),
     () => this.chunkId(),
   );
 
@@ -79,8 +75,7 @@ export class ChunkTranscriptsContainer {
    * actually known — `selectedSegmentFinal()`'s `null` holds it disabled until then, so the
    * segment is read exactly once. */
   protected readonly segmentQuery = injectChunkTranscriptSegmentQuery(
-    () => this.client(),
-    () => this.plane(),
+    () => this.target(),
     () => this.chunkId(),
     () => this.segmentId(),
     () => this.selectedSegmentFinal(),

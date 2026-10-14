@@ -7,6 +7,7 @@ import { type RequestClientStub, settle, stubError, stubRequestClient } from 'fl
 import { vi } from 'vitest';
 
 import { MachineDetail } from './chunk-detail';
+import { provideActiveRunner } from '../../core/active-runner';
 
 /** A `ChunkDetail` fixture — the runner's own `GET /api/chunks/{id}` pass-through
  * proxy response the header renders off. */
@@ -60,9 +61,9 @@ const OLDER = (overrides: Partial<runnerApi.LeaseView> = {}): runnerApi.LeaseVie
 
 /** A transcript route that answers every lease's read with an empty transcript. */
 const TRANSCRIPT_ROUTE = /^\/api\/leases\/([^/]+)\/transcript$/;
-const CHUNK_ROUTE = /^\/api\/chunks\/([^/]+)$/;
-const PAUSE_ROUTE = /^\/api\/chunks\/([^/]+)\/pause$/;
-const RESUME_ROUTE = /^\/api\/chunks\/([^/]+)\/resume$/;
+const CHUNK_ROUTE = /^\/runners\/rn_1\/api\/chunks\/([^/]+)$/;
+const PAUSE_ROUTE = /^\/runners\/rn_1\/api\/chunks\/([^/]+)\/pause$/;
+const RESUME_ROUTE = /^\/runners\/rn_1\/api\/chunks\/([^/]+)\/resume$/;
 
 /** The header's own severable read + mutation routes, layered onto the transcript
  * route every test needs — `header` answers `GET /api/chunks/{id}`, `pauseResult`
@@ -96,6 +97,7 @@ async function render(
     imports: [MachineDetail],
     providers: [
       provideZonelessChangeDetection(),
+      provideActiveRunner('rn_1'),
       provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
       // The header's chunk id is a `routerLink`.
       provideRouter([]),
@@ -220,7 +222,7 @@ describe('MachineDetail header', () => {
     el.querySelector<HTMLElement>('[data-testid="confirm-dialog-confirm"]')?.click();
     await settle(fixture);
 
-    expect(stub.forRoute(`/api/chunks/${NEWEST().chunk_id}/pause`, 'POST')).toHaveLength(1);
+    expect(stub.forRoute(`/runners/rn_1/api/chunks/${NEWEST().chunk_id}/pause`, 'POST')).toHaveLength(1);
   });
 
   it('offers Resume for a paused chunk and fires the mutation once confirmed', async () => {
@@ -237,7 +239,7 @@ describe('MachineDetail header', () => {
     el.querySelector<HTMLElement>('[data-testid="confirm-dialog-confirm"]')?.click();
     await settle(fixture);
 
-    expect(stub.forRoute(`/api/chunks/${NEWEST().chunk_id}/resume`, 'POST')).toHaveLength(1);
+    expect(stub.forRoute(`/runners/rn_1/api/chunks/${NEWEST().chunk_id}/resume`, 'POST')).toHaveLength(1);
   });
 
   it('does not fire the pause mutation when the operator declines the confirm', async () => {
@@ -250,7 +252,7 @@ describe('MachineDetail header', () => {
     el.querySelector<HTMLElement>('[data-testid="confirm-dialog-cancel"]')?.click();
     await settle(fixture);
 
-    expect(stub.forRoute(`/api/chunks/${NEWEST().chunk_id}/pause`, 'POST')).toHaveLength(0);
+    expect(stub.forRoute(`/runners/rn_1/api/chunks/${NEWEST().chunk_id}/pause`, 'POST')).toHaveLength(0);
   });
 
   it('offers neither Pause nor Resume for a chunk in a non-pausable state', async () => {
@@ -385,7 +387,7 @@ describe('MachineDetail Pause/Resume pending + failure', () => {
     el.querySelector<HTMLElement>('[data-testid="confirm-dialog-confirm"]')?.click();
     await settle(fixture);
 
-    expect(stub.forRoute(`/api/chunks/${NEWEST().chunk_id}/pause`, 'POST')).toHaveLength(2);
+    expect(stub.forRoute(`/runners/rn_1/api/chunks/${NEWEST().chunk_id}/pause`, 'POST')).toHaveLength(2);
     expect(el.querySelector('[data-testid="action-error"]')).not.toBeNull();
   });
 });
@@ -436,6 +438,7 @@ describe('MachineDetail heartbeat label ticking', () => {
         imports: [MachineDetail],
         providers: [
           provideZonelessChangeDetection(),
+          provideActiveRunner('rn_1'),
           provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
           provideRouter([]),
         ],

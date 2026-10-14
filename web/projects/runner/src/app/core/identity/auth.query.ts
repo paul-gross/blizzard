@@ -3,7 +3,7 @@ import { injectMutation, injectQuery, QueryClient } from '@tanstack/angular-quer
 import { runnerApi } from 'fleet';
 
 import { runnerLogoutMutationKey } from '../mutation-keys';
-import { runnerSessionKey } from '../query-keys';
+import { sessionKey } from '../query-keys';
 
 const logoutInFlightSignal = signal(false);
 
@@ -32,7 +32,7 @@ export const runnerLogoutInFlight = logoutInFlightSignal.asReadonly();
  */
 export function injectRunnerSessionQuery() {
   return injectQuery(() => ({
-    queryKey: runnerSessionKey,
+    queryKey: sessionKey,
     queryFn: async (): Promise<runnerApi.RunnerAuthSessionView> => {
       const { data, error } = await readRunnerSession();
       if (error) throw error;
@@ -85,7 +85,7 @@ export function injectRunnerLogoutMutation() {
     onMutate: () => logoutInFlightSignal.set(true),
     onSettled: () => {
       logoutInFlightSignal.set(false);
-      return queryClient.invalidateQueries({ queryKey: runnerSessionKey });
+      return queryClient.invalidateQueries({ queryKey: sessionKey });
     },
   }));
 }

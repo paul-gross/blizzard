@@ -6,13 +6,14 @@ import { type RequestClientStub, settle, stubRequestClient } from 'fleet/testing
 import { vi } from 'vitest';
 
 import { LocalAsks } from './app-asks';
+import { provideActiveRunner } from '../core/active-runner';
 
 let stub: RequestClientStub | undefined;
 
 afterEach(() => stub?.restore());
 
 /** A full `DashboardView` body, `asks.items` set to `asks` and every other section
- * its empty default — `LocalAsks` reads off the shared `/api/dashboard` poll,
+ * its empty default — `LocalAsks` reads off the shared `/runners/rn_1/api/dashboard` poll,
  * not a `/api/asks` route of its own. */
 function dashboardBody(asks: readonly runnerApi.AskView[]): runnerApi.DashboardView {
   return {
@@ -24,23 +25,22 @@ function dashboardBody(asks: readonly runnerApi.AskView[]): runnerApi.DashboardV
       hub: { endpoint: 'http://127.0.0.1:8421', reachable: true, last_contact_at: null, buffer_depth: 0 },
       last_tick_at: null,
     },
-    environments: { items: [] },
     asks: { items: [...asks] },
     escalations: { items: [] },
     takeovers: { items: [] },
     fleet_summary: null,
     facts: { items: [] },
     harness_health: { items: [] },
-    subscriptions: { items: [] },
   };
 }
 
 async function render(asks: readonly runnerApi.AskView[]): Promise<{ el: HTMLElement; fixture: ComponentFixture<LocalAsks> }> {
-  stub = stubRequestClient(runnerClient, (method, path) => (method === 'GET' && path === '/api/dashboard' ? dashboardBody(asks) : {}));
+  stub = stubRequestClient(runnerClient, (method, path) => (method === 'GET' && path === '/runners/rn_1/api/dashboard' ? dashboardBody(asks) : {}));
   await TestBed.configureTestingModule({
     imports: [LocalAsks],
     providers: [
       provideZonelessChangeDetection(),
+      provideActiveRunner('rn_1'),
       provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
     ],
   }).compileComponents();

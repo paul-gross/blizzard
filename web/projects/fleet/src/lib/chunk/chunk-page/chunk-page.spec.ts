@@ -12,7 +12,7 @@ import { provideChunkPageDaemon } from './chunk-page-daemon';
 
 /**
  * The shared chunk detail page (`/board/chunk/:chunkId`) mounted with a runner's daemon —
- * its own client and plane and **no** operator-action port — the read-only half of the
+ * its own target and board and **no** operator-action port — the read-only half of the
  * daemon seam. The hub's half, with its port, is the hub board's own chunk-page spec.
  * Driven through a real router (`RouterTestingHarness`) rather than a stubbed
  * `ActivatedRoute`: the page reads its own route param (`:chunkId`) and independent
@@ -70,7 +70,12 @@ const ROUTES = [
   {
     path: 'board/chunk/:chunkId',
     component: ChunkPage,
-    providers: [provideChunkPageDaemon({ client: runnerClient, plane: 'runner' })],
+    providers: [
+      provideChunkPageDaemon(() => ({
+        target: () => ({ plane: 'runner', client: runnerClient, runnerId: 'rn_1' }),
+        boardLinkBase: () => ['/board'],
+      })),
+    ],
   },
 ];
 
@@ -92,12 +97,12 @@ const SEGMENT = {
 function routes(segments: readonly unknown[] = []): (method: string, path: string) => unknown {
   return (method, path) => {
     if (method !== 'GET') return {};
-    if (path === `/api/chunks/${CHUNK_ID}`) return DETAIL;
-    if (path === `/api/chunks/${CHUNK_ID}/work-items`) {
+    if (path === `/runners/rn_1/api/chunks/${CHUNK_ID}`) return DETAIL;
+    if (path === `/runners/rn_1/api/chunks/${CHUNK_ID}/work-items`) {
       return { items: [{ source: 'blizzard', ref: '318', label: 'blizzard#318', title: 'Chunk detail route', body: 'x', comments: [] }] };
     }
-    if (path === `/api/chunks/${CHUNK_ID}/transcripts`) return { chunk_id: CHUNK_ID, segments };
-    const segmentMatch = /^\/api\/chunks\/[^/]+\/transcripts\/([^/]+)$/.exec(path);
+    if (path === `/runners/rn_1/api/chunks/${CHUNK_ID}/transcripts`) return { chunk_id: CHUNK_ID, segments };
+    const segmentMatch = /^\/runners\/rn_1\/api\/chunks\/[^/]+\/transcripts\/([^/]+)$/.exec(path);
     if (segmentMatch) {
       return { segment_id: segmentMatch[1], final: true, truncated: false, turns: [] };
     }
@@ -148,7 +153,7 @@ describe('ChunkPage on a runner daemon', () => {
     stub = stubRequestClient(
       runnerClient,
       (method, path) =>
-        method === 'GET' && path === `/api/chunks/${CHUNK_ID}/work-items`
+        method === 'GET' && path === `/runners/rn_1/api/chunks/${CHUNK_ID}/work-items`
           ? stubError(503, { detail: 'no work source is configured' })
           : routes()(method, path),
     );
@@ -222,8 +227,8 @@ describe('ChunkPage on a runner daemon', () => {
     stub = stubRequestClient(runnerClient, routes([SEGMENT]));
     const el = await open(`/board/chunk/${CHUNK_ID}?tab=node-history&step=nd_build:1`);
 
-    expect(stub.forRoute(`/api/chunks/${CHUNK_ID}/transcripts`, 'GET').length).toBeGreaterThan(0);
-    expect(stub.forRoute(`/api/chunks/${CHUNK_ID}/transcripts/sg_1`, 'GET').length).toBeGreaterThan(0);
+    expect(stub.forRoute(`/runners/rn_1/api/chunks/${CHUNK_ID}/transcripts`, 'GET').length).toBeGreaterThan(0);
+    expect(stub.forRoute(`/runners/rn_1/api/chunks/${CHUNK_ID}/transcripts/sg_1`, 'GET').length).toBeGreaterThan(0);
     expect(el.querySelector('[data-testid="node-history-transcript-body"]')).not.toBeNull();
   });
 
@@ -269,7 +274,7 @@ describe('ChunkPage on a runner daemon', () => {
     el = harness.fixture.nativeElement as HTMLElement;
 
     expect(TestBed.inject(Router).url).toBe(`/board/chunk/${CHUNK_ID}?tab=transcripts`);
-    expect(stub.forRoute(`/api/chunks/${CHUNK_ID}/transcripts`, 'GET').length).toBeGreaterThan(0);
+    expect(stub.forRoute(`/runners/rn_1/api/chunks/${CHUNK_ID}/transcripts`, 'GET').length).toBeGreaterThan(0);
     expect(el.querySelector('[data-testid="chunk-transcripts-tab"]')).not.toBeNull();
     const step = el.querySelector('[data-testid="transcript-step"]');
     expect(step?.textContent).toContain('build \u00b7 epoch 1');
@@ -281,14 +286,14 @@ describe('ChunkPage on a runner daemon', () => {
     stub = stubRequestClient(runnerClient, routes([SEGMENT]));
     const el = await open(`/board/chunk/${CHUNK_ID}?tab=transcripts&segment=sg_1`);
 
-    expect(stub.forRoute(`/api/chunks/${CHUNK_ID}/transcripts/sg_1`, 'GET').length).toBeGreaterThan(0);
+    expect(stub.forRoute(`/runners/rn_1/api/chunks/${CHUNK_ID}/transcripts/sg_1`, 'GET').length).toBeGreaterThan(0);
     expect(el.querySelector('[data-testid="transcript-segment-body"]')).not.toBeNull();
   });
 
   it('renders an explicit empty state for a chunk with no history transitions and no transcript segments', async () => {
     stub.restore();
     stub = stubRequestClient(runnerClient, (method, path) => {
-      if (method === 'GET' && path === `/api/chunks/${CHUNK_ID}`) return { ...DETAIL, history: [], current_node_id: 'done', current_node_terminal: true };
+      if (method === 'GET' && path === `/runners/rn_1/api/chunks/${CHUNK_ID}`) return { ...DETAIL, history: [], current_node_id: 'done', current_node_terminal: true };
       return routes()(method, path);
     });
     const el = await open(`/board/chunk/${CHUNK_ID}?tab=transcripts`);
@@ -299,7 +304,7 @@ describe('ChunkPage on a runner daemon', () => {
   it("renders the hub-sourced cost estimate folded into the one cost figure on the General tab's token breakdown and the Node history tab's timeline", async () => {
     stub.restore();
     stub = stubRequestClient(runnerClient, (method, path) => {
-      if (method === 'GET' && path === `/api/chunks/${CHUNK_ID}`) {
+      if (method === 'GET' && path === `/runners/rn_1/api/chunks/${CHUNK_ID}`) {
         return {
           ...DETAIL,
           cost: {
@@ -355,7 +360,7 @@ describe('ChunkPage on a runner daemon', () => {
     // would mount an always-empty sub-panel and satisfy a mount-only assertion.
     stub.restore();
     stub = stubRequestClient(runnerClient, (method, path) => {
-      if (method === 'GET' && path === `/api/chunks/${CHUNK_ID}`) {
+      if (method === 'GET' && path === `/runners/rn_1/api/chunks/${CHUNK_ID}`) {
         return {
           ...DETAIL,
           status: 'needs_human',
@@ -383,7 +388,7 @@ describe('ChunkPage on a runner daemon', () => {
   it('shows an error state when the chunk detail read fails', async () => {
     stub.restore();
     stub = stubRequestClient(runnerClient, (method, path) => {
-      if (method === 'GET' && path === `/api/chunks/${CHUNK_ID}`) return stubError(502, { detail: 'unreachable' });
+      if (method === 'GET' && path === `/runners/rn_1/api/chunks/${CHUNK_ID}`) return stubError(502, { detail: 'unreachable' });
       return routes()(method, path);
     });
     const el = await open(`/board/chunk/${CHUNK_ID}`);
@@ -397,7 +402,7 @@ describe('ChunkPage on a runner daemon', () => {
   it('renders no answer or resolve controls for an open question and gate decision', async () => {
     stub.restore();
     stub = stubRequestClient(runnerClient, (method, path) => {
-      if (method === 'GET' && path === `/api/chunks/${CHUNK_ID}`) {
+      if (method === 'GET' && path === `/runners/rn_1/api/chunks/${CHUNK_ID}`) {
         return {
           ...DETAIL,
           status: 'waiting_on_human',
@@ -443,7 +448,7 @@ describe('ChunkPage on a runner daemon', () => {
   it('renders no graph edit for a not-ready chunk', async () => {
     stub.restore();
     stub = stubRequestClient(runnerClient, (method, path) => {
-      if (method === 'GET' && path === `/api/chunks/${CHUNK_ID}`) return { ...DETAIL, status: 'not_ready', graph_editable: true };
+      if (method === 'GET' && path === `/runners/rn_1/api/chunks/${CHUNK_ID}`) return { ...DETAIL, status: 'not_ready', graph_editable: true };
       return routes()(method, path);
     });
     const el = await open(`/board/chunk/${CHUNK_ID}`);

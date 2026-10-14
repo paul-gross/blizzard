@@ -13,7 +13,9 @@
     } @else {
       <app-header shell-header />
     }
-    @if (!mobile()) {
+    @if (mobile()) {
+      <app-runner-switcher shell-nav variant="mobile" />
+    } @else {
       <app-nav shell-nav />
     }
     <router-outlet />

@@ -9,6 +9,7 @@ import { vi } from 'vitest';
 
 import { App } from './app';
 import { routes } from './app.routes';
+import { provideActiveRunner } from '../core/active-runner';
 
 /** A do-nothing EventSource so `RunnerLiveUpdates` can open
  * without a real stream — mirrors `app.spec.ts`'s own `FakeEventSource`. */
@@ -33,6 +34,7 @@ async function setUp(route: (method: string, path: string) => unknown) {
     imports: [App],
     providers: [
       provideZonelessChangeDetection(),
+      provideActiveRunner('rn_1'),
       provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
       provideRouter(routes),
       { provide: EVENT_SOURCE_FACTORY, useValue: factory },
@@ -78,7 +80,7 @@ describe('runner App session-recovery fork (issue #312)', () => {
 
     const fixture = TestBed.createComponent(App);
     const router = TestBed.inject(Router);
-    await router.navigateByUrl('/');
+    await router.navigateByUrl('/runners/rn_1/board');
     await settle(fixture);
     const el = fixture.nativeElement as HTMLElement;
 
@@ -93,10 +95,10 @@ describe('runner App session-recovery fork (issue #312)', () => {
     restore = r;
 
     // First no-session 401: mark set, the (mocked) bounce is "attempted".
-    await runnerApi.listLeasesApiLeasesGet({ throwOnError: false });
+    await runnerApi.listLeasesRunnersRunnerIdApiLeasesGet({ path: { runner_id: 'rn_1' }, throwOnError: false });
     expect(recovery.recovering()).toBe(false);
     // A further no-session 401 while the mark still stands: sets `recovering`.
-    await runnerApi.listLeasesApiLeasesGet({ throwOnError: false });
+    await runnerApi.listLeasesRunnersRunnerIdApiLeasesGet({ path: { runner_id: 'rn_1' }, throwOnError: false });
     expect(recovery.recovering()).toBe(true);
 
     const fixture = TestBed.createComponent(App);
@@ -113,8 +115,8 @@ describe('runner App session-recovery fork (issue #312)', () => {
     );
     restore = r;
 
-    await runnerApi.listLeasesApiLeasesGet({ throwOnError: false });
-    await runnerApi.listLeasesApiLeasesGet({ throwOnError: false });
+    await runnerApi.listLeasesRunnersRunnerIdApiLeasesGet({ path: { runner_id: 'rn_1' }, throwOnError: false });
+    await runnerApi.listLeasesRunnersRunnerIdApiLeasesGet({ path: { runner_id: 'rn_1' }, throwOnError: false });
     expect(recovery.recovering()).toBe(true);
     expect(navigateSpy).toHaveBeenCalledTimes(1);
 
@@ -147,6 +149,7 @@ describe('runner App session-recovery fork (issue #312)', () => {
       imports: [App],
       providers: [
         provideZonelessChangeDetection(),
+        provideActiveRunner('rn_1'),
         provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
         provideRouter(routes),
         { provide: EVENT_SOURCE_FACTORY, useValue: factory },
@@ -174,7 +177,7 @@ describe('runner App session-recovery fork (issue #312)', () => {
 
     // Fire-and-forget — the shape a concurrent query's own interceptor call
     // takes, never awaited by the test body itself.
-    void runnerApi.listLeasesApiLeasesGet({ throwOnError: false });
+    void runnerApi.listLeasesRunnersRunnerIdApiLeasesGet({ path: { runner_id: 'rn_1' }, throwOnError: false });
 
     resolveSession();
     // Exercised directly (not just via `afterEach`), mirroring exactly what

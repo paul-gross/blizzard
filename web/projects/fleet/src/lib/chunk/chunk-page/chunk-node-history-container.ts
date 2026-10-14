@@ -20,8 +20,7 @@ import { ChunkNodeHistoryTab } from './chunk-node-history-tab';
  * forwarding resolved state to the presentational {@link ChunkNodeHistoryTab}, which
  * injects nothing.
  *
- * The transcript reads cross the daemon's own seam ({@link CHUNK_PAGE_DAEMON}'s `client`
- * and `plane`), so each daemon's page shows the per-step transcript from its own
+ * The transcript reads cross the daemon's own seam ({@link CHUNK_PAGE_DAEMON}'s `target`), so each daemon's page shows the per-step transcript from its own
  * transcript endpoints.
  *
  * A step can carry more than one segment (a resumed lease). {@link pickedSegmentId}
@@ -55,8 +54,7 @@ export class ChunkNodeHistoryContainer {
   private readonly daemon = inject(CHUNK_PAGE_DAEMON);
 
   protected readonly indexQuery = injectChunkTranscriptsQuery(
-    () => this.daemon.client,
-    () => this.daemon.plane,
+    () => this.daemon.target(),
     () => this.chunkId(),
   );
 
@@ -101,8 +99,7 @@ export class ChunkNodeHistoryContainer {
   );
 
   protected readonly segmentQuery = injectChunkTranscriptSegmentQuery(
-    () => this.daemon.client,
-    () => this.daemon.plane,
+    () => this.daemon.target(),
     () => this.chunkId(),
     () => this.effectiveSegmentId(),
     () => this.effectiveSegmentFinal(),

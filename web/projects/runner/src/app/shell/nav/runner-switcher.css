@@ -1,0 +1,54 @@
+:host {
+  display: flex;
+  flex: 0 1 auto;
+  min-width: 0;
+  margin-left: auto;
+}
+:host(.mobile) {
+  margin-left: 0;
+  border-bottom: 1px solid var(--line);
+}
+.switcher {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 0 12px;
+  border-left: 1px solid var(--line);
+}
+:host(.mobile) .switcher {
+  flex: 1;
+  padding: 4px 8px;
+  border-left: none;
+}
+.switcher-label {
+  flex: none;
+  margin-right: 4px;
+  color: var(--label);
+  white-space: nowrap;
+}
+/* The chips give, never the row: they scroll inside the control. */
+.chips {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+  text-transform: none;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+.chips::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+.brake {
+  color: var(--amber);
+}
+/* In the desktop strip the label gives way first, leaving the tabs their room. */
+@media (max-width: 900px) {
+  :host(:not(.mobile)) .switcher-label {
+    display: none;
+  }
+}

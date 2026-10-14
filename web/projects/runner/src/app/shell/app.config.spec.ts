@@ -53,7 +53,7 @@ describe('runner appConfig wires session recovery (issue #312)', () => {
       path === '/api/auth/session' ? { auth_enabled: true, username: null } : stubError(401, { detail: 'not authenticated' }),
     );
 
-    await runnerApi.listLeasesApiLeasesGet({ throwOnError: false });
+    await runnerApi.listLeasesRunnersRunnerIdApiLeasesGet({ path: { runner_id: 'rn_1' }, throwOnError: false });
 
     expect(navigateSpy).toHaveBeenCalledTimes(1);
   });

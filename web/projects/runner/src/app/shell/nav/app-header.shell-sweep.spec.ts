@@ -8,6 +8,7 @@ import { RunnerLiveUpdates } from '../../core/live/runner-live-updates';
 import { page } from 'vitest/browser';
 
 import { AppHeader } from './app-header';
+import { provideActiveRunner } from '../../core/active-runner';
 
 /**
  * The runner app root's desktop header's half of `web:shell-sweep`
@@ -34,6 +35,7 @@ async function render(degradedConnection = false) {
     imports: [AppHeader],
     providers: [
       provideZonelessChangeDetection(),
+      provideActiveRunner('rn_1'),
       provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
       // The chunk name in the header is a `routerLink`.
       provideRouter([]),

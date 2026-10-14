@@ -6,6 +6,7 @@ import { type RequestClientStub, settle, stubRequestClient } from 'fleet/testing
 import { vi } from 'vitest';
 
 import { LocalInfo } from './app-info';
+import { provideActiveRunner } from '../core/active-runner';
 
 /** The runner's own hub-link facts off `GET /api/dashboard`'s `runner` section —
  * hub-free, so it resolves even when the fleet-summary forward fails (`fleet_summary:
@@ -32,18 +33,16 @@ const COUNTS = { ready: 4, running: 3, waiting: 2, needs: 1 };
 function dashboardBody(fleetSummary: runnerApi.FleetSummaryView | null): runnerApi.DashboardView {
   return {
     runner: RUNNER_STATUS,
-    environments: { items: [] },
     asks: { items: [] },
     escalations: { items: [] },
     takeovers: { items: [] },
     facts: { items: [] },
     harness_health: { items: [] },
-    subscriptions: { items: [] },
     fleet_summary: fleetSummary,
   };
 }
 
-/** Render `LocalInfo` with `/api/dashboard` answered by `fleetSummary` — the canned
+/** Render `LocalInfo` with `/runners/rn_1/api/dashboard` answered by `fleetSummary` — the canned
  * counts, or `null` for the degraded path (a hub outage is a 200 with a null slot
  * under the aggregate, never a failed request). Pass a function to answer each read
  * from live state — with the returned `queryClient`, that drives one instance
@@ -54,13 +53,13 @@ async function render(
   const summaryOf = typeof fleetSummary === 'function' ? fleetSummary : () => fleetSummary;
   const stub = stubRequestClient(runnerClient, (method, path) => {
     if (method !== 'GET') return {};
-    if (path === '/api/dashboard') return dashboardBody(summaryOf());
+    if (path === '/runners/rn_1/api/dashboard') return dashboardBody(summaryOf());
     return {};
   });
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   await TestBed.configureTestingModule({
     imports: [LocalInfo],
-    providers: [provideZonelessChangeDetection(), provideTanStackQuery(queryClient)],
+    providers: [provideZonelessChangeDetection(), provideActiveRunner('rn_1'), provideTanStackQuery(queryClient)],
   }).compileComponents();
   const fixture = TestBed.createComponent(LocalInfo);
   await settle(fixture);
@@ -85,7 +84,7 @@ describe('LocalInfo fleet-summary strip', () => {
     expect(el.querySelector('[data-testid="fleet-strip"]')?.classList.contains('stale')).toBe(false);
     expect(el.querySelector('[data-testid="fleet-age"]')?.textContent).toContain('live');
     // It read through the composed dashboard read, not the hub directly.
-    expect(stub.forRoute('/api/dashboard', 'GET').length).toBeGreaterThan(0);
+    expect(stub.forRoute('/runners/rn_1/api/dashboard', 'GET').length).toBeGreaterThan(0);
   });
 
   it('renders a zero count, not a dash, for an empty bucket', async () => {
@@ -97,7 +96,7 @@ describe('LocalInfo fleet-summary strip', () => {
   });
 
   it('degrades to the last-known/dimmed state when the hub forward fails', async () => {
-    // A hub outage is a 200 `/api/dashboard` read carrying `fleet_summary: null`
+    // A hub outage is a 200 `/runners/rn_1/api/dashboard` read carrying `fleet_summary: null`
     // — the strip dims and banners "last known", and the rest of the
     // panel (hub-free) is unaffected.
     const { fixture, stub: s } = await render(null);
@@ -128,7 +127,7 @@ describe('LocalInfo fleet-summary strip', () => {
     await settle(fixture);
 
     // Two reads actually happened against one instance.
-    expect(stub.forRoute('/api/dashboard', 'GET').length).toBeGreaterThan(1);
+    expect(stub.forRoute('/runners/rn_1/api/dashboard', 'GET').length).toBeGreaterThan(1);
     // The first read's counts survive, no bucket blanks to a dash.
     expect(el.querySelector('[data-testid="fleet-ready"]')?.textContent).toContain('4');
     expect(el.querySelector('[data-testid="fleet-running"]')?.textContent).toContain('3');

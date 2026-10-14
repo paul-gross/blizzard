@@ -7,6 +7,7 @@ import { settle } from 'fleet/testing';
 
 import { App } from './app';
 import { routes } from './app.routes';
+import { ACTIVE_RUNNER } from '../core/active-runner';
 
 /** A do-nothing EventSource so `RunnerLiveUpdates` can open
  * without a real stream — mirrors the hub app-root's own `FakeEventSource`. */
@@ -26,7 +27,7 @@ describe('runner App', () => {
   const previousFetch = globalThis.fetch;
 
   beforeEach(async () => {
-    // The shell mounts `LocalPanel`, which polls `GET /api/leases` —
+    // The shell mounts `LocalPanel`, which polls its runner's leases —
     // stub a minimal empty response so this shell-level test stays independent of
     // the local panel's own query behavior (covered by the board panel's own specs).
     globalThis.fetch = (async () =>
@@ -54,40 +55,55 @@ describe('runner App', () => {
     globalThis.fetch = previousFetch;
   });
 
-  it('redirects the empty path to /board and renders the app-panel shell through the routed tab strip (issue #313)', async () => {
+  it('renders the host page at the root, with only the Host tab and no runner active', async () => {
     const fixture = TestBed.createComponent(App);
     const router = TestBed.inject(Router);
     await router.navigateByUrl('/');
     await settle(fixture);
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(router.url).toBe('/board');
-    expect(el.querySelector('[data-testid="app-nav"]')).toBeTruthy();
-    expect(el.querySelector('app-panel')).toBeTruthy();
-    expect(el.querySelector('[data-testid="local-panel"]')).toBeTruthy();
+    expect(router.url).toBe('/');
+    expect(el.querySelector('[data-testid="host-page"]')).toBeTruthy();
+    expect(el.querySelector('[data-testid="nav-host"]')?.classList.contains('active')).toBe(true);
+    expect(el.querySelector('[data-testid="nav-board"]')).toBeNull();
+    expect(el.querySelector('[data-testid="runner-switcher"]')).toBeTruthy();
+    expect(TestBed.inject(ACTIVE_RUNNER)()).toBeNull();
   });
 
-  it('resolves a selection query-param URL through the redirect and still mounts the panel', async () => {
-    // The panel's selection rides in the URL's query params. The
-    // `''` redirect (`app.routes.ts`) must carry it through to `/board` — a
-    // deep-linked reload lands here. `navigateByUrl` resolves `true` only on a
-    // successful match, so this proves the route table itself, not just that
-    // the panel renders.
+  it('mounts a runner’s board under /runners/:runnerId with its selection, and makes it the active runner', async () => {
     const router = TestBed.inject(Router);
     const fixture = TestBed.createComponent(App);
 
-    const resolved = await router.navigateByUrl('/?chunk=ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9&attempt=lease_01KXKVVF1J3D6H6VYZ3XYNZPRR');
+    const resolved = await router.navigateByUrl(
+      '/runners/rn_1/board?chunk=ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9&attempt=lease_01KXKVVF1J3D6H6VYZ3XYNZPRR',
+    );
     await settle(fixture);
+    const el = fixture.nativeElement as HTMLElement;
 
     expect(resolved).toBe(true);
-    expect(router.url).toBe('/board?chunk=ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9&attempt=lease_01KXKVVF1J3D6H6VYZ3XYNZPRR');
-    expect((fixture.nativeElement as HTMLElement).querySelector('app-panel')).toBeTruthy();
+    expect(el.querySelector('app-panel')).toBeTruthy();
+    expect(el.querySelector('[data-testid="local-panel"]')).toBeTruthy();
+    expect(TestBed.inject(ACTIVE_RUNNER)()).toBe('rn_1');
   });
 
-  it('resolves /events to the full-width fact log, without mounting the board first', async () => {
+  it('follows the route to another runner', async () => {
     const router = TestBed.inject(Router);
     const fixture = TestBed.createComponent(App);
-    const resolved = await router.navigateByUrl('/events');
+    await router.navigateByUrl('/runners/rn_1/board');
+    await settle(fixture);
+    await router.navigateByUrl('/runners/rn_2/events');
+    await settle(fixture);
+
+    expect(TestBed.inject(ACTIVE_RUNNER)()).toBe('rn_2');
+    expect((fixture.nativeElement as HTMLElement).querySelector('[data-testid="nav-board"]')?.getAttribute('href')).toBe(
+      '/runners/rn_2/board',
+    );
+  });
+
+  it('resolves a runner’s events page to the full-width fact log, without mounting the board first', async () => {
+    const router = TestBed.inject(Router);
+    const fixture = TestBed.createComponent(App);
+    const resolved = await router.navigateByUrl('/runners/rn_1/events');
     await settle(fixture);
     const el = fixture.nativeElement as HTMLElement;
 
@@ -96,14 +112,37 @@ describe('runner App', () => {
     expect(el.querySelector('app-panel')).toBeNull();
   });
 
+  it('resolves a runner’s machine page', async () => {
+    const router = TestBed.inject(Router);
+    const fixture = TestBed.createComponent(App);
+    await router.navigateByUrl('/runners/rn_1/machine');
+    await settle(fixture);
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="machine-page"]')).toBeTruthy();
+    expect(el.querySelector('[data-testid="nav-machine"]')?.classList.contains('active')).toBe(true);
+  });
+
+  it('renders no board at the old root /board, and does not redirect', async () => {
+    const router = TestBed.inject(Router);
+    const fixture = TestBed.createComponent(App);
+    await router.navigateByUrl('/board');
+    await settle(fixture);
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(router.url).toBe('/board');
+    expect(el.querySelector('app-panel')).toBeNull();
+    expect(el.querySelector('[data-testid="host-page"]')).toBeTruthy();
+  });
+
   describe('the app-root header/nav/content order', () => {
     // Pins the header as app-root chrome via `AppShell`: it precedes the nav
-    // strip in DOM order on /board and stays mounted on /events, matching the
+    // strip in DOM order on a runner's board and stays mounted on its events, matching the
     // hub.
-    it('renders the header above the tab strip on /board, not the other way around', async () => {
+    it('renders the header above the tab strip on a board, not the other way around', async () => {
       const router = TestBed.inject(Router);
       const fixture = TestBed.createComponent(App);
-      await router.navigateByUrl('/board');
+      await router.navigateByUrl('/runners/rn_1/board');
       await settle(fixture);
       const el = fixture.nativeElement as HTMLElement;
 
@@ -116,10 +155,10 @@ describe('runner App', () => {
       ).toBe(true);
     });
 
-    it('keeps the header mounted on /events, outside the board route', async () => {
+    it('keeps the header mounted on a runner’s events, outside the board route', async () => {
       const router = TestBed.inject(Router);
       const fixture = TestBed.createComponent(App);
-      await router.navigateByUrl('/events');
+      await router.navigateByUrl('/runners/rn_1/events');
       await settle(fixture);
       const el = fixture.nativeElement as HTMLElement;
 
@@ -130,46 +169,44 @@ describe('runner App', () => {
   it('marks the active route on the nav tabs and preserves the selection across a Board → Events → Board round trip', async () => {
     const router = TestBed.inject(Router);
     const fixture = TestBed.createComponent(App);
-    await router.navigateByUrl('/board?chunk=ch_1');
+    await router.navigateByUrl('/runners/rn_1/board?chunk=ch_1');
     await settle(fixture);
     let el = fixture.nativeElement as HTMLElement;
 
     expect(el.querySelector('[data-testid="nav-board"]')?.classList.contains('active')).toBe(true);
     expect(el.querySelector('[data-testid="nav-events"]')?.classList.contains('active')).toBe(false);
+    expect(el.querySelector('[data-testid="nav-host"]')?.classList.contains('active')).toBe(false);
 
     el.querySelector<HTMLElement>('[data-testid="nav-events"]')?.click();
     await settle(fixture);
     el = fixture.nativeElement as HTMLElement;
 
-    expect(router.url).toBe('/events?chunk=ch_1');
+    expect(router.url).toBe('/runners/rn_1/events?chunk=ch_1');
     expect(el.querySelector('[data-testid="nav-events"]')?.classList.contains('active')).toBe(true);
 
     el.querySelector<HTMLElement>('[data-testid="nav-board"]')?.click();
     await settle(fixture);
 
-    expect(router.url).toBe('/board?chunk=ch_1');
+    expect(router.url).toBe('/runners/rn_1/board?chunk=ch_1');
   });
 
   describe('mobile mode', () => {
-    it('renders the persistent bottom tab bar (Board/Events routed, Asks/Transcripts inert) instead of the top nav', async () => {
+    it('renders the persistent bottom tab bar and the runner switcher instead of the top nav', async () => {
       const viewport = TestBed.inject(ViewportService);
       viewport.setOverride('mobile');
       const router = TestBed.inject(Router);
       const fixture = TestBed.createComponent(App);
-      await router.navigateByUrl('/');
+      await router.navigateByUrl('/runners/rn_1/board');
       await settle(fixture);
       const el = fixture.nativeElement as HTMLElement;
 
       expect(el.querySelector('[data-testid="app-nav"]')).toBeNull();
       expect(el.querySelector('[data-testid="local-panel-mobile-tab-bar"]')).toBeTruthy();
-      const board = el.querySelector('[data-testid="tab-board"]');
-      const events = el.querySelector('[data-testid="tab-events"]');
-      const asks = el.querySelector('[data-testid="tab-asks-runner"]');
-      const transcripts = el.querySelector('[data-testid="tab-transcripts-runner"]');
-      expect(board?.classList.contains('on')).toBe(true);
-      expect(events).toBeTruthy();
-      expect(asks?.hasAttribute('disabled')).toBe(true);
-      expect(transcripts?.hasAttribute('disabled')).toBe(true);
+      expect(el.querySelector('[data-testid="runner-switcher"]')).toBeTruthy();
+      expect(el.querySelector('[data-testid="tab-board"]')?.classList.contains('on')).toBe(true);
+      expect(el.querySelector('[data-testid="tab-host"]')?.classList.contains('on')).toBe(false);
+      expect(el.querySelector('[data-testid="tab-events"]')).toBeTruthy();
+      expect(el.querySelector('[data-testid="tab-asks-runner"]')?.hasAttribute('disabled')).toBe(true);
     });
   });
 });

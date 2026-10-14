@@ -1,32 +1,39 @@
 import { type runnerApi, type SseStatus, type StatCell } from 'fleet';
 
 /** The header's connection label: the live stream's reconnect first, then its settled auth failure, then the
- * dashboard read's pending and failed states — `ok` otherwise. */
+ * host read's pending and failed states — `ok` otherwise. */
 export function headerConnectionLabel(
   streamState: SseStatus,
   authFailed: boolean,
-  dashboardPending: boolean,
-  dashboardError: boolean,
+  hostPending: boolean,
+  hostError: boolean,
 ): string {
   if (streamState === 'reconnecting') return 'reconnecting…';
   if (authFailed) return 'degraded';
-  if (dashboardPending) return 'connecting…';
-  if (dashboardError) return 'offline';
+  if (hostPending) return 'connecting…';
+  if (hostError) return 'offline';
   return 'ok';
 }
 
-/** The header's live stat cells — environments in use over the pool's size, active agent leases over
- * `max_agents` — withheld (`[]`) while the dashboard read is still pending. */
+/** The header's live stat cells, across the whole host — environments in use over every workspace's environments,
+ * agents in use over every serving runner's `max_agents` — withheld (`[]`) while the host's runner read is still
+ * pending. */
 export function headerStatCells(
-  dashboardPending: boolean,
-  dashboard: runnerApi.DashboardView | undefined,
+  hostPending: boolean,
+  runners: readonly runnerApi.HostRunnerView[] | undefined,
+  environments: readonly runnerApi.HostWorkspaceEnvironmentsView[] | undefined,
 ): readonly StatCell[] {
-  if (dashboardPending) return [];
-  const envs = dashboard?.environments?.items ?? [];
-  const envsUsed = envs.filter((env) => env.chunk_id != null).length;
-  const capacities = dashboard?.runner?.capacities;
+  if (hostPending) return [];
+  const envs = (environments ?? []).flatMap((workspace) => workspace.items ?? []);
+  const envsUsed = envs.filter((env) => env.held ?? env.chunk_id != null).length;
+  const serving = (runners ?? []).filter((runner) => runner.state === 'serving');
   return [
     { key: 'envs', label: 'Envs', value: envsUsed, capacity: envs.length },
-    { key: 'agents', label: 'Agents', value: capacities?.used ?? 0, capacity: capacities?.max_agents ?? 0 },
+    {
+      key: 'agents',
+      label: 'Agents',
+      value: serving.reduce((sum, runner) => sum + (runner.agents_in_use ?? 0), 0),
+      capacity: serving.reduce((sum, runner) => sum + (runner.max_agents ?? 0), 0),
+    },
   ];
 }

@@ -8,6 +8,7 @@ import { vi } from 'vitest';
 import { injectRunnerSessionQuery } from '../identity/auth.query';
 import { injectRunnerLeasesQuery } from '../leases.query';
 import { injectRunnerDashboardQuery } from '../status.query';
+import { provideActiveRunner } from '../active-runner';
 
 /** A minimal host mounting all four backstop-governed reads in one injection context —
  * `chunkId` is fixed `null` (unselected), the gating {@link injectChunkDetailQuery}
@@ -22,8 +23,7 @@ class PollingHost {
   readonly leases = injectRunnerLeasesQuery();
   readonly session = injectRunnerSessionQuery();
   readonly chunkDetail = injectChunkDetailQuery(
-    () => runnerClient,
-    () => 'runner',
+    () => ({ plane: 'runner', client: runnerClient, runnerId: 'rn_1' }),
     () => null,
   );
 }
@@ -46,8 +46,8 @@ describe('the panel\'s D7 poll floors, idle and unselected', () => {
   it('re-fires only dashboard and leases across two backstop intervals; session polls once, chunk-detail never', async () => {
     vi.useFakeTimers();
     stub = stubRequestClient(runnerClient, (method, path) => {
-      if (method === 'GET' && path === '/api/dashboard') return {};
-      if (method === 'GET' && path === '/api/leases') return { items: [] };
+      if (method === 'GET' && path === '/runners/rn_1/api/dashboard') return {};
+      if (method === 'GET' && path === '/runners/rn_1/api/leases') return { items: [] };
       if (method === 'GET' && path === '/api/auth/session') return { auth_enabled: true, username: 'alice' };
       return {};
     });
@@ -55,6 +55,7 @@ describe('the panel\'s D7 poll floors, idle and unselected', () => {
       imports: [PollingHost],
       providers: [
         provideZonelessChangeDetection(),
+        provideActiveRunner('rn_1'),
         provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
       ],
     }).compileComponents();
@@ -63,21 +64,21 @@ describe('the panel\'s D7 poll floors, idle and unselected', () => {
     await vi.advanceTimersByTimeAsync(0);
 
     // The one initial read each enabled query issues on mount.
-    expect(stub.forRoute('/api/dashboard', 'GET')).toHaveLength(1);
-    expect(stub.forRoute('/api/leases', 'GET')).toHaveLength(1);
+    expect(stub.forRoute('/runners/rn_1/api/dashboard', 'GET')).toHaveLength(1);
+    expect(stub.forRoute('/runners/rn_1/api/leases', 'GET')).toHaveLength(1);
     expect(stub.forRoute('/api/auth/session', 'GET')).toHaveLength(1);
-    expect(stub.requests.filter((r) => /^\/api\/chunks\//.test(r.path))).toHaveLength(0);
+    expect(stub.requests.filter((r) => /^\/runners\/rn_1\/api\/chunks\//.test(r.path))).toHaveLength(0);
 
     // Idle for a window spanning two backstop intervals — no SSE event ever fires.
     await vi.advanceTimersByTimeAsync(RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS * 2 + 1_000);
 
     // Dashboard and leases: the backstop kept firing.
-    expect(stub.forRoute('/api/dashboard', 'GET').length).toBeGreaterThanOrEqual(3);
-    expect(stub.forRoute('/api/leases', 'GET').length).toBeGreaterThanOrEqual(3);
+    expect(stub.forRoute('/runners/rn_1/api/dashboard', 'GET').length).toBeGreaterThanOrEqual(3);
+    expect(stub.forRoute('/runners/rn_1/api/leases', 'GET').length).toBeGreaterThanOrEqual(3);
     // Session: no refetch interval — just the one mount-time read.
     expect(stub.forRoute('/api/auth/session', 'GET')).toHaveLength(1);
     // Chunk-detail: disabled the whole time — never issued even its first read.
-    expect(stub.requests.filter((r) => /^\/api\/chunks\//.test(r.path))).toHaveLength(0);
+    expect(stub.requests.filter((r) => /^\/runners\/rn_1\/api\/chunks\//.test(r.path))).toHaveLength(0);
     expect(fixture.componentInstance.chunkDetail.isPending()).toBe(true);
   });
 });

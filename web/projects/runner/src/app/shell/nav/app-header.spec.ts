@@ -2,13 +2,14 @@ import { type Provider, provideZonelessChangeDetection, signal } from '@angular/
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { runnerClient, type runnerApi, type SseStatus } from 'fleet';
+import { runnerClient, type SseStatus } from 'fleet';
 import { type RequestClientStub, hiddenAtContainerWidth, settle, stubError, stubRequestClient } from 'fleet/testing';
 import { RunnerLogout } from '../../core/identity/runner-logout';
 import { RunnerLiveUpdates } from '../../core/live/runner-live-updates';
 import { vi } from 'vitest';
 
 import { AppHeader } from './app-header';
+import { provideActiveRunner } from '../../core/active-runner';
 
 /** A `RunnerLiveUpdates` stand-in so a spec can drive {@link AppHeader}'s
  * `connection` fold without opening a real stream — the header
@@ -17,36 +18,12 @@ function fakeLiveUpdates(status: SseStatus, authFailed = false): Provider {
   return { provide: RunnerLiveUpdates, useValue: { status: signal(status), authFailed: signal(authFailed) } };
 }
 
-/** A full `DashboardView` body — every field this header's own
- * dashboard read touches (`runner.capacities`, `environments`), plus every
- * other section a plausible/empty default. */
-function dashboardBody(overrides: Partial<runnerApi.DashboardView> = {}): runnerApi.DashboardView {
-  return {
-    runner: {
-      runner_id: 'runner-local',
-      workspace_id: 'workspace-local',
-      pause: { local: false, hub: false, effective: false },
-      capacities: { max_agents: 4, used: 0, free: 4 },
-      hub: { endpoint: 'http://127.0.0.1:8421', reachable: true, last_contact_at: null, buffer_depth: 0 },
-      last_tick_at: null,
-    },
-    environments: { items: [] },
-    asks: { items: [] },
-    escalations: { items: [] },
-    takeovers: { items: [] },
-    facts: { items: [] },
-    harness_health: { items: [] },
-    subscriptions: { items: [] },
-    fleet_summary: null,
-    ...overrides,
-  };
-}
-
 async function render(extraProviders: Provider[] = []) {
   await TestBed.configureTestingModule({
     imports: [AppHeader],
     providers: [
       provideZonelessChangeDetection(),
+      provideActiveRunner('rn_1'),
       provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
       provideRouter([]),
       ...extraProviders,
@@ -76,7 +53,7 @@ describe('AppHeader', () => {
 
   it('shows offline in the header when the runner local API is unreachable (issue #131)', async () => {
     stub = stubRequestClient(runnerClient, (method, path) =>
-      method === 'GET' && path === '/api/dashboard' ? stubError(503, { detail: 'down' }) : { items: [] },
+      method === 'GET' && path === '/api/host/runners' ? stubError(503, { detail: 'down' }) : { items: [] },
     );
     const fixture = await render();
     const el = fixture.nativeElement as HTMLElement;
@@ -84,48 +61,61 @@ describe('AppHeader', () => {
     expect(el.querySelector('[data-testid="conn"]')?.textContent).toContain('offline');
   });
 
-  it('shows reconnecting… while the live stream retries a drop, even though the dashboard read is ok (blizzard#333)', async () => {
+  it('shows reconnecting… while the live stream retries a drop, even though the host read is ok (blizzard#333)', async () => {
     const fixture = await render([fakeLiveUpdates('reconnecting')]);
     const el = fixture.nativeElement as HTMLElement;
 
     expect(el.querySelector('[data-testid="conn"]')?.textContent).toContain('reconnecting…');
   });
 
-  it('shows degraded once the stream has exhausted its bounded re-arm, even though the dashboard read is ok (blizzard#333)', async () => {
+  it('shows degraded once the stream has exhausted its bounded re-arm, even though the host read is ok (blizzard#333)', async () => {
     const fixture = await render([fakeLiveUpdates('closed', true)]);
     const el = fixture.nativeElement as HTMLElement;
 
     expect(el.querySelector('[data-testid="conn"]')?.textContent).toContain('degraded');
   });
 
-  it('folds the runner status and environments reads into the header stat cells (issue #131)', async () => {
-    stub = stubRequestClient(runnerClient, (method, path) =>
-      method === 'GET' && path === '/api/dashboard'
-        ? dashboardBody({
-            runner: {
-              runner_id: 'runner-local',
-              workspace_id: 'workspace-local',
-              pause: { local: false, hub: false, effective: false },
-              capacities: { max_agents: 2, used: 1, free: 1 },
-              hub: { endpoint: 'http://127.0.0.1:8421', reachable: true, last_contact_at: null, buffer_depth: 0 },
-              last_tick_at: null,
-            },
-            environments: {
+  it('folds the host’s runner and environment reads into the header stat cells', async () => {
+    stub = stubRequestClient(runnerClient, (method, path) => {
+      if (method !== 'GET') return {};
+      if (path === '/api/host/runners') {
+        return {
+          items: [
+            { runner_id: 'rn_1', name: 'r-claude', state: 'serving', agents_in_use: 1, max_agents: 2 },
+            { runner_id: 'rn_2', name: 'r-chatgpt', state: 'serving', agents_in_use: 0, max_agents: 1 },
+          ],
+        };
+      }
+      if (path === '/api/host/environments') {
+        return {
+          workspaces: [
+            {
+              workspace_id: 'ws-a',
               items: [
-                { environment_id: 'alpha', chunk_id: 'ch_1', held_since: '2026-07-16T11:18:00.000Z' },
-                { environment_id: 'beta', chunk_id: null, held_since: null },
-                { environment_id: 'gamma', chunk_id: null, held_since: null },
-                { environment_id: 'delta', chunk_id: null, held_since: null },
+                { environment_id: 'alpha', held: true, chunk_id: 'ch_1', runner_id: 'rn_1' },
+                { environment_id: 'beta', held: false },
               ],
             },
-          })
-        : { items: [] },
-    );
+            { workspace_id: 'ws-b', items: [{ environment_id: 'gamma' }, { environment_id: 'delta' }] },
+          ],
+        };
+      }
+      return { items: [] };
+    });
     const fixture = await render();
     const el = fixture.nativeElement as HTMLElement;
 
     expect(el.querySelector('[data-testid="stat-envs"]')?.textContent?.trim()).toBe('1/4');
-    expect(el.querySelector('[data-testid="stat-agents"]')?.textContent?.trim()).toBe('1/2');
+    expect(el.querySelector('[data-testid="stat-agents"]')?.textContent?.trim()).toBe('1/3');
+  });
+
+  it('renders the pause control only while a runner is active', async () => {
+    const onRunner = await render();
+    expect((onRunner.nativeElement as HTMLElement).querySelector('[data-testid="pause-control"]')).not.toBeNull();
+
+    TestBed.resetTestingModule();
+    const onHost = await render([provideActiveRunner(null)]);
+    expect((onHost.nativeElement as HTMLElement).querySelector('[data-testid="pause-control"]')).toBeNull();
   });
 
   it('withholds the header stat cells before the first read resolves, rather than a misleading 0/0', async () => {
@@ -134,12 +124,13 @@ describe('AppHeader', () => {
       imports: [AppHeader],
       providers: [
         provideZonelessChangeDetection(),
+        provideActiveRunner('rn_1'),
         provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
         provideRouter([]),
       ],
     }).compileComponents();
     const fixture = TestBed.createComponent(AppHeader);
-    // Right after creation neither the status nor the environments read has resolved
+    // Right after creation neither the runners nor the environments read has resolved
     // yet — the same gap the hub header's own spendToday cell withholds itself for.
     fixture.detectChanges();
     let el = fixture.nativeElement as HTMLElement;

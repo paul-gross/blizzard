@@ -6,9 +6,10 @@ import { type RequestClientStub, settle, stubError, stubRequestClient } from 'fl
 
 import { ChunkCard } from './chunk-card';
 import type { MachineChunkStatus } from './chunk-status';
+import { provideActiveRunner } from '../../core/active-runner';
 
 /** Matches `GET /api/chunks/{chunk_id}/work-items` for any chunk id. */
-const WORK_ITEMS_ROUTE = /^\/api\/chunks\/[^/]+\/work-items$/;
+const WORK_ITEMS_ROUTE = /^\/runners\/rn_1\/api\/chunks\/[^/]+\/work-items$/;
 
 const LEASE = (overrides: Partial<runnerApi.LeaseView> = {}): runnerApi.LeaseView => ({
   lease_id: 'lease_01KXKVVF1J3D6H6VYZ3XYNZPRR',
@@ -41,6 +42,7 @@ async function render(workItemsResponse: (method: string, path: string) => unkno
     imports: [ChunkCard],
     providers: [
       provideZonelessChangeDetection(),
+      provideActiveRunner('rn_1'),
       provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
     ],
   }).compileComponents();

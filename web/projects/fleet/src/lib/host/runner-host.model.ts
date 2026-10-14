@@ -15,29 +15,54 @@ export function heldForLabel(heldSince: string | null | undefined, now: number):
   return age === null ? '—' : formatHeldFor(age);
 }
 
-/** One {@link EnvironmentRow} per pool environment, in wire order, aged against `now`. */
-export function runnerEnvironmentRows(envs: readonly runnerApi.EnvironmentView[], now: number): readonly EnvironmentRow[] {
+/** Who holds a held environment — its runner's display name and the project of the chunk
+ * holding it, `null` for an unheld one or one whose host names no runner. */
+function holderLabel(env: runnerApi.HostEnvironmentView, runnerName: (runnerId: string) => string): string | null {
+  if (env.runner_id == null) return null;
+  return [runnerName(env.runner_id), env.project].filter((part) => part != null && part !== '').join(' · ');
+}
+
+/** One {@link EnvironmentRow} per environment of a workspace, in wire order, aged against
+ * `now` — `runnerName` resolves a holder's runner id to its display name. */
+export function runnerEnvironmentRows(
+  envs: readonly runnerApi.HostEnvironmentView[],
+  now: number,
+  runnerName: (runnerId: string) => string,
+): readonly EnvironmentRow[] {
   return envs.map((env) => ({
     environmentId: env.environment_id,
-    isHeld: env.chunk_id != null,
+    isHeld: env.held ?? env.chunk_id != null,
     chunkRef: env.chunk_id == null ? '' : compactRef(env.chunk_id),
     heldFor: heldForLabel(env.held_since, now),
-    holder: null,
+    holder: holderLabel(env, runnerName),
   }));
 }
 
-/** The runner dashboard's pool as the shared workspace table's one workspace — the
- * dashboard names no workspace, so the pool renders as its environments alone. */
-export function runnerWorkspaceRows(envs: readonly runnerApi.EnvironmentView[], now: number): readonly WorkspaceRow[] {
-  const environments = runnerEnvironmentRows(envs, now);
-  return [
-    {
-      workspaceId: null,
-      capacity: environments.length,
+/** The host's environments grouped by workspace, as the shared workspace table's rows —
+ * one per declared workspace in `workspaces`' order, its capacity the workspace's own
+ * `max_environments`. A group naming a workspace the declaration list does not carry
+ * still renders, after the declared ones, with no capacity. */
+export function runnerWorkspaceRows(
+  workspaces: readonly runnerApi.HostWorkspaceView[],
+  groups: readonly runnerApi.HostWorkspaceEnvironmentsView[],
+  now: number,
+  runnerName: (runnerId: string) => string,
+): readonly WorkspaceRow[] {
+  const byId = new Map(groups.map((group) => [group.workspace_id, group.items ?? []]));
+  const declared = new Set(workspaces.map((ws) => ws.workspace_id));
+  const row = (workspaceId: string, capacity: number | null): WorkspaceRow => {
+    const environments = runnerEnvironmentRows(byId.get(workspaceId) ?? [], now, runnerName);
+    return {
+      workspaceId,
+      capacity,
       inUse: environments.filter((env) => env.isHeld).length,
       flag: null,
       environments,
-    },
+    };
+  };
+  return [
+    ...workspaces.map((ws) => row(ws.workspace_id, ws.max_environments)),
+    ...groups.filter((group) => !declared.has(group.workspace_id)).map((group) => row(group.workspace_id, null)),
   ];
 }
 
@@ -92,11 +117,13 @@ export function renewalLabel(
 }
 
 /** One shared subscription row per declared subscription, in wire order, aged against
- * `now`. The dashboard reports the newest sampling attempt rather than usage windows, so
- * each row carries its {@link SubscriptionPace.sample} line and no pace bars. */
+ * `now`. The host reports the newest sampling attempt rather than usage windows, so
+ * each row carries its {@link SubscriptionPace.sample} line and no pace bars, and names
+ * the runners spending it — `runnerName` resolves a spender's id to its display name. */
 export function runnerSubscriptionPaces(
-  subs: readonly runnerApi.SubscriptionView[],
+  subs: readonly runnerApi.HostSubscriptionView[],
   now: number,
+  runnerName: (runnerId: string) => string,
 ): readonly SubscriptionPace[] {
   return subs.map((sub) => ({
     slug: sub.slug,
@@ -113,6 +140,7 @@ export function runnerSubscriptionPaces(
       sampledAgo: sampledAgoLabel(sub.sampled_at ?? null, now),
       ok: sub.ok ?? null,
     },
+    spenders: (sub.spenders ?? []).map(runnerName),
     renewalLabel: renewalLabel(
       sub.renewal_result ?? null,
       sub.renewal_failure_reason ?? null,

@@ -1,7 +1,8 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { CdkMenuTrigger } from '@angular/cdk/menu';
 import { BoardHeader, KitAvatar, KitMenu, KitMenuItem, KitMenuPanel, type StatCell, ViewportMenu } from 'fleet';
-import { injectRunnerDashboardQuery } from '../../core/status.query';
+import { injectActiveRunner } from '../../core/active-runner';
+import { injectHostEnvironmentsQuery, injectHostRunnersQuery } from '../../host/host.query';
 import { LocalIdentity } from '../../core/identity/app-identity';
 import { RunnerLogout } from '../../core/identity/runner-logout';
 import { LocalPauseControl } from '../../machine/app-pause-control';
@@ -14,19 +15,19 @@ import { headerConnectionLabel, headerStatCells } from './app-header.model';
  * shelf the hub's own header sits on. Mounted there, `AppShell` (`fleet`) enforces header-above-nav-above-content by
  * construction and the header persists across every route, matching the hub.
  *
- * A small container, not a presentational component: it injects
- * {@link injectRunnerDashboardQuery} itself for {@link connection} and
- * {@link headerStats}; `LocalPanel` (`runner/src/app/board/app-panel.ts`)
- * renders no header and reads neither. TanStack dedupes query-key
- * injections, so this component injecting the same dashboard query
- * `LocalPanel` (and several of its rails) also injects costs no extra
- * network request — one poll for the whole app, not two. It also injects
+ * A small container, not a presentational component: it injects the host's
+ * runner and environment reads itself for {@link connection} and
+ * {@link headerStats} — the header is the host's, on every page, whether or not
+ * a runner is active. TanStack dedupes query-key injections, so this component
+ * injecting the same host reads the host page and the switcher inject costs no
+ * extra network request. It also injects
  * {@link RunnerLiveUpdates} directly — the same root-provided
  * singleton `../app.ts` starts — purely to read its `status`/`authFailed` for
  * {@link connection}; it maps them into `BoardHeader`'s input the same way it
  * already maps the dashboard read, never starting or restarting the stream itself.
  *
- * The pause control ({@link LocalPauseControl}), the identity
+ * The pause control ({@link LocalPauseControl}) acts on the active runner and
+ * renders only while one is active. It, the identity
  * block ({@link LocalIdentity}), and the profile menu ride in the header's
  * `[header-trailing]` slot, exactly as they did inside `LocalPanelLayout` —
  * each a self-fetching mini-container of its own, composed here without this
@@ -44,8 +45,13 @@ import { headerConnectionLabel, headerStatCells } from './app-header.model';
   styleUrl: './app-header.css',
 })
 export class AppHeader {
-  private readonly dashboardQuery = injectRunnerDashboardQuery();
+  private readonly runnersQuery = injectHostRunnersQuery();
+  private readonly environmentsQuery = injectHostEnvironmentsQuery();
   private readonly liveUpdates = inject(RunnerLiveUpdates);
+
+  /** Whether a runner is active — the pause control renders only then. */
+  private readonly activeRunner = injectActiveRunner();
+  protected readonly runnerActive = computed(() => this.activeRunner() !== null);
 
   /** The shell's one logout owner; the menu item's pending flag and trigger bind to it. */
   protected readonly logout = inject(RunnerLogout);
@@ -56,25 +62,25 @@ export class AppHeader {
    * drop, `degraded` once the stream's `401` channel has exhausted its bounded
    * re-arm and settled dead rather than merely
    * blipping through one — no dashboard read ever surfaces that on its own, since
-   * every other `401` degrades in its own region and the dashboard poll itself can
-   * still be `ok`. Falls through to the dashboard read's own state — `ok` once it
+   * every other `401` degrades in its own region and the host read itself can
+   * still be `ok`. Falls through to the host's runner read's own state — `ok` once it
    * resolves, `offline` on a failed read, `connecting…` for the pending gap before
     * the first read settles — otherwise. */
   protected readonly connection = computed<string>(() =>
     headerConnectionLabel(
       this.liveUpdates.status(),
       this.liveUpdates.authFailed(),
-      this.dashboardQuery.isPending(),
-      this.dashboardQuery.isError(),
+      this.runnersQuery.isPending(),
+      this.runnersQuery.isError(),
     ),
   );
 
-  /** The header's live stat cells — environments in use/capacity off the
-   * environments pool, active agent leases/capacity off the runner section's
-   * `capacities`. Withheld (`[]`) until the dashboard read has resolved at
+  /** The header's live stat cells across the host — environments in use over
+   * every workspace's environments, agents in use over every serving runner's
+   * ceiling. Withheld (`[]`) until the host's runner read has resolved at
    * least once, the same stance the hub header's own `spendToday` cell takes
     * rather than show a misleading `Envs 0/0`. */
   protected readonly headerStats = computed<readonly StatCell[]>(() =>
-    headerStatCells(this.dashboardQuery.isPending(), this.dashboardQuery.data()),
+    headerStatCells(this.runnersQuery.isPending(), this.runnersQuery.data(), this.environmentsQuery.data()),
   );
 }

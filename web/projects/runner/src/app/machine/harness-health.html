@@ -1,0 +1,11 @@
+<div class="wrap" data-testid="harness-health">
+  <fleet-kit-async-state
+    [state]="triadState()"
+    loadingText="LOADING…"
+    errorText="HARNESS HEALTH UNAVAILABLE"
+    emptyText="NO HARNESS BINDINGS"
+    emptyTestid="harness-health-empty"
+  >
+    <app-harness-health-view [harnesses]="harnesses()" />
+  </fleet-kit-async-state>
+</div>

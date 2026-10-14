@@ -10,9 +10,10 @@ import {
 } from 'fleet';
 import { vi } from 'vitest';
 
-import { runnerChunkDetailKey, runnerDashboardKey, runnerLeasesKey } from '../query-keys';
+import { hostKey, runnerChunkDetailKey, runnerDashboardKey, runnerLeasesKey } from '../query-keys';
 import { RunnerLiveUpdates, STREAM_REARM_MAX_ATTEMPTS } from './runner-live-updates';
 import { SessionRecovery } from '../identity/session-recovery';
+import { provideActiveRunner } from '../active-runner';
 
 /** EventSource stand-in with named-listener and auth-failure support — jsdom ships
  * none, and reconnect plus the stream's `401` channel must be driven deterministically.
@@ -70,6 +71,7 @@ describe('RunnerLiveUpdates (blizzard#317 Phase 4)', () => {
     TestBed.configureTestingModule({
       providers: [
         provideZonelessChangeDetection(),
+        provideActiveRunner('rn_1'),
         provideTanStackQuery(queryClient),
         { provide: EVENT_SOURCE_FACTORY, useValue: factory },
       ],
@@ -82,148 +84,99 @@ describe('RunnerLiveUpdates (blizzard#317 Phase 4)', () => {
     vi.useRealTimers();
   });
 
-  it('invalidates the leases list, the dashboard, and the named chunk on lease-changed', () => {
+  /** The query keys every `invalidateQueries` call named, after one coalesce window. */
+  function emitAndCollect(frames: readonly [string, object][]): unknown[] {
     const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
     TestBed.runInInjectionContext(() => TestBed.inject(RunnerLiveUpdates).start());
-
     const source = FakeEventSource.instances[0];
     source.open();
-    source.emitNamed(
-      'lease-changed',
-      JSON.stringify({ lease_id: 'lease_1', chunk_id: 'ch_1', cause: 'transitioned' }),
-      '1',
-    );
+    frames.forEach(([kind, payload], i) => source.emitNamed(kind, JSON.stringify(payload), String(i + 1)));
     vi.advanceTimersByTime(INVALIDATION_COALESCE_WINDOW_MS);
+    return invalidate.mock.calls.map((call) => call[0]?.queryKey);
+  }
 
-    const keys = invalidate.mock.calls.map((call) => call[0]?.queryKey);
-    expect(keys).toContainEqual(runnerLeasesKey);
-    expect(keys).toContainEqual(runnerDashboardKey);
-    expect(keys).toContainEqual(runnerChunkDetailKey('ch_1'));
+  it('invalidates the named runner’s leases, dashboard, and chunk, and the host, on lease-changed', () => {
+    const keys = emitAndCollect([
+      ['lease-changed', { runner_id: 'rn_1', lease_id: 'lease_1', chunk_id: 'ch_1', cause: 'transitioned' }],
+    ]);
+
+    expect(keys).toContainEqual(runnerLeasesKey('rn_1'));
+    expect(keys).toContainEqual(runnerDashboardKey('rn_1'));
+    expect(keys).toContainEqual(runnerChunkDetailKey('rn_1', 'ch_1'));
+    expect(keys).toContainEqual(hostKey);
   });
 
-  it('invalidates only the dashboard (and the named chunk) on ask-changed — not the leases list', () => {
-    const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
-    TestBed.runInInjectionContext(() => TestBed.inject(RunnerLiveUpdates).start());
+  it('invalidates only the named runner’s dashboard and chunk on ask-changed — not its leases list', () => {
+    const keys = emitAndCollect([
+      ['ask-changed', { runner_id: 'rn_1', lease_id: 'lease_1', chunk_id: 'ch_2', question_id: 'q_1', cause: 'asked' }],
+    ]);
 
-    const source = FakeEventSource.instances[0];
-    source.open();
-    source.emitNamed(
-      'ask-changed',
-      JSON.stringify({ lease_id: 'lease_1', chunk_id: 'ch_2', question_id: 'q_1', cause: 'asked' }),
-      '1',
-    );
-    vi.advanceTimersByTime(INVALIDATION_COALESCE_WINDOW_MS);
-
-    const keys = invalidate.mock.calls.map((call) => call[0]?.queryKey);
-    expect(keys).toContainEqual(runnerDashboardKey);
-    expect(keys).toContainEqual(runnerChunkDetailKey('ch_2'));
-    expect(keys).not.toContainEqual(runnerLeasesKey);
+    expect(keys).toContainEqual(runnerDashboardKey('rn_1'));
+    expect(keys).toContainEqual(runnerChunkDetailKey('rn_1', 'ch_2'));
+    expect(keys).not.toContainEqual(runnerLeasesKey('rn_1'));
   });
 
-  it('invalidates the dashboard and the named chunk on escalation-changed', () => {
-    const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
-    TestBed.runInInjectionContext(() => TestBed.inject(RunnerLiveUpdates).start());
+  it('invalidates the named runner’s dashboard and chunk on escalation-changed and takeover-changed', () => {
+    const keys = emitAndCollect([
+      ['escalation-changed', { runner_id: 'rn_1', chunk_id: 'ch_3', cause: 'opened' }],
+      ['takeover-changed', { runner_id: 'rn_1', chunk_id: 'ch_4', takeover_id: 'tko_1', cause: 'opened' }],
+    ]);
 
-    const source = FakeEventSource.instances[0];
-    source.open();
-    source.emitNamed('escalation-changed', JSON.stringify({ chunk_id: 'ch_3', cause: 'opened' }), '1');
-    vi.advanceTimersByTime(INVALIDATION_COALESCE_WINDOW_MS);
-
-    const keys = invalidate.mock.calls.map((call) => call[0]?.queryKey);
-    expect(keys).toContainEqual(runnerDashboardKey);
-    expect(keys).toContainEqual(runnerChunkDetailKey('ch_3'));
+    expect(keys).toContainEqual(runnerDashboardKey('rn_1'));
+    expect(keys).toContainEqual(runnerChunkDetailKey('rn_1', 'ch_3'));
+    expect(keys).toContainEqual(runnerChunkDetailKey('rn_1', 'ch_4'));
   });
 
-  it('invalidates the dashboard and the named chunk on takeover-changed', () => {
-    const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
-    TestBed.runInInjectionContext(() => TestBed.inject(RunnerLiveUpdates).start());
+  it('invalidates only the host on environment-changed, which names no runner', () => {
+    const keys = emitAndCollect([['environment-changed', { chunk_id: 'ch_5', environment_id: 'env_1', cause: 'bound' }]]);
 
-    const source = FakeEventSource.instances[0];
-    source.open();
-    source.emitNamed(
-      'takeover-changed',
-      JSON.stringify({ chunk_id: 'ch_4', takeover_id: 'tko_1', cause: 'opened' }),
-      '1',
-    );
-    vi.advanceTimersByTime(INVALIDATION_COALESCE_WINDOW_MS);
-
-    const keys = invalidate.mock.calls.map((call) => call[0]?.queryKey);
-    expect(keys).toContainEqual(runnerDashboardKey);
-    expect(keys).toContainEqual(runnerChunkDetailKey('ch_4'));
+    expect(keys).toEqual([hostKey]);
   });
 
-  it('invalidates the dashboard and the named chunk on environment-changed', () => {
-    const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
-    TestBed.runInInjectionContext(() => TestBed.inject(RunnerLiveUpdates).start());
+  it('invalidates the named runner’s dashboard on a runner-wide fact-changed (chunk_id null) with no chunk key', () => {
+    const keys = emitAndCollect([
+      ['fact-changed', { runner_id: 'rn_1', seq: 1, kind: 'event.recorded', chunk_id: null, lease_id: null }],
+    ]);
 
-    const source = FakeEventSource.instances[0];
-    source.open();
-    source.emitNamed(
-      'environment-changed',
-      JSON.stringify({ chunk_id: 'ch_5', environment_id: 'env_1', cause: 'bound' }),
-      '1',
-    );
-    vi.advanceTimersByTime(INVALIDATION_COALESCE_WINDOW_MS);
-
-    const keys = invalidate.mock.calls.map((call) => call[0]?.queryKey);
-    expect(keys).toContainEqual(runnerDashboardKey);
-    expect(keys).toContainEqual(runnerChunkDetailKey('ch_5'));
+    expect(keys).toContainEqual(runnerDashboardKey('rn_1'));
+    expect(keys.every((key) => (key as readonly unknown[])[1] !== 'chunk')).toBe(true);
   });
 
-  it('invalidates the dashboard on a runner-wide fact-changed (chunk_id null) with no chunk key', () => {
-    const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
-    TestBed.runInInjectionContext(() => TestBed.inject(RunnerLiveUpdates).start());
+  it('invalidates the named runner’s dashboard and chunk on a chunk-scoped fact-changed', () => {
+    const keys = emitAndCollect([
+      ['fact-changed', { runner_id: 'rn_1', seq: 2, kind: 'chunk-facts-appended', chunk_id: 'ch_6', lease_id: 'lease_2' }],
+    ]);
 
-    const source = FakeEventSource.instances[0];
-    source.open();
-    source.emitNamed(
-      'fact-changed',
-      JSON.stringify({ seq: 1, kind: 'event.recorded', chunk_id: null, lease_id: null }),
-      '1',
-    );
-    vi.advanceTimersByTime(INVALIDATION_COALESCE_WINDOW_MS);
-
-    const keys = invalidate.mock.calls.map((call) => call[0]?.queryKey);
-    expect(keys).toContainEqual(runnerDashboardKey);
-    expect(keys.every((key) => key?.[1] !== 'chunk')).toBe(true);
+    expect(keys).toContainEqual(runnerDashboardKey('rn_1'));
+    expect(keys).toContainEqual(runnerChunkDetailKey('rn_1', 'ch_6'));
   });
 
-  it('invalidates the dashboard and the named chunk on a chunk-scoped fact-changed', () => {
-    const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
-    TestBed.runInInjectionContext(() => TestBed.inject(RunnerLiveUpdates).start());
+  it('invalidates only the framing runner’s keys plus the host — never another runner’s', () => {
+    const keys = emitAndCollect([
+      ['lease-changed', { runner_id: 'rn_1', lease_id: 'lease_1', chunk_id: 'ch_1', cause: 'spawned' }],
+      ['fact-changed', { runner_id: 'rn_1', seq: 4, kind: 'chunk-facts-appended', chunk_id: 'ch_1', lease_id: 'lease_1' }],
+    ]);
 
-    const source = FakeEventSource.instances[0];
-    source.open();
-    source.emitNamed(
-      'fact-changed',
-      JSON.stringify({ seq: 2, kind: 'chunk-facts-appended', chunk_id: 'ch_6', lease_id: 'lease_2' }),
-      '1',
-    );
-    vi.advanceTimersByTime(INVALIDATION_COALESCE_WINDOW_MS);
-
-    const keys = invalidate.mock.calls.map((call) => call[0]?.queryKey);
-    expect(keys).toContainEqual(runnerDashboardKey);
-    expect(keys).toContainEqual(runnerChunkDetailKey('ch_6'));
+    expect(keys.length).toBeGreaterThan(0);
+    for (const key of keys) {
+      const root = (key as readonly unknown[])[0];
+      expect(root === 'rn_1' || root === 'host', `key ${JSON.stringify(key)} leads with neither rn_1 nor host`).toBe(true);
+    }
+    expect(keys).not.toContainEqual(runnerLeasesKey('rn_2'));
+    expect(keys).not.toContainEqual(runnerDashboardKey('rn_2'));
+    expect(keys).not.toContainEqual(runnerChunkDetailKey('rn_2', 'ch_1'));
   });
 
-  it('collapses duplicate keys from multiple frames in one window into a single invalidation (review:F5)', () => {
-    const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
-    TestBed.runInInjectionContext(() => TestBed.inject(RunnerLiveUpdates).start());
+  it('collapses duplicate keys from multiple frames in one window into a single invalidation', () => {
+    const keys = emitAndCollect([
+      ['escalation-changed', { runner_id: 'rn_1', chunk_id: 'ch_a', cause: 'opened' }],
+      ['takeover-changed', { runner_id: 'rn_1', chunk_id: 'ch_b', takeover_id: 't_1', cause: 'opened' }],
+      ['fact-changed', { runner_id: 'rn_1', seq: 3, kind: 'event.recorded', chunk_id: null, lease_id: null }],
+    ]);
 
-    const source = FakeEventSource.instances[0];
-    source.open();
-    // Three frames in the same window, each staling the dashboard key.
-    source.emitNamed('escalation-changed', JSON.stringify({ chunk_id: 'ch_a', cause: 'opened' }), '1');
-    source.emitNamed('takeover-changed', JSON.stringify({ chunk_id: 'ch_b', takeover_id: 't_1', cause: 'opened' }), '2');
-    source.emitNamed(
-      'fact-changed',
-      JSON.stringify({ seq: 3, kind: 'event.recorded', chunk_id: null, lease_id: null }),
-      '3',
-    );
-    vi.advanceTimersByTime(INVALIDATION_COALESCE_WINDOW_MS);
-
-    const dashboardHits = invalidate.mock.calls.filter((call) => call[0]?.queryKey === runnerDashboardKey);
+    const dashboardHits = keys.filter((key) => JSON.stringify(key) === JSON.stringify(runnerDashboardKey('rn_1')));
     expect(dashboardHits).toHaveLength(1);
+    expect(keys.filter((key) => JSON.stringify(key) === JSON.stringify(hostKey))).toHaveLength(1);
   });
 
   it('clears the pending coalesce timer on destroy — no invalidation fires after teardown (review round 4, F2)', () => {
@@ -234,7 +187,7 @@ describe('RunnerLiveUpdates (blizzard#317 Phase 4)', () => {
     source.open();
     // A frame lands inside the coalesce window, then the service is torn down before
     // that window's own flush would have fired.
-    source.emitNamed('escalation-changed', JSON.stringify({ chunk_id: 'ch_a', cause: 'opened' }), '1');
+    source.emitNamed('escalation-changed', JSON.stringify({ runner_id: 'rn_1', chunk_id: 'ch_a', cause: 'opened' }), '1');
     TestBed.resetTestingModule();
     invalidate.mockClear();
 
@@ -249,13 +202,13 @@ describe('RunnerLiveUpdates (blizzard#317 Phase 4)', () => {
 
     const source = FakeEventSource.instances[0];
     source.open();
-    source.emitNamed('escalation-changed', JSON.stringify({ chunk_id: 'ch_a', cause: 'opened' }), '1');
+    source.emitNamed('escalation-changed', JSON.stringify({ runner_id: 'rn_1', chunk_id: 'ch_a', cause: 'opened' }), '1');
 
     vi.advanceTimersByTime(INVALIDATION_COALESCE_WINDOW_MS - 1);
     expect(invalidate).not.toHaveBeenCalled();
 
     vi.advanceTimersByTime(1);
-    expect(invalidate.mock.calls.map((call) => call[0]?.queryKey)).toContainEqual(runnerDashboardKey);
+    expect(invalidate.mock.calls.map((call) => call[0]?.queryKey)).toContainEqual(runnerDashboardKey('rn_1'));
   });
 
   it('re-GETs the whole query client on the confirmed reopen, not on drop detection (D1)', () => {

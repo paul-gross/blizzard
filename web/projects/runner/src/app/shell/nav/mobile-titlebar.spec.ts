@@ -8,12 +8,14 @@ import { RunnerLogout } from '../../core/identity/runner-logout';
 import { vi } from 'vitest';
 
 import { MobileTitlebar } from './mobile-titlebar';
+import { provideActiveRunner } from '../../core/active-runner';
 
 async function render() {
   await TestBed.configureTestingModule({
     imports: [MobileTitlebar],
     providers: [
       provideZonelessChangeDetection(),
+      provideActiveRunner('rn_1'),
       provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
       provideRouter([]),
     ],
@@ -53,7 +55,7 @@ describe('MobileTitlebar (runner)', () => {
   it('derives the titlebar live dot from the runner status hub-reachable read', async () => {
     stub.restore();
     stub = stubRequestClient(runnerClient, (method, path) => {
-      if (method === 'GET' && path === '/api/dashboard') {
+      if (method === 'GET' && path === '/runners/rn_1/api/dashboard') {
         return {
           runner: {
             runner_id: 'runner-local',
@@ -68,13 +70,11 @@ describe('MobileTitlebar (runner)', () => {
             pause: { local: false, hub: false, effective: false },
             last_tick_at: null,
           },
-          environments: { items: [] },
           asks: { items: [] },
           escalations: { items: [] },
           takeovers: { items: [] },
           facts: { items: [] },
           harness_health: { items: [] },
-          subscriptions: { items: [] },
           fleet_summary: null,
         };
       }
