@@ -122,6 +122,9 @@ def test_runner_panel_updates_live_over_sse_with_no_reload(tmp_path: Path, chrom
 
             runner_client = httpx.Client(base_url=f"http://{config.host}:{config.port}", timeout=15.0)
             _await_http(proc, runner_client, "/api/health", log=log)
+            # The panel's board is the runner's own page, under the id the host serves it at.
+            (served,) = runner_client.get("/api/host/runners").json()["items"]
+            board_url = f"http://{config.host}:{config.port}/runners/{served['runner_id']}/board"
 
             with sync_playwright() as pw:
                 browser = pw.chromium.launch(headless=True)
@@ -130,7 +133,7 @@ def test_runner_panel_updates_live_over_sse_with_no_reload(tmp_path: Path, chrom
                 try:
                     # Load the panel ONCE, never reloaded again. Established pre-state, not a
                     # race: nothing is promoted yet, so "0 live" holds regardless of launch time.
-                    page.goto(f"http://{config.host}:{config.port}/", wait_until="load")
+                    page.goto(board_url, wait_until="load")
                     expect(page.get_by_test_id("local-panel")).to_be_visible()
                     expect(page.get_by_test_id("lease-count")).to_have_text("0 live")
                     expect(page.get_by_test_id("agent-row")).to_have_count(0)
