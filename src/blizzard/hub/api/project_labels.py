@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
-from blizzard.hub.api.chunk_views import ProjectLabelFields, project_label_fields
+from blizzard.hub.api.project_label_fields import ProjectLabelFields, project_label_fields
 from blizzard.hub.composition import TenantServices
 from blizzard.hub.domain.projects.model import Project, ProjectId
 

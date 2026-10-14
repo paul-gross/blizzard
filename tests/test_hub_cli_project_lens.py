@@ -188,6 +188,8 @@ _SINCE = ("--since", "2026-01-01T00:00:00", "--until", "2030-01-01T00:00:00")
         ("config", "changes"),
         ("chunk", "list"),
         ("queue", "show"),
+        ("question", "list"),
+        ("decision", "list"),
     ],
 )
 def test_a_listing_verb_sends_the_project_it_names_for_the_hub_to_narrow_by(
@@ -263,6 +265,8 @@ def _command(*path: str) -> click.Command:
         (("scope", "list"), "Show only this project's records"),
         (("chunk", "list"), "Show only this project's records"),
         (("run", "list"), "Show only this project's records"),
+        (("question", "list"), "Show only this project's records"),
+        (("decision", "list"), "Show only this project's records"),
         (("analytics", "summary"), "Show only this project's records"),
         (("status",), "Show only this project's chunks"),
         (("chunk", "ingest"), "The project to mint the chunk in"),

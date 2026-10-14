@@ -1365,6 +1365,58 @@ class ReviewFindingProjectIsChunks(HubQueryCheck):
         return violations
 
 
+class QuestionProjectIsChunks(HubQueryCheck):
+    """``hub:question-project-is-chunks`` — a question belongs to the project of the chunk that asked it."""
+
+    def run(self) -> list[Violation]:
+        chunks, questions = hub.chunks, hub.questions
+        chunk_project = {
+            row.chunk_id: row.project_id for row in self.rows(select(chunks.c.chunk_id, chunks.c.project_id))
+        }
+        violations: list[Violation] = []
+        for row in self.rows(
+            select(questions.c.question_id, questions.c.chunk_id, questions.c.project_id).order_by(
+                questions.c.tenant_id, questions.c.question_id
+            )
+        ):
+            asked_in = chunk_project.get(row.chunk_id)
+            if asked_in is not None and asked_in != row.project_id:
+                violations.append(
+                    Violation(
+                        "hub:question-project-is-chunks",
+                        f"question {row.question_id} of project {row.project_id} was asked on chunk "
+                        f"{row.chunk_id} of project {asked_in}",
+                    )
+                )
+        return violations
+
+
+class DecisionProjectIsChunks(HubQueryCheck):
+    """``hub:decision-project-is-chunks`` — a decision belongs to the project of the chunk it gates."""
+
+    def run(self) -> list[Violation]:
+        chunks, decisions = hub.chunks, hub.decisions
+        chunk_project = {
+            row.chunk_id: row.project_id for row in self.rows(select(chunks.c.chunk_id, chunks.c.project_id))
+        }
+        violations: list[Violation] = []
+        for row in self.rows(
+            select(decisions.c.decision_id, decisions.c.chunk_id, decisions.c.project_id).order_by(
+                decisions.c.decision_id
+            )
+        ):
+            gated_in = chunk_project.get(row.chunk_id)
+            if gated_in is not None and gated_in != row.project_id:
+                violations.append(
+                    Violation(
+                        "hub:decision-project-is-chunks",
+                        f"decision {row.decision_id} of project {row.project_id} gates chunk "
+                        f"{row.chunk_id} of project {gated_in}",
+                    )
+                )
+        return violations
+
+
 class ProposalCitesOwnProject(HubQueryCheck):
     """``hub:proposal-cites-own-project`` — every finding a garden proposal cites belongs to the proposal's own
     project."""
@@ -1650,6 +1702,8 @@ class HubInvariants:
                 RoutineScopeSameProject(conn),
                 FindingScopeInProject(conn),
                 ReviewFindingProjectIsChunks(conn),
+                QuestionProjectIsChunks(conn),
+                DecisionProjectIsChunks(conn),
                 ProposalCitesOwnProject(conn),
                 WorkItemProjectInTenant(conn),
                 SlugNotCurrentAndFormer(conn),

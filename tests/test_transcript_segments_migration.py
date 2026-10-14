@@ -11,7 +11,7 @@ import sqlalchemy as sa
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub import runtime as hub_runtime
-from tests.support import hub_scoped_engine
+from tests.support import hub_scoped_engine, seed_chunk, seed_graph
 
 pytestmark = pytest.mark.component
 
@@ -73,6 +73,8 @@ def test_harness_provenance_backfills_concrete_session_rows_without_versions(tmp
         questions = sa.Table("questions", old, autoload_with=engine)
         transcripts = sa.Table("transcript_segments", old, autoload_with=engine)
         with engine.begin() as conn:
+            seed_graph(conn, "gr_1", at=now)
+            seed_chunk(conn, "ch_1", graph_id="gr_1", at=now)
             conn.execute(
                 questions.insert(),
                 [

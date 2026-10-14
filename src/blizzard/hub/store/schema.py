@@ -1551,6 +1551,8 @@ questions = Table(
     Column("question", Text, nullable=False),
     Column("options", Text, nullable=False),  # JSON list[str] of offered choices (may be empty)
     Column("asked_at", UtcDateTime, nullable=False),  # reap clock stops for the chunk from here
+    # The asking chunk's project, taken from its row in the write's own transaction.
+    Column("project_id", String, ForeignKey("projects.project_id", name="fk_questions_projects"), nullable=False),
     Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_questions_tenant_id"), nullable=False),
     PrimaryKeyConstraint("tenant_id", "question_id", name="pk_questions"),
 )
@@ -1559,6 +1561,14 @@ Index("ix_questions_tenant_chunk_id", questions.c.tenant_id, questions.c.chunk_i
 Index(
     "ix_questions_tenant_asked_at_question_id",
     questions.c.tenant_id,
+    questions.c.asked_at,
+    questions.c.question_id,
+)
+# (tenant_id, project_id, asked_at, question_id) for one project's ordered reads.
+Index(
+    "ix_questions_tenant_project_asked_at_question_id",
+    questions.c.tenant_id,
+    questions.c.project_id,
     questions.c.asked_at,
     questions.c.question_id,
 )
@@ -1622,6 +1632,8 @@ decisions = Table(
     Column("submitted_at", UtcDateTime, nullable=False),
     # The runner whose configuration imposed this gate — a fact of the write; `NULL` when the graph declared it.
     Column("imposed_by_runner_id", String, nullable=True),
+    # The deciding chunk's project, taken from its row in the write's own transaction.
+    Column("project_id", String, ForeignKey("projects.project_id", name="fk_decisions_projects"), nullable=False),
     Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_decisions_tenant_id"), nullable=False),
 )
 # (tenant_id, chunk_id, submitted_at, decision_id): one chunk's decisions, already in submission order.
@@ -1636,6 +1648,14 @@ Index(
 Index(
     "ix_decisions_tenant_submitted_at_decision_id",
     decisions.c.tenant_id,
+    decisions.c.submitted_at,
+    decisions.c.decision_id,
+)
+# (tenant_id, project_id, submitted_at, decision_id) for one project's ordered reads.
+Index(
+    "ix_decisions_tenant_project_submitted_at_decision_id",
+    decisions.c.tenant_id,
+    decisions.c.project_id,
     decisions.c.submitted_at,
     decisions.c.decision_id,
 )

@@ -115,7 +115,8 @@ The CLI keeps no saved project, as it keeps no saved tenant. Every verb that act
 
 The tenant is settled first, by `--tenant` ([tenants.md](./tenants.md#naming-the-tenant-a-call-acts-in)); the project
 is looked up within it. The tenant-wide reads take the same filter over HTTP as `?project=<id|slug>`: chunks, chunk
-counts, the queue and backlog, runs, spend, the analytics reads, the event feed and the event stream.
+counts, the queue and backlog, open questions and decisions, runs, spend, the analytics reads, the event feed and the
+event stream.
 
 ## Runners serve projects
 

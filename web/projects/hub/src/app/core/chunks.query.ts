@@ -1,4 +1,4 @@
-import { type QueryClient, injectQuery } from '@tanstack/angular-query-experimental';
+import { injectQuery } from '@tanstack/angular-query-experimental';
 
 import {
   listChunksApiChunksGet,
@@ -21,7 +21,12 @@ export function boardChunksQueryOptions(project: string | null) {
       drainPages(
         (cursor) =>
           listChunksApiChunksGet({
-            query: { cursor, limit: DRAIN_LIMIT, board_window: true, project: project ?? undefined },
+            query: {
+              cursor,
+              limit: DRAIN_LIMIT,
+              board_window: true,
+              project: project ?? undefined,
+            },
             throwOnError: false,
           }),
         (page) => page.chunks,
@@ -50,21 +55,4 @@ export function injectHubBoardChunksQuery() {
     // primary freshness path. See LIVE_COVERED_POLL_BACKSTOP_MS.
     refetchInterval: LIVE_COVERED_POLL_BACKSTOP_MS,
   }));
-}
-
-/**
- * Rows that name a chunk, narrowed to the chunks of the project `project` names — every row on All (`null`). The
- * questions and decisions reads carry no project of their own, so a row belongs to a project through its chunk: it is
- * kept when its chunk is on the project's board list, read through {@link boardChunksQueryOptions} (the board's own
- * cache entry, re-read only when it is missing or a live event has staled it).
- */
-export async function inProjectChunks<T extends { readonly chunk_id: string }>(
-  queryClient: QueryClient,
-  project: string | null,
-  rows: readonly T[],
-): Promise<T[]> {
-  if (project === null) return [...rows];
-  const chunks = await queryClient.fetchQuery({ ...boardChunksQueryOptions(project), staleTime: Infinity });
-  const ids = new Set(chunks.map((chunk) => chunk.chunk_id));
-  return rows.filter((row) => ids.has(row.chunk_id));
 }

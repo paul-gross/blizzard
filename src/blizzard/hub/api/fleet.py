@@ -333,7 +333,8 @@ def get_question(question_id: str, services: Services) -> QuestionView:
     row = services.chunks.questions.get_question(question_id)
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown question {question_id}")
-    return questions_api.question_view(row, services.registry.names_for([row.runner_id]))
+    labels = ProjectLabels.read(services, [row.project_id])
+    return questions_api.question_view(row, services.registry.names_for([row.runner_id]), labels.fields(row.project_id))
 
 
 # Moved wholesale — no anonymous caller ever reached these.

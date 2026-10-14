@@ -15,6 +15,7 @@ from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.chunk.model import AnswerOutcome, NodeQuestion
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, FenceRefusal
 from blizzard.hub.domain.chunk.ports.questions import IWriteChunkQuestionsRepository
+from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_rows import QUESTIONS, fence, lock_chunk_row
 from blizzard.hub.store.internal.chunk_terminal_predicates import chunk_is_terminal
@@ -35,21 +36,20 @@ class ChunkQuestionsStore:
             ).one_or_none()
             return QUESTIONS.of(row) if row is not None else None
 
-    def list_open_questions(self) -> list[NodeQuestion]:
+    def list_open_questions(self, *, project: ProjectId | None = None) -> list[NodeQuestion]:
         """The unanswered questions whose chunk has not ended — the SQL mirror of
         :meth:`NodeQuestion.require_answerable`, pinned by ``tests/test_open_questions_closure.py``.
         Question ids are runner-minted, so the answered set is read within the scope too: another
-        tenant's answer under the same id never hides this tenant's question."""
+        tenant's answer under the same id never hides this tenant's question. ``project`` narrows to
+        one project's questions."""
+        open_ = s.questions.c.question_id.not_in(
+            self._store.select(s.question_answers, s.question_answers.c.question_id)
+        ) & ~chunk_is_terminal(self._store, s.questions.c.chunk_id)
+        if project is not None:
+            open_ &= s.questions.c.project_id == project
         with self._store.read("list_open_questions") as conn:
             rows = conn.execute(
-                QUESTIONS.select(self._store)
-                .where(
-                    s.questions.c.question_id.not_in(
-                        self._store.select(s.question_answers, s.question_answers.c.question_id)
-                    )
-                    & ~chunk_is_terminal(self._store, s.questions.c.chunk_id)
-                )
-                .order_by(s.questions.c.asked_at)
+                QUESTIONS.select(self._store).where(open_).order_by(s.questions.c.asked_at, s.questions.c.question_id)
             ).all()
             return [QUESTIONS.of(row) for row in rows]
 
@@ -89,10 +89,14 @@ class ChunkQuestionsStore:
             refusal = fence(conn, chunk_id, epoch=epoch, admission=admission, claimant=claimant)
             if refusal is not None:
                 return refusal
+            project_id = conn.execute(
+                self._store.select(s.chunks, s.chunks.c.project_id).where(s.chunks.c.chunk_id == chunk_id)
+            ).scalar_one()
             conn.execute(
                 self._store.insert(s.questions).values(
                     question_id=question_id,
                     chunk_id=chunk_id,
+                    project_id=project_id,
                     node_id=node_id,
                     session_id=session_id,
                     harness_id=harness_id,

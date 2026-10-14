@@ -24,10 +24,11 @@ from blizzard.hub.api import chunk_events
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.chunk_edit import ChunkPatchBody
-from blizzard.hub.api.chunk_views import ChunkView, blocked_view, ingest_conflict_response, project_label_fields
+from blizzard.hub.api.chunk_views import ChunkView, blocked_view, ingest_conflict_response
 from blizzard.hub.api.deps import Services
 from blizzard.hub.api.graph_names import GraphNames, graph_by_ref
 from blizzard.hub.api.marker_auth import require_marker_authority
+from blizzard.hub.api.project_label_fields import project_label_fields
 from blizzard.hub.api.project_params import QueryProject, body_project, project_of_call, project_ref
 from blizzard.hub.composition import TenantServices
 from blizzard.hub.delivery.marker_auth import AmbiguousMarkerRepository

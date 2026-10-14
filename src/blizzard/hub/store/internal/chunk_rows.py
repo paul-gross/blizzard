@@ -146,6 +146,7 @@ class QuestionQuery:
             answered_at=q.answered_at,
             delivered=q.delivered_at is not None,
             delivered_at=q.delivered_at,
+            project_id=q.project_id,
         )
 
 

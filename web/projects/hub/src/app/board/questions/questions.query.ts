@@ -1,5 +1,4 @@
-import { inject } from '@angular/core';
-import { QueryClient, injectQuery } from '@tanstack/angular-query-experimental';
+import { injectQuery } from '@tanstack/angular-query-experimental';
 
 import {
   type QuestionView,
@@ -9,7 +8,6 @@ import {
   injectProjectFilter,
   lensedKey,
 } from 'fleet/shell';
-import { inProjectChunks } from '../../core/chunks.query';
 
 /**
  * Hub `GET /api/questions` read — every open (unanswered) question across the
@@ -17,22 +15,24 @@ import { inProjectChunks } from '../../core/chunks.query';
  * client (bzh:generated-client). This is the fleet-wide ask list, distinct from a
  * single chunk's `questions` in its detail aggregate.
  *
- * Under a project lens the list keeps only the questions on the project's chunks ({@link inProjectChunks}): the hub
- * reads this list whole, and a question belongs to its chunk's project. The key carries the lens.
+ * Under a project lens the read carries `?project=`, so the hub narrows the list to the lensed project's questions
+ * whatever the board's chunk list holds. The key carries the lens.
  *
  * Freshness: `EVENT_INVALIDATION_REGISTRY` (`web/projects/fleet/src/lib/sse/fleet-live.ts`).
  */
 export function injectHubQuestionsQuery() {
-  const queryClient = inject(QueryClient);
   const projectFilter = injectProjectFilter();
   return injectQuery(() => {
     const project = projectFilter();
     return {
       queryKey: lensedKey(hubQuestionsKey, project),
       queryFn: async (): Promise<QuestionView[]> => {
-        const { data, error } = await listOpenQuestionsApiQuestionsGet({ throwOnError: false });
+        const { data, error } = await listOpenQuestionsApiQuestionsGet({
+          query: { project: project ?? undefined },
+          throwOnError: false,
+        });
         if (error) throw error;
-        return inProjectChunks(queryClient, project, data ?? []);
+        return data ?? [];
       },
       refetchInterval: LIVE_COVERED_POLL_BACKSTOP_MS,
     };

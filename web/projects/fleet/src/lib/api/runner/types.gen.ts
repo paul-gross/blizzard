@@ -997,6 +997,18 @@ export type DecisionView = {
      */
     node_name: string;
     /**
+     * Project Id
+     */
+    project_id?: string | null;
+    /**
+     * Project Name
+     */
+    project_name?: string | null;
+    /**
+     * Project Slug
+     */
+    project_slug?: string | null;
+    /**
      * Resolved At
      */
     resolved_at?: string | null;
@@ -2518,6 +2530,18 @@ export type QuestionView = {
      * Options
      */
     options?: Array<string>;
+    /**
+     * Project Id
+     */
+    project_id?: string | null;
+    /**
+     * Project Name
+     */
+    project_name?: string | null;
+    /**
+     * Project Slug
+     */
+    project_slug?: string | null;
     /**
      * Question
      */

@@ -19,6 +19,9 @@ from blizzard.hub.api import chunk_events
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.deps import Services
+from blizzard.hub.api.project_label_fields import ProjectLabelFields
+from blizzard.hub.api.project_labels import ProjectLabels
+from blizzard.hub.api.project_params import QueryProject
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.domain.chunk.model import DecisionClosed, GateDecision, NotADecisionChoice
 from blizzard.wire.decision import (
@@ -35,9 +38,10 @@ router = APIRouter(
 )
 
 
-def to_decision_view(row: GateDecision, runner_names: Mapping[str, str]) -> DecisionView:
+def to_decision_view(row: GateDecision, runner_names: Mapping[str, str], project: ProjectLabelFields) -> DecisionView:
     """Map a :class:`GateDecision` to its wire view (shared with the chunk detail), naming the
-    imposing runner out of ``runner_names``, the caller's one batched read."""
+    imposing runner out of ``runner_names``, the caller's one batched read, and the chunk's
+    project labels."""
     return DecisionView(
         decision_id=row.decision_id,
         chunk_id=row.chunk_id,
@@ -54,17 +58,21 @@ def to_decision_view(row: GateDecision, runner_names: Mapping[str, str]) -> Deci
         imposed_by_runner_name=runner_names.get(row.imposed_by_runner_id)
         if row.imposed_by_runner_id is not None
         else None,
+        **project,
     )
 
 
 @router.get("/decisions", response_model=OpenDecisionsResponse, dependencies=[Depends(require(Permission.FLEET_VIEW))])
-def list_decisions(services: Services) -> OpenDecisionsResponse:
-    """The fleet's open (unresolved) decisions — gate surfacing."""
-    rows = services.chunks.decisions.list_open_decisions()
+def list_decisions(services: Services, project: QueryProject) -> OpenDecisionsResponse:
+    """The fleet's open (unresolved) decisions — gate surfacing — or only ``?project=``'s."""
+    rows = services.chunks.decisions.list_open_decisions(project=project)
     runner_names = services.registry.names_for(
         d.imposed_by_runner_id for d in rows if d.imposed_by_runner_id is not None
     )
-    return OpenDecisionsResponse(decisions=[to_decision_view(d, runner_names) for d in rows])
+    labels = ProjectLabels.read(services, (d.project_id for d in rows))
+    return OpenDecisionsResponse(
+        decisions=[to_decision_view(d, runner_names, labels.fields(d.project_id)) for d in rows]
+    )
 
 
 @router.post("/decisions/{decision_id}/resolutions", response_model=DecisionResolutionResponse)

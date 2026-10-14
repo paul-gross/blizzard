@@ -15,6 +15,7 @@ from blizzard.foundation.ids import Id
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api.decisions import to_decision_view
 from blizzard.hub.api.graph_names import GraphNames
+from blizzard.hub.api.project_label_fields import ProjectLabelFields, project_label_fields
 from blizzard.hub.api.questions import question_view
 from blizzard.hub.composition import TenantServices
 from blizzard.hub.delivery.hub_node import PollPolicy
@@ -116,24 +117,6 @@ def blocked_view(unmet_prerequisite_chunk_ids: Sequence[str] | None) -> BlockedV
     if marking is None:
         return None
     return BlockedView(prerequisite_chunk_id=marking.prerequisite_chunk_id, unmet_count=marking.unmet_count)
-
-
-class ProjectLabelFields(TypedDict):
-    """The project label fields every chunk-describing view carries."""
-
-    project_id: str | None
-    project_slug: str | None
-    project_name: str | None
-
-
-def project_label_fields(project_id: str | None, project: Project | None) -> ProjectLabelFields:
-    """A chunk's project labels: its ``project_id``, with the current slug and name of ``project``,
-    the record that id resolves to — ``None`` for each label the hub has no record for."""
-    return {
-        "project_id": project_id,
-        "project_slug": project.slug if project is not None else None,
-        "project_name": project.name if project is not None else None,
-    }
 
 
 def ingest_conflict_response(services: TenantServices, exc: IngestConflict) -> JSONResponse:
@@ -375,6 +358,7 @@ class ChunkView:
                 *(question.runner_id for question in questions),
             ]
         )
+        project = self._project_fields()
         return ChunkDetail(
             chunk_id=self.chunk.chunk_id,
             graph_id=self.chunk.graph_id,
@@ -403,18 +387,18 @@ class ChunkView:
             neighborhood=self.neighborhood
             if self.neighborhood is not None
             else ChunkNeighborhoodView(prerequisites=[], dependents=[]),
-            decision=to_decision_view(decision, runner_names) if decision is not None else None,
+            decision=to_decision_view(decision, runner_names, project) if decision is not None else None,
             history=history.transitions(),
             migrations=history.migrations(),
             restarts=history.restarts(),
             artifacts=self._artifacts(artifacts),
-            questions=[question_view(question, runner_names) for question in questions],
+            questions=[question_view(question, runner_names, project) for question in questions],
             **self._delivery_fields(self._delivery()),
             cost=self.usage_total(),
             usage=self._usage_history(),
             pending=self._pending(),
             bounces=self._bounces(),
-            **self._project_fields(),
+            **project,
         )
 
     @staticmethod

@@ -13,6 +13,7 @@ from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.model import DecisionChoice, GateDecision
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, FenceRefusal
+from blizzard.hub.domain.projects.model import ProjectId
 
 
 @domain_model
@@ -43,8 +44,8 @@ class IReadChunkDecisionsRepository(Protocol):
         """The chunk's newest not-yet-transitioned decision."""
         ...
 
-    def list_open_decisions(self) -> list[GateDecision]:
-        """Every unresolved decision across the fleet."""
+    def list_open_decisions(self, *, project: ProjectId | None = None) -> list[GateDecision]:
+        """Every unresolved decision across the fleet, or only the given project's."""
         ...
 
     def live_decisions_for(self, chunk_ids: Iterable[str]) -> dict[str, LiveDecisionStatus]:
