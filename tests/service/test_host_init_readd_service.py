@@ -115,7 +115,7 @@ def test_init_with_allow_readd_sets_a_pre_host_store_aside_adds_a_runner_and_the
             assert poll_until(lambda: hub.get(own_read, headers=bearer).status_code == 200, timeout=30.0), (
                 read_daemon_log(log)
             )
-            assert local.get("/api/runner").json()["runner_id"] == config.runner_id
+            assert local.get(f"/runners/{config.runner_id}/api/runner").json()["runner_id"] == config.runner_id
         finally:
             local.close()
             _terminate(proc)

@@ -13,6 +13,7 @@ from pathlib import Path
 
 from blizzard.foundation.public_origins import PublicOrigins
 from blizzard.foundation.roles import domain_model
+from blizzard.foundation.runner_paths import runner_prefix
 from blizzard.foundation.runner_token_names import hub_token_variable
 from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.foundation.trace_export.settings import TracingSettings
@@ -604,10 +605,15 @@ class RunnerConfig:
 
     @property
     def local_api_url(self) -> str:
-        """The runner's own TCP door — the one derivation of the ``BLIZZARD_RUNNER_URL``
-        a worker or taken-over session is handed, shared by the loop context and the
-        takeover service so the two cannot drift."""
-        return f"http://{self.host}:{self.port}"
+        """The runner's own base on its host's TCP door, ``http://<host>:<port>/runners/<runner_id>`` — the one
+        derivation of the ``BLIZZARD_RUNNER_URL`` a worker or taken-over session is handed, shared by the loop
+        context and the takeover service so the two cannot drift."""
+        return f"http://{self.host}:{self.port}{runner_prefix(self.served_id())}"
+
+    def served_id(self) -> str:
+        """The id a host serves this runner under: its hub-minted id, or — for a runner not yet joined, which only an
+        offline build holds — its name."""
+        return self.runner_id or self.name
 
     def resolved_workspace_prompt(self) -> str:
         """The effective static workspace prompt, resolved from its three knobs.

@@ -10,7 +10,6 @@ from pathlib import Path
 
 import pytest
 import sqlalchemy as sa
-from fastapi.testclient import TestClient
 
 from blizzard.runner import runtime as runner_runtime
 from blizzard.runner.app import create_app
@@ -24,6 +23,7 @@ from blizzard.runner.loop_wiring import LoopWiring
 from blizzard.runner.store import schema
 from blizzard.runner.store.errors import RUNNER_SCOPED_OPTION, RunnerAlreadyBound, RunnerUnbound
 from tests.host_files import load_runner_config
+from tests.runner_client import runner_client
 from tests.runner_fakes import FakeHarness, FakeHub, SqlAlchemyRunnerStore, loop_graph, make_store
 
 pytestmark = pytest.mark.component
@@ -74,7 +74,7 @@ def test_an_unbound_store_refuses_the_identity_write_and_a_bound_one_another_run
 
 def test_patch_runner_answers_503_naming_the_cause_until_bound(tmp_path: Path) -> None:
     config = RunnerConfig(root=tmp_path, db_url="sqlite://")
-    with TestClient(create_app(config, binding=_Binding(None))) as client:
+    with runner_client(create_app(config, binding=_Binding(None))) as client:
         resp = client.patch("/api/runner", json={"paused": True})
 
     assert resp.status_code == 503
@@ -85,7 +85,7 @@ def test_a_selftest_answers_503_until_bound_after_naming_an_unknown_harness(tmp_
     config = RunnerConfig(root=tmp_path, db_url="sqlite://")
     adapter = FakeHarness(handle=WorkerHandle(session_id="s", pid=1, process_start_time="t", pgid=1), verdict=None)
     harnesses = HarnessRegistry({CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=adapter)})
-    with TestClient(create_app(config, harnesses=harnesses, binding=_Binding(None))) as client:
+    with runner_client(create_app(config, harnesses=harnesses, binding=_Binding(None))) as client:
         refused = client.post("/api/selftests", json={"harness": CLAUDE_CODE_HARNESS_ID})
         unknown = client.post("/api/selftests", json={"harness": "codex"})
 

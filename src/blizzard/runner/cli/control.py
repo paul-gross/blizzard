@@ -8,7 +8,6 @@ import time
 from dataclasses import dataclass
 
 import click
-import httpx
 
 from blizzard.cli.operator_trace import ITraceHeaders, OperatorTrace
 from blizzard.foundation.credential_renewal import RenewalFailureReason, RenewalResult
@@ -124,21 +123,15 @@ def status(ctx: click.Context, directory: str, runner_url: str | None) -> None:
     Every section is this runner's own local read, so the view renders fully with the
     hub unreachable; hub reachability is itself reported, not assumed."""
     with RunnerDaemon.reach("status", directory, runner_url, OperatorTrace.source(ctx)) as daemon:
-        runner_resp = daemon.send("get", "/api/runner")
-        if runner_resp.status_code == httpx.codes.SERVICE_UNAVAILABLE:
-            # The host built no runner to serve: its readiness detail names each one it left unbuilt, and why.
-            ready = daemon.send("get", "/api/ready").json()
-            raise click.ClickException(
-                f"the host at {daemon.where} serves no runner ({runner_resp.status_code}): {ready['detail']}"
-            )
-        runner_resp.raise_for_status()
-        view = runner_resp.json()
+        # A host serving no runner fails here, naming why each one is halted.
+        runner_id = daemon.runner_id()
+        view = daemon.get("/api/runner").json()
         leases_resp = daemon.get("/api/leases")
-        envs_resp = daemon.get("/api/environments")
+        envs_resp = daemon.get_from_host("/api/host/environments")
         asks_resp = daemon.get("/api/asks", params={"open": "true"})
         escalations_resp = daemon.get("/api/escalations")
         takeovers_resp = daemon.get("/api/takeovers")
-        subscriptions_resp = daemon.get("/api/subscriptions")
+        subscriptions_resp = daemon.get_from_host("/api/host/subscriptions")
         escalations = escalations_resp.json().get("items", [])
         harness_health = (
             daemon.get("/api/harness-health").json().get("items", [])
@@ -182,9 +175,14 @@ def status(ctx: click.Context, directory: str, runner_url: str | None) -> None:
     for lease in leases:
         click.echo(f"  {lease['lease_id']}  {lease['state']:<12} chunk={lease['chunk_id']} node={lease['node_name']}")
 
-    # `GET /api/environments` carries the full configured pool; this section
-    # is the *held*-environments view, so it keeps the slots the runner reports held.
-    envs = [env for env in envs_resp.json().get("items", []) if env.get("held")]
+    # `GET /api/host/environments` carries every workspace's whole pool; this section
+    # is this runner's *held*-environments view, so it keeps the slots this runner holds.
+    envs = [
+        env
+        for workspace in envs_resp.json().get("workspaces", [])
+        for env in workspace.get("items", [])
+        if env.get("held") and env.get("runner_id") == runner_id
+    ]
     click.echo(f"\nheld environments ({len(envs)}):")
     for env in envs:
         click.echo(f"  {env['environment_id']}  chunk={env['chunk_id']}  held since {env['held_since']}")
@@ -224,7 +222,7 @@ def status(ctx: click.Context, directory: str, runner_url: str | None) -> None:
     for tko in takeovers:
         click.echo(f"  chunk {tko['chunk_id']}  takeover={tko['takeover_id']}  held since {tko['held_since']}")
 
-    subscriptions = subscriptions_resp.json().get("items", [])
+    subscriptions = [sub for sub in subscriptions_resp.json().get("items", []) if runner_id in sub.get("spenders", [])]
     click.echo(f"\nsubscriptions ({len(subscriptions)}):")
     for sub in subscriptions:
         if sub["sampled_at"] is None:

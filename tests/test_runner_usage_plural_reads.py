@@ -11,8 +11,8 @@ from pathlib import Path
 import pytest
 
 from blizzard.foundation.clock import FixedClock
-from blizzard.runner.api.subscriptions import _subscription_list
-from blizzard.runner.config import RunnerConfig, SubscriptionDeclaration
+from blizzard.runner.api.host import _subscription_list
+from blizzard.runner.config import SubscriptionDeclaration
 from blizzard.runner.lifecycle.usage_limit import _fallback_reset
 from blizzard.runner.loop.context import LoopConfig, ResolvedSubscription
 from blizzard.runner.subscriptions.subscription_sampler import PROVIDER_ANTHROPIC
@@ -134,11 +134,9 @@ def test_subscription_list_statement_count_is_flat_in_the_declared_subscriptions
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     for i in range(declared):
         _record(store, f"sub-{i}", 0, payload=_payload(10.0))
-    config = RunnerConfig(
-        root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}", subscriptions=_declarations(declared)
-    )
+    declarations = _declarations(declared)
 
-    count = count_queries(store._engine, lambda: _subscription_list(config, store))
+    count = count_queries(store._engine, lambda: _subscription_list(declarations, store, {}))
 
     assert count == 2  # one batched read each: the newest attempts, the newest renewals
 

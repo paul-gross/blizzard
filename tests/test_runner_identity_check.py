@@ -16,7 +16,6 @@ from pathlib import Path
 
 import httpx
 import pytest
-from fastapi.testclient import TestClient
 from pytest import MonkeyPatch
 from structlog.testing import capture_logs
 
@@ -34,6 +33,7 @@ from blizzard.runner.lifecycle.identity_check import IdentityCheck, ProxyIdentit
 from blizzard.runner.lifecycle.registration import Registration
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.tick import tick
+from tests.runner_client import runner_client
 from tests.runner_fakes import (
     FakeHarness,
     FakeHub,
@@ -296,7 +296,7 @@ def _proxied(
         identity_verdict=held,
         identity_check=ProxyIdentityCheck("r1", held, ctx.clock),
     )
-    client = TestClient(app)
+    client = runner_client(app)
     resp = client.get("/api/fleet-summary")
     if resp.status_code == 200:
         assert client.get("/api/fleet-summary").status_code == 200
@@ -496,5 +496,5 @@ def test_the_hub_clients_present_the_token_taken_up_from_env(tmp_path: Path, mon
     held.reread()
 
     loop_client.identity()
-    assert TestClient(app).get("/api/fleet-summary").status_code == 200
+    assert runner_client(app).get("/api/fleet-summary").status_code == 200
     assert presented == [f"Bearer {_RIGHT}", f"Bearer {_RIGHT}"]

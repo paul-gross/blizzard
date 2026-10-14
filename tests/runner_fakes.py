@@ -35,7 +35,7 @@ from blizzard.runner.environments.provider import (
     WorkspaceAcquisitionError,
 )
 from blizzard.runner.environments.worktree import IWorktreeGit
-from blizzard.runner.events.broker import EventBroker
+from blizzard.runner.events.broker import EventBroker, RunnerEventPublisher
 from blizzard.runner.harness.adapter import (
     IHarnessAdapter,
     PendingWorkerHandle,
@@ -1509,6 +1509,7 @@ def make_context(
         )
         store.record_runner_identity(seeded)
         _identity.hold(seeded)
+    publisher = RunnerEventPublisher(events, FIXTURE_RUNNER_ID) if events is not None else None
     context = LoopContext(
         stores=_stores,
         host_stores=make_host_stores(store, _clock),
@@ -1537,7 +1538,7 @@ def make_context(
             harnesses=_harnesses,
             invocation_boundaries=store,
             transcripts_wired=_transcripts_wired,
-            events=events,
+            events=publisher,
         ),
         sessions=SessionResolver(
             leases=store,
@@ -1545,11 +1546,11 @@ def make_context(
             transcripts_wired=_transcripts_wired,
         ),
         harness_selector=HarnessSelector(harnesses=_harnesses),
-        env_release=EnvironmentRelease(environments=store, clock=_clock, provider=_provider, events=events),
+        env_release=EnvironmentRelease(environments=store, clock=_clock, provider=_provider, events=publisher),
         # Wired exactly when `harness` itself holds a transcript source, resolved once here;
         # `LoopWiring.context` always wires it, its graph's default harness being guarded to resolve one.
         transcripts_wired=_transcripts_wired,
-        events=events,
+        events=publisher,
         harnesses=_harnesses,
         harness_versions=harness_versions,
     )

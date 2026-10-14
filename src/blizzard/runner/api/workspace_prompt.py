@@ -1,21 +1,22 @@
-"""The runner-local workspace-prompt endpoint — ``GET``/``PUT /api/workspace-prompt``.
+"""The host's workspace-prompt endpoint — ``GET``/``PUT``/``DELETE /api/host/workspaces/{workspace_id}/prompt``.
 
-The **runtime** control over the standing workspace prompt: ``GET`` returns the
-store's override when set and the static config value otherwise, and ``PUT`` replaces it."""
+The **runtime** control over a workspace's standing prompt: ``GET`` returns the
+store's override when set and the static config value otherwise, ``PUT`` replaces it, and ``DELETE`` drops it.
+A workspace the host does not declare answers ``404``."""
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from fastapi import APIRouter, Request
 from pydantic import BaseModel
 
 from blizzard.runner.api.wiring import RunnerWiring
 
-router = APIRouter(prefix="/api", tags=["runner"])
+router = APIRouter(prefix="/api/host/workspaces/{workspace_id}", tags=["host"])
 
 #: The lane an effective workspace prompt came from — the store's runtime override, or the
-#: runner's own configuration.
+#: host's configuration.
 WorkspacePromptSource = Literal["override", "config"]
 
 
@@ -23,7 +24,7 @@ class WorkspacePromptResponse(BaseModel):
     """The effective workspace prompt prepended to a worker spawn."""
 
     prompt: str
-    #: Which of the two lanes produced `prompt`: the runtime override, or the runner's config.
+    #: Which of the two lanes produced `prompt`: the runtime override, or the host's config.
     source: WorkspacePromptSource = "config"
 
 
@@ -33,37 +34,39 @@ class WorkspacePromptReplacement(BaseModel):
     prompt: str
 
 
-@router.get("/workspace-prompt", response_model=WorkspacePromptResponse)
-def read_workspace_prompt(request: Request) -> WorkspacePromptResponse:
+_UNKNOWN: dict[int | str, dict[str, Any]] = {404: {"description": "The host declares no such workspace."}}
+
+
+@router.get("/prompt", response_model=WorkspacePromptResponse, responses=_UNKNOWN)
+def read_workspace_prompt(workspace_id: str, request: Request) -> WorkspacePromptResponse:
     """The effective spawn preamble prompt: the runtime override if set, else static config."""
     wiring = RunnerWiring.of(request)
-    stores, config = wiring.maybe_host_read_stores(), wiring.maybe_config()
-    override = (
-        stores.workspace_prompt.workspace_prompt_override(config.workspace_id)
-        if stores is not None and config is not None
-        else None
-    )
+    workspace = wiring.workspace(workspace_id)
+    stores = wiring.maybe_host_read_stores()
+    override = stores.workspace_prompt.workspace_prompt_override(workspace_id) if stores is not None else None
     if override is not None:
         return WorkspacePromptResponse(prompt=override, source="override")
-    prompt = config.resolved_workspace_prompt() if config is not None else ""
-    return WorkspacePromptResponse(prompt=prompt, source="config")
+    return WorkspacePromptResponse(prompt=workspace.configured_prompt(), source="config")
 
 
-@router.put("/workspace-prompt", response_model=WorkspacePromptResponse)
-def replace_workspace_prompt(request_body: WorkspacePromptReplacement, request: Request) -> WorkspacePromptResponse:
+@router.put("/prompt", response_model=WorkspacePromptResponse, responses=_UNKNOWN)
+def replace_workspace_prompt(
+    workspace_id: str, request_body: WorkspacePromptReplacement, request: Request
+) -> WorkspacePromptResponse:
     """Replace the runtime workspace-prompt override — effective on subsequent spawns."""
     wiring = RunnerWiring.of(request)
-    wiring.workspace_prompts().replace(wiring.config().workspace_id, prompt=request_body.prompt)
+    wiring.workspace(workspace_id)
+    wiring.workspace_prompts().replace(workspace_id, prompt=request_body.prompt)
     return WorkspacePromptResponse(prompt=request_body.prompt, source="override")
 
 
-@router.delete("/workspace-prompt", response_model=WorkspacePromptResponse)
-def clear_workspace_prompt(request: Request) -> WorkspacePromptResponse:
-    """Drop the runtime override so the runner's configured prompt resolves again.
+@router.delete("/prompt", response_model=WorkspacePromptResponse, responses=_UNKNOWN)
+def clear_workspace_prompt(workspace_id: str, request: Request) -> WorkspacePromptResponse:
+    """Drop the runtime override so the workspace's configured prompt resolves again.
 
     Distinct from overriding with empty text, which is itself a standing override; the response
     carries whatever the config now resolves to, effective on subsequent spawns."""
     wiring = RunnerWiring.of(request)
-    config = wiring.config()
-    wiring.workspace_prompts().clear(config.workspace_id)
-    return WorkspacePromptResponse(prompt=config.resolved_workspace_prompt(), source="config")
+    workspace = wiring.workspace(workspace_id)
+    wiring.workspace_prompts().clear(workspace_id)
+    return WorkspacePromptResponse(prompt=workspace.configured_prompt(), source="config")

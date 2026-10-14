@@ -146,7 +146,7 @@ def traces_replay(
             body = {"since": iso_utc(start), "until": iso_utc(stop), "dry_run": dry_run}
             where = f"window {number} of {len(windows)}; resume with --since {resume_since(start)}"
             try:
-                resp = daemon.client.post("/api/traces/replay", json=body, timeout=_REPLAY_TIMEOUT)
+                resp = daemon.client.post(daemon.runner_path("/api/traces/replay"), json=body, timeout=_REPLAY_TIMEOUT)
             except httpx.HTTPError as exc:
                 raise click.ClickException(f"{daemon.unreachable(exc).message} ({where})") from exc
             if resp.status_code == httpx.codes.BAD_GATEWAY:

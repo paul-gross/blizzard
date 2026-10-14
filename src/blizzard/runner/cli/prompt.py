@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import difflib
+from urllib.parse import quote
 
 import click
 
@@ -36,7 +37,7 @@ _PROMPT_DIR_OPTION = click.option(
 )
 
 
-_OVERRIDE_SOURCE = "store override (PUT /api/workspace-prompt)"
+_OVERRIDE_SOURCE = "store override (PUT /api/host/workspaces/<workspace>/prompt)"
 
 
 def _packaged_sample(name: str) -> str:
@@ -147,8 +148,9 @@ def prompt_clear(ctx: click.Context, directory: str, runner_url: str | None) -> 
     """Drop the store override so the configured workspace prompt resolves again.
 
     The one `prompt` verb that needs a running runner. Takes effect on subsequent spawns."""
+    workspace_id = load_runner(directory).workspace_id
     with RunnerDaemon.reach("prompt clear", directory, runner_url, OperatorTrace.source(ctx)) as daemon:
-        daemon.send("delete", "/api/workspace-prompt").raise_for_status()
+        daemon.send_to_host("delete", f"/api/host/workspaces/{quote(workspace_id, safe='')}/prompt").raise_for_status()
     click.echo("workspace-prompt override cleared — the configured prompt applies on subsequent spawns")
 
 

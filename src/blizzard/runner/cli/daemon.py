@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from types import TracebackType
 from typing import Literal
@@ -12,6 +12,7 @@ import httpx
 
 from blizzard.cli.operator_trace import ITraceHeaders
 from blizzard.cli.param_rank import ParamSource
+from blizzard.foundation.runner_paths import runner_prefix
 from blizzard.runner.host_layout import HostLayout
 
 # A machine-local round trip, so a hook-scale budget rather than the hub-client one.
@@ -41,6 +42,8 @@ class RunnerDaemon:
     verb: str
     client: httpx.Client
     where: str
+    #: The runner this door reaches, once the host has named it.
+    _runner: dict[str, str] = field(default_factory=dict, compare=False, repr=False)
 
     @classmethod
     def reach(cls, verb: str, directory: str, runner_url: str | None, trace: ITraceHeaders) -> RunnerDaemon:
@@ -79,19 +82,55 @@ class RunnerDaemon:
         return False
 
     def get(self, path: str, *, params: dict[str, str] | None = None) -> httpx.Response:
-        return self._call("get", path, params=params)
+        """``GET`` the runner's own ``path``, raising on a non-2xx answer."""
+        return self._call("get", self.runner_path(path), params=params)
 
     def post(self, path: str, *, json_body: object | None = None) -> httpx.Response:
-        return self._call("post", path, json_body=json_body)
+        return self._call("post", self.runner_path(path), json_body=json_body)
 
     def patch(self, path: str, *, json_body: object | None = None) -> httpx.Response:
-        return self._call("patch", path, json_body=json_body)
+        return self._call("patch", self.runner_path(path), json_body=json_body)
 
     def send(self, method: str, path: str, *, json_body: object | None = None) -> httpx.Response:
+        """``method`` on the runner's own ``path``, whatever it answers."""
+        return self.send_to_host(method, self.runner_path(path), json_body=json_body)
+
+    def send_to_host(self, method: str, path: str, *, json_body: object | None = None) -> httpx.Response:
+        """``method`` on the host's own ``path``, at its root, whatever it answers."""
         kwargs: dict[str, object] = {}
         if json_body is not None:
             kwargs["json"] = json_body
         return getattr(self.client, method)(path, **kwargs)
+
+    def get_from_host(self, path: str) -> httpx.Response:
+        """``GET`` the host's own ``path``, at its root, raising on a non-2xx answer."""
+        return self._call("get", path)
+
+    def runner_path(self, path: str) -> str:
+        """``path`` under the prefix of the runner this door reaches."""
+        return runner_prefix(self.runner_id()) + path
+
+    def runner_id(self) -> str:
+        """The id of the one runner the host serves, read from its runner list once. A host serving none fails naming
+        why each is halted; one serving several fails naming them."""
+        if "id" not in self._runner:
+            self._runner["id"] = self._sole_runner_id()
+        return self._runner["id"]
+
+    def _sole_runner_id(self) -> str:
+        items: list[dict[str, object]] = self._call("get", "/api/host/runners").json()["items"]
+        serving = [item for item in items if item["state"] == "serving"]
+        if len(serving) == 1:
+            return str(serving[0]["runner_id"])
+        if not serving:
+            halted = "; ".join(
+                f"runner {item['name']} ({item['runner_id'] or 'no id'}) is halted: "
+                f"{'; '.join(map(str, item['halted_reasons']))}"  # type: ignore[arg-type]
+                for item in items
+            )
+            raise click.ClickException(f"{self.verb}: the host at {self.where} serves no runner: {halted or 'none'}")
+        names = ", ".join(f"{item['name']} ({item['runner_id']})" for item in serving)
+        raise click.ClickException(f"{self.verb}: the host at {self.where} serves several runners: {names}")
 
     def unreachable(self, exc: Exception) -> click.ClickException:
         return click.ClickException(f"{self.verb}: could not reach the runner at {self.where} ({exc})")

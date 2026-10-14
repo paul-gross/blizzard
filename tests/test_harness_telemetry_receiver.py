@@ -355,14 +355,17 @@ def test_a_url_attribute_leaves_without_its_query_string() -> None:
     assert dict(readable.log_record.attributes or {}) == {"url.full": "https://x.test/p"}
 
 
-@pytest.mark.parametrize("path", ["/v1/traces", "/v1/metrics", "/v1/logs", "/prefix/v1/logs/"])
+@pytest.mark.parametrize(
+    "path", ["/runners/rn_1/v1/traces", "/runners/rn_1/v1/metrics", "/runners/rn_1/v1/logs", "/prefix/v1/logs/"]
+)
 def test_every_otlp_receiver_path_is_excluded_from_spans(path: str) -> None:
     assert is_excluded({"method": "POST", "path": path})
 
 
 def test_other_paths_are_not_excluded() -> None:
-    assert not is_excluded({"method": "POST", "path": "/api/leases"})
-    assert is_excluded({"method": "POST", "path": "/api/heartbeat"})
+    assert not is_excluded({"method": "POST", "path": "/runners/rn_1/api/leases"})
+    assert not is_excluded({"method": "POST", "path": "/api/heartbeat"})
+    assert is_excluded({"method": "POST", "path": "/runners/rn_1/api/heartbeat"})
 
 
 def test_every_metric_kind_encodes_through_the_sdks_own_protobuf_encoder() -> None:

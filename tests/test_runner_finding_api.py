@@ -13,12 +13,12 @@ from pathlib import Path
 import httpx
 import pytest
 from fastapi import FastAPI
-from fastapi.testclient import TestClient
 
 from blizzard.foundation.tokens import TokenHash
 from blizzard.runner.app import create_app
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.leases.model import NewLease
+from tests.runner_client import runner_client
 from tests.runner_fakes import make_host_stores, make_store, make_stores, no_retry_clock
 
 _NOW = datetime(2026, 9, 4, 12, 0, 0, tzinfo=UTC)
@@ -113,7 +113,7 @@ def _stub_hub(app: FastAPI, status_code: int, payload: object, seen: list[str] |
 @pytest.mark.component
 def test_list_503_when_store_unwired(tmp_path: Path) -> None:
     config = RunnerConfig(root=tmp_path, db_url="sqlite://", hub_url=_HUB_URL)
-    with TestClient(create_app(config)) as client:
+    with runner_client(create_app(config)) as client:
         resp = client.get("/api/leases/lease_1/findings", headers={"X-Blizzard-Lease-Token": _TOKEN})
     assert resp.status_code == 503
 
@@ -121,7 +121,7 @@ def test_list_503_when_store_unwired(tmp_path: Path) -> None:
 @pytest.mark.component
 def test_list_404_for_an_unknown_lease(tmp_path: Path) -> None:
     app, _store = _app_with_store(tmp_path)
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get("/api/leases/lease_ghost/findings", headers={"X-Blizzard-Lease-Token": _TOKEN})
     assert resp.status_code == 404
 
@@ -130,7 +130,7 @@ def test_list_404_for_an_unknown_lease(tmp_path: Path) -> None:
 def test_list_403_for_a_missing_token(tmp_path: Path) -> None:
     app, store = _app_with_store(tmp_path)
     _seed_lease(store)
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get("/api/leases/lease_1/findings")
     assert resp.status_code == 403
 
@@ -139,7 +139,7 @@ def test_list_403_for_a_missing_token(tmp_path: Path) -> None:
 def test_list_403_for_a_wrong_token(tmp_path: Path) -> None:
     app, store = _app_with_store(tmp_path)
     _seed_lease(store)
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get("/api/leases/lease_1/findings", headers={"X-Blizzard-Lease-Token": "nope"})
     assert resp.status_code == 403
 
@@ -150,7 +150,7 @@ def test_list_503_when_hub_unwired_even_for_an_authorized_lease(tmp_path: Path) 
     never learns the hub-wiring state."""
     app, store = _app_with_store(tmp_path, hub_url="")
     _seed_lease(store)
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         authed = client.get("/api/leases/lease_1/findings", headers={"X-Blizzard-Lease-Token": _TOKEN})
         unauthed = client.get("/api/leases/lease_1/findings", headers={"X-Blizzard-Lease-Token": "nope"})
     assert authed.status_code == 503
@@ -163,7 +163,7 @@ def test_list_forwards_to_the_hub_chunks_findings_route_and_returns_the_set(tmp_
     _seed_lease(store)
     seen: list[str] = []
     _stub_hub(app, 200, _BUCKET, seen)
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get("/api/leases/lease_1/findings", headers={"X-Blizzard-Lease-Token": _TOKEN})
     assert resp.status_code == 200, resp.text
     assert seen == [f"{_HUB_URL}/api/fleet/chunks/{_CHUNK}/findings"]
@@ -179,7 +179,7 @@ def test_list_502_when_the_hub_is_unreachable(tmp_path: Path) -> None:
         raise httpx.ConnectError("refused")
 
     app.state.hub_router.handler = handler
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get("/api/leases/lease_1/findings", headers={"X-Blizzard-Lease-Token": _TOKEN})
     assert resp.status_code == 502
 
@@ -189,7 +189,7 @@ def test_list_hub_refusal_of_a_chunk_answering_no_proposal_passes_through_verbat
     app, store = _app_with_store(tmp_path)
     _seed_lease(store)
     _stub_hub(app, 404, {"detail": f"chunk {_CHUNK} answers no accepted, minted proposal"})
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get("/api/leases/lease_1/findings", headers={"X-Blizzard-Lease-Token": _TOKEN})
     assert resp.status_code == 404
     assert "no accepted, minted proposal" in resp.json()["detail"]
@@ -203,7 +203,7 @@ def test_list_hub_refusal_of_a_chunk_answering_no_proposal_passes_through_verbat
 def test_get_403_for_a_missing_token(tmp_path: Path) -> None:
     app, store = _app_with_store(tmp_path)
     _seed_lease(store)
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get("/api/leases/lease_1/findings/fin_1")
     assert resp.status_code == 403
 
@@ -214,7 +214,7 @@ def test_get_forwards_to_the_hub_chunks_finding_route_and_returns_it(tmp_path: P
     _seed_lease(store)
     seen: list[str] = []
     _stub_hub(app, 200, _FINDING, seen)
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get("/api/leases/lease_1/findings/fin_1", headers={"X-Blizzard-Lease-Token": _TOKEN})
     assert resp.status_code == 200, resp.text
     assert seen == [f"{_HUB_URL}/api/fleet/chunks/{_CHUNK}/findings/fin_1"]
@@ -226,7 +226,7 @@ def test_get_hub_refusal_of_an_out_of_set_id_passes_through_verbatim(tmp_path: P
     app, store = _app_with_store(tmp_path)
     _seed_lease(store)
     _stub_hub(app, 404, {"detail": "finding fin_other is not among the findings"})
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get("/api/leases/lease_1/findings/fin_other", headers={"X-Blizzard-Lease-Token": _TOKEN})
     assert resp.status_code == 404
     assert "not among the findings" in resp.json()["detail"]

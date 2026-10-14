@@ -712,12 +712,17 @@ def test_start_reports_the_resume_upward(tmp_path: Path, monkeypatch: pytest.Mon
 
 
 def _daemon_answering(monkeypatch: pytest.MonkeyPatch, view: dict[str, object]) -> None:
-    """Every verb's local API answers ``PATCH /api/runner`` with ``view`` — no daemon behind it."""
+    """Every verb's local API answers ``PATCH /api/runner`` with ``view`` — no daemon behind it — on a host of one."""
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/api/host/runners":
+            return httpx.Response(200, json={"items": [{"runner_id": "rn_1", "name": "r", "state": "serving"}]})
+        return httpx.Response(200, json=view)
 
     def reach(
         _cls: type[RunnerDaemon], verb: str, _directory: str, _runner_url: str | None, _trace: ITraceHeaders
     ) -> RunnerDaemon:
-        transport = httpx.MockTransport(lambda _request: httpx.Response(200, json=view))
+        transport = httpx.MockTransport(answer)
         return RunnerDaemon(verb, httpx.Client(transport=transport, base_url="http://runner"), "runner.sock")
 
     monkeypatch.setattr(RunnerDaemon, "reach", classmethod(reach))

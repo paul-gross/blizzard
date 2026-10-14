@@ -12,12 +12,12 @@ from pathlib import Path
 
 import httpx
 import pytest
-from fastapi.testclient import TestClient
 
 from blizzard.runner.app import create_app
 from blizzard.runner.cli import runner as runner_group
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.leases.model import NewLease
+from tests.runner_client import runner_client
 from tests.runner_fakes import make_host_stores, make_store, make_stores
 from tests.worker_http import bind_stubs
 
@@ -55,7 +55,7 @@ def test_heartbeat_endpoint_records_a_beat(tmp_path: Path) -> None:
     _seed_lease(store)
     assert store.latest_heartbeat("lease_1") is None
 
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.post("/api/heartbeat", json={"lease_id": "lease_1"})
 
     assert resp.status_code == 200, resp.text
@@ -70,7 +70,7 @@ def test_heartbeat_endpoint_records_for_an_already_closed_lease(tmp_path: Path) 
     _seed_lease(store)
     store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="transitioned", closed_at=_NOW)
 
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.post("/api/heartbeat", json={"lease_id": "lease_1"})
 
     assert resp.status_code == 200, resp.text
@@ -82,7 +82,7 @@ def test_heartbeat_endpoint_404_for_an_unminted_lease(tmp_path: Path) -> None:
     """An identifier naming no lease this runner ever minted is refused, not silently recorded."""
     app, store = _runner_app_with_store(tmp_path)
 
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.post("/api/heartbeat", json={"lease_id": "lease_nonesuch"})
 
     assert resp.status_code == 404, resp.text
@@ -93,7 +93,7 @@ def test_heartbeat_endpoint_404_for_an_unminted_lease(tmp_path: Path) -> None:
 def test_heartbeat_endpoint_503_when_store_unwired(tmp_path: Path) -> None:
     """The store-free app (OpenAPI export / unit boot) answers 503, never pretends."""
     config = RunnerConfig(root=tmp_path, db_url="sqlite://")
-    with TestClient(create_app(config)) as client:
+    with runner_client(create_app(config)) as client:
         resp = client.post("/api/heartbeat", json={"lease_id": "lease_1"})
     assert resp.status_code == 503
 

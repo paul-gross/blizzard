@@ -74,7 +74,7 @@ def _host(
 
 
 def _identity_state(local: httpx.Client) -> str | None:
-    view = local.get("/api/runner")
+    view = local.get(f"/runners/{_CONFIGURED.runner_id}/api/runner")
     return view.json()["identity"]["state"] if view.status_code == 200 else None
 
 
@@ -122,7 +122,7 @@ def test_a_runner_only_config_error_halts_that_runner_while_the_host_serves(tmp_
             assert local.get("/api/health").status_code == 200
             detail = local.get("/api/ready").json()["detail"]
             assert "runner-local" in detail and "names subscription 'missing'" in detail, detail
-            assert local.get("/api/runner").status_code != 200
+            assert local.get(f"/runners/{_CONFIGURED.runner_id}/api/runner").status_code == 503
             status = _status(root, hub_url)
             said = status.stdout + status.stderr
             assert status.returncode != 0
@@ -140,7 +140,7 @@ def test_a_store_that_names_another_runner_halts_that_runner_while_the_host_serv
             assert local.get("/api/health").status_code == 200
             detail = local.get("/api/ready").json()["detail"]
             assert _OTHER.runner_id in detail and _CONFIGURED.runner_id in detail, detail
-            assert local.get("/api/runner").status_code != 200
+            assert local.get(f"/runners/{_CONFIGURED.runner_id}/api/runner").status_code == 503
             # Nothing registered under the configured id: the store still names only the one runner.
             unregistered = hub.get(f"/api/fleet/runners/{_CONFIGURED.runner_id}", headers=_CONFIGURED.bearer)
             assert unregistered.status_code == 409, unregistered.text

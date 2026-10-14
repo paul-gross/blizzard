@@ -11,7 +11,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
-from fastapi.testclient import TestClient
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.tokens import TokenHash
@@ -20,6 +19,7 @@ from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.operator.attachments import AttachmentService
+from tests.runner_client import runner_client
 from tests.runner_fakes import make_host_stores, make_store, make_stores
 
 _NOW = datetime(2026, 7, 19, 12, 0, 0, tzinfo=UTC)
@@ -54,7 +54,7 @@ def _seed_lease(store, **overrides: object) -> None:  # type: ignore[no-untyped-
 @pytest.mark.component
 def test_503_when_attachment_service_unwired(tmp_path: Path) -> None:
     config = RunnerConfig(root=tmp_path, db_url="sqlite://")
-    with TestClient(create_app(config)) as client:
+    with runner_client(create_app(config)) as client:
         resp = client.post("/api/leases/lease_1/attachments", json={"name": "n", "content": "c"})
     assert resp.status_code == 503
 
@@ -67,7 +67,7 @@ def test_503_when_store_unwired(tmp_path: Path) -> None:
     # The service is wired, but ``runner_stores`` — the controller's own read-only
     # resolution seam — is not: the edge must still answer 503, not raise.
     app = create_app(config, attachments=service)
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.post("/api/leases/lease_1/attachments", json={"name": "n", "content": "c"})
     assert resp.status_code == 503
 
@@ -75,7 +75,7 @@ def test_503_when_store_unwired(tmp_path: Path) -> None:
 @pytest.mark.component
 def test_404_for_an_unknown_lease(tmp_path: Path) -> None:
     app, _store = _app_with_attachments(tmp_path)
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.post(
             "/api/leases/lease_ghost/attachments",
             json={"name": "n", "content": "c"},
@@ -88,7 +88,7 @@ def test_404_for_an_unknown_lease(tmp_path: Path) -> None:
 def test_403_for_a_missing_token(tmp_path: Path) -> None:
     app, store = _app_with_attachments(tmp_path)
     _seed_lease(store)
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.post("/api/leases/lease_1/attachments", json={"name": "n", "content": "c"})
     assert resp.status_code == 403
     assert store.attachments_for_lease("lease_1") == {}
@@ -98,7 +98,7 @@ def test_403_for_a_missing_token(tmp_path: Path) -> None:
 def test_403_for_a_wrong_token(tmp_path: Path) -> None:
     app, store = _app_with_attachments(tmp_path)
     _seed_lease(store)
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.post(
             "/api/leases/lease_1/attachments",
             json={"name": "n", "content": "c"},
@@ -112,7 +112,7 @@ def test_403_for_a_wrong_token(tmp_path: Path) -> None:
 def test_200_records_the_attachment_with_the_dedicated_header(tmp_path: Path) -> None:
     app, store = _app_with_attachments(tmp_path)
     _seed_lease(store)
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.post(
             "/api/leases/lease_1/attachments",
             json={"name": "review-findings", "content": "looks good"},
@@ -127,7 +127,7 @@ def test_200_records_the_attachment_with_the_dedicated_header(tmp_path: Path) ->
 def test_200_records_the_attachment_with_a_bearer_authorization_header(tmp_path: Path) -> None:
     app, store = _app_with_attachments(tmp_path)
     _seed_lease(store)
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.post(
             "/api/leases/lease_1/attachments",
             json={"name": "n", "content": "c"},
@@ -141,7 +141,7 @@ def test_200_records_the_attachment_with_a_bearer_authorization_header(tmp_path:
 def test_re_attach_of_the_same_name_overwrites_the_prior_content(tmp_path: Path) -> None:
     app, store = _app_with_attachments(tmp_path)
     _seed_lease(store)
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         first = client.post(
             "/api/leases/lease_1/attachments",
             json={"name": "n", "content": "first"},
@@ -164,7 +164,7 @@ def test_a_closed_lease_is_404_not_403(tmp_path: Path) -> None:
     app, store = _app_with_attachments(tmp_path)
     _seed_lease(store)
     store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="transitioned", closed_at=_NOW)
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.post(
             "/api/leases/lease_1/attachments",
             json={"name": "n", "content": "c"},
@@ -193,7 +193,7 @@ def test_an_open_takeover_authorizes_a_closed_reference_lease_but_refuses_the_at
     )
     store.record_lease_token("lease_1", TokenHash(takeover_token).hex, _NOW)
 
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         forged = client.post(
             "/api/leases/lease_1/attachments",
             json={"name": "n", "content": "c"},
@@ -216,7 +216,7 @@ def test_422_for_empty_content(tmp_path: Path) -> None:
     after the token check, so an unauthorized caller still reads ``403``."""
     app, store = _app_with_attachments(tmp_path)
     _seed_lease(store)
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         forged = client.post(
             "/api/leases/lease_1/attachments",
             json={"name": "n", "content": ""},
@@ -239,7 +239,7 @@ def test_422_for_empty_content(tmp_path: Path) -> None:
 @pytest.mark.component
 def test_get_503_when_store_unwired(tmp_path: Path) -> None:
     config = RunnerConfig(root=tmp_path, db_url="sqlite://")
-    with TestClient(create_app(config)) as client:
+    with runner_client(create_app(config)) as client:
         resp = client.get("/api/leases/lease_1/attachments", headers={"X-Blizzard-Lease-Token": _TOKEN})
     assert resp.status_code == 503
 
@@ -247,7 +247,7 @@ def test_get_503_when_store_unwired(tmp_path: Path) -> None:
 @pytest.mark.component
 def test_get_404_for_an_unknown_lease(tmp_path: Path) -> None:
     app, _store = _app_with_attachments(tmp_path)
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get("/api/leases/lease_ghost/attachments", headers={"X-Blizzard-Lease-Token": _TOKEN})
     assert resp.status_code == 404
 
@@ -256,7 +256,7 @@ def test_get_404_for_an_unknown_lease(tmp_path: Path) -> None:
 def test_get_403_for_a_missing_token(tmp_path: Path) -> None:
     app, store = _app_with_attachments(tmp_path)
     _seed_lease(store)
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get("/api/leases/lease_1/attachments")
     assert resp.status_code == 403
 
@@ -265,7 +265,7 @@ def test_get_403_for_a_missing_token(tmp_path: Path) -> None:
 def test_get_403_for_a_wrong_token(tmp_path: Path) -> None:
     app, store = _app_with_attachments(tmp_path)
     _seed_lease(store)
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get("/api/leases/lease_1/attachments", headers={"X-Blizzard-Lease-Token": "nope"})
     assert resp.status_code == 403
 
@@ -274,7 +274,7 @@ def test_get_403_for_a_wrong_token(tmp_path: Path) -> None:
 def test_get_returns_an_empty_list_when_nothing_is_staged(tmp_path: Path) -> None:
     app, store = _app_with_attachments(tmp_path)
     _seed_lease(store)
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get("/api/leases/lease_1/attachments", headers={"X-Blizzard-Lease-Token": _TOKEN})
     assert resp.status_code == 200, resp.text
     assert resp.json() == []
@@ -287,7 +287,7 @@ def test_get_reads_back_a_just_staged_submission_immediately(tmp_path: Path) -> 
     node-step completes and publishes it."""
     app, store = _app_with_attachments(tmp_path)
     _seed_lease(store)
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         client.post(
             "/api/leases/lease_1/attachments",
             json={"name": "review-findings", "content": "looks good"},
@@ -302,7 +302,7 @@ def test_get_reads_back_a_just_staged_submission_immediately(tmp_path: Path) -> 
 def test_get_returns_newest_content_per_name_sorted_by_name(tmp_path: Path) -> None:
     app, store = _app_with_attachments(tmp_path)
     _seed_lease(store)
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         client.post(
             "/api/leases/lease_1/attachments",
             json={"name": "z-name", "content": "z"},

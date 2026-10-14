@@ -286,7 +286,7 @@ def test_a_cross_node_resume_with_no_recorded_fingerprint_still_announces_the_ro
 
 @pytest.mark.unit
 def test_resume_with_a_changed_workspace_prompt_announces_and_sends_layer_two() -> None:
-    """AC3, the common case: a live ``PUT /api/workspace-prompt`` between two spawns of one
+    """AC3, the common case: a live ``PUT /api/host/workspaces/{id}/prompt`` between two spawns of one
     session. The new prose arrives in full behind an explicit announcement — never in the
     same position looking like the block the worker was handed several spawns ago."""
     prior = _fingerprint("Old policy.", _ENVS, runner_prompt="Blizzard prose.")

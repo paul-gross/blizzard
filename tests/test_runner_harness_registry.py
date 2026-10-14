@@ -30,6 +30,7 @@ from blizzard.runner.harness.wiring import (
 )
 from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
 from tests.harness_sections import with_claude_code, with_opencode
+from tests.runner_client import runner_seams
 from tests.runner_fakes import FakeHarness, FakeTranscriptSource
 
 
@@ -142,7 +143,7 @@ def test_registry_distinguishes_a_known_unavailable_capability() -> None:
 def test_export_app_has_an_empty_hermetic_harness_registry() -> None:
     app = create_app_for_export()
 
-    assert app.state.harnesses.known_harnesses == ()
+    assert runner_seams(app).harnesses.known_harnesses == ()
 
 
 @pytest.mark.unit

@@ -9,6 +9,7 @@ from pathlib import Path
 import httpx
 import pytest
 from click.testing import CliRunner
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from blizzard.foundation.clock import FixedClock
@@ -25,6 +26,7 @@ from blizzard.runner.tracing.replay import LeaseTraceReplay, ReplayUnavailable, 
 from blizzard.runner.tracing.status import LeaseTraceStatusReader
 from blizzard.runner.tracing.sweep import LeaseTraceSweep
 from tests import runner_trace_fixtures as fx
+from tests.runner_client import runner_client
 from tests.runner_fakes import SqlAlchemyRunnerStore, make_store
 from tests.runner_trace_leases import closed_lease
 from tests.support import InMemoryTraceExporter
@@ -83,9 +85,18 @@ class _Runner:
         return now - timedelta(seconds=back), now
 
 
+def _app(runner: _Runner, tmp_path: Path) -> FastAPI:
+    return create_app(_config(tmp_path), runner_stores=None, trace_status=runner.status, trace_replay=runner.replayer)
+
+
 def _client(runner: _Runner, tmp_path: Path) -> TestClient:
-    app = create_app(_config(tmp_path), runner_stores=None, trace_status=runner.status, trace_replay=runner.replayer)
-    return TestClient(app)
+    """A client at the host's root — the door an operator verb reaches through."""
+    return TestClient(_app(runner, tmp_path))
+
+
+def _routes(runner: _Runner, tmp_path: Path) -> TestClient:
+    """A client addressing the runner's own routes."""
+    return runner_client(_app(runner, tmp_path))
 
 
 def _config(tmp_path: Path) -> RunnerConfig:
@@ -202,7 +213,7 @@ def test_the_routes_serve_and_refuse_an_unwired_runner(tmp_path: Path) -> None:
     since, until = runner.window()
     body = {"since": since.isoformat(), "until": until.isoformat(), "dry_run": True}
 
-    with _client(runner, tmp_path) as client:
+    with _routes(runner, tmp_path) as client:
         ok = client.get("/api/traces/status")
         told = client.post("/api/traces/replay", json=body)
         bad = client.post(
@@ -223,7 +234,7 @@ def test_the_routes_serve_and_refuse_an_unwired_runner(tmp_path: Path) -> None:
     assert bad.status_code == 422
     assert future.status_code == 422 and "future" in future.json()["detail"]
     assert runner.exporter.batches == []
-    unwired = TestClient(create_app(_config(tmp_path)))
+    unwired = runner_client(create_app(_config(tmp_path)))
     assert unwired.get("/api/traces/status").status_code == 503
     assert unwired.post("/api/traces/replay", json=body).status_code == 503
 
@@ -401,7 +412,7 @@ def test_the_status_route_serves_the_runner_only_harness_telemetry_block(tmp_pat
     runner = _Runner(tmp_path)
     runner.status = _reader_with_plan(runner, _PLAN)
 
-    with _client(runner, tmp_path) as client:
+    with _routes(runner, tmp_path) as client:
         body = client.get("/api/traces/status").json()
 
     assert body["harness_telemetry"] == {
@@ -413,14 +424,14 @@ def test_the_status_route_serves_the_runner_only_harness_telemetry_block(tmp_pat
 
 def test_the_status_route_omits_the_block_where_no_plan_is_wired(tmp_path: Path) -> None:
     runner = _Runner(tmp_path)
-    with _client(runner, tmp_path) as client:
+    with _routes(runner, tmp_path) as client:
         assert client.get("/api/traces/status").json()["harness_telemetry"] is None
 
 
 def test_the_verb_names_each_signals_outcome(tmp_path: Path) -> None:
     runner = _Runner(tmp_path)
     runner.status = _reader_with_plan(runner, _PLAN)
-    body = _client(runner, tmp_path).get("/api/traces/status").json()
+    body = _routes(runner, tmp_path).get("/api/traces/status").json()
 
     assert harness_telemetry_lines(body["harness_telemetry"]) == [
         "harness telemetry:",

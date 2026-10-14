@@ -1,5 +1,5 @@
-"""``GET /api/subscriptions`` (component tier) — every declared
-subscription's own newest sampling attempt and credential renewal, reading the store directly
+"""``GET /api/host/subscriptions`` (component tier) — every declared
+subscription's own newest sampling attempt and credential renewal, with the runners that spend it, reading the store directly
 with no fresh sample or renewal of its own."""
 
 from __future__ import annotations
@@ -11,7 +11,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from blizzard.runner.app import create_app
-from blizzard.runner.config import RunnerConfig, SubscriptionDeclaration
+from blizzard.runner.config import DEFAULT_RUNNER_NAME, RunnerConfig, SubscriptionDeclaration
 from blizzard.runner.subscriptions.credential_renewer import (
     RenewalFailureReason,
     RenewalOutcome,
@@ -40,7 +40,7 @@ def test_a_never_attempted_slug_reports_every_field_none(tmp_path: Path) -> None
         subscriptions=(SubscriptionDeclaration(slug="anthropic", name="Anthropic", provider=PROVIDER_ANTHROPIC),),
     )
 
-    resp = client.get("/api/subscriptions")
+    resp = client.get("/api/host/subscriptions")
 
     assert resp.status_code == 200, resp.text
     assert resp.json() == {
@@ -55,6 +55,7 @@ def test_a_never_attempted_slug_reports_every_field_none(tmp_path: Path) -> None
                 "renewal_attempted_at": None,
                 "renewal_result": None,
                 "renewal_failure_reason": None,
+                "spenders": [DEFAULT_RUNNER_NAME],
             }
         ]
     }
@@ -73,7 +74,7 @@ def test_a_successful_attempt_reports_ok_true_and_no_miss_reason(tmp_path: Path)
         report_payload="{}",
     )
 
-    resp = client.get("/api/subscriptions")
+    resp = client.get("/api/host/subscriptions")
 
     assert resp.status_code == 200, resp.text
     item = resp.json()["items"][0]
@@ -97,7 +98,7 @@ def test_a_miss_reports_ok_false_and_its_reason(tmp_path: Path) -> None:
         miss_reason="credential_lapsed",
     )
 
-    resp = client.get("/api/subscriptions")
+    resp = client.get("/api/host/subscriptions")
 
     assert resp.status_code == 200, resp.text
     item = resp.json()["items"][0]
@@ -119,7 +120,7 @@ def test_a_renewed_outcome_reports_typed_beside_the_attempt(tmp_path: Path) -> N
         claim_id=claim_id, outcome=RenewalOutcome(RenewalOutcomeKind.RENEWED), recorded_at=_NOW
     )
 
-    resp = client.get("/api/subscriptions")
+    resp = client.get("/api/host/subscriptions")
 
     assert resp.status_code == 200, resp.text
     item = resp.json()["items"][0]
@@ -139,7 +140,7 @@ def test_a_failed_outcome_reports_its_typed_reason(tmp_path: Path) -> None:
         recorded_at=_NOW,
     )
 
-    resp = client.get("/api/subscriptions")
+    resp = client.get("/api/host/subscriptions")
 
     assert resp.status_code == 200, resp.text
     assert _renewal_fields(resp.json()["items"][0]) == ("2026-09-22T12:00:00+00:00", "failed", "timed_out")
@@ -152,7 +153,7 @@ def test_a_claim_with_no_outcome_reports_unrecorded(tmp_path: Path) -> None:
     )
     store.claim_credential_renewal(slug="codex", claimed_at=_NOW)
 
-    resp = client.get("/api/subscriptions")
+    resp = client.get("/api/host/subscriptions")
 
     assert resp.status_code == 200, resp.text
     assert _renewal_fields(resp.json()["items"][0]) == ("2026-09-22T12:00:00+00:00", "unrecorded", None)
@@ -182,10 +183,23 @@ def test_several_declared_subscriptions_each_report_their_own_slugs_newest_attem
         miss_reason="endpoint_unreachable",
     )
 
-    resp = client.get("/api/subscriptions")
+    resp = client.get("/api/host/subscriptions")
 
     assert resp.status_code == 200, resp.text
     by_slug = {item["slug"]: item for item in resp.json()["items"]}
     assert by_slug["anthropic"]["ok"] is True
     assert by_slug["codex"]["ok"] is False
     assert by_slug["codex"]["miss_reason"] == "endpoint_unreachable"
+
+
+def test_a_host_declared_subscription_no_runner_spends_names_no_spender(tmp_path: Path) -> None:
+    store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
+    declared = SubscriptionDeclaration(slug="openai", name="OpenAI", provider=PROVIDER_OPENAI)
+    config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}")
+    app = create_app(
+        config, subscriptions=(declared,), runner_stores=make_stores(store), host_stores=make_host_stores(store)
+    )
+
+    (item,) = TestClient(app).get("/api/host/subscriptions").json()["items"]
+
+    assert (item["slug"], item["spenders"]) == ("openai", [])

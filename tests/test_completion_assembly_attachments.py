@@ -9,7 +9,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
-from fastapi.testclient import TestClient
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.clock import FixedClock
@@ -23,6 +22,7 @@ from blizzard.runner.leases.model import NewLease
 from blizzard.runner.loop.steps import Advance, Pull
 from blizzard.runner.node_steps.submissions import ApplyReply
 from blizzard.runner.operator.attachments import AttachmentService
+from tests.runner_client import runner_client
 from tests.runner_fakes import (
     FakeHarness,
     FakeHub,
@@ -76,7 +76,7 @@ def test_advance_prefers_a_real_attachment_and_falls_back_for_the_rest(tmp_path:
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
 
     # `review-diary` is left un-attached to prove the fallback still fires.
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.post(
             "/api/leases/lease_r/attachments",
             json={"name": "review-findings", "content": "the real findings"},

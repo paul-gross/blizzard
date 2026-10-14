@@ -10,13 +10,13 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
-from fastapi.testclient import TestClient
 
 from blizzard.foundation.tokens import TokenHash
 from blizzard.runner.app import create_app
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.leases.model import NewLease
+from tests.runner_client import runner_client
 from tests.runner_fakes import make_host_stores, make_store, make_stores
 
 _NOW = datetime(2026, 7, 23, 12, 0, 0, tzinfo=UTC)
@@ -48,7 +48,7 @@ def _seed_lease(store, **overrides: object) -> None:  # type: ignore[no-untyped-
 @pytest.mark.component
 def test_503_when_store_unwired(tmp_path: Path) -> None:
     config = RunnerConfig(root=tmp_path, db_url="sqlite://")
-    with TestClient(create_app(config)) as client:
+    with runner_client(create_app(config)) as client:
         resp = client.post(
             "/api/leases/lease_1/asks", json={"question": "q?"}, headers={"X-Blizzard-Lease-Token": _TOKEN}
         )
@@ -58,7 +58,7 @@ def test_503_when_store_unwired(tmp_path: Path) -> None:
 @pytest.mark.component
 def test_404_for_an_unknown_lease(tmp_path: Path) -> None:
     app, _store = _app_with_store(tmp_path)
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.post(
             "/api/leases/lease_ghost/asks", json={"question": "q?"}, headers={"X-Blizzard-Lease-Token": _TOKEN}
         )
@@ -69,7 +69,7 @@ def test_404_for_an_unknown_lease(tmp_path: Path) -> None:
 def test_403_for_a_missing_token(tmp_path: Path) -> None:
     app, store = _app_with_store(tmp_path)
     _seed_lease(store)
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.post("/api/leases/lease_1/asks", json={"question": "q?"})
     assert resp.status_code == 403
     assert store.unforwarded_ask("lease_1") is None
@@ -79,7 +79,7 @@ def test_403_for_a_missing_token(tmp_path: Path) -> None:
 def test_403_for_a_wrong_token(tmp_path: Path) -> None:
     app, store = _app_with_store(tmp_path)
     _seed_lease(store)
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.post(
             "/api/leases/lease_1/asks", json={"question": "q?"}, headers={"X-Blizzard-Lease-Token": "nope"}
         )
@@ -91,7 +91,7 @@ def test_403_for_a_wrong_token(tmp_path: Path) -> None:
 def test_200_records_the_ask_with_the_dedicated_header(tmp_path: Path) -> None:
     app, store = _app_with_store(tmp_path)
     _seed_lease(store)
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.post(
             "/api/leases/lease_1/asks",
             json={"question": "which way?", "options": ["a", "b"]},
@@ -114,7 +114,7 @@ def test_a_closed_lease_is_404_not_403(tmp_path: Path) -> None:
     app, store = _app_with_store(tmp_path)
     _seed_lease(store)
     store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="transitioned", closed_at=_NOW)
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.post(
             "/api/leases/lease_1/asks", json={"question": "q?"}, headers={"X-Blizzard-Lease-Token": _TOKEN}
         )
@@ -141,7 +141,7 @@ def test_an_open_takeover_authorizes_a_closed_reference_lease_but_refuses_the_as
     )
     store.record_lease_token("lease_1", TokenHash(takeover_token).hex, _NOW)
 
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         forged = client.post(
             "/api/leases/lease_1/asks", json={"question": "q?"}, headers={"X-Blizzard-Lease-Token": "not-it"}
         )

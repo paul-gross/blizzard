@@ -14,7 +14,6 @@ from pathlib import Path
 
 import httpx
 import pytest
-from fastapi.testclient import TestClient
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
 import blizzard.runner.app as runner_app
@@ -56,6 +55,7 @@ from blizzard.runner.subscriptions.internal.openai_subscription_sampler import O
 from blizzard.runner.subscriptions.subscription_sampler import PROVIDER_ANTHROPIC, PROVIDER_OPENAI
 from tests.harness_sections import sections
 from tests.host_files import load_runner_config, write_minimal_host
+from tests.runner_client import runner_client, runner_seams
 from tests.runner_fakes import (
     FIXTURE_RUNNER_ID,
     FakeHub,
@@ -100,7 +100,7 @@ def test_basic_provider_wired_with_shared_absolute_root_and_capacity(tmp_path: P
         assert SpawnCwd.of_session(loop.config.workspace_root, str(tmp_path / "scratch" / "chunk")) == str(
             tmp_path / "scratch" / "chunk"
         )
-        assert hosted.state.runner_status._env_pool == ()
+        assert runner_seams(hosted).runner_status._env_pool == ()
 
 
 @pytest.mark.unit
@@ -410,7 +410,7 @@ def test_hosted_app_threads_the_worker_settings_path_and_permission_mode(tmp_pat
 
     app = build_hosted_app(load_runner_config(tmp_path)).app
 
-    harness = app.state.harnesses.lifecycle(CLAUDE_CODE_HARNESS_ID)
+    harness = runner_seams(app).harnesses.lifecycle(CLAUDE_CODE_HARNESS_ID)
     assert isinstance(harness, ClaudeCodeAdapter)
     assert harness._settings_path == settings
     assert " --permission-mode acceptEdits" in harness.resume_command("/w", "s-1", attended=True)
@@ -452,7 +452,9 @@ def test_loop_wiring_of_threads_the_broker_into_the_loop_context(tmp_path: Path)
     broker = EventBroker()
 
     with loop_context(config, broker=broker) as ctx:
-        assert ctx.events is broker
+        assert ctx.events is not None
+        ctx.events.publish_fact_changed(seq=1, kind="event.recorded", chunk_id=None, lease_id=None)
+    assert [json.loads(e.data)["runner_id"] for e in broker.snapshot()] == [FIXTURE_RUNNER_ID]
 
 
 @pytest.mark.unit
@@ -506,14 +508,14 @@ def test_context_health_is_the_graphs_own_cache(tmp_path: Path) -> None:
 
 @pytest.mark.unit
 def test_hosted_app_threads_the_broker_into_create_apps_seam_list(tmp_path: Path) -> None:
-    """The ``host`` verb's broker reaches ``app.state.events`` — the
+    """The ``host`` verb's broker reaches ``app.state.event_broker`` — the
     seam the stream route (``src/blizzard/runner/api/events.py``) reads off the served app."""
     write_minimal_host(tmp_path)
     broker = EventBroker()
 
     app = build_hosted_app(load_runner_config(tmp_path), events=broker).app
 
-    assert app.state.events is broker
+    assert app.state.event_broker is broker
 
 
 @pytest.mark.unit
@@ -523,7 +525,7 @@ def test_hosted_app_exposes_the_same_harness_health_cache_it_wires_into_create_a
 
     hosted = build_hosted_app(load_runner_config(tmp_path))
 
-    assert hosted.app.state.harness_health is hosted.harness_health
+    assert runner_seams(hosted.app).harness_health is hosted.harness_health
 
 
 @pytest.mark.unit
@@ -603,12 +605,13 @@ def test_hosted_graph_shares_process_scoped_dependencies_with_loop_and_recovery(
     graph = build_runner_process(config, events=EventBroker(), runner_id=FIXTURE_RUNNER_ID)
     hosted = build_hosted_app(config, process_graph=graph)
     try:
-        ctx = LoopWiring(config, "", "", graph.events).context(FakeHub(), graph)
+        ctx = LoopWiring(config, "", "", graph.host.events).context(FakeHub(), graph)
         try:
             assert hosted.app.state.workspace_provider is ctx.provider is graph.provider
-            assert hosted.app.state.harnesses is ctx.harnesses is graph.harnesses
-            assert hosted.app.state.harness_health is ctx.harness_health is graph.health
-            assert hosted.app.state.events is ctx.events is graph.events
+            assert runner_seams(hosted.app).harnesses is ctx.harnesses is graph.harnesses
+            assert runner_seams(hosted.app).harness_health is ctx.harness_health is graph.health
+            assert hosted.app.state.event_broker is graph.host.events
+            assert ctx.events is graph.events
             assert hosted.app.state.clock is ctx.clock is hosted.resume.clock is graph.clock
             assert hosted.resume.process is ctx.process is graph.process
             assert ctx.stores is graph.stores
@@ -670,7 +673,7 @@ def test_hosted_app_defaults_to_no_broker(tmp_path: Path) -> None:
 
     app = build_hosted_app(load_runner_config(tmp_path)).app
 
-    assert app.state.events is None
+    assert app.state.event_broker is None
 
 
 @pytest.mark.unit
@@ -681,7 +684,7 @@ def test_create_app_for_export_stays_broker_less(tmp_path: Path) -> None:
 
     app = create_app(config)
 
-    assert app.state.events is None
+    assert app.state.event_broker is None
 
 
 @pytest.mark.unit
@@ -951,7 +954,7 @@ def test_hosted_app_composes_the_escalation_takeover_command_over_the_runner_roo
         store.record_closure(
             lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="escalated", closed_at=_NOW
         )
-        with TestClient(hosted.app) as client:
+        with runner_client(hosted.app) as client:
             (escalation,) = client.get("/api/escalations").json()["items"]
         assert escalation["wrapped_takeover_command"] == (
             f"blizzard runner takeover ch_1 --dir {shlex.quote(str(config.root))}"

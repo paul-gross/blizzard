@@ -226,6 +226,8 @@ def main() -> None:
         else:
             raise RuntimeError("runner did not become healthy")
         assert health["status"] == "ok"
+        (served,) = [item for item in _request(base + "/api/host/runners")["items"] if item["state"] == "serving"]
+        runner = f"{base}/runners/{served['runner_id']}"
         bundle_status = subprocess.run(
             ["uv", "run", "blizzard", "runner", "harness", "status", "--dir", str(root)],
             env=env,
@@ -235,7 +237,7 @@ def main() -> None:
         ).stdout
         assert "opencode: source" in bundle_status and "snapshot:" in bundle_status
         for _ in range(120):
-            matches = [item for item in _request(base + "/api/leases")["items"] if item["chunk_id"] == args.chunk_id]
+            matches = [item for item in _request(runner + "/api/leases")["items"] if item["chunk_id"] == args.chunk_id]
             if matches:
                 break
             time.sleep(0.25)
@@ -245,13 +247,13 @@ def main() -> None:
         routed = True
         lease_pid = lease["pid"]
         assert lease["harness_id"] == "opencode"
-        ack = _request(base + "/api/heartbeat", {"lease_id": lease["lease_id"]})
+        ack = _request(runner + "/api/heartbeat", {"lease_id": lease["lease_id"]})
         assert ack == {"recorded": True, "lease_id": lease["lease_id"]}
-        before = _request(base + "/api/dashboard")["runner"]["last_tick_at"]
+        before = _request(runner + "/api/dashboard")["runner"]["last_tick_at"]
         for _ in range(100):
-            dashboard = _request(base + "/api/dashboard")
+            dashboard = _request(runner + "/api/dashboard")
             current = next(
-                item for item in _request(base + "/api/leases")["items"] if item["lease_id"] == lease["lease_id"]
+                item for item in _request(runner + "/api/leases")["items"] if item["lease_id"] == lease["lease_id"]
             )
             if dashboard["runner"]["last_tick_at"] != before and current["last_heartbeat_at"]:
                 break

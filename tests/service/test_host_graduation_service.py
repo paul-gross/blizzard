@@ -228,12 +228,13 @@ def test_a_graduated_pre_host_directory_resumes_its_leases_and_delivers_its_back
             _await_http(proc, local, "/api/health", log=log)
             assert poll_until(lambda: _hub_mark(hub) >= _ACKED + _BACKLOG, timeout=30.0), read_daemon_log(log)
 
-            status = local.get("/api/runner")
+            runner = f"/runners/{_RUNNER.runner_id}"
+            status = local.get(f"{runner}/api/runner")
             assert status.status_code == 200, status.text
             assert status.json()["runner_id"] == _RUNNER.runner_id
-            leases = {lease["lease_id"]: lease for lease in local.get("/api/leases").json()["items"]}
+            leases = {lease["lease_id"]: lease for lease in local.get(f"{runner}/api/leases").json()["items"]}
             assert {"lease_held", "lease_parked"} <= set(leases), leases
-            escalations = local.get("/api/escalations").json()["items"]
+            escalations = local.get(f"{runner}/api/escalations").json()["items"]
             assert [(e["lease_id"], e["cause"]) for e in escalations] == [("lease_escalated", "retries_exhausted")]
             # The held and parked leases are the runner's to resume: its ticks reap the unspawned one and resume the
             # parked one, each releasing a chunk the hub never handed out.

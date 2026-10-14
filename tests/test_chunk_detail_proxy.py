@@ -15,6 +15,7 @@ from fastapi.testclient import TestClient
 
 from blizzard.runner.app import create_app
 from blizzard.runner.config import RunnerConfig
+from tests.runner_client import runner_client
 from tests.runner_fakes import no_retry_clock
 
 _HUB_URL = "http://hub.local:8421"
@@ -65,7 +66,7 @@ _SUMMARY: dict[str, object] = {
 
 def _runner_app(tmp_path: Path, *, hub_proxy_client: httpx.Client | None = None) -> TestClient:
     config = RunnerConfig(root=tmp_path, db_url="sqlite://", hub_url=_HUB_URL)
-    return TestClient(create_app(config, hub_proxy_client=hub_proxy_client, hub_retry_clock=no_retry_clock()))
+    return runner_client(create_app(config, hub_proxy_client=hub_proxy_client, hub_retry_clock=no_retry_clock()))
 
 
 @pytest.mark.component
@@ -152,7 +153,7 @@ def test_proxy_forwards_the_authorization_header_when_a_token_is_configured(tmp_
 
     client = httpx.Client(transport=httpx.MockTransport(handler))
     config = RunnerConfig(root=tmp_path, db_url="sqlite://", hub_url=_HUB_URL, hub_token="proxy-token")
-    resp = TestClient(create_app(config, hub_proxy_client=client)).get(f"/api/chunks/{_CHUNK}")
+    resp = runner_client(create_app(config, hub_proxy_client=client)).get(f"/api/chunks/{_CHUNK}")
 
     assert resp.status_code == 200, resp.text
     assert seen_headers[0]["Authorization"] == "Bearer proxy-token"
@@ -161,6 +162,6 @@ def test_proxy_forwards_the_authorization_header_when_a_token_is_configured(tmp_
 @pytest.mark.component
 def test_503_when_the_runner_is_not_wired_to_a_hub(tmp_path: Path) -> None:
     config = RunnerConfig(root=tmp_path, db_url="sqlite://", hub_url="")
-    resp = TestClient(create_app(config)).get(f"/api/chunks/{_CHUNK}")
+    resp = runner_client(create_app(config)).get(f"/api/chunks/{_CHUNK}")
 
     assert resp.status_code == 503

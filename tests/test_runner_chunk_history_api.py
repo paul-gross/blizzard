@@ -14,7 +14,6 @@ from pathlib import Path
 import httpx
 import pytest
 from fastapi import FastAPI
-from fastapi.testclient import TestClient
 
 from blizzard.foundation.migration_source import MigrationSource
 from blizzard.foundation.tokens import TokenHash
@@ -25,6 +24,7 @@ from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionRefe
 from blizzard.runner.leases.model import NewLease
 from blizzard.wire.chunk import BounceView, MigrationView, TransitionView
 from blizzard.wire.history import ChunkHistoryView
+from tests.runner_client import runner_client
 from tests.runner_fakes import make_host_stores, make_store, make_stores, no_retry_clock
 from tests.support import build_hub, make_ready, pointer_token, report_lease
 
@@ -245,7 +245,7 @@ def _stub_hub(app: FastAPI, status_code: int, payload: object, seen: list[str] |
 @pytest.mark.component
 def test_503_when_store_unwired(tmp_path: Path) -> None:
     config = RunnerConfig(root=tmp_path, db_url="sqlite://", hub_url=_HUB_URL)
-    with TestClient(create_app(config)) as client:
+    with runner_client(create_app(config)) as client:
         resp = client.get("/api/leases/lease_1/history", headers={"X-Blizzard-Lease-Token": _TOKEN})
     assert resp.status_code == 503
 
@@ -253,7 +253,7 @@ def test_503_when_store_unwired(tmp_path: Path) -> None:
 @pytest.mark.component
 def test_404_for_an_unknown_lease(tmp_path: Path) -> None:
     app, _store = _app_with_store(tmp_path)
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get("/api/leases/lease_ghost/history", headers={"X-Blizzard-Lease-Token": _TOKEN})
     assert resp.status_code == 404
 
@@ -262,7 +262,7 @@ def test_404_for_an_unknown_lease(tmp_path: Path) -> None:
 def test_403_for_a_missing_token(tmp_path: Path) -> None:
     app, store = _app_with_store(tmp_path)
     _seed_lease(store)
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get("/api/leases/lease_1/history")
     assert resp.status_code == 403
 
@@ -271,7 +271,7 @@ def test_403_for_a_missing_token(tmp_path: Path) -> None:
 def test_403_for_a_wrong_token(tmp_path: Path) -> None:
     app, store = _app_with_store(tmp_path)
     _seed_lease(store)
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get("/api/leases/lease_1/history", headers={"X-Blizzard-Lease-Token": "nope"})
     assert resp.status_code == 403
 
@@ -281,7 +281,7 @@ def test_a_closed_lease_is_404_not_403(tmp_path: Path) -> None:
     app, store = _app_with_store(tmp_path)
     _seed_lease(store)
     store.record_closure(lease_id="lease_1", chunk_id=_CHUNK, node_id="nd_build", reason="transitioned", closed_at=_NOW)
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get("/api/leases/lease_1/history", headers={"X-Blizzard-Lease-Token": _TOKEN})
     assert resp.status_code == 404
 
@@ -307,7 +307,7 @@ def test_an_open_takeover_authorizes_a_closed_reference_lease(tmp_path: Path) ->
     store.record_lease_token("lease_1", TokenHash(takeover_token).hex, _NOW)
     _stub_hub(app, 200, _DETAIL)
 
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get("/api/leases/lease_1/history", headers={"X-Blizzard-Lease-Token": takeover_token})
     assert resp.status_code == 200, resp.text
 
@@ -318,7 +318,7 @@ def test_503_when_hub_unwired_even_for_an_authorized_lease(tmp_path: Path) -> No
     never learns the hub-wiring state — mirrors the artifacts proxy."""
     app, store = _app_with_store(tmp_path, hub_url="")
     _seed_lease(store)
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         authed = client.get("/api/leases/lease_1/history", headers={"X-Blizzard-Lease-Token": _TOKEN})
         unauthed = client.get("/api/leases/lease_1/history", headers={"X-Blizzard-Lease-Token": "nope"})
     assert authed.status_code == 503
@@ -331,7 +331,7 @@ def test_forwards_to_the_hub_chunk_detail_route_and_returns_merged_rows(tmp_path
     _seed_lease(store)
     seen: list[str] = []
     _stub_hub(app, 200, _DETAIL, seen)
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get("/api/leases/lease_1/history", headers={"X-Blizzard-Lease-Token": _TOKEN})
     assert resp.status_code == 200, resp.text
     assert seen == [f"{_HUB_URL}/api/fleet/chunks/{_CHUNK}"]
@@ -355,7 +355,7 @@ def test_forwards_the_runner_bearer_when_a_token_is_configured(tmp_path: Path) -
         return httpx.Response(200, json=_DETAIL)
 
     hub_proxy_client = httpx.Client(transport=httpx.MockTransport(handler))
-    with TestClient(
+    with runner_client(
         create_app(
             config,
             runner_stores=make_stores(store),
@@ -377,7 +377,7 @@ def test_502_when_the_hub_is_unreachable(tmp_path: Path) -> None:
         raise httpx.ConnectError("refused")
 
     app.state.hub_router.handler = handler
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get("/api/leases/lease_1/history", headers={"X-Blizzard-Lease-Token": _TOKEN})
     assert resp.status_code == 502
 
@@ -387,7 +387,7 @@ def test_hub_status_passes_through_verbatim(tmp_path: Path) -> None:
     app, store = _app_with_store(tmp_path)
     _seed_lease(store)
     _stub_hub(app, 404, {"detail": "no such chunk"})
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get("/api/leases/lease_1/history", headers={"X-Blizzard-Lease-Token": _TOKEN})
     assert resp.status_code == 404
     assert resp.json()["detail"] == "no such chunk"
@@ -499,7 +499,7 @@ def test_a_workers_history_read_matches_the_transitions_the_hub_recorded(tmp_pat
     )
     runner_store.record_lease_token("lease_1", TokenHash(_TOKEN).hex, _NOW)
     runner_config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}", hub_url=_HUB_URL)
-    with TestClient(
+    with runner_client(
         create_app(
             runner_config,
             runner_stores=make_stores(runner_store),

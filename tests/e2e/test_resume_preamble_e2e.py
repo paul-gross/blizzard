@@ -269,7 +269,7 @@ def test_resumed_node_entry_elides_unchanged_standing_layers(tmp_path: Path) -> 
 
 def test_resumed_node_entry_announces_a_replaced_workspace_prompt(tmp_path: Path) -> None:
     """The correctness half, at runtime: an operator replaces the workspace prompt through
-    the live ``PUT /api/workspace-prompt`` door between build's two entries, and the second
+    the live ``PUT /api/host/workspaces/{workspace_id}/prompt`` door between build's two entries, and the second
     entry is told, rather than being handed the new prose where the old one sat."""
     replaced: list[bool] = []
 
@@ -287,7 +287,9 @@ def test_resumed_node_entry_announces_a_replaced_workspace_prompt(tmp_path: Path
             }
             if "review" not in nodes:
                 return
-            response = runner.put("/api/workspace-prompt", json={"prompt": _REPLACEMENT_PROMPT})
+            response = runner.put(
+                f"/api/host/workspaces/{config.workspace_id}/prompt", json={"prompt": _REPLACEMENT_PROMPT}
+            )
             assert response.status_code == 200, response.text
             replaced.append(True)
 

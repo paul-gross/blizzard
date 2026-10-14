@@ -1,5 +1,4 @@
-"""The runner-local machine-status routes — ``GET /runner`` / ``/environments`` /
-``/asks`` / ``/escalations``.
+"""The runner-local machine-status routes — ``GET /runner`` / ``/asks`` / ``/escalations``.
 
 Exercised over a real store via TestClient. Hub-free but for the derived reachability
 read: every route's shape, its empty and unwired forms, and the derivation->wire
@@ -12,7 +11,6 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
-from fastapi.testclient import TestClient
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.runner.app import create_app
@@ -33,6 +31,7 @@ from blizzard.runner.hub.identity import (
 )
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.status.view import RunnerStatusService
+from tests.runner_client import runner_client
 from tests.runner_fakes import FakeHarness, FakeProbe, make_host_stores, make_store, make_stores, registered_identity
 from tests.support import assert_all_timestamps_utc
 
@@ -105,7 +104,7 @@ def _seed_lease(store, **overrides: object) -> None:  # type: ignore[no-untyped-
 @pytest.mark.component
 def test_summary_defaults_on_an_empty_store(tmp_path: Path) -> None:
     app, _store = _app_with_status(tmp_path, max_agents=3)
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get("/api/runner")
 
     assert resp.status_code == 200, resp.text
@@ -133,7 +132,7 @@ def test_summary_carries_the_tenant_beside_the_runners_id_and_name(tmp_path: Pat
         runner_id="rn_status", runner_name="r-bravo", registered_at=_NOW, tenant_id="tn_bravo", tenant_name="bravo"
     )
     app, _store = _app_with_status(tmp_path, identity=RunnerIdentityHolder(identity))
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         body = client.get("/api/runner").json()
 
     assert (body["runner_id"], body["runner_name"]) == ("rn_status", "r-bravo")
@@ -145,7 +144,7 @@ def test_summary_reports_the_identity_verdict_naming_both_runners_and_the_reset_
     verdict = IdentityVerdictHolder("blizzard runner store reset /runner")
     verdict.record(IdentityState.MISMATCHED, store_runner_id="rn_status", token_runner_id="rn_other", checked_at=_NOW)
     app, _store = _app_with_status(tmp_path, identity_verdict=verdict)
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         body = client.get("/api/runner").json()
 
     assert body["identity"] == {
@@ -161,7 +160,7 @@ def test_summary_reports_the_identity_verdict_naming_both_runners_and_the_reset_
 @pytest.mark.component
 def test_an_unchecked_verdict_reports_no_ids_and_no_check_yet(tmp_path: Path) -> None:
     app, _store = _app_with_status(tmp_path, identity_verdict=IdentityVerdictHolder("blizzard runner store reset /r"))
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         body = client.get("/api/runner").json()
 
     assert body["identity"] == {
@@ -177,7 +176,7 @@ def test_an_unchecked_verdict_reports_no_ids_and_no_check_yet(tmp_path: Path) ->
 def test_patch_runner_reports_the_identity_get_reports(tmp_path: Path) -> None:
     app, _ = _app_with_status(tmp_path, identity=RunnerIdentityHolder())
 
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         patched = client.patch("/api/runner", json={"paused": True, "by": "operator"})
         read = client.get("/api/runner")
 
@@ -194,7 +193,7 @@ def test_patch_runner_reports_the_identity_get_reports(tmp_path: Path) -> None:
 @pytest.mark.component
 def test_summary_reports_the_gates_the_service_was_built_with(tmp_path: Path) -> None:
     app, _store = _app_with_status(tmp_path, gates=("build", "review"))
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         body = client.get("/api/runner").json()
 
     assert body["gates"] == ["build", "review"]
@@ -203,8 +202,8 @@ def test_summary_reports_the_gates_the_service_was_built_with(tmp_path: Path) ->
 @pytest.mark.component
 def test_503_when_status_service_unwired(tmp_path: Path) -> None:
     config = RunnerConfig(root=tmp_path, db_url="sqlite://")
-    with TestClient(create_app(config)) as client:
-        for path in ("/api/runner", "/api/environments", "/api/escalations", "/api/takeovers"):
+    with runner_client(create_app(config)) as client:
+        for path in ("/api/runner", "/api/escalations", "/api/takeovers"):
             assert client.get(path).status_code == 503, path
 
 
@@ -213,7 +212,7 @@ def test_capacities_reflect_active_leases_the_same_way_fill_counts_them(tmp_path
     app, store = _app_with_status(tmp_path, max_agents=2)
     _seed_lease(store, lease_id="lease_1", chunk_id="ch_1")
 
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get("/api/runner")
 
     assert resp.json()["capacities"] == {"max_agents": 2, "used": 1, "free": 1}
@@ -225,7 +224,7 @@ def test_hub_reachable_when_last_contact_is_within_the_staleness_threshold(tmp_p
     app, store = _app_with_status(tmp_path, clock=clock)
     store.set_hub_paused(paused=False, at=_NOW - timedelta(minutes=1))
 
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get("/api/runner")
 
     hub = resp.json()["hub"]
@@ -240,7 +239,7 @@ def test_hub_unreachable_when_last_contact_is_stale(tmp_path: Path) -> None:
     app, store = _app_with_status(tmp_path, clock=clock)
     store.set_hub_paused(paused=False, at=_NOW - timedelta(hours=1))
 
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get("/api/runner")
 
     hub = resp.json()["hub"]
@@ -253,7 +252,7 @@ def test_pause_states_reported_apart_and_effective_is_the_or(tmp_path: Path) -> 
     app, store = _app_with_status(tmp_path)
     store.record_local_pause(paused=True, at=_NOW, by="alice", report_kind="runner.locally_paused", report_payload="{}")
 
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get("/api/runner")
 
     assert resp.json()["pause"] == {"local": True, "hub": False, "effective": True, "local_reason": None}
@@ -273,7 +272,7 @@ def test_pause_local_reason_surfaces_when_locally_paused_with_one(tmp_path: Path
         reason="usage limit: claude_code (resets 2026-09-21T22:40Z)",
     )
 
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get("/api/runner")
 
     assert resp.json()["pause"]["local_reason"] == "usage limit: claude_code (resets 2026-09-21T22:40Z)"
@@ -297,7 +296,7 @@ def test_pause_local_reason_is_none_when_not_locally_paused(tmp_path: Path) -> N
         paused=False, at=_NOW, by="operator", report_kind="runner.locally_resumed", report_payload="{}"
     )
 
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get("/api/runner")
 
     assert resp.json()["pause"] == {"local": False, "hub": False, "effective": False, "local_reason": None}
@@ -309,7 +308,7 @@ def test_buffer_depth_counts_the_unacked_outbound_buffer(tmp_path: Path) -> None
     store.enqueue_outbound(kind="lease.minted", chunk_id="ch_1", lease_id="lease_1", payload="{}", created_at=_NOW)
     store.enqueue_outbound(kind="lease.minted", chunk_id="ch_2", lease_id="lease_2", payload="{}", created_at=_NOW)
 
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get("/api/runner")
 
     assert resp.json()["hub"]["buffer_depth"] == 2
@@ -327,7 +326,7 @@ def test_buffer_depth_reports_the_true_depth_above_the_drains_own_per_run_limit(
             kind="lease.minted", chunk_id=f"ch_{i}", lease_id=f"lease_{i}", payload="{}", created_at=_NOW
         )
 
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get("/api/runner")
 
     assert resp.json()["hub"]["buffer_depth"] == total
@@ -338,106 +337,10 @@ def test_last_tick_reflects_daemon_liveness(tmp_path: Path) -> None:
     app, store = _app_with_status(tmp_path)
     store.record_daemon_liveness(alive_at=_NOW)
 
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get("/api/runner")
 
     assert resp.json()["last_tick_at"] == _NOW.isoformat()
-
-
-# --- GET /environments ---
-
-
-@pytest.mark.component
-def test_environments_lists_every_pool_environment_held_or_not(tmp_path: Path) -> None:
-    """A mixed pool: held slots carry their binding, unused slots carry
-    neither — every configured environment surfaces, not only the held ones."""
-    app, store = _app_with_status(tmp_path, env_pool=("e1", "e2", "e3"))
-    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
-    store.record_binding(chunk_id="ch_2", environment_id="e2", workdir="/ws/e2", bound_at=_NOW + timedelta(minutes=1))
-
-    with TestClient(app) as client:
-        resp = client.get("/api/environments")
-
-    assert resp.status_code == 200, resp.text
-    items = resp.json()["items"]
-    assert items == [
-        {"environment_id": "e1", "chunk_id": "ch_1", "held_since": _NOW.isoformat(), "held": True},
-        {
-            "environment_id": "e2",
-            "chunk_id": "ch_2",
-            "held_since": (_NOW + timedelta(minutes=1)).isoformat(),
-            "held": True,
-        },
-        {"environment_id": "e3", "chunk_id": None, "held_since": None, "held": False},
-    ]
-
-
-@pytest.mark.component
-def test_a_released_binding_reverts_its_slot_to_unused(tmp_path: Path) -> None:
-    app, store = _app_with_status(tmp_path, env_pool=("e1",))
-    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
-    store.record_release(chunk_id="ch_1", environment_id="e1", released_at=_NOW + timedelta(minutes=1))
-
-    with TestClient(app) as client:
-        resp = client.get("/api/environments")
-
-    assert resp.json()["items"] == [{"environment_id": "e1", "chunk_id": None, "held_since": None, "held": False}]
-
-
-@pytest.mark.component
-def test_empty_pool_yields_an_empty_response(tmp_path: Path) -> None:
-    app, _store = _app_with_status(tmp_path, env_pool=())
-
-    with TestClient(app) as client:
-        resp = client.get("/api/environments")
-
-    assert resp.json()["items"] == []
-
-
-@pytest.mark.component
-def test_a_held_binding_outside_the_configured_pool_still_surfaces(tmp_path: Path) -> None:
-    """A binding for an environment id no longer in the (resized) pool must not vanish —
-    it still holds a chunk, so it still appears."""
-    app, store = _app_with_status(tmp_path, env_pool=("e1",))
-    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
-    store.record_binding(chunk_id="ch_2", environment_id="e9", workdir="/ws/e9", bound_at=_NOW + timedelta(minutes=1))
-
-    with TestClient(app) as client:
-        resp = client.get("/api/environments")
-
-    items = resp.json()["items"]
-    assert items == [
-        {"environment_id": "e1", "chunk_id": "ch_1", "held_since": _NOW.isoformat(), "held": True},
-        {
-            "environment_id": "e9",
-            "chunk_id": "ch_2",
-            "held_since": (_NOW + timedelta(minutes=1)).isoformat(),
-            "held": True,
-        },
-    ]
-
-
-@pytest.mark.component
-def test_two_held_bindings_on_one_environment_id_both_surface(tmp_path: Path) -> None:
-    """A crash/requeue race can leave two held bindings on the same environment id —
-    the anomaly must not collapse into a single row or be silently dropped."""
-    app, store = _app_with_status(tmp_path, env_pool=("e1",))
-    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
-    store.record_binding(chunk_id="ch_2", environment_id="e1", workdir="/ws/e1", bound_at=_NOW + timedelta(minutes=1))
-
-    with TestClient(app) as client:
-        resp = client.get("/api/environments")
-
-    items = resp.json()["items"]
-    assert items == [
-        {"environment_id": "e1", "chunk_id": "ch_1", "held_since": _NOW.isoformat(), "held": True},
-        {
-            "environment_id": "e1",
-            "chunk_id": "ch_2",
-            "held_since": (_NOW + timedelta(minutes=1)).isoformat(),
-            "held": True,
-        },
-    ]
 
 
 # --- GET /asks?open=true ---
@@ -457,7 +360,7 @@ def test_open_asks_lists_an_unforwarded_ask(tmp_path: Path) -> None:
         asked_at=_NOW,
     )
 
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get("/api/asks", params={"open": "true"})
 
     assert resp.status_code == 200, resp.text
@@ -490,7 +393,7 @@ def test_open_asks_hides_an_unforwarded_ask_a_newer_one_on_its_lease_supersedes(
             asked_at=_NOW,
         )
 
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get("/api/asks", params={"open": "true"})
 
     assert resp.status_code == 200, resp.text
@@ -515,7 +418,7 @@ def test_open_asks_includes_a_forwarded_and_parked_ask(tmp_path: Path) -> None:
     )
     store.record_park(lease_id="lease_1", chunk_id="ch_1", question_id="qn_1", parked_at=_NOW)
 
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get("/api/asks", params={"open": "true"})
 
     assert [item["question_id"] for item in resp.json()["items"]] == ["qn_1"]
@@ -537,7 +440,7 @@ def test_an_answered_ask_does_not_appear(tmp_path: Path) -> None:
     store.record_park(lease_id="lease_1", chunk_id="ch_1", question_id="qn_1", parked_at=_NOW)
     store.record_park_resume(lease_id="lease_1", question_id="qn_1", resumed_at=_NOW + timedelta(minutes=1))
 
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get("/api/asks", params={"open": "true"})
 
     assert resp.json()["items"] == []
@@ -569,7 +472,7 @@ def test_an_ask_whose_lease_closed_without_a_park_resume_does_not_appear(tmp_pat
         closed_at=_NOW + timedelta(minutes=1),
     )
 
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get("/api/asks", params={"open": "true"})
 
     assert resp.json()["items"] == []
@@ -578,7 +481,7 @@ def test_an_ask_whose_lease_closed_without_a_park_resume_does_not_appear(tmp_pat
 @pytest.mark.component
 def test_open_false_is_refused_rather_than_answered_wrong(tmp_path: Path) -> None:
     app, _store = _app_with_status(tmp_path)
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get("/api/asks", params={"open": "false"})
 
     assert resp.status_code == 400
@@ -604,7 +507,7 @@ def test_an_escalated_lease_appears_with_its_resume_command(tmp_path: Path) -> N
         lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="escalated", closed_at=closed_at
     )
 
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get("/api/escalations")
 
     assert resp.status_code == 200, resp.text
@@ -646,7 +549,7 @@ def test_an_escalation_derives_its_cause_from_the_closure_reason(
     _seed_lease(store, lease_id="lease_1", chunk_id="ch_1", epoch=1)
     store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason=reason, closed_at=_NOW)
 
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         items = client.get("/api/escalations").json()["items"]
 
     assert [item["cause"] for item in items] == [cause]
@@ -666,7 +569,7 @@ def test_an_ordinary_escalated_closure_reads_back_the_cause_recorded_beside_it(t
         escalation_cause=cause,
     )
 
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         items = client.get("/api/escalations").json()["items"]
 
     assert [item["cause"] for item in items] == [cause]
@@ -686,7 +589,7 @@ def test_an_escalation_carries_the_wrapped_takeover_command_when_the_runner_dir_
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
     store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="escalated", closed_at=_NOW)
 
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         item = client.get("/api/escalations").json()["items"][0]
 
     assert item["wrapped_takeover_command"] == "blizzard runner takeover ch_1 --dir '/opt/runner dir'"
@@ -717,7 +620,7 @@ def test_an_escalated_leases_harness_version_reads_the_generations_own_recorded_
         closed_at=_NOW + timedelta(minutes=5),
     )
 
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         item = client.get("/api/escalations").json()["items"][0]
 
     assert item["harness_id"] == "claude_code"
@@ -798,7 +701,7 @@ def test_a_superseded_escalation_does_not_appear(tmp_path: Path) -> None:
     store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="escalated", closed_at=_NOW)
     _seed_lease(store, lease_id="lease_2", chunk_id="ch_1", epoch=2, created_at=_NOW + timedelta(minutes=1))
 
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get("/api/escalations")
 
     assert resp.json()["items"] == []
@@ -810,7 +713,7 @@ def test_a_non_escalated_closure_does_not_appear(tmp_path: Path) -> None:
     _seed_lease(store)
     store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="failed", closed_at=_NOW)
 
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get("/api/escalations")
 
     assert resp.json()["items"] == []
@@ -834,7 +737,7 @@ def test_an_open_takeover_appears_with_its_id_and_held_since(tmp_path: Path) -> 
         opened_at=opened_at,
     )
 
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get("/api/takeovers")
 
     assert resp.status_code == 200, resp.text
@@ -864,7 +767,7 @@ def test_a_closed_takeover_does_not_appear(tmp_path: Path) -> None:
     )
     store.record_takeover_end(takeover_id="tko_1", ended_at=_NOW + timedelta(minutes=1))
 
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get("/api/takeovers")
 
     assert resp.json()["items"] == []
@@ -874,7 +777,7 @@ def test_a_closed_takeover_does_not_appear(tmp_path: Path) -> None:
 def test_no_open_takeovers_is_an_empty_list(tmp_path: Path) -> None:
     app, _store = _app_with_status(tmp_path)
 
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get("/api/takeovers")
 
     assert resp.json()["items"] == []
@@ -898,7 +801,7 @@ def test_facts_lists_recent_outbound_newest_first_including_acked(tmp_path: Path
     acked_at = _NOW + timedelta(minutes=2)
     store.ack_outbound(1, acked_at=acked_at)
 
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get("/api/facts")
 
     assert resp.status_code == 200, resp.text
@@ -923,7 +826,7 @@ def test_facts_honors_the_limit_query(tmp_path: Path) -> None:
     for i in range(3):
         store.enqueue_outbound(kind="lease.minted", chunk_id=f"ch_{i}", lease_id=None, payload="{}", created_at=_NOW)
 
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         resp = client.get("/api/facts", params={"limit": 2})
 
     assert [item["seq"] for item in resp.json()["items"]] == [3, 2]
@@ -932,7 +835,7 @@ def test_facts_honors_the_limit_query(tmp_path: Path) -> None:
 @pytest.mark.component
 def test_facts_503_when_status_service_unwired(tmp_path: Path) -> None:
     config = RunnerConfig(root=tmp_path, db_url="sqlite://")
-    with TestClient(create_app(config)) as client:
+    with runner_client(create_app(config)) as client:
         assert client.get("/api/facts").status_code == 503
 
 
@@ -967,7 +870,7 @@ def test_an_escalation_carries_the_parked_sessions_own_configuration(tmp_path: P
         closed_at=_NOW + timedelta(minutes=5),
     )
 
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         item = client.get("/api/escalations").json()["items"][0]
 
     assert (item["session_name"], item["model"], item["effort"]) == ("code", "opus", "high")
@@ -981,7 +884,7 @@ def test_summary_names_each_held_binding_matching_no_workspace(tmp_path: Path) -
         chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1", project_id="pr_1"
     )
     store.record_binding(chunk_id="ch_2", environment_id="e9", workdir="/elsewhere/e9", bound_at=_NOW)
-    with TestClient(app) as client:
+    with runner_client(app) as client:
         body = client.get("/api/runner").json()
 
     assert body["unmatched_bindings"] == [

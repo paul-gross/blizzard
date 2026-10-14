@@ -36,6 +36,7 @@ from blizzard.runner.tracing.platform import (
 from blizzard.runner.tracing.platform import (
     PLATFORM_INSTRUMENTATION_SCOPE_VERSION as RUNNER_SCOPE_VERSION,
 )
+from tests.runner_client import runner_client
 from tests.runner_fakes import make_host_stores, make_store, make_stores, no_retry_clock
 
 pytestmark = pytest.mark.component
@@ -122,7 +123,7 @@ def test_a_worker_read_chains_runner_and_hub_spans_under_the_step_root(tmp_path:
             platform_tracing=runner_handle,
         )
         root = step_root(StepKey.attempt(chunk_id, 1))
-        with TestClient(runner) as worker:
+        with runner_client(runner) as worker:
             read = worker.get(
                 "/api/leases/lease_1/history",
                 headers={
@@ -134,14 +135,14 @@ def test_a_worker_read_chains_runner_and_hub_spans_under_the_step_root(tmp_path:
 
     runner_spans = _finished(runner_handle, runner_exporter)
     hub_spans = _finished(hub_handle, hub_exporter)
-    runner_server = _only(runner_spans, "SERVER", "GET /api/leases/")
-    runner_client = _only(runner_spans, "CLIENT", "GET")
+    runner_server = _only(runner_spans, "SERVER", "GET /runners/{runner_id}/api/leases/")
+    runner_call = _only(runner_spans, "CLIENT", "GET")
     hub_server = _only(hub_spans, "SERVER", "GET /api/fleet/chunks/")
     hub_queries = [s for s in hub_spans if _parent_id(s) == _span_id(hub_server)]
 
     assert _parent_id(runner_server) == root.span_id
-    assert _parent_id(runner_client) == _span_id(runner_server)
-    assert _parent_id(hub_server) == _span_id(runner_client)
+    assert _parent_id(runner_call) == _span_id(runner_server)
+    assert _parent_id(hub_server) == _span_id(runner_call)
     assert hub_queries, "the hub request's store reads should be child spans"
-    chained = [runner_server, runner_client, hub_server, *hub_queries]
+    chained = [runner_server, runner_call, hub_server, *hub_queries]
     assert {s.context.trace_id for s in chained if s.context is not None} == {root.trace_id}

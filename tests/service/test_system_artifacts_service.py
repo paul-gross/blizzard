@@ -64,7 +64,7 @@ def _seed_lease(config: RunnerConfig, runner_dir: Path, *, lease_id: str, token:
 def _cli_env(config: RunnerConfig, *, lease_id: str, token: str) -> dict[str, str]:
     return {
         "BLIZZARD_LEASE_ID": lease_id,
-        "BLIZZARD_RUNNER_URL": f"http://{config.host}:{config.port}",
+        "BLIZZARD_RUNNER_URL": config.local_api_url,
         "BLIZZARD_LEASE_TOKEN": token,
     }
 

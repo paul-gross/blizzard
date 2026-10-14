@@ -36,6 +36,7 @@ from blizzard.runner.subscriptions.credential_renewer import (
     RenewalOutcomeKind,
 )
 from tests.host_files import load_runner_config
+from tests.runner_client import runner_seams
 from tests.runner_fakes import SqlAlchemyRunnerStore, runner_store_errors
 from tests.runner_init_fakes import init_runner
 
@@ -90,14 +91,14 @@ def _serve_local_api(
     config = load_runner_config(root, port=0)
     app = build_hosted_app(config).app
     if refusing is not None:  # (store runner, token runner): the verdict the loop's check would hold
-        app.state.identity_verdict.record(
+        runner_seams(app).identity_verdict.record(
             IdentityState.MISMATCHED,
             store_runner_id=refusing[0],
             token_runner_id=refusing[1],
             checked_at=datetime(2026, 7, 16, 12, 0, tzinfo=UTC),
         )
     if not trace_status:
-        app.state.trace_status = None  # `GET /api/traces/status` then refuses with a 503
+        runner_seams(app).trace_status = None  # `GET /api/traces/status` then refuses with a 503
     sockets = Listeners.of(config).bound()
     tcp_url = f"http://{sockets[1].getsockname()[0]}:{sockets[1].getsockname()[1]}"
     server = uvicorn.Server(uvicorn.Config(app, log_level="warning"))
@@ -549,7 +550,8 @@ def test_status_prints_harness_health_under_a_no_acceptable_harness_escalation(
     paths = _record_daemon_paths(monkeypatch)
 
     with _serve_local_api(root) as (_, tcp_url):
-        health = httpx.get(f"{tcp_url}/api/harness-health").json()["items"]
+        (runner,) = httpx.get(f"{tcp_url}/api/host/runners").json()["items"]
+        health = httpx.get(f"{tcp_url}/runners/{runner['runner_id']}/api/harness-health").json()["items"]
         result = CliRunner().invoke(runner_group, ["status", "--dir", str(root)])
 
     assert result.exit_code == 0, result.output

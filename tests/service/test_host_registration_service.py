@@ -124,7 +124,7 @@ def test_a_runner_naming_no_subscription_registers_an_empty_roster_and_samples_n
             # Long enough for several ticks, each a chance to sample.
             time.sleep(3.0)
             runner = view().json()
-            panel = local.get("/api/subscriptions")
+            panel = local.get("/api/host/subscriptions")
             assert panel.status_code == 200, panel.text
             listed = panel.json()
 

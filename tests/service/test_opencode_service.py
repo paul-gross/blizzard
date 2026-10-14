@@ -124,9 +124,9 @@ def test_runner_serves_a_mock_opencode_lease_with_a_published_bundle(tmp_path: P
         assert composed["permission"] == {"bash": "deny", "question": "deny"}
 
         with _runner_api(config):
-            client = httpx.Client(base_url=f"http://{config.host}:{config.port}", timeout=10.0)
+            client = httpx.Client(base_url=config.local_api_url, timeout=10.0)
             try:
-                assert client.get("/api/health").status_code == 200
+                assert httpx.get(f"http://{config.host}:{config.port}/api/health", timeout=10.0).status_code == 200
                 minted = poll_until(lambda: _tick_and_check_lease(config, fenced, client, chunk_id), timeout=60.0)
                 assert minted
                 lease = next(item for item in client.get("/api/leases").json()["items"] if item["chunk_id"] == chunk_id)
@@ -250,7 +250,7 @@ def test_opencode_transcript_is_read_back_through_the_runner_http_api(tmp_path: 
                 landed = poll_until(lambda: _run_and_check(config, fenced, hub, chunk_id, "done"), timeout=90.0)
                 assert landed, f"chunk did not land under OpenCode (status {_status(hub, chunk_id)!r})"
 
-                runner_client = httpx.Client(base_url=f"http://{config.host}:{config.port}", timeout=10.0)
+                runner_client = httpx.Client(base_url=config.local_api_url, timeout=10.0)
                 try:
                     leases = runner_client.get("/api/leases")
                     assert leases.status_code == 200, leases.text
@@ -329,7 +329,7 @@ def test_opencode_transcript_segment_carries_opencode_provenance_through_the_run
                 landed = poll_until(lambda: _run_and_check(config, fenced, hub, chunk_id, "done"), timeout=90.0)
                 assert landed, f"chunk did not land under OpenCode (status {_status(hub, chunk_id)!r})"
 
-                runner_client = httpx.Client(base_url=f"http://{config.host}:{config.port}", timeout=10.0)
+                runner_client = httpx.Client(base_url=config.local_api_url, timeout=10.0)
                 try:
                     index = runner_client.get(f"/api/chunks/{chunk_id}/transcripts")
                     assert index.status_code == 200, index.text

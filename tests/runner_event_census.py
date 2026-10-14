@@ -141,7 +141,8 @@ WRITE_PROTOCOL_CENSUS: dict[str, Disposition] = {
     ),
     # --- asks ----------------------------------------------------------------
     "record_ask": Published(
-        RunnerEventType.ASK_CHANGED, "POST /api/leases/{lease_id}/asks (runner/api/asks.py) — cause='asked'"
+        RunnerEventType.ASK_CHANGED,
+        "POST /runners/{runner_id}/api/leases/{lease_id}/asks (runner/api/asks.py) — cause='asked'",
     ),
     "record_park": Published(
         RunnerEventType.LEASE_CHANGED,

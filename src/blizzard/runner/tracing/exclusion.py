@@ -5,14 +5,16 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
+from blizzard.foundation.runner_paths import OTLP_PATHS, within_runner
+
 _HEARTBEAT = ("POST", "/api/heartbeat")
-_OTLP_SUFFIXES = ("/v1/traces", "/v1/metrics", "/v1/logs")
+_OTLP_SUFFIXES = tuple(OTLP_PATHS)
 
 
 def is_excluded(scope: Mapping[str, Any]) -> bool:
-    """A worker's ``POST /api/heartbeat``, or any OTLP receiver path (``/v1/traces``, ``/v1/metrics``,
-    ``/v1/logs``), given its ASGI scope."""
+    """A worker's ``POST /api/heartbeat`` under its runner's prefix, or any OTLP receiver path (``/v1/traces``,
+    ``/v1/metrics``, ``/v1/logs``), given its ASGI scope."""
     path = str(scope.get("path", ""))
     if path.rstrip("/").endswith(_OTLP_SUFFIXES):
         return True
-    return (str(scope.get("method", "")).upper(), path) == _HEARTBEAT
+    return (str(scope.get("method", "")).upper(), within_runner(path)) == _HEARTBEAT
