@@ -657,3 +657,87 @@ def test_status_fails_on_any_runner_read_status_but_the_one_a_runnerless_host_an
     assert result.exit_code != 0
     assert str(answered) in result.output
     assert "serves no runner" not in result.output
+
+
+@pytest.mark.component
+def test_status_selects_a_host_of_ones_runner_by_name_by_id_or_unnamed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _init_runner(tmp_path)
+    _no_hub(monkeypatch)
+    with _serve_local_api(root) as (_, tcp_url):
+        (runner,) = httpx.get(f"{tcp_url}/api/host/runners").json()["items"]
+        results = [
+            CliRunner().invoke(runner_group, ["status", "--dir", str(root), *selector])
+            for selector in ([], ["--runner", runner["name"]], ["--runner", runner["runner_id"]])
+        ]
+
+    for result in results:
+        assert result.exit_code == 0, result.output
+    assert results[1].output == results[0].output == results[2].output
+
+
+@pytest.mark.component
+def test_an_unmatched_runner_fails_naming_the_hosts_runners(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    root = _init_runner(tmp_path)
+    _no_hub(monkeypatch)
+    with _serve_local_api(root) as (_, tcp_url):
+        (runner,) = httpx.get(f"{tcp_url}/api/host/runners").json()["items"]
+        result = CliRunner().invoke(runner_group, ["pause", "--dir", str(root), "--runner", "nope"])
+
+    assert result.exit_code != 0
+    assert "holds no runner 'nope'" in result.output
+    assert f"{runner['name']} ({runner['runner_id']}, serving)" in result.output
+
+
+def _host_of(items: list[dict[str, object]], monkeypatch: pytest.MonkeyPatch, paths: list[str]) -> None:
+    """Every verb reaches a mock host whose runner list is ``items`` and which answers any other call as runner ``beta``."""
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        paths.append(request.url.path)
+        if request.url.path == "/api/host/runners":
+            return httpx.Response(200, json={"items": items})
+        return httpx.Response(200, json={"runner_name": "beta"})
+
+    def reach(
+        cls: type[RunnerDaemon], verb: str, _dir: str, _url: str | None, _trace: object, runner: str | None = None
+    ) -> RunnerDaemon:
+        client = httpx.Client(transport=httpx.MockTransport(answer), base_url="http://host")
+        return RunnerDaemon(verb, client, "host", runner)
+
+    monkeypatch.setattr(RunnerDaemon, "reach", classmethod(reach))
+
+
+_TWO_RUNNERS: list[dict[str, object]] = [
+    {"runner_id": "rn_a", "name": "alpha", "state": "serving", "halted_reasons": []},
+    {"runner_id": "rn_b", "name": "beta", "state": "serving", "halted_reasons": []},
+]
+
+
+@pytest.mark.component
+def test_an_unnamed_runner_on_a_host_of_several_fails_naming_them(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    paths: list[str] = []
+    _host_of(_TWO_RUNNERS, monkeypatch, paths)
+
+    result = CliRunner().invoke(runner_group, ["requeue", "ch_1", "--dir", str(tmp_path)])
+
+    assert result.exit_code != 0
+    assert "holds several runners" in result.output and "--runner" in result.output
+    assert "alpha (rn_a, serving)" in result.output and "beta (rn_b, serving)" in result.output
+    assert paths == ["/api/host/runners"]
+
+
+@pytest.mark.component
+@pytest.mark.parametrize("selector", ["beta", "rn_b"])
+def test_a_named_runner_on_a_host_of_several_is_the_one_addressed(
+    selector: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    paths: list[str] = []
+    _host_of(_TWO_RUNNERS, monkeypatch, paths)
+
+    result = CliRunner().invoke(runner_group, ["start", "--dir", str(tmp_path), "--runner", selector])
+
+    assert result.exit_code == 0, result.output
+    assert paths == ["/api/host/runners", "/runners/rn_b/api/runner"]

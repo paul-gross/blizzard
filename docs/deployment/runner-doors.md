@@ -60,8 +60,14 @@ query and need no refusal, the single-writer constraint binding writers only. `p
 that is a client verb: it writes the store, so it goes through the daemon, at
 `DELETE /api/host/workspaces/{workspace_id}/prompt` for the workspace the other `prompt` verbs resolve.
 
-A local verb that reaches a runner reads the host's `GET /api/host/runners` and addresses the one runner it serves under
-its prefix; a host serving none fails naming why each runner is halted.
+## Choosing the runner: `--runner`
+
+`status`, `pause`, `start`, `takeover`, `requeue`, `selftest`, `traces status`, and `traces replay` each act on one of
+the host's runners, which `--runner` names by name or by id. The verb resolves it against the running host's
+`GET /api/host/runners`, over either door, and addresses that runner under its prefix. Omitted on a host of one runner,
+it is that runner. Omitted on a host of several, or naming none it holds, the verb fails naming the host's runners; a
+runner the host holds halted fails naming why. `prompt clear` takes no `--runner`: the override it clears is the host's,
+per workspace.
 
 ## The web panel and its stream
 

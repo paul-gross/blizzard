@@ -720,7 +720,12 @@ def _daemon_answering(monkeypatch: pytest.MonkeyPatch, view: dict[str, object]) 
         return httpx.Response(200, json=view)
 
     def reach(
-        _cls: type[RunnerDaemon], verb: str, _directory: str, _runner_url: str | None, _trace: ITraceHeaders
+        _cls: type[RunnerDaemon],
+        verb: str,
+        _directory: str,
+        _runner_url: str | None,
+        _trace: ITraceHeaders,
+        _runner: str | None = None,
     ) -> RunnerDaemon:
         transport = httpx.MockTransport(answer)
         return RunnerDaemon(verb, httpx.Client(transport=transport, base_url="http://runner"), "runner.sock")

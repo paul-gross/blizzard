@@ -13,7 +13,7 @@ from blizzard.cli.operator_trace import OperatorTrace
 from blizzard.cli.window import refuse_future_until, replay_windows, resume_since, since_option, until_option
 from blizzard.foundation.clock import SystemClock
 from blizzard.foundation.store.utc import iso_utc
-from blizzard.runner.cli.daemon import RunnerDaemon
+from blizzard.runner.cli.daemon import RunnerDaemon, runner_option
 from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
 
 # The local API's own door override; `control` declares the same variable.
@@ -25,6 +25,7 @@ _COLLECTOR_HINT = "point the runner at an OpenTelemetry Collector that receives 
 
 
 def _daemon_options(command: Any) -> Any:
+    command = runner_option(command)
     command = click.option(
         "--runner-url",
         "runner_url",
@@ -106,10 +107,12 @@ def traces_group() -> None:
 @click.option("--json", "as_json", is_flag=True, default=False, help="Print the response body as JSON.")
 @_daemon_options
 @click.pass_context
-def traces_status(ctx: click.Context, as_json: bool, directory: str, runner_url: str | None) -> None:
+def traces_status(
+    ctx: click.Context, as_json: bool, directory: str, runner_url: str | None, runner: str | None
+) -> None:
     """Whether tracing is on, the endpoint's origin, the cursor and its lag, the last export, and the
     last error. A credential in the endpoint is never shown."""
-    with RunnerDaemon.reach("traces status", directory, runner_url, OperatorTrace.source(ctx)) as daemon:
+    with RunnerDaemon.reach("traces status", directory, runner_url, OperatorTrace.source(ctx), runner) as daemon:
         status = daemon.get("/api/traces/status").json()
     if as_json:
         click.echo(json.dumps(status, indent=2))
@@ -133,13 +136,14 @@ def traces_replay(
     as_json: bool,
     directory: str,
     runner_url: str | None,
+    runner: str | None,
 ) -> None:
     """Tell every lease that closed in [since, until) again, with the live sweep's span ids. The live cursor
     does not move, so spans the backend already holds arrive again — it dedupes on their ids. A range over
     replay_max_window is told in windows; a failure names the --since to resume from."""
     refuse_future_until(until, SystemClock())
     total = {"leases": 0, "spans": 0, "batches": 0, "windows": 0}
-    with RunnerDaemon.reach("traces replay", directory, runner_url, OperatorTrace.source(ctx)) as daemon:
+    with RunnerDaemon.reach("traces replay", directory, runner_url, OperatorTrace.source(ctx), runner) as daemon:
         status = daemon.get("/api/traces/status").json()
         windows = replay_windows(since, until, status.get("replay_max_window_seconds"))
         for number, (start, stop) in enumerate(windows, 1):
