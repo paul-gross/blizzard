@@ -88,6 +88,9 @@ export class MachineDetail {
   private readonly runnerId = injectActiveRunner();
   private readonly target = injectActiveRunnerTarget();
 
+  /** The chunk detail route's path segments before the chunk id, under the active runner. */
+  protected readonly linkBase = computed(() => ['/runners', this.runnerId() ?? '', 'board', 'chunk']);
+
   protected readonly detailQuery = injectChunkDetailQuery(
     () => this.target(),
     () => this.chunkId(),

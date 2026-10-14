@@ -159,6 +159,14 @@ describe('MachineDetail header', () => {
     expect(el.textContent).not.toContain('chunk detail');
   });
 
+  it('links the chunk id to the chunk page under the active runner', async () => {
+    const rendered = await render([NEWEST()]);
+    stub = rendered.stub;
+
+    const ref = rendered.el.querySelector('[data-testid="detail-chunk-ref"]');
+    expect(ref?.getAttribute('href')).toBe(`/runners/rn_1/board/chunk/${NEWEST().chunk_id}`);
+  });
+
   it('renders work items as links out to their web url', async () => {
     const rendered = await render([NEWEST()]);
     stub = rendered.stub;

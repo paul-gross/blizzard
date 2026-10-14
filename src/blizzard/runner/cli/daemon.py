@@ -145,6 +145,11 @@ class RunnerDaemon:
                 raise click.ClickException(
                     f"{self.verb}: the host at {self.where} holds no runner {self.selector!r}: {_named(items)}"
                 )
+            if len(matched) > 1:
+                raise click.ClickException(
+                    f"{self.verb}: --runner {self.selector!r} matches several runners on the host at "
+                    f"{self.where}, so name one by id: {_named(matched)}"
+                )
             chosen = matched[0]
         elif len(items) == 1:
             chosen = items[0]

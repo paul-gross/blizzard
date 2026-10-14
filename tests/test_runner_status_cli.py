@@ -741,3 +741,17 @@ def test_a_named_runner_on_a_host_of_several_is_the_one_addressed(
 
     assert result.exit_code == 0, result.output
     assert paths == ["/api/host/runners", "/runners/rn_b/api/runner"]
+
+
+@pytest.mark.component
+def test_a_name_shared_by_two_runners_fails_naming_their_ids(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    paths: list[str] = []
+    twins = [{**item, "name": "alpha"} for item in _TWO_RUNNERS]
+    _host_of(twins, monkeypatch, paths)
+
+    result = CliRunner().invoke(runner_group, ["start", "--dir", str(tmp_path), "--runner", "alpha"])
+
+    assert result.exit_code != 0
+    assert "matches several runners" in result.output
+    assert "rn_a" in result.output and "rn_b" in result.output
+    assert paths == ["/api/host/runners"]
