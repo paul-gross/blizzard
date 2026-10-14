@@ -22,6 +22,7 @@ from blizzard.runner.hub.outbound import COMPLETION_KIND
 from blizzard.runner.lifecycle.drain import OutboundDrain
 from blizzard.runner.loop.context import LoopConfig
 from tests.runner_fakes import (
+    FIXTURE_RUNNER_ID,
     FakeHarness,
     FakeHub,
     FakeProbe,
@@ -306,7 +307,7 @@ def test_runner_drain_acks_a_replayed_completion_during_a_slow_hub_node_and_flus
         provider=FakeProvider({"e": "/ws/e"}),
         harness=harness,
         probe=FakeProbe(),
-        config=LoopConfig(runner_name="r1", workspace_id="w1"),
+        config=LoopConfig(runner_name="r1", workspace_id="w1", runner_id=FIXTURE_RUNNER_ID),
         clock=FixedClock(now),
         registered=False,
     )

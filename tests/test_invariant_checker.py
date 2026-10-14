@@ -65,6 +65,14 @@ def _runner_engine(tmp_path: Path):
     return engine
 
 
+def _set_counters(engine, *, outbound: int | None = None, transcript: int | None = None) -> None:
+    """The fixture runner's outbox counters, as the seam leaves them after issuing up to each seq."""
+    with engine.begin() as conn:
+        for lane, last_seq in ((runner.OUTBOX_LANE_OUTBOUND, outbound), (runner.OUTBOX_LANE_TRANSCRIPT, transcript)):
+            if last_seq is not None:
+                conn.execute(insert(runner.outbox_counters).values(lane=lane, last_seq=last_seq))
+
+
 def _hub_engine(tmp_path: Path):
     return create_engine_from_url(init_hub(tmp_path / "hub").db_url)
 
@@ -74,22 +82,16 @@ def test_clean_stores_have_no_violations(tmp_path: Path) -> None:
     assert HubInvariants(_hub_engine(tmp_path)).run() == []
 
 
-def test_a_runner_scoped_row_naming_no_runner_or_an_unregistered_one_is_a_violation(tmp_path: Path) -> None:
+def test_a_runner_scoped_row_naming_an_unregistered_runner_is_a_violation(tmp_path: Path) -> None:
     engine = _runner_engine(tmp_path)
     with engine.begin() as conn:
-        # A NULL key, as a previous release's statement leaves it, named outright for the statement guard.
-        conn.execute(
-            sa.insert(runner.leases).values(
-                runner_id=None, lease_id="lease_a", chunk_id="ch_1", epoch=1, created_at=_NOW
-            )
-        )
         conn.execute(
             sa.insert(runner.leases).values(
                 runner_id="rn_other", lease_id="lease_b", chunk_id="ch_2", epoch=1, created_at=_NOW
             )
         )
     details = {v.detail for v in RunnerInvariants(engine).run() if v.invariant == "runner:rows-name-registered-runner"}
-    assert details == {"1 leases row(s) name no runner", "1 leases row(s) name unregistered runner rn_other"}
+    assert details == {"1 leases row(s) name unregistered runner rn_other"}
 
 
 def test_runner_scoped_rows_naming_the_registered_runner_are_not_a_violation(tmp_path: Path) -> None:
@@ -335,6 +337,7 @@ def test_gapped_outbound_seq_is_a_violation(tmp_path: Path) -> None:
                     seq=seq, kind="lease.minted", chunk_id="ch_1", lease_id="l", payload="{}", created_at=_NOW
                 )
             )
+    _set_counters(engine, outbound=4)
     slugs = {v.invariant for v in RunnerInvariants(engine).run()}
     assert "runner:gapless-outbound-seq" in slugs
 
@@ -355,6 +358,7 @@ def test_a_pruned_acked_outbound_seq_below_the_pending_floor_is_not_a_violation(
                 seq=3, kind="lease.minted", chunk_id="ch_1", lease_id="l", payload="{}", created_at=_NOW
             )
         )
+    _set_counters(engine, outbound=3)
     assert RunnerInvariants(engine).run() == []
 
 
@@ -375,6 +379,7 @@ def test_a_hole_at_or_above_the_pending_floor_in_outbound_seq_is_still_a_violati
                     seq=seq, kind="lease.minted", chunk_id="ch_1", lease_id="l", payload="{}", created_at=_NOW
                 )
             )
+    _set_counters(engine, outbound=4)
     slugs = {v.invariant for v in RunnerInvariants(engine).run()}
     assert "runner:gapless-outbound-seq" in slugs
 
@@ -389,6 +394,7 @@ def test_gapped_transcript_outbound_seq_is_a_violation(tmp_path: Path) -> None:
                     seq=seq, final=False, segment_id="seg_1", chunk_id="ch_1", payload="{}", created_at=_NOW
                 )
             )
+    _set_counters(engine, transcript=4)
     slugs = {v.invariant for v in RunnerInvariants(engine).run()}
     assert "runner:gapless-transcript-outbound-seq" in slugs
     # A fact-lane gap does not trip the transcript lane's own check, and vice versa.
@@ -418,6 +424,7 @@ def test_an_acked_and_pruned_transcript_seq_between_two_retained_rows_is_not_a_v
                 seq=3, final=False, segment_id="seg_2", chunk_id="ch_1", payload="{}", created_at=_NOW
             )
         )
+    _set_counters(engine, transcript=3)
     assert RunnerInvariants(engine).run() == []
 
 
@@ -444,8 +451,148 @@ def test_a_pending_gap_among_only_unacked_transcript_rows_is_still_a_violation(t
                     seq=seq, final=False, segment_id="seg_2", chunk_id="ch_1", payload="{}", created_at=_NOW
                 )
             )
+    _set_counters(engine, transcript=4)
     slugs = {v.invariant for v in RunnerInvariants(engine).run()}
     assert "runner:gapless-transcript-outbound-seq" in slugs
+
+
+def test_a_hole_among_acked_outbound_rows_with_none_pending_is_a_violation(tmp_path: Path) -> None:
+    """With no pending row there is no floor, so every retained seq counts."""
+    engine = _runner_engine(tmp_path)
+    with engine.begin() as conn:
+        for seq in (1, 3):
+            conn.execute(
+                insert(runner.outbound_buffer).values(
+                    seq=seq,
+                    kind="lease.minted",
+                    chunk_id="ch_1",
+                    lease_id="l",
+                    payload="{}",
+                    created_at=_NOW,
+                    acked_at=_NOW,
+                )
+            )
+    _set_counters(engine, outbound=3)
+    slugs = {v.invariant for v in RunnerInvariants(engine).run()}
+    assert "runner:gapless-outbound-seq" in slugs
+
+
+def test_a_hole_among_acked_transcript_rows_is_not_a_violation(tmp_path: Path) -> None:
+    """The transcript lane judges its pending window alone: an acked row's absence is retention."""
+    engine = _runner_engine(tmp_path)
+    with engine.begin() as conn:
+        for seq, acked_at in ((1, _NOW), (3, _NOW), (4, None), (5, None)):
+            conn.execute(
+                insert(runner.transcript_outbound_buffer).values(
+                    seq=seq,
+                    final=True,
+                    segment_id="seg_1",
+                    chunk_id="ch_1",
+                    payload="{}",
+                    created_at=_NOW,
+                    acked_at=acked_at,
+                )
+            )
+    _set_counters(engine, transcript=5)
+    slugs = {v.invariant for v in RunnerInvariants(engine).run()}
+    assert "runner:gapless-transcript-outbound-seq" not in slugs
+
+
+_OTHER_RUNNER = "rn_other"
+
+
+def _two_runner_engine(tmp_path: Path):
+    """A store holding two registered runners, each with its own outbox rows 1..3 on both lanes and counters at 3."""
+    engine = _runner_engine(tmp_path)
+    with engine.begin() as conn:
+        conn.execute(
+            sa.insert(runner.runner_identity).values(runner_id=_OTHER_RUNNER, runner_name="o", registered_at=_NOW)
+        )
+        for runner_id in (FIXTURE_RUNNER_ID, _OTHER_RUNNER):
+            for lane, last_seq in ((runner.OUTBOX_LANE_OUTBOUND, 3), (runner.OUTBOX_LANE_TRANSCRIPT, 3)):
+                conn.execute(
+                    sa.insert(runner.outbox_counters).values(runner_id=runner_id, lane=lane, last_seq=last_seq)
+                )
+            for seq in (1, 2, 3):
+                conn.execute(
+                    sa.insert(runner.outbound_buffer).values(
+                        runner_id=runner_id, seq=seq, kind="lease.minted", payload="{}", created_at=_NOW
+                    )
+                )
+                conn.execute(
+                    sa.insert(runner.transcript_outbound_buffer).values(
+                        runner_id=runner_id,
+                        seq=seq,
+                        final=False,
+                        segment_id="seg_1",
+                        chunk_id="ch_1",
+                        payload="{}",
+                        created_at=_NOW,
+                    )
+                )
+    return engine
+
+
+def test_two_runners_each_count_their_own_gapless_seq_and_hold_every_invariant(tmp_path: Path) -> None:
+    assert RunnerInvariants(_two_runner_engine(tmp_path)).run() == []
+
+
+def test_a_hole_in_one_runners_outbox_names_that_runner_alone(tmp_path: Path) -> None:
+    engine = _two_runner_engine(tmp_path)
+    with engine.begin() as conn:
+        for table in (runner.outbound_buffer, runner.transcript_outbound_buffer):
+            conn.execute(sa.delete(table).where(table.c.runner_id == _OTHER_RUNNER, table.c.seq == 2))
+    violations = {
+        v.invariant: v.detail for v in RunnerInvariants(engine).run() if v.invariant.startswith("runner:gapless-")
+    }
+    assert violations == {
+        "runner:gapless-outbound-seq": f"runner {_OTHER_RUNNER}: retained outbound seqs not gapless; missing [2]",
+        "runner:gapless-transcript-outbound-seq": (
+            f"runner {_OTHER_RUNNER}: pending transcript outbound seqs not gapless; missing [2]"
+        ),
+    }
+
+
+@pytest.mark.parametrize(
+    ("lane", "table"),
+    [
+        (runner.OUTBOX_LANE_OUTBOUND, runner.outbound_buffer),
+        (runner.OUTBOX_LANE_TRANSCRIPT, runner.transcript_outbound_buffer),
+    ],
+)
+def test_a_counter_below_a_retained_seq_is_a_violation(tmp_path: Path, lane: str, table: sa.Table) -> None:
+    engine = _two_runner_engine(tmp_path)
+    with engine.begin() as conn:
+        conn.execute(
+            sa.update(runner.outbox_counters)
+            .where(runner.outbox_counters.c.runner_id == _OTHER_RUNNER, runner.outbox_counters.c.lane == lane)
+            .values(last_seq=2)
+        )
+    details = {v.detail for v in RunnerInvariants(engine).run() if v.invariant == "runner:outbox-counter-above-seq"}
+    assert details == {f"runner {_OTHER_RUNNER}: {lane} lane retains seq 3 but has counter 2"}
+
+
+def test_a_lane_with_rows_and_no_counter_is_a_violation(tmp_path: Path) -> None:
+    engine = _two_runner_engine(tmp_path)
+    with engine.begin() as conn:
+        conn.execute(sa.delete(runner.outbox_counters).where(runner.outbox_counters.c.runner_id == _OTHER_RUNNER))
+    details = {v.detail for v in RunnerInvariants(engine).run() if v.invariant == "runner:outbox-counter-above-seq"}
+    assert details == {
+        f"runner {_OTHER_RUNNER}: outbound lane retains seq 3 but has no counter",
+        f"runner {_OTHER_RUNNER}: transcript lane retains seq 3 but has no counter",
+    }
+
+
+def test_a_counter_above_every_retained_seq_is_not_a_violation(tmp_path: Path) -> None:
+    """Retention may prune the newest acked row; the counter stays where it was, ahead of everything retained."""
+    engine = _two_runner_engine(tmp_path)
+    with engine.begin() as conn:
+        conn.execute(
+            sa.delete(runner.outbound_buffer).where(
+                runner.outbound_buffer.c.runner_id == FIXTURE_RUNNER_ID, runner.outbound_buffer.c.seq == 3
+            )
+        )
+    assert RunnerInvariants(engine).run() == []
 
 
 def _segment_row(**overrides: object) -> dict:

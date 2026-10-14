@@ -26,7 +26,6 @@ from blizzard.runner.lifecycle.dormant import DormantSession
 from blizzard.runner.lifecycle.takeover import TakeoverOpenScope, TakeoverService
 from blizzard.runner.loop.steps import Advance
 from blizzard.runner.store import MIGRATIONS_DIR
-from blizzard.runner.store.internal.host_unowned_row_stamp import UnownedRowStamp
 from blizzard.runner.transcripts.internal.harness_transcript_repositories import HarnessTranscriptRepositories
 from blizzard.runner.transcripts.service import TranscriptService
 from tests.runner_fakes import (
@@ -46,6 +45,7 @@ from tests.runner_fakes import (
 pytestmark = pytest.mark.component
 
 _PARENT = "20260913_1100_runner_store_indexes"
+_KEYED_REVISION = "20261011_1000_runner_scope"
 _STAMP = "2026-09-11 12:00:00"
 _NOW = datetime(2026, 9, 11, 12, 0, tzinfo=UTC)
 _CHOICES = [("pass", "meets criteria"), ("fail", "does not")]
@@ -65,11 +65,19 @@ def _migrated_store(tmp_path, seed: Callable[[Connection], None]) -> SqlAlchemyR
             seed(conn)
     finally:
         engine.dispose()
+    # The runner registers between the releases, so the tightening revision claims the old rows for it.
+    migrations.upgrade(_KEYED_REVISION)
+    engine = create_engine_from_url(url)
+    try:
+        with engine.begin() as conn:
+            conn.execute(
+                sa.text("INSERT INTO runner_identity (runner_id, runner_name, registered_at) VALUES (:id, 'r', :at)"),
+                {"id": FIXTURE_RUNNER_ID, "at": _STAMP},
+            )
+    finally:
+        engine.dispose()
     migrations.upgrade("head")
-    # The store held no identity, so the upgrade left every row unowned; the runner's start-up stamp claims them.
-    store = SqlAlchemyRunnerStore(create_engine_from_url(url), runner_store_errors())
-    UnownedRowStamp(store.connections).stamp(FIXTURE_RUNNER_ID)
-    return store
+    return SqlAlchemyRunnerStore(create_engine_from_url(url), runner_store_errors())
 
 
 def _seed_lease(

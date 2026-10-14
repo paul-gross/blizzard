@@ -25,6 +25,7 @@ from tests.e2e.test_acceptance_loop import (
     _mock_bin_dir,
     _runner_config,
 )
+from tests.host_files import write_host_file
 
 
 def bare_origin(tmp_path: Path) -> Path:
@@ -78,7 +79,7 @@ def basic_config(runner_dir: Path, workspace: Path, bin_dir: Path, hub_port: int
         workspace_provider="basic",
         workspace_repos=(WorkspaceRepo(REPO_NAME, f"file://{origin}"),),
     )
-    config.config_path.write_text(config.to_toml())
+    write_host_file(config)
     return config
 
 

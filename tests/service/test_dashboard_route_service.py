@@ -100,9 +100,10 @@ def test_dashboard_matches_the_individual_reads_over_a_real_running_daemon(tmp_p
     with mock_hub(bin_dir, hub_port) as hub:
         config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
 
+        assert config.runner_id is not None
         engine = create_engine_from_url(config.db_url)
         try:
-            _seed_all_local_sections(registered_fixture_store(engine))
+            _seed_all_local_sections(registered_fixture_store(engine, config.runner_id))
         finally:
             engine.dispose()
 

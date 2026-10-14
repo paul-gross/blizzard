@@ -8,6 +8,7 @@ import time
 from dataclasses import dataclass
 
 import click
+import httpx
 
 from blizzard.cli.operator_trace import ITraceHeaders, OperatorTrace
 from blizzard.foundation.credential_renewal import RenewalFailureReason, RenewalResult
@@ -123,7 +124,15 @@ def status(ctx: click.Context, directory: str, runner_url: str | None) -> None:
     Every section is this runner's own local read, so the view renders fully with the
     hub unreachable; hub reachability is itself reported, not assumed."""
     with RunnerDaemon.reach("status", directory, runner_url, OperatorTrace.source(ctx)) as daemon:
-        view = daemon.get("/api/runner").json()
+        runner_resp = daemon.send("get", "/api/runner")
+        if runner_resp.status_code == httpx.codes.SERVICE_UNAVAILABLE:
+            # The host built no runner to serve: its readiness detail names each one it left unbuilt, and why.
+            ready = daemon.send("get", "/api/ready").json()
+            raise click.ClickException(
+                f"the host at {daemon.where} serves no runner ({runner_resp.status_code}): {ready['detail']}"
+            )
+        runner_resp.raise_for_status()
+        view = runner_resp.json()
         leases_resp = daemon.get("/api/leases")
         envs_resp = daemon.get("/api/environments")
         asks_resp = daemon.get("/api/asks", params={"open": "true"})
@@ -146,9 +155,8 @@ def status(ctx: click.Context, directory: str, runner_url: str | None) -> None:
     identity = view.get("identity")
     if identity is not None and identity["state"] == "mismatched":
         click.echo(
-            f"  REFUSING: token belongs to runner {identity['token_runner_id']}, store belongs to runner "
-            f"{identity['store_runner_id']} — restore the right token, or clear the store with "
-            f"{identity['reset_command']}"
+            f"  REFUSING: token belongs to runner {identity['token_runner_id']}, the configured runner is "
+            f"{identity['store_runner_id']} — {identity['reset_command']}"
         )
     elif identity is not None and identity["state"] == "unchecked":
         click.echo("  identity: unchecked — waiting for the hub to answer which runner the token belongs to")

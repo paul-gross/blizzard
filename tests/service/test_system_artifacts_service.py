@@ -23,8 +23,7 @@ from blizzard.runner.config import RunnerConfig
 from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.leases.model import NewLease
 from tests.e2e.test_acceptance_loop import _free_port, _runner_api, _runner_config
-from tests.runner_fakes import FIXTURE_RUNNER_ID, SqlAlchemyRunnerStore, runner_store_errors
-from tests.runner_join import held_token, token_identity
+from tests.runner_fakes import SqlAlchemyRunnerStore, runner_store_errors
 from tests.service.support import mint_fixture, mock_hub, require_mock_fleet, require_winter_source, service_gate
 
 pytestmark = [pytest.mark.service, service_gate]
@@ -32,27 +31,17 @@ pytestmark = [pytest.mark.service, service_gate]
 _NOW = datetime(2026, 1, 1, tzinfo=UTC)
 
 
-def _registration(runner_dir: Path, hub_url: str) -> RunnerIdentity:
-    """The identity a tick's registration would store: the hub's runner for the token ``runner init`` wrote, or — for
-    a runner never joined — the fixture runner."""
-    token = held_token(runner_dir)
-    if not token:
-        return RunnerIdentity(FIXTURE_RUNNER_ID, "runner-local", _NOW)
-    answer = token_identity(hub_url, token)
-    assert answer.status_code == 200, answer.text
-    return RunnerIdentity(answer.json()["runner_id"], answer.json()["runner_name"], _NOW)
-
-
 def _seed_lease(config: RunnerConfig, runner_dir: Path, *, lease_id: str, token: str, graph_id: str) -> None:
     """Mint a lease directly on the runner's own store — no chunk need ever reach the mock
     hub, since a system-scope read never resolves the chunk envelope at all. ``graph_id``
     names a graph nothing ever calls ``record_graph_artifacts`` for, so it is, by
     construction, a graph declaring no ``artifacts:`` block."""
+    assert config.runner_id is not None
     engine = create_engine_from_url(config.db_url)
     try:
         # No tick runs here, so the identity row its registration would write is recorded first: the served API binds
-        # to it, and a joined runner's token must name the same runner.
-        identity = _registration(runner_dir, config.hub_url)
+        # to the runner the host file configures.
+        identity = RunnerIdentity(config.runner_id, config.name, _NOW)
         store = SqlAlchemyRunnerStore(engine, runner_store_errors(), identity.runner_id)
         store.record_runner_identity(identity)
         store.record_lease(

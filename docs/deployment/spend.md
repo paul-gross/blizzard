@@ -1,11 +1,11 @@
 # Spend
 
 An unattended fleet spends against the operator's harness billing with no ceiling by default; two optional caps live in
-a `[cost]` table in `blizzard-runner.toml`, absent by default — no table, no cap. Every billed cost blizzard records
-derives from the harness's own reported figure, by subtraction and never by pricing: blizzard keeps no pricing table of
-its own. Where a step's own reported figure is a subscription's literal zero, the runner may still read OpenCode's own
-cached rates and label the result as an estimate ([Estimated cost](#estimated-cost) below) — never fabricated, never
-guessed past what that cache says, and never presented as billed spend.
+a `[runner.cost]` table under the runner's `[[runner]]` in `blizzard-host.toml`, absent by default — no table, no cap.
+Every billed cost blizzard records derives from the harness's own reported figure, by subtraction and never by pricing:
+blizzard keeps no pricing table of its own. Where a step's own reported figure is a subscription's literal zero, the
+runner may still read OpenCode's own cached rates and label the result as an estimate ([Estimated cost](#estimated-cost)
+below) — never fabricated, never guessed past what that cache says, and never presented as billed spend.
 
 ## The two readings of a reported figure
 
@@ -113,7 +113,7 @@ rate is always chosen from that one step's own tokens, never from an invocation'
 invocation can price at two different rates. A step whose model has no entry in the cache, or whose cache file is
 missing or unreadable, stays cost-absent: never a raise, never a guess past what the cache says.
 
-The runner reads the cache from `XDG_CACHE_HOME/opencode/models.json` when `[worker] env_passthrough` passes
+The runner reads the cache from `XDG_CACHE_HOME/opencode/models.json` when `[runner.worker] env_passthrough` passes
 `XDG_CACHE_HOME` through to the worker, or from `HOME/.cache/opencode/models.json` otherwise — the default OpenCode
 itself writes to. This is the same worker-owned environment mapping the worker's own identity is built from, never a
 constant path, so relocating a fleet's OpenCode cache is a passthrough change, not a runner one. A worker running on
@@ -158,11 +158,10 @@ reached the caps.
 ## External subscription usage
 
 A harness on a metered subscription tracks its own account's rate-limit window utilization independently of anything
-blizzard spends or caps; the runner samples it on the cadence `[external_subscription_usage]` `sample_interval_seconds`
-in `blizzard-runner.toml` sets (default 300 seconds when the table or key is absent), or the cadence a
-`[[subscription]]` declaration sets when a runner declares its subscriptions explicitly — a runner with none declared
-runs the single legacy table's own subscription unchanged. The sampled utilization is advisory only — it never throttles
-claiming, scheduling, or spawning, and no cost cap consults it.
+blizzard spends or caps; the runner samples it on the cadence the `sample_interval_seconds` of the `[[subscription]]`
+its `[[runner]]` names sets in `blizzard-host.toml` (default 300 seconds when the key is absent) — a runner naming none
+samples none. The sampled utilization is advisory only — it never throttles claiming, scheduling, or spawning, and no
+cost cap consults it.
 
 Every sample crosses the wire carrying the `slug` of the subscription it belongs to, and the hub rejects one that does
 not. A runner predating per-subscription reporting therefore needs upgrading before the hub that drops the singular

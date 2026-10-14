@@ -46,6 +46,7 @@ from blizzard.runner.node_steps.chunk_state import ChunkPause, ChunkState
 from blizzard.runner.node_steps.submissions import ApplyReply
 from blizzard.runner.throttle.pause import PauseService
 from tests.runner_fakes import (
+    FIXTURE_RUNNER_ID,
     FakeHarness,
     FakeHub,
     FakeProbe,
@@ -782,7 +783,7 @@ def test_full_tick_while_locally_paused_spawns_no_process_by_any_path(tmp_path):
         provider=FakeProvider({"e1": "/ws/e1", "e2": "/ws/e2"}),
         harness=harness,
         probe=probe,
-        config=LoopConfig(runner_name="r1", workspace_id="ws1", max_agents=2),
+        config=LoopConfig(runner_name="r1", workspace_id="ws1", runner_id=FIXTURE_RUNNER_ID, max_agents=2),
     )
     _pause_locally(store, ctx, paused=True)
 
@@ -1080,6 +1081,7 @@ def _ceiling_config(cap, *, window_hours=24.0, max_agents=1):  # type: ignore[no
     return LoopConfig(
         runner_name="r1",
         workspace_id="ws1",
+        runner_id="rn_1",
         max_agents=max_agents,
         runner_ceiling_usd=cap,
         runner_ceiling_window_hours=window_hours,

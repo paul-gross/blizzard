@@ -7,6 +7,7 @@ identity vars and a live runner's hub URL and token.
 
 from __future__ import annotations
 
+import dataclasses
 import os
 import zlib
 from collections.abc import Iterator
@@ -19,13 +20,15 @@ from typing import Any
 import pytest
 
 from blizzard.foundation.operator_sessions.internal import session_file
+from blizzard.foundation.runner_token_names import HUB_TOKEN_VARIABLE_PREFIX
 from blizzard.hub import app as hub_app
 from blizzard.hub import runtime as hub_runtime
 from blizzard.hub.domain.config.legacy_keys import LEGACY_FORGE_VARIABLES
 from blizzard.hub.store.tenant_guard import GUARD_ENVIRONMENT_VARIABLE, install_tenant_guard
 from blizzard.runner import app as runner_app
 from blizzard.runner import runtime as runner_runtime
-from blizzard.runner.config import DEFAULT_TOKEN_ENV, ENV_HUB_URL
+from blizzard.runner.config import ENV_HUB_URL
+from blizzard.runner.host_config import HostConfig
 from blizzard.runner.store.runner_guard import GUARD_ENVIRONMENT_VARIABLE as RUNNER_GUARD_ENVIRONMENT_VARIABLE
 from blizzard.runner.store.runner_guard import install_runner_guard
 from tests.repo_files import install_repo_read_guard
@@ -120,16 +123,14 @@ def _strip_worker_identity_env(monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv(name, raising=False)
 
 
-# The hub a runner joins and the token it presents there.
-_HUB_COORDINATES_ENV = (ENV_HUB_URL, DEFAULT_TOKEN_ENV)
-
-
 @pytest.fixture(autouse=True)
 def _strip_hub_coordinates_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Unset the hub URL and runner token so a developer's shell never leaks them into an
-    in-process runner config load."""
-    for name in _HUB_COORDINATES_ENV:
-        monkeypatch.delenv(name, raising=False)
+    """Unset the hub URL and every runner token variable — the pre-host unsuffixed one included — so a developer's
+    shell never leaks them into an in-process host config load."""
+    monkeypatch.delenv(ENV_HUB_URL, raising=False)
+    for name in list(os.environ):
+        if name == HUB_TOKEN_VARIABLE_PREFIX.rstrip("_") or name.startswith(HUB_TOKEN_VARIABLE_PREFIX):
+            monkeypatch.delenv(name, raising=False)
 
 
 # What switches operator tracing on: a configured OTLP endpoint, absent a worker's own trace context.
@@ -203,6 +204,10 @@ class Daemon:
         The runner's returns a ``HostedApp`` carrying the served app; the hub's returns
         the served app directly. `isinstance` distinguishes the two explicitly.
         """
+        if isinstance(config, HostConfig):
+            # The runner's store is bound from its configured id: a host init scaffolds one that has not joined a hub.
+            runner = config.runner_config()
+            config = dataclasses.replace(runner, runner_id=runner.runner_id or "rn_fixture")
         built = self.app.build_hosted_app(config)
         if isinstance(built, runner_app.HostedApp):
             return built.app

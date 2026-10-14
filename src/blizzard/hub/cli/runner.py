@@ -10,6 +10,7 @@ import click
 import httpx
 
 from blizzard.foundation.roles import dto
+from blizzard.foundation.runner_token_names import hub_token_variable
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
 from blizzard.hub.cli.views import Listing, RunnerLine
@@ -42,9 +43,14 @@ class RunnerDetail:
             yield f"  retired={self.body.get('retired_at')} by {self.body.get('retired_by')}"
 
 
-def _token_lines(token: str) -> tuple[str, str]:
-    """A freshly minted bearer token, printed once as the line a runner directory's ``.env`` takes."""
-    return "bearer token, shown only once — put this line in the runner directory's .env:", f"BZ_HUB_TOKEN={token}"
+def _token_lines(runner_name: str, token: str) -> tuple[str, str]:
+    """A freshly minted bearer token, printed once as the line a host directory's ``.env`` takes: the variable is
+    derived from the runner's name."""
+    return (
+        "bearer token, shown only once — put this line in the host directory's .env "
+        "(the variable follows the host file's [[runner]] name):",
+        f"{hub_token_variable(runner_name)}={token}",
+    )
 
 
 @click.group("runner")
@@ -100,7 +106,7 @@ def runner_add(cli: CliContext, name: str, projects: tuple[str, ...], host_id: s
     cli.show_lines(
         body,
         f"added runner {body['runner_id']} ({body['runner_name']}) — never connected",
-        *_token_lines(body["token"]),
+        *_token_lines(body["runner_name"], body["token"]),
     )
 
 
@@ -165,13 +171,20 @@ def runner_enroll(cli: CliContext, runner_id: str) -> None:
     A thin client of ``POST /runners/{id}/enrollments``. The token it replaces stops resolving
     immediately, the one `add` minted included. RUNNER_ID must already be added at the hub
     (404 otherwise) and not retired (409 — `reinstate` it first)."""
+    # The enrollment answers no name, and the variable the token goes in is derived from it: the registry entry has
+    # it. It is read first, so a read that fails leaves the token unrotated rather than minting one no line shows.
+    entry = cli.get(f"/api/runners/{runner_id}", "GET /runners/{id}", on_status={404: f"unknown runner {runner_id}"})
     resp = cli.post(
         f"/api/runners/{runner_id}/enrollments",
         "POST /runners/{id}/enrollments",
         on_status={404: f"unknown runner {runner_id}", 409: f"runner {runner_id} is retired"},
     )
     body = resp.json()
-    cli.show_lines(body, f"enrolled {runner_id} — its previous token no longer resolves", *_token_lines(body["token"]))
+    cli.show_lines(
+        body,
+        f"enrolled {runner_id} — its previous token no longer resolves",
+        *_token_lines(entry.json()["runner_name"], body["token"]),
+    )
 
 
 @runner_group.command("retire", cls=FleetCommand)

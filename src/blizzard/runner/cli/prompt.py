@@ -1,22 +1,24 @@
 from __future__ import annotations
 
 import difflib
-import json
-from pathlib import Path
 
 import click
 
 from blizzard.cli.operator_trace import OperatorTrace
+from blizzard.cli.runtime import click_exception_on
 from blizzard.runner.cli.control import ENV_LOCAL_API_URL
 from blizzard.runner.cli.daemon import RunnerDaemon
+from blizzard.runner.cli.directory import load_runner
 from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
 from blizzard.runner.cli.runtime import read_host_stores
-from blizzard.runner.config import CONFIG_FILENAME, ConfigError, RunnerConfig
+from blizzard.runner.config import RunnerConfig
+from blizzard.runner.config_table import ConfigError
 from blizzard.runner.harness.workspace_prompts import (
     PACKAGED,
     WORKSPACE_PROMPT_FILENAME,
     UnknownWorkspacePromptSample,
 )
+from blizzard.runner.host_layout import HostLayout, repoint_workspace_prompt
 from blizzard.runner.store.errors import RunnerStoreError
 
 
@@ -46,13 +48,6 @@ def _packaged_sample(name: str) -> str:
         raise click.ClickException(f"no packaged sample named {name} (packaged: {packaged})") from exc
 
 
-def _prompt_config(directory: str) -> RunnerConfig:
-    try:
-        return RunnerConfig.load(Path(directory))
-    except ConfigError as exc:
-        raise click.ClickException(str(exc)) from exc
-
-
 @prompt_group.command("list")
 def prompt_list() -> None:
     """List the workspace-prompt samples shipped in this wheel."""
@@ -76,18 +71,19 @@ def prompt_show(name: str) -> None:
 @_PROMPT_DIR_OPTION
 @click.option("--force", is_flag=True, help="Overwrite an existing workspace-prompt.md in the runtime root.")
 def prompt_install(name: str, directory: str, force: bool) -> None:
-    """Copy packaged sample NAME into the runtime root and point the config at the copy.
+    """Copy packaged sample NAME into the runtime root and point the workspace at the copy.
 
-    The forked shape: the config carries `workspace_prompt_file`, never the package knob, so
+    The forked shape: the workspace carries `prompt_file`, never the package knob, so
     `prompt diff` has a local file to compare. Takes effect on the next runner restart."""
     text = _packaged_sample(name)
-    config = _prompt_config(directory)
+    config = load_runner(directory)
     destination = config.root / WORKSPACE_PROMPT_FILENAME
     if destination.exists() and not force:
         raise click.ClickException(f"{destination} already exists — pass --force to overwrite it")
     destination.write_text(text)
-    _repoint_config(config.root, file_path=str(destination))
-    click.echo(f"installed sample {name} to {destination} and set workspace_prompt_file")
+    with click_exception_on(ConfigError):
+        repoint_workspace_prompt(HostLayout(config.root), config.workspace_id, file_path=str(destination))
+    click.echo(f"installed sample {name} to {destination} and set the workspace's prompt_file")
     if _stored_override(config) is not None:
         click.echo("a store override stands and wins over this file — clear it first: `blizzard runner prompt clear`")
         return
@@ -103,7 +99,7 @@ def prompt_diff(name: str, directory: str) -> None:
     Effective means the lane a spawn reads: the store override when one stands, else the
     configured knob. Exits 1 when they differ, so a deploy can check a forked copy for drift."""
     sample = _packaged_sample(name)
-    config = _prompt_config(directory)
+    config = load_runner(directory)
     local, source = _effective_prompt(config)
     lines = list(
         difflib.unified_diff(
@@ -127,7 +123,7 @@ def prompt_status(directory: str) -> None:
 
     Exits 1 when a source is configured but resolves to nothing — the shape a rollback to a
     wheel that does not read the configured knob produces."""
-    config = _prompt_config(directory)
+    config = load_runner(directory)
     resolved, source = _effective_prompt(config)
     _echo_prompt_status(source, resolved)
     if source == _OVERRIDE_SOURCE:
@@ -188,34 +184,3 @@ def _stored_override(config: RunnerConfig) -> str | None:
             return stores.workspace_prompt.workspace_prompt_override(config.workspace_id)
     except RunnerStoreError as exc:
         raise click.ClickException(f"could not read the runner store at {config.db_url}: {exc}") from exc
-
-
-def _repoint_config(root: Path, *, file_path: str) -> None:
-    """Point the top-level prompt knobs at an installed copy, leaving the rest of the file alone —
-    a targeted line rewrite, not a regeneration (pinned by
-    tests/test_cli_workspace_prompt.py::test_install_into_a_config_predating_the_package_knob_keeps_it_parseable)."""
-    path = root / CONFIG_FILENAME
-    lines = path.read_text().splitlines(keepends=True)
-    knobs = {"workspace_prompt_file": json.dumps(file_path), "workspace_prompt_package": '""'}
-    end = next((i for i, line in enumerate(lines) if line.lstrip().startswith("[")), len(lines))
-    at = end
-    for i, line in enumerate(lines[:end]):
-        key = line.split("=", 1)[0].strip()
-        if key.startswith("workspace_prompt"):
-            at = i + 1
-        if key in knobs:
-            lines[i] = f"{key} = {knobs.pop(key)}\n"
-    if knobs:
-        _insert_knobs(lines, at=at, boundary=end, knobs=knobs)
-    path.write_text("".join(lines))
-
-
-def _insert_knobs(lines: list[str], *, at: int, boundary: int, knobs: dict[str, str]) -> None:
-    """Splice absent knobs in, rewinding off a table's own comment block and terminating the line
-    above — an unterminated last line would otherwise concatenate into invalid TOML."""
-    if at == boundary:
-        while at > 0 and (lines[at - 1].lstrip().startswith("#") or not lines[at - 1].strip()):
-            at -= 1
-    if at > 0 and not lines[at - 1].endswith("\n"):
-        lines[at - 1] += "\n"
-    lines[at:at] = [f"{key} = {value}\n" for key, value in knobs.items()]

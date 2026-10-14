@@ -162,31 +162,18 @@ def test_a_binding_is_set_once_and_never_changes(engine: Engine) -> None:
     assert store.runner_id == _A
 
 
-def test_a_store_binds_to_the_runner_its_identity_row_names(engine: Engine) -> None:
-    empty = _store(engine, None)
-    assert empty.bind_to_stored() is None
-    with engine.begin() as conn:
-        conn.execute(_store(engine).insert(runner_identity).values(runner_name="r", registered_at=_AT))
-    assert _store(engine, None).bind_to_stored() == _A
-
-
-def test_an_unbound_store_adopts_an_identity_row_another_process_records_on_its_next_read(engine: Engine) -> None:
+def test_an_unbound_store_never_adopts_an_identity_row_it_finds(engine: Engine) -> None:
     with engine.begin() as conn:
         conn.execute(_store(engine).insert(leases).values(lease_id="l", chunk_id="c", epoch=1, created_at=_AT))
-    view = _store(engine, None)
-    assert view.all(view.select(leases)) == []
-    assert view.runner_id is None
-
-    with engine.begin() as conn:
         conn.execute(_store(engine).insert(runner_identity).values(runner_name="r", registered_at=_AT))
-    assert [row.lease_id for row in view.all(view.select(leases))] == ["l"]
-    assert view.runner_id == _A
+    view = _store(engine, None)
 
-    # Once bound, a later identity row naming another runner never moves the binding.
-    with engine.begin() as conn:
-        conn.execute(_store(engine, "rn_b").insert(runner_identity).values(runner_name="r", registered_at=_AT))
-    view.select(leases)
-    assert view.runner_id == _A
+    assert view.all(view.select(leases)) == []
+    assert view.all(view.select(runner_identity)) == []
+    assert view.runner_id is None  # whose store this is is configured, never read back out of it
+
+    view.bind(_A)
+    assert [row.lease_id for row in view.all(view.select(leases))] == ["l"]
 
 
 def test_a_caller_never_supplies_the_runner_the_seam_stamps(engine: Engine) -> None:
@@ -246,7 +233,7 @@ _RUNNER_PROCESS = textwrap.dedent(
 
     from pathlib import Path
     root = Path(sys.argv[1])
-    graph = build_runner_process(RunnerConfig(root=root, db_url=f"sqlite:///{root / 'runner.db'}"))
+    graph = build_runner_process(RunnerConfig(root=root, db_url=f"sqlite:///{root / 'host.db'}"), runner_id="rn_a")
     try:
         schema.metadata.create_all(graph.engine, tables=[schema.leases])
         with graph.engine.connect() as conn:

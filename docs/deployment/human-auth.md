@@ -103,7 +103,7 @@ entirely, gated on its runner bearer token ([runner-auth.md](./runner-auth.md)).
 ## Federating a runner's web surface
 
 A runner wanting its human web surface reachable via the hub's SSO bounce declares `public_url` in
-`blizzard-runner.toml` — the browser-reachable base URL(s) it answers on, deriving the redirect URIs
+the top level of `blizzard-host.toml` — the browser-reachable base URL(s) it answers on, deriving the redirect URIs
 (`<public_url>/api/auth/callback` each) it presents to the hub. `public_url` empty (the scaffold default) registers no
 federation identity, leaving the runner's human surface unreachable via SSO — also the correct state when the hub runs
 mode `"none"`, since there is no IdP to bounce to.
@@ -147,7 +147,7 @@ cross-site POST, and the callback fails its state check, surfacing as "bad or ex
 ### Keeping sessions across a runner restart
 
 The runner's session cookie is signed with a secret read from the environment variable `session_secret_env` names in
-`blizzard-runner.toml` (default `BZ_RUNNER_SESSION_SECRET`); the toml holds only the name. Generate a value with
+`blizzard-host.toml` (default `BZ_RUNNER_SESSION_SECRET`); the toml holds only the name. Generate a value with
 `openssl rand -base64 48` and set it in the runner process's environment — for the packaged unit, its `EnvironmentFile`
 (`/etc/blizzard/runner.env`). The runtime dir's `.env` won't do: the daemon reads only its hub token from there. It must
 be base64 decoding to at least 32 bytes, or config load fails with a `ConfigError` naming the variable. With the secret
@@ -186,7 +186,7 @@ proxy, minting the session cookie without Secure even on an end-to-end HTTPS dep
 the proxy's own IP, collapsing all clients into one login-throttle and `auth_facts`-actor bucket; both are correct on
 direct exposure.
 
-`trusted_proxies` — a top-level key in both `blizzard-hub.toml` and `blizzard-runner.toml` — lists proxy addresses or
+`trusted_proxies` — a top-level key in both `blizzard-hub.toml` and `blizzard-host.toml` — lists proxy addresses or
 CIDRs whose forwarded headers are trusted; when and only when the direct peer matches, `X-Forwarded-Proto` decides the
 effective scheme (the cookie Secure flag, on both daemons) and the rightmost untrusted hop of `X-Forwarded-For` becomes
 the throttle and fact client IP. An unlisted peer keeps its direct-connection values whatever headers it carries, so a

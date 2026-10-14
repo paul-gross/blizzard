@@ -13,7 +13,7 @@ from click.testing import CliRunner
 
 from blizzard.foundation.runner_tokens import RunnerTokenRefusalReason
 from blizzard.runner.cli.runtime import InitCollaborators
-from blizzard.runner.config import DEFAULT_TOKEN_ENV, ENV_HUB_URL
+from blizzard.runner.config import ENV_HUB_URL
 from blizzard.runner.hub.client import (
     HubClientError,
     IHubRunnerAdmin,
@@ -131,7 +131,6 @@ def init_runner(hub: FakeInitHub | None = None) -> InitRunner:
 def fake_init_hub(monkeypatch: pytest.MonkeyPatch) -> FakeInitHub:
     """The hub a test hands its in-process ``runner init`` — through :func:`init_runner` — and the guard
     for one that forgets to: the hub URL environment points at a refused local address, so such an init
-    fails fast rather than reaching a developer's live hub. A hub token the developer's shell carries is stripped."""
-    monkeypatch.delenv(DEFAULT_TOKEN_ENV, raising=False)
+    fails fast rather than reaching a developer's live hub."""
     monkeypatch.setenv(ENV_HUB_URL, _REFUSED_HUB)
     return FakeInitHub()

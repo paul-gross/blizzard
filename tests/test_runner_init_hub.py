@@ -18,7 +18,7 @@ from click.testing import Result
 from blizzard.cli.main import blizzard
 from blizzard.foundation.operator_sessions.internal.session_file import SessionFile
 from blizzard.foundation.runner_tokens import RunnerTokenRefusalReason
-from blizzard.runner.config import CONFIG_FILENAME, DEFAULT_TOKEN_ENV, RunnerConfig
+from blizzard.runner.host_layout import HostLayout
 from blizzard.runner.hub.bootstrap import BootstrapStop, BootstrapStopped, HeldToken, RunnerBootstrap, kept_identity
 from blizzard.runner.hub.client import (
     HubClientError,
@@ -31,7 +31,9 @@ from blizzard.runner.hub.client import (
 from blizzard.runner.hub.internal.token_file import HubTokenFile
 from blizzard.runner.hub.token_file import ENV_FILENAME, assigned_token, with_token
 from blizzard.runner.runtime import sqlite_store_file
+from tests.host_files import load_runner_config
 from tests.runner_init_fakes import FakeHubRunnerAdmin, FakeInitHub, FakeTokenIdentityReader, init_runner
+from tests.runner_join import DEFAULT_TOKEN_ENV
 
 _HUB = "http://hub.test:8421"
 _FROM_FILE = HeldToken("t", from_process_env=False)
@@ -108,11 +110,13 @@ def test_a_token_the_hub_never_received_stops() -> None:
 @pytest.mark.unit
 def test_the_token_file_replaces_only_the_token_line_owner_only(tmp_path: Path) -> None:
     env = tmp_path / ENV_FILENAME
-    env.write_text("# instance\nOTEL_EXPORTER_OTLP_ENDPOINT=http://c:4318\nBZ_HUB_TOKEN=old\nBZ_HUB_TOKEN=older\n")
+    env.write_text(
+        f"# instance\nOTEL_EXPORTER_OTLP_ENDPOINT=http://c:4318\n{DEFAULT_TOKEN_ENV}=old\n{DEFAULT_TOKEN_ENV}=older\n"
+    )
     tokens = HubTokenFile.of(tmp_path, DEFAULT_TOKEN_ENV)
     assert tokens.held() == "older"  # the last assignment wins, as systemd reads it
     tokens.write("new")
-    assert env.read_text() == "# instance\nOTEL_EXPORTER_OTLP_ENDPOINT=http://c:4318\nBZ_HUB_TOKEN=new\n"
+    assert env.read_text() == f"# instance\nOTEL_EXPORTER_OTLP_ENDPOINT=http://c:4318\n{DEFAULT_TOKEN_ENV}=new\n"
     assert stat.S_IMODE(env.stat().st_mode) == 0o600
     assert [p.name for p in tmp_path.iterdir()] == [ENV_FILENAME]
 
@@ -121,7 +125,7 @@ def test_the_token_file_replaces_only_the_token_line_owner_only(tmp_path: Path) 
 def test_the_token_file_reads_a_quoted_token_and_holds_none_when_absent(tmp_path: Path) -> None:
     tokens = HubTokenFile.of(tmp_path, DEFAULT_TOKEN_ENV)
     assert tokens.held() == ""
-    (tmp_path / ENV_FILENAME).write_text('BZ_HUB_TOKEN="quoted"\n')
+    (tmp_path / ENV_FILENAME).write_text(f'{DEFAULT_TOKEN_ENV}="quoted"\n')
     assert tokens.held() == "quoted"
 
 
@@ -158,9 +162,9 @@ def test_a_runner_verb_reads_the_token_file_and_the_environment_overrides_it(
 ) -> None:
     root = tmp_path / "runner"
     assert _init(fake_init_hub, root).exit_code == 0
-    assert RunnerConfig.load(root).hub_token == "init-token-1"
+    assert load_runner_config(root).hub_token == "init-token-1"
     monkeypatch.setenv(DEFAULT_TOKEN_ENV, "from-env")
-    assert RunnerConfig.load(root).hub_token == "from-env"
+    assert load_runner_config(root).hub_token == "from-env"
 
 
 # --- init against the hub ------------------------------------------------------------------------
@@ -174,7 +178,7 @@ def test_init_adds_the_runner_under_its_name_and_writes_its_token(tmp_path: Path
     assert [(i.runner_id, i.runner_name) for i in fake_init_hub.admin.added] == [("rn_init1", "runner-local")]
     assert [(c.hub_url, c.runner_token, c.operator_token) for c in fake_init_hub.calls] == [(_HUB, "", None)]
     env = root / ENV_FILENAME
-    assert env.read_text() == "BZ_HUB_TOKEN=init-token-1\n"
+    assert env.read_text() == f"{DEFAULT_TOKEN_ENV}=init-token-1\n"
     assert stat.S_IMODE(env.stat().st_mode) == 0o600
     assert "rn_init1" in result.output
 
@@ -187,6 +191,39 @@ def test_init_reuses_a_token_the_hub_accepts_and_adds_nothing(tmp_path: Path, fa
     assert len(fake_init_hub.admin.added) == 1
     assert fake_init_hub.calls[-1].runner_token == "init-token-1"
     assert (root / ENV_FILENAME).read_bytes() == env_bytes
+
+
+@pytest.mark.component
+def test_init_over_a_token_added_under_another_name_than_the_scaffolded_one_adds_a_second_runner(
+    tmp_path: Path, fake_init_hub: FakeInitHub
+) -> None:
+    """`hub runner add edge` prints BZ_HUB_TOKEN_EDGE, but a fresh init scaffolds `runner-local` and looks for
+    BZ_HUB_TOKEN_RUNNER_LOCAL: the token under the other variable is not found."""
+    issued = fake_init_hub.admin.add_runner("edge")
+    root = tmp_path / "runner"
+    root.mkdir()
+    (root / ENV_FILENAME).write_text(f"BZ_HUB_TOKEN_EDGE={issued.token}\n")
+    result = _init(fake_init_hub, root)
+    assert result.exit_code == 0, result.output
+    assert [added.runner_name for added in fake_init_hub.admin.added] == ["edge", "runner-local"]
+
+
+@pytest.mark.component
+def test_init_over_a_token_added_as_the_scaffolded_name_keeps_it_and_scaffolds_the_full_host_file(
+    tmp_path: Path, fake_init_hub: FakeInitHub
+) -> None:
+    """`hub runner add runner-local` prints the variable a fresh init looks for: init keeps the runner, writes its
+    id, and scaffolds the bindings a hand-written host file would lack."""
+    issued = fake_init_hub.admin.add_runner("runner-local")
+    root = tmp_path / "runner"
+    root.mkdir()
+    (root / ENV_FILENAME).write_text(f"{DEFAULT_TOKEN_ENV}={issued.token}\n")
+    result = _init(fake_init_hub, root)
+    assert result.exit_code == 0, result.output
+    assert len(fake_init_hub.admin.added) == 1
+    config = HostLayout(root).config_path.read_text()
+    assert f'id = "{issued.runner_id}"' in config
+    assert "projects = [" in config
 
 
 @pytest.mark.component
@@ -227,7 +264,7 @@ def test_init_that_cannot_restrict_a_kept_token_file_warns_naming_it(
 
 
 @pytest.mark.unit
-@pytest.mark.parametrize(("content", "mode"), [("OTEL_SERVICE_NAME=r\n", 0o644), ("BZ_HUB_TOKEN=t\n", 0o600)])
+@pytest.mark.parametrize(("content", "mode"), [("OTEL_SERVICE_NAME=r\n", 0o644), (f"{DEFAULT_TOKEN_ENV}=t\n", 0o600)])
 def test_the_token_file_leaves_a_file_holding_no_token_or_already_owner_only_as_it_is(
     tmp_path: Path, content: str, mode: int
 ) -> None:
@@ -250,7 +287,7 @@ def test_the_token_file_raises_when_it_cannot_read_a_present_files_mode(tmp_path
 @pytest.mark.component
 def test_init_with_a_wiped_store_and_a_current_token_adds_nothing(tmp_path: Path, fake_init_hub: FakeInitHub) -> None:
     root, _ = _joined(tmp_path, fake_init_hub)
-    for path in RunnerConfig.load(root).data_dir.iterdir():
+    for path in load_runner_config(root).data_dir.iterdir():
         path.unlink()
     result = _init(fake_init_hub, root)
     assert result.exit_code == 0, result.output
@@ -265,7 +302,7 @@ def test_init_after_a_hub_reset_re_adds_the_runner_with_allow_readd(tmp_path: Pa
     assert result.exit_code == 0, result.output
     assert [i.runner_id for i in fake_init_hub.admin.added] == ["rn_init1"]
     assert (root / ENV_FILENAME).read_text() == (
-        "OTEL_EXPORTER_OTLP_ENDPOINT=http://collector:4318\nBZ_HUB_TOKEN=init-token-1\n"
+        f"OTEL_EXPORTER_OTLP_ENDPOINT=http://collector:4318\n{DEFAULT_TOKEN_ENV}=init-token-1\n"
     )
 
 
@@ -320,7 +357,7 @@ def test_init_stopping_on_a_token_the_environment_supplies_says_to_replace_the_v
     result = _init(fake_init_hub, root)
     assert result.exit_code != 0
     assert fake_init_hub.calls[-1].runner_token == "revoked-in-env"
-    assert f"set {DEFAULT_TOKEN_ENV} to it, or unset {DEFAULT_TOKEN_ENV} and put it in {root / ENV_FILENAME}" in (
+    assert f"replace it where init found it (${DEFAULT_TOKEN_ENV}), which overrides {root / ENV_FILENAME}" in (
         result.output
     )
     assert (root / ENV_FILENAME).read_bytes() == env_bytes
@@ -388,7 +425,7 @@ def test_init_refuses_an_existing_config_naming_another_hub(tmp_path: Path, fake
     assert result.exit_code != 0
     assert "http://elsewhere:8421" in result.output
     assert len(fake_init_hub.calls) == 1
-    assert RunnerConfig.load(root).hub_url == _HUB
+    assert load_runner_config(root).hub_url == _HUB
 
 
 @pytest.mark.component
@@ -405,17 +442,18 @@ def test_init_stops_when_the_environment_overrides_a_token_it_must_replace(
 
 
 @pytest.mark.component
-def test_init_adds_a_legacy_runner_id_only_config_under_that_id_as_its_name(
+def test_init_adds_a_renamed_runner_under_its_name_and_writes_its_token_under_the_variable_that_name_derives(
     tmp_path: Path, fake_init_hub: FakeInitHub
 ) -> None:
     root = tmp_path / "runner"
     assert _init(fake_init_hub, root).exit_code == 0
-    config = root / CONFIG_FILENAME
-    config.write_text(config.read_text().replace('name = "runner-local"', 'runner_id = "r-legacy"'))
+    config = HostLayout(root).config_path
+    config.write_text(config.read_text().replace('name = "runner-local"', 'name = "r-claude"'))
     (root / ENV_FILENAME).unlink()
-    result = _init(fake_init_hub, root)
+    result = _init(fake_init_hub, root, "--allow-readd")  # the store still names the runner the old name had added
     assert result.exit_code == 0, result.output
-    assert fake_init_hub.admin.added[-1].runner_name == "r-legacy"
+    assert fake_init_hub.admin.added[-1].runner_name == "r-claude"
+    assert (root / ENV_FILENAME).read_text() == "BZ_HUB_TOKEN_R_CLAUDE=init-token-2\n"
 
 
 # --- the old runner's store on a re-add ----------------------------------------------------------
@@ -489,14 +527,8 @@ def test_no_token_over_a_store_naming_no_runner_adds_without_setting_it_aside() 
     assert log.calls == ["add"]
 
 
-def _record_identity(root: Path, runner_id: str) -> Path:
-    database = sqlite_store_file(RunnerConfig.load(root).db_url)
-    with closing(sqlite3.connect(database)) as conn, conn:
-        conn.execute(
-            "INSERT INTO runner_identity (runner_id, runner_name, registered_at) VALUES (?, 'r', '2026-10-08')",
-            (runner_id,),
-        )
-    return database
+def _store_file(root: Path) -> Path:
+    return sqlite_store_file(load_runner_config(root).db_url)
 
 
 def _identity_ids(database: Path) -> list[str]:
@@ -509,29 +541,29 @@ def test_init_re_adding_after_a_hub_reset_sets_the_old_store_aside_keeping_it(
     tmp_path: Path, fake_init_hub: FakeInitHub
 ) -> None:
     root, _ = _joined(tmp_path, fake_init_hub)
-    database = _record_identity(root, "rn_init1")
+    database = _store_file(root)
     fake_init_hub.admin.added.clear()
 
     result = _init(fake_init_hub, root, "--allow-readd")
 
     assert result.exit_code == 0, result.output
-    aside = [p for p in database.parent.iterdir() if p.name.startswith("runner.db.")]
+    aside = [p for p in database.parent.iterdir() if p.name.startswith("host.db.") and p.suffix != ".lock"]
     assert len(aside) == 1
     assert "set the old runner's store aside as" in result.output
-    assert _identity_ids(aside[0]) == ["rn_init1"]
-    assert _identity_ids(database) == []
+    assert _identity_ids(aside[0]) == ["rn_init1"]  # the old runner's identity row stays with its store
+    assert _identity_ids(database) == ["rn_init1"]  # the fresh store holds the runner just added
 
 
 @pytest.mark.component
 def test_init_keeping_its_token_keeps_the_store(tmp_path: Path, fake_init_hub: FakeInitHub) -> None:
     root, _ = _joined(tmp_path, fake_init_hub)
-    database = _record_identity(root, "rn_init1")
+    database = _store_file(root)
 
     result = _init(fake_init_hub, root, "--allow-readd")
 
     assert result.exit_code == 0, result.output
     assert _identity_ids(database) == ["rn_init1"]
-    assert not [p for p in database.parent.iterdir() if p.name.startswith("runner.db.")]
+    assert not [p for p in database.parent.iterdir() if p.name.startswith("host.db.")]
 
 
 @pytest.mark.component
@@ -539,7 +571,7 @@ def test_init_with_no_token_over_a_store_naming_a_runner_stops_naming_it_and_the
     tmp_path: Path, fake_init_hub: FakeInitHub
 ) -> None:
     root, _ = _joined(tmp_path, fake_init_hub)
-    database = _record_identity(root, "rn_init1")
+    database = _store_file(root)
     (root / ENV_FILENAME).write_text("")
 
     result = _init(fake_init_hub, root)

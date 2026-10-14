@@ -22,7 +22,15 @@ from blizzard.runner.leases.model import NewLease
 from blizzard.runner.loop.context import LoopConfig
 from blizzard.runner.transcripts.transcript_pump import TranscriptPump
 from tests.repo_files import repo_root
-from tests.runner_fakes import FakeHarness, FakeHub, FakeProbe, FakeProvider, make_context, make_store
+from tests.runner_fakes import (
+    FIXTURE_RUNNER_ID,
+    FakeHarness,
+    FakeHub,
+    FakeProbe,
+    FakeProvider,
+    make_context,
+    make_store,
+)
 from tests.test_runner_harness_opencode_transcript import (
     FakeExporter,
     _assistant_message,
@@ -106,7 +114,7 @@ def test_a_pending_tool_call_completing_on_a_later_window_never_ships_twice() ->
         provider=FakeProvider({"e1": "/ws/e1"}),
         harness=harness,
         probe=FakeProbe(),
-        config=LoopConfig(runner_name="r1", workspace_id="ws1", transcripts_ship=True),
+        config=LoopConfig(runner_name="r1", workspace_id="ws1", runner_id=FIXTURE_RUNNER_ID, transcripts_ship=True),
     )
     ctx = replace(ctx, harnesses=_registry(harness, source))
     _open_segment(ctx)
@@ -188,7 +196,7 @@ def test_an_unresolved_child_sidechain_is_visible_and_picked_up_on_a_later_windo
         provider=FakeProvider({"e1": "/ws/e1"}),
         harness=harness,
         probe=FakeProbe(),
-        config=LoopConfig(runner_name="r1", workspace_id="ws1", transcripts_ship=True),
+        config=LoopConfig(runner_name="r1", workspace_id="ws1", runner_id=FIXTURE_RUNNER_ID, transcripts_ship=True),
     )
     ctx = replace(ctx, harnesses=_registry(harness, source))
     ctx.stores.environments.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
@@ -253,7 +261,7 @@ def test_a_live_capture_ships_a_timestamp_on_every_turn_and_sidechain_turn() -> 
         provider=FakeProvider({"e1": "/ws/e1"}),
         harness=harness,
         probe=FakeProbe(),
-        config=LoopConfig(runner_name="r1", workspace_id="ws1", transcripts_ship=True),
+        config=LoopConfig(runner_name="r1", workspace_id="ws1", runner_id=FIXTURE_RUNNER_ID, transcripts_ship=True),
     )
     ctx = replace(ctx, harnesses=_registry(harness, source))
     _open_segment(ctx)

@@ -18,11 +18,13 @@ Type=exec
 # refuses to start on a revision mismatch. Self-healing across a wheel upgrade.
 ExecStartPre=/opt/blizzard/venv/bin/blizzard-runner migrate --dir /var/lib/blizzard/runner
 ExecStart=/opt/blizzard/venv/bin/blizzard-runner host --dir /var/lib/blizzard/runner
-# Optional overrides (workspace root, hub URL, harness binary) — the durable ones
-# live in the runner's own config.toml, seeded by `blizzard runner init`. No forge
-# or work-source credentials belong here: a runner never holds them. Nor does its
-# hub token: `blizzard runner init` writes that to /var/lib/blizzard/runner/.env,
-# which the daemon reads itself; a BZ_HUB_TOKEN set here would override it.
+# Optional override: BZ_HARNESS_BINARY, the harness binary, is the one environment
+# setting the host reads at start; everything else lives in the host directory's
+# blizzard-host.toml, seeded by `blizzard runner init`. No
+# forge or work-source credentials belong here: a runner never holds them. Nor does its
+# hub token: `blizzard runner init` writes that to /var/lib/blizzard/runner/.env as
+# BZ_HUB_TOKEN_<NAME> (the runner's name, upper-cased, non-alphanumerics as `_`), which
+# the daemon reads itself; a BZ_HUB_TOKEN_<NAME> set here would override it.
 EnvironmentFile=-/etc/blizzard/runner.env
 User=blizzard
 Group=blizzard

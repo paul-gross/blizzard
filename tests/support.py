@@ -1935,6 +1935,28 @@ def migrate_to(tmp_path: Path, revision: str) -> tuple[MigrationRunner, Engine]:
     return runner, create_engine_from_url(db_url)
 
 
+def upgrade_runner_store_as_registered(
+    migrations: MigrationRunner, db_url: str, runner_id: str = "rn_01JX0000000000000000000000"
+) -> None:
+    """Upgrade a runner store seeded at an old revision to head with ``runner_id`` registered: the tightening revision
+    refuses rows naming no runner unless the identity row can name one, so the identity lands between the additive
+    revision (which creates the column) and the tightening one (which claims the old rows for it)."""
+    migrations.upgrade("20261011_1000_runner_scope")
+    engine = create_engine_from_url(db_url)
+    try:
+        with engine.begin() as conn:
+            conn.execute(
+                sa.text(
+                    "INSERT INTO runner_identity (runner_id, runner_name, registered_at)"
+                    " VALUES (:id, 'r', '2026-10-01 00:00:00')"
+                ),
+                {"id": runner_id},
+            )
+    finally:
+        engine.dispose()
+    migrations.upgrade("head")
+
+
 def seed_graph(conn: sa.Connection, graph_id: str, *, at: datetime) -> None:
     """Seed one ``graphs`` parent row — the FK a seeded chunk needs, at any revision."""
     values = {"graph_id": graph_id, "name": "g", "entry_node_id": "nd_1", "definition_yaml": "", "created_at": at}

@@ -35,7 +35,6 @@ from blizzard.hub.domain.observability.forge_status import IReadAnnotatedSources
 from blizzard.hub.domain.observability.hub_events import IReadHubEventLog
 from blizzard.hub.domain.observability.tracing.repository import IReadTraceStatus, IReadTraceSteps
 from blizzard.hub.domain.tenancy.administration import IReadTenantDirectory
-from blizzard.runner.hub.outbound_buffer import IReadOutboundRepository
 from blizzard.runner.tracing.repository import IReadLeaseTraceCursor
 from blizzard.runner.transcripts.ledger import IReadTranscriptLedgerRepository
 
@@ -166,12 +165,6 @@ _RARE_OPERATOR_EVENT_REASON = (
     "hub-resolved escalation) — sparse by the event's own nature, not by retention."
 )
 
-# Points at src/blizzard/runner/store/schema.py's "A singleton row" comments beside `hub_control`, `runner_identity`.
-_RUNNER_SINGLETON_REASON = (
-    "schema.py's own 'A singleton row' comments beside `hub_control` and `runner_identity`: "
-    "every write replaces the one row in place, so a scan reads at most one row."
-)
-
 RUNNER_ALLOWED_SCANS: list[Allowance] = [
     # --- the named six (src/blizzard/runner/store/schema.py, beside `asks`) --------------------------------
     TableWideAllowance("asks", 50, _SCHEMA_520_REASON),
@@ -204,15 +197,6 @@ RUNNER_ALLOWED_SCANS: list[Allowance] = [
     TableWideAllowance("pause_parks", 50, _RARE_OPERATOR_EVENT_REASON),
     TableWideAllowance("pause_park_resumes", 50, _RARE_OPERATOR_EVENT_REASON),
     TableWideAllowance("local_pause_facts", 50, _RARE_OPERATOR_EVENT_REASON),
-    # --- singletons ---------------------------------------------------------------------
-    TableWideAllowance("hub_control", 1, _RUNNER_SINGLETON_REASON),
-    TableWideAllowance("runner_identity", 1, _RUNNER_SINGLETON_REASON),
-    TableWideAllowance(
-        "hub_served_projects",
-        20,
-        "schema.py's comment beside `hub_served_projects`: the hub's latest answer, replaced whole — one row "
-        "per project the runner's configuration declares, a handful at most; every read takes the whole answer.",
-    ),
     # --- the transcript lane's own pending-delivery buffer ------------------------------
     TableWideAllowance(
         "transcript_outbound_buffer",
@@ -222,17 +206,6 @@ RUNNER_ALLOWED_SCANS: list[Allowance] = [
         "keeps it near-empty in healthy operation, the same smallness the #520 six lean on.",
     ),
     # --- deliberate whole-table reads of otherwise-indexed tables -----------------------
-    MethodScopedAllowance(
-        IReadOutboundRepository,
-        "recent_outbound",
-        "outbound_buffer",
-        100,
-        "bounded by IWriteOutboundRepository.prune_outbound's 7-day retention window, "
-        "unlike the OTHER outbound_buffer reads (pending_outbound and friends), which "
-        "filter on acked_at and so do hit ix_outbound_buffer_acked_at_seq — this one "
-        "deliberately reads the newest N regardless of ack state, which that index does "
-        "not cover.",
-    ),
     MethodScopedAllowance(
         IReadTranscriptLedgerRepository,
         "transcript_backfill_leases",

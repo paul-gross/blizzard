@@ -113,8 +113,9 @@ where context actually grows; the warn lane samples a running lease's session co
 measurement is the conversation's size — the newest turn's prompt size, what a resume would repay — not accumulated
 tokens.
 
-The warn lane is the `[context]` table in `blizzard-runner.toml` — `warn_tokens` and `sample_interval_seconds`; absent
-`warn_tokens` the lane is off entirely and no transcript is read, `sample_interval_seconds` alone being inert.
+The warn lane is the `[runner.context]` table of the runner's `[[runner]]` in `blizzard-host.toml` — `warn_tokens` and
+`sample_interval_seconds`; absent `warn_tokens` the lane is off entirely and no transcript is read,
+`sample_interval_seconds` alone being inert.
 
 A crossing surfaces as a worker-context-warned entry in the operational event feed
 ([observability.md](./observability.md)), carrying lease, node, measured context, and the configured line; the runner
@@ -122,5 +123,5 @@ also logs it at WARNING. The warning fires once per lease, on the first crossing
 line keeps being sampled without re-reporting.
 
 The warn lane observes and gates nothing — no worker stopped, no chunk parked, no session rotated (rotation is the
-graph's `rotate` block; the intervening spend controls are `[cost]`, [spend.md](./spend.md)). It ships no probe verb;
-confirm sampling via the runner's journal or the `context_samples` table in `runner.db`.
+graph's `rotate` block; the intervening spend controls are `[runner.cost]`, [spend.md](./spend.md)). It ships no probe verb;
+confirm sampling via the runner's journal or the `context_samples` table in `host.db`.

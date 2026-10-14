@@ -29,6 +29,7 @@ from blizzard.runner.loop.context import LoopConfig, LoopContext
 from blizzard.runner.loop.steps import Fill
 from blizzard.runner.process.internal.worker_scratch_dirs import WorkerScratchDirs
 from tests.runner_fakes import (
+    FIXTURE_RUNNER_ID,
     FakeHarness,
     FakeProbe,
     FakeProvider,
@@ -135,7 +136,7 @@ class _RealRunner:
             provider=provider,
             process=FakeProbe(alive={(200, "start-200")}),
             worktree_git=FakeWorktreeGit(),
-            config=LoopConfig(runner_name=runner_id, workspace_id="w1", max_agents=1),
+            config=LoopConfig(runner_name=runner_id, workspace_id="w1", runner_id=FIXTURE_RUNNER_ID, max_agents=1),
             identity=registered_identity(runner_id, runner_id),
             worker_files=WorkerStdoutFiles("", self.store),
             elicitation_files=ElicitationFiles(str(tmp_path / f"{runner_id}-elicit")),

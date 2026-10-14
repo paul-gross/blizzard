@@ -48,6 +48,7 @@ from blizzard.runner.subscriptions.subscription_sampler import (
     SampleMissReason,
 )
 from tests.runner_fakes import (
+    FIXTURE_RUNNER_ID,
     FakeHarness,
     FakeHub,
     FakeProbe,
@@ -674,7 +675,9 @@ def test_ceiling_pause_publishes_fact_changed(tmp_path: Path) -> None:
         harness=FakeHarness(handle=_HANDLE, verdict=None),
         probe=FakeProbe(),
         clock=FixedClock(_NOW),
-        config=LoopConfig(runner_name="r1", workspace_id="ws1", max_agents=1, runner_ceiling_usd=5.0),
+        config=LoopConfig(
+            runner_name="r1", workspace_id="ws1", runner_id=FIXTURE_RUNNER_ID, max_agents=1, runner_ceiling_usd=5.0
+        ),
         events=events,
     )
 
@@ -785,6 +788,7 @@ def test_context_sample_crossing_publishes_fact_changed(tmp_path: Path) -> None:
         config=LoopConfig(
             runner_name="r1",
             workspace_id="ws1",
+            runner_id="rn_1",
             max_agents=1,
             context_warn_tokens=300_000,
             context_sample_interval_seconds=60,
@@ -828,7 +832,7 @@ def test_external_usage_sample_publishes_fact_changed(tmp_path: Path) -> None:
         harness=FakeHarness(handle=_HANDLE, verdict=None),
         probe=FakeProbe(),
         clock=FixedClock(_NOW),
-        config=LoopConfig(runner_name="r1", workspace_id="ws1", max_agents=1),
+        config=LoopConfig(runner_name="r1", workspace_id="ws1", runner_id=FIXTURE_RUNNER_ID, max_agents=1),
         events=events,
         subscriptions=(resolved,),
     )
@@ -861,7 +865,7 @@ def test_external_usage_miss_publishes_fact_changed(tmp_path: Path) -> None:
         harness=FakeHarness(handle=_HANDLE, verdict=None),
         probe=FakeProbe(),
         clock=FixedClock(_NOW),
-        config=LoopConfig(runner_name="r1", workspace_id="ws1", max_agents=1),
+        config=LoopConfig(runner_name="r1", workspace_id="ws1", runner_id=FIXTURE_RUNNER_ID, max_agents=1),
         events=events,
         subscriptions=(resolved,),
     )

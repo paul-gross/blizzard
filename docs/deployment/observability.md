@@ -61,8 +61,8 @@ lookup elsewhere.
 These files outlive the lease: releasing an environment does not delete them, so an invocation's envelope stays readable
 well after the chunk that spawned it has moved on — the one place to see exactly what a harness returned after something
 has gone wrong (a usage-limit hit, an interrupted worker, a premature exit). They are not durable forever, though — a
-periodic sweep prunes both streams once they age past `[worker_stdout] retention_days` in `blizzard-runner.toml`
-(default 14 days); a file inside the window is left alone regardless of its lease's own state.
+periodic sweep prunes both streams once they age past `[worker_stdout] retention_days` in `blizzard-host.toml` (default
+14 days); a file inside the window is left alone regardless of its lease's own state.
 
 ## Worker scratch directory
 

@@ -23,7 +23,7 @@ from blizzard.runner.tracing.replay import LeaseTraceReplay, ReplayUnavailable
 from blizzard.runner.tracing.sweep import LeaseTraceSweep
 from tests.runner_fakes import SqlAlchemyRunnerStore, make_store, runner_store_errors
 from tests.runner_trace_leases import closed_lease
-from tests.support import InMemoryTraceExporter
+from tests.support import InMemoryTraceExporter, upgrade_runner_store_as_registered
 
 pytestmark = pytest.mark.component
 
@@ -39,7 +39,8 @@ _RENAMED = RunnerIdentity(_REGISTERED.runner_id, "r-claude-2", datetime(2026, 10
 
 def _pre_identity_store(tmp_path: Path) -> SqlAlchemyRunnerStore:
     """One lease minted and closed under the old shape, keyed by the runner's configured name, then
-    the real migration to head — which keeps the lease and leaves the identity row empty."""
+    the real migration to head with the runner registered in between — which keeps the lease and claims it for that
+    runner. The store holds an identity row, but the process holder has not been told of it."""
     url = f"sqlite:///{tmp_path / 'runner.db'}"
     migrations = MigrationRunner(script_location=MIGRATIONS_DIR, url=url)
     migrations.upgrade(_PRE_IDENTITY)
@@ -60,8 +61,8 @@ def _pre_identity_store(tmp_path: Path) -> SqlAlchemyRunnerStore:
                 conn.execute(sa.text(statement), {"minted": _MINTED, "closed": _CLOSED})
     finally:
         engine.dispose()
-    migrations.upgrade("head")
-    return SqlAlchemyRunnerStore(create_engine_from_url(url), runner_store_errors(), runner_id=None)
+    upgrade_runner_store_as_registered(migrations, url, _REGISTERED.runner_id)
+    return SqlAlchemyRunnerStore(create_engine_from_url(url), runner_store_errors(), runner_id=_REGISTERED.runner_id)
 
 
 def _replayed(store: SqlAlchemyRunnerStore, identity: RunnerIdentityHolder) -> list[FinishedSpan]:

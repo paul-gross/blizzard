@@ -15,6 +15,7 @@ import httpx
 import pytest
 
 from blizzard.runner.config import RunnerConfig
+from blizzard.runner.hub.internal.token_file import HubTokenFile
 from tests.e2e.test_acceptance_loop import _forge, _free_port, _hub, _runner_api, _runner_config
 from tests.runner_fakes import make_store
 from tests.service.support import (
@@ -58,9 +59,12 @@ def test_runner_presents_the_bearer_token_on_every_hub_call(tmp_path: Path) -> N
     with mock_hub(bin_dir, hub_port) as hub:
         chunk_id = _seed(hub)
         # Pinned at the mock hub, so the assertion names the token rather than reading one back.
-        assert hub.post("/_seed/runners", json={"name": "runner-auth", "token": _TOKEN}).status_code in (200, 201)
-        base_config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port, join=False)
-        config = dataclasses.replace(base_config, hub_token=_TOKEN)
+        config = dataclasses.replace(
+            _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port, join=False), hub_token=_TOKEN
+        )
+        HubTokenFile.of(config.root, config.token_env).write(_TOKEN)
+        seeded = hub.post("/_seed/runners", json={"name": config.name, "runner_id": config.runner_id, "token": _TOKEN})
+        assert seeded.status_code in (200, 201), seeded.text
 
         landed = poll_until(lambda: _run_and_check(config, fenced, hub, chunk_id, "done"), timeout=90.0)
         assert landed, f"chunk did not land (status {_status(hub, chunk_id)!r})"
@@ -111,8 +115,11 @@ def test_a_runner_no_hub_added_sends_no_authorization_header_and_never_registers
 
     hub_port = _free_port()
     with mock_hub(bin_dir, hub_port) as hub:
-        config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port, join=False)
-        assert config.hub_token == "", "the runner config must scaffold with no token for this scenario"
+        config = dataclasses.replace(
+            _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port, join=False), hub_token=""
+        )
+        HubTokenFile.of(config.root, config.token_env).write("")
+        assert not HubTokenFile.of(config.root, config.token_env).held(), "this scenario holds no token"
 
         # A couple of ticks is enough to try registering — no chunk needed.
         _drive(config, fenced, ticks=2, pause=0.3)

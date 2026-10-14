@@ -47,14 +47,14 @@ class RunnerControlPatch(BaseModel):
 @router.patch(
     "/runner",
     response_model=RunnerControlView,
-    responses={503: {"description": "The runner has not registered yet, so its store is bound to no runner."}},
+    responses={503: {"description": "The runner's store is bound to no runner id."}},
 )
 def patch_runner(request_body: RunnerControlPatch, request: Request) -> RunnerControlView:
     """Set this runner's own pause brake — it starts no new workers.
 
     Independent of the hub's brake: it works with the hub unreachable, and neither reads nor
-    writes the hub's flag. Not a drain: a live worker is left running. Refused with 503 until the
-    runner first registers, since the brake is a fact of the runner the store is bound to."""
+    writes the hub's flag. Not a drain: a live worker is left running. Refused with 503 while the
+    store is bound to no runner id, since the brake is a fact of the runner the store is bound to."""
     wiring = RunnerWiring.of(request)
     wiring.require_bound()
     status = wiring.status()

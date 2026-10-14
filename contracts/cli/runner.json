@@ -552,7 +552,7 @@
     "external-usage": {
       "commands": {
         "probe": {
-          "help": "Sample one declared subscription's rate-limit usage, by SLUG, and print it.\n\nRead-only, writes nothing. SLUG defaults to the legacy ``anthropic`` declaration\nevery runner still carries.",
+          "help": "Sample one declared subscription's rate-limit usage, by SLUG, and print it.\n\nRead-only, writes nothing. It reads the subscriptions the host declares; SLUG may be left out\nwhen the host declares exactly one.",
           "params": [
             {
               "hidden": false,
@@ -686,7 +686,7 @@
       "short_help": "Worker hook: record a lease heartbeat (identity from the environment)."
     },
     "host": {
-      "help": "Become the blizzard-runner daemon: the reconciliation loop + the local API.\n\nDIRECTORY (positional) and --dir are equivalent \u2014 pass one; giving both requires\nthey agree. Defaults to $BZ_RUNNER_DIR, then the cwd.",
+      "help": "Become the blizzard host: the reconciliation loop of each runner + the local API.\n\nDIRECTORY (positional) and --dir are equivalent \u2014 pass one; giving both requires\nthey agree. Defaults to $BZ_RUNNER_DIR, then the cwd. A directory that has not graduated to a host is\nrefused, naming the graduation procedure.",
       "params": [
         {
           "hidden": false,
@@ -700,7 +700,7 @@
           "type": "text"
         },
         {
-          "help": "Runner runtime directory (overrides $BZ_RUNNER_DIR).",
+          "help": "Host directory (overrides $BZ_RUNNER_DIR).",
           "hidden": false,
           "kind": "option",
           "name": "dir_option",
@@ -734,13 +734,25 @@
           "required": false,
           "secondary_opts": [],
           "type": "integer"
+        },
+        {
+          "help": "Run every check a start would \u2014 the host file, the store's revision, each runner's token resolved to its id \u2014 report each error, and start nothing.",
+          "hidden": false,
+          "kind": "option",
+          "name": "check",
+          "opts": [
+            "--check"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "type": "boolean"
         }
       ],
       "path": "runner host",
-      "short_help": "Become the blizzard-runner daemon: the reconciliation loop + the local API."
+      "short_help": "Become the blizzard host: the reconciliation loop of each runner + the local API."
     },
     "init": {
-      "help": "Scaffold config + data dir + a migrated store under DIRECTORY, then join the runner to its\nhub. Idempotent.\n\nA runner holding no token is added at the hub \u2014 under your `blizzard hub login` session when you\nhold one, in the tenant --tenant names or else the only one you may enter \u2014 and its token\nwritten to DIRECTORY/.env. A held token whose runner serves another tenant than --tenant names stops: a\nrunner never moves between tenants. A fresh config serves the projects --project names, else\n`default`; the runner is added serving them, or, with none named, the tenant's only project.\nDIRECTORY defaults to $BZ_RUNNER_DIR, then the cwd.",
+      "help": "Scaffold the host file + data dir + a migrated store under DIRECTORY, then join the host's runner to\nits hub. Idempotent.\n\nA runner holding no token is added at the hub \u2014 under your `blizzard hub login` session when you\nhold one, in the tenant --tenant names or else the only one you may enter \u2014 its token written to\nDIRECTORY/.env as BZ_HUB_TOKEN_<NAME> and its id to the host file's `[[runner]]`. A held token whose runner\nserves another tenant than --tenant names stops: a runner never moves between tenants. A fresh host serves\nthe projects --project names, else `default`; the runner is added serving them, or, with none named, the\ntenant's only project. A directory a pre-host runner left behind is refused, naming graduation, unless\n--allow-readd sets its store aside. DIRECTORY defaults to $BZ_RUNNER_DIR, then the cwd.",
       "params": [
         {
           "hidden": false,
@@ -803,13 +815,13 @@
         }
       ],
       "path": "runner init",
-      "short_help": "Scaffold config + data dir + a migrated store under DIRECTORY, then join the runner to its hub."
+      "short_help": "Scaffold the host file + data dir + a migrated store under DIRECTORY, then join the host's runner to its hub."
     },
     "migrate": {
-      "help": "Apply pending store migrations, or reverse with --down <rev>.",
+      "help": "Apply pending store migrations, or reverse with --down <rev>.\n\nA directory that has not graduated to a host is refused and left as it is. A graduated one holding a pre-host\n`data/runner.db` and no `data/host.db` adopts that store first. Adoption and --down hold the directory and are\nrefused while a host is running; a plain upgrade is refused only while a pre-host daemon answers.",
       "params": [
         {
-          "help": "Runner runtime directory (overrides $BZ_RUNNER_DIR).",
+          "help": "Host directory (overrides $BZ_RUNNER_DIR).",
           "hidden": false,
           "kind": "option",
           "name": "directory",
@@ -1037,7 +1049,7 @@
           "short_help": "Diff this runtime's effective workspace prompt against packaged sample NAME."
         },
         "install": {
-          "help": "Copy packaged sample NAME into the runtime root and point the config at the copy.\n\nThe forked shape: the config carries `workspace_prompt_file`, never the package knob, so\n`prompt diff` has a local file to compare. Takes effect on the next runner restart.",
+          "help": "Copy packaged sample NAME into the runtime root and point the workspace at the copy.\n\nThe forked shape: the workspace carries `prompt_file`, never the package knob, so\n`prompt diff` has a local file to compare. Takes effect on the next runner restart.",
           "params": [
             {
               "hidden": false,
@@ -1076,7 +1088,7 @@
             }
           ],
           "path": "runner prompt install",
-          "short_help": "Copy packaged sample NAME into the runtime root and point the config at the copy."
+          "short_help": "Copy packaged sample NAME into the runtime root and point the workspace at the copy."
         },
         "list": {
           "help": "List the workspace-prompt samples shipped in this wheel.",
@@ -1308,7 +1320,7 @@
     "store": {
       "commands": {
         "reset": {
-          "help": "Move the store under DIRECTORY aside under a timestamped name, then migrate a fresh one.\n\nNothing is deleted: the old store keeps its undelivered events and in-flight leases beside the\nnew one. Refused while the runner's daemon answers on its socket, and for a store that is not a\nSQLite file. DIRECTORY defaults to $BZ_RUNNER_DIR, then the cwd.",
+          "help": "Move the store under DIRECTORY aside under a timestamped name, then migrate a fresh one.\n\nNothing is deleted: the old store keeps its undelivered events and in-flight leases beside the\nnew one. Refused while the host holds the directory or a pre-host daemon answers on its socket, and for a\nstore that is not a SQLite file. DIRECTORY defaults to $BZ_RUNNER_DIR, then the cwd.",
           "params": [
             {
               "hidden": false,
@@ -1326,10 +1338,10 @@
           "short_help": "Move the store under DIRECTORY aside under a timestamped name, then migrate a fresh one."
         }
       },
-      "help": "Administer the runner's local store while its daemon is down.",
+      "help": "Administer the host's local store while the host is down.",
       "params": [],
       "path": "runner store",
-      "short_help": "Administer the runner's local store while its daemon is down."
+      "short_help": "Administer the host's local store while the host is down."
     },
     "takeover": {
       "help": "Take over a parked chunk: exec the interactive resume command in this terminal. The\ntakeover fact is recorded before anything else runs, so no loop step can respawn or judge the\nsession while it is open; the lease token travels only in the response body and the exec, never\nprinted. ``--force`` supersedes a live worker attempt instead of refusing. An interrupted session\nstill closes the takeover.",
@@ -1398,10 +1410,10 @@
       "short_help": "Take over a parked chunk: exec the interactive resume command in this terminal."
     },
     "tick": {
-      "help": "Run ONE synchronous reconciliation tick (REAP \u2192 PULL \u2192 FILL \u2192 ADVANCE).\n\nThe steppable-loop driver for tests and the e2e (``bzh:steppable-loop``): a single pass against the\nlive hub and workspace, then exit. Refuses on a store revision mismatch, like ``host``.",
+      "help": "Run ONE synchronous reconciliation tick (REAP \u2192 PULL \u2192 FILL \u2192 ADVANCE) of the host's runner.\n\nThe steppable-loop driver for tests and the e2e (``bzh:steppable-loop``): a single pass against the\nlive hub and workspace, then exit. Refuses on a store revision mismatch, like ``host``, and while another\nprocess holds the directory.",
       "params": [
         {
-          "help": "Runner runtime directory (overrides $BZ_RUNNER_DIR).",
+          "help": "Host directory (overrides $BZ_RUNNER_DIR).",
           "hidden": false,
           "kind": "option",
           "name": "directory",
@@ -1414,7 +1426,7 @@
         }
       ],
       "path": "runner tick",
-      "short_help": "Run ONE synchronous reconciliation tick (REAP \u2192 PULL \u2192 FILL \u2192 ADVANCE)."
+      "short_help": "Run ONE synchronous reconciliation tick (REAP \u2192 PULL \u2192 FILL \u2192 ADVANCE) of the host's runner."
     },
     "traces": {
       "commands": {

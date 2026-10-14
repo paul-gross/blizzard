@@ -21,8 +21,9 @@ from blizzard.cli.main import blizzard
 from blizzard.cli.operator_trace import UNTRACED
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.cli.daemon import LOCAL_CLIENT_TIMEOUT, daemon_holding
-from blizzard.runner.config import RunnerConfig
+from blizzard.runner.host_layout import HostLayout
 from blizzard.runner.store import schema as runner_schema
+from tests.host_files import load_runner_config
 from tests.runner_fakes import FIXTURE_RUNNER_ID
 from tests.runner_init_fakes import init_runner
 
@@ -191,7 +192,7 @@ def test_dev_check_invariants_asks_for_active_lease_process_is_live(tmp_path: Pa
     runner = init_runner()
     assert runner.invoke(blizzard, ["runner", "init", str(root)]).exit_code == 0
 
-    engine = create_engine_from_url(RunnerConfig.load(root).db_url)
+    engine = create_engine_from_url(load_runner_config(root).db_url)
     with engine.begin() as conn:
         conn.execute(
             insert(runner_schema.leases).values(
@@ -215,12 +216,12 @@ def test_runner_init(tmp_path: Path) -> None:
     root = str(tmp_path / "runner")
     result = init_runner().invoke(blizzard, ["runner", "init", root])
     assert result.exit_code == 0, result.output
-    assert (tmp_path / "runner" / "blizzard-runner.toml").exists()
+    assert (tmp_path / "runner" / "blizzard-host.toml").exists()
 
 
 # The runtime-dir env fallback: --dir > $BZ_<daemon>_DIR > cwd. Parametrized
 # over both daemons — a fallback wired on one but not the other is the drift worth catching.
-_DAEMONS = [("hub", "BZ_HUB_DIR", "blizzard-hub.toml"), ("runner", "BZ_RUNNER_DIR", "blizzard-runner.toml")]
+_DAEMONS = [("hub", "BZ_HUB_DIR", "blizzard-hub.toml"), ("runner", "BZ_RUNNER_DIR", "blizzard-host.toml")]
 
 
 @pytest.mark.parametrize(("daemon", "env_var", "config_name"), _DAEMONS)
@@ -379,18 +380,18 @@ def test_a_stale_socket_file_is_not_a_serving_daemon(tmp_path: Path) -> None:
     behind must not refuse a verb nothing is actually holding."""
     root = tmp_path / "runner"
     assert init_runner().invoke(blizzard, ["runner", "init", str(root)]).exit_code == 0
-    RunnerConfig.socket_path_for(root).write_bytes(b"")
+    HostLayout(root).legacy_socket_path.write_bytes(b"")
 
-    assert daemon_holding(root, UNTRACED) is None
+    assert daemon_holding(HostLayout(root).legacy_socket_path, UNTRACED) is None
 
 
 def test_a_daemon_answering_its_socket_is_holding_the_store(tmp_path: Path) -> None:
     root = tmp_path / "runner"
     assert init_runner().invoke(blizzard, ["runner", "init", str(root)]).exit_code == 0
-    server = _serve_on(RunnerConfig.socket_path_for(root), _OK)
+    server = _serve_on(HostLayout(root).legacy_socket_path, _OK)
 
     try:
-        assert daemon_holding(root, UNTRACED) is not None
+        assert daemon_holding(HostLayout(root).legacy_socket_path, UNTRACED) is not None
     finally:
         server.close()
 
@@ -401,10 +402,10 @@ def test_an_ambiguous_liveness_answer_fails_closed(reply: bytes | None, expected
     ambiguity toward "nothing there" would let the verb write concurrently with it."""
     root = tmp_path / "runner"
     assert init_runner().invoke(blizzard, ["runner", "init", str(root)]).exit_code == 0
-    server = _serve_on(RunnerConfig.socket_path_for(root), reply)
+    server = _serve_on(HostLayout(root).legacy_socket_path, reply)
 
     try:
-        holding = daemon_holding(root, UNTRACED)
+        holding = daemon_holding(HostLayout(root).legacy_socket_path, UNTRACED)
     finally:
         server.close()
 
@@ -424,8 +425,8 @@ def test_runner_transcript_backfill_refuses_while_the_lane_is_off(tmp_path: Path
 
 
 def _enable_transcript_shipping(root: Path) -> None:
-    config_path = root / "blizzard-runner.toml"
-    config_path.write_text(config_path.read_text().replace("ship = false", "ship = true"))
+    config_path = root / "blizzard-host.toml"
+    config_path.write_text(config_path.read_text().replace("ship = false", "ship = true", 1))
 
 
 def test_runner_transcript_backfill_drives_its_whole_production_route(tmp_path: Path) -> None:
@@ -456,13 +457,46 @@ def test_runner_transcript_reship_drives_its_whole_production_route(tmp_path: Pa
     assert "no such transcript segment: seg_nope" in result.output
 
 
+@pytest.mark.parametrize("verb", [["reship", "seg_x"], ["backfill", "--dry-run"]])
+def test_a_transcript_verb_refuses_a_store_that_names_another_runner_and_changes_nothing(
+    tmp_path: Path, verb: list[str]
+) -> None:
+    root = tmp_path / "runner"
+    assert init_runner().invoke(blizzard, ["runner", "init", str(root)]).exit_code == 0
+    _enable_transcript_shipping(root)
+    config_path = root / "blizzard-host.toml"
+    config_path.write_text(config_path.read_text().replace('id = "rn_init1"', 'id = "rn_other"'))
+
+    result = init_runner().invoke(blizzard, ["runner", "transcript", *verb, "--dir", str(root)])
+
+    assert result.exit_code == 1
+    assert "the store belongs to runner rn_init1, not the configured rn_other" in result.output
+    assert f"`blizzard runner store reset {root}`" in result.output
+    assert "Traceback" not in result.output
+
+
+@pytest.mark.parametrize("verb", [["reship", "seg_x"], ["backfill", "--dry-run"]])
+def test_a_transcript_verb_refuses_a_runner_that_has_not_joined_its_hub(tmp_path: Path, verb: list[str]) -> None:
+    root = tmp_path / "runner"
+    assert init_runner().invoke(blizzard, ["runner", "init", str(root)]).exit_code == 0
+    _enable_transcript_shipping(root)
+    config_path = root / "blizzard-host.toml"
+    config_path.write_text(config_path.read_text().replace('id = "rn_init1"\n', "", 1))
+
+    result = init_runner().invoke(blizzard, ["runner", "transcript", *verb, "--dir", str(root)])
+
+    assert result.exit_code == 1
+    assert "has not joined its hub" in result.output
+    assert isinstance(result.exception, SystemExit)
+
+
 def test_runner_transcript_reship_refuses_while_a_daemon_holds_the_store(tmp_path: Path) -> None:
     """The shared `_transcript_config` guard reaches the second verb too — the whole reason
     it was extracted, and a regression here is silent store corruption, not a failed command."""
     root = tmp_path / "runner"
     assert init_runner().invoke(blizzard, ["runner", "init", str(root)]).exit_code == 0
     _enable_transcript_shipping(root)
-    server = _serve_on(RunnerConfig.socket_path_for(root), _OK)
+    server = _serve_on(HostLayout(root).legacy_socket_path, _OK)
 
     try:
         result = init_runner().invoke(blizzard, ["runner", "transcript", "reship", "seg_x", "--dir", str(root)])
@@ -470,7 +504,7 @@ def test_runner_transcript_reship_refuses_while_a_daemon_holds_the_store(tmp_pat
         server.close()
 
     assert result.exit_code != 0
-    assert "single-writer" in result.output
+    assert "single-owner" in result.output
 
 
 def test_runner_transcript_backfill_refuses_while_a_daemon_holds_the_store(tmp_path: Path) -> None:
@@ -478,7 +512,7 @@ def test_runner_transcript_backfill_refuses_while_a_daemon_holds_the_store(tmp_p
     root = tmp_path / "runner"
     assert init_runner().invoke(blizzard, ["runner", "init", str(root)]).exit_code == 0
     _enable_transcript_shipping(root)
-    server = _serve_on(RunnerConfig.socket_path_for(root), _OK)
+    server = _serve_on(HostLayout(root).legacy_socket_path, _OK)
 
     try:
         result = init_runner().invoke(blizzard, ["runner", "transcript", "backfill", "--dir", str(root)])
@@ -486,7 +520,7 @@ def test_runner_transcript_backfill_refuses_while_a_daemon_holds_the_store(tmp_p
         server.close()
 
     assert result.exit_code != 0
-    assert "single-writer" in result.output
+    assert "single-owner" in result.output
 
 
 def test_runner_takeover_errors_cleanly_with_no_daemon_serving(tmp_path: Path) -> None:
@@ -540,11 +574,9 @@ def test_runner_host_without_a_token_names_both_ways_to_get_one(
     result = runner.invoke(blizzard, ["runner", "host", "--dir", str(root)])
 
     assert isinstance(result.exception, RuntimeError)
-    assert "the hub refuses this runner until `blizzard runner init` adds it" in result.output
-    assert (
-        "if `blizzard hub runner list` already shows it, put the line `blizzard hub runner enroll <id>` prints in"
-        in result.output
-    )
+    assert "runner runner-local" in result.output and "is halted: has no hub token" in result.output
+    assert "`blizzard runner init` adds the runner" in result.output
+    assert "`blizzard hub runner enroll <id>` prints the line to put there" in result.output
 
 
 def test_runner_host_reports_a_missing_runner_prompt_file_as_a_clean_error(tmp_path: Path) -> None:
@@ -554,7 +586,7 @@ def test_runner_host_reports_a_missing_runner_prompt_file_as_a_clean_error(tmp_p
     runner = init_runner()
     root = tmp_path / "runner"
     assert runner.invoke(blizzard, ["runner", "init", str(root)]).exit_code == 0
-    config_path = root / "blizzard-runner.toml"
+    config_path = root / "blizzard-host.toml"
     config_path.write_text(
         config_path.read_text().replace('runner_prompt_file = ""', 'runner_prompt_file = "does-not-exist.md"')
     )

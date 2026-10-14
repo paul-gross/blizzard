@@ -34,7 +34,6 @@ from blizzard.runner.config import RunnerConfig, SubscriptionDeclaration
 from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.leases.lease_auth import LeaseToken
 from blizzard.runner.loop_wiring import LoopWiring
-from blizzard.runner.runtime import init_environment as init_runner_environment
 from blizzard.runner.store.schema import escalation_closures, outbound_buffer
 from tests.e2e.test_acceptance_loop import (
     REPO,
@@ -46,6 +45,7 @@ from tests.e2e.test_acceptance_loop import (
     _runner_config,
     _terminate,
 )
+from tests.host_files import init_runner_environment, write_host_file
 from tests.runner_fakes import daemon_store
 from tests.runner_join import fleet_headers, pin_runner, runner_spawn_env, seed_pinned_runner
 from tests.service.support import (
@@ -1132,7 +1132,7 @@ def _host(config: RunnerConfig, env: dict[str, str]) -> subprocess.Popen[str]:
 
 def _traced(config: RunnerConfig) -> RunnerConfig:
     traced = dataclasses.replace(config, tracing=TracingConfig(sweep_seconds=1, settle_seconds=0))
-    traced.config_path.write_text(traced.to_toml())
+    write_host_file(traced)
     return traced
 
 
@@ -1205,15 +1205,14 @@ def test_a_grpc_protocol_serves_with_tracing_off_and_one_rejection_reaches_the_h
             "OTEL_EXPORTER_OTLP_ENDPOINT": "http://127.0.0.1:4318",
             "OTEL_EXPORTER_OTLP_PROTOCOL": "grpc",
         }
-        # Held unreachable first: a fresh runner is bound to no runner until it registers, so the rejection — a
-        # runner-scoped row — is held rather than buffered.
+        # Held unreachable first: the rejection is buffered under the configured runner and waits there.
         assert hub.post("/_levers/unreachable", json={"remaining": 10_000}).status_code == 200
         log = config.root / "daemon.log"
         proc = _host(config, env)
         client = httpx.Client(base_url=f"http://127.0.0.1:{config.port}", timeout=10.0)
         try:
             _await_http(proc, client, "/api/health", log=log)
-            assert _trace_config_rejections(config, pending=True) == 0
+            assert poll_until(lambda: _trace_config_rejections(config, pending=True) == 1)
             assert _trace_config_rejections(config, pending=False) == 0
 
             assert hub.post("/_levers/reset").status_code == 200

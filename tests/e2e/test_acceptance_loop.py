@@ -30,7 +30,6 @@ from blizzard.runner.composition import RunnerProcess
 from blizzard.runner.config import ENV_TRANSCRIPTS_ROOT, RunnerConfig
 from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.loop_wiring import LoopWiring
-from blizzard.runner.runtime import init_environment as init_runner_environment
 from tests.e2e.fleet_traces import (
     PLANT_DIR_VAR,
     PLANT_LEASE_TOKEN_SCRIPT,
@@ -51,6 +50,7 @@ from tests.e2e.fleet_traces import (
 )
 from tests.e2e.harness_variants import CLAUDE_CODE, MockHarness, both_mock_harnesses
 from tests.harness_sections import claude_code, opencode, sections
+from tests.host_files import init_runner_environment, sampler_without_credentials
 from tests.runner_join import join_runner
 from tests.support import (
     create_repositories,
@@ -681,7 +681,7 @@ def _runner_config(
         ),
         # A path that is never created, so the external-usage sampler's missing-credentials
         # soft failure trips before any request is built.
-        external_usage_credentials_path=str(runner_dir / "no-such-credentials.json"),
+        subscriptions=sampler_without_credentials(runner_dir),
         base_branch="main",
         worker_env_passthrough=MOCK_HARNESS_ENV_PASSTHROUGH,
     )

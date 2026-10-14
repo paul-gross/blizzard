@@ -305,7 +305,7 @@ them beside the hub's.
 - **Turning them on.** The runner reads the same OpenTelemetry variables as the hub, and only those:
   `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` or `OTEL_EXPORTER_OTLP_ENDPOINT` turns its sweep on, and a protocol other than
   `http/protobuf` is rejected. `service.name` is `blizzard-runner` unless `OTEL_SERVICE_NAME` or
-  `OTEL_RESOURCE_ATTRIBUTES` names one. The sweep's knobs are the `[tracing]` block of `blizzard-runner.toml`, with the
+  `OTEL_RESOURCE_ATTRIBUTES` names one. The sweep's knobs are the `[tracing]` block of `blizzard-host.toml`, with the
   same names and defaults as the hub's; `batch_limit` counts closed leases.
 - **Where it runs.** Only `blizzard runner host` sweeps, on a thread of its own, so a slow or hung backend never delays
   a tick. `blizzard runner tick` never tells anything. At shutdown the runner waits a few seconds for an export in
@@ -337,7 +337,7 @@ its time. Most of them form their own traces; the ones made on a step's behalf j
 step's root, as described under **Nesting under a step** below. The [Spans](#spans) table does not list them.
 
 - **Turning them on.** Both switches are needed: `platform = true` in the `[tracing]` block of `blizzard-hub.toml` or
-  `blizzard-runner.toml`, and an OTLP endpoint in OpenTelemetry's own variables, the same ones the chunk traces read.
+  `blizzard-host.toml`, and an OTLP endpoint in OpenTelemetry's own variables, the same ones the chunk traces read.
   Either alone leaves them off, and a protocol other than `http/protobuf` turns them off too. With them off, a daemon
   installs no tracer provider.
 - **Sampling.** A trace's root, which is a request that arrives with no `traceparent`, a runner tick or a hub sweep
@@ -460,7 +460,7 @@ authentication, encodings and caps, with the exceptions listed there.
 
 #### Worker programs
 
-With `worker_programs = true` in the `[tracing]` block of `blizzard-runner.toml`, default `false` and effective only
+With `worker_programs = true` in the `[tracing]` block of `blizzard-host.toml`, default `false` and effective only
 alongside `platform = true`, the runner also lets the programs a worker runs send their own spans. Each invocation's
 environment then carries `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` (the runner's `/v1/traces`),
 `OTEL_EXPORTER_OTLP_TRACES_PROTOCOL=http/protobuf` and `OTEL_EXPORTER_OTLP_TRACES_HEADERS` (the lease token). It also
@@ -494,7 +494,7 @@ under the step. With it off, no `WINTER_OTEL_*` variable and none of these `OTEL
 
 #### Harness telemetry
 
-With `harness_telemetry = true` in the `[tracing]` block of `blizzard-runner.toml`, default `false` and effective only
+With `harness_telemetry = true` in the `[tracing]` block of `blizzard-host.toml`, default `false` and effective only
 alongside `platform = true`, a Claude Code worker exports its metrics, logs and traces to the runner. Measured on
 `claude` 2.1.288 to 2.1.289; the managed-settings behavior below is read from `claude`'s code, not run.
 

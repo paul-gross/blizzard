@@ -13,6 +13,7 @@ from blizzard.runner.hub.outbound_buffer import (
     OutboundFactEntry,
 )
 from blizzard.runner.store.errors import RunnerStoreConnections
+from blizzard.runner.store.internal.base import insert_outbox_row
 from blizzard.runner.store.schema import outbound_buffer
 
 # See IWriteOutboundRepository.prune_outbound's own docstring for the retention contract.
@@ -78,13 +79,16 @@ class OutboundStore:
         self, *, kind: str, chunk_id: str | None, lease_id: str | None, payload: str, created_at: datetime
     ) -> int:
         with self._store.begin() as conn:
-            result = conn.execute(
-                self._store.insert(outbound_buffer).values(
-                    kind=kind, chunk_id=chunk_id, lease_id=lease_id, payload=payload, created_at=created_at
-                )
+            return insert_outbox_row(
+                self._store,
+                conn,
+                outbound_buffer,
+                kind=kind,
+                chunk_id=chunk_id,
+                lease_id=lease_id,
+                payload=payload,
+                created_at=created_at,
             )
-        key = result.inserted_primary_key
-        return int(key[0]) if key is not None else 0
 
     def ack_outbound(self, seq: int, *, acked_at: datetime) -> None:
         self.ack_outbound_batch([seq], acked_at=acked_at)

@@ -18,6 +18,7 @@ from pydantic import TypeAdapter
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.harness.capability_snapshot import HarnessCapability
 from blizzard.runner.hub.client import (
+    BindingDeclaration,
     ChunkEndedError,
     ChunkNotFoundError,
     ClaimConflict,
@@ -79,6 +80,7 @@ from blizzard.wire.route import (
 from blizzard.wire.runner import (
     RunnerAddRequest,
     RunnerAddResponse,
+    RunnerBinding,
     RunnerCapability,
     RunnerIdentityRefusal,
     RunnerIdentityView,
@@ -258,6 +260,8 @@ class HttpHubClient:
         subscriptions: tuple[SubscriptionDeclaration, ...] = (),
         gates: tuple[str, ...] = (),
         projects: tuple[str, ...] | None = None,
+        bindings: tuple[BindingDeclaration, ...] | None = None,
+        subscription: str | None = None,
     ) -> RegistrationReply:
         resp = self._post(
             f"{_FLEET_API}/runners",
@@ -273,6 +277,12 @@ class HttpHubClient:
                 ],
                 gates=list(gates),
                 projects=list(projects) if projects is not None else None,
+                bindings=(
+                    [RunnerBinding(project=b.project, workspace_id=b.workspace_id, agents=b.agents) for b in bindings]
+                    if bindings is not None
+                    else None
+                ),
+                subscription=subscription,
             ).model_dump(mode="json"),
         )
         reply = RunnerRegistrationResponse.model_validate(resp.json())

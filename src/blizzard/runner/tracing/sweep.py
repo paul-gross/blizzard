@@ -7,8 +7,7 @@ told and §The cursor, deferring to fleet-spans for the cursor's rules. Every co
 from __future__ import annotations
 
 import json
-import threading
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from datetime import datetime, timedelta
 
 from blizzard.foundation.clock import IClock
@@ -70,38 +69,6 @@ def announce_rejected_tracing(settings: TracingSettings, outbound: IWriteOutboun
     if payload is None:
         return
     outbound.enqueue_outbound(kind=EVENT_RECORDED, chunk_id=None, lease_id=None, payload=payload, created_at=at)
-
-
-class PendingTracingRejection:
-    """The start's ``trace-config-rejected`` report, held until the store is bound to a runner: the report is a
-    runner-scoped row, and a store bound to none has no runner to write it for. :meth:`announce` buffers it the first
-    time it runs with ``bound()`` true, and is a no-op before and after."""
-
-    def __init__(
-        self,
-        settings: TracingSettings,
-        outbound: IWriteOutboundRepository,
-        bound: Callable[[], bool],
-        clock: IClock,
-    ) -> None:
-        self._settings = settings
-        self._outbound = outbound
-        self._bound = bound
-        self._clock = clock
-        self._owed = rejected_tracing_report(settings) is not None
-        self._lock = threading.Lock()
-
-    @property
-    def owed(self) -> bool:
-        """Whether the report is still to be buffered."""
-        return self._owed
-
-    def announce(self) -> None:
-        with self._lock:
-            if not self._owed or not self._bound():
-                return
-            announce_rejected_tracing(self._settings, self._outbound, self._clock.now())
-            self._owed = False
 
 
 def cursor_after(keys: Sequence[LeaseCursorKey], span_count: int, at: datetime) -> LeaseTraceCheckpoint:

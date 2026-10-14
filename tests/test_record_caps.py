@@ -15,7 +15,7 @@ import pytest
 
 from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.observability.transcripts import RECORD_MAX_BYTES
-from blizzard.runner.config import RunnerConfig
+from blizzard.runner.host_config import HostConfig
 from blizzard.runner.transcripts.caps import TRANSCRIPT_RECORD_MAX_BYTES
 from tests.repo_files import repo_root
 
@@ -61,7 +61,7 @@ def test_the_operator_doc_states_the_cap_magnitude_the_code_enforces(pattern: st
     ("rendered", "who"),
     [
         (lambda p: HubConfig(root=p, db_url=HubConfig.default_db_url(p)).to_toml(), "hub"),
-        (lambda p: RunnerConfig(root=p, db_url=RunnerConfig.default_db_url(p)).to_toml(), "runner"),
+        (lambda p: HostConfig.scaffold(p).to_toml(), "runner"),
     ],
 )
 def test_each_scaffolded_config_warns_an_operator_about_the_cap_ordering(

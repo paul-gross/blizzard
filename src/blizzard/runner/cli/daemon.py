@@ -12,7 +12,7 @@ import httpx
 
 from blizzard.cli.operator_trace import ITraceHeaders
 from blizzard.cli.param_rank import ParamSource
-from blizzard.runner.config import RunnerConfig
+from blizzard.runner.host_layout import HostLayout
 
 # A machine-local round trip, so a hook-scale budget rather than the hub-client one.
 LOCAL_CLIENT_TIMEOUT = 5.0
@@ -57,7 +57,7 @@ class RunnerDaemon:
             client = httpx.Client(base_url=runner_url, timeout=LOCAL_CLIENT_TIMEOUT, headers=trace.headers())
             return cls(verb, client, runner_url)
 
-        sock = RunnerConfig.socket_path_for(Path(directory))
+        sock = HostLayout(Path(directory)).socket_path
         if not sock.exists():
             # No degraded read path — an absent socket is a daemon-not-running diagnostic,
             # never a reason to fall back to reading the store.
@@ -109,11 +109,10 @@ class RunnerDaemon:
         return resp
 
 
-def daemon_holding(root: Path, trace: ITraceHeaders) -> str | None:
-    """What is holding ``root``'s socket, or ``None`` when nothing is — the single-writer guard's
+def daemon_holding(sock: Path, trace: ITraceHeaders) -> str | None:
+    """What is holding the socket ``sock``, or ``None`` when nothing is — the single-owner guard's
     probe for a verb that writes or moves the store. Fail-closed: a socket that does not answer
     its health probe cleanly is still held."""
-    sock = RunnerConfig.socket_path_for(root)
     if not sock.exists():
         return None
     try:

@@ -77,22 +77,27 @@ describe('LocalInfoView', () => {
     expect(getComputedStyle(id).whiteSpace).toBe('nowrap');
   });
 
-  it('names both runners and the reset command while its token names another runner', async () => {
+  it('names both runners and the remedy while its token names another runner', async () => {
     const { el } = await render({
       verdict: {
         state: 'mismatched',
         store_runner_id: 'rn_store',
         token_runner_id: 'rn_other',
         checked_at: '2026-07-16T11:59:45.000Z',
-        reset_command: 'blizzard runner store reset /runner',
+        reset_command:
+          'set BZ_HUB_TOKEN_RUNNER_LOCAL to the token of runner rn_store, or correct `[[runner]] id` in /runner/blizzard-host.toml',
       },
     });
 
     const row = el.querySelector('[data-testid="runner-verdict"]')!;
     expect(row.textContent).toContain('REFUSING');
+    expect(row.textContent).toContain('the configured runner is');
+    expect(row.textContent).not.toContain('store to');
     expect(row.querySelector('[data-testid="verdict-token"]')?.textContent).toBe('rn_other');
     expect(row.querySelector('[data-testid="verdict-store"]')?.textContent).toBe('rn_store');
-    expect(row.querySelector('[data-testid="verdict-reset"]')?.textContent).toBe('blizzard runner store reset /runner');
+    expect(row.querySelector('[data-testid="verdict-reset"]')?.textContent).toBe(
+      'set BZ_HUB_TOKEN_RUNNER_LOCAL to the token of runner rn_store, or correct `[[runner]] id` in /runner/blizzard-host.toml',
+    );
   });
 
   it('reads verified once its token resolves to its own runner, and leaves the row out with no verdict', async () => {

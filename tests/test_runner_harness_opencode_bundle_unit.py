@@ -84,7 +84,7 @@ def test_content_rewrites_only_relative_companions(tmp_path: Path) -> None:
 def test_registry_binds_published_config_and_generated_config_without_bundle(
     tmp_path: Path, spawn_executor: Executor
 ) -> None:
-    config = init_environment(tmp_path / "runtime")
+    config = init_environment(tmp_path / "runtime").runner_config()
     assert opencode(config).worker_config_path is not None
     worker = opencode(config).worker_config_at(config.root)
     assert worker.is_file()

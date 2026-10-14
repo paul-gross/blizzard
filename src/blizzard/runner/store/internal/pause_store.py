@@ -9,7 +9,7 @@ from sqlalchemy import func
 
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.store.errors import RunnerStoreConnections
-from blizzard.runner.store.internal.base import open_pause_park, pause_parked_lease_ids
+from blizzard.runner.store.internal.base import insert_outbox_row, open_pause_park, pause_parked_lease_ids
 from blizzard.runner.store.schema import (
     hub_control,
     local_pause_facts,
@@ -117,14 +117,18 @@ class PauseStore:
             conn.execute(
                 self._store.insert(local_pause_facts).values(paused=paused, set_at=at, set_by=by, reason=reason)
             )
-            result = conn.execute(
-                self._store.insert(outbound_buffer).values(
-                    kind=report_kind, chunk_id=None, lease_id=None, payload=report_payload, created_at=at
-                )
+            seq = insert_outbox_row(
+                self._store,
+                conn,
+                outbound_buffer,
+                kind=report_kind,
+                chunk_id=None,
+                lease_id=None,
+                payload=report_payload,
+                created_at=at,
             )
         _log.info("local pause fact recorded", paused=paused, set_by=by, report=report_kind)
-        key = result.inserted_primary_key
-        return int(key[0]) if key is not None else 0
+        return seq
 
     def record_pause_park(
         self, *, lease_id: str, chunk_id: str, parked_at: datetime, interrupted_elicitation_id: int | None = None

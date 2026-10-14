@@ -16,6 +16,7 @@ from blizzard.runner.config import RunnerConfig
 from blizzard.runner.environments.factory import WORKSPACE_PROVIDERS, WorkspaceSettings, build_workspace_provider
 from blizzard.runner.environments.internal import basic_provider
 from blizzard.runner.environments.provider import IWorkspaceProvider, WorkspaceRepo
+from blizzard.runner.host_layout import HostLayout
 from tests.runner_fakes import FakeProvider
 
 
@@ -28,7 +29,7 @@ class _Case:
 
 
 def _settings(tmp_path: Path, **fields: object) -> WorkspaceSettings:
-    config = RunnerConfig(root=tmp_path, db_url=RunnerConfig.default_db_url(tmp_path), **fields)  # type: ignore[arg-type]
+    config = RunnerConfig(root=tmp_path, db_url=HostLayout(tmp_path).default_db_url, **fields)  # type: ignore[arg-type]
     return config.workspace_settings
 
 

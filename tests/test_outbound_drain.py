@@ -21,6 +21,7 @@ from blizzard.runner.loop.context import LoopConfig
 from blizzard.runner.loop.steps import Pull
 from blizzard.runner.node_steps.submissions import ApplyReply
 from tests.runner_fakes import (
+    FIXTURE_RUNNER_ID,
     FakeHarness,
     FakeHub,
     FakeProbe,
@@ -59,7 +60,7 @@ def _ctx(hub: FakeHub, *, store=None):  # type: ignore[no-untyped-def]
         provider=FakeProvider({"e1": "/ws/e1"}),
         harness=harness,
         probe=FakeProbe(),
-        config=LoopConfig(runner_name="r1", workspace_id="ws1"),
+        config=LoopConfig(runner_name="r1", workspace_id="ws1", runner_id=FIXTURE_RUNNER_ID),
         clock=FixedClock(_NOW),
     )
 

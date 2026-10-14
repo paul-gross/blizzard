@@ -23,7 +23,8 @@ from structlog.testing import capture_logs
 from blizzard.foundation.clock import FixedClock
 from blizzard.runner.app import create_app
 from blizzard.runner.composition import held_hub_token
-from blizzard.runner.config import DEFAULT_TOKEN_ENV, RunnerConfig
+from blizzard.runner.config import RunnerConfig
+from blizzard.runner.host_config import ResolvedToken, TokenSource
 from blizzard.runner.hub.client import IdentityRouteMissing, TokenIdentity, TokenRefusal
 from blizzard.runner.hub.held_token import HubTokenHolder
 from blizzard.runner.hub.identity import IdentityState, IdentityVerdictHolder
@@ -42,6 +43,7 @@ from tests.runner_fakes import (
     make_store,
     no_retry_clock,
 )
+from tests.runner_join import DEFAULT_TOKEN_ENV
 from tests.support import RunnerFleetClient, build_hub
 
 pytestmark = pytest.mark.component
@@ -58,11 +60,16 @@ class _HubWithoutIdentityRead(FakeHub):
 
 
 def _ctx(
-    tmp_path: Path, hub: FakeHub, *, registered: bool = True, hub_token: HubTokenHolder | None = None
+    tmp_path: Path,
+    hub: FakeHub,
+    *,
+    registered: bool = True,
+    hub_token: HubTokenHolder | None = None,
+    runner_id: str = "r1",
 ) -> LoopContext:
     """A context whose hub is gated by an unchecked verdict, as a freshly started runner's is — its store
-    bound by the seeded registration when ``registered``, else by the first one."""
-    store = make_store(f"sqlite:///{tmp_path / 'runner.db'}", runner_id=None)
+    bound to the configured ``runner_id``, holding its identity row when ``registered``, else until the first registration."""
+    store = make_store(f"sqlite:///{tmp_path / 'runner.db'}", runner_id=runner_id)
     return make_context(
         store,
         hub=hub,
@@ -105,17 +112,19 @@ def test_the_check_compares_the_token_runner_with_the_store_runner(
     IdentityCheck(ctx).run()
 
     verdict = ctx.identity_verdict.verdict()
-    assert (verdict.state, verdict.store_runner_id, verdict.token_runner_id) == (expected, store_runner, token_runner)
+    assert (verdict.state, verdict.store_runner_id, verdict.token_runner_id) == (expected, "r1", token_runner)
     assert verdict.checked_at == _NOW
     stored = ctx.stores.identity.runner_identity()
     assert (stored.runner_id if stored is not None else None) == store_runner
     assert ctx.identity.current() == stored
 
 
-def test_an_empty_store_takes_its_id_from_the_first_registration_never_from_the_check(tmp_path: Path) -> None:
+def test_an_unregistered_store_records_its_identity_at_the_first_registration_never_at_the_check(
+    tmp_path: Path,
+) -> None:
     """The process's identity names only a runner that has registered — sign-in and the trace sweep read it as
-    such — so the check leaves an empty store empty, and the registration after it adopts the reply's id."""
-    hub = FakeHub(default_runner_id="rn_minted")
+    such — so the check leaves an unregistered store without a row, and the registration after it records the reply."""
+    hub = FakeHub(default_runner_id="r1")
     ctx = _ctx(tmp_path, hub, registered=False)
 
     IdentityCheck(ctx).run()
@@ -126,7 +135,7 @@ def test_an_empty_store_takes_its_id_from_the_first_registration_never_from_the_
     Registration(ctx).run()
 
     adopted = ctx.stores.identity.runner_identity()
-    assert adopted is not None and adopted.runner_id == "rn_minted"
+    assert adopted is not None and adopted.runner_id == "r1"
     assert ctx.identity.current() == adopted
     assert len(hub.registered) == 1
 
@@ -244,7 +253,7 @@ def test_the_check_reads_the_token_runner_from_a_real_hub(
 ) -> None:
     hub = build_hub(tmp_path)
     assert hub.app is not None
-    ctx = _ctx(tmp_path, FakeHub(default_runner_id="rn_store"))
+    ctx = _ctx(tmp_path, FakeHub(default_runner_id="rn_store"), runner_id="rn_store")
     real = HttpHubClient(RunnerFleetClient(hub.app, services=hub.services, default_runner_id=token_runner))
 
     IdentityCheck(dataclasses.replace(ctx, token_identity=real)).run()
@@ -285,7 +294,7 @@ def _proxied(
         hub_proxy_client=httpx.Client(transport=httpx.MockTransport(handler)),
         hub_retry_clock=no_retry_clock(),
         identity_verdict=held,
-        identity_check=ProxyIdentityCheck(ctx.stores.identity, held, ctx.clock),
+        identity_check=ProxyIdentityCheck("r1", held, ctx.clock),
     )
     client = TestClient(app)
     resp = client.get("/api/fleet-summary")
@@ -387,7 +396,8 @@ def _refusing(
         monkeypatch.setenv(DEFAULT_TOKEN_ENV, _WRONG)
     else:
         monkeypatch.delenv(DEFAULT_TOKEN_ENV, raising=False)
-    held = held_hub_token(_runtime_with_env_token(tmp_path, _WRONG))
+    source = TokenSource.ENVIRONMENT if from_process_env else TokenSource.DOTENV
+    held = held_hub_token(_runtime_with_env_token(tmp_path, _WRONG), ResolvedToken(_WRONG, source))
     hub = FakeHub(default_runner_id="r1")
     hub.issued = {_WRONG: "rn_other", _RIGHT: "r1"}
     hub.presents(held)
@@ -464,7 +474,7 @@ def test_the_hub_clients_present_the_token_taken_up_from_env(tmp_path: Path, mon
     """The loop's hub client and the hub proxy both present the held token as it stands at each call."""
     monkeypatch.delenv(DEFAULT_TOKEN_ENV, raising=False)
     config = _runtime_with_env_token(tmp_path, _WRONG)
-    held = held_hub_token(config)
+    held = held_hub_token(config, ResolvedToken(_WRONG, TokenSource.DOTENV))
     presented: list[str] = []
 
     def handler(request: httpx.Request) -> httpx.Response:

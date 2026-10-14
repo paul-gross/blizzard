@@ -25,6 +25,7 @@ from blizzard.runner.subscriptions.subscription_sampler import (
     SampleMissReason,
 )
 from tests.runner_fakes import (
+    FIXTURE_RUNNER_ID,
     FakeHarness,
     FakeHub,
     FakeProbe,
@@ -96,7 +97,7 @@ def _ctx(
         harness=FakeHarness(handle=_HANDLE, verdict="pass"),
         probe=FakeProbe(),
         clock=clock,
-        config=LoopConfig(runner_name="r1", workspace_id="ws1", max_agents=1),
+        config=LoopConfig(runner_name="r1", workspace_id="ws1", runner_id=FIXTURE_RUNNER_ID, max_agents=1),
         subscriptions=(_resolved(interval_seconds=interval_seconds, sampler=sampler),),
     )
 
@@ -118,7 +119,7 @@ def _ctx_with_a_claimable_chunk(
         harness=FakeHarness(handle=_HANDLE, verdict="pass"),
         probe=probe,
         clock=clock,
-        config=LoopConfig(runner_name="r1", workspace_id="ws1", max_agents=1),
+        config=LoopConfig(runner_name="r1", workspace_id="ws1", runner_id=FIXTURE_RUNNER_ID, max_agents=1),
         subscriptions=(_resolved(interval_seconds=interval_seconds, sampler=sampler),),
     )
     return ctx, hub
@@ -453,7 +454,7 @@ def test_two_declarations_with_different_cadences_only_the_due_one_samples(tmp_p
         harness=FakeHarness(handle=_HANDLE, verdict="pass"),
         probe=FakeProbe(),
         clock=clock,
-        config=LoopConfig(runner_name="r1", workspace_id="ws1", max_agents=1),
+        config=LoopConfig(runner_name="r1", workspace_id="ws1", runner_id=FIXTURE_RUNNER_ID, max_agents=1),
         subscriptions=(
             _resolved("fast", interval_seconds=100, sampler=fast),
             _resolved("slow", interval_seconds=10_000, sampler=slow),
@@ -487,7 +488,7 @@ def test_a_failed_sample_advances_only_its_own_slugs_cadence_and_leaves_the_othe
         harness=FakeHarness(handle=_HANDLE, verdict="pass"),
         probe=FakeProbe(),
         clock=clock,
-        config=LoopConfig(runner_name="r1", workspace_id="ws1", max_agents=1),
+        config=LoopConfig(runner_name="r1", workspace_id="ws1", runner_id=FIXTURE_RUNNER_ID, max_agents=1),
         subscriptions=(
             _resolved("good", interval_seconds=100, sampler=ok),
             _resolved("bad", interval_seconds=100, sampler=failing),
@@ -532,7 +533,7 @@ def test_a_declared_provider_with_no_sampler_stays_declared_and_unsampled(tmp_pa
         harness=FakeHarness(handle=_HANDLE, verdict="pass"),
         probe=FakeProbe(),
         clock=clock,
-        config=LoopConfig(runner_name="r1", workspace_id="ws1", max_agents=1),
+        config=LoopConfig(runner_name="r1", workspace_id="ws1", runner_id=FIXTURE_RUNNER_ID, max_agents=1),
         subscriptions=(
             _resolved("known", interval_seconds=100, sampler=known),
             _resolved("no-binding", interval_seconds=100, sampler=None),

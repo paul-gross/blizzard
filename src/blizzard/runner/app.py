@@ -72,7 +72,7 @@ from blizzard.runner.api.work_items import router as work_items_router
 from blizzard.runner.api.workspace_prompt import router as workspace_prompt_router
 from blizzard.runner.auth.internal.http_jwks_cache import JwksCache
 from blizzard.runner.auth.jti_cache import IJtiCache
-from blizzard.runner.composition import HostProcess, RunnerProcess, build_host_process
+from blizzard.runner.composition import HostProcess, RunnerProcess, build_runner_process
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.environments.provider import IWorkspaceProvider
 from blizzard.runner.events.broker import EventBroker
@@ -232,10 +232,11 @@ def create_app(
     composition root passes a handle. ``telemetry_receiver`` is the process's worker telemetry receiver;
     absent, the OTLP routes answer 503. ``identity`` is the process's holder; absent, the federation
     routes answer 503. ``identity_verdict`` is the verdict the status reports. ``identity_check`` gates
-    the hub proxy, which forwards only once it verifies the token names the store's runner; absent, the
+    the hub proxy, which forwards only once it verifies the token names the configured runner; absent, the
     proxy forwards ungated. ``hub_token`` is the token the proxy presents; absent, the proxy
-    presents ``config``'s. ``binding`` is the store's runner binding; while it names no runner, the routes that write
-    runner-scoped rows answer 503. ``host_stores`` are the host-scoped stores; ``jti_cache`` defaults to theirs."""
+    presents ``config``'s. ``binding`` is the store's runner binding, bound from the configured id before the app
+    serves; should it name no runner, the routes that write runner-scoped rows answer 503.
+    ``host_stores`` are the host-scoped stores; ``jti_cache`` defaults to theirs."""
     log = get_logger("blizzard.runner")
     clock = clock or SystemClock()
     process = process or LinuxProcessProbe()
@@ -394,10 +395,11 @@ class HostedApp:
     #: One resume hook per hosted runner, in the host's runner order.
     resumes: tuple[ResumeMarking, ...]
     engine: Engine
-    #: The one `HarnessHealthCache` shared with the app, so a read and the registered availability agree.
-    harness_health: HarnessHealthCache
-    archived_transcript_client: httpx.Client
-    hub_proxy_client: httpx.Client
+    #: The one `HarnessHealthCache` shared with the app, so a read and the registered availability agree; ``None``
+    #: when the host built no runner.
+    harness_health: HarnessHealthCache | None
+    archived_transcript_client: httpx.Client | None
+    hub_proxy_client: httpx.Client | None
     hub_http_client: httpx.Client
     owned_host: HostProcess | None = None
 
@@ -411,8 +413,9 @@ class HostedApp:
         with contextlib.ExitStack() as closing:
             if self.owned_host is not None:
                 closing.callback(self.owned_host.close)
-            closing.callback(self.archived_transcript_client.close)
-            closing.callback(self.hub_proxy_client.close)
+            for client in (self.archived_transcript_client, self.hub_proxy_client):
+                if client is not None:
+                    closing.callback(client.close)
             closing.callback(self.hub_http_client.close)
 
 
@@ -426,10 +429,12 @@ def build_hosted_app(
     """Wire the served app and recovery hooks from the host graph.
 
     ``host`` is the host the caller built and owns; ``process_graph`` names a runner whose host serves instead.
-    With neither, this builds a host of one and the returned app closes it."""
+    With neither, this builds a host of one over ``config``'s runner and the returned app closes it."""
     owned = host is None and process_graph is None
     if host is None:
-        host = process_graph.host if process_graph is not None else build_host_process(config, events=events)
+        if process_graph is None:
+            process_graph = build_runner_process(config, events=events)
+        host = process_graph.host
     with contextlib.ExitStack() as startup:
         if owned:
             startup.callback(host.close)
@@ -441,10 +446,12 @@ def build_hosted_app(
 def _wire_hosted_app(
     config: RunnerConfig, host: HostProcess, startup: contextlib.ExitStack, *, owned_host: HostProcess | None
 ) -> HostedApp:
-    # One runner's services mount at the unprefixed paths; a second runner has no route prefix to mount under yet.
-    (graph,) = host.runners
     engine = host.engine
     readiness = host.readiness
+    if not host.runners:
+        return _wire_runnerless_app(config, host, startup, owned_host=owned_host)
+    # One runner's services mount at the unprefixed paths; a second runner has no route prefix to mount under yet.
+    (graph,) = host.runners
     runner_stores = graph.stores
     connections = graph.connections
     harness_health = graph.health
@@ -547,7 +554,7 @@ def _wire_hosted_app(
         identity=graph.identity,
         identity_verdict=graph.identity_verdict,
         # The proxy's forward is a first contact with the hub: it asks which runner its token names.
-        identity_check=ProxyIdentityCheck(runner_stores.identity, graph.identity_verdict, clock),
+        identity_check=ProxyIdentityCheck(graph.runner_id, graph.identity_verdict, clock),
         hub_token=graph.hub_token,
         readiness=readiness,
         workspace_provider=workspace_provider,
@@ -592,6 +599,27 @@ def _wire_hosted_app(
         hub_http_client,
         owned_host,
     )
+
+
+def _wire_runnerless_app(
+    config: RunnerConfig, host: HostProcess, startup: contextlib.ExitStack, *, owned_host: HostProcess | None
+) -> HostedApp:
+    """The app of a host that built no runner: what answers for the host itself — its health, and its readiness,
+    whose detail names each halted runner. The runner routes are not mounted, so they answer 503."""
+    hub_http_client = startup.enter_context(httpx.Client(base_url=config.hub_url, timeout=5.0))
+    host.platform_tracing.instrument_client(hub_http_client)
+    app = create_app(
+        config,
+        platform_tracing=host.platform_tracing,
+        readiness=host.readiness,
+        workspace_provider=host.provider,
+        host_stores=host.host_stores,
+        hub_http_client=hub_http_client,
+        events=host.events,
+        clock=host.clock,
+        process=host.process,
+    )
+    return HostedApp(app, (), host.engine, None, None, None, hub_http_client, owned_host)
 
 
 def create_app_for_export() -> FastAPI:

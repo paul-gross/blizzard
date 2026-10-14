@@ -26,8 +26,6 @@ from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.runner.app import build_hosted_app, create_app
 from blizzard.runner.composition import build_runner_process
 from blizzard.runner.config import (
-    CONFIG_FILENAME,
-    LEGACY_ANTHROPIC_SLUG,
     ConfigError,
     RunnerConfig,
     SubscriptionDeclaration,
@@ -44,6 +42,7 @@ from blizzard.runner.harness.opencode.adapter import OpenCodeAdapter
 from blizzard.runner.harness.opencode.section import OpenCodeSection
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.harness.wiring import publish_harness_bundle
+from blizzard.runner.host_layout import HostLayout
 from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.loop.context import LoopContext
@@ -56,6 +55,7 @@ from blizzard.runner.subscriptions.internal.openai_credential_renewer import Ope
 from blizzard.runner.subscriptions.internal.openai_subscription_sampler import OpenAISubscriptionSampler
 from blizzard.runner.subscriptions.subscription_sampler import PROVIDER_ANTHROPIC, PROVIDER_OPENAI
 from tests.harness_sections import sections
+from tests.host_files import load_runner_config, write_minimal_host
 from tests.runner_fakes import (
     FIXTURE_RUNNER_ID,
     FakeHub,
@@ -74,15 +74,16 @@ _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
 
 @pytest.fixture(autouse=True)
 def _migrated_default_store(tmp_path: Path) -> None:
-    """Every graph a case builds over ``RunnerConfig.default_db_url(tmp_path)`` boots over a migrated store."""
-    migrated_store_at(RunnerConfig.default_db_url(tmp_path))
+    """Every graph a case builds over ``HostLayout(tmp_path).default_db_url`` boots over a migrated store."""
+    migrated_store_at(HostLayout(tmp_path).default_db_url)
 
 
 @pytest.mark.unit
 def test_basic_provider_wired_with_shared_absolute_root_and_capacity(tmp_path: Path) -> None:
     config = RunnerConfig(
+        runner_id=FIXTURE_RUNNER_ID,
         root=tmp_path,
-        db_url=RunnerConfig.default_db_url(tmp_path),
+        db_url=HostLayout(tmp_path).default_db_url,
         workspace_provider="basic",
         workspace_root="scratch",
         workspace_repos=(WorkspaceRepo("toy", "file:///tmp/toy.git"),),
@@ -105,8 +106,9 @@ def test_basic_provider_wired_with_shared_absolute_root_and_capacity(tmp_path: P
 @pytest.mark.unit
 def test_basic_default_root_is_shared_with_transcript_usage(tmp_path: Path) -> None:
     config = RunnerConfig(
+        runner_id=FIXTURE_RUNNER_ID,
         root=tmp_path,
-        db_url=RunnerConfig.default_db_url(tmp_path),
+        db_url=HostLayout(tmp_path).default_db_url,
         workspace_provider="basic",
         workspace_repos=(WorkspaceRepo("toy", "file:///tmp/toy.git"),),
     )
@@ -146,8 +148,9 @@ def _seeded_running_lease_store(tmp_path: Path):  # type: ignore[no-untyped-def]
 @pytest.mark.unit
 def test_loop_wiring_threads_worker_env_passthrough_into_the_adapter(tmp_path: Path) -> None:
     config = RunnerConfig(
+        runner_id=FIXTURE_RUNNER_ID,
         root=tmp_path,
-        db_url=RunnerConfig.default_db_url(tmp_path),
+        db_url=HostLayout(tmp_path).default_db_url,
         workspace_root=str(tmp_path / "workspace"),
         worker_env_passthrough=("MY_HARNESS_QUIRK", "ANOTHER_VAR"),
     )
@@ -160,31 +163,49 @@ def test_loop_wiring_threads_worker_env_passthrough_into_the_adapter(tmp_path: P
 
 
 @pytest.mark.unit
-def test_loop_wiring_threads_external_usage_credentials_path_into_the_sampler(tmp_path: Path) -> None:
-    """An unthreaded override leaves every daemon this root builds reading the
-    sampler's own default credentials path and reaching the real Anthropic endpoint
-    . The sampler is a separate seam from the harness adapter —
-    selected from the config's resolved (declared-or-synthesized) subscription list, not
-    threaded through ``ClaudeCodeAdapter`` anymore, and keyed by slug since a
-    runner may declare several. The legacy table's own ``external_usage_sample_interval_seconds``
-    reaches that same synthesized declaration's ``sample_interval_seconds`` — the cadence
-    the tick's per-slug gate reads (``ExternalUsageSample``), not a runner-wide setting."""
+def test_loop_wiring_threads_a_declarations_credentials_path_and_cadence_into_its_sampler(tmp_path: Path) -> None:
+    """An unthreaded override leaves every daemon this root builds reading the sampler's own default credentials
+    path and reaching the real Anthropic endpoint. The sampler is a separate seam from the harness adapter —
+    selected from the subscription the runner names, keyed by slug. The declaration's own
+    ``sample_interval_seconds`` is the cadence the tick's per-slug gate reads (``ExternalUsageSample``)."""
     scratch = str(tmp_path / "scratch-credentials.json")
     config = RunnerConfig(
+        runner_id=FIXTURE_RUNNER_ID,
         root=tmp_path,
-        db_url=RunnerConfig.default_db_url(tmp_path),
+        db_url=HostLayout(tmp_path).default_db_url,
         workspace_root=str(tmp_path / "workspace"),
-        external_usage_credentials_path=scratch,
-        external_usage_sample_interval_seconds=123,
+        subscriptions=(
+            SubscriptionDeclaration(
+                slug="anthropic",
+                name="Anthropic",
+                provider=PROVIDER_ANTHROPIC,
+                credentials_path=scratch,
+                sample_interval_seconds=123,
+            ),
+        ),
     )
 
     with loop_context(config) as ctx:
         assert isinstance(ctx.harnesses.lifecycle(CLAUDE_CODE_HARNESS_ID), ClaudeCodeAdapter)
-        assert [s.slug for s in ctx.subscriptions] == [LEGACY_ANTHROPIC_SLUG]
+        assert [s.slug for s in ctx.subscriptions] == ["anthropic"]
         resolved = ctx.subscriptions[0]
         assert resolved.sample_interval_seconds == 123
         assert isinstance(resolved.sampler, AnthropicSubscriptionSampler)
         assert resolved.sampler._credentials_path == scratch
+
+
+@pytest.mark.unit
+def test_a_runner_naming_no_subscription_builds_no_sampler_and_registers_an_empty_roster(tmp_path: Path) -> None:
+    config = RunnerConfig(
+        runner_id=FIXTURE_RUNNER_ID,
+        root=tmp_path,
+        db_url=HostLayout(tmp_path).default_db_url,
+        workspace_root=str(tmp_path / "workspace"),
+    )
+
+    with loop_context(config) as ctx:
+        assert ctx.subscriptions == ()
+        assert ctx.config.subscription is None
 
 
 @pytest.mark.unit
@@ -193,8 +214,9 @@ def test_the_loops_declared_subscriptions_share_one_root_owned_http_client(tmp_p
     composition root: every declared subscription's sampler draws
     from the *same* shared client, not one each."""
     config = RunnerConfig(
+        runner_id=FIXTURE_RUNNER_ID,
         root=tmp_path,
-        db_url=RunnerConfig.default_db_url(tmp_path),
+        db_url=HostLayout(tmp_path).default_db_url,
         workspace_root=str(tmp_path / "workspace"),
         subscriptions=(
             SubscriptionDeclaration(slug="anthropic", name="Anthropic", provider=PROVIDER_ANTHROPIC),
@@ -230,8 +252,9 @@ def test_a_tick_with_an_openai_subscription_never_invokes_a_renewer(
     monkeypatch.setattr(OpenAICredentialRenewer, "renewal_due", _due)
     monkeypatch.setattr(OpenAICredentialRenewer, "renew", _renew)
     config = RunnerConfig(
+        runner_id=FIXTURE_RUNNER_ID,
         root=tmp_path,
-        db_url=RunnerConfig.default_db_url(tmp_path),
+        db_url=HostLayout(tmp_path).default_db_url,
         workspace_root=str(tmp_path / "workspace"),
         subscriptions=(
             SubscriptionDeclaration(
@@ -259,8 +282,9 @@ def test_a_tick_with_an_openai_subscription_never_invokes_a_renewer(
 @pytest.mark.unit
 def test_no_renewal_pass_is_composed_when_no_provider_binds_a_renewer(tmp_path: Path) -> None:
     config = RunnerConfig(
+        runner_id=FIXTURE_RUNNER_ID,
         root=tmp_path,
-        db_url=RunnerConfig.default_db_url(tmp_path),
+        db_url=HostLayout(tmp_path).default_db_url,
         subscriptions=(SubscriptionDeclaration(slug="anthropic", name="Anthropic", provider=PROVIDER_ANTHROPIC),),
     )
 
@@ -274,7 +298,10 @@ def test_the_loops_usage_http_client_is_not_built_merely_by_composing_the_contex
     must open no real connection pool; only calling the provider
     builds one."""
     config = RunnerConfig(
-        root=tmp_path, db_url=RunnerConfig.default_db_url(tmp_path), workspace_root=str(tmp_path / "workspace")
+        runner_id=FIXTURE_RUNNER_ID,
+        root=tmp_path,
+        db_url=HostLayout(tmp_path).default_db_url,
+        workspace_root=str(tmp_path / "workspace"),
     )
 
     with loop_context(config) as ctx:
@@ -286,7 +313,10 @@ def test_the_loops_usage_http_client_is_not_built_merely_by_composing_the_contex
 def test_the_loops_usage_http_client_owner_closes_a_client_it_actually_built(tmp_path: Path) -> None:
     """Closing the context's shared client closes the real ``httpx.Client`` a sampler built."""
     config = RunnerConfig(
-        root=tmp_path, db_url=RunnerConfig.default_db_url(tmp_path), workspace_root=str(tmp_path / "workspace")
+        runner_id=FIXTURE_RUNNER_ID,
+        root=tmp_path,
+        db_url=HostLayout(tmp_path).default_db_url,
+        workspace_root=str(tmp_path / "workspace"),
     )
 
     with loop_context(config) as ctx:
@@ -304,8 +334,9 @@ def test_loop_wiring_threads_the_worker_settings_path_and_permission_mode(tmp_pa
     """The configured worker settings path and permission mode reach the Claude Code adapter."""
     settings = str(tmp_path / "worker-settings.json")
     config = RunnerConfig(
+        runner_id=FIXTURE_RUNNER_ID,
         root=tmp_path,
-        db_url=RunnerConfig.default_db_url(tmp_path),
+        db_url=HostLayout(tmp_path).default_db_url,
         workspace_root=str(tmp_path / "workspace"),
         harness_sections=sections(ClaudeCodeSection(worker_settings_path=settings, permission_mode="acceptEdits")),
     )
@@ -325,14 +356,15 @@ def test_process_graph_delivers_the_published_snapshot_to_the_claude_code_adapte
     (bundle / "claude-code").mkdir(parents=True)
     (bundle / "claude-code" / "mcp.json").write_text("{}")
     config = RunnerConfig(
+        runner_id=FIXTURE_RUNNER_ID,
         root=tmp_path,
-        db_url=RunnerConfig.default_db_url(tmp_path),
+        db_url=HostLayout(tmp_path).default_db_url,
         workspace_root=str(tmp_path / "workspace"),
         harness_sections=sections(ClaudeCodeSection(worker_settings_path=str(tmp_path / "worker-settings.json"))),
     )
     snapshot = publish_harness_bundle(bundle, tmp_path)
 
-    graph = build_runner_process(config, bundle=snapshot)
+    graph = build_runner_process(config, bundle=snapshot, runner_id=FIXTURE_RUNNER_ID)
     try:
         adapter = graph.harnesses.lifecycle(CLAUDE_CODE_HARNESS_ID)
         assert isinstance(adapter, ClaudeCodeAdapter)
@@ -349,8 +381,9 @@ def test_process_graph_delivers_the_published_snapshot_to_the_claude_code_adapte
 def test_registry_threads_the_autonomy_to_both_bindings(tmp_path: Path, autonomy: Autonomy) -> None:
     """The constructor path is the only way ``autonomy`` reaches a binding."""
     config = RunnerConfig(
+        runner_id=FIXTURE_RUNNER_ID,
         root=tmp_path,
-        db_url=RunnerConfig.default_db_url(tmp_path),
+        db_url=HostLayout(tmp_path).default_db_url,
         workspace_root=str(tmp_path / "workspace"),
         autonomy=autonomy,
     )
@@ -371,13 +404,11 @@ def test_hosted_app_threads_the_worker_settings_path_and_permission_mode(tmp_pat
     asserts the permission mode — a second threading of the same two keys,
     which the loop's own root does not cover."""
     settings = str(tmp_path / "worker-settings.json")
-    (tmp_path / CONFIG_FILENAME).write_text(
-        f'db_url = "{RunnerConfig.default_db_url(tmp_path)}"\n'
-        f'worker_settings_path = "{settings}"\n'
-        'harness_permission_mode = "acceptEdits"\n'
+    write_minimal_host(
+        tmp_path, runner=f'worker_settings_path = "{settings}"\nharness_permission_mode = "acceptEdits"\n'
     )
 
-    app = build_hosted_app(RunnerConfig.load(tmp_path)).app
+    app = build_hosted_app(load_runner_config(tmp_path)).app
 
     harness = app.state.harnesses.lifecycle(CLAUDE_CODE_HARNESS_ID)
     assert isinstance(harness, ClaudeCodeAdapter)
@@ -388,14 +419,14 @@ def test_hosted_app_threads_the_worker_settings_path_and_permission_mode(tmp_pat
 @pytest.mark.unit
 def test_loop_wiring_threads_runner_dir_from_the_resolved_root(tmp_path: Path) -> None:
     """The wrapped takeover command needs ``LoopConfig.runner_dir`` to
-    mirror ``RunnerConfig``'s resolved ``root``. Routed through ``RunnerConfig.load()``
+    mirror ``RunnerConfig``'s resolved ``root``. Routed through ``load_runner_config()``
     with an un-resolved ``..``-bearing path, since a bare ``tmp_path`` already resolves."""
     real_root = tmp_path / "runner"
     real_root.mkdir()
-    (real_root / CONFIG_FILENAME).write_text(f'db_url = "{RunnerConfig.default_db_url(real_root)}"\n')
+    write_minimal_host(real_root)
     unresolved_root = tmp_path / "nested" / ".." / "runner"
 
-    config = RunnerConfig.load(unresolved_root)
+    config = load_runner_config(unresolved_root)
     migrated_store_at(config.db_url)
     with loop_context(config) as ctx:
         assert ".." not in ctx.config.runner_dir
@@ -407,7 +438,7 @@ def test_loop_wiring_of_defaults_to_no_broker(tmp_path: Path) -> None:
     """A loop-only caller (``blizzard runner tick``) threads no
     broker, so its ``LoopContext`` publishes nothing — the disposition for the
     store-free/export app and every other path with no stream to feed."""
-    config = RunnerConfig(root=tmp_path, db_url=RunnerConfig.default_db_url(tmp_path))
+    config = RunnerConfig(runner_id=FIXTURE_RUNNER_ID, root=tmp_path, db_url=HostLayout(tmp_path).default_db_url)
 
     with loop_context(config) as ctx:
         assert ctx.events is None
@@ -417,7 +448,7 @@ def test_loop_wiring_of_defaults_to_no_broker(tmp_path: Path) -> None:
 def test_loop_wiring_of_threads_the_broker_into_the_loop_context(tmp_path: Path) -> None:
     """The ``host`` verb's one broker reaches ``LoopContext`` — the
     seam's publish call sites read off."""
-    config = RunnerConfig(root=tmp_path, db_url=RunnerConfig.default_db_url(tmp_path))
+    config = RunnerConfig(runner_id=FIXTURE_RUNNER_ID, root=tmp_path, db_url=HostLayout(tmp_path).default_db_url)
     broker = EventBroker()
 
     with loop_context(config, broker=broker) as ctx:
@@ -428,7 +459,10 @@ def test_loop_wiring_of_threads_the_broker_into_the_loop_context(tmp_path: Path)
 def test_periodic_driver_threads_the_graph_broker_into_its_own_loop_wiring(tmp_path: Path) -> None:
     """The broker the graph carries reaches ``PeriodicDriver``'s own ``LoopWiring``."""
     config = RunnerConfig(
-        root=tmp_path, db_url=RunnerConfig.default_db_url(tmp_path), workspace_root=str(tmp_path / "workspace")
+        runner_id=FIXTURE_RUNNER_ID,
+        root=tmp_path,
+        db_url=HostLayout(tmp_path).default_db_url,
+        workspace_root=str(tmp_path / "workspace"),
     )
     broker = EventBroker()
 
@@ -441,7 +475,10 @@ def test_periodic_driver_threads_the_graph_broker_into_its_own_loop_wiring(tmp_p
 @pytest.mark.unit
 def test_periodic_driver_defaults_to_no_broker(tmp_path: Path) -> None:
     config = RunnerConfig(
-        root=tmp_path, db_url=RunnerConfig.default_db_url(tmp_path), workspace_root=str(tmp_path / "workspace")
+        runner_id=FIXTURE_RUNNER_ID,
+        root=tmp_path,
+        db_url=HostLayout(tmp_path).default_db_url,
+        workspace_root=str(tmp_path / "workspace"),
     )
 
     with loop_graph(config) as graph:
@@ -453,7 +490,10 @@ def test_periodic_driver_defaults_to_no_broker(tmp_path: Path) -> None:
 @pytest.mark.unit
 def test_context_health_is_the_graphs_own_cache(tmp_path: Path) -> None:
     config = RunnerConfig(
-        root=tmp_path, db_url=RunnerConfig.default_db_url(tmp_path), workspace_root=str(tmp_path / "workspace")
+        runner_id=FIXTURE_RUNNER_ID,
+        root=tmp_path,
+        db_url=HostLayout(tmp_path).default_db_url,
+        workspace_root=str(tmp_path / "workspace"),
     )
 
     with loop_graph(config) as graph:
@@ -468,10 +508,10 @@ def test_context_health_is_the_graphs_own_cache(tmp_path: Path) -> None:
 def test_hosted_app_threads_the_broker_into_create_apps_seam_list(tmp_path: Path) -> None:
     """The ``host`` verb's broker reaches ``app.state.events`` — the
     seam the stream route (``src/blizzard/runner/api/events.py``) reads off the served app."""
-    (tmp_path / CONFIG_FILENAME).write_text(f'db_url = "{RunnerConfig.default_db_url(tmp_path)}"\n')
+    write_minimal_host(tmp_path)
     broker = EventBroker()
 
-    app = build_hosted_app(RunnerConfig.load(tmp_path), events=broker).app
+    app = build_hosted_app(load_runner_config(tmp_path), events=broker).app
 
     assert app.state.events is broker
 
@@ -479,9 +519,9 @@ def test_hosted_app_threads_the_broker_into_create_apps_seam_list(tmp_path: Path
 @pytest.mark.unit
 def test_hosted_app_exposes_the_same_harness_health_cache_it_wires_into_create_app(tmp_path: Path) -> None:
     """``HostedApp.harness_health`` is the instance ``app.state`` carries."""
-    (tmp_path / CONFIG_FILENAME).write_text(f'db_url = "{RunnerConfig.default_db_url(tmp_path)}"\n')
+    write_minimal_host(tmp_path)
 
-    hosted = build_hosted_app(RunnerConfig.load(tmp_path))
+    hosted = build_hosted_app(load_runner_config(tmp_path))
 
     assert hosted.app.state.harness_health is hosted.harness_health
 
@@ -492,8 +532,13 @@ def test_tick_once_over_a_supplied_graph_traces_through_it_and_leaves_it_open(
 ) -> None:
     """A driver of repeated ticks hands one graph in: its platform tracer reaches the tick's context, its
     hub client is instrumented, and the tick does not close it."""
-    config = RunnerConfig(root=tmp_path, db_url=RunnerConfig.default_db_url(tmp_path), hub_url="http://hub.test:8421")
-    graph = build_runner_process(config)
+    config = RunnerConfig(
+        runner_id=FIXTURE_RUNNER_ID,
+        root=tmp_path,
+        db_url=HostLayout(tmp_path).default_db_url,
+        hub_url="http://hub.test:8421",
+    )
+    graph = build_runner_process(config, runner_id=FIXTURE_RUNNER_ID)
     ticked: list[object] = []
     instrumented: list[httpx.Client | httpx.AsyncClient] = []
     monkeypatch.setattr(loop_wiring, "tick", lambda ctx: ticked.append(ctx.tracer))
@@ -532,7 +577,12 @@ def test_a_transcript_operator_verb_checks_identity_before_its_first_hub_call(
 ) -> None:
     """An operator verb builds its own process graph, whose verdict starts unchecked: without the
     tick's identity check at its head, every hub call it makes is answered as an outage."""
-    config = RunnerConfig(root=tmp_path, db_url=RunnerConfig.default_db_url(tmp_path), hub_url="http://hub.test:8421")
+    config = RunnerConfig(
+        runner_id=FIXTURE_RUNNER_ID,
+        root=tmp_path,
+        db_url=HostLayout(tmp_path).default_db_url,
+        hub_url="http://hub.test:8421",
+    )
     hub = FakeHub()
     monkeypatch.setattr(loop_wiring, "HttpHubClient", lambda _client: hub)
     monkeypatch.setattr(loop_wiring, "TranscriptBackfill", _HubCallingBackfill)
@@ -549,8 +599,8 @@ def test_a_transcript_operator_verb_checks_identity_before_its_first_hub_call(
 
 @pytest.mark.unit
 def test_hosted_graph_shares_process_scoped_dependencies_with_loop_and_recovery(tmp_path: Path) -> None:
-    config = RunnerConfig(root=tmp_path, db_url=RunnerConfig.default_db_url(tmp_path))
-    graph = build_runner_process(config, events=EventBroker())
+    config = RunnerConfig(runner_id=FIXTURE_RUNNER_ID, root=tmp_path, db_url=HostLayout(tmp_path).default_db_url)
+    graph = build_runner_process(config, events=EventBroker(), runner_id=FIXTURE_RUNNER_ID)
     hosted = build_hosted_app(config, process_graph=graph)
     try:
         ctx = LoopWiring(config, "", "", graph.events).context(FakeHub(), graph)
@@ -574,8 +624,8 @@ def test_hosted_graph_shares_process_scoped_dependencies_with_loop_and_recovery(
 def test_failed_hosted_app_wiring_closes_partial_clients_and_only_its_own_graph(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, owned_graph: bool
 ) -> None:
-    config = RunnerConfig(root=tmp_path, db_url=RunnerConfig.default_db_url(tmp_path))
-    graph = build_runner_process(config)
+    config = RunnerConfig(runner_id=FIXTURE_RUNNER_ID, root=tmp_path, db_url=HostLayout(tmp_path).default_db_url)
+    graph = build_runner_process(config, runner_id=FIXTURE_RUNNER_ID)
     disposed: list[str] = []
     real_dispose = graph.engine.dispose
 
@@ -584,7 +634,7 @@ def test_failed_hosted_app_wiring_closes_partial_clients_and_only_its_own_graph(
         real_dispose()
 
     monkeypatch.setattr(graph.engine, "dispose", dispose)
-    monkeypatch.setattr(runner_app, "build_host_process", lambda *_args, **_kwargs: graph.host)
+    monkeypatch.setattr(runner_app, "build_runner_process", lambda *_args, **_kwargs: graph)
     original_client = httpx.Client
     clients: list[httpx.Client] = []
 
@@ -616,9 +666,9 @@ def test_failed_hosted_app_wiring_closes_partial_clients_and_only_its_own_graph(
 def test_hosted_app_defaults_to_no_broker(tmp_path: Path) -> None:
     """The disposition for every ``build_hosted_app`` caller but ``host`` itself — none
     exists yet, but the default must stay absent so a future one degrades safely."""
-    (tmp_path / CONFIG_FILENAME).write_text(f'db_url = "{RunnerConfig.default_db_url(tmp_path)}"\n')
+    write_minimal_host(tmp_path)
 
-    app = build_hosted_app(RunnerConfig.load(tmp_path)).app
+    app = build_hosted_app(load_runner_config(tmp_path)).app
 
     assert app.state.events is None
 
@@ -627,7 +677,7 @@ def test_hosted_app_defaults_to_no_broker(tmp_path: Path) -> None:
 def test_create_app_for_export_stays_broker_less(tmp_path: Path) -> None:
     """The OpenAPI-export/store-free app is one of the paths names as having no
     stream to feed — unlike the hub, ``create_app`` never conjures a broker on its own."""
-    config = RunnerConfig(root=tmp_path, db_url="sqlite://")
+    config = RunnerConfig(runner_id=FIXTURE_RUNNER_ID, root=tmp_path, db_url="sqlite://")
 
     app = create_app(config)
 
@@ -639,8 +689,9 @@ def test_periodic_driver_resolves_prompts_eagerly_at_construction(tmp_path: Path
     """A configured-but-missing ``runner_prompt_file`` raises ``ConfigError`` from the
     constructor."""
     config = RunnerConfig(
+        runner_id=FIXTURE_RUNNER_ID,
         root=tmp_path,
-        db_url=RunnerConfig.default_db_url(tmp_path),
+        db_url=HostLayout(tmp_path).default_db_url,
         workspace_root=str(tmp_path / "workspace"),
         runner_prompt_file="does-not-exist.md",
     )
@@ -715,8 +766,9 @@ def test_both_roots_boot_with_a_single_enabled_harness(
     tmp_path: Path, claude_code_enabled: bool, opencode_enabled: bool, expected: tuple[str, ...]
 ) -> None:
     config = RunnerConfig(
+        runner_id=FIXTURE_RUNNER_ID,
         root=tmp_path,
-        db_url=RunnerConfig.default_db_url(tmp_path),
+        db_url=HostLayout(tmp_path).default_db_url,
         workspace_provider="basic",
         workspace_root="scratch",
         workspace_repos=(WorkspaceRepo("toy", "file:///tmp/toy.git"),),
@@ -736,7 +788,10 @@ def test_loop_wiring_of_delivers_its_bundle_to_the_graph_it_builds(tmp_path: Pat
     (bundle / "claude-code").mkdir(parents=True)
     (bundle / "claude-code" / "mcp.json").write_text("{}")
     config = RunnerConfig(
-        root=tmp_path, db_url=RunnerConfig.default_db_url(tmp_path), workspace_root=str(tmp_path / "workspace")
+        runner_id=FIXTURE_RUNNER_ID,
+        root=tmp_path,
+        db_url=HostLayout(tmp_path).default_db_url,
+        workspace_root=str(tmp_path / "workspace"),
     )
     snapshot = publish_harness_bundle(bundle, tmp_path)
 
@@ -759,8 +814,9 @@ def _harness_telemetry_env(
     settings.write_text(json.dumps({"env": settings_env or {}}))
     tracing = TracingConfig(platform=platform, harness_telemetry=harness_telemetry)
     config = RunnerConfig(
+        runner_id=FIXTURE_RUNNER_ID,
         root=tmp_path,
-        db_url=RunnerConfig.default_db_url(tmp_path),
+        db_url=HostLayout(tmp_path).default_db_url,
         workspace_root=str(tmp_path / "workspace"),
         harness_sections=sections(ClaudeCodeSection(worker_settings_path=str(settings))),
         tracing=tracing,
@@ -774,7 +830,7 @@ def _harness_telemetry_env(
         scope_version="0",
         exporter=InMemorySpanExporter(),
     )
-    graph = build_runner_process(config, environ=environ, platform_tracing=handle)
+    graph = build_runner_process(config, environ=environ, platform_tracing=handle, runner_id=FIXTURE_RUNNER_ID)
     try:
         adapter = graph.harnesses.lifecycle(CLAUDE_CODE_HARNESS_ID)
         assert isinstance(adapter, ClaudeCodeAdapter)
@@ -834,11 +890,17 @@ def test_process_graph_builds_the_trace_sweep_over_the_configured_tracing(
 
     monkeypatch.setattr(composition, "LeaseTraceSweep", record)
     config = RunnerConfig(
-        root=tmp_path, db_url=RunnerConfig.default_db_url(tmp_path), tracing=TracingConfig(sweep_seconds=7)
+        runner_id=FIXTURE_RUNNER_ID,
+        root=tmp_path,
+        db_url=HostLayout(tmp_path).default_db_url,
+        tracing=TracingConfig(sweep_seconds=7),
     )
     exporter = InMemoryTraceExporter()
     graph = build_runner_process(
-        config, environ={"OTEL_EXPORTER_OTLP_ENDPOINT": "http://collector:4318"}, trace_exporter=exporter
+        config,
+        environ={"OTEL_EXPORTER_OTLP_ENDPOINT": "http://collector:4318"},
+        trace_exporter=exporter,
+        runner_id=FIXTURE_RUNNER_ID,
     )
     try:
         (kwargs,) = built
@@ -851,6 +913,7 @@ def test_process_graph_builds_the_trace_sweep_over_the_configured_tracing(
 @pytest.mark.unit
 def test_hosted_app_composes_the_escalation_takeover_command_over_the_runner_root(tmp_path: Path) -> None:
     config = RunnerConfig(
+        runner_id=FIXTURE_RUNNER_ID,
         root=tmp_path,
         db_url=f"sqlite:///{tmp_path / 'runner.db'}",
         workspace_provider="basic",

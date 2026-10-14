@@ -1,9 +1,10 @@
 """The hub bearer token a runner process presents, and taking up a corrected one without a restart.
 
 Every runner->hub client presents the process holder's current token. A runner whose token names
-another runner than its store re-reads its runtime dir's ``.env`` at each identity check, so restoring
-the right token there resumes it in-process with nothing lost. A token the process environment supplied
-overrides the file, so it stays fixed until the runner restarts. The holder never logs a token."""
+another runner than the configured one re-reads its runtime dir's ``.env`` at each identity check, so
+restoring the right token there resumes it in-process with nothing lost. A token the process environment or
+the host file supplied takes precedence over ``.env``, so it stays fixed until the runner restarts.
+The holder never logs a token."""
 
 from __future__ import annotations
 

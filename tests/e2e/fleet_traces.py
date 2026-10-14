@@ -937,6 +937,7 @@ def runner_sweep(
             environ=environ,
             platform_tracing=build_runner_platform_tracing(traced, environ, identity=identity),
             identity=identity,
+            runner_id=config.runner_id,
         )
     try:
         assert process.trace_sweep is not None, "the collector endpoint did not enable the runner's trace sweep"

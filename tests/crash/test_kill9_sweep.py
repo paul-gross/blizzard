@@ -35,7 +35,6 @@ from blizzard.hub.store import schema as hub_schema
 from blizzard.hub.store.scoped import is_tenant_owned
 from blizzard.hub.tenancy import TenantId
 from blizzard.runner.composition import build_host_stores
-from blizzard.runner.config import RunnerConfig
 from blizzard.runner.environments.internal.winter_cli import SubprocessWinterCli
 from blizzard.runner.harness.identity import OPENCODE_HARNESS_ID
 from blizzard.runner.leases.model import NewLease
@@ -74,6 +73,7 @@ from tests.crash.support import (
     write_runner_config,
 )
 from tests.crash_points import discover_crash_points
+from tests.host_files import load_runner_config
 from tests.otlp_sink import OtlpSink, otlp_sink
 from tests.runner_fakes import (
     FIXTURE_RUNNER_ID,
@@ -369,7 +369,7 @@ def _assert_invariants(runner_dir: Path, hub_dir: Path, *, when: str, after_reco
     instant a kill lands passes ``False``: ``ActiveLeaseProcessIsLive`` does not hold
     there by construction. A checkpoint reached only once REAP/RESUME reconciled it passes
     ``True``, so that check is asked for there."""
-    runner_db = RunnerConfig.load(runner_dir).db_url
+    runner_db = load_runner_config(runner_dir).db_url
     hub_db = HubConfig.load(hub_dir).db_url
     violations = Invariants(runner_db_url=runner_db, hub_db_url=hub_db).run(after_recovery=after_recovery)
     assert not violations, f"invariant violations {when}:\n" + "\n".join(str(v) for v in violations)
@@ -732,7 +732,7 @@ def test_kill9_at_attach_crash_point(crash_env: CrashEnv, tmp_path: Path, point:
         port=runner_port,
         join=False,
     )
-    db_url = RunnerConfig.load(runner_dir).db_url
+    db_url = load_runner_config(runner_dir).db_url
 
     # Seed a lease + its capability token, then park it, through a store the daemon does not
     # yet hold; dispose so the hosted daemon opens the sqlite file with no concurrent writer.
@@ -854,7 +854,7 @@ def test_kill9_at_declare_commit_crash_point(crash_env: CrashEnv, tmp_path: Path
         port=runner_port,
         join=False,
     )
-    db_url = RunnerConfig.load(runner_dir).db_url
+    db_url = load_runner_config(runner_dir).db_url
 
     # Seed a lease + its capability token, then park it, through a store the daemon does not
     # yet hold; dispose so the hosted daemon opens the sqlite file with no concurrent writer.
@@ -1402,14 +1402,14 @@ def _usage_fact_cost(runner_dir: Path, lease_id: str, generation: int) -> float 
 def _runner_store(runner_dir: Path) -> tuple[SqlAlchemyRunnerStore, Engine]:
     """A read store over the runner's sqlite, bound to the runner its registration stored, plus its engine (dispose
     after use)."""
-    engine = create_engine_from_url(RunnerConfig.load(runner_dir).db_url)
+    engine = create_engine_from_url(load_runner_config(runner_dir).db_url)
     return daemon_store(engine), engine
 
 
 @contextlib.contextmanager
 def _audit_connection(runner_dir: Path) -> Iterator[Any]:
     """A read connection over every runner's rows in the runner's sqlite, as the invariant checker's audit opens one."""
-    engine = create_engine_from_url(RunnerConfig.load(runner_dir).db_url)
+    engine = create_engine_from_url(load_runner_config(runner_dir).db_url)
     try:
         audit = build_host_stores(engine, errors=runner_store_errors(), clock=SystemClock()).runner_audit
         with audit.connect() as conn:
@@ -3526,7 +3526,7 @@ def test_kill9_at_egress_crash_point(crash_env: CrashEnv, tmp_path: Path, point:
 
 def _trace_runner_config(runner_dir: Path) -> None:
     """Tune the scaffolded runner's ``[tracing]`` knobs to a fast, zero-settle cadence before it starts."""
-    toml = runner_dir / "blizzard-runner.toml"
+    toml = runner_dir / "blizzard-host.toml"
     text = toml.read_text()
     for commented, live in (
         ("# sweep_seconds = 60", f"sweep_seconds = {_TRACE_SWEEP_SECONDS}"),

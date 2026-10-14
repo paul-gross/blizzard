@@ -73,7 +73,7 @@ def _tick(ctx: LoopContext) -> None:
         chunk_views=MemoizingChunkViewCache(ctx.hub),
         capabilities=TickCapabilities(ctx.harnesses, ctx.harness_versions, ctx.harness_health),
     )
-    # Before any other hub call: until the token is verified to name the store's runner, `ctx.hub`
+    # Before any other hub call: until the token is verified to name the configured runner, `ctx.hub`
     # answers every call as an outage, so nothing below can read another runner's chunks as its own.
     _traced(ctx, IdentityCheck)
     # A token naming another runner drives no lease and delivers nothing; liveness, retention and

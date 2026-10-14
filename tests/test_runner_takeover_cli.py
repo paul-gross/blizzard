@@ -19,8 +19,8 @@ from click.testing import CliRunner
 
 from blizzard.runner.cli import runner as runner_group
 from blizzard.runner.cli.daemon import RunnerDaemon
-from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
+from blizzard.runner.host_layout import HostLayout
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.lifecycle.takeover import TakeoverCommand
 from tests.runner_fakes import SqlAlchemyRunnerStore
@@ -94,7 +94,7 @@ def test_takeover_hands_the_resumed_session_a_worker_verb_that_reaches_the_runne
     reached: dict[str, httpx.Response] = {}
     # `BLIZZARD_RUNNER_URL` is unreachable here (`port=0` ephemeral binding), so this reaches
     # the daemon the same way the CLI's worker-verb commands do: over the UDS socket `--dir` names.
-    transport = httpx.HTTPTransport(uds=str(RunnerConfig.socket_path_for(root)))
+    transport = httpx.HTTPTransport(uds=str(HostLayout(root).socket_path))
 
     def fake_call(command: str, shell: bool = False, cwd: str | None = None, env: dict[str, str] | None = None) -> int:
         assert env is not None

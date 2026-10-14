@@ -2,7 +2,7 @@
 
 A shape reflected from a store at the revision before the runner key names no ``runner_id``, so a row built from it
 writes exactly as that release did; reflected at head, the caller decides the key. Shared by the runner-scope
-migration's tests and the start-up stamp's."""
+migration's tests."""
 
 from __future__ import annotations
 
@@ -15,8 +15,12 @@ from blizzard.runner.store import schema
 
 T0 = datetime(2026, 1, 1, tzinfo=UTC)
 
-#: Every runner-scoped table but the identity row, which keys itself by its own ``runner_id``.
-KEYED = frozenset(t.name for t in schema.metadata.sorted_tables if t.info["scope"] == "runner") - {"runner_identity"}
+#: Every runner-scoped table the additive revision keys, but the identity row, which keys itself by its own
+#: ``runner_id``, and the outbox counters, which only the tightening revision creates.
+KEYED = frozenset(t.name for t in schema.metadata.sorted_tables if t.info["scope"] == "runner") - {
+    "runner_identity",
+    "outbox_counters",
+}
 
 _ALLOWED_VALUES = re.compile(r"^\s*(\w+)\s+IN\s*\(\s*'([^']*)'")
 

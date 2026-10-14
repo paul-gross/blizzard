@@ -38,6 +38,7 @@ from blizzard.runner.hub.internal.token_file import HubTokenFile
 from blizzard.runner.hub.token_file import ENV_FILENAME
 from blizzard.wire.user import CallerTenantsView, CallerTenantView
 from tests.runner_init_fakes import FakeHubRunnerAdmin, FakeInitHub, FakeTokenIdentityReader, init_runner
+from tests.runner_join import DEFAULT_TOKEN_ENV
 from tests.support import build_hub, default_tenant
 
 _HUB = "http://hub.test:8421"
@@ -290,7 +291,7 @@ def test_init_left_a_choice_stops_listing_ids_beside_names_and_how_to_name_one(
     assert f"blizzard runner init {root} --tenant <tenant_id>" in result.output
     assert "  ten_alpha  alpha" in result.output
     assert "  ten_bravo  bravo" in result.output
-    assert not HubTokenFile.of(root, "BZ_HUB_TOKEN").held()
+    assert not HubTokenFile.of(root, DEFAULT_TOKEN_ENV).held()
 
 
 @pytest.mark.component
@@ -379,13 +380,13 @@ def test_init_against_a_hub_with_two_tenants_needs_the_tenant_named_and_never_mo
     assert unnamed.exit_code != 0
     assert f"  {first}  " in unnamed.output
     assert f"  {bravo}  bravo" in unnamed.output
-    assert not HubTokenFile.of(root, "BZ_HUB_TOKEN").held()
+    assert not HubTokenFile.of(root, DEFAULT_TOKEN_ENV).held()
     observer = TestClient(hub.app)
     assert _runner_ids(observer, first) == [] and _runner_ids(observer, bravo) == []
 
     added = init("--tenant", bravo)
     assert added.exit_code == 0, added.output
-    token = HubTokenFile.of(root, "BZ_HUB_TOKEN").held()
+    token = HubTokenFile.of(root, DEFAULT_TOKEN_ENV).held()
     identity = HttpHubClient(TestClient(hub.app, headers={"Authorization": f"Bearer {token}"})).identity()
     assert isinstance(identity, TokenIdentity)
     assert (identity.tenant_id, identity.tenant_name) == (bravo, "bravo")
@@ -400,5 +401,5 @@ def test_init_against_a_hub_with_two_tenants_needs_the_tenant_named_and_never_mo
     kept = init("--tenant", bravo)
     assert kept.exit_code == 0, kept.output
     assert f"in tenant bravo ({bravo}) keeps its token" in kept.output
-    assert HubTokenFile.of(root, "BZ_HUB_TOKEN").held() == token
+    assert HubTokenFile.of(root, DEFAULT_TOKEN_ENV).held() == token
     assert _runner_ids(observer, bravo) == [identity.runner_id]

@@ -29,9 +29,17 @@ with the key ignored.
 
 `blizzard hub runner add <name>` mints the runner's id — `rn_` followed by a ULID, which never changes — and its bearer
 token together, and records the runner under that name as never connected. It prints both once, the token as the
-`BZ_HUB_TOKEN=<token>` line a runner's runtime-dir `.env` takes; there is no read-back. The runner's first registration
-with that token resolves it to the id, and from then on the `name` its own `blizzard-runner.toml` declares replaces the
-one `add` was given ([remote-runner.md](../remote-runner.md#point-it-at-the-hub) owns naming).
+`BZ_HUB_TOKEN_<NAME>=<token>` line a host directory's `.env` takes — `<NAME>` is the runner's name upper-cased with
+every character outside `A-Z0-9` replaced by `_`, so `r-claude` prints `BZ_HUB_TOKEN_R_CLAUDE=…`; there is no read-back.
+The runner's first registration with that token resolves it to the id, and from then on the `name` its `[[runner]]` in
+`blizzard-host.toml` declares replaces the one `add` was given
+([remote-runner.md](../remote-runner.md#point-it-at-the-hub) owns naming).
+
+A fresh `blizzard-runner init` scaffolds the runner as `runner-local` and looks for `BZ_HUB_TOKEN_RUNNER_LOCAL`, so to
+keep a runner added by hand, add it as `runner-local` and put the line it prints in the new directory's `.env` before
+running init; a token under another name's variable is not found, and init adds a second runner. To give the runner
+another name afterwards, change `name` and rename the variable to match
+([remote-runner.md](../remote-runner.md#point-it-at-the-hub)).
 
 `add` adds the runner in the tenant the call acts in — `--tenant <tenant_id>`, needed only when you belong to several
 ([tenants.md](./tenants.md#naming-the-tenant-a-call-acts-in)). The runner belongs to that tenant for as long as it
@@ -39,8 +47,9 @@ exists: its token names the tenant on every fleet call, and a runner never moves
 
 `add` takes a repeatable `--project <id|slug>`, the projects the runner serves; a project the tenant does not hold
 refuses the add. Without it, the runner serves the tenant's project when the tenant holds one, and nothing when it holds
-several. `blizzard-runner init` writes `projects = ["default"]` into a fresh config, or the projects its own repeated
-`--project` names, and adds the runner serving them ([projects.md](./projects.md#runners-serve-projects)).
+several. `blizzard-runner init` writes the runner's `projects` into a fresh host file as a binding of `default`, or of
+each project its own repeated `--project` names, and adds the runner serving them
+([projects.md](./projects.md#runners-serve-projects)).
 
 `blizzard-runner init <dir>` adds the runner and writes its token in one step, at the hub its config names, which
 `--hub
@@ -76,13 +85,16 @@ so the new runner never inherits the old one's leases and buffered facts. Nothin
 It refuses while the runner's daemon is running. A runner holding no token whose store still belongs to a runner stops
 the same way an unknown token does: put that runner's token back, or re-run init with `--allow-readd`.
 
-`blizzard-runner.toml`'s `token_env` (default `BZ_HUB_TOKEN`) names the variable carrying the token, never the secret
-itself. Every runner verb reads it from the process environment first, then from the runtime dir's `.env`, which init
-writes: it replaces only the token's line, keeps every other line in systemd `EnvironmentFile` syntax, writes the file
-owner-only (`0600`) through an atomic rename, and so replaces a symlinked `.env` with a regular file. When init keeps a
-token that a hand-written `.env` holds, it makes that file owner-only too, leaving its bytes as they are, or warns when
-it cannot. The daemon reads only the token from that file. A token the process environment supplies wins, so when the
-hub does not know it, init stops rather than write a replacement that would go unread.
+A runner's token variable is derived from its `name`, as above; the host file has no key to rename it. Every runner verb
+resolves a runner's token from the first of the process environment's `BZ_HUB_TOKEN_<NAME>`, the host file's
+`[hub_tokens]` table keyed by the runner's name (`[hub_tokens] r-claude = "…"`), and `BZ_HUB_TOKEN_<NAME>` in the host
+directory's `.env`, which init writes. A host file that holds `[hub_tokens]` or `host_token` and is readable by anyone
+but its owner draws a start-up warning. Init replaces only the token's line in `.env`, keeps every other line in systemd
+`EnvironmentFile` syntax, writes the file owner-only (`0600`) through an atomic rename, and so replaces a symlinked
+`.env` with a regular file. When init keeps a token that a hand-written `.env` holds, it makes that file owner-only too,
+leaving its bytes as they are, or warns when it cannot. The daemon reads only the token from that file. A token the
+process environment or the host file supplies wins, so when the hub does not know it, init stops rather than write a
+replacement that would go unread.
 
 If the hub adds the runner but its token cannot be written, init exits naming
 `blizzard hub runner retire <id> --hub-url <hub>`: the hub holds that runner as never connected, under a token nobody
@@ -114,14 +126,16 @@ when the runner holds no token. The runner is refused until `enroll` mints a new
 A host is the machine a set of runners lives on, recorded in the tenant that added it. It has its own id — `hs_`
 followed by a ULID — a name, and its own bearer token, separate from every runner's.
 `blizzard hub runner-host add <name>` mints the id and token together and prints both once, the token as a
-`BZ_HUB_TOKEN=<token>` line; there is no read-back. The group is `runner-host` because `blizzard hub host` launches the
-host daemon. Host names are unique among a tenant's live hosts, and a taken name refuses the add.
+`BZ_HUB_TOKEN=<token>` line; there is no read-back. A host reads its token as `BZ_HOST_TOKEN`, from the process
+environment, the host file's `host_token` key, or the host directory's `.env`, so rename the printed variable when you
+store it. The group is `runner-host` because `blizzard hub host` launches the host daemon. Host names are unique among a
+tenant's live hosts, and a taken name refuses the add.
 
 The host token reaches only the host's own routes, under `/api/fleet/host`: reporting the machine's workspace, reading
 its record back, adding a runner under the host, retiring one of its runners, and pushing the host's own facts (its
-subscription usage samples and misses) to `/api/fleet/host/events`, de-duplicated against a mark of the host's own. It is refused on every runner route,
-and a runner's token is refused on the host routes. A host acts only on runners it holds; another tenant's runner is
-refused as unknown.
+subscription usage samples and misses) to `/api/fleet/host/events`, de-duplicated against a mark of the host's own. It
+is refused on every runner route, and a runner's token is refused on the host routes. A host acts only on runners it
+holds; another tenant's runner is refused as unknown.
 
 `add --adopt <runner_id>` (repeatable) adds the host and takes the named runners under it in one transaction, so there
 is no moment the host exists without them. `blizzard hub runner-host adopt <host_id> <runner_id>` takes an existing
@@ -150,33 +164,36 @@ The writes require the `runner:retire` permission and the reads `fleet:view`.
 
 The board shows each host as a card over the runners it holds. To an identity holding `runner:retire`, the card carries
 retire, revoke-token and enroll, and each runner row on it carries release. Release, retire and revoke-token each ask
-for confirmation first. A retire the hub refuses shows the refusal and asks again before forcing it. Enroll shows the new
-token once.
+for confirmation first. A retire the hub refuses shows the refusal and asks again before forcing it. Enroll shows the
+new token once.
 
 ## A token that names another runner
 
 At the head of every tick the runner asks the hub which runner its token belongs to (`GET /api/fleet/identity`) and
-compares the answer with the runner its store belongs to. A store that names no runner yet takes the token's. When they
+compares the answer with the runner its host file configures, the `[[runner]] id` the store is bound to. When they
 differ — a wrong token, or a `hub_url` pointing at another hub — the runner refuses to drive its leases or deliver its
 buffered facts, and checks again on the next tick, so putting things right resumes it with nothing lost. A hub that
 cannot be reached, or that refuses the token, leaves the verdict as it stood: an outage never reads as a mismatch.
 
-The runner logs the refusal once, at warning severity, naming both runner ids and the reset command, and
+The runner logs the refusal once, at warning severity, naming both runner ids and what restores it, and
 `blizzard runner status` shows it:
 
 ```text
-REFUSING: token belongs to runner rn_…, store belongs to runner rn_… — restore the right token, or clear the store with blizzard runner store reset <dir>
+REFUSING: token belongs to runner rn_…, the configured runner is rn_… — set BZ_HUB_TOKEN_<NAME> to the token of runner rn_…, or correct `[[runner]] id` in <dir>/blizzard-host.toml
 ```
 
 While refusing, each check first re-reads the token from the runtime dir's `.env`, so correcting the token there resumes
-the runner in-process, with no restart. A token from the process environment — `BZ_HUB_TOKEN`, or the variable
-`token_env` names — overrides `.env` and stays fixed until the runner restarts; the runner logs that once when it starts
-refusing.
+the runner in-process, with no restart. A token from the process environment — `BZ_HUB_TOKEN_<NAME>` — or from the host
+file's `[hub_tokens]` overrides `.env` and stays fixed until the runner restarts; the runner logs that once when it
+starts refusing.
 
-When the store, not the token, is what is wrong, `blizzard runner store reset <dir>` moves the store aside under a
-timestamped name and migrates a fresh one in its place. It deletes nothing: the old store keeps its undelivered facts
-and in-flight leases beside the new one. It refuses while the runner's daemon answers on its socket, and for a store
-that is not a SQLite file. Start the runner again, and its first check gives the fresh store the token's runner.
+When the store, not the token or the `id`, is what is wrong, `blizzard runner store reset <dir>` moves the store aside
+under a timestamped name and migrates a fresh one in its place. It deletes nothing: the old store keeps its undelivered
+facts and in-flight leases beside the new one. It refuses while the host holds the directory or a pre-host daemon
+answers on its `runner.sock`, and for a store that is not a SQLite file. Start the host again, and the fresh store is
+bound to the configured `[[runner]] id`. A store that names the runner is not reset: a runner with history keeps its
+facts at the hub, and the fresh store drops every fact below the hub's high-water mark, so restore the right store
+instead. Reset only a store that is foreign to the configured runner and holds nothing to keep.
 
 `blizzard runner status` also names the runner's tenant beside its id, as `tenant=<name> (<tenant_id>)`, once a hub that
 names it has answered.

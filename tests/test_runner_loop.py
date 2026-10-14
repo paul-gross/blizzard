@@ -198,7 +198,9 @@ def test_fill_spawns_a_node_with_no_authored_retry_budget_at_the_configured_defa
     hub.claim_outcome = claimed_outcome("ch_1", env)
     provider = FakeProvider({"e1": "/ws/e1"})
     harness = FakeHarness(handle=_HANDLE, verdict="pass")
-    config = LoopConfig(runner_name="r1", workspace_id="ws1", max_agents=1, default_retries_max=5)
+    config = LoopConfig(
+        runner_name="r1", workspace_id="ws1", runner_id=FIXTURE_RUNNER_ID, max_agents=1, default_retries_max=5
+    )
     ctx = make_context(store, hub=hub, provider=provider, harness=harness, probe=FakeProbe(), config=config)
 
     Fill(ctx).run()
@@ -219,7 +221,9 @@ def test_fill_spawns_a_node_with_an_authored_retry_budget_overriding_the_configu
     hub.claim_outcome = claimed_outcome("ch_1", env)
     provider = FakeProvider({"e1": "/ws/e1"})
     harness = FakeHarness(handle=_HANDLE, verdict="pass")
-    config = LoopConfig(runner_name="r1", workspace_id="ws1", max_agents=1, default_retries_max=2)
+    config = LoopConfig(
+        runner_name="r1", workspace_id="ws1", runner_id=FIXTURE_RUNNER_ID, max_agents=1, default_retries_max=2
+    )
     ctx = make_context(store, hub=hub, provider=provider, harness=harness, probe=FakeProbe(), config=config)
 
     Fill(ctx).run()
@@ -629,7 +633,13 @@ def test_fresh_mint_with_no_acceptable_set_mints_under_the_runner_default(tmp_pa
 def test_spawn_preamble_carries_the_step_traceparent_only_with_platform_tracing_on(tmp_path, platform_tracing):  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
     default = FakeHarness(handle=_HANDLE, verdict="pass")
-    config = LoopConfig(runner_name="r1", workspace_id="ws1", max_agents=1, platform_tracing=platform_tracing)
+    config = LoopConfig(
+        runner_name="r1",
+        workspace_id="ws1",
+        runner_id=FIXTURE_RUNNER_ID,
+        max_agents=1,
+        platform_tracing=platform_tracing,
+    )
     ctx = make_context(
         store, hub=FakeHub(), provider=FakeProvider({"e1": "/ws/e1"}), harness=default, probe=FakeProbe(), config=config
     )
@@ -878,7 +888,9 @@ def test_a_fresh_spawn_freezes_its_spawn_cwd_on_the_new_transcript_segment(  # t
         provider=FakeProvider({"e1": "/ws/e1"}),
         harness=FakeHarness(handle=_HANDLE, verdict="pass"),
         probe=FakeProbe(),
-        config=LoopConfig(runner_name="r1", workspace_id="ws1", workspace_root=workspace_root),
+        config=LoopConfig(
+            runner_name="r1", workspace_id="ws1", runner_id=FIXTURE_RUNNER_ID, workspace_root=workspace_root
+        ),
     )
 
     Spawner(ctx).spawn("ch_1", _build_envelope(), environments, via="test")
@@ -997,7 +1009,9 @@ def test_spawn_preamble_carries_lease_and_local_api(tmp_path):  # type: ignore[n
         provider=FakeProvider({"e1": "/ws/e1"}),
         harness=harness,
         probe=FakeProbe(),
-        config=LoopConfig(runner_name="r1", workspace_id="ws1", local_api_url="http://127.0.0.1:9999"),
+        config=LoopConfig(
+            runner_name="r1", workspace_id="ws1", runner_id=FIXTURE_RUNNER_ID, local_api_url="http://127.0.0.1:9999"
+        ),
     )
 
     Fill(ctx).run()
@@ -1302,7 +1316,9 @@ def test_fill_strict_holds_at_a_dependency_denial_discovered_only_at_claim_time(
         provider=provider,
         harness=harness,
         probe=FakeProbe(),
-        config=LoopConfig(runner_name="r1", workspace_id="ws1", max_agents=2, queue_strict=True),
+        config=LoopConfig(
+            runner_name="r1", workspace_id="ws1", runner_id=FIXTURE_RUNNER_ID, max_agents=2, queue_strict=True
+        ),
     )
 
     Fill(ctx).run()
@@ -1357,7 +1373,9 @@ def test_fill_strict_holds_at_a_marked_head_and_idles(tmp_path):  # type: ignore
         provider=provider,
         harness=harness,
         probe=FakeProbe(),
-        config=LoopConfig(runner_name="r1", workspace_id="ws1", max_agents=1, queue_strict=True),
+        config=LoopConfig(
+            runner_name="r1", workspace_id="ws1", runner_id=FIXTURE_RUNNER_ID, max_agents=1, queue_strict=True
+        ),
     )
 
     Fill(ctx).run()
@@ -1389,7 +1407,9 @@ def test_fill_finds_no_entry_when_every_peeked_chunk_is_marked(tmp_path, strict)
         provider=provider,
         harness=harness,
         probe=FakeProbe(),
-        config=LoopConfig(runner_name="r1", workspace_id="ws1", max_agents=1, queue_strict=strict),
+        config=LoopConfig(
+            runner_name="r1", workspace_id="ws1", runner_id=FIXTURE_RUNNER_ID, max_agents=1, queue_strict=strict
+        ),
     )
 
     Fill(ctx).run()
@@ -1486,7 +1506,7 @@ def test_fill_respects_max_agents(tmp_path):  # type: ignore[no-untyped-def]
         provider=provider,
         harness=FakeHarness(handle=_HANDLE, verdict="pass"),
         probe=FakeProbe(alive={_ALIVE}),
-        config=LoopConfig(runner_name="r1", workspace_id="ws1", max_agents=1),
+        config=LoopConfig(runner_name="r1", workspace_id="ws1", runner_id=FIXTURE_RUNNER_ID, max_agents=1),
     )
 
     Fill(ctx).run()
@@ -1546,7 +1566,7 @@ def test_fill_peeks_once_per_claim_attempt_on_the_matched_path(tmp_path):  # typ
         provider=provider,
         harness=harness,
         probe=FakeProbe(),
-        config=LoopConfig(runner_name="r1", workspace_id="ws1", max_agents=2),
+        config=LoopConfig(runner_name="r1", workspace_id="ws1", runner_id=FIXTURE_RUNNER_ID, max_agents=2),
     )
 
     Fill(ctx).run()
@@ -1576,7 +1596,7 @@ def test_fill_peeks_with_this_runners_own_capability_snapshot_and_queue_strict_p
         provider=FakeProvider({"e1": "/ws/e1"}),
         harness=harness,
         probe=FakeProbe(),
-        config=LoopConfig(runner_name="r1", workspace_id="ws1", queue_strict=True),
+        config=LoopConfig(runner_name="r1", workspace_id="ws1", runner_id=FIXTURE_RUNNER_ID, queue_strict=True),
     )
 
     Fill(ctx).run()
@@ -1600,7 +1620,7 @@ def test_fill_peeks_pass_over_by_default(tmp_path):  # type: ignore[no-untyped-d
         provider=FakeProvider({}),
         harness=FakeHarness(handle=_HANDLE, verdict="pass"),
         probe=FakeProbe(),
-        config=LoopConfig(runner_name="r1", workspace_id="ws1"),
+        config=LoopConfig(runner_name="r1", workspace_id="ws1", runner_id=FIXTURE_RUNNER_ID),
     )
 
     Fill(ctx).run()
@@ -2060,6 +2080,7 @@ def _preamble_config(*, workspace_prompt: str = "WORKSPACE-POLICY", runner_promp
     return LoopConfig(
         runner_name="r1",
         workspace_id="ws1",
+        runner_id="rn_1",
         workspace_root="/ws",
         workspace_prompt=workspace_prompt,
         runner_prompt=runner_prompt,
@@ -3207,7 +3228,12 @@ def test_retries_exhausted_escalates_and_holds_envs(tmp_path, workspace_root, ex
     # stays shell-safe (shlex.quote) rather than merely happening to work on a plain path.
     runner_dir = "/tmp/runner dir/r1"
     config = LoopConfig(
-        runner_name="r1", workspace_id="ws1", max_agents=1, runner_dir=runner_dir, workspace_root=workspace_root
+        runner_name="r1",
+        workspace_id="ws1",
+        runner_id="rn_1",
+        max_agents=1,
+        runner_dir=runner_dir,
+        workspace_root=workspace_root,
     )
     # Three verdict-less attempts: attempt 1 & 2 requeue, attempt 3 escalates.
     provider = FakeProvider({"e1": "/ws/e1"})
@@ -3269,7 +3295,9 @@ def test_escalation_without_a_session_composes_neither_takeover_command(tmp_path
     assert lease is not None and lease.session_id is None  # never spawned
 
     hub = FakeHub()
-    config = LoopConfig(runner_name="r1", workspace_id="ws1", max_agents=1, runner_dir="/tmp/runner-dir")
+    config = LoopConfig(
+        runner_name="r1", workspace_id="ws1", runner_id=FIXTURE_RUNNER_ID, max_agents=1, runner_dir="/tmp/runner-dir"
+    )
     ctx = make_context(
         store,
         hub=hub,
@@ -3317,7 +3345,9 @@ def test_escalation_with_a_session_but_no_binding_composes_neither_takeover_comm
     assert lease is not None and lease.session_id == "sess-a"  # spawned, but no binding recorded
 
     hub = FakeHub()
-    config = LoopConfig(runner_name="r1", workspace_id="ws1", max_agents=1, runner_dir="/tmp/runner-dir")
+    config = LoopConfig(
+        runner_name="r1", workspace_id="ws1", runner_id=FIXTURE_RUNNER_ID, max_agents=1, runner_dir="/tmp/runner-dir"
+    )
     ctx = make_context(
         store,
         hub=hub,
@@ -3367,7 +3397,9 @@ def test_escalation_after_its_bindings_were_released_still_escalates(tmp_path): 
     assert lease is not None and lease.session_id == "sess-a"
     assert store.bindings_for_chunk("ch_1") == []  # released, not merely never bound
 
-    config = LoopConfig(runner_name="r1", workspace_id="ws1", max_agents=1, runner_dir="/tmp/runner-dir")
+    config = LoopConfig(
+        runner_name="r1", workspace_id="ws1", runner_id=FIXTURE_RUNNER_ID, max_agents=1, runner_dir="/tmp/runner-dir"
+    )
     ctx = make_context(
         store,
         hub=FakeHub(),
@@ -3399,7 +3431,14 @@ def test_escalation_after_its_bindings_were_released_still_escalates(tmp_path): 
 
 
 def _cap_config(cap, runner_dir="/tmp/runner-dir"):  # type: ignore[no-untyped-def]
-    return LoopConfig(runner_name="r1", workspace_id="ws1", max_agents=1, chunk_cap_usd=cap, runner_dir=runner_dir)
+    return LoopConfig(
+        runner_name="r1",
+        workspace_id="ws1",
+        runner_id=FIXTURE_RUNNER_ID,
+        max_agents=1,
+        chunk_cap_usd=cap,
+        runner_dir=runner_dir,
+    )
 
 
 @pytest.mark.unit
@@ -3819,6 +3858,7 @@ def test_spawn_prefixes_static_workspace_prompt_and_sets_workspace_root(tmp_path
         config=LoopConfig(
             runner_name="r1",
             workspace_id="ws1",
+            runner_id="rn_1",
             workspace_root="/ws",
             workspace_prompt="STATIC-PROMPT",
         ),
@@ -3851,7 +3891,9 @@ def test_spawn_reflects_runtime_prompt_override_with_no_restart(tmp_path):  # ty
         provider=FakeProvider({"e1": "/ws/e1"}),
         harness=harness,
         probe=FakeProbe(),
-        config=LoopConfig(runner_name="r1", workspace_id="ws1", workspace_prompt="STATIC-PROMPT"),
+        config=LoopConfig(
+            runner_name="r1", workspace_id="ws1", runner_id=FIXTURE_RUNNER_ID, workspace_prompt="STATIC-PROMPT"
+        ),
     )
 
     Fill(ctx).run()
@@ -4064,6 +4106,7 @@ def test_pull_registers_every_declared_redirect_uri(tmp_path):  # type: ignore[n
         config=LoopConfig(
             runner_name="r1",
             workspace_id="ws1",
+            runner_id="rn_1",
             public_url="http://127.0.0.1:8431",
             redirect_uris=uris,
         ),
@@ -4156,7 +4199,9 @@ def test_pull_registers_the_gates_this_runner_imposes(tmp_path):  # type: ignore
         provider=FakeProvider({"e1": "/ws/e1"}),
         harness=FakeHarness(handle=_HANDLE, verdict="pass"),
         probe=FakeProbe(),
-        config=LoopConfig(runner_name="r1", workspace_id="ws1", max_agents=1, gates=("build", "review")),
+        config=LoopConfig(
+            runner_name="r1", workspace_id="ws1", runner_id=FIXTURE_RUNNER_ID, max_agents=1, gates=("build", "review")
+        ),
     )
 
     Pull(ctx).run()
@@ -4230,7 +4275,9 @@ def test_judgement_runs_in_the_sessions_own_spawn_cwd(tmp_path, workspace_root, 
         provider=FakeProvider({"e1": "/ws/e1"}),
         harness=harness,
         probe=FakeProbe(),
-        config=LoopConfig(runner_name="r1", workspace_id="ws1", workspace_root=workspace_root),
+        config=LoopConfig(
+            runner_name="r1", workspace_id="ws1", runner_id=FIXTURE_RUNNER_ID, workspace_root=workspace_root
+        ),
     )
 
     Advance(ctx).run()  # launches the detached elicitation

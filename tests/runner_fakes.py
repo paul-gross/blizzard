@@ -13,7 +13,7 @@ import threading
 import weakref
 from collections.abc import Callable, Iterable, Iterator, Sequence
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -53,6 +53,7 @@ from blizzard.runner.harness.transcript import IHarnessTranscriptSource, Transcr
 from blizzard.runner.harness.usage import UsageKind, UsageLimit, UsageSample
 from blizzard.runner.hub.chunk_status_cache import IChunkViews, ReadThroughChunkViews
 from blizzard.runner.hub.client import (
+    BindingDeclaration,
     ChunkEndedError,
     ChunkNotFoundError,
     ClaimedRoute,
@@ -101,7 +102,6 @@ from blizzard.runner.store.internal.host_external_usage_store import ExternalUsa
 from blizzard.runner.store.internal.host_graph_artifact_store import GraphArtifactStore
 from blizzard.runner.store.internal.host_jti_cache_store import JtiCacheRepository
 from blizzard.runner.store.internal.host_runner_audit import RunnerAudit
-from blizzard.runner.store.internal.host_unowned_row_stamp import UnownedRowStamp, stamp_unowned_rows
 from blizzard.runner.store.internal.host_workspace_prompt_store import WorkspacePromptStore
 from blizzard.runner.store.internal.identity_store import RunnerIdentityStore
 from blizzard.runner.store.internal.invocation_boundary_store import InvocationBoundaryStore
@@ -201,7 +201,7 @@ class SqlAlchemyRunnerStore(
         OverloadStore.__init__(self, store)
         AskStore.__init__(self, store)
         PauseStore.__init__(self, store)
-        RunnerIdentityStore.__init__(self, store, stamp_unowned_rows)
+        RunnerIdentityStore.__init__(self, store)
         ServedProjectsStore.__init__(self, store)
         TakeoverStore.__init__(self, store)
         RequeueStore.__init__(self, store)
@@ -228,19 +228,18 @@ def runner_store_errors() -> RunnerStoreErrorFactory:
 
 
 def daemon_store(engine: Engine) -> SqlAlchemyRunnerStore:
-    """A store over a running daemon's own file, bound to the runner its registration stored there — not the fixture
-    runner, which the hub that daemon registered with never minted. Unbound while nothing has registered yet: reads
-    answer empty until the identity row lands, and a write refuses."""
-    store = SqlAlchemyRunnerStore(engine, runner_store_errors(), None)
-    store.connections.bind_to_stored()
-    return store
+    """A store over a running daemon's own file, bound to the runner its identity row there names — the one ``init``
+    joined or its first registration recorded, not the fixture runner, which the hub that daemon registered with never
+    minted. Unbound while the file names none yet: reads answer empty, and a write refuses."""
+    named = RunnerAudit(RunnerStoreConnections(engine, runner_store_errors())).named_runners()
+    return SqlAlchemyRunnerStore(engine, runner_store_errors(), named[-1] if named else None)
 
 
-def registered_fixture_store(engine: Engine) -> SqlAlchemyRunnerStore:
-    """A store bound to the fixture runner, with that runner's identity row recorded — so an API served over the same
+def registered_fixture_store(engine: Engine, runner_id: str = FIXTURE_RUNNER_ID) -> SqlAlchemyRunnerStore:
+    """A store bound to the fixture runner (or ``runner_id``), with that runner's identity row recorded — so an API served over the same
     file, never registered by a tick of its own, adopts the fixture runner and reads what this store seeds."""
-    store = SqlAlchemyRunnerStore(engine, runner_store_errors())
-    store.record_runner_identity(RunnerIdentity(FIXTURE_RUNNER_ID, "runner-local", REGISTERED_AT))
+    store = SqlAlchemyRunnerStore(engine, runner_store_errors(), runner_id)
+    store.record_runner_identity(RunnerIdentity(runner_id, "runner-local", REGISTERED_AT))
     return store
 
 
@@ -315,7 +314,6 @@ def make_host_stores(store: SqlAlchemyRunnerStore, clock: IClock | None = None) 
         jti_cache=JtiCacheRepository(store.connections, clock or SystemClock()),
         daemon_liveness=store,
         external_usage=store,
-        unowned_row_stamp=UnownedRowStamp(store.connections),
         runner_audit=RunnerAudit(store.connections),
     )
 
@@ -517,6 +515,8 @@ class FakeHub:
         self.registered_subscriptions: list[tuple[SubscriptionDeclaration, ...]] = []
         self.registered_gates: list[tuple[str, ...]] = []
         self.registered_projects: list[tuple[str, ...] | None] = []
+        self.registered_bindings: list[tuple[BindingDeclaration, ...] | None] = []
+        self.registered_subscription: list[str | None] = []
         self.paused = False  # the hub-side pause brake this fake reports back
         self.down = False
         # chunk ids `get_envelope` 404s for; `chunk_statuses` never raises for
@@ -694,6 +694,8 @@ class FakeHub:
         subscriptions: tuple[SubscriptionDeclaration, ...] = (),
         gates: tuple[str, ...] = (),
         projects: tuple[str, ...] | None = None,
+        bindings: tuple[BindingDeclaration, ...] | None = None,
+        subscription: str | None = None,
     ) -> RegistrationReply:
         if self.down:
             raise HubClientError("fake hub is down")
@@ -706,6 +708,8 @@ class FakeHub:
         self.registered_subscriptions.append(subscriptions)
         self.registered_gates.append(gates)
         self.registered_projects.append(projects)
+        self.registered_bindings.append(bindings)
+        self.registered_subscription.append(subscription)
         return RegistrationReply(
             runner_id=runner_id,
             runner_name=name,
@@ -1460,7 +1464,19 @@ def make_context(
     ``chunk_views`` defaults to a fresh :class:`ReadThroughChunkViews` over ``hub`` — a step driven directly
     (not through ``tick()``) reads the hub on every ``get()``. ``registered`` seeds the store's identity row and
     the holder with ``hub``'s runner id; ``False`` leaves the runner never registered."""
-    resolved_config = config if config is not None else LoopConfig(runner_name="r1", workspace_id="ws1", max_agents=1)
+    resolved_config = (
+        config
+        if config is not None
+        else LoopConfig(
+            runner_name="r1",
+            workspace_id="ws1",
+            runner_id=store.connections.runner_id or FIXTURE_RUNNER_ID,
+            max_agents=1,
+        )
+    )
+    if not resolved_config.runner_id:
+        # The runner the store is bound to — the fixture runner, whose token the fake hub holds.
+        resolved_config = replace(resolved_config, runner_id=store.connections.runner_id or FIXTURE_RUNNER_ID)
     # A verdict handed in gates the hub as a hosted runner's is; with none, the runner is matched and ungated.
     _verdict = identity_verdict if identity_verdict is not None else matched_verdict()
     _hub: IHubClient = VerifiedHubClient(hub, _verdict) if identity_verdict is not None else hub
@@ -1666,10 +1682,13 @@ def no_retry_clock() -> ManualMonotonicClock:
 
 
 @contextmanager
-def loop_graph(config: RunnerConfig, *, events: EventBroker | None = None) -> Iterator[RunnerProcess]:
+def loop_graph(
+    config: RunnerConfig, *, events: EventBroker | None = None, runner_id: str | None = None
+) -> Iterator[RunnerProcess]:
     """The composition root's process graph over ``config``, closed on exit — the one owner
-    of a graph for every test that builds a :class:`LoopContext` or a ``PeriodicDriver``."""
-    graph = build_runner_process(config, events=events)
+    of a graph for every test that builds a :class:`LoopContext` or a ``PeriodicDriver``. Its runner is bound to
+    ``runner_id``, else to the id ``config`` carries, else to the fixture runner."""
+    graph = build_runner_process(config, events=events, runner_id=runner_id or config.runner_id or FIXTURE_RUNNER_ID)
     try:
         yield graph
     finally:

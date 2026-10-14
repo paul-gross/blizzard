@@ -37,7 +37,7 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.observability.analytics.events import KIND_AGENT_SPAWN, KIND_SKILL_INVOCATION
-from blizzard.runner.config import ENV_TRANSCRIPTS_ROOT, RunnerConfig
+from blizzard.runner.config import ENV_TRANSCRIPTS_ROOT
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, OPENCODE_HARNESS_ID
 from blizzard.runner.store import schema as runner_schema
 from tests.crash.support import (
@@ -61,6 +61,7 @@ from tests.crash.support import (
 )
 from tests.e2e.fleet_traces import FleetCollector, InvocationExpect, assert_invocations
 from tests.e2e.harness_variants import MOCK_CLAUDE_CODE_MODEL
+from tests.host_files import load_runner_config, write_host_file
 from tests.runner_fakes import daemon_store
 from tests.runner_join import runner_spawn_env
 from tests.support import (
@@ -157,7 +158,7 @@ def _start_runner(
     crash point: every restart here is a clean operator-style SIGTERM, not a kill -9."""
     runner_bin = str(Path(sys.executable).parent / "blizzard-runner")
     env = runner_spawn_env(
-        RunnerConfig.load(runner_dir).hub_url,
+        load_runner_config(runner_dir).hub_url,
         {"BZ_RUNNER_TICK_SECONDS": tick_seconds, ENV_HARNESS_FENCE: "1", **(extra_env or {})},
     )
     return subprocess.Popen(
@@ -251,7 +252,7 @@ def _daemon_start_count(log_path: Path) -> int:
 
 
 def _open_resume_intents(runner_dir: Path) -> set[str]:
-    engine = create_engine_from_url(RunnerConfig.load(runner_dir).db_url)
+    engine = create_engine_from_url(load_runner_config(runner_dir).db_url)
     try:
         return daemon_store(engine).resume_intent_lease_ids()
     finally:
@@ -264,7 +265,7 @@ def _await_committed(runner_dir: Path, chunk_id: str, landed_file: str, *, timeo
     what a resume relies on to submit and land."""
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        engine = create_engine_from_url(RunnerConfig.load(runner_dir).db_url)
+        engine = create_engine_from_url(load_runner_config(runner_dir).db_url)
         try:
             store = daemon_store(engine)
             committed = any(
@@ -298,7 +299,7 @@ def _leases_with_node(runner_dir: Path, chunk_id: str) -> list[dict[str, object]
     model/effort (`lease_context`) — the join `tests/crash/test_kill9_sweep.py`'s own
     per-chunk helpers never need, since no crash-sweep scenario mixes two node names on
     one chunk."""
-    engine = create_engine_from_url(RunnerConfig.load(runner_dir).db_url)
+    engine = create_engine_from_url(load_runner_config(runner_dir).db_url)
     try:
         with engine.connect() as conn:
             rows = conn.execute(
@@ -335,7 +336,7 @@ def _usage_rows(runner_dir: Path, chunk_id: str) -> list[dict[str, object]]:
     """The runner's own usage facts for ``chunk_id`` — the ground truth the hub-served
     board's `ChunkDetail.usage` is compared against below, rather than a hardcoded value
     this test would otherwise have to guess (e.g. a harness's own model-alias table)."""
-    engine = create_engine_from_url(RunnerConfig.load(runner_dir).db_url)
+    engine = create_engine_from_url(load_runner_config(runner_dir).db_url)
     try:
         with engine.connect() as conn:
             rows = conn.execute(
@@ -369,7 +370,7 @@ def _wait_build_judged(runner_dir: Path, chunk_id: str, build_node_id: str, *, t
     lands, this test has a full tick interval of slack — no race — before either of those
     next happen."""
     deadline = time.monotonic() + timeout
-    engine = create_engine_from_url(RunnerConfig.load(runner_dir).db_url)
+    engine = create_engine_from_url(load_runner_config(runner_dir).db_url)
     try:
         while time.monotonic() < deadline:
             runner_id = _registered_runner_id(engine)
@@ -490,7 +491,7 @@ def test_mixed_lineage_crosses_a_harness_boundary_and_survives_two_operator_rest
             # 2. Wire the runner with BOTH mock binaries and turn transcript shipping on —
             # the board's usage and the hub's derived analytics events both read off it.
             write_runner_config(runner_dir, workspace=workspace, bin_dir=bin_dir, hub_port=hub_port, port=runner_port)
-            config = RunnerConfig.load(runner_dir)
+            config = load_runner_config(runner_dir)
             config = dataclasses.replace(
                 config,
                 transcripts_root=str(transcripts_root),
@@ -498,7 +499,7 @@ def test_mixed_lineage_crosses_a_harness_boundary_and_survives_two_operator_rest
                 worker_env_passthrough=(ENV_HARNESS_FENCE, ENV_TRANSCRIPTS_ROOT),
                 **({"tracing": _TRACING} if fleet_traces.available else {}),
             )
-            config.config_path.write_text(config.to_toml())
+            write_host_file(config)
 
             # 3. Start the runner — on the wide boundary tick (see the module docstring)
             # — and let the Claude Code lineage (`build`) run to completion.

@@ -20,6 +20,7 @@ from blizzard.runner.store.internal.base import (
     Unclosed,
     encode_work_refs,
     enqueue_transcript_final,
+    insert_outbox_row,
     lease_select,
     row_to_lease,
 )
@@ -223,17 +224,16 @@ class LeaseRecordStore:
                 )
             )
             if event_kind is not None and event_payload is not None:
-                result = conn.execute(
-                    self._store.insert(outbound_buffer).values(
-                        kind=event_kind,
-                        chunk_id=chunk_id,
-                        lease_id=lease_id,
-                        payload=event_payload,
-                        created_at=closed_at,
-                    )
+                event_seq = insert_outbox_row(
+                    self._store,
+                    conn,
+                    outbound_buffer,
+                    kind=event_kind,
+                    chunk_id=chunk_id,
+                    lease_id=lease_id,
+                    payload=event_payload,
+                    created_at=closed_at,
                 )
-                key = result.inserted_primary_key
-                event_seq = int(key[0]) if key is not None else 0
             # Segments are final by step close — finalized atomically here, on
             # the transcript lane's OWN buffer, never `outbound_buffer` above.
             open_segments = conn.execute(

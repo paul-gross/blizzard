@@ -646,7 +646,13 @@ def test_a_worker_that_exits_on_its_interrupt_has_its_generation_recorded_after_
     hub.chunks["ch_1"] = _paused_chunk()
     hub.envelopes["ch_1"] = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES)
     harness = FakeHarness(handle=_HANDLE, verdict="pass", usage_by_kind={"spawn": _sample("spawn", cost_usd=0.42)})
-    config = LoopConfig(runner_name="r1", workspace_id="ws1", max_agents=1, worker_stdout_dir=str(stdout_dir))
+    config = LoopConfig(
+        runner_name="r1",
+        workspace_id="ws1",
+        runner_id=FIXTURE_RUNNER_ID,
+        max_agents=1,
+        worker_stdout_dir=str(stdout_dir),
+    )
     ctx = _make_ctx(store, hub, harness, probe, config=config)
 
     tick(ctx)

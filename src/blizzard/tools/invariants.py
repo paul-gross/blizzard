@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, ClassVar
 
-from sqlalchemy import Connection, CursorResult, Engine, Select, Table, and_, func, select
+from sqlalchemy import Connection, CursorResult, Engine, Select, Table, and_, func, or_, select
 
 from blizzard.foundation.clock import IClock, SystemClock
 from blizzard.foundation.logging import get_logger
@@ -259,10 +259,9 @@ class UniqueEnvBinding(QueryCheck):
 
 
 class RowsNameRegisteredRunner(QueryCheck):
-    """Every runner-scoped row names a runner the store's ``runner_identity`` records — a row naming no runner (NULL)
-    included. A row the bound runner's scoped reads cannot see is lost to it: a lease never reaped, a binding never
-    released, an outbound fact never flushed. Rows a previous release wrote are stamped at the runner's start, before
-    any recovery this checker runs after; ``runner_identity`` keys itself by its own id, so it is not judged."""
+    """Every runner-scoped row names a runner the store's ``runner_identity`` records. A row the bound runner's scoped
+    reads cannot see is lost to it: a lease never reaped, a binding never released, an outbound fact never flushed.
+    ``runner_identity`` keys itself by its own id, so it is not judged."""
 
     _TABLES: ClassVar[tuple[Table, ...]] = tuple(
         table
@@ -276,64 +275,113 @@ class RowsNameRegisteredRunner(QueryCheck):
         for table in self._TABLES:
             key = table.c[RUNNER_COLUMN]
             for row in self.conn.execute(
-                select(key, func.count()).where(key.is_(None) | key.not_in(registered)).group_by(key).order_by(key)
+                select(key, func.count()).where(key.not_in(registered)).group_by(key).order_by(key)
             ):
-                named = "no runner" if row[0] is None else f"unregistered runner {row[0]}"
                 violations.append(
-                    Violation("runner:rows-name-registered-runner", f"{row[1]} {table.name} row(s) name {named}")
+                    Violation(
+                        "runner:rows-name-registered-runner",
+                        f"{row[1]} {table.name} row(s) name unregistered runner {row[0]}",
+                    )
                 )
         return violations
 
 
+def _holes_by_runner(conn: Connection, table: Table, *, pending_only: bool = False) -> dict[str, list[int]]:
+    """Each runner's missing seqs among the ``table`` rows it retains from its own lowest pending seq upward, or among
+    its pending rows alone (``pending_only``), in runner order. A runner whose sequence has no hole is absent."""
+    runner_id_column = table.c[RUNNER_COLUMN]
+    if pending_only:
+        query = select(runner_id_column, table.c.seq).where(table.c.acked_at.is_(None))
+    else:
+        floor = (
+            select(runner_id_column.label("runner_id"), func.min(table.c.seq).label("floor"))
+            .where(table.c.acked_at.is_(None))
+            .group_by(runner_id_column)
+            .subquery()
+        )
+        query = (
+            select(runner_id_column, table.c.seq)
+            .outerjoin(floor, floor.c.runner_id == runner_id_column)
+            .where(or_(floor.c.floor.is_(None), table.c.seq >= floor.c.floor))
+        )
+    by_runner: dict[str, list[int]] = {}
+    for runner_id, seq in conn.execute(query.order_by(runner_id_column, table.c.seq)):
+        by_runner.setdefault(runner_id, []).append(seq)
+    holes: dict[str, list[int]] = {}
+    for runner_id, seqs in by_runner.items():
+        missing = sorted(set(range(seqs[0], seqs[-1] + 1)) - set(seqs))
+        if missing:
+            holes[runner_id] = missing
+    return holes
+
+
 class GaplessOutboundSeq(QueryCheck):
-    """A hole in the outbound buffer's retained seqs would break FIFO idempotent replay —
-    scoped to the pending floor upward, not every seq ever minted, since retention
-    (`IWriteOutboundRepository.prune_outbound`) prunes below it. Mirrors
-    `GaplessTranscriptOutboundSeq`'s own scoping for its lane."""
+    """A hole in a runner's retained outbound seqs would break FIFO idempotent replay — scoped, per runner, to its
+    pending floor upward, not every seq it ever minted, since retention (`IWriteOutboundRepository.prune_outbound`)
+    prunes below it. Mirrors `GaplessTranscriptOutboundSeq`'s own scoping for its lane."""
 
     def run(self) -> list[Violation]:
-        floor = self.conn.execute(
-            select(func.min(runner.outbound_buffer.c.seq)).where(runner.outbound_buffer.c.acked_at.is_(None))
-        ).scalar_one()
-        stmt = select(runner.outbound_buffer.c.seq)
-        if floor is not None:
-            stmt = stmt.where(runner.outbound_buffer.c.seq >= floor)
-        seqs = sorted(row[0] for row in self.conn.execute(stmt))
-        if not seqs:
-            return []
-        expected = list(range(seqs[0], seqs[0] + len(seqs)))
-        if seqs == expected:
-            return []
-        missing = sorted(set(expected) - set(seqs))
-        return [Violation("runner:gapless-outbound-seq", f"retained outbound seqs not gapless; missing {missing}")]
+        return [
+            Violation(
+                "runner:gapless-outbound-seq",
+                f"runner {runner_id}: retained outbound seqs not gapless; missing {missing}",
+            )
+            for runner_id, missing in _holes_by_runner(self.conn, runner.outbound_buffer).items()
+        ]
 
 
 class GaplessTranscriptOutboundSeq(QueryCheck):
-    """A hole in the transcript lane's own *pending* (unacked) seqs means a lost record —
-    scoped to the pending window, not every seq ever minted (review
-    since an acked non-final row is pruned outright."""
+    """A hole in a runner's transcript lane's own *pending* (unacked) seqs means a lost record — scoped, per runner, to
+    the pending window, not every seq it ever minted, since an acked non-final row is pruned outright."""
 
     def run(self) -> list[Violation]:
-        seqs = sorted(
-            row[0]
-            for row in self.conn.execute(
-                select(runner.transcript_outbound_buffer.c.seq).where(
-                    runner.transcript_outbound_buffer.c.acked_at.is_(None)
-                )
-            )
-        )
-        if not seqs:
-            return []
-        expected = list(range(seqs[0], seqs[0] + len(seqs)))
-        if seqs == expected:
-            return []
-        missing = sorted(set(expected) - set(seqs))
         return [
             Violation(
                 "runner:gapless-transcript-outbound-seq",
-                f"pending transcript outbound seqs not gapless; missing {missing}",
+                f"runner {runner_id}: pending transcript outbound seqs not gapless; missing {missing}",
             )
+            for runner_id, missing in _holes_by_runner(
+                self.conn, runner.transcript_outbound_buffer, pending_only=True
+            ).items()
         ]
+
+
+class OutboxCounterAboveSeq(QueryCheck):
+    """A runner's outbox counter is at or above every seq its lane retains. A counter below one would issue a seq a
+    consumer already holds, or one the hub already treated as final; a lane with rows and no counter is the same
+    breach. Judged per runner and lane."""
+
+    _LANES: ClassVar[tuple[tuple[str, Table], ...]] = (
+        (runner.OUTBOX_LANE_OUTBOUND, runner.outbound_buffer),
+        (runner.OUTBOX_LANE_TRANSCRIPT, runner.transcript_outbound_buffer),
+    )
+
+    def run(self) -> list[Violation]:
+        counters = {
+            (row.runner_id, row.lane): row.last_seq
+            for row in self.conn.execute(
+                select(
+                    runner.outbox_counters.c.runner_id, runner.outbox_counters.c.lane, runner.outbox_counters.c.last_seq
+                )
+            )
+        }
+        violations: list[Violation] = []
+        for lane, table in self._LANES:
+            for runner_id, newest in self.conn.execute(
+                select(table.c[RUNNER_COLUMN], func.max(table.c.seq))
+                .group_by(table.c[RUNNER_COLUMN])
+                .order_by(table.c[RUNNER_COLUMN])
+            ):
+                counter = counters.get((runner_id, lane))
+                if counter is None or counter < newest:
+                    held = "no counter" if counter is None else f"counter {counter}"
+                    violations.append(
+                        Violation(
+                            "runner:outbox-counter-above-seq",
+                            f"runner {runner_id}: {lane} lane retains seq {newest} but has {held}",
+                        )
+                    )
+        return violations
 
 
 class TranscriptSegmentFinalizedExactlyOnce(QueryCheck):
@@ -1034,6 +1082,7 @@ class RunnerInvariants:
                 RowsNameRegisteredRunner(conn),
                 GaplessOutboundSeq(conn),
                 GaplessTranscriptOutboundSeq(conn),
+                OutboxCounterAboveSeq(conn),
                 TranscriptSegmentFinalizedExactlyOnce(conn),
                 OneOpenPauseParkPerLease(conn),
                 UsageAttributedOnce(conn),

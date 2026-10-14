@@ -29,7 +29,7 @@ from blizzard.runner.harness.registry import IHarnessRegistry, UnavailableHarnes
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource
 from blizzard.runner.hub.chunk_status_cache import IChunkViews
-from blizzard.runner.hub.client import IHubClient, ITokenIdentityReader
+from blizzard.runner.hub.client import BindingDeclaration, IHubClient, ITokenIdentityReader
 from blizzard.runner.hub.held_token import HubTokenHolder
 from blizzard.runner.hub.identity import IdentityVerdictHolder, RunnerIdentityHolder
 from blizzard.runner.leases.worker_stdout import IWorkerStdoutFiles
@@ -59,6 +59,8 @@ class LoopConfig:
     #: The configured name every registration declares — a label, never this runner's identity.
     runner_name: str
     workspace_id: str
+    #: The hub-minted id the host file configures: the runner its store is bound to and its token must resolve to.
+    runner_id: str
     max_agents: int = 1
     base_branch: str = "main"
     #: The runner's configured environment-pool size; ``None`` unreported.
@@ -87,6 +89,10 @@ class LoopConfig:
     #: The projects this runner serves, by id or slug, declared at every registration; ``None`` declares
     #: none, so the hub keeps the declaration it holds. Read at context build, like :attr:`gates`.
     projects: tuple[str, ...] | None = None
+    #: The same declaration by workspace and agent count, sent beside :attr:`projects` at every registration.
+    bindings: tuple[BindingDeclaration, ...] | None = None
+    #: The slug of the declared subscription the runner spends; ``None`` names none.
+    subscription: str | None = None
     #: The directory the per-lease harness-stdout files live in; empty means
     #: no redirect. A worker's envelope survives the process there for later read-back.
     worker_stdout_dir: str = ""
@@ -170,7 +176,7 @@ class LoopContext:
     identity: RunnerIdentityHolder
     #: The ungated identity read the tick's identity check asks — the one hub call ``hub`` does not gate.
     token_identity: ITokenIdentityReader
-    #: Whether the token is verified to resolve to the store's runner; ``hub`` forwards only while it is.
+    #: Whether the token is verified to resolve to the configured runner; ``hub`` forwards only while it is.
     identity_verdict: IdentityVerdictHolder
     #: The token ``hub`` and ``token_identity`` present; the identity check re-reads it while refusing.
     hub_token: HubTokenHolder

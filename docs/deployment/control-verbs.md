@@ -23,9 +23,10 @@ chunk derives `paused` and FILL skips it until resumed. Pause is refused (409) o
 chunk, and deliberately allowed on `waiting_on_human` and `needs_human` — it is a broad lever.
 
 A pause-parked chunk still occupies an agent slot: FILL claims only into open slots, and a `chunk pause` deliberately
-keeps the lease active with environments held warm for the in-place resume, so a paused lease counts against
-`max_agents` exactly like a running one — pause enough chunks on one runner and it silently stops claiming new work,
-with nothing beyond the pause's own log line saying why; `detach`, `stop`, and `done` each free the slot immediately.
+keeps the lease active with environments held warm for the in-place resume, so a paused lease counts against the
+runner's agent cap — the sum of its bindings' `agents` — exactly like a running one — pause enough chunks on one runner
+and it silently stops claiming new work, with nothing beyond the pause's own log line saying why; `detach`, `stop`, and
+`done` each free the slot immediately.
 
 A chunk both paused and parked on an open question derives `waiting_on_human` first, so the board chip reads
 `waiting_on_human`, not `paused`, until the question is answered — but the pause fact survives (answering never

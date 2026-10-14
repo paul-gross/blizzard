@@ -28,13 +28,12 @@ from sqlalchemy.sql.compiler import SQLCompiler
 from sqlalchemy.sql.elements import BinaryExpression
 
 from blizzard.foundation.store.key_scoping import KeyedStatements, KeyScoping
-from blizzard.runner.store.schema import runner_identity
 
 #: The column every runner-scoped table is keyed by.
 RUNNER_COLUMN = "runner_id"
 
 #: The execution option that marks a statement deliberately unscoped by runner, exempting it from the runner statement
-#: guard: the seam's own read of the stored binding, the host store's start-up stamp and the invariant audit.
+#: guard: the cross-runner reads of :class:`~blizzard.runner.store.internal.host_runner_audit.RunnerAudit`.
 RUNNER_SCOPED_OPTION = "blizzard_runner_unscoped"
 
 
@@ -144,6 +143,12 @@ class RunnerStoreConnections:
         """The runner this store is bound to; ``None`` until bound."""
         return self._runner_id
 
+    def bound_runner_id(self) -> str:
+        """The runner this store is bound to; raises :class:`RunnerUnbound` until bound."""
+        if self._runner_id is None:
+            raise RunnerUnbound("runner_id")
+        return self._runner_id
+
     def bind(self, runner_id: str) -> None:
         """Bind to ``runner_id``; binding again to the same id is a no-op, to another raises
         :class:`RunnerAlreadyBound`."""
@@ -153,30 +158,11 @@ class RunnerStoreConnections:
             elif self._runner_id != runner_id:
                 raise RunnerAlreadyBound(self._runner_id, runner_id)
 
-    def bind_to_stored(self) -> str | None:
-        """Bind to the runner the store's identity row names, when it holds one; answer the binding. The one read of
-        ``runner_identity`` not confined to a runner — it is how the store learns which runner it is — so it is exempt
-        from the runner statement guard."""
-        stmt = (
-            sa.select(runner_identity.c.runner_id)
-            .order_by(runner_identity.c.id.desc())
-            .limit(1)
-            .execution_options(**{RUNNER_SCOPED_OPTION: True})
-        )
-        rows = self.all(stmt)
-        if rows:
-            self.bind(str(rows[0].runner_id))
-        return self._runner_id
-
     # --- scoped builders ---------------------------------------------------------------------------------------------
 
     def _reading(self) -> KeyedStatements:
         """Builders for a read: bound to the runner, or — unbound — to a ``NULL`` parameter no row equals, so a
-        runner-scoped read answers as an empty store. An unbound store first adopts an identity row another process
-        has since registered, so a read-only view of a registered store sees it; once bound, the binding never
-        changes and no re-check runs."""
-        if self._runner_id is None:
-            self.bind_to_stored()
+        runner-scoped read answers as an empty store."""
         key: Any = self._runner_id
         if key is None:
             key = sa.bindparam(None, None, type_=sa.String(), unique=True)

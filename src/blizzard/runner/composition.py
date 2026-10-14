@@ -10,9 +10,9 @@ from __future__ import annotations
 
 import contextlib
 import os
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from sqlalchemy import Engine
 
@@ -26,11 +26,12 @@ from blizzard.foundation.platform_tracing.handle import (
 )
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.internal.store_status_reader import SqlAlchemyStoreStatusReader
-from blizzard.foundation.store.readiness import ReadinessService
+from blizzard.foundation.store.readiness import Readiness, ReadinessService
 from blizzard.foundation.trace_export.exporter import ITraceExporter
 from blizzard.foundation.trace_export.internal.otlp import OtlpTraceExporter
 from blizzard.foundation.trace_export.settings import TracingSettings
-from blizzard.runner.config import RunnerConfig
+from blizzard.runner.config import RunnerConfig, SubscriptionDeclaration
+from blizzard.runner.config_table import ConfigError
 from blizzard.runner.environments.factory import build_workspace_provider
 from blizzard.runner.environments.provider import IWorkspaceProvider
 from blizzard.runner.events.broker import EventBroker
@@ -47,17 +48,20 @@ from blizzard.runner.harness.wiring import (
     configured_tiers,
     declared_telemetry_names,
 )
+from blizzard.runner.host_config import BuiltRunner, HaltedRunner, HostConfig, ResolvedToken
+from blizzard.runner.host_layout import HostLayout
 from blizzard.runner.hub.held_token import HubTokenHolder
 from blizzard.runner.hub.identity import (
     ICurrentRunnerIdentity,
     IdentityVerdictHolder,
+    IWriteRunnerIdentityRepository,
     RunnerIdentity,
     RunnerIdentityHolder,
 )
 from blizzard.runner.hub.internal.token_file import HubTokenFile
 from blizzard.runner.listeners import Listeners
 from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
-from blizzard.runner.runtime import migration_runner, reset_command
+from blizzard.runner.runtime import migration_runner
 from blizzard.runner.store.errors import RunnerStoreConnections, RunnerStoreErrorFactory
 from blizzard.runner.store.internal.ask_store import AskStore
 from blizzard.runner.store.internal.attachment_store import AttachmentStore
@@ -71,8 +75,6 @@ from blizzard.runner.store.internal.host_external_usage_store import ExternalUsa
 from blizzard.runner.store.internal.host_graph_artifact_store import GraphArtifactStore
 from blizzard.runner.store.internal.host_jti_cache_store import JtiCacheRepository
 from blizzard.runner.store.internal.host_runner_audit import RunnerAudit
-from blizzard.runner.store.internal.host_unowned_row_stamp import UnownedRowStamp
-from blizzard.runner.store.internal.host_unowned_row_stamp import stamp_unowned_rows as stamp_unowned_rows_on
 from blizzard.runner.store.internal.host_workspace_prompt_store import WorkspacePromptStore
 from blizzard.runner.store.internal.identity_store import RunnerIdentityStore
 from blizzard.runner.store.internal.invocation_boundary_store import InvocationBoundaryStore
@@ -157,6 +159,8 @@ class HostProcess:
     #: Where admitted metrics and logs leave — disabled unless a handle is supplied.
     received_telemetry: IReceivedTelemetryExport = field(default_factory=DisabledReceivedTelemetryExport)
     runners: tuple[RunnerProcess, ...] = ()
+    #: The runners the host file declares that were left unbuilt by their own errors; the host serves without them.
+    halted: tuple[HaltedRunner, ...] = ()
 
     def close(self) -> None:
         with contextlib.ExitStack() as closing:
@@ -176,6 +180,8 @@ class RunnerProcess:
     """
 
     host: HostProcess
+    #: The configuration this runner was built from.
+    config: RunnerConfig
     #: This runner's connections over the host's engine, bound to the runner it is.
     connections: RunnerStoreConnections
     stores: RunnerStores
@@ -192,7 +198,7 @@ class RunnerProcess:
     trace_replay: LeaseTraceReplay
     #: Who this runner is at its hub; seeded from the store at boot and refreshed by every registration.
     identity: RunnerIdentityHolder
-    #: Whether this runner has verified its token names the store's runner — unchecked from start.
+    #: Whether this runner has verified its token names the configured runner — unchecked from start.
     identity_verdict: IdentityVerdictHolder
     #: The token every runner->hub client presents — re-read from ``.env`` while the identity mismatches.
     hub_token: HubTokenHolder
@@ -200,6 +206,11 @@ class RunnerProcess:
     harness_telemetry: HarnessTelemetryPlan = field(default_factory=HarnessTelemetryPlan)
     #: Whether closing this runner closes the host it was built over — the host-of-one a standalone build makes.
     closes_host: bool = False
+
+    @property
+    def runner_id(self) -> str:
+        """The hub id this runner is configured with, which its stores are bound to."""
+        return self.connections.bound_runner_id()
 
     @property
     def engine(self) -> Engine:
@@ -269,6 +280,21 @@ class RunnerProcess:
                 self.host.close()
 
 
+@dataclass(frozen=True)
+class HostReadiness(ReadinessService):
+    """The store's readiness with the host's halted runners named in its detail. ``ready`` keeps meaning the store's: a
+    halted runner is the host's to report, not a reason it cannot serve."""
+
+    halted: tuple[str, ...] = ()
+
+    def evaluate(self) -> Readiness:
+        readiness = super().evaluate()
+        if not self.halted:
+            return readiness
+        detail = "; ".join(filter(None, (readiness.detail, *self.halted)))
+        return replace(readiness, detail=detail)
+
+
 class _RunnersIdentity:
     """The :class:`~blizzard.runner.hub.identity.ICurrentRunnerIdentity` the host's shared pieces stamp from: the
     identity of the first of the host's runners that holds one. With one runner it answers exactly what that
@@ -298,16 +324,16 @@ def _held_environment_ids(runners: Callable[[], tuple[RunnerProcess, ...]]) -> C
 
 
 def _credential_renewal_pass(
-    config: RunnerConfig, host_stores: HostStores, clock: SystemClock
+    declarations: Sequence[SubscriptionDeclaration], host_stores: HostStores, clock: SystemClock
 ) -> CredentialRenewalPass | None:
-    """Every declared subscription paired with its provider's renewer binding, sharing one
+    """Every subscription the host declares paired with its provider's renewer binding, sharing one
     one-shot subprocess seam; ``None`` when no provider binds one."""
     subprocess = SubprocessOneShotProcess()
     renewable = [
         RenewableSubscription(
             slug=declaration.slug, sample_interval_seconds=declaration.sample_interval_seconds, renewer=renewer
         )
-        for declaration in config.resolved_subscriptions()
+        for declaration in declarations
         if (renewer := select_renewer(declaration, clock=clock, subprocess=subprocess)) is not None
     ]
     if not renewable:
@@ -345,14 +371,72 @@ def build_runner_received_telemetry(
     return build_received_telemetry_export(config.tracing, env, resource=resource_attributes(env, __version__))
 
 
-def held_hub_token(config: RunnerConfig) -> HubTokenHolder:
-    """The token the runner started with, re-readable from its ``.env`` unless the process environment
-    supplied it."""
-    file = None if config.token_from_process_env() else HubTokenFile.of(config.root, config.token_env)
+def held_hub_token(config: RunnerConfig, token: ResolvedToken | None = None) -> HubTokenHolder:
+    """The token the runner started with, re-read from its ``.env`` only when ``token`` says ``.env`` was where it came
+    from. Without a resolution the token is held as it is."""
+    file = HubTokenFile.of(config.root, config.token_env) if token is not None and token.rereads_dotenv() else None
     return HubTokenHolder(config.hub_token, file=file)
 
 
 def build_host_process(
+    host: HostConfig,
+    runners: Sequence[BuiltRunner] = (),
+    *,
+    halted: Sequence[HaltedRunner] = (),
+    events: EventBroker | None = None,
+    bundles: Mapping[str, BundleSnapshot | None] | None = None,
+    environ: Mapping[str, str] | None = None,
+    trace_exporter: ITraceExporter | None = None,
+    platform_tracing: IPlatformTracing | None = None,
+    received_telemetry: IReceivedTelemetryExport | None = None,
+    trace_platform: bool = False,
+) -> HostProcess:
+    """Construct the host graph from its file, and one runner over it for each of ``runners`` — each bound to its
+    configured id before anything runs. ``halted`` are the runners left unbuilt; the host keeps them to report.
+    Disposes partial resources on failure.
+
+    ``environ`` decides whether tracing is enabled; ``trace_exporter`` replaces the OTLP binding an enabled sweep would
+    otherwise build. ``trace_platform`` builds the platform-tracing and received-telemetry handles the config and
+    environment decide, stamped from the host's runners; otherwise ``platform_tracing`` and ``received_telemetry`` are
+    used as given. ``bundles`` are the harness-config snapshots each runner published, by runner id."""
+    graph = _build_host_graph(
+        runners[0].config if runners else host.host_view(),
+        subscriptions=host.subscriptions,
+        events=events,
+        environ=environ,
+        platform_tracing=platform_tracing,
+        received_telemetry=received_telemetry,
+        trace_platform=trace_platform,
+    )
+    try:
+        for built in runners:
+            graph.runners = (
+                *graph.runners,
+                _build_runner(
+                    built.config,
+                    graph,
+                    bundle=(bundles or {}).get(built.id),
+                    environ=environ,
+                    trace_exporter=trace_exporter,
+                    identity=None,
+                    runner_id=built.id,
+                    token=built.token,
+                    closes_host=False,
+                ),
+            )
+        graph.halted = tuple(halted)
+        graph.readiness = HostReadiness(
+            reader=graph.readiness.reader,
+            expected_revision=graph.readiness.expected_revision,
+            halted=tuple(runner.describe() for runner in halted),
+        )
+        return graph
+    except BaseException:
+        graph.close()
+        raise
+
+
+def build_runner_process(
     config: RunnerConfig,
     *,
     events: EventBroker | None = None,
@@ -363,44 +447,76 @@ def build_host_process(
     received_telemetry: IReceivedTelemetryExport | None = None,
     identity: RunnerIdentityHolder | None = None,
     runner_id: str | None = None,
-    trace_platform: bool = False,
-) -> HostProcess:
-    """Construct the host graph and the runner it hosts; dispose partial resources on failure.
-
-    ``environ`` decides whether tracing is enabled; ``trace_exporter`` replaces the OTLP binding an enabled sweep would
-    otherwise build. ``trace_platform`` builds the platform-tracing and received-telemetry handles the config and
-    environment decide, stamped from the host's runners; otherwise ``platform_tracing`` and ``received_telemetry`` are
-    used as given. ``identity`` is the holder the runner keeps, seeded from the store's identity row either way, and
-    ``runner_id`` binds the runner to that id instead of the store's newest identity row."""
-    return _build_host_process(
+    token: ResolvedToken | None = None,
+) -> RunnerProcess:
+    """A host of one and its runner, for the standalone commands and tests that drive one runner: closing the
+    returned runner closes the host too. The runner is bound to ``runner_id``, else to the id ``config`` carries;
+    ``token`` is where its hub token resolved from. The other arguments are :func:`build_host_process`'s."""
+    graph = _build_host_graph(
         config,
+        subscriptions=config.subscriptions,
         events=events,
+        environ=environ,
+        platform_tracing=platform_tracing,
+        received_telemetry=received_telemetry,
+        trace_platform=False,
+    )
+    try:
+        runner = _build_runner(
+            config,
+            graph,
+            bundle=bundle,
+            environ=environ,
+            trace_exporter=trace_exporter,
+            identity=identity,
+            runner_id=runner_id or config.runner_id,
+            token=token,
+            closes_host=True,
+        )
+    except BaseException:
+        graph.close()
+        raise
+    graph.runners = (runner,)
+    return runner
+
+
+def add_runner(
+    config: RunnerConfig,
+    host: HostProcess,
+    *,
+    runner_id: str,
+    bundle: BundleSnapshot | None = None,
+    environ: Mapping[str, str] | None = None,
+    trace_exporter: ITraceExporter | None = None,
+) -> RunnerProcess:
+    """Host one more runner on ``host``, bound to ``runner_id``."""
+    runner = _build_runner(
+        config,
+        host,
         bundle=bundle,
         environ=environ,
         trace_exporter=trace_exporter,
-        platform_tracing=platform_tracing,
-        received_telemetry=received_telemetry,
-        identity=identity,
+        identity=None,
         runner_id=runner_id,
-        trace_platform=trace_platform,
+        token=None,
         closes_host=False,
     )
+    host.runners = (*host.runners, runner)
+    return runner
 
 
-def _build_host_process(
+def _build_host_graph(
     config: RunnerConfig,
     *,
+    subscriptions: Sequence[SubscriptionDeclaration],
     events: EventBroker | None,
-    bundle: BundleSnapshot | None,
     environ: Mapping[str, str] | None,
-    trace_exporter: ITraceExporter | None,
     platform_tracing: IPlatformTracing | None,
     received_telemetry: IReceivedTelemetryExport | None,
-    identity: RunnerIdentityHolder | None,
-    runner_id: str | None,
     trace_platform: bool,
-    closes_host: bool,
 ) -> HostProcess:
+    """The host's own graph, with no runner on it yet. ``config`` carries the host's keys — listeners, tracing, the
+    workspace — and ``subscriptions`` are the host's declarations, which its credential renewal covers."""
     install_runner_guard()
     engine = create_engine_from_url(config.db_url)
     try:
@@ -460,81 +576,23 @@ def _build_host_process(
             metric_bounds=metric_bounds,
             log_bounds=log_bounds,
             harness_telemetry_names=telemetry_names,
-            host_tick=HostTick(credential_renewal=_credential_renewal_pass(config, host_stores, clock)),
+            host_tick=HostTick(credential_renewal=_credential_renewal_pass(subscriptions, host_stores, clock)),
             platform_tracing=platform_tracing,
             received_telemetry=received_telemetry,
         )
         built.append(host)
-        host.runners = (
-            _build_runner(
-                config,
-                host,
-                bundle=bundle,
-                environ=environ,
-                trace_exporter=trace_exporter,
-                identity=identity,
-                runner_id=runner_id,
-                closes_host=closes_host,
-            ),
-        )
         return host
     except BaseException:
         engine.dispose()
         raise
 
 
-def build_runner_process(
-    config: RunnerConfig,
-    *,
-    events: EventBroker | None = None,
-    bundle: BundleSnapshot | None = None,
-    environ: Mapping[str, str] | None = None,
-    trace_exporter: ITraceExporter | None = None,
-    platform_tracing: IPlatformTracing | None = None,
-    received_telemetry: IReceivedTelemetryExport | None = None,
-    identity: RunnerIdentityHolder | None = None,
-    runner_id: str | None = None,
-) -> RunnerProcess:
-    """A host of one and its runner, for the standalone commands and tests that drive one runner: closing the
-    returned runner closes the host too. The arguments are :func:`build_host_process`'s."""
-    return _build_host_process(
-        config,
-        events=events,
-        bundle=bundle,
-        environ=environ,
-        trace_exporter=trace_exporter,
-        platform_tracing=platform_tracing,
-        received_telemetry=received_telemetry,
-        identity=identity,
-        runner_id=runner_id,
-        trace_platform=False,
-        closes_host=True,
-    ).runners[0]
-
-
-def add_runner(
-    config: RunnerConfig,
-    host: HostProcess,
-    *,
-    runner_id: str,
-    bundle: BundleSnapshot | None = None,
-    environ: Mapping[str, str] | None = None,
-    trace_exporter: ITraceExporter | None = None,
-) -> RunnerProcess:
-    """Host one more runner on ``host``, bound to ``runner_id``. The store's newest identity row names one runner
-    only, so a second runner on a host is bound by the id it is given."""
-    runner = _build_runner(
-        config,
-        host,
-        bundle=bundle,
-        environ=environ,
-        trace_exporter=trace_exporter,
-        identity=None,
-        runner_id=runner_id,
-        closes_host=False,
+def _identity_remedy(config: RunnerConfig, runner_id: str) -> str:
+    """What restores a runner whose token resolves to another runner than the one configured."""
+    return (
+        f"set {config.token_env} to the token of runner {runner_id}, "
+        f"or correct `[[runner]] id` in {HostLayout(config.root).config_path}"
     )
-    host.runners = (*host.runners, runner)
-    return runner
 
 
 def _build_runner(
@@ -546,22 +604,20 @@ def _build_runner(
     trace_exporter: ITraceExporter | None,
     identity: RunnerIdentityHolder | None,
     runner_id: str | None,
+    token: ResolvedToken | None,
     closes_host: bool,
 ) -> RunnerProcess:
-    """One runner over ``host``'s engine, bound to ``runner_id`` or else the runner the store's identity row names."""
+    """One runner over ``host``'s engine, its stores bound to ``runner_id`` before anything reads or writes them."""
+    if runner_id is None:
+        raise ConfigError(f"runner {config.name} has no id: bind it to the hub-minted id of its [[runner]] entry")
     identity = identity or RunnerIdentityHolder()
     platform_tracing = host.platform_tracing
     executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="blizzard-spawner")
     try:
-        # Bound and seeded only from a store at the code's schema head: a store mid-migration fails readiness, not
-        # boot, and binds when registration adopts an id. Rows naming no runner are stamped by the command that starts
-        # the process (`stamp_unowned_rows`), before it serves or ticks.
+        # Seeded only from a store at the code's schema head: a store mid-migration fails readiness, not boot.
         ready = host.readiness.evaluate().ready
         connections = RunnerStoreConnections(host.engine, RunnerStoreErrorFactory(get_logger("blizzard.runner.store")))
-        if runner_id is not None:
-            connections.bind(runner_id)
-        elif ready:
-            connections.bind_to_stored()
+        connections.bind(runner_id)
         stores = _build_stores(connections)
         clock = host.clock
         registered = stores.identity.runner_identity() if ready else None
@@ -614,6 +670,7 @@ def _build_runner(
         )
         return RunnerProcess(
             host=host,
+            config=config,
             connections=connections,
             stores=stores,
             host_stores=_build_host_stores(connections, clock),
@@ -624,8 +681,8 @@ def _build_runner(
             trace_sweep=trace_sweep,
             trace_replay=trace_replay,
             identity=identity,
-            identity_verdict=IdentityVerdictHolder(reset_command(config.root)),
-            hub_token=held_hub_token(config),
+            identity_verdict=IdentityVerdictHolder(_identity_remedy(config, runner_id)),
+            hub_token=held_hub_token(config, token),
             harness_telemetry=plan,
             closes_host=closes_host,
         )
@@ -661,7 +718,7 @@ def _build_stores(connections: RunnerStoreConnections) -> RunnerStores:
         overload=OverloadStore(connections),
         asks=AskStore(connections),
         pause=PauseStore(connections),
-        identity=RunnerIdentityStore(connections, stamp_unowned_rows_on),
+        identity=RunnerIdentityStore(connections),
         served_projects=ServedProjectsStore(connections),
         takeover=TakeoverStore(connections),
         requeue=RequeueStore(connections),
@@ -677,22 +734,18 @@ def _build_stores(connections: RunnerStoreConnections) -> RunnerStores:
     )
 
 
-def build_read_stores(engine: Engine, *, errors: RunnerStoreErrorFactory) -> RunnerReadStores:
+def build_identity_writer(
+    engine: Engine, *, errors: RunnerStoreErrorFactory, runner_id: str
+) -> IWriteRunnerIdentityRepository:
+    """The identity row's writer, bound to ``runner_id``, for ``init`` to record the runner it joined."""
+    return build_stores(engine, errors=errors, runner_id=runner_id).identity
+
+
+def build_read_stores(engine: Engine, *, errors: RunnerStoreErrorFactory, runner_id: str | None) -> RunnerReadStores:
     """The read-only bundle a controller-facing collaborator takes — narrows build_stores's
-    bundle over the same adapter instances, never a second one — bound to the runner the store's identity row names,
-    or unbound (reading as empty) when it holds none."""
-    connections = RunnerStoreConnections(engine, errors)
-    connections.bind_to_stored()
-    return RunnerReadStores.of(_build_stores(connections))
-
-
-def stamp_unowned_rows(runner: RunnerProcess) -> int:
-    """The start-up stamp: when the runner's store is bound, stamp the bound runner's id on every runner-scoped row that
-    names none, through the host's own stores; answer how many were stamped. Run by ``blizzard runner host`` and
-    ``blizzard runner tick`` once the graph is built and before either serves or ticks. A store not yet bound stamps
-    nothing — registration's first adoption stamps them in the identity write's commit."""
-    bound = runner.connections.runner_id
-    return runner.host.host_stores.unowned_row_stamp.stamp(bound) if bound is not None else 0
+    bundle over the same adapter instances, never a second one — bound to the configured ``runner_id``, or unbound
+    (reading as empty) for a runner that has none yet."""
+    return RunnerReadStores.of(build_stores(engine, errors=errors, runner_id=runner_id))
 
 
 def build_host_stores(
@@ -716,6 +769,5 @@ def _build_host_stores(connections: RunnerStoreConnections, clock: IClock) -> Ho
         jti_cache=JtiCacheRepository(connections, clock),
         daemon_liveness=DaemonLivenessStore(connections),
         external_usage=ExternalUsageStore(connections),
-        unowned_row_stamp=UnownedRowStamp(connections),
         runner_audit=RunnerAudit(connections),
     )

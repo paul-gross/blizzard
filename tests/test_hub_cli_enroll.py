@@ -34,7 +34,11 @@ def test_enroll_posts_to_the_enrollments_endpoint_and_prints_the_token(monkeypat
         calls.append(url)
         return _FakeResponse(201, {"runner_id": "runner-a", "token": "sekrit-token"})
 
+    def fake_get(url: str, *, timeout: float, **_: object) -> _FakeResponse:
+        return _FakeResponse(200, {"runner_id": "runner-a", "runner_name": "runner-a"})
+
     monkeypatch.setattr(httpx, "post", fake_post)
+    monkeypatch.setattr(httpx, "get", fake_get)
     result = CliRunner().invoke(
         hub_group, ["runner", "enroll", "runner-a"], env={"BZ_HUB_URL": "http://hub.local:8421"}
     )
@@ -46,10 +50,10 @@ def test_enroll_posts_to_the_enrollments_endpoint_and_prints_the_token(monkeypat
 
 @pytest.mark.unit
 def test_enroll_maps_an_unknown_runner(monkeypatch: pytest.MonkeyPatch) -> None:
-    def fake_post(url: str, *, timeout: float) -> _FakeResponse:
+    def fake_get(url: str, *, timeout: float, **_: object) -> _FakeResponse:
         return _FakeResponse(404)
 
-    monkeypatch.setattr(httpx, "post", fake_post)
+    monkeypatch.setattr(httpx, "get", fake_get)
     result = CliRunner().invoke(hub_group, ["runner", "enroll", "ghost"])
 
     assert result.exit_code != 0

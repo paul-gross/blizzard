@@ -20,9 +20,9 @@ from pathlib import Path
 import httpx
 
 from blizzard.runner.config import RunnerConfig
-from blizzard.runner.runtime import init_environment as init_runner_environment
 from blizzard.wire.work_source import WorkSourceDocument
 from tests.harness_sections import claude_code, opencode, sections
+from tests.host_files import init_runner_environment, load_runner_config, sampler_without_credentials, write_host_file
 from tests.runner_join import join_runner, runner_spawn_env
 from tests.support import (
     create_repositories,
@@ -878,13 +878,13 @@ def write_runner_config(
         ),
         # Unset on purpose: the external-usage sampler's first soft-failure check (a
         # missing credentials file) trips before any request is built.
-        external_usage_credentials_path=str(runner_dir / "no-such-credentials.json"),
+        subscriptions=sampler_without_credentials(runner_dir),
         base_branch="main",
         # `start_runner` sets `ENV_HARNESS_FENCE` in the daemon subprocess's own env; it
         # reaches a worker only because it is declared here.
         worker_env_passthrough=(ENV_HARNESS_FENCE,),
     )
-    config.config_path.write_text(config.to_toml())
+    write_host_file(config)
     return config
 
 
@@ -894,7 +894,7 @@ def start_runner(
     """Start (or restart) the runner daemon; arm ``crash_point`` for a runner-side point."""
     runner_bin = str(Path(sys.executable).parent / "blizzard-runner")
     env = runner_spawn_env(
-        RunnerConfig.load(runner_dir).hub_url,
+        load_runner_config(runner_dir).hub_url,
         {"BZ_RUNNER_TICK_SECONDS": TICK_SECONDS, ENV_HARNESS_FENCE: "1", **(extra_env or {})},
     )
     _apply_crash_env(env, crash_point)

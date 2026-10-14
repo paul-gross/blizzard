@@ -7,7 +7,6 @@ runner that had registered before tenants, seeded with literal SQL at that revis
 
 from __future__ import annotations
 
-import dataclasses
 from pathlib import Path
 
 import pytest
@@ -18,7 +17,6 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import HubConfig
 from blizzard.hub.runtime import Migrations
-from blizzard.runner.config import RunnerConfig
 from blizzard.runner.hub.internal.http_hub import HttpHubClient
 from tests.support import build_hub
 from tests.test_carried_config_round_trip import _AT, _BEFORE_TENANTS, _NOW, _SEED
@@ -45,15 +43,6 @@ def _carried_store(root: Path) -> None:
         engine.dispose()
 
 
-def _carried_config(root: Path, hub_url: str) -> RunnerConfig:
-    """The runner's configuration as written before projects: no ``projects`` key at all."""
-    root.mkdir(parents=True)
-    config = dataclasses.replace(RunnerConfig.scaffold(root, hub_url=hub_url), projects=None)
-    config.config_path.write_text(config.to_toml())
-    assert "\nprojects =" not in config.config_path.read_text()
-    return RunnerConfig.load(root)
-
-
 def test_a_carried_runner_naming_no_projects_keeps_serving_default(tmp_path: Path) -> None:
     _carried_store(tmp_path / "hub")
     hub = build_hub(tmp_path / "hub")
@@ -63,11 +52,9 @@ def test_a_carried_runner_naming_no_projects_keeps_serving_default(tmp_path: Pat
     enrolled = hub.client.post(f"/api/runners/{_RUNNER_ID}/enrollments")
     assert enrolled.status_code == 201, enrolled.text
     bearer = {"Authorization": f"Bearer {enrolled.json()['token']}"}
-    config = _carried_config(tmp_path / "runner", str(hub.client.base_url))
-    assert config.projects is None
 
     with TestClient(hub.app, headers=bearer) as fleet:
-        reply = HttpHubClient(fleet).register_runner(config.name, "ws-carried", projects=config.projects)
+        reply = HttpHubClient(fleet).register_runner("r-carried", "ws-carried", projects=None)
 
     assert reply.runner_id == _RUNNER_ID
     assert reply.projects is not None

@@ -83,7 +83,7 @@ def _b_row(table: sa.Table, row: dict[str, Any]) -> dict[str, Any]:
     copied: dict[str, Any] = {}
     for column in table.columns:
         value = row[column.name]
-        if column.primary_key and column.name in {"id", "seq"}:
+        if column.primary_key and column.name == "id":
             continue
         if column.name == "runner_id":
             value = RUNNER_B

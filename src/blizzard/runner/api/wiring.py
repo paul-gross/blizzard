@@ -244,15 +244,14 @@ class RunnerWiring:
         return getattr(self.state, "host_read_stores", None)
 
     def require_bound(self) -> None:
-        """Refuse with a ``503`` naming the cause while the store is bound to no runner: a route that writes
-        runner-scoped rows has no runner to write them for until registration first adopts the hub-minted id. An app
-        wired without a binding checks nothing."""
+        """Refuse with a ``503`` when the store is bound to no runner. The host binds each store to its configured
+        id before it serves, so this only guards an app wired with a binding that was never bound; an app wired
+        without a binding checks nothing."""
         binding: IRunnerBinding | None = getattr(self.state, "binding", None)
         if binding is not None and binding.runner_id is None:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="runner not registered yet — its store binds to the hub-minted id at the first registration;"
-                " retry once the runner has registered with the hub",
+                detail="runner store is bound to no runner id — the host binds it from its configured id at startup",
             )
 
     @staticmethod

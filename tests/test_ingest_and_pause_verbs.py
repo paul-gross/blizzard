@@ -13,7 +13,6 @@ import threading
 import time
 from collections.abc import Iterator
 from contextlib import contextmanager
-from datetime import UTC, datetime
 from pathlib import Path
 
 import httpx
@@ -27,10 +26,9 @@ from blizzard.hub.cli import hub as hub_group
 from blizzard.runner.app import build_hosted_app
 from blizzard.runner.cli import runner as runner_group
 from blizzard.runner.cli.daemon import RunnerDaemon
-from blizzard.runner.config import RunnerConfig
-from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.listeners import Listeners, Uds
-from tests.runner_fakes import FIXTURE_RUNNER_ID, SqlAlchemyRunnerStore, runner_store_errors
+from tests.host_files import load_runner_config
+from tests.runner_fakes import SqlAlchemyRunnerStore, runner_store_errors
 from tests.runner_init_fakes import init_runner
 
 
@@ -576,19 +574,18 @@ def test_chunk_delete_maps_an_unknown_chunk(monkeypatch: pytest.MonkeyPatch) -> 
 
 def _store(root: Path) -> SqlAlchemyRunnerStore:
     """Read the runner's own store back to assert the fact the verb landed."""
-    return SqlAlchemyRunnerStore(create_engine_from_url(RunnerConfig.load(root).db_url), runner_store_errors())
+    config = load_runner_config(root)
+    return SqlAlchemyRunnerStore(
+        create_engine_from_url(config.db_url), runner_store_errors(), runner_id=config.runner_id
+    )
 
 
 def _init_runner(tmp_path: Path) -> Path:
-    """An initialized runner that has registered — the local API writes only a bound store."""
+    """An initialized runner — init joined it to the hub, so the host file names its id and its store holds its
+    identity row, and the local API writes a store bound to it."""
     root = tmp_path / "runner"
     result = init_runner().invoke(runner_group, ["init", str(root)])
     assert result.exit_code == 0, result.output
-    _store(root).record_runner_identity(
-        RunnerIdentity(
-            runner_id=FIXTURE_RUNNER_ID, runner_name="runner-local", registered_at=datetime(2026, 7, 16, tzinfo=UTC)
-        )
-    )
     return root
 
 
@@ -599,7 +596,7 @@ def _serve_local_api(root: Path) -> Iterator[tuple[Path, str]]:
     Driven against a real server, since the socket itself is what has to work; TCP binds
     on an ephemeral port so a test never collides with a daemon on the box.
     """
-    config = RunnerConfig.load(root, port=0)
+    config = load_runner_config(root, port=0)
     # Pin the SSO auth-mode probe to a none-mode (unreachable) hub so the
     # human-lane gating resolves to the authless path these hub-free tests assume.
     config = dataclasses.replace(config, hub_url="http://127.0.0.1:1")

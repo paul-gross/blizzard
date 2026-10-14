@@ -22,6 +22,7 @@ from blizzard.runner.config import RunnerConfig
 from blizzard.runner.leases.model import NewLease
 from tests import claude_code_telemetry
 from tests.e2e.test_acceptance_loop import _await_http, _free_port, _runner_config
+from tests.host_files import write_host_file
 from tests.otlp_sink import OtlpSink, otlp_sink
 from tests.runner_fakes import make_store
 from tests.runner_join import runner_spawn_env
@@ -111,7 +112,7 @@ def test_a_runner_host_delivers_server_spans_over_tcp_and_the_socket_and_tick_sp
     with mock_hub(bin_dir, hub_port), otlp_sink() as sink:
         config: RunnerConfig = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
         config = dataclasses.replace(config, tracing=TracingConfig(platform=True, platform_sample_ratio=1.0))
-        config.config_path.write_text(config.to_toml())
+        write_host_file(config)
         env = runner_spawn_env(
             config.hub_url,
             {
@@ -174,7 +175,7 @@ def test_a_worker_span_posted_over_tcp_and_the_socket_reaches_the_real_exporter(
     with mock_hub(bin_dir, hub_port), otlp_sink() as sink:
         config: RunnerConfig = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
         config = dataclasses.replace(config, tracing=TracingConfig(platform=True, platform_sample_ratio=1.0))
-        config.config_path.write_text(config.to_toml())
+        write_host_file(config)
         env = runner_spawn_env(
             config.hub_url, {"BLIZZARD_MOCK_HARNESS_FENCE": "1", "OTEL_EXPORTER_OTLP_ENDPOINT": sink.url}
         )
@@ -194,8 +195,7 @@ def test_a_worker_span_posted_over_tcp_and_the_socket_reaches_the_real_exporter(
         try:
             _await_http(proc, tcp, "/api/health", log=log)
             assert poll_until(lambda: '"tick end"' in read_daemon_log(log), timeout=30.0)
-            store = make_store(config.db_url, runner_id=None)
-            store.connections.bind_to_stored()
+            store = make_store(config.db_url, runner_id=config.runner_id)
             now = datetime.now(UTC)
             store.record_lease(
                 NewLease(
@@ -230,7 +230,7 @@ def test_claude_code_metrics_and_logs_posted_over_tcp_and_the_socket_reach_the_r
         config: RunnerConfig = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
         tracing = TracingConfig(platform=True, platform_sample_ratio=1.0, harness_telemetry=True)
         config = dataclasses.replace(config, tracing=tracing)
-        config.config_path.write_text(config.to_toml())
+        write_host_file(config)
         env = runner_spawn_env(
             config.hub_url, {"BLIZZARD_MOCK_HARNESS_FENCE": "1", "OTEL_EXPORTER_OTLP_ENDPOINT": sink.url}
         )
@@ -249,8 +249,7 @@ def test_claude_code_metrics_and_logs_posted_over_tcp_and_the_socket_reach_the_r
         try:
             _await_http(proc, tcp, "/api/health", log=log)
             assert poll_until(lambda: '"tick end"' in read_daemon_log(log), timeout=30.0)
-            store = make_store(config.db_url, runner_id=None)
-            store.connections.bind_to_stored()
+            store = make_store(config.db_url, runner_id=config.runner_id)
             # The first tick registered: the identity every forwarded item is stamped with.
             identity = store.runner_identity()
             assert identity is not None, read_daemon_log(log)

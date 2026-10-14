@@ -31,6 +31,7 @@ from blizzard.runner.node_steps.submissions import ApplyReply
 from blizzard.runner.runtime import migration_runner
 from blizzard.runner.subscriptions.subscription_sampler import SampleMiss
 from tests.runner_fakes import (
+    FIXTURE_RUNNER_ID,
     FakeCheckRunner,
     FakeHarness,
     FakeHub,
@@ -325,7 +326,7 @@ def test_the_external_usage_sample_runs_after_fill_has_claimed(tmp_path) -> None
         harness=harness,
         probe=FakeProbe(alive={(_HANDLE.pid, _HANDLE.process_start_time)}),
         clock=FixedClock(_NOW),
-        config=LoopConfig(runner_name="r1", workspace_id="ws1", max_agents=1),
+        config=LoopConfig(runner_name="r1", workspace_id="ws1", runner_id=FIXTURE_RUNNER_ID, max_agents=1),
         subscriptions=(resolved,),
     )
 

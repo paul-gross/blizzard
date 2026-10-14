@@ -22,6 +22,7 @@ from blizzard.runner.loop.context import LoopConfig
 from blizzard.runner.loop.steps import CompleteHeldBindings, Fill
 from blizzard.runner.node_steps.chunk_state import ChunkState
 from tests.runner_fakes import (
+    FIXTURE_RUNNER_ID,
     FakeHarness,
     FakeHub,
     FakeProbe,
@@ -51,7 +52,7 @@ def _ctx(store, hub, *, pool: dict[str, str] | None = None, max_agents: int = 1)
         provider=FakeProvider(pool if pool is not None else {"e1": "/ws/e1", "e2": "/ws/e2"}),
         harness=FakeHarness(handle=_HANDLE, verdict="pass"),
         probe=FakeProbe(),
-        config=LoopConfig(runner_name="r1", workspace_id="ws1", max_agents=max_agents),
+        config=LoopConfig(runner_name="r1", workspace_id="ws1", runner_id=FIXTURE_RUNNER_ID, max_agents=max_agents),
     )
     # The tick's own memoizing cache, so a test sees the hub calls one tick makes.
     return dataclasses.replace(ctx, chunk_views=MemoizingChunkViewCache(ctx.hub))

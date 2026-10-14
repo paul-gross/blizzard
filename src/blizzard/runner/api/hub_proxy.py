@@ -44,9 +44,8 @@ def _unverified(verdict: IdentityVerdict) -> str:
     """Why the proxy forwards nothing: the runner's token is unverified, or names another runner."""
     if verdict.state is IdentityState.MISMATCHED:
         return (
-            f"runner_identity_mismatch: this runner's token belongs to runner {verdict.token_runner_id}, but its "
-            f"store belongs to runner {verdict.store_runner_id}; restore the right token, or clear the store with "
-            f"`{verdict.reset_command}`"
+            f"runner_identity_mismatch: this runner's token belongs to runner {verdict.token_runner_id}, but the "
+            f"configured runner is {verdict.store_runner_id}; {verdict.reset_command}"
         )
     return "runner_identity_unverified: this runner has not yet verified its token with the hub"
 
@@ -124,7 +123,7 @@ class HubProxy:
 
         While the loop has not checked the runner's identity, the forward first asks the hub which runner
         its token belongs to, through this same forward — so a hub that does not answer fails it exactly
-        as an outage fails any read. A token not verified to name the store's runner answers ``503`` with
+        as an outage fails any read. A token not verified to name the configured runner answers ``503`` with
         the reason, forwarding nothing.
 
         A ``GET`` retries a transport error or a ``502``/``503``/``504`` with bounded backoff,
@@ -194,7 +193,7 @@ class HubProxy:
             raise HTTPException(status_code=upstream.status_code, detail=self._detail(upstream))
 
     def _verify_identity(self, timeout: float | None) -> None:
-        """Return once the token is verified to name the store's runner; raise ``503`` with the reason
+        """Return once the token is verified to name the configured runner; raise ``503`` with the reason
         when it is not, or the forward's own failure when the hub does not answer the identity read."""
         if self.identity is None:
             return

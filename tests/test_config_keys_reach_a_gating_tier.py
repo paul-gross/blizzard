@@ -27,6 +27,10 @@ _NON_GATING = {"e2e", "journey", "crash", "service"}
 _CONFIGS = (
     ("runner/config", "RunnerConfig"),
     ("runner/config", "SubscriptionDeclaration"),
+    ("runner/host_config", "HostConfig"),
+    ("runner/host_config", "HostWorkspace"),
+    ("runner/config", "ProjectBinding"),
+    ("runner/host_config", "RunnerEntry"),
     ("hub/config", "HubConfig"),
     ("hub/domain/config/legacy_keys", "LegacyKeys"),
     ("hub/domain/config/legacy_keys", "WorkSourceConfig"),
