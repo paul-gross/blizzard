@@ -135,6 +135,47 @@ describe('LocalInfoView', () => {
     );
   });
 
+  it('names the reason and the remedy while the hub refuses its token', async () => {
+    const { el } = await render({
+      verdict: {
+        state: 'refused',
+        store_runner_id: 'rn_store',
+        token_runner_id: null,
+        checked_at: '2026-07-16T11:59:45.000Z',
+        reason: 'the hub refuses this runner\'s token (revoked)',
+        reset_command: 'set BZ_HUB_TOKEN_RUNNER_LOCAL to a fresh token of runner rn_store',
+      },
+    });
+
+    const row = el.querySelector('[data-testid="runner-verdict"]')!;
+    expect(row.textContent).toContain('REFUSED');
+    expect(row.querySelector('[data-testid="verdict-reason"]')?.textContent).toBe("the hub refuses this runner's token (revoked)");
+    expect(row.querySelector('[data-testid="verdict-reset"]')?.textContent).toBe(
+      'set BZ_HUB_TOKEN_RUNNER_LOCAL to a fresh token of runner rn_store',
+    );
+  });
+
+  it.each([
+    ['not_held', 'not held under this host (hs_1) at its hub'],
+    ['tenant_differs', 'stands in tenant tn_a, not the host\'s tenant tn_b'],
+  ] as const)('reads halted with its reason and no remedy when %s', async (state, reason) => {
+    const { el } = await render({
+      verdict: {
+        state,
+        store_runner_id: 'rn_store',
+        token_runner_id: 'rn_store',
+        checked_at: '2026-07-16T11:59:45.000Z',
+        reason,
+        reset_command: '',
+      },
+    });
+
+    const row = el.querySelector('[data-testid="runner-verdict"]')!;
+    expect(row.textContent).toContain('HALTED');
+    expect(row.querySelector('[data-testid="verdict-reason"]')?.textContent).toBe(reason);
+    expect(row.querySelector('[data-testid="verdict-reset"]')).toBeNull();
+  });
+
   it('reads verified once its token resolves to its own runner, and leaves the row out with no verdict', async () => {
     const matched = await render({
       verdict: {

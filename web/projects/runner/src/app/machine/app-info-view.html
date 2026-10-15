@@ -9,7 +9,8 @@
   }
 </ng-template>
 <!-- Whether the token resolves to the runner the host file configures; a refusing runner names both ids
-     and the remedy that restores it. -->
+     and the remedy that restores it, a refused token its reason and remedy, and a runner its host's hub
+     halts the reason it is halted. -->
 <ng-template #verdictValue>
   @if (view().identity; as verdict) {
     @switch (verdict.state) {
@@ -18,6 +19,19 @@
         <span class="rid" data-testid="verdict-token">{{ verdict.token_runner_id }}</span>, the configured runner is
         <span class="rid" data-testid="verdict-store">{{ verdict.store_runner_id }}</span> —
         <span data-testid="verdict-reset">{{ verdict.reset_command }}</span>
+      }
+      @case ('refused') {
+        <span class="link down">REFUSED</span> the hub refuses this runner's token —
+        <span data-testid="verdict-reason">{{ verdict.reason }}</span> —
+        <span data-testid="verdict-reset">{{ verdict.reset_command }}</span>
+      }
+      @case ('not_held') {
+        <span class="link down">HALTED</span> not held by its host —
+        <span data-testid="verdict-reason">{{ verdict.reason }}</span>
+      }
+      @case ('tenant_differs') {
+        <span class="link down">HALTED</span> tenant differs from its host's —
+        <span data-testid="verdict-reason">{{ verdict.reason }}</span>
       }
       @case ('matched') {
         <span class="link up">VERIFIED</span>

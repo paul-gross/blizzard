@@ -1,0 +1,21 @@
+<div class="wrap" data-testid="host-registration">
+  <fleet-kit-async-state
+    [state]="triadState()"
+    loadingText="LOADING…"
+    errorText="REGISTRATION UNAVAILABLE"
+    emptyText="NO REGISTRATION"
+    emptyTestid="host-registration-empty"
+  >
+    @if (summary(); as s) {
+      <div class="head" [attr.data-state]="s.state">
+        <fleet-kit-badge [tone]="s.tone" variant="pill" data-testid="host-registration-state">{{ s.label }}</fleet-kit-badge>
+        @if (s.answeredAt; as at) {
+          <span class="answered" data-testid="host-registration-answered">answered <fleet-when [iso]="at" [relative]="true" /></span>
+        }
+      </div>
+      @for (line of s.lines; track $index) {
+        <div class="line" data-testid="host-registration-line">{{ line }}</div>
+      }
+    }
+  </fleet-kit-async-state>
+</div>

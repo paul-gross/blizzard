@@ -2,7 +2,13 @@ import { computed, type Signal } from '@angular/core';
 import { injectQuery } from '@tanstack/angular-query-experimental';
 import { RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS, runnerApi } from 'fleet';
 
-import { hostEnvironmentsKey, hostRunnersKey, hostSubscriptionsKey, hostWorkspacesKey } from '../core/query-keys';
+import {
+  hostEnvironmentsKey,
+  hostRegistrationKey,
+  hostRunnersKey,
+  hostSubscriptionsKey,
+  hostWorkspacesKey,
+} from '../core/query-keys';
 
 /**
  * The host's reads — `GET /api/host/*`, at the host's root and through the generated
@@ -61,6 +67,20 @@ export function injectHostSubscriptionsQuery() {
       const { data, error } = await runnerApi.listSubscriptionsApiHostSubscriptionsGet({ throwOnError: false });
       if (error) throw error;
       return data?.items ?? [];
+    },
+    refetchInterval: RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS,
+  }));
+}
+
+/** `GET /api/host/registration` — the host's registration at its hub, as its latest
+ * report found it. */
+export function injectHostRegistrationQuery() {
+  return injectQuery(() => ({
+    queryKey: hostRegistrationKey,
+    queryFn: async (): Promise<runnerApi.HostRegistrationView> => {
+      const { data, error } = await runnerApi.hostRegistrationApiHostRegistrationGet({ throwOnError: false });
+      if (error) throw error;
+      return data!;
     },
     refetchInterval: RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS,
   }));

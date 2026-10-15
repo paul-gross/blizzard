@@ -14,7 +14,8 @@ export interface HostRunnerRow {
   /** One line per binding: its project, workspace, and agent ceiling there. */
   readonly bindings: readonly string[];
   readonly haltedReasons: readonly string[];
-  /** The runner's board, `null` where there is no runner to open — halted, or no id. */
+  /** The runner's board, `null` where there is no runner to open — not served, or no id. A
+   * runner its hub halts is still served, so it keeps its link. */
   readonly boardLink: readonly string[] | null;
 }
 
@@ -31,6 +32,7 @@ export function brakeLabel(pause: runnerApi.PauseStateView | null | undefined): 
 export function hostRunnerRows(runners: readonly runnerApi.HostRunnerView[]): readonly HostRunnerRow[] {
   return runners.map((runner) => {
     const serving = runner.state === 'serving';
+    const served = runner.served ?? serving;
     return {
       runnerId: runner.runner_id,
       name: runner.name,
@@ -41,7 +43,7 @@ export function hostRunnerRows(runners: readonly runnerApi.HostRunnerView[]): re
         (binding) => `${binding.project} · ${binding.workspace_id} · ${binding.agents} agents`,
       ),
       haltedReasons: serving ? [] : (runner.halted_reasons ?? []),
-      boardLink: serving && runner.runner_id !== null ? ['/runners', runner.runner_id, 'board'] : null,
+      boardLink: served && runner.runner_id !== null ? ['/runners', runner.runner_id, 'board'] : null,
     };
   });
 }

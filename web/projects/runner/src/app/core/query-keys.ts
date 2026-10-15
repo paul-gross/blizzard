@@ -18,6 +18,8 @@ export const hostWorkspacesKey = [...hostKey, 'workspaces'] as const;
 export const hostEnvironmentsKey = [...hostKey, 'environments'] as const;
 /** `GET /api/host/subscriptions` — the host's subscriptions and who spends them. */
 export const hostSubscriptionsKey = [...hostKey, 'subscriptions'] as const;
+/** `GET /api/host/registration` — the host's registration at its hub. */
+export const hostRegistrationKey = [...hostKey, 'registration'] as const;
 
 /** `GET /api/auth/session` — whether the surface is gated, and the signed-in hub
  * username, behind the panel's username/logout control. The host's session, kept out of
