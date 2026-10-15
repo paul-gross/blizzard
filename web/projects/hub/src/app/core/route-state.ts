@@ -9,6 +9,14 @@ import { filter, map } from 'rxjs';
  * than a service, so a component reaches them the way it reaches a query.
  */
 
+/** The value of `name` in this route's own params, as a signal — `null` while the route carries no such param. */
+export function injectRouteParam(name: string): Signal<string | null> {
+  const route = inject(ActivatedRoute);
+  return toSignal(route.paramMap.pipe(map((params) => params.get(name))), {
+    initialValue: route.snapshot.paramMap.get(name),
+  });
+}
+
 /**
  * The value of `name` on this route's currently activated child, as a signal —
  * `null` whenever the active child declares no such param.
