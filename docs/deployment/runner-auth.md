@@ -168,13 +168,45 @@ retire, revoke-token and enroll, and each runner row on it carries release. Rele
 for confirmation first. A retire the hub refuses shows the refusal and asks again before forcing it. Enroll shows the
 new token once.
 
+### A registered host
+
+A host that holds a host token is **registered**; one that holds none is unchanged, runs one runner, and that runner
+reports itself as it always has. A registered host:
+
+- **Reports itself on every host tick.** It posts its first `public_url`, the panel's sign-in callback URIs, each
+  workspace with the environments it holds, and the `[[subscription]]` roster it declares to `POST /api/fleet/host`,
+  and its runners stop sending a roster of their own. It reports once before any runner ticks, so a runner the hub has
+  released from the host never claims across a restart while the hub answers; a report that fails or times out starts
+  the runners anyway.
+- **Records who it is from the hub's first answer.** The host id and tenant land once in the store's `host_identity`
+  row and are never edited. A later answer naming another host or tenant is a refusal of the host's token, not an
+  update: the runners keep working, the host's facts stay buffered, and the panel shows the refusal.
+- **Drains its own fact lane.** Its subscription usage samples and misses ride the host's lane, `host_outbound_buffer`,
+  to `POST /api/fleet/host/events`, never a runner's lane, and leave only while the latest report was answered with the
+  host's own identity. Against a hub from before hosts, which answers the host routes `404`, the runners keep working
+  and the facts wait in the buffer.
+- **Runs several runners.** The host file may hold more than one `[[runner]]`, each with its own token; without a host
+  token, a second `[[runner]]` is a host error.
+- **Halts a runner its hub does not hold.** From each answered report, the host judges every runner: held under the
+  host, not held, or standing in another tenant than the host's. A runner not held, or in another tenant, halts alone —
+  it drives no lease and delivers nothing, its hub proxy answers `503`, and the others keep working — and resumes within
+  a host tick of the hub holding it again. A hub that has not answered, refuses the host's token, or predates hosts
+  never halts a runner this way.
+
+`GET /api/host/registration` reads where the host stands — `unregistered`, `pending` until its first report,
+`registered` with its host id and tenant, `refused`, `no_hosts`, or `unreachable` — with the facts waiting on its lane.
+The host page of the panel shows it. A served runner its hub halts is listed by `GET /api/host/runners` as `halted`,
+naming why, and its own views still read.
+
 ## A token that names another runner
 
 At the head of every tick the runner asks the hub which runner its token belongs to (`GET /api/fleet/identity`) and
 compares the answer with the runner its host file configures, the `[[runner]] id` the store is bound to. When they
 differ — a wrong token, or a `hub_url` pointing at another hub — the runner refuses to drive its leases or deliver its
-buffered facts, and checks again on the next tick, so putting things right resumes it with nothing lost. A hub that
-cannot be reached, or that refuses the token, leaves the verdict as it stood: an outage never reads as a mismatch.
+buffered facts, and checks again on the next tick, so putting things right resumes it with nothing lost. A token the hub
+refuses — unknown, revoked, or its runner retired — is a refusal of its own, shown as `REFUSING:` with the hub's reason
+and checked again each tick the same way. A hub that cannot be reached leaves the verdict as it stood: an outage never
+reads as a mismatch.
 
 The runner logs the refusal once, at warning severity, naming both runner ids and what restores it, and
 `blizzard runner status` shows it:
