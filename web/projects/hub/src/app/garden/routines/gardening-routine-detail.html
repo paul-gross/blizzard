@@ -5,7 +5,9 @@
   [canEdit]="canEdit()"
   [actionError]="lifecycleActionError()"
   [lifecyclePending]="lifecyclePending()"
+  [editPending]="editPending()"
   (run)="run()"
+  (editGraph)="onEditGraph($event)"
   (retire)="onRetireRoutine($event)"
   (enable)="onEnableRoutine($event)"
 />

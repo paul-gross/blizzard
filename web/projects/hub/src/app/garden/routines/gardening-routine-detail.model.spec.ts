@@ -10,6 +10,7 @@ import {
   proposalCountsRows,
   relatedScopeRows,
   routineByName,
+  routineGraphEdit,
   routineEffectiveGraph,
   routineOverrideRetired,
   routinePanelState,
@@ -382,5 +383,17 @@ describe('routineRecentRuns', () => {
     expect(routineRunsLabel(routineRecentRuns(runs, 'nightly'), 'last 28 days')).toBe('2 in the last 28 days');
     expect(routineRunsLabel([], 'last 28 days')).toBe('0 in the last 28 days');
     expect(routineRunsLabel(null, 'last 28 days')).toBeNull();
+  });
+});
+
+describe('routineGraphEdit', () => {
+  it('sets the trimmed graph onto the routine', () => {
+    expect(routineGraphEdit(ROUTINE, '  garden-delta  ')).toEqual({ routineId: 'rtn_1', graphName: 'garden-delta' });
+  });
+
+  it('is null with no routine, on a blank graph, or on the graph the routine already runs', () => {
+    expect(routineGraphEdit(null, 'garden-delta')).toBeNull();
+    expect(routineGraphEdit(ROUTINE, '   ')).toBeNull();
+    expect(routineGraphEdit(ROUTINE, ' garden-routine ')).toBeNull();
   });
 });

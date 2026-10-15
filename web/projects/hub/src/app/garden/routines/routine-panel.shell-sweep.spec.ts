@@ -246,7 +246,7 @@ describe('gardening routine panel lifecycle controls shell sweep (web:shell-swee
 });
 
 describe('gardening routine detail header shell sweep (web:shell-sweep)', () => {
-  it.each([1280, 390])('holds the name, project chip, Run… and Retire, all on screen, at %ipx', async (width) => {
+  it.each([1280, 390])('holds the name, project chip, Run…, Edit and Retire, all on screen, at %ipx', async (width) => {
     const fixture = await render(VM, true);
     const root = fixture.nativeElement as HTMLElement;
     document.body.appendChild(root);
@@ -261,6 +261,7 @@ describe('gardening routine detail header shell sweep (web:shell-sweep)', () => 
         record.querySelector('h3'),
         record.querySelector('[data-testid="gardening-routine-panel-project"]'),
         record.querySelector('[data-testid="gardening-routine-run"]'),
+        record.querySelector('[data-testid="gardening-routine-panel-edit"]'),
         record.querySelector('[data-testid="gardening-routine-panel-retire"]'),
       ];
       for (const part of parts) {
@@ -272,6 +273,14 @@ describe('gardening routine detail header shell sweep (web:shell-sweep)', () => 
         for (const part of parts) expect(Math.abs(part!.getBoundingClientRect().top - top)).toBeLessThan(12);
       }
       expect(record.scrollWidth).toBeLessThanOrEqual(record.clientWidth);
+
+      record.querySelector<HTMLButtonElement>('[data-testid="gardening-routine-panel-edit"]')!.click();
+      await fixture.whenStable();
+      const editor = root.querySelector<HTMLElement>('[data-testid="gardening-routine-panel-graph-input"]');
+      expect(editor, `the graph editor did not open at ${width}px`).not.toBeNull();
+      expect(editor!.getBoundingClientRect().right).toBeLessThanOrEqual(width);
+      const facts = root.querySelector<HTMLElement>('[data-testid="gardening-routine-record-facts"]')!;
+      expect(facts.scrollWidth, `the open editor overflows at ${width}px`).toBeLessThanOrEqual(facts.clientWidth);
 
       const recent = root.querySelector<HTMLElement>('[data-testid="gardening-routine-recent-runs"]')!;
       expect(recent.querySelectorAll('li')).toHaveLength(2);

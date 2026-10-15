@@ -11,6 +11,7 @@ import {
   restingAsyncState,
 } from 'fleet';
 import { effectiveGraphByName } from './gardening-effective-graph';
+import type { RoutineEditVars } from './routine-edit.mutations';
 import type { RoutineLifecycleVars } from './routine-lifecycle.mutations';
 import type {
   LastSweptRowVm,
@@ -49,6 +50,14 @@ export function routineOverrideRetired(
   if (routine === null) return null;
   const vars = pending.find((v) => v.routineId === routine.routine_id);
   return vars ? vars.retired : null;
+}
+
+/** The edit setting `routine`'s graph to `graphName`, trimmed — `null` with no routine, on a blank name, or on the
+ * graph it already runs, so nothing is sent that would change nothing. */
+export function routineGraphEdit(routine: RoutineView | null, graphName: string): RoutineEditVars | null {
+  const trimmed = graphName.trim();
+  if (routine === null || trimmed === '' || trimmed === routine.graph_name) return null;
+  return { routineId: routine.routine_id, graphName: trimmed };
 }
 
 /** The read-only strategy steps of the routine's effective graph, in node order. */

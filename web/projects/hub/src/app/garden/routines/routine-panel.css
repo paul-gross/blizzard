@@ -60,7 +60,18 @@ fleet-kit-panel {
 }
 .rp-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
+}
+/* The graph editor, in place of the Graph fact's value. */
+.rp-edit {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.rp-edit-input {
+  flex: 1;
+  min-width: 0;
 }
 .rp-dim {
   color: var(--label);

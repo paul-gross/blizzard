@@ -259,6 +259,7 @@ export {
   resumeChunkApiChunksChunkIdResumePost,
   resumeRunnerApiRunnersRunnerIdResumePost,
   retireGraphApiGraphsGraphIdRetirePost,
+  editRoutineApiRoutinesRoutineIdPatch,
   retireRoutineApiRoutinesRoutineIdRetirePost,
   routineBaselinesApiRoutinesRoutineIdBaselinesGet,
   routineProposalCountsApiRoutinesProposalCountsGet,

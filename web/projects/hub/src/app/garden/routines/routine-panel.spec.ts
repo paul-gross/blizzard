@@ -46,6 +46,7 @@ describe('FleetRoutinePanel', () => {
     canEdit?: boolean;
     actionError?: string | null;
     lifecyclePending?: boolean;
+    editPending?: boolean;
   }) {
     await TestBed.configureTestingModule({
       imports: [FleetRoutinePanel],
@@ -59,6 +60,7 @@ describe('FleetRoutinePanel', () => {
     fixture.componentRef.setInput('canEdit', inputs.canEdit ?? false);
     fixture.componentRef.setInput('actionError', inputs.actionError ?? null);
     fixture.componentRef.setInput('lifecyclePending', inputs.lifecyclePending ?? false);
+    fixture.componentRef.setInput('editPending', inputs.editPending ?? false);
     await fixture.whenStable();
     return fixture;
   }
@@ -432,5 +434,52 @@ describe('FleetRoutinePanel', () => {
     expect(el.querySelector('[data-testid="gardening-routine-panel-state"]')?.textContent).toContain('retired');
     expect(el.querySelector('[data-testid="gardening-routine-panel-retire"]')).toBeTruthy();
     expect(el.querySelector('[data-testid="gardening-routine-panel-enable"]')).toBeNull();
+  });
+
+  it('shows Edit in the header only for an identity with graph:edit', async () => {
+    const fixture = await mount({});
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('[data-testid="gardening-routine-panel-edit"]')).toBeNull();
+
+    fixture.componentRef.setInput('canEdit', true);
+    await fixture.whenStable();
+    expect(el.querySelector('[data-testid="gardening-routine-record"] [data-testid="gardening-routine-panel-edit"]')).toBeTruthy();
+  });
+
+  it('opens the graph in place, emits the typed graph, and closes once the new graph reads back', async () => {
+    const fixture = await mount({ canEdit: true });
+    const el = fixture.nativeElement as HTMLElement;
+    let emitted: string | null = null;
+    fixture.componentInstance.editGraph.subscribe((g) => (emitted = g));
+    expect(el.querySelector('[data-testid="gardening-routine-panel-graph-input"]')).toBeNull();
+
+    el.querySelector<HTMLButtonElement>('[data-testid="gardening-routine-panel-edit"]')!.click();
+    await fixture.whenStable();
+    const input = el.querySelector<HTMLInputElement>('[data-testid="gardening-routine-panel-graph-input"]')!;
+    expect(input.value).toBe('garden-routine');
+    input.value = 'garden-delta';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    el.querySelector<HTMLButtonElement>('[data-testid="gardening-routine-panel-graph-submit"]')!.click();
+
+    expect(emitted).toBe('garden-delta');
+    await fixture.whenStable();
+    expect(el.querySelector('[data-testid="gardening-routine-panel-graph-input"]'), 'open until it reads back').toBeTruthy();
+
+    fixture.componentRef.setInput('vm', { ...VM, record: { ...VM.record, graphName: 'garden-delta' } });
+    await fixture.whenStable();
+    expect(el.querySelector('[data-testid="gardening-routine-panel-graph-input"]')).toBeNull();
+  });
+
+  it('closes the editor on Cancel, and disables Set while the edit is pending', async () => {
+    const fixture = await mount({ canEdit: true, editPending: true });
+    const el = fixture.nativeElement as HTMLElement;
+
+    el.querySelector<HTMLButtonElement>('[data-testid="gardening-routine-panel-edit"]')!.click();
+    await fixture.whenStable();
+    expect(el.querySelector<HTMLButtonElement>('[data-testid="gardening-routine-panel-graph-submit"]')?.disabled).toBe(true);
+
+    el.querySelector<HTMLButtonElement>('[data-testid="gardening-routine-panel-graph-cancel"]')!.click();
+    await fixture.whenStable();
+    expect(el.querySelector('[data-testid="gardening-routine-panel-graph-input"]')).toBeNull();
   });
 });

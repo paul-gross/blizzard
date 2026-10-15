@@ -12,12 +12,12 @@ import {
   KitFactList,
   KitPanel,
   KitProseBlock,
+  KitTextInput,
 } from 'fleet';
 
 import { lifecycleTone } from '../../core/lifecycle-tone';
 
-/** The routine's own record — read-only: this panel ships no New/Edit
- * affordance. `RoutineView` also carries `routine_id`/`created_at`, neither
+/** The routine's own record — its graph alone is editable here. `RoutineView` also carries `routine_id`/`created_at`, neither
  * displayed here — identity is the list's own compact ref (`RoutineListRowVm`),
  * and `created_at` earns no row of its own on this record. */
 export interface RoutineRecordVm {
@@ -115,7 +115,7 @@ export interface RoutinePanelVm {
  * The gardening routine panel's single-routine detail, as three stacked
  * `fleet-kit-panel`s (blizzard-product:/delivered/garden/user-interface.md §Declaring
  * and running a routine): **Routine** — what the routine *is*: a header holding its
- * name, project chip and lifecycle with Run… and Retire at the right, its record as a
+ * name, project chip and lifecycle with Run…, Edit and Retire at the right, its record as a
  * fact list, and its recent runs in the runs window; **Activity** — what it *has done*, the inflow/outflow trend,
  * measurements, and last-swept table, all runtime observations rather than routine
  * definition; and **Strategy** — the effective graph's read-only prompts.
@@ -134,13 +134,16 @@ export interface RoutinePanelVm {
  * definition, so the Strategy panel reads the same whether or not a run is currently
  * offered.
  *
+ * Edit opens the graph in place; Set emits the new graph name, and the editor closes
+ * once the new graph reads back — `FleetScopePanel`'s own description editor.
+ *
  * Retire/enable confirm before emitting — `FleetScopePanel`'s own confirm-then-emit
  * pattern.
  */
 @Component({
   selector: 'app-routine-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitAsyncState, FleetWhen, KitBadge, KitButton, KitConfirmDialog, KitFactList, KitPanel, KitProseBlock],
+  imports: [KitAsyncState, FleetWhen, KitBadge, KitButton, KitConfirmDialog, KitFactList, KitPanel, KitProseBlock, KitTextInput],
   templateUrl: './routine-panel.html',
   styleUrl: './routine-panel.css',
 })
@@ -151,12 +154,12 @@ export class FleetRoutinePanel {
   /** The project the routine belongs to, shown beside its name; `null` until read. */
   readonly project = input<string | null>(null);
 
-  /** Whether the current identity may retire/enable this routine (`graph:edit`) —
-   * withholds the lifecycle controls when `false`, `FleetScopePanel.canEdit`'s own
+  /** Whether the current identity may edit or retire/enable this routine (`graph:edit`) —
+   * withholds Edit and the lifecycle controls when `false`, `FleetScopePanel.canEdit`'s own
    * shape. */
   readonly canEdit = input(false);
 
-  /** Set on a failed retire/enable; rendered beside the controls that raise it. */
+  /** Set on a failed edit/retire/enable; rendered beside the controls that raise it. */
   readonly actionError = input<string | null>(null);
 
   /** Whether the retire/enable mutation is in flight — disables both Re-enable and
@@ -164,7 +167,11 @@ export class FleetRoutinePanel {
    * state. */
   readonly lifecyclePending = input(false);
 
+  /** Whether the graph edit is in flight — disables the Set button. */
+  readonly editPending = input(false);
+
   readonly run = output<void>();
+  readonly editGraph = output<string>();
   readonly retire = output<string>();
   readonly enable = output<string>();
 
@@ -178,6 +185,35 @@ export class FleetRoutinePanel {
     readonly variant: 'primary' | 'danger';
     readonly run: () => void;
   } | null>(null);
+
+  /** The routine whose graph is open for editing, with the graph it opened on, and the draft typed so far — `null`
+   * while none is. Keyed by name so a pick of another routine never carries an open editor across, and by the graph
+   * so a saved edit, reading back a new one, closes the editor while a failed one leaves it open beside its error. */
+  private readonly editing = signal<{ readonly name: string; readonly original: string; readonly value: string } | null>(
+    null,
+  );
+
+  protected isEditing(panel: RoutinePanelVm): boolean {
+    const editing = this.editing();
+    return editing?.name === panel.record.name && editing.original === panel.record.graphName;
+  }
+
+  protected startEditing(panel: RoutinePanelVm): void {
+    const { name, graphName } = panel.record;
+    this.editing.set({ name, original: graphName, value: graphName });
+  }
+
+  protected stopEditing(): void {
+    this.editing.set(null);
+  }
+
+  protected graphDraft(panel: RoutinePanelVm): string {
+    return this.isEditing(panel) ? (this.editing()?.value ?? panel.record.graphName) : panel.record.graphName;
+  }
+
+  protected updateGraphDraft(panel: RoutinePanelVm, value: string): void {
+    this.editing.set({ name: panel.record.name, original: panel.record.graphName, value });
+  }
 
   /** The record as an aligned fact grid (`fleet-kit-fact-list`, `KitFact`'s own
    * shape) — a method, not a stored computed, since it depends on the selected

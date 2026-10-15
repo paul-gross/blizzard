@@ -401,4 +401,28 @@ describe('GardeningRoutineDetail', () => {
       'unknown routine rtn_1',
     );
   });
+
+  it('submits an edited graph through PATCH /api/routines/{id}', async () => {
+    const fixture = await render({ me: OPERATOR_ME_RESPONSE, params: { routineName: 'nightly' } });
+    const el = fixture.nativeElement as HTMLElement;
+
+    el.querySelector<HTMLButtonElement>('[data-testid="gardening-routine-panel-edit"]')!.click();
+    await fixture.whenStable();
+    const input = el.querySelector<HTMLInputElement>('[data-testid="gardening-routine-panel-graph-input"]')!;
+    input.value = 'garden-delta';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    el.querySelector<HTMLButtonElement>('[data-testid="gardening-routine-panel-graph-submit"]')?.click();
+    await settle(fixture);
+
+    const calls = stub.forRoute('/api/routines/rtn_1', 'PATCH');
+    expect(calls).toHaveLength(1);
+    expect(calls[0].body).toEqual({ graph_name: 'garden-delta' });
+  });
+
+  it('withholds Edit from an identity without graph:edit', async () => {
+    const fixture = await render({ params: { routineName: 'nightly' } });
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="gardening-routine-panel-edit"]')).toBeNull();
+  });
 });
