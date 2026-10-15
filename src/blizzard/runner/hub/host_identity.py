@@ -1,10 +1,9 @@
 """The host's identity at its hub — the hub-minted ``hs_`` id and the tenant its first answered report named.
 
-A host is registered when it holds a host token; the identity is what the hub answered for that token. It is recorded
-once, from the first answered report, in the store's single ``host_identity`` row, and never edited after: a later
-answer naming another host or tenant is a refusal of the host's credential, not an update. Every consumer reads the
-process holder (:class:`ICurrentHostIdentity`), seeded from the row at boot and handed the identity once the row is
-written."""
+A host is registered when it holds a host token; the identity is what the hub answered for that token, recorded once in
+the store's single ``host_identity`` row and never edited: a later answer naming another host or tenant refuses the
+host's credential rather than updating it. Consumers read the process holder (:class:`ICurrentHostIdentity`), seeded
+from the row at boot."""
 
 from __future__ import annotations
 
