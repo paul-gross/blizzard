@@ -439,14 +439,18 @@ def _escalation_closure_reason(config: RunnerConfig, chunk_id: str) -> str | Non
 
 def test_a_real_runners_registration_carries_every_declared_subscription(tmp_path: Path) -> None:
     """The mock hub's view lists every slug the real runner declared, including one whose
-    provider binds no sampler."""
+    provider binds no sampler — the roster a runner standing under no host sends itself, so it is seeded standalone
+    rather than joined by an init that registers a host."""
     bin_dir = require_mock_fleet()
     workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
     fenced = _tick_env()
+    root = tmp_path / "runner"
+    standalone = pin_runner(root, runner_id="rn_01JX0000000000000000000ROST", name="runner-local")
 
     hub_port = _free_port()
     with mock_hub(bin_dir, hub_port) as hub:
-        config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+        seed_pinned_runner(hub, standalone)
+        config = _runner_config(root, workspace, bin_dir, hub_port, join=False)
         config = dataclasses.replace(
             config, subscriptions=(SubscriptionDeclaration(slug="probe", name="Probe", provider="none-such"),)
         )
