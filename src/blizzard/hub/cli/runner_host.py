@@ -80,7 +80,7 @@ class HostDetail:
 
 def _token_lines(token: str) -> tuple[str, str]:
     """A freshly minted host bearer token, printed once as the line a host's ``.env`` takes."""
-    return "bearer token, shown only once — put this line in the host's .env:", f"BZ_HUB_TOKEN={token}"
+    return "bearer token, shown only once — put this line in the host's .env:", f"BZ_HOST_TOKEN={token}"
 
 
 @click.group("runner-host")

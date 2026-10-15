@@ -127,9 +127,9 @@ when the runner holds no token. The runner is refused until `enroll` mints a new
 A host is the machine a set of runners lives on, recorded in the tenant that added it. It has its own id — `hs_`
 followed by a ULID — a name, and its own bearer token, separate from every runner's.
 `blizzard hub runner-host add <name>` mints the id and token together and prints both once, the token as a
-`BZ_HUB_TOKEN=<token>` line; there is no read-back. A host reads its token as `BZ_HOST_TOKEN`, from the process
-environment, the host file's `host_token` key, or the host directory's `.env`, so rename the printed variable when you
-store it. The group is `runner-host` because `blizzard hub host` launches the host daemon. Host names are unique among a
+`BZ_HOST_TOKEN=<token>` line; there is no read-back. A host reads its token as `BZ_HOST_TOKEN`, from the process
+environment, the host file's `host_token` key, or the host directory's `.env`, so the printed line goes into the host
+directory's `.env` as it is. The group is `runner-host` because `blizzard hub host` launches the host daemon. Host names are unique among a
 tenant's live hosts, and a taken name refuses the add.
 
 The host token reaches only the host's own routes, under `/api/fleet/host`: reporting the machine's workspace, reading
@@ -154,7 +154,7 @@ registration answer, never refused; the hub offers the runner no work through a 
 flagged subscription.
 
 `runner-host revoke-token <host_id>` revokes the host's token and leaves the host recorded; `enroll <host_id>` mints a
-new one and records the token it replaces as revoked. A revoked hash stays dead, as for a runner.
+new one, printed once as a `BZ_HOST_TOKEN=<token>` line, and records the token it replaces as revoked. A revoked hash stays dead, as for a runner.
 `runner-host retire
 <host_id>` revokes the token and retires the host, then retires each of its runners; it refuses
 while a runner still holds routes unless `--force` is given, and `--by` records who retired it. Between the host's
