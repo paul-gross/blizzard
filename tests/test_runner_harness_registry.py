@@ -258,22 +258,22 @@ def test_production_registry_defaults_to_claude_code_with_both_enabled(
 @pytest.mark.unit
 def test_production_health_probes_omit_a_disabled_harness(tmp_path: Path) -> None:
     base = RunnerConfig(root=tmp_path, db_url="sqlite://")
-    assert list(build_production_harness_health_probes(base.harness_settings, spawn_root="")) == [
+    assert list(build_production_harness_health_probes(base.harness_settings, spawn_roots=("",))) == [
         CLAUDE_CODE_HARNESS_ID,
         OPENCODE_HARNESS_ID,
     ]
     no_claude = with_claude_code(RunnerConfig(root=tmp_path, db_url="sqlite://"), enabled=False)
-    assert list(build_production_harness_health_probes(no_claude.harness_settings, spawn_root="")) == [
+    assert list(build_production_harness_health_probes(no_claude.harness_settings, spawn_roots=("",))) == [
         OPENCODE_HARNESS_ID
     ]
     no_opencode = with_opencode(RunnerConfig(root=tmp_path, db_url="sqlite://"), enabled=False)
-    assert list(build_production_harness_health_probes(no_opencode.harness_settings, spawn_root="")) == [
+    assert list(build_production_harness_health_probes(no_opencode.harness_settings, spawn_roots=("",))) == [
         CLAUDE_CODE_HARNESS_ID
     ]
 
 
 def _probe_auth_path(config: RunnerConfig) -> Path | None:
-    probe = build_production_harness_health_probes(config.harness_settings, spawn_root="")[OPENCODE_HARNESS_ID]
+    probe = build_production_harness_health_probes(config.harness_settings, spawn_roots=("",))[OPENCODE_HARNESS_ID]
     assert isinstance(probe, OpenCodeHealthProbe)
     return vars(probe)["_auth_path"]
 

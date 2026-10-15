@@ -60,7 +60,7 @@ def _seed_running_lease(store, *, node_id="nd_build", node_name="build"):  # typ
         session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
         spawned_at=_NOW,
     )
-    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
 
 
 @pytest.mark.unit
@@ -90,7 +90,7 @@ def test_runner_config_gate_buffers_a_decision_not_a_completion(tmp_path):  # ty
         harness=harness,
         probe=FakeProbe(),  # worker exited
         worktree_git=wt,
-        config=LoopConfig(runner_name="r1", workspace_id="ws1", runner_id=FIXTURE_RUNNER_ID, gates=("build",)),
+        config=LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID, gates=("build",)),
     )
 
     Advance(ctx).run()  # gated -> the declared commit is verified, a decision is buffered, no verdict elicited
@@ -137,7 +137,7 @@ def test_gated_node_decision_elicited_exactly_once_while_flush_pending(tmp_path)
         harness=FakeHarness(handle=_HANDLE, verdict="pass"),
         probe=FakeProbe(),
         worktree_git=wt,
-        config=LoopConfig(runner_name="r1", workspace_id="ws1", runner_id=FIXTURE_RUNNER_ID, gates=("build",)),
+        config=LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID, gates=("build",)),
     )
 
     Advance(ctx).run()
@@ -154,7 +154,7 @@ def test_resolved_gate_is_advanced_by_the_resolving_transition(tmp_path):  # typ
     transition and continues in place from the returned envelope."""
     store = _store(tmp_path)
     # A chunk parked at a gate: envs bound, no active lease.
-    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
     hub = FakeHub()
     hub.chunks["ch_1"] = ChunkState(
         chunk_id="ch_1",
@@ -196,7 +196,7 @@ def test_resolved_gate_is_advanced_by_the_resolving_transition(tmp_path):  # typ
 def test_unresolved_gate_keeps_waiting(tmp_path):  # type: ignore[no-untyped-def]
     """A parked chunk whose decision is not yet resolved advances nothing."""
     store = _store(tmp_path)
-    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
     hub = FakeHub()
     hub.chunks["ch_1"] = ChunkState(
         chunk_id="ch_1",
@@ -233,7 +233,7 @@ def test_fill_leaves_a_resolved_gate_to_advance(tmp_path):  # type: ignore[no-un
     recovers, so it must skip and leave the resolving transition to ADVANCE."""
     store = _store(tmp_path)
     # A chunk parked at a gate the human just resolved: env bound, no active lease, RUNNING.
-    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
     hub = FakeHub()
     hub.chunks["ch_1"] = ChunkState(
         chunk_id="ch_1",
@@ -298,7 +298,7 @@ def _gate_parked_chunk(*, status, route_runner_id, resolved_choice):  # type: ig
 def test_a_detached_gate_park_releases_its_envs_and_submits_nothing(tmp_path, status, resolved_choice):  # type: ignore[no-untyped-def]
     """A detach keeps the decision but drops the route: the park has nothing left to resolve here."""
     store = _store(tmp_path)
-    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
     hub = FakeHub()
     hub.chunks["ch_1"] = _gate_parked_chunk(status=status, route_runner_id=None, resolved_choice=resolved_choice)
     provider = FakeProvider({"e1": "/ws/e1"})
@@ -316,7 +316,7 @@ def test_a_detached_gate_park_releases_its_envs_and_submits_nothing(tmp_path, st
 @pytest.mark.unit
 def test_a_gate_park_reassigned_to_another_runner_releases_its_envs(tmp_path):  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
-    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
     hub = FakeHub()
     hub.chunks["ch_1"] = _gate_parked_chunk(
         status=ChunkStatus.WAITING_ON_HUMAN, route_runner_id="r_other", resolved_choice=None
@@ -334,7 +334,7 @@ def test_a_gate_park_reassigned_to_another_runner_releases_its_envs(tmp_path):  
 @pytest.mark.unit
 def test_a_stopped_gate_park_with_its_decision_present_releases_its_envs(tmp_path):  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
-    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
     hub = FakeHub()
     hub.chunks["ch_1"] = _gate_parked_chunk(status=ChunkStatus.STOPPED, route_runner_id="r1", resolved_choice="approve")
     provider = FakeProvider({"e1": "/ws/e1"})

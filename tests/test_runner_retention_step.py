@@ -31,6 +31,7 @@ from tests.runner_fakes import (
     FakeProvider,
     make_context,
     make_store,
+    serving,
 )
 
 pytestmark = pytest.mark.unit
@@ -70,7 +71,7 @@ def _ctx(store, *, config: LoopConfig | None = None):  # type: ignore[no-untyped
         harness=FakeHarness(handle=_HANDLE, verdict=None),
         probe=FakeProbe(),
         clock=FixedClock(_NOW),
-        config=config or LoopConfig(runner_name="r1", workspace_id="ws1", runner_id=FIXTURE_RUNNER_ID, max_agents=1),
+        config=config or LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID, bindings=serving(1)),
     )
 
 
@@ -173,9 +174,8 @@ def test_retention_sweeps_worker_stdout_and_stderr_past_the_retention_window(tmp
     os.utime(old_stderr, (stale_mtime, stale_mtime))
     config = LoopConfig(
         runner_name="r1",
-        workspace_id="ws1",
         runner_id=FIXTURE_RUNNER_ID,
-        max_agents=1,
+        bindings=serving(1),
         worker_stdout_dir=str(stdout_dir),
     )
     ctx = _ctx(store, config=config)

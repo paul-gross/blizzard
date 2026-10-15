@@ -53,6 +53,7 @@ from tests.runner_fakes import (
     make_context,
     make_envelope,
     make_store,
+    single_workspace,
 )
 
 pytestmark = pytest.mark.component
@@ -74,7 +75,7 @@ def _service(store, *, clock=None, harness=None, probe=None, workspace_root=""):
         tokens=store,
         elicitations=store,
         local_api_url="http://127.0.0.1:8431",
-        workspace_root=workspace_root,
+        workspaces=single_workspace(FakeProvider({}), spawn_root=workspace_root),
         harnesses=HarnessRegistry(
             {CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=harness or FakeHarness(handle=_HANDLE, verdict=None))}
         ),
@@ -121,7 +122,7 @@ def _seed_lease(
         session=SessionReference(CLAUDE_CODE_HARNESS_ID, session),
         spawned_at=_NOW,
     )
-    store.record_binding(chunk_id=chunk, environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    store.record_binding(chunk_id=chunk, environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
 
 
 def _open_scope(store, chunk_id: str = "ch_1") -> TakeoverOpenScope:  # type: ignore[no-untyped-def]
@@ -135,6 +136,7 @@ def _open_scope(store, chunk_id: str = "ch_1") -> TakeoverOpenScope:  # type: ig
         latest_epoch=store.latest_epoch(chunk_id),
         active_parked=_active_in(store, chunk_id, store.parked_lease_ids()),
         submission_pending=_active_in(store, chunk_id, store.pending_submission_lease_ids()),
+        workspace_id=newest.workspace_id if (newest := store.newest_binding_for_chunk(chunk_id)) else None,
     )
 
 
@@ -222,7 +224,7 @@ def test_takeover_after_a_node_entry_escalation_resolves_the_prior_session(tmp_p
         "lease_1", pid=1, process_start_time="t1", session=SessionReference("foreign", "sess-old"), spawned_at=_NOW
     )
     store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="transitioned", closed_at=_NOW)
-    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
 
     default = FakeHarness(handle=_HANDLE, verdict="pass")
     unresolved = HarnessRegistry(
@@ -274,7 +276,7 @@ def test_takeover_after_a_node_entry_escalation_resolves_the_prior_session(tmp_p
         elicitations=store,
         local_api_url="http://127.0.0.1:8431",
         harnesses=resolved,
-        workspace_root="",
+        workspaces=single_workspace(FakeProvider({})),
     )
 
     opened = service.open(_open_scope(store), force=False)
@@ -587,7 +589,7 @@ def test_advance_releases_a_done_held_chunk_under_an_open_takeover(tmp_path) -> 
     store = _store(tmp_path)
     # A gate-parked chunk: a held binding, no active lease (its lease already closed
     # "parked"), and an open takeover over it.
-    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
     store.record_takeover(
         takeover_id="tko_1",
         chunk_id="ch_1",

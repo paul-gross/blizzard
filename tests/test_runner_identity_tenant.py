@@ -32,6 +32,7 @@ from tests.runner_fakes import (
     make_context,
     make_store,
     runner_store_errors,
+    serving,
 )
 
 pytestmark = pytest.mark.component
@@ -117,7 +118,7 @@ def _ctx(store: SqlAlchemyRunnerStore, hub: FakeHub, *, checked: bool = False) -
         harness=FakeHarness(handle=None, verdict=None),  # type: ignore[arg-type]
         probe=FakeProbe(alive=set()),
         clock=FixedClock(_NOW),
-        config=LoopConfig(runner_name="r-claude", workspace_id="ws1", runner_id=_RUNNER, max_agents=1),
+        config=LoopConfig(runner_name="r-claude", runner_id=_RUNNER, bindings=serving(1)),
         registered=False,
         identity_verdict=None if checked else IdentityVerdictHolder("blizzard runner store reset /runner"),
     )

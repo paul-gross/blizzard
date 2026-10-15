@@ -39,6 +39,8 @@ from tests.runner_fakes import (
     make_usage_recorder,
     matched_verdict,
     registered_identity,
+    serving,
+    single_workspace,
 )
 from tests.support import build_hub, pointer_token, report_lease
 
@@ -120,7 +122,9 @@ def test_detach_at_the_real_hub_is_learned_by_a_real_pull_tick(tmp_path: Path) -
         session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
         spawned_at=seed_time,
     )
-    store.record_binding(chunk_id=chunk_id, environment_id="e1", workdir="/ws/e1", bound_at=seed_time)
+    store.record_binding(
+        chunk_id=chunk_id, environment_id="e1", workdir="/ws/e1", bound_at=seed_time, workspace_id="ws1"
+    )
 
     # The operator detaches at the REAL hub endpoint.
     hub.clock.advance(timedelta(seconds=1))
@@ -146,10 +150,10 @@ def test_detach_at_the_real_hub_is_learned_by_a_real_pull_tick(tmp_path: Path) -
         identity_verdict=matched_verdict(),
         hub_token=fixed_hub_token(),
         chunk_views=ReadThroughChunkViews(_hub_client),
-        provider=provider,
+        workspaces=single_workspace(provider),
         process=probe,
         worktree_git=FakeWorktreeGit(),
-        config=LoopConfig(runner_name="r1", workspace_id="ws1", runner_id=FIXTURE_RUNNER_ID, max_agents=1),
+        config=LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID, bindings=serving(1)),
         # The id the hub resolves the fleet client's token to.
         identity=registered_identity("r1", "r1"),
         worker_files=WorkerStdoutFiles("", store),
@@ -161,7 +165,7 @@ def test_detach_at_the_real_hub_is_learned_by_a_real_pull_tick(tmp_path: Path) -
         env_release=EnvironmentRelease(
             environments=store,
             clock=hub.clock,
-            provider=provider,
+            workspaces=single_workspace(provider),
         ),
         harnesses=_harnesses,
     )
@@ -217,7 +221,9 @@ def test_stop_at_the_real_hub_is_learned_by_a_real_pull_tick(tmp_path: Path) -> 
         session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
         spawned_at=seed_time,
     )
-    store.record_binding(chunk_id=chunk_id, environment_id="e1", workdir="/ws/e1", bound_at=seed_time)
+    store.record_binding(
+        chunk_id=chunk_id, environment_id="e1", workdir="/ws/e1", bound_at=seed_time, workspace_id="ws1"
+    )
 
     # The operator stops at the REAL hub endpoint.
     hub.clock.advance(timedelta(seconds=1))
@@ -243,10 +249,10 @@ def test_stop_at_the_real_hub_is_learned_by_a_real_pull_tick(tmp_path: Path) -> 
         identity_verdict=matched_verdict(),
         hub_token=fixed_hub_token(),
         chunk_views=ReadThroughChunkViews(_hub_client),
-        provider=provider,
+        workspaces=single_workspace(provider),
         process=probe,
         worktree_git=FakeWorktreeGit(),
-        config=LoopConfig(runner_name="r1", workspace_id="ws1", runner_id=FIXTURE_RUNNER_ID, max_agents=1),
+        config=LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID, bindings=serving(1)),
         # The id the hub resolves the fleet client's token to.
         identity=registered_identity("r1", "r1"),
         worker_files=WorkerStdoutFiles("", store),
@@ -258,7 +264,7 @@ def test_stop_at_the_real_hub_is_learned_by_a_real_pull_tick(tmp_path: Path) -> 
         env_release=EnvironmentRelease(
             environments=store,
             clock=hub.clock,
-            provider=provider,
+            workspaces=single_workspace(provider),
         ),
         harnesses=_harnesses,
     )

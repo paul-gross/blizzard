@@ -44,12 +44,14 @@ def _host(root: Path, hub: httpx.Client, hub_url: str, *, subscribed: bool) -> I
         port=port,
         hub_url=hub_url,
         runner_id=_RUNNER.runner_id,
-        max_environments=4,
-        bindings=(
-            ProjectBinding("default", config.workspace_id, 2),
-            ProjectBinding("web", config.workspace_id, 1),
+        workspaces=tuple(
+            dataclasses.replace(w, max_environments=4) if w.id == config.home_workspace.id else w
+            for w in config.workspaces
         ),
-        max_agents=3,
+        bindings=(
+            ProjectBinding("default", config.home_workspace.id, 2),
+            ProjectBinding("web", config.home_workspace.id, 1),
+        ),
         subscriptions=sampler_without_credentials(root) if subscribed else (),
     )
     write_host_file(configured)
@@ -101,12 +103,12 @@ def test_the_hub_reads_back_a_runners_bindings_and_subscription_beside_its_regis
             # The named subscription is sampled: its credential-less attempt records a miss.
             assert poll_until(lambda: "anthropic" in _sampled_slugs(config), timeout=30.0)
 
-    assert runner["workspace_id"] == config.workspace_id
+    assert runner["workspace_id"] == config.home_workspace.id
     assert runner["env_capacity"] == 4
     assert [project["entry"] for project in runner["projects"]] == ["default", "web"]
     assert [(b["project"], b["workspace_id"], b["agents"]) for b in runner["bindings"]] == [
-        ("default", config.workspace_id, 2),
-        ("web", config.workspace_id, 1),
+        ("default", config.home_workspace.id, 2),
+        ("web", config.home_workspace.id, 1),
     ]
     assert (runner["subscription"], runner["subscription_unrostered"]) == ("anthropic", False)
     assert [subscription["slug"] for subscription in runner["subscriptions"]] == ["anthropic"], runner

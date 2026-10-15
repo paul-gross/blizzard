@@ -46,6 +46,8 @@ ENV_BASE_BRANCH = "BZ_BASE_BRANCH"
 ENV_GATES = "BZ_RUNNER_GATES"  # comma-separated node names this runner gates
 #: What a freshly scaffolded runner serves: the project every tenant holds from its creation.
 SCAFFOLD_PROJECTS: tuple[str, ...] = ("default",)
+#: The agents each scaffolded binding runs at once.
+SCAFFOLD_AGENTS = 1
 ENV_WORKSPACE_PROMPT = "BZ_WORKSPACE_PROMPT"  # the runner-owned workspace prompt, inline
 ENV_WORKSPACE_PROMPT_PACKAGE = "BZ_WORKSPACE_PROMPT_PACKAGE"  # a packaged workspace-prompt sample, by name (#344)
 ENV_RUNNER_PROMPT = "BZ_RUNNER_PROMPT"  # the blizzard-preamble override, inline
@@ -56,11 +58,10 @@ ENV_ENV_PASSTHROUGH = "BZ_RUNNER_ENV_PASSTHROUGH"  # comma-separated names seede
 # The browser-reachable base URLs this runner answers on, comma-separated.
 ENV_PUBLIC_URL = "BZ_RUNNER_PUBLIC_URL"
 
-# Reconciliation-loop defaults — the runner is machine-level and single-workspace.
+# Reconciliation-loop defaults.
 DEFAULT_HUB_URL = "http://127.0.0.1:8421"  # the hub's default bind (band +2)
 DEFAULT_RUNNER_NAME = "runner-local"
 DEFAULT_WORKSPACE_ID = "workspace-local"
-DEFAULT_MAX_AGENTS = 1
 DEFAULT_BASE_BRANCH = "main"
 # The env var NAMING the secret that signs this runner's session cookie, likewise name-only in the toml.
 DEFAULT_SESSION_SECRET_ENV = "BZ_RUNNER_SESSION_SECRET"
@@ -382,6 +383,89 @@ class Auth:
 
 @domain_model
 @dataclass(frozen=True)
+class HostWorkspace:
+    """One ``[[workspace]]``: a root and the environments it names within it, and its standing prompt — three source
+    knobs, one effective value (:meth:`resolved_prompt`)."""
+
+    id: str
+    root: str = ""
+    provider: str = "winter"
+    envs: tuple[str, ...] = DEFAULT_ENV_POOL
+    max_environments: int = DEFAULT_MAX_ENVIRONMENTS
+    repos: tuple[WorkspaceRepo, ...] = ()
+    base_branch: str = DEFAULT_BASE_BRANCH
+    prompt: str = ""
+    prompt_file: str = ""
+    #: A packaged workspace-prompt sample, by name; exclusive with the two above.
+    prompt_package: str = ""
+
+    def settings(self, host_root: Path) -> WorkspaceSettings:
+        """The provider's inputs, with relative roots resolved against ``host_root``."""
+        path = Path(self.root) if self.root else host_root / "workspace"
+        return WorkspaceSettings(
+            provider=self.provider,
+            root=host_root,
+            workspace_root=self.root,
+            effective_workspace_root=str((path if path.is_absolute() else host_root / path).resolve()),
+            repos=self.repos,
+            max_environments=self.max_environments,
+            base_branch=self.base_branch,
+            env_pool=self.envs,
+        )
+
+    def resolved_prompt(self, host_root: Path) -> str:
+        """The effective static workspace prompt, resolved from its three knobs.
+
+        ``prompt_package`` names a packaged sample and is exclusive with the other two, which keep their
+        file-wins-over-inline precedence; a configured-but-missing sample or file raises, while all three empty is
+        valid and returns ``""``. A relative ``prompt_file`` resolves against ``host_root``."""
+        if self.prompt_package:
+            self._sole_prompt_knob()
+            try:
+                return PACKAGED.text(self.prompt_package)
+            except UnknownWorkspacePromptSample as exc:
+                packaged = ", ".join(PACKAGED.names) or "none"
+                raise ConfigError(
+                    f"workspace {self.id}: prompt_package names no packaged sample: "
+                    f"{self.prompt_package} (packaged: {packaged})"
+                ) from exc
+        if self.prompt_file:
+            path = Path(self.prompt_file)
+            if not path.is_absolute():
+                path = host_root / path
+            if not path.exists():
+                raise ConfigError(f"workspace {self.id}: prompt_file does not exist: {path}")
+            return path.read_text()
+        return self.prompt
+
+    def prompt_source(self) -> str:
+        """Which knob :meth:`resolved_prompt` resolves from, in its precedence."""
+        if self.prompt_package:
+            return f'package "{self.prompt_package}"'
+        if self.prompt_file:
+            return f"file {self.prompt_file}"
+        return "inline prompt" if self.prompt else "none"
+
+    def _sole_prompt_knob(self) -> None:
+        """Reject a named sample set alongside either text knob — the pair has no precedence rule."""
+        conflicts = [name for name, value in (("prompt_file", self.prompt_file), ("prompt", self.prompt)) if value]
+        if conflicts:
+            raise ConfigError(
+                f"workspace {self.id}: prompt_package is exclusive with {', '.join(conflicts)} — set one of them"
+            )
+
+
+def bound_workspaces(
+    declared: tuple[HostWorkspace, ...], bindings: tuple[ProjectBinding, ...] | None
+) -> tuple[HostWorkspace, ...]:
+    """Each of ``declared`` that ``bindings`` name, in binding order; ``declared``'s first when they name none."""
+    by_id = {workspace.id: workspace for workspace in declared}
+    bound = dict.fromkeys(binding.workspace for binding in bindings or () if binding.workspace in by_id)
+    return tuple(by_id[workspace_id] for workspace_id in bound) or declared[:1]
+
+
+@domain_model
+@dataclass(frozen=True)
 class ProjectBinding:
     """One ``[[runner]] projects`` binding: a project, the workspace it runs in, and its agent count."""
 
@@ -405,18 +489,14 @@ class RunnerConfig:
     name: str = DEFAULT_RUNNER_NAME
     #: The hub-minted id the host file's ``[[runner]]`` names; the runner's store binds to it before anything runs.
     runner_id: str | None = None
-    workspace_id: str = DEFAULT_WORKSPACE_ID
     #: The resolved hub bearer token (see :attr:`token_env` for its variable); empty is a valid state.
     hub_token: str = field(default="", repr=False)
     #: Names the env var carrying the session-signing secret; :attr:`session_secret` is the
     #: resolved bytes, empty when the variable is unset.
     session_secret_env: str = DEFAULT_SESSION_SECRET_ENV
     session_secret: bytes = field(default=b"", repr=False)
-    workspace_root: str = ""  # the winter workspace the provider drives; required to FILL
-    workspace_provider: str = "winter"
-    workspace_repos: tuple[WorkspaceRepo, ...] = ()
-    max_environments: int = DEFAULT_MAX_ENVIRONMENTS
-    workspace_envs: tuple[str, ...] = DEFAULT_ENV_POOL  # the provider's static env pool
+    #: Every workspace the host declares, in file order; a config built without a host file holds the default one.
+    workspaces: tuple[HostWorkspace, ...] = (HostWorkspace(DEFAULT_WORKSPACE_ID),)
     #: `[harness] autonomy`, the runner-wide approval posture each harness binding translates.
     autonomy: Autonomy = Autonomy.Dangerous
     #: Where :attr:`autonomy`'s posture comes from: a binding's legacy override, `[harness] autonomy`, or `"default"`.
@@ -425,22 +505,14 @@ class RunnerConfig:
     harness_config_dir: Path | None = None
     #: Every harness binding's own config section, in catalog order.
     harness_sections: HarnessSections = field(default_factory=HarnessSections.defaults)
-    max_agents: int = DEFAULT_MAX_AGENTS
-    base_branch: str = DEFAULT_BASE_BRANCH
     #: Node NAMES this runner imposes a human gate on; reloaded every tick.
     gates: tuple[str, ...] = ()
     #: The projects this runner serves, by id or slug, sent at every registration. ``None`` — no
     #: ``projects`` key — declares nothing, so the hub keeps the declaration it holds; ``()`` — an
     #: explicit ``projects = []`` — serves none.
     projects: tuple[str, ...] | None = None
-    #: The workspace prompt prepended to a worker spawn — two source knobs,
-    #: one effective value (:meth:`resolved_workspace_prompt`); the file wins when set.
-    workspace_prompt: str = ""
-    workspace_prompt_file: str = ""
-    #: A packaged workspace-prompt sample, by name; exclusive with the two above.
-    workspace_prompt_package: str = ""
-    #: The override of the baked-in blizzard preamble, prepended ahead of
-    #: :attr:`workspace_prompt`; empty resolves to the baked default.
+    #: The override of the baked-in blizzard preamble, prepended ahead of the
+    #: workspace prompt; empty resolves to the baked default.
     runner_prompt: str = ""
     runner_prompt_file: str = ""
     #: Where the harness writes session transcripts; read from the toml, never
@@ -567,12 +639,6 @@ class RunnerConfig:
         return HostLayout(self.root).data_dir
 
     @property
-    def effective_workspace_root(self) -> str:  # ast-grep-ignore: bzh:property-delegates
-        """An absolute root shared by the hosted app and loop, independent of their cwd."""
-        path = Path(self.workspace_root) if self.workspace_root else self.root / "workspace"
-        return str((path if path.is_absolute() else self.root / path).resolve())
-
-    @property
     def harness_settings(self) -> HarnessSettings:
         """The runner-wide values every harness binding is built from."""
         return HarnessSettings(
@@ -585,18 +651,16 @@ class RunnerConfig:
         )
 
     @property
-    def workspace_settings(self) -> WorkspaceSettings:
-        """The workspace binding's inputs: provider name, runner root, and declared and effective workspace roots."""
-        return WorkspaceSettings(
-            provider=self.workspace_provider,
-            root=self.root,
-            workspace_root=self.workspace_root,
-            effective_workspace_root=self.effective_workspace_root,
-            repos=self.workspace_repos,
-            max_environments=self.max_environments,
-            base_branch=self.base_branch,
-            env_pool=self.workspace_envs,
-        )
+    def bound_workspaces(self) -> tuple[HostWorkspace, ...]:
+        """Each declared workspace this runner's bindings name, in binding order; the host's first when they name
+        none."""
+        return bound_workspaces(self.workspaces, self.bindings)
+
+    @property
+    def home_workspace(self) -> HostWorkspace:
+        """The workspace this runner is reported and addressed by as such: the first its bindings name, else the
+        host's first."""
+        return self.bound_workspaces[0]
 
     @property
     def socket_path(self) -> Path:
@@ -615,48 +679,10 @@ class RunnerConfig:
         offline build holds — its name."""
         return self.runner_id or self.name
 
-    def resolved_workspace_prompt(self) -> str:
-        """The effective static workspace prompt, resolved from its three knobs.
-
-        ``workspace_prompt_package`` names a packaged sample and is exclusive with the other two,
-        which keep their file-wins-over-inline precedence; a configured-but-missing sample or file
-        raises, while all three empty is valid and returns ``""``."""
-        if self.workspace_prompt_package:
-            self._sole_workspace_prompt_knob()
-            try:
-                return PACKAGED.text(self.workspace_prompt_package)
-            except UnknownWorkspacePromptSample as exc:
-                packaged = ", ".join(PACKAGED.names) or "none"
-                raise ConfigError(
-                    f"workspace_prompt_package names no packaged sample: "
-                    f"{self.workspace_prompt_package} (packaged: {packaged})"
-                ) from exc
-        if self.workspace_prompt_file:
-            path = Path(self.workspace_prompt_file)
-            if not path.is_absolute():
-                path = self.root / path
-            if not path.exists():
-                raise ConfigError(f"workspace_prompt_file does not exist: {path}")
-            return path.read_text()
-        return self.workspace_prompt
-
-    def _sole_workspace_prompt_knob(self) -> None:
-        """Reject a named sample set alongside either text knob — the pair has no precedence rule."""
-        conflicts = [
-            name
-            for name, value in (
-                ("workspace_prompt_file", self.workspace_prompt_file),
-                ("workspace_prompt", self.workspace_prompt),
-            )
-            if value
-        ]
-        if conflicts:
-            raise ConfigError(f"workspace_prompt_package is exclusive with {', '.join(conflicts)} — set one of them")
-
     def resolved_runner_prompt(self) -> str:
         """The effective override for the blizzard preamble, from its two knobs.
 
-        Mirrors :meth:`resolved_workspace_prompt`: the file knob wins when set, and a
+        Mirrors :meth:`HostWorkspace.resolved_prompt`: the file knob wins when set, and a
         configured-but-missing file raises. Both empty returns ``""``, which the preamble
         renderer reads as "use the baked default", never as an absent layer."""
         if self.runner_prompt_file:

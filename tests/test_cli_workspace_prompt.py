@@ -62,9 +62,9 @@ def test_install_forks_the_sample_and_repoints_the_config(tmp_path: Path) -> Non
     assert result.exit_code == 0, result.output
 
     reloaded = load_runner_config(root)
-    assert reloaded.workspace_prompt_file == str(root / WORKSPACE_PROMPT_FILENAME)
-    assert reloaded.workspace_prompt_package == ""
-    assert reloaded.resolved_workspace_prompt() == (root / WORKSPACE_PROMPT_FILENAME).read_text()
+    assert reloaded.home_workspace.prompt_file == str(root / WORKSPACE_PROMPT_FILENAME)
+    assert reloaded.home_workspace.prompt_package == ""
+    assert reloaded.home_workspace.resolved_prompt(reloaded.root) == (root / WORKSPACE_PROMPT_FILENAME).read_text()
     # An operator's comments and tables are not collateral of setting one knob.
     assert "# blizzard host configuration" in (root / "blizzard-host.toml").read_text()
 
@@ -129,8 +129,8 @@ def test_install_into_a_config_predating_the_package_knob_keeps_it_parseable(tmp
     assert result.exit_code == 0, result.output
 
     reloaded = load_runner_config(root)  # would raise TOMLDecodeError on a mangled rewrite
-    assert reloaded.workspace_prompt_file == str(root / WORKSPACE_PROMPT_FILENAME)
-    assert reloaded.workspace_prompt_package == ""
+    assert reloaded.home_workspace.prompt_file == str(root / WORKSPACE_PROMPT_FILENAME)
+    assert reloaded.home_workspace.prompt_package == ""
     keys = [line.split("=", 1)[0].strip() for line in path.read_text().splitlines()]
     # The spliced knob joins its siblings as one contiguous run, not adrift above a table header.
     at = [i for i, key in enumerate(keys) if key in ("prompt", "prompt_file", "prompt_package")]
@@ -145,7 +145,7 @@ def test_a_standing_override_is_what_diff_and_status_report(tmp_path: Path) -> N
     assert _run("install", "winter", "--dir", str(root)).exit_code == 0
     config = load_runner_config(root)
     store = SqlAlchemyRunnerStore(create_engine_from_url(config.db_url), runner_store_errors())
-    store.set_workspace_prompt(config.workspace_id, prompt="AN OVERRIDE", at=datetime(2026, 1, 1, tzinfo=UTC))
+    store.set_workspace_prompt(config.home_workspace.id, prompt="AN OVERRIDE", at=datetime(2026, 1, 1, tzinfo=UTC))
 
     status = _run("status", "--dir", str(root))
     assert status.exit_code == 0, status.output

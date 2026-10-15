@@ -45,9 +45,9 @@ def test_scaffolded_runner_uses_an_ordinary_directory_without_winter(tmp_path: P
     config_file = runtime / "blizzard-host.toml"
     config_file.write_text(config_file.read_text() + f'\n[[workspace.repo]]\nname = "toy"\nurl = "{repo.url}"\n')
     config = load_runner_config(runtime)
-    provider = build_workspace_provider(config.workspace_settings)
+    provider = build_workspace_provider(config.home_workspace.settings(config.root))
 
-    assert config.workspace_provider == "basic"
+    assert config.home_workspace.provider == "basic"
     assert isinstance(provider, BasicWorkspaceProvider)
     acquired = provider.acquire("01JFULLCHUNK", 1, [])
     assert (Path(acquired[0].workdir) / "toy" / "README.md").read_text() == "base\n"

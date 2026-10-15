@@ -18,7 +18,7 @@ from blizzard.runner.harness.usage import UsageSample
 from blizzard.runner.leases.internal.worker_stdout_files import WorkerStdoutFiles
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.usage.recorder import UsageRecorder
-from tests.runner_fakes import FakeHarness, FakeTranscriptSource, make_store
+from tests.runner_fakes import FakeHarness, FakeProvider, FakeTranscriptSource, make_store, single_workspace
 
 pytestmark = pytest.mark.component
 
@@ -109,7 +109,7 @@ def test_envelope_less_fallback_sums_each_harnesss_own_transcript_no_cross_read(
         usage=store,
         clock=FixedClock(_NOW),
         worker_files=WorkerStdoutFiles("", store),  # "" — no envelope ever survives
-        workspace_root="",
+        workspaces=single_workspace(FakeProvider({})),
         harnesses=registry,
         invocation_boundaries=store,
         transcripts_wired=True,  # the lane's on/off switch alone; reads still dispatch per-owner
@@ -156,7 +156,7 @@ def test_envelope_parse_still_records_with_the_transcripts_lane_off(tmp_path) ->
         usage=store,
         clock=FixedClock(_NOW),
         worker_files=WorkerStdoutFiles(str(stdout_dir), store),
-        workspace_root="",
+        workspaces=single_workspace(FakeProvider({})),
         harnesses=registry,
         invocation_boundaries=store,
         transcripts_wired=False,  # the lane is off entirely — not this generation's own envelope
@@ -186,7 +186,7 @@ def test_transcript_fallback_with_no_transcript_source_records_nothing_rather_th
         usage=store,
         clock=FixedClock(_NOW),
         worker_files=WorkerStdoutFiles("", store),  # "" — no envelope ever survives
-        workspace_root="",
+        workspaces=single_workspace(FakeProvider({})),
         harnesses=registry,
         invocation_boundaries=store,
         transcripts_wired=True,  # the lane is ON — the fallback is reached

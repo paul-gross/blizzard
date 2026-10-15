@@ -29,7 +29,6 @@ from blizzard.runner.config import (
     DEFAULT_ENV_POOL,
     DEFAULT_HOST,
     DEFAULT_HUB_URL,
-    DEFAULT_MAX_AGENTS,
     DEFAULT_MAX_ENVIRONMENTS,
     DEFAULT_PORT,
     DEFAULT_RUNNER_NAME,
@@ -48,9 +47,11 @@ from blizzard.runner.config import (
     ENV_WORKSPACE_PROMPT,
     ENV_WORKSPACE_PROMPT_PACKAGE,
     ENV_WORKSPACE_ROOT,
+    SCAFFOLD_AGENTS,
     SCAFFOLD_PROJECTS,
     Auth,
     Context,
+    HostWorkspace,
     ProjectBinding,
     Queue,
     RunnerConfig,
@@ -67,7 +68,6 @@ from blizzard.runner.config import (
 )
 from blizzard.runner.config_table import ConfigError, Table
 from blizzard.runner.environments.factory import WORKSPACE_PROVIDERS
-from blizzard.runner.environments.provider import WorkspaceRepo
 from blizzard.runner.harness.wiring import HarnessSections
 from blizzard.runner.host_layout import (
     DATA_DIRNAME,
@@ -187,23 +187,6 @@ def resolve_token(
 
 @domain_model
 @dataclass(frozen=True)
-class HostWorkspace:
-    """One ``[[workspace]]``: a root and the environments it names within it."""
-
-    id: str
-    root: str = ""
-    provider: str = "winter"
-    envs: tuple[str, ...] = DEFAULT_ENV_POOL
-    max_environments: int = DEFAULT_MAX_ENVIRONMENTS
-    repos: tuple[WorkspaceRepo, ...] = ()
-    base_branch: str = DEFAULT_BASE_BRANCH
-    prompt: str = ""
-    prompt_file: str = ""
-    prompt_package: str = ""
-
-
-@domain_model
-@dataclass(frozen=True)
 class RunnerEntry:
     """One ``[[runner]]`` as authored. ``own`` carries the tables only a runner owns, parsed onto a
     :class:`RunnerConfig` the host's keys are projected over; it is ``None`` when they did not parse."""
@@ -303,8 +286,8 @@ class HostConfig:
             dotenv_text=_dotenv_text(self.root),
         )
 
-    def _problems(self, entry: RunnerEntry) -> tuple[list[str], HostWorkspace | None]:
-        """The runner errors only the host's declarations show, with the one workspace the entry binds."""
+    def _problems(self, entry: RunnerEntry) -> list[str]:
+        """The runner errors only the host's declarations show."""
         errors = list(entry.errors)
         declared = {subscription.slug for subscription in self.subscriptions}
         if entry.subscription is not None and entry.subscription not in declared:
@@ -316,14 +299,10 @@ class HostConfig:
                     f"binds project {binding.project!r} to workspace {binding.workspace!r}, "
                     "which the host does not declare"
                 )
-        bound = list(dict.fromkeys(binding.workspace for binding in entry.bindings))
-        if len(bound) > 1:
-            errors.append(f"binds more than one workspace ({', '.join(bound)}); a runner serves one workspace for now")
-        workspace = workspaces.get(bound[0]) if bound else (self.workspaces[0] if self.workspaces else None)
-        return errors, workspace
+        return errors
 
     def _project(self, entry: RunnerEntry, environ: Mapping[str, str]) -> BuiltRunner | HaltedRunner:
-        errors, workspace = self._problems(entry)
+        errors = self._problems(entry)
         if entry.id is None:
             errors.append("has no id")
         variable = hub_token_variable(entry.name)
@@ -337,7 +316,7 @@ class HostConfig:
             )
         if errors or entry.id is None or entry.own is None:
             return HaltedRunner(entry.name, entry.id, tuple(errors))
-        return BuiltRunner(entry.id, self._config_for(entry, entry.own, workspace, token), token)
+        return BuiltRunner(entry.id, self._config_for(entry, entry.own, token), token)
 
     def _unsuffixed_token_hint(self, variable: str, environ: Mapping[str, str]) -> str:
         """The rename a leftover unsuffixed ``BZ_HUB_TOKEN`` calls for, or nothing when none is held: a pre-host
@@ -360,41 +339,38 @@ class HostConfig:
         """The sole runner's config for an offline verb: projected whether or not it has joined its hub — no id,
         no token — and refused only for the errors its own entry holds."""
         entry = self.sole_runner()
-        errors, workspace = self._problems(entry)
+        errors = self._problems(entry)
         if errors or entry.own is None:
             raise HostConfigError(tuple(f"runner {entry.name}: {error}" for error in errors))
-        return self._config_for(entry, entry.own, workspace, self.token_for(entry, environ))
+        return self._config_for(entry, entry.own, self.token_for(entry, environ))
 
     def _config_for(
         self,
         entry: RunnerEntry,
         own: RunnerConfig,
-        workspace: HostWorkspace | None,
         token: ResolvedToken,
     ) -> RunnerConfig:
         declared = {subscription.slug: subscription for subscription in self.subscriptions}
         chosen = (declared[entry.subscription],) if entry.subscription is not None else ()
         return replace(
-            self._shared(own, workspace),
+            self._shared(own),
             name=entry.name,
             runner_id=entry.id,
             hub_token=token.value,
-            max_agents=sum(binding.agents for binding in entry.bindings),
             projects=tuple(binding.project for binding in entry.bindings),
             bindings=entry.bindings,
             subscriptions=chosen,
         )
 
     def host_view(self) -> RunnerConfig:
-        """The host's own keys on a :class:`RunnerConfig`, naming its first workspace and declaring every
-        subscription — for the pieces a host builds before, or without, any runner: its listeners, tracing and
-        workspace provider."""
+        """The host's own keys on a :class:`RunnerConfig`, declaring every subscription — for the pieces a host
+        builds before, or without, any runner: its listeners, tracing and workspaces."""
         base = RunnerConfig(root=self.root, db_url=self.db_url)
-        view = self._shared(base, self.workspaces[0] if self.workspaces else None)
+        view = self._shared(base)
         return replace(view, subscriptions=self.subscriptions)
 
-    def _shared(self, base: RunnerConfig, workspace: HostWorkspace | None) -> RunnerConfig:
-        """``base`` with the host's keys and ``workspace``'s laid over it."""
+    def _shared(self, base: RunnerConfig) -> RunnerConfig:
+        """``base`` with the host's keys laid over it, its declared workspaces among them."""
         shared = replace(
             base,
             db_url=self.db_url,
@@ -413,22 +389,9 @@ class HostConfig:
             trusted_proxies=self.trusted_proxies,
             worker_stdout_retention_days=self.worker_stdout.retention_days,
             tracing=self.tracing,
+            workspaces=self.workspaces or base.workspaces,
         )
-        if workspace is None:
-            return shared
-        return replace(
-            shared,
-            workspace_id=workspace.id,
-            workspace_root=workspace.root,
-            workspace_provider=workspace.provider,
-            workspace_repos=workspace.repos,
-            max_environments=workspace.max_environments,
-            workspace_envs=workspace.envs,
-            base_branch=workspace.base_branch,
-            workspace_prompt=workspace.prompt,
-            workspace_prompt_file=workspace.prompt_file,
-            workspace_prompt_package=workspace.prompt_package,
-        )
+        return shared
 
     @classmethod
     def load(cls, root: Path, *, host: str | None = None, port: int | None = None) -> HostConfig:
@@ -520,7 +483,7 @@ class HostConfig:
             name=DEFAULT_RUNNER_NAME,
             subscription=SCAFFOLD_SUBSCRIPTION.slug,
             bindings=tuple(
-                ProjectBinding(project, workspace.id, DEFAULT_MAX_AGENTS)
+                ProjectBinding(project, workspace.id, SCAFFOLD_AGENTS)
                 for project in (projects if projects is not None else SCAFFOLD_PROJECTS)
             ),
             own=own,

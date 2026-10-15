@@ -66,7 +66,7 @@ def list_runners(request: Request) -> HostRunnerListResponse:
                 ),
                 bindings=bindings,
                 agents_in_use=summary.capacities.used,
-                max_agents=summary.capacities.max_agents,
+                max_agents=sum(b.agents for b in summary.capacities.bindings),
             )
         )
     items.extend(
@@ -94,7 +94,7 @@ def list_environments(request: Request) -> HostEnvironmentListResponse:
     held: list[tuple[str, str, EnvBinding]] = []
     for served in wiring.runners().served:
         runner = wiring.for_runner(served)
-        home = runner.config().workspace_id
+        home = runner.config().home_workspace.id
         held.extend(
             (served.runner_id, binding.workspace_id or home, binding)
             for binding in runner.read_stores().environments.held_bindings()

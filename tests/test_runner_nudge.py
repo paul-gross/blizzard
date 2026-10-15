@@ -186,7 +186,7 @@ def _seed_exited_lease(
         session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
         spawned_at=_NOW,
     )
-    store.record_binding(chunk_id=chunk_id, environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    store.record_binding(chunk_id=chunk_id, environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
 
 
 @pytest.mark.component

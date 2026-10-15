@@ -43,6 +43,8 @@ from tests.runner_fakes import (
     make_context,
     registered_identity,
     runner_store_errors,
+    serving,
+    single_workspace,
 )
 
 pytestmark = pytest.mark.component
@@ -311,9 +313,8 @@ def _tick_statement_count(
         clock=FixedClock(_NOW),
         config=LoopConfig(
             runner_name="r1",
-            workspace_id="ws1",
             runner_id="rn_1",
-            max_agents=n,
+            bindings=serving(n),
             context_warn_tokens=300_000,
             context_sample_interval_seconds=60,
             transcripts_ship=ship,
@@ -376,10 +377,9 @@ def _status_service(spawn_executor: Executor, store: SqlAlchemyRunnerStore) -> R
         identity=registered_identity("r1"),
         runner_name="r1",
         workspace_id="ws1",
-        max_agents=10,
+        bindings=serving(10),
         hub_url="http://hub",
-        env_pool=(),
-        workspace_root="/ws",
+        workspaces=single_workspace(FakeProvider({}), spawn_root="/ws"),
         harnesses=HarnessRegistry(
             {
                 CLAUDE_CODE_HARNESS_ID: HarnessBinding(

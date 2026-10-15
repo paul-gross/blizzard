@@ -16,9 +16,12 @@ from blizzard.foundation.roles import domain_model
 from blizzard.runner.environments.repository import (
     EnvBinding,
     IReadEnvironmentRepository,
+    OpenLeaseHold,
     group_bindings_by_chunk,
 )
+from blizzard.runner.environments.workspaces import IWorkspaces
 from blizzard.runner.harness.registry import IHarnessLifecycleRegistry, UnavailableHarnessError, UnknownHarnessError
+from blizzard.runner.hub.client import BindingDeclaration
 from blizzard.runner.hub.identity import ICurrentIdentityVerdict, ICurrentRunnerIdentity, IdentityVerdict
 from blizzard.runner.hub.outbound_buffer import IReadOutboundRepository, OutboundFactEntry
 from blizzard.runner.hub.served_projects import (
@@ -30,11 +33,14 @@ from blizzard.runner.leases.asks import IReadAskRepository, OpenAsk
 from blizzard.runner.leases.escalations import IReadEscalationRepository
 from blizzard.runner.leases.record import IReadLeaseRecordRepository
 from blizzard.runner.lifecycle.daemon_liveness import IReadDaemonLivenessRepository
+from blizzard.runner.lifecycle.model import SlotBinding, binding_usage, free_slots, open_lease_count
+from blizzard.runner.lifecycle.routing import RoutingConflict, RoutingMap, routing_map
 from blizzard.runner.lifecycle.takeover import EscalationCommands, IReadTakeoverRepository
 from blizzard.runner.throttle.pause import IReadPauseRepository, RunnerBrakes
 
 __all__ = [
     "HUB_CONTACT_STALENESS_THRESHOLD",
+    "BindingCapacity",
     "Capacities",
     "EnvironmentSlot",
     "EscalationView",
@@ -79,18 +85,51 @@ class PauseState:
 
 @domain_model
 @dataclass(frozen=True)
-class Capacities:
-    """See ``src/blizzard/wire/runner_status.py``'s ``CapacitiesView``."""
+class BindingCapacity:
+    """One binding's agent slots: the entry as declared, the project id it resolved to (``None`` while it routes
+    nothing), its workspace, and its ``agents`` split into ``used`` and ``free``."""
 
-    max_agents: int
+    project: str
+    project_id: str | None
+    workspace_id: str
+    agents: int
     used: int
     free: int
 
+
+@domain_model
+@dataclass(frozen=True)
+class Capacities:
+    """See ``src/blizzard/wire/runner_status.py``'s ``CapacitiesView``."""
+
+    used: int
+    bindings: tuple[BindingCapacity, ...] = ()
+
     @classmethod
-    def of(cls, *, max_agents: int, used: int) -> Capacities:
-        """``used`` of ``max_agents`` slots; ``free`` never reads below zero, even when more
-        leases are active than the configured maximum allows."""
-        return cls(max_agents=max_agents, used=used, free=max(max_agents - used, 0))
+    def of(
+        cls, bindings: Sequence[BindingDeclaration], routing: RoutingMap, holds: Sequence[OpenLeaseHold]
+    ) -> Capacities:
+        """Each binding's slots, counted as FILL counts them; ``free`` never reads below zero, even when more
+        leases count against a binding than its ``agents`` allow."""
+        resolved = [routing.project_id(binding.project) for binding in bindings]
+        used = binding_usage(
+            [SlotBinding(workspace_id=b.workspace_id, project_id=p) for b, p in zip(bindings, resolved, strict=True)],
+            holds,
+        )
+        return cls(
+            used=open_lease_count(holds),
+            bindings=tuple(
+                BindingCapacity(
+                    project=binding.project,
+                    project_id=project_id,
+                    workspace_id=binding.workspace_id,
+                    agents=binding.agents,
+                    used=in_use,
+                    free=free_slots(binding.agents, in_use),
+                )
+                for binding, project_id, in_use in zip(bindings, resolved, used, strict=True)
+            ),
+        )
 
 
 @domain_model
@@ -148,8 +187,10 @@ class RunnerStatusSummary:
     #: answered yet; ``None`` when neither the configuration nor an answer names any.
     served_projects: tuple[ServedProjectStatus, ...] | None = None
     #: Each held binding no workspace has claimed — its workdir matched none the provider lists. It
-    #: keeps its lease and still counts against ``max_agents``.
+    #: keeps its lease and still counts against every binding of the runner.
     unmatched_bindings: tuple[EnvBinding, ...] = ()
+    #: Each project two or more bindings resolve to; while any stands, the runner claims nothing.
+    routing_conflicts: tuple[RoutingConflict, ...] = ()
 
 
 @domain_model
@@ -162,6 +203,8 @@ class EnvironmentSlot:
     environment_id: str
     chunk_id: str | None
     held_since: datetime | None
+    #: The workspace whose pool the environment is in; ``None`` for a held binding that names none.
+    workspace_id: str | None = None
 
     def is_held(self) -> bool:
         """Whether a chunk holds this environment now — the one reading of "held" every
@@ -169,8 +212,10 @@ class EnvironmentSlot:
         return self.chunk_id is not None
 
     @classmethod
-    def pool_view(cls, env_pool: Sequence[str], held_bindings: Sequence[EnvBinding]) -> list[EnvironmentSlot]:
-        """The full configured pool, joined against the held bindings, in pool order.
+    def pool_view(
+        cls, env_pool: Sequence[str], held_bindings: Sequence[EnvBinding], *, workspace_id: str | None = None
+    ) -> list[EnvironmentSlot]:
+        """The full configured pool of ``workspace_id``, joined against the held bindings, in pool order.
 
         A bound environment never silently vanishes: each extra binding on a pool id (``environment_id``
         is not unique) gets its own row after the slot, and a binding off the pool is appended at the end."""
@@ -186,6 +231,7 @@ class EnvironmentSlot:
                     environment_id=env_id,
                     chunk_id=primary.chunk_id if primary else None,
                     held_since=primary.bound_at if primary else None,
+                    workspace_id=workspace_id,
                 )
             )
             slots.extend(cls._held(extra) for extra in bindings[1:])
@@ -197,7 +243,12 @@ class EnvironmentSlot:
 
     @classmethod
     def _held(cls, binding: EnvBinding) -> EnvironmentSlot:
-        return cls(environment_id=binding.environment_id, chunk_id=binding.chunk_id, held_since=binding.bound_at)
+        return cls(
+            environment_id=binding.environment_id,
+            chunk_id=binding.chunk_id,
+            held_since=binding.bound_at,
+            workspace_id=binding.workspace_id,
+        )
 
 
 @domain_model
@@ -258,11 +309,10 @@ class RunnerStatusService:
         projects: tuple[str, ...] | None = None,
         runner_name: str,
         workspace_id: str,
-        max_agents: int,
+        bindings: tuple[BindingDeclaration, ...] = (),
         hub_url: str,
-        env_pool: tuple[str, ...],
         harnesses: IHarnessLifecycleRegistry,
-        workspace_root: str,
+        workspaces: IWorkspaces,
         gates: tuple[str, ...] = (),
         runner_dir: str = "",
         contact_staleness: timedelta = HUB_CONTACT_STALENESS_THRESHOLD,
@@ -275,7 +325,7 @@ class RunnerStatusService:
         self._asks = asks
         self._takeover = takeover
         self._escalations = escalations
-        self._workspace_root = workspace_root
+        self._workspaces = workspaces
         self._clock = clock
         self._harnesses = harnesses
         self._identity = identity
@@ -284,9 +334,8 @@ class RunnerStatusService:
         self._projects = projects
         self._runner_name = runner_name
         self._workspace_id = workspace_id
-        self._max_agents = max_agents
+        self._bindings = bindings
         self._hub_url = hub_url
-        self._env_pool = env_pool
         self._gates = gates
         self._runner_dir = runner_dir
         self._contact_staleness = contact_staleness
@@ -296,12 +345,14 @@ class RunnerStatusService:
         hub_paused = self._pause.hub_paused()
         local_reason = self._pause.local_pause_reason() if local_paused else None
         identity = self._identity.current()
+        answer = self._served_projects.served_projects_answer() if self._served_projects is not None else None
+        routing = routing_map(self._bindings, answer)
         return RunnerStatusSummary(
             runner_id=identity.runner_id if identity is not None else None,
             runner_name=identity.runner_name if identity is not None else self._runner_name,
             workspace_id=self._workspace_id,
             pause=PauseState.of(local=local_paused, hub=hub_paused, local_reason=local_reason),
-            capacities=Capacities.of(max_agents=self._max_agents, used=len(self._lease_record.list_active_leases())),
+            capacities=Capacities.of(self._bindings, routing, self._environments.open_lease_holds()),
             hub=HubConnectivity.of(
                 endpoint=self._hub_url,
                 contact_at=self._pause.hub_contact_at(),
@@ -314,16 +365,32 @@ class RunnerStatusService:
             identity=self._identity_verdict.verdict() if self._identity_verdict is not None else None,
             tenant_id=identity.tenant_id if identity is not None else None,
             tenant_name=identity.tenant_name if identity is not None else None,
-            served_projects=served_projects_status(
-                self._projects,
-                self._served_projects.served_projects_answer() if self._served_projects is not None else None,
-            ),
+            served_projects=served_projects_status(self._projects, answer),
             unmatched_bindings=tuple(b for b in self._environments.held_bindings() if b.workspace_id is None),
+            routing_conflicts=routing.conflicts,
         )
 
     def environments(self) -> list[EnvironmentSlot]:
-        """The full configured pool, joined against the held binding facts: ``EnvironmentSlot.pool_view``."""
-        return EnvironmentSlot.pool_view(self._env_pool, self._environments.held_bindings())
+        """The pool of every workspace the runner binds, in binding order, each joined against this runner's held
+        binding facts (``EnvironmentSlot.pool_view``). A held row naming no workspace joins the first."""
+        held = self._environments.held_bindings()
+        workspace_ids = self._workspaces_bound()
+        slots: list[EnvironmentSlot] = []
+        for position, workspace_id in enumerate(workspace_ids):
+            provider = self._workspaces.provider(workspace_id)
+            pool = provider.pool() if provider is not None else ()
+            own = [
+                b
+                for b in held
+                if b.workspace_id == workspace_id or (position == 0 and b.workspace_id not in workspace_ids)
+            ]
+            slots.extend(EnvironmentSlot.pool_view(pool, own, workspace_id=workspace_id))
+        return slots
+
+    def _workspaces_bound(self) -> tuple[str, ...]:
+        """Each workspace the runner's bindings name, in binding order; else the one it is reported by."""
+        bound = tuple(dict.fromkeys(binding.workspace_id for binding in self._bindings))
+        return bound or (self._workspace_id,)
 
     def open_asks(self) -> list[OpenAsk]:
         return self._asks.open_asks()
@@ -353,14 +420,15 @@ class RunnerStatusService:
                     # The escalation remains visible under its recorded owner, but cannot
                     # offer a command this runner cannot compose. A polled read: no log.
                     harness = None
+            bindings = held_by_chunk.get(escalation.chunk_id, [])
             commands = EscalationCommands.compose(
                 escalation.chunk_id,
                 session=session,
-                bindings=held_by_chunk.get(escalation.chunk_id, []),
+                bindings=bindings,
                 harness=harness,
                 model=escalation.resolved_model,
                 effort=escalation.resolved_effort,
-                workspace_root=self._workspace_root,
+                workspace_root=self._workspaces.spawn_root(bindings[0].workspace_id if bindings else None),
                 runner_dir=self._runner_dir,
             )
             views.append(

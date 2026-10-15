@@ -13,7 +13,9 @@ import pytest
 from fastapi.testclient import TestClient
 
 from blizzard.runner.app import create_app
+from blizzard.runner.composition import build_workspaces
 from blizzard.runner.config import DEFAULT_WORKSPACE_ID, RunnerConfig
+from tests.host_files import one_workspace
 from tests.runner_fakes import make_host_stores, make_store, make_stores
 
 _PROMPT = f"/api/host/workspaces/{DEFAULT_WORKSPACE_ID}/prompt"
@@ -22,9 +24,17 @@ _PROMPT = f"/api/host/workspaces/{DEFAULT_WORKSPACE_ID}/prompt"
 def _app_with_store(tmp_path: Path, *, workspace_prompt: str = ""):  # type: ignore[no-untyped-def]
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     config = RunnerConfig(
-        root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}", workspace_prompt=workspace_prompt
+        root=tmp_path,
+        db_url=f"sqlite:///{tmp_path / 'runner.db'}",
+        workspaces=one_workspace(prompt=workspace_prompt),
     )
-    return create_app(config, runner_stores=make_stores(store), host_stores=make_host_stores(store)), store, config
+    app = create_app(
+        config,
+        runner_stores=make_stores(store),
+        host_stores=make_host_stores(store),
+        workspace_registry=build_workspaces(config.workspaces, tmp_path),
+    )
+    return app, store, config
 
 
 @pytest.mark.component
@@ -44,7 +54,7 @@ def test_put_replaces_override_and_get_reflects_it(tmp_path: Path) -> None:
         assert put.status_code == 200, put.text
         assert put.json() == {"prompt": "REPLACED", "source": "override"}
         # The override is durable in the store (what the loop reads at spawn) and GET reflects it.
-        assert store.workspace_prompt_override(config.workspace_id) == "REPLACED"
+        assert store.workspace_prompt_override(config.home_workspace.id) == "REPLACED"
         assert client.get(_PROMPT).json() == {"prompt": "REPLACED", "source": "override"}
 
 
@@ -55,7 +65,7 @@ def test_put_can_clear_to_table_only(tmp_path: Path) -> None:
     with TestClient(app) as client:
         client.put(_PROMPT, json={"prompt": ""})
         assert client.get(_PROMPT).json() == {"prompt": "", "source": "override"}
-    assert store.workspace_prompt_override(config.workspace_id) == ""
+    assert store.workspace_prompt_override(config.home_workspace.id) == ""
 
 
 @pytest.mark.component
@@ -68,7 +78,7 @@ def test_delete_drops_the_override_and_config_resolves_again(tmp_path: Path) -> 
         assert deleted.status_code == 200, deleted.text
         assert deleted.json() == {"prompt": "STATIC", "source": "config"}
         assert client.get(_PROMPT).json() == {"prompt": "STATIC", "source": "config"}
-    assert store.workspace_prompt_override(config.workspace_id) is None
+    assert store.workspace_prompt_override(config.home_workspace.id) is None
 
 
 @pytest.mark.component
@@ -81,7 +91,11 @@ def test_delete_without_an_override_is_a_no_op(tmp_path: Path) -> None:
 @pytest.mark.component
 def test_put_503_when_store_unwired(tmp_path: Path) -> None:
     """The store-free app (OpenAPI export / unit boot) refuses the write rather than pretend."""
-    config = RunnerConfig(root=tmp_path, db_url="sqlite://", workspace_prompt="STATIC")
+    config = RunnerConfig(
+        root=tmp_path,
+        db_url="sqlite://",
+        workspaces=one_workspace(prompt="STATIC"),
+    )
     with TestClient(create_app(config)) as client:
         resp = client.put(_PROMPT, json={"prompt": "x"})
     assert resp.status_code == 503

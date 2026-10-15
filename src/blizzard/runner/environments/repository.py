@@ -22,6 +22,7 @@ __all__ = [
     "IReadEnvironmentRepository",
     "IWriteEnvironmentRepository",
     "IncompleteBinding",
+    "OpenLeaseHold",
     "binding_completion",
     "group_bindings_by_chunk",
     "releasable_after_refusal",
@@ -78,6 +79,18 @@ class IncompleteBinding:
 
 @domain_model
 @dataclass(frozen=True)
+class OpenLeaseHold:
+    """One open lease's chunk with one binding it holds: the workspace and project that row names. A chunk holding
+    no binding reads once, ``held`` false and both columns ``None``."""
+
+    chunk_id: str
+    held: bool
+    workspace_id: str | None = None
+    project_id: str | None = None
+
+
+@domain_model
+@dataclass(frozen=True)
 class BindingCompletion:
     """What one held row gains: each column is a value to fill, or ``None`` to leave it as it is."""
 
@@ -89,21 +102,26 @@ class BindingCompletion:
 def binding_completion(
     row: IncompleteBinding,
     *,
-    workspace_id: str,
-    listed_workdirs: Mapping[str, str],
+    listed_workdirs: Mapping[str, Mapping[str, str]],
     project_id: str | None,
 ) -> BindingCompletion | None:
     """The completion ``row`` takes, or ``None`` when it gains nothing this time.
 
-    The row takes ``workspace_id`` when its workdir normalizes to one of ``listed_workdirs`` — the
-    workspace root joined with each environment its provider lists — never by environment name
-    alone. It takes ``project_id`` when the hub answered one. A column already set is never
-    overwritten."""
+    ``listed_workdirs`` maps each of the host's workspaces, in declaration order, to the workdirs its provider lists —
+    the workspace root joined with each environment. The row takes the first workspace whose listing holds its
+    workdir, compared normalized — never by environment name alone, since two workspaces on different roots may both
+    name one. It takes ``project_id`` when the hub answered one. A column already set is never overwritten."""
     workspace = None
     if row.workspace_id is None:
         resolved = _resolved(row.workdir)
-        if any(resolved == _resolved(listed) for listed in listed_workdirs.values()):
-            workspace = workspace_id
+        workspace = next(
+            (
+                workspace_id
+                for workspace_id, listed in listed_workdirs.items()
+                if any(resolved == _resolved(workdir) for workdir in listed.values())
+            ),
+            None,
+        )
     project = project_id if row.project_id is None else None
     if workspace is None and project is None:
         return None
@@ -172,6 +190,11 @@ class IReadEnvironmentRepository(Protocol):
         """The chunk's unreleased env bindings (its held environments)."""
         ...
 
+    def newest_binding_for_chunk(self, chunk_id: str) -> EnvBinding | None:
+        """The chunk's most recently recorded binding, released or not — the row a lease's workspace is read from
+        once its environments may already be given back. ``None`` when the chunk was never bound here."""
+        ...
+
     def live_tenure_chunk_ids(self) -> list[str]:
         """Chunks still held by this runner — those with an unreleased binding."""
         ...
@@ -186,6 +209,11 @@ class IReadEnvironmentRepository(Protocol):
     def incomplete_held_bindings(self) -> list[IncompleteBinding]:
         """Every held binding lacking its workspace or its project — one statement, empty once
         every held row is complete."""
+        ...
+
+    def open_lease_holds(self) -> list[OpenLeaseHold]:
+        """Each open lease's chunk with each binding it holds, and once with ``held`` false for a chunk holding
+        none — the input every binding's slot count is derived from."""
         ...
 
 

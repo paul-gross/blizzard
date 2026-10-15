@@ -328,6 +328,47 @@ def test_env_bound_to_two_chunks_is_a_violation(tmp_path: Path) -> None:
     assert "runner:unique-env-binding" in slugs
 
 
+def _bind_held(engine, *rows: tuple[str, str, str | None]) -> None:
+    """Held bindings, each ``(chunk_id, environment_id, workspace_id)``."""
+    with engine.begin() as conn:
+        for chunk_id, environment_id, workspace_id in rows:
+            conn.execute(
+                insert(runner.env_bindings).values(
+                    chunk_id=chunk_id,
+                    environment_id=environment_id,
+                    workdir=f"/{workspace_id}/{environment_id}",
+                    bound_at=_NOW,
+                    workspace_id=workspace_id,
+                )
+            )
+
+
+def _unique_env_violations(engine) -> list[str]:
+    return [v.detail for v in RunnerInvariants(engine).run() if v.invariant == "runner:unique-env-binding"]
+
+
+def test_two_workspaces_holding_environments_of_one_name_is_not_a_violation(tmp_path: Path) -> None:
+    engine = _runner_engine(tmp_path)
+    _bind_held(engine, ("ch_1", "r1", "ws_a"), ("ch_2", "r1", "ws_b"), ("ch_3", "r2", "ws_a"), ("ch_4", "r2", "ws_b"))
+    assert _unique_env_violations(engine) == []
+
+
+def test_one_workspace_environment_held_by_two_chunks_is_a_violation(tmp_path: Path) -> None:
+    engine = _runner_engine(tmp_path)
+    _bind_held(engine, ("ch_1", "r1", "ws_a"), ("ch_2", "r1", "ws_b"), ("ch_3", "r1", "ws_a"))
+    details = _unique_env_violations(engine)
+    assert len(details) == 1
+    assert "ws_a" in details[0] and "ch_1" in details[0] and "ch_3" in details[0]
+
+
+def test_a_held_row_naming_no_workspace_conflicts_with_any_row_on_its_environment(tmp_path: Path) -> None:
+    engine = _runner_engine(tmp_path)
+    _bind_held(engine, ("ch_1", "r1", None), ("ch_2", "r1", "ws_b"), ("ch_3", "r2", None))
+    details = _unique_env_violations(engine)
+    assert len(details) == 1
+    assert "ch_1" in details[0] and "ch_2" in details[0]
+
+
 def test_gapped_outbound_seq_is_a_violation(tmp_path: Path) -> None:
     engine = _runner_engine(tmp_path)
     with engine.begin() as conn:

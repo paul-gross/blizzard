@@ -147,8 +147,10 @@ class HttpHubClient:
     def __init__(self, client: httpx.Client) -> None:
         self._client = client
 
-    def peek_queue(self, capabilities: Sequence[HarnessCapability], *, policy: str) -> list[QueueEntry]:
-        request = QueuePeekRequest(capabilities=[_capability(c) for c in capabilities], policy=policy)
+    def peek_queue(
+        self, capabilities: Sequence[HarnessCapability], *, policy: str, project: str | None = None
+    ) -> list[QueueEntry]:
+        request = QueuePeekRequest(capabilities=[_capability(c) for c in capabilities], policy=policy, project=project)
         resp = self._post(f"{_FLEET_API}/queue/peek", request.model_dump(mode="json"))
         return _queue(QueuePeekResponse.model_validate(resp.json()))
 

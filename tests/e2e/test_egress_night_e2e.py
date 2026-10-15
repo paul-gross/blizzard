@@ -482,9 +482,7 @@ def exported(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Exported]:
     with _forge(bin_dir, origins, forge_port) as forge:
         # -- the night, exported live as NDJSON ---------------------------------------------------------------
         with _hub(hub_dir, forge_port, hub_port, egress=egress(ndjson_dir, "ndjson")) as hub:
-            config = dataclasses.replace(
-                _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port), max_agents=1
-            )
+            config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
             night = Night(hub, forge, hub_url, config, fenced)
             with _runner_api(config):
                 _run_the_night(night, planted)

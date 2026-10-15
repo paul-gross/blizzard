@@ -17,7 +17,14 @@ from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.leases.internal.worker_stdout_files import WorkerStdoutFiles
 from blizzard.runner.leases.model import Lease, NewLease
 from blizzard.runner.usage.recorder import UsageRecorder
-from tests.runner_fakes import FakeHarness, FakeTranscriptSource, SqlAlchemyRunnerStore, make_store
+from tests.runner_fakes import (
+    FakeHarness,
+    FakeProvider,
+    FakeTranscriptSource,
+    SqlAlchemyRunnerStore,
+    make_store,
+    single_workspace,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -81,7 +88,7 @@ def _recorder(
         usage=store,
         clock=FixedClock(_NOW),
         worker_files=WorkerStdoutFiles(str(stdout_dir), store),
-        workspace_root="",
+        workspaces=single_workspace(FakeProvider({})),
         harnesses=registry,
         invocation_boundaries=store,
         transcripts_wired=True,

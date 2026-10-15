@@ -161,10 +161,6 @@ class SpawnConfig(TranscriptPumpConfig, Protocol):
     def runner_prompt(self) -> str: ...
     @property
     def worker_program_tracing(self) -> bool: ...
-    @property
-    def workspace_id(self) -> str: ...
-    @property
-    def workspace_prompt(self) -> str: ...
 
 
 class SpawnContext(TranscriptPumpContext, Protocol):
@@ -200,7 +196,9 @@ class SpawnContext(TranscriptPumpContext, Protocol):
     def sessions(self) -> SessionResolver: ...
     @property
     def tracer(self) -> IPlatformTracer: ...
-    def resolve_boundary_start(self, session: SessionReference, workdir: str | None) -> tuple[str | None, bool]: ...
+    def resolve_boundary_start(
+        self, session: SessionReference, workdir: str | None, workspace_id: str | None
+    ) -> tuple[str | None, bool]: ...
 
 
 @dataclass(frozen=True)
@@ -301,10 +299,12 @@ class Spawner:
         resumed = self.ctx.sessions.resumption(resume_from)
         lease = self._mint(chunk_id, envelope, resume=resumed, harness_id=owner, at=now)
         _CP_AFTER_MINT.reached()
+        workspace_id = self.lease_workspace(chunk_id)
         rendered = self._render(
             chunk_id,
             lease.lease_id,
             environments,
+            workspace_id,
             node_name=envelope.node.node_name,
             resume=resumed,
         )
@@ -313,7 +313,7 @@ class Spawner:
         kind = spawn_boundary_kind(resumed=resume_from is not None)
         if resume_from is not None:
             workdir = environments[0].workdir if environments else None
-            start_position, start_unreadable = self.ctx.resolve_boundary_start(resume_from, workdir)
+            start_position, start_unreadable = self.ctx.resolve_boundary_start(resume_from, workdir, workspace_id)
         else:
             start_position, start_unreadable = None, False
         self.ctx.stores.invocation_boundaries.record_boundary_open(
@@ -334,7 +334,7 @@ class Spawner:
         try:
             pending = harness.spawn(
                 envelope,
-                self._worker_preamble(chunk_id, lease, environments, rendered),
+                self._worker_preamble(chunk_id, lease, environments, rendered, workspace_id),
                 session_hint=str(uuid.uuid4()),
                 resume_from=resume_from.session_id if resume_from is not None else None,
                 model=lease.model,
@@ -398,7 +398,9 @@ class Spawner:
             session=spawned_session,
             identified_at=self.ctx.clock.now(),
             harness_version=version,
-            spawn_cwd=SpawnCwd(self.ctx.config.workspace_root, environments[0].workdir if environments else None).path,
+            spawn_cwd=SpawnCwd(
+                self.ctx.workspaces.spawn_root(workspace_id), environments[0].workdir if environments else None
+            ).path,
         )
         if self.ctx.events is not None:
             # The 'created' mint alone leaves `spawning` -> `running` unannounced.
@@ -420,7 +422,10 @@ class Spawner:
         to resolve right now escalates the chunk in place instead of spawning — an operation on
         an existing recorded session no other runner can resume, so nothing here loops a
         blocked mint forever or substitutes a different harness for it."""
-        spawn_cwd = SpawnCwd(self.ctx.config.workspace_root, environments[0].workdir if environments else None).path
+        spawn_cwd = SpawnCwd(
+            self.ctx.workspaces.spawn_root(self.lease_workspace(chunk_id)),
+            environments[0].workdir if environments else None,
+        ).path
         resume = self.ctx.sessions.resolve_resume(chunk_id, envelope.node, spawn_cwd)
         if resume.owner_unresolvable is not None:
             session, exc = resume.owner_unresolvable
@@ -501,6 +506,12 @@ class Spawner:
                 detail=str(exc),
             )
             return None
+
+    def lease_workspace(self, chunk_id: str) -> str | None:
+        """The workspace the chunk's newest binding names — every spawn-time read of a workspace goes through it;
+        ``None`` when the row names none."""
+        binding = self.ctx.stores.environments.newest_binding_for_chunk(chunk_id)
+        return binding.workspace_id if binding is not None else None
 
     def generation(self, lease_id: str) -> int:
         """The spawn generation this lease's next start is about to mint — one past the
@@ -604,18 +615,23 @@ class Spawner:
         chunk_id: str,
         lease_id: str,
         environments: list[AcquiredEnvironment],
+        workspace_id: str | None,
         *,
         node_name: str,
         resume: ResumedSession | None,
     ) -> Preamble:
-        # The store's runtime override when set, else the static config prompt — read here so a
-        # replace applies to the next spawn with no restart.
-        override = self.ctx.host_stores.workspace_prompt.workspace_prompt_override(self.ctx.config.workspace_id)
+        # The lease's workspace's runtime override when set, else its configured prompt — read here so a
+        # replace applies to the next spawn with no restart. A binding naming no workspace has no prompt.
+        override = (
+            self.ctx.host_stores.workspace_prompt.workspace_prompt_override(workspace_id)
+            if workspace_id is not None
+            else None
+        )
         # `prior` is read ONLY when this spawn resumes a session, so a fresh one can
         # never elide prose it has never seen; nothing recorded reads `None` and renders in full.
         return Preamble.of(
             runner_prompt=self.ctx.config.runner_prompt,
-            workspace_prompt=override if override is not None else self.ctx.config.workspace_prompt,
+            workspace_prompt=override if override is not None else self.ctx.workspaces.prompt(workspace_id),
             environments=environments,
             lease_id=lease_id,
             runner_id=registered_runner_id(self.ctx.identity),
@@ -626,14 +642,19 @@ class Spawner:
         )
 
     def _worker_preamble(
-        self, chunk_id: str, lease: MintedLease, environments: list[AcquiredEnvironment], rendered: Preamble
+        self,
+        chunk_id: str,
+        lease: MintedLease,
+        environments: list[AcquiredEnvironment],
+        rendered: Preamble,
+        workspace_id: str | None,
     ) -> WorkerPreamble:
         generation = self.generation(lease.lease_id)
         return WorkerPreamble(
             environments=environments,
             lease_id=lease.lease_id,
             local_api_url=self.ctx.config.local_api_url,
-            workspace_root=self.ctx.config.workspace_root,
+            workspace_root=self.ctx.workspaces.spawn_root(workspace_id),
             prompt_prefix=rendered.text,
             stdout_path=self.ctx.worker_files.stdout_path(lease.lease_id, generation),
             stderr_path=self.ctx.worker_files.stderr_path(lease.lease_id, generation),

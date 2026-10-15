@@ -63,6 +63,8 @@ from tests.runner_fakes import (
     make_stores,
     record_usage,
     registered_identity,
+    serving,
+    single_workspace,
 )
 
 pytestmark = pytest.mark.component
@@ -271,7 +273,7 @@ def test_env_release_release_binding_publishes_environment_released(tmp_path: Pa
         events=events,
     )
 
-    ctx.env_release.release_binding("ch_1", [AcquiredEnvironment(environment_id="e1", workdir="/ws/e1")])
+    ctx.env_release.release_binding("ch_1", "ws1", [AcquiredEnvironment(environment_id="e1", workdir="/ws/e1")])
 
     env_frames = _frames(events, "environment-changed")
     assert env_frames == [{"chunk_id": "ch_1", "environment_id": "e1", "cause": "released"}]
@@ -536,7 +538,7 @@ def test_takeover_open_and_close_publish_takeover_changed(tmp_path: Path) -> Non
         tokens=store,
         elicitations=store,
         local_api_url="http://x",
-        workspace_root="",
+        workspaces=single_workspace(FakeProvider({})),
         harnesses=HarnessRegistry(
             {CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=FakeHarness(handle=_HANDLE, verdict=None))}
         ),
@@ -575,7 +577,7 @@ def test_takeover_force_open_over_a_live_worker_publishes_the_fence_bump_as_fact
         tokens=store,
         elicitations=store,
         local_api_url="http://x",
-        workspace_root="",
+        workspaces=single_workspace(FakeProvider({})),
         harnesses=HarnessRegistry(
             {CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=FakeHarness(handle=_HANDLE, verdict=None))}
         ),
@@ -683,9 +685,7 @@ def test_ceiling_pause_publishes_fact_changed(tmp_path: Path) -> None:
         harness=FakeHarness(handle=_HANDLE, verdict=None),
         probe=FakeProbe(),
         clock=FixedClock(_NOW),
-        config=LoopConfig(
-            runner_name="r1", workspace_id="ws1", runner_id=FIXTURE_RUNNER_ID, max_agents=1, runner_ceiling_usd=5.0
-        ),
+        config=LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID, bindings=serving(1), runner_ceiling_usd=5.0),
         events=events,
     )
 
@@ -716,11 +716,9 @@ def test_patch_runner_route_publishes_fact_changed(tmp_path: Path) -> None:
         escalations=store,
         identity=registered_identity("rn_patch", config.name),
         runner_name=config.name,
-        workspace_id=config.workspace_id,
-        max_agents=config.max_agents,
+        workspace_id=config.home_workspace.id,
         hub_url=config.hub_url,
-        env_pool=(),
-        workspace_root="",
+        workspaces=single_workspace(FakeProvider({})),
         harnesses=HarnessRegistry({}),
     )
     app = create_app(
@@ -795,9 +793,8 @@ def test_context_sample_crossing_publishes_fact_changed(tmp_path: Path) -> None:
         clock=FixedClock(_NOW),
         config=LoopConfig(
             runner_name="r1",
-            workspace_id="ws1",
             runner_id="rn_1",
-            max_agents=1,
+            bindings=serving(1),
             context_warn_tokens=300_000,
             context_sample_interval_seconds=60,
         ),
@@ -840,7 +837,7 @@ def test_external_usage_sample_publishes_fact_changed(tmp_path: Path) -> None:
         harness=FakeHarness(handle=_HANDLE, verdict=None),
         probe=FakeProbe(),
         clock=FixedClock(_NOW),
-        config=LoopConfig(runner_name="r1", workspace_id="ws1", runner_id=FIXTURE_RUNNER_ID, max_agents=1),
+        config=LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID, bindings=serving(1)),
         events=events,
         subscriptions=(resolved,),
     )
@@ -873,7 +870,7 @@ def test_external_usage_miss_publishes_fact_changed(tmp_path: Path) -> None:
         harness=FakeHarness(handle=_HANDLE, verdict=None),
         probe=FakeProbe(),
         clock=FixedClock(_NOW),
-        config=LoopConfig(runner_name="r1", workspace_id="ws1", runner_id=FIXTURE_RUNNER_ID, max_agents=1),
+        config=LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID, bindings=serving(1)),
         events=events,
         subscriptions=(resolved,),
     )

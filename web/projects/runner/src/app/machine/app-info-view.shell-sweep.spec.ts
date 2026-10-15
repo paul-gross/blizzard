@@ -37,7 +37,7 @@ const STATUS: runnerApi.RunnerStatusView = {
   runner_name: 'runner-local',
   workspace_id: 'workspace-local',
   pause: { local: false, hub: false, effective: false },
-  capacities: { max_agents: 4, used: 1, free: 3 },
+  capacities: { used: 1, bindings: [{ project: 'p', project_id: 'p', workspace_id: 'ws', agents: 4, used: 1, free: 3 }] },
   hub: { endpoint: 'http://127.0.0.1:8421', reachable: true, last_contact_at: '2026-07-16T11:59:30.000Z', buffer_depth: 2 },
   last_tick_at: '2026-07-16T11:59:45.000Z',
   gates: ['build', 'review', 'deliver-to-master', 'a-node-with-a-rather-long-name-to-force-wrapping'],

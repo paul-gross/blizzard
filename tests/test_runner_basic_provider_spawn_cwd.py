@@ -13,7 +13,7 @@ import pytest
 
 from blizzard.runner.app import build_hosted_app
 from blizzard.runner.composition import build_runner_process
-from blizzard.runner.config import RunnerConfig
+from blizzard.runner.config import DEFAULT_WORKSPACE_ID, RunnerConfig
 from blizzard.runner.environments.provider import WorkspaceRepo
 from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
@@ -21,6 +21,7 @@ from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.loop_wiring import LoopWiring
+from tests.host_files import one_workspace
 from tests.runner_client import runner_client, runner_seams
 from tests.runner_fakes import FIXTURE_RUNNER_ID, FakeHub, make_store, migrated_store_at
 
@@ -32,10 +33,9 @@ def test_basic_takeover_escalation_and_transcript_resolve_to_the_environment_wor
     config = RunnerConfig(
         root=tmp_path,
         db_url=f"sqlite:///{tmp_path / 'runner.db'}",
-        workspace_provider="basic",
-        workspace_root="scratch",
-        workspace_repos=(WorkspaceRepo("toy", "file:///tmp/toy.git"),),
-        max_environments=3,
+        workspaces=one_workspace(
+            provider="basic", root="scratch", repos=(WorkspaceRepo("toy", "file:///tmp/toy.git"),), max_environments=3
+        ),
     )
     workdir = str(tmp_path / "scratch" / "e1")
     migrated_store_at(config.db_url)
@@ -45,7 +45,7 @@ def test_basic_takeover_escalation_and_transcript_resolve_to_the_environment_wor
     graph = build_runner_process(config, events=EventBroker(), runner_id=FIXTURE_RUNNER_ID)
     hosted = build_hosted_app(config, process_graph=graph)
     try:
-        ctx = LoopWiring(config, "", "", graph.host.events).context(FakeHub(), graph)
+        ctx = LoopWiring(config, "", graph.host.events).context(FakeHub(), graph)
         try:
             for lease_id, chunk_id in (("lease_1", "ch_1"), ("lease_2", "ch_2")):
                 store.record_lease(
@@ -67,15 +67,21 @@ def test_basic_takeover_escalation_and_transcript_resolve_to_the_environment_wor
                     session=SessionReference(CLAUDE_CODE_HARNESS_ID, f"sess-{chunk_id}"),
                     spawned_at=_NOW,
                 )
-            store.record_binding(chunk_id="ch_1", environment_id="e1", workdir=workdir, bound_at=_NOW)
-            store.record_binding(chunk_id="ch_2", environment_id="e2", workdir=workdir, bound_at=_NOW)
+            for chunk_id, environment_id in (("ch_1", "e1"), ("ch_2", "e2")):
+                store.record_binding(
+                    chunk_id=chunk_id,
+                    environment_id=environment_id,
+                    workdir=workdir,
+                    bound_at=_NOW,
+                    workspace_id=DEFAULT_WORKSPACE_ID,
+                )
             store.record_park(lease_id="lease_1", chunk_id="ch_1", question_id="qn_1", parked_at=_NOW)
             store.record_closure(
                 lease_id="lease_2", chunk_id="ch_2", node_id="nd_build", reason="escalated", closed_at=_NOW
             )
 
             # The directory the loop spawns a worker in for this environment.
-            loop_cwd = SpawnCwd.of_session(ctx.config.workspace_root, workdir)
+            loop_cwd = SpawnCwd.of_session(ctx.workspaces.spawn_root(DEFAULT_WORKSPACE_ID), workdir)
             assert loop_cwd == workdir
 
             with runner_client(hosted.app) as client:

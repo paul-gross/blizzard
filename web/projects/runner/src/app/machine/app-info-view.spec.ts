@@ -9,7 +9,7 @@ const RUNNER_STATUS: runnerApi.RunnerStatusView = {
   runner_name: 'runner-local',
   workspace_id: 'workspace-local',
   pause: { local: false, hub: false, effective: false },
-  capacities: { max_agents: 4, used: 1, free: 3 },
+  capacities: { used: 1, bindings: [{ project: 'p', project_id: 'p', workspace_id: 'ws', agents: 4, used: 1, free: 3 }] },
   hub: {
     endpoint: 'http://127.0.0.1:8421',
     reachable: true,
@@ -24,6 +24,8 @@ async function render(
     fleet: runnerApi.FleetSummaryView | null;
     fleetStale: boolean;
     gates: string[];
+    capacities: runnerApi.CapacitiesView;
+    routingConflicts: runnerApi.RoutingConflictView[];
     identity: Pick<runnerApi.RunnerStatusView, 'runner_id' | 'runner_name'>;
     verdict: runnerApi.IdentityVerdictView;
   }> = {},
@@ -37,6 +39,8 @@ async function render(
     ...RUNNER_STATUS,
     ...overrides.identity,
     gates: overrides.gates ?? [],
+    capacities: overrides.capacities ?? RUNNER_STATUS.capacities,
+    routing_conflicts: overrides.routingConflicts ?? [],
     identity: overrides.verdict ?? null,
   });
   fixture.componentRef.setInput('lastFlushLabel', '-30s');
@@ -57,6 +61,37 @@ describe('LocalInfoView', () => {
     expect(el.querySelector('[data-testid="hub-last-flush"]')?.textContent).toContain('-30s');
     expect(el.querySelector('.tick')?.textContent).toContain('-15s');
     expect(el.querySelector('[data-testid="hub-buffered"]')?.textContent).toContain('2 events');
+  });
+
+  it('shows a row of agent slots per binding beneath the runner-wide total', async () => {
+    const { el } = await render({
+      capacities: {
+        used: 3,
+        bindings: [
+          { project: 'blizzard', project_id: 'pj_1', workspace_id: 'ws-a', agents: 2, used: 2, free: 0 },
+          { project: 'winter', project_id: null, workspace_id: 'ws-b', agents: 3, used: 1, free: 2 },
+        ],
+      },
+    });
+
+    expect(el.querySelector('[data-testid="agents-total"]')?.textContent).toContain('3/5 slots');
+    const rows = [...el.querySelectorAll('[data-testid="binding-agents"]')].map((row) => row.textContent);
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toContain('2/2 slots');
+    expect(rows[1]).toContain('1/3 slots');
+    expect(el.textContent).toContain('agents · blizzard → ws-a');
+    expect(el.textContent).toContain('agents · winter → ws-b');
+  });
+
+  it('names the entries of each routing conflict and that the runner is not claiming', async () => {
+    const quiet = await render();
+    expect(quiet.el.querySelector('[data-testid="routing-conflict"]')).toBeNull();
+    TestBed.resetTestingModule();
+
+    const { el } = await render({ routingConflicts: [{ project_id: 'pj_1', entries: ['blizzard', 'pj_1'] }] });
+    expect(el.querySelector('[data-testid="routing-conflict"]')?.textContent).toContain(
+      'blizzard, pj_1 → pj_1 · not claiming',
+    );
   });
 
   it('names the runner beside its full hub-minted id', async () => {

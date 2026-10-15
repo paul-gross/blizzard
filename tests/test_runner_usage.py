@@ -46,6 +46,7 @@ from tests.runner_fakes import (
     make_envelope,
     make_store,
     make_stores,
+    single_workspace,
 )
 
 pytestmark = pytest.mark.unit
@@ -153,9 +154,7 @@ def test_advance_records_spawn_and_judge_usage_facts(tmp_path):  # type: ignore[
         provider=FakeProvider({"e1": "/ws/e1"}),
         harness=harness,
         probe=FakeProbe(),
-        config=LoopConfig(
-            runner_name="r1", workspace_id="ws1", runner_id=FIXTURE_RUNNER_ID, worker_stdout_dir=str(stdout_dir)
-        ),
+        config=LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID, worker_stdout_dir=str(stdout_dir)),
     )
 
     Advance(ctx).run()  # launches the detached elicitation
@@ -200,9 +199,7 @@ def test_advance_carries_an_estimate_on_the_outbound_payload_without_touching_th
         provider=FakeProvider({"e1": "/ws/e1"}),
         harness=harness,
         probe=FakeProbe(),
-        config=LoopConfig(
-            runner_name="r1", workspace_id="ws1", runner_id=FIXTURE_RUNNER_ID, worker_stdout_dir=str(stdout_dir)
-        ),
+        config=LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID, worker_stdout_dir=str(stdout_dir)),
     )
 
     Advance(ctx).run()  # launches the detached elicitation
@@ -262,7 +259,7 @@ def test_record_worker_reads_a_real_cost_off_a_sigint_error_during_execution_env
         usage=store,
         clock=FixedClock(_NOW),
         worker_files=worker_files,
-        workspace_root="/ws",
+        workspaces=single_workspace(FakeProvider({}), spawn_root="/ws"),
         harnesses=registry,
         invocation_boundaries=store,
     )
@@ -321,7 +318,7 @@ def test_record_attempt_uses_the_judge_transcripts_actual_model_when_result_omit
         usage=store,
         clock=FixedClock(_NOW),
         worker_files=WorkerStdoutFiles("", store),
-        workspace_root="/ws",
+        workspaces=single_workspace(FakeProvider({}), spawn_root="/ws"),
         harnesses=registry,
         invocation_boundaries=store,
         transcripts_wired=True,
@@ -416,7 +413,7 @@ def test_record_worker_carries_a_real_opencode_adapters_estimate_apart_from_its_
         usage=store,
         clock=FixedClock(_NOW),
         worker_files=WorkerStdoutFiles(str(stdout_dir), store),
-        workspace_root="/ws",
+        workspaces=single_workspace(FakeProvider({}), spawn_root="/ws"),
         harnesses=registry,
         invocation_boundaries=store,
         transcripts_wired=True,
@@ -469,9 +466,7 @@ def test_advance_records_resume_kind_on_a_later_generation(tmp_path):  # type: i
         provider=FakeProvider({"e1": "/ws/e1"}),
         harness=harness,
         probe=FakeProbe(),
-        config=LoopConfig(
-            runner_name="r1", workspace_id="ws1", runner_id=FIXTURE_RUNNER_ID, worker_stdout_dir=str(stdout_dir)
-        ),
+        config=LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID, worker_stdout_dir=str(stdout_dir)),
     )
 
     Advance(ctx).run()  # launches the detached elicitation
@@ -549,9 +544,7 @@ def test_resume_generation_with_no_envelope_of_its_own_never_reads_the_prior_gen
         provider=FakeProvider({"e1": "/ws/e1"}),
         harness=harness,
         probe=FakeProbe(),
-        config=LoopConfig(
-            runner_name="r1", workspace_id="ws1", runner_id=FIXTURE_RUNNER_ID, worker_stdout_dir=str(stdout_dir)
-        ),
+        config=LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID, worker_stdout_dir=str(stdout_dir)),
     )
     # Generation 1's envelope file is still on disk; generation 2 never wrote its own.
     # Written via the path-builder so a collapsed path would write where 2 reads.
@@ -605,9 +598,7 @@ def test_advance_falls_back_to_transcript_usage_when_no_envelope(tmp_path):  # t
         provider=FakeProvider({"e1": "/ws/e1"}),
         harness=harness,
         probe=FakeProbe(),
-        config=LoopConfig(
-            runner_name="r1", workspace_id="ws1", runner_id=FIXTURE_RUNNER_ID, worker_stdout_dir=str(stdout_dir)
-        ),
+        config=LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID, worker_stdout_dir=str(stdout_dir)),
     )
 
     Advance(ctx).run()  # launches the detached elicitation
@@ -635,9 +626,7 @@ def test_advance_records_no_usage_fact_when_no_envelope_and_no_transcript(tmp_pa
         provider=FakeProvider({"e1": "/ws/e1"}),
         harness=harness,
         probe=FakeProbe(),
-        config=LoopConfig(
-            runner_name="r1", workspace_id="ws1", runner_id=FIXTURE_RUNNER_ID
-        ),  # no worker_stdout_dir, no transcripts
+        config=LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID),  # no worker_stdout_dir, no transcripts
     )
 
     Advance(ctx).run()  # launches the detached elicitation
@@ -671,9 +660,7 @@ def test_usage_replay_after_crash_is_idempotent(tmp_path):  # type: ignore[no-un
         provider=FakeProvider({"e1": "/ws/e1"}),
         harness=harness,
         probe=FakeProbe(),
-        config=LoopConfig(
-            runner_name="r1", workspace_id="ws1", runner_id=FIXTURE_RUNNER_ID, worker_stdout_dir=str(stdout_dir)
-        ),
+        config=LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID, worker_stdout_dir=str(stdout_dir)),
     )
     lease = store.active_lease_for_chunk("ch_1")
     assert lease is not None
@@ -721,9 +708,7 @@ def test_ask_and_exit_records_the_worker_usage_before_parking(tmp_path):  # type
         provider=FakeProvider({"e1": "/ws/e1"}),
         harness=harness,
         probe=FakeProbe(),
-        config=LoopConfig(
-            runner_name="r1", workspace_id="ws1", runner_id=FIXTURE_RUNNER_ID, worker_stdout_dir=str(stdout_dir)
-        ),
+        config=LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID, worker_stdout_dir=str(stdout_dir)),
     )
 
     Advance(ctx).run()
@@ -764,9 +749,7 @@ def test_ask_park_worker_usage_is_idempotent_across_a_re_park(tmp_path):  # type
         provider=FakeProvider({"e1": "/ws/e1"}),
         harness=harness,
         probe=FakeProbe(),
-        config=LoopConfig(
-            runner_name="r1", workspace_id="ws1", runner_id=FIXTURE_RUNNER_ID, worker_stdout_dir=str(stdout_dir)
-        ),
+        config=LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID, worker_stdout_dir=str(stdout_dir)),
     )
     lease = store.active_lease_for_chunk("ch_1")
     assert lease is not None
@@ -824,9 +807,7 @@ def test_verdict_less_failure_still_records_spawn_and_judge_usage(tmp_path):  # 
         provider=FakeProvider({"e1": "/ws/e1"}),
         harness=harness,
         probe=FakeProbe(),
-        config=LoopConfig(
-            runner_name="r1", workspace_id="ws1", runner_id=FIXTURE_RUNNER_ID, worker_stdout_dir=str(stdout_dir)
-        ),
+        config=LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID, worker_stdout_dir=str(stdout_dir)),
     )
 
     Advance(ctx).run()  # launches the detached elicitation
@@ -879,7 +860,6 @@ def test_verdict_less_failure_falls_back_to_transcript_when_no_envelope(tmp_path
         probe=FakeProbe(),
         config=LoopConfig(
             runner_name="r1",
-            workspace_id="ws1",
             runner_id=FIXTURE_RUNNER_ID,
             worker_stdout_dir=str(tmp_path / "missing"),
         ),
@@ -922,9 +902,7 @@ def test_release_all_leaves_every_lease_stdout_file_in_place(tmp_path):  # type:
         provider=FakeProvider({"e1": "/ws/e1"}),
         harness=FakeHarness(handle=_HANDLE, verdict="pass"),
         probe=FakeProbe(),
-        config=LoopConfig(
-            runner_name="r1", workspace_id="ws1", runner_id=FIXTURE_RUNNER_ID, worker_stdout_dir=str(stdout_dir)
-        ),
+        config=LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID, worker_stdout_dir=str(stdout_dir)),
     )
 
     ctx.env_release.release_chunk("ch_1")

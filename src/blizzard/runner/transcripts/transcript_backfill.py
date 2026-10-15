@@ -276,8 +276,11 @@ class TranscriptBackfill:
         return unfinished(self.ctx.stores.transcript_ledger.open_transcript_segments(), active_lease_ids)
 
     def _spawn_cwd(self, chunk_id: str) -> str | None:
-        bindings = self.ctx.stores.environments.bindings_for_chunk(chunk_id)
-        return SpawnCwd(self.ctx.config.workspace_root, bindings[0].workdir if bindings else None).path
+        """The closed lease's spawn cwd, read through the workspace its newest binding names — released by now."""
+        binding = self.ctx.stores.environments.newest_binding_for_chunk(chunk_id)
+        if binding is None:
+            return None
+        return SpawnCwd(self.ctx.workspaces.spawn_root(binding.workspace_id), binding.workdir).path
 
     def _unreadable(self, session: SessionReference, *, chunk_id: str) -> bool:
         """True when ``session``'s transcript cannot be read right now — a rotated-away

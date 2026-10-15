@@ -20,7 +20,7 @@ from blizzard.runner.leases.internal.worker_stdout_files import WorkerStdoutFile
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.transcripts.invocation_boundaries import InvocationBoundaryKind
 from blizzard.runner.usage.recorder import UsageRecorder
-from tests.runner_fakes import FakeHarness, FakeTranscriptSource, make_store
+from tests.runner_fakes import FakeHarness, FakeProvider, FakeTranscriptSource, make_store, single_workspace
 
 pytestmark = pytest.mark.component
 
@@ -55,7 +55,7 @@ def _recorder(store, registry) -> UsageRecorder:  # type: ignore[no-untyped-def]
         usage=store,
         clock=FixedClock(_NOW),
         worker_files=WorkerStdoutFiles("", store),  # "" — no envelope ever survives
-        workspace_root="",
+        workspaces=single_workspace(FakeProvider({})),
         harnesses=registry,
         invocation_boundaries=store,
         transcripts_wired=True,

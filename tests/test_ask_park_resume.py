@@ -31,6 +31,7 @@ from tests.runner_fakes import (
     make_context,
     make_envelope,
     make_store,
+    serving,
 )
 
 pytestmark = pytest.mark.unit
@@ -66,7 +67,7 @@ def _seed_exited_lease(store):  # type: ignore[no-untyped-def]
         session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
         spawned_at=_NOW,
     )
-    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
 
 
 def _ctx(store, *, hub=None, probe=None, clock=None):  # type: ignore[no-untyped-def]
@@ -288,11 +289,10 @@ def test_answer_resumes_the_dormant_session_under_the_same_lease(tmp_path, works
         probe=FakeProbe(),
         config=LoopConfig(
             runner_name="r1",
-            workspace_id="ws1",
             runner_id=FIXTURE_RUNNER_ID,
-            max_agents=1,
-            workspace_root=workspace_root,
+            bindings=serving(1),
         ),
+        spawn_root=workspace_root,
     )
 
     Advance(ctx).run()

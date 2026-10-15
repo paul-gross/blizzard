@@ -233,7 +233,7 @@ def _wait_for[T](what: str, read: Callable[[], T], done: Callable[[T], bool], ti
 
 def _working_directories(config: RunnerConfig) -> list[str]:
     """The directory the export's relative paths are relative to: the one the runner records as the worker's."""
-    root = Path(config.workspace_root)
+    root = Path(config.home_workspace.root)
     return sorted({str(root), str(root.resolve())})
 
 
@@ -333,7 +333,6 @@ def test_the_exported_events_agree_with_the_hubs_own_counts(tmp_path: Path, monk
         runner_dir = tmp_path / "runner"
         config = dataclasses.replace(
             _runner_config(runner_dir, workspace, bin_dir, hub_port),
-            max_agents=1,
             transcripts_root=str(transcripts_root),
             transcripts_ship=True,
         )

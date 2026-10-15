@@ -13,8 +13,8 @@ from typing import Protocol
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.roles import domain_model
-from blizzard.runner.environments.provider import IWorkspaceProvider
 from blizzard.runner.environments.repository import IReadEnvironmentRepository
+from blizzard.runner.environments.workspaces import IWorkspaces
 from blizzard.runner.hub.outbound_buffer import IReadOutboundRepository
 from blizzard.runner.leases.worker_lease import WorkerLease, WorkerVerb
 
@@ -209,22 +209,23 @@ _CP_DECLARE_COMMIT_AFTER_RECORD = crashpoint(
 
 
 class GitCommitDeclarationService:
-    """Composition-root-wired: the write store, the environment store, the workspace provider, the
-    outbound buffer (whether the lease's outcome is still unbuffered), and the clock. The provider's repo
-    manifest says which repos the lease authorizes and is the one source of each origin later verified."""
+    """Composition-root-wired: the write store, the environment store, the host's workspaces, the
+    outbound buffer (whether the lease's outcome is still unbuffered), and the clock. The repo manifest of the
+    provider of the workspace the environment's binding names says which repos the lease authorizes and is the one
+    source of each origin later verified."""
 
     def __init__(
         self,
         store: IWriteGitCommitDeclarationRepository,
         clock: IClock,
-        provider: IWorkspaceProvider,
+        workspaces: IWorkspaces,
         *,
         environments: IReadEnvironmentRepository,
         outbound: IReadOutboundRepository,
     ) -> None:
         self._store = store
         self._clock = clock
-        self._provider = provider
+        self._workspaces = workspaces
         self._environments = environments
         self._outbound = outbound
 
@@ -246,11 +247,15 @@ class GitCommitDeclarationService:
         Append-and-read-newest (``bzh:facts-not-status``): a repeat call for the same ``(lease, env,
         repo)`` is a correction. The env is part of that key, so one env cannot overwrite another."""
         lease = worker.lease
-        bound = [binding.environment_id for binding in self._environments.bindings_for_chunk(lease.chunk_id)]
-        resolved_env = resolve_declaring_environment(lease.chunk_id, bound, environment_id)
+        bindings = self._environments.bindings_for_chunk(lease.chunk_id)
+        resolved_env = resolve_declaring_environment(
+            lease.chunk_id, [binding.environment_id for binding in bindings], environment_id
+        )
+        workspace_id = next((b.workspace_id for b in bindings if b.environment_id == resolved_env), None)
+        provider = self._workspaces.provider(workspace_id)
         record = GitCommitDeclaration(resolved_env, repo, branch, commit).declared_by(
             worker,
-            known_repos=[binding.name for binding in self._provider.repos(resolved_env)],
+            known_repos=[repo.name for repo in provider.repos(resolved_env)] if provider is not None else [],
             outcome_pending=lease.lease_id in self._outbound.pending_submission_lease_ids(),
             at=self._clock.now(),
         )

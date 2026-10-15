@@ -32,7 +32,19 @@ from blizzard.runner.hub.identity import (
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.status.view import RunnerStatusService
 from tests.runner_client import runner_client
-from tests.runner_fakes import FakeHarness, FakeProbe, make_host_stores, make_store, make_stores, registered_identity
+from tests.runner_fakes import (
+    FIXTURE_PROJECT_ID,
+    TEST_WORKSPACE_ID,
+    FakeHarness,
+    FakeProbe,
+    FakeProvider,
+    make_host_stores,
+    make_store,
+    make_stores,
+    registered_identity,
+    serving,
+    single_workspace,
+)
 from tests.support import assert_all_timestamps_utc
 
 _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
@@ -43,7 +55,7 @@ def _app_with_status(
     *,
     clock: FixedClock | None = None,
     harness: FakeHarness | None = None,
-    max_agents: int = 2,
+    agents: int = 2,
     env_pool: tuple[str, ...] | None = None,
     gates: tuple[str, ...] = (),
     runner_dir: str = "",
@@ -51,7 +63,8 @@ def _app_with_status(
     identity_verdict: ICurrentIdentityVerdict | None = None,
 ):  # type: ignore[no-untyped-def]
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
-    config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}", max_agents=max_agents)
+    config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}")
+    pool = config.home_workspace.envs if env_pool is None else env_pool
     _harness = harness or FakeHarness(
         handle=WorkerHandle(session_id="sess-x", pid=1, process_start_time="start-1", pgid=1),
         verdict=None,
@@ -69,11 +82,10 @@ def _app_with_status(
         identity=identity or registered_identity("rn_status", config.name),
         identity_verdict=identity_verdict,
         runner_name=config.name,
-        workspace_id=config.workspace_id,
-        max_agents=config.max_agents,
+        workspace_id=TEST_WORKSPACE_ID,
+        bindings=serving(agents),
         hub_url=config.hub_url,
-        env_pool=config.workspace_envs if env_pool is None else env_pool,
-        workspace_root="",
+        workspaces=single_workspace(FakeProvider({env: f"/ws/{env}" for env in pool})),
         gates=gates,
         runner_dir=runner_dir,
         harnesses=HarnessRegistry({CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=_harness)}),
@@ -103,16 +115,29 @@ def _seed_lease(store, **overrides: object) -> None:  # type: ignore[no-untyped-
 
 @pytest.mark.component
 def test_summary_defaults_on_an_empty_store(tmp_path: Path) -> None:
-    app, _store = _app_with_status(tmp_path, max_agents=3)
+    app, _store = _app_with_status(tmp_path, agents=3)
     with runner_client(app) as client:
         resp = client.get("/api/runner")
 
     assert resp.status_code == 200, resp.text
     body = resp.json()
     assert (body["runner_id"], body["runner_name"]) == ("rn_status", "runner-local")
-    assert body["workspace_id"] == "workspace-local"
+    assert body["workspace_id"] == TEST_WORKSPACE_ID
     assert body["pause"] == {"local": False, "hub": False, "effective": False, "local_reason": None}
-    assert body["capacities"] == {"max_agents": 3, "used": 0, "free": 3}
+    assert body["capacities"] == {
+        "used": 0,
+        "bindings": [
+            {
+                "project": FIXTURE_PROJECT_ID,
+                "project_id": None,
+                "workspace_id": TEST_WORKSPACE_ID,
+                "agents": 3,
+                "used": 0,
+                "free": 3,
+            }
+        ],
+    }
+    assert body["routing_conflicts"] == []
     assert body["hub"] == {
         "endpoint": "http://127.0.0.1:8421",
         "reachable": False,
@@ -209,13 +234,15 @@ def test_503_when_status_service_unwired(tmp_path: Path) -> None:
 
 @pytest.mark.component
 def test_capacities_reflect_active_leases_the_same_way_fill_counts_them(tmp_path: Path) -> None:
-    app, store = _app_with_status(tmp_path, max_agents=2)
+    app, store = _app_with_status(tmp_path, agents=2)
     _seed_lease(store, lease_id="lease_1", chunk_id="ch_1")
 
     with runner_client(app) as client:
         resp = client.get("/api/runner")
 
-    assert resp.json()["capacities"] == {"max_agents": 2, "used": 1, "free": 1}
+    capacities = resp.json()["capacities"]
+    assert capacities["used"] == 1
+    assert [(b["agents"], b["used"], b["free"]) for b in capacities["bindings"]] == [(2, 1, 1)]
 
 
 @pytest.mark.component
@@ -501,7 +528,7 @@ def test_an_escalated_lease_appears_with_its_resume_command(tmp_path: Path) -> N
         session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
         spawned_at=_NOW,
     )
-    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
     closed_at = _NOW + timedelta(minutes=5)
     store.record_closure(
         lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="escalated", closed_at=closed_at
@@ -586,7 +613,7 @@ def test_an_escalation_carries_the_wrapped_takeover_command_when_the_runner_dir_
         session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
         spawned_at=_NOW,
     )
-    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
     store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="escalated", closed_at=_NOW)
 
     with runner_client(app) as client:
@@ -611,7 +638,7 @@ def test_an_escalated_leases_harness_version_reads_the_generations_own_recorded_
         spawned_at=_NOW,
         harness_version="1.2.3",
     )
-    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
     store.record_closure(
         lease_id="lease_1",
         chunk_id="ch_1",
@@ -650,10 +677,8 @@ def test_the_escalation_paste_string_carries_no_permission_mode_even_when_config
         identity=registered_identity("rn_status"),
         runner_name="runner-local",
         workspace_id="workspace-local",
-        max_agents=2,
         hub_url="http://hub",
-        env_pool=("e1",),
-        workspace_root=workspace_root,
+        workspaces=single_workspace(FakeProvider({}), spawn_root=workspace_root),
         harnesses=HarnessRegistry(
             {
                 CLAUDE_CODE_HARNESS_ID: HarnessBinding(
@@ -676,7 +701,7 @@ def test_the_escalation_paste_string_carries_no_permission_mode_even_when_config
         session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
         spawned_at=_NOW,
     )
-    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
     store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="escalated", closed_at=_NOW)
 
     (escalation,) = service.escalations()
@@ -697,7 +722,7 @@ def test_a_superseded_escalation_does_not_appear(tmp_path: Path) -> None:
         session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
         spawned_at=_NOW,
     )
-    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
     store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="escalated", closed_at=_NOW)
     _seed_lease(store, lease_id="lease_2", chunk_id="ch_1", epoch=2, created_at=_NOW + timedelta(minutes=1))
 
@@ -725,7 +750,7 @@ def test_a_non_escalated_closure_does_not_appear(tmp_path: Path) -> None:
 @pytest.mark.component
 def test_an_open_takeover_appears_with_its_id_and_held_since(tmp_path: Path) -> None:
     app, store = _app_with_status(tmp_path)
-    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
     opened_at = _NOW + timedelta(minutes=5)
     store.record_takeover(
         takeover_id="tko_1",
@@ -755,7 +780,7 @@ def test_an_open_takeover_appears_with_its_id_and_held_since(tmp_path: Path) -> 
 @pytest.mark.component
 def test_a_closed_takeover_does_not_appear(tmp_path: Path) -> None:
     app, store = _app_with_status(tmp_path)
-    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
     store.record_takeover(
         takeover_id="tko_1",
         chunk_id="ch_1",
@@ -861,7 +886,7 @@ def test_an_escalation_carries_the_parked_sessions_own_configuration(tmp_path: P
         session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
         spawned_at=_NOW,
     )
-    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
     store.record_closure(
         lease_id="lease_1",
         chunk_id="ch_1",

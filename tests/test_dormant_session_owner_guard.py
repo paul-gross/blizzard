@@ -99,7 +99,9 @@ def test_on_answer_blocked_by_unresolvable_owner_escalates_in_place(tmp_path, un
         session=SessionReference(_FOREIGN_HARNESS_ID, "sess-a"),
         spawned_at=_NOW,
     )
-    store.record_binding(chunk_id="ch_blocked", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    store.record_binding(
+        chunk_id="ch_blocked", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1"
+    )
     store.record_ask(
         lease_id="lease_blocked",
         chunk_id="ch_blocked",
@@ -110,7 +112,9 @@ def test_on_answer_blocked_by_unresolvable_owner_escalates_in_place(tmp_path, un
         asked_at=_NOW,
     )
     store.record_park(lease_id="lease_blocked", chunk_id="ch_blocked", question_id="qn_1", parked_at=_NOW)
-    store.record_binding(chunk_id="ch_done", environment_id="e_done", workdir="/ws/e_done", bound_at=_NOW)
+    store.record_binding(
+        chunk_id="ch_done", environment_id="e_done", workdir="/ws/e_done", bound_at=_NOW, workspace_id="ws1"
+    )
 
     hub = FakeHub()
     hub.questions["qn_1"] = _answered_question()
@@ -162,9 +166,13 @@ def test_on_unpause_blocked_by_unresolvable_owner_escalates_in_place(tmp_path, u
         session=SessionReference(_FOREIGN_HARNESS_ID, "sess-a"),
         spawned_at=_NOW,
     )
-    store.record_binding(chunk_id="ch_blocked", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    store.record_binding(
+        chunk_id="ch_blocked", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1"
+    )
     store.record_pause_park(lease_id="lease_blocked", chunk_id="ch_blocked", parked_at=_NOW)
-    store.record_binding(chunk_id="ch_done", environment_id="e_done", workdir="/ws/e_done", bound_at=_NOW)
+    store.record_binding(
+        chunk_id="ch_done", environment_id="e_done", workdir="/ws/e_done", bound_at=_NOW, workspace_id="ws1"
+    )
 
     hub = FakeHub()
     # The pause has lifted and the chunk is still routed to this runner — the on_unpause
@@ -220,8 +228,12 @@ def test_resume_on_unmet_produces_blocked_by_unresolvable_owner_escalates_in_pla
         session=SessionReference(_FOREIGN_HARNESS_ID, "sess-a"),
         spawned_at=_NOW,
     )
-    store.record_binding(chunk_id="ch_blocked", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
-    store.record_binding(chunk_id="ch_done", environment_id="e_done", workdir="/ws/e_done", bound_at=_NOW)
+    store.record_binding(
+        chunk_id="ch_blocked", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1"
+    )
+    store.record_binding(
+        chunk_id="ch_done", environment_id="e_done", workdir="/ws/e_done", bound_at=_NOW, workspace_id="ws1"
+    )
 
     hub = FakeHub()
     # A clean exit with a required `produces:` name never attached — the unmet-produces
@@ -297,7 +309,9 @@ def test_park_on_ask_skips_only_the_usage_record_when_owner_unresolvable(tmp_pat
         session=SessionReference(_FOREIGN_HARNESS_ID, "sess-a"),
         spawned_at=_NOW,
     )
-    store.record_binding(chunk_id="ch_blocked", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    store.record_binding(
+        chunk_id="ch_blocked", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1"
+    )
     store.record_ask(
         lease_id="lease_blocked",
         chunk_id="ch_blocked",
@@ -307,7 +321,9 @@ def test_park_on_ask_skips_only_the_usage_record_when_owner_unresolvable(tmp_pat
         session=SessionReference(_FOREIGN_HARNESS_ID, "sess-a"),
         asked_at=_NOW,
     )
-    store.record_binding(chunk_id="ch_done", environment_id="e_done", workdir="/ws/e_done", bound_at=_NOW)
+    store.record_binding(
+        chunk_id="ch_done", environment_id="e_done", workdir="/ws/e_done", bound_at=_NOW, workspace_id="ws1"
+    )
 
     hub = FakeHub()
     hub.chunks["ch_done"] = _done_chunk("ch_done")

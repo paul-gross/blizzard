@@ -112,7 +112,7 @@ def test_pump_skips_only_the_segment_with_an_unresolvable_owner(tmp_path, unavai
         provider=FakeProvider({"e_ch_blocked": "/ws/ch_blocked", "e_ch_ok": "/ws/ch_ok"}),
         harness=harness,
         probe=FakeProbe(),
-        config=LoopConfig(runner_name="r1", workspace_id="ws1", runner_id=FIXTURE_RUNNER_ID, transcripts_ship=True),
+        config=LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID, transcripts_ship=True),
     )
     ctx = replace(ctx, harnesses=_registry(harness, unavailable=unavailable))
 

@@ -20,7 +20,11 @@ from typing import Any, Protocol
 
 from blizzard.runner.auth.jti_cache import IJtiCache
 from blizzard.runner.auth.tokens import IReadTokenRepository, IWriteTokenRepository
-from blizzard.runner.environments.repository import IReadEnvironmentRepository, IWriteEnvironmentRepository
+from blizzard.runner.environments.repository import (
+    EnvBinding,
+    IReadEnvironmentRepository,
+    IWriteEnvironmentRepository,
+)
 from blizzard.runner.harness.selftest_result import (
     IReadSelfTestResultRepository,
     IWriteSelfTestResultRepository,
@@ -238,8 +242,8 @@ class RunnerReadStores:
 
 
 class IRunnerAudit(Protocol):
-    """The reads that span every runner: the invariant checker's audit, and which runners the store's identity rows
-    name."""
+    """The reads that span every runner: the invariant checker's audit, which runners the store's identity rows name,
+    and what a workspace's shared pool holds."""
 
     def connect(self) -> AbstractContextManager[Any]:
         """A store connection whose statements are exempt from the runner statement guard, closed on leaving the
@@ -248,6 +252,11 @@ class IRunnerAudit(Protocol):
 
     def named_runners(self) -> tuple[str, ...]:
         """The ids of the runners the store's identity rows name, oldest first — empty for a store none has joined."""
+        ...
+
+    def held_workspace_bindings(self, workspace_id: str) -> list[EnvBinding]:
+        """Every runner's held bindings in the workspace's pool, plus every held binding naming no workspace (an
+        unknown row only shrinks a pool), oldest first."""
         ...
 
 
@@ -261,7 +270,8 @@ class HostStores:
     jti_cache: IJtiCache
     daemon_liveness: IWriteDaemonLivenessRepository
     external_usage: IWriteExternalUsageRepository
-    #: Exempt: reads every runner's rows at once — the invariant audit and ``init``'s which-runners read.
+    #: Exempt: reads every runner's rows at once — the invariant audit, ``init``'s which-runners read, and a workspace
+    #: pool's held read.
     runner_audit: IRunnerAudit
 
 

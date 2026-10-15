@@ -19,11 +19,12 @@ from starlette.datastructures import State
 from blizzard.foundation.clock import IClock, IMonotonicClock
 from blizzard.foundation.events.broker import EventBroker
 from blizzard.foundation.forwarded import TrustedProxies
-from blizzard.foundation.roles import collaborator
+from blizzard.foundation.roles import collaborator, dto
 from blizzard.foundation.store.readiness import ReadinessService
 from blizzard.runner.auth.jti_cache import IJtiCache
 from blizzard.runner.auth.jwks_cache import IJwksCache
 from blizzard.runner.config import RunnerConfig, SubscriptionDeclaration
+from blizzard.runner.environments.workspaces import IWorkspaces
 from blizzard.runner.events.publisher import IRunnerEventPublisher
 from blizzard.runner.harness.health_cache import IReadHarnessHealth
 from blizzard.runner.harness.registry import IHarnessRegistry
@@ -86,19 +87,16 @@ class RunnerRegistry:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"no runner {runner_id} on this host")
 
 
-@collaborator
+@dto
 @dataclass(frozen=True)
 class ServedWorkspace:
-    """One workspace the host serves: its environment pool, and the config its static prompt resolves from."""
+    """One workspace the host serves: its environment pool, and its static prompt — what resolves while no runtime
+    override stands."""
 
     workspace_id: str
     env_pool: tuple[str, ...]
     max_environments: int
-    prompt_config: RunnerConfig
-
-    def configured_prompt(self) -> str:
-        """The workspace's static prompt — what resolves while no runtime override stands."""
-        return self.prompt_config.resolved_workspace_prompt()
+    configured_prompt: str = ""
 
 
 def bind_runner(request: Request, runner_id: Annotated[str, Path(description="The runner's hub-minted id.")]) -> None:
@@ -295,6 +293,14 @@ class RunnerWiring:
     def lease_sessions(self) -> LeaseSessionService:
         service: LeaseSessionService | None = self._seam("lease_sessions")
         return service if service is not None else self._refuse("lease session service")
+
+    def workspace_registry(self) -> IWorkspaces:
+        registry = self.maybe_workspace_registry()
+        return registry if registry is not None else self._refuse("workspace registry")
+
+    def maybe_workspace_registry(self) -> IWorkspaces | None:
+        """The host's workspace registry; ``None`` on an app built without one."""
+        return getattr(self.state, "workspace_registry", None)
 
     def workspace_prompts(self) -> WorkspacePromptService:
         service: WorkspacePromptService | None = self._seam("workspace_prompts")

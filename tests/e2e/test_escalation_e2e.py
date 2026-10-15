@@ -7,7 +7,6 @@ Runs under both mock harnesses. Skipped unless ``BLIZZARD_E2E=1`` with the sibli
 
 from __future__ import annotations
 
-import dataclasses
 import json
 import os
 import shlex
@@ -152,7 +151,6 @@ def test_retries_exhausted_escalates_and_takeover_resumes_session(
         assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202  # ready for the runner
 
         config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
-        config = dataclasses.replace(config, max_agents=1)
         fenced = dict(os.environ)
         fenced["BLIZZARD_MOCK_HARNESS_FENCE"] = "1"
         with runner_sweep(config, fleet_traces) as sweep:

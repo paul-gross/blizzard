@@ -495,6 +495,51 @@
         "title": "AttachmentResponse",
         "type": "object"
       },
+      "BindingCapacityView": {
+        "description": "One binding's agent slots: ``used`` plus ``free`` accounts for its ``agents``. ``project`` is the entry as\nconfigured; ``project_id`` the project it resolved to, ``None`` while it routes nothing.",
+        "properties": {
+          "agents": {
+            "title": "Agents",
+            "type": "integer"
+          },
+          "free": {
+            "title": "Free",
+            "type": "integer"
+          },
+          "project": {
+            "title": "Project",
+            "type": "string"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "used": {
+            "title": "Used",
+            "type": "integer"
+          },
+          "workspace_id": {
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project",
+          "workspace_id",
+          "agents",
+          "used",
+          "free"
+        ],
+        "title": "BindingCapacityView",
+        "type": "object"
+      },
       "BlockedView": {
         "description": "A chunk's blocked marking \u2014 present iff a pre-claim dependent (``not_ready`` or\n``ready``) has a standing dependency edge naming a prerequisite that has not reached ``done``.\nCarried beside ``status``, never a status of its own; names the immediate prerequisite only, with\nno transitive walk to whatever it may itself wait on. Where several prerequisites are unmet at\nonce, ``prerequisite_chunk_id`` names the earliest-declared one. The marking is absent when\nnothing is unmet.",
         "properties": {
@@ -540,15 +585,15 @@
         "type": "object"
       },
       "CapacitiesView": {
-        "description": "Agent-slot accounting: ``used`` plus ``free`` accounts for ``max_agents``.",
+        "description": "Agent-slot accounting per binding, plus the runner-wide count of open leases. A lease whose project or\nworkspace is not yet known counts against every binding it may belong to.",
         "properties": {
-          "free": {
-            "title": "Free",
-            "type": "integer"
-          },
-          "max_agents": {
-            "title": "Max Agents",
-            "type": "integer"
+          "bindings": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/BindingCapacityView"
+            },
+            "title": "Bindings",
+            "type": "array"
           },
           "used": {
             "title": "Used",
@@ -556,9 +601,7 @@
           }
         },
         "required": [
-          "max_agents",
-          "used",
-          "free"
+          "used"
         ],
         "title": "CapacitiesView",
         "type": "object"
@@ -4359,6 +4402,28 @@
         "title": "RouteView",
         "type": "object"
       },
+      "RoutingConflictView": {
+        "description": "Two or more configured entries resolving to one project; while any stands, the runner claims nothing.",
+        "properties": {
+          "entries": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Entries",
+            "type": "array"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_id",
+          "entries"
+        ],
+        "title": "RoutingConflictView",
+        "type": "object"
+      },
       "RunnerAuthSessionView": {
         "description": "An own-identity read (``GET /api/auth/session``): whether the human surface is gated\nat all, and if so the signed-in hub username. ``auth_enabled`` false is a ``none``-mode hub, whose\nsurface is authless; ``username`` is ``None`` when gated but no valid session is presented.",
         "properties": {
@@ -4498,6 +4563,14 @@
           },
           "pause": {
             "$ref": "#/components/schemas/PauseStateView"
+          },
+          "routing_conflicts": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/RoutingConflictView"
+            },
+            "title": "Routing Conflicts",
+            "type": "array"
           },
           "runner_id": {
             "anyOf": [
@@ -5719,7 +5792,7 @@
         "type": "object"
       },
       "UnmatchedBindingView": {
-        "description": "One held binding whose workdir matches no workspace the runner's provider lists. It keeps its\nlease and still counts against ``max_agents``.",
+        "description": "One held binding whose workdir matches no workspace the host declares. It keeps its lease and still\ncounts against every binding of the runner.",
         "properties": {
           "chunk_id": {
             "title": "Chunk Id",

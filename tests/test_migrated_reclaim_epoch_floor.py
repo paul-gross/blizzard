@@ -11,11 +11,14 @@ from pathlib import Path
 
 import pytest
 
+from blizzard.hub.domain.tenancy.administration import DEFAULT_PROJECT_SLUG
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.hub.chunk_status_cache import ReadThroughChunkViews
+from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.hub.internal.http_hub import HttpHubClient
+from blizzard.runner.hub.served_projects import ServedProject
 from blizzard.runner.leases.internal.worker_stdout_files import WorkerStdoutFiles
 from blizzard.runner.lifecycle.drain import OutboundDrain
 from blizzard.runner.lifecycle.env_release import EnvironmentRelease
@@ -26,6 +29,7 @@ from blizzard.runner.loop.steps import Fill
 from blizzard.runner.process.internal.worker_scratch_dirs import WorkerScratchDirs
 from tests.runner_fakes import (
     FIXTURE_RUNNER_ID,
+    REGISTERED_AT,
     FakeHarness,
     FakeProbe,
     FakeProvider,
@@ -38,8 +42,10 @@ from tests.runner_fakes import (
     make_usage_recorder,
     matched_verdict,
     registered_identity,
+    serving,
+    single_workspace,
 )
-from tests.support import RunnerFleetClient, build_hub, ingest, report_lease
+from tests.support import RunnerFleetClient, build_hub, default_project, ingest, report_lease
 
 pytestmark = pytest.mark.component
 
@@ -133,6 +139,11 @@ def test_migrated_chunk_reclaimed_by_a_fresh_runner_mints_above_the_hub_floor(tm
     _harnesses = HarnessRegistry(
         {CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=harness, transcript_source=harness.transcript_source())}
     )
+    # The hub serves the runner its tenant's default project; the runner holds that answer as a registration records it.
+    store.record_runner_identity(RunnerIdentity(store.connections.runner_id or "", "runner", REGISTERED_AT))
+    store.record_served_projects(
+        [ServedProject(DEFAULT_PROJECT_SLUG, project_id=default_project(hub.engine))], at=REGISTERED_AT
+    )
     ctx = LoopContext(
         stores=make_stores(store),
         host_stores=make_host_stores(store),
@@ -142,10 +153,12 @@ def test_migrated_chunk_reclaimed_by_a_fresh_runner_mints_above_the_hub_floor(tm
         identity_verdict=matched_verdict(),
         hub_token=fixed_hub_token(),
         chunk_views=ReadThroughChunkViews(_hub_client),
-        provider=provider,
+        workspaces=single_workspace(provider),
         process=FakeProbe(alive={(200, "start-200")}),
         worktree_git=FakeWorktreeGit(),
-        config=LoopConfig(runner_name="r2", workspace_id="w2", runner_id=FIXTURE_RUNNER_ID, max_agents=1),
+        config=LoopConfig(
+            runner_name="r2", runner_id=FIXTURE_RUNNER_ID, bindings=serving(project=DEFAULT_PROJECT_SLUG)
+        ),
         identity=registered_identity("r2", "r2"),
         worker_files=WorkerStdoutFiles("", store),
         elicitation_files=ElicitationFiles(str(tmp_path / "elicit")),
@@ -156,7 +169,7 @@ def test_migrated_chunk_reclaimed_by_a_fresh_runner_mints_above_the_hub_floor(tm
         env_release=EnvironmentRelease(
             environments=store,
             clock=hub.clock,
-            provider=provider,
+            workspaces=single_workspace(provider),
         ),
         harnesses=_harnesses,
     )

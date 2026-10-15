@@ -228,7 +228,7 @@ class Attempt:
             harness=harness,
             model=lease.resolved_model,
             effort=lease.resolved_effort,
-            workspace_root=self.ctx.config.workspace_root,
+            workspace_root=self.ctx.workspaces.spawn_root(bindings[0].workspace_id if bindings else None),
             runner_dir=self.ctx.config.runner_dir,
         )
         takeover = commands.resume

@@ -18,7 +18,13 @@ from blizzard.runner.leases.model import NewLease
 from blizzard.runner.transcripts.archived_repository import ArchivedTranscript
 from blizzard.runner.transcripts.repository import Transcript, Turn
 from blizzard.runner.transcripts.service import TranscriptService
-from tests.runner_fakes import FakeArchivedTranscriptRepository, StaticTranscriptRepositoryResolver, make_store
+from tests.runner_fakes import (
+    FakeArchivedTranscriptRepository,
+    FakeProvider,
+    StaticTranscriptRepositoryResolver,
+    make_store,
+    single_workspace,
+)
 
 _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
 _KEY = ("ch_1", "nd_build", 1)
@@ -51,7 +57,7 @@ def _service(
         environments=store,
         transcripts=StaticTranscriptRepositoryResolver(local or FakeTranscriptRepository()),
         archived=archived or FakeArchivedTranscriptRepository(),
-        workspace_root="",
+        workspaces=single_workspace(FakeProvider({})),
     )
 
 

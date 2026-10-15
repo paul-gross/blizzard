@@ -431,8 +431,12 @@ class DormantSession:
             # elicitation's own signal, or the fresh one's classification would re-read that
             # same signal off the transcript forever.
             generation = self.ctx.stores.liveness.lease_generation(lease.lease_id)
-            workdir = judgement.bindings[0].workdir if judgement.bindings else None
-            start_position, start_unreadable = self.ctx.resolve_boundary_start(lease.session, workdir)
+            binding = judgement.bindings[0] if judgement.bindings else None
+            start_position, start_unreadable = self.ctx.resolve_boundary_start(
+                lease.session,
+                binding.workdir if binding else None,
+                binding.workspace_id if binding else None,
+            )
             self.ctx.stores.invocation_boundaries.record_boundary_advance(
                 lease_id=lease.lease_id,
                 generation=generation,
@@ -476,8 +480,12 @@ class DormantSession:
             # elicitation's own signal, or the fresh one's classification would re-read that
             # same signal off the transcript forever.
             generation = self.ctx.stores.liveness.lease_generation(lease.lease_id)
-            workdir = judgement.bindings[0].workdir if judgement.bindings else None
-            start_position, start_unreadable = self.ctx.resolve_boundary_start(lease.session, workdir)
+            binding = judgement.bindings[0] if judgement.bindings else None
+            start_position, start_unreadable = self.ctx.resolve_boundary_start(
+                lease.session,
+                binding.workdir if binding else None,
+                binding.workspace_id if binding else None,
+            )
             self.ctx.stores.invocation_boundaries.record_boundary_advance(
                 lease_id=lease.lease_id,
                 generation=generation,
@@ -600,8 +608,10 @@ class DormantSession:
         assert session is not None
         generation = spawner.generation(lease.lease_id)
         if not self._worker_boundary_already_open(generation):
-            workdir = bindings[0].workdir if bindings else None
-            start_position, start_unreadable = self.ctx.resolve_boundary_start(session, workdir)
+            binding = bindings[0] if bindings else None
+            start_position, start_unreadable = self.ctx.resolve_boundary_start(
+                session, binding.workdir if binding else None, binding.workspace_id if binding else None
+            )
             self.ctx.stores.invocation_boundaries.record_boundary_open(
                 lease_id=lease.lease_id,
                 chunk_id=lease.chunk_id,
@@ -617,7 +627,7 @@ class DormantSession:
         # Observed BEFORE the resume, the same as a fresh spawn (src/blizzard/runner/lifecycle/spawn.py): a hung or
         # failing probe must never run after the worker is already live and unrecorded.
         version = harness.observe_version()
-        spawn_cwd = SpawnCwd.of_session(self.ctx.config.workspace_root, bindings[0].workdir)
+        spawn_cwd = SpawnCwd.of_session(self.ctx.workspaces.spawn_root(bindings[0].workspace_id), bindings[0].workdir)
         resumed = harness.resume_with_message(
             spawn_cwd,
             session.session_id,

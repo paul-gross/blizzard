@@ -33,10 +33,11 @@ from blizzard.runner.leases.elicitation import PendingElicitation
 from blizzard.runner.leases.model import Lease
 from blizzard.runner.leases.overload import backing_off_facts
 from blizzard.runner.lifecycle.attempt import Attempt
-from blizzard.runner.lifecycle.claim import InterruptedClaims, ReadyQueue
+from blizzard.runner.lifecycle.claim import InterruptedClaims
 from blizzard.runner.lifecycle.daemon_liveness import IReadDaemonLivenessRepository
 from blizzard.runner.lifecycle.dormant import DormantSession
 from blizzard.runner.lifecycle.drain import OutboundDrain
+from blizzard.runner.lifecycle.fill import BindingFill
 from blizzard.runner.lifecycle.held_chunk import HeldChunk
 from blizzard.runner.lifecycle.judgement.judgement import Judgement, KnownElicitation, elicitation_still_pending
 from blizzard.runner.lifecycle.model import (
@@ -52,7 +53,6 @@ from blizzard.runner.lifecycle.model import (
     exited_worker_elicitation_move,
     exited_worker_settled_move,
     lease_reconcile_move,
-    open_slots,
     reap_move,
     resumable,
 )
@@ -427,7 +427,7 @@ class CompleteHeldBindings(Step):
         """Give each held binding lacking them its workspace and its chunk's project — ahead of FILL.
 
         One read finds the incomplete held rows; with none, nothing else runs. A row takes the
-        configured workspace when its workdir matches one the provider lists, and its project from
+        host workspace whose provider lists its workdir, and its project from
         the chunk-status batch read. A row the hub cannot answer, or whose workdir matches no
         workspace, keeps its gap and its lease — it is retried next tick and named in status.
         Each completion fills only an empty column in one transaction, so a crash re-runs it
@@ -436,7 +436,7 @@ class CompleteHeldBindings(Step):
         rows = ctx.stores.environments.incomplete_held_bindings()
         if not rows:
             return
-        listed = ctx.provider.environment_workdirs()
+        listed = ctx.workspaces.environment_workdirs()
         lacking_project = {row.chunk_id for row in rows if row.project_id is None}
         ctx.chunk_views.prime(lacking_project)
         projects = {chunk_id: self._project(chunk_id) for chunk_id in lacking_project}
@@ -444,7 +444,6 @@ class CompleteHeldBindings(Step):
         for row in rows:
             completion = binding_completion(
                 row,
-                workspace_id=ctx.config.workspace_id,
                 listed_workdirs=listed,
                 project_id=projects.get(row.chunk_id),
             )
@@ -464,8 +463,9 @@ class Fill(Step):
     def run(self) -> None:
         """Keep the fleet busy: peek → acquire → claim-by-route → bind → spawn.
 
-        Open slots are ``MAX_AGENTS - active_leases``; for each, peek the ready queue, acquire the
-        chunk's environments all-or-nothing, and claim the route. Either brake stops *new* claims.
+        Each binding's open slots are its ``agents`` less the open leases counted against it; for each,
+        peek the binding's project, acquire the chunk's environments all-or-nothing from the binding's
+        workspace, and claim the route. Either brake stops *new* claims.
         """
         ctx = self.ctx
         brakes = Spawner(ctx).brakes()
@@ -478,11 +478,7 @@ class Fill(Step):
                 local_paused=brakes.local,
             )
             return
-        slots = open_slots(ctx.config.max_agents, ctx.stores.lease_record.count_active_leases())
-        # Peek per attempt, not once per fill — the single-entry peek response leaves no cache to reuse.
-        for _ in range(slots):
-            if not ReadyQueue.peeked(ctx).claim_one():
-                break
+        BindingFill(ctx).fill()
 
 
 class Advance(Step):
@@ -755,7 +751,11 @@ class ContextSample(Step):
         """The lease's worktree, the transcript locator's multi-match tie-break — never its key.
 
         Resolved exactly as the transcript pump resolves it, so both lanes read the same file."""
-        return SpawnCwd(self.ctx.config.workspace_root, bindings[0].workdir if bindings else None).path
+        binding = bindings[0] if bindings else None
+        return SpawnCwd(
+            self.ctx.workspaces.spawn_root(binding.workspace_id if binding else None),
+            binding.workdir if binding else None,
+        ).path
 
 
 class ExternalUsageSample(Step):

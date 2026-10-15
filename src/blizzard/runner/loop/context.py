@@ -14,7 +14,7 @@ from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.platform_tracing.tracer import IPlatformTracer, NoopPlatformTracer
 from blizzard.foundation.roles import domain_model
-from blizzard.runner.environments.provider import IWorkspaceProvider
+from blizzard.runner.environments.workspaces import IWorkspaces
 from blizzard.runner.environments.worktree import IWorktreeGit
 from blizzard.runner.events.publisher import IRunnerEventPublisher
 from blizzard.runner.harness.capability_snapshot import (
@@ -58,13 +58,8 @@ class LoopConfig:
 
     #: The configured name every registration declares — a label, never this runner's identity.
     runner_name: str
-    workspace_id: str
     #: The hub-minted id the host file configures: the runner its store is bound to and its token must resolve to.
     runner_id: str
-    max_agents: int = 1
-    base_branch: str = "main"
-    #: The runner's configured environment-pool size; ``None`` unreported.
-    env_capacity: int | None = None
     #: This runner's own browser-reachable base URL; empty registers no
     #: federation identity.
     public_url: str = ""
@@ -74,12 +69,6 @@ class LoopConfig:
     #: The runner's own local-API base URL, handed to a spawned worker as
     #: ``BLIZZARD_RUNNER_URL`` so its heartbeat hook posts back.
     local_api_url: str = "http://127.0.0.1:8431"
-    #: The winter workspace root — the spawn cwd for every worker, so it loads
-    #: the workspace's shared context instead of starting below it in an env subdir.
-    workspace_root: str = ""
-    #: The static workspace prompt from config, resolved once at ``host``
-    #: startup — the fallback under the store's runtime override.
-    workspace_prompt: str = ""
     #: The operator's override of the baked-in blizzard preamble, resolved
     #: once at ``host`` startup. Empty means unset; there is no runtime override.
     runner_prompt: str = ""
@@ -133,6 +122,16 @@ class LoopConfig:
     #: ``[tracing] worker_programs`` is on too, so every worker invocation is pointed at the runner's receiver.
     worker_program_tracing: bool = False
 
+    @property
+    def bound_workspace_ids(self) -> tuple[str, ...]:
+        """Each workspace :attr:`bindings` names, in binding order; none without a declaration."""
+        return bound_workspace_ids(self.bindings)
+
+
+def bound_workspace_ids(bindings: tuple[BindingDeclaration, ...] | None) -> tuple[str, ...]:
+    """Each workspace ``bindings`` name, in binding order."""
+    return tuple(dict.fromkeys(binding.workspace_id for binding in bindings or ()))
+
 
 @dataclass(frozen=True)
 class ResolvedSubscription:
@@ -183,7 +182,8 @@ class LoopContext:
     #: This tick's (or, standalone, this step's own) chunk-status read seam —
     #: see :mod:`blizzard.runner.hub.chunk_status_cache`.
     chunk_views: IChunkViews
-    provider: IWorkspaceProvider
+    #: The host's workspaces; a lease reaches its own through the workspace its binding row names.
+    workspaces: IWorkspaces
     process: IProcessProbe
     worktree_git: IWorktreeGit
     config: LoopConfig
@@ -237,13 +237,16 @@ class LoopContext:
         raise/guard contract as the registry's role accessors."""
         return self.harnesses.transcript_source(session.harness_id)
 
-    def resolve_boundary_start(self, session: SessionReference, workdir: str | None) -> tuple[str | None, bool]:
+    def resolve_boundary_start(
+        self, session: SessionReference, workdir: str | None, workspace_id: str | None
+    ) -> tuple[str | None, bool]:
         """``(start_position, start_unreadable)`` for a boundary about to open on ``session`` —
         the current transcript tail, or ``(None, True)`` when the source is unresolvable or the
         read fails; never conflate that with ``(None, False)``, a fresh session's own beginning
         sentinel. Shared by every resume/judge/nudge boundary opener, so a
-        transient read failure on any of them is durably distinguishable from a fresh spawn."""
-        spawn_cwd = SpawnCwd(self.config.workspace_root, workdir).path
+        transient read failure on any of them is durably distinguishable from a fresh spawn.
+        The tail is read in the spawn cwd of ``workspace_id``, the workspace the lease's binding names."""
+        spawn_cwd = SpawnCwd(self.workspaces.spawn_root(workspace_id), workdir).path
         try:
             source = self.transcript_source_for(session)
         except (UnknownHarnessError, UnavailableHarnessError) as exc:
@@ -265,6 +268,7 @@ if TYPE_CHECKING:
     from blizzard.runner.lifecycle.claim import ClaimContext
     from blizzard.runner.lifecycle.dormant import DormantContext
     from blizzard.runner.lifecycle.drain import DrainContext
+    from blizzard.runner.lifecycle.fill import FillContext
     from blizzard.runner.lifecycle.held_chunk import HeldChunkContext
     from blizzard.runner.lifecycle.identity_check import IdentityCheckContext
     from blizzard.runner.lifecycle.judgement.git_commits import GitCommitsContext
@@ -308,6 +312,9 @@ if TYPE_CHECKING:
         return ctx
 
     def _conforms_to_claim(ctx: LoopContext) -> ClaimContext:
+        return ctx
+
+    def _conforms_to_fill(ctx: LoopContext) -> FillContext:
         return ctx
 
     def _conforms_to_usage_limit(ctx: LoopContext) -> UsageLimitContext:

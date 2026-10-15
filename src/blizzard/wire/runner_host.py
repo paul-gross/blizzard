@@ -39,6 +39,7 @@ class HostRunnerView(HostRunnerStateView):
     pause: PauseStateView | None = None
     bindings: list[HostRunnerBindingView] = Field(default_factory=list)
     agents_in_use: int = 0
+    #: The sum of its bindings' ``agents``.
     max_agents: int = 0
 
 

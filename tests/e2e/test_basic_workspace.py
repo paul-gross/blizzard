@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import dataclasses
 import os
 import subprocess
 from pathlib import Path
@@ -25,7 +24,7 @@ from tests.e2e.test_acceptance_loop import (
     _mock_bin_dir,
     _runner_config,
 )
-from tests.host_files import write_host_file
+from tests.host_files import with_workspace, write_host_file
 
 
 def bare_origin(tmp_path: Path) -> Path:
@@ -74,10 +73,10 @@ def basic_graph_yaml() -> str:
 
 
 def basic_config(runner_dir: Path, workspace: Path, bin_dir: Path, hub_port: int, origin: Path) -> RunnerConfig:
-    config = dataclasses.replace(
+    config = with_workspace(
         _runner_config(runner_dir, workspace, bin_dir, hub_port),
-        workspace_provider="basic",
-        workspace_repos=(WorkspaceRepo(REPO_NAME, f"file://{origin}"),),
+        provider="basic",
+        repos=(WorkspaceRepo(REPO_NAME, f"file://{origin}"),),
     )
     write_host_file(config)
     return config

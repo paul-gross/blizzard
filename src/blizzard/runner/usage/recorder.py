@@ -8,6 +8,7 @@ from blizzard.foundation.clock import IClock
 from blizzard.foundation.fact_kinds import USAGE_RECORDED
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.environments.repository import EnvBinding
+from blizzard.runner.environments.workspaces import IWorkspaces
 from blizzard.runner.events.publisher import IRunnerEventPublisher
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.registry import IHarnessRegistry, UnavailableHarnessError, UnknownHarnessError
@@ -44,7 +45,8 @@ class UsageRecorder:
     usage: IWriteUsageRepository
     clock: IClock
     worker_files: IWorkerStdoutReader
-    workspace_root: str
+    #: The host's workspaces; a range is read in the spawn cwd of the workspace the lease's binding names.
+    workspaces: IWorkspaces
     #: Required; every recorded session's owner resolves through this registry, with no single-harness fallback.
     harnesses: IHarnessRegistry
     #: The generation's own boundary — the range-read fallback's start.
@@ -223,8 +225,11 @@ class UsageRecorder:
         charged = charge_range(start, end_boundary)
         if charged is None:
             return []
-        fallback_workdir = bindings[0].workdir if bindings else None
-        spawn_cwd = SpawnCwd(self.workspace_root, fallback_workdir).path
+        binding = bindings[0] if bindings else None
+        spawn_cwd = SpawnCwd(
+            self.workspaces.spawn_root(binding.workspace_id if binding else None),
+            binding.workdir if binding else None,
+        ).path
         try:
             source = self.harnesses.transcript_source(session.harness_id)
         except (UnknownHarnessError, UnavailableHarnessError) as exc:

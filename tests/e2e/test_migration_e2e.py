@@ -7,7 +7,6 @@ new graph lands the change on bare `main` exactly once.
 
 from __future__ import annotations
 
-import dataclasses
 import os
 import subprocess
 from pathlib import Path
@@ -170,7 +169,6 @@ def test_cross_graph_migration_repins_requeues_and_lands_under_the_new_graph(
         assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
 
         config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
-        config = dataclasses.replace(config, max_agents=1)
         fenced = dict(os.environ)
         fenced["BLIZZARD_MOCK_HARNESS_FENCE"] = "1"
         status = _drive_until_done(config, hub, chunk_id, fenced)

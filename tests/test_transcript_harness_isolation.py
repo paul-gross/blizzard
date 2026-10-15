@@ -92,7 +92,7 @@ def _two_harness_ctx():  # type: ignore[no-untyped-def]
         provider=FakeProvider({"e_a": "/ws/e_a", "e_b": "/ws/e_b"}),
         harness=harness_a,
         probe=FakeProbe(),
-        config=LoopConfig(runner_name="r1", workspace_id="ws1", runner_id=FIXTURE_RUNNER_ID, transcripts_ship=True),
+        config=LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID, transcripts_ship=True),
     )
     registry = HarnessRegistry(
         {

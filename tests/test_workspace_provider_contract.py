@@ -12,11 +12,10 @@ from pathlib import Path
 
 import pytest
 
-from blizzard.runner.config import RunnerConfig
+from blizzard.runner.config import HostWorkspace
 from blizzard.runner.environments.factory import WORKSPACE_PROVIDERS, WorkspaceSettings, build_workspace_provider
 from blizzard.runner.environments.internal import basic_provider
 from blizzard.runner.environments.provider import IWorkspaceProvider, WorkspaceRepo
-from blizzard.runner.host_layout import HostLayout
 from tests.runner_fakes import FakeProvider
 
 
@@ -29,8 +28,7 @@ class _Case:
 
 
 def _settings(tmp_path: Path, **fields: object) -> WorkspaceSettings:
-    config = RunnerConfig(root=tmp_path, db_url=HostLayout(tmp_path).default_db_url, **fields)  # type: ignore[arg-type]
-    return config.workspace_settings
+    return HostWorkspace("ws", **fields).settings(tmp_path)  # type: ignore[arg-type]
 
 
 _CASES = {
@@ -38,9 +36,9 @@ _CASES = {
         build=lambda tmp: build_workspace_provider(
             _settings(
                 tmp,
-                workspace_provider="basic",
-                workspace_root="scratch",
-                workspace_repos=(WorkspaceRepo("toy", "file:///tmp/toy.git"),),
+                provider="basic",
+                root="scratch",
+                repos=(WorkspaceRepo("toy", "file:///tmp/toy.git"),),
                 max_environments=4,
             )
         ),
@@ -50,7 +48,7 @@ _CASES = {
     ),
     "winter": _Case(
         build=lambda tmp: build_workspace_provider(
-            _settings(tmp, workspace_provider="winter", workspace_root=str(tmp / "ws"), workspace_envs=("a", "b", "c"))
+            _settings(tmp, provider="winter", root=str(tmp / "ws"), envs=("a", "b", "c"))
         ),
         spawn_root=lambda tmp: str(tmp / "ws"),
         capacity=3,
@@ -58,9 +56,7 @@ _CASES = {
     ),
     # Unset, winter's spawn root stays unset rather than falling back to its working root.
     "winter-unset-root": _Case(
-        build=lambda tmp: build_workspace_provider(
-            _settings(tmp, workspace_provider="winter", workspace_root="", workspace_envs=("a",))
-        ),
+        build=lambda tmp: build_workspace_provider(_settings(tmp, provider="winter", root="", envs=("a",))),
         spawn_root=lambda _tmp: "",
         capacity=1,
         pool=("a",),
@@ -123,9 +119,9 @@ def test_a_basic_binding_built_by_the_factory_honors_the_passed_held_ids_and_con
     monkeypatch.setattr(basic_provider, "SubprocessEnvGit", _FetchRecordingGit)
     settings = _settings(
         tmp_path,
-        workspace_provider="basic",
-        workspace_root="scratch",
-        workspace_repos=(WorkspaceRepo("toy", "file:///tmp/toy.git"),),
+        provider="basic",
+        root="scratch",
+        repos=(WorkspaceRepo("toy", "file:///tmp/toy.git"),),
         base_branch="trunk",
     )
     held: list[str] = []

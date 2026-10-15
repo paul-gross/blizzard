@@ -7,7 +7,6 @@ re-entry, and build runs twice — both commits land on bare `main`. Runs under 
 
 from __future__ import annotations
 
-import dataclasses
 import os
 import subprocess
 from pathlib import Path
@@ -202,7 +201,6 @@ def test_review_cycle_fails_once_then_delivers(
         assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202  # ready for the runner
 
         config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
-        config = dataclasses.replace(config, max_agents=1)
         fenced = dict(os.environ)
         fenced["BLIZZARD_MOCK_HARNESS_FENCE"] = "1"
         with runner_sweep(config, fleet_traces) as sweep:

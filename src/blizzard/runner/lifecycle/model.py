@@ -20,6 +20,7 @@ from blizzard.foundation.leases import LeaseClosureReason, LeaseState
 from blizzard.foundation.node_steps import ApplyOutcome
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.runner_event_types import LeaseChangeCause
+from blizzard.runner.environments.repository import OpenLeaseHold
 from blizzard.runner.hub.client import QueueEntry
 from blizzard.runner.leases.closure import ESCALATION_MINT
 from blizzard.runner.leases.model import Lease
@@ -884,6 +885,43 @@ def exited_worker_settled_move(*, backing_off: bool, unforwarded_ask: bool) -> E
     return ExitedMove.PARK_ON_ASK if unforwarded_ask else ExitedMove.JUDGE
 
 
-def open_slots(max_agents: int, active: int) -> int:
-    """How many new claims FILL may make this tick."""
-    return max(max_agents - active, 0)
+@domain_model
+@dataclass(frozen=True)
+class SlotBinding:
+    """A binding as its slots are counted: its workspace, and the project it resolved to (``None`` while unresolved)."""
+
+    workspace_id: str
+    project_id: str | None
+
+
+def _hold_counts_against(hold: OpenLeaseHold, binding: SlotBinding) -> bool:
+    """Whether one held row counts against ``binding``: a row naming a project counts against that project's
+    binding, one whose project is not known against every binding on its workspace, and one naming no workspace — or
+    a lease holding no binding at all — against every binding, so an unknown row can only make a binding claim less."""
+    if not hold.held or hold.workspace_id is None:
+        return True
+    if hold.project_id is None:
+        return hold.workspace_id == binding.workspace_id
+    return hold.project_id == binding.project_id
+
+
+def binding_usage(bindings: Sequence[SlotBinding], holds: Iterable[OpenLeaseHold]) -> tuple[int, ...]:
+    """How many open leases count against each of ``bindings``, in order — each open lease once per chunk, however
+    many environments it holds."""
+    by_chunk: dict[str, list[OpenLeaseHold]] = {}
+    for hold in holds:
+        by_chunk.setdefault(hold.chunk_id, []).append(hold)
+    return tuple(
+        sum(1 for rows in by_chunk.values() if any(_hold_counts_against(row, binding) for row in rows))
+        for binding in bindings
+    )
+
+
+def open_lease_count(holds: Iterable[OpenLeaseHold]) -> int:
+    """How many open leases the runner holds — one per chunk."""
+    return len({hold.chunk_id for hold in holds})
+
+
+def free_slots(agents: int, used: int) -> int:
+    """How many new claims a binding of ``agents`` may make with ``used`` open; never below zero."""
+    return max(agents - used, 0)

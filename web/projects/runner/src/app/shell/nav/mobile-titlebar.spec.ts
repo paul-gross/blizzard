@@ -66,7 +66,7 @@ describe('MobileTitlebar (runner)', () => {
               last_contact_at: null,
               buffer_depth: 0,
             },
-            capacities: { used: 0, max_agents: 4, free: 4 },
+            capacities: { used: 0, bindings: [{ project: 'p', project_id: 'p', workspace_id: 'ws', agents: 4, used: 0, free: 4 }] },
             pause: { local: false, hub: false, effective: false },
             last_tick_at: null,
           },

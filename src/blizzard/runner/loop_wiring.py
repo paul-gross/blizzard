@@ -81,11 +81,11 @@ class _LazyUsageHttpClient:
 class LoopWiring:
     """Constructs the loop's collaborators from resolved config.
 
-    The prompts are **already-resolved** values: resolving them on the caller's own thread
-    turns a missing prompt file into a startup error (``tests/test_pin_runner_loop.py``)."""
+    The runner prompt is an **already-resolved** value: resolving it on the caller's own thread
+    turns a missing prompt file into a startup error (``tests/test_pin_runner_loop.py``); each workspace's prompt
+    is resolved where the host builds its workspaces."""
 
     config: RunnerConfig
-    workspace_prompt: str
     runner_prompt: str
     #: The SSE broker a standalone verb hands to the graph it builds; absent when none is served.
     events: EventBroker | None = None
@@ -96,8 +96,8 @@ class LoopWiring:
     def of(
         cls, config: RunnerConfig, *, broker: EventBroker | None = None, bundle: BundleSnapshot | None = None
     ) -> LoopWiring:
-        """Read the prompt files now, on the calling thread."""
-        return cls(config, config.resolved_workspace_prompt(), config.resolved_runner_prompt(), broker, bundle)
+        """Read the runner prompt file now, on the calling thread."""
+        return cls(config, config.resolved_runner_prompt(), broker, bundle)
 
     def context(
         self,
@@ -114,7 +114,7 @@ class LoopWiring:
         ``sweep_worker_scratch`` runs the per-lease scratch directory's one-shot orphan sweep — safe
         only when no spawn can race it, so off by default. ``tracer`` is the tick's span seam, absent by default."""
         config = self.config
-        stores, provider, harnesses, clock = graph.stores, graph.provider, graph.harnesses, graph.clock
+        stores, workspaces, harnesses, clock = graph.stores, graph.workspaces, graph.harnesses, graph.clock
         # A startup guard: this composition's transcripts lane requires the default
         # harness's own binding to resolve one, not merely to be registered at all.
         default_id = default_harness_id(harnesses)
@@ -151,11 +151,7 @@ class LoopWiring:
             _worker_scratch.sweep_orphans(lease.lease_id for lease in stores.lease_record.list_active_leases())
         loop_config = LoopConfig(
             runner_name=config.name,
-            workspace_id=config.workspace_id,
             runner_id=graph.runner_id,
-            max_agents=config.max_agents,
-            base_branch=config.base_branch,
-            env_capacity=provider.capacity(),
             public_url=config.public_url,  # this runner's own federation identity
             redirect_uris=config.redirect_uris,
             local_api_url=replace(config, runner_id=graph.runner_id).local_api_url,
@@ -167,8 +163,6 @@ class LoopWiring:
                 else tuple(BindingDeclaration(b.project, b.workspace, b.agents) for b in config.bindings)
             ),
             subscription=resolved_subscriptions[0].slug if resolved_subscriptions else None,
-            workspace_root=provider.spawn_root(),
-            workspace_prompt=self.workspace_prompt,
             runner_prompt=self.runner_prompt,
             worker_stdout_dir=str(worker_stdout_dir),
             worker_stdout_retention_days=config.worker_stdout_retention_days,
@@ -201,7 +195,7 @@ class LoopWiring:
             hub_token=graph.hub_token,
             # The non-memoizing default — only `tick()` itself upgrades this per call.
             chunk_views=ReadThroughChunkViews(verified),
-            provider=provider,
+            workspaces=workspaces,
             subscriptions=resolved_subscriptions,
             usage_http_client=usage_http_client,
             process=graph.process,
@@ -217,7 +211,7 @@ class LoopWiring:
                 usage=stores.usage,
                 clock=clock,
                 worker_files=_worker_files,
-                workspace_root=loop_config.workspace_root,
+                workspaces=workspaces,
                 harnesses=harnesses,
                 invocation_boundaries=stores.invocation_boundaries,
                 transcripts_wired=True,
@@ -232,7 +226,7 @@ class LoopWiring:
             env_release=EnvironmentRelease(
                 environments=stores.environments,
                 clock=clock,
-                provider=provider,
+                workspaces=workspaces,
                 events=graph.events,
             ),
             # The startup guard above already resolved the default harness's transcript

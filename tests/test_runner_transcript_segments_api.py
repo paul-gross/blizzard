@@ -21,7 +21,14 @@ from blizzard.runner.transcripts.archived_repository import ArchivedTranscript
 from blizzard.runner.transcripts.repository import Transcript, Turn
 from blizzard.runner.transcripts.service import TranscriptService
 from tests.runner_client import runner_client
-from tests.runner_fakes import StaticTranscriptRepositoryResolver, make_host_stores, make_store, make_stores
+from tests.runner_fakes import (
+    FakeProvider,
+    StaticTranscriptRepositoryResolver,
+    make_host_stores,
+    make_store,
+    make_stores,
+    single_workspace,
+)
 from tests.support import assert_all_timestamps_utc
 
 _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
@@ -59,7 +66,7 @@ def _app_with_segments(tmp_path: Path, *, repo: FakeTranscriptRepository | None 
         environments=store,
         transcripts=StaticTranscriptRepositoryResolver(repo or FakeTranscriptRepository()),
         archived=RaisingArchivedTranscriptRepository(),
-        workspace_root="",
+        workspaces=single_workspace(FakeProvider({})),
     )
     return create_app(
         config, runner_stores=make_stores(store), host_stores=make_host_stores(store), transcripts=service

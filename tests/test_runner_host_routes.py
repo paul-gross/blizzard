@@ -22,10 +22,20 @@ from blizzard.runner.app import create_app, create_app_for_export, runner_seams
 from blizzard.runner.config import ProjectBinding, RunnerConfig
 from blizzard.runner.harness.registry import HarnessRegistry
 from blizzard.runner.host_config import HaltedRunner
+from blizzard.runner.hub.client import BindingDeclaration
 from blizzard.runner.status.view import RunnerStatusService
 from blizzard.runner.stores import RunnerStores
+from tests.host_files import one_workspace
 from tests.runner_client import live_api_routes
-from tests.runner_fakes import SqlAlchemyRunnerStore, make_host_stores, make_store, make_stores, registered_identity
+from tests.runner_fakes import (
+    FakeProvider,
+    SqlAlchemyRunnerStore,
+    make_host_stores,
+    make_store,
+    make_stores,
+    registered_identity,
+    single_workspace,
+)
 
 pytestmark = pytest.mark.component
 
@@ -49,11 +59,10 @@ def _status(store: SqlAlchemyRunnerStore, config: RunnerConfig) -> RunnerStatusS
         identity=registered_identity(config.served_id(), config.name),
         identity_verdict=None,
         runner_name=config.name,
-        workspace_id=config.workspace_id,
-        max_agents=config.max_agents,
+        workspace_id=config.home_workspace.id,
+        bindings=tuple(BindingDeclaration(b.project, b.workspace, b.agents) for b in config.bindings or ()),
         hub_url=config.hub_url,
-        env_pool=(),
-        workspace_root="",
+        workspaces=single_workspace(FakeProvider({}), workspace_id="ws-1"),
         gates=(),
         runner_dir="",
         harnesses=HarnessRegistry({}),
@@ -61,7 +70,7 @@ def _status(store: SqlAlchemyRunnerStore, config: RunnerConfig) -> RunnerStatusS
 
 
 def _runner(
-    tmp_path: Path, runner_id: str, name: str, *, bindings: tuple[ProjectBinding, ...], max_agents: int = 1
+    tmp_path: Path, runner_id: str, name: str, *, bindings: tuple[ProjectBinding, ...]
 ) -> tuple[RunnerConfig, RunnerStores]:
     db_url = f"sqlite:///{tmp_path / 'host.db'}"
     config = RunnerConfig(
@@ -69,9 +78,8 @@ def _runner(
         db_url=db_url,
         runner_id=runner_id,
         name=name,
-        workspace_id="ws-1",
+        workspaces=one_workspace(id="ws-1"),
         bindings=bindings,
-        max_agents=max_agents,
     )
     return config, make_stores(make_store(db_url, runner_id))
 
@@ -79,9 +87,7 @@ def _runner(
 def _two_runner_app(
     tmp_path: Path, *, halted: tuple[HaltedRunner, ...] = ()
 ) -> tuple[FastAPI, RunnerStores, RunnerStores]:
-    a_config, a_stores = _runner(
-        tmp_path, "rn_a", "r-claude", bindings=(ProjectBinding("blizzard", "ws-1", 2),), max_agents=2
-    )
+    a_config, a_stores = _runner(tmp_path, "rn_a", "r-claude", bindings=(ProjectBinding("blizzard", "ws-1", 2),))
     b_config, b_stores = _runner(tmp_path, "rn_b", "r-chatgpt", bindings=(ProjectBinding("mock", "ws-1", 1),))
     clock = FixedClock(_NOW)
     seams = tuple(
@@ -99,7 +105,7 @@ def _two_runner_app(
         a_config,
         runners=seams,
         halted=halted,
-        workspaces=(ServedWorkspace("ws-1", ("e1", "e2", "e3"), 3, a_config),),
+        workspaces=(ServedWorkspace("ws-1", ("e1", "e2", "e3"), 3),),
         host_stores=make_host_stores(host_store),
         clock=clock,
     )
