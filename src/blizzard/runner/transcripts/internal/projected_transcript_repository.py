@@ -153,6 +153,6 @@ class ProjectedTranscriptRepository:
 
 
 # Typecheck-time Protocol/adapter conformance sentinel
-# (`blizzard-context:/exemplars/python/repo_pattern.py`).
+# (`exemplars/python/exemplar/hub/store/internal/permit_store.py`).
 def _conforms_read_transcript_repository(x: ProjectedTranscriptRepository) -> IReadTranscriptRepository:
     return x
