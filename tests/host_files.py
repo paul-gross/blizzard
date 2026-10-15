@@ -11,15 +11,17 @@ from pathlib import Path
 from typing import Any
 
 from blizzard.runner.config import (
+    DEFAULT_WORKSPACE_ID,
     SCAFFOLD_PROJECTS,
     Auth,
+    HostWorkspace,
     ProjectBinding,
     RunnerConfig,
     SubscriptionDeclaration,
     Transcripts,
     WorkerStdout,
 )
-from blizzard.runner.host_config import HostConfig, HostWorkspace, RunnerEntry
+from blizzard.runner.host_config import HostConfig, RunnerEntry
 from blizzard.runner.host_layout import HostLayout, write_runner_id
 from blizzard.runner.hub.internal.token_file import HubTokenFile
 from blizzard.runner.runtime import init_environment
@@ -91,20 +93,8 @@ def load_runner_config(root: Path | str, *, host: str | None = None, port: int |
 
 
 def host_config_of(config: RunnerConfig) -> HostConfig:
-    """The host file one runner's ``config`` stands for: its host keys at the top, its workspace as the one
-    ``[[workspace]]``, and the runner — with the projects it serves bound at its agent count — as the one ``[[runner]]``."""
-    workspace = HostWorkspace(
-        id=config.workspace_id,
-        root=config.workspace_root,
-        provider=config.workspace_provider,
-        envs=config.workspace_envs,
-        max_environments=config.max_environments,
-        repos=config.workspace_repos,
-        base_branch=config.base_branch,
-        prompt=config.workspace_prompt,
-        prompt_file=config.workspace_prompt_file,
-        prompt_package=config.workspace_prompt_package,
-    )
+    """The host file one runner's ``config`` stands for: its host keys at the top, its workspaces as the
+    ``[[workspace]]`` entries, and the runner — with the projects it serves bound at its agent count — as the one ``[[runner]]``."""
     entry = RunnerEntry(
         name=config.name,
         id=config.runner_id,
@@ -146,7 +136,7 @@ def host_config_of(config: RunnerConfig) -> HostConfig:
         ),
         worker_stdout=WorkerStdout.of({"retention_days": config.worker_stdout_retention_days}),
         subscriptions=config.subscriptions,
-        workspaces=(workspace,),
+        workspaces=config.workspaces,
         runners=(entry,),
     )
 
@@ -163,15 +153,19 @@ def with_runner(config: RunnerConfig, **changes: object) -> RunnerConfig:
     return changed
 
 
+def one_workspace(**fields: Any) -> tuple[HostWorkspace, ...]:
+    """A host's ``workspaces`` holding one workspace, the default id unless ``fields`` names another."""
+    return (HostWorkspace(**{"id": DEFAULT_WORKSPACE_ID, **fields}),)
+
+
+def with_workspace(config: RunnerConfig, **changes: Any) -> RunnerConfig:
+    """``config`` with ``changes`` laid over its first workspace."""
+    first, *rest = config.workspaces
+    return dataclasses.replace(config, workspaces=(dataclasses.replace(first, **changes), *rest))
+
+
 def _bindings_of(config: RunnerConfig) -> tuple[ProjectBinding, ...]:
     if config.bindings:
-        # A test that sets ``max_agents`` on a loaded config means the host's agent total: the first binding absorbs it.
-        first, *rest = config.bindings
-        spare = max(config.max_agents - sum(binding.agents for binding in rest), 1)
-        return (dataclasses.replace(first, agents=spare), *rest)
+        return config.bindings
     projects = SCAFFOLD_PROJECTS if config.projects is None else config.projects
-    spare = max(config.max_agents - max(len(projects) - 1, 0), 1)
-    return tuple(
-        ProjectBinding(project, config.workspace_id, spare if position == 0 else 1)
-        for position, project in enumerate(projects)
-    )
+    return tuple(ProjectBinding(project, config.home_workspace.id, 1) for project in projects)

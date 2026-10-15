@@ -25,7 +25,7 @@ def test_clear_drops_the_override_through_the_daemon(tmp_path: Path) -> None:
     root = _init_runner(tmp_path)
     config = load_runner_config(root)
     store = SqlAlchemyRunnerStore(create_engine_from_url(config.db_url), runner_store_errors())
-    store.set_workspace_prompt(config.workspace_id, prompt="AN OVERRIDE", at=datetime(2026, 1, 1, tzinfo=UTC))
+    store.set_workspace_prompt(config.home_workspace.id, prompt="AN OVERRIDE", at=datetime(2026, 1, 1, tzinfo=UTC))
     standing = _run("status", "--dir", str(root))
     assert "store override" in standing.output
     assert "runner prompt clear" in standing.output

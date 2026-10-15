@@ -24,6 +24,7 @@ from tests.runner_fakes import (
     FakeProvider,
     make_context,
     make_store,
+    serving,
 )
 from tests.support import count_queries
 
@@ -163,7 +164,7 @@ def test_fallback_reset_statement_count_is_flat_in_the_declared_subscriptions(tm
         harness=FakeHarness(handle=None, verdict=None),  # type: ignore[arg-type]
         probe=FakeProbe(),
         clock=FixedClock(_NOW),
-        config=LoopConfig(runner_name="r1", workspace_id="ws1", runner_id=FIXTURE_RUNNER_ID, max_agents=1),
+        config=LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID, bindings=serving(1)),
         subscriptions=resolved,
     )
 
@@ -193,7 +194,7 @@ def test_fallback_reset_picks_the_soonest_reset_across_declared_slugs(tmp_path: 
         harness=FakeHarness(handle=None, verdict=None),  # type: ignore[arg-type]
         probe=FakeProbe(),
         clock=FixedClock(_NOW),
-        config=LoopConfig(runner_name="r1", workspace_id="ws1", runner_id=FIXTURE_RUNNER_ID, max_agents=1),
+        config=LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID, bindings=serving(1)),
         subscriptions=resolved,
     )
 

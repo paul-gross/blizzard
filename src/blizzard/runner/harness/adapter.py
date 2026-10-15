@@ -446,6 +446,44 @@ class IHarnessHealthProbe(Protocol):
         ...
 
 
+class EverySpawnRootProbe:
+    """One binding's health probe over every spawn root its workers start in: each of ``probes`` was built for one
+    root, so ambient conflicts are the union of theirs, and every other answer — the same for every root — is the
+    first's."""
+
+    def __init__(self, probes: Sequence[IHarnessHealthProbe]) -> None:
+        self._probes = tuple(probes)
+        self._first = self._probes[0]
+
+    def binary_present(self) -> bool:
+        return self._first.binary_present()
+
+    def probe_authentication(self) -> bool:
+        return self._first.probe_authentication()
+
+    def config_conflicts(self) -> tuple[str, ...]:
+        return tuple(dict.fromkeys(conflict for probe in self._probes for conflict in probe.config_conflicts()))
+
+    def supported_version(self) -> SpecifierSet | None:
+        return self._first.supported_version()
+
+    def supported_version_display(self) -> str | None:
+        return self._first.supported_version_display()
+
+    def normalize_version(self, raw: str | None) -> str | None:
+        return self._first.normalize_version(raw)
+
+    def classifies_offline(self) -> bool:
+        return self._first.classifies_offline()
+
+    def declared_degradations(self) -> tuple[DeclaredDegradation, ...]:
+        return self._first.declared_degradations()
+
+
+def _conforms_every_spawn_root_probe(x: EverySpawnRootProbe) -> IHarnessHealthProbe:
+    return x
+
+
 class IHarnessLifecycleAndVerdict(IHarnessWorkerLifecycle, IHarnessVerdictParsing, Protocol):
     """Worker lifecycle plus verdict parsing, combined into the one slice a consumer
     needing both takes rather than the full adapter (``bzh:seam-size-ceiling``)."""

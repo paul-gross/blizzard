@@ -7,7 +7,6 @@ scenarios below cover ``resume:<node>`` and a named pool.
 
 from __future__ import annotations
 
-import dataclasses
 import json
 import os
 import subprocess
@@ -198,7 +197,6 @@ def test_session_modes_resume_targeted_and_fresh_across_a_cycle(tmp_path: Path) 
         assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202  # ready for the runner
 
         config = _runner_config(runner_dir, workspace, bin_dir, hub_port)
-        config = dataclasses.replace(config, max_agents=1)
         db_url = config.db_url
         fenced = dict(os.environ)
         fenced["BLIZZARD_MOCK_HARNESS_FENCE"] = "1"
@@ -341,7 +339,7 @@ def test_a_named_pool_threads_one_session_across_nodes_and_reasserts_its_model(t
         chunk_id = ingested.json()["chunk_id"]
         assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
 
-        config = dataclasses.replace(_runner_config(runner_dir, workspace, bin_dir, hub_port), max_agents=1)
+        config = _runner_config(runner_dir, workspace, bin_dir, hub_port)
         db_url = config.db_url
         fenced = dict(os.environ)
         fenced["BLIZZARD_MOCK_HARNESS_FENCE"] = "1"

@@ -6,6 +6,7 @@ its lease. Chunk-scoped segment reads resolve through the same session-file read
 from __future__ import annotations
 
 from blizzard.runner.environments.repository import IReadEnvironmentRepository
+from blizzard.runner.environments.workspaces import IWorkspaces
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.leases.model import Lease
@@ -35,14 +36,14 @@ class TranscriptService:
         environments: IReadEnvironmentRepository,
         transcripts: ITranscriptRepositoryResolver,
         archived: IReadArchivedTranscriptRepository,
-        workspace_root: str,
+        workspaces: IWorkspaces,
     ) -> None:
         self._leases = leases
         self._transcript_ledger = transcript_ledger
         self._environments = environments
         self._transcripts = transcripts
         self._archived = archived
-        self._workspace_root = workspace_root
+        self._workspaces = workspaces
 
     def for_lease(self, lease_id: str) -> ResolvedTranscript | None:
         """The lease's resolved transcript, or ``None`` when no lease with this id ever
@@ -110,8 +111,9 @@ class TranscriptService:
         return repository.read_turns(session.session_id, spawn_cwd=spawn_cwd, since=since)
 
     def _spawn_cwd(self, chunk_id: str) -> str | None:
-        bindings = self._environments.bindings_for_chunk(chunk_id)
-        # A closed lease's bindings are already released, so `bindings_for_chunk` returns `[]` and the
-        # hint is legitimately `None`; the primary by-session-id lookup does not need it.
-        fallback_workdir = bindings[0].workdir if bindings else None
-        return SpawnCwd(self._workspace_root, fallback_workdir).path
+        # The newest binding, released or not: a closed lease's transcript still reads in its own workspace. A
+        # chunk never bound here has no hint, which the primary by-session-id lookup does not need.
+        binding = self._environments.newest_binding_for_chunk(chunk_id)
+        if binding is None:
+            return None
+        return SpawnCwd(self._workspaces.spawn_root(binding.workspace_id), binding.workdir).path

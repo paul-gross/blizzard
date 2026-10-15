@@ -57,6 +57,19 @@ export class LocalInfoView {
     const verdict: readonly KitFact[] = v.identity
       ? [{ label: 'identity', template: verdictValue, testid: 'runner-verdict' }]
       : [];
+    const bindings = v.capacities.bindings ?? [];
+    const slots = bindings.reduce((sum, binding) => sum + binding.agents, 0);
+    const bindingRows: readonly KitFact[] = bindings.map((binding) => ({
+      label: `agents · ${binding.project} → ${binding.workspace_id}`,
+      value: `${binding.used}/${binding.agents} slots`,
+      testid: 'binding-agents',
+    }));
+    // Entries resolving to one project leave the runner claiming nothing until the config is fixed.
+    const conflictRows: readonly KitFact[] = (v.routing_conflicts ?? []).map((conflict) => ({
+      label: 'routing conflict',
+      value: `${conflict.entries.join(', ')} → ${conflict.project_id} · not claiming`,
+      testid: 'routing-conflict',
+    }));
     return [
       { label: 'runner', template: identityValue, testid: 'runner-identity' },
       ...verdict,
@@ -64,7 +77,9 @@ export class LocalInfoView {
       { label: 'link', template: linkValue },
       { label: 'last flush', value: this.lastFlushLabel(), testid: 'hub-last-flush' },
       { label: 'buffered', value: `${v.hub.buffer_depth} events`, testid: 'hub-buffered' },
-      { label: 'agents', value: `${v.capacities.used}/${v.capacities.max_agents} slots` },
+      { label: 'agents', value: `${v.capacities.used}/${slots} slots`, testid: 'agents-total' },
+      ...bindingRows,
+      ...conflictRows,
       { label: 'gates', value: v.gates?.join(', ') || 'none', testid: 'hub-gates' },
       { label: 'loop', template: loopValue },
     ];

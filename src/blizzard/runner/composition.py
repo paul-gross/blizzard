@@ -14,6 +14,7 @@ import os
 from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field, replace
+from pathlib import Path
 
 from sqlalchemy import Engine
 
@@ -31,10 +32,10 @@ from blizzard.foundation.store.readiness import Readiness, ReadinessService
 from blizzard.foundation.trace_export.exporter import ITraceExporter
 from blizzard.foundation.trace_export.internal.otlp import OtlpTraceExporter
 from blizzard.foundation.trace_export.settings import TracingSettings
-from blizzard.runner.config import RunnerConfig, SubscriptionDeclaration
+from blizzard.runner.config import HostWorkspace, RunnerConfig, SubscriptionDeclaration
 from blizzard.runner.config_table import ConfigError
 from blizzard.runner.environments.factory import build_workspace_provider
-from blizzard.runner.environments.provider import IWorkspaceProvider
+from blizzard.runner.environments.workspaces import IWorkspaces, WorkspaceEntry, WorkspaceRegistry
 from blizzard.runner.events.broker import EventBroker, RunnerEventPublisher
 from blizzard.runner.events.publisher import IRunnerEventPublisher
 from blizzard.runner.harness.bundle import BundleSnapshot
@@ -96,7 +97,7 @@ from blizzard.runner.store.internal.token_store import TokenStore
 from blizzard.runner.store.internal.transcript_ledger_store import TranscriptLedgerStore
 from blizzard.runner.store.internal.usage_store import UsageStore
 from blizzard.runner.store.runner_guard import install_runner_guard
-from blizzard.runner.stores import HostReadStores, HostStores, RunnerReadStores, RunnerStores
+from blizzard.runner.stores import HostReadStores, HostStores, IRunnerAudit, RunnerReadStores, RunnerStores
 from blizzard.runner.subscriptions.internal.credential_renewer_factory import select_renewer
 from blizzard.runner.subscriptions.internal.subprocess_one_shot_process import SubprocessOneShotProcess
 from blizzard.runner.tracing.attributes import (
@@ -137,7 +138,8 @@ class HostProcess:
     connections: RunnerStoreConnections
     host_stores: HostStores
     listeners: Listeners
-    provider: IWorkspaceProvider
+    #: Every workspace the host declares, each with its own provider, spawn root, standing prompt and lock.
+    workspaces: IWorkspaces
     events: EventBroker | None
     clock: SystemClock
     process: LinuxProcessProbe
@@ -221,8 +223,8 @@ class RunnerProcess:
         return self.host.engine
 
     @property
-    def provider(self) -> IWorkspaceProvider:
-        return self.host.provider
+    def workspaces(self) -> IWorkspaces:
+        return self.host.workspaces
 
     @functools.cached_property
     def events(self) -> IRunnerEventPublisher | None:
@@ -316,16 +318,37 @@ class _RunnersIdentity:
         return None
 
 
-def _held_environment_ids(runners: Callable[[], tuple[RunnerProcess, ...]]) -> Callable[[], list[str]]:
-    """The environment ids held by any of the host's runners, in runner order."""
+def _pool_held_ids(audit: IRunnerAudit, workspace_id: str) -> Callable[[], list[str]]:
+    """The environment ids any of the host's runners holds in ``workspace_id``'s pool, or under no workspace."""
 
     def held() -> list[str]:
-        ids: dict[str, None] = {}
-        for runner in runners():
-            ids.update(dict.fromkeys(runner.stores.environments.held_environment_ids()))
-        return list(ids)
+        return list(dict.fromkeys(b.environment_id for b in audit.held_workspace_bindings(workspace_id)))
 
     return held
+
+
+def build_workspaces(
+    declared: Sequence[HostWorkspace], host_root: Path, *, audit: IRunnerAudit | None = None
+) -> WorkspaceRegistry:
+    """The host's workspace registry: one provider per declared workspace, each with its spawn root and its standing
+    prompt resolved now — a missing prompt file or an unknown packaged sample is a start-up error. With ``audit``,
+    each provider reads its own pool's held set host-wide."""
+    entries = []
+    for workspace in declared:
+        held_ids = _pool_held_ids(audit, workspace.id) if audit is not None else None
+        provider = build_workspace_provider(workspace.settings(host_root), held_ids=held_ids)
+        entries.append(
+            WorkspaceEntry(
+                workspace.id, provider, spawn_root=provider.spawn_root(), prompt=workspace.resolved_prompt(host_root)
+            )
+        )
+    return WorkspaceRegistry(entries)
+
+
+def bound_spawn_roots(config: RunnerConfig, workspaces: IWorkspaces) -> tuple[str, ...]:
+    """The distinct spawn roots of the workspaces ``config``'s runner binds — what its health probes and
+    ambient-conflict checks run over."""
+    return tuple(dict.fromkeys(workspaces.spawn_root(workspace.id) for workspace in config.bound_workspaces))
 
 
 def _credential_renewal_pass(
@@ -521,7 +544,7 @@ def _build_host_graph(
     trace_platform: bool,
 ) -> HostProcess:
     """The host's own graph, with no runner on it yet. ``config`` carries the host's keys — listeners, tracing, the
-    workspace — and ``subscriptions`` are the host's declarations, which its credential renewal covers."""
+    workspaces — and ``subscriptions`` are the host's declarations, which its credential renewal covers."""
     install_runner_guard()
     engine = create_engine_from_url(config.db_url)
     try:
@@ -556,7 +579,7 @@ def _build_host_graph(
             connections=connections,
             host_stores=host_stores,
             listeners=Listeners.of(config),
-            provider=build_workspace_provider(config.workspace_settings, held_ids=_held_environment_ids(runners)),
+            workspaces=build_workspaces(config.workspaces, config.root, audit=host_stores.runner_audit),
             events=events,
             clock=clock,
             process=LinuxProcessProbe(),
@@ -651,7 +674,7 @@ def _build_runner(
         health = HarnessHealthCache(
             clock=clock,
             probes=build_production_harness_health_probes(
-                config.harness_settings, spawn_root=host.provider.spawn_root()
+                config.harness_settings, spawn_roots=bound_spawn_roots(config, host.workspaces)
             ),
             corpus=CommittedCorpus(),
             selftest_results=stores.selftest_results,

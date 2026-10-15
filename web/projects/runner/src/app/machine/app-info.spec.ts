@@ -16,7 +16,7 @@ const RUNNER_STATUS = {
   runner_id: 'runner-local',
   workspace_id: 'workspace-local',
   pause: { local: false, hub: false, effective: false },
-  capacities: { max_agents: 4, used: 1, free: 3 },
+  capacities: { used: 1, bindings: [{ project: 'p', project_id: 'p', workspace_id: 'ws', agents: 4, used: 1, free: 3 }] },
   hub: {
     endpoint: 'http://127.0.0.1:8421',
     reachable: true,

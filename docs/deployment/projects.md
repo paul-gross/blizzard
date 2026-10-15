@@ -133,6 +133,11 @@ projects = [{ project = "default", workspace = "workspace-local", agents = 1 }]
 The runner sends the project list at every registration. A `[[runner]]` with no `projects` key is halted, naming the
 key, and only `projects = []` declares that the runner serves nothing.
 
+A runner may bind its projects to several workspaces. Each binding's `agents` caps that binding alone, and a full
+binding asks the hub for nothing, so a busy project never stands in front of another project's work. The environments
+of one `[[workspace]]` form one pool, shared by every runner of the host that binds a project to it. Two entries that
+resolve to the same project leave the runner claiming nothing until one is removed; its status names both.
+
 `blizzard-runner init` writes a binding of `default` into a fresh host file, so a new runner is offered work on
 its first registration with no edit. A repeated `--project <id|slug>` names other projects instead, and the runner is
 added serving them; a project the tenant does not hold refuses the add, and nothing is added. `blizzard hub runner add

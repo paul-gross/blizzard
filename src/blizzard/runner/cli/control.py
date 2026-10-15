@@ -162,7 +162,19 @@ def status(ctx: click.Context, directory: str, runner_url: str | None, runner: s
     reason = f" — {pause['local_reason']}" if pause.get("local_reason") else ""
     click.echo(f"  {brake_state}{reason}")
     cap = view["capacities"]
-    click.echo(f"  capacity: {cap['used']}/{cap['max_agents']} used, {cap['free']} free")
+    bindings = cap.get("bindings", [])
+    total = sum(b["agents"] for b in bindings)
+    click.echo(f"  capacity: {cap['used']}/{total} used")
+    for b in bindings:
+        resolved = "" if b.get("project_id") else " (unresolved)"
+        click.echo(
+            f"    {b['project']}{resolved} -> {b['workspace_id']}: {b['used']}/{b['agents']} used, {b['free']} free"
+        )
+    for conflict in view.get("routing_conflicts", []):
+        click.echo(
+            f"  NOT CLAIMING: {', '.join(conflict['entries'])} all resolve to project {conflict['project_id']}"
+            " — bind each project once"
+        )
     hub = view["hub"]
     reachability = "reachable" if hub["reachable"] else "unreachable"
     contact = hub["last_contact_at"] or "never"

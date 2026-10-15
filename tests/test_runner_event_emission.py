@@ -67,7 +67,7 @@ def _seed_lease(store, *, retries_max: int, chunk="ch_1", lease="lease_1", epoch
         session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
         spawned_at=_NOW,
     )
-    store.record_binding(chunk_id=chunk, environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    store.record_binding(chunk_id=chunk, environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
 
 
 def _events(store):  # type: ignore[no-untyped-def]

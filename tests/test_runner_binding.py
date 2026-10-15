@@ -4,7 +4,7 @@ hold off: ``PATCH /api/runner`` and ``POST /api/selftests`` answer 503 naming th
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -22,7 +22,7 @@ from blizzard.runner.loop.tick import tick
 from blizzard.runner.loop_wiring import LoopWiring
 from blizzard.runner.store import schema
 from blizzard.runner.store.errors import RUNNER_SCOPED_OPTION, RunnerAlreadyBound, RunnerUnbound
-from tests.host_files import load_runner_config
+from tests.host_files import load_runner_config, with_workspace
 from tests.runner_client import runner_client
 from tests.runner_fakes import FakeHarness, FakeHub, SqlAlchemyRunnerStore, loop_graph, make_store
 
@@ -107,12 +107,12 @@ def test_a_runner_is_bound_from_configuration_before_its_hub_answers_and_registr
     tmp_path: Path,
 ) -> None:
     runner_runtime.init_environment(tmp_path / "runner")
-    config = replace(load_runner_config(tmp_path / "runner"), workspace_root=str(tmp_path / "workspace"))
+    config = with_workspace(load_runner_config(tmp_path / "runner"), root=str(tmp_path / "workspace"))
     hub = FakeHub(default_runner_id="rn_other")
     hub.down = True
     with loop_graph(config, runner_id="rn_a") as graph:
         assert graph.connections.runner_id == "rn_a"  # bound by its configured id, with the hub down
-        ctx = LoopWiring(config, "", "", None).context(hub, graph)
+        ctx = LoopWiring(config, "", None).context(hub, graph)
         try:
             tick(ctx)
             assert "runner_identity" not in _owners(graph.engine)  # an unreachable hub records no identity

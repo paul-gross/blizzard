@@ -78,6 +78,35 @@ def test_a_rebind_after_a_release_reads_as_held(tmp_path):  # type: ignore[no-un
 
 
 @pytest.mark.unit
+def test_the_newest_binding_of_a_chunk_reads_through_its_release(tmp_path):  # type: ignore[no-untyped-def]
+    """A lease's workspace is read from its newest binding row, released or not, and never from another chunk's."""
+    store = _store(tmp_path)
+    assert store.newest_binding_for_chunk("ch_1") is None
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/a/e1", bound_at=_NOW, workspace_id="ws_a")
+    store.record_binding(
+        chunk_id="ch_1", environment_id="e1", workdir="/b/e1", bound_at=_NOW + timedelta(minutes=1), workspace_id="ws_b"
+    )
+    store.record_binding(chunk_id="ch_2", environment_id="e2", workdir="/a/e2", bound_at=_NOW, workspace_id="ws_a")
+    store.record_release(chunk_id="ch_1", environment_id="e1", released_at=_NOW + timedelta(minutes=2))
+
+    newest = store.newest_binding_for_chunk("ch_1")
+    assert store.bindings_for_chunk("ch_1") == []
+    assert newest is not None
+    assert (newest.workspace_id, newest.workdir) == ("ws_b", "/b/e1")
+
+
+@pytest.mark.unit
+def test_the_newest_binding_of_a_chunk_is_the_latest_recorded_even_at_an_equal_instant(tmp_path):  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/a/e1", bound_at=_NOW, workspace_id="ws_a")
+    store.record_binding(chunk_id="ch_1", environment_id="e2", workdir="/b/e2", bound_at=_NOW)
+
+    newest = store.newest_binding_for_chunk("ch_1")
+    assert newest is not None
+    assert (newest.environment_id, newest.workspace_id) == ("e2", None)
+
+
+@pytest.mark.unit
 def test_release_epoch_floor_and_tenure_read_are_chunk_scoped_at_equal_instants(tmp_path: Path) -> None:
     store = _store(tmp_path)
     for chunk, epoch in (("ch_1", 1), ("ch_2", 9), ("ch_3", 1)):

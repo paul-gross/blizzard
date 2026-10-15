@@ -109,8 +109,12 @@ def test_judgement_launch_blocked_by_unresolvable_owner_escalates_in_place(tmp_p
         session=SessionReference(_FOREIGN_HARNESS_ID, "sess-a"),
         spawned_at=_NOW,
     )
-    store.record_binding(chunk_id="ch_blocked", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
-    store.record_binding(chunk_id="ch_done", environment_id="e_done", workdir="/ws/e_done", bound_at=_NOW)
+    store.record_binding(
+        chunk_id="ch_blocked", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1"
+    )
+    store.record_binding(
+        chunk_id="ch_done", environment_id="e_done", workdir="/ws/e_done", bound_at=_NOW, workspace_id="ws1"
+    )
 
     hub = FakeHub()
     hub.envelopes["ch_blocked"] = _build_envelope("ch_blocked")
@@ -165,7 +169,7 @@ def test_judgement_collect_blocked_by_unresolvable_owner_escalates_in_place(tmp_
         session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
         spawned_at=_NOW,
     )
-    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
     hub = FakeHub()
     hub.envelopes["ch_1"] = _build_envelope("ch_1")
     harness = FakeHarness(
@@ -228,7 +232,7 @@ def test_judgement_collect_blocked_by_unresolvable_owner_defers_while_locally_pa
         session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
         spawned_at=_NOW,
     )
-    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
     hub = FakeHub()
     hub.envelopes["ch_1"] = _build_envelope("ch_1")
     harness = FakeHarness(
@@ -288,7 +292,7 @@ def test_judgement_collect_blocked_by_unresolvable_owner_abandons_a_detached_chu
         session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
         spawned_at=_NOW,
     )
-    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
     hub = FakeHub()
     hub.envelopes["ch_1"] = _build_envelope("ch_1")
     harness = FakeHarness(
@@ -344,7 +348,9 @@ def test_escalate_blocked_by_unresolvable_owner_still_escalates_with_no_takeover
         session=SessionReference(_FOREIGN_HARNESS_ID, "sess-a"),
         spawned_at=_NOW,
     )
-    store.record_binding(chunk_id="ch_blocked", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    store.record_binding(
+        chunk_id="ch_blocked", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1"
+    )
 
     hub = FakeHub()
     harness = FakeHarness(
@@ -392,7 +398,9 @@ def test_fail_owner_block_short_circuits_a_retry_the_budget_would_otherwise_allo
         session=SessionReference(_FOREIGN_HARNESS_ID, "sess-a"),
         spawned_at=_NOW,
     )
-    store.record_binding(chunk_id="ch_blocked", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    store.record_binding(
+        chunk_id="ch_blocked", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1"
+    )
 
     hub = FakeHub()
     harness = FakeHarness(
@@ -471,8 +479,10 @@ def test_pool_head_owner_unresolvable_at_node_entry_escalates_but_a_sibling_chun
     store.record_closure(
         lease_id="lease_head", chunk_id="ch_pool", node_id="nd_build", reason="transitioned", closed_at=_NOW
     )
-    store.record_binding(chunk_id="ch_pool", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
-    store.record_binding(chunk_id="ch_sibling", environment_id="e2", workdir="/ws/e2", bound_at=_NOW)
+    store.record_binding(chunk_id="ch_pool", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
+    store.record_binding(
+        chunk_id="ch_sibling", environment_id="e2", workdir="/ws/e2", bound_at=_NOW, workspace_id="ws1"
+    )
 
     hub = FakeHub()
     # Routed here still — only its recorded owner is unresolvable, so `Attempt.detached`'s
@@ -538,8 +548,10 @@ def test_a_plain_resumes_unresolvable_owner_escalates_node_entry_but_a_sibling_s
     store.record_closure(
         lease_id="lease_head", chunk_id="ch_plain", node_id="nd_build", reason="transitioned", closed_at=_NOW
     )
-    store.record_binding(chunk_id="ch_plain", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
-    store.record_binding(chunk_id="ch_sibling", environment_id="e2", workdir="/ws/e2", bound_at=_NOW)
+    store.record_binding(chunk_id="ch_plain", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
+    store.record_binding(
+        chunk_id="ch_sibling", environment_id="e2", workdir="/ws/e2", bound_at=_NOW, workspace_id="ws1"
+    )
 
     hub = FakeHub()
     # Routed here still — only its recorded owner is unresolvable.

@@ -21,7 +21,7 @@ function dashboardBody(asks: readonly runnerApi.AskView[]): runnerApi.DashboardV
       runner_id: 'runner-local',
       workspace_id: 'workspace-local',
       pause: { local: false, hub: false, effective: false },
-      capacities: { max_agents: 4, used: 0, free: 4 },
+      capacities: { used: 0, bindings: [{ project: 'p', project_id: 'p', workspace_id: 'ws', agents: 4, used: 0, free: 4 }] },
       hub: { endpoint: 'http://127.0.0.1:8421', reachable: true, last_contact_at: null, buffer_depth: 0 },
       last_tick_at: null,
     },

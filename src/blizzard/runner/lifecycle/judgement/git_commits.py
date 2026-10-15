@@ -13,8 +13,8 @@ from typing import Protocol
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.repo_ref import pointer_key, repo_identity
 from blizzard.foundation.roles import domain_model
-from blizzard.runner.environments.provider import IWorkspaceProvider
 from blizzard.runner.environments.repository import EnvBinding
+from blizzard.runner.environments.workspaces import IWorkspaces
 from blizzard.runner.environments.worktree import IWorktreeGit, WorktreeGitError
 from blizzard.runner.hub.outbound import OutboundContext, OutboundFacts, OutboundStores
 from blizzard.runner.leases.model import Lease
@@ -125,7 +125,7 @@ class GitCommitsContext(OutboundContext, Protocol):
     @property
     def stores(self) -> GitCommitsStores: ...
     @property
-    def provider(self) -> IWorkspaceProvider: ...
+    def workspaces(self) -> IWorkspaces: ...
     @property
     def worktree_git(self) -> IWorktreeGit: ...
 
@@ -194,11 +194,13 @@ class DeclaredCommits:
     def _origins(self) -> dict[Key, str]:
         """``{(environment_id, repo): origin_url}`` across every bound environment.
 
-        The provider is the authority on both which repos an env holds and where each pushes,
-        so this is a lookup, never a path guessed from a workdir or a cwd."""
+        The provider of the workspace each binding names is the authority on both which repos an env
+        holds and where each pushes, so this is a lookup, never a path guessed from a workdir or a cwd.
+        A binding naming no declared workspace holds no repo."""
         origins: dict[Key, str] = {}
         for binding in self.bindings:
-            for repo in self.ctx.provider.repos(binding.environment_id):
+            provider = self.ctx.workspaces.provider(binding.workspace_id)
+            for repo in provider.repos(binding.environment_id) if provider is not None else ():
                 origins[(binding.environment_id, repo.name)] = repo.origin_url
         return origins
 

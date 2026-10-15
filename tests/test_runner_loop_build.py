@@ -25,6 +25,7 @@ from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.runner.app import build_hosted_app, create_app
 from blizzard.runner.composition import build_runner_process
 from blizzard.runner.config import (
+    DEFAULT_WORKSPACE_ID,
     ConfigError,
     RunnerConfig,
     SubscriptionDeclaration,
@@ -54,7 +55,7 @@ from blizzard.runner.subscriptions.internal.openai_credential_renewer import Ope
 from blizzard.runner.subscriptions.internal.openai_subscription_sampler import OpenAISubscriptionSampler
 from blizzard.runner.subscriptions.subscription_sampler import PROVIDER_ANTHROPIC, PROVIDER_OPENAI
 from tests.harness_sections import sections
-from tests.host_files import load_runner_config, write_minimal_host
+from tests.host_files import load_runner_config, one_workspace, write_minimal_host
 from tests.runner_client import runner_client, runner_seams
 from tests.runner_fakes import (
     FIXTURE_RUNNER_ID,
@@ -84,23 +85,22 @@ def test_basic_provider_wired_with_shared_absolute_root_and_capacity(tmp_path: P
         runner_id=FIXTURE_RUNNER_ID,
         root=tmp_path,
         db_url=HostLayout(tmp_path).default_db_url,
-        workspace_provider="basic",
-        workspace_root="scratch",
-        workspace_repos=(WorkspaceRepo("toy", "file:///tmp/toy.git"),),
-        max_environments=3,
+        workspaces=one_workspace(
+            provider="basic", root="scratch", repos=(WorkspaceRepo("toy", "file:///tmp/toy.git"),), max_environments=3
+        ),
     )
     hosted = build_hosted_app(config).app
     with loop_context(config) as loop:
-        assert isinstance(hosted.state.workspace_provider, BasicWorkspaceProvider)
-        assert isinstance(loop.provider, BasicWorkspaceProvider)
-        assert loop.config.env_capacity == 3
-        assert loop.config.workspace_root == ""
-        assert loop.usage.workspace_root == loop.config.workspace_root
-        assert hosted.state.workspace_provider._root == loop.provider._root == tmp_path / "scratch"
-        assert SpawnCwd.of_session(loop.config.workspace_root, str(tmp_path / "scratch" / "chunk")) == str(
-            tmp_path / "scratch" / "chunk"
-        )
-        assert runner_seams(hosted).runner_status._env_pool == ()
+        provider = loop.workspaces.provider(DEFAULT_WORKSPACE_ID)
+        assert isinstance(provider, BasicWorkspaceProvider)
+        assert provider.capacity() == 3
+        assert loop.workspaces.spawn_root(DEFAULT_WORKSPACE_ID) == ""
+        assert loop.usage.workspaces is loop.workspaces
+        assert provider._root == tmp_path / "scratch"
+        assert SpawnCwd.of_session(
+            loop.workspaces.spawn_root(DEFAULT_WORKSPACE_ID), str(tmp_path / "scratch" / "chunk")
+        ) == str(tmp_path / "scratch" / "chunk")
+        assert runner_seams(hosted).runner_status.environments() == []
 
 
 @pytest.mark.unit
@@ -109,13 +109,12 @@ def test_basic_default_root_is_shared_with_transcript_usage(tmp_path: Path) -> N
         runner_id=FIXTURE_RUNNER_ID,
         root=tmp_path,
         db_url=HostLayout(tmp_path).default_db_url,
-        workspace_provider="basic",
-        workspace_repos=(WorkspaceRepo("toy", "file:///tmp/toy.git"),),
+        workspaces=one_workspace(provider="basic", repos=(WorkspaceRepo("toy", "file:///tmp/toy.git"),)),
     )
 
     with loop_context(config) as loop:
-        assert loop.config.workspace_root == ""
-        assert loop.usage.workspace_root == loop.config.workspace_root
+        assert loop.workspaces.spawn_root(DEFAULT_WORKSPACE_ID) == ""
+        assert loop.usage.workspaces is loop.workspaces
 
 
 def _seeded_running_lease_store(tmp_path: Path):  # type: ignore[no-untyped-def]
@@ -151,7 +150,7 @@ def test_loop_wiring_threads_worker_env_passthrough_into_the_adapter(tmp_path: P
         runner_id=FIXTURE_RUNNER_ID,
         root=tmp_path,
         db_url=HostLayout(tmp_path).default_db_url,
-        workspace_root=str(tmp_path / "workspace"),
+        workspaces=one_workspace(root=str(tmp_path / "workspace")),
         worker_env_passthrough=("MY_HARNESS_QUIRK", "ANOTHER_VAR"),
     )
 
@@ -173,7 +172,7 @@ def test_loop_wiring_threads_a_declarations_credentials_path_and_cadence_into_it
         runner_id=FIXTURE_RUNNER_ID,
         root=tmp_path,
         db_url=HostLayout(tmp_path).default_db_url,
-        workspace_root=str(tmp_path / "workspace"),
+        workspaces=one_workspace(root=str(tmp_path / "workspace")),
         subscriptions=(
             SubscriptionDeclaration(
                 slug="anthropic",
@@ -200,7 +199,7 @@ def test_a_runner_naming_no_subscription_builds_no_sampler_and_registers_an_empt
         runner_id=FIXTURE_RUNNER_ID,
         root=tmp_path,
         db_url=HostLayout(tmp_path).default_db_url,
-        workspace_root=str(tmp_path / "workspace"),
+        workspaces=one_workspace(root=str(tmp_path / "workspace")),
     )
 
     with loop_context(config) as ctx:
@@ -217,7 +216,7 @@ def test_the_loops_declared_subscriptions_share_one_root_owned_http_client(tmp_p
         runner_id=FIXTURE_RUNNER_ID,
         root=tmp_path,
         db_url=HostLayout(tmp_path).default_db_url,
-        workspace_root=str(tmp_path / "workspace"),
+        workspaces=one_workspace(root=str(tmp_path / "workspace")),
         subscriptions=(
             SubscriptionDeclaration(slug="anthropic", name="Anthropic", provider=PROVIDER_ANTHROPIC),
             SubscriptionDeclaration(slug="codex", name="Codex", provider=PROVIDER_OPENAI),
@@ -255,7 +254,7 @@ def test_a_tick_with_an_openai_subscription_never_invokes_a_renewer(
         runner_id=FIXTURE_RUNNER_ID,
         root=tmp_path,
         db_url=HostLayout(tmp_path).default_db_url,
-        workspace_root=str(tmp_path / "workspace"),
+        workspaces=one_workspace(root=str(tmp_path / "workspace")),
         subscriptions=(
             SubscriptionDeclaration(
                 slug="codex", name="Codex", provider=PROVIDER_OPENAI, credentials_path=str(tmp_path / "auth.json")
@@ -266,7 +265,7 @@ def test_a_tick_with_an_openai_subscription_never_invokes_a_renewer(
     make_store(config.db_url)  # schema only; the graph opens its own engine over it
 
     with loop_graph(config) as graph:
-        ctx = LoopWiring(config, "", "", None).context(FakeHub(), graph)
+        ctx = LoopWiring(config, "", None).context(FakeHub(), graph)
         try:
             tick(ctx)
         finally:
@@ -301,7 +300,7 @@ def test_the_loops_usage_http_client_is_not_built_merely_by_composing_the_contex
         runner_id=FIXTURE_RUNNER_ID,
         root=tmp_path,
         db_url=HostLayout(tmp_path).default_db_url,
-        workspace_root=str(tmp_path / "workspace"),
+        workspaces=one_workspace(root=str(tmp_path / "workspace")),
     )
 
     with loop_context(config) as ctx:
@@ -316,7 +315,7 @@ def test_the_loops_usage_http_client_owner_closes_a_client_it_actually_built(tmp
         runner_id=FIXTURE_RUNNER_ID,
         root=tmp_path,
         db_url=HostLayout(tmp_path).default_db_url,
-        workspace_root=str(tmp_path / "workspace"),
+        workspaces=one_workspace(root=str(tmp_path / "workspace")),
     )
 
     with loop_context(config) as ctx:
@@ -337,7 +336,7 @@ def test_loop_wiring_threads_the_worker_settings_path_and_permission_mode(tmp_pa
         runner_id=FIXTURE_RUNNER_ID,
         root=tmp_path,
         db_url=HostLayout(tmp_path).default_db_url,
-        workspace_root=str(tmp_path / "workspace"),
+        workspaces=one_workspace(root=str(tmp_path / "workspace")),
         harness_sections=sections(ClaudeCodeSection(worker_settings_path=settings, permission_mode="acceptEdits")),
     )
 
@@ -359,7 +358,7 @@ def test_process_graph_delivers_the_published_snapshot_to_the_claude_code_adapte
         runner_id=FIXTURE_RUNNER_ID,
         root=tmp_path,
         db_url=HostLayout(tmp_path).default_db_url,
-        workspace_root=str(tmp_path / "workspace"),
+        workspaces=one_workspace(root=str(tmp_path / "workspace")),
         harness_sections=sections(ClaudeCodeSection(worker_settings_path=str(tmp_path / "worker-settings.json"))),
     )
     snapshot = publish_harness_bundle(bundle, tmp_path)
@@ -384,7 +383,7 @@ def test_registry_threads_the_autonomy_to_both_bindings(tmp_path: Path, autonomy
         runner_id=FIXTURE_RUNNER_ID,
         root=tmp_path,
         db_url=HostLayout(tmp_path).default_db_url,
-        workspace_root=str(tmp_path / "workspace"),
+        workspaces=one_workspace(root=str(tmp_path / "workspace")),
         autonomy=autonomy,
     )
 
@@ -464,7 +463,7 @@ def test_periodic_driver_threads_the_graph_broker_into_its_own_loop_wiring(tmp_p
         runner_id=FIXTURE_RUNNER_ID,
         root=tmp_path,
         db_url=HostLayout(tmp_path).default_db_url,
-        workspace_root=str(tmp_path / "workspace"),
+        workspaces=one_workspace(root=str(tmp_path / "workspace")),
     )
     broker = EventBroker()
 
@@ -480,7 +479,7 @@ def test_periodic_driver_defaults_to_no_broker(tmp_path: Path) -> None:
         runner_id=FIXTURE_RUNNER_ID,
         root=tmp_path,
         db_url=HostLayout(tmp_path).default_db_url,
-        workspace_root=str(tmp_path / "workspace"),
+        workspaces=one_workspace(root=str(tmp_path / "workspace")),
     )
 
     with loop_graph(config) as graph:
@@ -495,11 +494,11 @@ def test_context_health_is_the_graphs_own_cache(tmp_path: Path) -> None:
         runner_id=FIXTURE_RUNNER_ID,
         root=tmp_path,
         db_url=HostLayout(tmp_path).default_db_url,
-        workspace_root=str(tmp_path / "workspace"),
+        workspaces=one_workspace(root=str(tmp_path / "workspace")),
     )
 
     with loop_graph(config) as graph:
-        ctx = LoopWiring(config, "", "").context(FakeHub(), graph)
+        ctx = LoopWiring(config, "").context(FakeHub(), graph)
         try:
             assert ctx.harness_health is graph.health
         finally:
@@ -605,9 +604,9 @@ def test_hosted_graph_shares_process_scoped_dependencies_with_loop_and_recovery(
     graph = build_runner_process(config, events=EventBroker(), runner_id=FIXTURE_RUNNER_ID)
     hosted = build_hosted_app(config, process_graph=graph)
     try:
-        ctx = LoopWiring(config, "", "", graph.host.events).context(FakeHub(), graph)
+        ctx = LoopWiring(config, "", graph.host.events).context(FakeHub(), graph)
         try:
-            assert hosted.app.state.workspace_provider is ctx.provider is graph.provider
+            assert hosted.app.state.workspace_registry is ctx.workspaces is graph.workspaces
             assert runner_seams(hosted.app).harnesses is ctx.harnesses is graph.harnesses
             assert runner_seams(hosted.app).harness_health is ctx.harness_health is graph.health
             assert hosted.app.state.event_broker is graph.host.events
@@ -695,7 +694,7 @@ def test_periodic_driver_resolves_prompts_eagerly_at_construction(tmp_path: Path
         runner_id=FIXTURE_RUNNER_ID,
         root=tmp_path,
         db_url=HostLayout(tmp_path).default_db_url,
-        workspace_root=str(tmp_path / "workspace"),
+        workspaces=one_workspace(root=str(tmp_path / "workspace")),
         runner_prompt_file="does-not-exist.md",
     )
 
@@ -772,9 +771,9 @@ def test_both_roots_boot_with_a_single_enabled_harness(
         runner_id=FIXTURE_RUNNER_ID,
         root=tmp_path,
         db_url=HostLayout(tmp_path).default_db_url,
-        workspace_provider="basic",
-        workspace_root="scratch",
-        workspace_repos=(WorkspaceRepo("toy", "file:///tmp/toy.git"),),
+        workspaces=one_workspace(
+            provider="basic", root="scratch", repos=(WorkspaceRepo("toy", "file:///tmp/toy.git"),)
+        ),
         harness_sections=sections(
             ClaudeCodeSection(enabled=claude_code_enabled), OpenCodeSection(enabled=opencode_enabled)
         ),
@@ -794,7 +793,7 @@ def test_loop_wiring_of_delivers_its_bundle_to_the_graph_it_builds(tmp_path: Pat
         runner_id=FIXTURE_RUNNER_ID,
         root=tmp_path,
         db_url=HostLayout(tmp_path).default_db_url,
-        workspace_root=str(tmp_path / "workspace"),
+        workspaces=one_workspace(root=str(tmp_path / "workspace")),
     )
     snapshot = publish_harness_bundle(bundle, tmp_path)
 
@@ -820,7 +819,7 @@ def _harness_telemetry_env(
         runner_id=FIXTURE_RUNNER_ID,
         root=tmp_path,
         db_url=HostLayout(tmp_path).default_db_url,
-        workspace_root=str(tmp_path / "workspace"),
+        workspaces=one_workspace(root=str(tmp_path / "workspace")),
         harness_sections=sections(ClaudeCodeSection(worker_settings_path=str(settings))),
         tracing=tracing,
     )
@@ -919,9 +918,9 @@ def test_hosted_app_composes_the_escalation_takeover_command_over_the_runner_roo
         runner_id=FIXTURE_RUNNER_ID,
         root=tmp_path,
         db_url=f"sqlite:///{tmp_path / 'runner.db'}",
-        workspace_provider="basic",
-        workspace_root="scratch",
-        workspace_repos=(WorkspaceRepo("toy", "file:///tmp/toy.git"),),
+        workspaces=one_workspace(
+            provider="basic", root="scratch", repos=(WorkspaceRepo("toy", "file:///tmp/toy.git"),)
+        ),
     )
     migrated_store_at(config.db_url)
     store = make_store(config.db_url)

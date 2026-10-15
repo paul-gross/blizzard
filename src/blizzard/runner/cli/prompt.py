@@ -83,7 +83,7 @@ def prompt_install(name: str, directory: str, force: bool) -> None:
         raise click.ClickException(f"{destination} already exists — pass --force to overwrite it")
     destination.write_text(text)
     with click_exception_on(ConfigError):
-        repoint_workspace_prompt(HostLayout(config.root), config.workspace_id, file_path=str(destination))
+        repoint_workspace_prompt(HostLayout(config.root), config.home_workspace.id, file_path=str(destination))
     click.echo(f"installed sample {name} to {destination} and set the workspace's prompt_file")
     if _stored_override(config) is not None:
         click.echo("a store override stands and wins over this file — clear it first: `blizzard runner prompt clear`")
@@ -148,7 +148,7 @@ def prompt_clear(ctx: click.Context, directory: str, runner_url: str | None) -> 
     """Drop the store override so the configured workspace prompt resolves again.
 
     The one `prompt` verb that needs a running runner. Takes effect on subsequent spawns."""
-    workspace_id = load_runner(directory).workspace_id
+    workspace_id = load_runner(directory).home_workspace.id
     with RunnerDaemon.reach("prompt clear", directory, runner_url, OperatorTrace.source(ctx)) as daemon:
         daemon.send_to_host("delete", f"/api/host/workspaces/{quote(workspace_id, safe='')}/prompt").raise_for_status()
     click.echo("workspace-prompt override cleared — the configured prompt applies on subsequent spawns")
@@ -164,25 +164,17 @@ def _effective_prompt(config: RunnerConfig) -> tuple[str, str]:
     override = _stored_override(config)
     if override is not None:
         return override, _OVERRIDE_SOURCE
+    workspace = config.home_workspace
     try:
-        return config.resolved_workspace_prompt(), _configured_source(config)
+        return workspace.resolved_prompt(config.root), workspace.prompt_source()
     except ConfigError as exc:
         raise click.ClickException(str(exc)) from exc
-
-
-def _configured_source(config: RunnerConfig) -> str:
-    """Which config knob layer 2 resolves from, in the precedence `resolved_workspace_prompt` applies."""
-    if config.workspace_prompt_package:
-        return f'package "{config.workspace_prompt_package}"'
-    if config.workspace_prompt_file:
-        return f"file {config.workspace_prompt_file}"
-    return "inline workspace_prompt" if config.workspace_prompt else "none"
 
 
 def _stored_override(config: RunnerConfig) -> str | None:
     """The store's runtime override, or ``None``. A read-only query, so a live daemon is no bar."""
     try:
         with read_host_stores(config) as stores:
-            return stores.workspace_prompt.workspace_prompt_override(config.workspace_id)
+            return stores.workspace_prompt.workspace_prompt_override(config.home_workspace.id)
     except RunnerStoreError as exc:
         raise click.ClickException(f"could not read the runner store at {config.db_url}: {exc}") from exc

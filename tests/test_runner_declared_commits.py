@@ -80,7 +80,9 @@ def _lease(tmp_path: Path) -> _Lease:
         )
     )
     for env in _ENVS:
-        store.record_binding(chunk_id="ch_1", environment_id=env, workdir=f"/ws/{env}", bound_at=_NOW)
+        store.record_binding(
+            chunk_id="ch_1", environment_id=env, workdir=f"/ws/{env}", bound_at=_NOW, workspace_id="ws1"
+        )
     git = FakeWorktreeGit()
     ctx = make_context(
         store,

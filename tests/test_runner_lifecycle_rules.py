@@ -67,6 +67,7 @@ from blizzard.runner.lifecycle.model import (
     exited_worker_elicitation_move,
     exited_worker_settled_move,
     failure_move,
+    free_slots,
     gate_resolution_lease_id,
     held_chunk_move,
     held_chunk_reads_local_epoch,
@@ -75,7 +76,6 @@ from blizzard.runner.lifecycle.model import (
     lease_reconcile_move,
     mint_owner_source,
     next_lease_epoch,
-    open_slots,
     owner_unresolvable_closure,
     owner_unresolvable_move,
     owns_node_entry,
@@ -732,10 +732,10 @@ def test_advance_move_precedence() -> None:
     assert move() is AdvanceMove.EXITED
 
 
-def test_open_slots() -> None:
-    assert open_slots(4, 1) == 3
-    assert open_slots(4, 4) == 0
-    assert open_slots(2, 5) == 0
+def test_free_slots_never_read_below_zero() -> None:
+    assert free_slots(4, 1) == 3
+    assert free_slots(4, 4) == 0
+    assert free_slots(2, 5) == 0
 
 
 # --- sessions and harness selection ----------------------------------------------------------- #

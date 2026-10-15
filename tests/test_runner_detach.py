@@ -66,7 +66,7 @@ def _seed_running_lease(  # type: ignore[no-untyped-def]
         session=SessionReference(CLAUDE_CODE_HARNESS_ID, session),
         spawned_at=_NOW,
     )
-    store.record_binding(chunk_id=chunk, environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    store.record_binding(chunk_id=chunk, environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
 
 
 def _seed_orphan_lease(store, *, chunk="ch_1", lease="lease_1", retries_max=0):  # type: ignore[no-untyped-def]
@@ -84,7 +84,7 @@ def _seed_orphan_lease(store, *, chunk="ch_1", lease="lease_1", retries_max=0): 
             created_at=_NOW,
         )
     )
-    store.record_binding(chunk_id=chunk, environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    store.record_binding(chunk_id=chunk, environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
 
 
 def _detached_chunk(chunk="ch_1", *, status=ChunkStatus.READY):  # type: ignore[no-untyped-def]
@@ -577,7 +577,7 @@ def test_advance_held_chunk_unknown_at_the_hub_releases_envs(tmp_path):  # type:
     whose ``GET /chunks/{id}`` now 404s is released the same way a landed delivery is —
     :func:`_advance_held_chunk`'s own terminal branch."""
     store = _store(tmp_path)
-    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
     hub = FakeHub()
     hub.not_found = {"ch_1"}
     provider = FakeProvider({"e1": "/ws/e1"})
@@ -594,7 +594,7 @@ def test_advance_held_chunk_defers_on_a_transient_hub_failure(tmp_path):  # type
     """Companion to the above: an unreachable hub leaves the held-but-leaseless chunk's
     environment untouched, retried next tick."""
     store = _store(tmp_path)
-    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
     hub = FakeHub()
     hub.down = True
     provider = FakeProvider({"e1": "/ws/e1"})
@@ -657,7 +657,7 @@ def test_fill_releases_an_interrupted_claim_binding_when_chunk_unknown_at_the_hu
     FILL's bind->claim->spawn window is released the same way ``_advance_held_chunk``
     releases a held-but-leaseless chunk, not re-asked about forever."""
     store = _store(tmp_path)
-    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
     hub = FakeHub()
     hub.not_found = {"ch_1"}
     hub.queue = []  # nothing new to fill — the reconciler is the only path that could act

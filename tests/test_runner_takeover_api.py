@@ -21,7 +21,15 @@ from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.lifecycle.takeover import TakeoverService
 from tests.runner_client import runner_client
-from tests.runner_fakes import FakeHarness, FakeProbe, make_host_stores, make_store, make_stores
+from tests.runner_fakes import (
+    FakeHarness,
+    FakeProbe,
+    FakeProvider,
+    make_host_stores,
+    make_store,
+    make_stores,
+    single_workspace,
+)
 
 _NOW = datetime(2026, 7, 17, 12, 0, 0, tzinfo=UTC)
 
@@ -51,7 +59,7 @@ def _app_with_takeover(
         tokens=store,
         elicitations=store,
         local_api_url="http://127.0.0.1:8431",
-        workspace_root="",
+        workspaces=single_workspace(FakeProvider({})),
         harnesses=resolved_harnesses,
     )
     return create_app(

@@ -35,6 +35,7 @@ from blizzard.hub.store import schema as hub_schema
 from blizzard.hub.store.scoped import is_tenant_owned
 from blizzard.hub.tenancy import TenantId
 from blizzard.runner.composition import build_host_stores
+from blizzard.runner.config import DEFAULT_WORKSPACE_ID
 from blizzard.runner.environments.internal.winter_cli import SubprocessWinterCli
 from blizzard.runner.harness.identity import OPENCODE_HARNESS_ID
 from blizzard.runner.leases.model import NewLease
@@ -882,6 +883,7 @@ def test_kill9_at_declare_commit_crash_point(crash_env: CrashEnv, tmp_path: Path
         environment_id=_DECLARE_COMMIT_ENV,
         workdir=str(crash_env.workspace / _DECLARE_COMMIT_ENV),
         bound_at=_DECLARE_COMMIT_NOW,
+        workspace_id=DEFAULT_WORKSPACE_ID,
     )
     store.record_ask(
         lease_id="lease_declare_commit",

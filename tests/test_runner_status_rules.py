@@ -7,12 +7,16 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from blizzard.runner.environments.repository import EnvBinding
-from blizzard.runner.status.view import Capacities, EnvironmentSlot, HubConnectivity, PauseState
+from blizzard.runner.environments.repository import EnvBinding, OpenLeaseHold
+from blizzard.runner.hub.client import BindingDeclaration
+from blizzard.runner.hub.served_projects import ServedProject, ServedProjectsAnswer
+from blizzard.runner.lifecycle.routing import routing_map
+from blizzard.runner.status.view import BindingCapacity, Capacities, EnvironmentSlot, HubConnectivity, PauseState
 
 pytestmark = pytest.mark.unit
 
 _NOW = datetime(2026, 7, 1, 12, 0, tzinfo=UTC)
+_AT = _NOW
 
 
 # --- PauseState.of ----------------------------------------------------------------------
@@ -33,12 +37,36 @@ def test_the_local_reason_is_kept_only_while_the_local_brake_is_on() -> None:
 # --- Capacities.of ----------------------------------------------------------------------
 
 
-def test_free_is_what_remains_of_the_maximum() -> None:
-    assert Capacities.of(max_agents=4, used=1) == Capacities(max_agents=4, used=1, free=3)
+_BINDINGS = (BindingDeclaration("a", "ws1", 4), BindingDeclaration("b", "ws2", 2))
+_ROUTING = routing_map(
+    _BINDINGS,
+    ServedProjectsAnswer(
+        projects=(ServedProject("a", project_id="pr_a"), ServedProject("b", project_id="pr_b")), answered_at=_AT
+    ),
+)
+
+
+def test_each_binding_reports_what_remains_of_its_own_agents() -> None:
+    holds = [OpenLeaseHold("ch_1", held=True, workspace_id="ws1", project_id="pr_a")]
+    assert Capacities.of(_BINDINGS, _ROUTING, holds) == Capacities(
+        used=1,
+        bindings=(
+            BindingCapacity(project="a", project_id="pr_a", workspace_id="ws1", agents=4, used=1, free=3),
+            BindingCapacity(project="b", project_id="pr_b", workspace_id="ws2", agents=2, used=0, free=2),
+        ),
+    )
 
 
 def test_free_never_reads_below_zero() -> None:
-    assert Capacities.of(max_agents=2, used=5).free == 0
+    holds = [OpenLeaseHold(f"ch_{n}", held=False) for n in range(5)]
+    capacities = Capacities.of(_BINDINGS, _ROUTING, holds)
+    assert capacities.used == 5
+    assert [b.free for b in capacities.bindings] == [0, 0]
+
+
+def test_an_unresolved_binding_reports_no_project_id() -> None:
+    capacities = Capacities.of(_BINDINGS, routing_map(_BINDINGS, None), [])
+    assert [b.project_id for b in capacities.bindings] == [None, None]
 
 
 # --- HubConnectivity.of -----------------------------------------------------------------

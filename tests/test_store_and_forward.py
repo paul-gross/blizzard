@@ -307,7 +307,7 @@ def test_runner_drain_acks_a_replayed_completion_during_a_slow_hub_node_and_flus
         provider=FakeProvider({"e": "/ws/e"}),
         harness=harness,
         probe=FakeProbe(),
-        config=LoopConfig(runner_name="r1", workspace_id="w1", runner_id=FIXTURE_RUNNER_ID),
+        config=LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID),
         clock=FixedClock(now),
         registered=False,
     )

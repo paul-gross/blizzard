@@ -389,9 +389,11 @@ class IChunkStatusReader(Protocol):
 class IHubClient(IChunkStatusReader, Protocol):
     """The runner's client of the hub API. Outbound-only."""
 
-    def peek_queue(self, capabilities: Sequence[HarnessCapability], *, policy: str) -> list[QueueEntry]:
+    def peek_queue(
+        self, capabilities: Sequence[HarnessCapability], *, policy: str, project: str | None = None
+    ) -> list[QueueEntry]:
         """``POST /api/fleet/queue/peek`` — at most one queue entry matching ``capabilities``
-        under ``policy``; a refusal raises ``HubClientError``."""
+        under ``policy``, narrowed to ``project`` when one is named; a refusal raises ``HubClientError``."""
         ...
 
     def claim_route(self, claim: ClaimRequest) -> RouteClaimOutcome:

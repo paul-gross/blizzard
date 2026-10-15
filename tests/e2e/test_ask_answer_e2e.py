@@ -232,7 +232,7 @@ def test_ask_parks_then_answer_resumes_session_to_done(
 
         # A free local-API port the worker's `blizzard runner ask` will POST to.
         config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
-        config = dataclasses.replace(config, host="127.0.0.1", port=_free_port(), max_agents=1)
+        config = dataclasses.replace(config, host="127.0.0.1", port=_free_port())
         planted = tmp_path / "planted"
         planted.mkdir()
         fenced = dict(os.environ)

@@ -13,10 +13,11 @@ from blizzard.runner.environments.repository import (
     EnvBinding,
     IncompleteBinding,
     IWriteEnvironmentRepository,
+    OpenLeaseHold,
 )
 from blizzard.runner.store.errors import RunnerStoreConnections
-from blizzard.runner.store.internal.base import HELD_BINDING
-from blizzard.runner.store.schema import binding_releases, env_bindings, leases
+from blizzard.runner.store.internal.base import HELD_BINDING, Unclosed
+from blizzard.runner.store.schema import binding_releases, env_bindings, lease_closures, leases
 
 _log = get_logger("blizzard.runner.store")
 
@@ -43,6 +44,16 @@ class EnvironmentStore:
             .order_by(env_bindings.c.bound_at)
         )
         return [self._row_to_binding(r) for r in self._store.all(stmt)]
+
+    def newest_binding_for_chunk(self, chunk_id: str) -> EnvBinding | None:
+        stmt = (
+            self._store.select(env_bindings)
+            .where(env_bindings.c.chunk_id == chunk_id)
+            .order_by(env_bindings.c.id.desc())
+            .limit(1)
+        )
+        rows = self._store.all(stmt)
+        return self._row_to_binding(rows[0]) if rows else None
 
     def live_tenure_chunk_ids(self) -> list[str]:
         stmt = (
@@ -103,6 +114,28 @@ class EnvironmentStore:
             )
             for r in self._store.all(stmt)
         ]
+
+    def open_lease_holds(self) -> list[OpenLeaseHold]:
+        open_chunks = self._store.select(leases, leases.c.chunk_id).where(
+            Unclosed(leases.c.lease_id, lease_closures.c.lease_id).clause(self._store)
+        )
+        held = (
+            self._store.select(
+                env_bindings, env_bindings.c.chunk_id, env_bindings.c.workspace_id, env_bindings.c.project_id
+            )
+            .where(HELD_BINDING.clause(self._store))
+            .where(env_bindings.c.chunk_id.in_(open_chunks))
+            .order_by(env_bindings.c.id)
+        )
+        with self._store.connect() as conn:
+            chunk_ids = list(dict.fromkeys(str(r.chunk_id) for r in conn.execute(open_chunks)))
+            rows = list(conn.execute(held))
+        holds = [
+            OpenLeaseHold(chunk_id=str(r.chunk_id), held=True, workspace_id=r.workspace_id, project_id=r.project_id)
+            for r in rows
+        ]
+        holding = {hold.chunk_id for hold in holds}
+        return holds + [OpenLeaseHold(chunk_id=c, held=False) for c in chunk_ids if c not in holding]
 
     def complete_bindings(self, completions: Sequence[BindingCompletion]) -> None:
         if not completions:

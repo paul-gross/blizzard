@@ -741,9 +741,13 @@ RUNNER_CENSUS: dict[tuple[type, str], RunnerRecipe] = {
     ),
     (IReadEnvironmentRepository, "held_environment_ids"): lambda w: w.read.environments.held_environment_ids(),
     (IReadEnvironmentRepository, "bindings_for_chunk"): lambda w: w.read.environments.bindings_for_chunk(w.chunk_1),
+    (IReadEnvironmentRepository, "newest_binding_for_chunk"): lambda w: w.read.environments.newest_binding_for_chunk(
+        w.chunk_1
+    ),
     (IReadEnvironmentRepository, "live_tenure_chunk_ids"): lambda w: w.read.environments.live_tenure_chunk_ids(),
     (IReadEnvironmentRepository, "held_bindings"): lambda w: w.read.environments.held_bindings(),
     (IReadEnvironmentRepository, "incomplete_held_bindings"): lambda w: w.read.environments.incomplete_held_bindings(),
+    (IReadEnvironmentRepository, "open_lease_holds"): lambda w: w.read.environments.open_lease_holds(),
     (IReadTranscriptLedgerRepository, "transcript_segment"): lambda w: w.read.transcript_ledger.transcript_segment(
         w.transcript_segment_id
     ),

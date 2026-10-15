@@ -365,6 +365,39 @@ export type AttachmentResponse = {
 };
 
 /**
+ * BindingCapacityView
+ *
+ * One binding's agent slots: ``used`` plus ``free`` accounts for its ``agents``. ``project`` is the entry as
+ * configured; ``project_id`` the project it resolved to, ``None`` while it routes nothing.
+ */
+export type BindingCapacityView = {
+    /**
+     * Agents
+     */
+    agents: number;
+    /**
+     * Free
+     */
+    free: number;
+    /**
+     * Project
+     */
+    project: string;
+    /**
+     * Project Id
+     */
+    project_id?: string | null;
+    /**
+     * Used
+     */
+    used: number;
+    /**
+     * Workspace Id
+     */
+    workspace_id: string;
+};
+
+/**
  * BlockedView
  *
  * A chunk's blocked marking — present iff a pre-claim dependent (``not_ready`` or
@@ -411,17 +444,14 @@ export type BounceView = {
 /**
  * CapacitiesView
  *
- * Agent-slot accounting: ``used`` plus ``free`` accounts for ``max_agents``.
+ * Agent-slot accounting per binding, plus the runner-wide count of open leases. A lease whose project or
+ * workspace is not yet known counts against every binding it may belong to.
  */
 export type CapacitiesView = {
     /**
-     * Free
+     * Bindings
      */
-    free: number;
-    /**
-     * Max Agents
-     */
-    max_agents: number;
+    bindings?: Array<BindingCapacityView>;
     /**
      * Used
      */
@@ -2758,6 +2788,22 @@ export type RouteView = {
 };
 
 /**
+ * RoutingConflictView
+ *
+ * Two or more configured entries resolving to one project; while any stands, the runner claims nothing.
+ */
+export type RoutingConflictView = {
+    /**
+     * Entries
+     */
+    entries: Array<string>;
+    /**
+     * Project Id
+     */
+    project_id: string;
+};
+
+/**
  * RunnerAuthSessionView
  *
  * An own-identity read (``GET /api/auth/session``): whether the human surface is gated
@@ -2858,6 +2904,10 @@ export type RunnerStatusView = {
      */
     last_tick_at: string | null;
     pause: PauseStateView;
+    /**
+     * Routing Conflicts
+     */
+    routing_conflicts?: Array<RoutingConflictView>;
     /**
      * Runner Id
      */
@@ -3605,8 +3655,8 @@ export type TurnSegmentView = {
 /**
  * UnmatchedBindingView
  *
- * One held binding whose workdir matches no workspace the runner's provider lists. It keeps its
- * lease and still counts against ``max_agents``.
+ * One held binding whose workdir matches no workspace the host declares. It keeps its lease and still
+ * counts against every binding of the runner.
  */
 export type UnmatchedBindingView = {
     /**

@@ -33,7 +33,7 @@ from tests.crash.support import (
     winter_source,
     write_runner_config,
 )
-from tests.host_files import load_runner_config, write_host_file
+from tests.host_files import load_runner_config, with_workspace, write_host_file
 from tests.support import fixture_work_source, free_port
 
 pytestmark = [
@@ -46,7 +46,7 @@ pytestmark = [
 
 FIXTURE_ENV = "journey"
 # A fleet of envs so parked / escalated chunks (which retain their env for resume /
-# takeover) never starve the chunks still building; max_agents caps concurrent workers.
+# takeover) never starve the chunks still building; each binding's agents caps its concurrent workers.
 RUNNER_ENVS = ("e1", "e2", "e3", "e4")
 MAX_AGENTS = 2
 
@@ -480,7 +480,10 @@ def _widen_runner_pool(runner_dir: Path) -> None:
     import dataclasses
 
     config = load_runner_config(runner_dir)
-    config = dataclasses.replace(config, workspace_envs=RUNNER_ENVS, max_agents=MAX_AGENTS)
+    config = with_workspace(config, envs=RUNNER_ENVS)
+    config = dataclasses.replace(
+        config, bindings=tuple(dataclasses.replace(binding, agents=MAX_AGENTS) for binding in config.bindings or ())
+    )
     write_host_file(config)
 
 

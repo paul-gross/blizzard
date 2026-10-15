@@ -155,19 +155,22 @@ def test_a_valid_file_projects_each_key_to_its_runner_field(tmp_path: Path) -> N
     assert projected.worker_stdout_retention_days == 3
     assert projected.token_env == "BZ_HUB_TOKEN_R_ONE"
     assert projected.hub_token == "tok-one"
-    assert projected.max_agents == 5
     assert projected.projects == ("blizzard", "other")
-    assert (projected.workspace_id, projected.workspace_root, projected.workspace_envs) == (
+    assert (projected.home_workspace.id, projected.home_workspace.root, projected.home_workspace.envs) == (
         "ws-a",
         "/srv/ws",
         ("e1", "e2"),
     )
-    assert (projected.max_environments, projected.base_branch, projected.workspace_prompt_package) == (
+    assert (
+        projected.home_workspace.max_environments,
+        projected.home_workspace.base_branch,
+        projected.home_workspace.prompt_package,
+    ) == (
         4,
         "master",
         "winter",
     )
-    assert [repo.name for repo in projected.workspace_repos] == ["repo"]
+    assert [repo.name for repo in projected.home_workspace.repos] == ["repo"]
     assert (projected.gates, projected.runner_prompt, projected.transcripts_root) == (("review",), "be brief", "/tmp/t")
     assert projected.queue_strict is True
     assert projected.chunk_cap_usd == 5.0
@@ -380,17 +383,17 @@ def test_a_runner_with_no_projects_key_is_a_runner_error_and_an_empty_list_serve
     assert isinstance(halted, HaltedRunner) and any("has no projects" in e for e in halted.errors)
     empty = absent.replace('name = "r-one"\n', 'name = "r-one"\nid = "x"\nprojects = []\n')
     built = _built(HostConfig.load(_write(tmp_path / "b", empty)), _TOKEN)
-    assert built.config.projects == () and built.config.max_agents == 0
-    assert (built.config.workspace_id, built.config.workspace_root) == ("ws", "/w")
+    assert built.config.projects == () and built.config.bindings == ()
+    assert (built.config.home_workspace.id, built.config.home_workspace.root) == ("ws", "/w")
 
 
-def test_a_runner_binding_two_workspaces_halts_for_now(tmp_path: Path) -> None:
+def test_a_runner_may_bind_projects_to_several_workspaces(tmp_path: Path) -> None:
     text = (
         '[[workspace]]\nid = "a"\nenvs = ["e1"]\n[[workspace]]\nid = "b"\nenvs = ["e2"]\n[[runner]]\nname = "r-one"\nid = "x"\n'
         'projects = [{ project = "p", workspace = "a", agents = 1 }, { project = "q", workspace = "b", agents = 1 }]\n'
     )
-    (halted,) = HostConfig.load(_write(tmp_path / "host", text)).projections(_TOKEN)
-    assert isinstance(halted, HaltedRunner) and any("more than one workspace" in e for e in halted.errors)
+    built = _built(HostConfig.load(_write(tmp_path / "host", text)), _TOKEN)
+    assert [(b.project, b.workspace, b.agents) for b in built.config.bindings or ()] == [("p", "a", 1), ("q", "b", 1)]
 
 
 @pytest.mark.parametrize(

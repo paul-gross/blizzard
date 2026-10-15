@@ -227,34 +227,54 @@ class ActiveLeaseProcessIsLive(QueryCheck):
 
 
 class UniqueEnvBinding(QueryCheck):
-    """A held env id (a binding with no release fact) is bound to at most one chunk. Two
-    chunks sharing a held env would double-book it."""
+    """A held environment of a workspace (a binding with no release fact) is bound to at most one chunk across the
+    host: two chunks sharing a held ``(workspace_id, environment_id)`` would double-book it. A held row naming no
+    workspace may be in any pool, so it conflicts with every other chunk's held row on the same environment id."""
 
     def run(self) -> list[Violation]:
         violations: list[Violation] = []
-        by_env: dict[str, set[str]] = {}
-        for chunk_id, env_id in self._held_bindings():
-            by_env.setdefault(env_id, set()).add(chunk_id)
-        for env_id, chunks in by_env.items():
-            if len(chunks) > 1:
+        by_env: dict[str, dict[str | None, set[str]]] = {}
+        for chunk_id, env_id, workspace_id in self._held_bindings():
+            by_env.setdefault(env_id, {}).setdefault(workspace_id, set()).add(chunk_id)
+        for env_id, by_workspace in by_env.items():
+            unknown = by_workspace.get(None, set())
+            for workspace_id, chunks in sorted(by_workspace.items(), key=lambda item: item[0] or ""):
+                if workspace_id is None:
+                    continue
+                if len(chunks) > 1:
+                    violations.append(
+                        Violation(
+                            "runner:unique-env-binding",
+                            f"env {env_id} of workspace {workspace_id} held by chunks {sorted(chunks)}",
+                        )
+                    )
+            every = set().union(*by_workspace.values())
+            if unknown and len(every) > 1:
                 violations.append(
-                    Violation("runner:unique-env-binding", f"env {env_id} held by chunks {sorted(chunks)}")
+                    Violation(
+                        "runner:unique-env-binding",
+                        f"env {env_id} held by chunks {sorted(every)}, at least one naming no workspace",
+                    )
                 )
         return violations
 
-    def _held_bindings(self) -> list[tuple[str, str]]:
+    def _held_bindings(self) -> list[tuple[str, str, str | None]]:
         releases = {
             (row[0], row[1])
             for row in self.conn.execute(
                 select(runner.binding_releases.c.chunk_id, runner.binding_releases.c.environment_id)
             )
         }
-        held: list[tuple[str, str]] = []
-        for chunk_id, env_id in self.conn.execute(
-            select(runner.env_bindings.c.chunk_id, runner.env_bindings.c.environment_id)
+        held: list[tuple[str, str, str | None]] = []
+        for chunk_id, env_id, workspace_id in self.conn.execute(
+            select(
+                runner.env_bindings.c.chunk_id,
+                runner.env_bindings.c.environment_id,
+                runner.env_bindings.c.workspace_id,
+            )
         ):
             if (chunk_id, env_id) not in releases:
-                held.append((chunk_id, env_id))
+                held.append((chunk_id, env_id, workspace_id))
         return held
 
 

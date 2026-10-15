@@ -40,9 +40,20 @@ def harness_status(directory: str) -> None:
     try:
         click.echo(f"autonomy: {config.autonomy} (from {config.autonomy_source})")
         shared = shared_inputs(config.harness_settings)
-        spawn_root = build_workspace_provider(config.workspace_settings).spawn_root()
+        spawn_roots = dict.fromkeys(
+            build_workspace_provider(workspace.settings(config.root)).spawn_root()
+            for workspace in config.bound_workspaces
+        )
         for declaration, section in declared(config.harness_sections):
-            _echo(declaration.diagnostics(section, shared, spawn_root=spawn_root))
+            _echo(
+                tuple(
+                    dict.fromkeys(
+                        line
+                        for spawn_root in spawn_roots
+                        for line in declaration.diagnostics(section, shared, spawn_root=spawn_root)
+                    )
+                )
+            )
         if config.harness_config_dir is None:
             click.echo("config_dir: none")
             for declaration, section in declared(config.harness_sections):

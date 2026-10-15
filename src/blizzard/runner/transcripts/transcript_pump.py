@@ -23,6 +23,7 @@ from blizzard.runner.environments.repository import (
     IReadEnvironmentRepository,
     group_bindings_by_chunk,
 )
+from blizzard.runner.environments.workspaces import IWorkspaces
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.registry import UnavailableHarnessError, UnknownHarnessError
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
@@ -63,8 +64,6 @@ class TranscriptPumpConfig(Protocol):
     def transcript_record_max_bytes(self) -> int | None: ...
     @property
     def transcript_chunk_max_bytes(self) -> int | None: ...
-    @property
-    def workspace_root(self) -> str: ...
 
 
 class TranscriptPumpContext(OutboundContext, Protocol):
@@ -74,6 +73,8 @@ class TranscriptPumpContext(OutboundContext, Protocol):
     def config(self) -> TranscriptPumpConfig: ...
     @property
     def transcripts_wired(self) -> bool: ...
+    @property
+    def workspaces(self) -> IWorkspaces: ...
     def transcript_source_for(self, session: SessionReference) -> IHarnessTranscriptSource: ...
 
 
@@ -305,8 +306,13 @@ class TranscriptPump:
             assert gate.outcome is not None
             return gate.outcome
 
-        bindings = bindings_by_chunk.get(segment.chunk_id, [])
-        spawn_cwd = SpawnCwd(self.ctx.config.workspace_root, bindings[0].workdir if bindings else None).path
+        held = bindings_by_chunk.get(segment.chunk_id, [])
+        # A segment outliving its lease's release still reads in the workspace its newest binding named.
+        binding = held[0] if held else self.ctx.stores.environments.newest_binding_for_chunk(segment.chunk_id)
+        spawn_cwd = SpawnCwd(
+            self.ctx.workspaces.spawn_root(binding.workspace_id if binding else None),
+            held[0].workdir if held else None,
+        ).path
         try:
             source = self.ctx.transcript_source_for(segment.session)
         except (UnknownHarnessError, UnavailableHarnessError) as exc:

@@ -34,6 +34,7 @@ from blizzard.runner.environments.provider import (
     RepoBinding,
     WorkspaceAcquisitionError,
 )
+from blizzard.runner.environments.workspaces import IWorkspaces, WorkspaceEntry, WorkspaceRegistry
 from blizzard.runner.environments.worktree import IWorktreeGit
 from blizzard.runner.events.broker import EventBroker, RunnerEventPublisher
 from blizzard.runner.harness.adapter import (
@@ -80,6 +81,7 @@ from blizzard.runner.leases.internal.worker_stdout_files import WorkerStdoutFile
 from blizzard.runner.lifecycle.env_release import EnvironmentRelease
 from blizzard.runner.lifecycle.judgement.check_runner import CheckOutcome, ICheckRunner
 from blizzard.runner.lifecycle.judgement.internal.elicitation_files import ElicitationFiles
+from blizzard.runner.lifecycle.routing import RoutedBinding
 from blizzard.runner.lifecycle.session import HarnessSelector, SessionResolver
 from blizzard.runner.loop.context import LoopConfig, LoopContext, ResolvedSubscription
 from blizzard.runner.loop_wiring import LoopWiring
@@ -418,10 +420,11 @@ def runner_invariant_violations(store: object) -> list[Violation]:
 
 @dataclass(frozen=True)
 class PeekCall:
-    """One ``peek_queue`` call the fake recorded: the capabilities and the policy it was sent."""
+    """One ``peek_queue`` call the fake recorded: the capabilities, the policy and the project it was sent."""
 
     capabilities: list[HarnessCapability]
     policy: str
+    project: str | None = None
 
 
 #: The bearer token a :class:`FakeHub` client presents unless a test hands it another.
@@ -478,6 +481,9 @@ class FakeHub:
         # One entry per `peek_queue` call, naming the request it carried —
         # lets a test assert on the capabilities/policy the call site sends.
         self.peek_queue_requests: list[PeekCall] = []
+        # Whether a peek naming a project is narrowed to it, as a current hub does; ``False`` plays a hub too old
+        # to honor ``project``, answering every served project's head.
+        self.narrows_peek = True
         self.claim_outcome: RouteClaimOutcome | None = None
         self.apply_responses: list[ApplyReply] = []
         self.envelopes: dict[str, Envelope] = {}
@@ -548,12 +554,20 @@ class FakeHub:
         """Present ``held``'s current token on every call from now on."""
         self._held = held
 
-    def peek_queue(self, capabilities: Sequence[HarnessCapability], *, policy: str) -> list[QueueEntry]:
+    def peek_queue(
+        self, capabilities: Sequence[HarnessCapability], *, policy: str, project: str | None = None
+    ) -> list[QueueEntry]:
         self.peek_queue_calls += 1
-        self.peek_queue_requests.append(PeekCall(capabilities=list(capabilities), policy=policy))
-        if self.queue_responses:
-            return self.queue_responses.pop(0)
-        return list(self.queue)
+        self.peek_queue_requests.append(PeekCall(capabilities=list(capabilities), policy=policy, project=project))
+        entries = self.queue_responses.pop(0) if self.queue_responses else list(self.queue)
+        if project is None or not self.narrows_peek:
+            return entries
+        # A scripted entry naming no project is taken as the peeked project's own.
+        return [
+            replace(entry, project_id=project) if entry.project_id is None else entry
+            for entry in entries
+            if entry.project_id in (None, project)
+        ]
 
     def _caller(self) -> str:
         """The runner id the presented token resolves to — a 401 for a token the hub does not hold."""
@@ -1439,6 +1453,47 @@ class FakeCheckRunner:
         return self._outcomes.get(command, self._default)
 
 
+#: The workspace id a test context's single workspace carries.
+TEST_WORKSPACE_ID = "ws1"
+
+#: The project a test context's default binding serves, declared by its id.
+FIXTURE_PROJECT_ID = "project-fixture"
+
+
+def serving(
+    agents: int = 1, *, project: str = FIXTURE_PROJECT_ID, workspace_id: str = TEST_WORKSPACE_ID
+) -> tuple[BindingDeclaration, ...]:
+    """A runner's bindings: one project bound to one workspace, running ``agents`` at once."""
+    return (BindingDeclaration(project=project, workspace_id=workspace_id, agents=agents),)
+
+
+def fixture_route(agents: int = 1, *, workspace_id: str = TEST_WORKSPACE_ID) -> RoutedBinding:
+    """The default binding as the routing map resolves it — the project its entry names is itself."""
+    return RoutedBinding(
+        project=FIXTURE_PROJECT_ID, project_id=FIXTURE_PROJECT_ID, workspace_id=workspace_id, agents=agents
+    )
+
+
+def single_workspace(
+    provider: IWorkspaceProvider,
+    *,
+    workspace_id: str = TEST_WORKSPACE_ID,
+    spawn_root: str | None = None,
+    prompt: str = "",
+) -> WorkspaceRegistry:
+    """A registry of one workspace over ``provider``, spawning in ``spawn_root`` (the provider's own when ``None``)."""
+    return WorkspaceRegistry(
+        [
+            WorkspaceEntry(
+                workspace_id,
+                provider,
+                spawn_root=provider.spawn_root() if spawn_root is None else spawn_root,
+                prompt=prompt,
+            )
+        ]
+    )
+
+
 def make_context(
     store: SqlAlchemyRunnerStore,
     *,
@@ -1458,8 +1513,14 @@ def make_context(
     registered: bool = True,
     identity_verdict: IdentityVerdictHolder | None = None,
     hub_token: HubTokenHolder | None = None,
+    workspaces: IWorkspaces | None = None,
+    spawn_root: str | None = None,
+    workspace_prompt: str = "",
 ) -> LoopContext:
     """Assemble a :class:`LoopContext` from a real store and injected fakes.
+
+    ``workspaces`` defaults to one workspace, ``ws1``, over ``provider``, spawning in ``spawn_root`` (the provider's
+    own when ``None``) with ``workspace_prompt`` as its standing prompt.
 
     ``chunk_views`` defaults to a fresh :class:`ReadThroughChunkViews` over ``hub`` — a step driven directly
     (not through ``tick()``) reads the hub on every ``get()``. ``registered`` seeds the store's identity row and
@@ -1469,11 +1530,13 @@ def make_context(
         if config is not None
         else LoopConfig(
             runner_name="r1",
-            workspace_id="ws1",
             runner_id=store.connections.runner_id or FIXTURE_RUNNER_ID,
-            max_agents=1,
+            bindings=serving(),
         )
     )
+    if resolved_config.bindings is None and resolved_config.projects is None:
+        # A runner declaring nothing claims nothing: the default binding gives it one project to claim for.
+        resolved_config = replace(resolved_config, bindings=serving())
     if not resolved_config.runner_id:
         # The runner the store is bound to — the fixture runner, whose token the fake hub holds.
         resolved_config = replace(resolved_config, runner_id=store.connections.runner_id or FIXTURE_RUNNER_ID)
@@ -1481,7 +1544,11 @@ def make_context(
     _verdict = identity_verdict if identity_verdict is not None else matched_verdict()
     _hub: IHubClient = VerifiedHubClient(hub, _verdict) if identity_verdict is not None else hub
     _chunk_views: IChunkViews = chunk_views if chunk_views is not None else ReadThroughChunkViews(hub=_hub)
-    _provider: IWorkspaceProvider = provider
+    _workspaces = (
+        workspaces
+        if workspaces is not None
+        else single_workspace(provider, spawn_root=spawn_root, prompt=workspace_prompt)
+    )
     _harnesses = HarnessRegistry(
         {CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=harness, transcript_source=harness.transcript_source())}
     )
@@ -1509,6 +1576,12 @@ def make_context(
         )
         store.record_runner_identity(seeded)
         _identity.hold(seeded)
+        if resolved_config.bindings and store.served_projects_answer() is None:
+            # The hub's answer to the declaration, as the registration records it: each entry names itself.
+            store.record_served_projects(
+                [ServedProject(entry=b.project, project_id=b.project) for b in resolved_config.bindings],
+                at=REGISTERED_AT,
+            )
     publisher = RunnerEventPublisher(events, FIXTURE_RUNNER_ID) if events is not None else None
     context = LoopContext(
         stores=_stores,
@@ -1520,7 +1593,7 @@ def make_context(
         identity_verdict=_verdict,
         hub_token=hub_token if hub_token is not None else fixed_hub_token(),
         chunk_views=_chunk_views,
-        provider=_provider,
+        workspaces=_workspaces,
         process=_probe,
         subscriptions=subscriptions,
         worktree_git=_wt,
@@ -1534,7 +1607,7 @@ def make_context(
             usage=store,
             clock=_clock,
             worker_files=_files,
-            workspace_root=resolved_config.workspace_root,
+            workspaces=_workspaces,
             harnesses=_harnesses,
             invocation_boundaries=store,
             transcripts_wired=_transcripts_wired,
@@ -1546,7 +1619,7 @@ def make_context(
             transcripts_wired=_transcripts_wired,
         ),
         harness_selector=HarnessSelector(harnesses=_harnesses),
-        env_release=EnvironmentRelease(environments=store, clock=_clock, provider=_provider, events=publisher),
+        env_release=EnvironmentRelease(environments=store, clock=_clock, workspaces=_workspaces, events=publisher),
         # Wired exactly when `harness` itself holds a transcript source, resolved once here;
         # `LoopWiring.context` always wires it, its graph's default harness being guarded to resolve one.
         transcripts_wired=_transcripts_wired,
@@ -1579,7 +1652,7 @@ def make_usage_recorder(
         usage=store,
         clock=clock,
         worker_files=WorkerStdoutFiles("", store),
-        workspace_root="",
+        workspaces=single_workspace(FakeProvider({})),
         harnesses=_default_harness_registry(harness),
         invocation_boundaries=store,
     )
@@ -1701,12 +1774,11 @@ def loop_context(
     config: RunnerConfig,
     *,
     broker: EventBroker | None = None,
-    workspace_prompt: str = "",
     runner_prompt: str = "",
 ) -> Iterator[LoopContext]:
     """A :class:`LoopContext` built by ``LoopWiring.context`` over its own graph, closed on exit."""
     with loop_graph(config, events=broker) as graph:
-        ctx = LoopWiring(config, workspace_prompt, runner_prompt, broker).context(FakeHub(), graph)
+        ctx = LoopWiring(config, runner_prompt, broker).context(FakeHub(), graph)
         try:
             yield ctx
         finally:

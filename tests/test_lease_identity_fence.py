@@ -13,12 +13,15 @@ import pytest
 from sqlalchemy import func, select
 
 from blizzard.hub.domain.execution.auth.route import ROUTE_TOKEN_WARN
+from blizzard.hub.domain.tenancy.administration import DEFAULT_PROJECT_SLUG
 from blizzard.hub.store import schema as s
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.hub.chunk_status_cache import ReadThroughChunkViews
+from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.hub.internal.http_hub import HttpHubClient
+from blizzard.runner.hub.served_projects import ServedProject
 from blizzard.runner.leases.internal.worker_stdout_files import WorkerStdoutFiles
 from blizzard.runner.lifecycle.drain import OutboundDrain
 from blizzard.runner.lifecycle.env_release import EnvironmentRelease
@@ -30,6 +33,7 @@ from blizzard.runner.loop.steps import Fill
 from blizzard.runner.process.internal.worker_scratch_dirs import WorkerScratchDirs
 from tests.runner_fakes import (
     FIXTURE_RUNNER_ID,
+    REGISTERED_AT,
     FakeHarness,
     FakeProbe,
     FakeProvider,
@@ -42,8 +46,10 @@ from tests.runner_fakes import (
     make_usage_recorder,
     matched_verdict,
     registered_identity,
+    serving,
+    single_workspace,
 )
-from tests.support import HubHarness, RunnerFleetClient, build_hub, hub_scoped, ingest
+from tests.support import HubHarness, RunnerFleetClient, build_hub, default_project, hub_scoped, ingest
 
 pytestmark = pytest.mark.component
 
@@ -124,6 +130,13 @@ class _RealRunner:
         harnesses = HarnessRegistry(
             {CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=harness, transcript_source=harness.transcript_source())}
         )
+        # The hub serves the runner its tenant's default project; the runner holds that answer as a registration records it.
+        self.store.record_runner_identity(
+            RunnerIdentity(self.store.connections.runner_id or "", "runner", REGISTERED_AT)
+        )
+        self.store.record_served_projects(
+            [ServedProject(DEFAULT_PROJECT_SLUG, project_id=default_project(hub.engine))], at=REGISTERED_AT
+        )
         self.ctx = LoopContext(
             stores=make_stores(self.store),
             host_stores=make_host_stores(self.store),
@@ -133,10 +146,12 @@ class _RealRunner:
             identity_verdict=matched_verdict(),
             hub_token=fixed_hub_token(),
             chunk_views=ReadThroughChunkViews(hub_client),
-            provider=provider,
+            workspaces=single_workspace(provider),
             process=FakeProbe(alive={(200, "start-200")}),
             worktree_git=FakeWorktreeGit(),
-            config=LoopConfig(runner_name=runner_id, workspace_id="w1", runner_id=FIXTURE_RUNNER_ID, max_agents=1),
+            config=LoopConfig(
+                runner_name=runner_id, runner_id=FIXTURE_RUNNER_ID, bindings=serving(project=DEFAULT_PROJECT_SLUG)
+            ),
             identity=registered_identity(runner_id, runner_id),
             worker_files=WorkerStdoutFiles("", self.store),
             elicitation_files=ElicitationFiles(str(tmp_path / f"{runner_id}-elicit")),
@@ -144,7 +159,9 @@ class _RealRunner:
             usage=make_usage_recorder(self.store, hub.clock),
             sessions=make_session_resolver(self.store),
             harness_selector=HarnessSelector(harnesses=harnesses),
-            env_release=EnvironmentRelease(environments=self.store, clock=hub.clock, provider=provider),
+            env_release=EnvironmentRelease(
+                environments=self.store, clock=hub.clock, workspaces=single_workspace(provider)
+            ),
             harnesses=harnesses,
         )
 

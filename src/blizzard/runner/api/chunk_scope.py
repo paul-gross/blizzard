@@ -28,6 +28,7 @@ def resolved_takeover_open_scope(chunk_id: str, request: Request) -> TakeoverOpe
     """The :class:`TakeoverOpenScope` for ``chunk_id``."""
     stores = RunnerWiring.of(request).read_stores()
     active = stores.lease_record.active_lease_for_chunk(chunk_id)
+    newest = stores.environments.newest_binding_for_chunk(chunk_id)
     return TakeoverOpenScope(
         chunk_id=chunk_id,
         open_takeover=stores.takeover.open_takeover_for_chunk(chunk_id),
@@ -38,6 +39,7 @@ def resolved_takeover_open_scope(chunk_id: str, request: Request) -> TakeoverOpe
         requeue_pending=chunk_id in stores.requeue.pending_requeue_chunk_ids(),
         active_parked=active is not None and active.lease_id in stores.asks.parked_lease_ids(),
         submission_pending=active is not None and active.lease_id in stores.outbound.pending_submission_lease_ids(),
+        workspace_id=newest.workspace_id if newest is not None else None,
     )
 
 

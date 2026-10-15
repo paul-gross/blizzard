@@ -202,9 +202,9 @@ whichever is left.
      position, entry, slug, project_id from hub_served_projects order by position"`
      lists them, and each row's `slug` becomes a binding's `project`. A row with a NULL `slug` is an entry no project
      answered to: use its `project_id` when it has one, and otherwise drop it, since a binding naming no project is
-     refused. **Split the old `max_agents` across the bindings, at least 1 agent each.** The host runs a runner's
-     `agents` summed across its bindings, so an old cap below the number of served projects graduates higher than it
-     was, unless you drop projects.
+     refused. **Split the old `max_agents` across the bindings, at least 1 agent each.** Each binding's `agents` caps
+     that binding alone, so an old cap below the number of served projects graduates higher than it was, unless you
+     drop projects.
    - Its `subscription` names its one `[[subscription]]` declaration. A file with several declarations moves every one
      to the host and names the plan its enabled harness spends. A file with none sampled a plan synthesized from
      `[external_subscription_usage]`; declare it as `[[subscription]]` with `slug = "anthropic"`, `name = "Anthropic"`,

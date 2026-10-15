@@ -15,6 +15,7 @@ from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionRefe
 from blizzard.runner.harness.registry import HarnessRegistry
 from blizzard.runner.hub.client import BindingDeclaration
 from blizzard.runner.hub.identity import IdentityState, RunnerIdentityHolder
+from blizzard.runner.hub.served_projects import ServedProject
 from blizzard.runner.leases.activity import HEARTBEAT_STALENESS_THRESHOLD
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.lifecycle.registration import Registration
@@ -22,6 +23,7 @@ from blizzard.runner.loop.context import LoopConfig, LoopContext
 from blizzard.runner.loop.steps import Fill, Pull, Reap, Resume
 from blizzard.runner.status.view import RunnerStatusService
 from tests.runner_fakes import (
+    FIXTURE_PROJECT_ID,
     FakeHarness,
     FakeHub,
     FakeProbe,
@@ -29,6 +31,8 @@ from tests.runner_fakes import (
     SqlAlchemyRunnerStore,
     make_context,
     make_store,
+    serving,
+    single_workspace,
 )
 
 pytestmark = pytest.mark.component
@@ -48,7 +52,7 @@ def _ctx(
         provider=FakeProvider({"e1": "/ws/e1"}),
         harness=FakeHarness(handle=None, verdict=None),  # type: ignore[arg-type]
         probe=FakeProbe(alive=set()),
-        config=LoopConfig(runner_name=name, workspace_id="ws1", max_agents=1, runner_id=configured),
+        config=LoopConfig(runner_name=name, bindings=serving(1), runner_id=configured),
         registered=registered,
     )
     return type(ctx)(**{**ctx.__dict__, "identity": RunnerIdentityHolder(store.runner_identity())})
@@ -69,10 +73,9 @@ def _status_name(ctx: LoopContext) -> tuple[str | None, str]:
         identity=ctx.identity,
         runner_name=ctx.config.runner_name,
         workspace_id="ws1",
-        max_agents=1,
+        bindings=serving(1),
         hub_url="http://hub.example",
-        env_pool=("e1",),
-        workspace_root="",
+        workspaces=single_workspace(FakeProvider({})),
         harnesses=HarnessRegistry({}),
     ).summary()
     return summary.runner_id, summary.runner_name
@@ -94,6 +97,7 @@ def test_a_runner_that_never_registered_claims_nothing_while_the_hub_is_unreacha
 
 def test_the_first_registration_records_the_hub_minted_identity_and_opens_the_claim_gate(tmp_path: Path) -> None:
     hub = FakeHub(default_runner_id="rn_minted")
+    hub.served_projects = (ServedProject(FIXTURE_PROJECT_ID, project_id=FIXTURE_PROJECT_ID),)
     ctx = _ctx(tmp_path / "runner.db", hub)
 
     Pull(ctx).run()
@@ -170,7 +174,7 @@ def test_a_registration_declares_the_bindings_and_subscription_its_config_carrie
 def test_a_runner_serving_nothing_registers_an_empty_declaration_and_claims_nothing(tmp_path: Path) -> None:
     hub = FakeHub()
     ctx = _ctx(tmp_path / "runner.db", hub)
-    ctx = replace(ctx, config=replace(ctx.config, bindings=(), projects=(), max_agents=0))
+    ctx = replace(ctx, config=replace(ctx.config, bindings=(), projects=()))
 
     Pull(ctx).run()
     Fill(ctx).run()

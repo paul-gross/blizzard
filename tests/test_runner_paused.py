@@ -57,6 +57,8 @@ from tests.runner_fakes import (
     make_store,
     make_stores,
     record_usage,
+    serving,
+    single_workspace,
 )
 
 pytestmark = pytest.mark.component
@@ -128,12 +130,11 @@ def test_pull_reports_the_configured_env_capacity(tmp_path):  # type: ignore[no-
     the board's slot bar has a `total`; a changed pool converges on the next pull."""
     ctx, hub, _store = _ctx_with_a_claimable_chunk(tmp_path, paused=False)
 
-    # env_capacity is mirrored from len(workspace_envs) at build; frozen config, so replace.
-    Pull(replace(ctx, config=replace(ctx.config, env_capacity=4))).run()
+    # The capacity is the runner's own workspace's provider's; a changed pool converges on the next pull.
+    Pull(replace(ctx, workspaces=single_workspace(FakeProvider({f"e{i}": f"/ws/e{i}" for i in range(4)})))).run()
     assert hub.registered_capacities == [4]
 
-    # The operator grew workspace_envs and the runner re-synced — the new count converges.
-    Pull(replace(ctx, config=replace(ctx.config, env_capacity=6))).run()
+    Pull(replace(ctx, workspaces=single_workspace(FakeProvider({f"e{i}": f"/ws/e{i}" for i in range(6)})))).run()
     assert hub.registered_capacities == [4, 6]
 
 
@@ -280,7 +281,7 @@ def _seed_running_lease(  # type: ignore[no-untyped-def]
         spawned_at=_NOW,
         pgid=pid,
     )
-    store.record_binding(chunk_id=chunk, environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    store.record_binding(chunk_id=chunk, environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
 
 
 def _running_chunk(chunk="ch_1", *, runner_id="r1"):  # type: ignore[no-untyped-def]
@@ -313,7 +314,7 @@ def _seed_exited_lease(store):  # type: ignore[no-untyped-def]
         session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
         spawned_at=_NOW,
     )
-    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
 
 
 def _answered_question(question_id="qn_1") -> HubQuestion:  # type: ignore[no-untyped-def]
@@ -616,7 +617,7 @@ def _seed_orphan_lease(store, *, chunk="ch_1", lease="lease_1", retries_max=2, e
             created_at=_NOW,
         )
     )
-    store.record_binding(chunk_id=chunk, environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    store.record_binding(chunk_id=chunk, environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
 
 
 def test_reap_orphan_requeue_respawn_suppressed_then_adopted_at_unpause(tmp_path):  # type: ignore[no-untyped-def]
@@ -767,7 +768,7 @@ def test_full_tick_while_locally_paused_spawns_no_process_by_any_path(tmp_path):
     hub.chunks["ch_1"] = _running_chunk()
     hub.envelopes["ch_1"] = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES)
     # A claimable chunk in the queue too, so FILL's own gate is exercised by the same pass
-    # (capacity is not what stops it: max_agents=2 with one lease held).
+    # (capacity is not what stops it: bindings=serving(2) with one lease held).
     hub.queue = [QueueEntry(chunk_id="ch_2", graph_id="gr_1", position=0)]
     ch_2_env = make_envelope("ch_2", "build", node_id="nd_build", choices=_CHOICES)
     hub.claim_outcome = claimed_outcome("ch_2", ch_2_env)
@@ -783,7 +784,7 @@ def test_full_tick_while_locally_paused_spawns_no_process_by_any_path(tmp_path):
         provider=FakeProvider({"e1": "/ws/e1", "e2": "/ws/e2"}),
         harness=harness,
         probe=probe,
-        config=LoopConfig(runner_name="r1", workspace_id="ws1", runner_id=FIXTURE_RUNNER_ID, max_agents=2),
+        config=LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID, bindings=serving(2)),
     )
     _pause_locally(store, ctx, paused=True)
 
@@ -885,7 +886,7 @@ def test_pull_rejection_at_exhausted_retries_defers_escalation_while_locally_pau
         session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
         spawned_at=_NOW,
     )
-    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
 
     hub = FakeHub()
     hub.chunks["ch_1"] = _running_chunk()  # still ours — not the reassigned/detached branch
@@ -1077,12 +1078,11 @@ def test_fill_denial_logs_what_the_hub_refused(tmp_path, outcome, event, fields)
 # --------------------------------------------------------------------------- #
 
 
-def _ceiling_config(cap, *, window_hours=24.0, max_agents=1):  # type: ignore[no-untyped-def]
+def _ceiling_config(cap, *, window_hours=24.0, agents=1):  # type: ignore[no-untyped-def]
     return LoopConfig(
         runner_name="r1",
-        workspace_id="ws1",
         runner_id="rn_1",
-        max_agents=max_agents,
+        bindings=serving(agents),
         runner_ceiling_usd=cap,
         runner_ceiling_window_hours=window_hours,
     )
@@ -1297,7 +1297,7 @@ def test_ceiling_engaged_defers_reap_kill_and_suppresses_fill_in_the_same_tick(t
         harness=harness,
         probe=probe,
         clock=FixedClock(_NOW),
-        config=_ceiling_config(5.0, max_agents=2),
+        config=_ceiling_config(5.0, agents=2),
     )
 
     tick(ctx)
@@ -1599,7 +1599,9 @@ def test_a_usage_limit_brake_engaged_earlier_in_the_pass_keeps_a_later_pause_par
             session=SessionReference(CLAUDE_CODE_HARNESS_ID, f"sess-{i}"),
             spawned_at=_NOW,
         )
-        store.record_binding(chunk_id=f"ch_{i}", environment_id=f"e{i}", workdir=f"/ws/e{i}", bound_at=_NOW)
+        store.record_binding(
+            chunk_id=f"ch_{i}", environment_id=f"e{i}", workdir=f"/ws/e{i}", bound_at=_NOW, workspace_id="ws1"
+        )
         hub.chunks[f"ch_{i}"] = ChunkState(
             chunk_id=f"ch_{i}", status=ChunkStatus.RUNNING, latest_epoch=1, route_runner_id="r1"
         )
@@ -1829,7 +1831,7 @@ def test_ceiling_pause_still_engages_and_behaves_unmodified(tmp_path):  # type: 
 def _ctx_with_a_crash_left_binding(tmp_path, *, route_runner_id: str | None = None):  # type: ignore[no-untyped-def]
     """A binding left by a crash between env acquire and claim, on a chunk the hub still reads READY."""
     store = _store(tmp_path)
-    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
     hub = FakeHub()
     hub.chunks["ch_1"] = ChunkState(
         chunk_id="ch_1", status=ChunkStatus.READY, latest_epoch=1, route_runner_id=route_runner_id

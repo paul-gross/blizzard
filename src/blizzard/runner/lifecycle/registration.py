@@ -19,6 +19,7 @@ from typing import Protocol
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
+from blizzard.runner.environments.workspaces import IWorkspaces
 from blizzard.runner.harness.capability_snapshot import HarnessCapability
 from blizzard.runner.hub.client import BindingDeclaration, HubClientError, IHubClient, SubscriptionDeclaration
 from blizzard.runner.hub.held_token import HubTokenHolder
@@ -71,9 +72,7 @@ class RegistrationConfig(Protocol):
     @property
     def runner_name(self) -> str: ...
     @property
-    def workspace_id(self) -> str: ...
-    @property
-    def env_capacity(self) -> int | None: ...
+    def bound_workspace_ids(self) -> tuple[str, ...]: ...
     @property
     def public_url(self) -> str: ...
     @property
@@ -107,6 +106,8 @@ class RegistrationContext(Protocol):
     def config(self) -> RegistrationConfig: ...
     @property
     def subscriptions(self) -> Sequence[DeclaredSubscription]: ...
+    @property
+    def workspaces(self) -> IWorkspaces: ...
     def capability_snapshot(self) -> tuple[HarnessCapability, ...]: ...
 
 
@@ -119,11 +120,14 @@ class Registration:
 
     def run(self) -> None:
         ctx = self.ctx
+        # The workspace this runner is reported by: the first its bindings name, else the host's first.
+        workspace_id = ctx.workspaces.home(ctx.config.bound_workspace_ids)
+        provider = ctx.workspaces.provider(workspace_id)
         try:
             reply = ctx.hub.register_runner(
                 ctx.config.runner_name,
-                ctx.config.workspace_id,
-                env_capacity=ctx.config.env_capacity,
+                workspace_id,
+                env_capacity=provider.capacity() if provider is not None else None,
                 url=ctx.config.public_url or None,
                 redirect_uris=ctx.config.redirect_uris,
                 capabilities=ctx.capability_snapshot(),

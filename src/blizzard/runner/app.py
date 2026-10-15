@@ -75,13 +75,14 @@ from blizzard.runner.api.workspace_prompt import router as workspace_prompt_rout
 from blizzard.runner.auth.internal.http_jwks_cache import JwksCache
 from blizzard.runner.auth.jti_cache import IJtiCache
 from blizzard.runner.composition import HostProcess, RunnerProcess, build_runner_process
-from blizzard.runner.config import RunnerConfig, SubscriptionDeclaration
-from blizzard.runner.environments.provider import IWorkspaceProvider
+from blizzard.runner.config import HostWorkspace, RunnerConfig, SubscriptionDeclaration
+from blizzard.runner.environments.workspaces import IWorkspaces
 from blizzard.runner.events.broker import EventBroker, RunnerEventPublisher
 from blizzard.runner.harness.health_cache import HarnessHealthCache, IReadHarnessHealth
 from blizzard.runner.harness.registry import HarnessRegistry, IHarnessRegistry
 from blizzard.runner.harness.workspace_prompts import WorkspacePromptService
 from blizzard.runner.host_config import HaltedRunner
+from blizzard.runner.hub.client import BindingDeclaration
 from blizzard.runner.hub.held_token import ICurrentHubToken
 from blizzard.runner.hub.identity import ICurrentIdentityVerdict, ICurrentRunnerIdentity, IIdentityOnContact
 from blizzard.runner.hub.internal.http_hub import HeldTokenAuth
@@ -283,7 +284,7 @@ def create_app(
     workspaces: Sequence[ServedWorkspace] | None = None,
     subscriptions: Sequence[SubscriptionDeclaration] | None = None,
     readiness: ReadinessService | None = None,
-    workspace_provider: IWorkspaceProvider | None = None,
+    workspace_registry: IWorkspaces | None = None,
     harnesses: IHarnessRegistry | None = None,
     runner_stores: RunnerStores | None = None,
     host_stores: HostStores | None = None,
@@ -322,10 +323,10 @@ def create_app(
     prefix, keyed by id; ``halted`` are the runners the host holds unbuilt.
 
     With ``runners`` omitted, the app serves one runner composed from the runner seams passed here by
-    :func:`runner_seams` — a host of one. ``workspaces`` defaults to ``config``'s one workspace over
-    ``workspace_provider``'s pool, and ``subscriptions`` to ``config``'s. A store-free build is possible; the
-    store-backed routes then answer 503 and ``/api/ready`` reports ``ready=false``. ``events`` defaults absent, leaving
-    the stream silent. ``platform_tracing`` is off unless the composition root passes a handle.
+    :func:`runner_seams` — a host of one. ``workspaces`` defaults to each of ``config``'s declared workspaces, over
+    ``workspace_registry``'s pool and prompt for it, and ``subscriptions`` to ``config``'s. A store-free build is
+    possible; the store-backed routes then answer 503 and ``/api/ready`` reports ``ready=false``. ``events`` defaults
+    absent, leaving the stream silent. ``platform_tracing`` is off unless the composition root passes a handle.
     ``telemetry_receiver`` is the host's worker telemetry receiver; absent, the OTLP routes answer 503. ``identity`` is
     the process's holder; absent, the federation routes answer 503. ``host_stores`` are the host-scoped stores;
     ``jti_cache`` defaults to theirs."""
@@ -364,14 +365,7 @@ def create_app(
             ),
         )
     if workspaces is None:
-        workspaces = (
-            ServedWorkspace(
-                workspace_id=config.workspace_id,
-                env_pool=workspace_provider.pool() if workspace_provider else (),
-                max_environments=config.max_environments,
-                prompt_config=config,
-            ),
-        )
+        workspaces = tuple(_served_workspace(workspace, workspace_registry) for workspace in config.workspaces)
 
     # No framework exporters: tests/test_apps.py::test_an_otlp_endpoint_installs_no_framework_exporters.
     app = FastAPI(
@@ -392,7 +386,8 @@ def create_app(
             role_policy=config.role_policy,
         )
     app.state.readiness = readiness
-    app.state.workspace_provider = workspace_provider
+    # The host's workspace registry; `None` on the store-free app.
+    app.state.workspace_registry = workspace_registry
     # The host-scoped stores, narrowed for controllers the way each runner's are.
     app.state.host_read_stores = HostReadStores.of(host_stores) if host_stores is not None else None
     # The SSE broker; `None` when no stream is wired.
@@ -546,8 +541,9 @@ def _wire_hosted_app(
     runner_stores = graph.stores
     connections = graph.connections
     harness_health = graph.health
-    workspace_provider = host.provider
-    spawn_root = workspace_provider.spawn_root()
+    workspaces = host.workspaces
+    # The runner's own workspace, as such: the first its bindings name, else the host's first.
+    home = config.home_workspace.id
     harnesses = graph.harnesses
     clock = host.clock
     process = host.process
@@ -585,7 +581,7 @@ def _wire_hosted_app(
         environments=runner_stores.environments,
         transcripts=HarnessTranscriptRepositories(harnesses),
         archived=archived_transcripts,
-        workspace_root=spawn_root,
+        workspaces=workspaces,
     )
     runner_status = RunnerStatusService(
         clock,
@@ -602,12 +598,11 @@ def _wire_hosted_app(
         served_projects=read_stores.served_projects,
         projects=config.projects,
         runner_name=config.name,
-        workspace_id=config.workspace_id,
-        max_agents=config.max_agents,
+        workspace_id=home,
+        bindings=tuple(BindingDeclaration(b.project, b.workspace, b.agents) for b in config.bindings or ()),
         hub_url=config.hub_url,
-        env_pool=workspace_provider.pool(),
         harnesses=harnesses,
-        workspace_root=spawn_root,
+        workspaces=workspaces,
         gates=config.gates,
         runner_dir=str(config.root),
     )
@@ -621,17 +616,17 @@ def _wire_hosted_app(
         # The same derivation the spawn preamble uses, so the two agree.
         local_api_url=config.local_api_url,
         harnesses=harnesses,
-        workspace_root=spawn_root,
+        workspaces=workspaces,
         events=graph.events,
     )
     requeue = RequeueService(runner_stores.requeue, clock)
     attachments = AttachmentService(runner_stores.attachments, clock)
-    # Takes the workspace provider too: a declaration is checked against the
-    # environment's repo manifest, which is the provider's to declare.
+    # Takes the workspaces too: a declaration is checked against the environment's repo manifest, which the
+    # provider of the environment's workspace declares.
     git_commit_declarations = GitCommitDeclarationService(
         runner_stores.git_commit_declarations,
         clock,
-        workspace_provider,
+        workspaces,
         environments=runner_stores.environments,
         outbound=runner_stores.outbound,
     )
@@ -680,7 +675,7 @@ def _wire_hosted_app(
         platform_tracing=platform_tracing,
         identity=graph.identity,
         readiness=readiness,
-        workspace_provider=workspace_provider,
+        workspace_registry=workspaces,
         host_stores=host.host_stores,
         telemetry_receiver=host.telemetry_receiver,
         hub_http_client=hub_http_client,
@@ -715,7 +710,7 @@ def _wire_runnerless_app(
         subscriptions=host.subscriptions,
         platform_tracing=host.platform_tracing,
         readiness=host.readiness,
-        workspace_provider=host.provider,
+        workspace_registry=host.workspaces,
         host_stores=host.host_stores,
         hub_http_client=hub_http_client,
         events=host.events,
@@ -723,6 +718,17 @@ def _wire_runnerless_app(
         process=host.process,
     )
     return HostedApp(app, (), host.engine, None, None, None, hub_http_client, owned_host)
+
+
+def _served_workspace(workspace: HostWorkspace, registry: IWorkspaces | None) -> ServedWorkspace:
+    """``workspace`` as the host serves it: its pool and resolved prompt from ``registry``, none without one."""
+    provider = registry.provider(workspace.id) if registry is not None else None
+    return ServedWorkspace(
+        workspace_id=workspace.id,
+        env_pool=provider.pool() if provider is not None else (),
+        max_environments=workspace.max_environments,
+        configured_prompt=registry.prompt(workspace.id) if registry is not None else "",
+    )
 
 
 def create_app_for_export() -> FastAPI:

@@ -15,10 +15,12 @@ from blizzard.runner.api.wiring import RunnerWiring
 from blizzard.runner.hub.identity import IdentityVerdict
 from blizzard.runner.status.view import RunnerStatusService
 from blizzard.wire.runner_status import (
+    BindingCapacityView,
     CapacitiesView,
     HubConnectivityView,
     IdentityVerdictView,
     PauseStateView,
+    RoutingConflictView,
     RunnerStatusView,
     ServedProjectStatusView,
     UnmatchedBindingView,
@@ -94,7 +96,18 @@ def _runner_status_view(service: RunnerStatusService) -> RunnerStatusView:
             local_reason=summary.pause.local_reason,
         ),
         capacities=CapacitiesView(
-            max_agents=summary.capacities.max_agents, used=summary.capacities.used, free=summary.capacities.free
+            used=summary.capacities.used,
+            bindings=[
+                BindingCapacityView(
+                    project=b.project,
+                    project_id=b.project_id,
+                    workspace_id=b.workspace_id,
+                    agents=b.agents,
+                    used=b.used,
+                    free=b.free,
+                )
+                for b in summary.capacities.bindings
+            ],
         ),
         hub=HubConnectivityView(
             endpoint=summary.hub.endpoint,
@@ -128,6 +141,9 @@ def _runner_status_view(service: RunnerStatusService) -> RunnerStatusView:
                 held_since=iso_utc(b.bound_at),
             )
             for b in summary.unmatched_bindings
+        ],
+        routing_conflicts=[
+            RoutingConflictView(project_id=c.project_id, entries=list(c.entries)) for c in summary.routing_conflicts
         ],
     )
 

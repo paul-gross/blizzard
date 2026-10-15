@@ -7,7 +7,6 @@ in a crash-once shim; every delta carries ``findings: []``, and an undeclared ax
 
 from __future__ import annotations
 
-import dataclasses
 import os
 import subprocess
 import sys
@@ -373,7 +372,7 @@ def test_ideation_runs_end_to_end_on_all_authored_paths(tmp_path: Path) -> None:
             scope_linked = hub.put(f"/api/routines/{routine_id}/scopes/{slug}")
             assert scope_linked.status_code == 204, scope_linked.text
 
-        config = dataclasses.replace(_runner_config(runner_dir, workspace, bin_dir, hub_port), max_agents=1)
+        config = _runner_config(runner_dir, workspace, bin_dir, hub_port)
         fenced = dict(os.environ)
         fenced["BLIZZARD_MOCK_HARNESS_FENCE"] = "1"
 

@@ -5,8 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from blizzard.foundation.clock import IClock
-from blizzard.runner.environments.provider import AcquiredEnvironment, IWorkspaceProvider
+from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.environments.repository import IWriteEnvironmentRepository, release_instants
+from blizzard.runner.environments.workspaces import IWorkspaces
 from blizzard.runner.events.publisher import IRunnerEventPublisher
 
 
@@ -17,28 +18,34 @@ class EnvironmentRelease:
 
     environments: IWriteEnvironmentRepository
     clock: IClock
-    provider: IWorkspaceProvider
+    #: Each environment goes back to the provider of the workspace its binding names.
+    workspaces: IWorkspaces
     #: The SSE publish seam, typed against the Protocol
     #: (``bzh:dependency-inversion``); ``None`` on a loop-only caller, a no-op there.
     events: IRunnerEventPublisher | None = None
 
     def release_chunk(self, chunk_id: str) -> None:
         """Release every environment held at the chunk's tenure end; the lease's worker
-        stdout/stderr is left in place."""
+        stdout/stderr is left in place. A binding naming no declared workspace has no provider to hand back to."""
         held = self.environments.bindings_for_chunk(chunk_id)
+        workspace_of = {binding.environment_id: binding.workspace_id for binding in held}
         for environment_id, released_at in release_instants(
             held, [binding.environment_id for binding in held], self.clock.now()
         ):
-            self.provider.release(environment_id)
+            provider = self.workspaces.provider(workspace_of[environment_id])
+            if provider is not None:
+                provider.release(environment_id)
             self.environments.record_release(chunk_id=chunk_id, environment_id=environment_id, released_at=released_at)
             self._publish_released(chunk_id, environment_id)
 
-    def release_binding(self, chunk_id: str, acquired: list[AcquiredEnvironment]) -> None:
-        """Undo a just-recorded binding whose claim never landed — release the fact and the env.
+    def release_binding(self, chunk_id: str, workspace_id: str, acquired: list[AcquiredEnvironment]) -> None:
+        """Undo a just-recorded binding whose claim never landed — release the fact and the env, back to
+        ``workspace_id``'s provider, the one it was acquired from.
 
         The binding is written before the hub claim, so a claim that fails to send or loses the
         race must retract both the local binding fact and the provider allocation, leaving the
         chunk exactly as if it had never been touched (it stays ``ready``)."""
+        provider = self.workspaces.provider(workspace_id)
         released = dict(
             release_instants(
                 self.environments.bindings_for_chunk(chunk_id), [a.environment_id for a in acquired], self.clock.now()
@@ -51,7 +58,8 @@ class EnvironmentRelease:
                     chunk_id=chunk_id, environment_id=a.environment_id, released_at=released_at
                 )
                 self._publish_released(chunk_id, a.environment_id)
-            self.provider.release(a.environment_id)
+            if provider is not None:
+                provider.release(a.environment_id)
 
     def _publish_released(self, chunk_id: str, environment_id: str) -> None:
         if self.events is not None:

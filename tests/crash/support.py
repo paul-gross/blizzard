@@ -20,7 +20,7 @@ from pathlib import Path
 import httpx
 
 from blizzard.foundation.runner_paths import runner_prefix
-from blizzard.runner.config import RunnerConfig
+from blizzard.runner.config import DEFAULT_WORKSPACE_ID, HostWorkspace, RunnerConfig
 from blizzard.wire.work_source import WorkSourceDocument
 from tests.harness_sections import claude_code, opencode, sections
 from tests.host_files import init_runner_environment, load_runner_config, sampler_without_credentials, write_host_file
@@ -856,9 +856,11 @@ def write_runner_config(
         host="127.0.0.1",
         port=port,
         hub_url=f"http://127.0.0.1:{hub_port}",
-        workspace_provider="winter",
-        workspace_root=str(workspace),
-        workspace_envs=(RUNNER_ENV,),
+        workspaces=(
+            HostWorkspace(
+                DEFAULT_WORKSPACE_ID, root=str(workspace), provider="winter", envs=(RUNNER_ENV,), base_branch="main"
+            ),
+        ),
         # The mock façade's own fence-relative default (``ClaudeTranscriptWriter``'s
         # ``transcripts_root``) — without this the real adapter's transcript reads (usage-limit
         # classification, the transcript-summed usage fallback) fall back to the real
@@ -880,7 +882,6 @@ def write_runner_config(
         # Unset on purpose: the external-usage sampler's first soft-failure check (a
         # missing credentials file) trips before any request is built.
         subscriptions=sampler_without_credentials(runner_dir),
-        base_branch="main",
         # `start_runner` sets `ENV_HARNESS_FENCE` in the daemon subprocess's own env; it
         # reaches a worker only because it is declared here.
         worker_env_passthrough=(ENV_HARNESS_FENCE,),

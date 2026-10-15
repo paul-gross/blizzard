@@ -24,10 +24,12 @@ from blizzard.runner.transcripts.service import TranscriptService
 from tests.runner_client import runner_client
 from tests.runner_fakes import (
     FakeArchivedTranscriptRepository,
+    FakeProvider,
     StaticTranscriptRepositoryResolver,
     make_host_stores,
     make_store,
     make_stores,
+    single_workspace,
 )
 from tests.support import assert_all_timestamps_utc
 
@@ -72,7 +74,7 @@ def _app_with_transcripts(
         environments=store,
         transcripts=transcripts,
         archived=archived,
-        workspace_root=workspace_root,
+        workspaces=single_workspace(FakeProvider({}), spawn_root=workspace_root),
     )
     return (
         create_app(config, runner_stores=make_stores(store), host_stores=make_host_stores(store), transcripts=service),

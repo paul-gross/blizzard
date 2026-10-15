@@ -13,6 +13,7 @@ from datetime import UTC, datetime
 import pytest
 
 from blizzard.foundation.chunk_status import ChunkStatus
+from blizzard.runner.environments.workspaces import WorkspaceEntry, WorkspaceRegistry
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.hub.chunk_status_cache import MemoizingChunkViewCache
@@ -22,6 +23,7 @@ from blizzard.runner.loop.context import LoopConfig
 from blizzard.runner.loop.steps import CompleteHeldBindings, Fill
 from blizzard.runner.node_steps.chunk_state import ChunkState
 from tests.runner_fakes import (
+    FIXTURE_PROJECT_ID,
     FIXTURE_RUNNER_ID,
     FakeHarness,
     FakeHub,
@@ -32,6 +34,7 @@ from tests.runner_fakes import (
     make_context,
     make_envelope,
     make_store,
+    serving,
 )
 
 pytestmark = pytest.mark.component
@@ -45,14 +48,14 @@ def _store(tmp_path) -> SqlAlchemyRunnerStore:  # type: ignore[no-untyped-def]
     return make_store(f"sqlite:///{tmp_path / 'runner.db'}")
 
 
-def _ctx(store, hub, *, pool: dict[str, str] | None = None, max_agents: int = 1):  # type: ignore[no-untyped-def]
+def _ctx(store, hub, *, pool: dict[str, str] | None = None, agents: int = 1):  # type: ignore[no-untyped-def]
     ctx = make_context(
         store,
         hub=hub,
         provider=FakeProvider(pool if pool is not None else {"e1": "/ws/e1", "e2": "/ws/e2"}),
         harness=FakeHarness(handle=_HANDLE, verdict="pass"),
         probe=FakeProbe(),
-        config=LoopConfig(runner_name="r1", workspace_id="ws1", runner_id=FIXTURE_RUNNER_ID, max_agents=max_agents),
+        config=LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID, bindings=serving(agents)),
     )
     # The tick's own memoizing cache, so a test sees the hub calls one tick makes.
     return dataclasses.replace(ctx, chunk_views=MemoizingChunkViewCache(ctx.hub))
@@ -102,6 +105,32 @@ def test_a_pre_revision_held_row_takes_the_workspace_its_workdir_resolves_to(tmp
     rows = _held_rows(store)
     assert rows["e1"][0] == "ws1"
     assert rows["e2"][0] is None
+
+
+def test_a_held_row_takes_whichever_host_workspace_lists_its_workdir(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """Two workspaces on different roots both name ``e1``: each row takes the workspace whose root holds it."""
+    store = _store(tmp_path)
+    hub = FakeHub()
+    _seed_pre_revision_binding(store, "ch_a", "e1", "/root-a/e1")
+    _seed_pre_revision_binding(store, "ch_b", "e1", "/root-b/e1")
+    workspaces = WorkspaceRegistry(
+        [
+            WorkspaceEntry("ws_a", FakeProvider({"e1": "/root-a/e1"}), spawn_root=""),
+            WorkspaceEntry("ws_b", FakeProvider({"e1": "/root-b/e1"}), spawn_root=""),
+        ]
+    )
+    ctx = make_context(
+        store,
+        hub=hub,
+        provider=FakeProvider({}),
+        harness=FakeHarness(handle=_HANDLE, verdict="pass"),
+        probe=FakeProbe(),
+        workspaces=workspaces,
+    )
+
+    CompleteHeldBindings(ctx).run()
+
+    assert {b.chunk_id: b.workspace_id for b in store.held_bindings()} == {"ch_a": "ws_a", "ch_b": "ws_b"}
 
 
 def test_a_held_row_takes_its_project_from_one_batch_status_read(tmp_path) -> None:  # type: ignore[no-untyped-def]
@@ -160,7 +189,7 @@ def test_a_held_rows_completion_never_overwrites_a_column_already_set(tmp_path) 
     assert _held_rows(store) == {"e1": ("ws_old", "pr_new")}
 
 
-def test_with_an_unmatched_held_row_fill_never_exceeds_max_agents(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_with_an_unmatched_held_row_fill_never_exceeds_the_bindings_agents(tmp_path) -> None:  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
     hub = FakeHub()
     _seed_pre_revision_binding(store, "ch_old", "e9", "/elsewhere/e9")
@@ -170,7 +199,7 @@ def test_with_an_unmatched_held_row_fill_never_exceeds_max_agents(tmp_path) -> N
     )
     hub.queue = [QueueEntry(chunk_id="ch_1", graph_id="gr_1", position=0, project_id="pr_1")]
     hub.claim_outcome = claimed_outcome("ch_1", make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES))
-    ctx = _ctx(store, hub, max_agents=1)
+    ctx = _ctx(store, hub, agents=1)
 
     CompleteHeldBindings(ctx).run()
     Fill(ctx).run()
@@ -183,21 +212,21 @@ def test_with_an_unmatched_held_row_fill_never_exceeds_max_agents(tmp_path) -> N
 def test_a_new_binding_carries_the_workspace_and_the_entrys_project(tmp_path) -> None:  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
     hub = FakeHub()
-    hub.queue = [QueueEntry(chunk_id="ch_1", graph_id="gr_1", position=0, project_id="pr_1")]
+    hub.queue = [QueueEntry(chunk_id="ch_1", graph_id="gr_1", position=0, project_id=FIXTURE_PROJECT_ID)]
     hub.claim_outcome = claimed_outcome("ch_1", make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES))
 
     Fill(_ctx(store, hub)).run()
 
     assert len(hub.claims) == 1
-    assert _held_rows(store) == {"e1": ("ws1", "pr_1")}
+    assert _held_rows(store) == {"e1": ("ws1", FIXTURE_PROJECT_ID)}
 
 
-def test_a_new_binding_from_an_entry_without_a_project_leaves_it_for_completion(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_an_entry_naming_no_project_is_never_claimed(tmp_path) -> None:  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
     hub = FakeHub()
+    hub.narrows_peek = False  # the entry reaches the runner as the hub sent it
     hub.queue = [QueueEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
-    hub.claim_outcome = claimed_outcome("ch_1", make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES))
 
     Fill(_ctx(store, hub)).run()
 
-    assert _held_rows(store) == {"e1": ("ws1", None)}
+    assert hub.claims == [] and _held_rows(store) == {}

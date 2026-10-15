@@ -26,7 +26,14 @@ from blizzard.runner.leases.internal.worker_stdout_files import WorkerStdoutFile
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.usage.recorder import UsageRecorder
 from tests.repo_files import repo_root
-from tests.runner_fakes import FakeHarness, FakeProbe, FakeTranscriptSource, make_store
+from tests.runner_fakes import (
+    FakeHarness,
+    FakeProbe,
+    FakeProvider,
+    FakeTranscriptSource,
+    make_store,
+    single_workspace,
+)
 from tests.test_runner_harness_opencode_transcript import FakeExporter
 
 pytestmark = pytest.mark.component
@@ -147,7 +154,7 @@ def _opencode_recorder(spawn_executor: Executor, tmp_path, store, *, transcripts
         usage=store,
         clock=FixedClock(_NOW),
         worker_files=WorkerStdoutFiles(str(stdout_dir), store),
-        workspace_root="/ws",
+        workspaces=single_workspace(FakeProvider({}), spawn_root="/ws"),
         harnesses=registry,
         invocation_boundaries=store,
         transcripts_wired=transcripts_wired,
@@ -219,7 +226,7 @@ def _fake_recorder(tmp_path, store, harness: FakeHarness, source: FakeTranscript
         usage=store,
         clock=FixedClock(_NOW),
         worker_files=WorkerStdoutFiles(str(stdout_dir), store),
-        workspace_root="/ws",
+        workspaces=single_workspace(FakeProvider({}), spawn_root="/ws"),
         harnesses=registry,
         invocation_boundaries=store,
         transcripts_wired=transcripts_wired,
@@ -324,7 +331,7 @@ def test_an_opencode_generation_records_its_descendant_sessions_steps_in_the_one
         usage=store,
         clock=FixedClock(datetime.fromtimestamp(1789384700, UTC)),
         worker_files=WorkerStdoutFiles(str(stdout_dir), store),
-        workspace_root="/ws",
+        workspaces=single_workspace(FakeProvider({}), spawn_root="/ws"),
         harnesses=registry,
         invocation_boundaries=store,
         transcripts_wired=True,
@@ -406,7 +413,7 @@ def test_interrupted_task_is_charged_once_across_recording_replay_and_resume(
             usage=store,
             clock=FixedClock(at(now_ms)),
             worker_files=WorkerStdoutFiles(str(stdout_dir), store),
-            workspace_root="/ws",
+            workspaces=single_workspace(FakeProvider({}), spawn_root="/ws"),
             harnesses=registry,
             invocation_boundaries=store,
         )

@@ -7,7 +7,6 @@ acceptance loop's live-stack scaffolding; skipped unless ``BLIZZARD_E2E=1``."""
 
 from __future__ import annotations
 
-import dataclasses
 import os
 import subprocess
 from pathlib import Path
@@ -154,7 +153,7 @@ def _drive(tmp_path: Path, graph_yaml: str, title: str):
         ]
         assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
 
-        config = dataclasses.replace(_runner_config(tmp_path / "runner", workspace, bin_dir, hub_port), max_agents=1)
+        config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
         fenced = dict(os.environ)
         fenced["BLIZZARD_MOCK_HARNESS_FENCE"] = "1"
         status = _drive_until_done(config, hub, chunk_id, fenced)

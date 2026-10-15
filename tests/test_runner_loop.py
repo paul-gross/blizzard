@@ -86,6 +86,7 @@ from tests.runner_fakes import (
     make_store,
     make_stores,
     runner_store_errors,
+    serving,
 )
 
 _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
@@ -123,7 +124,7 @@ def _seed_running_lease(store, *, chunk="ch_1", lease="lease_1", pid=100, start=
         session=SessionReference(CLAUDE_CODE_HARNESS_ID, session),
         spawned_at=_NOW,
     )
-    store.record_binding(chunk_id=chunk, environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    store.record_binding(chunk_id=chunk, environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
 
 
 def _chunk_with_cost(  # type: ignore[no-untyped-def]
@@ -198,9 +199,7 @@ def test_fill_spawns_a_node_with_no_authored_retry_budget_at_the_configured_defa
     hub.claim_outcome = claimed_outcome("ch_1", env)
     provider = FakeProvider({"e1": "/ws/e1"})
     harness = FakeHarness(handle=_HANDLE, verdict="pass")
-    config = LoopConfig(
-        runner_name="r1", workspace_id="ws1", runner_id=FIXTURE_RUNNER_ID, max_agents=1, default_retries_max=5
-    )
+    config = LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID, bindings=serving(1), default_retries_max=5)
     ctx = make_context(store, hub=hub, provider=provider, harness=harness, probe=FakeProbe(), config=config)
 
     Fill(ctx).run()
@@ -221,9 +220,7 @@ def test_fill_spawns_a_node_with_an_authored_retry_budget_overriding_the_configu
     hub.claim_outcome = claimed_outcome("ch_1", env)
     provider = FakeProvider({"e1": "/ws/e1"})
     harness = FakeHarness(handle=_HANDLE, verdict="pass")
-    config = LoopConfig(
-        runner_name="r1", workspace_id="ws1", runner_id=FIXTURE_RUNNER_ID, max_agents=1, default_retries_max=2
-    )
+    config = LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID, bindings=serving(1), default_retries_max=2)
     ctx = make_context(store, hub=hub, provider=provider, harness=harness, probe=FakeProbe(), config=config)
 
     Fill(ctx).run()
@@ -358,7 +355,7 @@ def test_requeue_after_a_pre_spawn_failure_keeps_the_minted_owner(tmp_path):  # 
         )
     )
     store.record_mint_owner("lease_1", "other")
-    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
     default = FakeHarness(handle=_HANDLE, verdict="pass")
     other = FakeHarness(
         handle=WorkerHandle(session_id="other-fresh", pid=200, process_start_time="other-start", pgid=200),
@@ -635,9 +632,8 @@ def test_spawn_preamble_carries_the_step_traceparent_only_with_platform_tracing_
     default = FakeHarness(handle=_HANDLE, verdict="pass")
     config = LoopConfig(
         runner_name="r1",
-        workspace_id="ws1",
         runner_id=FIXTURE_RUNNER_ID,
-        max_agents=1,
+        bindings=serving(1),
         platform_tracing=platform_tracing,
     )
     ctx = make_context(
@@ -723,7 +719,7 @@ def test_fresh_mint_selects_the_acceptable_harness_and_a_retry_stays_under_it(tm
     assert lease is not None and lease.harness_id == "chosen" and lease.resolved_model == "chosen-model"
 
     # A within-node retry mints under the same selected harness — it never re-runs selection.
-    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
     Attempt(ctx, lease).fail(reason=LeaseClosureReason.REAPED, via="test")
 
     assert store.active_lease(lease.lease_id) is None  # closed by `fail`, then requeued
@@ -752,7 +748,7 @@ def test_requeue_escalates_when_the_failed_harness_falls_out_of_the_acceptable_s
         )
     )
     store.record_mint_owner("lease_1", "dropped")
-    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
     default = FakeHarness(handle=_HANDLE, verdict=None)
     hub = FakeHub()
     hub.envelopes["ch_1"] = make_envelope(
@@ -850,7 +846,7 @@ def test_new_spawn_generations_record_their_bindings_actual_harness_version(tmp_
     Spawner(ctx).spawn(
         "ch_1", _build_envelope(), [AcquiredEnvironment(environment_id="e1", workdir="/ws/e1")], via="test"
     )
-    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
     ResumeIntents(make_stores(store)).mark_graceful(now=_NOW)
     hub.chunks["ch_1"] = _chunk_with_cost(cost_usd=0)
     harness.harness_version = "resume-2.0"
@@ -889,9 +885,13 @@ def test_a_fresh_spawn_freezes_its_spawn_cwd_on_the_new_transcript_segment(  # t
         harness=FakeHarness(handle=_HANDLE, verdict="pass"),
         probe=FakeProbe(),
         config=LoopConfig(
-            runner_name="r1", workspace_id="ws1", runner_id=FIXTURE_RUNNER_ID, workspace_root=workspace_root
+            runner_name="r1",
+            runner_id=FIXTURE_RUNNER_ID,
         ),
+        spawn_root=workspace_root,
     )
+
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
 
     Spawner(ctx).spawn("ch_1", _build_envelope(), environments, via="test")
 
@@ -1009,9 +1009,7 @@ def test_spawn_preamble_carries_lease_and_local_api(tmp_path):  # type: ignore[n
         provider=FakeProvider({"e1": "/ws/e1"}),
         harness=harness,
         probe=FakeProbe(),
-        config=LoopConfig(
-            runner_name="r1", workspace_id="ws1", runner_id=FIXTURE_RUNNER_ID, local_api_url="http://127.0.0.1:9999"
-        ),
+        config=LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID, local_api_url="http://127.0.0.1:9999"),
     )
 
     Fill(ctx).run()
@@ -1316,9 +1314,7 @@ def test_fill_strict_holds_at_a_dependency_denial_discovered_only_at_claim_time(
         provider=provider,
         harness=harness,
         probe=FakeProbe(),
-        config=LoopConfig(
-            runner_name="r1", workspace_id="ws1", runner_id=FIXTURE_RUNNER_ID, max_agents=2, queue_strict=True
-        ),
+        config=LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID, bindings=serving(2), queue_strict=True),
     )
 
     Fill(ctx).run()
@@ -1373,9 +1369,7 @@ def test_fill_strict_holds_at_a_marked_head_and_idles(tmp_path):  # type: ignore
         provider=provider,
         harness=harness,
         probe=FakeProbe(),
-        config=LoopConfig(
-            runner_name="r1", workspace_id="ws1", runner_id=FIXTURE_RUNNER_ID, max_agents=1, queue_strict=True
-        ),
+        config=LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID, bindings=serving(1), queue_strict=True),
     )
 
     Fill(ctx).run()
@@ -1407,9 +1401,7 @@ def test_fill_finds_no_entry_when_every_peeked_chunk_is_marked(tmp_path, strict)
         provider=provider,
         harness=harness,
         probe=FakeProbe(),
-        config=LoopConfig(
-            runner_name="r1", workspace_id="ws1", runner_id=FIXTURE_RUNNER_ID, max_agents=1, queue_strict=strict
-        ),
+        config=LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID, bindings=serving(1), queue_strict=strict),
     )
 
     Fill(ctx).run()
@@ -1467,7 +1459,7 @@ def test_fill_refuses_a_held_environment_and_the_tick_still_advances(tmp_path, m
     import blizzard.runner.loop.tick as tick_module
 
     store = _store(tmp_path)
-    store.record_binding(chunk_id="ch_holder", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    store.record_binding(chunk_id="ch_holder", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
     hub = FakeHub()
     hub.queue = [QueueEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
     provider = _HeldIgnoringProvider({"e1": "/ws/e1", "e2": "/ws/e2"})
@@ -1494,7 +1486,7 @@ def test_fill_refuses_a_held_environment_and_the_tick_still_advances(tmp_path, m
 
 
 @pytest.mark.unit
-def test_fill_respects_max_agents(tmp_path):  # type: ignore[no-untyped-def]
+def test_fill_respects_the_bindings_agents(tmp_path):  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
     _seed_running_lease(store)  # one active lease already occupies the single slot
     hub = FakeHub()
@@ -1506,7 +1498,7 @@ def test_fill_respects_max_agents(tmp_path):  # type: ignore[no-untyped-def]
         provider=provider,
         harness=FakeHarness(handle=_HANDLE, verdict="pass"),
         probe=FakeProbe(alive={_ALIVE}),
-        config=LoopConfig(runner_name="r1", workspace_id="ws1", runner_id=FIXTURE_RUNNER_ID, max_agents=1),
+        config=LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID, bindings=serving(1)),
     )
 
     Fill(ctx).run()
@@ -1522,7 +1514,7 @@ def test_fill_releases_a_binding_the_hub_reports_terminal_with_no_route(tmp_path
     store = _store(tmp_path)
     # A binding survives with no lease at all — the chunk's last lease already closed
     # (e.g. `transitioned`), the observed-in-production shape.
-    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
     hub = FakeHub()
     hub.chunks["ch_1"] = ChunkState(
         chunk_id="ch_1",
@@ -1566,7 +1558,7 @@ def test_fill_peeks_once_per_claim_attempt_on_the_matched_path(tmp_path):  # typ
         provider=provider,
         harness=harness,
         probe=FakeProbe(),
-        config=LoopConfig(runner_name="r1", workspace_id="ws1", runner_id=FIXTURE_RUNNER_ID, max_agents=2),
+        config=LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID, bindings=serving(2)),
     )
 
     Fill(ctx).run()
@@ -1596,7 +1588,7 @@ def test_fill_peeks_with_this_runners_own_capability_snapshot_and_queue_strict_p
         provider=FakeProvider({"e1": "/ws/e1"}),
         harness=harness,
         probe=FakeProbe(),
-        config=LoopConfig(runner_name="r1", workspace_id="ws1", runner_id=FIXTURE_RUNNER_ID, queue_strict=True),
+        config=LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID, queue_strict=True),
     )
 
     Fill(ctx).run()
@@ -1620,7 +1612,7 @@ def test_fill_peeks_pass_over_by_default(tmp_path):  # type: ignore[no-untyped-d
         provider=FakeProvider({}),
         harness=FakeHarness(handle=_HANDLE, verdict="pass"),
         probe=FakeProbe(),
-        config=LoopConfig(runner_name="r1", workspace_id="ws1", runner_id=FIXTURE_RUNNER_ID),
+        config=LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID),
     )
 
     Fill(ctx).run()
@@ -2076,13 +2068,10 @@ def test_within_node_retry_stays_fresh_even_when_the_node_is_resume(tmp_path):  
 # read -> renderer -> adapter prefix) the renderer's own unit tier cannot.
 
 
-def _preamble_config(*, workspace_prompt: str = "WORKSPACE-POLICY", runner_prompt: str = "BLIZZARD-FRAMING"):  # type: ignore[no-untyped-def]
+def _preamble_config(*, runner_prompt: str = "BLIZZARD-FRAMING"):  # type: ignore[no-untyped-def]
     return LoopConfig(
         runner_name="r1",
-        workspace_id="ws1",
         runner_id="rn_1",
-        workspace_root="/ws",
-        workspace_prompt=workspace_prompt,
         runner_prompt=runner_prompt,
     )
 
@@ -2102,6 +2091,8 @@ def _first_build_spawn(store, hub, provider, env, *, session, at, config=None): 
         probe=FakeProbe(),
         clock=FixedClock(at),
         config=config if config is not None else _preamble_config(),
+        spawn_root="/ws",
+        workspace_prompt="WORKSPACE-POLICY",
     )
     Fill(ctx).run()
     return harness
@@ -2122,6 +2113,8 @@ def _reenter_node(store, hub, provider, env, *, session, pid, at, config=None): 
         probe=FakeProbe(),
         clock=FixedClock(at),
         config=config if config is not None else _preamble_config(),
+        spawn_root="/ws",
+        workspace_prompt="WORKSPACE-POLICY",
     )
     Advance(ctx).run()  # launches the detached elicitation
     Advance(ctx).run()  # collects it — the fake pid reads dead by default
@@ -2281,6 +2274,8 @@ def test_a_resume_with_message_between_node_entries_does_not_disturb_the_fingerp
             probe=FakeProbe(),
             clock=FixedClock(_NOW + timedelta(seconds=45)),
             config=_preamble_config(),
+            spawn_root="/ws",
+            workspace_prompt="WORKSPACE-POLICY",
         )
     ).run()
     assert resume_harness.resumed  # the resume-with-message really ran
@@ -2381,7 +2376,7 @@ def test_advance_review_harvests_findings_asset_from_assessment(tmp_path):  # ty
         session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
         spawned_at=_NOW,
     )
-    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
 
     hub = FakeHub()
     hub.envelopes["ch_1"] = make_envelope(
@@ -2440,7 +2435,7 @@ def test_advance_review_node_drives_no_git_commit_verify_or_artifact(tmp_path): 
         session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
         spawned_at=_NOW,
     )
-    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
     # No `record_git_commit_declaration` call — a review-only worker declares nothing.
 
     hub = FakeHub()
@@ -2639,7 +2634,7 @@ def test_completion_survives_hub_outage_and_applies_once(tmp_path):  # type: ign
 )
 def test_fill_only_adopts_the_current_restart_epoch(tmp_path, restart_epoch, hub_epoch, prior_epoch, adopts):  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
-    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
     store.record_lease(
         NewLease(
             lease_id="lease_prior",
@@ -2696,7 +2691,7 @@ def test_fill_only_adopts_the_current_restart_epoch(tmp_path, restart_epoch, hub
 
 def _restarted_holding_unleased_claim(tmp_path):  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
-    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
     store.set_route_token("ch_1", token="tok", at=_NOW)
     store.record_takeover(
         takeover_id="tko_1",
@@ -2744,7 +2739,7 @@ def test_restart_adopt_proceeds_once_the_takeover_closes(tmp_path):  # type: ign
 @pytest.mark.unit
 def test_adopting_an_unleased_claim_passes_the_hubs_epoch(tmp_path, monkeypatch):  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
-    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
     hub = FakeHub()
     hub.chunks["ch_1"] = ChunkState(chunk_id="ch_1", status=ChunkStatus.RUNNING, route_runner_id="r1", latest_epoch=7)
     hub.envelopes["ch_1"] = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES, epoch=7)
@@ -2776,7 +2771,7 @@ def test_adopting_a_claim_the_hub_reports_ended_releases_it_and_stops_retrying(t
     """An ended chunk is terminal like an unknown one: the binding is released and the next
     tick has nothing left to retry, rather than the generic hub-error retry."""
     store = _store(tmp_path)
-    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
     if token_held:
         store.set_route_token("ch_1", token="tok", at=_NOW)
     hub = FakeHub()
@@ -2799,7 +2794,7 @@ def test_adopting_a_claim_the_hub_reports_ended_releases_it_and_stops_retrying(t
 def test_poll_hub_node_releases_on_done(tmp_path):  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
     # A chunk held at a hub node: a binding but no active lease.
-    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
     hub = FakeHub()
     hub.chunks["ch_1"] = ChunkState(
         chunk_id="ch_1",
@@ -2821,7 +2816,7 @@ def test_poll_hub_node_releases_on_done(tmp_path):  # type: ignore[no-untyped-de
 def test_poll_hub_node_releases_on_stopped(tmp_path):  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
     # A chunk stopped while parked at a hub node: a binding but no active lease.
-    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
     hub = FakeHub()
     hub.chunks["ch_1"] = ChunkState(
         chunk_id="ch_1",
@@ -2844,7 +2839,7 @@ def test_poll_hub_node_releases_on_stopped(tmp_path):  # type: ignore[no-untyped
 @pytest.mark.unit
 def test_poll_hub_node_waits_while_delivering(tmp_path):  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
-    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
     hub = FakeHub()
     hub.chunks["ch_1"] = ChunkState(
         chunk_id="ch_1",
@@ -2888,7 +2883,7 @@ def test_advance_held_chunk_spawns_into_post_merge_node(tmp_path):  # type: igno
     store.record_closure(
         lease_id="lease_build", chunk_id="ch_1", node_id="nd_build", reason="transitioned", closed_at=_NOW
     )
-    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
     hub = FakeHub()
     hub.chunks["ch_1"] = ChunkState(
         chunk_id="ch_1",
@@ -2932,7 +2927,7 @@ def test_advance_held_chunk_does_not_respawn_a_buffered_escalation(tmp_path):  #
         )
     )
     store.record_closure(lease_id="lease_esc", chunk_id="ch_1", node_id="nd_build", reason="failed", closed_at=_NOW)
-    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
     hub = FakeHub()
     # The hub has NOT advanced: it still reads running at the SAME epoch the runner minted (2),
     # because the escalation.recorded fact has not flushed yet.
@@ -3012,7 +3007,7 @@ def test_reap_orphan_requeues(tmp_path):  # type: ignore[no-untyped-def]
             created_at=_NOW,
         )
     )
-    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
     hub = FakeHub()
     hub.envelopes["ch_1"] = _build_envelope()
     harness = FakeHarness(
@@ -3046,7 +3041,7 @@ def test_reap_orphan_requeue_removes_the_failed_leases_scratch_directory_and_cre
             created_at=_NOW,
         )
     )
-    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
     hub = FakeHub()
     hub.envelopes["ch_1"] = _build_envelope()
     harness = FakeHarness(
@@ -3122,7 +3117,7 @@ def test_reap_closes_a_provisional_generation_left_by_an_identity_failure(tmp_pa
         )
     provisional = store.active_lease_for_chunk("ch_1")
     assert provisional is not None
-    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
     hub.envelopes["ch_1"] = _build_envelope()  # requeue's own idempotent re-read
 
     Reap(ctx).run()
@@ -3229,18 +3224,24 @@ def test_retries_exhausted_escalates_and_holds_envs(tmp_path, workspace_root, ex
     runner_dir = "/tmp/runner dir/r1"
     config = LoopConfig(
         runner_name="r1",
-        workspace_id="ws1",
         runner_id="rn_1",
-        max_agents=1,
+        bindings=serving(1),
         runner_dir=runner_dir,
-        workspace_root=workspace_root,
     )
     # Three verdict-less attempts: attempt 1 & 2 requeue, attempt 3 escalates.
     provider = FakeProvider({"e1": "/ws/e1"})
     for i in range(1, 4):
         handle = WorkerHandle(session_id=f"sess-{i}", pid=300 + i, process_start_time=f"start-{i}", pgid=300 + i)
         harness = FakeHarness(handle=handle, verdict=None)
-        ctx = make_context(store, hub=hub, provider=provider, harness=harness, probe=FakeProbe(), config=config)
+        ctx = make_context(
+            store,
+            hub=hub,
+            provider=provider,
+            harness=harness,
+            probe=FakeProbe(),
+            config=config,
+            spawn_root=workspace_root,
+        )
         if i == 1:
             _seed_running_lease(store, pid=300, start="start-0")
         Advance(ctx).run()  # launches the detached elicitation
@@ -3290,13 +3291,13 @@ def test_escalation_without_a_session_composes_neither_takeover_command(tmp_path
             created_at=_NOW,
         )
     )
-    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
     lease = store.active_lease_for_chunk("ch_1")
     assert lease is not None and lease.session_id is None  # never spawned
 
     hub = FakeHub()
     config = LoopConfig(
-        runner_name="r1", workspace_id="ws1", runner_id=FIXTURE_RUNNER_ID, max_agents=1, runner_dir="/tmp/runner-dir"
+        runner_name="r1", runner_id=FIXTURE_RUNNER_ID, bindings=serving(1), runner_dir="/tmp/runner-dir"
     )
     ctx = make_context(
         store,
@@ -3346,7 +3347,7 @@ def test_escalation_with_a_session_but_no_binding_composes_neither_takeover_comm
 
     hub = FakeHub()
     config = LoopConfig(
-        runner_name="r1", workspace_id="ws1", runner_id=FIXTURE_RUNNER_ID, max_agents=1, runner_dir="/tmp/runner-dir"
+        runner_name="r1", runner_id=FIXTURE_RUNNER_ID, bindings=serving(1), runner_dir="/tmp/runner-dir"
     )
     ctx = make_context(
         store,
@@ -3391,14 +3392,14 @@ def test_escalation_after_its_bindings_were_released_still_escalates(tmp_path): 
         session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
         spawned_at=_NOW,
     )
-    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
     store.record_release(chunk_id="ch_1", environment_id="e1", released_at=_NOW)
     lease = store.active_lease_for_chunk("ch_1")
     assert lease is not None and lease.session_id == "sess-a"
     assert store.bindings_for_chunk("ch_1") == []  # released, not merely never bound
 
     config = LoopConfig(
-        runner_name="r1", workspace_id="ws1", runner_id=FIXTURE_RUNNER_ID, max_agents=1, runner_dir="/tmp/runner-dir"
+        runner_name="r1", runner_id=FIXTURE_RUNNER_ID, bindings=serving(1), runner_dir="/tmp/runner-dir"
     )
     ctx = make_context(
         store,
@@ -3433,9 +3434,8 @@ def test_escalation_after_its_bindings_were_released_still_escalates(tmp_path): 
 def _cap_config(cap, runner_dir="/tmp/runner-dir"):  # type: ignore[no-untyped-def]
     return LoopConfig(
         runner_name="r1",
-        workspace_id="ws1",
         runner_id=FIXTURE_RUNNER_ID,
-        max_agents=1,
+        bindings=serving(1),
         chunk_cap_usd=cap,
         runner_dir=runner_dir,
     )
@@ -3857,11 +3857,10 @@ def test_spawn_prefixes_static_workspace_prompt_and_sets_workspace_root(tmp_path
         probe=FakeProbe(),
         config=LoopConfig(
             runner_name="r1",
-            workspace_id="ws1",
             runner_id="rn_1",
-            workspace_root="/ws",
-            workspace_prompt="STATIC-PROMPT",
         ),
+        spawn_root="/ws",
+        workspace_prompt="STATIC-PROMPT",
     )
 
     Fill(ctx).run()
@@ -3892,8 +3891,10 @@ def test_spawn_reflects_runtime_prompt_override_with_no_restart(tmp_path):  # ty
         harness=harness,
         probe=FakeProbe(),
         config=LoopConfig(
-            runner_name="r1", workspace_id="ws1", runner_id=FIXTURE_RUNNER_ID, workspace_prompt="STATIC-PROMPT"
+            runner_name="r1",
+            runner_id=FIXTURE_RUNNER_ID,
         ),
+        workspace_prompt="STATIC-PROMPT",
     )
 
     Fill(ctx).run()
@@ -3978,7 +3979,7 @@ def test_advance_harvests_git_commits_from_every_bound_environment(tmp_path):  #
     harvest spans every binding, verified against its own environment's origin."""
     store = _store(tmp_path)
     _seed_running_lease(store)
-    store.record_binding(chunk_id="ch_1", environment_id="e2", workdir="/ws/e2", bound_at=_NOW)
+    store.record_binding(chunk_id="ch_1", environment_id="e2", workdir="/ws/e2", bound_at=_NOW, workspace_id="ws1")
     for env, commit in (("e1", "aaa111"), ("e2", "bbb222")):
         store.record_git_commit_declaration(
             lease_id="lease_1",
@@ -4032,7 +4033,7 @@ def _two_env_commit_submission(tmp_path, *, origins, commits):  # type: ignore[n
     ``commits[env]`` against ``origins[env]``; returns the submitted pointers and the hub."""
     store = _store(tmp_path)
     _seed_running_lease(store)
-    store.record_binding(chunk_id="ch_1", environment_id="e2", workdir="/ws/e2", bound_at=_NOW)
+    store.record_binding(chunk_id="ch_1", environment_id="e2", workdir="/ws/e2", bound_at=_NOW, workspace_id="ws1")
     for env in ("e1", "e2"):
         store.record_git_commit_declaration(
             lease_id="lease_1",
@@ -4105,7 +4106,6 @@ def test_pull_registers_every_declared_redirect_uri(tmp_path):  # type: ignore[n
         probe=FakeProbe(),
         config=LoopConfig(
             runner_name="r1",
-            workspace_id="ws1",
             runner_id="rn_1",
             public_url="http://127.0.0.1:8431",
             redirect_uris=uris,
@@ -4200,7 +4200,7 @@ def test_pull_registers_the_gates_this_runner_imposes(tmp_path):  # type: ignore
         harness=FakeHarness(handle=_HANDLE, verdict="pass"),
         probe=FakeProbe(),
         config=LoopConfig(
-            runner_name="r1", workspace_id="ws1", runner_id=FIXTURE_RUNNER_ID, max_agents=1, gates=("build", "review")
+            runner_name="r1", runner_id=FIXTURE_RUNNER_ID, bindings=serving(1), gates=("build", "review")
         ),
     )
 
@@ -4276,8 +4276,10 @@ def test_judgement_runs_in_the_sessions_own_spawn_cwd(tmp_path, workspace_root, 
         harness=harness,
         probe=FakeProbe(),
         config=LoopConfig(
-            runner_name="r1", workspace_id="ws1", runner_id=FIXTURE_RUNNER_ID, workspace_root=workspace_root
+            runner_name="r1",
+            runner_id=FIXTURE_RUNNER_ID,
         ),
+        spawn_root=workspace_root,
     )
 
     Advance(ctx).run()  # launches the detached elicitation

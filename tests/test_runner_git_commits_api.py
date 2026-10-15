@@ -16,7 +16,7 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.tokens import TokenHash
 from blizzard.runner.app import build_hosted_app, create_app
 from blizzard.runner.composition import build_runner_process
-from blizzard.runner.config import RunnerConfig
+from blizzard.runner.config import DEFAULT_WORKSPACE_ID, RunnerConfig
 from blizzard.runner.environments.internal.winter_provider import WinterWorkspaceProvider
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.hub.identity import RunnerIdentity
@@ -26,6 +26,7 @@ from blizzard.runner.lifecycle.judgement.git_commit_declaration import (
     GitCommitDeclarationService,
 )
 from blizzard.runner.loop_wiring import LoopWiring
+from tests.host_files import one_workspace
 from tests.runner_client import runner_client
 from tests.runner_fakes import (
     FIXTURE_RUNNER_ID,
@@ -35,6 +36,7 @@ from tests.runner_fakes import (
     make_store,
     make_stores,
     migrated_store_at,
+    single_workspace,
 )
 from tests.test_runner_winter_provider import _FakeGit, _FakeWinter
 
@@ -42,12 +44,13 @@ _NOW = datetime(2026, 7, 22, 12, 0, 0, tzinfo=UTC)
 _TOKEN = "the-lease-token"
 _BODY = {"repo": "toy-api", "branch": "feat/x", "commit": "abc123"}
 _PROVIDER = FakeProvider({"e1": "/ws/e1"})
+_WORKSPACES = single_workspace(_PROVIDER, workspace_id=DEFAULT_WORKSPACE_ID)
 
 
 def _app_with_declarations(tmp_path: Path):  # type: ignore[no-untyped-def]
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}")
-    service = GitCommitDeclarationService(store, FixedClock(_NOW), _PROVIDER, environments=store, outbound=store)
+    service = GitCommitDeclarationService(store, FixedClock(_NOW), _WORKSPACES, environments=store, outbound=store)
     return create_app(
         config, runner_stores=make_stores(store), host_stores=make_host_stores(store), git_commit_declarations=service
     ), store
@@ -69,7 +72,13 @@ def _seed_lease(store, **overrides: object) -> None:  # type: ignore[no-untyped-
     store.record_lease_token(str(fields["lease_id"]), TokenHash(_TOKEN).hex, _NOW)
     # A declaration resolves its environment from the chunk's bindings, so a lease
     # without one has nothing to declare against.
-    store.record_binding(chunk_id=str(fields["chunk_id"]), environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    store.record_binding(
+        chunk_id=str(fields["chunk_id"]),
+        environment_id="e1",
+        workdir="/ws/e1",
+        bound_at=_NOW,
+        workspace_id=DEFAULT_WORKSPACE_ID,
+    )
 
 
 @pytest.mark.component
@@ -84,7 +93,7 @@ def test_503_when_declaration_service_unwired(tmp_path: Path) -> None:
 def test_503_when_store_unwired(tmp_path: Path) -> None:
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}")
-    service = GitCommitDeclarationService(store, FixedClock(_NOW), _PROVIDER, environments=store, outbound=store)
+    service = GitCommitDeclarationService(store, FixedClock(_NOW), _WORKSPACES, environments=store, outbound=store)
     # The service is wired, but ``runner_stores`` — the controller's own read-only
     # resolution seam — is not: the edge must still answer 503, not raise.
     app = create_app(config, git_commit_declarations=service)
@@ -248,12 +257,20 @@ def test_400_when_several_environments_are_held_and_none_is_named(tmp_path: Path
     provider = FakeProvider({"e1": "/ws/e1", "e2": "/ws/e2"})
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}")
-    service = GitCommitDeclarationService(store, FixedClock(_NOW), provider, environments=store, outbound=store)
+    service = GitCommitDeclarationService(
+        store,
+        FixedClock(_NOW),
+        single_workspace(provider, workspace_id=DEFAULT_WORKSPACE_ID),
+        environments=store,
+        outbound=store,
+    )
     app = create_app(
         config, runner_stores=make_stores(store), host_stores=make_host_stores(store), git_commit_declarations=service
     )
     _seed_lease(store)
-    store.record_binding(chunk_id="ch_1", environment_id="e2", workdir="/ws/e2", bound_at=_NOW)
+    store.record_binding(
+        chunk_id="ch_1", environment_id="e2", workdir="/ws/e2", bound_at=_NOW, workspace_id=DEFAULT_WORKSPACE_ID
+    )
 
     with runner_client(app) as client:
         ambiguous = client.post(
@@ -277,12 +294,20 @@ def test_the_same_repo_in_two_environments_is_two_declarations(tmp_path: Path) -
     provider = FakeProvider({"e1": "/ws/e1", "e2": "/ws/e2"})
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}")
-    service = GitCommitDeclarationService(store, FixedClock(_NOW), provider, environments=store, outbound=store)
+    service = GitCommitDeclarationService(
+        store,
+        FixedClock(_NOW),
+        single_workspace(provider, workspace_id=DEFAULT_WORKSPACE_ID),
+        environments=store,
+        outbound=store,
+    )
     app = create_app(
         config, runner_stores=make_stores(store), host_stores=make_host_stores(store), git_commit_declarations=service
     )
     _seed_lease(store)
-    store.record_binding(chunk_id="ch_1", environment_id="e2", workdir="/ws/e2", bound_at=_NOW)
+    store.record_binding(
+        chunk_id="ch_1", environment_id="e2", workdir="/ws/e2", bound_at=_NOW, workspace_id=DEFAULT_WORKSPACE_ID
+    )
 
     with runner_client(app) as client:
         for env, commit in (("e1", "aaa111"), ("e2", "bbb222")):
@@ -310,7 +335,7 @@ def test_hosted_winter_reacquire_updates_worker_declarations_on_the_shared_provi
     migrated_store_at(db_url)
     store = make_store(db_url)
     store.record_runner_identity(RunnerIdentity(FIXTURE_RUNNER_ID, "runner-local", _NOW))
-    config = RunnerConfig(root=tmp_path, db_url=db_url, workspace_root=str(tmp_path), workspace_envs=("e1",))
+    config = RunnerConfig(root=tmp_path, db_url=db_url, workspaces=one_workspace(root=str(tmp_path), envs=("e1",)))
     (tmp_path / "e1").mkdir()
     winter = _FakeWinter()
     provider = WinterWorkspaceProvider(str(tmp_path), env_pool=["e1"], winter=winter, git=_FakeGit())
@@ -323,10 +348,11 @@ def test_hosted_winter_reacquire_updates_worker_declarations_on_the_shared_provi
     graph = build_runner_process(config, runner_id=FIXTURE_RUNNER_ID)
     hosted = build_hosted_app(config, process_graph=graph)
     try:
-        loop = LoopWiring(config, "", "").context(FakeHub(), graph)
+        loop = LoopWiring(config, "").context(FakeHub(), graph)
         try:
-            assert hosted.app.state.workspace_provider is loop.provider is provider
-            loop.provider.acquire("ch_1", 1, held_ids=[])
+            assert hosted.app.state.workspace_registry is loop.workspaces
+            assert loop.workspaces.provider(DEFAULT_WORKSPACE_ID) is provider
+            provider.acquire("ch_1", 1, held_ids=[])
             _seed_lease(store)
             headers = {"X-Blizzard-Lease-Token": _TOKEN}
             with runner_client(hosted.app) as client:
@@ -338,7 +364,7 @@ def test_hosted_winter_reacquire_updates_worker_declarations_on_the_shared_provi
                     lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="transitioned", closed_at=_NOW
                 )
                 membership("new")
-                loop.provider.acquire("ch_2", 1, held_ids=[])
+                provider.acquire("ch_2", 1, held_ids=[])
                 _seed_lease(store, lease_id="lease_2", chunk_id="ch_2")
                 accepted = client.post(
                     "/api/leases/lease_2/git-commits", json={**_BODY, "repo": "new"}, headers=headers

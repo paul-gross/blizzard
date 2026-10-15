@@ -31,11 +31,13 @@ from blizzard.runner.store.internal.host_jti_cache_store import JtiCacheReposito
 from blizzard.runner.store.schema import metadata
 from tests.runner_client import runner_base_url
 from tests.runner_fakes import (
+    FakeProvider,
     SqlAlchemyRunnerStore,
     make_host_stores,
     make_stores,
     registered_identity,
     runner_store_errors,
+    single_workspace,
 )
 
 pytestmark = pytest.mark.component
@@ -126,10 +128,8 @@ def _build_app(
         identity=identity,
         runner_name=name,
         workspace_id="workspace-1",
-        max_agents=1,
         hub_url=config.hub_url,
-        env_pool=("e1",),
-        workspace_root="",
+        workspaces=single_workspace(FakeProvider({})),
         harnesses=HarnessRegistry({}),  # unused by the two routes this test drives
     )
     app = create_app(

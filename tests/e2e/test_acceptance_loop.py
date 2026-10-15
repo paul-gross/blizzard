@@ -27,7 +27,7 @@ from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.observability.egress.config import EgressConfig
 from blizzard.runner.app import build_hosted_app
 from blizzard.runner.composition import RunnerProcess
-from blizzard.runner.config import ENV_TRANSCRIPTS_ROOT, RunnerConfig
+from blizzard.runner.config import DEFAULT_WORKSPACE_ID, ENV_TRANSCRIPTS_ROOT, HostWorkspace, RunnerConfig
 from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.loop_wiring import LoopWiring
 from tests.e2e.fleet_traces import (
@@ -664,9 +664,11 @@ def _runner_config(
         host="127.0.0.1",
         port=_free_port(),
         hub_url=f"http://127.0.0.1:{hub_port}",
-        workspace_provider="winter",
-        workspace_root=str(workspace),
-        workspace_envs=(RUNNER_ENV,),
+        workspaces=(
+            HostWorkspace(
+                DEFAULT_WORKSPACE_ID, root=str(workspace), provider="winter", envs=(RUNNER_ENV,), base_branch="main"
+            ),
+        ),
         harness_sections=sections(
             # The mock façade rejects any ``--permission-mode``, so ``None`` omits it; both health
             # probes read a fixture credential file, since neither mock is a logged-in provider CLI.
@@ -682,7 +684,6 @@ def _runner_config(
         # A path that is never created, so the external-usage sampler's missing-credentials
         # soft failure trips before any request is built.
         subscriptions=sampler_without_credentials(runner_dir),
-        base_branch="main",
         worker_env_passthrough=MOCK_HARNESS_ENV_PASSTHROUGH,
     )
 

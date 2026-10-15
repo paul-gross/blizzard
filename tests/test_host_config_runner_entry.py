@@ -76,20 +76,17 @@ def test_the_runners_token_variable_follows_its_name(tmp_path: Path) -> None:
         ),
     ],
 )
-def test_the_bindings_become_the_projects_served_and_their_agents_the_cap(
-    tmp_path: Path, projects: str, served: tuple[str, ...]
-) -> None:
+def test_the_bindings_become_the_projects_served(tmp_path: Path, projects: str, served: tuple[str, ...]) -> None:
     write_minimal_host(tmp_path, projects=projects)
     runner = HostConfig.load(tmp_path).runner_config(_TOKEN)
     assert runner.projects == served
-    assert runner.max_agents == sum(binding.agents for binding in runner.bindings or ())
 
 
 def test_a_runner_serving_nothing_projects_no_projects_and_no_agents(tmp_path: Path) -> None:
     write_minimal_host(tmp_path, projects="[]")
     (built,) = HostConfig.load(tmp_path).projections(_TOKEN)
     assert isinstance(built, BuiltRunner)
-    assert (built.config.projects, built.config.bindings, built.config.max_agents) == ((), (), 0)
+    assert (built.config.projects, built.config.bindings) == ((), ())
 
 
 def test_a_runner_with_no_projects_key_is_halted_naming_the_key(tmp_path: Path) -> None:

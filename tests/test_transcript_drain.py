@@ -65,7 +65,6 @@ def _ctx(hub: FakeHub, *, clock: FixedClock | None = None, record_max_bytes: int
         probe=FakeProbe(),
         config=LoopConfig(
             runner_name="r1",
-            workspace_id="ws1",
             runner_id="rn_1",
             transcripts_ship=False,
             transcript_record_max_bytes=record_max_bytes,
@@ -175,7 +174,7 @@ def test_drain_run_pumps_then_flushes_a_real_pump_output_to_the_hub_with_shippin
         provider=FakeProvider({"e1": "/ws/e1"}),
         harness=harness,
         probe=FakeProbe(),
-        config=LoopConfig(runner_name="r1", workspace_id="ws1", runner_id=FIXTURE_RUNNER_ID, transcripts_ship=True),
+        config=LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID, transcripts_ship=True),
     )
     segment_id = _spawn_one_segment(ctx)
 
@@ -719,7 +718,7 @@ def test_drain_run_survives_a_raising_pump_and_recovers_next_run() -> None:
         provider=FakeProvider({"e1": "/ws/e1"}),
         harness=harness,
         probe=FakeProbe(),
-        config=LoopConfig(runner_name="r1", workspace_id="ws1", runner_id=FIXTURE_RUNNER_ID, transcripts_ship=True),
+        config=LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID, transcripts_ship=True),
     )
     segment_id = _spawn_one_segment(ctx)
     # A buffered record with nothing to do with this tick's own (failing) pump read.

@@ -6,7 +6,7 @@ declaration's own graph loads on first use."""
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Mapping
+from collections.abc import Iterator, Mapping, Sequence
 from concurrent.futures import Executor
 from dataclasses import dataclass
 from functools import cache
@@ -15,7 +15,7 @@ from typing import Any
 
 from blizzard.foundation.roles import domain_model
 from blizzard.runner.config_table import ConfigError
-from blizzard.runner.harness.adapter import IHarnessHealthProbe
+from blizzard.runner.harness.adapter import EverySpawnRootProbe, IHarnessHealthProbe
 from blizzard.runner.harness.autonomy import Autonomy
 from blizzard.runner.harness.bundle import BundleSnapshot, HarnessLayout, HarnessSource
 from blizzard.runner.harness.claude_code.section import CLAUDE_CODE_SECTION
@@ -210,15 +210,18 @@ def build_production_harness_registry(
 
 
 def build_production_harness_health_probes(
-    settings: HarnessSettings, *, spawn_root: str
+    settings: HarnessSettings, *, spawn_roots: Sequence[str]
 ) -> dict[str, IHarnessHealthProbe]:
     """Every enabled harness binding's own :class:`~blizzard.runner.harness.adapter.
-    IHarnessHealthProbe`, symmetric with :func:`build_production_harness_registry`."""
+    IHarnessHealthProbe`, symmetric with :func:`build_production_harness_registry` — checking ambient
+    settings once per distinct spawn root in ``spawn_roots``."""
     shared = shared_inputs(settings)
-    return {
-        declaration.harness_id: declaration.health_probe(section, shared, spawn_root=spawn_root)
+    roots = tuple(dict.fromkeys(spawn_roots)) or ("",)
+    probes = {
+        declaration.harness_id: tuple(declaration.health_probe(section, shared, spawn_root=root) for root in roots)
         for declaration, section in enabled(settings.sections)
     }
+    return {harness_id: each[0] if len(each) == 1 else EverySpawnRootProbe(each) for harness_id, each in probes.items()}
 
 
 def publish_harness_bundle(

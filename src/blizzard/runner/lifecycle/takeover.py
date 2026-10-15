@@ -23,6 +23,7 @@ from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.roles import domain_model
 from blizzard.runner.auth.tokens import IWriteTokenRepository
 from blizzard.runner.environments.provider import AcquiredEnvironment
+from blizzard.runner.environments.workspaces import IWorkspaces
 from blizzard.runner.events.publisher import IRunnerEventPublisher
 from blizzard.runner.harness.adapter import IHarnessWorkerLifecycle, WorkerPreamble
 from blizzard.runner.harness.identity import SessionReference
@@ -163,8 +164,8 @@ class TakeoverOpenScope:
     (``bzh:domain-takes-objects``): the runner holds no chunk entity, so this names
     exactly the facts the rule's refusals and reference-lease derivation read from
     ``chunk_id`` — the open takeover, the held bindings, the active and latest leases,
-    the fence-epoch floor, whether a runner requeue of the chunk is pending, and whether the active
-    lease is ask-parked or already has a submission buffered."""
+    the fence-epoch floor, whether a runner requeue of the chunk is pending, whether the active
+    lease is ask-parked or already has a submission buffered, and the workspace the chunk's newest binding names."""
 
     chunk_id: str
     open_takeover: OpenTakeover | None
@@ -175,6 +176,8 @@ class TakeoverOpenScope:
     requeue_pending: bool = False
     active_parked: bool = False
     submission_pending: bool = False
+    #: The workspace the chunk's newest binding names — the session resumes in its spawn cwd; ``None`` names none.
+    workspace_id: str | None = None
 
 
 @domain_model
@@ -464,14 +467,14 @@ class TakeoverService:
         elicitations: IWriteElicitationRepository,
         local_api_url: str,
         harnesses: IHarnessLifecycleRegistry,
-        workspace_root: str,
+        workspaces: IWorkspaces,
         events: IRunnerEventPublisher | None = None,
     ) -> None:
         self._takeover = takeover
         self._outbound = outbound
         self._tokens = tokens
         self._elicitations = elicitations
-        self._workspace_root = workspace_root
+        self._workspaces = workspaces
         self._clock = clock
         self._harnesses = harnesses
         self._process = process
@@ -544,7 +547,7 @@ class TakeoverService:
         # Read the reference lease's stamps rather than re-resolving, so the
         # operator continues under exactly the configuration the session ran with.
         command = harness.resume_command(
-            SpawnCwd.of_session(self._workspace_root, workdir),
+            SpawnCwd.of_session(self._workspaces.spawn_root(scope.workspace_id), workdir),
             session.session_id,
             model=reference.resolved_model,
             effort=reference.resolved_effort,

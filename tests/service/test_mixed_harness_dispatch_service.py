@@ -241,7 +241,7 @@ def test_claim_revalidates_against_a_regressed_registration_through_the_real_run
                     headers=config.auth_headers(),
                     json={
                         "name": config.name,
-                        "workspace_id": config.workspace_id,
+                        "workspace_id": config.home_workspace.id,
                         "capabilities": [{"harness_id": "claude_code", "default": True}],
                     },
                 )
@@ -542,8 +542,8 @@ def test_two_session_lineages_interleave_on_one_dispatch_loop_with_no_cross_talk
                 cwds = _segment_spawn_cwds(config, chunk_id)
                 assert cwds, chunk_id
                 assert all(cwds), cwds
-                assert config.workspace_root
-                assert set(cwds) == {config.workspace_root}, cwds
+                assert config.home_workspace.root
+                assert set(cwds) == {config.home_workspace.root}, cwds
 
             # --- usage recorded (judgement resolved into a completion means both a spawn
             # and a judge invocation earned their own facts), per lineage — never crossed ---

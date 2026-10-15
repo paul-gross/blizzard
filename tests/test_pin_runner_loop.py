@@ -30,6 +30,7 @@ from blizzard.runner.node_steps.chunk_state import ChunkPause, ChunkState
 from blizzard.runner.node_steps.submissions import ApplyReply
 from blizzard.runner.runtime import migration_runner
 from blizzard.runner.subscriptions.subscription_sampler import SampleMiss
+from tests.host_files import one_workspace
 from tests.runner_fakes import (
     FIXTURE_RUNNER_ID,
     FakeCheckRunner,
@@ -43,6 +44,7 @@ from tests.runner_fakes import (
     make_context,
     make_envelope,
     make_store,
+    serving,
 )
 
 _NOW = datetime(2026, 8, 4, 12, 0, 0, tzinfo=UTC)
@@ -262,26 +264,25 @@ def test_the_resume_guard_fact_is_durable_before_the_resume_runs(tmp_path) -> No
 
 
 @pytest.mark.unit
-def test_loop_wiring_uses_the_injected_prompts_and_never_re_derives_them(tmp_path: Path) -> None:
-    """Re-deriving them here would raise ``ConfigError`` on a configured-but-missing prompt
+def test_loop_wiring_uses_the_injected_runner_prompt_and_never_re_derives_it(tmp_path: Path) -> None:
+    """Re-deriving it here would raise ``ConfigError`` on a configured-but-missing prompt
     file from whatever thread this runs on — for the daemon, the background loop thread —
     instead of from ``host``'s own startup call."""
     config = RunnerConfig(
         root=tmp_path,
         db_url=f"sqlite:///{tmp_path / 'runner.db'}",
-        workspace_root=str(tmp_path / "workspace"),
+        workspaces=one_workspace(root=str(tmp_path / "workspace")),
         runner_prompt_file="does-not-exist.md",
-        workspace_prompt_file="also-missing.md",
     )
     migration_runner(config).upgrade("head")  # the graph reads the identity row at boot, as `host` does once current
 
     try:
-        with loop_context(config, workspace_prompt="ws prose", runner_prompt="runner prose") as ctx:
-            prompts = (ctx.config.workspace_prompt, ctx.config.runner_prompt)
+        with loop_context(config, runner_prompt="runner prose") as ctx:
+            prompt = ctx.config.runner_prompt
     except ConfigError as exc:  # pragma: no cover - the pinned regression
-        pytest.fail(f"the prompts were re-derived here instead of taken from the caller: {exc}")
+        pytest.fail(f"the runner prompt was re-derived here instead of taken from the caller: {exc}")
 
-    assert prompts == ("ws prose", "runner prose")
+    assert prompt == "runner prose"
 
 
 # The external-subscription-usage sample is the tick's LAST step.
@@ -326,7 +327,7 @@ def test_the_external_usage_sample_runs_after_fill_has_claimed(tmp_path) -> None
         harness=harness,
         probe=FakeProbe(alive={(_HANDLE.pid, _HANDLE.process_start_time)}),
         clock=FixedClock(_NOW),
-        config=LoopConfig(runner_name="r1", workspace_id="ws1", runner_id=FIXTURE_RUNNER_ID, max_agents=1),
+        config=LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID, bindings=serving(1)),
         subscriptions=(resolved,),
     )
 

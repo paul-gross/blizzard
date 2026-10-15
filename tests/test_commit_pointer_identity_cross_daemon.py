@@ -48,7 +48,9 @@ def _submit(tmp_path: Path, *, origins: dict[str, str], commits: dict[str, str])
         )
     )
     for env in ("e1", "e2"):
-        store.record_binding(chunk_id="ch_1", environment_id=env, workdir=f"/ws/{env}", bound_at=_NOW)
+        store.record_binding(
+            chunk_id="ch_1", environment_id=env, workdir=f"/ws/{env}", bound_at=_NOW, workspace_id="ws1"
+        )
         store.record_git_commit_declaration(
             lease_id="lease_1",
             chunk_id="ch_1",

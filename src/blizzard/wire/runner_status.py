@@ -26,12 +26,31 @@ class PauseStateView(BaseModel):
     local_reason: str | None = None
 
 
-class CapacitiesView(BaseModel):
-    """Agent-slot accounting: ``used`` plus ``free`` accounts for ``max_agents``."""
+class BindingCapacityView(BaseModel):
+    """One binding's agent slots: ``used`` plus ``free`` accounts for its ``agents``. ``project`` is the entry as
+    configured; ``project_id`` the project it resolved to, ``None`` while it routes nothing."""
 
-    max_agents: int
+    project: str
+    project_id: str | None = None
+    workspace_id: str
+    agents: int
     used: int
     free: int
+
+
+class CapacitiesView(BaseModel):
+    """Agent-slot accounting per binding, plus the runner-wide count of open leases. A lease whose project or
+    workspace is not yet known counts against every binding it may belong to."""
+
+    used: int
+    bindings: list[BindingCapacityView] = []
+
+
+class RoutingConflictView(BaseModel):
+    """Two or more configured entries resolving to one project; while any stands, the runner claims nothing."""
+
+    project_id: str
+    entries: list[str]
 
 
 class HubConnectivityView(BaseModel):
@@ -74,8 +93,8 @@ class ServedProjectStatusView(BaseModel):
 
 
 class UnmatchedBindingView(BaseModel):
-    """One held binding whose workdir matches no workspace the runner's provider lists. It keeps its
-    lease and still counts against ``max_agents``."""
+    """One held binding whose workdir matches no workspace the host declares. It keeps its lease and still
+    counts against every binding of the runner."""
 
     chunk_id: str
     environment_id: str
@@ -108,6 +127,8 @@ class RunnerStatusView(BaseModel):
     served_projects: list[ServedProjectStatusView] | None = None
     #: Each held binding no workspace has claimed; empty when every held binding names one.
     unmatched_bindings: list[UnmatchedBindingView] = []
+    #: Each project two or more bindings resolve to; empty when the routing is sound.
+    routing_conflicts: list[RoutingConflictView] = []
 
 
 class EnvironmentView(BaseModel):

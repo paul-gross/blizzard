@@ -52,6 +52,7 @@ from tests.runner_fakes import (
     make_envelope,
     make_store,
     make_stores,
+    serving,
 )
 
 pytestmark = pytest.mark.component
@@ -87,7 +88,7 @@ def _seed_running_lease(store, *, chunk="ch_1", lease="lease_1", pid=100, start=
         spawned_at=_NOW,
         pgid=pid,
     )
-    store.record_binding(chunk_id=chunk, environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    store.record_binding(chunk_id=chunk, environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
 
 
 class _ExitingProbe(FakeProbe):
@@ -648,9 +649,8 @@ def test_a_worker_that_exits_on_its_interrupt_has_its_generation_recorded_after_
     harness = FakeHarness(handle=_HANDLE, verdict="pass", usage_by_kind={"spawn": _sample("spawn", cost_usd=0.42)})
     config = LoopConfig(
         runner_name="r1",
-        workspace_id="ws1",
         runner_id=FIXTURE_RUNNER_ID,
-        max_agents=1,
+        bindings=serving(1),
         worker_stdout_dir=str(stdout_dir),
     )
     ctx = _make_ctx(store, hub, harness, probe, config=config)
@@ -826,7 +826,7 @@ def _seed_orphan_lease(store, *, retries_max=2):  # type: ignore[no-untyped-def]
             created_at=_NOW,
         )
     )
-    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
 
 
 def _suppressed_chunk_paused(logs, *, via):  # type: ignore[no-untyped-def]

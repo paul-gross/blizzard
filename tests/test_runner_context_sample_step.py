@@ -29,6 +29,7 @@ from tests.runner_fakes import (
     FakeTranscriptSource,
     make_context,
     make_store,
+    serving,
 )
 
 pytestmark = pytest.mark.unit
@@ -83,9 +84,8 @@ def _ctx(store, *, tokens: int | None, clock: FixedClock, warn: int | None = 300
             clock=clock,
             config=LoopConfig(
                 runner_name="r1",
-                workspace_id="ws1",
                 runner_id="rn_1",
-                max_agents=1,
+                bindings=serving(1),
                 context_warn_tokens=warn,
                 context_sample_interval_seconds=interval,
             ),

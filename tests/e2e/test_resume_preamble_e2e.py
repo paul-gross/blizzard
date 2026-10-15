@@ -38,6 +38,7 @@ from tests.e2e.test_acceptance_loop import (
     _winter_source,
 )
 from tests.e2e.test_session_modes_e2e import _graph_yaml
+from tests.host_files import with_workspace
 from tests.runner_fakes import daemon_store
 
 pytestmark = [
@@ -163,10 +164,9 @@ def _live_stack(tmp_path: Path):  # type: ignore[no-untyped-def]
         # deployment with an empty layer 2 would prove only half of it.
         config = dataclasses.replace(
             config,
-            max_agents=1,
             runner_prompt=_RUNNER_PROMPT,
-            workspace_prompt=_WORKSPACE_PROMPT,
         )
+        config = with_workspace(config, prompt=_WORKSPACE_PROMPT)
         fenced = dict(os.environ)
         fenced["BLIZZARD_MOCK_HARNESS_FENCE"] = "1"
         yield hub, chunk_id, config, workspace, origins / f"{REPO_NAME}.git", fenced
@@ -288,7 +288,7 @@ def test_resumed_node_entry_announces_a_replaced_workspace_prompt(tmp_path: Path
             if "review" not in nodes:
                 return
             response = runner.put(
-                f"/api/host/workspaces/{config.workspace_id}/prompt", json={"prompt": _REPLACEMENT_PROMPT}
+                f"/api/host/workspaces/{config.home_workspace.id}/prompt", json={"prompt": _REPLACEMENT_PROMPT}
             )
             assert response.status_code == 200, response.text
             replaced.append(True)

@@ -61,7 +61,7 @@ def _seed_running_lease(  # type: ignore[no-untyped-def]
         session=SessionReference(CLAUDE_CODE_HARNESS_ID, session),
         spawned_at=_NOW,
     )
-    store.record_binding(chunk_id=chunk, environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    store.record_binding(chunk_id=chunk, environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
 
 
 def _running_chunk(chunk="ch_1", *, runner_id="r1"):  # type: ignore[no-untyped-def]

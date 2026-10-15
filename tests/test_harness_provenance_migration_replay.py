@@ -40,6 +40,7 @@ from tests.runner_fakes import (
     make_context,
     make_envelope,
     runner_store_errors,
+    single_workspace,
 )
 
 pytestmark = pytest.mark.component
@@ -270,7 +271,7 @@ def test_backfilled_session_transcript_reads_from_the_claude_code_source(tmp_pat
         environments=store,
         transcripts=HarnessTranscriptRepositories(registry),
         archived=FakeArchivedTranscriptRepository(),
-        workspace_root="",
+        workspaces=single_workspace(FakeProvider({})),
     )
 
     resolved = service.for_lease("lease_transcript")
@@ -306,7 +307,7 @@ def test_backfilled_session_takeover_opens_under_claude_code(tmp_path) -> None: 
         tokens=store,
         elicitations=store,
         local_api_url="http://127.0.0.1:8431",
-        workspace_root="",
+        workspaces=single_workspace(FakeProvider({})),
         harnesses=registry,
     )
     scope = TakeoverOpenScope(

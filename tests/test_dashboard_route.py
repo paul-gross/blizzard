@@ -29,11 +29,13 @@ from tests.runner_client import runner_client
 from tests.runner_fakes import (
     FakeHarness,
     FakeHarnessHealth,
+    FakeProvider,
     make_host_stores,
     make_store,
     make_stores,
     no_retry_clock,
     registered_identity,
+    single_workspace,
 )
 
 _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
@@ -61,11 +63,9 @@ def _app_with_status(
         escalations=store,
         identity=registered_identity("rn_status", config.name),
         runner_name=config.name,
-        workspace_id=config.workspace_id,
-        max_agents=config.max_agents,
+        workspace_id=config.home_workspace.id,
         hub_url=config.hub_url,
-        env_pool=("e1",),
-        workspace_root="",
+        workspaces=single_workspace(FakeProvider({})),
         harnesses=HarnessRegistry({CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=harness)}),
     )
     app = create_app(

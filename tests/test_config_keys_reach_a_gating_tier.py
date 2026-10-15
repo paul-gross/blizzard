@@ -28,7 +28,7 @@ _CONFIGS = (
     ("runner/config", "RunnerConfig"),
     ("runner/config", "SubscriptionDeclaration"),
     ("runner/host_config", "HostConfig"),
-    ("runner/host_config", "HostWorkspace"),
+    ("runner/config", "HostWorkspace"),
     ("runner/config", "ProjectBinding"),
     ("runner/host_config", "RunnerEntry"),
     ("hub/config", "HubConfig"),

@@ -272,7 +272,7 @@ def test_board_browser_live_group_reorder_answer_and_pause(tmp_path: Path, chrom
         chunk_c = _ingest_chunk(forge, hub, "chunk C — group merged")
 
         config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
-        config = dataclasses.replace(config, host="127.0.0.1", port=_free_port(), max_agents=1)
+        config = dataclasses.replace(config, host="127.0.0.1", port=_free_port())
         fenced = dict(os.environ)
         fenced["BLIZZARD_MOCK_HARNESS_FENCE"] = "1"
 

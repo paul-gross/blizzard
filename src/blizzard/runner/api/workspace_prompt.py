@@ -46,7 +46,7 @@ def read_workspace_prompt(workspace_id: str, request: Request) -> WorkspacePromp
     override = stores.workspace_prompt.workspace_prompt_override(workspace_id) if stores is not None else None
     if override is not None:
         return WorkspacePromptResponse(prompt=override, source="override")
-    return WorkspacePromptResponse(prompt=workspace.configured_prompt(), source="config")
+    return WorkspacePromptResponse(prompt=workspace.configured_prompt, source="config")
 
 
 @router.put("/prompt", response_model=WorkspacePromptResponse, responses=_UNKNOWN)
@@ -69,4 +69,4 @@ def clear_workspace_prompt(workspace_id: str, request: Request) -> WorkspaceProm
     wiring = RunnerWiring.of(request)
     workspace = wiring.workspace(workspace_id)
     wiring.workspace_prompts().clear(workspace_id)
-    return WorkspacePromptResponse(prompt=workspace.configured_prompt(), source="config")
+    return WorkspacePromptResponse(prompt=workspace.configured_prompt, source="config")

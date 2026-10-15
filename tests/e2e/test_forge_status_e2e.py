@@ -7,7 +7,6 @@ full-pass floor (the hub keeps only in-memory probe state); a down forge degradi
 
 from __future__ import annotations
 
-import dataclasses
 import os
 import subprocess
 import time
@@ -141,7 +140,6 @@ def test_forge_status_projection_e2e(tmp_path: Path) -> None:
         )
 
         config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
-        config = dataclasses.replace(config, max_agents=1)
         fenced = {**os.environ, "BLIZZARD_MOCK_HARNESS_FENCE": "1"}
         status, history = _drive_recording_labels(config, hub, forge, chunk_a, number_a, fenced)
 

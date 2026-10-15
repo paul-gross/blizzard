@@ -67,7 +67,11 @@ def test_every_knob_defaults_when_its_key_is_absent(tmp_path: Path) -> None:
     )
     assert config.worker_env_passthrough == () and config.worker_path_prepend == ()
     assert (config.runner_prompt, config.runner_prompt_file, config.transcripts_root) == ("", "", "")
-    assert (config.workspace_prompt, config.workspace_prompt_file, config.workspace_prompt_package) == ("", "", "")
+    assert (config.home_workspace.prompt, config.home_workspace.prompt_file, config.home_workspace.prompt_package) == (
+        "",
+        "",
+        "",
+    )
     assert config.public_urls == () and config.trusted_proxies == ()
     assert config.subscriptions == () and config.gates == ()
     assert (claude_code(config).enabled, opencode(config).enabled) == (True, True)
@@ -99,7 +103,7 @@ def test_every_knob_parses_from_a_hand_written_file_and_survives_a_round_trip(tm
         90000,
     )
     assert config.worker_stdout_retention_days == 3
-    assert config.workspace_prompt_file == "wp.md"
+    assert config.home_workspace.prompt_file == "wp.md"
     assert (config.gates, config.runner_prompt, config.transcripts_root) == (("review",), "be brief", "/tmp/t")
     assert config.queue_strict is True
     assert (config.chunk_cap_usd, config.runner_ceiling_usd, config.runner_ceiling_window_hours) == (5.0, 50.0, 6.0)
@@ -155,22 +159,26 @@ def test_the_missing_path_prepend_entries_name_only_what_is_absent(tmp_path: Pat
     assert config.missing_worker_path_prepend_entries == (str(tmp_path / "gone"),)
 
 
+def _workspace_prompt(config: RunnerConfig) -> str:
+    return config.home_workspace.resolved_prompt(config.root)
+
+
 def test_a_workspace_prompt_resolves_from_its_one_knob(tmp_path: Path) -> None:
     root = tmp_path / "host"
     (root).mkdir()
     (root / "wp.md").write_text("from the file")
-    assert _config(root, workspace='prompt = "inline"\n').resolved_workspace_prompt() == "inline"
-    assert _config(root, workspace='prompt_file = "wp.md"\n').resolved_workspace_prompt() == "from the file"
+    assert _workspace_prompt(_config(root, workspace='prompt = "inline"\n')) == "inline"
+    assert _workspace_prompt(_config(root, workspace='prompt_file = "wp.md"\n')) == "from the file"
     with pytest.raises(ConfigError, match="does not exist"):
-        _config(root, workspace='prompt_file = "absent.md"\n').resolved_workspace_prompt()
+        _workspace_prompt(_config(root, workspace='prompt_file = "absent.md"\n'))
 
 
 def test_a_packaged_workspace_prompt_is_exclusive_with_the_text_knobs_and_must_exist(tmp_path: Path) -> None:
-    assert _config(tmp_path / "a", workspace='prompt_package = "winter"\n').resolved_workspace_prompt()
+    assert _workspace_prompt(_config(tmp_path / "a", workspace='prompt_package = "winter"\n'))
     with pytest.raises(ConfigError, match="exclusive"):
-        _config(tmp_path / "b", workspace='prompt_package = "winter"\nprompt = "x"\n').resolved_workspace_prompt()
+        _workspace_prompt(_config(tmp_path / "b", workspace='prompt_package = "winter"\nprompt = "x"\n'))
     with pytest.raises(ConfigError, match="no packaged sample"):
-        _config(tmp_path / "c", workspace='prompt_package = "nope"\n').resolved_workspace_prompt()
+        _workspace_prompt(_config(tmp_path / "c", workspace='prompt_package = "nope"\n'))
 
 
 def test_a_runner_prompt_file_wins_over_the_inline_text_and_a_missing_one_raises(tmp_path: Path) -> None:

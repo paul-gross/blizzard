@@ -217,7 +217,9 @@ class Judgement:
         self.ctx.stores.checks.record_nudge_fired(lease_id=lease.lease_id, epoch=lease.epoch, at=self.ctx.clock.now())
         # The nudge's own boundary, riding `record_nudge_fired`'s own
         # pre-resume transaction — no new window, so no new crash point brackets it.
-        start_position, start_unreadable = self.ctx.resolve_boundary_start(self.session, self.bindings[0].workdir)
+        start_position, start_unreadable = self.ctx.resolve_boundary_start(
+            self.session, self.bindings[0].workdir, self.bindings[0].workspace_id
+        )
         self.ctx.stores.invocation_boundaries.record_boundary_open(
             lease_id=lease.lease_id,
             chunk_id=lease.chunk_id,
@@ -422,7 +424,9 @@ class Judgement:
         )
         # The judgement's own boundary, riding `record_elicitation_launch`'s own
         # pre-launch write. Keyed by the CURRENT generation — a judgement mints no new one.
-        start_position, start_unreadable = self.ctx.resolve_boundary_start(self.session, self.bindings[0].workdir)
+        start_position, start_unreadable = self.ctx.resolve_boundary_start(
+            self.session, self.bindings[0].workdir, self.bindings[0].workspace_id
+        )
         generation = (
             self.generation
             if self.generation is not None
@@ -458,8 +462,9 @@ class Judgement:
             # `_resolve_harness` already escalated, clearing the in-flight record as part of
             # that closure — no other runner can resume this exact session to relaunch on.
             return
+        binding = self.bindings[0]
         handle = harness.judge(
-            SpawnCwd.of_session(self.ctx.config.workspace_root, self.bindings[0].workdir),
+            SpawnCwd.of_session(self.ctx.workspaces.spawn_root(binding.workspace_id), binding.workdir),
             session.session_id,
             message,
             output_path,
