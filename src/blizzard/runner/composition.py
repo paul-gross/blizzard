@@ -59,7 +59,7 @@ from blizzard.runner.hub.client import HostReport, HostReportedWorkspace
 from blizzard.runner.hub.client import SubscriptionDeclaration as HubSubscriptionDeclaration
 from blizzard.runner.hub.held_token import HubTokenHolder
 from blizzard.runner.hub.host_identity import HostIdentityHolder
-from blizzard.runner.hub.host_registration import HostRegistration, HostRegistrationHolder
+from blizzard.runner.hub.host_registration import HostRegistration, HostRegistrationHolder, ICurrentHostRegistration
 from blizzard.runner.hub.identity import (
     ICurrentRunnerIdentity,
     IdentityVerdictHolder,
@@ -197,7 +197,7 @@ class HostProcess:
     def registered(self) -> bool:
         """Whether the host holds a host token: it reports itself, and its roster with it, so its runners declare
         no subscriptions of their own."""
-        return self.host_hub_http_client is not None
+        return self.host_registration.current().registered()
 
     def spenders_of(self, slug: str | None, *, excluding: str) -> tuple[RunnerProcess, ...]:
         """The runners of this host, other than ``excluding``, that spend ``slug`` — none for a runner that spends no
@@ -411,11 +411,11 @@ class _HostAttemptSink:
         host_lane: IWriteHostLaneRepository,
         runners: Callable[[], tuple[RunnerProcess, ...]],
         *,
-        registered: bool,
+        registration: ICurrentHostRegistration,
     ) -> None:
         self._host_lane = host_lane
         self._runners = runners
-        self._registered = registered
+        self._registration = registration
 
     def record(
         self,
@@ -427,7 +427,7 @@ class _HostAttemptSink:
         report_payload: str,
         miss_reason: str | None,
     ) -> None:
-        if self._registered:
+        if self._registration.current().registered():
             self._host_lane.record_host_external_usage_attempt(
                 slug=slug,
                 sampled_at=sampled_at,
@@ -462,10 +462,10 @@ def _external_usage_sample_pass(
     http_client: LazyUsageHttpClient,
     runners: Callable[[], tuple[RunnerProcess, ...]],
     *,
-    registered: bool,
+    registration: ICurrentHostRegistration,
 ) -> ExternalUsageSamplePass | None:
     """Every subscription the host declares paired with its provider's sampler, sharing one HTTP client; ``None``
-    when the host declares none. ``registered`` says whether the host holds a host token, so its attempts ride its
+    when the host declares none. ``registration`` says whether the host holds a host token, so its attempts ride its
     own lane."""
     if not declarations:
         return None
@@ -481,7 +481,7 @@ def _external_usage_sample_pass(
     return ExternalUsageSamplePass(
         subscriptions=sampled,
         attempts=host_stores.external_usage,
-        sink=_HostAttemptSink(host_stores.host_lane, runners, registered=registered),
+        sink=_HostAttemptSink(host_stores.host_lane, runners, registration=registration),
         clock=clock,
     )
 
@@ -698,12 +698,12 @@ def _build_host_graph(
         metric_bounds = ReceiverBounds.fresh(clock)
         log_bounds = ReceiverBounds.fresh(clock)
         telemetry_names = declared_telemetry_names()
-        registered = bool(host_token)
         workspaces = build_workspaces(config.workspaces, config.root, audit=host_stores.runner_audit)
         host_identity = HostIdentityHolder()
-        host_registration = HostRegistrationHolder.for_host(registered=registered)
+        # The one place a host's registration is derived: everything after reads it from the holder.
+        host_registration = HostRegistrationHolder.for_host(registered=bool(host_token))
         host_hub: HttpHostHubClient | None = None
-        if registered:
+        if host_registration.current().registered():
             host_hub_http_client = httpx.Client(base_url=config.hub_url, timeout=_HOST_HUB_TIMEOUT_SECONDS)
             platform_tracing.instrument_client(host_hub_http_client)
             host_hub = HttpHostHubClient(host_hub_http_client, token=host_token)
@@ -753,7 +753,7 @@ def _build_host_graph(
                     else None
                 ),
                 external_usage_sample=_external_usage_sample_pass(
-                    subscriptions, host_stores, clock, usage_http_client, runners, registered=registered
+                    subscriptions, host_stores, clock, usage_http_client, runners, registration=host_registration
                 ),
                 lane_drain=(
                     HostLaneDrain(
