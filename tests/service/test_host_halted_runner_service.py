@@ -23,15 +23,14 @@ from blizzard.runner.host_layout import HostLayout
 from blizzard.runner.hub.internal.token_file import HubTokenFile
 from blizzard.runner.runtime import sqlite_store_file
 from tests.e2e.test_acceptance_loop import REPO, _await_http, _free_port, _runner_config, _terminate
+from tests.fleet_world import mint_world
 from tests.host_files import host_config_of, init_runner_environment, write_host_file
 from tests.runner_join import RUNNER_BIN, JoinedRunner, fleet_headers, runner_spawn_env, seed_pinned_runner
 from tests.service.support import (
-    mint_fixture,
     mock_hub,
     mock_hub_chunk_spec,
     poll_until,
     require_mock_fleet,
-    require_winter_source,
     service_gate,
 )
 from tests.support import daemon_log_sink, read_daemon_log
@@ -291,7 +290,7 @@ def _own_view(hub: httpx.Client, runner: _Added) -> dict:
 
 def _fixture(tmp_path: Path) -> tuple[Path, Path]:
     bin_dir = require_mock_fleet()
-    workspace, _origins, _bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
+    workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
     return bin_dir, workspace
 
 
