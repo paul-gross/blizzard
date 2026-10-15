@@ -224,10 +224,11 @@ def _append_table(layout: HostLayout, name: str, table: str) -> None:
     _replace(layout, text, text + separator + table, expected, what=f"the appended [[{name}]]")
 
 
-def runner_table(layout: HostLayout, runner_name: str) -> str:
+def runner_table(layout: HostLayout, runner_name: str, *, text: str | None = None) -> str:
     """The text of the ``[[runner]]`` named ``runner_name`` as the file holds it — its header, keys, every
-    ``[runner.*]`` sub-table, and its comments — so it can be appended to another host file whole."""
-    text = layout.config_path.read_text()
+    ``[runner.*]`` sub-table, and its comments — so it can be appended to another host file whole. ``text`` stands
+    in for the file's own, for a host file not yet written."""
+    text = layout.config_path.read_text() if text is None else text
     runners = _parsed(layout, text).get("runner", [])
     position = next(
         (i for i, entry in enumerate(runners) if isinstance(entry, dict) and entry.get("name") == runner_name), None

@@ -235,8 +235,8 @@ naming why, and its own views still read.
 ### Ingesting a runner from another store
 
 `blizzard runner ingest <source> --runner <name|id> [--workspace-id <id>] [--dir <host dir>]` moves one runner into
-this host: its rows, its configuration and its token. The source is another host's directory, or an archive store that
-`blizzard runner store reset --runner` wrote. A runner directory that has not graduated is refused, naming graduation.
+this host: its rows, its configuration and its token. The source is another host's directory, an archive store that
+`blizzard runner store reset --runner` wrote, or a runner directory that has not graduated to a host.
 Take the runner under this host at the hub first: `blizzard hub runner-host release <host_id> <runner_id>` on the
 host that holds it, then `blizzard hub runner-host adopt <host_id> <runner_id>` on this one.
 
@@ -255,6 +255,15 @@ this build's schema, so the source's store is not written until the runner's row
 An archive carries rows only, so the runner's `[[runner]]` and token must already be in this host, as a reset leaves
 them; ingest refuses an archive otherwise. The source host keeps the runner's `[[runner]]`, which halts there for want
 of its token.
+
+A runner directory that has not graduated is read as the host of one it would graduate to
+([upgrade.md](../upgrade.md)): its store is `data/runner.db`, its `[[workspace]]` and `[[runner]]` come from
+`blizzard-runner.toml` by graduation's key placement, and the runner takes the id its store records. Its token is read
+from `BZ_HUB_TOKEN`, or the variable the file's `token_env` names, and that variable is what leaves the source's
+`.env`. A runner before hosts takes no lock, so only its `runner.sock` is probed. Its store holds that one runner and
+stays at the schema it ran, so the last step moves it aside whole rather than deleting rows from it. A file declaring
+several `[[subscription]]`s, or a `db_url` naming another store, is refused: graduate that directory by hand, then
+ingest the host it becomes.
 
 The ingest refuses, changing nothing, when:
 

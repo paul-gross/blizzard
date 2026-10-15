@@ -567,3 +567,56 @@ def test_a_hub_token_never_appears_in_the_repr_of_a_host_or_runner_config() -> N
 
     assert "tok-secret-host" not in repr(host)
     assert "tok-secret-runner" not in repr(runner)
+
+
+def _graduated(tmp_path: Path, legacy: dict[str, object], served: tuple[str, ...] = ()) -> HostConfig:
+    return HostConfig.graduated(tmp_path, legacy, runner_id="rn_graduated", served=served)
+
+
+def test_a_flat_runner_file_graduates_to_one_workspace_and_one_runner_under_the_stores_id(tmp_path: Path) -> None:
+    host = _graduated(
+        tmp_path,
+        {
+            "hub_url": "http://hub.test:8421",
+            "port": 9001,
+            "db_url": f"sqlite:///{tmp_path}/data/runner.db",
+            "token_env": "BZ_HUB_TOKEN",
+            "runner_id": "rn_graduated",
+            "name": "box",
+            "workspace_id": "ws-box",
+            "workspace_envs": ["e1", "e2"],
+            "max_environments": 3,
+            "max_agents": 2,
+            "projects": ["default", "web"],
+            "gates": [],
+            "external_subscription_usage": {"sample_interval_seconds": 900},
+        },
+    )
+
+    assert (host.hub_url, host.port, host.db_url) == ("http://hub.test:8421", 9001, host.layout.default_db_url)
+    [workspace] = host.workspaces
+    assert (workspace.id, workspace.envs, workspace.max_environments) == ("ws-box", ("e1", "e2"), 3)
+    runner = host.sole_runner("box")
+    assert (runner.id, runner.errors) == ("rn_graduated", ())
+    assert [(b.project, b.workspace, b.agents) for b in runner.bindings] == [
+        ("default", "ws-box", 2),
+        ("web", "ws-box", 2),
+    ]
+    [subscription] = host.subscriptions
+    assert (runner.subscription, subscription.slug, subscription.sample_interval_seconds) == (
+        "anthropic",
+        "anthropic",
+        900,
+    )
+
+
+def test_a_flat_runner_file_naming_no_projects_graduates_bound_to_what_the_hub_last_served(tmp_path: Path) -> None:
+    runner = _graduated(tmp_path, {"runner_id": "legacy-name"}, served=("default",)).sole_runner("legacy-name")
+    assert [(b.project, b.workspace, b.agents) for b in runner.bindings] == [("default", "workspace-local", 1)]
+
+
+def test_a_flat_runner_file_declaring_one_subscription_names_it_and_several_are_refused(tmp_path: Path) -> None:
+    plan = {"slug": "team", "name": "Team", "provider": "anthropic"}
+    assert _graduated(tmp_path, {"subscription": [plan]}).sole_runner(None).subscription == "team"
+    with pytest.raises(ConfigError, match="graduate it by hand"):
+        _graduated(tmp_path, {"subscription": [plan, {**plan, "slug": "other"}]})

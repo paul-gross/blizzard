@@ -14,6 +14,7 @@ from pathlib import Path
 import pytest
 import sqlalchemy as sa
 
+from blizzard.foundation.crash import CrashPoint
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.cli import runners as runners_cli
@@ -23,6 +24,7 @@ from blizzard.runner.host_layout import HostFileEditor, HostLayout, HostLock, ap
 from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.hub.internal.token_file import HubTokenFile
 from blizzard.runner.hub.token_file import ENV_FILENAME
+from blizzard.runner.runtime import init_environment, migration_runner
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
 from tests.runner_ingest_support import (
     HERE_HOST,
@@ -371,14 +373,6 @@ def test_ingest_is_refused_for_a_source_store_ahead_of_this_build(tmp_path: Path
     _refuse(fake_init_hub, hosts, "which this build does not know", "--workspace-id", _NEW_WORKSPACE)
 
 
-def test_ingest_is_refused_for_a_directory_that_has_not_graduated(tmp_path: Path, fake_init_hub: FakeInitHub) -> None:
-    hosts = two_hosts(tmp_path, fake_init_hub)
-    legacy = tmp_path / "legacy"
-    legacy.mkdir()
-    (legacy / "blizzard-runner.toml").write_text('hub_url = "http://hub.test:8421"\n')
-    _refuse(fake_init_hub, hosts, "has not graduated", source=legacy)
-
-
 def test_ingest_is_refused_for_a_file_that_is_not_a_store(tmp_path: Path, fake_init_hub: FakeInitHub) -> None:
     hosts = two_hosts(tmp_path, fake_init_hub)
     stray = tmp_path / "notes.txt"
@@ -475,6 +469,142 @@ def test_a_rerun_after_the_source_ran_is_refused_naming_both_stores(
 
     result = _ingest(fake_init_hub, hosts, "--workspace-id", _NEW_WORKSPACE)
     assert there in result.output and here in result.output
+
+
+#: The revision a runner before hosts left its store at.
+_PRE_HOST_REVISION = "20261011_1000_runner_scope"
+_PRE_HOST_TOKEN = "tok_pre_host"
+
+
+def _pre_host_directory(root: Path) -> None:
+    """``root`` as a runner before hosts left it, running ``r2``: ``data/runner.db`` at the revision before the
+    tightening, holding the runner's identity, a lease, and an outbound backlog; its flat ``blizzard-runner.toml``;
+    and its token under the unsuffixed variable."""
+    config = init_environment(root)
+    migration_runner(config).downgrade(_PRE_HOST_REVISION)
+    engine = create_engine_from_url(config.db_url)
+    tables = reflect(engine).tables
+    with engine.begin() as conn:
+        conn.execute(
+            sa.insert(tables["runner_identity"]).values(runner_id=MOVING_ID, runner_name=MOVING, registered_at=T0)
+        )
+        conn.execute(
+            sa.insert(tables["leases"]).values(
+                lease_id="lease_pre_host", chunk_id="ch_pre_host", epoch=1, created_at=T0
+            )
+        )
+        for _ in (1, 2):
+            conn.execute(
+                sa.insert(tables["outbound_buffer"]).values(kind="event.recorded", payload="{}", created_at=T0)
+            )
+    engine.dispose()
+    layout = HostLayout(root)
+    layout.store_path.rename(layout.legacy_store_path)
+    layout.config_path.unlink()
+    (root / "bundle").mkdir()
+    (root / "bundle" / "settings.json").write_text("{}\n")
+    layout.legacy_config_path.write_text(
+        f'db_url = "sqlite:///{layout.legacy_store_path}"\n'
+        'hub_url = "http://hub.test:8421"\n'
+        'token_env = "BZ_HUB_TOKEN"\n'
+        f'name = "{MOVING}"\n'
+        'workspace_id = "ws-pre-host"\n'
+        'workspace_provider = "basic"\n'
+        'workspace_envs = ["e1"]\n'
+        "max_environments = 4\n"
+        "max_agents = 2\n"
+        'projects = ["default"]\n'
+        "[harness]\n"
+        'autonomy = "dangerous"\n'
+        f'config_dir = "{root / "bundle"}"\n'
+        "[external_subscription_usage]\n"
+        "sample_interval_seconds = 600\n"
+    )
+    (root / ENV_FILENAME).write_text(f"BZ_HUB_TOKEN={_PRE_HOST_TOKEN}\n")
+
+
+def test_ingest_of_a_directory_that_has_not_graduated_takes_its_runner_and_moves_its_store_aside(
+    tmp_path: Path, fake_init_hub: FakeInitHub, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    hosts = two_hosts(tmp_path, fake_init_hub)
+    legacy = tmp_path / "pre-host"
+    _pre_host_directory(legacy)
+    store = HostLayout(legacy).legacy_store_path
+    probed: list[Path] = []
+    monkeypatch.setattr(runners_cli, "daemon_holding", lambda sock, _trace: probed.append(sock))
+    untouched = store.read_bytes()
+
+    result = _ingest(fake_init_hub, hosts, source=legacy)
+
+    assert result.exit_code == 0, result.output
+    assert legacy.resolve() / "runner.sock" in probed and legacy.resolve() / "host.sock" not in probed
+    assert not (HostLayout(legacy).data_dir / "host.lock").exists(), "a pre-host runner's directory takes no lock"
+    assert not store.exists()
+    [aside] = [p for p in HostLayout(legacy).data_dir.iterdir() if p.name.startswith("runner.db.")]
+    assert aside.read_bytes() == untouched, "the source store was written"
+    host = HostConfig.load(hosts.here)
+    added = host.sole_runner(MOVING)
+    assert added.id == MOVING_ID
+    assert [(b.project, b.workspace, b.agents) for b in added.bindings] == [("default", "ws-pre-host", 2)]
+    assert "ws-pre-host" in [w.id for w in host.workspaces]
+    assert added.subscription == "anthropic"
+    [declared] = [
+        r for r in tomllib.loads(HostLayout(hosts.here).config_path.read_text())["runner"] if r["name"] == MOVING
+    ]
+    assert declared["harness"]["config_dir"] == str(hosts.here / "runners" / MOVING / "bundle")
+    assert (hosts.here / "runners" / MOVING / "bundle" / "settings.json").exists()
+    assert HubTokenFile.of(hosts.here, _VARIABLE).held() == _PRE_HOST_TOKEN
+    assert HubTokenFile.of(legacy, "BZ_HUB_TOKEN").held() == ""
+    here = _engine(hosts.here)
+    assert [r["lease_id"] for r in rows(here, "leases", runner_id=MOVING_ID)] == ["lease_pre_host"]
+    assert [r["seq"] for r in rows(here, "outbound_buffer", runner_id=MOVING_ID)] == [1, 2]
+    assert invariant_violations(here) == []
+    here.dispose()
+
+    again = _ingest(fake_init_hub, hosts, source=legacy)
+    assert again.exit_code == 0 and "completed the ingest of runner r2" in again.output, again.output
+
+
+def test_ingest_is_refused_while_a_runner_answers_in_a_directory_that_has_not_graduated(
+    tmp_path: Path, fake_init_hub: FakeInitHub, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    hosts = two_hosts(tmp_path, fake_init_hub)
+    legacy = tmp_path / "pre-host"
+    _pre_host_directory(legacy)
+    answering = legacy.resolve() / "runner.sock"
+    monkeypatch.setattr(
+        runners_cli, "daemon_holding", lambda sock, _trace: f"a runner answers at {sock}" if sock == answering else None
+    )
+    _refuse(fake_init_hub, hosts, f"the source is running (a runner answers at {answering})", source=legacy)
+
+
+class _Interrupted(BaseException):
+    """Stands in for the kill at an armed point: nothing past the point runs."""
+
+
+@pytest.mark.parametrize("point", ["ingest.after-copy.before-config", "ingest.after-config.before-removal"])
+def test_a_rerun_after_a_kill_at_either_point_is_refused_once_the_source_ran(
+    tmp_path: Path, fake_init_hub: FakeInitHub, monkeypatch: pytest.MonkeyPatch, point: str
+) -> None:
+    hosts = two_hosts(tmp_path, fake_init_hub)
+    reached = CrashPoint.reached
+
+    def interrupt(self: CrashPoint) -> None:
+        if self.name == point:
+            raise _Interrupted(point)
+        reached(self)
+
+    monkeypatch.setattr(CrashPoint, "reached", interrupt)
+    with pytest.raises(_Interrupted):
+        _ingest(fake_init_hub, hosts, "--workspace-id", _NEW_WORKSPACE)
+    monkeypatch.setattr(CrashPoint, "reached", reached)
+    engine = _engine(hosts.there)
+    build_host_stores(engine, errors=_errors(), clock=_Clock()).daemon_liveness.record_daemon_liveness(
+        alive_at=T0 + timedelta(hours=1)
+    )
+    engine.dispose()
+
+    _refuse(fake_init_hub, hosts, "has run since", "--workspace-id", _NEW_WORKSPACE)
 
 
 class _Clock:

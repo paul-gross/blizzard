@@ -118,7 +118,7 @@ adds one under the host's token and appends its `[[runner]]`, and the host start
 `blizzard-runner retire --runner <name|id> --dir <runtime dir>` retires one and removes its entry; a running host halts it
 at its next tick ([runner-auth.md](./deployment/runner-auth.md#adding-and-retiring-a-hosts-runners)).
 `blizzard-runner ingest <source> --runner <name|id> --dir <runtime dir>` moves one in from another host's directory,
-with its rows, configuration and token
+or from a runner directory that has not graduated, with its rows, configuration and token
 ([runner-auth.md](./deployment/runner-auth.md#ingesting-a-runner-from-another-store)).
 
 ## Verify

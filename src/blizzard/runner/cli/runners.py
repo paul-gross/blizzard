@@ -206,7 +206,8 @@ def retire(ctx: click.Context, directory: str, runner: str, force: bool) -> None
 )
 @click.pass_context
 def ingest(ctx: click.Context, source: Path, directory: str, runner: str, workspace_id: str | None) -> None:
-    """Move one runner from SOURCE — another host's directory, or a `store reset --runner` archive — into this host:
+    """Move one runner from SOURCE — another host's directory, a `store reset --runner` archive, or a runner directory
+    that has not graduated — into this host:
     its rows, its workspace, subscription and `[[runner]]` where this host lacks them, and its token; then delete its
     rows from SOURCE, moving a source left with no runner aside. An archive's `[[runner]]` and token must already be
     here. Refused while either host runs, or the hub does not hold the runner under this host; a re-run completes an

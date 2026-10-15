@@ -71,6 +71,7 @@ from blizzard.runner.hub.identity import (
 from blizzard.runner.hub.internal.http_hub import HttpHostHubClient
 from blizzard.runner.hub.internal.token_file import HubTokenFile
 from blizzard.runner.hub.runner_transfer import HostIngest, IRunnerRowRemoval, IRunnerTransfer
+from blizzard.runner.hub.served_projects import ServedProjectsAnswer
 from blizzard.runner.ingest import HeldBinding, IIngestStores, ITokenFiles, RunnerIngest, RunnerStoreView
 from blizzard.runner.lifecycle.host_lane_drain import HostLaneDrain
 from blizzard.runner.lifecycle.host_tick import HostTick
@@ -1068,6 +1069,7 @@ class RunnerStoreFiles:
                 open_takeover_chunk_ids=frozenset(runner.takeover.open_takeover_chunk_ids()),
                 held_bindings=tuple(runner.environments.held_bindings()),
                 last_alive_at=host.daemon_liveness.last_daemon_liveness(),
+                served_projects=_served_slugs(runner.served_projects.served_projects_answer()),
             )
 
     def named_runners(self, url: str) -> tuple[str, ...]:
@@ -1096,6 +1098,12 @@ class RunnerStoreFiles:
     def record_host_identity(self, url: str, identity: HostIdentity) -> None:
         with _engine(url) as engine:
             build_host_stores(engine, errors=self.errors, clock=self.clock).host_identity.record_host_identity(identity)
+
+
+def _served_slugs(answer: ServedProjectsAnswer | None) -> tuple[str, ...]:
+    if answer is None:
+        return ()
+    return tuple(p.slug or p.entry for p in answer.projects if p.resolved())
 
 
 def build_runner_store_files(clock: IClock | None = None) -> RunnerStoreFiles:

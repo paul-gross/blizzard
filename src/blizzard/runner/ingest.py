@@ -1,9 +1,9 @@
 """``blizzard runner ingest`` — move one runner from another store into this host: its rows, configuration and token.
 
-The source — a host directory or a reset archive — is read only through a migrated backup copy until its rows go.
-The copy, each configuration edit, and the removal touch separate files, so each edit is skipped when made already and a
-re-run resumes from the ``host_ingests`` record rather than repeating. The order and windows are recorded in
-``bzh:crash-exemptions-runner``."""
+The source — a host directory, a reset archive, or a runner directory that has not graduated — is read only through a
+migrated backup copy until its rows go. The copy, each configuration edit, and the removal touch separate files, so each
+edit is skipped when made already and a re-run resumes from the ``host_ingests`` record. The order and windows are
+recorded in ``bzh:crash-exemptions-runner``."""
 
 from __future__ import annotations
 
@@ -29,7 +29,9 @@ from blizzard.runner.config import HostWorkspace, ProjectBinding, SubscriptionDe
 from blizzard.runner.config_table import ConfigError
 from blizzard.runner.environments.repository import EnvBinding
 from blizzard.runner.host_config import (
+    GRADUATION_PROCEDURE,
     RUNNER_PATH_KEYS,
+    UNSUFFIXED_TOKEN_VARIABLE,
     HostConfig,
     RunnerEntry,
     subscription_toml,
@@ -204,6 +206,8 @@ class RunnerStoreView:
     open_takeover_chunk_ids: frozenset[str]
     held_bindings: tuple[EnvBinding, ...]
     last_alive_at: datetime | None
+    #: The projects the hub last answered the runner serves, by slug — each one a project answered to.
+    served_projects: tuple[str, ...] = ()
 
 
 class IIngestStores(IRunnerRowMoves, Protocol):
@@ -256,13 +260,19 @@ class ITokenFiles(Protocol):
 @domain_model
 @dataclass(frozen=True)
 class _Source:
-    """The resolved source: its kind, the path the ingest record names, its store file, and — for a host directory —
-    its configuration."""
+    """The resolved source: its kind, the path the ingest record names, its store file, and — for a host directory,
+    or a runner directory graduated in memory — its configuration, the text of its host file when that is not on disk,
+    and the variable its ``.env`` holds a runner's token under when that is not the runner's own."""
 
     kind: SourceKind
     path: Path
     store: Path
     config: HostConfig | None
+    host_text: str | None = None
+    token_env: str | None = None
+
+    def token_variable(self, runner_name: str) -> str:
+        return self.token_env or hub_token_variable(runner_name)
 
 
 @domain_model
@@ -313,17 +323,13 @@ class RunnerIngest:
         """Ingest the runner ``request`` names, or complete an ingest of it interrupted part-way. Raises an
         :class:`IngestRefused` naming why it cannot."""
         kind = source_kind(request.source)
-        if kind is SourceKind.UNGRADUATED:
-            raise SourceUnsupported(
-                f"{request.source} is a runner directory that has not graduated to a host; ingest reads a host "
-                "directory or an archive store — graduate it first (docs/upgrade.md), then ingest from it"
-            )
         path = request.source.resolve()
         if path == self.host.root:
             raise SourceUnsupported(f"{path} is this host; name another host directory or an archive store")
         with (
             self._held(self.host.layout, "this host"),
             self._held(HostLayout(path), "the source") if kind is SourceKind.HOST_DIRECTORY else nullcontext(),
+            self._answering(HostLayout(path).legacy_socket_path) if kind is SourceKind.UNGRADUATED else nullcontext(),
         ):
             source = self._source(kind, path)
             return self._ingest(source, request)
@@ -341,15 +347,59 @@ class RunnerIngest:
                     raise SourceRunning(f"{which} is running ({held}); stop it, then re-run")
             yield
 
+    @contextmanager
+    def _answering(self, socket: Path) -> Iterator[None]:
+        """A runner directory that has not graduated, held for the run: a pre-host runner takes no lock, so only
+        its ``runner.sock`` tells whether it runs."""
+        if (held := self.holder(socket)) is not None:
+            raise SourceRunning(f"the source is running ({held}); stop it, then re-run")
+        yield
+
     def _source(self, kind: SourceKind, path: Path) -> _Source:
         if kind is SourceKind.ARCHIVE:
             return _Source(kind, path, path, None)
+        if kind is SourceKind.UNGRADUATED:
+            return self._ungraduated(path)
         try:
             config = HostConfig.load(path)
             store = sqlite_store_file(config.db_url)
         except (ConfigError, StoreResetRefused) as exc:
             raise SourceUnsupported(f"cannot read the source host at {path}: {exc}") from exc
         return _Source(kind, path, store, config)
+
+    def _ungraduated(self, path: Path) -> _Source:
+        """A runner directory that has not graduated, read as the host of one it graduates to: its store is
+        ``data/runner.db``, its runner's id is the one that store records, and its token is under the variable its
+        file names. Once its store is moved aside it carries nothing but its path, which an ingest record names."""
+        layout = HostLayout(path)
+        store = layout.legacy_store_path
+        try:
+            legacy = tomllib.loads(layout.legacy_config_path.read_text())
+        except (OSError, tomllib.TOMLDecodeError) as exc:
+            raise SourceUnsupported(f"cannot read {layout.legacy_config_path}: {exc}") from exc
+        named = legacy.get("db_url")
+        if named is not None and sqlite_url(store) != named and f"sqlite:///{store}" != named:
+            raise SourceUnsupported(
+                f"{layout.legacy_config_path} names its store at {named}, not {store}: graduation reads the "
+                f"directory's own store only, so graduate it by hand ({GRADUATION_PROCEDURE})"
+            )
+        token_env = str(legacy.get("token_env", UNSUFFIXED_TOKEN_VARIABLE))
+        if not store.exists():
+            return _Source(SourceKind.UNGRADUATED, path, store, None, token_env=token_env)
+        with self._copy_of(store) as copy:
+            named_runners = self.stores.named_runners(copy)
+            if len(named_runners) != 1:
+                raise SourceUnsupported(
+                    f"the source store {store} records {len(named_runners)} runner identities "
+                    f"({', '.join(named_runners) or 'none'}), not the one a runner before hosts holds"
+                )
+            [runner_id] = named_runners
+            view = self.stores.runner_view(copy, runner_id)
+        try:
+            config = HostConfig.graduated(path, legacy, runner_id=runner_id, served=view.served_projects)
+        except ConfigError as exc:
+            raise SourceUnsupported(f"cannot graduate the runner file {layout.legacy_config_path}: {exc}") from exc
+        return _Source(SourceKind.UNGRADUATED, path, store, config, host_text=config.to_toml(), token_env=token_env)
 
     def _entry(self, source: _Source, runner: str) -> RunnerEntry:
         """The moving runner's ``[[runner]]``: the source's, or — for an archive, which carries rows only — this
@@ -358,6 +408,11 @@ class RunnerIngest:
         try:
             entry = config.sole_runner(runner)
         except ConfigError as exc:
+            if source.kind is SourceKind.UNGRADUATED:
+                raise SourceUnsupported(
+                    f"the source holds no store at {source.store}, and this host holds no runner {runner} ingested "
+                    f"from it: {exc}"
+                ) from exc
             if source.config is None:
                 raise SourceUnsupported(
                     f"an archive store carries the runner's rows only, so its [[runner]] and token must already be in "
@@ -366,6 +421,8 @@ class RunnerIngest:
             raise SourceUnsupported(str(exc)) from exc
         if entry.id is None:
             raise SourceUnsupported(f"runner {entry.name} has no id in {config.config_path}, so the hub holds none")
+        if entry.errors:
+            raise SourceUnsupported(f"runner {entry.name}'s [[runner]] is refused: {'; '.join(entry.errors)}")
         return entry
 
     def _ingest(self, source: _Source, request: IngestRequest) -> IngestOutcome:
@@ -402,7 +459,7 @@ class RunnerIngest:
                 self._refuse_fresh(source, entry, runner_id, view)
             plan = self._plan(source, entry, request.workspace_id)
             if not resuming:
-                self._refuse_conflicts(entry, runner_id, view, plan)
+                self._refuse_conflicts(source, entry, runner_id, view, plan)
                 ingest = HostIngest(
                     runner_id=runner_id,
                     source=str(source.path),
@@ -417,8 +474,12 @@ class RunnerIngest:
         _CP_AFTER_COPY.reached()
         self._configure(source, entry, plan)
         _CP_AFTER_CONFIG.reached()
-        self.stores.remove_runner_rows(sqlite_url(source.store), runner_id, keep_counters=False)
-        moved = self._set_aside_emptied(source)
+        if source.kind is SourceKind.UNGRADUATED:
+            # Its one runner is the whole store, which stays at the schema it ran: it is moved aside, not edited.
+            moved = set_aside_sqlite(source.store, now=self.clock.now()).moved
+        else:
+            self.stores.remove_runner_rows(sqlite_url(source.store), runner_id, keep_counters=False)
+            moved = self._set_aside_emptied(source)
         _log.info("runner ingested", runner_id=runner_id, source=str(source.path), resumed=resuming)
         return IngestOutcome(runner_id, entry.name, resumed=resuming, set_aside=moved)
 
@@ -528,8 +589,8 @@ class RunnerIngest:
             if entry.subscription is not None and entry.subscription not in declared
             else None
         )
-        table, files = self._runner_plan(config, entry, ids)
-        token = self.tokens.held(config.root, hub_token_variable(entry.name))
+        table, files = self._runner_plan(config, entry, ids, text=source.host_text)
+        token = self.tokens.held(config.root, source.token_variable(entry.name))
         return _ConfigPlan(
             workspaces=workspaces,
             workspace_ids=ids or None,
@@ -593,12 +654,12 @@ class RunnerIngest:
         return tuple(appended), ids
 
     def _runner_plan(
-        self, config: HostConfig, entry: RunnerEntry, ids: Mapping[str, str]
+        self, config: HostConfig, entry: RunnerEntry, ids: Mapping[str, str], *, text: str | None
     ) -> tuple[str, tuple[tuple[Path, Path], ...]]:
         """The source's ``[[runner]]`` text with its bindings renamed and every path key pointing into the source
         rewritten to its copy under this host's ``runners/<name>/``, and the copies to make."""
         try:
-            table = runner_table(config.layout, entry.name)
+            table = runner_table(config.layout, entry.name, text=text)
         except ConfigError as exc:
             raise SourceUnsupported(str(exc)) from exc
         values: dict[tuple[str, ...], str] = {}
@@ -628,7 +689,9 @@ class RunnerIngest:
         except ConfigError as exc:
             raise SourceUnsupported(f"runner {entry.name}'s [[runner]] cannot be carried: {exc}") from exc
 
-    def _refuse_conflicts(self, entry: RunnerEntry, runner_id: str, view: RunnerStoreView, plan: _ConfigPlan) -> None:
+    def _refuse_conflicts(
+        self, source: _Source, entry: RunnerEntry, runner_id: str, view: RunnerStoreView, plan: _ConfigPlan
+    ) -> None:
         """The refusals that need the configuration plan: a held environment two runners would hold, and a token that
         cannot move."""
         renamed = plan.workspace_ids or {}
@@ -649,7 +712,8 @@ class RunnerIngest:
         held_here = self.tokens.held(self.host.root, variable)
         if plan.runner_table is not None and not plan.token:
             raise TokenConflict(
-                f"the source's .env holds no {variable} for runner {entry.name}, so there is none to move"
+                f"the source's .env holds no {source.token_variable(entry.name)} for runner {entry.name}, so there is "
+                "none to move"
             )
         if plan.runner_table is None and not held_here:
             raise TokenConflict(
@@ -682,7 +746,7 @@ class RunnerIngest:
         if plan.token and self.tokens.held(self.host.root, variable) != plan.token:
             self.tokens.write(self.host.root, variable, plan.token)
         if source.config is not None:
-            self.tokens.remove(source.config.root, variable)
+            self.tokens.remove(source.config.root, source.token_variable(entry.name))
 
     def _set_aside_emptied(self, source: _Source) -> tuple[Path, ...]:
         """The source store moved aside whole when no runner is left in it."""
