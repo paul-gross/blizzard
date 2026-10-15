@@ -622,7 +622,8 @@ def stashed_route_tokens(config: RunnerConfig) -> list[str]:
     engine = sqlalchemy.create_engine(config.db_url)
     try:
         with engine.connect() as connection:
-            return [row[0] for row in connection.execute(sqlalchemy.select(route_tokens.c.token))]
+            statement = sqlalchemy.select(route_tokens.c.token).where(route_tokens.c.runner_id == config.served_id())
+            return [row[0] for row in connection.execute(statement)]
     finally:
         engine.dispose()
 
