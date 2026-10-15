@@ -1,0 +1,20 @@
+/* Type-checks the web exemplars against the real hub app: `rootDirs` lays the exemplar tree over `projects/`, so an
+   exemplar's relative import reaches the real file beside it, a bare import resolves from this `node_modules`, and
+   `fleet` resolves to the exemplar's barrel over the real one. Run by `scripts/exemplar-check.sh`. */
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "types": ["vitest/globals"],
+    "rootDirs": ["./projects", "../exemplars/web"],
+    "paths": {
+      "fleet": ["../exemplars/web/fleet/src/exemplar-api.ts"],
+      "fleet/shell": ["./projects/fleet/src/shell-api.ts"],
+      "fleet/testing": ["./projects/fleet/src/lib/testing/public-api.ts"],
+      "@angular/*/testing": ["./node_modules/@angular/*/types/testing.d.ts"],
+      "*": ["./node_modules/*"]
+    }
+  },
+  "files": [],
+  "include": ["../exemplars/web/**/*.ts"]
+}

@@ -1,0 +1,19 @@
+<fleet-kit-panel label="Permit" data-testid="permit-detail">
+  <a [routerLink]="'/permits' | lensLink">All permits</a>
+  <fleet-kit-async-state
+    [state]="state()"
+    loadingText="Loading permit…"
+    loadingTestid="permit-detail-loading"
+    errorText="Failed to load the permit."
+    errorTestid="permit-detail-error"
+    emptyText="Pick a permit."
+    emptyTestid="permit-detail-empty"
+  >
+    <fleet-kit-fact-list [rows]="facts()" testid="permit-detail-facts" />
+  </fleet-kit-async-state>
+</fleet-kit-panel>
+<ng-template #requestedAt>
+  @if (permit(); as p) {
+    <fleet-when [iso]="p.requested_at" />
+  }
+</ng-template>

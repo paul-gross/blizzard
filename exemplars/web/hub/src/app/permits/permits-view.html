@@ -1,0 +1,85 @@
+<fleet-kit-panel [label]="label()" data-testid="permits">
+  @if (actionError(); as message) {
+    <p role="alert" data-testid="permits-action-error">{{ message }}</p>
+  }
+  <fleet-kit-async-state
+    [state]="state()"
+    loadingText="Loading permits…"
+    loadingTestid="permits-loading"
+    errorText="Failed to load permits."
+    errorTestid="permits-error"
+    emptyText="No permits."
+    emptyTestid="permits-empty"
+  >
+    <table>
+      <thead>
+        <tr>
+          <th>Capability</th>
+          <th>Holder</th>
+          <th>Project</th>
+          <th>State</th>
+          <th>Requested</th>
+          @if (canEdit()) {
+            <th><span class="visually-hidden">Actions</span></th>
+          }
+        </tr>
+      </thead>
+      <tbody>
+        @for (row of rows(); track row.permit.permit_id) {
+          <tr data-testid="permits-row" [attr.data-permit-id]="row.permit.permit_id">
+            <td>
+              <a [routerLink]="['/permits', row.permit.permit_id] | lensLink">{{ row.permit.capability }}</a>
+            </td>
+            <td>{{ row.permit.holder }}</td>
+            <td data-testid="permits-project">{{ projectLabel(row) }}</td>
+            <td data-testid="permits-state">{{ row.state }}</td>
+            <td><fleet-when [iso]="row.permit.requested_at" /></td>
+            @if (canEdit()) {
+              <td>
+                @for (verb of moves(row); track verb) {
+                  <fleet-kit-button
+                    [testid]="'permits-' + verb"
+                    [disabled]="row.pending"
+                    (click)="move.emit({ permitId: row.permit.permit_id, verb })">
+                    {{ moveLabel(verb) }}
+                  </fleet-kit-button>
+                }
+                @if (canRevoke(row)) {
+                  <fleet-kit-button
+                    variant="danger"
+                    testid="permits-revoke"
+                    [disabled]="row.pending"
+                    (click)="onRevokeStart(row.permit.permit_id)">
+                    Revoke
+                  </fleet-kit-button>
+                }
+              </td>
+            }
+          </tr>
+        }
+      </tbody>
+    </table>
+  </fleet-kit-async-state>
+</fleet-kit-panel>
+@if (revoking(); as permitId) {
+  <fleet-kit-dialog [open]="true" ariaLabel="Revoke permit" testid="permits-revoke-dialog" (closed)="revoking.set(null)">
+    <span fleetKitDialogHeader>Revoke permit</span>
+    <fleet-kit-text-input
+      ariaLabel="Why the permit is revoked"
+      testid="permits-revoke-note"
+      [value]="note()"
+      (valueChange)="note.set($event)"
+    />
+    <div fleetKitDialogFooter>
+      <fleet-kit-button testid="permits-revoke-cancel" (click)="revoking.set(null)">Cancel</fleet-kit-button>
+      <fleet-kit-button
+        variant="danger"
+        testid="permits-revoke-confirm"
+        [disabled]="note().trim() === ''"
+        (click)="onRevokeConfirm(permitId)"
+      >
+        Revoke
+      </fleet-kit-button>
+    </div>
+  </fleet-kit-dialog>
+}

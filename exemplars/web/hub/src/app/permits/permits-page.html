@@ -1,0 +1,9 @@
+<app-permits-view
+  [rows]="rows()"
+  [state]="state()"
+  [label]="label()"
+  [canEdit]="canEdit()"
+  [actionError]="actionError()"
+  (move)="onMove($event)"
+  (revoke)="onRevoke($event)"
+/>
