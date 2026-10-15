@@ -8,7 +8,7 @@ that parameter object, plus the loop's static config.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
@@ -41,7 +41,7 @@ from blizzard.runner.loop.retention_floor import RetentionPasses
 from blizzard.runner.process.probe import IProcessProbe
 from blizzard.runner.process.worker_scratch import IWorkerScratchDirs
 from blizzard.runner.stores import HostStores, RunnerStores
-from blizzard.runner.subscriptions.subscription_sampler import ISubscriptionSampler
+from blizzard.runner.throttle.pause import SpendingRunner
 from blizzard.runner.usage.recorder import UsageRecorder
 
 _log = get_logger("blizzard.runner.loop")
@@ -133,33 +133,17 @@ def bound_workspace_ids(bindings: tuple[BindingDeclaration, ...] | None) -> tupl
     return tuple(dict.fromkeys(binding.workspace_id for binding in bindings or ()))
 
 
+@domain_model
 @dataclass(frozen=True)
 class ResolvedSubscription:
-    """One declared subscription with its resolved sampler binding — the loop step's own
-    view. ``sampler`` is ``None`` for an unbound or unknown provider. Credential renewal is
-    not the tick's: it runs on its own driver. ``provider`` rides along because the
-    registration push reads it, though no view reaches it yet."""
+    """One declared subscription as the loop reads it. Sampling and credential renewal are not the tick's: the host
+    runs them on its own driver. ``provider`` rides along because the registration push reads it, though no view
+    reaches it yet."""
 
     slug: str
     name: str
     provider: str
     sample_interval_seconds: int
-    sampler: ISubscriptionSampler | None
-
-
-class ICloseableUsageHttpClient(Protocol):
-    """A closeable handle on the subscription samplers' shared HTTP client; ``close`` is called
-    once and is safe whether or not a client was built."""
-
-    def close(self) -> None: ...
-
-
-class _NoUsageHttpClient:
-    """The no-op default for a context built without composing the subscription seam
-    (most direct test constructions) — closing it does nothing."""
-
-    def close(self) -> None:
-        return None
 
 
 @dataclass(frozen=True)
@@ -206,12 +190,10 @@ class LoopContext:
     #: The SSE publish seam, typed against the Protocol
     #: (``bzh:dependency-inversion``); ``None`` on ``blizzard runner tick``, a no-op there.
     events: IRunnerEventPublisher | None = None
-    #: Every declared provider subscription, resolved — each sampled when
-    #: due against its own ``sample_interval_seconds`` and ``slug``-keyed anchor.
+    #: Every provider subscription this runner declares — what registration reports and the usage-limit brake reads.
     subscriptions: tuple[ResolvedSubscription, ...] = ()
-    #: The shared subscription-sampling HTTP client's owner — see
-    #: :class:`ICloseableUsageHttpClient`.
-    usage_http_client: ICloseableUsageHttpClient = field(default_factory=_NoUsageHttpClient)
+    #: The other runners of this host spending this runner's subscription — a usage limit reached here brakes them too.
+    slug_spenders: tuple[SpendingRunner, ...] = ()
     #: Opens the tick's root and step spans — the no-op on a standalone ``blizzard runner tick``.
     tracer: IPlatformTracer = field(default_factory=NoopPlatformTracer)
     #: This tick's capability memo (``tick()`` wires it); ``None`` rebuilds it per read.

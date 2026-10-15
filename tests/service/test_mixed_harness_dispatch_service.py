@@ -233,24 +233,21 @@ def test_claim_revalidates_against_a_regressed_registration_through_the_real_run
         ):
             wiring = LoopWiring.of(config)
             ctx = wiring.context(HttpHubClient(client), graph)
-            try:
-                Pull(ctx).run()  # registers this runner's true set: claude_code + opencode
-                # A stale registration under the same runner's token regresses the stored set.
-                regressed = hub.post(
-                    "/api/fleet/runners",
-                    headers=config.auth_headers(),
-                    json={
-                        "name": config.name,
-                        "workspace_id": config.home_workspace.id,
-                        "capabilities": [{"harness_id": "claude_code", "default": True}],
-                    },
-                )
-                assert regressed.status_code == 201, regressed.text
-                # Peeks workable off this tick's true snapshot; claim revalidates
-                # server-side against the now-regressed registration and is denied.
-                Fill(ctx).run()
-            finally:
-                ctx.usage_http_client.close()
+            Pull(ctx).run()  # registers this runner's true set: claude_code + opencode
+            # A stale registration under the same runner's token regresses the stored set.
+            regressed = hub.post(
+                "/api/fleet/runners",
+                headers=config.auth_headers(),
+                json={
+                    "name": config.name,
+                    "workspace_id": config.home_workspace.id,
+                    "capabilities": [{"harness_id": "claude_code", "default": True}],
+                },
+            )
+            assert regressed.status_code == 201, regressed.text
+            # Peeks workable off this tick's true snapshot; claim revalidates
+            # server-side against the now-regressed registration and is denied.
+            Fill(ctx).run()
 
         assert _status(hub, chunk_id) == "ready"  # denied — never claimed
         assert _lease_id_for_chunk(config, chunk_id) is None

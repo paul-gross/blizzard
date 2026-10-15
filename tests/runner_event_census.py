@@ -197,6 +197,14 @@ WRITE_PROTOCOL_CENSUS: dict[str, Disposition] = {
         "(blizzard#317 review round 4, F1 — was wrongly Silent, since the write's own outbound_buffer "
         "insert bypassed enqueue_outbound and so went unannounced).",
     ),
+    "locked_brakes": Silent("opens the locked brake transaction; it writes no fact itself."),
+    "local_brake_locked": Silent("a read of the brake on a locked transaction."),
+    "record_local_pause_locked": Published(
+        RunnerEventType.FACT_CHANGED,
+        "UsageLimitBrakes.engage and PauseService.set_local_pause (runner/throttle/pause.py) — kind is the write's "
+        "own report_kind. Announced after the transaction commits, through the publisher of the runner the fact "
+        "belongs to.",
+    ),
     # --- escalations -----------------------------------------------------------
     "record_escalation_closure": Published(
         RunnerEventType.ESCALATION_CHANGED, "Pull._reconcile_escalations (runner/loop/steps.py) — cause='closed'"
@@ -272,14 +280,15 @@ WRITE_PROTOCOL_CENSUS: dict[str, Disposition] = {
     ),
     "record_external_usage_attempt": Published(
         RunnerEventType.FACT_CHANGED,
-        "ExternalUsageSample._sample_one (runner/loop/steps.py), called once per declared "
-        "subscription per tick — kind='external_subscription_usage.sampled', only when that "
-        "declaration's sampler produced a sample (report_kind is empty otherwise, and nothing is "
-        "enqueued to announce then). `slug` (blizzard#436 phase 2) keys the row to its own "
-        "declaration, so one subscription's attempt never announces, or advances the cadence of, "
-        "another's. D7's elapsed-time-derived reason covers the sampler's own "
-        "cadence, not this occasional fact-log row (blizzard#317 review round 4, F1 — same class as "
-        "record_usage above).",
+        "_HostAttemptSink.record (runner/composition.py), called by ExternalUsageSamplePass once per declared "
+        "subscription per cadence on an unregistered host — kind='external_subscription_usage.sampled' or "
+        "'.missed', published through the reporting runner's own event publisher. `slug` keys the row to its own "
+        "declaration, so one subscription's attempt never announces, or advances the cadence of, another's. D7's "
+        "elapsed-time-derived reason covers the sampler's own cadence, not this occasional fact-log row.",
+    ),
+    "record_host_external_usage_attempt": Silent(
+        "_HostAttemptSink.record (runner/composition.py) on a registered host — the attempt and its report ride the "
+        "host's own lane, which no runner's board or SSE stream carries."
     ),
     "claim_credential_renewal": Silent(
         "CredentialRenewalPass (runner/usage/credential_renewal.py) — runner-local diagnostics only: no kind "

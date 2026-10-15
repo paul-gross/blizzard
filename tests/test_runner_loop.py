@@ -76,7 +76,6 @@ from tests.runner_fakes import (
     FakeHub,
     FakeProbe,
     FakeProvider,
-    FakeSubscriptionSampler,
     FakeWorktreeGit,
     SqlAlchemyRunnerStore,
     TieredFakeHarness,
@@ -4167,14 +4166,12 @@ def test_pull_sends_every_declared_subscription_including_a_sampler_less_one(tmp
                 name="Anthropic",
                 provider="anthropic",
                 sample_interval_seconds=300,
-                sampler=FakeSubscriptionSampler(),
             ),
             ResolvedSubscription(
                 slug="probe",
                 name="Probe",
                 provider="none-such",
                 sample_interval_seconds=300,
-                sampler=None,
             ),
         ),
     )

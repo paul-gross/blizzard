@@ -1703,7 +1703,6 @@ def test_usage_limit_reason_falls_back_to_the_sampled_resets_at(tmp_path):  # ty
                 name="Anthropic",
                 provider="anthropic",
                 sample_interval_seconds=60,
-                sampler=None,
             ),
         ),
     )
@@ -1713,7 +1712,7 @@ def test_usage_limit_reason_falls_back_to_the_sampled_resets_at(tmp_path):  # ty
     reports = [f for f in store.pending_outbound() if f.kind == RUNNER_LOCALLY_PAUSED]
     payload = json.loads(reports[0].payload)
     # The 100%-utilized 5h window's own reset, never the 7d window's earlier-but-partial one.
-    assert payload["reason"] == f"usage limit: {CLAUDE_CODE_HARNESS_ID} (resets 2026-07-13T15:00Z)"
+    assert payload["reason"] == f"usage limit: anthropic via {CLAUDE_CODE_HARNESS_ID} (resets 2026-07-13T15:00Z)"
 
 
 def test_usage_limit_reason_fallback_skips_a_failed_samples_null_payload(tmp_path):  # type: ignore[no-untyped-def]
@@ -1764,7 +1763,6 @@ def test_usage_limit_reason_fallback_skips_a_failed_samples_null_payload(tmp_pat
                 name="Anthropic",
                 provider="anthropic",
                 sample_interval_seconds=60,
-                sampler=None,
             ),
         ),
     )
@@ -1773,7 +1771,7 @@ def test_usage_limit_reason_fallback_skips_a_failed_samples_null_payload(tmp_pat
 
     reports = [f for f in store.pending_outbound() if f.kind == RUNNER_LOCALLY_PAUSED]
     payload = json.loads(reports[0].payload)
-    assert payload["reason"] == f"usage limit: {CLAUDE_CODE_HARNESS_ID} (resets 2026-07-13T15:00Z)"
+    assert payload["reason"] == f"usage limit: anthropic via {CLAUDE_CODE_HARNESS_ID} (resets 2026-07-13T15:00Z)"
 
 
 def test_a_usage_limit_brake_is_not_lifted_by_the_reset_time_passing(tmp_path):  # type: ignore[no-untyped-def]

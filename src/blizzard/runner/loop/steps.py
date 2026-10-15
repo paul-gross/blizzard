@@ -18,7 +18,6 @@ from blizzard.foundation.fact_kinds import EVENT_RECORDED
 from blizzard.foundation.leases import LeaseClosureReason
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import as_utc, iso_utc
-from blizzard.foundation.usage_windows import admit_usage_window
 from blizzard.runner.environments.repository import (
     BindingCompletion,
     EnvBinding,
@@ -60,28 +59,22 @@ from blizzard.runner.lifecycle.registration import Registration, registered_runn
 from blizzard.runner.lifecycle.spawn import Spawner
 from blizzard.runner.lifecycle.takeover import TakeoverCloser, TakeoverCloseScope
 from blizzard.runner.lifecycle.usage_limit import classify_worker_usage_limit, engage_and_park_worker
-from blizzard.runner.loop.context import LoopContext, ResolvedSubscription
+from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.process.probe import IProcessProbe
 from blizzard.runner.stores import RunnerStores
-from blizzard.runner.subscriptions.subscription_sampler import (
-    ExternalSubscriptionUsageSnapshot,
-    SampleMissReason,
-    sample_due,
-)
 from blizzard.runner.throttle.overload import (
     classify_worker_overload,
     record_worker_overload,
     reset_if_streak_open,
 )
 from blizzard.runner.throttle.pause import PauseService, RunnerBrakes, spend_ceiling_reason
-from blizzard.runner.usage.repository import ContextSampleState, external_usage_attempt
+from blizzard.runner.usage.repository import ContextSampleState
 
 #: This module's public API — the loop steps it owns, in tick order.
 __all__ = [
     "Advance",
     "CompleteHeldBindings",
     "ContextSample",
-    "ExternalUsageSample",
     "Fill",
     "Pull",
     "Reap",
@@ -618,8 +611,8 @@ class Retention(Step):
     `bzh:probe-gated-pass`'s floor-only form."""
 
     def run(self) -> None:
-        """One prune per lane, each isolated (mirrors ExternalUsageSample's own per-item
-        loop): one lane's failure must not skip the others, and this step gates nothing
+        """One prune per lane, each isolated (each lane its own
+        isolated item): one lane's failure must not skip the others, and this step gates nothing
         else in the tick either way."""
         ctx = self.ctx
         now = ctx.clock.now()
@@ -670,7 +663,7 @@ class ContextSample(Step):
             # lease below filters "due" itself from its own already-fetched state.
             states = ctx.stores.usage.context_sample_states([lease.lease_id for lease in leases])
             bindings_by_chunk = group_bindings_by_chunk(ctx.stores.environments.held_bindings())
-        except Exception as exc:  # this step is not last in the tick — see ExternalUsageSample
+        except Exception as exc:  # a failed read skips this step only; the tick goes on
             _log.warning("context sample step failed", detail=str(exc))
             return
         for lease in leases:
@@ -756,91 +749,3 @@ class ContextSample(Step):
             self.ctx.workspaces.spawn_root(binding.workspace_id if binding else None),
             binding.workdir if binding else None,
         ).path
-
-
-class ExternalUsageSample(Step):
-    """Every declared subscription's own rate-limit utilization, each on
-    its own per-slug cadence — last in the tick."""
-
-    def run(self) -> None:
-        """Sample every declared subscription that is due.
-
-        Each declaration's cadence anchor is derived as ``max(sampled_at)`` for its own
-        ``slug``, and an attempt row is recorded either way — ``NULL`` payload on a miss.
-        One declaration's failure never stops the next one being sampled this same tick."""
-        for resolved in self.ctx.subscriptions:
-            try:
-                self._sample_one(resolved)
-            except Exception as exc:  # second line of defense — the sampler contract already promises this
-                _log.warning("external subscription usage sample step failed", slug=resolved.slug, detail=str(exc))
-
-    def _sample_one(self, resolved: ResolvedSubscription) -> None:
-        ctx = self.ctx
-        anchor = ctx.host_stores.external_usage.last_external_usage_attempt_at(resolved.slug)
-        if not sample_due(anchor, ctx.clock.now(), resolved.sample_interval_seconds):
-            return
-        sampler = resolved.sampler
-        if sampler is None:
-            # A declaration its provider binds no sampler to stays declared and unsampled, with no
-            # attempt row, since no sampler failed.
-            return
-        attempt = external_usage_attempt(sampler.sample(), slug=resolved.slug, at=ctx.clock.now())
-        result = attempt.result
-        if isinstance(result, SampleMissReason):
-            payload = None
-            report_payload = json.dumps(self._miss_payload(resolved, result, missed_at=attempt.sampled_at))
-        else:
-            payload = report_payload = json.dumps(self._payload(resolved, result))
-        seq = ctx.host_stores.external_usage.record_external_usage_attempt(
-            slug=attempt.slug,
-            sampled_at=attempt.sampled_at,
-            payload=payload,
-            report_kind=attempt.report_kind,
-            report_payload=report_payload,
-            miss_reason=attempt.miss_reason.value if attempt.miss_reason is not None else None,
-        )
-        if seq is not None and ctx.events is not None:
-            ctx.events.publish_fact_changed(seq=seq, kind=attempt.report_kind, chunk_id=None, lease_id=None)
-
-    @staticmethod
-    def _miss_payload(
-        resolved: ResolvedSubscription, reason: SampleMissReason, *, missed_at: datetime
-    ) -> dict[str, object]:
-        """The stable JSON shape for a sampler miss — exactly ``{slug,
-        name, missed_at, reason}``, the reason only: never a token, a refresh token, or a
-        path crosses on a miss."""
-        return {
-            "slug": resolved.slug,
-            "name": resolved.name,
-            "missed_at": iso_utc(missed_at),
-            "reason": reason.value,
-        }
-
-    @staticmethod
-    def _payload(resolved: ResolvedSubscription, snapshot: ExternalSubscriptionUsageSnapshot) -> dict[str, object]:
-        """The stable JSON shape for a sampled snapshot — both this attempt's stored
-        ``payload`` and its buffered outbound report use this exact shape. ``slug`` and
-        ``name`` name the declared subscription and its operator-facing label. A window
-        the hub's own fact model would refuse is dropped here rather than sent, so the
-        persisted attempt and the outbound report carry the same complete windows."""
-        windows: list[dict[str, object]] = []
-        for window in snapshot.windows:
-            payload = {
-                "window": window.window,
-                "utilization_pct": window.utilization_pct,
-                "resets_at": iso_utc(window.resets_at),
-                "window_seconds": window.window_seconds,
-            }
-            admitted = admit_usage_window(payload)
-            if isinstance(admitted, str):
-                _log.warning(
-                    "dropped malformed external usage window", slug=resolved.slug, window=window.window, reason=admitted
-                )
-                continue
-            windows.append(payload)
-        return {
-            "slug": resolved.slug,
-            "name": resolved.name,
-            "sampled_at": iso_utc(snapshot.sampled_at),
-            "windows": windows,
-        }

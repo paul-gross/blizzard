@@ -113,21 +113,18 @@ def test_a_runner_is_bound_from_configuration_before_its_hub_answers_and_registr
     with loop_graph(config, runner_id="rn_a") as graph:
         assert graph.connections.runner_id == "rn_a"  # bound by its configured id, with the hub down
         ctx = LoopWiring(config, "", None).context(hub, graph)
-        try:
-            tick(ctx)
-            assert "runner_identity" not in _owners(graph.engine)  # an unreachable hub records no identity
+        tick(ctx)
+        assert "runner_identity" not in _owners(graph.engine)  # an unreachable hub records no identity
 
-            hub.down = False
-            tick(ctx)  # the hub answers that the token belongs to another runner: nothing is adopted
-            assert graph.connections.runner_id == "rn_a"
-            assert "runner_identity" not in _owners(graph.engine)
-            assert graph.identity_verdict.verdict().state is IdentityState.MISMATCHED
+        hub.down = False
+        tick(ctx)  # the hub answers that the token belongs to another runner: nothing is adopted
+        assert graph.connections.runner_id == "rn_a"
+        assert "runner_identity" not in _owners(graph.engine)
+        assert graph.identity_verdict.verdict().state is IdentityState.MISMATCHED
 
-            hub.default_runner_id = "rn_a"
-            hub.issued[hub._token] = "rn_a"
-            tick(ctx)  # the configured runner's token: its identity row is recorded, and every row names it
-        finally:
-            ctx.usage_http_client.close()
+        hub.default_runner_id = "rn_a"
+        hub.issued[hub._token] = "rn_a"
+        tick(ctx)  # the configured runner's token: its identity row is recorded, and every row names it
 
         owners = _owners(graph.engine)
         assert "runner_identity" in owners

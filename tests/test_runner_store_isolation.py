@@ -62,6 +62,7 @@ from blizzard.runner.transcripts.ledger import IWriteTranscriptLedgerRepository
 from blizzard.runner.usage.repository import (
     IWriteCredentialRenewalRepository,
     IWriteExternalUsageRepository,
+    IWriteHostLaneRepository,
     IWriteUsageRepository,
 )
 from tests.runner_fakes import record_usage, runner_migration_prototype
@@ -215,6 +216,17 @@ def _sample() -> UsageSample:
 
 #: Every runner ``IWrite*`` method a runner-scoped row can be written or changed by, driven through runner A's adapters
 #: against the seeded world — on A's own chunks and leases, so an unconfined write would reach B's same-shaped rows.
+
+
+def _engage_under_lock(w: RunnerWorld) -> None:
+    """One locked brake transaction over the world's runner alone: its brake read and its fact written on the handle."""
+    with w.stores.pause.locked_brakes([]) as locked:
+        w.stores.pause.local_brake_locked(locked)
+        w.stores.pause.record_local_pause_locked(
+            locked, paused=True, at=_at(53), by="usage-limit", report_kind="runner.locally_paused", report_payload="{}"
+        )
+
+
 WRITE_CENSUS: dict[tuple[type, str], WriteRecipe] = {
     (IWriteLeaseRecordRepository, "record_lease"): _new_lease,
     (IWriteLeaseRecordRepository, "record_closure"): lambda w: w.stores.lease_record.record_closure(
@@ -384,6 +396,9 @@ WRITE_CENSUS: dict[tuple[type, str], WriteRecipe] = {
     (IWritePauseRepository, "record_local_pause"): lambda w: w.stores.pause.record_local_pause(
         paused=True, at=_at(37), by="operator", report_kind="runner.locally_paused", report_payload="{}"
     ),
+    (IWritePauseRepository, "locked_brakes"): lambda w: _engage_under_lock(w),
+    (IWritePauseRepository, "local_brake_locked"): lambda w: _engage_under_lock(w),
+    (IWritePauseRepository, "record_local_pause_locked"): lambda w: _engage_under_lock(w),
     (IWritePauseRepository, "record_pause_park"): lambda w: w.stores.pause.record_pause_park(
         lease_id=w.lease_2, chunk_id=w.chunk_1, parked_at=_at(38)
     ),
@@ -502,6 +517,8 @@ WRITE_EXEMPTIONS: dict[tuple[type, str], str] = {
     (IWriteWorkspacePromptRepository, "set_workspace_prompt"): _HOST_ONLY + " (workspace_prompt)",
     (IWriteWorkspacePromptRepository, "clear_workspace_prompt"): _HOST_ONLY + " (workspace_prompt)",
     (IWriteExternalUsageRepository, "prune_external_usage_samples"): _HOST_ONLY + " (external_usage_samples)",
+    (IWriteHostLaneRepository, "record_host_external_usage_attempt"): _HOST_ONLY
+    + " (external_usage_samples, host_outbound_buffer)",
     (IWriteCredentialRenewalRepository, "claim_credential_renewal"): _HOST_ONLY + " (credential_renewal_claims)",
     (IWriteCredentialRenewalRepository, "record_credential_renewal_outcome"): _HOST_ONLY
     + " (credential_renewal_outcomes)",

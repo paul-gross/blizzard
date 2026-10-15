@@ -153,7 +153,6 @@ def test_fallback_reset_statement_count_is_flat_in_the_declared_subscriptions(tm
             name=f"Sub {i}",
             provider=PROVIDER_ANTHROPIC,
             sample_interval_seconds=300,
-            sampler=None,
         )
         for i in range(declared)
     )
@@ -174,19 +173,11 @@ def test_fallback_reset_statement_count_is_flat_in_the_declared_subscriptions(tm
     assert _fallback_reset(ctx) == _NOW + timedelta(hours=2)
 
 
-def test_fallback_reset_picks_the_soonest_reset_across_declared_slugs(tmp_path: Path) -> None:
+def test_fallback_reset_reads_only_the_runners_own_slug(tmp_path: Path) -> None:
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
-    _record(store, "late", 0, payload=_payload(100.0, resets_in=timedelta(hours=4)))
-    _record(store, "soon", 0, payload=_payload(100.0, resets_in=timedelta(hours=1)))
-    _record(store, "partial", 0, payload=_payload(90.0, resets_in=timedelta(minutes=10)))
-    # Recorded, but not declared: its sooner reset is never consulted.
-    _record(store, "undeclared", 0, payload=_payload(100.0, resets_in=timedelta(minutes=5)))
-    resolved = tuple(
-        ResolvedSubscription(
-            slug=slug, name=slug, provider=PROVIDER_ANTHROPIC, sample_interval_seconds=300, sampler=None
-        )
-        for slug in ("late", "soon", "partial")
-    )
+    _record(store, "own", 0, payload=_payload(100.0, resets_in=timedelta(hours=4)))
+    # Another slug's sooner reset is never consulted, declared or not.
+    _record(store, "other", 0, payload=_payload(100.0, resets_in=timedelta(hours=1)))
     ctx = make_context(
         store,
         hub=FakeHub(),
@@ -195,7 +186,32 @@ def test_fallback_reset_picks_the_soonest_reset_across_declared_slugs(tmp_path: 
         probe=FakeProbe(),
         clock=FixedClock(_NOW),
         config=LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID, bindings=serving(1)),
-        subscriptions=resolved,
+        subscriptions=(
+            ResolvedSubscription(slug="own", name="own", provider=PROVIDER_ANTHROPIC, sample_interval_seconds=300),
+        ),
     )
 
-    assert _fallback_reset(ctx) == _NOW + timedelta(hours=1)
+    assert _fallback_reset(ctx) == _NOW + timedelta(hours=4)
+
+
+def test_fallback_reset_is_none_for_a_runner_spending_no_slug_or_whose_slug_has_no_sample(tmp_path: Path) -> None:
+    store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
+    _record(store, "other", 0, payload=_payload(100.0, resets_in=timedelta(hours=1)))
+
+    def ctx_over(*slugs: str):  # type: ignore[no-untyped-def]
+        return make_context(
+            store,
+            hub=FakeHub(),
+            provider=FakeProvider({}),
+            harness=FakeHarness(handle=None, verdict=None),  # type: ignore[arg-type]
+            probe=FakeProbe(),
+            clock=FixedClock(_NOW),
+            config=LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID, bindings=serving(1)),
+            subscriptions=tuple(
+                ResolvedSubscription(slug=slug, name=slug, provider=PROVIDER_ANTHROPIC, sample_interval_seconds=300)
+                for slug in slugs
+            ),
+        )
+
+    assert _fallback_reset(ctx_over()) is None
+    assert _fallback_reset(ctx_over("unsampled")) is None

@@ -28,9 +28,11 @@ __all__ = [
     "ExternalUsageAttemptSummary",
     "IReadCredentialRenewalRepository",
     "IReadExternalUsageRepository",
+    "IReadHostLaneRepository",
     "IReadUsageRepository",
     "IWriteCredentialRenewalRepository",
     "IWriteExternalUsageRepository",
+    "IWriteHostLaneRepository",
     "IWriteUsageRepository",
     "InvocationCost",
     "UsageTotals",
@@ -414,4 +416,32 @@ class IWriteExternalUsageRepository(IReadExternalUsageRepository, IWriteCredenti
         ``max(sampled_at)`` per slug is unchanged, so
         :meth:`~IReadExternalUsageRepository.last_external_usage_attempt_at` answers identically
         before and after. Returns the number of rows pruned."""
+        ...
+
+
+class IReadHostLaneRepository(Protocol):
+    """Read-only host-lane state: whether this host has been registered at its hub."""
+
+    def host_registered(self) -> bool:
+        """Whether a ``host_identity`` row exists — the host's own facts then ride its own lane, not a runner's."""
+        ...
+
+
+class IWriteHostLaneRepository(IReadHostLaneRepository, Protocol):
+    """Read-write host lane — held only by the sampling pass."""
+
+    def record_host_external_usage_attempt(
+        self,
+        *,
+        slug: str,
+        sampled_at: datetime,
+        payload: str | None,
+        report_kind: str,
+        report_payload: str,
+        miss_reason: str | None = None,
+    ) -> int:
+        """Append one declared subscription's sampling attempt and buffer its report on the host's own outbound
+        lane — atomically, returning the buffered seq. The arguments are
+        :meth:`~IWriteExternalUsageRepository.record_external_usage_attempt`'s; the report carries the same kind
+        and payload."""
         ...

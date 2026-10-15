@@ -197,6 +197,12 @@ RUNNER_ALLOWED_SCANS: list[Allowance] = [
     TableWideAllowance("pause_parks", 50, _RARE_OPERATOR_EVENT_REASON),
     TableWideAllowance("pause_park_resumes", 50, _RARE_OPERATOR_EVENT_REASON),
     TableWideAllowance("local_pause_facts", 50, _RARE_OPERATOR_EVENT_REASON),
+    # --- a singleton --------------------------------------------------------------------
+    TableWideAllowance(
+        "host_identity",
+        1,
+        "the host's registration row — a singleton the registered host records once, so an existence probe reads at most one row.",
+    ),
     # --- the transcript lane's own pending-delivery buffer ------------------------------
     TableWideAllowance(
         "transcript_outbound_buffer",

@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
+from dataclasses import dataclass
 from datetime import datetime
+from typing import cast
 
 import sqlalchemy as sa
-from sqlalchemy import func
+from sqlalchemy import Connection, func
 
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.store.errors import RunnerStoreConnections
@@ -16,10 +20,26 @@ from blizzard.runner.store.schema import (
     outbound_buffer,
     pause_park_resumes,
     pause_parks,
+    runner_identity,
 )
-from blizzard.runner.throttle.pause import IWritePauseRepository, PausePark
+from blizzard.runner.throttle.pause import ILockedBrakes, IWritePauseRepository, LocalBrake, PausePark
 
 _log = get_logger("blizzard.runner.store")
+
+
+@dataclass(frozen=True)
+class _LockedBrakes:
+    """The concrete handle — every member's statements run on :attr:`conn`, the transaction each member's identity row
+    was locked on. :class:`~blizzard.runner.throttle.pause.ILockedBrakes` is what the domain holds it as, which
+    declares no connection access."""
+
+    conn: Connection
+    pauses: tuple[IWritePauseRepository, ...]
+
+
+def _conn_of(handle: ILockedBrakes) -> Connection:
+    """Recover the transaction from a domain-held handle; only :meth:`PauseStore.locked_brakes` builds one."""
+    return cast(_LockedBrakes, handle).conn
 
 
 class PauseStore:
@@ -114,21 +134,89 @@ class PauseStore:
         # Both inserts, one transaction: two would leave a `kill -9` window where the runner
         # has stopped claiming and the hub is never told.
         with self._store.begin() as conn:
-            conn.execute(
-                self._store.insert(local_pause_facts).values(paused=paused, set_at=at, set_by=by, reason=reason)
-            )
-            seq = insert_outbox_row(
-                self._store,
+            return self._record_local_pause_conn(
                 conn,
-                outbound_buffer,
-                kind=report_kind,
-                chunk_id=None,
-                lease_id=None,
-                payload=report_payload,
-                created_at=at,
+                paused=paused,
+                at=at,
+                by=by,
+                report_kind=report_kind,
+                report_payload=report_payload,
+                reason=reason,
             )
+
+    def _record_local_pause_conn(
+        self,
+        conn: Connection,
+        *,
+        paused: bool,
+        at: datetime,
+        by: str,
+        report_kind: str,
+        report_payload: str,
+        reason: str | None,
+    ) -> int:
+        conn.execute(self._store.insert(local_pause_facts).values(paused=paused, set_at=at, set_by=by, reason=reason))
+        seq = insert_outbox_row(
+            self._store,
+            conn,
+            outbound_buffer,
+            kind=report_kind,
+            chunk_id=None,
+            lease_id=None,
+            payload=report_payload,
+            created_at=at,
+        )
         _log.info("local pause fact recorded", paused=paused, set_by=by, report=report_kind)
         return seq
+
+    @contextmanager
+    def locked_brakes(self, spenders: Sequence[IWritePauseRepository]) -> Iterator[ILockedBrakes]:
+        # Each runner's own builder locks its identity row, in sorted runner-id order, as the first statements: the
+        # first write takes SQLite's writer lock, and Postgres queues every writer of one set on the same rows.
+        members = {_store_of(pause).bound_runner_id(): pause for pause in (self, *spenders)}
+        with self._store.begin() as conn:
+            locked: list[IWritePauseRepository] = []
+            for runner_id in sorted(members):
+                pause = members[runner_id]
+                held = _lock_identity_row(conn, _store_of(pause))
+                if held or pause is self:
+                    locked.append(pause)
+            yield _LockedBrakes(conn, tuple(locked))
+
+    def local_brake_locked(self, handle: ILockedBrakes) -> LocalBrake:
+        row = (
+            _conn_of(handle)
+            .execute(
+                self._store.select(local_pause_facts, local_pause_facts.c.paused, local_pause_facts.c.reason)
+                .order_by(local_pause_facts.c.id.desc())
+                .limit(1)
+            )
+            .one_or_none()
+        )
+        if row is None or not row.paused:
+            return LocalBrake(paused=False)
+        return LocalBrake(paused=True, reason=row.reason)
+
+    def record_local_pause_locked(
+        self,
+        handle: ILockedBrakes,
+        *,
+        paused: bool,
+        at: datetime,
+        by: str,
+        report_kind: str,
+        report_payload: str,
+        reason: str | None = None,
+    ) -> int:
+        return self._record_local_pause_conn(
+            _conn_of(handle),
+            paused=paused,
+            at=at,
+            by=by,
+            report_kind=report_kind,
+            report_payload=report_payload,
+            reason=reason,
+        )
 
     def record_pause_park(
         self, *, lease_id: str, chunk_id: str, parked_at: datetime, interrupted_elicitation_id: int | None = None
@@ -153,6 +241,19 @@ class PauseStore:
         with self._store.begin() as conn:
             conn.execute(self._store.insert(pause_park_resumes).values(lease_id=lease_id, resumed_at=resumed_at))
         _log.info("pause park resumed", lease_id=lease_id)
+
+
+def _store_of(pause: IWritePauseRepository) -> RunnerStoreConnections:
+    """The connections a pause store is bound through — every member of one fan-out is one of this package's own."""
+    assert isinstance(pause, PauseStore)
+    return pause._store
+
+
+def _lock_identity_row(conn: Connection, store: RunnerStoreConnections) -> bool:
+    """A no-op ``UPDATE`` of the bound runner's identity row, built by that runner's own binding: whether the row
+    exists, and — on its first write — the transaction's lock on it."""
+    result = conn.execute(store.update(runner_identity).values(runner_id=runner_identity.c.runner_id))
+    return result.rowcount > 0
 
 
 def _conforms_pause_store(x: PauseStore) -> IWritePauseRepository:

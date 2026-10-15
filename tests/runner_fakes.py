@@ -103,6 +103,7 @@ from blizzard.runner.store.internal.host_daemon_liveness_store import DaemonLive
 from blizzard.runner.store.internal.host_external_usage_store import ExternalUsageStore
 from blizzard.runner.store.internal.host_graph_artifact_store import GraphArtifactStore
 from blizzard.runner.store.internal.host_jti_cache_store import JtiCacheRepository
+from blizzard.runner.store.internal.host_lane_store import HostLaneStore
 from blizzard.runner.store.internal.host_runner_audit import RunnerAudit
 from blizzard.runner.store.internal.host_workspace_prompt_store import WorkspacePromptStore
 from blizzard.runner.store.internal.identity_store import RunnerIdentityStore
@@ -137,6 +138,7 @@ from blizzard.runner.subscriptions.subscription_sampler import (
     SampleMiss,
     SampleMissReason,
 )
+from blizzard.runner.throttle.pause import SpendingRunner
 from blizzard.runner.transcripts.archived_repository import ArchivedTranscript
 from blizzard.runner.transcripts.repository import IReadTranscriptRepository
 from blizzard.runner.usage.recorder import UsageRecorder
@@ -170,6 +172,7 @@ class SqlAlchemyRunnerStore(
     EscalationStore,
     UsageStore,
     ExternalUsageStore,
+    HostLaneStore,
     DaemonLivenessStore,
     AttachmentStore,
     GitCommitDeclarationStore,
@@ -210,6 +213,7 @@ class SqlAlchemyRunnerStore(
         EscalationStore.__init__(self, store)
         UsageStore.__init__(self, store)
         ExternalUsageStore.__init__(self, store)
+        HostLaneStore.__init__(self, store)
         DaemonLivenessStore.__init__(self, store)
         AttachmentStore.__init__(self, store)
         GitCommitDeclarationStore.__init__(self, store)
@@ -316,6 +320,7 @@ def make_host_stores(store: SqlAlchemyRunnerStore, clock: IClock | None = None) 
         jti_cache=JtiCacheRepository(store.connections, clock or SystemClock()),
         daemon_liveness=store,
         external_usage=store,
+        host_lane=store,
         runner_audit=RunnerAudit(store.connections),
     )
 
@@ -1507,6 +1512,7 @@ def make_context(
     config: LoopConfig | None = None,
     events: EventBroker | None = None,
     subscriptions: tuple[ResolvedSubscription, ...] = (),
+    slug_spenders: tuple[SpendingRunner, ...] = (),
     chunk_views: IChunkViews | None = None,
     harness_versions: HarnessVersionCache | None = None,
     worker_scratch: WorkerScratchDirs | None = None,
@@ -1596,6 +1602,7 @@ def make_context(
         workspaces=_workspaces,
         process=_probe,
         subscriptions=subscriptions,
+        slug_spenders=slug_spenders,
         worktree_git=_wt,
         check_runner=_check_runner,
         config=resolved_config,
@@ -1779,10 +1786,7 @@ def loop_context(
     """A :class:`LoopContext` built by ``LoopWiring.context`` over its own graph, closed on exit."""
     with loop_graph(config, events=broker) as graph:
         ctx = LoopWiring(config, runner_prompt, broker).context(FakeHub(), graph)
-        try:
-            yield ctx
-        finally:
-            ctx.usage_http_client.close()
+        yield ctx
 
 
 class FakeHarnessHealth:

@@ -582,10 +582,10 @@
           "short_help": "Sample one declared subscription's rate-limit usage, by SLUG, and print it."
         }
       },
-      "help": "Diagnostics for the runner's own external-subscription usage sampling.",
+      "help": "Diagnostics for the host's external-subscription usage sampling.",
       "params": [],
       "path": "runner external-usage",
-      "short_help": "Diagnostics for the runner's own external-subscription usage sampling."
+      "short_help": "Diagnostics for the host's external-subscription usage sampling."
     },
     "finding": {
       "commands": {

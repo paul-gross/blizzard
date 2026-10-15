@@ -2,9 +2,9 @@
 
 Shared by a worker generation's own exit (:mod:`blizzard.runner.loop.steps`'s ``Advance``)
 and a judge elicitation's own exit (:mod:`blizzard.runner.lifecycle.judgement.judgement`'s ``Judgement``):
-both react to the same harness fact the same way — engage the local pause brake with a
-reason naming the harness and its reset time, park the lease in place, consume no retry,
-bump no epoch. The classifier is the adapter's own translated fact
+both react to the same harness fact the same way — engage the local pause brake, and that of every other runner of
+the host spending the same subscription, with a reason naming the subscription, the harness and the reset time, park
+the lease in place, consume no retry, bump no epoch. The classifier is the adapter's own translated fact
 (:meth:`~blizzard.runner.harness.adapter.IHarnessUsageLimits.classify_usage_limit`); this
 module is where the loop decides what to do with it (``bzh:deterministic-shell``)."""
 
@@ -23,7 +23,7 @@ from blizzard.runner.harness.usage import UsageLimit
 from blizzard.runner.leases.model import Lease
 from blizzard.runner.lifecycle.attempt import Attempt, AttemptContext
 from blizzard.runner.lifecycle.spawn import SpawnHostStores, SpawnStores
-from blizzard.runner.throttle.pause import PauseService, usage_limit_reason
+from blizzard.runner.throttle.pause import SpendingRunner, UsageLimitBrakes, usage_limit_reason
 from blizzard.runner.usage.repository import IReadExternalUsageRepository, soonest_exhausted_reset
 
 _log = get_logger("blizzard.runner.loop")
@@ -62,6 +62,10 @@ class UsageLimitContext(AttemptContext, Protocol):
     def host_stores(self) -> UsageLimitHostStores: ...
     @property
     def subscriptions(self) -> Sequence[DeclaredSubscription]: ...
+    @property
+    def slug_spenders(self) -> Sequence[SpendingRunner]:
+        """The other runners of this host spending this runner's subscription; none when it spends none."""
+        ...
 
 
 def classify_worker_usage_limit(
@@ -132,20 +136,29 @@ def engage_and_park_judge(ctx: UsageLimitContext, lease: Lease, limit: UsageLimi
 
 def _engage(ctx: UsageLimitContext, harness_id: str, limit: UsageLimit) -> None:
     reason = _reason(ctx, harness_id, limit)
-    PauseService(ctx.stores.pause, ctx.clock, events=ctx.events).engage(by="usage-limit", reason=reason)
+    UsageLimitBrakes(SpendingRunner(ctx.stores.pause, ctx.events), ctx.slug_spenders, ctx.clock).engage(
+        by="usage-limit", reason=reason
+    )
 
 
 def _reason(ctx: UsageLimitContext, harness_id: str, limit: UsageLimit) -> str:
-    return usage_limit_reason(harness_id, limit.resets_at or _fallback_reset(ctx))
+    return usage_limit_reason(harness_id, limit.resets_at or _fallback_reset(ctx), slug=_own_slug(ctx))
+
+
+def _own_slug(ctx: UsageLimitContext) -> str | None:
+    """The one subscription this runner spends, or ``None`` when it names none."""
+    return ctx.subscriptions[0].slug if ctx.subscriptions else None
 
 
 def _fallback_reset(ctx: UsageLimitContext) -> datetime | None:
-    """The soonest pending reset every declared subscription itself last reported
-    (:func:`~blizzard.runner.usage.repository.soonest_exhausted_reset`) — no
-    harness-to-subscription mapping."""
-    usage = ctx.host_stores.external_usage
-    windows_by_slug = usage.latest_external_usage_windows_by_slug([r.slug for r in ctx.subscriptions])
-    return soonest_exhausted_reset(windows_by_slug, ctx.clock.now())
+    """The soonest pending reset this runner's own subscription last reported
+    (:func:`~blizzard.runner.usage.repository.soonest_exhausted_reset`) — ``None`` when it spends none, or when
+    that slug has no sample, whatever any other slug last reported."""
+    slug = _own_slug(ctx)
+    if slug is None:
+        return None
+    windows = ctx.host_stores.external_usage.latest_external_usage_windows(slug)
+    return soonest_exhausted_reset({slug: windows}, ctx.clock.now())
 
 
 def _usage_limit_adapter(ctx: UsageLimitContext, session: SessionReference) -> IHarnessUsageLimits | None:

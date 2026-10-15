@@ -130,6 +130,15 @@ def test_usage_limit_reason_minute_precision() -> None:
     assert usage_limit_reason("claude-code", None) == "usage limit: claude-code"
 
 
+def test_usage_limit_reason_names_the_subscription_beside_the_harness() -> None:
+    resets_at = datetime(2026, 10, 4, 17, 42, 31, tzinfo=UTC)
+    assert (
+        usage_limit_reason("claude-code", resets_at, slug="max")
+        == "usage limit: max via claude-code (resets 2026-10-04T17:42Z)"
+    )
+    assert usage_limit_reason("claude-code", None, slug="max") == "usage limit: max via claude-code"
+
+
 def _next(streak: OverloadStreak, *, identity: str = "3") -> OverloadExit:
     return streak.next_fact(
         lease_id="lease-1",

@@ -14,6 +14,7 @@ import os
 from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field, replace
+from datetime import datetime
 from pathlib import Path
 
 from sqlalchemy import Engine
@@ -77,6 +78,7 @@ from blizzard.runner.store.internal.host_daemon_liveness_store import DaemonLive
 from blizzard.runner.store.internal.host_external_usage_store import ExternalUsageStore
 from blizzard.runner.store.internal.host_graph_artifact_store import GraphArtifactStore
 from blizzard.runner.store.internal.host_jti_cache_store import JtiCacheRepository
+from blizzard.runner.store.internal.host_lane_store import HostLaneStore
 from blizzard.runner.store.internal.host_runner_audit import RunnerAudit
 from blizzard.runner.store.internal.host_workspace_prompt_store import WorkspacePromptStore
 from blizzard.runner.store.internal.identity_store import RunnerIdentityStore
@@ -100,6 +102,8 @@ from blizzard.runner.store.runner_guard import install_runner_guard
 from blizzard.runner.stores import HostReadStores, HostStores, IRunnerAudit, RunnerReadStores, RunnerStores
 from blizzard.runner.subscriptions.internal.credential_renewer_factory import select_renewer
 from blizzard.runner.subscriptions.internal.subprocess_one_shot_process import SubprocessOneShotProcess
+from blizzard.runner.subscriptions.internal.subscription_sampler_factory import select_sampler
+from blizzard.runner.subscriptions.internal.usage_http_client import LazyUsageHttpClient
 from blizzard.runner.tracing.attributes import (
     INSTRUMENTATION_SCOPE,
     INSTRUMENTATION_SCOPE_VERSION,
@@ -120,7 +124,9 @@ from blizzard.runner.tracing.receiving import TelemetryReceiver
 from blizzard.runner.tracing.replay import LeaseTraceReplay
 from blizzard.runner.tracing.sweep import LeaseTraceSweep
 from blizzard.runner.usage.credential_renewal import CredentialRenewalPass, RenewableSubscription
+from blizzard.runner.usage.external_usage_sample import ExternalUsageSamplePass, SampledSubscription
 from blizzard.runner.usage.host_tick import HostTick
+from blizzard.runner.usage.repository import IWriteHostLaneRepository
 
 
 @dataclass
@@ -156,8 +162,10 @@ class HostProcess:
     log_bounds: ReceiverBounds
     #: What every declared binding's telemetry arrives under, which the receiver admits and routes by.
     harness_telemetry_names: tuple[HarnessTelemetryNames, ...]
-    #: The pass the host's own thread runs; its one step today is credential renewal.
+    #: The pass the host's own thread runs: usage sampling and credential renewal.
     host_tick: HostTick
+    #: The one HTTP client every declared subscription's sampler shares, built on first use and closed with the host.
+    usage_http_client: LazyUsageHttpClient
     #: Platform spans — disabled unless a handle is supplied; every collaborator opens spans through it.
     platform_tracing: IPlatformTracing = field(default_factory=DisabledPlatformTracing)
     #: Where admitted metrics and logs leave — disabled unless a handle is supplied.
@@ -168,11 +176,23 @@ class HostProcess:
     #: The subscriptions the host declares, whichever runners spend them.
     subscriptions: tuple[SubscriptionDeclaration, ...] = ()
 
+    def spenders_of(self, slug: str | None, *, excluding: str) -> tuple[RunnerProcess, ...]:
+        """The runners of this host, other than ``excluding``, that spend ``slug`` — none for a runner that spends no
+        subscription."""
+        if slug is None:
+            return ()
+        return tuple(
+            runner
+            for runner in self.runners
+            if runner.runner_id != excluding and any(declared.slug == slug for declared in runner.config.subscriptions)
+        )
+
     def close(self) -> None:
         with contextlib.ExitStack() as closing:
             closing.callback(self.platform_tracing.shutdown, PLATFORM_TRACING_SHUTDOWN_SECONDS)
             closing.callback(self.received_telemetry.shutdown, PLATFORM_TRACING_SHUTDOWN_SECONDS)
             closing.callback(self.engine.dispose)
+            closing.callback(self.usage_http_client.close)
             for runner in self.runners:
                 closing.callback(runner.close_runner)
 
@@ -367,6 +387,83 @@ def _credential_renewal_pass(
     if not renewable:
         return None
     return CredentialRenewalPass(subscriptions=renewable, renewals=host_stores.external_usage, clock=clock)
+
+
+_log = get_logger("blizzard.runner.composition")
+
+
+class _HostAttemptSink:
+    """Where the host's sampling pass records an attempt: a registered host's own lane, else — an unregistered host
+    having none — its first runner's bound stores and event publisher, as a runner's own sample did."""
+
+    def __init__(self, host_lane: IWriteHostLaneRepository, runners: Callable[[], tuple[RunnerProcess, ...]]) -> None:
+        self._host_lane = host_lane
+        self._runners = runners
+
+    def record(
+        self,
+        *,
+        slug: str,
+        sampled_at: datetime,
+        payload: str | None,
+        report_kind: str,
+        report_payload: str,
+        miss_reason: str | None,
+    ) -> None:
+        if self._host_lane.host_registered():
+            self._host_lane.record_host_external_usage_attempt(
+                slug=slug,
+                sampled_at=sampled_at,
+                payload=payload,
+                report_kind=report_kind,
+                report_payload=report_payload,
+                miss_reason=miss_reason,
+            )
+            return
+        runners = self._runners()
+        if not runners:
+            _log.warning("external usage attempt not recorded: the host has no runner to report through", slug=slug)
+            return
+        reporter = runners[0]
+        seq = reporter.host_stores.external_usage.record_external_usage_attempt(
+            slug=slug,
+            sampled_at=sampled_at,
+            payload=payload,
+            report_kind=report_kind,
+            report_payload=report_payload,
+            miss_reason=miss_reason,
+        )
+        events = reporter.events
+        if seq is not None and events is not None:
+            events.publish_fact_changed(seq=seq, kind=report_kind, chunk_id=None, lease_id=None)
+
+
+def _external_usage_sample_pass(
+    declarations: Sequence[SubscriptionDeclaration],
+    host_stores: HostStores,
+    clock: SystemClock,
+    http_client: LazyUsageHttpClient,
+    runners: Callable[[], tuple[RunnerProcess, ...]],
+) -> ExternalUsageSamplePass | None:
+    """Every subscription the host declares paired with its provider's sampler, sharing one HTTP client; ``None``
+    when the host declares none."""
+    if not declarations:
+        return None
+    sampled = [
+        SampledSubscription(
+            slug=declaration.slug,
+            name=declaration.name,
+            sample_interval_seconds=declaration.sample_interval_seconds,
+            sampler=select_sampler(declaration, clock=clock, http_client=http_client),
+        )
+        for declaration in declarations
+    ]
+    return ExternalUsageSamplePass(
+        subscriptions=sampled,
+        attempts=host_stores.external_usage,
+        sink=_HostAttemptSink(host_stores.host_lane, runners),
+        clock=clock,
+    )
 
 
 #: How long the runner's shutdown waits for buffered platform spans to leave.
@@ -567,6 +664,7 @@ def _build_host_graph(
         connections = RunnerStoreConnections(engine, errors)
         clock = SystemClock()
         host_stores = _build_host_stores(connections, clock)
+        usage_http_client = LazyUsageHttpClient()
         span_limiter = SpanRateLimiter(clock)
         receiver_counter = ReceiverCounter()
         harness_span_counter = ReceiverCounter()
@@ -604,7 +702,13 @@ def _build_host_graph(
             metric_bounds=metric_bounds,
             log_bounds=log_bounds,
             harness_telemetry_names=telemetry_names,
-            host_tick=HostTick(credential_renewal=_credential_renewal_pass(subscriptions, host_stores, clock)),
+            host_tick=HostTick(
+                external_usage_sample=_external_usage_sample_pass(
+                    subscriptions, host_stores, clock, usage_http_client, runners
+                ),
+                credential_renewal=_credential_renewal_pass(subscriptions, host_stores, clock),
+            ),
+            usage_http_client=usage_http_client,
             subscriptions=tuple(subscriptions),
             platform_tracing=platform_tracing,
             received_telemetry=received_telemetry,
@@ -798,5 +902,6 @@ def _build_host_stores(connections: RunnerStoreConnections, clock: IClock) -> Ho
         jti_cache=JtiCacheRepository(connections, clock),
         daemon_liveness=DaemonLivenessStore(connections),
         external_usage=ExternalUsageStore(connections),
+        host_lane=HostLaneStore(connections),
         runner_audit=RunnerAudit(connections),
     )

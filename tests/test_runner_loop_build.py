@@ -47,12 +47,13 @@ from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.tick import tick
-from blizzard.runner.loop_wiring import LoopWiring, PeriodicDriver, ResumeMarking, _LazyUsageHttpClient
+from blizzard.runner.loop_wiring import LoopWiring, PeriodicDriver, ResumeMarking
 from blizzard.runner.stores import RunnerReadStores
 from blizzard.runner.subscriptions.credential_renewer import RenewalOutcome, RenewalOutcomeKind
 from blizzard.runner.subscriptions.internal.anthropic_subscription_sampler import AnthropicSubscriptionSampler
 from blizzard.runner.subscriptions.internal.openai_credential_renewer import OpenAICredentialRenewer
 from blizzard.runner.subscriptions.internal.openai_subscription_sampler import OpenAISubscriptionSampler
+from blizzard.runner.subscriptions.internal.usage_http_client import LazyUsageHttpClient
 from blizzard.runner.subscriptions.subscription_sampler import PROVIDER_ANTHROPIC, PROVIDER_OPENAI
 from tests.harness_sections import sections
 from tests.host_files import load_runner_config, one_workspace, write_minimal_host
@@ -166,7 +167,7 @@ def test_loop_wiring_threads_a_declarations_credentials_path_and_cadence_into_it
     """An unthreaded override leaves every daemon this root builds reading the sampler's own default credentials
     path and reaching the real Anthropic endpoint. The sampler is a separate seam from the harness adapter —
     selected from the subscription the runner names, keyed by slug. The declaration's own
-    ``sample_interval_seconds`` is the cadence the tick's per-slug gate reads (``ExternalUsageSample``)."""
+    ``sample_interval_seconds`` is the cadence the host's per-slug gate reads (``ExternalUsageSamplePass``)."""
     scratch = str(tmp_path / "scratch-credentials.json")
     config = RunnerConfig(
         runner_id=FIXTURE_RUNNER_ID,
@@ -184,13 +185,17 @@ def test_loop_wiring_threads_a_declarations_credentials_path_and_cadence_into_it
         ),
     )
 
-    with loop_context(config) as ctx:
+    with loop_graph(config) as graph:
+        ctx = LoopWiring(config, "", None).context(FakeHub(), graph)
         assert isinstance(ctx.harnesses.lifecycle(CLAUDE_CODE_HARNESS_ID), ClaudeCodeAdapter)
         assert [s.slug for s in ctx.subscriptions] == ["anthropic"]
-        resolved = ctx.subscriptions[0]
-        assert resolved.sample_interval_seconds == 123
-        assert isinstance(resolved.sampler, AnthropicSubscriptionSampler)
-        assert resolved.sampler._credentials_path == scratch
+        assert ctx.subscriptions[0].sample_interval_seconds == 123
+        sampling = graph.host.host_tick.external_usage_sample
+        assert sampling is not None
+        (sampled,) = sampling._subscriptions
+        assert sampled.sample_interval_seconds == 123
+        assert isinstance(sampled.sampler, AnthropicSubscriptionSampler)
+        assert sampled.sampler._credentials_path == scratch
 
 
 @pytest.mark.unit
@@ -208,9 +213,9 @@ def test_a_runner_naming_no_subscription_builds_no_sampler_and_registers_an_empt
 
 
 @pytest.mark.unit
-def test_the_loops_declared_subscriptions_share_one_root_owned_http_client(tmp_path: Path) -> None:
+def test_the_hosts_declared_subscriptions_share_one_host_owned_http_client(tmp_path: Path) -> None:
     """The laziness invariant ("a sampler that never samples opens no pool") lives at the
-    composition root: every declared subscription's sampler draws
+    host's composition: every declared subscription's sampler draws
     from the *same* shared client, not one each."""
     config = RunnerConfig(
         runner_id=FIXTURE_RUNNER_ID,
@@ -223,13 +228,15 @@ def test_the_loops_declared_subscriptions_share_one_root_owned_http_client(tmp_p
         ),
     )
 
-    with loop_context(config) as ctx:
-        assert [s.slug for s in ctx.subscriptions] == ["anthropic", "codex"]
-        first_sampler, second_sampler = (s.sampler for s in ctx.subscriptions)
+    with loop_graph(config) as graph:
+        sampling = graph.host.host_tick.external_usage_sample
+        assert sampling is not None
+        assert [s.slug for s in sampling._subscriptions] == ["anthropic", "codex"]
+        first_sampler, second_sampler = (s.sampler for s in sampling._subscriptions)
         assert isinstance(first_sampler, AnthropicSubscriptionSampler)
         assert isinstance(second_sampler, OpenAISubscriptionSampler)
-        assert first_sampler._http_client is ctx.usage_http_client
-        assert second_sampler._http_client is ctx.usage_http_client
+        assert first_sampler._http_client is graph.host.usage_http_client
+        assert second_sampler._http_client is graph.host.usage_http_client
 
 
 @pytest.mark.unit
@@ -237,7 +244,7 @@ def test_a_tick_with_an_openai_subscription_never_invokes_a_renewer(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Renewal is composed into the host's own pass, never the tick: a whole tick over an
-    ``openai`` declaration samples it but never reaches either half of the renewer seam."""
+    ``openai`` declaration neither samples it nor reaches either half of the renewer seam."""
     calls: list[str] = []
 
     def _due(self: OpenAICredentialRenewer) -> bool:
@@ -266,13 +273,10 @@ def test_a_tick_with_an_openai_subscription_never_invokes_a_renewer(
 
     with loop_graph(config) as graph:
         ctx = LoopWiring(config, "", None).context(FakeHub(), graph)
-        try:
-            tick(ctx)
-        finally:
-            ctx.usage_http_client.close()
+        tick(ctx)
         assert (
-            graph.host_stores.external_usage.last_external_usage_attempt_at("codex") is not None
-        )  # the tick sampled it
+            graph.host_stores.external_usage.last_external_usage_attempt_at("codex") is None
+        )  # sampling is the host's
         assert graph.host.host_tick.credential_renewal is not None  # composed for `runner host` alone
 
     assert calls == []
@@ -292,8 +296,8 @@ def test_no_renewal_pass_is_composed_when_no_provider_binds_a_renewer(tmp_path: 
 
 
 @pytest.mark.unit
-def test_the_loops_usage_http_client_is_not_built_merely_by_composing_the_context(tmp_path: Path) -> None:
-    """No declared subscription ever samples in this test — composing the context alone
+def test_the_hosts_usage_http_client_is_not_built_merely_by_composing_the_host(tmp_path: Path) -> None:
+    """No declared subscription ever samples in this test — composing the host alone
     must open no real connection pool; only calling the provider
     builds one."""
     config = RunnerConfig(
@@ -303,14 +307,14 @@ def test_the_loops_usage_http_client_is_not_built_merely_by_composing_the_contex
         workspaces=one_workspace(root=str(tmp_path / "workspace")),
     )
 
-    with loop_context(config) as ctx:
-        assert isinstance(ctx.usage_http_client, _LazyUsageHttpClient)
-        assert ctx.usage_http_client._client is None
+    with loop_graph(config) as graph:
+        assert isinstance(graph.host.usage_http_client, LazyUsageHttpClient)
+        assert graph.host.usage_http_client._client is None
 
 
 @pytest.mark.unit
-def test_the_loops_usage_http_client_owner_closes_a_client_it_actually_built(tmp_path: Path) -> None:
-    """Closing the context's shared client closes the real ``httpx.Client`` a sampler built."""
+def test_the_hosts_usage_http_client_owner_closes_a_client_it_actually_built(tmp_path: Path) -> None:
+    """Closing the host's shared client closes the real ``httpx.Client`` a sampler built."""
     config = RunnerConfig(
         runner_id=FIXTURE_RUNNER_ID,
         root=tmp_path,
@@ -318,12 +322,11 @@ def test_the_loops_usage_http_client_owner_closes_a_client_it_actually_built(tmp
         workspaces=one_workspace(root=str(tmp_path / "workspace")),
     )
 
-    with loop_context(config) as ctx:
-        assert isinstance(ctx.usage_http_client, _LazyUsageHttpClient)
-        client = ctx.usage_http_client()
+    with loop_graph(config) as graph:
+        client = graph.host.usage_http_client()
         assert not client.is_closed
 
-        ctx.usage_http_client.close()
+        graph.host.usage_http_client.close()
 
         assert client.is_closed
 
@@ -499,10 +502,7 @@ def test_context_health_is_the_graphs_own_cache(tmp_path: Path) -> None:
 
     with loop_graph(config) as graph:
         ctx = LoopWiring(config, "").context(FakeHub(), graph)
-        try:
-            assert ctx.harness_health is graph.health
-        finally:
-            ctx.usage_http_client.close()
+        assert ctx.harness_health is graph.health
 
 
 @pytest.mark.unit
@@ -605,17 +605,14 @@ def test_hosted_graph_shares_process_scoped_dependencies_with_loop_and_recovery(
     hosted = build_hosted_app(config, process_graph=graph)
     try:
         ctx = LoopWiring(config, "", graph.host.events).context(FakeHub(), graph)
-        try:
-            assert hosted.app.state.workspace_registry is ctx.workspaces is graph.workspaces
-            assert runner_seams(hosted.app).harnesses is ctx.harnesses is graph.harnesses
-            assert runner_seams(hosted.app).harness_health is ctx.harness_health is graph.health
-            assert hosted.app.state.event_broker is graph.host.events
-            assert ctx.events is graph.events
-            assert hosted.app.state.clock is ctx.clock is hosted.resume.clock is graph.clock
-            assert hosted.resume.process is ctx.process is graph.process
-            assert ctx.stores is graph.stores
-        finally:
-            ctx.usage_http_client.close()
+        assert hosted.app.state.workspace_registry is ctx.workspaces is graph.workspaces
+        assert runner_seams(hosted.app).harnesses is ctx.harnesses is graph.harnesses
+        assert runner_seams(hosted.app).harness_health is ctx.harness_health is graph.health
+        assert hosted.app.state.event_broker is graph.host.events
+        assert ctx.events is graph.events
+        assert hosted.app.state.clock is ctx.clock is hosted.resume.clock is graph.clock
+        assert hosted.resume.process is ctx.process is graph.process
+        assert ctx.stores is graph.stores
     finally:
         hosted.close()
         graph.close()

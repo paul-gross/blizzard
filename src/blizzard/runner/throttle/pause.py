@@ -7,7 +7,8 @@ The brake's rules live on :class:`LocalBrake` (which verbs are legal from which 
 from __future__ import annotations
 
 import json
-from collections.abc import Container, Mapping
+from collections.abc import Container, Mapping, Sequence
+from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
@@ -25,6 +26,7 @@ __all__ = [
     "BrakeState",
     "BrakeVerb",
     "BrakeVerdict",
+    "ILockedBrakes",
     "IReadPauseRepository",
     "IWritePauseRepository",
     "LocalBrake",
@@ -32,6 +34,8 @@ __all__ = [
     "PausePark",
     "PauseService",
     "RunnerBrakes",
+    "SpendingRunner",
+    "UsageLimitBrakes",
     "needs_pause_park",
     "spend_ceiling_reason",
     "usage_limit_reason",
@@ -192,10 +196,12 @@ def spend_ceiling_reason(*, cap: float, window_hours: float, spend: float, parti
     return f"spend ceiling ${cap:.2f} reached over the trailing {window_hours:g}h (spend ${spend:.2f}{partial_note})"
 
 
-def usage_limit_reason(harness_id: str, resets_at: datetime | None) -> str:
-    """The usage-limit engagement's durable reason, naming the reset to the minute when known."""
+def usage_limit_reason(harness_id: str, resets_at: datetime | None, *, slug: str | None = None) -> str:
+    """The usage-limit engagement's durable reason, naming the subscription beside the harness when the runner spends
+    one, and the reset to the minute when known."""
     suffix = f" (resets {as_utc(resets_at).strftime('%Y-%m-%dT%H:%MZ')})" if resets_at is not None else ""
-    return f"usage limit: {harness_id}{suffix}"
+    via = f"{slug} via {harness_id}" if slug is not None else harness_id
+    return f"usage limit: {via}{suffix}"
 
 
 @domain_model
@@ -254,6 +260,16 @@ class IReadPauseRepository(Protocol):
         ...
 
 
+class ILockedBrakes(Protocol):
+    """The handle of one open locked brake transaction — the domain-facing view, which declares no connection access.
+    Each store's own ``*_locked`` method recovers the transaction it runs on from the handle."""
+
+    @property
+    def pauses(self) -> Sequence[IWritePauseRepository]:
+        """The pause stores whose runner's lock this transaction holds, in sorted runner-id order."""
+        ...
+
+
 class IWritePauseRepository(IReadPauseRepository, Protocol):
     """Read-write pause-brake store — held only by the domain."""
 
@@ -292,6 +308,41 @@ class IWritePauseRepository(IReadPauseRepository, Protocol):
         """End a lease's pause-park — the operator resumed it."""
         ...
 
+    def locked_brakes(self, spenders: Sequence[IWritePauseRepository]) -> AbstractContextManager[ILockedBrakes]:
+        """Open one write transaction over this runner and every one of ``spenders``, locking each runner's identity
+        row first, in sorted runner-id order (``bzh:store-exclusive-write``), then yield the handle bound to that one
+        transaction. A spender whose runner holds no identity row has never held a lease or written a runner-scoped
+        row, so it is left out of :attr:`ILockedBrakes.pauses`; this runner is always in it. Each member's brake is
+        read and written through its own ``*_locked`` methods, taking this same handle."""
+        ...
+
+    def local_brake_locked(self, handle: ILockedBrakes) -> LocalBrake:
+        """This runner's brake, derived from its newest local pause fact on the handle's transaction."""
+        ...
+
+    def record_local_pause_locked(
+        self,
+        handle: ILockedBrakes,
+        *,
+        paused: bool,
+        at: datetime,
+        by: str,
+        report_kind: str,
+        report_payload: str,
+        reason: str | None = None,
+    ) -> int:
+        """:meth:`record_local_pause` on the handle's transaction: this runner's fact and report, stamped by this
+        runner's own binding, commit or roll back with every other member's."""
+        ...
+
+
+def _report_payload(fact: LocalPauseFact) -> str:
+    # The hub attributes the report to the runner whose token pushes it, so it names no runner.
+    payload: dict[str, object] = {"by": fact.by, "at": iso_utc(fact.at)}
+    if fact.reason is not None:
+        payload["reason"] = fact.reason
+    return json.dumps(payload)
+
 
 class PauseService:
     """Composition-root-wired: the pause store, the clock, and the optional event
@@ -309,10 +360,13 @@ class PauseService:
         nothing when :meth:`LocalBrake.set_by_operator` finds it already in the requested state.
 
         The brake and its hub-bound report are one write: mirroring runs hub→runner only, so a brake
-        never reported up would never be repaired (``tests/test_ingest_and_pause_verbs.py``)."""
-        fact = self._brake().set_by_operator(paused=paused, by=by, at=self._clock.now())
-        if fact is not None:
-            self._write(fact)
+        never reported up would never be repaired (``tests/test_ingest_and_pause_verbs.py``). The write takes this
+        runner's lock before it reads the brake, so a usage-limit fan-out's read cannot race it."""
+        with self._store.locked_brakes(()) as locked:
+            fact = self._store.local_brake_locked(locked).set_by_operator(paused=paused, by=by, at=self._clock.now())
+            seq = self._write_locked(locked, fact) if fact is not None else None
+        if fact is not None and seq is not None:
+            self._publish(seq, fact)
 
     def engage(self, *, by: str, reason: str) -> None:
         """Engage the local brake with a durable reason — once (:meth:`LocalBrake.engage`).
@@ -326,17 +380,77 @@ class PauseService:
         return LocalBrake(paused=paused, reason=self._store.local_pause_reason() if paused else None)
 
     def _write(self, fact: LocalPauseFact) -> None:
-        # The hub attributes the report to the runner whose token pushes it, so it names no runner.
-        payload: dict[str, object] = {"by": fact.by, "at": iso_utc(fact.at)}
-        if fact.reason is not None:
-            payload["reason"] = fact.reason
         seq = self._store.record_local_pause(
             paused=fact.paused,
             at=fact.at,
             by=fact.by,
             report_kind=fact.report_kind,
-            report_payload=json.dumps(payload),
+            report_payload=_report_payload(fact),
             reason=fact.reason,
         )
+        self._publish(seq, fact)
+
+    def _write_locked(self, locked: ILockedBrakes, fact: LocalPauseFact) -> int:
+        return self._store.record_local_pause_locked(
+            locked,
+            paused=fact.paused,
+            at=fact.at,
+            by=fact.by,
+            report_kind=fact.report_kind,
+            report_payload=_report_payload(fact),
+            reason=fact.reason,
+        )
+
+    def _publish(self, seq: int, fact: LocalPauseFact) -> None:
         if self._events is not None:
             self._events.publish_fact_changed(seq=seq, kind=fact.report_kind, chunk_id=None, lease_id=None)
+
+
+@dataclass(frozen=True)
+class SpendingRunner:
+    """One runner of the host as the usage-limit brake reaches it: its own pause store, and the publisher that
+    announces its facts."""
+
+    pause: IWritePauseRepository
+    events: IRunnerEventPublisher | None = None
+
+
+class UsageLimitBrakes:
+    """The usage-limit engagement across every runner of the host that spends the limited subscription: this
+    runner's brake and each spender's, engaged in one locked write transaction. Each runner's own
+    :meth:`LocalBrake.engage` decides for it — an already-engaged brake is kept, not re-braked — and each fact is
+    stamped and reported by that runner's own store. After the commit, every engaged runner's own publisher announces
+    its fact."""
+
+    def __init__(self, own: SpendingRunner, spenders: Sequence[SpendingRunner], clock: IClock) -> None:
+        self._own = own
+        self._spenders = tuple(spenders)
+        self._clock = clock
+
+    def engage(self, *, by: str, reason: str) -> None:
+        """Engage every member's brake with ``reason``, or none of them. A runner whose slug no other runner spends
+        engages only its own, as :meth:`PauseService.engage` does."""
+        if not self._spenders:
+            PauseService(self._own.pause, self._clock, events=self._own.events).engage(by=by, reason=reason)
+            return
+        members = {id(runner.pause): runner for runner in (self._own, *self._spenders)}
+        engaged: list[tuple[SpendingRunner, int, LocalPauseFact]] = []
+        with self._own.pause.locked_brakes([runner.pause for runner in self._spenders]) as locked:
+            at = self._clock.now()
+            for pause in locked.pauses:
+                fact = pause.local_brake_locked(locked).engage(by=by, reason=reason, at=at)
+                if fact is None:
+                    continue
+                seq = pause.record_local_pause_locked(
+                    locked,
+                    paused=fact.paused,
+                    at=fact.at,
+                    by=fact.by,
+                    report_kind=fact.report_kind,
+                    report_payload=_report_payload(fact),
+                    reason=fact.reason,
+                )
+                engaged.append((members[id(pause)], seq, fact))
+        for runner, seq, fact in engaged:
+            if runner.events is not None:
+                runner.events.publish_fact_changed(seq=seq, kind=fact.report_kind, chunk_id=None, lease_id=None)
