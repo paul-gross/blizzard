@@ -2952,6 +2952,95 @@
         "title": "HostEnvironmentView",
         "type": "object"
       },
+      "HostRegistrationView": {
+        "description": "The host's registration at its hub, as its latest report found it: the identity its first answered report\nrecorded (``host_id``, ``tenant_id``), the name and runners the hub last answered for it, when, and \u2014 short of\nregistered \u2014 why. ``buffered_facts`` counts the facts waiting on the host's own lane.",
+        "properties": {
+          "answered_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Answered At"
+          },
+          "buffered_facts": {
+            "default": 0,
+            "title": "Buffered Facts",
+            "type": "integer"
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "held_runner_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Held Runner Ids",
+            "type": "array"
+          },
+          "host_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Host Id"
+          },
+          "host_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Host Name"
+          },
+          "state": {
+            "enum": [
+              "unregistered",
+              "pending",
+              "registered",
+              "refused",
+              "no_hosts",
+              "unreachable"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "tenant_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tenant Id"
+          }
+        },
+        "required": [
+          "state"
+        ],
+        "title": "HostRegistrationView",
+        "type": "object"
+      },
       "HostRunnerBindingView": {
         "description": "One project a runner serves, the workspace it runs in, and the agents it runs there at once.",
         "properties": {
@@ -3026,7 +3115,7 @@
         "type": "object"
       },
       "HostRunnerView": {
-        "description": "One runner on the host: a served runner's brake, bindings and agents in use, or a halted one's reasons.",
+        "description": "One runner on the host: a served runner's brake, bindings and agents in use, or a halted one's reasons.\n``served`` is whether its routes answer \u2014 true for a runner halted by its hub's refusal, whose own views still\nread, false for one halted by its configuration.",
         "properties": {
           "agents_in_use": {
             "default": 0,
@@ -3076,6 +3165,11 @@
               }
             ],
             "title": "Runner Id"
+          },
+          "served": {
+            "default": false,
+            "title": "Served",
+            "type": "boolean"
           },
           "state": {
             "enum": [
@@ -3293,7 +3387,7 @@
         "type": "object"
       },
       "IdentityVerdictView": {
-        "description": "Whether the runner's token resolves to the runner its host file configures (``store_runner_id``).\n\n``unchecked`` until the hub first answers the check, ``matched`` while it does, ``mismatched``\nwhile the token names another runner \u2014 the runner then drives no lease until the right token\nreturns. ``reset_command`` names how to restore it: the token variable and the configured id.",
+        "description": "Whether the runner's token resolves to the runner its host file configures (``store_runner_id``).\n\n``unchecked`` until the hub first answers the check, ``matched`` while it does, ``mismatched``\nwhile the token names another runner, ``refused`` while the hub refuses the token (unknown, revoked,\nretired) \u2014 the runner then drives no lease until a check resolves it again. On a registered host,\n``not_held`` while the hub does not hold the runner under the host and ``tenant_differs`` while it stands\nin another tenant than the host's halt the runner alone. ``reason`` says why for those last three.\n``reset_command`` names how to restore the token: the token variable and the configured id.",
         "properties": {
           "checked_at": {
             "anyOf": [
@@ -3306,6 +3400,17 @@
             ],
             "title": "Checked At"
           },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
           "reset_command": {
             "title": "Reset Command",
             "type": "string"
@@ -3314,7 +3419,10 @@
             "enum": [
               "unchecked",
               "matched",
-              "mismatched"
+              "mismatched",
+              "refused",
+              "not_held",
+              "tenant_differs"
             ],
             "title": "State",
             "type": "string"
@@ -6406,9 +6514,31 @@
         ]
       }
     },
+    "/api/host/registration": {
+      "get": {
+        "description": "Where the host stands with its hub: unregistered, or \u2014 holding a host token \u2014 what its latest report found,\nwith the identity its first answered report recorded and the facts waiting on its own lane.",
+        "operationId": "host_registration_api_host_registration_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HostRegistrationView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Host Registration",
+        "tags": [
+          "host"
+        ]
+      }
+    },
     "/api/host/runners": {
       "get": {
-        "description": "Every runner the host holds \u2014 a served one with its brake, bindings and agents in use, a halted one with its\nreasons.",
+        "description": "Every runner the host holds \u2014 a served one with its brake, bindings and agents in use, a halted one with its\nreasons. A served runner its identity verdict refuses \u2014 its token refused or naming another runner, or its hub\nnot holding it under the host \u2014 is halted too, naming why.",
         "operationId": "list_runners_api_host_runners_get",
         "responses": {
           "200": {

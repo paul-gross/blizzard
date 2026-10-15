@@ -197,6 +197,7 @@ from blizzard.runner.transcripts.repository import IReadTranscriptRepository
 from blizzard.runner.usage.repository import (
     IReadCredentialRenewalRepository,
     IReadExternalUsageRepository,
+    IReadHostLaneRepository,
     IReadUsageRepository,
 )
 from tests.runner_fakes import record_usage
@@ -669,6 +670,10 @@ def build_runner_world(engine: Engine, runner_id: str = RUNNER_ID) -> RunnerWorl
     host.host_identity.record_host_identity(
         HostIdentity(host_id="hs_census", tenant_id="tn_census", registered_at=_t(95))
     )
+    host.host_lane.record_host_external_usage_attempt(
+        slug="census-host", sampled_at=_t(96), payload=None, report_kind="census.kind", report_payload="{}"
+    )
+    host.host_lane.record_host_high_water(seq=0, at=_t(97))
 
     read = RunnerReadStores.of(stores)
     return RunnerWorld(
@@ -840,6 +845,8 @@ RUNNER_CENSUS: dict[tuple[type, str], RunnerRecipe] = {
         w.host_read.external_usage.latest_external_usage_attempts_by_slug([w.usage_slug])
     ),
     (IReadHostIdentityRepository, "host_identity"): lambda w: w.host_read.host_identity.host_identity(),
+    (IReadHostLaneRepository, "host_buffered_count"): lambda w: w.host_read.host_lane.host_buffered_count(),
+    (IReadHostLaneRepository, "host_high_water_seen"): lambda w: w.host_read.host_lane.host_high_water_seen(),
     (IReadCredentialRenewalRepository, "last_credential_renewal_claim_at"): lambda w: (
         w.host_read.external_usage.last_credential_renewal_claim_at(w.usage_slug)
     ),

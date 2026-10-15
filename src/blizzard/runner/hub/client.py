@@ -572,7 +572,7 @@ class IHubClient(IChunkStatusReader, Protocol):
         url: str | None = None,
         redirect_uris: tuple[str, ...] = (),
         capabilities: tuple[HarnessCapability, ...] = (),
-        subscriptions: tuple[SubscriptionDeclaration, ...] = (),
+        subscriptions: tuple[SubscriptionDeclaration, ...] | None = (),
         gates: tuple[str, ...] = (),
         projects: tuple[str, ...] | None = None,
         bindings: tuple[BindingDeclaration, ...] | None = None,
@@ -580,8 +580,9 @@ class IHubClient(IChunkStatusReader, Protocol):
     ) -> RegistrationReply:
         """``POST /api/fleet/runners`` — register the runner this client's token names under its
         declared ``name``, and learn its hub-minted id from the reply. Idempotent, and refreshes the
-        runner's liveness at the hub. Every optional field, ``subscriptions`` included,
-        is unconditionally overwritten each call; ``subscriptions`` is always a list, never omitted.
+        runner's liveness at the hub. Every optional field is unconditionally overwritten each call
+        but ``subscriptions``, which ``None`` omits — a runner of a registered host, whose host reports the
+        roster, sends none.
         ``gates`` is the runner's own configured human-gate node names — reported for display, never
         read back to enforce. ``projects`` is the projects the runner serves, by id or slug: sent as
         given, ``None`` as null — never ``[]`` — so the hub keeps the declaration it holds, where

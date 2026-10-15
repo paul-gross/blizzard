@@ -109,6 +109,7 @@ _DEDICATED_PREFIXES = (
     "usagelimit.",
     "trace.",
     "leasetrace.",
+    "hostlane.",
     "egress.",
     "teardown.",
 )
@@ -149,6 +150,9 @@ _USAGE_LIMIT_POINTS = [p for p in _ALL_POINTS if p.startswith("usagelimit.")]
 _TRACE_POINTS = [p for p in _ALL_POINTS if p.startswith("trace.")]
 # `leasetrace.*`: the RUNNER's twin of `trace.*`, swept by `test_kill9_at_lease_trace_crash_point`.
 _LEASE_TRACE_POINTS = [p for p in _ALL_POINTS if p.startswith("leasetrace.")]
+# `hostlane.*`: the RUNNER host's own fact lane, between the hub's answer and the mark recorded; swept by
+# `test_kill9_at_host_lane_crash_point`.
+_HOST_LANE_POINTS = [p for p in _ALL_POINTS if p.startswith("hostlane.")]
 # `egress.*` fires in the HUB's egress sweep; swept by `test_kill9_at_egress_crash_point`.
 _EGRESS_POINTS = [p for p in _ALL_POINTS if p.startswith("egress.")]
 # `teardown.*` fires inside the HUB's tenant deletion — after its close, between drain batches, and after its drain.
@@ -234,6 +238,10 @@ _TRACE_CI_SUBSET = ("trace.after-export.before-cursor",)
 _LEASE_TRACE_CI_SUBSET = ("leasetrace.after-export.before-cursor",)
 
 
+# The host-lane CI subset: the family's lone member is its own CI representative.
+_HOST_LANE_CI_SUBSET = ("hostlane.after-push.before-mark",)
+
+
 # The egress CI subset: the later window; the full sweep runs both.
 _EGRESS_CI_SUBSET = ("egress.after-commit.before-cursor",)
 
@@ -269,6 +277,7 @@ _CLOSE_SWEEP = _select(_CLOSE_POINTS, _CLOSE_CI_SUBSET)
 _USAGE_LIMIT_SWEEP = _select(_USAGE_LIMIT_POINTS, _USAGE_LIMIT_CI_SUBSET)
 _TRACE_SWEEP = _select(_TRACE_POINTS, _TRACE_CI_SUBSET)
 _LEASE_TRACE_SWEEP = _select(_LEASE_TRACE_POINTS, _LEASE_TRACE_CI_SUBSET)
+_HOST_LANE_SWEEP = _select(_HOST_LANE_POINTS, _HOST_LANE_CI_SUBSET)
 _EGRESS_SWEEP = _select(_EGRESS_POINTS, _EGRESS_CI_SUBSET)
 _TEARDOWN_SWEEP = _select(_TEARDOWN_POINTS, _TEARDOWN_CI_SUBSET)
 
@@ -296,6 +305,7 @@ def test_ci_subset_covers_every_family(monkeypatch: pytest.MonkeyPatch) -> None:
         | set(_select(_USAGE_LIMIT_POINTS, _USAGE_LIMIT_CI_SUBSET))
         | set(_select(_TRACE_POINTS, _TRACE_CI_SUBSET))
         | set(_select(_LEASE_TRACE_POINTS, _LEASE_TRACE_CI_SUBSET))
+        | set(_select(_HOST_LANE_POINTS, _HOST_LANE_CI_SUBSET))
         | set(_select(_EGRESS_POINTS, _EGRESS_CI_SUBSET))
         | set(_select(_TEARDOWN_POINTS, _TEARDOWN_CI_SUBSET))
     )
@@ -3628,6 +3638,87 @@ def test_kill9_at_lease_trace_crash_point(crash_env: CrashEnv, tmp_path: Path, p
         assert sum(advancing) == len(sink.spans()) - len(told_once), (
             "cursor rows do not cover each post-restart span exactly once"
         )
+
+
+# --- The host's own fact lane — a registered host pushes its facts and records the hub's mark ---
+
+
+def _host_lane(runner_dir: Path) -> tuple[list[int], int | None]:
+    """The seqs waiting on the host's own lane, and the hub's answered mark the host recorded."""
+    with _audit_connection(runner_dir) as conn:
+        pending = conn.execute(
+            select(runner_schema.host_outbound_buffer.c.seq).order_by(runner_schema.host_outbound_buffer.c.seq)
+        ).scalars()
+        buffered = list(pending)
+        mark = conn.execute(select(runner_schema.host_high_water_seen.c.seq)).scalar_one_or_none()
+    return buffered, mark
+
+
+def _hub_host_mark(hub_dir: Path, host_id: str) -> int | None:
+    """The per-host mark the hub holds for ``host_id``."""
+    engine = create_engine_from_url(HubConfig.load(hub_dir).db_url)
+    try:
+        with engine.connect() as conn:
+            return conn.execute(
+                hub_scoped(
+                    select(hub_schema.host_high_water.c.seq).where(hub_schema.host_high_water.c.host_id == host_id)
+                )
+            ).scalar_one_or_none()
+    finally:
+        engine.dispose()
+
+
+@pytest.mark.parametrize("point", _HOST_LANE_SWEEP)
+def test_kill9_at_host_lane_crash_point(crash_env: CrashEnv, tmp_path: Path, point: str) -> None:
+    """A ``kill -9`` of a registered host after its hub applied a lane push, before the host records the mark,
+    leaves the facts buffered; the restarted host re-pushes them, the hub answers them already applied, and the
+    host clears them and records the mark the hub holds."""
+    hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
+    hub_port, runner_port = free_port(), free_port()
+    hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=None, work_sources=())
+    runner_proc = None
+    hub = httpx.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
+    try:
+        await_http(hub, "/api/health", proc=hub_proc)
+        config = write_runner_config(
+            runner_dir, workspace=crash_env.workspace, bin_dir=crash_env.bin_dir, hub_port=hub_port, port=runner_port
+        )
+        # The runner init joined stands under the host from its start: the host adopts it as it is added.
+        added = hub.post("/api/hosts", json={"name": "crash-host", "adopt": [config.served_id()]})
+        assert added.status_code == 201, added.text
+        host_id = added.json()["host_id"]
+        with (runner_dir / ".env").open("a") as env:
+            env.write(f"BZ_HOST_TOKEN={added.json()['token']}\n")
+        runner_proc = start_runner(runner_dir, crash_point=point)
+
+        code = wait_death(runner_proc, timeout=90.0)
+        assert code == -9, f"armed runner at {point} exited {code}, not SIGKILL (-9); point never reached?"
+        _assert_invariants(runner_dir, hub_dir, when=f"immediately after kill at {point}", after_recovery=False)
+        buffered, mark = _host_lane(runner_dir)
+        assert buffered, "the killed push left no fact buffered on the host's lane"
+        assert mark is None, f"the host recorded a mark {mark} the killed pass never got to record"
+        applied = _hub_host_mark(hub_dir, host_id)
+        assert applied is not None and applied >= max(buffered), (applied, buffered)
+
+        runner_proc = start_runner(runner_dir, crash_point=None)
+        assert _poll(lambda: (mark := _host_lane(runner_dir)[1]) is not None and mark >= max(buffered), 60.0), (
+            f"the restarted host never recorded the hub's mark past {buffered}"
+        )
+        assert not set(buffered) & set(_host_lane(runner_dir)[0]), "a re-pushed fact stayed on the host's lane"
+        _assert_invariants(runner_dir, hub_dir, when=f"after recovery past {point}", after_recovery=True)
+    finally:
+        hub.close()
+        terminate(runner_proc)
+        terminate(hub_proc)
+
+
+def _poll(done: Any, timeout: float) -> bool:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if done():
+            return True
+        time.sleep(0.5)
+    return False
 
 
 # --- Tenant deletion — the hub drains a closed tenant in batches and the sweep finishes what a kill cut short ---

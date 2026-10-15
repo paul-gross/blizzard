@@ -1852,6 +1852,48 @@ export type HostEnvironmentView = {
 };
 
 /**
+ * HostRegistrationView
+ *
+ * The host's registration at its hub, as its latest report found it: the identity its first answered report
+ * recorded (``host_id``, ``tenant_id``), the name and runners the hub last answered for it, when, and — short of
+ * registered — why. ``buffered_facts`` counts the facts waiting on the host's own lane.
+ */
+export type HostRegistrationView = {
+    /**
+     * Answered At
+     */
+    answered_at?: string | null;
+    /**
+     * Buffered Facts
+     */
+    buffered_facts?: number;
+    /**
+     * Detail
+     */
+    detail?: string | null;
+    /**
+     * Held Runner Ids
+     */
+    held_runner_ids?: Array<string>;
+    /**
+     * Host Id
+     */
+    host_id?: string | null;
+    /**
+     * Host Name
+     */
+    host_name?: string | null;
+    /**
+     * State
+     */
+    state: 'unregistered' | 'pending' | 'registered' | 'refused' | 'no_hosts' | 'unreachable';
+    /**
+     * Tenant Id
+     */
+    tenant_id?: string | null;
+};
+
+/**
  * HostRunnerBindingView
  *
  * One project a runner serves, the workspace it runs in, and the agents it runs there at once.
@@ -1905,6 +1947,8 @@ export type HostRunnerStateView = {
  * HostRunnerView
  *
  * One runner on the host: a served runner's brake, bindings and agents in use, or a halted one's reasons.
+ * ``served`` is whether its routes answer — true for a runner halted by its hub's refusal, whose own views still
+ * read, false for one halted by its configuration.
  */
 export type HostRunnerView = {
     /**
@@ -1932,6 +1976,10 @@ export type HostRunnerView = {
      * Runner Id
      */
     runner_id: string | null;
+    /**
+     * Served
+     */
+    served?: boolean;
     /**
      * State
      */
@@ -2059,8 +2107,11 @@ export type HubConnectivityView = {
  * Whether the runner's token resolves to the runner its host file configures (``store_runner_id``).
  *
  * ``unchecked`` until the hub first answers the check, ``matched`` while it does, ``mismatched``
- * while the token names another runner — the runner then drives no lease until the right token
- * returns. ``reset_command`` names how to restore it: the token variable and the configured id.
+ * while the token names another runner, ``refused`` while the hub refuses the token (unknown, revoked,
+ * retired) — the runner then drives no lease until a check resolves it again. On a registered host,
+ * ``not_held`` while the hub does not hold the runner under the host and ``tenant_differs`` while it stands
+ * in another tenant than the host's halt the runner alone. ``reason`` says why for those last three.
+ * ``reset_command`` names how to restore the token: the token variable and the configured id.
  */
 export type IdentityVerdictView = {
     /**
@@ -2068,13 +2119,17 @@ export type IdentityVerdictView = {
      */
     checked_at: string | null;
     /**
+     * Reason
+     */
+    reason?: string | null;
+    /**
      * Reset Command
      */
     reset_command: string;
     /**
      * State
      */
-    state: 'unchecked' | 'matched' | 'mismatched';
+    state: 'unchecked' | 'matched' | 'mismatched' | 'refused' | 'not_held' | 'tenant_differs';
     /**
      * Store Runner Id
      */
@@ -4039,6 +4094,22 @@ export type ListEnvironmentsApiHostEnvironmentsGetResponses = {
 };
 
 export type ListEnvironmentsApiHostEnvironmentsGetResponse = ListEnvironmentsApiHostEnvironmentsGetResponses[keyof ListEnvironmentsApiHostEnvironmentsGetResponses];
+
+export type HostRegistrationApiHostRegistrationGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/host/registration';
+};
+
+export type HostRegistrationApiHostRegistrationGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: HostRegistrationView;
+};
+
+export type HostRegistrationApiHostRegistrationGetResponse = HostRegistrationApiHostRegistrationGetResponses[keyof HostRegistrationApiHostRegistrationGetResponses];
 
 export type ListRunnersApiHostRunnersGetData = {
     body?: never;

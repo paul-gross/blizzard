@@ -303,7 +303,7 @@ class HttpHubClient:
         url: str | None = None,
         redirect_uris: tuple[str, ...] = (),
         capabilities: tuple[HarnessCapability, ...] = (),
-        subscriptions: tuple[SubscriptionDeclaration, ...] = (),
+        subscriptions: tuple[SubscriptionDeclaration, ...] | None = (),
         gates: tuple[str, ...] = (),
         projects: tuple[str, ...] | None = None,
         bindings: tuple[BindingDeclaration, ...] | None = None,
@@ -318,9 +318,14 @@ class HttpHubClient:
                 url=url,
                 redirect_uris=list(redirect_uris),
                 capabilities=[_capability(c) for c in capabilities],
-                subscriptions=[
-                    RunnerSubscriptionDeclaration(slug=d.slug, name=d.name, provider=d.provider) for d in subscriptions
-                ],
+                subscriptions=(
+                    [
+                        RunnerSubscriptionDeclaration(slug=d.slug, name=d.name, provider=d.provider)
+                        for d in subscriptions
+                    ]
+                    if subscriptions is not None
+                    else None
+                ),
                 gates=list(gates),
                 projects=list(projects) if projects is not None else None,
                 bindings=(

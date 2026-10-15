@@ -65,6 +65,7 @@ from blizzard.runner.transcripts.invocation_boundaries import (
 from blizzard.runner.transcripts.ledger import IReadTranscriptLedgerRepository, IWriteTranscriptLedgerRepository
 from blizzard.runner.usage.repository import (
     IReadExternalUsageRepository,
+    IReadHostLaneRepository,
     IReadUsageRepository,
     IWriteExternalUsageRepository,
     IWriteHostLaneRepository,
@@ -289,6 +290,7 @@ class HostReadStores:
     daemon_liveness: IReadDaemonLivenessRepository
     external_usage: IReadExternalUsageRepository
     host_identity: IReadHostIdentityRepository
+    host_lane: IReadHostLaneRepository
 
     @classmethod
     def of(cls, stores: HostStores) -> HostReadStores:
@@ -298,4 +300,5 @@ class HostReadStores:
             daemon_liveness=stores.daemon_liveness,
             external_usage=stores.external_usage,
             host_identity=stores.host_identity,
+            host_lane=stores.host_lane,
         )

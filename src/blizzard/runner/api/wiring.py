@@ -31,7 +31,9 @@ from blizzard.runner.harness.registry import IHarnessRegistry
 from blizzard.runner.harness.workspace_prompts import WorkspacePromptService
 from blizzard.runner.host_config import HaltedRunner
 from blizzard.runner.hub.held_token import ICurrentHubToken
-from blizzard.runner.hub.identity import IIdentityOnContact
+from blizzard.runner.hub.host_identity import HostIdentityHolder, ICurrentHostIdentity
+from blizzard.runner.hub.host_registration import HostRegistrationHolder, ICurrentHostRegistration
+from blizzard.runner.hub.identity import ICurrentIdentityVerdict, IIdentityOnContact
 from blizzard.runner.leases.activity import LocalLeaseService
 from blizzard.runner.leases.asks import AskService
 from blizzard.runner.leases.liveness import LeaseLivenessService
@@ -322,6 +324,20 @@ class RunnerWiring:
     def maybe_readiness(self) -> ReadinessService | None:
         """The readiness service; ``None`` on the store-free app, which reports not ready — never refused."""
         return self._seam("readiness")
+
+    def maybe_identity_verdict(self) -> ICurrentIdentityVerdict | None:
+        """The runner's identity verdict; ``None`` on a runner built without one."""
+        return self._seam("identity_verdict")
+
+    def host_registration(self) -> ICurrentHostRegistration:
+        """Where the host stands with its hub."""
+        registration: ICurrentHostRegistration | None = self._seam("host_registration")
+        return registration if registration is not None else HostRegistrationHolder.for_host(registered=False)
+
+    def host_identity(self) -> ICurrentHostIdentity:
+        """The identity the host's first answered report recorded."""
+        identity: ICurrentHostIdentity | None = self._seam("host_identity")
+        return identity if identity is not None else HostIdentityHolder()
 
     def maybe_identity_check(self) -> IIdentityOnContact | None:
         return self._seam("identity_check")

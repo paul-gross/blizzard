@@ -1,4 +1,5 @@
-"""The host's own reads — ``GET /api/host/runners``, ``/workspaces``, ``/environments`` and ``/subscriptions``.
+"""The host's own reads — ``GET /api/host/registration``, ``/runners``, ``/workspaces``, ``/environments`` and
+``/subscriptions``.
 
 Each composes the registered runners' own bound seams, stamping each runner's id; none reads across runners
 (``bzh:runner-scoped-store``). Read-only over their wiring (``bzh:controller-read-only``)."""
@@ -14,12 +15,15 @@ from blizzard.foundation.subscription_miss import SampleMissReason
 from blizzard.runner.api.wiring import RunnerWiring, ServedWorkspace
 from blizzard.runner.config import SubscriptionDeclaration
 from blizzard.runner.environments.repository import EnvBinding
+from blizzard.runner.hub.identity import ICurrentIdentityVerdict, IdentityState
 from blizzard.runner.usage.repository import IReadExternalUsageRepository
 from blizzard.wire.runner_host import (
     HostEnvironmentListResponse,
     HostEnvironmentView,
+    HostRegistrationView,
     HostRunnerBindingView,
     HostRunnerListResponse,
+    HostRunnerState,
     HostRunnerView,
     HostSubscriptionListResponse,
     HostSubscriptionView,
@@ -32,10 +36,31 @@ from blizzard.wire.runner_status import PauseStateView
 router = APIRouter(prefix="/api/host", tags=["host"])
 
 
+@router.get("/registration", response_model=HostRegistrationView)
+def host_registration(request: Request) -> HostRegistrationView:
+    """Where the host stands with its hub: unregistered, or — holding a host token — what its latest report found,
+    with the identity its first answered report recorded and the facts waiting on its own lane."""
+    wiring = RunnerWiring.of(request)
+    status = wiring.host_registration().current()
+    identity = wiring.host_identity().current()
+    stores = wiring.maybe_host_read_stores()
+    return HostRegistrationView(
+        state=status.state.value,
+        host_id=identity.host_id if identity is not None else None,
+        tenant_id=identity.tenant_id if identity is not None else None,
+        host_name=status.host_name,
+        answered_at=iso_utc(status.answered_at) if status.answered_at is not None else None,
+        held_runner_ids=list(status.held_runner_ids),
+        detail=status.detail,
+        buffered_facts=stores.host_lane.host_buffered_count() if stores is not None else 0,
+    )
+
+
 @router.get("/runners", response_model=HostRunnerListResponse)
 def list_runners(request: Request) -> HostRunnerListResponse:
     """Every runner the host holds — a served one with its brake, bindings and agents in use, a halted one with its
-    reasons."""
+    reasons. A served runner its identity verdict refuses — its token refused or naming another runner, or its hub
+    not holding it under the host — is halted too, naming why."""
     wiring = RunnerWiring.of(request)
     registry = wiring.runners()
     items: list[HostRunnerView] = []
@@ -45,11 +70,20 @@ def list_runners(request: Request) -> HostRunnerListResponse:
             HostRunnerBindingView(project=b.project, workspace_id=b.workspace, agents=b.agents)
             for b in runner.config().bindings or ()
         ]
+        halted_reasons = _refusal(runner.maybe_identity_verdict())
+        state: HostRunnerState = "halted" if halted_reasons else "serving"
         service = runner.maybe_status()
         if service is None:
             # A store-free runner: listed, with nothing of its brake or capacity to read.
             items.append(
-                HostRunnerView(runner_id=served.runner_id, name=served.name, state="serving", bindings=bindings)
+                HostRunnerView(
+                    runner_id=served.runner_id,
+                    name=served.name,
+                    state=state,
+                    served=True,
+                    halted_reasons=halted_reasons,
+                    bindings=bindings,
+                )
             )
             continue
         summary = service.summary()
@@ -57,7 +91,9 @@ def list_runners(request: Request) -> HostRunnerListResponse:
             HostRunnerView(
                 runner_id=served.runner_id,
                 name=served.name,
-                state="serving",
+                state=state,
+                served=True,
+                halted_reasons=halted_reasons,
                 pause=PauseStateView(
                     local=summary.pause.local,
                     hub=summary.pause.hub,
@@ -74,6 +110,18 @@ def list_runners(request: Request) -> HostRunnerListResponse:
         for halted in registry.halted
     )
     return HostRunnerListResponse(items=items)
+
+
+def _refusal(identity: ICurrentIdentityVerdict | None) -> list[str]:
+    """Why a served runner's identity verdict halts it, or nothing while it does not."""
+    if identity is None:
+        return []
+    verdict = identity.verdict()
+    if not verdict.refusing():
+        return []
+    if verdict.state is IdentityState.MISMATCHED:
+        return [f"its token belongs to runner {verdict.token_runner_id}, not the configured {verdict.store_runner_id}"]
+    return [verdict.reason or str(verdict.state)]
 
 
 @router.get("/workspaces", response_model=HostWorkspaceListResponse)

@@ -23,6 +23,13 @@ from blizzard.runner.config import ProjectBinding, RunnerConfig
 from blizzard.runner.harness.registry import HarnessRegistry
 from blizzard.runner.host_config import HaltedRunner
 from blizzard.runner.hub.client import BindingDeclaration
+from blizzard.runner.hub.host_identity import HostIdentity, HostIdentityHolder
+from blizzard.runner.hub.host_registration import (
+    HostRegistrationHolder,
+    HostRegistrationState,
+    HostRegistrationStatus,
+)
+from blizzard.runner.hub.identity import HostStanding, IdentityState, IdentityVerdictHolder
 from blizzard.runner.status.view import RunnerStatusService
 from blizzard.runner.stores import RunnerStores
 from tests.host_files import one_workspace
@@ -85,7 +92,12 @@ def _runner(
 
 
 def _two_runner_app(
-    tmp_path: Path, *, halted: tuple[HaltedRunner, ...] = ()
+    tmp_path: Path,
+    *,
+    halted: tuple[HaltedRunner, ...] = (),
+    verdicts: tuple[IdentityVerdictHolder | None, IdentityVerdictHolder | None] = (None, None),
+    registration: HostRegistrationHolder | None = None,
+    host_identity: HostIdentityHolder | None = None,
 ) -> tuple[FastAPI, RunnerStores, RunnerStores]:
     a_config, a_stores = _runner(tmp_path, "rn_a", "r-claude", bindings=(ProjectBinding("blizzard", "ws-1", 2),))
     b_config, b_stores = _runner(tmp_path, "rn_b", "r-chatgpt", bindings=(ProjectBinding("mock", "ws-1", 1),))
@@ -97,8 +109,9 @@ def _two_runner_app(
             process=None,  # type: ignore[arg-type]
             runner_stores=stores,
             runner_status=_status(stores.lease_record, config),  # type: ignore[arg-type]
+            identity_verdict=verdict,
         )
-        for config, stores in ((a_config, a_stores), (b_config, b_stores))
+        for config, stores, verdict in ((a_config, a_stores, verdicts[0]), (b_config, b_stores, verdicts[1]))
     )
     host_store = make_store(f"sqlite:///{tmp_path / 'host.db'}", None)
     app = create_app(
@@ -107,6 +120,8 @@ def _two_runner_app(
         halted=halted,
         workspaces=(ServedWorkspace("ws-1", ("e1", "e2", "e3"), 3),),
         host_stores=make_host_stores(host_store),
+        host_registration=registration,
+        host_identity=host_identity,
         clock=clock,
     )
     return app, a_stores, b_stores
@@ -206,6 +221,61 @@ def test_host_runners_lists_each_runner_served_or_halted(tmp_path: Path) -> None
     assert (items[0]["agents_in_use"], items[0]["max_agents"]) == (0, 2)
     assert items[1]["pause"]["local"] is True
     assert (items[2]["pause"], items[2]["halted_reasons"]) == (None, ["has no id"])
+
+
+def test_a_served_runner_its_hub_halts_is_listed_halted_naming_why_and_still_served(tmp_path: Path) -> None:
+    released = IdentityVerdictHolder("reset")
+    released.record(IdentityState.MATCHED, store_runner_id="rn_b", token_runner_id="rn_b", checked_at=_NOW)
+    released.stand(HostStanding.NOT_HELD, reason="not held under this host (hs_1) at its hub")
+    held = IdentityVerdictHolder("reset")
+    held.record(IdentityState.MATCHED, store_runner_id="rn_a", token_runner_id="rn_a", checked_at=_NOW)
+    app, _a, _b = _two_runner_app(tmp_path, verdicts=(held, released))
+    client = TestClient(app)
+
+    items = client.get("/api/host/runners").json()["items"]
+
+    assert [(i["runner_id"], i["state"], i["served"], i["halted_reasons"]) for i in items] == [
+        ("rn_a", "serving", True, []),
+        ("rn_b", "halted", True, ["not held under this host (hs_1) at its hub"]),
+    ]
+    # Its own views still read, so its panel can say why it is halted.
+    assert client.get("/runners/rn_b/api/runner").status_code == 200
+
+
+def test_the_host_registration_read_names_where_the_host_stands(tmp_path: Path) -> None:
+    unregistered, _a, _b = _two_runner_app(tmp_path)
+    assert TestClient(unregistered).get("/api/host/registration").json() == {
+        "state": "unregistered",
+        "host_id": None,
+        "tenant_id": None,
+        "host_name": None,
+        "answered_at": None,
+        "held_runner_ids": [],
+        "detail": None,
+        "buffered_facts": 0,
+    }
+
+    registration = HostRegistrationHolder.for_host(registered=True)
+    registration.hold(
+        HostRegistrationStatus(
+            HostRegistrationState.REGISTERED, answered_at=_NOW, host_name="host-a", held_runner_ids=("rn_a", "rn_b")
+        )
+    )
+    identity = HostIdentityHolder(HostIdentity("hs_1", "tn_1", _NOW))
+    (tmp_path / "registered").mkdir()
+    registered, _a, _b = _two_runner_app(tmp_path / "registered", registration=registration, host_identity=identity)
+    body = TestClient(registered).get("/api/host/registration").json()
+    assert (body["state"], body["host_id"], body["tenant_id"], body["host_name"]) == (
+        "registered",
+        "hs_1",
+        "tn_1",
+        "host-a",
+    )
+    assert body["held_runner_ids"] == ["rn_a", "rn_b"]
+
+    registration.hold(HostRegistrationStatus(HostRegistrationState.NO_HOSTS, detail="404: Not Found"))
+    body = TestClient(registered).get("/api/host/registration").json()
+    assert (body["state"], body["detail"]) == ("no_hosts", "404: Not Found")
 
 
 def test_ready_lists_each_runner_beside_the_store_fields(tmp_path: Path) -> None:

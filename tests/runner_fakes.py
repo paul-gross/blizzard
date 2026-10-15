@@ -527,7 +527,7 @@ class FakeHub:
         # capabilities per register call
         self.registered_capabilities: list[tuple[HarnessCapability, ...]] = []
         # subscriptions per register call
-        self.registered_subscriptions: list[tuple[SubscriptionDeclaration, ...]] = []
+        self.registered_subscriptions: list[tuple[SubscriptionDeclaration, ...] | None] = []
         self.registered_gates: list[tuple[str, ...]] = []
         self.registered_projects: list[tuple[str, ...] | None] = []
         self.registered_bindings: list[tuple[BindingDeclaration, ...] | None] = []
@@ -714,7 +714,7 @@ class FakeHub:
         url: str | None = None,
         redirect_uris: tuple[str, ...] = (),
         capabilities: tuple[HarnessCapability, ...] = (),
-        subscriptions: tuple[SubscriptionDeclaration, ...] = (),
+        subscriptions: tuple[SubscriptionDeclaration, ...] | None = (),
         gates: tuple[str, ...] = (),
         projects: tuple[str, ...] | None = None,
         bindings: tuple[BindingDeclaration, ...] | None = None,

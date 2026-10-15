@@ -668,6 +668,18 @@
               "required": false,
               "secondary_opts": [],
               "type": "text"
+            },
+            {
+              "help": "The host's runner to address, by name or id; may be omitted on a host of one runner.",
+              "hidden": false,
+              "kind": "option",
+              "name": "runner",
+              "opts": [
+                "--runner"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
             }
           ],
           "path": "runner harness status",
@@ -1025,6 +1037,18 @@
               "required": false,
               "secondary_opts": [],
               "type": "text"
+            },
+            {
+              "help": "The host's runner to address, by name or id; may be omitted on a host of one runner.",
+              "hidden": false,
+              "kind": "option",
+              "name": "runner",
+              "opts": [
+                "--runner"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
             }
           ],
           "path": "runner prompt clear",
@@ -1051,6 +1075,18 @@
               "name": "directory",
               "opts": [
                 "--dir"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "The host's runner to address, by name or id; may be omitted on a host of one runner.",
+              "hidden": false,
+              "kind": "option",
+              "name": "runner",
+              "opts": [
+                "--runner"
               ],
               "required": false,
               "secondary_opts": [],
@@ -1097,6 +1133,18 @@
               "required": false,
               "secondary_opts": [],
               "type": "boolean"
+            },
+            {
+              "help": "The host's runner to address, by name or id; may be omitted on a host of one runner.",
+              "hidden": false,
+              "kind": "option",
+              "name": "runner",
+              "opts": [
+                "--runner"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
             }
           ],
           "path": "runner prompt install",
@@ -1136,6 +1184,18 @@
               "name": "directory",
               "opts": [
                 "--dir"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "The host's runner to address, by name or id; may be omitted on a host of one runner.",
+              "hidden": false,
+              "kind": "option",
+              "name": "runner",
+              "opts": [
+                "--runner"
               ],
               "required": false,
               "secondary_opts": [],
@@ -1495,6 +1555,18 @@
           "required": false,
           "secondary_opts": [],
           "type": "text"
+        },
+        {
+          "help": "The host's runner to address, by name or id; may be omitted on a host of one runner.",
+          "hidden": false,
+          "kind": "option",
+          "name": "runner",
+          "opts": [
+            "--runner"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "type": "text"
         }
       ],
       "path": "runner tick",
@@ -1694,6 +1766,18 @@
               "required": false,
               "secondary_opts": [],
               "type": "integer"
+            },
+            {
+              "help": "The host's runner to address, by name or id; may be omitted on a host of one runner.",
+              "hidden": false,
+              "kind": "option",
+              "name": "runner",
+              "opts": [
+                "--runner"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
             }
           ],
           "path": "runner transcript backfill",
@@ -1720,6 +1804,18 @@
               "name": "directory",
               "opts": [
                 "--dir"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "The host's runner to address, by name or id; may be omitted on a host of one runner.",
+              "hidden": false,
+              "kind": "option",
+              "name": "runner",
+              "opts": [
+                "--runner"
               ],
               "required": false,
               "secondary_opts": [],

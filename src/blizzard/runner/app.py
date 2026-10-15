@@ -20,14 +20,16 @@ from fastapi.exceptions import HTTPException
 from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy import Engine
 from starlette.datastructures import State
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 from blizzard import __version__
 from blizzard.foundation.clock import IClock, IMonotonicClock, SystemClock, SystemMonotonicClock
 from blizzard.foundation.forwarded import TrustedProxies
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.platform_tracing.attributes import annotate
 from blizzard.foundation.platform_tracing.handle import DISABLED_TELEMETRY, IPlatformTracing
 from blizzard.foundation.roles import collaborator
-from blizzard.foundation.runner_paths import RUNNER_ROUTE_PREFIX, is_api_path
+from blizzard.foundation.runner_paths import RUNNER_ROUTE_PREFIX, RUNNERS_SEGMENT, is_api_path
 from blizzard.foundation.store.readiness import ReadinessService
 from blizzard.foundation.web import Frontend, install_schema_components
 from blizzard.runner.api.analytics import router as analytics_router
@@ -84,6 +86,8 @@ from blizzard.runner.harness.workspace_prompts import WorkspacePromptService
 from blizzard.runner.host_config import HaltedRunner
 from blizzard.runner.hub.client import BindingDeclaration
 from blizzard.runner.hub.held_token import ICurrentHubToken
+from blizzard.runner.hub.host_identity import HostIdentityHolder, ICurrentHostIdentity
+from blizzard.runner.hub.host_registration import HostRegistrationHolder, ICurrentHostRegistration
 from blizzard.runner.hub.identity import ICurrentIdentityVerdict, ICurrentRunnerIdentity, IIdentityOnContact
 from blizzard.runner.hub.internal.http_hub import HeldTokenAuth
 from blizzard.runner.leases.activity import LocalLeaseService
@@ -104,6 +108,7 @@ from blizzard.runner.status.view import RunnerStatusService
 from blizzard.runner.stores import HostReadStores, HostStores, IRunnerBinding, RunnerReadStores, RunnerStores
 from blizzard.runner.throttle.pause import PauseService
 from blizzard.runner.tracing.exclusion import is_excluded
+from blizzard.runner.tracing.platform import identity_stamp, stamping_as
 from blizzard.runner.tracing.receiving import TelemetryReceiver
 from blizzard.runner.tracing.replay import LeaseTraceReplay
 from blizzard.runner.tracing.status import LeaseTraceStatusReader
@@ -216,17 +221,20 @@ def runner_seams(
     identity_check: IIdentityOnContact | None = None,
     hub_token: ICurrentHubToken | None = None,
     binding: IRunnerBinding | None = None,
+    identity: ICurrentRunnerIdentity | None = None,
 ) -> ServedRunner:
     """One runner's seams, served under :attr:`RunnerConfig.served_id()`. Every store-backed seam is optional, so a
     store-free runner is possible; its routes then answer 503. ``selftests`` is always wired. ``identity_check`` gates
     the hub proxy, which forwards only once it verifies the token names the configured runner; absent, the proxy
     forwards ungated. ``hub_token`` is the token the proxy presents; absent, the proxy presents ``config``'s.
     ``binding`` is the store's runner binding; should it name no runner, the routes that write runner-scoped rows
-    answer 503."""
+    answer 503. ``identity`` is the runner's own holder, which every platform span its requests open is stamped
+    from."""
     runner_id = config.served_id()
     publisher = RunnerEventPublisher.over(events, runner_id)
     seams = State()
     seams.config = config
+    seams.identity = identity
     seams.identity_verdict = identity_verdict
     seams.identity_check = identity_check
     seams.hub_token = hub_token
@@ -288,6 +296,8 @@ def create_app(
     harnesses: IHarnessRegistry | None = None,
     runner_stores: RunnerStores | None = None,
     host_stores: HostStores | None = None,
+    host_registration: ICurrentHostRegistration | None = None,
+    host_identity: ICurrentHostIdentity | None = None,
     leases: LocalLeaseService | None = None,
     transcripts: TranscriptService | None = None,
     runner_status: RunnerStatusService | None = None,
@@ -362,6 +372,7 @@ def create_app(
                 identity_check=identity_check,
                 hub_token=hub_token,
                 binding=binding,
+                identity=identity,
             ),
         )
     if workspaces is None:
@@ -390,6 +401,9 @@ def create_app(
     app.state.workspace_registry = workspace_registry
     # The host-scoped stores, narrowed for controllers the way each runner's are.
     app.state.host_read_stores = HostReadStores.of(host_stores) if host_stores is not None else None
+    # Where the host stands with its hub, as its registration step last found it.
+    app.state.host_registration = host_registration or HostRegistrationHolder.for_host(registered=False)
+    app.state.host_identity = host_identity or HostIdentityHolder()
     # The SSE broker; `None` when no stream is wired.
     app.state.event_broker = events
     # Set on shutdown by `_lifespan`; the stream route's live wait races it.
@@ -444,6 +458,10 @@ def create_app(
                     return await call_next(request)
             return await call_next(request)
 
+    # Every platform span a request under a runner's prefix opens is that runner's; one on the host's own routes
+    # carries no runner identity.
+    app.add_middleware(_RunnerStampMiddleware)
+
     # The served shell's half of the human web lane's gate — see :class:`Lane`.
     @app.middleware("http")
     async def _gate_web_surface(request: Request, call_next):  # type: ignore[no-untyped-def]
@@ -472,6 +490,36 @@ def create_app(
     return app
 
 
+class _RunnerStampMiddleware:
+    """Run a request under ``/runners/{runner_id}`` in that runner's stamping context — read from the app's
+    registry, so a runner the host does not serve stamps nothing — and stamp the request's own server span, which
+    opens before any middleware runs."""
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        identity = _served_identity(scope) if scope["type"] == "http" else None
+        if identity is None:
+            await self.app(scope, receive, send)
+            return
+        if stamped := identity_stamp(identity)():
+            annotate(stamped)
+        with stamping_as(identity):
+            await self.app(scope, receive, send)
+
+
+def _served_identity(scope: Scope) -> ICurrentRunnerIdentity | None:
+    parts = str(scope.get("path", "")).split("/", 3)
+    if len(parts) < 3 or f"/{parts[1]}" != RUNNERS_SEGMENT:
+        return None
+    registry: RunnerRegistry | None = getattr(scope["app"].state, "runners", None)
+    for served in registry.served if registry is not None else ():
+        if served.runner_id == parts[2]:
+            return getattr(served.seams, "identity", None)
+    return None
+
+
 @dataclass(frozen=True)
 class HostedApp:
     """The served app and restart-resume hooks wired from one host graph."""
@@ -483,8 +531,8 @@ class HostedApp:
     #: The one `HarnessHealthCache` shared with the app, so a read and the registered availability agree; ``None``
     #: when the host built no runner.
     harness_health: HarnessHealthCache | None
-    archived_transcript_client: httpx.Client | None
-    hub_proxy_client: httpx.Client | None
+    #: The authenticated hub clients each runner's routes own — its archived-transcript reads and its hub proxy.
+    runner_clients: tuple[httpx.Client, ...]
     hub_http_client: httpx.Client
     owned_host: HostProcess | None = None
 
@@ -498,9 +546,8 @@ class HostedApp:
         with contextlib.ExitStack() as closing:
             if self.owned_host is not None:
                 closing.callback(self.owned_host.close)
-            for client in (self.archived_transcript_client, self.hub_proxy_client):
-                if client is not None:
-                    closing.callback(client.close)
+            for client in self.runner_clients:
+                closing.callback(client.close)
             closing.callback(self.hub_http_client.close)
 
 
@@ -535,8 +582,61 @@ def _wire_hosted_app(
     readiness = host.readiness
     if not host.runners:
         return _wire_runnerless_app(config, host, startup, owned_host=owned_host)
-    # The host serves one runner for now; its routes mount under its id, so a second only adds a registry entry.
-    (graph,) = host.runners
+    # Each runner's routes mount under its own id, over its own seams and its own authenticated hub clients.
+    # The first runner keeps the config the caller built the app from; each other runner is served from its own.
+    wired = [
+        _wire_runner(config if index == 0 else graph.config, host, graph, startup)
+        for index, graph in enumerate(host.runners)
+    ]
+    first = host.runners[0]
+    # The real, network-reaching hub client — only `host` wires one.
+    hub_http_client = startup.enter_context(httpx.Client(base_url=config.hub_url, timeout=5.0))
+    host.platform_tracing.instrument_client(hub_http_client)
+    app = create_app(
+        replace(config, runner_id=first.runner_id),
+        runners=tuple(runner.served for runner in wired),
+        halted=host.halted,
+        subscriptions=host.subscriptions,
+        platform_tracing=host.platform_tracing,
+        identity=first.identity,
+        readiness=readiness,
+        workspace_registry=host.workspaces,
+        host_stores=host.host_stores,
+        host_registration=host.host_registration,
+        host_identity=host.host_identity,
+        telemetry_receiver=host.telemetry_receiver,
+        hub_http_client=hub_http_client,
+        events=host.events,
+        clock=host.clock,
+        process=host.process,
+    )
+    resumes = tuple(
+        ResumeMarking(runner.stores, runner.host_stores, host.clock, host.process) for runner in host.runners
+    )
+    return HostedApp(
+        app,
+        resumes,
+        engine,
+        wired[0].harness_health,
+        tuple(client for runner in wired for client in runner.clients),
+        hub_http_client,
+        owned_host,
+    )
+
+
+@dataclass(frozen=True)
+class _WiredRunner:
+    """One hosted runner's served seams, its harness health, and the hub clients it owns."""
+
+    served: ServedRunner
+    harness_health: HarnessHealthCache
+    clients: tuple[httpx.Client, ...]
+
+
+def _wire_runner(
+    config: RunnerConfig, host: HostProcess, graph: RunnerProcess, startup: contextlib.ExitStack
+) -> _WiredRunner:
+    """``graph``'s seams, served under its id, with its own authenticated hub clients entered on ``startup``."""
     config = replace(config, runner_id=graph.runner_id)
     runner_stores = graph.stores
     connections = graph.connections
@@ -630,9 +730,6 @@ def _wire_hosted_app(
         environments=runner_stores.environments,
         outbound=runner_stores.outbound,
     )
-    # The real, network-reaching hub client — only `host` wires one.
-    hub_http_client = startup.enter_context(httpx.Client(base_url=config.hub_url, timeout=5.0))
-    platform_tracing.instrument_client(hub_http_client)
     served = runner_seams(
         config,
         clock=clock,
@@ -666,34 +763,9 @@ def _wire_hosted_app(
         git_commit_declarations=git_commit_declarations,
         harness_health=harness_health,
         hub_proxy_client=hub_proxy_client,
-    )
-    app = create_app(
-        config,
-        runners=(served,),
-        halted=host.halted,
-        subscriptions=host.subscriptions,
-        platform_tracing=platform_tracing,
         identity=graph.identity,
-        readiness=readiness,
-        workspace_registry=workspaces,
-        host_stores=host.host_stores,
-        telemetry_receiver=host.telemetry_receiver,
-        hub_http_client=hub_http_client,
-        events=events,
-        clock=clock,
-        process=process,
     )
-    resumes = tuple(ResumeMarking(runner.stores, runner.host_stores, clock, process) for runner in host.runners)
-    return HostedApp(
-        app,
-        resumes,
-        engine,
-        harness_health,
-        archived_transcript_client,
-        hub_proxy_client,
-        hub_http_client,
-        owned_host,
-    )
+    return _WiredRunner(served, harness_health, (archived_transcript_client, hub_proxy_client))
 
 
 def _wire_runnerless_app(
@@ -717,7 +789,7 @@ def _wire_runnerless_app(
         clock=host.clock,
         process=host.process,
     )
-    return HostedApp(app, (), host.engine, None, None, None, hub_http_client, owned_host)
+    return HostedApp(app, (), host.engine, None, (), hub_http_client, owned_host)
 
 
 def _served_workspace(workspace: HostWorkspace, registry: IWorkspaces | None) -> ServedWorkspace:

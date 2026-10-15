@@ -89,7 +89,7 @@ class VerifiedHubClient:
         url: str | None = None,
         redirect_uris: tuple[str, ...] = (),
         capabilities: tuple[HarnessCapability, ...] = (),
-        subscriptions: tuple[SubscriptionDeclaration, ...] = (),
+        subscriptions: tuple[SubscriptionDeclaration, ...] | None = (),
         gates: tuple[str, ...] = (),
         projects: tuple[str, ...] | None = None,
         bindings: tuple[BindingDeclaration, ...] | None = None,

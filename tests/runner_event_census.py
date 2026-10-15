@@ -290,6 +290,11 @@ WRITE_PROTOCOL_CENSUS: dict[str, Disposition] = {
         "_HostAttemptSink.record (runner/composition.py) on a registered host — the attempt and its report ride the "
         "host's own lane, which no runner's board or SSE stream carries."
     ),
+    "pending_host_facts": Silent("the host's lane drain's read of its own buffer — it writes nothing."),
+    "record_host_high_water": Silent(
+        "HostLaneDrain (runner/lifecycle/host_lane_drain.py), once per answered push — the host's own lane, which "
+        "no runner's board or SSE stream carries."
+    ),
     "record_host_identity": Silent(
         "the host's registration step, once, from its first answered report — the identity is the host's own, "
         "which no runner's board or SSE stream carries."

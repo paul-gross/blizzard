@@ -27,13 +27,13 @@ from blizzard.runner.host_layout import HostLayout
 from blizzard.runner.hub.held_token import HubTokenHolder
 from blizzard.runner.hub.host_identity import HostIdentity
 from blizzard.runner.hub.identity import IdentityVerdictHolder, RunnerIdentityHolder
+from blizzard.runner.lifecycle.host_tick import HostTick
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop_wiring import PeriodicDriver
 from blizzard.runner.store.schema import host_outbound_buffer
 from blizzard.runner.stores import RunnerStores
 from blizzard.runner.subscriptions.subscription_sampler import PROVIDER_ANTHROPIC, ExternalSubscriptionUsageSnapshot
 from blizzard.runner.usage.credential_renewal import CredentialRenewalPass
-from blizzard.runner.usage.host_tick import HostTick
 from blizzard.runner.usage.periodic_pass_driver import PeriodicPassDriver
 from tests.host_files import host_config_of
 from tests.runner_fakes import FakeSubscriptionSampler, migrated_store_at

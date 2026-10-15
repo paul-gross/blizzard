@@ -25,7 +25,7 @@ from blizzard.foundation.runner_token_names import hub_token_variable
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.migrations import MigrationConnectionError, RevisionMismatchError
 from blizzard.runner.app import HostedApp, build_hosted_app
-from blizzard.runner.cli.daemon import daemon_holding
+from blizzard.runner.cli.daemon import daemon_holding, runner_option
 from blizzard.runner.cli.directory import load_host
 from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
 from blizzard.runner.cli.store import runtime_of
@@ -306,6 +306,15 @@ def named_runners(config: IStoreLocation) -> tuple[str, ...]:
         ).runner_audit.named_runners()
     finally:
         engine.dispose()
+
+
+def configured_ids(config: RunnerConfig) -> tuple[str, ...]:
+    """The ids every ``[[runner]]`` of ``config``'s host file configures — the runners a store it opens may name."""
+    try:
+        host = HostConfig.load(config.root)
+    except ConfigError:
+        return ()
+    return tuple(entry.id for entry in host.runners if entry.id is not None)
 
 
 class _RuntimeStore:
@@ -614,9 +623,10 @@ def host(
         with click_exception_on(RevisionMismatchError, MigrationConnectionError):
             ensure_current_revision(config)
         named = named_runners(config)
+        ours = tuple(entry.id for entry in config.runners if entry.id is not None)
         kept: list[BuiltRunner] = []
         for built in runners:
-            if (reason := foreign_store_reason(named, built.id, reset_command(config.root))) is None:
+            if (reason := foreign_store_reason(named, built.id, reset_command(config.root), configured=ours)) is None:
                 kept.append(built)
             else:
                 halted.append(HaltedRunner(name=built.config.name, id=built.id, errors=(reason,)))
@@ -681,9 +691,12 @@ def _check(ctx: click.Context, root: Path, *, host: str | None, port: int | None
         if isinstance(projection, HaltedRunner):
             problems.append(projection.describe())
             continue
-        problem = foreign_store_reason(named, projection.id, reset_command(config.root)) or _resolve_token(
-            collaborators, config.hub_url, projection
-        )
+        problem = foreign_store_reason(
+            named,
+            projection.id,
+            reset_command(config.root),
+            configured=tuple(entry.id for entry in config.runners if entry.id is not None),
+        ) or _resolve_token(collaborators, config.hub_url, projection)
         if problem is None:
             click.echo(
                 f"runner {projection.config.name} ({projection.id}): its token ({projection.token.source}) "
@@ -792,6 +805,9 @@ def _serve_host(config: RunnerConfig, host: HostProcess, hosted: HostedApp) -> N
             if resumable:
                 click.echo(f"marked {resumable} crash-interrupted lease(s) for restart-resume")
 
+        # Report once before any runner ticks, so a runner the hub released under this host never claims across a
+        # restart; a report that fails or times out starts the runners anyway.
+        host.host_tick.report()
         for runner_threads in threads:
             runner_threads.start()
             started.append(runner_threads)
@@ -854,8 +870,9 @@ def _pass_drivers(config: RunnerConfig, runner: RunnerProcess) -> list[PeriodicP
     envvar=ENV_RUNNER_DIR,
     help="Host directory (overrides $BZ_RUNNER_DIR).",
 )
+@runner_option
 @click.pass_context
-def tick_cmd(ctx: click.Context, directory: str) -> None:
+def tick_cmd(ctx: click.Context, directory: str, runner: str | None) -> None:
     """Run ONE synchronous reconciliation tick (REAP → PULL → FILL → ADVANCE) of the host's runner.
 
     The steppable-loop driver for tests and the e2e (``bzh:steppable-loop``): a single pass against the
@@ -866,9 +883,12 @@ def tick_cmd(ctx: click.Context, directory: str) -> None:
     halted = [projection for projection in config.projections() if isinstance(projection, HaltedRunner)]
     if halted:
         raise click.ClickException("\n".join(runner.describe() for runner in halted))
-    if len(built) != 1:
-        raise click.ClickException(f"{config.layout.config_path} declares {len(built)} runners; a tick drives one")
-    (runner,) = built
+    with click_exception_on(ConfigError):
+        entry = config.sole_runner(runner)
+    picked = [projection for projection in built if projection.id == entry.id]
+    if not picked:
+        raise click.ClickException(f"runner {entry.name} is not built, so a tick cannot drive it")
+    (runner_built,) = picked
     try:
         lock = HostLock.acquire(config.layout)
     except HostHeld as exc:
@@ -879,12 +899,21 @@ def tick_cmd(ctx: click.Context, directory: str) -> None:
             raise click.ClickException(f"{holding}, so this tick cannot run — stop it first")
         with click_exception_on(RevisionMismatchError, MigrationConnectionError):
             ensure_current_revision(config)
-        if (reason := foreign_store_reason(named_runners(config), runner.id, reset_command(config.root))) is not None:
-            raise click.ClickException(f"runner {runner.config.name} ({runner.id}): {reason}")
-        bundle = _publish_harness_bundle(runner.config)
-        graph = build_runner_process(runner.config, bundle=bundle, runner_id=runner.id, token=runner.token)
+        if (
+            reason := foreign_store_reason(
+                named_runners(config),
+                runner_built.id,
+                reset_command(config.root),
+                configured=tuple(entry.id for entry in config.runners if entry.id is not None),
+            )
+        ) is not None:
+            raise click.ClickException(f"runner {runner_built.config.name} ({runner_built.id}): {reason}")
+        bundle = _publish_harness_bundle(runner_built.config)
+        graph = build_runner_process(
+            runner_built.config, bundle=bundle, runner_id=runner_built.id, token=runner_built.token
+        )
         try:
-            LoopWiring.of(runner.config, bundle=bundle).tick_once(process=graph)
+            LoopWiring.of(runner_built.config, bundle=bundle).tick_once(process=graph)
         finally:
             graph.close()
     click.echo("tick complete")

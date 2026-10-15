@@ -10,8 +10,14 @@ from pydantic import BaseModel, Field
 
 from blizzard.wire.runner_status import EnvironmentView, PauseStateView, SubscriptionView
 
-#: Whether the host serves a runner, or holds it halted by its own configuration errors.
+#: Whether the host serves a runner, or holds it halted — by its own configuration errors, or, while served, by a hub
+#: that refuses its token or does not hold it under the host.
 HostRunnerState = Literal["serving", "halted"]
+
+#: Where the host stands with its hub: ``unregistered``, holding no host token; ``pending``, holding one and not yet
+#: reported; ``registered``, the hub answering its latest report as this host; ``refused``, the hub refusing its token
+#: or answering as another host; ``no_hosts``, a hub from before hosts; ``unreachable``, its latest report unanswered.
+HostRegistrationState = Literal["unregistered", "pending", "registered", "refused", "no_hosts", "unreachable"]
 
 
 class HostRunnerStateView(BaseModel):
@@ -32,8 +38,11 @@ class HostRunnerBindingView(BaseModel):
 
 
 class HostRunnerView(HostRunnerStateView):
-    """One runner on the host: a served runner's brake, bindings and agents in use, or a halted one's reasons."""
+    """One runner on the host: a served runner's brake, bindings and agents in use, or a halted one's reasons.
+    ``served`` is whether its routes answer — true for a runner halted by its hub's refusal, whose own views still
+    read, false for one halted by its configuration."""
 
+    served: bool = False
     halted_reasons: list[str] = Field(default_factory=list)
     #: ``None`` for a halted runner, which holds no brake.
     pause: PauseStateView | None = None
@@ -45,6 +54,21 @@ class HostRunnerView(HostRunnerStateView):
 
 class HostRunnerListResponse(BaseModel):
     items: list[HostRunnerView] = []
+
+
+class HostRegistrationView(BaseModel):
+    """The host's registration at its hub, as its latest report found it: the identity its first answered report
+    recorded (``host_id``, ``tenant_id``), the name and runners the hub last answered for it, when, and — short of
+    registered — why. ``buffered_facts`` counts the facts waiting on the host's own lane."""
+
+    state: HostRegistrationState
+    host_id: str | None = None
+    tenant_id: str | None = None
+    host_name: str | None = None
+    answered_at: str | None = None
+    held_runner_ids: list[str] = Field(default_factory=list)
+    detail: str | None = None
+    buffered_facts: int = 0
 
 
 class HostWorkspaceView(BaseModel):

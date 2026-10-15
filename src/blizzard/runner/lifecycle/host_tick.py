@@ -7,20 +7,34 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from blizzard.runner.hub.host_registration import HostRegistration
+from blizzard.runner.lifecycle.host_lane_drain import HostLaneDrain
 from blizzard.runner.usage.credential_renewal import CredentialRenewalPass
 from blizzard.runner.usage.external_usage_sample import ExternalUsageSamplePass
 
 
 @dataclass(frozen=True)
 class HostTick:
-    """One pass over the host-scoped steps: the usage-sampling pass, absent when the host declares no subscription,
-    then the credential-renewal pass, absent when no provider binds a renewer."""
+    """One pass over the host-scoped steps: the host's registration, absent on a host with no host token; the
+    usage-sampling pass, absent when the host declares no subscription; the host's lane drain, absent with the
+    registration — after sampling, so a sample buffered this pass leaves in it; then the credential-renewal pass,
+    absent when no provider binds a renewer."""
 
+    registration: HostRegistration | None = None
     external_usage_sample: ExternalUsageSamplePass | None = None
+    lane_drain: HostLaneDrain | None = None
     credential_renewal: CredentialRenewalPass | None = None
 
+    def report(self) -> None:
+        """The registration step alone — what the host runs once before it starts its runners' ticks."""
+        if self.registration is not None:
+            self.registration.run()
+
     def run(self) -> None:
+        self.report()
         if self.external_usage_sample is not None:
             self.external_usage_sample.run()
+        if self.lane_drain is not None:
+            self.lane_drain.run()
         if self.credential_renewal is not None:
             self.credential_renewal.run()
