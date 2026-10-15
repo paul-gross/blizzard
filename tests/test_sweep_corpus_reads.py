@@ -16,7 +16,6 @@ import sqlalchemy as sa
 from sqlalchemy import event
 
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.chunk.model import WorkRef, WorkRefLabel
 from blizzard.hub.domain.observability.egress.events_window import EventsItem, position_of
 from blizzard.hub.domain.observability.egress.repository import (
@@ -25,14 +24,20 @@ from blizzard.hub.domain.observability.egress.repository import (
     EventsPosition,
     UsagePosition,
 )
-from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.egress_store import EgressStore
 from blizzard.hub.store.internal.hub_scoped_corpus import SweepCorpusReads
 from blizzard.hub.store.internal.hub_scoped_reads import hub_scoped_read
 from blizzard.hub.tenancy import HUB_SCOPED_OPTION, TenantId
 from tests.hub_event_rows import hub_events_of
-from tests.support import close_tenant, default_project, default_tenant, hub_level_connections, hub_scoped
+from tests.support import (
+    close_tenant,
+    default_project,
+    default_tenant,
+    hub_level_connections,
+    hub_scoped,
+    migrated_hub_at,
+)
 
 pytestmark = pytest.mark.component
 
@@ -47,7 +52,7 @@ _CLOSED = TenantId("ten_closed")
 class _World:
     def __init__(self, tmp_path: Path) -> None:
         db_url = f"sqlite:///{tmp_path / 'hub.db'}"
-        migration_runner(HubConfig(root=tmp_path, db_url=db_url)).upgrade("head")
+        migrated_hub_at(db_url)
         self.engine = create_engine_from_url(db_url)
         self.carried = default_tenant(self.engine)
         self.corpus = SweepCorpusReads(partial(hub_scoped_read, hub_level_connections(self.engine)))

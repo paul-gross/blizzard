@@ -22,14 +22,12 @@ from sqlalchemy.exc import IntegrityError
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.utc import UtcDateTime
-from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.chunk.model import WorkRef
 from blizzard.hub.domain.config.authoring import ConfigAuthoring
 from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.domain.config.repositories import RepositoryCoordinateTaken, RepositoryFields, RepositorySlugTaken
 from blizzard.hub.domain.config.secrets import SecretAlreadyExists, SecretName
 from blizzard.hub.domain.config.work_sources import WorkSourceFields, WorkSourceLocatorTaken, WorkSourceSlugTaken
-from blizzard.hub.runtime import migration_runner
 from blizzard.hub.secrets import hub_key_provider, secret_cipher
 from blizzard.hub.store import schema
 from blizzard.hub.store.internal.chunk_questions_store import ChunkQuestionsStore
@@ -44,7 +42,7 @@ from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from blizzard.hub.store.internal.work_source_record_store import WorkSourceRecordStore
 from blizzard.hub.store.scoped import is_project_keyed
 from blizzard.hub.tenancy import TenantId
-from tests.support import default_project, default_tenant, hub_scoped, scoped_connections
+from tests.support import default_project, default_tenant, hub_scoped, migrated_hub_at, scoped_connections
 
 pytestmark = pytest.mark.component
 
@@ -72,7 +70,7 @@ def tenants(tmp_path: Path) -> _Tenants:
     """A store migrated to head: its carried-over tenant, plus a second tenant registered beside it, each
     holding one project."""
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
-    migration_runner(HubConfig(root=tmp_path, db_url=db_url)).upgrade("head")
+    migrated_hub_at(db_url)
     engine = create_engine_from_url(db_url)
     first = default_tenant(engine)
     with engine.begin() as conn:

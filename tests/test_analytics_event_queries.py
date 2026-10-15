@@ -12,15 +12,13 @@ import pytest
 from sqlalchemy import Engine, insert
 
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.kernel.pagination import MalformedCursor, encode_cursor
 from blizzard.hub.domain.observability.analytics.events import SegmentProvenance, TranscriptEvent
 from blizzard.hub.domain.observability.analytics.queries import EventQueryCriteria
-from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.analytics_event_query_store import AnalyticsEventQueryStore
 from blizzard.hub.store.internal.transcript_event_store import TranscriptEventStore
-from tests.support import hub_store_connections, mint_graph, stamp
+from tests.support import hub_store_connections, migrated_hub_at, mint_graph, stamp
 
 pytestmark = pytest.mark.component
 
@@ -71,7 +69,7 @@ class _Fixture(NamedTuple):
 
 def _new_store(tmp_path: Path) -> _Fixture:
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
-    migration_runner(HubConfig(root=tmp_path, db_url=db_url)).upgrade("head")
+    migrated_hub_at(db_url)
     engine = create_engine_from_url(db_url)
     connections = hub_store_connections(engine)
     writer = TranscriptEventStore(connections)

@@ -21,7 +21,6 @@ from blizzard.runner.hub.identity import IdentityState, IdentityVerdictHolder, R
 from blizzard.runner.lifecycle.identity_check import IdentityCheck
 from blizzard.runner.lifecycle.registration import Registration
 from blizzard.runner.loop.context import LoopConfig, LoopContext
-from blizzard.runner.store import MIGRATIONS_DIR
 from blizzard.runner.store import schema as runner_schema
 from tests.runner_fakes import (
     FakeHarness,
@@ -31,6 +30,7 @@ from tests.runner_fakes import (
     SqlAlchemyRunnerStore,
     make_context,
     make_store,
+    migrated_store_at,
     runner_store_errors,
     serving,
 )
@@ -189,7 +189,7 @@ def test_no_table_but_the_identity_rows_carries_a_tenant(tmp_path: Path) -> None
     url = f"sqlite:///{tmp_path / 'store.db'}"
     engine = create_engine_from_url(url)
     try:
-        MigrationRunner(script_location=MIGRATIONS_DIR, url=url).upgrade("head")
+        migrated_store_at(url)
         inspector = sa.inspect(engine)
         migrated = {
             t for t in inspector.get_table_names() if any("tenant" in c["name"] for c in inspector.get_columns(t))

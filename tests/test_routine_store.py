@@ -14,18 +14,16 @@ import pytest
 from sqlalchemy import Engine, select
 
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.config.changes import ChangeContext, ChangeOp, ConfigChange, Door, RecordKind
 from blizzard.hub.domain.config.work_sources import ConfigRevisionConflict
 from blizzard.hub.domain.garden.routines import Routine, RoutineNameTakenError
 from blizzard.hub.domain.garden.scopes import Scope, ScopeMint, ScopeSlug
-from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.routine_scope_store import RoutineScopeStore
 from blizzard.hub.store.internal.routine_store import RoutineStore
 from blizzard.hub.store.internal.scope_store import ScopeStore
-from tests.support import default_project, hub_scoped, hub_store_connections, stamp
+from tests.support import default_project, hub_scoped, hub_store_connections, migrated_hub_at, stamp
 
 pytestmark = pytest.mark.component
 
@@ -34,7 +32,7 @@ _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
 
 def _store_and_engine(tmp_path: Path) -> tuple[RoutineStore, Engine]:
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
-    migration_runner(HubConfig(root=tmp_path, db_url=db_url)).upgrade("head")
+    migrated_hub_at(db_url)
     engine = create_engine_from_url(db_url)
     with engine.begin() as conn:
         conn.execute(s.scopes.insert().values(stamp(s.scopes, slug="blizzard", description="", created_at=_NOW)))

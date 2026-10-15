@@ -13,7 +13,6 @@ import sqlalchemy as sa
 from sqlalchemy import Engine
 
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.garden.review.materialize import (
     NewReviewFinding,
@@ -21,11 +20,10 @@ from blizzard.hub.domain.garden.review.materialize import (
     ReviewFindingsOutcome,
     ReviewFindingsPlan,
 )
-from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store.internal.review_findings_store import ReviewFindingsStore
 from blizzard.hub.store.schema import artifacts, chunks, config_changes, finding_facts, findings, scopes
 from blizzard.hub.store.scoped import ScopedStatements
-from tests.support import hub_scoped, hub_store_connections, seed_chunk, seed_graph, stamp
+from tests.support import hub_scoped, hub_store_connections, migrated_hub_at, seed_chunk, seed_graph, stamp
 
 pytestmark = pytest.mark.component
 
@@ -34,7 +32,7 @@ _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
 
 def _store_and_engine(tmp_path: Path) -> tuple[ReviewFindingsStore, Engine]:
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
-    migration_runner(HubConfig(root=tmp_path, db_url=db_url)).upgrade("head")
+    migrated_hub_at(db_url)
     engine = create_engine_from_url(db_url)
     with engine.begin() as conn:
         conn.execute(sa.insert(scopes).values(stamp(scopes, slug="blizzard", description="", created_at=_NOW)))

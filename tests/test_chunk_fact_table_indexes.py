@@ -20,9 +20,7 @@ from sqlalchemy import Engine, Row
 from sqlalchemy.dialects import sqlite
 
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.observability.analytics.operational import OperationalCriteria
-from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.analytics_operational_store import _spend_by_node_stmt
 from blizzard.hub.store.internal.chunk_events_store import (
@@ -51,7 +49,7 @@ from blizzard.hub.store.internal.transcript_event_store import _visible_segment_
 from blizzard.hub.store.scoped import ScopedStatements
 from blizzard.hub.tenancy import StoreScope, TenantId
 
-from .support import hub_store_connections, seed_chunk, seed_graph
+from .support import hub_store_connections, migrated_hub_at, seed_chunk, seed_graph
 
 pytestmark = pytest.mark.component
 
@@ -89,7 +87,7 @@ _CHUNK_ID_EPOCH_COMPOSITE_TABLES = ("transitions", "lease_facts", "chunk_bounces
 
 def _engine(tmp_path: Path) -> Engine:
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
-    migration_runner(HubConfig(root=tmp_path, db_url=db_url)).upgrade("head")
+    migrated_hub_at(db_url)
     engine = create_engine_from_url(db_url)
     with engine.begin() as conn:
         seed_graph(conn, "g1", at=_NOW)

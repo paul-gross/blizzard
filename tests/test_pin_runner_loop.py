@@ -25,7 +25,6 @@ from blizzard.runner.loop.context import DEFAULT_RETRIES_MAX
 from blizzard.runner.loop.steps import Advance, Resume
 from blizzard.runner.node_steps.chunk_state import ChunkPause, ChunkState
 from blizzard.runner.node_steps.submissions import ApplyReply
-from blizzard.runner.runtime import migration_runner
 from tests.host_files import one_workspace
 from tests.runner_fakes import (
     FakeCheckRunner,
@@ -38,6 +37,7 @@ from tests.runner_fakes import (
     make_context,
     make_envelope,
     make_store,
+    migrated_store_at,
 )
 
 _NOW = datetime(2026, 8, 4, 12, 0, 0, tzinfo=UTC)
@@ -267,7 +267,7 @@ def test_loop_wiring_uses_the_injected_runner_prompt_and_never_re_derives_it(tmp
         workspaces=one_workspace(root=str(tmp_path / "workspace")),
         runner_prompt_file="does-not-exist.md",
     )
-    migration_runner(config).upgrade("head")  # the graph reads the identity row at boot, as `host` does once current
+    migrated_store_at(config.db_url)  # the graph reads the identity row at boot, as `host` does once current
 
     try:
         with loop_context(config, runner_prompt="runner prose") as ctx:

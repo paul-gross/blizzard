@@ -12,13 +12,18 @@ import sqlalchemy as sa
 from sqlalchemy import Engine
 
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.chunk.model import Chunk, WorkItemAuthor, WorkRef
 from blizzard.hub.domain.garden.run_context import RunContext
-from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store.internal.run_context_store import RunContextStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
-from tests.support import default_project, default_tenant, hub_store_connections, seed_graph, seed_work_item
+from tests.support import (
+    default_project,
+    default_tenant,
+    hub_store_connections,
+    migrated_hub_at,
+    seed_graph,
+    seed_work_item,
+)
 
 pytestmark = pytest.mark.component
 
@@ -27,7 +32,7 @@ _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
 
 def _store_and_items(tmp_path: Path) -> tuple[RunContextStore, WorkItemStore, Engine]:
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
-    migration_runner(HubConfig(root=tmp_path, db_url=db_url)).upgrade("head")
+    migrated_hub_at(db_url)
     engine = create_engine_from_url(db_url)
     with engine.begin() as conn:
         conn.execute(

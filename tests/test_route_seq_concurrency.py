@@ -20,14 +20,12 @@ from sqlalchemy.sql.dml import Update
 from structlog import get_logger
 
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.hub.config import HubConfig
-from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreErrorFactory
 from blizzard.hub.store.internal.chunk_rows import lock_chunk_row, next_route_seq
 from blizzard.hub.store.scoped import ScopedConnections
 from blizzard.hub.tenancy import StoreScope, TenantId
-from tests.support import hub_store_connections, stamp
+from tests.support import hub_store_connections, migrated_hub_at, stamp
 
 pytestmark = pytest.mark.unit
 
@@ -99,7 +97,7 @@ def test_lock_chunk_row_compiles_to_the_same_row_scoped_statement_on_both_dialec
 
 def test_concurrent_seq_allocation_on_sqlite_never_duplicates(tmp_path: Path) -> None:
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
-    migration_runner(HubConfig(root=tmp_path, db_url=db_url)).upgrade("head")
+    migrated_hub_at(db_url)
     engine = create_engine_from_url(db_url)
 
     barrier = threading.Barrier(2)

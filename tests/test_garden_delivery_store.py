@@ -13,7 +13,6 @@ import sqlalchemy as sa
 from sqlalchemy import Engine, event
 
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.garden.delivery.materialize import (
     DeliveryOutcome,
@@ -25,7 +24,6 @@ from blizzard.hub.domain.garden.delivery.materialize import (
     NewProposal,
 )
 from blizzard.hub.domain.garden.run_context import RunContext
-from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store.internal.garden_delivery_store import GardenDeliveryStore
 from blizzard.hub.store.schema import (
     artifacts,
@@ -40,6 +38,7 @@ from tests.support import (
     default_tenant,
     hub_scoped,
     hub_store_connections,
+    migrated_hub_at,
     seed_chunk,
     seed_graph,
     stamp,
@@ -55,7 +54,7 @@ _RUN = RunContext(project_id=_PROJECT, routine_name="nightly", scope_slug="blizz
 
 def _store_and_engine(tmp_path: Path, *, enforce_foreign_keys: bool = False) -> tuple[GardenDeliveryStore, Engine]:
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
-    migration_runner(HubConfig(root=tmp_path, db_url=db_url)).upgrade("head")
+    migrated_hub_at(db_url)
     engine = create_engine_from_url(db_url)
     if enforce_foreign_keys:
         # sqlite runs with FK enforcement off by default — the very reason a wrong
