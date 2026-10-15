@@ -856,7 +856,7 @@
           "type": "text"
         },
         {
-          "help": "Add the host, or a runner, again when its hub does not know its token \u2014 only after that hub's data was reset. A host added again sets the store aside and adds every runner again under it.",
+          "help": "Add the host, or a runner, again when its hub does not know its token \u2014 only after that hub's data was reset. A host added again sets the store aside and adds every runner again under it; a runner beside another is never added again in place, since the store it would set aside is theirs too.",
           "hidden": false,
           "kind": "option",
           "name": "allow_readd",
@@ -1332,7 +1332,7 @@
       "short_help": "Hand a needs_human chunk back to the fleet: a fresh attempt at its current node."
     },
     "retire": {
-      "help": "Retire one of this registered host's runners at its hub, then remove its `[[runner]]` from the host file. A\nrunning host halts it at its next tick, the hub refusing its token; its rows stay in the host's store.\n\nRefused, with nothing retired, on a host holding no host token, or while the runner holds chunks unless --force\nreleases them.",
+      "help": "Retire one of this registered host's runners at its hub, then remove its `[[runner]]` from the host file. A\nrunning host halts it at its next tick, the hub refusing its token; the host's store forgets its identity, and\nits other rows stay there, inert.\n\nRefused, with nothing retired, on a host holding no host token, or while the runner holds chunks unless --force\nreleases them.",
       "params": [
         {
           "help": "Host directory (overrides $BZ_RUNNER_DIR).",

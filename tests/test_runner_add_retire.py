@@ -210,3 +210,23 @@ def test_retire_forgets_the_runners_identity_so_init_runs_again_over_the_remaini
     assert named_runners(HostConfig.load(root)) == ("rn_init1",)
     again = _run(fake_init_hub, "init", str(root), "--hub", _HUB)
     assert again.exit_code == 0, again.output
+
+
+def test_a_readd_of_one_runner_beside_another_refuses_rather_than_set_the_shared_store_aside(
+    tmp_path: Path, fake_init_hub: FakeInitHub
+) -> None:
+    root = _registered(tmp_path, fake_init_hub)
+    assert _run(fake_init_hub, "add", "r2", "--project", "default", "--dir", str(root)).exit_code == 0
+    assert _run(fake_init_hub, "init", str(root), "--hub", _HUB).exit_code == 0
+    env = root / ENV_FILENAME
+    env.write_text("".join(line for line in env.read_text().splitlines(keepends=True) if "BZ_HUB_TOKEN_R2" not in line))
+    store = HostLayout(root).store_path
+    before = (named_runners(HostConfig.load(root)), HostLayout(root).config_path.read_bytes())
+
+    refused = _run(fake_init_hub, "init", str(root), "--hub", _HUB, "--allow-readd")
+
+    assert refused.exit_code != 0
+    assert "runner-local" in refused.output and "blizzard runner retire --runner r2" in refused.output
+    assert (named_runners(HostConfig.load(root)), HostLayout(root).config_path.read_bytes()) == before
+    assert not [path for path in store.parent.iterdir() if path.name.startswith(f"{store.name}.")]
+    assert len(fake_init_hub.admin.added) == 2

@@ -166,7 +166,8 @@ class InitCollaborators:
     "--allow-readd",
     is_flag=True,
     help="Add the host, or a runner, again when its hub does not know its token — only after that hub's data was "
-    "reset. A host added again sets the store aside and adds every runner again under it.",
+    "reset. A host added again sets the store aside and adds every runner again under it; a runner beside another is "
+    "never added again in place, since the store it would set aside is theirs too.",
 )
 @click.option(
     "--tenant",
@@ -552,6 +553,9 @@ class _RuntimeStore:
         named = [runner_id for runner_id in named_runners(self.config) if runner_id not in siblings]
         return named[0] if named else None
 
+    def is_set_aside(self) -> bool:
+        return self._set_aside
+
     def set_aside(self) -> None:
         if self._set_aside:
             return
@@ -576,6 +580,21 @@ class _RunnerStoreView:
         return self.store.stored_runner_id(sibling_of=self.entry)
 
     def set_aside(self) -> None:
+        """Set the shared store aside for this runner's re-add — a no-op once the host's own re-add set it aside,
+        and refused while another ``[[runner]]`` stays beside it: setting the store aside would drop that runner's
+        backlog and rewind its sequences below the hub's high-water marks."""
+        if self.store.is_set_aside():
+            return
+        config = self.store.config
+        siblings = [other.name for other in config.runners if other.name != self.entry.name]
+        if siblings:
+            name = self.entry.name
+            raise click.ClickException(
+                f"runner {name} cannot be added again in place: the store it would set aside also holds runner "
+                f"{', '.join(siblings)}, whose backlog it would drop. Retire it with `blizzard runner retire --runner "
+                f"{name} --dir {config.root}` and add a fresh one with `blizzard runner add {name} --project "
+                f"<project> --dir {config.root}`. Nothing was added"
+            )
         self.store.set_aside()
 
 

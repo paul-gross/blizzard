@@ -95,7 +95,10 @@ host token the hub refuses as a retired host's stops init too.
 
 Before it re-adds, init sets the store aside under a timestamped name beside it and migrates a fresh one,
 so the new runner never inherits the old one's leases and buffered facts. Nothing is deleted: the old store keeps them.
-It refuses while the runner's daemon is running. A runner holding no token whose store still belongs to a runner stops
+It refuses while the runner's daemon is running. The store is the host's, shared by every runner it configures, so a
+runner is never re-added in place beside another: setting the store aside would drop that runner's backlog. Init
+refuses, naming `blizzard runner retire` and `blizzard runner add`, which replace the one runner and leave the store
+as it is; a host re-added sets the store aside once and adds every runner again over it. A runner holding no token whose store still belongs to a runner stops
 the same way an unknown token does: put that runner's token back, or re-run init with `--allow-readd`.
 
 A runner's token variable is derived from its `name`, as above; the host file has no key to rename it. Every runner verb
