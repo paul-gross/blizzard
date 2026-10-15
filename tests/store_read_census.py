@@ -196,6 +196,7 @@ from blizzard.runner.transcripts.repository import IReadTranscriptRepository
 from blizzard.runner.usage.repository import (
     IReadCredentialRenewalRepository,
     IReadExternalUsageRepository,
+    IReadHostLaneRepository,
     IReadUsageRepository,
 )
 from tests.runner_fakes import record_usage
@@ -834,6 +835,7 @@ RUNNER_CENSUS: dict[tuple[type, str], RunnerRecipe] = {
     (IReadExternalUsageRepository, "latest_external_usage_attempts_by_slug"): lambda w: (
         w.host_read.external_usage.latest_external_usage_attempts_by_slug([w.usage_slug])
     ),
+    (IReadHostLaneRepository, "host_registered"): lambda w: w.host_read.host_lane.host_registered(),
     (IReadCredentialRenewalRepository, "last_credential_renewal_claim_at"): lambda w: (
         w.host_read.external_usage.last_credential_renewal_claim_at(w.usage_slug)
     ),
