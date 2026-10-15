@@ -233,7 +233,12 @@ def init(
             _join_runner(config, entry, collaborators, HostJoin(host, host_clients(host.token)), store, rerun)
 
 
-@collaborator
+def write_runner_token(root: Path, token_env: str, token: str) -> None:
+    """Write ``token`` to the host directory's ``.env`` as ``token_env``, for the verbs outside this composition
+    root."""
+    HubTokenFile.of(root, token_env).write(token)
+
+
 @dataclass(frozen=True)
 class HostJoin:
     """The host init registered, and its own hub calls under the token it holds."""
@@ -561,7 +566,6 @@ class _RuntimeStore:
         return _RunnerStoreView(self, entry)
 
 
-@collaborator
 @dataclass(frozen=True)
 class _RunnerStoreView:
     store: _RuntimeStore

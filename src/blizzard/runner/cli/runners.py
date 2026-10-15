@@ -15,7 +15,7 @@ from blizzard.foundation.runner_token_names import hub_token_variable
 from blizzard.runner.cli.daemon import daemon_holding
 from blizzard.runner.cli.directory import load_host
 from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
-from blizzard.runner.cli.runtime import InitCollaborators
+from blizzard.runner.cli.runtime import InitCollaborators, write_runner_token
 from blizzard.runner.config import SCAFFOLD_AGENTS, ProjectBinding
 from blizzard.runner.config_table import ConfigError
 from blizzard.runner.host_config import (
@@ -33,7 +33,6 @@ from blizzard.runner.hub.client import (
     HubClientError,
     RunnerAddRefused,
 )
-from blizzard.runner.hub.internal.token_file import HubTokenFile
 from blizzard.runner.hub.token_file import ENV_FILENAME
 
 #: Where a host keeps each runner's own files, by runner name.
@@ -114,7 +113,7 @@ def add(
         raise click.ClickException(_host_refused(answer, hub, f"add runner {name}"))
     retire = f"`blizzard runner retire --runner {answer.runner_id} --dir {config.root}`"
     try:
-        HubTokenFile.of(config.root, token_env).write(answer.token)
+        write_runner_token(config.root, token_env, answer.token)
     except OSError as exc:
         raise click.ClickException(
             f"runner {name} ({answer.runner_id}) was added at {hub}, but its token was not written: {exc}; retire "
