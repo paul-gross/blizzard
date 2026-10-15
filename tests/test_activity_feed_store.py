@@ -17,17 +17,15 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.hub_event_types import ActivityChunkChangeCause, ChunkChangeCause
 from blizzard.foundation.migration_source import MigrationSource
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.chunk.model import ActivityEntry, DecisionChoice
 from blizzard.hub.domain.chunk.ports.events import IReadChunkEventsRepository
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
 from blizzard.hub.domain.runners.registration import IReadRunnerRegistry, RunnerAddition
 from blizzard.hub.domain.runners.route import Route
-from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store.internal.chunk_rows import record_deleted_row, record_grouped_row_conn
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
-from tests.support import chunk_stores, hub_store_connections, migrate_to, seed_chunk, seed_graph
+from tests.support import chunk_stores, hub_store_connections, migrate_to, migrated_hub_at, seed_chunk, seed_graph
 
 pytestmark = pytest.mark.component
 
@@ -428,7 +426,7 @@ def test_no_single_source_read_exceeds_the_limit(tmp_path: Path) -> None:
 
 def _registry_store(tmp_path: Path) -> RunnerRegistryStore:
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
-    migration_runner(HubConfig(root=tmp_path, db_url=db_url)).upgrade("head")
+    migrated_hub_at(db_url)
     store = RunnerRegistryStore(hub_store_connections(create_engine_from_url(db_url)))
     store.add(RunnerAddition("runner-a", "runner-a", "hash-runner-a", at=_T0, by="test"))
     return store

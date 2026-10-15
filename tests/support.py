@@ -31,7 +31,7 @@ import httpx
 import sqlalchemy as sa
 from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
-from sqlalchemy import Engine, event
+from sqlalchemy import Engine, event, make_url
 from sqlalchemy import insert as sa_insert
 from sqlalchemy.sql.base import Executable
 
@@ -1163,6 +1163,15 @@ def hub_migration_prototype() -> Path:
         return _hub_prototype_db
 
 
+def migrated_hub_at(db_url: str) -> None:
+    """Lay a head-migrated hub store at the URL's sqlite file unless it already exists."""
+    path = Path(make_url(db_url).database or "")
+    if path.exists():
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(hub_migration_prototype(), path)
+
+
 def checkpoint_sqlite(db_url: str) -> None:
     """Flush a sqlite file's WAL back into itself and drop the connection — a bare copy
     of the ``.db`` file is only a complete store once no ``-wal``/``-shm`` sidecar is
@@ -1931,7 +1940,10 @@ def migrate_to(tmp_path: Path, revision: str) -> tuple[MigrationRunner, Engine]:
     today's ``schema`` tables, outside any tenant scope, goes through ``hub_scoped_engine``."""
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
     runner = Migrations(HubConfig(root=tmp_path, db_url=db_url), MIGRATION_CLOCK).runner
-    runner.upgrade(revision)
+    if revision == "head" and not (tmp_path / "hub.db").exists():
+        migrated_hub_at(db_url)
+    else:
+        runner.upgrade(revision)
     return runner, create_engine_from_url(db_url)
 
 

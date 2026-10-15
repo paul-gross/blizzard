@@ -21,9 +21,7 @@ from blizzard.hub.auth.internal.session_repository import SessionRepository
 from blizzard.hub.auth.internal.superuser_bootstrap_repository import SuperuserBootstrapRepository
 from blizzard.hub.auth.internal.user_repository import UserRepository
 from blizzard.hub.auth.models import AuthFact, AuthStateEntry, Identity, Session, SuperuserBootstrap, User
-from blizzard.hub.config import HubConfig
-from blizzard.hub.runtime import migration_runner
-from tests.support import hub_store_connections
+from tests.support import hub_store_connections, migrated_hub_at
 
 pytestmark = pytest.mark.component
 
@@ -33,7 +31,7 @@ _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 @pytest.fixture
 def store(tmp_path: Path):  # type: ignore[no-untyped-def]
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
-    migration_runner(HubConfig(root=tmp_path, db_url=db_url)).upgrade("head")
+    migrated_hub_at(db_url)
     return hub_store_connections(create_engine_from_url(db_url))
 
 

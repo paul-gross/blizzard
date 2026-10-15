@@ -16,16 +16,14 @@ from sqlalchemy.sql import ClauseElement, visitors
 from sqlalchemy.sql.elements import TextClause
 
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.observability.transcripts import TranscriptSlice
-from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreError
 from blizzard.hub.store.internal import transcript_segment_store as store_module
 from blizzard.hub.store.internal.transcript_segment_store import TranscriptSegmentStore
 from blizzard.hub.store.scoped import ScopedStatements
 from blizzard.hub.tenancy import StoreScope, TenantId
-from tests.support import hub_store_connections
+from tests.support import hub_store_connections, migrated_hub_at
 
 pytestmark = pytest.mark.unit
 
@@ -56,7 +54,7 @@ def _record(**overrides: object) -> TranscriptSlice:
 
 def _migrated_engine(tmp_path: Path):  # type: ignore[no-untyped-def]
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
-    migration_runner(HubConfig(root=tmp_path, db_url=db_url)).upgrade("head")
+    migrated_hub_at(db_url)
     return create_engine_from_url(db_url)
 
 

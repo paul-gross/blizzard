@@ -13,11 +13,9 @@ from pathlib import Path
 import pytest
 
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.runners.registration import RunnerAddition, RunnerCapability
-from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
-from tests.support import hub_store_connections
+from tests.support import hub_store_connections, migrated_hub_at
 
 pytestmark = pytest.mark.unit
 
@@ -27,7 +25,7 @@ _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
 def _store(tmp_path: Path) -> RunnerRegistryStore:
     """A migrated store holding the added runner ``r1``, ready for its registrations."""
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
-    migration_runner(HubConfig(root=tmp_path, db_url=db_url)).upgrade("head")
+    migrated_hub_at(db_url)
     store = RunnerRegistryStore(hub_store_connections(create_engine_from_url(db_url)))
     store.add(RunnerAddition("r1", "r1", "hash-r1", at=_NOW, by="test"))
     return store

@@ -17,7 +17,6 @@ import pytest
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.chunk.model import Chunk
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.observability.analytics.derivation import (
@@ -29,7 +28,6 @@ from blizzard.hub.domain.observability.analytics.derivation import (
 from blizzard.hub.domain.observability.analytics.events import KIND_FILE_READ
 from blizzard.hub.domain.observability.analytics.extraction import EXTRACTOR_VERSION
 from blizzard.hub.domain.observability.transcripts import TranscriptSlice
-from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from blizzard.hub.store.internal.chunk_record_store import ChunkRecordStore
@@ -42,6 +40,7 @@ from tests.support import (
     count_queries,
     hub_level_connections,
     hub_store_connections,
+    migrated_hub_at,
     seed_chunk_record,
 )
 
@@ -98,7 +97,7 @@ def _segment_record(**overrides: object) -> TranscriptSlice:
 class _Fixture:
     def __init__(self, tmp_path: Path) -> None:
         db_url = f"sqlite:///{tmp_path / 'hub.db'}"
-        migration_runner(HubConfig(root=tmp_path, db_url=db_url)).upgrade("head")
+        migrated_hub_at(db_url)
         self.engine = create_engine_from_url(db_url)
         self.chunks = chunk_stores(self.engine, FixedClock(_NOW))
         self.segments = TranscriptSegmentStore(hub_store_connections(self.engine))

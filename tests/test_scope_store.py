@@ -15,15 +15,13 @@ from sqlalchemy import Engine
 from structlog.testing import capture_logs
 
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.config.changes import ChangeContext, ConfigChange, Door
 from blizzard.hub.domain.config.work_sources import ConfigRevisionConflict
 from blizzard.hub.domain.garden.scopes import Scope, ScopeEdit, ScopeSlug
-from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store.errors import HubStoreError
 from blizzard.hub.store.internal.scope_store import ScopeStore
 from blizzard.hub.store.schema import config_changes, scope_lifecycle_facts, scopes
-from tests.support import default_project, hub_store_connections, seed_project
+from tests.support import default_project, hub_store_connections, migrated_hub_at, seed_project
 
 pytestmark = pytest.mark.component
 
@@ -32,7 +30,7 @@ _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
 
 def _store_and_engine(tmp_path: Path) -> tuple[ScopeStore, Engine]:
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
-    migration_runner(HubConfig(root=tmp_path, db_url=db_url)).upgrade("head")
+    migrated_hub_at(db_url)
     engine = create_engine_from_url(db_url)
     return ScopeStore(hub_store_connections(engine)), engine
 

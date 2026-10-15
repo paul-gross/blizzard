@@ -21,12 +21,10 @@ from sqlalchemy.exc import IntegrityError
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.utc import UtcDateTime
-from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.config.changes import ChangeContext, ChangeOp, ConfigChange, Door, RecordKind
 from blizzard.hub.domain.garden.routines import Routine
 from blizzard.hub.domain.garden.run_context import RunContext
 from blizzard.hub.domain.garden.scopes import Scope, ScopeSlug
-from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.finding_store import FindingSetStore, FindingStore
 from blizzard.hub.store.internal.routine_scope_store import RoutineScopeStore
@@ -35,7 +33,7 @@ from blizzard.hub.store.internal.run_context_store import RunContextStore
 from blizzard.hub.store.internal.scope_store import ScopeStore
 from blizzard.hub.store.scoped import ScopedConnections
 from blizzard.hub.tenancy import TenantId
-from tests.support import default_project, default_tenant, hub_scoped, scoped_connections
+from tests.support import default_project, default_tenant, hub_scoped, migrated_hub_at, scoped_connections
 
 _PROJECT = "proj_test"
 
@@ -143,7 +141,7 @@ def store(tmp_path: Path) -> _Store:
     """A store migrated to head, its carried-over tenant and a second one each holding scope ``blizzard`` with a
     routine, a link, a run, a finding and a finding set attached."""
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
-    migration_runner(HubConfig(root=tmp_path, db_url=db_url)).upgrade("head")
+    migrated_hub_at(db_url)
     engine = create_engine_from_url(db_url)
     first = default_tenant(engine)
     with engine.begin() as conn:

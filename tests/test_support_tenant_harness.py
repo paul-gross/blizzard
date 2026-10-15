@@ -11,12 +11,10 @@ import sqlalchemy as sa
 from sqlalchemy import event
 
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.hub.config import HubConfig
-from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import schema
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.tenancy import HUB_SCOPED_OPTION
-from tests.support import default_tenant, hub_level_connections, hub_scoped, hub_scoped_engine, stamp
+from tests.support import default_tenant, hub_level_connections, hub_scoped, hub_scoped_engine, migrated_hub_at, stamp
 
 pytestmark = pytest.mark.component
 
@@ -25,7 +23,7 @@ _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 
 def _head_store(tmp_path: Path) -> sa.Engine:
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
-    migration_runner(HubConfig(root=tmp_path, db_url=db_url)).upgrade("head")
+    migrated_hub_at(db_url)
     return create_engine_from_url(db_url)
 
 

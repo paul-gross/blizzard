@@ -27,13 +27,11 @@ from blizzard.hub.auth.internal.identity_repository import IdentityRepository
 from blizzard.hub.auth.internal.session_repository import SessionRepository
 from blizzard.hub.auth.internal.superuser_bootstrap_repository import SuperuserBootstrapRepository
 from blizzard.hub.auth.internal.user_repository import UserRepository
-from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.chunk.model import WorkRef
 from blizzard.hub.domain.observability.analytics.events import DerivationMarker
 from blizzard.hub.domain.observability.analytics.operational import OperationalCriteria
 from blizzard.hub.domain.observability.analytics.queries import EventQueryCriteria
 from blizzard.hub.domain.observability.egress.repository import EpochKey, EventsPosition
-from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store.errors import HubStoreError
 from blizzard.hub.store.internal.analytics_event_query_store import AnalyticsEventQueryStore
 from blizzard.hub.store.internal.analytics_operational_store import AnalyticsOperationalStore
@@ -64,7 +62,7 @@ from blizzard.hub.store.internal.transcript_event_store import TranscriptEventSt
 from blizzard.hub.store.internal.transcript_segment_store import TranscriptSegmentStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from blizzard.hub.tenancy import TenantId
-from tests.support import scoped_connections
+from tests.support import migrated_hub_at, scoped_connections
 
 pytestmark = pytest.mark.component
 
@@ -291,7 +289,7 @@ def _schema_missing_engine(tmp_path: Path) -> Engine:
     fault raised mid-query rather than at connection acquisition (the
     ``tests/test_scope_store.py`` pilot's own technique, reused here across every adapter)."""
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
-    migration_runner(HubConfig(root=tmp_path, db_url=db_url)).upgrade("head")
+    migrated_hub_at(db_url)
     engine = create_engine_from_url(db_url)
     engine.dispose()
     (tmp_path / "hub.db").unlink()

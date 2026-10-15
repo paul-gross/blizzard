@@ -10,13 +10,11 @@ import pytest
 import sqlalchemy as sa
 
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.runners.registration import RunnerAddition, RunnerRegistration, ServedEntry
-from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import schema
 from blizzard.hub.store.errors import HubStoreError
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
-from tests.support import count_queries, default_tenant, hub_store_connections
+from tests.support import count_queries, default_tenant, hub_store_connections, migrated_hub_at
 
 pytestmark = pytest.mark.component
 
@@ -26,7 +24,7 @@ _LATER = _T0 + timedelta(minutes=5)
 
 def _engine(tmp_path: Path) -> sa.Engine:
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
-    migration_runner(HubConfig(root=tmp_path, db_url=db_url)).upgrade("head")
+    migrated_hub_at(db_url)
     return create_engine_from_url(db_url)
 
 

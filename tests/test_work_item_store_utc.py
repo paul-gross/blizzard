@@ -14,11 +14,9 @@ import pytest
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.work_items import WorkItemClosure
-from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.chunk.model import WorkItemAuthor
-from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
-from tests.support import hub_store_connections, seed_graph, seed_work_item
+from tests.support import hub_store_connections, migrated_hub_at, seed_graph, seed_work_item
 
 pytestmark = pytest.mark.unit
 
@@ -27,7 +25,7 @@ _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
 
 def _store(tmp_path: Path) -> WorkItemStore:
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
-    migration_runner(HubConfig(root=tmp_path, db_url=db_url)).upgrade("head")
+    migrated_hub_at(db_url)
     engine = create_engine_from_url(db_url)
     with engine.begin() as conn:
         seed_graph(conn, "gr_1", at=_NOW)

@@ -14,14 +14,12 @@ import pytest
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.composition import LiveConfig, build_hub_core, build_live_config
-from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.config.changes import RecordKind
 from blizzard.hub.domain.config.secrets import SecretName
 from blizzard.hub.domain.config.work_sources import WorkSourceEdit, WorkSourceFields
-from blizzard.hub.runtime import migration_runner
 from blizzard.hub.secrets import hub_key_provider
 from blizzard.hub.tenancy import StoreScope
-from tests.support import OP, config_authoring, default_tenant
+from tests.support import OP, config_authoring, default_tenant, migrated_hub_at
 
 pytestmark = pytest.mark.component
 
@@ -45,7 +43,7 @@ class _Client:
 class _World:
     def __init__(self, tmp_path: Path) -> None:
         db_url = f"sqlite:///{tmp_path / 'hub.db'}"
-        migration_runner(HubConfig(root=tmp_path, db_url=db_url)).upgrade("head")
+        migrated_hub_at(db_url)
         self.engine = create_engine_from_url(db_url)
         self.keys = hub_key_provider({}, data_dir=tmp_path / "data")
         clock = FixedClock(_NOW)

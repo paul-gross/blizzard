@@ -14,7 +14,6 @@ from sqlalchemy import Engine
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store import batching as batching_module
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.domain.config.secrets import (
     SecretAlreadyExists,
@@ -24,11 +23,10 @@ from blizzard.hub.domain.config.secrets import (
     SecretRevisionConflict,
     SecretUnreadable,
 )
-from blizzard.hub.runtime import migration_runner
 from blizzard.hub.secrets import StoreSecretReader, hub_key_provider, secret_cipher
 from blizzard.hub.store.internal.secret_store import SecretStore
 from blizzard.hub.store.schema import secrets
-from tests.support import OP, config_authoring, hub_store_connections
+from tests.support import OP, config_authoring, hub_store_connections, migrated_hub_at
 
 pytestmark = pytest.mark.component
 
@@ -38,7 +36,7 @@ _NOW = datetime(2026, 10, 4, 12, 0, 0, tzinfo=UTC)
 class _World:
     def __init__(self, tmp_path: Path) -> None:
         db_url = f"sqlite:///{tmp_path / 'hub.db'}"
-        migration_runner(HubConfig(root=tmp_path, db_url=db_url)).upgrade("head")
+        migrated_hub_at(db_url)
         self.engine: Engine = create_engine_from_url(db_url)
         self.store = SecretStore(hub_store_connections(self.engine))
         self.clock = FixedClock(_NOW)

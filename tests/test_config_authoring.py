@@ -12,7 +12,6 @@ from sqlalchemy import Engine, func
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.config.apply import (
     ApplyEntryRefused,
     ConfigDeclaration,
@@ -50,7 +49,6 @@ from blizzard.hub.domain.config.work_sources import (
     WorkSourceSecretUnavailable,
     WorkSourceSlugTaken,
 )
-from blizzard.hub.runtime import migration_runner
 from blizzard.hub.secrets import hub_key_provider
 from blizzard.hub.store.internal.config_change_store import ConfigChangeStore
 from blizzard.hub.store.internal.repository_record_store import RepositoryRecordStore
@@ -58,7 +56,7 @@ from blizzard.hub.store.internal.secret_referrers import SecretReferrersStore
 from blizzard.hub.store.internal.secret_store import SecretStore
 from blizzard.hub.store.internal.work_source_record_store import WorkSourceRecordStore
 from blizzard.hub.store.schema import config_changes
-from tests.support import OP, config_authoring, hub_store_connections
+from tests.support import OP, config_authoring, hub_store_connections, migrated_hub_at
 
 pytestmark = pytest.mark.component
 
@@ -75,7 +73,7 @@ _CLI = ChangeContext(actor="alice", door=Door.CLI)
 class _World:
     def __init__(self, tmp_path: Path) -> None:
         db_url = f"sqlite:///{tmp_path / 'hub.db'}"
-        migration_runner(HubConfig(root=tmp_path, db_url=db_url)).upgrade("head")
+        migrated_hub_at(db_url)
         self.engine: Engine = create_engine_from_url(db_url)
         connections = hub_store_connections(self.engine)
         self.secrets = SecretStore(connections)

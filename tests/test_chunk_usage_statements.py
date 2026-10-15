@@ -17,13 +17,11 @@ from sqlalchemy.sql.elements import BinaryExpression, TextClause
 from sqlalchemy.sql.functions import Function
 
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.hub.config import HubConfig
-from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store.internal import chunk_usage_store as store_module
 from blizzard.hub.store.scoped import ScopedStatements
 from blizzard.hub.tenancy import StoreScope, TenantId
 
-from .support import seed_chunk, seed_graph
+from .support import migrated_hub_at, seed_chunk, seed_graph
 
 pytestmark = pytest.mark.unit
 
@@ -64,7 +62,7 @@ def test_spend_range_query_plans_as_an_index_search(tmp_path: Path) -> None:
     disk-backed sqlite file and reads the query planner — component tier, unlike the
     rest of this file (`blizzard-context`'s tier rules)."""
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
-    migration_runner(HubConfig(root=tmp_path, db_url=db_url)).upgrade("head")
+    migrated_hub_at(db_url)
     engine = create_engine_from_url(db_url)
     with engine.begin() as conn:
         seed_graph(conn, "g1", at=_SINCE)

@@ -15,10 +15,8 @@ from sqlalchemy.dialects import postgresql, sqlite
 from sqlalchemy.sql.dml import Update
 
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.hub.config import HubConfig
-from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
-from tests.support import hub_store_connections
+from tests.support import hub_store_connections, migrated_hub_at
 
 pytestmark = pytest.mark.unit
 
@@ -46,7 +44,7 @@ def test_next_ref_increment_locks_the_source_row_for_update() -> None:
 
 def test_concurrent_first_allocation_on_sqlite_never_duplicates(tmp_path: Path) -> None:
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
-    migration_runner(HubConfig(root=tmp_path, db_url=db_url)).upgrade("head")
+    migrated_hub_at(db_url)
     engine = create_engine_from_url(db_url)
     store = WorkItemStore(hub_store_connections(engine))
 
@@ -79,7 +77,7 @@ def test_concurrent_first_allocation_on_sqlite_never_duplicates(tmp_path: Path) 
 
 def test_concurrent_allocation_against_an_existing_row_never_duplicates(tmp_path: Path) -> None:
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
-    migration_runner(HubConfig(root=tmp_path, db_url=db_url)).upgrade("head")
+    migrated_hub_at(db_url)
     engine = create_engine_from_url(db_url)
     store = WorkItemStore(hub_store_connections(engine))
     store.allocate_ref("hub")  # seed the counter row so both threads race the existing-row path

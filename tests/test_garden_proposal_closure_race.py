@@ -22,16 +22,14 @@ from structlog import get_logger
 
 from blizzard.foundation.garden_proposals import GardenProposalClosureKind, GardenProposalOrigin
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.garden.proposals.model import GardenProposalEdit, GardenProposalFindingAlreadyLinkedError
-from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store.errors import HubStoreErrorFactory
 from blizzard.hub.store.internal.garden_proposal_closure_store import insert_garden_proposal_closure_row
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
 from blizzard.hub.store.schema import garden_proposal_findings, garden_proposals
 from blizzard.hub.store.scoped import ScopedConnections
 from blizzard.hub.tenancy import StoreScope, TenantId
-from tests.support import hub_store_connections, stamp
+from tests.support import hub_store_connections, migrated_hub_at, stamp
 
 _PROJECT = "proj_test"
 
@@ -109,7 +107,7 @@ def test_insert_closure_row_locks_the_proposal_row_before_reading_closures() -> 
 
 def _store_and_engine(tmp_path: Path) -> tuple[GardenProposalStore, Engine]:
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
-    migration_runner(HubConfig(root=tmp_path, db_url=db_url)).upgrade("head")
+    migrated_hub_at(db_url)
     engine = create_engine_from_url(db_url)
     return GardenProposalStore(hub_store_connections(engine)), engine
 

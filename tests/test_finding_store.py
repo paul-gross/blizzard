@@ -18,13 +18,11 @@ from sqlalchemy.exc import OperationalError
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store import batching as batching_module
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.garden.findings.model import FactEntry, Finding, FindingAlreadyExited, FindingExitService
-from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreError
 from blizzard.hub.store.internal.finding_store import FindingStore, lock_findings
-from tests.support import count_queries, default_project, default_tenant, hub_store_connections, stamp
+from tests.support import count_queries, default_project, default_tenant, hub_store_connections, migrated_hub_at, stamp
 
 pytestmark = pytest.mark.component
 
@@ -34,7 +32,7 @@ _LATER = _NOW.replace(hour=13)
 
 def _store_and_engine(tmp_path: Path) -> tuple[FindingStore, Engine]:
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
-    migration_runner(HubConfig(root=tmp_path, db_url=db_url)).upgrade("head")
+    migrated_hub_at(db_url)
     engine = create_engine_from_url(db_url)
     with engine.begin() as conn:
         for slug in ("blizzard", "other-scope"):

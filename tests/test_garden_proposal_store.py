@@ -16,14 +16,19 @@ from blizzard.foundation.garden_proposals import (
     GardenProposalOrigin,
 )
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.chunk.model import WorkRef
 from blizzard.hub.domain.garden.proposals.model import GardenProposalCounts, GardenProposalEdit, RoutineProposalState
-from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.garden_proposal_closure_store import insert_garden_proposal_closure_row
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
-from tests.support import count_queries, count_rows_read, default_project, default_tenant, hub_store_connections
+from tests.support import (
+    count_queries,
+    count_rows_read,
+    default_project,
+    default_tenant,
+    hub_store_connections,
+    migrated_hub_at,
+)
 
 pytestmark = pytest.mark.component
 
@@ -77,7 +82,7 @@ def _accept_mint(engine: Engine, proposal_id: str, *, at: datetime = _NOW) -> No
 
 def _store_and_engine(tmp_path: Path) -> tuple[GardenProposalStore, Engine]:
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
-    migration_runner(HubConfig(root=tmp_path, db_url=db_url)).upgrade("head")
+    migrated_hub_at(db_url)
     engine = create_engine_from_url(db_url)
     with engine.begin() as conn:
         conn.execute(

@@ -18,17 +18,15 @@ from sqlalchemy.sql import ClauseElement, visitors
 from sqlalchemy.sql.elements import TextClause
 
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.observability.analytics.events import SegmentProvenance, TranscriptEvent
 from blizzard.hub.domain.observability.transcripts import TranscriptSlice
-from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal import transcript_event_store as store_module
 from blizzard.hub.store.internal.transcript_event_store import TranscriptEventStore
 from blizzard.hub.store.internal.transcript_segment_store import TranscriptSegmentStore
 from blizzard.hub.store.scoped import ScopedStatements
 from blizzard.hub.tenancy import StoreScope, TenantId
-from tests.support import hub_store_connections, seed_chunk, seed_graph
+from tests.support import hub_store_connections, migrated_hub_at, seed_chunk, seed_graph
 
 pytestmark = pytest.mark.unit
 
@@ -103,7 +101,7 @@ def _event(**overrides: object) -> TranscriptEvent:
 
 def _migrated_engine(tmp_path: Path, *, chunk_ids: tuple[str, ...] = ("ch_1", "ch_2")):  # type: ignore[no-untyped-def]
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
-    migration_runner(HubConfig(root=tmp_path, db_url=db_url)).upgrade("head")
+    migrated_hub_at(db_url)
     engine = create_engine_from_url(db_url)
     # A segment is visible only while its chunk is, so the visible-set cases need one.
     with engine.begin() as conn:
