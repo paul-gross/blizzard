@@ -55,6 +55,7 @@ from blizzard.runner.harness.wiring import (
 from blizzard.runner.host_config import BuiltRunner, HaltedRunner, HostConfig, ResolvedToken
 from blizzard.runner.host_layout import HostLayout
 from blizzard.runner.hub.held_token import HubTokenHolder
+from blizzard.runner.hub.host_identity import HostIdentityHolder
 from blizzard.runner.hub.identity import (
     ICurrentRunnerIdentity,
     IdentityVerdictHolder,
@@ -77,6 +78,7 @@ from blizzard.runner.store.internal.git_commit_declaration_store import GitCommi
 from blizzard.runner.store.internal.host_daemon_liveness_store import DaemonLivenessStore
 from blizzard.runner.store.internal.host_external_usage_store import ExternalUsageStore
 from blizzard.runner.store.internal.host_graph_artifact_store import GraphArtifactStore
+from blizzard.runner.store.internal.host_identity_store import HostIdentityStore
 from blizzard.runner.store.internal.host_jti_cache_store import JtiCacheRepository
 from blizzard.runner.store.internal.host_lane_store import HostLaneStore
 from blizzard.runner.store.internal.host_runner_audit import RunnerAudit
@@ -175,6 +177,8 @@ class HostProcess:
     halted: tuple[HaltedRunner, ...] = ()
     #: The subscriptions the host declares, whichever runners spend them.
     subscriptions: tuple[SubscriptionDeclaration, ...] = ()
+    #: Who this host is at its hub; seeded from the store at boot, and handed the identity once it is first recorded.
+    host_identity: HostIdentityHolder = field(default_factory=HostIdentityHolder)
 
     def spenders_of(self, slug: str | None, *, excluding: str) -> tuple[RunnerProcess, ...]:
         """The runners of this host, other than ``excluding``, that spend ``slug`` — none for a runner that spends no
@@ -393,12 +397,20 @@ _log = get_logger("blizzard.runner.composition")
 
 
 class _HostAttemptSink:
-    """Where the host's sampling pass records an attempt: a registered host's own lane, else — an unregistered host
-    having none — its first runner's bound stores and event publisher, as a runner's own sample did."""
+    """Where the host's sampling pass records an attempt: a registered host's own lane — one holding a host token,
+    whether or not its hub has answered yet — else, an unregistered host having none, its first runner's bound stores
+    and event publisher, as a runner's own sample did."""
 
-    def __init__(self, host_lane: IWriteHostLaneRepository, runners: Callable[[], tuple[RunnerProcess, ...]]) -> None:
+    def __init__(
+        self,
+        host_lane: IWriteHostLaneRepository,
+        runners: Callable[[], tuple[RunnerProcess, ...]],
+        *,
+        registered: bool,
+    ) -> None:
         self._host_lane = host_lane
         self._runners = runners
+        self._registered = registered
 
     def record(
         self,
@@ -410,7 +422,7 @@ class _HostAttemptSink:
         report_payload: str,
         miss_reason: str | None,
     ) -> None:
-        if self._host_lane.host_registered():
+        if self._registered:
             self._host_lane.record_host_external_usage_attempt(
                 slug=slug,
                 sampled_at=sampled_at,
@@ -444,9 +456,12 @@ def _external_usage_sample_pass(
     clock: SystemClock,
     http_client: LazyUsageHttpClient,
     runners: Callable[[], tuple[RunnerProcess, ...]],
+    *,
+    registered: bool,
 ) -> ExternalUsageSamplePass | None:
     """Every subscription the host declares paired with its provider's sampler, sharing one HTTP client; ``None``
-    when the host declares none."""
+    when the host declares none. ``registered`` says whether the host holds a host token, so its attempts ride its
+    own lane."""
     if not declarations:
         return None
     sampled = [
@@ -461,7 +476,7 @@ def _external_usage_sample_pass(
     return ExternalUsageSamplePass(
         subscriptions=sampled,
         attempts=host_stores.external_usage,
-        sink=_HostAttemptSink(host_stores.host_lane, runners),
+        sink=_HostAttemptSink(host_stores.host_lane, runners, registered=registered),
         clock=clock,
     )
 
@@ -532,6 +547,7 @@ def build_host_process(
         platform_tracing=platform_tracing,
         received_telemetry=received_telemetry,
         trace_platform=trace_platform,
+        registered=bool(host.host_token.value),
     )
     try:
         for built in runners:
@@ -639,9 +655,11 @@ def _build_host_graph(
     platform_tracing: IPlatformTracing | None,
     received_telemetry: IReceivedTelemetryExport | None,
     trace_platform: bool,
+    registered: bool = False,
 ) -> HostProcess:
     """The host's own graph, with no runner on it yet. ``config`` carries the host's keys — listeners, tracing, the
-    workspaces — and ``subscriptions`` are the host's declarations, which its credential renewal covers."""
+    workspaces — and ``subscriptions`` are the host's declarations, which its credential renewal covers.
+    ``registered`` says whether the host holds a host token."""
     install_runner_guard()
     engine = create_engine_from_url(config.db_url)
     try:
@@ -664,6 +682,7 @@ def _build_host_graph(
         connections = RunnerStoreConnections(engine, errors)
         clock = SystemClock()
         host_stores = _build_host_stores(connections, clock)
+        host_identity = HostIdentityHolder(host_stores.host_identity.host_identity())
         usage_http_client = LazyUsageHttpClient()
         span_limiter = SpanRateLimiter(clock)
         receiver_counter = ReceiverCounter()
@@ -704,7 +723,7 @@ def _build_host_graph(
             harness_telemetry_names=telemetry_names,
             host_tick=HostTick(
                 external_usage_sample=_external_usage_sample_pass(
-                    subscriptions, host_stores, clock, usage_http_client, runners
+                    subscriptions, host_stores, clock, usage_http_client, runners, registered=registered
                 ),
                 credential_renewal=_credential_renewal_pass(subscriptions, host_stores, clock),
             ),
@@ -712,6 +731,7 @@ def _build_host_graph(
             subscriptions=tuple(subscriptions),
             platform_tracing=platform_tracing,
             received_telemetry=received_telemetry,
+            host_identity=host_identity,
         )
         built.append(host)
         return host
@@ -903,5 +923,6 @@ def _build_host_stores(connections: RunnerStoreConnections, clock: IClock) -> Ho
         daemon_liveness=DaemonLivenessStore(connections),
         external_usage=ExternalUsageStore(connections),
         host_lane=HostLaneStore(connections),
+        host_identity=HostIdentityStore(connections),
         runner_audit=RunnerAudit(connections),
     )

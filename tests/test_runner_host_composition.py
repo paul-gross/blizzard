@@ -22,13 +22,14 @@ from blizzard.runner.composition import HostProcess, add_runner, build_host_proc
 from blizzard.runner.config import RunnerConfig, SubscriptionDeclaration
 from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.harness.registry import HarnessRegistry
-from blizzard.runner.host_config import BuiltRunner, HaltedRunner, ResolvedToken
+from blizzard.runner.host_config import BuiltRunner, HaltedRunner, ResolvedToken, TokenSource
 from blizzard.runner.host_layout import HostLayout
 from blizzard.runner.hub.held_token import HubTokenHolder
+from blizzard.runner.hub.host_identity import HostIdentity
 from blizzard.runner.hub.identity import IdentityVerdictHolder, RunnerIdentityHolder
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop_wiring import PeriodicDriver
-from blizzard.runner.store.schema import host_identity, host_outbound_buffer
+from blizzard.runner.store.schema import host_outbound_buffer
 from blizzard.runner.stores import RunnerStores
 from blizzard.runner.subscriptions.subscription_sampler import PROVIDER_ANTHROPIC, ExternalSubscriptionUsageSnapshot
 from blizzard.runner.usage.credential_renewal import CredentialRenewalPass
@@ -267,11 +268,36 @@ def test_an_unregistered_hosts_sample_reaches_its_runners_outbound_buffer_and_is
         host.close()
 
 
-def test_a_registered_hosts_sample_reaches_its_own_outbound_lane_and_no_runners(tmp_path: Path) -> None:
-    host = _host(_sampling_config(tmp_path), "rn_a")
+def _registered_host(config: RunnerConfig) -> HostProcess:
+    """The host the config's file declares, holding a host token, with one built runner ``rn_a``."""
+    file = dataclasses.replace(host_config_of(config), host_token=ResolvedToken("host-tok", TokenSource.HOST_FILE))
+    return build_host_process(
+        file, [BuiltRunner("rn_a", dataclasses.replace(config, runner_id="rn_a"), ResolvedToken())]
+    )
+
+
+def test_a_host_identity_row_without_a_host_token_leaves_the_host_unregistered(tmp_path: Path) -> None:
+    config = _sampling_config(tmp_path)
+    first = _host(config, "rn_a")
+    first.host_stores.host_identity.record_host_identity(HostIdentity("hs_1", "tn_1", _SAMPLED_AT))
+    first.close()
+    host = _host(config, "rn_a")
     try:
-        with host.engine.begin() as conn:
-            conn.execute(host_identity.insert().values(host_id="ho_1", tenant_id=None, registered_at=_SAMPLED_AT))
+        assert host.host_identity.current() == HostIdentity("hs_1", "tn_1", _SAMPLED_AT)
+        _fake_samplers(host)
+        host.host_tick.run()
+        assert [fact.kind for fact in host.runners[0].stores.outbound.pending_outbound()] == [_SAMPLED_KIND] * 2
+        with host.engine.connect() as conn:
+            assert conn.execute(select(func.count()).select_from(host_outbound_buffer)).scalar_one() == 0
+    finally:
+        host.close()
+
+
+def test_a_registered_hosts_sample_reaches_its_own_outbound_lane_and_no_runners(tmp_path: Path) -> None:
+    # Registered means holding a host token: the lane is the host's own before its hub has ever answered.
+    host = _registered_host(_sampling_config(tmp_path))
+    try:
+        assert host.host_identity.current() is None
         _fake_samplers(host)
         host.host_tick.run()
         assert host.runners[0].stores.outbound.pending_outbound() == []

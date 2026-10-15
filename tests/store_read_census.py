@@ -166,6 +166,7 @@ from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionRefe
 from blizzard.runner.harness.selftest_result import IReadSelfTestResultRepository
 from blizzard.runner.harness.usage import UsageSample
 from blizzard.runner.harness.workspace_prompts import IReadWorkspacePromptRepository
+from blizzard.runner.hub.host_identity import HostIdentity, IReadHostIdentityRepository
 from blizzard.runner.hub.identity import IReadRunnerIdentityRepository, RunnerIdentity
 from blizzard.runner.hub.outbound_buffer import IReadOutboundRepository
 from blizzard.runner.hub.served_projects import IReadServedProjectsRepository, ServedProject
@@ -196,7 +197,6 @@ from blizzard.runner.transcripts.repository import IReadTranscriptRepository
 from blizzard.runner.usage.repository import (
     IReadCredentialRenewalRepository,
     IReadExternalUsageRepository,
-    IReadHostLaneRepository,
     IReadUsageRepository,
 )
 from tests.runner_fakes import record_usage
@@ -666,6 +666,10 @@ def build_runner_world(engine: Engine, runner_id: str = RUNNER_ID) -> RunnerWorl
         "trace-export-failed", at=_t(94), report_kind="event.recorded", report_payload="{}"
     )
 
+    host.host_identity.record_host_identity(
+        HostIdentity(host_id="hs_census", tenant_id="tn_census", registered_at=_t(95))
+    )
+
     read = RunnerReadStores.of(stores)
     return RunnerWorld(
         engine=engine,
@@ -835,7 +839,7 @@ RUNNER_CENSUS: dict[tuple[type, str], RunnerRecipe] = {
     (IReadExternalUsageRepository, "latest_external_usage_attempts_by_slug"): lambda w: (
         w.host_read.external_usage.latest_external_usage_attempts_by_slug([w.usage_slug])
     ),
-    (IReadHostLaneRepository, "host_registered"): lambda w: w.host_read.host_lane.host_registered(),
+    (IReadHostIdentityRepository, "host_identity"): lambda w: w.host_read.host_identity.host_identity(),
     (IReadCredentialRenewalRepository, "last_credential_renewal_claim_at"): lambda w: (
         w.host_read.external_usage.last_credential_renewal_claim_at(w.usage_slug)
     ),

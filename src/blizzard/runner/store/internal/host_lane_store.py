@@ -1,17 +1,15 @@
 """SQLAlchemy adapter for the host-lane repository seam (package-private).
 
-Host-scoped: ``host_identity``, ``host_outbound_buffer`` and ``external_usage_samples`` are all facts about this host,
+Host-scoped: ``host_outbound_buffer`` and ``external_usage_samples`` are both facts about this host,
 never a runner's, so its statements carry no runner equality and the adapter writes no runner-scoped row."""
 
 from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import select
-
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.store.errors import RunnerStoreConnections
-from blizzard.runner.store.schema import external_usage_samples, host_identity, host_outbound_buffer
+from blizzard.runner.store.schema import external_usage_samples, host_outbound_buffer
 from blizzard.runner.usage.repository import IWriteHostLaneRepository
 
 _log = get_logger("blizzard.runner.store")
@@ -22,10 +20,6 @@ class HostLaneStore:
 
     def __init__(self, store: RunnerStoreConnections) -> None:
         self._store = store
-
-    def host_registered(self) -> bool:
-        with self._store.connect() as conn:
-            return conn.execute(select(host_identity.c.id).limit(1)).first() is not None
 
     def record_host_external_usage_attempt(
         self,

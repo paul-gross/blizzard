@@ -34,6 +34,7 @@ from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionRefe
 from blizzard.runner.harness.selftest_result import IWriteSelfTestResultRepository
 from blizzard.runner.harness.usage import UsageSample
 from blizzard.runner.harness.workspace_prompts import IWriteWorkspacePromptRepository
+from blizzard.runner.hub.host_identity import IWriteHostIdentityRepository
 from blizzard.runner.hub.identity import IWriteRunnerIdentityRepository, RunnerIdentity
 from blizzard.runner.hub.outbound_buffer import IWriteOutboundRepository
 from blizzard.runner.hub.served_projects import IWriteServedProjectsRepository, ServedProject
@@ -519,6 +520,7 @@ WRITE_EXEMPTIONS: dict[tuple[type, str], str] = {
     (IWriteExternalUsageRepository, "prune_external_usage_samples"): _HOST_ONLY + " (external_usage_samples)",
     (IWriteHostLaneRepository, "record_host_external_usage_attempt"): _HOST_ONLY
     + " (external_usage_samples, host_outbound_buffer)",
+    (IWriteHostIdentityRepository, "record_host_identity"): _HOST_ONLY + " (host_identity)",
     (IWriteCredentialRenewalRepository, "claim_credential_renewal"): _HOST_ONLY + " (credential_renewal_claims)",
     (IWriteCredentialRenewalRepository, "record_credential_renewal_outcome"): _HOST_ONLY
     + " (credential_renewal_outcomes)",

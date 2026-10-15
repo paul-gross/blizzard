@@ -28,7 +28,6 @@ __all__ = [
     "ExternalUsageAttemptSummary",
     "IReadCredentialRenewalRepository",
     "IReadExternalUsageRepository",
-    "IReadHostLaneRepository",
     "IReadUsageRepository",
     "IWriteCredentialRenewalRepository",
     "IWriteExternalUsageRepository",
@@ -419,15 +418,7 @@ class IWriteExternalUsageRepository(IReadExternalUsageRepository, IWriteCredenti
         ...
 
 
-class IReadHostLaneRepository(Protocol):
-    """Read-only host-lane state: whether this host has been registered at its hub."""
-
-    def host_registered(self) -> bool:
-        """Whether a ``host_identity`` row exists — the host's own facts then ride its own lane, not a runner's."""
-        ...
-
-
-class IWriteHostLaneRepository(IReadHostLaneRepository, Protocol):
+class IWriteHostLaneRepository(Protocol):
     """Read-write host lane — held only by the sampling pass."""
 
     def record_host_external_usage_attempt(

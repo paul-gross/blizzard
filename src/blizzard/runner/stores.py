@@ -30,6 +30,7 @@ from blizzard.runner.harness.selftest_result import (
     IWriteSelfTestResultRepository,
 )
 from blizzard.runner.harness.workspace_prompts import IReadWorkspacePromptRepository, IWriteWorkspacePromptRepository
+from blizzard.runner.hub.host_identity import IReadHostIdentityRepository, IWriteHostIdentityRepository
 from blizzard.runner.hub.identity import IReadRunnerIdentityRepository, IWriteRunnerIdentityRepository
 from blizzard.runner.hub.outbound_buffer import IReadOutboundRepository, IWriteOutboundRepository
 from blizzard.runner.hub.served_projects import IReadServedProjectsRepository, IWriteServedProjectsRepository
@@ -64,7 +65,6 @@ from blizzard.runner.transcripts.invocation_boundaries import (
 from blizzard.runner.transcripts.ledger import IReadTranscriptLedgerRepository, IWriteTranscriptLedgerRepository
 from blizzard.runner.usage.repository import (
     IReadExternalUsageRepository,
-    IReadHostLaneRepository,
     IReadUsageRepository,
     IWriteExternalUsageRepository,
     IWriteHostLaneRepository,
@@ -273,6 +273,7 @@ class HostStores:
     daemon_liveness: IWriteDaemonLivenessRepository
     external_usage: IWriteExternalUsageRepository
     host_lane: IWriteHostLaneRepository
+    host_identity: IWriteHostIdentityRepository
     #: Exempt: reads every runner's rows at once — the invariant audit, ``init``'s which-runners read, and a workspace
     #: pool's held read.
     runner_audit: IRunnerAudit
@@ -287,7 +288,7 @@ class HostReadStores:
     graph_artifacts: IReadGraphArtifactRepository
     daemon_liveness: IReadDaemonLivenessRepository
     external_usage: IReadExternalUsageRepository
-    host_lane: IReadHostLaneRepository
+    host_identity: IReadHostIdentityRepository
 
     @classmethod
     def of(cls, stores: HostStores) -> HostReadStores:
@@ -296,5 +297,5 @@ class HostReadStores:
             graph_artifacts=stores.graph_artifacts,
             daemon_liveness=stores.daemon_liveness,
             external_usage=stores.external_usage,
-            host_lane=stores.host_lane,
+            host_identity=stores.host_identity,
         )

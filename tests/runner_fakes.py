@@ -102,6 +102,7 @@ from blizzard.runner.store.internal.git_commit_declaration_store import GitCommi
 from blizzard.runner.store.internal.host_daemon_liveness_store import DaemonLivenessStore
 from blizzard.runner.store.internal.host_external_usage_store import ExternalUsageStore
 from blizzard.runner.store.internal.host_graph_artifact_store import GraphArtifactStore
+from blizzard.runner.store.internal.host_identity_store import HostIdentityStore
 from blizzard.runner.store.internal.host_jti_cache_store import JtiCacheRepository
 from blizzard.runner.store.internal.host_lane_store import HostLaneStore
 from blizzard.runner.store.internal.host_runner_audit import RunnerAudit
@@ -173,6 +174,7 @@ class SqlAlchemyRunnerStore(
     UsageStore,
     ExternalUsageStore,
     HostLaneStore,
+    HostIdentityStore,
     DaemonLivenessStore,
     AttachmentStore,
     GitCommitDeclarationStore,
@@ -214,6 +216,7 @@ class SqlAlchemyRunnerStore(
         UsageStore.__init__(self, store)
         ExternalUsageStore.__init__(self, store)
         HostLaneStore.__init__(self, store)
+        HostIdentityStore.__init__(self, store)
         DaemonLivenessStore.__init__(self, store)
         AttachmentStore.__init__(self, store)
         GitCommitDeclarationStore.__init__(self, store)
@@ -321,6 +324,7 @@ def make_host_stores(store: SqlAlchemyRunnerStore, clock: IClock | None = None) 
         daemon_liveness=store,
         external_usage=store,
         host_lane=store,
+        host_identity=store,
         runner_audit=RunnerAudit(store.connections),
     )
 
