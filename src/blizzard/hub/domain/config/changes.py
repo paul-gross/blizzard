@@ -198,7 +198,17 @@ class IReadConfigChanges(Protocol):
         project_id: str | None = None,
     ) -> list[ConfigChange]:
         """Newest-first by ``id``, strictly below ``before`` when given, at most ``limit`` rows; only the rows of
-        ``project_id`` when given."""
+        ``project_id`` when given, plus the tenant-wide ones (``project_id`` unset)."""
+        ...
+
+    def count(
+        self,
+        *,
+        record_kind: RecordKind | None,
+        record_key: str | None,
+        project_id: str | None = None,
+    ) -> int:
+        """How many rows :meth:`page` selects with the same filters, whatever ``before`` — one scalar statement."""
         ...
 
 

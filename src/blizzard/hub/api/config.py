@@ -132,12 +132,20 @@ def _labels(changes: list[ConfigChange], services: TenantServices) -> dict[tuple
     return labels
 
 
-def _view(change: ConfigChange, labels: dict[tuple[RecordKind, str], str]) -> ConfigChangeView:
+def _actor_names(changes: list[ConfigChange], services: TenantServices) -> dict[str, str]:
+    """The display name — else the username — of each user actor a page of changes names, in one read
+    (``bzh:bulk-reconstitution``); an actor that is no user is absent."""
+    users = services.users.get_many(list({c.actor for c in changes}))
+    return {user_id: user.display_name or user.username for user_id, user in users.items()}
+
+
+def _view(change: ConfigChange, labels: dict[tuple[RecordKind, str], str], names: dict[str, str]) -> ConfigChangeView:
     assert change.id is not None
     return ConfigChangeView(
         id=change.id,
         recorded_at=iso_utc(change.recorded_at),
         actor=change.actor,
+        actor_name=names.get(change.actor),
         door=change.door.value,
         record_kind=change.record_kind.value,
         record_key=change.record_key,
@@ -181,8 +189,13 @@ def list_changes(
     )
     page = rows[:limit]
     labels = _labels(page, services)
+    names = _actor_names(page, services)
     return ConfigChangesPage(
-        changes=[_view(c, labels) for c in page], next_before=page[-1].id if len(rows) > limit else None
+        changes=[_view(c, labels, names) for c in page],
+        next_before=page[-1].id if len(rows) > limit else None,
+        total=services.config_changes.count(
+            record_kind=record_kind, record_key=_key_of(record_kind, record_key, services), project_id=project
+        ),
     )
 
 

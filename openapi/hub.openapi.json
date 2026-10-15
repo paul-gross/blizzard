@@ -1507,6 +1507,17 @@
             "title": "Done",
             "type": "integer"
           },
+          "done_since": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Done Since"
+          },
           "needs_human": {
             "title": "Needs Human",
             "type": "integer"
@@ -3197,6 +3208,17 @@
             "title": "Actor",
             "type": "string"
           },
+          "actor_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor Name"
+          },
           "apply_id": {
             "anyOf": [
               {
@@ -3300,6 +3322,11 @@
               }
             ],
             "title": "Next Before"
+          },
+          "total": {
+            "default": 0,
+            "title": "Total",
+            "type": "integer"
           }
         },
         "required": [
@@ -18471,9 +18498,26 @@
     },
     "/api/chunk-counts": {
       "get": {
-        "description": "The all-time fleet count per derived status \u2014 over exactly the chunks\n``GET /api/chunks`` pages over, with no window applied; ``?project=`` counts that\nproject's chunks alone.",
+        "description": "The all-time fleet count per derived status \u2014 over exactly the chunks\n``GET /api/chunks`` pages over, with no window applied; ``?project=`` counts that\nproject's chunks alone. With ``done_since``, ``done_since`` answers how many of the ``done`` ones finished at or\nafter that instant; the caller chooses the boundary.",
         "operationId": "chunk_counts_api_chunk_counts_get",
         "parameters": [
+          {
+            "in": "query",
+            "name": "done_since",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Done Since"
+            }
+          },
           {
             "in": "query",
             "name": "project",

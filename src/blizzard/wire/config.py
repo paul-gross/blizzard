@@ -27,6 +27,8 @@ class ConfigChangeView(BaseModel):
     id: int
     recorded_at: str
     actor: str
+    #: The actor's display name, falling back to their username; ``None`` when the actor is not a user.
+    actor_name: str | None = None
     door: str
     record_kind: str
     record_key: str
@@ -46,6 +48,8 @@ class ConfigChangesPage(BaseModel):
 
     changes: list[ConfigChangeView]
     next_before: int | None = None
+    #: Every change the request's filters select, whatever ``before`` — the figure a count badge reads.
+    total: int = 0
 
 
 class ProjectDocument(BaseModel):

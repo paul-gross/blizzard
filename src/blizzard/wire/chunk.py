@@ -225,6 +225,8 @@ class ChunkCountsView(BaseModel):
     stopped: int
     done: int
     terminal: int
+    #: Chunks that derive ``done`` and finished at or after the request's ``done_since``; ``None`` when none was sent.
+    done_since: int | None = None
 
 
 class RouteView(BaseModel):

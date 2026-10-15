@@ -21,12 +21,14 @@ record's id, so they follow the record across slug changes; each row carries the
 `record_label`, which the listing shows. A row's recorded fields stay as written: a slug edit lists the old and new
 slug.
 
-Over HTTP the same log is `GET /api/config/changes?record_kind=&record_key=&before=&limit=`, newest first, at most 200
-rows a page. Pass the response's `next_before` as `before` to read the next page; it is `null` on the last. Reading
-needs the `fleet:view` permission.
+Over HTTP the same log is `GET /api/config/changes?record_kind=&record_key=&project=&before=&limit=`, newest first, at
+most 200 rows a page. Pass the response's `next_before` as `before` to read the next page; it is `null` on the last.
+`project` keeps that project's changes and the tenant-wide ones. The response's `total` counts every change the filters
+select, whatever `before`. Each row's `actor_name` is the actor's display name, or their username, and is null when the
+actor is not a user. Reading needs the `fleet:view` permission.
 
-The board's Admin page has a Changes tab that reads the same log, newest first, with each entry's actor, door, and
-fields. An older page loads on request.
+The board's Admin page has a Changes tab that reads the same log, newest first, with each entry's author by name, door,
+and fields, and the log's total as the tab's count. An older page loads on request.
 
 ## Operations
 

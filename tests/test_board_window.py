@@ -146,7 +146,7 @@ def test_chunk_counts_count_all_time_and_exclude_ephemeral_chunks(tmp_path: Path
     counts = hub.client.get("/api/chunk-counts")
     assert counts.status_code == 200
     body = counts.json()
-    assert set(body) == {"total", "terminal"} | {status.value for status in ChunkStatus}
+    assert set(body) == {"total", "terminal", "done_since"} | {status.value for status in ChunkStatus}
 
     unfiltered = _listed(hub, board_window=False)
     assert body["total"] == len(unfiltered) == sum(body[status.value] for status in ChunkStatus)
@@ -259,3 +259,54 @@ def test_the_project_lens_floors_that_projects_done_chunks_only(tmp_path: Path) 
 
     assert listed("beta") == set(moved[-BOARD_DONE_FLOOR:])
     assert listed("default") == set(ids[1::2][-BOARD_DONE_FLOOR:])
+
+
+def _done_since(hub: HubHarness, since: datetime, **params: str) -> int:
+    resp = hub.client.get("/api/chunk-counts", params={"done_since": since.isoformat()} | params)
+    assert resp.status_code == 200, resp.text
+    return resp.json()["done_since"]
+
+
+def test_done_since_counts_every_done_branch_finishing_at_or_after_the_instant(tmp_path: Path) -> None:
+    hub = hub_with_graph(tmp_path)
+    every_branch(hub)
+    now = hub.clock.now()
+
+    assert hub.client.get("/api/chunk-counts").json()["done_since"] is None
+    everything = _done_since(hub, now - OLD - timedelta(days=1))
+    assert everything == hub.client.get("/api/chunk-counts").json()["done"] > 0
+    # The newer half finished an hour back: the same branches, counted once each.
+    recent = _done_since(hub, now - timedelta(hours=2))
+    assert 0 < recent < everything
+    assert recent * 2 == everything
+    assert _done_since(hub, now + timedelta(minutes=1)) == 0
+
+
+def test_done_since_narrows_to_one_project(tmp_path: Path) -> None:
+    hub = hub_with_graph(tmp_path)
+    done_by_transition(hub, "ch_default", ago=timedelta(hours=1))
+    done_by_transition(hub, "ch_beta", ago=timedelta(hours=1))
+    beta = seed_project(hub.engine, "beta")
+    with hub.engine.begin() as conn:
+        conn.execute(
+            update(s.chunks)
+            .where(s.chunks.c.tenant_id == default_tenant(hub.engine), s.chunks.c.chunk_id == "ch_beta")
+            .values(project_id=beta)
+        )
+    since = hub.clock.now() - timedelta(hours=2)
+
+    assert _done_since(hub, since) == 2
+    assert _done_since(hub, since, project=beta) == 1
+
+
+def test_done_since_costs_the_same_statements_across_the_done_count(tmp_path: Path) -> None:
+    (tmp_path / "none").mkdir()
+    (tmp_path / "many").mkdir()
+    bare = _hub_with_old_terminal(tmp_path / "none", old_terminal=0)
+    heavy = _hub_with_old_terminal(tmp_path / "many", old_terminal=20)
+    since = (bare.clock.now() - timedelta(days=1)).isoformat()
+    path = f"/api/chunk-counts?done_since={since.replace('+', '%2B')}"
+
+    assert count_queries(bare.engine, lambda: bare.client.get(path)) == count_queries(
+        heavy.engine, lambda: heavy.client.get(path)
+    )
