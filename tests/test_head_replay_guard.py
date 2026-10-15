@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -27,6 +28,17 @@ def test_an_ordinary_test_cannot_replay_from_empty(tmp_path: Path, tree: str, he
     with pytest.raises(AssertionError, match=f"test_head_replay_guard.py.*{helper}"):
         runner.upgrade("head")
     assert runner.current_revision() is None
+
+
+@pytest.mark.unit
+def test_a_runner_named_ancestor_does_not_turn_a_hub_tree_into_a_runner_tree(tmp_path: Path) -> None:
+    url = f"sqlite:///{tmp_path / 'store.db'}"
+    runner = replace(
+        hub_migration_runner(HubConfig(root=tmp_path, db_url=url)),
+        script_location=Path("/home/runner/work/blizzard/src/blizzard/hub/store/migrations"),
+    )
+    with pytest.raises(AssertionError, match=r"test_head_replay_guard\.py.*migrated_hub_at"):
+        runner.upgrade("head")
 
 
 @pytest.mark.component

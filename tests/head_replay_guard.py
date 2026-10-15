@@ -26,7 +26,7 @@ def install_head_replay_guard() -> None:
         ):
             helpers = (
                 "migrated_store_at"
-                if "runner" in self.script_location.parts
+                if self.script_location.parent.parent.name == "runner"
                 else "migrated_hub_at or migrate_to(tmp_path, 'head')"
             )
             raise AssertionError(f"{caller.name}: replaying migrations to head from empty; use {helpers}")
