@@ -17,6 +17,7 @@ from blizzard.runner.config import ENV_HUB_URL
 from blizzard.runner.hub.client import (
     HubClientError,
     IHubRunnerAdmin,
+    IssuedHost,
     IssuedIdentity,
     ITokenIdentityReader,
     OperatorTenant,
@@ -47,7 +48,8 @@ class FakeHubRunnerAdmin:
     """Answers every add with ``issued`` — or, unscripted, a fresh ``rn_init<n>`` id and token per
     add — and raises ``refusal`` (a ``RunnerAddRefused`` or ``HubClientError``) instead when set.
     ``added`` holds every identity it handed out, oldest first, ``named`` the tenant each add
-    named and ``declared`` the projects it named. The tenant listing answers ``tenants``, raising it when it is a ``HubClientError``."""
+    named and ``declared`` the projects it named; ``hosts`` holds every host it added, each a fresh ``hs_init<n>``.
+    The tenant listing answers ``tenants``, raising it when it is a ``HubClientError``."""
 
     issued: IssuedIdentity | None = None
     refusal: HubClientError | None = None
@@ -55,6 +57,7 @@ class FakeHubRunnerAdmin:
     named: list[str | None] = field(default_factory=list)
     declared: list[tuple[str, ...] | None] = field(default_factory=list)
     tenants_answer: list[OperatorTenant] | HubClientError = field(default_factory=list)
+    hosts: list[IssuedHost] = field(default_factory=list)
 
     def add_runner(
         self, name: str, *, tenant_id: str | None = None, projects: tuple[str, ...] | None = None
@@ -72,6 +75,14 @@ class FakeHubRunnerAdmin:
         if isinstance(self.tenants_answer, HubClientError):
             raise self.tenants_answer
         return self.tenants_answer
+
+    def add_host(self, name: str, *, tenant_id: str | None = None) -> IssuedHost:
+        if self.refusal is not None:
+            raise self.refusal
+        n = len(self.hosts) + 1
+        host = IssuedHost(host_id=f"hs_init{n}", host_name=name, token=f"init-host-token-{n}")
+        self.hosts.append(host)
+        return host
 
 
 @dataclass(frozen=True)
