@@ -1,5 +1,71 @@
 {
   "commands": {
+    "add": {
+      "help": "Add runner NAME to this registered host at its hub, with no hub sign-in: its token goes to the host's `.env`\nas BZ_HUB_TOKEN_<NAME> and its `[[runner]]` to the host file. A running host starts it at its next start.\n\nRefused, with nothing added, on a host holding no host token, or when NAME or a --workspace is not one the host\nfile allows.",
+      "params": [
+        {
+          "hidden": false,
+          "kind": "argument",
+          "name": "name",
+          "opts": [
+            "name"
+          ],
+          "required": true,
+          "secondary_opts": [],
+          "type": "text"
+        },
+        {
+          "help": "Host directory (overrides $BZ_RUNNER_DIR).",
+          "hidden": false,
+          "kind": "option",
+          "name": "directory",
+          "opts": [
+            "--dir"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "type": "text"
+        },
+        {
+          "help": "A project the runner serves, by id or slug; repeat for several.",
+          "hidden": false,
+          "kind": "option",
+          "name": "projects",
+          "opts": [
+            "--project"
+          ],
+          "required": true,
+          "secondary_opts": [],
+          "type": "text"
+        },
+        {
+          "help": "The host's workspace each --project runs in: once for all of them, or once per --project in order. Default: the host's only workspace.",
+          "hidden": false,
+          "kind": "option",
+          "name": "workspaces",
+          "opts": [
+            "--workspace"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "type": "text"
+        },
+        {
+          "help": "How many agents each --project runs at once: once for all, or once per --project. Default: 1.",
+          "hidden": false,
+          "kind": "option",
+          "name": "agents",
+          "opts": [
+            "--agents"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "type": "integer range"
+        }
+      ],
+      "path": "runner add",
+      "short_help": "Add runner NAME to this registered host at its hub, with no hub sign-in: its token goes to the host's `.env` as BZ_HUB_TOKEN_<NAME> and its `[[runner]]` to the host file."
+    },
     "analytics": {
       "commands": {
         "counts": {
@@ -764,7 +830,7 @@
       "short_help": "Become the blizzard host: the reconciliation loop of each runner + the local API."
     },
     "init": {
-      "help": "Scaffold the host file + data dir + a migrated store under DIRECTORY, then join the host's runner to\nits hub. Idempotent.\n\nA runner holding no token is added at the hub \u2014 under your `blizzard hub login` session when you\nhold one, in the tenant --tenant names or else the only one you may enter \u2014 its token written to\nDIRECTORY/.env as BZ_HUB_TOKEN_<NAME> and its id to the host file's `[[runner]]`. A held token whose runner\nserves another tenant than --tenant names stops: a runner never moves between tenants. A fresh host serves\nthe projects --project names, else `default`; the runner is added serving them, or, with none named, the\ntenant's only project. A directory a pre-host runner left behind is refused, naming graduation, unless\n--allow-readd sets its store aside. DIRECTORY defaults to $BZ_RUNNER_DIR, then the cwd.",
+      "help": "Scaffold the host file + data dir + a migrated store under DIRECTORY, then register the host at its hub and\njoin each of its runners under it. Idempotent.\n\nA host token the hub knows \u2014 $BZ_HOST_TOKEN, the host file's `host_token`, then DIRECTORY/.env \u2014 keeps its host.\nHolding none, the host is added at the hub under your `blizzard hub login` session when you hold one, in the\ntenant --tenant names or else the only one you may enter, named after its first `[[runner]]`; its token is\nwritten to DIRECTORY/.env as BZ_HOST_TOKEN. A runner holding no token is added under the host, its token\nwritten to DIRECTORY/.env as BZ_HUB_TOKEN_<NAME> and its id to its `[[runner]]`; a runner whose token the hub\nknows is kept when it stands under the host. A held token in another tenant than --tenant names stops: neither\na host nor a runner moves between tenants. A fresh host serves the projects --project names, else `default`. A\ndirectory a pre-host runner left behind is refused, naming graduation, unless --allow-readd sets its store\naside. DIRECTORY defaults to $BZ_RUNNER_DIR, then the cwd.",
       "params": [
         {
           "hidden": false,
@@ -790,7 +856,7 @@
           "type": "text"
         },
         {
-          "help": "Add the runner again when its hub does not know its token \u2014 only after that hub's data was reset.",
+          "help": "Add the host, or a runner, again when its hub does not know its token \u2014 only after that hub's data was reset. A host added again sets the store aside and adds every runner again under it.",
           "hidden": false,
           "kind": "option",
           "name": "allow_readd",
@@ -802,7 +868,7 @@
           "type": "boolean"
         },
         {
-          "help": "Add the runner in this tenant, by id; needed only when you may enter several.",
+          "help": "Add the host and its runners in this tenant, by id; needed only when you may enter several.",
           "hidden": false,
           "kind": "option",
           "name": "tenant_id",
@@ -827,7 +893,7 @@
         }
       ],
       "path": "runner init",
-      "short_help": "Scaffold the host file + data dir + a migrated store under DIRECTORY, then join the host's runner to its hub."
+      "short_help": "Scaffold the host file + data dir + a migrated store under DIRECTORY, then register the host at its hub and join each of its runners under it."
     },
     "migrate": {
       "help": "Apply pending store migrations, or reverse with --down <rev>.\n\nA directory that has not graduated to a host is refused and left as it is. A graduated one holding a pre-host\n`data/runner.db` and no `data/host.db` adopts that store first. Adoption and --down hold the directory and are\nrefused while a host is running; a plain upgrade is refused only while a pre-host daemon answers.",
@@ -1264,6 +1330,49 @@
       ],
       "path": "runner requeue",
       "short_help": "Hand a needs_human chunk back to the fleet: a fresh attempt at its current node."
+    },
+    "retire": {
+      "help": "Retire one of this registered host's runners at its hub, then remove its `[[runner]]` from the host file. A\nrunning host halts it at its next tick, the hub refusing its token; its rows stay in the host's store.\n\nRefused, with nothing retired, on a host holding no host token, or while the runner holds chunks unless --force\nreleases them.",
+      "params": [
+        {
+          "help": "Host directory (overrides $BZ_RUNNER_DIR).",
+          "hidden": false,
+          "kind": "option",
+          "name": "directory",
+          "opts": [
+            "--dir"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "type": "text"
+        },
+        {
+          "help": "The host's runner to retire, by name or id.",
+          "hidden": false,
+          "kind": "option",
+          "name": "runner",
+          "opts": [
+            "--runner"
+          ],
+          "required": true,
+          "secondary_opts": [],
+          "type": "text"
+        },
+        {
+          "help": "Retire it even while it holds chunks, releasing them.",
+          "hidden": false,
+          "kind": "option",
+          "name": "force",
+          "opts": [
+            "--force"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "type": "boolean"
+        }
+      ],
+      "path": "runner retire",
+      "short_help": "Retire one of this registered host's runners at its hub, then remove its `[[runner]]` from the host file."
     },
     "scope": {
       "commands": {

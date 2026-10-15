@@ -39,12 +39,13 @@ from blizzard.runner.composition import (
     build_read_stores,
     build_runner_process,
 )
-from blizzard.runner.config import RunnerConfig
+from blizzard.runner.config import DEFAULT_RUNNER_NAME, RunnerConfig
 from blizzard.runner.config_table import ConfigError
 from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.harness.bundle import BundleSnapshot
 from blizzard.runner.harness.wiring import publish_harness_bundle
 from blizzard.runner.host_config import (
+    HOST_TOKEN_VARIABLE,
     BuiltRunner,
     HaltedRunner,
     HostConfig,
@@ -64,7 +65,10 @@ from blizzard.runner.hub.bootstrap import (
     TokenNotWritten,
 )
 from blizzard.runner.hub.client import (
+    HostAddRefusalReason,
+    HostAddRefused,
     HubClientError,
+    IHostHubClient,
     IHubRunnerAdmin,
     ITokenIdentityReader,
     OperatorTenant,
@@ -73,8 +77,16 @@ from blizzard.runner.hub.client import (
     TokenIdentity,
     TokenRefusal,
 )
+from blizzard.runner.hub.host_bootstrap import (
+    HostBootstrap,
+    HostBootstrapStop,
+    HostBootstrapStopped,
+    HostRunnerAdmin,
+    HostTokenNotWritten,
+    JoinedHost,
+)
 from blizzard.runner.hub.identity import RunnerIdentity
-from blizzard.runner.hub.internal.http_hub import HttpHubClient, HttpHubRunnerAdmin
+from blizzard.runner.hub.internal.http_hub import HttpHostHubClient, HttpHubClient, HttpHubRunnerAdmin
 from blizzard.runner.hub.internal.token_file import HubTokenFile
 from blizzard.runner.lifecycle.identity_check import foreign_store_reason
 from blizzard.runner.listeners import ListenerError, Uds
@@ -101,6 +113,9 @@ _INIT_HUB_TIMEOUT_SECONDS = 15.0
 
 type InitHubClients = tuple[ITokenIdentityReader, IHubRunnerAdmin]
 
+#: The host's own hub calls, by the host token each presents.
+type HostClients = Callable[[str], IHostHubClient]
+
 
 @contextmanager
 def _http_hub_clients(hub_url: str, runner_token: str, operator_token: str | None) -> Iterator[InitHubClients]:
@@ -113,13 +128,26 @@ def _http_hub_clients(hub_url: str, runner_token: str, operator_token: str | Non
         yield HttpHubClient(runner_http), HttpHubRunnerAdmin(operator_http, operator_token=operator_token)
 
 
+@contextmanager
+def _http_host_clients(hub_url: str) -> Iterator[HostClients]:
+    """The host's own hub calls, each under the host token it is made with."""
+    with httpx.Client(base_url=hub_url, timeout=_INIT_HUB_TIMEOUT_SECONDS) as http:
+        yield lambda token: HttpHostHubClient(http, token=token)
+
+
 @collaborator
 @dataclass(frozen=True)
 class InitCollaborators:
-    """What ``init`` reaches the hub through: an invoker hands its own to the root group as ``obj``;
-    with none, ``init`` builds the HTTP one."""
+    """What ``init`` and the host's runner verbs reach the hub through: an invoker hands its own to the root
+    group as ``obj``; with none, each builds the HTTP one."""
 
     hub_clients: Callable[[str, str, str | None], AbstractContextManager[InitHubClients]]
+    host_clients: Callable[[str], AbstractContextManager[HostClients]]
+
+    @classmethod
+    def of(cls, ctx: click.Context) -> InitCollaborators:
+        """The invoker's collaborators, or the HTTP ones."""
+        return ctx.find_object(InitCollaborators) or cls(_http_hub_clients, _http_host_clients)
 
     def join_with(self, hub_url: str, token: str) -> AbstractContextManager[InitHubClients]:
         """The identity read and the add for ``hub_url``, under the held ``token`` and the operator's session."""
@@ -136,14 +164,15 @@ class InitCollaborators:
 @click.option(
     "--allow-readd",
     is_flag=True,
-    help="Add the runner again when its hub does not know its token — only after that hub's data was reset.",
+    help="Add the host, or a runner, again when its hub does not know its token — only after that hub's data was "
+    "reset. A host added again sets the store aside and adds every runner again under it.",
 )
 @click.option(
     "--tenant",
     "tenant_id",
     default=None,
     metavar="TENANT_ID",
-    help="Add the runner in this tenant, by id; needed only when you may enter several.",
+    help="Add the host and its runners in this tenant, by id; needed only when you may enter several.",
 )
 @click.option(
     "--project",
@@ -161,16 +190,18 @@ def init(
     tenant_id: str | None,
     projects: tuple[str, ...],
 ) -> None:
-    """Scaffold the host file + data dir + a migrated store under DIRECTORY, then join the host's runner to
-    its hub. Idempotent.
+    """Scaffold the host file + data dir + a migrated store under DIRECTORY, then register the host at its hub and
+    join each of its runners under it. Idempotent.
 
-    A runner holding no token is added at the hub — under your `blizzard hub login` session when you
-    hold one, in the tenant --tenant names or else the only one you may enter — its token written to
-    DIRECTORY/.env as BZ_HUB_TOKEN_<NAME> and its id to the host file's `[[runner]]`. A held token whose runner
-    serves another tenant than --tenant names stops: a runner never moves between tenants. A fresh host serves
-    the projects --project names, else `default`; the runner is added serving them, or, with none named, the
-    tenant's only project. A directory a pre-host runner left behind is refused, naming graduation, unless
-    --allow-readd sets its store aside. DIRECTORY defaults to $BZ_RUNNER_DIR, then the cwd."""
+    A host token the hub knows — $BZ_HOST_TOKEN, the host file's `host_token`, then DIRECTORY/.env — keeps its host.
+    Holding none, the host is added at the hub under your `blizzard hub login` session when you hold one, in the
+    tenant --tenant names or else the only one you may enter, named after its first `[[runner]]`; its token is
+    written to DIRECTORY/.env as BZ_HOST_TOKEN. A runner holding no token is added under the host, its token
+    written to DIRECTORY/.env as BZ_HUB_TOKEN_<NAME> and its id to its `[[runner]]`; a runner whose token the hub
+    knows is kept when it stands under the host. A held token in another tenant than --tenant names stops: neither
+    a host nor a runner moves between tenants. A fresh host serves the projects --project names, else `default`. A
+    directory a pre-host runner left behind is refused, naming graduation, unless --allow-readd sets its store
+    aside. DIRECTORY defaults to $BZ_RUNNER_DIR, then the cwd."""
     named = projects or None
     trace = OperatorTrace.source(ctx)
     initialized: list[HostConfig] = []
@@ -191,24 +222,192 @@ def init(
         config_error=ConfigError,
     )
     (config,) = initialized
-    entry = config.sole_runner()
-    token = config.token_for(entry)
-    collaborators = ctx.find_object(InitCollaborators) or InitCollaborators(_http_hub_clients)
+    collaborators = InitCollaborators.of(ctx)
     rerun = _Rerun(config.root, tenant_id=tenant_id, allow_readd=allow_readd, projects=named)
-    if (
-        entry.id is not None
-        and not token.value
-        and not allow_readd
-        and _RuntimeStore(config, trace).stored_runner_id() is None
-    ):
+    store = _RuntimeStore(config, trace)
+    for entry in config.runners:
+        _refuse_tokenless(config, entry, store, rerun)
+    with collaborators.host_clients(config.hub_url) as host_clients:
+        host = register_host(config, collaborators, host_clients, store, rerun)
+        for entry in config.runners:
+            _join_runner(config, entry, collaborators, HostJoin(host, host_clients(host.token)), store, rerun)
+
+
+@collaborator
+@dataclass(frozen=True)
+class HostJoin:
+    """The host init registered, and its own hub calls under the token it holds."""
+
+    joined: JoinedHost
+    client: IHostHubClient
+
+
+def register_host(
+    config: HostConfig,
+    collaborators: InitCollaborators,
+    host_clients: HostClients,
+    store: IRunnerStoreAside,
+    rerun: _Rerun,
+) -> JoinedHost:
+    """Keep the host the held host token names, or add one named after the first ``[[runner]]`` and write its
+    token; any stop exits non-zero with no host added."""
+    held_token = config.host_token
+    held = HeldToken(held_token.value, from_process_env=not held_token.rereads_dotenv()) if held_token.value else None
+    token_file = HubTokenFile.of(config.root, HOST_TOKEN_VARIABLE)
+    hub = config.hub_url
+    name = config.runners[0].name if config.runners else DEFAULT_RUNNER_NAME
+    with collaborators.join_with(hub, "") as (_identity, admin):
+        adopt = () if held is not None else _adoptable(config, collaborators, rerun)
+        try:
+            host = HostBootstrap(host_clients, admin, token_file, store).join(
+                name, held=held, allow_readd=rerun.allow_readd, tenant_id=rerun.tenant_id, adopt=adopt
+            )
+        except HostBootstrapStopped as exc:
+            raise click.ClickException(_host_stopped(exc, config, token_file, rerun)) from exc
+        except HostTokenNotWritten as exc:
+            raise click.ClickException(
+                f"{exc}; retire it with `blizzard hub runner-host retire {exc.host_id} --hub-url {hub}`, then "
+                f"re-run `{rerun.again()}`"
+            ) from exc
+        except HostAddRefused as exc:
+            raise click.ClickException(_host_add_refused(exc, name, hub, rerun)) from exc
+        except HubClientError as exc:
+            raise click.ClickException(f"cannot register this host at the hub at {hub}: {exc}") from exc
+    record = host.record
+    where = f"host {record.host_name} ({record.host_id}) in tenant {record.tenant_id}"
+    if host.added:
+        again = " in place of the one the hub no longer knows" if host.readded else ""
+        click.echo(f"registered {where} at {hub}{again}; its token is in {token_file.path} as {HOST_TOKEN_VARIABLE}")
+    else:
+        click.echo(f"{where} keeps its token for {hub}")
+        if held_token.rereads_dotenv():
+            _restrict(token_file)
+    return host
+
+
+def _adoptable(config: HostConfig, collaborators: InitCollaborators, rerun: _Rerun) -> tuple[str, ...]:
+    """The runners a new host adopts as it is added: each whose held token the hub knows, in the tenant named if
+    one is. A token the hub refuses, or a read that fails, adopts nothing — the runner's own join reports it."""
+    adopt: list[str] = []
+    for entry in config.runners:
+        token = config.token_for(entry)
+        if not token.value:
+            continue
+        try:
+            with collaborators.identity_for(config.hub_url, token.value) as (identity, _admin):
+                answer = identity.identity()
+        except HubClientError:
+            continue
+        if isinstance(answer, TokenIdentity) and (
+            rerun.tenant_id is None or answer.tenant_id in (None, rerun.tenant_id)
+        ):
+            adopt.append(answer.runner_id)
+    return tuple(dict.fromkeys(adopt))
+
+
+def _host_stopped(exc: HostBootstrapStopped, config: HostConfig, token_file: HubTokenFile, rerun: _Rerun) -> str:
+    hub = config.hub_url
+    match exc.stop:
+        case HostBootstrapStop.UNKNOWN_HOST_TOKEN:
+            return (
+                f"the hub at {hub} does not know this host's token, so nothing was added and {token_file.path} is "
+                f"unchanged. If that hub's data was deliberately reset, re-run `{rerun.readding()}` to add the host "
+                f"and every runner again; otherwise check that {hub} is this host's hub"
+            )
+        case HostBootstrapStop.HOST_TOKEN_OVERRIDDEN:
+            where = (
+                f"${HOST_TOKEN_VARIABLE}"
+                if config.host_token.source is TokenSource.ENVIRONMENT
+                else f"host_token in {HOST_CONFIG_FILENAME}"
+            )
+            return (
+                f"the hub at {hub} does not know the host token {where} carries, and a replacement in "
+                f"{token_file.path} would go unread while it is set, so nothing was added: remove it there and "
+                f"re-run `{rerun.again()}`"
+            )
+        case HostBootstrapStop.HOST_RETIRED:
+            return (
+                f"the hub at {hub} refuses this host's token as a retired host's, so nothing was added: remove "
+                f"{HOST_TOKEN_VARIABLE} from where it is set to register a new host, or mint the host a new token "
+                f"with `blizzard hub runner-host enroll <host_id> --hub-url {hub}`"
+            )
+        case HostBootstrapStop.HUB_WITHOUT_HOSTS:
+            return f"the hub at {hub} predates hosts, so nothing was added; upgrade it, then re-run `{rerun.again()}`"
+        case HostBootstrapStop.ANOTHER_TENANT:
+            assert exc.held is not None, "the another-tenant stop carries the held host"
+            return (
+                f"this host's token belongs to host {exc.held.host_id}, which serves tenant {exc.held.tenant_id}, "
+                f"but --tenant names tenant {rerun.tenant_id}, so nothing was added: a host never moves between "
+                f"tenants. Re-run `{rerun.keeping_the_runner()}` to keep this host, or set up a new host in tenant "
+                f"{rerun.tenant_id} from a fresh directory with "
+                f"`blizzard runner init <new-directory> --tenant {rerun.tenant_id}`"
+            )
+        case HostBootstrapStop.TENANT_REQUIRED:
+            return (
+                f"you may enter several tenants at {hub}, so nothing was added: name the one to add this host in "
+                f"by its id with `{rerun.naming_a_tenant()}`{_tenant_listing(exc.tenants)}"
+            )
+        case HostBootstrapStop.NO_SUCH_TENANT:
+            return (
+                f"the hub at {hub} has no tenant {rerun.tenant_id} you may enter, so nothing was added: name one "
+                f"you may enter by its id with `{rerun.naming_a_tenant()}` — a tenant is named by "
+                f"its id, never its name{_tenant_listing(exc.tenants)}"
+            )
+
+
+def _host_add_refused(exc: HostAddRefused, name: str, hub: str, rerun: _Rerun) -> str:
+    match exc.reason:
+        case HostAddRefusalReason.SIGN_IN_REQUIRED:
+            return (
+                f"the hub at {hub} requires sign-in to add a host: run `blizzard hub login --hub-url {hub}` "
+                f"as an operator who may add hosts, then re-run `{rerun.again()}`"
+            )
+        case HostAddRefusalReason.FORBIDDEN:
+            return f"your session at {hub} may not add hosts: {exc.detail}"
+        case HostAddRefusalReason.UNSUPPORTED:
+            return f"the hub at {hub} predates hosts, so nothing was added; upgrade it, then re-run `{rerun.again()}`"
+        case HostAddRefusalReason.NAME_TAKEN:
+            return (
+                f"the hub at {hub} refused to add host {name}, so nothing was added: a live host already holds the "
+                f"name, or a runner this host holds a token for stands under another host or is retired "
+                f"({exc.detail}). Rename this host's first [[runner]], or retire the other host with "
+                f"`blizzard hub runner-host retire <host_id> --hub-url {hub}`"
+            )
+        case HostAddRefusalReason.TENANT_REQUIRED | HostAddRefusalReason.NO_SUCH_TENANT:
+            return f"the hub at {hub} could not settle the tenant to add this host in: {exc.detail}"
+
+
+def _refuse_tokenless(config: HostConfig, entry: RunnerEntry, store: _RuntimeStore, rerun: _Rerun) -> None:
+    """Stop before reaching the hub when ``entry`` is configured with an id but holds no token over a store naming
+    no runner of its own: init would add another runner in its place."""
+    if entry.id is None or rerun.allow_readd or config.token_for(entry).value:
+        return
+    if store.stored_runner_id(sibling_of=entry) is None:
         raise click.ClickException(
             f"runner {entry.name} is configured as {entry.id} but holds no token, so init would add another runner "
             f"in its place; restore its token, or re-run `{rerun.readding()}` to set its store aside and add a new one"
         )
+
+
+def _join_runner(
+    config: HostConfig,
+    entry: RunnerEntry,
+    collaborators: InitCollaborators,
+    host: HostJoin,
+    store: _RuntimeStore,
+    rerun: _Rerun,
+) -> None:
+    """Join ``entry``'s runner to the hub under the host, then write its id into the host file and its identity
+    row into the store."""
+    token = config.token_for(entry)
     with collaborators.join_with(config.hub_url, token.value) as (identity, admin):
-        if entry.id is not None and token.value and not allow_readd:
+        if entry.id is not None and token.value and not rerun.allow_readd:
             _refuse_other_runner(entry, identity)
-        joined = _join_hub(config, entry, token, identity, admin, _RuntimeStore(config, trace), rerun)
+        joined = _join_hub(
+            config, entry, token, identity, HostRunnerAdmin(host.client, admin), store.for_runner(entry), rerun
+        )
+    if not joined.added and not host.joined.holds(joined.runner_id):
+        raise click.ClickException(_stands_elsewhere(config, entry, joined, host.joined, rerun))
     # The token is written before the id, and the id before the identity row: a crash between any two is completed
     # by running init again, which keeps the runner the token names and, under --allow-readd, writes the id it
     # left stale. A configured id differing from the joined runner's reaches here only by a re-add.
@@ -216,6 +415,19 @@ def init(
         with click_exception_on(ConfigError):
             write_runner_id(config.layout, entry.name, joined.runner_id)
     _record_identity(config, joined)
+
+
+def _stands_elsewhere(
+    config: HostConfig, entry: RunnerEntry, joined: JoinedRunner, host: JoinedHost, rerun: _Rerun
+) -> str:
+    """The stop for a kept runner the hub does not hold under this host."""
+    hub, host_id = config.hub_url, host.record.host_id
+    return (
+        f"runner {entry.name}'s token belongs to runner {joined.runner_id}, which the hub at {hub} does not hold "
+        f"under this host ({host_id}), so its id and identity row were not written: place it under this host with "
+        f"`blizzard hub runner-host adopt {host_id} {joined.runner_id} --hub-url {hub}`, then re-run "
+        f"`{rerun.again()}`"
+    )
 
 
 def _refuse_other_runner(entry: RunnerEntry, identity: ITokenIdentityReader) -> None:
@@ -239,7 +451,8 @@ def _refuse_unsettled(config: HostConfig, entry: RunnerEntry, joined: JoinedRunn
     names another runner, or the host file configures another id and no re-add was asked for. A kept runner joins
     a store set aside for it or one naming only itself, and a configured id differing from its own is completed
     only under a re-add — the state a crash between the token and the id leaves."""
-    others = [named for named in named_runners(config) if named != joined.runner_id]
+    siblings = {other.id for other in config.runners if other.name != entry.name}
+    others = [named for named in named_runners(config) if named != joined.runner_id and named not in siblings]
     if others:
         raise click.ClickException(
             f"runner {entry.name}'s token belongs to runner {joined.runner_id}, but the store here names runner "
@@ -318,23 +531,47 @@ def configured_ids(config: RunnerConfig) -> tuple[str, ...]:
 
 
 class _RuntimeStore:
-    """The host's own store, as ``init`` sees it while the host is down."""
+    """The host's own store, as ``init`` sees it while the host is down. It is set aside at most once per init:
+    the host added again and each runner added again share the one fresh store."""
 
     def __init__(self, config: HostConfig, trace: ITraceHeaders) -> None:
         self.config = config
         self.trace = trace
+        self._set_aside = False
 
-    def stored_runner_id(self) -> str | None:
-        """The runner the store's identity rows name — asked of the cross-runner audit, since no runner is
-        configured yet to bind a view to."""
-        named = named_runners(self.config)
+    def stored_runner_id(self, *, sibling_of: RunnerEntry | None = None) -> str | None:
+        """The runner the store's identity rows name, other than any another ``[[runner]]`` of the host configures
+        beside ``sibling_of`` — asked of the cross-runner audit, since no runner is bound to a view yet."""
+        siblings = {e.id for e in self.config.runners if sibling_of is not None and e.name != sibling_of.name}
+        named = [runner_id for runner_id in named_runners(self.config) if runner_id not in siblings]
         return named[0] if named else None
 
     def set_aside(self) -> None:
+        if self._set_aside:
+            return
         with click_exception_on(ConfigError, StoreResetRefused):
             aside = runtime_of(self.config.root, self.trace).reset_store(now=SystemClock().now())
+        self._set_aside = True
         for path in aside.moved:
-            click.echo(f"set the old runner's store aside as {path}")
+            click.echo(f"set the old store aside as {path}")
+
+    def for_runner(self, entry: RunnerEntry) -> IRunnerStoreAside:
+        """The store as ``entry``'s runner joins it: the runners its siblings configure are theirs, not a former
+        owner's."""
+        return _RunnerStoreView(self, entry)
+
+
+@collaborator
+@dataclass(frozen=True)
+class _RunnerStoreView:
+    store: _RuntimeStore
+    entry: RunnerEntry
+
+    def stored_runner_id(self) -> str | None:
+        return self.store.stored_runner_id(sibling_of=self.entry)
+
+    def set_aside(self) -> None:
+        self.store.set_aside()
 
 
 @dto
@@ -686,7 +923,7 @@ def _check(ctx: click.Context, root: Path, *, host: str | None, port: int | None
     except (RevisionMismatchError, MigrationConnectionError) as exc:
         problems.append(f"store: {exc}")
         named = ()
-    collaborators = ctx.find_object(InitCollaborators) or InitCollaborators(_http_hub_clients)
+    collaborators = InitCollaborators.of(ctx)
     for projection in config.projections():
         if isinstance(projection, HaltedRunner):
             problems.append(projection.describe())

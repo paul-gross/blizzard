@@ -18,13 +18,14 @@ from click.testing import Result
 from blizzard.cli.main import blizzard
 from blizzard.foundation.operator_sessions.internal.session_file import SessionFile
 from blizzard.foundation.runner_tokens import RunnerTokenRefusalReason
+from blizzard.runner.host_config import HOST_TOKEN_VARIABLE
 from blizzard.runner.host_layout import HostLayout
 from blizzard.runner.hub.bootstrap import BootstrapStop, BootstrapStopped, HeldToken, RunnerBootstrap, kept_identity
 from blizzard.runner.hub.client import (
+    HostAddRefusalReason,
+    HostAddRefused,
     HubClientError,
     IssuedIdentity,
-    RunnerAddRefusalReason,
-    RunnerAddRefused,
     TokenIdentity,
     TokenRefusal,
 )
@@ -176,9 +177,10 @@ def test_init_adds_the_runner_under_its_name_and_writes_its_token(tmp_path: Path
     result = _init(fake_init_hub, root)
     assert result.exit_code == 0, result.output
     assert [(i.runner_id, i.runner_name) for i in fake_init_hub.admin.added] == [("rn_init1", "runner-local")]
-    assert [(c.hub_url, c.runner_token, c.operator_token) for c in fake_init_hub.calls] == [(_HUB, "", None)]
+    # The host is registered under the operator's credential first, then the runner joins under it.
+    assert [(c.hub_url, c.runner_token, c.operator_token) for c in fake_init_hub.calls] == [(_HUB, "", None)] * 2
     env = root / ENV_FILENAME
-    assert env.read_text() == f"{DEFAULT_TOKEN_ENV}=init-token-1\n"
+    assert env.read_text() == f"{HOST_TOKEN_VARIABLE}=init-host-token-1\n{DEFAULT_TOKEN_ENV}=init-token-1\n"
     assert stat.S_IMODE(env.stat().st_mode) == 0o600
     assert "rn_init1" in result.output
 
@@ -230,20 +232,24 @@ def test_init_over_a_token_added_as_the_scaffolded_name_keeps_it_and_scaffolds_t
 def test_init_keeping_a_hand_written_token_makes_its_file_owner_only_bytes_unchanged(
     tmp_path: Path, fake_init_hub: FakeInitHub
 ) -> None:
-    """An operator adds the runner elsewhere and pastes its token line under the default umask."""
+    """An operator adds the runner elsewhere and pastes its token line under the default umask; the host init
+    registers adopts it, and the host token written beside it leaves the file owner-only."""
     issued = fake_init_hub.admin.add_runner("anna-laptop")
     root = tmp_path / "runner"
     root.mkdir()
     env = root / ENV_FILENAME
     env.write_text(f"OTEL_EXPORTER_OTLP_ENDPOINT=http://collector:4318\n{DEFAULT_TOKEN_ENV}={issued.token}\n")
     env.chmod(0o644)
-    env_bytes = env.read_bytes()
     result = _init(fake_init_hub, root)
     assert result.exit_code == 0, result.output
-    assert "keeps its token" in result.output and "owner-only" in result.output
+    assert "keeps its token" in result.output
     assert stat.S_IMODE(env.stat().st_mode) == 0o600
-    assert env.read_bytes() == env_bytes
+    assert env.read_text() == (
+        f"OTEL_EXPORTER_OTLP_ENDPOINT=http://collector:4318\n{DEFAULT_TOKEN_ENV}={issued.token}\n"
+        f"{HOST_TOKEN_VARIABLE}=init-host-token-1\n"
+    )
     assert len(fake_init_hub.admin.added) == 1
+    assert fake_init_hub.admin.adopted == [(issued.runner_id,)]
 
 
 @pytest.mark.component
@@ -302,7 +308,8 @@ def test_init_after_a_hub_reset_re_adds_the_runner_with_allow_readd(tmp_path: Pa
     assert result.exit_code == 0, result.output
     assert [i.runner_id for i in fake_init_hub.admin.added] == ["rn_init1"]
     assert (root / ENV_FILENAME).read_text() == (
-        f"OTEL_EXPORTER_OTLP_ENDPOINT=http://collector:4318\n{DEFAULT_TOKEN_ENV}=init-token-1\n"
+        f"OTEL_EXPORTER_OTLP_ENDPOINT=http://collector:4318\n{HOST_TOKEN_VARIABLE}=init-host-token-1\n"
+        f"{DEFAULT_TOKEN_ENV}=init-token-1\n"
     )
 
 
@@ -378,17 +385,33 @@ def test_init_fails_and_adds_nothing_when_the_hub_is_unreachable(tmp_path: Path,
 def test_init_with_no_token_fails_and_writes_nothing_when_the_add_cannot_reach_the_hub(
     tmp_path: Path, fake_init_hub: FakeInitHub
 ) -> None:
-    fake_init_hub.admin.refusal = HubClientError("POST /api/runners -> 503")
+    fake_init_hub.admin.host_refusal = HubClientError("POST /api/hosts -> 503")
     result = _init(fake_init_hub, tmp_path / "runner")
     assert result.exit_code != 0
     assert not (tmp_path / "runner" / ENV_FILENAME).exists()
 
 
 @pytest.mark.component
+def test_init_whose_runner_add_cannot_reach_the_hub_keeps_the_host_and_writes_no_runner_token(
+    tmp_path: Path, fake_init_hub: FakeInitHub
+) -> None:
+    fake_init_hub.admin.refusal = HubClientError("POST /api/fleet/host/runners -> 503")
+    root = tmp_path / "runner"
+    result = _init(fake_init_hub, root)
+    assert result.exit_code != 0
+    assert (root / ENV_FILENAME).read_text() == f"{HOST_TOKEN_VARIABLE}=init-host-token-1\n"
+
+
+@pytest.mark.component
 def test_init_that_cannot_write_an_added_runners_token_fails_naming_the_runner_to_retire(
     tmp_path: Path, fake_init_hub: FakeInitHub, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    write = HubTokenFile.write
+
     def unwritable(self: HubTokenFile, token: str) -> None:
+        if self.token_env == HOST_TOKEN_VARIABLE:
+            write(self, token)
+            return
         raise PermissionError(errno.EACCES, os.strerror(errno.EACCES), str(self.path))
 
     monkeypatch.setattr(HubTokenFile, "write", unwritable)
@@ -400,12 +423,12 @@ def test_init_that_cannot_write_an_added_runners_token_fails_naming_the_runner_t
 
 @pytest.mark.component
 def test_init_against_a_hub_requiring_sign_in_says_to_log_in(tmp_path: Path, fake_init_hub: FakeInitHub) -> None:
-    fake_init_hub.admin.refusal = RunnerAddRefused(
-        "POST /api/runners -> 401", reason=RunnerAddRefusalReason.SIGN_IN_REQUIRED, detail="not authenticated"
+    fake_init_hub.admin.host_refusal = HostAddRefused(
+        "POST /api/hosts -> 401", reason=HostAddRefusalReason.SIGN_IN_REQUIRED, detail="not authenticated"
     )
     result = _init(fake_init_hub, tmp_path / "runner")
     assert result.exit_code != 0
-    assert "blizzard hub login" in result.output
+    assert "blizzard hub login" in result.output and "to add a host" in result.output
     assert not (tmp_path / "runner" / ENV_FILENAME).exists()
 
 
@@ -419,12 +442,13 @@ def test_init_adds_under_the_operator_session_held_for_its_hub(tmp_path: Path, f
 @pytest.mark.component
 def test_init_refuses_an_existing_config_naming_another_hub(tmp_path: Path, fake_init_hub: FakeInitHub) -> None:
     root, _ = _joined(tmp_path, fake_init_hub)
+    reached = len(fake_init_hub.calls)
     result = init_runner(fake_init_hub).invoke(
         blizzard, ["runner", "init", str(root), "--hub", "http://elsewhere:8421"]
     )
     assert result.exit_code != 0
     assert "http://elsewhere:8421" in result.output
-    assert len(fake_init_hub.calls) == 1
+    assert len(fake_init_hub.calls) == reached
     assert load_runner_config(root).hub_url == _HUB
 
 
@@ -453,7 +477,9 @@ def test_init_adds_a_renamed_runner_under_its_name_and_writes_its_token_under_th
     result = _init(fake_init_hub, root, "--allow-readd")  # the store still names the runner the old name had added
     assert result.exit_code == 0, result.output
     assert fake_init_hub.admin.added[-1].runner_name == "r-claude"
-    assert (root / ENV_FILENAME).read_text() == "BZ_HUB_TOKEN_R_CLAUDE=init-token-2\n"
+    assert (root / ENV_FILENAME).read_text() == (
+        f"{HOST_TOKEN_VARIABLE}=init-host-token-2\nBZ_HUB_TOKEN_R_CLAUDE=init-token-2\n"
+    )
 
 
 # --- the old runner's store on a re-add ----------------------------------------------------------
@@ -549,7 +575,7 @@ def test_init_re_adding_after_a_hub_reset_sets_the_old_store_aside_keeping_it(
     assert result.exit_code == 0, result.output
     aside = [p for p in database.parent.iterdir() if p.name.startswith("host.db.") and p.suffix != ".lock"]
     assert len(aside) == 1
-    assert "set the old runner's store aside as" in result.output
+    assert "set the old store aside as" in result.output
     assert _identity_ids(aside[0]) == ["rn_init1"]  # the old runner's identity row stays with its store
     assert _identity_ids(database) == ["rn_init1"]  # the fresh store holds the runner just added
 

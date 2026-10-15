@@ -104,6 +104,16 @@ class HostAddRefused(HubClientError):
         self.detail = detail
 
 
+class HostRunnerRetireRefused(HubClientError):
+    """The hub refused to retire a runner under the host because it still holds chunks (409) — terminal
+    for the caller unless it retires again with ``force``. ``detail`` is the hub's refusal text, naming
+    each held chunk. Still a :class:`HubClientError`."""
+
+    def __init__(self, message: str, *, detail: str) -> None:
+        super().__init__(message)
+        self.detail = detail
+
+
 class HostRefusalReason(StrEnum):
     """Why the hub refused a call under the host's own token: ``CREDENTIAL_REFUSED``, the token is
     missing, unknown, revoked, or its host retired (401 or 403); ``NOT_FOUND``, the hub answered 404 —
@@ -635,11 +645,12 @@ class IHubRunnerAdmin(Protocol):
         that predates tenants. Any failure raises :class:`HubClientError`."""
         ...
 
-    def add_host(self, name: str, *, tenant_id: str | None = None) -> IssuedHost:
+    def add_host(self, name: str, *, tenant_id: str | None = None, adopt: tuple[str, ...] = ()) -> IssuedHost:
         """``POST /api/hosts`` — add a host under ``name`` in the tenant ``tenant_id`` names, or, with
-        none named, the one the hub resolves for the operator; the hub mints its id and bearer token
-        together. A refusal raises :class:`HostAddRefused`; an unreachable hub or a 5xx raises
-        :class:`HubClientError`, and the hub has added nothing the caller can use."""
+        none named, the one the hub resolves for the operator, placing the runners ``adopt`` names under
+        it in the same write; the hub mints its id and bearer token together. A refusal raises
+        :class:`HostAddRefused`; an unreachable hub or a 5xx raises :class:`HubClientError`, and the hub
+        has added nothing the caller can use."""
         ...
 
 
@@ -666,11 +677,12 @@ class IHostHubClient(Protocol):
     def add_runner(self, name: str, *, projects: tuple[str, ...] | None = None) -> IssuedIdentity | HostRefused:
         """``POST /api/fleet/host/runners`` — add a runner under the host, in its tenant, under the
         initial ``name``, serving the projects ``projects`` names — or, with ``None``, the tenant's only
-        project; the hub mints its id and bearer token together."""
+        project; the hub mints its id and bearer token together. A named project the tenant does not hold
+        raises :class:`RunnerAddRefused`."""
         ...
 
     def retire_runner(self, runner_id: str, *, force: bool = False) -> RetiredHostRunner | HostRefused:
         """``POST /api/fleet/host/runners/{runner_id}/retire`` — retire a runner under the host. The hub
         refuses one that still holds chunks unless ``force`` releases them, raising
-        :class:`HubClientError` naming them."""
+        :class:`HostRunnerRetireRefused` naming them."""
         ...

@@ -22,9 +22,11 @@ from blizzard.cli.main import blizzard
 from blizzard.foundation.runner_tokens import RunnerTokenRefusalReason
 from blizzard.hub.api.auth_session import TENANT_HEADER as HUB_TENANT_HEADER
 from blizzard.hub.api.me import MeResponse, MeTenant
-from blizzard.runner.cli.runtime import InitCollaborators, InitHubClients
+from blizzard.runner.cli.runtime import HostClients, InitCollaborators, InitHubClients
 from blizzard.runner.hub.bootstrap import BootstrapStop, BootstrapStopped, HeldToken, RunnerBootstrap
 from blizzard.runner.hub.client import (
+    HostAddRefusalReason,
+    HostAddRefused,
     HubClientError,
     IssuedIdentity,
     OperatorTenant,
@@ -33,7 +35,12 @@ from blizzard.runner.hub.client import (
     TokenIdentity,
     TokenRefusal,
 )
-from blizzard.runner.hub.internal.http_hub import TENANT_HEADER, HttpHubClient, HttpHubRunnerAdmin
+from blizzard.runner.hub.internal.http_hub import (
+    TENANT_HEADER,
+    HttpHostHubClient,
+    HttpHubClient,
+    HttpHubRunnerAdmin,
+)
 from blizzard.runner.hub.internal.token_file import HubTokenFile
 from blizzard.runner.hub.token_file import ENV_FILENAME
 from blizzard.wire.user import CallerTenantsView, CallerTenantView
@@ -48,6 +55,9 @@ _BRAVO = OperatorTenant(tenant_id="ten_bravo", name="bravo")
 _IN_ALPHA = TokenIdentity(runner_id="rn_1", runner_name="r", tenant_id="ten_alpha", tenant_name="alpha")
 _TENANT_REQUIRED = RunnerAddRefused(
     "POST /api/runners -> 409", reason=RunnerAddRefusalReason.TENANT_REQUIRED, detail="name the tenant"
+)
+_HOST_TENANT_REQUIRED = HostAddRefused(
+    "POST /api/hosts -> 409", reason=HostAddRefusalReason.TENANT_REQUIRED, detail="name the tenant"
 )
 
 
@@ -283,7 +293,7 @@ def test_init_left_a_choice_stops_listing_ids_beside_names_and_how_to_name_one(
     tmp_path: Path, fake_init_hub: FakeInitHub
 ) -> None:
     root = tmp_path / "runner"
-    fake_init_hub.admin.refusal = _TENANT_REQUIRED
+    fake_init_hub.admin.host_refusal = _HOST_TENANT_REQUIRED
     fake_init_hub.admin.tenants_answer = [_ALPHA, _BRAVO]
     result = _init(fake_init_hub, root)
     assert result.exit_code != 0
@@ -298,8 +308,8 @@ def test_init_left_a_choice_stops_listing_ids_beside_names_and_how_to_name_one(
 def test_init_naming_a_tenant_it_may_not_enter_stops_listing_the_ones_it_may(
     tmp_path: Path, fake_init_hub: FakeInitHub
 ) -> None:
-    fake_init_hub.admin.refusal = RunnerAddRefused(
-        "POST /api/runners -> 404", reason=RunnerAddRefusalReason.NO_SUCH_TENANT, detail="no such tenant"
+    fake_init_hub.admin.host_refusal = HostAddRefused(
+        "POST /api/hosts -> 404", reason=HostAddRefusalReason.NO_SUCH_TENANT, detail="no such tenant"
     )
     fake_init_hub.admin.tenants_answer = [_ALPHA]
     result = _init(fake_init_hub, tmp_path / "runner", "--tenant", "alpha")
@@ -314,7 +324,7 @@ def test_init_whose_held_token_serves_another_tenant_stops_naming_both_and_keeps
     tmp_path: Path, fake_init_hub: FakeInitHub
 ) -> None:
     root = tmp_path / "runner"
-    assert _init(fake_init_hub, root).exit_code == 0
+    assert _init(fake_init_hub, root, "--tenant", "ten_bravo").exit_code == 0
     env_bytes = (root / ENV_FILENAME).read_bytes()
     fake_init_hub.identity = FakeTokenIdentityReader(
         TokenIdentity(runner_id="rn_init1", runner_name="runner-local", tenant_id="ten_alpha", tenant_name="alpha")
@@ -354,7 +364,11 @@ def _real_hub_clients(app: FastAPI) -> InitCollaborators:
             HttpHubRunnerAdmin(TestClient(app), operator_token=operator_token),
         )
 
-    return InitCollaborators(clients)
+    @contextmanager
+    def host_clients(_hub_url: str) -> Iterator[HostClients]:
+        yield lambda token: HttpHostHubClient(TestClient(app), token=token)
+
+    return InitCollaborators(clients, host_clients)
 
 
 def _runner_ids(client: TestClient, tenant: str) -> list[str]:
@@ -394,7 +408,7 @@ def test_init_against_a_hub_with_two_tenants_needs_the_tenant_named_and_never_mo
 
     moved = init("--tenant", first)
     assert moved.exit_code != 0
-    assert f"which serves tenant bravo ({bravo})" in moved.output
+    assert f"which serves tenant {bravo}" in moved.output
     assert f"--tenant names tenant {first}" in moved.output
     assert _runner_ids(observer, first) == []
 

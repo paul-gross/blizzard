@@ -2,8 +2,10 @@
 
 The layout is the directory's filenames and its graduation state; the lock is the one owner a host
 directory has; the writes are the few the host file takes after its author's — ``init``'s scaffold and its
-runner ``id``, and ``prompt install`` repointing a workspace's prompt keys. Each write is a targeted line
-edit of the file as it stands, never a regeneration, so an operator's comments and ordering survive."""
+runner ``id``, ``runner add`` appending a whole ``[[runner]]`` and ``runner retire`` removing one, and ``prompt
+install`` repointing a workspace's prompt keys. Each write is a targeted line edit of the file as it stands, never a
+regeneration, so an operator's comments and ordering survive; each is checked by parsing the result against what the
+edit must yield, and refused when it would yield anything else."""
 
 from __future__ import annotations
 
@@ -181,6 +183,92 @@ def repoint_workspace_prompt(layout: HostLayout, workspace_id: str, *, file_path
         workspace_id,
         {"prompt_file": json.dumps(file_path), "prompt_package": '""'},
     )
+
+
+def append_runner(layout: HostLayout, table: str) -> None:
+    """Append the ``[[runner]]`` whose TOML ``table`` holds — its header, keys, and ``[runner.*]`` sub-tables —
+    after everything the file holds."""
+    text = layout.config_path.read_text()
+    before = _parsed(layout, text)
+    try:
+        added = tomllib.loads(table)["runner"]
+    except (tomllib.TOMLDecodeError, KeyError) as error:
+        raise ConfigError(f"the [[runner]] to append is not one TOML [[runner]]: {error}") from error
+    expected = copy.deepcopy(before)
+    expected.setdefault("runner", []).extend(added)
+    separator = "" if not text or text.endswith("\n") else "\n"
+    _replace(layout, text, text + separator + table, expected, what="the appended [[runner]]")
+
+
+def remove_runner(layout: HostLayout, runner_name: str) -> None:
+    """Remove the ``[[runner]]`` named ``runner_name`` whole: its header, its keys, and every ``[runner.*]``
+    sub-table under it. Comments leading into the next table stay with that table."""
+    text = layout.config_path.read_text()
+    before = _parsed(layout, text)
+    runners = before.get("runner", [])
+    position = next(
+        (i for i, entry in enumerate(runners) if isinstance(entry, dict) and entry.get("name") == runner_name), None
+    )
+    if position is None:
+        raise ConfigError(f"{layout.config_path} has no [[runner]] with name = {runner_name!r}")
+    lines = text.splitlines(keepends=True)
+    statements = _statements(lines)
+    header, end = _runner_span(lines, statements, position)
+    while end > header and (not lines[end - 1].strip() or lines[end - 1].lstrip().startswith("#")):
+        end -= 1
+    # The blank lines that set the removed table off from the one before it go with it.
+    while header > 0 and not lines[header - 1].strip():
+        header -= 1
+    expected = copy.deepcopy(before)
+    del expected["runner"][position]
+    if not expected["runner"]:
+        del expected["runner"]
+    _replace(layout, text, "".join(lines[:header] + lines[end:]), expected, what=f"[[runner]] {runner_name!r}")
+
+
+def _parsed(layout: HostLayout, text: str) -> dict[str, Any]:
+    try:
+        return tomllib.loads(text)
+    except tomllib.TOMLDecodeError as error:
+        raise ConfigError(f"{layout.config_path} is not valid TOML: {error}") from error
+
+
+def _replace(layout: HostLayout, text: str, edited: str, expected: dict[str, Any], *, what: str) -> None:
+    """Write ``edited`` over the host file whole, when it parses to ``expected``; refuse it otherwise."""
+    try:
+        after = tomllib.loads(edited)
+    except tomllib.TOMLDecodeError as error:
+        raise ConfigError(f"{layout.config_path} cannot take the edit to {what}: {error}") from error
+    if after != expected:
+        raise ConfigError(f"{layout.config_path} cannot take the edit to {what} safely; edit it by hand")
+    if edited == text:
+        return
+    replacement = _write_pending(layout.root, edited, mode=layout.config_path.stat().st_mode & 0o777)
+    os.replace(replacement, layout.config_path)
+
+
+_RUNNER_HEADER = re.compile(r"^\s*\[\[\s*runner\s*\]\]\s*(#.*)?$")
+_RUNNER_SUBTABLE = re.compile(r"^\s*\[\[?\s*runner\s*\.")
+
+
+def _runner_span(lines: list[str], statements: list[tuple[int, int]], position: int) -> tuple[int, int]:
+    """The line range of the ``position``-th ``[[runner]]``: from its header up to the next header that is not
+    one of its ``[runner.*]`` sub-tables."""
+    seen = -1
+    for index, (first, last) in enumerate(statements):
+        if first == last and _RUNNER_HEADER.match(lines[first]):
+            seen += 1
+            if seen == position:
+                end = next(
+                    (
+                        f
+                        for f, _ in statements[index + 1 :]
+                        if _HEADER.match(lines[f]) and not _RUNNER_SUBTABLE.match(lines[f])
+                    ),
+                    len(lines),
+                )
+                return first, end
+    raise ConfigError(f"[[runner]] number {position + 1} has no header line to edit")
 
 
 def _set_table_keys(layout: HostLayout, table: str, identity_key: str, identity: str, values: dict[str, str]) -> None:
