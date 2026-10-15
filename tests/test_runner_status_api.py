@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.runner_identity_state import IdentityState
 from blizzard.runner.app import create_app
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.adapter import WorkerHandle
@@ -24,7 +25,6 @@ from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.hub.identity import (
     ICurrentIdentityVerdict,
     ICurrentRunnerIdentity,
-    IdentityState,
     IdentityVerdictHolder,
     RunnerIdentity,
     RunnerIdentityHolder,

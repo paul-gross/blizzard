@@ -16,6 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response,
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 
+from blizzard.foundation.host_registration_state import HostRegistrationState
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.origin import Origin
 from blizzard.foundation.platform_tracing.attributes import annotate_caller
@@ -33,7 +34,7 @@ from blizzard.runner.auth.session import (
 )
 from blizzard.runner.auth.validate import FederationToken, FederationTokenError
 from blizzard.runner.hub.host_identity import ICurrentHostIdentity
-from blizzard.runner.hub.host_registration import HostRegistrationState, ICurrentHostRegistration
+from blizzard.runner.hub.host_registration import ICurrentHostRegistration
 from blizzard.runner.hub.identity import ICurrentRunnerIdentity
 
 _log = get_logger("blizzard.runner.auth")

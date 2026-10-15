@@ -2952,6 +2952,19 @@
         "title": "HostEnvironmentView",
         "type": "object"
       },
+      "HostRegistrationState": {
+        "description": "Where the host stands with its hub, as its latest report found it.",
+        "enum": [
+          "unregistered",
+          "pending",
+          "registered",
+          "refused",
+          "no_hosts",
+          "unreachable"
+        ],
+        "title": "HostRegistrationState",
+        "type": "string"
+      },
       "HostRegistrationView": {
         "description": "The host's registration at its hub, as its latest report found it: the identity its first answered report\nrecorded (``host_id``, ``tenant_id``), the name and runners the hub last answered for it, when, and \u2014 short of\nregistered \u2014 why. ``buffered_facts`` counts the facts waiting on the host's own lane.",
         "properties": {
@@ -3012,16 +3025,7 @@
             "title": "Host Name"
           },
           "state": {
-            "enum": [
-              "unregistered",
-              "pending",
-              "registered",
-              "refused",
-              "no_hosts",
-              "unreachable"
-            ],
-            "title": "State",
-            "type": "string"
+            "$ref": "#/components/schemas/HostRegistrationState"
           },
           "tenant_id": {
             "anyOf": [
@@ -3386,6 +3390,19 @@
         "title": "HubConnectivityView",
         "type": "object"
       },
+      "IdentityState": {
+        "description": "Whether this process may work as the configured runner: its token's own verdict, and \u2014 on a registered\nhost \u2014 whether the hub holds it under the host.",
+        "enum": [
+          "unchecked",
+          "matched",
+          "mismatched",
+          "refused",
+          "not_held",
+          "tenant_differs"
+        ],
+        "title": "IdentityState",
+        "type": "string"
+      },
       "IdentityVerdictView": {
         "description": "Whether the runner's token resolves to the runner its host file configures (``store_runner_id``).\n\n``unchecked`` until the hub first answers the check, ``matched`` while it does, ``mismatched``\nwhile the token names another runner, ``refused`` while the hub refuses the token (unknown, revoked,\nretired) \u2014 the runner then drives no lease until a check resolves it again. On a registered host,\n``not_held`` while the hub does not hold the runner under the host and ``tenant_differs`` while it stands\nin another tenant than the host's halt the runner alone. ``reason`` says why for those last three.\n``reset_command`` names how to restore the token: the token variable and the configured id.",
         "properties": {
@@ -3416,16 +3433,7 @@
             "type": "string"
           },
           "state": {
-            "enum": [
-              "unchecked",
-              "matched",
-              "mismatched",
-              "refused",
-              "not_held",
-              "tenant_differs"
-            ],
-            "title": "State",
-            "type": "string"
+            "$ref": "#/components/schemas/IdentityState"
           },
           "store_runner_id": {
             "anyOf": [

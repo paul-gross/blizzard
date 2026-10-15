@@ -11,10 +11,11 @@ import pytest
 from structlog.testing import capture_logs
 
 from blizzard.foundation.clock import FixedClock, SystemClock
+from blizzard.foundation.runner_identity_state import IdentityState
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.registry import HarnessRegistry
 from blizzard.runner.hub.client import BindingDeclaration
-from blizzard.runner.hub.identity import IdentityState, RunnerIdentityHolder
+from blizzard.runner.hub.identity import RunnerIdentityHolder
 from blizzard.runner.hub.served_projects import ServedProject
 from blizzard.runner.leases.activity import HEARTBEAT_STALENESS_THRESHOLD
 from blizzard.runner.leases.model import NewLease

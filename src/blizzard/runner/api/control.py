@@ -150,7 +150,7 @@ def _runner_status_view(service: RunnerStatusService) -> RunnerStatusView:
 
 def _identity_view(verdict: IdentityVerdict) -> IdentityVerdictView:
     return IdentityVerdictView(
-        state=verdict.state.value,
+        state=verdict.state,
         store_runner_id=verdict.store_runner_id,
         token_runner_id=verdict.token_runner_id,
         checked_at=iso_utc(verdict.checked_at) if verdict.checked_at is not None else None,

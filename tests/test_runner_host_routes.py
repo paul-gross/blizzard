@@ -15,6 +15,8 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.host_registration_state import HostRegistrationState
+from blizzard.foundation.runner_identity_state import IdentityState
 from blizzard.foundation.runner_paths import is_api_path
 from blizzard.foundation.web import Frontend
 from blizzard.runner.api.wiring import ServedWorkspace
@@ -24,12 +26,8 @@ from blizzard.runner.harness.registry import HarnessRegistry
 from blizzard.runner.host_config import HaltedRunner
 from blizzard.runner.hub.client import BindingDeclaration
 from blizzard.runner.hub.host_identity import HostIdentity, HostIdentityHolder
-from blizzard.runner.hub.host_registration import (
-    HostRegistrationHolder,
-    HostRegistrationState,
-    HostRegistrationStatus,
-)
-from blizzard.runner.hub.identity import HostStanding, IdentityState, IdentityVerdictHolder
+from blizzard.runner.hub.host_registration import HostRegistrationHolder, HostRegistrationStatus
+from blizzard.runner.hub.identity import HostStanding, IdentityVerdictHolder
 from blizzard.runner.status.view import RunnerStatusService
 from blizzard.runner.stores import RunnerStores
 from tests.host_files import one_workspace

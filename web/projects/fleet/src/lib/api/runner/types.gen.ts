@@ -1852,6 +1852,27 @@ export type HostEnvironmentView = {
 };
 
 /**
+ * HostRegistrationState
+ *
+ * Where the host stands with its hub, as its latest report found it.
+ */
+export const HostRegistrationState = {
+    UNREGISTERED: 'unregistered',
+    PENDING: 'pending',
+    REGISTERED: 'registered',
+    REFUSED: 'refused',
+    NO_HOSTS: 'no_hosts',
+    UNREACHABLE: 'unreachable'
+} as const;
+
+/**
+ * HostRegistrationState
+ *
+ * Where the host stands with its hub, as its latest report found it.
+ */
+export type HostRegistrationState = typeof HostRegistrationState[keyof typeof HostRegistrationState];
+
+/**
  * HostRegistrationView
  *
  * The host's registration at its hub, as its latest report found it: the identity its first answered report
@@ -1883,10 +1904,7 @@ export type HostRegistrationView = {
      * Host Name
      */
     host_name?: string | null;
-    /**
-     * State
-     */
-    state: 'unregistered' | 'pending' | 'registered' | 'refused' | 'no_hosts' | 'unreachable';
+    state: HostRegistrationState;
     /**
      * Tenant Id
      */
@@ -2102,6 +2120,29 @@ export type HubConnectivityView = {
 };
 
 /**
+ * IdentityState
+ *
+ * Whether this process may work as the configured runner: its token's own verdict, and — on a registered
+ * host — whether the hub holds it under the host.
+ */
+export const IdentityState = {
+    UNCHECKED: 'unchecked',
+    MATCHED: 'matched',
+    MISMATCHED: 'mismatched',
+    REFUSED: 'refused',
+    NOT_HELD: 'not_held',
+    TENANT_DIFFERS: 'tenant_differs'
+} as const;
+
+/**
+ * IdentityState
+ *
+ * Whether this process may work as the configured runner: its token's own verdict, and — on a registered
+ * host — whether the hub holds it under the host.
+ */
+export type IdentityState = typeof IdentityState[keyof typeof IdentityState];
+
+/**
  * IdentityVerdictView
  *
  * Whether the runner's token resolves to the runner its host file configures (``store_runner_id``).
@@ -2126,10 +2167,7 @@ export type IdentityVerdictView = {
      * Reset Command
      */
     reset_command: string;
-    /**
-     * State
-     */
-    state: 'unchecked' | 'matched' | 'mismatched' | 'refused' | 'not_held' | 'tenant_differs';
+    state: IdentityState;
     /**
      * Store Runner Id
      */

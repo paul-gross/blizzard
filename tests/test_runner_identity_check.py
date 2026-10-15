@@ -20,13 +20,14 @@ from pytest import MonkeyPatch
 from structlog.testing import capture_logs
 
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.runner_identity_state import IdentityState
 from blizzard.runner.app import create_app
 from blizzard.runner.composition import held_hub_token
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.host_config import ResolvedToken, TokenSource
 from blizzard.runner.hub.client import IdentityRouteMissing, TokenIdentity, TokenRefusal
 from blizzard.runner.hub.held_token import HubTokenHolder
-from blizzard.runner.hub.identity import IdentityState, IdentityVerdictHolder
+from blizzard.runner.hub.identity import IdentityVerdictHolder
 from blizzard.runner.hub.internal.http_hub import HeldTokenAuth, HttpHubClient
 from blizzard.runner.hub.internal.token_file import HubTokenFile
 from blizzard.runner.lifecycle.identity_check import IdentityCheck, ProxyIdentityCheck

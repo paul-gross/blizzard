@@ -8,16 +8,12 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from blizzard.foundation.host_registration_state import HostRegistrationState
 from blizzard.wire.runner_status import EnvironmentView, PauseStateView, SubscriptionView
 
 #: Whether the host serves a runner, or holds it halted — by its own configuration errors, or, while served, by a hub
 #: that refuses its token or does not hold it under the host.
 HostRunnerState = Literal["serving", "halted"]
-
-#: Where the host stands with its hub: ``unregistered``, holding no host token; ``pending``, holding one and not yet
-#: reported; ``registered``, the hub answering its latest report as this host; ``refused``, the hub refusing its token
-#: or answering as another host; ``no_hosts``, a hub from before hosts; ``unreachable``, its latest report unanswered.
-HostRegistrationState = Literal["unregistered", "pending", "registered", "refused", "no_hosts", "unreachable"]
 
 
 class HostRunnerStateView(BaseModel):

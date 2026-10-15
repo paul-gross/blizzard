@@ -12,6 +12,8 @@ from pathlib import Path
 import pytest
 
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.host_registration_state import HostRegistrationState
+from blizzard.foundation.runner_identity_state import IdentityState
 from blizzard.runner.hub.client import (
     HostFactPushAck,
     HostHeldRunner,
@@ -25,18 +27,8 @@ from blizzard.runner.hub.client import (
     RetiredHostRunner,
 )
 from blizzard.runner.hub.host_identity import HostIdentity, HostIdentityHolder
-from blizzard.runner.hub.host_registration import (
-    HostRegistration,
-    HostRegistrationHolder,
-    HostRegistrationState,
-)
-from blizzard.runner.hub.identity import (
-    HostStanding,
-    IdentityState,
-    IdentityVerdictHolder,
-    RunnerIdentity,
-    RunnerIdentityHolder,
-)
+from blizzard.runner.hub.host_registration import HostRegistration, HostRegistrationHolder
+from blizzard.runner.hub.identity import HostStanding, IdentityVerdictHolder, RunnerIdentity, RunnerIdentityHolder
 from blizzard.runner.hub.verified import IdentityNotVerified, VerifiedHubClient
 from blizzard.runner.lifecycle.host_lane_drain import HOST_LANE_DRAIN_LIMIT, HostLaneDrain
 from tests.runner_fakes import FakeHub, make_host_stores, make_store

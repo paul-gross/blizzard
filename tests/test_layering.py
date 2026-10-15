@@ -42,6 +42,8 @@ _MOVED_HOMES = {
     "WindowFault": "blizzard.foundation.operator_window",
     "fault_message": "blizzard.foundation.operator_window",
     "EgressState": "blizzard.foundation.egress_state",
+    "IdentityState": "blizzard.foundation.runner_identity_state",
+    "HostRegistrationState": "blizzard.foundation.host_registration_state",
     "RESERVED_HUB_SOURCE_NAME": "blizzard.hub.domain.kernel.hub_source",
     "KNOWN_WORK_SOURCE_PROVIDERS": "blizzard.hub.domain.config.work_sources",
     "ROUTE_TOKEN_WARN": "blizzard.hub.domain.execution.auth.route",

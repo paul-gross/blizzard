@@ -19,13 +19,13 @@ from typing import Protocol
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.runner_identity_state import IdentityState
 from blizzard.runner.environments.workspaces import IWorkspaces
 from blizzard.runner.harness.capability_snapshot import HarnessCapability
 from blizzard.runner.hub.client import BindingDeclaration, HubClientError, IHubClient, SubscriptionDeclaration
 from blizzard.runner.hub.held_token import HubTokenHolder
 from blizzard.runner.hub.identity import (
     ICurrentRunnerIdentity,
-    IdentityState,
     IdentityVerdictHolder,
     IWriteRunnerIdentityRepository,
     RunnerIdentity,

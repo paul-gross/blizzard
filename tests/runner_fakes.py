@@ -23,6 +23,7 @@ from sqlalchemy import Engine, MetaData, make_url
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock, IClock, ManualMonotonicClock, SystemClock
 from blizzard.foundation.node_steps import ApplyOutcome, SessionMode
+from blizzard.foundation.runner_identity_state import IdentityState
 from blizzard.foundation.runner_tokens import RunnerTokenRefusalReason
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.composition import RunnerProcess, build_runner_process
@@ -74,7 +75,7 @@ from blizzard.runner.hub.client import (
     TranscriptPushAck,
 )
 from blizzard.runner.hub.held_token import HubTokenHolder
-from blizzard.runner.hub.identity import IdentityState, IdentityVerdictHolder, RunnerIdentity, RunnerIdentityHolder
+from blizzard.runner.hub.identity import IdentityVerdictHolder, RunnerIdentity, RunnerIdentityHolder
 from blizzard.runner.hub.served_projects import ServedProject
 from blizzard.runner.hub.verified import VerifiedHubClient
 from blizzard.runner.leases.internal.worker_stdout_files import WorkerStdoutFiles

@@ -15,10 +15,11 @@ from fastapi.exceptions import HTTPException
 
 from blizzard.foundation.clock import IMonotonicClock
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.runner_identity_state import IdentityState
 from blizzard.runner.api.wiring import RunnerWiring
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.hub.held_token import ICurrentHubToken
-from blizzard.runner.hub.identity import IdentityState, IdentityVerdict, IIdentityOnContact
+from blizzard.runner.hub.identity import IdentityVerdict, IIdentityOnContact
 from blizzard.wire.runner import RunnerIdentityView
 
 # The hub's answer to which runner the presented token belongs to.

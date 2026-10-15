@@ -19,10 +19,10 @@ import threading
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
-from enum import StrEnum
 from typing import Protocol
 
 from blizzard.foundation.clock import IClock
+from blizzard.foundation.host_registration_state import HostRegistrationState
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import domain_model
 from blizzard.runner.hub.client import (
@@ -42,23 +42,6 @@ from blizzard.runner.hub.host_identity import (
 from blizzard.runner.hub.identity import HostStanding, ICurrentRunnerIdentity, IHostStandingSink
 
 _log = get_logger("blizzard.runner.host")
-
-
-class HostRegistrationState(StrEnum):
-    """Where the host stands with its hub, as its latest report found it."""
-
-    #: The host holds no host token: it reports nothing, and each runner signs in and reports on its own.
-    UNREGISTERED = "unregistered"
-    #: The host holds a host token and has not reported yet.
-    PENDING = "pending"
-    #: The hub answered the latest report with the host's own identity.
-    REGISTERED = "registered"
-    #: The hub refuses the host's token, or answered as another host or tenant than the one recorded.
-    REFUSED = "refused"
-    #: The hub answered 404: it predates hosts.
-    NO_HOSTS = "no_hosts"
-    #: The latest report did not reach the hub, or it did not answer.
-    UNREACHABLE = "unreachable"
 
 
 @domain_model

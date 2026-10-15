@@ -10,12 +10,13 @@ from collections.abc import Sequence
 
 from fastapi import APIRouter, Request
 
+from blizzard.foundation.runner_identity_state import IdentityState
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.foundation.subscription_miss import SampleMissReason
 from blizzard.runner.api.wiring import RunnerWiring, ServedWorkspace
 from blizzard.runner.config import SubscriptionDeclaration
 from blizzard.runner.environments.repository import EnvBinding
-from blizzard.runner.hub.identity import ICurrentIdentityVerdict, IdentityState
+from blizzard.runner.hub.identity import ICurrentIdentityVerdict
 from blizzard.runner.usage.repository import IReadExternalUsageRepository
 from blizzard.wire.runner_host import (
     HostEnvironmentListResponse,
@@ -45,7 +46,7 @@ def host_registration(request: Request) -> HostRegistrationView:
     identity = wiring.host_identity().current()
     stores = wiring.maybe_host_read_stores()
     return HostRegistrationView(
-        state=status.state.value,
+        state=status.state,
         host_id=identity.host_id if identity is not None else None,
         tenant_id=identity.tenant_id if identity is not None else None,
         host_name=status.host_name,

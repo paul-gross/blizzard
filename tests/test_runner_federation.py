@@ -19,17 +19,14 @@ from jwt.algorithms import RSAAlgorithm
 from structlog.testing import capture_logs
 
 from blizzard.foundation.clock import SystemClock
+from blizzard.foundation.host_registration_state import HostRegistrationState
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.app import create_app
 from blizzard.runner.auth.session import CookieNames
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.registry import HarnessRegistry
 from blizzard.runner.hub.host_identity import HostIdentity, HostIdentityHolder
-from blizzard.runner.hub.host_registration import (
-    HostRegistrationHolder,
-    HostRegistrationState,
-    HostRegistrationStatus,
-)
+from blizzard.runner.hub.host_registration import HostRegistrationHolder, HostRegistrationStatus
 from blizzard.runner.hub.identity import RunnerIdentityHolder
 from blizzard.runner.status.view import RunnerStatusService
 from blizzard.runner.store.errors import RunnerStoreConnections

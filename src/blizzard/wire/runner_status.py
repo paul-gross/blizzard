@@ -5,11 +5,10 @@ strings with an explicit UTC offset (``bzh:utc-instants``)."""
 
 from __future__ import annotations
 
-from typing import Literal
-
 from pydantic import BaseModel
 
 from blizzard.foundation.credential_renewal import RenewalFailureReason, RenewalResult
+from blizzard.foundation.runner_identity_state import IdentityState
 from blizzard.foundation.subscription_miss import SampleMissReason
 from blizzard.wire.fleet import FleetSummaryView
 
@@ -74,7 +73,7 @@ class IdentityVerdictView(BaseModel):
     in another tenant than the host's halt the runner alone. ``reason`` says why for those last three.
     ``reset_command`` names how to restore the token: the token variable and the configured id."""
 
-    state: Literal["unchecked", "matched", "mismatched", "refused", "not_held", "tenant_differs"]
+    state: IdentityState
     store_runner_id: str | None
     token_runner_id: str | None
     checked_at: str | None

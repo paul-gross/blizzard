@@ -27,6 +27,7 @@ from typing import Protocol
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.runner_identity_state import IdentityState
 from blizzard.runner.hub.client import (
     HubClientError,
     IdentityRouteMissing,
@@ -37,7 +38,6 @@ from blizzard.runner.hub.client import (
 from blizzard.runner.hub.held_token import HubTokenHolder, TokenReread
 from blizzard.runner.hub.identity import (
     ICurrentIdentityVerdict,
-    IdentityState,
     IdentityVerdict,
     IdentityVerdictHolder,
     IWriteRunnerIdentityRepository,

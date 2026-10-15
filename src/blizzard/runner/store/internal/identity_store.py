@@ -64,7 +64,6 @@ class RunnerIdentityStore:
             tenant_id=identity.tenant_id,
         )
 
-
     def forget_runner_identity(self) -> None:
         bound = self._store.runner_id
         if bound is None:
