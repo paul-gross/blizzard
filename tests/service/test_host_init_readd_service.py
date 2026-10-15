@@ -4,7 +4,8 @@ flag ``init`` refuses, names graduation, and changes nothing; with it the store 
 mock hub, its id lands in the host file, its token under ``BZ_HUB_TOKEN_<NAME>`` and its identity row in the host's
 store, and ``host --dir`` then starts a host. Over the host ``init`` registers, ``runner add`` — holding no hub
 session — adds a runner the mock holds under the host and the host runs after a restart, and ``runner retire`` halts it
-on the running host within a tick and removes its entry. Run with ``BLIZZARD_SERVICE=1``."""
+on the running host within a tick and removes its entry, after which ``init`` runs again and a restarted host serves the
+runner that remains. Run with ``BLIZZARD_SERVICE=1``."""
 
 from __future__ import annotations
 
@@ -186,6 +187,9 @@ def test_runner_add_with_no_session_runs_after_a_restart_and_retire_halts_it_wit
         record = hub.get("/api/fleet/host", headers=bearer)
         assert record.status_code == 200, record.text
         assert {r["runner_id"] for r in record.json()["runners"]} == {config.runners[0].id, r2}, record.json()
+        # init run again writes r2's identity row, so the retire below must leave a store its host still starts.
+        rejoined = run_runner_init(root, hub_url)
+        assert rejoined.returncode == 0, rejoined.stdout + rejoined.stderr
 
         with _running_host(root, hub_url, port, log) as local:
             assert poll_until(lambda: _identity_state(local, r2) == "matched", timeout=30.0), (
@@ -204,3 +208,14 @@ def test_runner_add_with_no_session_runs_after_a_restart_and_retire_halts_it_wit
 
             assert poll_until(halted, timeout=10.0), (local.get("/api/host/runners").json(), read_daemon_log(log))
             assert _identity_state(local, config.runners[0].id or "") == "matched"
+
+        again = run_runner_init(root, hub_url)
+        assert again.returncode == 0, again.stdout + again.stderr
+        with _running_host(root, hub_url, port, log) as local:
+            remaining = config.runners[0].id or ""
+            assert poll_until(lambda: _identity_state(local, remaining) == "matched", timeout=30.0), (
+                local.get("/api/host/runners").json(),
+                read_daemon_log(log),
+            )
+            listed = local.get("/api/host/runners").json()["items"]
+            assert r2 not in {item["runner_id"] for item in listed}, listed
