@@ -18,7 +18,7 @@ from sqlalchemy.exc import IntegrityError
 
 from blizzard.foundation.roles import domain_model
 from blizzard.runner.leases.model import Lease, WorkRefStamp
-from blizzard.runner.store.errors import RunnerStoreConnections
+from blizzard.runner.store.errors import RUNNER_COLUMN, RunnerStoreConnections
 from blizzard.runner.store.schema import (
     OUTBOX_LANE_OUTBOUND,
     OUTBOX_LANE_TRANSCRIPT,
@@ -243,6 +243,48 @@ def _next_outbox_seq(store: RunnerStoreConnections, conn: Connection, lane: str)
     return conn.execute(
         store.select(outbox_counters, outbox_counters.c.last_seq).where(outbox_counters.c.lane == lane)
     ).scalar_one()
+
+
+#: The tables a runner transfer carries through :func:`carry_outbox_rows` rather than its generic table loop.
+CARRIED_OUTBOX_TABLES: frozenset[Table] = frozenset({*_OUTBOX_LANES, outbox_counters})
+
+
+def carry_outbox_rows(
+    source: RunnerStoreConnections,
+    source_conn: Connection,
+    destination: RunnerStoreConnections,
+    destination_conn: Connection,
+) -> None:
+    """The outboxes' other door: copy the bound runner's outbox rows from ``source_conn`` into ``destination_conn``
+    (the destination's transaction) under the ``seq``s they were issued, which the runner's hub already judges them by,
+    and set each lane counter to the larger of the two stores', so it never moves backwards — even into a store that
+    kept a larger one when the runner was removed from it. Both stores are bound to the moving runner."""
+    for table in _OUTBOX_LANES:
+        rows = [
+            {name: value for name, value in row._mapping.items() if name != RUNNER_COLUMN}
+            for row in source_conn.execute(source.select(table).order_by(table.c.seq))
+        ]
+        if rows:
+            destination_conn.execute(destination.insert(table), rows)
+    held = {
+        row.lane: row.last_seq
+        for row in destination_conn.execute(
+            destination.select(outbox_counters, outbox_counters.c.lane, outbox_counters.c.last_seq)
+        )
+    }
+    for row in source_conn.execute(
+        source.select(outbox_counters, outbox_counters.c.lane, outbox_counters.c.last_seq).order_by(
+            outbox_counters.c.lane
+        )
+    ):
+        if row.lane not in held:
+            destination_conn.execute(destination.insert(outbox_counters).values(lane=row.lane, last_seq=row.last_seq))
+        elif row.last_seq > held[row.lane]:
+            destination_conn.execute(
+                destination.update(outbox_counters)
+                .where(outbox_counters.c.lane == row.lane)
+                .values(last_seq=row.last_seq)
+            )
 
 
 def enqueue_transcript_final(store: RunnerStoreConnections, conn: Connection, segment: Any, *, at: datetime) -> None:

@@ -104,6 +104,7 @@ from blizzard.runner.store.internal.host_daemon_liveness_store import DaemonLive
 from blizzard.runner.store.internal.host_external_usage_store import ExternalUsageStore
 from blizzard.runner.store.internal.host_graph_artifact_store import GraphArtifactStore
 from blizzard.runner.store.internal.host_identity_store import HostIdentityStore
+from blizzard.runner.store.internal.host_ingest_store import HostIngestStore
 from blizzard.runner.store.internal.host_jti_cache_store import JtiCacheRepository
 from blizzard.runner.store.internal.host_lane_store import HostLaneStore
 from blizzard.runner.store.internal.host_runner_audit import RunnerAudit
@@ -326,6 +327,7 @@ def make_host_stores(store: SqlAlchemyRunnerStore, clock: IClock | None = None) 
         external_usage=store,
         host_lane=store,
         host_identity=store,
+        host_ingests=HostIngestStore(store.connections),
         runner_audit=RunnerAudit(store.connections),
     )
 

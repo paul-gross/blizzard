@@ -169,6 +169,7 @@ from blizzard.runner.harness.workspace_prompts import IReadWorkspacePromptReposi
 from blizzard.runner.hub.host_identity import HostIdentity, IReadHostIdentityRepository
 from blizzard.runner.hub.identity import IReadRunnerIdentityRepository, RunnerIdentity
 from blizzard.runner.hub.outbound_buffer import IReadOutboundRepository
+from blizzard.runner.hub.runner_transfer import IReadHostIngestRepository
 from blizzard.runner.hub.served_projects import IReadServedProjectsRepository, ServedProject
 from blizzard.runner.leases.asks import IReadAskRepository
 from blizzard.runner.leases.elicitation import IReadElicitationRepository
@@ -845,6 +846,7 @@ RUNNER_CENSUS: dict[tuple[type, str], RunnerRecipe] = {
         w.host_read.external_usage.latest_external_usage_attempts_by_slug([w.usage_slug])
     ),
     (IReadHostIdentityRepository, "host_identity"): lambda w: w.host_read.host_identity.host_identity(),
+    (IReadHostIngestRepository, "latest_host_ingest"): lambda w: w.host_read.host_ingests.latest_host_ingest("rn_x"),
     (IReadHostLaneRepository, "host_buffered_count"): lambda w: w.host_read.host_lane.host_buffered_count(),
     (IReadHostLaneRepository, "host_high_water_seen"): lambda w: w.host_read.host_lane.host_high_water_seen(),
     (IReadCredentialRenewalRepository, "last_credential_renewal_claim_at"): lambda w: (

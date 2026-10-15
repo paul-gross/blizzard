@@ -69,6 +69,7 @@ from blizzard.runner.hub.identity import (
 )
 from blizzard.runner.hub.internal.http_hub import HttpHostHubClient
 from blizzard.runner.hub.internal.token_file import HubTokenFile
+from blizzard.runner.hub.runner_transfer import IRunnerRowRemoval, IRunnerTransfer
 from blizzard.runner.lifecycle.host_lane_drain import HostLaneDrain
 from blizzard.runner.lifecycle.host_tick import HostTick
 from blizzard.runner.listeners import Listeners
@@ -86,6 +87,7 @@ from blizzard.runner.store.internal.host_daemon_liveness_store import DaemonLive
 from blizzard.runner.store.internal.host_external_usage_store import ExternalUsageStore
 from blizzard.runner.store.internal.host_graph_artifact_store import GraphArtifactStore
 from blizzard.runner.store.internal.host_identity_store import HostIdentityStore
+from blizzard.runner.store.internal.host_ingest_store import HostIngestStore
 from blizzard.runner.store.internal.host_jti_cache_store import JtiCacheRepository
 from blizzard.runner.store.internal.host_lane_store import HostLaneStore
 from blizzard.runner.store.internal.host_runner_audit import RunnerAudit
@@ -102,6 +104,7 @@ from blizzard.runner.store.internal.overload_store import OverloadStore
 from blizzard.runner.store.internal.pause_store import PauseStore
 from blizzard.runner.store.internal.projects_answer_store import ServedProjectsStore
 from blizzard.runner.store.internal.requeue_store import RequeueStore
+from blizzard.runner.store.internal.runner_transfer_store import RunnerRowRemovalStore, RunnerTransferStore
 from blizzard.runner.store.internal.selftest_result_store import SelfTestResultStore
 from blizzard.runner.store.internal.takeover_store import TakeoverStore
 from blizzard.runner.store.internal.token_store import TokenStore
@@ -1003,5 +1006,22 @@ def _build_host_stores(connections: RunnerStoreConnections, clock: IClock) -> Ho
         external_usage=ExternalUsageStore(connections),
         host_lane=HostLaneStore(connections),
         host_identity=HostIdentityStore(connections),
+        host_ingests=HostIngestStore(connections),
         runner_audit=RunnerAudit(connections),
     )
+
+
+def build_runner_transfer(
+    source: Engine, destination: Engine, *, errors: RunnerStoreErrorFactory, runner_id: str, clock: IClock
+) -> IRunnerTransfer:
+    """The copy of ``runner_id`` from the migrated ``source`` store into ``destination``: both stores' connections bound
+    to it, and the destination's host member running the host half on the copy's transaction."""
+    into = RunnerStoreConnections(destination, errors, runner_id)
+    return RunnerTransferStore(
+        RunnerStoreConnections(source, errors, runner_id), into, _build_host_stores(into, clock).host_ingests
+    )
+
+
+def build_runner_removal(engine: Engine, *, errors: RunnerStoreErrorFactory, runner_id: str) -> IRunnerRowRemoval:
+    """The removal of ``runner_id``'s rows from the store ``engine`` opens, its connections bound to it."""
+    return RunnerRowRemovalStore(RunnerStoreConnections(engine, errors, runner_id))
