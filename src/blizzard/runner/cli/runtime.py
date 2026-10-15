@@ -1183,7 +1183,11 @@ def tick_cmd(ctx: click.Context, directory: str, runner: str | None) -> None:
             raise click.ClickException(f"runner {runner_built.config.name} ({runner_built.id}): {reason}")
         bundle = _publish_harness_bundle(runner_built.config)
         graph = build_runner_process(
-            runner_built.config, bundle=bundle, runner_id=runner_built.id, token=runner_built.token
+            runner_built.config,
+            bundle=bundle,
+            runner_id=runner_built.id,
+            token=runner_built.token,
+            host_token=config.host_token.value,
         )
         try:
             LoopWiring.of(runner_built.config, bundle=bundle).tick_once(process=graph)

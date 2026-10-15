@@ -1,6 +1,7 @@
 """``blizzard runner add`` and ``retire`` over a registered host directory (component tier): a runner added under the
 host's own credential with its token, directory and ``[[runner]]`` written in that order; one retired at the hub before
-its entry is removed; and both refused, reaching no hub, on a host holding no host token."""
+its entry is removed; and both refused, reaching no hub, on a host holding no host token. A registered host's
+``tick`` drives its runner as one the host reports for."""
 
 from __future__ import annotations
 
@@ -12,11 +13,13 @@ from click.testing import Result
 
 from blizzard.cli.main import blizzard
 from blizzard.runner.cli.runtime import named_runners
+from blizzard.runner.composition import RunnerProcess
 from blizzard.runner.host_config import HOST_TOKEN_VARIABLE, BuiltRunner, HostConfig
 from blizzard.runner.host_layout import HostLayout, HostLock
 from blizzard.runner.hub.client import HostRunnerRetireRefused
 from blizzard.runner.hub.internal.token_file import HubTokenFile
 from blizzard.runner.hub.token_file import ENV_FILENAME
+from blizzard.runner.loop_wiring import LoopWiring
 from tests.runner_init_fakes import FakeInitHub, init_runner
 
 pytestmark = pytest.mark.component
@@ -230,3 +233,21 @@ def test_a_readd_of_one_runner_beside_another_refuses_rather_than_set_the_shared
     assert (named_runners(HostConfig.load(root)), HostLayout(root).config_path.read_bytes()) == before
     assert not [path for path in store.parent.iterdir() if path.name.startswith(f"{store.name}.")]
     assert len(fake_init_hub.admin.added) == 2
+
+
+def test_tick_on_a_registered_host_drives_its_runner_as_one_the_host_reports(
+    tmp_path: Path, fake_init_hub: FakeInitHub, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _registered(tmp_path, fake_init_hub)
+    seen: list[bool] = []
+
+    def tick_once(_wiring: LoopWiring, *, process: RunnerProcess | None = None) -> None:
+        assert process is not None
+        seen.append(process.host.registered())
+
+    monkeypatch.setattr(LoopWiring, "tick_once", tick_once)
+
+    result = _run(fake_init_hub, "tick", "--dir", str(root))
+
+    assert result.exit_code == 0, result.output
+    assert seen == [True]

@@ -595,10 +595,12 @@ def build_runner_process(
     identity: RunnerIdentityHolder | None = None,
     runner_id: str | None = None,
     token: ResolvedToken | None = None,
+    host_token: str = "",
 ) -> RunnerProcess:
     """A host of one and its runner, for the standalone commands and tests that drive one runner: closing the
     returned runner closes the host too. The runner is bound to ``runner_id``, else to the id ``config`` carries;
-    ``token`` is where its hub token resolved from. The other arguments are :func:`build_host_process`'s."""
+    ``token`` is where its hub token resolved from, and ``host_token`` the host's own credential, so a runner of a
+    registered host leaves its roster to the host. The other arguments are :func:`build_host_process`'s."""
     graph = _build_host_graph(
         config,
         subscriptions=config.subscriptions,
@@ -607,6 +609,7 @@ def build_runner_process(
         platform_tracing=platform_tracing,
         received_telemetry=received_telemetry,
         trace_platform=False,
+        host_token=host_token,
     )
     try:
         runner = _build_runner(
