@@ -164,6 +164,15 @@ A runner host serves one panel for every runner it runs, so it signs the operato
 and mints a token whose audience is the host id and whose role is the person's role in the host's tenant. A runner with
 no host keeps signing in as its own client.
 
+A host that holds a host token — a registered host ([runner-auth.md](./runner-auth.md)) — signs in as its host id: the
+`client` it presents, the audience it requires of the token, and the name of its session cookie,
+`bz_runner_session_<host id>`. One sign-in then reaches every runner's pages under the panel. The host is the client
+only while its latest report was answered with the identity it recorded. Before its first answer, while the hub refuses
+its token or answers as another host or tenant, against a hub that predates hosts, and while the hub is unreachable,
+the panel offers no sign-in: `login` answers 503 and no session is read. Its runners keep working meanwhile, and
+sign-in returns at the next answered report, with any session still inside its TTL. A host with no host token keeps
+signing in as its first runner, as before.
+
 An unknown host id, a callback the host has not reported, and a person with no membership in the host's tenant all get
 the one undifferentiated 400 a runner client gets. Only a member who presents a reported callback can tell a retired
 host apart, by a 403.

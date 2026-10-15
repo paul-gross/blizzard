@@ -45,8 +45,11 @@ from blizzard.runner.api.events import router as events_router
 from blizzard.runner.api.facts import router as facts_router
 from blizzard.runner.api.federation import (
     FederationSettings,
+    HostSignInClient,
     HubAuthModeCache,
+    ISignInClient,
     NeedsFederationBounce,
+    RunnerSignInClient,
     require_human_api,
     require_human_session,
 )
@@ -389,11 +392,17 @@ def create_app(
     app.state.runners = RunnerRegistry(tuple(runners), tuple(halted))
     app.state.workspaces = tuple(workspaces)
     app.state.subscriptions = tuple(subscriptions if subscriptions is not None else config.subscriptions)
-    if identity is not None:
+    # A registered host signs in as itself; an unregistered one as its first runner.
+    sign_in: ISignInClient | None = None
+    if host_registration is not None and host_identity is not None and host_registration.current().registered():
+        sign_in = HostSignInClient(host_registration, host_identity)
+    elif identity is not None:
+        sign_in = RunnerSignInClient(identity)
+    if sign_in is not None:
         app.state.federation = FederationSettings(
             public_origins=config.public_origins,
             hub_url=config.hub_url,
-            identity=identity,
+            client=sign_in,
             role_policy=config.role_policy,
         )
     app.state.readiness = readiness

@@ -73,6 +73,10 @@ class HostRegistrationStatus:
     held_runner_ids: tuple[str, ...] = ()
     detail: str | None = None
 
+    def registered(self) -> bool:
+        """Whether the host holds a host token — every state but unregistered, whatever the hub last answered."""
+        return self.state is not HostRegistrationState.UNREGISTERED
+
     def drains(self) -> bool:
         """Whether the host's lane may push: only while the latest report was answered with a matching identity."""
         return self.state is HostRegistrationState.REGISTERED

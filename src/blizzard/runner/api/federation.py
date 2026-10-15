@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import secrets
 from dataclasses import dataclass
-from typing import Annotated, Literal
+from typing import Annotated, Literal, Protocol
 from urllib.parse import parse_qs, quote
 
 import httpx
@@ -32,6 +32,8 @@ from blizzard.runner.auth.session import (
     resolve_human_session,
 )
 from blizzard.runner.auth.validate import FederationToken, FederationTokenError
+from blizzard.runner.hub.host_identity import ICurrentHostIdentity
+from blizzard.runner.hub.host_registration import HostRegistrationState, ICurrentHostRegistration
 from blizzard.runner.hub.identity import ICurrentRunnerIdentity
 
 _log = get_logger("blizzard.runner.auth")
@@ -44,33 +46,69 @@ _BOUNCE_COOKIE_MAX_AGE = 600  # 10 minutes — generous for a slow hub/provider 
 _LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 
 
+class ISignInClient(Protocol):
+    """Who the panel signs in as at its hub: the client id the hub's authorize endpoint and its tokens name."""
+
+    def client_id(self) -> str | None:
+        """The client id sign-in uses now, or ``None`` while the panel offers no sign-in."""
+        ...
+
+
+@dataclass(frozen=True)
+class RunnerSignInClient:
+    """An unregistered host's client: its first runner, by the id of that runner's latest registration — none
+    before the first one, when the hub knows no client."""
+
+    identity: ICurrentRunnerIdentity
+
+    def client_id(self) -> str | None:
+        current = self.identity.current()
+        return current.runner_id if current is not None else None
+
+
+@dataclass(frozen=True)
+class HostSignInClient:
+    """A registered host's client: the host itself, by its host id — only while its latest report was answered with
+    the identity it holds. Before an answer, against a hub that refuses it or predates hosts, or when it is
+    unreachable, the panel offers no sign-in."""
+
+    registration: ICurrentHostRegistration
+    identity: ICurrentHostIdentity
+
+    def client_id(self) -> str | None:
+        if self.registration.current().state is not HostRegistrationState.REGISTERED:
+            return None
+        current = self.identity.current()
+        return current.host_id if current is not None else None
+
+
 @dataclass(frozen=True)
 class FederationSettings:
-    """What the bounce and its callback read off this runner's config: the declared browser
-    origins, the hub it federates with, its own identity there, and the role policy a federated
+    """What the bounce and its callback read off this host's config: the declared browser
+    origins, the hub it federates with, the client it signs in as there, and the role policy a federated
     identity resolves against."""
 
     public_origins: PublicOrigins
     hub_url: str
-    identity: ICurrentRunnerIdentity
+    client: ISignInClient
     role_policy: RolePolicy
 
     def client_id(self) -> str:
-        """This runner's client id at its hub — the id of its latest registration. Sign-in waits
-        for the first one: the hub knows no client before it."""
-        current = self.identity.current()
+        """The client id sign-in uses at the hub. Sign-in waits while there is none: the hub knows no client yet,
+        or the host is not answered as itself."""
+        current = self.client.client_id()
         if current is None:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="this runner has not registered at its hub yet — sign-in waits for its first registration",
+                detail="this host has no client at its hub yet — sign-in waits for the hub to answer it",
             )
-        return current.runner_id
+        return current
 
     def cookie_names(self) -> CookieNames | None:
-        """This runner's cookie names, keyed by its client id; ``None`` before its first registration,
-        when sign-in has minted no cookie."""
-        current = self.identity.current()
-        return CookieNames(current.runner_id) if current is not None else None
+        """The session cookie names, keyed by the client id; ``None`` while there is none, when no sign-in is
+        offered and no cookie is read."""
+        current = self.client.client_id()
+        return CookieNames(current) if current is not None else None
 
 
 class NeedsFederationBounce(Exception):
