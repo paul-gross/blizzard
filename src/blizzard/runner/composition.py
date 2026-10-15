@@ -63,6 +63,7 @@ from blizzard.runner.hub.host_registration import HostRegistration, HostRegistra
 from blizzard.runner.hub.identity import (
     ICurrentRunnerIdentity,
     IdentityVerdictHolder,
+    IWriteRetiredRunnerIdentity,
     IWriteRunnerIdentityRepository,
     RunnerIdentityHolder,
 )
@@ -960,6 +961,13 @@ def build_identity_writer(
 ) -> IWriteRunnerIdentityRepository:
     """The identity row's writer, bound to ``runner_id``, for ``init`` to record the runner it joined."""
     return build_stores(engine, errors=errors, runner_id=runner_id).identity
+
+
+def build_identity_forgetter(
+    engine: Engine, *, errors: RunnerStoreErrorFactory, runner_id: str
+) -> IWriteRetiredRunnerIdentity:
+    """The identity row's forgetter, bound to ``runner_id``, for ``runner retire`` to forget the runner it retired."""
+    return RunnerIdentityStore(RunnerStoreConnections(engine, errors, runner_id))
 
 
 def build_read_stores(engine: Engine, *, errors: RunnerStoreErrorFactory, runner_id: str | None) -> RunnerReadStores:

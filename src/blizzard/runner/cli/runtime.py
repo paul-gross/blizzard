@@ -35,6 +35,7 @@ from blizzard.runner.composition import (
     build_host_process,
     build_host_read_stores,
     build_host_stores,
+    build_identity_forgetter,
     build_identity_writer,
     build_read_stores,
     build_runner_process,
@@ -608,6 +609,18 @@ def _record_identity(config: HostConfig, joined: JoinedRunner) -> None:
                 tenant_name=joined.tenant_name,
             )
         )
+    finally:
+        engine.dispose()
+
+
+def forget_identity(config: HostConfig, runner_id: str) -> None:
+    """Delete a retired runner's identity row from the host's store, so the store names only runners the host
+    configures and a later start or ``init`` does not take it for another host's."""
+    engine = create_engine_from_url(config.db_url)
+    try:
+        build_identity_forgetter(
+            engine, errors=RunnerStoreErrorFactory(get_logger("blizzard.runner.store")), runner_id=runner_id
+        ).forget_runner_identity()
     finally:
         engine.dispose()
 

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from blizzard.foundation.logging import get_logger
-from blizzard.runner.hub.identity import IWriteRunnerIdentityRepository, RunnerIdentity
+from blizzard.runner.hub.identity import IWriteRetiredRunnerIdentity, IWriteRunnerIdentityRepository, RunnerIdentity
 from blizzard.runner.store.errors import RunnerAlreadyBound, RunnerStoreConnections, RunnerUnbound
 from blizzard.runner.store.schema import runner_identity
 
@@ -65,5 +65,18 @@ class RunnerIdentityStore:
         )
 
 
+    def forget_runner_identity(self) -> None:
+        bound = self._store.runner_id
+        if bound is None:
+            raise RunnerUnbound(runner_identity.name)
+        with self._store.begin() as conn:
+            conn.execute(self._store.delete(runner_identity))
+        _log.debug("runner identity forgotten", runner_id=bound)
+
+
 def _conforms_runner_identity_store(x: RunnerIdentityStore) -> IWriteRunnerIdentityRepository:
+    return x
+
+
+def _conforms_retired_runner_identity(x: RunnerIdentityStore) -> IWriteRetiredRunnerIdentity:
     return x

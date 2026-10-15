@@ -63,6 +63,15 @@ class IWriteRunnerIdentityRepository(IReadRunnerIdentityRepository, Protocol):
         ...
 
 
+class IWriteRetiredRunnerIdentity(Protocol):
+    """Forget a retired runner's identity row — held only by ``runner retire``."""
+
+    def forget_runner_identity(self) -> None:
+        """Delete the bound runner's identity row, so the host's store no longer names a runner the hub retired and
+        no ``[[runner]]`` configures; its other rows stay, inert. Deleting no row is not an error."""
+        ...
+
+
 class ICurrentRunnerIdentity(Protocol):
     """The process's current runner identity."""
 

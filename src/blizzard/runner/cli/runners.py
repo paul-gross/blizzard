@@ -2,9 +2,10 @@
 own credential.
 
 ``add`` writes in the order that leaves no entry without its token: the hub's mint, then the token in ``.env``, then
-``runners/<name>/``, then the appended ``[[runner]]``. ``retire`` retires at the hub before it removes the entry, so a
-crash between the two leaves an entry the hub refuses — which the host halts — never a runner the hub still serves
-with no entry naming it."""
+``runners/<name>/``, then the appended ``[[runner]]``. ``retire`` retires at the hub, then forgets the runner's identity
+row in the host's store, then removes the entry, so a crash between any two leaves an entry the hub refuses — which the
+host halts — never a runner the hub still serves with no entry naming it, nor a store naming a runner no entry
+configures, which a start would take for another host's."""
 
 from __future__ import annotations
 
@@ -15,7 +16,7 @@ from blizzard.foundation.runner_token_names import hub_token_variable
 from blizzard.runner.cli.daemon import daemon_holding
 from blizzard.runner.cli.directory import load_host
 from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
-from blizzard.runner.cli.runtime import InitCollaborators, write_runner_token
+from blizzard.runner.cli.runtime import InitCollaborators, forget_identity, write_runner_token
 from blizzard.runner.config import SCAFFOLD_AGENTS, ProjectBinding
 from blizzard.runner.config_table import ConfigError
 from blizzard.runner.host_config import (
@@ -148,7 +149,8 @@ def add(
 @click.pass_context
 def retire(ctx: click.Context, directory: str, runner: str, force: bool) -> None:
     """Retire one of this registered host's runners at its hub, then remove its `[[runner]]` from the host file. A
-    running host halts it at its next tick, the hub refusing its token; its rows stay in the host's store.
+    running host halts it at its next tick, the hub refusing its token; the host's store forgets its identity, and
+    its other rows stay there, inert.
 
     Refused, with nothing retired, on a host holding no host token, or while the runner holds chunks unless --force
     releases them."""
@@ -177,6 +179,7 @@ def retire(ctx: click.Context, directory: str, runner: str, force: bool) -> None
     if isinstance(answer, HostRefused):
         raise click.ClickException(_host_refused(answer, hub, f"retire runner {entry.name} ({entry.id})"))
     released = f", releasing {', '.join(answer.released_chunk_ids)}" if answer.released_chunk_ids else ""
+    forget_identity(config, entry.id)
     try:
         remove_runner(config.layout, entry.name)
     except ConfigError as exc:

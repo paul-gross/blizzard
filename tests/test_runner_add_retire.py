@@ -11,6 +11,7 @@ import pytest
 from click.testing import Result
 
 from blizzard.cli.main import blizzard
+from blizzard.runner.cli.runtime import named_runners
 from blizzard.runner.host_config import HOST_TOKEN_VARIABLE, BuiltRunner, HostConfig
 from blizzard.runner.host_layout import HostLayout, HostLock
 from blizzard.runner.hub.client import HostRunnerRetireRefused
@@ -192,3 +193,20 @@ def test_retire_of_a_runner_not_under_the_host_is_refused_leaving_its_entry(
     assert result.exit_code != 0
     assert "does not stand under this host" in result.output
     assert _runner_names(root) == ["runner-local"]
+
+
+def test_retire_forgets_the_runners_identity_so_init_runs_again_over_the_remaining_runner(
+    tmp_path: Path, fake_init_hub: FakeInitHub
+) -> None:
+    root = _registered(tmp_path, fake_init_hub)
+    assert _run(fake_init_hub, "add", "r2", "--project", "default", "--dir", str(root)).exit_code == 0
+    rerun = _run(fake_init_hub, "init", str(root), "--hub", _HUB)
+    assert rerun.exit_code == 0, rerun.output
+    assert set(named_runners(HostConfig.load(root))) == {"rn_init1", "rn_init2"}
+
+    result = _run(fake_init_hub, "retire", "--runner", "r2", "--dir", str(root))
+
+    assert result.exit_code == 0, result.output
+    assert named_runners(HostConfig.load(root)) == ("rn_init1",)
+    again = _run(fake_init_hub, "init", str(root), "--hub", _HUB)
+    assert again.exit_code == 0, again.output
