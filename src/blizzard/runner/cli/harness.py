@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import click
 
+from blizzard.runner.cli.daemon import runner_option
 from blizzard.runner.cli.directory import load_runner
 from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
 from blizzard.runner.config_table import ConfigError
@@ -31,12 +32,13 @@ def harness_group() -> None:
     envvar=ENV_RUNNER_DIR,
     help="Runner runtime directory (overrides $BZ_RUNNER_DIR).",
 )
-def harness_status(directory: str) -> None:
+@runner_option
+def harness_status(directory: str, runner: str | None) -> None:
     """Report the bundle sources, the published snapshot, and the autonomy setting.
 
     Prints names and paths only, never file contents. Exits 1 when a bundle is configured
     but no snapshot is published."""
-    config = load_runner(directory)
+    config = load_runner(directory, runner=runner)
     try:
         click.echo(f"autonomy: {config.autonomy} (from {config.autonomy_source})")
         shared = shared_inputs(config.harness_settings)

@@ -30,6 +30,7 @@ from blizzard.runner.harness.selftest_result import (
     IWriteSelfTestResultRepository,
 )
 from blizzard.runner.harness.workspace_prompts import IReadWorkspacePromptRepository, IWriteWorkspacePromptRepository
+from blizzard.runner.hub.host_identity import IReadHostIdentityRepository, IWriteHostIdentityRepository
 from blizzard.runner.hub.identity import IReadRunnerIdentityRepository, IWriteRunnerIdentityRepository
 from blizzard.runner.hub.outbound_buffer import IReadOutboundRepository, IWriteOutboundRepository
 from blizzard.runner.hub.served_projects import IReadServedProjectsRepository, IWriteServedProjectsRepository
@@ -273,6 +274,7 @@ class HostStores:
     daemon_liveness: IWriteDaemonLivenessRepository
     external_usage: IWriteExternalUsageRepository
     host_lane: IWriteHostLaneRepository
+    host_identity: IWriteHostIdentityRepository
     #: Exempt: reads every runner's rows at once — the invariant audit, ``init``'s which-runners read, and a workspace
     #: pool's held read.
     runner_audit: IRunnerAudit
@@ -287,6 +289,7 @@ class HostReadStores:
     graph_artifacts: IReadGraphArtifactRepository
     daemon_liveness: IReadDaemonLivenessRepository
     external_usage: IReadExternalUsageRepository
+    host_identity: IReadHostIdentityRepository
     host_lane: IReadHostLaneRepository
 
     @classmethod
@@ -296,5 +299,6 @@ class HostReadStores:
             graph_artifacts=stores.graph_artifacts,
             daemon_liveness=stores.daemon_liveness,
             external_usage=stores.external_usage,
+            host_identity=stores.host_identity,
             host_lane=stores.host_lane,
         )

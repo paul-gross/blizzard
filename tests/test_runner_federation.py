@@ -19,11 +19,14 @@ from jwt.algorithms import RSAAlgorithm
 from structlog.testing import capture_logs
 
 from blizzard.foundation.clock import SystemClock
+from blizzard.foundation.host_registration_state import HostRegistrationState
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.app import create_app
 from blizzard.runner.auth.session import CookieNames
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.registry import HarnessRegistry
+from blizzard.runner.hub.host_identity import HostIdentity, HostIdentityHolder
+from blizzard.runner.hub.host_registration import HostRegistrationHolder, HostRegistrationStatus
 from blizzard.runner.hub.identity import RunnerIdentityHolder
 from blizzard.runner.status.view import RunnerStatusService
 from blizzard.runner.store.errors import RunnerStoreConnections
@@ -101,6 +104,8 @@ def _build_app(
     runner_id: str = _RUNNER_ID,
     runner_name: str | None = None,
     registered: bool = True,
+    host_registration: HostRegistrationHolder | None = None,
+    host_identity: HostIdentityHolder | None = None,
 ) -> TestClient:
     name = runner_name or runner_id
     identity = registered_identity(runner_id, name) if registered else RunnerIdentityHolder()
@@ -138,6 +143,8 @@ def _build_app(
         host_stores=make_host_stores(store),
         runner_status=runner_status,
         identity=identity,
+        host_registration=host_registration,
+        host_identity=host_identity,
         hub_http_client=_hub_client(oauth_enabled=oauth_enabled, jwk=jwk),
         jti_cache=JtiCacheRepository(RunnerStoreConnections(engine, runner_store_errors()), SystemClock()),
     )
@@ -676,3 +683,89 @@ def test_before_its_first_registration_a_runner_reads_no_session_and_sign_in_wai
     assert client.get("/api/host/environments").status_code == 401
     assert client.get("/api/auth/login", follow_redirects=False).status_code == 503
     assert client.post("/api/auth/logout").status_code == 204
+
+
+_HOST_ID = "hs_01HOSTHOSTHOSTHOSTHOSTHOST"
+
+
+def _registered_host(state: HostRegistrationState) -> tuple[HostRegistrationHolder, HostIdentityHolder]:
+    identity = HostIdentityHolder(HostIdentity(host_id=_HOST_ID, tenant_id="tn_1", registered_at=datetime.now(UTC)))
+    return HostRegistrationHolder(HostRegistrationStatus(state=state)), identity
+
+
+def test_a_registered_host_signs_in_as_its_host_id_for_client_audience_and_cookie_names(tmp_path: Path) -> None:
+    private_key, jwk = _keypair()
+    registration, identity = _registered_host(HostRegistrationState.REGISTERED)
+    client = _build_app(tmp_path, oauth_enabled=True, jwk=jwk, host_registration=registration, host_identity=identity)
+
+    host_names = CookieNames(_HOST_ID)
+    login = client.get("/api/auth/login?return_to=/", follow_redirects=False)
+    assert parse_qs(urlparse(login.headers["location"]).query)["client"] == [_HOST_ID]
+    state = login.cookies[host_names.bounce_state]
+    # A token addressed to the first runner is refused: the audience is the host.
+    client.cookies.set(host_names.bounce_state, state)
+    refused = client.post(
+        "/api/auth/callback",
+        content=f"token={_sign(private_key, jti='jti-runner-aud')}&state={state}",
+        headers={"content-type": "application/x-www-form-urlencoded"},
+        follow_redirects=False,
+    )
+    assert host_names.session not in refused.cookies
+
+    client.cookies.clear()
+    _bounce_in(client, private_key, jti="jti-host", runner_id=_HOST_ID)
+    assert client.get("/api/host/environments").status_code == 200
+    # The first runner's cookie name authenticates nothing on a registered host.
+    session = next(c.value for c in client.cookies.jar if c.name == host_names.session)
+    client.cookies.clear()
+    client.cookies.set(_NAMES.session, session)
+    assert client.get("/api/host/environments").status_code == 401
+
+
+@pytest.mark.parametrize(
+    "state",
+    [
+        HostRegistrationState.PENDING,
+        HostRegistrationState.REFUSED,
+        HostRegistrationState.NO_HOSTS,
+        HostRegistrationState.UNREACHABLE,
+    ],
+)
+def test_a_registered_host_offers_no_sign_in_until_its_latest_report_is_answered_as_itself(
+    tmp_path: Path, state: HostRegistrationState
+) -> None:
+    private_key, jwk = _keypair()
+    registration, identity = _registered_host(HostRegistrationState.REGISTERED)
+    client = _build_app(tmp_path, oauth_enabled=True, jwk=jwk, host_registration=registration, host_identity=identity)
+    _bounce_in(client, private_key, jti="jti-before", runner_id=_HOST_ID)
+
+    registration.hold(HostRegistrationStatus(state=state))
+    assert client.get("/api/auth/login", follow_redirects=False).status_code == 503
+    assert client.get("/api/host/environments").status_code == 401
+
+    registration.hold(HostRegistrationStatus(state=HostRegistrationState.REGISTERED))
+    assert client.get("/api/host/environments").status_code == 200
+
+
+def test_a_registered_host_with_no_recorded_identity_offers_no_sign_in(tmp_path: Path) -> None:
+    _private_key, jwk = _keypair()
+    registration = HostRegistrationHolder.for_host(registered=True)
+    client = _build_app(
+        tmp_path, oauth_enabled=True, jwk=jwk, host_registration=registration, host_identity=HostIdentityHolder()
+    )
+    assert client.get("/api/auth/login", follow_redirects=False).status_code == 503
+
+
+def test_an_unregistered_host_keeps_its_first_runner_as_the_sign_in_client(tmp_path: Path) -> None:
+    private_key, jwk = _keypair()
+    client = _build_app(
+        tmp_path,
+        oauth_enabled=True,
+        jwk=jwk,
+        host_registration=HostRegistrationHolder.for_host(registered=False),
+        host_identity=HostIdentityHolder(),
+    )
+    login = client.get("/api/auth/login?return_to=/", follow_redirects=False)
+    assert parse_qs(urlparse(login.headers["location"]).query)["client"] == [_RUNNER_ID]
+    _bounce_in(client, private_key, jti="jti-unregistered")
+    assert client.get("/api/host/environments").status_code == 200

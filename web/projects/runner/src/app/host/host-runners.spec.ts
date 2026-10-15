@@ -58,6 +58,25 @@ describe('HostRunners', () => {
     expect(row?.querySelector('[data-testid="host-runner-halted-reason"]')?.textContent?.trim()).toBe('no hub token');
   });
 
+  it('keeps the link of a served runner its hub halts, beside its reasons', async () => {
+    const el = await render([
+      {
+        runner_id: 'rn_2',
+        name: 'r-chatgpt',
+        state: 'halted',
+        served: true,
+        halted_reasons: ['not held under this host (hs_1) at its hub'],
+      },
+    ]);
+
+    const row = el.querySelector('[data-testid="host-runner-row"]');
+    expect(row?.querySelector('[data-testid="host-runner-link"]')?.getAttribute('href')).toBe('/runners/rn_2/board');
+    expect(row?.querySelector('[data-testid="host-runner-halted"]')).not.toBeNull();
+    expect(row?.querySelector('[data-testid="host-runner-halted-reason"]')?.textContent?.trim()).toBe(
+      'not held under this host (hs_1) at its hub',
+    );
+  });
+
   it('renders the empty state for a host with no runners', async () => {
     const el = await render([]);
 

@@ -3,7 +3,8 @@
 A real Chromium bounces through a real hub + stub IdP into runner A, then the captured
 token is replayed against runner B (rejected, audience-bound) and against runner A again
 (rejected, single-use ``jti``); a hub key rotation mid-run is picked up by a second
-bounce into runner B with no restart. Needs ``uv run playwright install chromium`` once."""
+bounce into runner B with no restart. A registered host of two runners signs in once, as its host id, and that one
+session reaches both runners' pages. Needs ``uv run playwright install chromium`` once."""
 
 from __future__ import annotations
 
@@ -20,11 +21,20 @@ from typing import Any, NamedTuple
 import httpx
 import pytest
 
+from blizzard.foundation.runner_token_names import hub_token_variable
 from blizzard.hub.config import AuthConfig, HubConfig, OAuthProviderConfig
 from blizzard.runner.auth.session import CookieNames
+from blizzard.runner.host_config import HOST_TOKEN_VARIABLE, RunnerEntry
+from blizzard.runner.host_layout import HostLayout
 from blizzard.runner.hub.internal.token_file import HubTokenFile
 from tests.e2e.test_acceptance_loop import _await_http, _free_port, _terminate
-from tests.host_files import load_runner_config, sampler_without_credentials, write_host_file
+from tests.host_files import (
+    host_config_of,
+    init_runner_environment,
+    load_runner_config,
+    sampler_without_credentials,
+    write_host_file,
+)
 from tests.runner_join import add_runner, adopt_runner, runner_spawn_env
 from tests.service.support import poll_until, require_stub_idp, stub_idp
 from tests.support import daemon_log_sink
@@ -350,3 +360,113 @@ def test_runner_session_reacquisition_e2e(tmp_path: Path) -> None:
                 browser.close()
                 if new_proc is not None:
                     _terminate(new_proc)
+
+
+@contextlib.contextmanager
+def _registered_host(root: Path, *, hub_port: int, port: int) -> Iterator[tuple[str, tuple[str, str]]]:
+    """A host the signed-in superuser adds at the hub, running two runners it adds under itself with its host token;
+    yields its host id and its runners' ids once the hub has answered its report, so sign-in is offered."""
+    hub_url = f"http://127.0.0.1:{hub_port}"
+    with httpx.Client(base_url=hub_url, timeout=15.0) as operator:
+        operator.get(f"/api/auth/{_PROVIDER_NAME}/authorize", follow_redirects=True)
+        added = operator.post("/api/hosts", json={"name": "host-e2e"})
+        assert added.status_code == 201, added.text
+    host_id, host_token = str(added.json()["host_id"]), str(added.json()["token"])
+    runners: list[tuple[str, str, str]] = []
+    with httpx.Client(base_url=hub_url, timeout=15.0, headers={"Authorization": f"Bearer {host_token}"}) as host:
+        for name in ("runner-one", "runner-two"):
+            minted = host.post("/api/fleet/host/runners", json={"name": name})
+            assert minted.status_code == 201, minted.text
+            runners.append((name, str(minted.json()["runner_id"]), str(minted.json()["token"])))
+
+    base = dataclasses.replace(
+        init_runner_environment(root),
+        hub_url=hub_url,
+        host="127.0.0.1",
+        port=port,
+        public_urls=(f"http://127.0.0.1:{port}",),
+        subscriptions=sampler_without_credentials(root),
+    )
+    entries = tuple(
+        RunnerEntry(
+            name=name,
+            id=runner_id,
+            subscription=base.subscriptions[0].slug,
+            bindings=(),
+            own=dataclasses.replace(base, name=name, runner_id=runner_id),
+        )
+        for name, runner_id, _token in runners
+    )
+    HostLayout(root).config_path.write_text(dataclasses.replace(host_config_of(base), runners=entries).to_toml())
+    for name, _runner_id, token in runners:
+        HubTokenFile.of(root, hub_token_variable(name)).write(token)
+
+    log = root / "daemon.log"
+    proc = subprocess.Popen(
+        [_runner_bin(), "host", "--dir", str(root)],
+        env=runner_spawn_env(hub_url, {HOST_TOKEN_VARIABLE: host_token}),
+        stdout=daemon_log_sink(log),
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+    client = httpx.Client(base_url=f"http://127.0.0.1:{port}", timeout=15.0)
+    try:
+        _await_http(proc, client, "/api/health", log=log)
+        # The host signs in as itself only once the hub has answered its report.
+        assert poll_until(lambda: client.get("/api/auth/login", follow_redirects=False).status_code != 503), (
+            "the host was never answered by its hub"
+        )
+        yield host_id, (runners[0][1], runners[1][1])
+    finally:
+        client.close()
+        _terminate(proc)
+
+
+def test_one_sign_in_at_a_registered_host_reaches_both_runners_pages(tmp_path: Path) -> None:
+    from playwright.sync_api import expect, sync_playwright
+
+    bin_dir = require_stub_idp()
+    idp_port = _free_port()
+    hub_port = _free_port()
+    host_port = _free_port()
+    host_url = f"http://127.0.0.1:{host_port}"
+
+    with sync_playwright() as pw, stub_idp(bin_dir, idp_port) as idp:
+        idp.put(
+            "/_levers/profile",
+            json={"subject": "7001", "handle": "host-op", "email": _PROFILE_EMAIL, "email_verified": True},
+        )
+
+        with (
+            _oauth_hub(tmp_path / "hub", idp_port, hub_port),
+            _registered_host(tmp_path / "host", hub_port=hub_port, port=host_port) as (host_id, (first, second)),
+        ):
+            names = CookieNames(host_id)
+            browser = pw.chromium.launch(headless=True)
+            context = browser.new_context()
+            page = context.new_page()
+            expect.set_options(timeout=20_000)
+            authorizes: list[str] = []
+            page.on(
+                "request",
+                lambda request: authorizes.append(request.url) if "/api/auth/authorize" in request.url else None,
+            )
+
+            try:
+                page.goto(f"{host_url}/runners/{first}/board", wait_until="load")
+                expect(page).to_have_title(re.compile("blizzard runner"))
+                assert any(f"client={host_id}" in url for url in authorizes), authorizes
+                # The hub's own session shares the loopback host; the panel's one session is named by the host id.
+                assert [
+                    c.get("name")
+                    for c in context.cookies(host_url)
+                    if c.get("name", "").startswith("bz_runner_session_")
+                ] == [names.session]
+
+                bounced = len(authorizes)
+                page.goto(f"{host_url}/runners/{second}/board", wait_until="load")
+                expect(page).to_have_title(re.compile("blizzard runner"))
+                expect(page.locator('[data-testid="identity-username"]')).to_be_visible()
+                assert len(authorizes) == bounced, "the second runner's page bounced to the hub again"
+            finally:
+                browser.close()

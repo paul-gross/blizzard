@@ -19,13 +19,13 @@ from typing import Protocol
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.runner_identity_state import IdentityState
 from blizzard.runner.environments.workspaces import IWorkspaces
 from blizzard.runner.harness.capability_snapshot import HarnessCapability
 from blizzard.runner.hub.client import BindingDeclaration, HubClientError, IHubClient, SubscriptionDeclaration
 from blizzard.runner.hub.held_token import HubTokenHolder
 from blizzard.runner.hub.identity import (
     ICurrentRunnerIdentity,
-    IdentityState,
     IdentityVerdictHolder,
     IWriteRunnerIdentityRepository,
     RunnerIdentity,
@@ -85,6 +85,8 @@ class RegistrationConfig(Protocol):
     def bindings(self) -> tuple[BindingDeclaration, ...] | None: ...
     @property
     def subscription(self) -> str | None: ...
+    @property
+    def declares_subscriptions(self) -> bool: ...
 
 
 class RegistrationContext(Protocol):
@@ -131,8 +133,14 @@ class Registration:
                 url=ctx.config.public_url or None,
                 redirect_uris=ctx.config.redirect_uris,
                 capabilities=ctx.capability_snapshot(),
-                subscriptions=tuple(
-                    SubscriptionDeclaration(slug=s.slug, name=s.name, provider=s.provider) for s in ctx.subscriptions
+                # A registered host reports the roster itself, so its runners send none.
+                subscriptions=(
+                    tuple(
+                        SubscriptionDeclaration(slug=s.slug, name=s.name, provider=s.provider)
+                        for s in ctx.subscriptions
+                    )
+                    if ctx.config.declares_subscriptions
+                    else None
                 ),
                 gates=ctx.config.gates,
                 projects=ctx.config.projects,

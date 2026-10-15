@@ -23,6 +23,7 @@ from sqlalchemy import Engine, MetaData, make_url
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock, IClock, ManualMonotonicClock, SystemClock
 from blizzard.foundation.node_steps import ApplyOutcome, SessionMode
+from blizzard.foundation.runner_identity_state import IdentityState
 from blizzard.foundation.runner_tokens import RunnerTokenRefusalReason
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.composition import RunnerProcess, build_runner_process
@@ -74,7 +75,7 @@ from blizzard.runner.hub.client import (
     TranscriptPushAck,
 )
 from blizzard.runner.hub.held_token import HubTokenHolder
-from blizzard.runner.hub.identity import IdentityState, IdentityVerdictHolder, RunnerIdentity, RunnerIdentityHolder
+from blizzard.runner.hub.identity import IdentityVerdictHolder, RunnerIdentity, RunnerIdentityHolder
 from blizzard.runner.hub.served_projects import ServedProject
 from blizzard.runner.hub.verified import VerifiedHubClient
 from blizzard.runner.leases.internal.worker_stdout_files import WorkerStdoutFiles
@@ -102,6 +103,7 @@ from blizzard.runner.store.internal.git_commit_declaration_store import GitCommi
 from blizzard.runner.store.internal.host_daemon_liveness_store import DaemonLivenessStore
 from blizzard.runner.store.internal.host_external_usage_store import ExternalUsageStore
 from blizzard.runner.store.internal.host_graph_artifact_store import GraphArtifactStore
+from blizzard.runner.store.internal.host_identity_store import HostIdentityStore
 from blizzard.runner.store.internal.host_jti_cache_store import JtiCacheRepository
 from blizzard.runner.store.internal.host_lane_store import HostLaneStore
 from blizzard.runner.store.internal.host_runner_audit import RunnerAudit
@@ -173,6 +175,7 @@ class SqlAlchemyRunnerStore(
     UsageStore,
     ExternalUsageStore,
     HostLaneStore,
+    HostIdentityStore,
     DaemonLivenessStore,
     AttachmentStore,
     GitCommitDeclarationStore,
@@ -214,6 +217,7 @@ class SqlAlchemyRunnerStore(
         UsageStore.__init__(self, store)
         ExternalUsageStore.__init__(self, store)
         HostLaneStore.__init__(self, store)
+        HostIdentityStore.__init__(self, store)
         DaemonLivenessStore.__init__(self, store)
         AttachmentStore.__init__(self, store)
         GitCommitDeclarationStore.__init__(self, store)
@@ -321,6 +325,7 @@ def make_host_stores(store: SqlAlchemyRunnerStore, clock: IClock | None = None) 
         daemon_liveness=store,
         external_usage=store,
         host_lane=store,
+        host_identity=store,
         runner_audit=RunnerAudit(store.connections),
     )
 
@@ -523,7 +528,7 @@ class FakeHub:
         # capabilities per register call
         self.registered_capabilities: list[tuple[HarnessCapability, ...]] = []
         # subscriptions per register call
-        self.registered_subscriptions: list[tuple[SubscriptionDeclaration, ...]] = []
+        self.registered_subscriptions: list[tuple[SubscriptionDeclaration, ...] | None] = []
         self.registered_gates: list[tuple[str, ...]] = []
         self.registered_projects: list[tuple[str, ...] | None] = []
         self.registered_bindings: list[tuple[BindingDeclaration, ...] | None] = []
@@ -710,7 +715,7 @@ class FakeHub:
         url: str | None = None,
         redirect_uris: tuple[str, ...] = (),
         capabilities: tuple[HarnessCapability, ...] = (),
-        subscriptions: tuple[SubscriptionDeclaration, ...] = (),
+        subscriptions: tuple[SubscriptionDeclaration, ...] | None = (),
         gates: tuple[str, ...] = (),
         projects: tuple[str, ...] | None = None,
         bindings: tuple[BindingDeclaration, ...] | None = None,

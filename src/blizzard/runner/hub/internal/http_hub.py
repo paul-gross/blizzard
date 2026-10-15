@@ -1,8 +1,9 @@
 """httpx adapter for the hub-client seam (package-private).
 
 The reference :class:`~blizzard.runner.hub.client.IHubClient` and
-:class:`~blizzard.runner.hub.client.ITokenIdentityReader` binding, and the
-:class:`~blizzard.runner.hub.client.IHubRunnerAdmin` one, and the auth presenting the runner's held
+:class:`~blizzard.runner.hub.client.ITokenIdentityReader` binding, the
+:class:`~blizzard.runner.hub.client.IHubRunnerAdmin` one, the
+:class:`~blizzard.runner.hub.client.IHostHubClient` one, and the auth presenting the runner's held
 token. All httpx usage is confined here; a
 transport failure or unexpected status is wrapped once into
 :class:`~blizzard.runner.hub.client.HubClientError` (``bzh:structlog-logging``).
@@ -10,10 +11,10 @@ transport failure or unexpected status is wrapped once into
 
 from __future__ import annotations
 
-from collections.abc import Generator, Iterable, Sequence
+from collections.abc import Callable, Generator, Iterable, Sequence
 
 import httpx
-from pydantic import TypeAdapter
+from pydantic import BaseModel, TypeAdapter
 
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.harness.capability_snapshot import HarnessCapability
@@ -26,12 +27,23 @@ from blizzard.runner.hub.client import (
     ClaimRequest,
     DependencyDenial,
     FactPushAck,
+    HostAddRefusalReason,
+    HostAddRefused,
+    HostFactPushAck,
+    HostHeldRunner,
+    HostRecord,
+    HostRefusalReason,
+    HostRefused,
+    HostReport,
+    HostRunnerRetireRefused,
     HubClientError,
     HubQuestion,
     IdentityRouteMissing,
+    IHostHubClient,
     IHubClient,
     IHubRunnerAdmin,
     IncompatibleDenial,
+    IssuedHost,
     IssuedIdentity,
     ITokenIdentityReader,
     OperatorTenant,
@@ -41,6 +53,7 @@ from blizzard.runner.hub.client import (
     QueueEntry,
     QueueWorkRef,
     RegistrationReply,
+    RetiredHostRunner,
     RouteClaimOutcome,
     RunnerAddRefusalReason,
     RunnerAddRefused,
@@ -64,7 +77,15 @@ from blizzard.runner.node_steps.envelope import Envelope
 from blizzard.runner.node_steps.submissions import ApplyReply, Completion, GateSubmission
 from blizzard.wire.chunk import ChunkStatusView, HubAdvanceResponse
 from blizzard.wire.envelope import ApplyResponse, NodeEnvelope
-from blizzard.wire.facts import RunnerFact, RunnerFactAck, RunnerFactBatch
+from blizzard.wire.facts import HostFactAck, HostFactBatch, RunnerFact, RunnerFactAck, RunnerFactBatch
+from blizzard.wire.host import (
+    HostAddRequest,
+    HostAddResponse,
+    HostRecordResponse,
+    HostReportRequest,
+    HostRunnerAddRequest,
+    HostWorkspace,
+)
 from blizzard.wire.question import QuestionView
 from blizzard.wire.queue import QueuePeekRequest, QueuePeekResponse
 from blizzard.wire.route import (
@@ -86,6 +107,8 @@ from blizzard.wire.runner import (
     RunnerIdentityView,
     RunnerRegistrationRequest,
     RunnerRegistrationResponse,
+    RunnerRetireRequest,
+    RunnerRetireResponse,
     RunnerSubscriptionDeclaration,
     RunnerView,
     ServedProjectView,
@@ -110,6 +133,12 @@ _RUNNERS_API = "/api/runners"
 #: The hub-level route naming the tenants the operator may enter.
 _ME_API = "/api/me"
 
+#: The operator route adding a host.
+_HOSTS_API = "/api/hosts"
+
+#: The prefix every call under a host's own token goes under.
+_HOST_API = f"{_FLEET_API}/host"
+
 #: The header an operator call names its tenant in, by id.
 TENANT_HEADER = "X-Blizzard-Tenant"
 
@@ -119,6 +148,41 @@ _ADD_REFUSALS: dict[int, RunnerAddRefusalReason] = {
     httpx.codes.FORBIDDEN: RunnerAddRefusalReason.FORBIDDEN,
     httpx.codes.NOT_FOUND: RunnerAddRefusalReason.UNSUPPORTED,
     httpx.codes.METHOD_NOT_ALLOWED: RunnerAddRefusalReason.UNSUPPORTED,
+}
+
+#: The statuses a host add is refused with, each a reason the caller acts on rather than retries.
+_HOST_ADD_REFUSALS: dict[int, HostAddRefusalReason] = {
+    httpx.codes.UNAUTHORIZED: HostAddRefusalReason.SIGN_IN_REQUIRED,
+    httpx.codes.FORBIDDEN: HostAddRefusalReason.FORBIDDEN,
+    httpx.codes.NOT_FOUND: HostAddRefusalReason.UNSUPPORTED,
+    httpx.codes.METHOD_NOT_ALLOWED: HostAddRefusalReason.UNSUPPORTED,
+    httpx.codes.CONFLICT: HostAddRefusalReason.NAME_TAKEN,
+}
+
+type _Refusal = Callable[[str, httpx.Response], HubClientError | None]
+
+
+def _retire_held(operation: str, resp: httpx.Response) -> HubClientError | None:
+    """A retire under the host refused while the runner still holds chunks (409)."""
+    if resp.status_code != httpx.codes.CONFLICT:
+        return None
+    return HostRunnerRetireRefused(f"{operation} -> {resp.status_code}", detail=_detail(resp))
+
+
+def _no_such_project(operation: str, resp: httpx.Response) -> HubClientError | None:
+    """An add under the host refused for a named project the tenant does not hold (422 with the hub's text)."""
+    if resp.status_code != httpx.codes.UNPROCESSABLE_ENTITY or not _text_detail(resp):
+        return None
+    return RunnerAddRefused(
+        f"{operation} -> {resp.status_code}", reason=RunnerAddRefusalReason.NO_SUCH_PROJECT, detail=_detail(resp)
+    )
+
+
+#: The statuses a call under the host's own token is refused with, typed for the caller to branch on.
+_HOST_REFUSALS: dict[int, HostRefusalReason] = {
+    httpx.codes.UNAUTHORIZED: HostRefusalReason.CREDENTIAL_REFUSED,
+    httpx.codes.FORBIDDEN: HostRefusalReason.CREDENTIAL_REFUSED,
+    httpx.codes.NOT_FOUND: HostRefusalReason.NOT_FOUND,
 }
 
 #: The hub's refusal text for a named tenant the caller cannot enter — one text for an unknown, a
@@ -259,7 +323,7 @@ class HttpHubClient:
         url: str | None = None,
         redirect_uris: tuple[str, ...] = (),
         capabilities: tuple[HarnessCapability, ...] = (),
-        subscriptions: tuple[SubscriptionDeclaration, ...] = (),
+        subscriptions: tuple[SubscriptionDeclaration, ...] | None = (),
         gates: tuple[str, ...] = (),
         projects: tuple[str, ...] | None = None,
         bindings: tuple[BindingDeclaration, ...] | None = None,
@@ -274,9 +338,14 @@ class HttpHubClient:
                 url=url,
                 redirect_uris=list(redirect_uris),
                 capabilities=[_capability(c) for c in capabilities],
-                subscriptions=[
-                    RunnerSubscriptionDeclaration(slug=d.slug, name=d.name, provider=d.provider) for d in subscriptions
-                ],
+                subscriptions=(
+                    [
+                        RunnerSubscriptionDeclaration(slug=d.slug, name=d.name, provider=d.provider)
+                        for d in subscriptions
+                    ]
+                    if subscriptions is not None
+                    else None
+                ),
                 gates=list(gates),
                 projects=list(projects) if projects is not None else None,
                 bindings=(
@@ -453,8 +522,143 @@ class HttpHubRunnerAdmin:
             raise _malformed(operation, exc) from exc
         return [OperatorTenant(tenant_id=t.tenant_id, name=t.name) for t in me.tenants]
 
+    def add_host(self, name: str, *, tenant_id: str | None = None, adopt: tuple[str, ...] = ()) -> IssuedHost:
+        operation = f"POST {_HOSTS_API}"
+        headers = self._headers()
+        if tenant_id is not None:
+            headers[TENANT_HEADER] = tenant_id
+        try:
+            resp = self._client.post(
+                _HOSTS_API,
+                json=HostAddRequest(name=name, adopt=list(adopt)).model_dump(mode="json", exclude_defaults=True),
+                headers=headers,
+            )
+        except httpx.HTTPError as exc:
+            _log.error("hub unreachable", operation=operation, detail=str(exc))
+            raise HubClientError(f"{operation} failed: {exc}") from exc
+        reason = _host_add_refusal(resp)
+        if reason is not None:
+            _log.info("hub call refused", operation=operation, status=resp.status_code, reason=reason)
+            raise HostAddRefused(f"{operation} -> {resp.status_code}", reason=reason, detail=_detail(resp))
+        if not resp.is_success:
+            _log.error("hub call failed", operation=operation, status=resp.status_code, body=resp.text[:500])
+            raise HubClientError(f"{operation} -> {resp.status_code}: {resp.text[:200]}")
+        try:
+            added = HostAddResponse.model_validate(resp.json())
+        except ValueError as exc:
+            raise _malformed(operation, exc) from exc
+        return IssuedHost(host_id=added.host_id, host_name=added.host_name, token=added.token)
+
     def _headers(self) -> dict[str, str]:
         return {"Authorization": f"Bearer {self._operator_token}"} if self._operator_token else {}
+
+
+def _host_add_refusal(resp: httpx.Response) -> HostAddRefusalReason | None:
+    """The reason a host add's answer refuses it, or ``None`` when it is no refusal the caller acts on.
+    A ``404`` carrying the hub's tenant text is the tenant refusal, and a ``409`` carrying the
+    tenant-required code is that one; any other ``404`` is a hub that predates hosts, and any other
+    ``409`` a name a live host holds."""
+    if resp.status_code == httpx.codes.NOT_FOUND and _detail(resp) == _NO_SUCH_TENANT:
+        return HostAddRefusalReason.NO_SUCH_TENANT
+    if resp.status_code == httpx.codes.CONFLICT and _refusal_code(resp) == _TENANT_REQUIRED:
+        return HostAddRefusalReason.TENANT_REQUIRED
+    return _HOST_ADD_REFUSALS.get(resp.status_code)
+
+
+class HttpHostHubClient:
+    """The host's own hub calls over an injected ``httpx.Client``, presenting ``token`` — the host's
+    bearer token — on each, whatever credential the client itself carries."""
+
+    def __init__(self, client: httpx.Client, *, token: str) -> None:
+        self._client = client
+        self._headers = {"Authorization": f"Bearer {token}"}
+
+    def report(self, report: HostReport) -> HostRecord | HostRefused:
+        body = HostReportRequest(
+            url=report.url,
+            redirect_uris=list(report.redirect_uris),
+            workspaces=[
+                HostWorkspace(workspace_id=w.workspace_id, env_capacity=w.env_capacity) for w in report.workspaces
+            ],
+            subscriptions=[
+                RunnerSubscriptionDeclaration(slug=d.slug, name=d.name, provider=d.provider)
+                for d in report.subscriptions
+            ],
+        )
+        resp = self._send("POST", _HOST_API, body.model_dump(mode="json", exclude={"name"}))
+        return resp if isinstance(resp, HostRefused) else _host_record(_validated(HostRecordResponse, resp, _HOST_API))
+
+    def record(self) -> HostRecord | HostRefused:
+        resp = self._send("GET", _HOST_API)
+        return resp if isinstance(resp, HostRefused) else _host_record(_validated(HostRecordResponse, resp, _HOST_API))
+
+    def push_facts(self, facts: Sequence[PushedFact]) -> HostFactPushAck | HostRefused:
+        path = f"{_HOST_API}/events"
+        batch = HostFactBatch(facts=[RunnerFact(seq=f.seq, kind=f.kind, payload=f.payload) for f in facts])
+        resp = self._send("POST", path, batch.model_dump(mode="json"))
+        if isinstance(resp, HostRefused):
+            return resp
+        ack = _validated(HostFactAck, resp, path)
+        return HostFactPushAck(
+            high_water=ack.high_water, applied=ack.applied, already_applied=ack.already_applied, rejected=ack.rejected
+        )
+
+    def add_runner(self, name: str, *, projects: tuple[str, ...] | None = None) -> IssuedIdentity | HostRefused:
+        path = f"{_HOST_API}/runners"
+        request = HostRunnerAddRequest(name=name, projects=list(projects) if projects is not None else None)
+        resp = self._send("POST", path, request.model_dump(mode="json"), refused=_no_such_project)
+        if isinstance(resp, HostRefused):
+            return resp
+        added = _validated(RunnerAddResponse, resp, path)
+        return IssuedIdentity(runner_id=added.runner_id, runner_name=added.runner_name, token=added.token)
+
+    def retire_runner(self, runner_id: str, *, force: bool = False) -> RetiredHostRunner | HostRefused:
+        path = f"{_HOST_API}/runners/{runner_id}/retire"
+        resp = self._send("POST", path, RunnerRetireRequest(force=force).model_dump(mode="json"), refused=_retire_held)
+        if isinstance(resp, HostRefused):
+            return resp
+        retired = _validated(RunnerRetireResponse, resp, path)
+        return RetiredHostRunner(
+            runner_id=retired.runner.runner_id, released_chunk_ids=tuple(retired.released_chunk_ids)
+        )
+
+    def _send(
+        self, method: str, path: str, body: object = None, *, refused: _Refusal | None = None
+    ) -> httpx.Response | HostRefused:
+        """The hub's answer, or its typed refusal; an answer ``refused`` types as a call's own refusal raises it."""
+        operation = f"{method} {path}"
+        try:
+            resp = self._client.request(method, path, json=body, headers=self._headers)
+        except httpx.HTTPError as exc:
+            _log.error("hub unreachable", operation=operation, detail=str(exc))
+            raise HubClientError(f"{operation} failed: {exc}") from exc
+        if resp.is_success:
+            return resp
+        reason = _HOST_REFUSALS.get(resp.status_code)
+        if reason is not None:
+            _log.info("hub call refused", operation=operation, status=resp.status_code, reason=reason)
+            return HostRefused(reason=reason, status=resp.status_code, detail=_detail(resp))
+        if refused is not None and (error := refused(operation, resp)) is not None:
+            _log.info("hub call refused", operation=operation, status=resp.status_code)
+            raise error
+        _log.error("hub call failed", operation=operation, status=resp.status_code, body=resp.text[:500])
+        raise HubClientError(f"{operation} -> {resp.status_code}: {resp.text[:200]}")
+
+
+def _validated[T: BaseModel](model: type[T], resp: httpx.Response, path: str) -> T:
+    try:
+        return model.model_validate(resp.json())
+    except ValueError as exc:
+        raise _malformed(f"{resp.request.method} {path}", exc) from exc
+
+
+def _host_record(wire: HostRecordResponse) -> HostRecord:
+    return HostRecord(
+        host_id=wire.host_id,
+        tenant_id=wire.tenant_id,
+        host_name=wire.host_name,
+        runners=tuple(HostHeldRunner(runner_id=r.runner_id, runner_name=r.runner_name) for r in wire.runners),
+    )
 
 
 def _add_refusal(resp: httpx.Response) -> RunnerAddRefusalReason | None:
@@ -492,6 +696,10 @@ def _conforms_token_identity_reader(x: HttpHubClient) -> ITokenIdentityReader:
 
 
 def _conforms_hub_runner_admin(x: HttpHubRunnerAdmin) -> IHubRunnerAdmin:
+    return x
+
+
+def _conforms_host_hub_client(x: HttpHostHubClient) -> IHostHubClient:
     return x
 
 

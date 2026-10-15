@@ -50,19 +50,31 @@ A runner has no identity until the hub adds it and issues the token it proves th
 [`docs/deployment/runner-auth.md`](./deployment/runner-auth.md) owns adding, where the token lives, and rotation. The
 remote case changes only how each step reaches the hub.
 
-On the runner machine, `init` adds the runner and installs its token in one step:
+On the runner machine, `init` registers the host, adds its runner under it, and installs both tokens in one step:
 
 ```bash
 blizzard-runner init /var/lib/blizzard/runner --hub https://hub.example.net
 ```
 
-A runner belongs to one tenant for as long as it exists
-([tenants.md](./deployment/tenants.md#a-runner-belongs-to-one-tenant)). When you may enter several tenants at that hub,
-name the runner's with `--tenant <tenant_id>`, by id; init stops and lists them otherwise.
+init uses the host token it finds — `BZ_HOST_TOKEN` in the environment, the host file's `host_token`, then the runtime
+dir's `.env` — and adds a host otherwise, named after the first `[[runner]]`, writing its token to `.env` as
+`BZ_HOST_TOKEN`. Every runner it adds is added under the host. When the hub's data was reset and it no longer knows the
+host's token, `--allow-readd` adds the host and every runner again;
+[runner-auth.md](./deployment/runner-auth.md#adding-a-runner) owns the full order.
 
-On a hub with `auth.mode = "oauth"`, that add runs under your `blizzard hub login --hub-url …` session on the runner
-machine, so it takes an operator holding `runner:add`. Where you would rather not sign in there, add the runner from any
-operator machine instead:
+A host and its runners belong to one tenant for as long as they exist
+([tenants.md](./deployment/tenants.md#a-runner-belongs-to-one-tenant)). When you may enter several tenants at that hub,
+name the host's with `--tenant <tenant_id>`, by id; init stops and lists them otherwise.
+
+On a hub with `auth.mode = "oauth"`, the host add runs under your `blizzard hub login --hub-url …` session on the runner
+machine. Where you would rather not sign in there, add the host from any operator machine instead and put the
+`BZ_HOST_TOKEN=…` line it prints in the runtime dir's `.env` before running init:
+
+```bash
+blizzard hub runner-host add runner-local --hub-url https://hub.example.net --tenant <tenant_id>
+```
+
+To keep a runner added by hand instead, add it from an operator machine:
 
 ```bash
 blizzard hub runner add runner-local --hub-url https://hub.example.net --tenant <tenant_id>
@@ -88,7 +100,7 @@ sudo -u blizzard sh -c 'umask 077; echo "BZ_HUB_TOKEN_RUNNER_LOCAL=…" >> /var/
 ```
 
 Then run the same `blizzard-runner init … --hub https://hub.example.net` there: it finds the token, confirms the hub
-knows it, and keeps that runner rather than adding another. It also makes a `.env` that other accounts can read
+knows it, and keeps that runner rather than adding another; a host init adds adopts it. It also makes a `.env` that other accounts can read
 owner-only, or warns when it cannot.
 
 Give the runner its own session-signing secret too, so board sessions survive a restart: generate one with
@@ -100,6 +112,11 @@ will not survive a restart. Never share one secret between runners: a cookie min
 
 Then start the runner with `systemctl enable --now blizzard-runner`, or `systemctl restart blizzard-runner` if the unit
 already runs: the daemon reads its token and session secret only at start.
+
+A registered host takes more runners with no sign-in: `blizzard-runner add <name> --project <p> --dir <runtime dir>`
+adds one under the host's token and appends its `[[runner]]`, and the host starts it at its next start.
+`blizzard-runner retire --runner <name|id> --dir <runtime dir>` retires one and removes its entry; a running host halts it
+at its next tick ([runner-auth.md](./deployment/runner-auth.md#adding-and-retiring-a-hosts-runners)).
 
 ## Verify
 

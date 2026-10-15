@@ -20,3 +20,6 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+.registration-panel {
+  grid-column: 1 / -1;
+}

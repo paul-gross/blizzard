@@ -17,6 +17,7 @@ from dataclasses import dataclass, field, replace
 from datetime import datetime
 from pathlib import Path
 
+import httpx
 from sqlalchemy import Engine
 
 from blizzard import __version__
@@ -54,15 +55,22 @@ from blizzard.runner.harness.wiring import (
 )
 from blizzard.runner.host_config import BuiltRunner, HaltedRunner, HostConfig, ResolvedToken
 from blizzard.runner.host_layout import HostLayout
+from blizzard.runner.hub.client import HostReport, HostReportedWorkspace
+from blizzard.runner.hub.client import SubscriptionDeclaration as HubSubscriptionDeclaration
 from blizzard.runner.hub.held_token import HubTokenHolder
+from blizzard.runner.hub.host_identity import HostIdentityHolder
+from blizzard.runner.hub.host_registration import HostRegistration, HostRegistrationHolder, ICurrentHostRegistration
 from blizzard.runner.hub.identity import (
     ICurrentRunnerIdentity,
     IdentityVerdictHolder,
+    IWriteRetiredRunnerIdentity,
     IWriteRunnerIdentityRepository,
-    RunnerIdentity,
     RunnerIdentityHolder,
 )
+from blizzard.runner.hub.internal.http_hub import HttpHostHubClient
 from blizzard.runner.hub.internal.token_file import HubTokenFile
+from blizzard.runner.lifecycle.host_lane_drain import HostLaneDrain
+from blizzard.runner.lifecycle.host_tick import HostTick
 from blizzard.runner.listeners import Listeners
 from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
 from blizzard.runner.runtime import migration_runner
@@ -77,6 +85,7 @@ from blizzard.runner.store.internal.git_commit_declaration_store import GitCommi
 from blizzard.runner.store.internal.host_daemon_liveness_store import DaemonLivenessStore
 from blizzard.runner.store.internal.host_external_usage_store import ExternalUsageStore
 from blizzard.runner.store.internal.host_graph_artifact_store import GraphArtifactStore
+from blizzard.runner.store.internal.host_identity_store import HostIdentityStore
 from blizzard.runner.store.internal.host_jti_cache_store import JtiCacheRepository
 from blizzard.runner.store.internal.host_lane_store import HostLaneStore
 from blizzard.runner.store.internal.host_runner_audit import RunnerAudit
@@ -112,7 +121,9 @@ from blizzard.runner.tracing.attributes import (
 from blizzard.runner.tracing.platform import (
     PLATFORM_INSTRUMENTATION_SCOPE,
     PLATFORM_INSTRUMENTATION_SCOPE_VERSION,
+    CurrentRunnerIdentity,
     identity_stamp,
+    runner_context_stamp,
 )
 from blizzard.runner.tracing.received_export import (
     DisabledReceivedTelemetryExport,
@@ -125,7 +136,6 @@ from blizzard.runner.tracing.replay import LeaseTraceReplay
 from blizzard.runner.tracing.sweep import LeaseTraceSweep
 from blizzard.runner.usage.credential_renewal import CredentialRenewalPass, RenewableSubscription
 from blizzard.runner.usage.external_usage_sample import ExternalUsageSamplePass, SampledSubscription
-from blizzard.runner.usage.host_tick import HostTick
 from blizzard.runner.usage.repository import IWriteHostLaneRepository
 
 
@@ -175,6 +185,19 @@ class HostProcess:
     halted: tuple[HaltedRunner, ...] = ()
     #: The subscriptions the host declares, whichever runners spend them.
     subscriptions: tuple[SubscriptionDeclaration, ...] = ()
+    #: Who this host is at its hub; seeded from the store at boot, and handed the identity once it is first recorded.
+    host_identity: HostIdentityHolder = field(default_factory=HostIdentityHolder)
+    #: The host registration step's latest outcome — unregistered on a host with no host token.
+    host_registration: HostRegistrationHolder = field(
+        default_factory=lambda: HostRegistrationHolder.for_host(registered=False)
+    )
+    #: The client the host's own hub calls go through, under its host token — ``None`` on a host with none.
+    host_hub_http_client: httpx.Client | None = None
+
+    def registered(self) -> bool:
+        """Whether the host holds a host token: it reports itself, and its roster with it, so its runners declare
+        no subscriptions of their own."""
+        return self.host_registration.current().registered()
 
     def spenders_of(self, slug: str | None, *, excluding: str) -> tuple[RunnerProcess, ...]:
         """The runners of this host, other than ``excluding``, that spend ``slug`` — none for a runner that spends no
@@ -193,6 +216,8 @@ class HostProcess:
             closing.callback(self.received_telemetry.shutdown, PLATFORM_TRACING_SHUTDOWN_SECONDS)
             closing.callback(self.engine.dispose)
             closing.callback(self.usage_http_client.close)
+            if self.host_hub_http_client is not None:
+                closing.callback(self.host_hub_http_client.close)
             for runner in self.runners:
                 closing.callback(runner.close_runner)
 
@@ -322,22 +347,6 @@ class HostReadiness(ReadinessService):
         return replace(readiness, detail=detail)
 
 
-class _RunnersIdentity:
-    """The :class:`~blizzard.runner.hub.identity.ICurrentRunnerIdentity` the host's shared pieces stamp from: the
-    identity of the first of the host's runners that holds one. With one runner it answers exactly what that
-    runner's holder answers, and nothing before its first registration."""
-
-    def __init__(self, runners: Callable[[], tuple[RunnerProcess, ...]]) -> None:
-        self._runners = runners
-
-    def current(self) -> RunnerIdentity | None:
-        for runner in self._runners():
-            held = runner.identity.current()
-            if held is not None:
-                return held
-        return None
-
-
 def _pool_held_ids(audit: IRunnerAudit, workspace_id: str) -> Callable[[], list[str]]:
     """The environment ids any of the host's runners holds in ``workspace_id``'s pool, or under no workspace."""
 
@@ -393,12 +402,20 @@ _log = get_logger("blizzard.runner.composition")
 
 
 class _HostAttemptSink:
-    """Where the host's sampling pass records an attempt: a registered host's own lane, else — an unregistered host
-    having none — its first runner's bound stores and event publisher, as a runner's own sample did."""
+    """Where the host's sampling pass records an attempt: a registered host's own lane — one holding a host token,
+    whether or not its hub has answered yet — else, an unregistered host having none, its first runner's bound stores
+    and event publisher, as a runner's own sample did."""
 
-    def __init__(self, host_lane: IWriteHostLaneRepository, runners: Callable[[], tuple[RunnerProcess, ...]]) -> None:
+    def __init__(
+        self,
+        host_lane: IWriteHostLaneRepository,
+        runners: Callable[[], tuple[RunnerProcess, ...]],
+        *,
+        registration: ICurrentHostRegistration,
+    ) -> None:
         self._host_lane = host_lane
         self._runners = runners
+        self._registration = registration
 
     def record(
         self,
@@ -410,7 +427,7 @@ class _HostAttemptSink:
         report_payload: str,
         miss_reason: str | None,
     ) -> None:
-        if self._host_lane.host_registered():
+        if self._registration.current().registered():
             self._host_lane.record_host_external_usage_attempt(
                 slug=slug,
                 sampled_at=sampled_at,
@@ -444,9 +461,12 @@ def _external_usage_sample_pass(
     clock: SystemClock,
     http_client: LazyUsageHttpClient,
     runners: Callable[[], tuple[RunnerProcess, ...]],
+    *,
+    registration: ICurrentHostRegistration,
 ) -> ExternalUsageSamplePass | None:
     """Every subscription the host declares paired with its provider's sampler, sharing one HTTP client; ``None``
-    when the host declares none."""
+    when the host declares none. ``registration`` says whether the host holds a host token, so its attempts ride its
+    own lane."""
     if not declarations:
         return None
     sampled = [
@@ -461,7 +481,7 @@ def _external_usage_sample_pass(
     return ExternalUsageSamplePass(
         subscriptions=sampled,
         attempts=host_stores.external_usage,
-        sink=_HostAttemptSink(host_stores.host_lane, runners),
+        sink=_HostAttemptSink(host_stores.host_lane, runners, registration=registration),
         clock=clock,
     )
 
@@ -471,11 +491,12 @@ PLATFORM_TRACING_SHUTDOWN_SECONDS = 3.0
 
 
 def build_runner_platform_tracing(
-    config: RunnerConfig, environ: Mapping[str, str] | None = None, *, identity: ICurrentRunnerIdentity
+    config: RunnerConfig, environ: Mapping[str, str] | None = None, *, identity: ICurrentRunnerIdentity | None = None
 ) -> IPlatformTracing:
-    """The handle ``[tracing]`` and the OTLP environment decide for this runner; every span it records
-    carries the id and name ``identity`` answers as it starts, and none is exported before the runner's
-    first registration."""
+    """The handle ``[tracing]`` and the OTLP environment decide. With ``identity``, every span it records carries
+    the id and name ``identity`` answers as it starts, and none is exported before that runner's first
+    registration; without, each span is stamped as the runner whose context opened it, and one opened outside any
+    runner's — the host's own — carries no runner identity."""
     env = os.environ if environ is None else environ
     return build_platform_tracing(
         config.tracing,
@@ -483,7 +504,7 @@ def build_runner_platform_tracing(
         resource=resource_attributes(env, __version__),
         scope=PLATFORM_INSTRUMENTATION_SCOPE,
         scope_version=PLATFORM_INSTRUMENTATION_SCOPE_VERSION,
-        stamp=identity_stamp(identity),
+        stamp=identity_stamp(identity) if identity is not None else runner_context_stamp(),
     )
 
 
@@ -532,6 +553,7 @@ def build_host_process(
         platform_tracing=platform_tracing,
         received_telemetry=received_telemetry,
         trace_platform=trace_platform,
+        host_token=host.host_token.value,
     )
     try:
         for built in runners:
@@ -573,10 +595,12 @@ def build_runner_process(
     identity: RunnerIdentityHolder | None = None,
     runner_id: str | None = None,
     token: ResolvedToken | None = None,
+    host_token: str = "",
 ) -> RunnerProcess:
     """A host of one and its runner, for the standalone commands and tests that drive one runner: closing the
     returned runner closes the host too. The runner is bound to ``runner_id``, else to the id ``config`` carries;
-    ``token`` is where its hub token resolved from. The other arguments are :func:`build_host_process`'s."""
+    ``token`` is where its hub token resolved from, and ``host_token`` the host's own credential, so a runner of a
+    registered host leaves its roster to the host. The other arguments are :func:`build_host_process`'s."""
     graph = _build_host_graph(
         config,
         subscriptions=config.subscriptions,
@@ -585,6 +609,7 @@ def build_runner_process(
         platform_tracing=platform_tracing,
         received_telemetry=received_telemetry,
         trace_platform=False,
+        host_token=host_token,
     )
     try:
         runner = _build_runner(
@@ -639,20 +664,22 @@ def _build_host_graph(
     platform_tracing: IPlatformTracing | None,
     received_telemetry: IReceivedTelemetryExport | None,
     trace_platform: bool,
+    host_token: str = "",
 ) -> HostProcess:
     """The host's own graph, with no runner on it yet. ``config`` carries the host's keys — listeners, tracing, the
-    workspaces — and ``subscriptions`` are the host's declarations, which its credential renewal covers."""
+    workspaces, its hub — and ``subscriptions`` are the host's declarations, which its credential renewal covers.
+    ``host_token`` is the host's own credential; a host holding one is registered, and reports itself to its hub."""
     install_runner_guard()
     engine = create_engine_from_url(config.db_url)
+    host_hub_http_client: httpx.Client | None = None
     try:
         built: list[HostProcess] = []
 
         def runners() -> tuple[RunnerProcess, ...]:
             return built[0].runners if built else ()
 
-        resolver = _RunnersIdentity(runners)
         if trace_platform:
-            platform_tracing = build_runner_platform_tracing(config, environ, identity=resolver)
+            platform_tracing = build_runner_platform_tracing(config, environ)
             received_telemetry = build_runner_received_telemetry(config, environ)
         platform_tracing = platform_tracing or DisabledPlatformTracing()
         received_telemetry = received_telemetry or DisabledReceivedTelemetryExport()
@@ -671,13 +698,22 @@ def _build_host_graph(
         metric_bounds = ReceiverBounds.fresh(clock)
         log_bounds = ReceiverBounds.fresh(clock)
         telemetry_names = declared_telemetry_names()
+        workspaces = build_workspaces(config.workspaces, config.root, audit=host_stores.runner_audit)
+        host_identity = HostIdentityHolder()
+        # The one place a host's registration is derived: everything after reads it from the holder.
+        host_registration = HostRegistrationHolder.for_host(registered=bool(host_token))
+        host_hub: HttpHostHubClient | None = None
+        if host_registration.current().registered():
+            host_hub_http_client = httpx.Client(base_url=config.hub_url, timeout=_HOST_HUB_TIMEOUT_SECONDS)
+            platform_tracing.instrument_client(host_hub_http_client)
+            host_hub = HttpHostHubClient(host_hub_http_client, token=host_token)
         host = HostProcess(
             engine=engine,
             readiness=readiness,
             connections=connections,
             host_stores=host_stores,
             listeners=Listeners.of(config),
-            workspaces=build_workspaces(config.workspaces, config.root, audit=host_stores.runner_audit),
+            workspaces=workspaces,
             events=events,
             clock=clock,
             process=LinuxProcessProbe(),
@@ -691,7 +727,7 @@ def _build_host_graph(
                 metric_bounds=metric_bounds,
                 log_bounds=log_bounds,
                 clock=clock,
-                identity=resolver,
+                identity=CurrentRunnerIdentity(),
                 worker_programs=config.tracing.worker_programs,
                 harness_telemetry=config.tracing.harness_telemetry,
                 mapped_services=config.tracing.worker_program_services,
@@ -703,8 +739,28 @@ def _build_host_graph(
             log_bounds=log_bounds,
             harness_telemetry_names=telemetry_names,
             host_tick=HostTick(
+                registration=(
+                    HostRegistration(
+                        client=host_hub,
+                        report=functools.partial(host_report, config, workspaces, subscriptions),
+                        identities=host_stores.host_identity,
+                        identity=host_identity,
+                        status=host_registration,
+                        runners=runners,
+                        clock=clock,
+                    )
+                    if host_hub is not None
+                    else None
+                ),
                 external_usage_sample=_external_usage_sample_pass(
-                    subscriptions, host_stores, clock, usage_http_client, runners
+                    subscriptions, host_stores, clock, usage_http_client, runners, registration=host_registration
+                ),
+                lane_drain=(
+                    HostLaneDrain(
+                        client=host_hub, lane=host_stores.host_lane, registration=host_registration, clock=clock
+                    )
+                    if host_hub is not None
+                    else None
                 ),
                 credential_renewal=_credential_renewal_pass(subscriptions, host_stores, clock),
             ),
@@ -712,12 +768,48 @@ def _build_host_graph(
             subscriptions=tuple(subscriptions),
             platform_tracing=platform_tracing,
             received_telemetry=received_telemetry,
+            host_identity=host_identity,
+            host_registration=host_registration,
+            host_hub_http_client=host_hub_http_client,
         )
+        # Seeded only from a store at the code's schema head: a store mid-migration fails readiness, not boot.
+        if readiness.evaluate().ready and (recorded := host_stores.host_identity.host_identity()) is not None:
+            host.host_identity.hold(recorded)
         built.append(host)
         return host
     except BaseException:
+        if host_hub_http_client is not None:
+            host_hub_http_client.close()
         engine.dispose()
         raise
+
+
+#: How long one of the host's own hub calls waits — its report bounds the start-up wait before the runners tick.
+_HOST_HUB_TIMEOUT_SECONDS = 10.0
+
+
+def host_report(
+    config: RunnerConfig, workspaces: IWorkspaces, subscriptions: Sequence[SubscriptionDeclaration]
+) -> HostReport:
+    """What the host reports about itself: its first public URL, the panel's sign-in callback URIs, each workspace
+    with the environments it holds, and the subscriptions it declares."""
+    reported = []
+    for workspace in config.workspaces:
+        provider = workspaces.provider(workspace.id)
+        reported.append(
+            HostReportedWorkspace(
+                workspace_id=workspace.id, env_capacity=provider.capacity() if provider is not None else None
+            )
+        )
+    return HostReport(
+        url=config.public_url or None,
+        redirect_uris=config.redirect_uris,
+        workspaces=tuple(reported),
+        subscriptions=tuple(
+            HubSubscriptionDeclaration(slug=declared.slug, name=declared.name, provider=declared.provider)
+            for declared in subscriptions
+        ),
+    )
 
 
 def _identity_remedy(config: RunnerConfig, runner_id: str) -> str:
@@ -874,6 +966,13 @@ def build_identity_writer(
     return build_stores(engine, errors=errors, runner_id=runner_id).identity
 
 
+def build_identity_forgetter(
+    engine: Engine, *, errors: RunnerStoreErrorFactory, runner_id: str
+) -> IWriteRetiredRunnerIdentity:
+    """The identity row's forgetter, bound to ``runner_id``, for ``runner retire`` to forget the runner it retired."""
+    return RunnerIdentityStore(RunnerStoreConnections(engine, errors, runner_id))
+
+
 def build_read_stores(engine: Engine, *, errors: RunnerStoreErrorFactory, runner_id: str | None) -> RunnerReadStores:
     """The read-only bundle a controller-facing collaborator takes — narrows build_stores's
     bundle over the same adapter instances, never a second one — bound to the configured ``runner_id``, or unbound
@@ -903,5 +1002,6 @@ def _build_host_stores(connections: RunnerStoreConnections, clock: IClock) -> Ho
         daemon_liveness=DaemonLivenessStore(connections),
         external_usage=ExternalUsageStore(connections),
         host_lane=HostLaneStore(connections),
+        host_identity=HostIdentityStore(connections),
         runner_audit=RunnerAudit(connections),
     )

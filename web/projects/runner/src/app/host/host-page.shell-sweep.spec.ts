@@ -89,12 +89,24 @@ const SUBSCRIPTIONS = {
   ],
 };
 
+const REGISTRATION = {
+  state: 'registered',
+  host_id: 'hs_01KXKVVF1J3D6H6VYZ3XYN3YJ9',
+  tenant_id: 'tn_01KXKVVF1J3D6H6VYZ3XYN3YJ9',
+  host_name: 'workstation-with-a-long-hostname',
+  answered_at: '2026-07-16T11:59:26.000Z',
+  held_runner_ids: ['rn_01KXKVVF1J3D6H6VYZ3XYN3YJ9'],
+  detail: null,
+  buffered_facts: 0,
+};
+
 function route(method: string, path: string): unknown {
   if (method !== 'GET') return {};
   if (path === '/api/host/runners') return RUNNERS;
   if (path === '/api/host/workspaces') return WORKSPACES;
   if (path === '/api/host/environments') return ENVIRONMENTS;
   if (path === '/api/host/subscriptions') return SUBSCRIPTIONS;
+  if (path === '/api/host/registration') return REGISTRATION;
   return {};
 }
 

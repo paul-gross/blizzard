@@ -103,6 +103,27 @@ def test_the_operator_runner_list_beside_the_add_call_stays_off_the_surface() ->
     assert classify_spec_diff(base, head) == []
 
 
+def test_the_host_add_call_is_on_the_surface() -> None:
+    added = {"type": "object", "properties": {"token": {"type": "string"}}, "required": ["token"]}
+    base = _spec({"/api/hosts": {"get": _op(), "post": _op(response_schema=_ref("Added"))}}, {"Added": added})
+    head = _spec(
+        {"/api/hosts": {"get": _op(), "post": _op(response_schema=_ref("Added"))}}, {"Added": {"type": "object"}}
+    )
+    assert any("Added.token" in v for v in _violation_texts(classify_spec_diff(base, head)))
+
+
+def test_the_host_plane_is_on_the_surface() -> None:
+    base = _spec({"/api/fleet/host": {"get": _op(), "post": _op()}})
+    head = _spec({"/api/fleet/host": {"get": _op()}})
+    assert _violation_texts(classify_spec_diff(base, head)) == ["POST /api/fleet/host: surface method removed"]
+
+
+def test_the_operator_host_list_beside_the_add_call_stays_off_the_surface() -> None:
+    base = _spec({"/api/hosts": {"get": _op(), "post": _op()}})
+    head = _spec({"/api/hosts": {"post": _op()}})
+    assert classify_spec_diff(base, head) == []
+
+
 # --- response-reached schema classes --------------------------------------------------
 
 

@@ -200,10 +200,10 @@ class Runtime:
             layout.data_dir.mkdir(parents=True, exist_ok=True)
             # Every binding's runner-owned files, versioned with the runner, so re-running
             # `init` refreshes them to head.
-            own = config.sole_runner().own
-            if own is not None:
-                for declaration, section in declared(own.harness_sections):
-                    declaration.scaffold_runtime(section, root)
+            for entry in config.runners:
+                if entry.own is not None:
+                    for declaration, section in declared(entry.own.harness_sections):
+                        declaration.scaffold_runtime(section, root)
         except OSError as exc:
             raise ConfigError(f"cannot write the host directory at {root}: {exc}") from exc
         self._upgrade(config)
@@ -249,7 +249,7 @@ class Runtime:
         if self.hub_url is not None and config.hub_url.rstrip("/") != self.hub_url.rstrip("/"):
             raise ConfigError(f"{config.layout.config_path} names the hub {config.hub_url}, not {self.hub_url}")
         if self.projects is not None:
-            held = tuple(binding.project for binding in config.sole_runner().bindings)
+            held = tuple(binding.project for binding in config.runners[0].bindings) if config.runners else ()
             if held != self.projects:
                 raise ConfigError(
                     f"{config.layout.config_path} holds projects = {list(held)}, not the projects "

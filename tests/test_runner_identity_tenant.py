@@ -13,11 +13,12 @@ import pytest
 import sqlalchemy as sa
 
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.runner_identity_state import IdentityState
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.migrations import MigrationRunner
 from blizzard.foundation.store.utc import UtcDateTime
 from blizzard.runner import runtime as runner_runtime
-from blizzard.runner.hub.identity import IdentityState, IdentityVerdictHolder, RunnerIdentity, RunnerIdentityHolder
+from blizzard.runner.hub.identity import IdentityVerdictHolder, RunnerIdentity, RunnerIdentityHolder
 from blizzard.runner.lifecycle.identity_check import IdentityCheck
 from blizzard.runner.lifecycle.registration import Registration
 from blizzard.runner.loop.context import LoopConfig, LoopContext

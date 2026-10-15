@@ -20,10 +20,11 @@ def load_host(directory: str, *, host: str | None = None, port: int | None = Non
         raise click.ClickException(str(exc)) from exc
 
 
-def load_runner(directory: str) -> RunnerConfig:
-    """The directory's sole runner as a :class:`RunnerConfig`, for the offline verbs that read one runner's keys."""
+def load_runner(directory: str, *, runner: str | None = None) -> RunnerConfig:
+    """The runner ``runner`` names — by name or id, and required on a host of several — as a :class:`RunnerConfig`,
+    for the offline verbs that read one runner's keys."""
     host = load_host(directory)
     try:
-        return host.runner_config()
+        return host.runner_config(runner=runner)
     except ConfigError as exc:
         raise click.ClickException(str(exc)) from exc

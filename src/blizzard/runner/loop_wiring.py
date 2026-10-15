@@ -43,6 +43,7 @@ from blizzard.runner.process.internal.worker_scratch_dirs import WorkerScratchDi
 from blizzard.runner.process.probe import IProcessProbe
 from blizzard.runner.stores import HostStores, RunnerStores
 from blizzard.runner.throttle.pause import SpendingRunner
+from blizzard.runner.tracing.platform import stamping_as
 from blizzard.runner.transcripts.transcript_backfill import (
     TranscriptBackfill,
     TranscriptBackfillReport,
@@ -141,6 +142,7 @@ class LoopWiring:
                 else tuple(BindingDeclaration(b.project, b.workspace, b.agents) for b in config.bindings)
             ),
             subscription=resolved_subscriptions[0].slug if resolved_subscriptions else None,
+            declares_subscriptions=not graph.host.registered(),
             runner_prompt=self.runner_prompt,
             worker_stdout_dir=str(worker_stdout_dir),
             worker_stdout_retention_days=config.worker_stdout_retention_days,
@@ -353,6 +355,11 @@ class PeriodicDriver:
         self._thread.join()
 
     def _run(self) -> None:
+        # Every platform span this thread opens is this runner's.
+        with stamping_as(self._graph.identity):
+            self._run_loop()
+
+    def _run_loop(self) -> None:
         config = self._wiring.config
         self._client = httpx.Client(
             base_url=config.hub_url, timeout=_HTTP_TIMEOUT, auth=HeldTokenAuth(self._graph.hub_token)

@@ -21,8 +21,8 @@ from blizzard.foundation.roles import domain_model
 #: The declared surface (docs/versioning.md's hub↔runner skew row): fleet calls, plus federation.
 _SURFACE_PREFIX = "/api/fleet"
 _SURFACE_EXTRA_PATHS = ("/api/auth/jwks.json", "/api/auth/authorize")
-#: Single operations a runner reaches on an operator path — `runner init` adding its runner.
-_SURFACE_EXTRA_OPERATIONS = (("post", "/api/runners"),)
+#: Single operations a runner reaches on an operator path — `runner init` adding its runner, or its host.
+_SURFACE_EXTRA_OPERATIONS = (("post", "/api/runners"), ("post", "/api/hosts"))
 _HTTP_METHODS = ("get", "post", "put", "patch", "delete")
 
 _BREAKING_COMMIT_MARKER = re.compile(r"^\w+(\([^)]*\))?!:")

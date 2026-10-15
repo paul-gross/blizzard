@@ -26,6 +26,7 @@ __all__ = [
     "CredentialRenewalSummary",
     "ExternalUsageAttempt",
     "ExternalUsageAttemptSummary",
+    "HostBufferedFact",
     "IReadCredentialRenewalRepository",
     "IReadExternalUsageRepository",
     "IReadHostLaneRepository",
@@ -419,16 +420,40 @@ class IWriteExternalUsageRepository(IReadExternalUsageRepository, IWriteCredenti
         ...
 
 
-class IReadHostLaneRepository(Protocol):
-    """Read-only host-lane state: whether this host has been registered at its hub."""
+@domain_model
+@dataclass(frozen=True)
+class HostBufferedFact:
+    """One fact waiting on the host's own lane: its per-host ``seq``, kind, and JSON payload text."""
 
-    def host_registered(self) -> bool:
-        """Whether a ``host_identity`` row exists — the host's own facts then ride its own lane, not a runner's."""
+    seq: int
+    kind: str
+    payload: str
+
+
+class IReadHostLaneRepository(Protocol):
+    """Read the host's own lane."""
+
+    def host_buffered_count(self) -> int:
+        """How many facts wait on the host's lane, unanswered by its hub."""
+        ...
+
+    def host_high_water_seen(self) -> int | None:
+        """The greatest seq the hub answered applied on the host's lane, or ``None`` before its first answer."""
         ...
 
 
 class IWriteHostLaneRepository(IReadHostLaneRepository, Protocol):
-    """Read-write host lane — held only by the sampling pass."""
+    """Read-write host lane — held by the sampling pass, which appends, and the host's lane drain, which sends and
+    clears."""
+
+    def pending_host_facts(self, *, limit: int) -> list[HostBufferedFact]:
+        """The oldest ``limit`` facts waiting on the host's lane, in seq order."""
+        ...
+
+    def record_host_high_water(self, *, seq: int, at: datetime) -> None:
+        """Record the hub's answered mark ``seq`` and delete every buffered fact at or below it, in one
+        transaction. A mark below the recorded one moves nothing back."""
+        ...
 
     def record_host_external_usage_attempt(
         self,

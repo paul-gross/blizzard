@@ -12,12 +12,13 @@ from __future__ import annotations
 
 import threading
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from enum import StrEnum
 from typing import Protocol
 
 from blizzard.foundation.roles import domain_model
+from blizzard.foundation.runner_identity_state import IdentityState
 
 
 @domain_model
@@ -63,6 +64,15 @@ class IWriteRunnerIdentityRepository(IReadRunnerIdentityRepository, Protocol):
         ...
 
 
+class IWriteRetiredRunnerIdentity(Protocol):
+    """Forget a retired runner's identity row — held only by ``runner retire``."""
+
+    def forget_runner_identity(self) -> None:
+        """Delete the bound runner's identity row, so the host's store no longer names a runner the hub retired and
+        no ``[[runner]]`` configures; its other rows stay, inert. Deleting no row is not an error."""
+        ...
+
+
 class ICurrentRunnerIdentity(Protocol):
     """The process's current runner identity."""
 
@@ -91,28 +101,40 @@ def _conforms_current_runner_identity(x: RunnerIdentityHolder) -> ICurrentRunner
     return x
 
 
-class IdentityState(StrEnum):
-    """Whether this process has verified that its token resolves to the configured runner."""
+#: The states in which the runner drives no lease and delivers nothing.
+REFUSING_STATES = frozenset(
+    {IdentityState.MISMATCHED, IdentityState.REFUSED, IdentityState.NOT_HELD, IdentityState.TENANT_DIFFERS}
+)
 
-    #: Not yet verified since the process started: every hub call answers as during an outage.
-    UNCHECKED = "unchecked"
-    #: The token resolves to the configured runner.
-    MATCHED = "matched"
-    #: The token resolves to a different runner: the runner refuses to work until it matches again.
-    MISMATCHED = "mismatched"
+
+class HostStanding(StrEnum):
+    """Whether the host's hub holds a runner under the host, judged only from an answered report whose identity
+    matches the host's. ``UNKNOWN`` never refuses: an unregistered host, a hub that has not answered, or one
+    from before hosts."""
+
+    UNKNOWN = "unknown"
+    HELD = "held"
+    NOT_HELD = "not_held"
+    TENANT_DIFFERS = "tenant_differs"
 
 
 @domain_model
 @dataclass(frozen=True)
 class IdentityVerdict:
     """The latest identity check: its ``state``, the configured runner, the runner the token
-    resolved to, when the hub last answered the check, and the remedy that restores the token or the id."""
+    resolved to, when the hub last answered the check, the remedy that restores the token or the id, and —
+    for a refused token or a host standing that halts the runner — why."""
 
     state: IdentityState
     store_runner_id: str | None
     token_runner_id: str | None
     checked_at: datetime | None
     reset_command: str
+    reason: str | None = None
+
+    def refusing(self) -> bool:
+        """Whether this verdict halts the runner."""
+        return self.state in REFUSING_STATES
 
 
 class ICurrentIdentityVerdict(Protocol):
@@ -121,7 +143,7 @@ class ICurrentIdentityVerdict(Protocol):
     def verdict(self) -> IdentityVerdict: ...
 
     def matched(self) -> bool:
-        """Whether the token is verified to resolve to the configured runner."""
+        """Whether the token is verified to resolve to the configured runner, and nothing refuses it."""
         ...
 
     def registration_checks(self) -> bool:
@@ -139,23 +161,56 @@ class IIdentityOnContact(Protocol):
         ...
 
 
+class IHostStandingSink(Protocol):
+    """Where the host's registration step writes one runner's standing under the host."""
+
+    def stand(self, standing: HostStanding, *, reason: str | None = None) -> None: ...
+
+
 class IdentityVerdictHolder:
     """The process-lifetime identity verdict, ``UNCHECKED`` from start. Shared by the loop that
-    checks it, the hub client and proxy it gates, and the status that reports it."""
+    checks it, the host tick that judges its standing, the hub client and proxy it gates, and the status that
+    reports it.
+
+    Two inputs held apart: the token's own verdict, which only the identity check and the registration write, and
+    the runner's standing under its host, which only the host tick writes. The verdict refuses when either one
+    refuses — the token's refusal first — so a check never clears a host refusal and a host answer never clears a
+    token's."""
 
     def __init__(self, reset_command: str, *, state: IdentityState = IdentityState.UNCHECKED) -> None:
         self._lock = threading.Lock()
-        self._verdict = IdentityVerdict(
+        self._token = IdentityVerdict(
             state=state, store_runner_id=None, token_runner_id=None, checked_at=None, reset_command=reset_command
         )
+        self._standing = HostStanding.UNKNOWN
+        self._standing_reason: str | None = None
         self._registration_checks = False
 
     def verdict(self) -> IdentityVerdict:
         with self._lock:
-            return self._verdict
+            return self._composed()
+
+    def _composed(self) -> IdentityVerdict:
+        token = self._token
+        if token.refusing():
+            return token
+        if self._standing is HostStanding.NOT_HELD:
+            return replace(token, state=IdentityState.NOT_HELD, reason=self._standing_reason)
+        if self._standing is HostStanding.TENANT_DIFFERS:
+            return replace(token, state=IdentityState.TENANT_DIFFERS, reason=self._standing_reason)
+        return token
 
     def matched(self) -> bool:
         return self.verdict().state is IdentityState.MATCHED
+
+    def token_refusing(self) -> bool:
+        """Whether the token's own verdict refuses — what a corrected ``.env`` token can lift."""
+        with self._lock:
+            return self._token.refusing()
+
+    def standing(self) -> HostStanding:
+        with self._lock:
+            return self._standing
 
     def registration_checks(self) -> bool:
         with self._lock:
@@ -169,18 +224,42 @@ class IdentityVerdictHolder:
     def record(
         self, state: IdentityState, *, store_runner_id: str | None, token_runner_id: str, checked_at: datetime
     ) -> IdentityState:
-        """Hold the verdict of a check the hub answered, returning the state it replaced."""
+        """Hold the token's verdict from a check the hub answered, returning the composed state it replaced."""
         with self._lock:
-            was = self._verdict.state
-            self._verdict = IdentityVerdict(
+            was = self._composed().state
+            self._token = IdentityVerdict(
                 state=state,
                 store_runner_id=store_runner_id,
                 token_runner_id=token_runner_id,
                 checked_at=checked_at,
-                reset_command=self._verdict.reset_command,
+                reset_command=self._token.reset_command,
             )
         return was
 
+    def refuse(self, *, store_runner_id: str, reason: str, checked_at: datetime) -> IdentityState:
+        """Hold that the hub refused the token for ``reason``, returning the composed state it replaced."""
+        with self._lock:
+            was = self._composed().state
+            self._token = IdentityVerdict(
+                state=IdentityState.REFUSED,
+                store_runner_id=store_runner_id,
+                token_runner_id=None,
+                checked_at=checked_at,
+                reset_command=self._token.reset_command,
+                reason=reason,
+            )
+        return was
+
+    def stand(self, standing: HostStanding, *, reason: str | None = None) -> None:
+        """Hold the runner's standing under its host, as the host tick last judged it."""
+        with self._lock:
+            self._standing = standing
+            self._standing_reason = reason
+
 
 def _conforms_current_identity_verdict(x: IdentityVerdictHolder) -> ICurrentIdentityVerdict:
+    return x
+
+
+def _conforms_host_standing_sink(x: IdentityVerdictHolder) -> IHostStandingSink:
     return x

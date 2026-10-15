@@ -4,13 +4,15 @@ A runner is the one its host file's ``[[runner]] id`` names, and its store is bo
 Each tick asks the hub which runner the bearer token belongs to and compares that id with the configured one — the id
 alone, since a runner never changes tenant and ids are unique across the hub. The store's identity row takes no part:
 configuration, not the store, says whose it is. A different runner means a wrong token or a hub URL pointing
-somewhere else: the runner refuses to drive its leases or deliver its buffered facts, and checks again next
+somewhere else, and a token the hub refuses — unknown, revoked, retired — is a refusal of its own: either way the
+runner refuses to drive its leases or deliver its buffered facts, and checks again next
 tick, so restoring the right token or hub resumes it with nothing lost. A matching answer also fills in the
 tenant it names when the row lacks it or holds another name for it — the first contact after an upgrade gives
 a row written before tenants its tenant. While refusing, each check first re-reads the token from the host
 dir's ``.env`` and checks with a corrected one, so restoring the token there needs no restart; a token the
-process environment or the host file supplied stays fixed until a restart. A hub that does not answer, or refuses the
-token, leaves the verdict as it stood: an outage never reads as a mismatch.
+process environment or the host file supplied stays fixed until a restart. A hub that does not answer leaves the
+verdict as it stood: an outage never reads as a mismatch. The check writes only the token's own verdict; the
+runner's standing under a registered host is the host tick's, and neither clears the other.
 
 A hub forward served outside the loop — the hub proxy — is a first contact too: while the loop has not
 checked yet, it judges the hub's answer the same way first (:class:`ProxyIdentityCheck`), writing nothing."""
@@ -25,6 +27,7 @@ from typing import Protocol
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.runner_identity_state import IdentityState
 from blizzard.runner.hub.client import (
     HubClientError,
     IdentityRouteMissing,
@@ -35,7 +38,6 @@ from blizzard.runner.hub.client import (
 from blizzard.runner.hub.held_token import HubTokenHolder, TokenReread
 from blizzard.runner.hub.identity import (
     ICurrentIdentityVerdict,
-    IdentityState,
     IdentityVerdict,
     IdentityVerdictHolder,
     IWriteRunnerIdentityRepository,
@@ -89,31 +91,47 @@ def log_transition(holder: IdentityVerdictHolder, was: IdentityState, *, token_f
             token_runner_id=verdict.token_runner_id,
             reset_command=verdict.reset_command,
         )
-        if token_fixed:
-            _log.warning(
-                "runner token comes from the process environment or the host file: restart the runner to change it"
-            )
+    elif verdict.state is IdentityState.REFUSED:
+        _log.warning(
+            "runner refuses to work: the hub refuses its token",
+            store_runner_id=verdict.store_runner_id,
+            reason=verdict.reason,
+            reset_command=verdict.reset_command,
+        )
     elif verdict.state is IdentityState.MATCHED:
         _log.info(
             "runner identity verified",
             runner_id=verdict.token_runner_id,
             was=str(was),
         )
+        return
+    else:
+        return
+    if token_fixed:
+        _log.warning(
+            "runner token comes from the process environment or the host file: restart the runner to change it"
+        )
 
 
-def foreign_store_reason(named: tuple[str, ...], configured_id: str, reset: str) -> str | None:
+def foreign_store_reason(
+    named: tuple[str, ...], configured_id: str, reset: str, *, configured: tuple[str, ...] = ()
+) -> str | None:
     """Why a store whose identity rows name ``named`` is not ``configured_id``'s, or ``None`` when it names only
-    that runner or none has joined it yet. A host store holds one runner: another's row beside the configured one
-    is as foreign as a store naming only another, and a runner started over it would orphan the other's leases and
-    backlog, so it is refused untouched. A store that already names the configured runner is the wrong file, so
-    its remedy is to restore the right store, never ``reset``. A store naming only another runner has a wrong
-    configured id, so its remedy is to correct the id; ``reset`` is named there with its hazard."""
-    if not named or set(named) == {configured_id}:
+    runners this host configures — ``configured_id`` and the other ``configured`` ids of its ``[[runner]]``
+    entries — or none has joined it yet. A store naming a runner no entry configures beside the configured one is
+    foreign: a runner started over it would orphan the other's leases and backlog, so it is refused untouched,
+    and since it already names the configured runner it is the wrong file, so its remedy is to restore the right
+    store, never ``reset``. A store naming only runners no entry configures has a wrong configured id, so its
+    remedy is to correct the id; ``reset`` is named there with its hazard."""
+    ours = {configured_id, *configured}
+    if not named or set(named) <= ours:
         return None
-    if configured_id in named:
+    foreign = [runner for runner in named if runner not in ours]
+    if any(runner in ours for runner in named):
         return (
-            f"the store names runners {', '.join(named)}, and a host store holds one; it cannot be told apart "
-            f"from {configured_id}'s, so it is left untouched — stop and restore the right store"
+            f"the store names runners {', '.join(named)}, and {', '.join(foreign)} is configured by no [[runner]] "
+            f"of this host; it cannot be told apart from {configured_id}'s, so it is left untouched — stop and "
+            "restore the right store"
         )
     return (
         f"the store belongs to runner {', '.join(named)}, not the configured {configured_id}; correct the `id` in "
@@ -136,16 +154,21 @@ def check_token(
     token_fixed: bool,
 ) -> TokenIdentity | None:
     """Ask the hub which runner the token belongs to, judge it against the configured runner, and hold
-    the verdict. Returns the hub's answer; ``None`` when the hub refused the token or has no identity read
-    — the latter left to the registration reply. Raises :class:`HubClientError` when the hub does not
-    answer. Either way short of an answer, the verdict stands."""
+    the verdict. Returns the hub's answer; ``None`` when the hub refused the token — held as a refusal of its
+    own, re-checked each tick — or has no identity read, left to the registration reply. Raises
+    :class:`HubClientError` when the hub does not answer, and the verdict stands."""
     try:
         answer = reader.identity()
     except IdentityRouteMissing:
         verdict.check_by_registration()
         return None
     if isinstance(answer, TokenRefusal):
-        _log.info("hub refused the runner's token", reason=str(answer.reason))
+        was = verdict.refuse(
+            store_runner_id=configured_id,
+            reason=f"the hub refuses this runner's token ({answer.reason})",
+            checked_at=now,
+        )
+        log_transition(verdict, was, token_fixed=token_fixed)
         return None
     was = verdict.record(
         judged(configured_id, answer.runner_id),
@@ -165,7 +188,7 @@ class IdentityCheck:
 
     def run(self) -> None:
         ctx = self.ctx
-        if ctx.identity_verdict.verdict().state is IdentityState.MISMATCHED:
+        if ctx.identity_verdict.token_refusing():
             _take_up_a_corrected_token(ctx.hub_token)
         try:
             answer = check_token(

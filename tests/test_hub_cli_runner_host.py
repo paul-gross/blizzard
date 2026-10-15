@@ -54,7 +54,7 @@ def test_add_posts_the_name_and_adoptions_and_prints_the_id_and_the_token_once(
     assert calls[0]["json"] == {"name": "box", "adopt": ["rn_a", "rn_b"]}
     assert f"added host {_ADDED['host_id']} (box) — never connected" in result.output
     assert "adopted: rn_a, rn_b" in result.output
-    assert "BZ_HUB_TOKEN=sekrit-token" in result.output.splitlines()
+    assert "BZ_HOST_TOKEN=sekrit-token" in result.output.splitlines()
     assert result.output.count("sekrit-token") == 1
 
 
@@ -149,7 +149,7 @@ def test_enroll_prints_the_new_token_once(monkeypatch: pytest.MonkeyPatch) -> No
     result = CliRunner().invoke(hub_group, ["runner-host", "enroll", "hs_a"], env=_ENV)
 
     assert calls[0]["url"] == f"{_HUB_URL}/api/hosts/hs_a/enrollments"
-    assert "BZ_HUB_TOKEN=fresh" in result.output.splitlines()
+    assert "BZ_HOST_TOKEN=fresh" in result.output.splitlines()
     assert result.output.count("fresh") == 1
 
 
@@ -255,7 +255,7 @@ def test_a_host_is_added_adopted_released_rotated_and_retired_through_the_cli(
     revoked = CliRunner().invoke(hub_group, ["runner-host", "revoke-token", host_id], env=_ENV)
     assert revoked.exit_code == 0, revoked.output
     enrolled = CliRunner().invoke(hub_group, ["runner-host", "enroll", host_id], env=_ENV)
-    assert enrolled.exit_code == 0 and "BZ_HUB_TOKEN=" in enrolled.output
+    assert enrolled.exit_code == 0 and "BZ_HOST_TOKEN=" in enrolled.output
 
     retired = CliRunner().invoke(hub_group, ["runner-host", "retire", host_id], env=_ENV)
     assert retired.exit_code == 0, retired.output

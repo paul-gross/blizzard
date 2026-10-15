@@ -329,16 +329,29 @@ class HostConfig:
             return ""
         return f"; {UNSUFFIXED_TOKEN_VARIABLE} is set in {where} but a host reads {variable}: rename it to {variable}"
 
-    def sole_runner(self) -> RunnerEntry:
-        """The one ``[[runner]]`` a host holds for now; raises when it holds none."""
+    def sole_runner(self, runner: str | None = None) -> RunnerEntry:
+        """The ``[[runner]]`` an offline verb acts on: the one ``runner`` names by name or id, else the host's only
+        one. Raises when it holds none, when ``runner`` names none it holds, or when it holds several and ``runner``
+        names none of them."""
         if not self.runners:
             raise HostConfigError((f"{self.layout.config_path} declares no [[runner]]",))
-        return self.runners[0]
+        held = ", ".join(entry.name for entry in self.runners)
+        if runner is not None:
+            for entry in self.runners:
+                if runner in (entry.name, entry.id):
+                    return entry
+            raise HostConfigError((f"{self.layout.config_path} declares no runner {runner!r}; it holds {held}",))
+        first, *others = self.runners
+        if others:
+            raise HostConfigError(
+                (f"{self.layout.config_path} declares several runners ({held}); name one with --runner",)
+            )
+        return first
 
-    def runner_config(self, environ: Mapping[str, str] | None = None) -> RunnerConfig:
-        """The sole runner's config for an offline verb: projected whether or not it has joined its hub — no id,
-        no token — and refused only for the errors its own entry holds."""
-        entry = self.sole_runner()
+    def runner_config(self, environ: Mapping[str, str] | None = None, *, runner: str | None = None) -> RunnerConfig:
+        """The config of the runner :meth:`sole_runner` picks, for an offline verb: projected whether or not it has
+        joined its hub — no id, no token — and refused only for the errors its own entry holds."""
+        entry = self.sole_runner(runner)
         errors = self._problems(entry)
         if errors or entry.own is None:
             raise HostConfigError(tuple(f"runner {entry.name}: {error}" for error in errors))
@@ -459,8 +472,6 @@ class HostConfig:
         environ = os.environ
         workspace_root = environ.get(ENV_WORKSPACE_ROOT, "")
         envs = environ.get(ENV_WORKSPACE_ENVS)
-        gates = environ.get(ENV_GATES)
-        passthrough = environ.get(ENV_ENV_PASSTHROUGH, "")
         workspace = HostWorkspace(
             id=DEFAULT_WORKSPACE_ID,
             root=workspace_root,
@@ -470,23 +481,14 @@ class HostConfig:
             prompt=environ.get(ENV_WORKSPACE_PROMPT, ""),
             prompt_package=environ.get(ENV_WORKSPACE_PROMPT_PACKAGE, ""),
         )
-        own = RunnerConfig(
-            root=root,
-            db_url=layout.default_db_url,
-            gates=tuple(g.strip() for g in gates.split(",") if g.strip()) if gates else (),
-            harness_sections=HarnessSections.scaffold(root, environ),
-            runner_prompt=environ.get(ENV_RUNNER_PROMPT, ""),
-            transcripts_root=environ.get(ENV_TRANSCRIPTS_ROOT, ""),
-            worker_env_passthrough=tuple(n.strip() for n in passthrough.split(",") if n.strip()),
-        )
-        entry = RunnerEntry(
-            name=DEFAULT_RUNNER_NAME,
+        entry = scaffold_runner(
+            root,
+            DEFAULT_RUNNER_NAME,
             subscription=SCAFFOLD_SUBSCRIPTION.slug,
             bindings=tuple(
                 ProjectBinding(project, workspace.id, SCAFFOLD_AGENTS)
                 for project in (projects if projects is not None else SCAFFOLD_PROJECTS)
             ),
-            own=own,
         )
         return cls(
             root=root,
@@ -547,6 +549,36 @@ class HostConfig:
             lines.append("\n[hub_tokens]\n")
             lines.extend(f"{json.dumps(name)} = {json.dumps(token)}\n" for name, token in self.hub_tokens)
         return lines
+
+
+def scaffold_runner(
+    root: Path,
+    name: str,
+    *,
+    bindings: tuple[ProjectBinding, ...],
+    subscription: str | None = None,
+    runner_id: str | None = None,
+) -> RunnerEntry:
+    """A ``[[runner]]`` carrying the scaffold's runner defaults, seeded from the injected ``BZ_*`` environment:
+    ``init``'s first runner, and each one ``runner add`` appends."""
+    environ = os.environ
+    gates = environ.get(ENV_GATES)
+    passthrough = environ.get(ENV_ENV_PASSTHROUGH, "")
+    own = RunnerConfig(
+        root=root,
+        db_url=HostLayout(root).default_db_url,
+        gates=tuple(g.strip() for g in gates.split(",") if g.strip()) if gates else (),
+        harness_sections=HarnessSections.scaffold(root, environ),
+        runner_prompt=environ.get(ENV_RUNNER_PROMPT, ""),
+        transcripts_root=environ.get(ENV_TRANSCRIPTS_ROOT, ""),
+        worker_env_passthrough=tuple(n.strip() for n in passthrough.split(",") if n.strip()),
+    )
+    return RunnerEntry(name=name, id=runner_id, subscription=subscription, bindings=bindings, own=own)
+
+
+def runner_toml(entry: RunnerEntry) -> str:
+    """``entry`` as the ``[[runner]]`` table text the host file holds, its sub-tables beneath it."""
+    return _runner_toml(entry)
 
 
 def _dotenv_text(root: Path) -> str:
@@ -821,8 +853,8 @@ def _own_tables(raw: Mapping[str, Any], *, root: Path, db_url: str, path: Path) 
 
 
 def _check_runner_uniqueness(entries: tuple[RunnerEntry, ...], *, has_host_token: bool, errors: _Errors) -> None:
-    """The host errors only the whole set of runners shows: a repeated id, name, or token variable, and
-    more runners than a host holds for now or than an unregistered host may."""
+    """The host errors only the whole set of runners shows: a repeated id, name, or token variable, and more
+    than one runner on a host with no host token."""
     for kind, keys in (
         ("id", [entry.id for entry in entries]),
         ("name", [entry.name for entry in entries]),
@@ -830,10 +862,8 @@ def _check_runner_uniqueness(entries: tuple[RunnerEntry, ...], *, has_host_token
     ):
         repeated = sorted({key for key in keys if key is not None and keys.count(key) > 1})
         errors.found.extend(f"two [[runner]] entries share the {kind} {key!r}" for key in repeated)
-    if len(entries) > 1:
-        errors.add(f"{len(entries)} [[runner]] entries: a host holds one runner for now")
-        if not has_host_token:
-            errors.add(f"more than one [[runner]] needs a host token ({HOST_TOKEN_VARIABLE}), and none is set")
+    if len(entries) > 1 and not has_host_token:
+        errors.add(f"more than one [[runner]] needs a host token ({HOST_TOKEN_VARIABLE}), and none is set")
 
 
 def _permission_warnings(path: Path, *, holds_credentials: bool) -> tuple[str, ...]:

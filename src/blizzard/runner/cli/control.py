@@ -154,6 +154,10 @@ def status(ctx: click.Context, directory: str, runner_url: str | None, runner: s
             f"  REFUSING: token belongs to runner {identity['token_runner_id']}, the configured runner is "
             f"{identity['store_runner_id']} — {identity['reset_command']}"
         )
+    elif identity is not None and identity["state"] == "refused":
+        click.echo(f"  REFUSING: {identity.get('reason')} — {identity['reset_command']}")
+    elif identity is not None and identity["state"] in ("not_held", "tenant_differs"):
+        click.echo(f"  HALTED: {identity.get('reason')}")
     elif identity is not None and identity["state"] == "unchecked":
         click.echo("  identity: unchecked — waiting for the hub to answer which runner the token belongs to")
     pause = view["pause"]

@@ -203,6 +203,17 @@ RUNNER_ALLOWED_SCANS: list[Allowance] = [
         1,
         "the host's registration row — a singleton the registered host records once, so an existence probe reads at most one row.",
     ),
+    TableWideAllowance(
+        "host_outbound_buffer",
+        100,
+        "the host lane's own store-and-forward buffer — the drain keeps it near-empty in healthy operation, the "
+        "same smallness the transcript lane's buffer leans on.",
+    ),
+    TableWideAllowance(
+        "host_high_water_seen",
+        1,
+        "the host lane's high-water singleton — one row, so a probe reads at most one.",
+    ),
     # --- the transcript lane's own pending-delivery buffer ------------------------------
     TableWideAllowance(
         "transcript_outbound_buffer",

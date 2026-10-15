@@ -19,6 +19,7 @@ import pytest
 import uvicorn
 from click.testing import CliRunner
 
+from blizzard.foundation.runner_identity_state import IdentityState
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.app import build_hosted_app
 from blizzard.runner.cli import runner as runner_group
@@ -26,7 +27,7 @@ from blizzard.runner.cli.daemon import RunnerDaemon
 from blizzard.runner.composition import build_host_process
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.host_config import BuiltRunner, HaltedRunner, HostConfig
-from blizzard.runner.hub.identity import IdentityState, RunnerIdentity
+from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.hub.served_projects import ServedProject
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.listeners import Listeners, Uds

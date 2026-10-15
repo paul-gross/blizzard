@@ -11,13 +11,14 @@ from pathlib import Path
 import pytest
 import sqlalchemy as sa
 
+from blizzard.foundation.runner_identity_state import IdentityState
 from blizzard.runner import runtime as runner_runtime
 from blizzard.runner.app import create_app
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
-from blizzard.runner.hub.identity import IdentityState, RunnerIdentity
+from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.loop.tick import tick
 from blizzard.runner.loop_wiring import LoopWiring
 from blizzard.runner.store import schema

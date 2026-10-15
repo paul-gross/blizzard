@@ -8,7 +8,7 @@ import click
 from blizzard.cli.operator_trace import OperatorTrace
 from blizzard.cli.runtime import click_exception_on
 from blizzard.runner.cli.control import ENV_LOCAL_API_URL
-from blizzard.runner.cli.daemon import RunnerDaemon
+from blizzard.runner.cli.daemon import RunnerDaemon, runner_option
 from blizzard.runner.cli.directory import load_runner
 from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
 from blizzard.runner.cli.runtime import read_host_stores
@@ -71,13 +71,14 @@ def prompt_show(name: str) -> None:
 @click.argument("name")
 @_PROMPT_DIR_OPTION
 @click.option("--force", is_flag=True, help="Overwrite an existing workspace-prompt.md in the runtime root.")
-def prompt_install(name: str, directory: str, force: bool) -> None:
+@runner_option
+def prompt_install(name: str, directory: str, force: bool, runner: str | None) -> None:
     """Copy packaged sample NAME into the runtime root and point the workspace at the copy.
 
     The forked shape: the workspace carries `prompt_file`, never the package knob, so
     `prompt diff` has a local file to compare. Takes effect on the next runner restart."""
     text = _packaged_sample(name)
-    config = load_runner(directory)
+    config = load_runner(directory, runner=runner)
     destination = config.root / WORKSPACE_PROMPT_FILENAME
     if destination.exists() and not force:
         raise click.ClickException(f"{destination} already exists — pass --force to overwrite it")
@@ -94,13 +95,14 @@ def prompt_install(name: str, directory: str, force: bool) -> None:
 @prompt_group.command("diff")
 @click.argument("name")
 @_PROMPT_DIR_OPTION
-def prompt_diff(name: str, directory: str) -> None:
+@runner_option
+def prompt_diff(name: str, directory: str, runner: str | None) -> None:
     """Diff this runtime's effective workspace prompt against packaged sample NAME.
 
     Effective means the lane a spawn reads: the store override when one stands, else the
     configured knob. Exits 1 when they differ, so a deploy can check a forked copy for drift."""
     sample = _packaged_sample(name)
-    config = load_runner(directory)
+    config = load_runner(directory, runner=runner)
     local, source = _effective_prompt(config)
     lines = list(
         difflib.unified_diff(
@@ -119,12 +121,13 @@ def prompt_diff(name: str, directory: str) -> None:
 
 @prompt_group.command("status")
 @_PROMPT_DIR_OPTION
-def prompt_status(directory: str) -> None:
+@runner_option
+def prompt_status(directory: str, runner: str | None) -> None:
     """Report which source the effective workspace prompt comes from, and how large it is.
 
     Exits 1 when a source is configured but resolves to nothing — the shape a rollback to a
     wheel that does not read the configured knob produces."""
-    config = load_runner(directory)
+    config = load_runner(directory, runner=runner)
     resolved, source = _effective_prompt(config)
     _echo_prompt_status(source, resolved)
     if source == _OVERRIDE_SOURCE:
@@ -143,12 +146,13 @@ def prompt_status(directory: str) -> None:
     envvar=ENV_LOCAL_API_URL,
     help="Runner local API over TCP (overrides $BZ_RUNNER_URL).",
 )
+@runner_option
 @click.pass_context
-def prompt_clear(ctx: click.Context, directory: str, runner_url: str | None) -> None:
+def prompt_clear(ctx: click.Context, directory: str, runner_url: str | None, runner: str | None) -> None:
     """Drop the store override so the configured workspace prompt resolves again.
 
     The one `prompt` verb that needs a running runner. Takes effect on subsequent spawns."""
-    workspace_id = load_runner(directory).home_workspace.id
+    workspace_id = load_runner(directory, runner=runner).home_workspace.id
     with RunnerDaemon.reach("prompt clear", directory, runner_url, OperatorTrace.source(ctx)) as daemon:
         daemon.send_to_host("delete", f"/api/host/workspaces/{quote(workspace_id, safe='')}/prompt").raise_for_status()
     click.echo("workspace-prompt override cleared — the configured prompt applies on subsequent spawns")

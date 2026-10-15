@@ -20,13 +20,14 @@ from pytest import MonkeyPatch
 from structlog.testing import capture_logs
 
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.runner_identity_state import IdentityState
 from blizzard.runner.app import create_app
 from blizzard.runner.composition import held_hub_token
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.host_config import ResolvedToken, TokenSource
 from blizzard.runner.hub.client import IdentityRouteMissing, TokenIdentity, TokenRefusal
 from blizzard.runner.hub.held_token import HubTokenHolder
-from blizzard.runner.hub.identity import IdentityState, IdentityVerdictHolder
+from blizzard.runner.hub.identity import IdentityVerdictHolder
 from blizzard.runner.hub.internal.http_hub import HeldTokenAuth, HttpHubClient
 from blizzard.runner.hub.internal.token_file import HubTokenFile
 from blizzard.runner.lifecycle.identity_check import IdentityCheck, ProxyIdentityCheck
@@ -141,21 +142,36 @@ def test_an_unregistered_store_records_its_identity_at_the_first_registration_ne
 
 
 @pytest.mark.parametrize("start", [IdentityState.UNCHECKED, IdentityState.MATCHED, IdentityState.MISMATCHED])
-@pytest.mark.parametrize("answer", ["down", "token-refused"])
-def test_a_hub_that_does_not_answer_leaves_the_verdict_as_it_stood(
-    tmp_path: Path, start: IdentityState, answer: str
-) -> None:
+def test_a_hub_that_does_not_answer_leaves_the_verdict_as_it_stood(tmp_path: Path, start: IdentityState) -> None:
     hub = FakeHub(default_runner_id="r1")
     ctx = _ctx(tmp_path, hub)
     ctx = dataclasses.replace(ctx, identity_verdict=IdentityVerdictHolder(_RESET, state=start))
-    if answer == "down":
-        hub.down = True
-    else:
-        hub.issued.clear()
+    hub.down = True
 
     IdentityCheck(ctx).run()
 
     assert _state(ctx) is start
+
+
+@pytest.mark.parametrize("start", [IdentityState.UNCHECKED, IdentityState.MATCHED, IdentityState.MISMATCHED])
+def test_a_token_the_hub_refuses_is_a_refusal_of_its_own_rechecked_each_tick(
+    tmp_path: Path, start: IdentityState
+) -> None:
+    hub = FakeHub(default_runner_id="r1")
+    ctx = _ctx(tmp_path, hub)
+    ctx = dataclasses.replace(ctx, identity_verdict=IdentityVerdictHolder(_RESET, state=start))
+    hub.issued.clear()
+
+    IdentityCheck(ctx).run()
+
+    verdict = ctx.identity_verdict.verdict()
+    assert verdict.state is IdentityState.REFUSED
+    assert verdict.reason is not None and "refuses this runner's token" in verdict.reason
+
+    hub.issued[hub.token] = "r1"
+    IdentityCheck(ctx).run()
+
+    assert _state(ctx) is IdentityState.MATCHED
 
 
 def test_a_mismatched_tick_drives_no_lease_and_delivers_nothing_until_the_right_token_returns(tmp_path: Path) -> None:
@@ -207,7 +223,7 @@ def test_an_outage_from_start_is_never_a_mismatch_and_the_runner_resumes_when_th
 
 
 def test_an_unchecked_runner_calls_the_hub_for_nothing_but_the_identity_read(tmp_path: Path) -> None:
-    """A token the hub refuses leaves the verdict unchecked, and the gated hub answers every other
+    """A token the hub refuses turns the verdict to a refusal, and the gated hub answers every other
     call as an outage — no registration, no claim, no delivery."""
     hub = FakeHub(default_runner_id="r1")
     hub.issued.clear()
@@ -216,7 +232,7 @@ def test_an_unchecked_runner_calls_the_hub_for_nothing_but_the_identity_read(tmp
 
     tick(ctx)
 
-    assert _state(ctx) is IdentityState.UNCHECKED
+    assert _state(ctx) is IdentityState.REFUSED
     assert (hub.registered, hub.push_facts_calls, hub.peek_queue_calls) == ([], [], 0)
 
 

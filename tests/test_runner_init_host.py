@@ -1,6 +1,7 @@
-"""``blizzard runner init`` over a host directory (component tier): the runner it joins is written into the host file
-by its hub id, its token under the variable its name derives, and its identity row into the store — each write
-completed by running init again after a crash between them."""
+"""``blizzard runner init`` over a host directory (component tier): the host it registers — kept by a held host token
+the hub knows, added otherwise, and added again with every runner when the hub forgot it — and each runner it joins
+under that host, written into the host file by its hub id, its token under the variable its name derives, and its
+identity row into the store — each write completed by running init again after a crash between them."""
 
 from __future__ import annotations
 
@@ -14,10 +15,14 @@ from click.testing import Result
 
 from blizzard.cli.main import blizzard
 from blizzard.foundation.clock import SystemClock
+from blizzard.foundation.operator_sessions.internal.session_file import SessionFile
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.composition import build_host_stores
-from blizzard.runner.host_layout import HostLayout
+from blizzard.runner.config import DEFAULT_WORKSPACE_ID, ProjectBinding
+from blizzard.runner.host_config import HOST_TOKEN_VARIABLE, HostConfig, runner_toml, scaffold_runner
+from blizzard.runner.host_layout import HostLayout, append_runner
 from blizzard.runner.hub.client import TokenIdentity
+from blizzard.runner.hub.token_file import ENV_FILENAME
 from blizzard.runner.runtime import sqlite_store_file
 from tests.host_files import load_runner_config
 from tests.runner_fakes import runner_store_errors
@@ -33,12 +38,12 @@ def _init(hub: FakeInitHub, root: Path, *args: str) -> Result:
 
 
 def _identity_rows(root: Path) -> list[tuple[str, str]]:
-    with closing(sqlite3.connect(sqlite_store_file(load_runner_config(root).db_url))) as conn:
+    with closing(sqlite3.connect(sqlite_store_file(HostConfig.load(root).db_url))) as conn:
         return [(row[0], row[1]) for row in conn.execute("SELECT runner_id, runner_name FROM runner_identity")]
 
 
 def _configured_id(root: Path) -> str | None:
-    (runner,) = tomllib.loads(HostLayout(root).config_path.read_text())["runner"]
+    runner, *_ = tomllib.loads(HostLayout(root).config_path.read_text())["runner"]
     return runner.get("id")
 
 
@@ -185,7 +190,7 @@ def _files(root: Path) -> tuple[bytes, bytes, bytes]:
     return (
         HostLayout(root).config_path.read_bytes(),
         (root / ".env").read_bytes(),
-        sqlite_store_file(load_runner_config(root).db_url).read_bytes(),
+        sqlite_store_file(HostConfig.load(root).db_url).read_bytes(),
     )
 
 
@@ -257,3 +262,181 @@ def test_init_with_a_stale_id_and_no_readd_refuses_rather_than_exit_zero_with_a_
 
     assert refused.exit_code != 0
     assert _files(root) == before
+
+
+# --- registering the host ------------------------------------------------------------------------
+
+
+def _env(root: Path) -> str:
+    return (root / ENV_FILENAME).read_text()
+
+
+def _with_a_second_runner(root: Path, name: str = "r-two") -> None:
+    """Append a ``[[runner]]`` with no id to ``root``'s host file, as an operator adding one by hand would."""
+    append_runner(
+        HostLayout(root),
+        runner_toml(scaffold_runner(root, name, bindings=(ProjectBinding("default", DEFAULT_WORKSPACE_ID, 1),))),
+    )
+
+
+def test_init_on_an_open_hub_registers_a_host_named_after_its_first_runner_and_adds_the_runner_under_it(
+    tmp_path: Path, fake_init_hub: FakeInitHub
+) -> None:
+    root = tmp_path / "host"
+
+    result = _init(fake_init_hub, root)
+
+    assert result.exit_code == 0, result.output
+    assert [(h.host_id, h.host_name) for h in fake_init_hub.admin.hosts] == [("hs_init1", "runner-local")]
+    assert fake_init_hub.admin.held == {"hs_init1": ["rn_init1"]}
+    assert fake_init_hub.calls[0].operator_token is None
+    assert f"{HOST_TOKEN_VARIABLE}=init-host-token-1\n" in _env(root)
+    assert "registered host runner-local (hs_init1)" in result.output
+    assert HostConfig.load(root).host_token.value == "init-host-token-1"
+
+
+def test_init_registers_the_host_under_the_operator_session_held_for_its_hub(
+    tmp_path: Path, fake_init_hub: FakeInitHub
+) -> None:
+    SessionFile.of().save(f"{_HUB}/", "operator-session")
+
+    result = _init(fake_init_hub, tmp_path / "host", "--tenant", "ten_bravo")
+
+    assert result.exit_code == 0, result.output
+    assert fake_init_hub.calls[0].operator_token == "operator-session"
+    assert fake_init_hub.admin.host_tenants == {"hs_init1": "ten_bravo"}
+    assert fake_init_hub.admin.held == {"hs_init1": ["rn_init1"]}
+
+
+def test_init_keeps_the_host_a_process_environment_host_token_names_and_writes_none(
+    tmp_path: Path, fake_init_hub: FakeInitHub, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    held = fake_init_hub.admin.add_host("enrolled")
+    monkeypatch.setenv(HOST_TOKEN_VARIABLE, held.token)
+    root = tmp_path / "host"
+
+    result = _init(fake_init_hub, root)
+
+    assert result.exit_code == 0, result.output
+    assert len(fake_init_hub.admin.hosts) == 1
+    assert fake_init_hub.admin.held == {held.host_id: ["rn_init1"]}
+    assert HOST_TOKEN_VARIABLE not in _env(root)
+    assert f"host enrolled ({held.host_id})" in result.output and "keeps its token" in result.output
+
+
+def test_init_keeps_the_host_the_dotenv_host_token_names(tmp_path: Path, fake_init_hub: FakeInitHub) -> None:
+    held = fake_init_hub.admin.add_host("enrolled")
+    root = tmp_path / "host"
+    root.mkdir()
+    (root / ENV_FILENAME).write_text(f"{HOST_TOKEN_VARIABLE}={held.token}\n")
+
+    result = _init(fake_init_hub, root)
+
+    assert result.exit_code == 0, result.output
+    assert len(fake_init_hub.admin.hosts) == 1
+    assert fake_init_hub.admin.held == {held.host_id: ["rn_init1"]}
+
+
+def test_init_joins_every_runner_of_a_host_of_several_under_the_one_host(
+    tmp_path: Path, fake_init_hub: FakeInitHub
+) -> None:
+    root = tmp_path / "host"
+    assert _init(fake_init_hub, root).exit_code == 0
+    _with_a_second_runner(root)
+
+    result = _init(fake_init_hub, root)
+
+    assert result.exit_code == 0, result.output
+    assert fake_init_hub.admin.held == {"hs_init1": ["rn_init1", "rn_init2"]}
+    assert [r["id"] for r in tomllib.loads(HostLayout(root).config_path.read_text())["runner"]] == [
+        "rn_init1",
+        "rn_init2",
+    ]
+    assert sorted(_identity_rows(root)) == [("rn_init1", "runner-local"), ("rn_init2", "r-two")]
+
+
+def test_init_whose_host_the_hub_forgot_stops_without_allow_readd_and_re_adds_host_and_every_runner_with_it(
+    tmp_path: Path, fake_init_hub: FakeInitHub
+) -> None:
+    root = tmp_path / "host"
+    assert _init(fake_init_hub, root).exit_code == 0
+    _with_a_second_runner(root)
+    assert _init(fake_init_hub, root).exit_code == 0
+    fake_init_hub.admin.hosts.clear()  # the hub's data is reset: neither the host's token nor a runner's is known
+    fake_init_hub.admin.added.clear()
+    before = _files(root)
+
+    refused = _init(fake_init_hub, root)
+
+    assert refused.exit_code != 0
+    assert "does not know this host's token" in refused.output and "--allow-readd" in refused.output
+    assert _files(root) == before
+
+    readded = _init(fake_init_hub, root, "--allow-readd")
+
+    assert readded.exit_code == 0, readded.output
+    assert [h.host_id for h in fake_init_hub.admin.hosts] == ["hs_init2"]
+    assert fake_init_hub.admin.adopted[-1] == ()
+    assert fake_init_hub.admin.held["hs_init2"] == ["rn_init1", "rn_init2"]
+    assert f"{HOST_TOKEN_VARIABLE}=init-host-token-2\n" in _env(root)
+    store = sqlite_store_file(HostConfig.load(root).db_url)
+    assert len([p for p in store.parent.iterdir() if p.name.startswith("host.db.") and p.suffix != ".lock"]) == 1
+    assert sorted(_identity_rows(root)) == [("rn_init1", "runner-local"), ("rn_init2", "r-two")]
+
+
+def test_an_unknown_host_token_from_the_process_environment_stops_init_even_with_allow_readd(
+    tmp_path: Path, fake_init_hub: FakeInitHub, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = tmp_path / "host"
+    assert _init(fake_init_hub, root).exit_code == 0
+    monkeypatch.setenv(HOST_TOKEN_VARIABLE, "stale-from-env")
+    before = _files(root)
+
+    refused = _init(fake_init_hub, root, "--allow-readd")
+
+    assert refused.exit_code != 0
+    assert f"${HOST_TOKEN_VARIABLE}" in refused.output and "would go unread" in refused.output
+    assert _files(root) == before
+    assert len(fake_init_hub.admin.hosts) == 1
+
+
+def test_init_whose_host_serves_another_tenant_than_named_stops(tmp_path: Path, fake_init_hub: FakeInitHub) -> None:
+    root = tmp_path / "host"
+    assert _init(fake_init_hub, root, "--tenant", "ten_alpha").exit_code == 0
+
+    refused = _init(fake_init_hub, root, "--tenant", "ten_bravo")
+
+    assert refused.exit_code != 0
+    assert "host hs_init1, which serves tenant ten_alpha" in refused.output
+    assert len(fake_init_hub.admin.hosts) == 1
+
+
+def test_init_whose_kept_runner_stands_under_no_host_of_its_own_stops_naming_the_adoption(
+    tmp_path: Path, fake_init_hub: FakeInitHub
+) -> None:
+    root = tmp_path / "host"
+    assert _init(fake_init_hub, root).exit_code == 0
+    fake_init_hub.admin.held["hs_init1"].clear()  # released at the hub
+
+    refused = _init(fake_init_hub, root)
+
+    assert refused.exit_code != 0
+    assert f"`blizzard hub runner-host adopt hs_init1 rn_init1 --hub-url {_HUB}`" in refused.output
+
+
+def test_a_new_host_adopts_the_runner_whose_held_token_the_hub_knows(
+    tmp_path: Path, fake_init_hub: FakeInitHub
+) -> None:
+    root = tmp_path / "host"
+    assert _init(fake_init_hub, root).exit_code == 0
+    env = root / ENV_FILENAME
+    env.write_text(
+        "".join(line for line in env.read_text().splitlines(keepends=True) if HOST_TOKEN_VARIABLE not in line)
+    )
+
+    result = _init(fake_init_hub, root)
+
+    assert result.exit_code == 0, result.output
+    assert fake_init_hub.admin.adopted == [(), ("rn_init1",)]
+    assert fake_init_hub.admin.held["hs_init2"] == ["rn_init1"]
+    assert len(fake_init_hub.admin.added) == 1

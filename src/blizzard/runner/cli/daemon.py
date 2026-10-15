@@ -160,8 +160,9 @@ class RunnerDaemon:
             )
         else:
             raise click.ClickException(f"{self.verb}: the host at {self.where} serves no runner: none")
-        if chosen["state"] != "serving":
-            serves_none = all(item["state"] != "serving" for item in items)
+        # A runner its hub halts is still served, and its own views — the status naming why — still read.
+        if chosen["state"] != "serving" and not chosen.get("served", False):
+            serves_none = all(item["state"] != "serving" and not item.get("served", False) for item in items)
             raise click.ClickException(
                 f"{self.verb}: the host at {self.where} {'serves no runner: ' if serves_none else 'holds '}"
                 f"runner {chosen['name']} "

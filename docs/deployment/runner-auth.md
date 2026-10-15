@@ -52,20 +52,27 @@ several. `blizzard-runner init` writes the runner's `projects` into a fresh host
 each project its own repeated `--project` names, and adds the runner serving them
 ([projects.md](./projects.md#runners-serve-projects)).
 
-`blizzard-runner init <dir>` adds the runner and writes its token in one step, at the hub its config names, which
-`--hub
-<url>` or else `BZ_HUB_URL` sets on a fresh config. With no token, it adds the runner under the config's `name`.
-On a hub with `auth.mode = "none"` that needs no sign-in; on one that requires it, the add runs under your
-`blizzard hub
-login` session for that hub, so it takes an operator holding `runner:add`, and with no session init stops
-and says so. It adds the runner in the tenant `--tenant <tenant_id>` names, by id, never by name; without the flag, in
-the only tenant you may enter, and when you may enter several it stops, listing them, ids beside names. With a token,
-init first asks the hub whose it is (`GET /api/fleet/identity`, under the runner's own token and with no side effects)
-and acts on the answer:
+`blizzard-runner init <dir>` registers the host at the hub its config names — `--hub <url>` or else `BZ_HUB_URL` sets
+it on a fresh config — then joins each `[[runner]]` under it, writing each token the hub issues as it is issued.
+
+It looks for the host's token first, as the host resolves it: `BZ_HOST_TOKEN` in the process environment, the host
+file's `host_token`, then `BZ_HOST_TOKEN` in the directory's `.env`. A held host token is checked with
+`GET /api/fleet/host`, and the host it names is kept. Holding none, init adds a host named after the first
+`[[runner]]` (`POST /api/hosts`) and writes its token to `.env` as `BZ_HOST_TOKEN`; a name a live host of the tenant
+holds stops init, naming the conflict. On a hub with `auth.mode = "none"` that needs no sign-in; on one that requires
+it, the add runs under your `blizzard hub login` session for that hub, and with no session init stops and says so. It
+adds the host in the tenant `--tenant <tenant_id>` names, by id, never by name; without the flag, in the only tenant you
+may enter, and when you may enter several it stops, listing them, ids beside names. A new host adopts each runner whose
+held token the hub knows. A held host token whose host serves another tenant than `--tenant` names stops: a host never
+moves between tenants. A hub that answers the host routes `404` predates hosts, and init stops.
+
+Every runner init adds is added under the host's own credential (`POST /api/fleet/host/runners`), in the host's tenant,
+with no sign-in. With a runner token, init first asks the hub whose it is (`GET /api/fleet/identity`, under the
+runner's own token and with no side effects) and acts on the answer:
 
 | The hub answers                                             | `init`                                                                                                                                         |
 | ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| the token's runner                                          | keeps the token and adds nothing                                                                                                               |
+| the token's runner                                          | keeps the token and adds nothing, when the hub holds the runner under this host; otherwise stops, naming `hub runner-host adopt`                |
 | the token's runner, in another tenant than `--tenant` names | stops and adds nothing, naming both tenants: drop `--tenant` to keep that runner, or set up a new runner in that tenant from a fresh directory |
 | an unknown token                                            | stops, adds nothing, and leaves `.env` untouched, naming the hub it asked                                                                      |
 | a revoked token                                             | stops, naming `hub runner enroll <id>` — rotation keeps the runner's id, and an add would not                                                  |
@@ -81,9 +88,17 @@ runner and replaces the token. Or the config names the wrong hub, one that never
 would mint a runner at that hub and overwrite the only token the runner holds for its own, so fix `hub_url` instead.
 Init never re-adds without the flag.
 
-Before it re-adds, init sets the old runner's store aside under a timestamped name beside it and migrates a fresh one,
+A host token the hub does not know reads the same way. With `--allow-readd`, init sets the host's store aside, adds the
+host afresh, and adds every `[[runner]]` again under it. A host token the process environment or the host file supplies
+is never replaced: an unknown one stops init even with `--allow-readd`, since a replacement in `.env` would go unread. A
+host token the hub refuses as a retired host's stops init too.
+
+Before it re-adds, init sets the store aside under a timestamped name beside it and migrates a fresh one,
 so the new runner never inherits the old one's leases and buffered facts. Nothing is deleted: the old store keeps them.
-It refuses while the runner's daemon is running. A runner holding no token whose store still belongs to a runner stops
+It refuses while the runner's daemon is running. The store is the host's, shared by every runner it configures, so a
+runner is never re-added in place beside another: setting the store aside would drop that runner's backlog. Init
+refuses, naming `blizzard runner retire` and `blizzard runner add`, which replace the one runner and leave the store
+as it is; a host re-added sets the store aside once and adds every runner again over it. A runner holding no token whose store still belongs to a runner stops
 the same way an unknown token does: put that runner's token back, or re-run init with `--allow-readd`.
 
 A runner's token variable is derived from its `name`, as above; the host file has no key to rename it. Every runner verb
@@ -97,7 +112,9 @@ leaving its bytes as they are, or warns when it cannot. The daemon reads only th
 process environment or the host file supplies wins, so when the hub does not know it, init stops rather than write a
 replacement that would go unread.
 
-If the hub adds the runner but its token cannot be written, init exits naming
+If the hub adds the host but its token cannot be written, init exits naming
+`blizzard hub runner-host retire <id> --hub-url <hub>`. If the hub adds a runner but its token cannot be written, init
+exits naming
 `blizzard hub runner retire <id> --hub-url <hub>`: the hub holds that runner as never connected, under a token nobody
 has. Retire it, then re-run init. An init interrupted between the two leaves the same runner, which `hub runner list`
 shows as never connected.
@@ -127,9 +144,9 @@ when the runner holds no token. The runner is refused until `enroll` mints a new
 A host is the machine a set of runners lives on, recorded in the tenant that added it. It has its own id — `hs_`
 followed by a ULID — a name, and its own bearer token, separate from every runner's.
 `blizzard hub runner-host add <name>` mints the id and token together and prints both once, the token as a
-`BZ_HUB_TOKEN=<token>` line; there is no read-back. A host reads its token as `BZ_HOST_TOKEN`, from the process
-environment, the host file's `host_token` key, or the host directory's `.env`, so rename the printed variable when you
-store it. The group is `runner-host` because `blizzard hub host` launches the host daemon. Host names are unique among a
+`BZ_HOST_TOKEN=<token>` line; there is no read-back. A host reads its token as `BZ_HOST_TOKEN`, from the process
+environment, the host file's `host_token` key, or the host directory's `.env`, so the printed line goes into the host
+directory's `.env` as it is. The group is `runner-host` because `blizzard hub host` launches the host daemon. Host names are unique among a
 tenant's live hosts, and a taken name refuses the add.
 
 The host token reaches only the host's own routes, under `/api/fleet/host`: reporting the machine's workspace, reading
@@ -154,7 +171,7 @@ registration answer, never refused; the hub offers the runner no work through a 
 flagged subscription.
 
 `runner-host revoke-token <host_id>` revokes the host's token and leaves the host recorded; `enroll <host_id>` mints a
-new one and records the token it replaces as revoked. A revoked hash stays dead, as for a runner.
+new one, printed once as a `BZ_HOST_TOKEN=<token>` line, and records the token it replaces as revoked. A revoked hash stays dead, as for a runner.
 `runner-host retire
 <host_id>` revokes the token and retires the host, then retires each of its runners; it refuses
 while a runner still holds routes unless `--force` is given, and `--by` records who retired it. Between the host's
@@ -168,13 +185,62 @@ retire, revoke-token and enroll, and each runner row on it carries release. Rele
 for confirmation first. A retire the hub refuses shows the refusal and asks again before forcing it. Enroll shows the
 new token once.
 
+### A registered host
+
+A host that holds a host token is **registered**; one that holds none is unchanged, runs one runner, and that runner
+reports itself as it always has. A registered host:
+
+- **Reports itself on every host tick.** It posts its first `public_url`, the panel's sign-in callback URIs, each
+  workspace with the environments it holds, and the `[[subscription]]` roster it declares to `POST /api/fleet/host`,
+  and its runners stop sending a roster of their own. It reports once before any runner ticks, so a runner the hub has
+  released from the host never claims across a restart while the hub answers; a report that fails or times out starts
+  the runners anyway.
+- **Records who it is from the hub's first answer.** The host id and tenant land once in the store's `host_identity`
+  row and are never edited. A later answer naming another host or tenant is a refusal of the host's token, not an
+  update: the runners keep working, the host's facts stay buffered, and the panel shows the refusal.
+- **Drains its own fact lane.** Its subscription usage samples and misses ride the host's lane, `host_outbound_buffer`,
+  to `POST /api/fleet/host/events`, never a runner's lane, and leave only while the latest report was answered with the
+  host's own identity. Against a hub from before hosts, which answers the host routes `404`, the runners keep working
+  and the facts wait in the buffer.
+- **Runs several runners.** The host file may hold more than one `[[runner]]`, each with its own token; without a host
+  token, a second `[[runner]]` is a host error.
+- **Halts a runner its hub does not hold.** From each answered report, the host judges every runner: held under the
+  host, not held, or standing in another tenant than the host's. A runner not held, or in another tenant, halts alone —
+  it drives no lease and delivers nothing, its hub proxy answers `503`, and the others keep working — and resumes within
+  a host tick of the hub holding it again. A hub that has not answered, refuses the host's token, or predates hosts
+  never halts a runner this way.
+
+### Adding and retiring a host's runners
+
+`blizzard runner add <name> --project <p>` adds a runner to a registered host under the host's own token, with no hub
+sign-in: the hub mints the runner under the host (`POST /api/fleet/host/runners`), then `add` writes its token to the
+host directory's `.env` as `BZ_HUB_TOKEN_<NAME>`, creates `runners/<name>/`, and appends its `[[runner]]` with the id the
+hub minted — in that order, so an entry never exists without its token. `--project` repeats; `--workspace` names the
+host's workspace each project runs in — once for all, or once per `--project` — and defaults to the host's only one;
+`--agents` likewise, defaulting to `1`. A `--workspace` the host file does not declare, or a name a `[[runner]]` already
+holds, refuses the add before it reaches the hub. A running host starts the new runner at its next start, and `add`
+says so.
+
+`blizzard runner retire --runner <name|id>` retires the runner at the hub under the host's token, forgets its identity
+in the host's store, then removes its `[[runner]]`, so the store names only runners the host still configures and the
+next start or `init` serves the rest. A runner still holding chunks refuses the retire, naming them; `--force` releases
+them. A running host halts the runner at its next tick, the hub refusing its token, and `retire` says so; the runner's
+other rows stay in the host's store, inert. Both verbs refuse a host holding no host token, naming `blizzard hub runner-host add`.
+
+`GET /api/host/registration` reads where the host stands — `unregistered`, `pending` until its first report,
+`registered` with its host id and tenant, `refused`, `no_hosts`, or `unreachable` — with the facts waiting on its lane.
+The host page of the panel shows it. A served runner its hub halts is listed by `GET /api/host/runners` as `halted`,
+naming why, and its own views still read.
+
 ## A token that names another runner
 
 At the head of every tick the runner asks the hub which runner its token belongs to (`GET /api/fleet/identity`) and
 compares the answer with the runner its host file configures, the `[[runner]] id` the store is bound to. When they
 differ — a wrong token, or a `hub_url` pointing at another hub — the runner refuses to drive its leases or deliver its
-buffered facts, and checks again on the next tick, so putting things right resumes it with nothing lost. A hub that
-cannot be reached, or that refuses the token, leaves the verdict as it stood: an outage never reads as a mismatch.
+buffered facts, and checks again on the next tick, so putting things right resumes it with nothing lost. A token the hub
+refuses — unknown, revoked, or its runner retired — is a refusal of its own, shown as `REFUSING:` with the hub's reason
+and checked again each tick the same way. A hub that cannot be reached leaves the verdict as it stood: an outage never
+reads as a mismatch.
 
 The runner logs the refusal once, at warning severity, naming both runner ids and what restores it, and
 `blizzard runner status` shows it:

@@ -11,10 +11,11 @@ import pytest
 from structlog.testing import capture_logs
 
 from blizzard.foundation.clock import FixedClock, SystemClock
+from blizzard.foundation.runner_identity_state import IdentityState
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.registry import HarnessRegistry
 from blizzard.runner.hub.client import BindingDeclaration
-from blizzard.runner.hub.identity import IdentityState, RunnerIdentityHolder
+from blizzard.runner.hub.identity import RunnerIdentityHolder
 from blizzard.runner.hub.served_projects import ServedProject
 from blizzard.runner.leases.activity import HEARTBEAT_STALENESS_THRESHOLD
 from blizzard.runner.leases.model import NewLease
@@ -369,3 +370,18 @@ def test_fill_releases_no_interrupted_claim_before_the_first_registration(tmp_pa
     Fill(ctx).run()
 
     assert [binding.chunk_id for binding in ctx.stores.environments.held_bindings()] == ["ch_1"]
+
+
+@pytest.mark.parametrize(("declares", "sent"), [(True, ()), (False, None)])
+def test_a_runner_of_a_registered_host_sends_no_roster_of_its_own(
+    tmp_path: Path, declares: bool, sent: tuple[()] | None
+) -> None:
+    """A registered host reports the subscriptions it declares itself, so its runners' registrations omit them and
+    the hub keeps the host's roster; an unregistered host's runner declares them as before."""
+    hub = FakeHub(default_runner_id="rn_minted")
+    ctx = _ctx(tmp_path / "runner.db", hub)
+    ctx = replace(ctx, config=replace(ctx.config, declares_subscriptions=declares))
+
+    Registration(ctx).run()
+
+    assert hub.registered_subscriptions == [sent]

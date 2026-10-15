@@ -1,8 +1,9 @@
 """The hub-client seam — the runner's outbound-only edge to the hub HTTP API.
 
 Every fleet call presents the runner's own bearer token, and the hub takes the runner's identity
-from that token alone. The one call made under an operator's credential instead — adding a runner
-— has its own narrow port, :class:`IHubRunnerAdmin`."""
+from that token alone. The calls made under an operator's credential instead — adding a runner or a
+host — have their own narrow port, :class:`IHubRunnerAdmin`, and the calls a host makes under its own
+token have theirs, :class:`IHostHubClient`."""
 
 from __future__ import annotations
 
@@ -75,6 +76,140 @@ class RunnerAddRefused(HubClientError):
         super().__init__(message)
         self.reason = reason
         self.detail = detail
+
+
+class HostAddRefusalReason(StrEnum):
+    """Why the hub refused to add a host: ``SIGN_IN_REQUIRED``, the hub requires an operator session
+    and none was presented, or it was not accepted (401); ``FORBIDDEN``, the operator lacks the
+    permission (403); ``UNSUPPORTED``, the hub predates hosts (404 or 405); ``NAME_TAKEN``, a live
+    host of the tenant holds the name (409); ``TENANT_REQUIRED``, the operator may enter several
+    tenants and named none (409); ``NO_SUCH_TENANT``, the named tenant is none the operator may
+    enter (404)."""
+
+    SIGN_IN_REQUIRED = "sign_in_required"
+    FORBIDDEN = "forbidden"
+    UNSUPPORTED = "unsupported"
+    NAME_TAKEN = "name_taken"
+    TENANT_REQUIRED = "tenant_required"
+    NO_SUCH_TENANT = "no_such_tenant"
+
+
+class HostAddRefused(HubClientError):
+    """The hub answered a host add with a refusal — terminal for the caller, never retried.
+    ``reason`` says which; ``detail`` is the hub's refusal text. Still a :class:`HubClientError`."""
+
+    def __init__(self, message: str, *, reason: HostAddRefusalReason, detail: str) -> None:
+        super().__init__(message)
+        self.reason = reason
+        self.detail = detail
+
+
+class HostRunnerRetireRefused(HubClientError):
+    """The hub refused to retire a runner under the host because it still holds chunks (409) — terminal
+    for the caller unless it retires again with ``force``. ``detail`` is the hub's refusal text, naming
+    each held chunk. Still a :class:`HubClientError`."""
+
+    def __init__(self, message: str, *, detail: str) -> None:
+        super().__init__(message)
+        self.detail = detail
+
+
+class HostRefusalReason(StrEnum):
+    """Why the hub refused a call under the host's own token: ``CREDENTIAL_REFUSED``, the token is
+    missing, unknown, revoked, or its host retired (401 or 403); ``NOT_FOUND``, the hub answered 404 —
+    on every host route but retire, a hub that predates hosts; on retire, also a runner that does not
+    stand under the host."""
+
+    CREDENTIAL_REFUSED = "credential_refused"
+    NOT_FOUND = "not_found"
+
+
+@domain_model
+@dataclass(frozen=True)
+class HostRefused:
+    """The hub's typed refusal of a host call: its ``reason``, the status it answered, and its
+    refusal text."""
+
+    reason: HostRefusalReason
+    status: int
+    detail: str
+
+
+@domain_model
+@dataclass(frozen=True)
+class HostReportedWorkspace:
+    """One workspace a host reports: its id, and how many environments it holds — ``None`` when it
+    reports none."""
+
+    workspace_id: str
+    env_capacity: int | None = None
+
+
+@domain_model
+@dataclass(frozen=True)
+class HostReport:
+    """What a host reports about itself each tick: its public URL, the panel's sign-in callback
+    URIs, its workspaces, and the subscriptions it declares. The hub replaces what it holds with
+    ``workspaces`` and ``subscriptions`` whole."""
+
+    url: str | None = None
+    redirect_uris: tuple[str, ...] = ()
+    workspaces: tuple[HostReportedWorkspace, ...] = ()
+    subscriptions: tuple[SubscriptionDeclaration, ...] = ()
+
+
+@domain_model
+@dataclass(frozen=True)
+class HostHeldRunner:
+    """One runner the hub holds under a host: its id and the name the hub holds for it."""
+
+    runner_id: str
+    runner_name: str
+
+
+@domain_model
+@dataclass(frozen=True)
+class HostRecord:
+    """A host's own record as the hub answers it: the hub-minted ``hs_`` id, its tenant, the name
+    the hub holds, and the runners it holds under the host that are not retired."""
+
+    host_id: str
+    tenant_id: str
+    host_name: str
+    runners: tuple[HostHeldRunner, ...] = ()
+
+
+@domain_model
+@dataclass(frozen=True)
+class HostFactPushAck:
+    """The hub's acknowledgement of one host-lane push against the host's own high-water mark: the
+    new mark, and the pushed seqs partitioned into applied, already applied, and rejected for a
+    non-idempotency reason."""
+
+    high_water: int
+    applied: list[int]
+    already_applied: list[int]
+    rejected: list[int]
+
+
+@domain_model
+@dataclass(frozen=True)
+class RetiredHostRunner:
+    """A runner the hub just retired under the host, and the chunks the retire released from it."""
+
+    runner_id: str
+    released_chunk_ids: tuple[str, ...] = ()
+
+
+@domain_model
+@dataclass(frozen=True)
+class IssuedHost:
+    """A host the hub just added: its minted ``hs_`` id, its name, and the plaintext bearer token
+    minted with the id — shown by the hub this once."""
+
+    host_id: str
+    host_name: str
+    token: str
 
 
 @domain_model
@@ -447,7 +582,7 @@ class IHubClient(IChunkStatusReader, Protocol):
         url: str | None = None,
         redirect_uris: tuple[str, ...] = (),
         capabilities: tuple[HarnessCapability, ...] = (),
-        subscriptions: tuple[SubscriptionDeclaration, ...] = (),
+        subscriptions: tuple[SubscriptionDeclaration, ...] | None = (),
         gates: tuple[str, ...] = (),
         projects: tuple[str, ...] | None = None,
         bindings: tuple[BindingDeclaration, ...] | None = None,
@@ -455,8 +590,9 @@ class IHubClient(IChunkStatusReader, Protocol):
     ) -> RegistrationReply:
         """``POST /api/fleet/runners`` — register the runner this client's token names under its
         declared ``name``, and learn its hub-minted id from the reply. Idempotent, and refreshes the
-        runner's liveness at the hub. Every optional field, ``subscriptions`` included,
-        is unconditionally overwritten each call; ``subscriptions`` is always a list, never omitted.
+        runner's liveness at the hub. Every optional field is unconditionally overwritten each call
+        but ``subscriptions``, which ``None`` omits — a runner of a registered host, whose host reports the
+        roster, sends none.
         ``gates`` is the runner's own configured human-gate node names — reported for display, never
         read back to enforce. ``projects`` is the projects the runner serves, by id or slug: sent as
         given, ``None`` as null — never ``[]`` — so the hub keeps the declaration it holds, where
@@ -490,7 +626,7 @@ class ITokenIdentityReader(Protocol):
 
 class IHubRunnerAdmin(Protocol):
     """The runner-side calls made under an operator's credential rather than a runner token: adding
-    a runner, and listing the tenants the operator may add one in. Its credential is the operator's
+    a runner or a host, and listing the tenants the operator may add one in. Its credential is the operator's
     signed-in session for the hub when one is held, and none otherwise — never a runner token. A hub
     without sign-in admits no credential; any other answers 401."""
 
@@ -507,4 +643,46 @@ class IHubRunnerAdmin(Protocol):
     def tenants(self) -> list[OperatorTenant]:
         """``GET /api/me`` — every tenant the operator may enter, ordered by id; empty from a hub
         that predates tenants. Any failure raises :class:`HubClientError`."""
+        ...
+
+    def add_host(self, name: str, *, tenant_id: str | None = None, adopt: tuple[str, ...] = ()) -> IssuedHost:
+        """``POST /api/hosts`` — add a host under ``name`` in the tenant ``tenant_id`` names, or, with
+        none named, the one the hub resolves for the operator, placing the runners ``adopt`` names under
+        it in the same write; the hub mints its id and bearer token together. A refusal raises
+        :class:`HostAddRefused`; an unreachable hub or a 5xx raises :class:`HubClientError`, and the hub
+        has added nothing the caller can use."""
+        ...
+
+
+class IHostHubClient(Protocol):
+    """The calls a host makes under its own bearer token, every one under ``/api/fleet/host``. The hub
+    takes the host from the token alone. Each answers its result, or :class:`HostRefused` when the hub
+    refuses the token (401, 403) or answers 404; an unreachable hub, a 5xx, or any other refusal raises
+    :class:`HubClientError`."""
+
+    def report(self, report: HostReport) -> HostRecord | HostRefused:
+        """``POST /api/fleet/host`` — report the host, and read its record back. The hub never refuses
+        a report over its content; it doubles as the host's heartbeat."""
+        ...
+
+    def record(self) -> HostRecord | HostRefused:
+        """``GET /api/fleet/host`` — the host's own record, reporting nothing."""
+        ...
+
+    def push_facts(self, facts: Sequence[PushedFact]) -> HostFactPushAck | HostRefused:
+        """``POST /api/fleet/host/events`` — push the host's own buffered facts, ordered by seq,
+        de-duplicated at the hub against the host's own mark."""
+        ...
+
+    def add_runner(self, name: str, *, projects: tuple[str, ...] | None = None) -> IssuedIdentity | HostRefused:
+        """``POST /api/fleet/host/runners`` — add a runner under the host, in its tenant, under the
+        initial ``name``, serving the projects ``projects`` names — or, with ``None``, the tenant's only
+        project; the hub mints its id and bearer token together. A named project the tenant does not hold
+        raises :class:`RunnerAddRefused`."""
+        ...
+
+    def retire_runner(self, runner_id: str, *, force: bool = False) -> RetiredHostRunner | HostRefused:
+        """``POST /api/fleet/host/runners/{runner_id}/retire`` — retire a runner under the host. The hub
+        refuses one that still holds chunks unless ``force`` releases them, raising
+        :class:`HostRunnerRetireRefused` naming them."""
         ...

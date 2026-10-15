@@ -309,18 +309,29 @@ def test_a_host_error_refuses_the_file_naming_its_entry(tmp_path: Path, text: st
         assert name in message
 
 
-def test_more_than_one_runner_is_a_host_error_and_without_a_host_token_says_so(tmp_path: Path) -> None:
+def test_more_than_one_runner_without_a_host_token_is_a_host_error_naming_it(tmp_path: Path) -> None:
     text = '[[runner]]\nname = "a"\nprojects = []\n[[runner]]\nname = "b"\nprojects = []\n'
     message = _refusal(tmp_path, text)
-    assert "2 [[runner]] entries" in message and HOST_TOKEN_VARIABLE in message
+    assert message == f"more than one [[runner]] needs a host token ({HOST_TOKEN_VARIABLE}), and none is set"
 
 
-def test_more_than_one_runner_under_a_host_token_is_refused_only_by_the_interim_rule(
+def test_more_than_one_runner_under_a_host_token_loads_and_an_offline_verb_names_which(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv(HOST_TOKEN_VARIABLE, "host-token")
-    message = _refusal(tmp_path, '[[runner]]\nname = "a"\nprojects = []\n[[runner]]\nname = "b"\nprojects = []\n')
-    assert message == "2 [[runner]] entries: a host holds one runner for now"
+    config = HostConfig.load(
+        _write(
+            tmp_path / "host",
+            '[[runner]]\nname = "a"\nid = "rn_a"\nprojects = []\n[[runner]]\nname = "b"\nprojects = []\n',
+        )
+    )
+    assert [entry.name for entry in config.runners] == ["a", "b"]
+    assert config.sole_runner("b").name == "b"
+    assert config.sole_runner("rn_a").name == "a"
+    with pytest.raises(HostConfigError, match="name one with --runner"):
+        config.sole_runner()
+    with pytest.raises(HostConfigError, match="declares no runner 'c'"):
+        config.sole_runner("c")
 
 
 def test_a_malformed_file_is_a_host_error(tmp_path: Path) -> None:

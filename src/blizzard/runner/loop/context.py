@@ -82,6 +82,8 @@ class LoopConfig:
     bindings: tuple[BindingDeclaration, ...] | None = None
     #: The slug of the declared subscription the runner spends; ``None`` names none.
     subscription: str | None = None
+    #: Whether the registration declares the host's subscriptions — false on a registered host, which reports them.
+    declares_subscriptions: bool = True
     #: The directory the per-lease harness-stdout files live in; empty means
     #: no redirect. A worker's envelope survives the process there for later read-back.
     worker_stdout_dir: str = ""

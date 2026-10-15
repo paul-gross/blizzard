@@ -113,12 +113,13 @@ def join_runner(runner_dir: Path, hub_url: str, *, allow_readd: bool = False) ->
 
 
 def adopt_runner(runner_dir: Path, hub_url: str, token: str) -> JoinedRunner:
-    """Join a runner an operator already added at a hub with sign-in: put the token its add printed
-    in the runner directory's ``.env``, then ``runner init``, which finds it known and adds nothing."""
-    runner_dir.mkdir(parents=True, exist_ok=True)
+    """Join a runner an operator already added at a hub with sign-in to a host left unregistered: scaffold the runner
+    directory, put the token its add printed in ``.env``, and write the id the hub resolves it to into the host file —
+    what ``runner init`` keeps for a known token, without the host it would register under the operator's session."""
+    joined = _identity_of(token, hub_url)
+    config = init_environment(runner_dir, hub_url=hub_url)
+    write_runner_id(HostLayout(config.root), config.sole_runner().name, joined.runner_id)
     HubTokenFile.of(runner_dir, DEFAULT_TOKEN_ENV).write(token)
-    joined = join_runner(runner_dir, hub_url)
-    assert joined.token == token, "runner init replaced the token of a runner the hub already knows"
     return joined
 
 
@@ -146,6 +147,10 @@ def seed_pinned_runner(hub: httpx.Client, runner: JoinedRunner) -> None:
 def _held_identity(runner_dir: Path, hub_url: str) -> JoinedRunner:
     token = held_token(runner_dir)
     assert token, f"runner init wrote no {DEFAULT_TOKEN_ENV} to {runner_dir / '.env'}"
+    return _identity_of(token, hub_url)
+
+
+def _identity_of(token: str, hub_url: str) -> JoinedRunner:
     answer = token_identity(hub_url, token)
     assert answer.status_code == 200, answer.text
     body = answer.json()

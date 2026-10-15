@@ -2,7 +2,7 @@
 sentinel against the real wire growing a mock counterpart forgets to serve.
 
 Two one-sided directions against the mock fleet's own served ``/openapi.json``: the mock hub serves
-every ``IHubClient`` endpoint and every endpoint of the runner's setup ports, verb-and-path-exact; the
+every ``IHubClient``, setup-port, and host-client endpoint, verb-and-path-exact; the
 mock runner's ``/_drive/*`` routes match a declared verb set (``bzh:sweep-release-only-tiers``)."""
 
 from __future__ import annotations
@@ -11,7 +11,7 @@ import re
 
 import pytest
 
-from blizzard.runner.hub.client import IHubClient, IHubRunnerAdmin, ITokenIdentityReader
+from blizzard.runner.hub.client import IHostHubClient, IHubClient, IHubRunnerAdmin, ITokenIdentityReader
 from tests.e2e.test_acceptance_loop import _free_port
 from tests.service.support import mock_hub, mock_runner, require_mock_fleet, service_gate
 
@@ -38,10 +38,21 @@ _IHUBCLIENT_ENDPOINTS: dict[str, tuple[str, str]] = {
     "rekey_route_token": ("POST", "/api/fleet/chunks/{chunk_id}/route-token"),
 }
 
-#: One table per runner setup port, rows verbatim from the same reference binding.
+#: One table per runner setup port and the host's own client, rows verbatim from the same reference binding.
 _SETUP_PORT_ENDPOINTS: dict[type, dict[str, tuple[str, str]]] = {
     ITokenIdentityReader: {"identity": ("GET", "/api/fleet/identity")},
-    IHubRunnerAdmin: {"add_runner": ("POST", "/api/runners"), "tenants": ("GET", "/api/me")},
+    IHubRunnerAdmin: {
+        "add_runner": ("POST", "/api/runners"),
+        "tenants": ("GET", "/api/me"),
+        "add_host": ("POST", "/api/hosts"),
+    },
+    IHostHubClient: {
+        "report": ("POST", "/api/fleet/host"),
+        "record": ("GET", "/api/fleet/host"),
+        "push_facts": ("POST", "/api/fleet/host/events"),
+        "add_runner": ("POST", "/api/fleet/host/runners"),
+        "retire_runner": ("POST", "/api/fleet/host/runners/{runner_id}/retire"),
+    },
 }
 
 _PATH_PARAM = re.compile(r"\{[^{}]+\}")
@@ -105,7 +116,7 @@ def test_ihubclient_endpoint_table_matches_the_protocol_method_set() -> None:
 
 def test_each_setup_port_table_matches_its_protocol_method_set() -> None:
     """Each runner setup port's table names exactly that port's method set, so a method added to
-    ``ITokenIdentityReader`` or ``IHubRunnerAdmin`` cannot go unserved by the mock hub unnoticed."""
+    ``ITokenIdentityReader``, ``IHubRunnerAdmin``, or ``IHostHubClient`` cannot go unserved by the mock hub unnoticed."""
     for proto, table in _SETUP_PORT_ENDPOINTS.items():
         actual = _protocol_method_names(proto)
         assert actual == set(table), (

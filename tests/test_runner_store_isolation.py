@@ -26,15 +26,18 @@ import pytest
 import sqlalchemy as sa
 
 import blizzard.runner as runner_pkg
+from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.auth.tokens import IWriteTokenRepository
+from blizzard.runner.composition import build_identity_forgetter
 from blizzard.runner.environments.repository import BindingCompletion, IWriteEnvironmentRepository
 from blizzard.runner.harness.fingerprint import PreambleFingerprint
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.selftest_result import IWriteSelfTestResultRepository
 from blizzard.runner.harness.usage import UsageSample
 from blizzard.runner.harness.workspace_prompts import IWriteWorkspacePromptRepository
-from blizzard.runner.hub.identity import IWriteRunnerIdentityRepository, RunnerIdentity
+from blizzard.runner.hub.host_identity import IWriteHostIdentityRepository
+from blizzard.runner.hub.identity import IWriteRetiredRunnerIdentity, IWriteRunnerIdentityRepository, RunnerIdentity
 from blizzard.runner.hub.outbound_buffer import IWriteOutboundRepository
 from blizzard.runner.hub.served_projects import IWriteServedProjectsRepository, ServedProject
 from blizzard.runner.leases.asks import IWriteAskRepository
@@ -53,7 +56,7 @@ from blizzard.runner.lifecycle.judgement.checks import ExecutedCheck, IWriteChec
 from blizzard.runner.lifecycle.judgement.git_commit_declaration import IWriteGitCommitDeclarationRepository
 from blizzard.runner.lifecycle.takeover import IWriteTakeoverRepository
 from blizzard.runner.store import schema
-from blizzard.runner.store.errors import RUNNER_SCOPED_OPTION, RUNNER_SCOPING
+from blizzard.runner.store.errors import RUNNER_SCOPED_OPTION, RUNNER_SCOPING, RunnerStoreErrorFactory
 from blizzard.runner.throttle.pause import IWritePauseRepository
 from blizzard.runner.tracing.cursor import LeaseCursorKey
 from blizzard.runner.tracing.repository import IWriteLeaseTraces, LeaseTraceCheckpoint
@@ -506,6 +509,10 @@ WRITE_CENSUS: dict[tuple[type, str], WriteRecipe] = {
             harness_id=CLAUDE_CODE_HARNESS_ID, status="failed", error="boom", recorded_at=_at(52)
         )
     ),
+    # Last: it deletes runner A's identity row, which no recipe above may depend on afterwards.
+    (IWriteRetiredRunnerIdentity, "forget_runner_identity"): lambda w: build_identity_forgetter(
+        w.engine, errors=RunnerStoreErrorFactory(get_logger("test")), runner_id=RUNNER_A
+    ).forget_runner_identity(),
 }
 
 _HOST_ONLY = "writes only host-scoped tables, which carry no runner"
@@ -519,6 +526,9 @@ WRITE_EXEMPTIONS: dict[tuple[type, str], str] = {
     (IWriteExternalUsageRepository, "prune_external_usage_samples"): _HOST_ONLY + " (external_usage_samples)",
     (IWriteHostLaneRepository, "record_host_external_usage_attempt"): _HOST_ONLY
     + " (external_usage_samples, host_outbound_buffer)",
+    (IWriteHostIdentityRepository, "record_host_identity"): _HOST_ONLY + " (host_identity)",
+    (IWriteHostLaneRepository, "pending_host_facts"): _HOST_ONLY + " (host_outbound_buffer, read only)",
+    (IWriteHostLaneRepository, "record_host_high_water"): _HOST_ONLY + " (host_high_water_seen, host_outbound_buffer)",
     (IWriteCredentialRenewalRepository, "claim_credential_renewal"): _HOST_ONLY + " (credential_renewal_claims)",
     (IWriteCredentialRenewalRepository, "record_credential_renewal_outcome"): _HOST_ONLY
     + " (credential_renewal_outcomes)",
