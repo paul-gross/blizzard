@@ -2189,6 +2189,10 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
         w.read.facts.status_counts(),
         w.read.facts.status_counts(project=w.project_id),
     ),
+    (IReadChunkFactsRepository, "done_since_count"): lambda w: (
+        w.read.facts.done_since_count(datetime(2000, 1, 1, tzinfo=UTC)),
+        w.read.facts.done_since_count(datetime(2000, 1, 1, tzinfo=UTC), project=w.project_id),
+    ),
     (IReadChunkFactsRepository, "status_facts_for"): lambda w: w.read.facts.status_facts_for(
         [w.chunk_ready_1, w.chunk_ready_2]
     ),
@@ -2445,6 +2449,9 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadConfigImports, "commit_coordinates"): lambda w: w.config_imports.commit_coordinates(),
     (IReadConfigChanges, "page"): lambda w: w.hub.services.config_changes.page(
         before=None, limit=10, record_kind=None, record_key=None
+    ),
+    (IReadConfigChanges, "count"): lambda w: w.hub.services.config_changes.count(
+        record_kind=None, record_key=None, project_id=w.project_id
     ),
     (IReadScopeRepository, "get"): lambda w: w.hub.services.scopes.get(w.project_id, w.scope_a),
     (IReadScopeRepository, "list_all"): lambda w: (

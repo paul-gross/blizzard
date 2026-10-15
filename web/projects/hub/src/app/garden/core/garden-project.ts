@@ -1,8 +1,8 @@
 /** The gardening doorway's URL — the tab on All. */
 export const GARDENING_DOORWAY_URL = '/gardening';
 
-/** The tab a project's garden opens on when its URL names none. */
-export const GARDENING_FIRST_TAB = 'runs';
+/** The tab a project's garden lands on when its URL names none: the proposals waiting on a person. */
+export const GARDENING_LANDING_TAB = 'proposals';
 
 /**
  * The project a garden call that names a record by slug or name is addressed in: the lens's. A slug or a name is unique

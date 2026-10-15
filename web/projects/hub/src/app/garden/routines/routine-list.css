@@ -11,6 +11,19 @@
 }
 /* One label per line, each clipping on its own rather than wrapping — the app's
    standing rule for list rows (`board-card.css`, `chunk-timeline-selection.css`). */
+/* Line 1 — the name, and on the right how the routine is kicked off. */
+.rt-top {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+.rt-cadence {
+  flex: none;
+  margin-left: auto;
+  color: var(--label);
+  font-size: var(--fs-xs);
+}
 .rt-name {
   display: block;
   min-width: 0;

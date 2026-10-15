@@ -95,8 +95,8 @@ describe('ProjectsPage', () => {
     return { harness, el: harness.routeNativeElement as HTMLElement, router: TestBed.inject(Router) };
   }
 
-  it('lists every project on All with its figures, marking the wired one and what the other needs', async () => {
-    const { el } = await open('/admin/projects');
+  it('lists every project on All with its figures, marking the wired one and what the other needs, and opens the first', async () => {
+    const { el, router } = await open('/admin/projects');
     expect(el.querySelector('[data-testid="projects-table-row-proj_w"]')).not.toBeNull();
     const figures = el.querySelector('[data-testid="projects-table-figures-proj_b"]')!.textContent!;
     expect(figures).toContain('1 linked source');
@@ -106,7 +106,7 @@ describe('ProjectsPage', () => {
     expect(el.querySelector('[data-testid="projects-table-needs-proj_w"]')!.textContent).toContain(
       'needs a work source, a repository, a runner',
     );
-    expect(el.querySelector('[data-testid="admin-projects-detail-empty"]')).not.toBeNull();
+    expect(router.url).toBe('/admin/projects/proj_b');
     expect(stub.forRoute('/api/chunk-counts', 'GET').map((call) => call.search)).toEqual(
       expect.arrayContaining(['?project=blizzard', '?project=winter']),
     );
@@ -114,7 +114,7 @@ describe('ProjectsPage', () => {
 
   it('heads the list with the tenant and puts New project beside it', async () => {
     const { el } = await open('/admin/projects');
-    const head = el.querySelector('.s-head')!;
+    const head = el.querySelector('[data-testid="admin-projects-list-panel"] .p-hdr')!;
     expect(head.textContent).toContain('Projects');
     expect(head.querySelector('[data-testid="admin-projects-new"]')).not.toBeNull();
   });

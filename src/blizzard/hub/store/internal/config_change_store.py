@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 
+from sqlalchemy import func, or_
 from sqlalchemy.engine import Connection
 
 from blizzard.hub.domain.config.changes import (
@@ -56,18 +57,38 @@ class ConfigChangeStore:
         record_key: str | None,
         project_id: str | None = None,
     ) -> list[ConfigChange]:
-        query = self._store.select(config_changes).order_by(config_changes.c.id.desc()).limit(limit)
+        query = self._filtered(
+            self._store.select(config_changes).order_by(config_changes.c.id.desc()).limit(limit),
+            record_kind=record_kind,
+            record_key=record_key,
+            project_id=project_id,
+        )
         if before is not None:
             query = query.where(config_changes.c.id < before)
+        with self._store.read("page") as conn:
+            rows = conn.execute(query).all()
+        return [self._of(row) for row in rows]
+
+    def count(self, *, record_kind: RecordKind | None, record_key: str | None, project_id: str | None = None) -> int:
+        query = self._filtered(
+            self._store.select(config_changes, func.count()),
+            record_kind=record_kind,
+            record_key=record_key,
+            project_id=project_id,
+        )
+        with self._store.read("count") as conn:
+            return conn.execute(query).scalar_one()
+
+    @staticmethod
+    def _filtered(query, *, record_kind, record_key, project_id):  # type: ignore[no-untyped-def]
+        """``query`` narrowed by the log's filters; a ``project_id`` keeps the tenant-wide rows beside the project's."""
         if record_kind is not None:
             query = query.where(config_changes.c.record_kind == record_kind.value)
         if record_key is not None:
             query = query.where(config_changes.c.record_key == record_key)
         if project_id is not None:
-            query = query.where(config_changes.c.project_id == project_id)
-        with self._store.read("page") as conn:
-            rows = conn.execute(query).all()
-        return [self._of(row) for row in rows]
+            query = query.where(or_(config_changes.c.project_id == project_id, config_changes.c.project_id.is_(None)))
+        return query
 
     @staticmethod
     def _of(row) -> ConfigChange:  # type: ignore[no-untyped-def]

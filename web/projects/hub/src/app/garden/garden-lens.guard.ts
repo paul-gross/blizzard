@@ -6,7 +6,7 @@ import type { ProjectView } from 'fleet';
 
 import { ProjectLens, lensSegmentOf, lensedUrl, unlensedUrl } from '../core/project-lens';
 import { projectsQueryOptions } from '../core/projects.query';
-import { GARDENING_DOORWAY_URL, GARDENING_FIRST_TAB } from './core/garden-project';
+import { GARDENING_DOORWAY_URL, GARDENING_LANDING_TAB } from './core/garden-project';
 import { isRecordTab, readRecordProject } from './core/garden-record.query';
 
 /** The tabs whose record segment is a name, unique only inside its project. */
@@ -32,16 +32,16 @@ function redirectTo(router: Router, url: string): RedirectCommand {
 }
 
 /**
- * The doorway's guard. Under a lens, `/p/{project}/gardening` opens the project's first tab. On All, a tenant holding
+ * The doorway's guard. Under a lens, `/p/{project}/gardening` opens the project's landing tab. On All, a tenant holding
  * exactly one project has no doorway to show: its garden opens instead. With several projects the doorway opens.
  */
 export const gardeningDoorwayGuard: CanActivateFn = async (_route, state) => {
   const router = inject(Router);
   const lensed = lensSegmentOf(state.url);
-  if (lensed !== null) return redirectTo(router, lensedUrl(`${GARDENING_DOORWAY_URL}/${GARDENING_FIRST_TAB}`, lensed));
+  if (lensed !== null) return redirectTo(router, lensedUrl(`${GARDENING_DOORWAY_URL}/${GARDENING_LANDING_TAB}`, lensed));
   const projects = await tenantProjects();
   if (projects.length === 1) {
-    return redirectTo(router, lensedUrl(`${GARDENING_DOORWAY_URL}/${GARDENING_FIRST_TAB}`, projects[0].slug));
+    return redirectTo(router, lensedUrl(`${GARDENING_DOORWAY_URL}/${GARDENING_LANDING_TAB}`, projects[0].slug));
   }
   return true;
 };

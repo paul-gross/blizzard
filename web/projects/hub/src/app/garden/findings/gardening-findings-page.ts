@@ -7,7 +7,7 @@ import { injectChildRouteParam } from '../../core/route-state';
 import { injectFindingsBucketFilters } from './gardening-findings-bucket-filters';
 import { findingListRows } from './gardening-findings-page.model';
 import { ProjectLens } from '../../core/project-lens';
-import { firstRowToOpen } from '../core/garden-first-row';
+import { firstRowToOpen } from '../../core/first-row';
 
 /**
  * The `/gardening/findings` sub-tab — the findings triage list and its filter row,

@@ -124,6 +124,7 @@ describe('GardeningRoutineDetail', () => {
       // The run dialog's own scope picker (`gardening-run-dialog.ts`) injects
       // `injectHubScopesQuery` independently of this pane.
       if (method === 'GET' && path === '/api/scopes') return [];
+      if (method === 'GET' && path === '/api/runs') return [];
       if (method === 'GET' && path === '/api/me') return me;
       return {};
     });
@@ -187,7 +188,7 @@ describe('GardeningRoutineDetail', () => {
     const fixture = await render({ params: { routineName: 'nightly' } });
     const el = fixture.nativeElement as HTMLElement;
 
-    const record = el.querySelector('[data-testid="gardening-routine-record"]');
+    const record = el.querySelector('[data-testid="gardening-routine-panel"]');
     expect(record?.textContent).toContain('nightly');
     expect(record?.textContent).toContain('garden-routine');
     expect(record?.textContent).toContain('blizzard');
@@ -399,5 +400,29 @@ describe('GardeningRoutineDetail', () => {
     expect(el.querySelector('[data-testid="gardening-routine-panel-error"]')?.textContent).toContain(
       'unknown routine rtn_1',
     );
+  });
+
+  it('submits an edited graph through PATCH /api/routines/{id}', async () => {
+    const fixture = await render({ me: OPERATOR_ME_RESPONSE, params: { routineName: 'nightly' } });
+    const el = fixture.nativeElement as HTMLElement;
+
+    el.querySelector<HTMLButtonElement>('[data-testid="gardening-routine-panel-edit"]')!.click();
+    await fixture.whenStable();
+    const input = el.querySelector<HTMLInputElement>('[data-testid="gardening-routine-panel-graph-input"]')!;
+    input.value = 'garden-delta';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    el.querySelector<HTMLButtonElement>('[data-testid="gardening-routine-panel-graph-submit"]')?.click();
+    await settle(fixture);
+
+    const calls = stub.forRoute('/api/routines/rtn_1', 'PATCH');
+    expect(calls).toHaveLength(1);
+    expect(calls[0].body).toEqual({ graph_name: 'garden-delta' });
+  });
+
+  it('withholds Edit from an identity without graph:edit', async () => {
+    const fixture = await render({ params: { routineName: 'nightly' } });
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="gardening-routine-panel-edit"]')).toBeNull();
   });
 });

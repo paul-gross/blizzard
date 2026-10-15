@@ -78,7 +78,7 @@ describe('the gardening guards on All', () => {
     await router.navigateByUrl('/gardening');
     await settle(fixture, 8);
 
-    expect(router.url).toBe('/p/solo/gardening/runs');
+    expect(router.url).toBe('/p/solo/gardening/proposals');
   });
 
   it('opens any gardening link under the only project\'s lens, a scope by its slug included', async () => {
@@ -174,13 +174,13 @@ describe('the gardening guards on All', () => {
     });
   }
 
-  it('opens a lensed bare gardening path on the project\'s first tab, reading nothing to decide', async () => {
+  it('opens a lensed bare gardening path on the project\'s landing tab, reading nothing to decide', async () => {
     const { fixture, router } = await boot(SEVERAL);
 
     await router.navigateByUrl('/p/winter/gardening');
     await settle(fixture, 8);
 
-    expect(router.url).toBe('/p/winter/gardening/runs');
+    expect(router.url).toBe('/p/winter/gardening/proposals');
   });
 });
 

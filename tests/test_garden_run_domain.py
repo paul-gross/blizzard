@@ -118,6 +118,9 @@ class _FakeChunkFacts:
     def status_counts(self, *, project: ProjectId | None = None) -> dict[ChunkStatus, int]:
         raise NotImplementedError
 
+    def done_since_count(self, since: datetime, *, project: ProjectId | None = None) -> int:
+        raise NotImplementedError
+
 
 @dataclass
 class _FakeFindings:

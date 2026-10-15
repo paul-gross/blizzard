@@ -1,5 +1,6 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
 
 import { FleetScopePanel, type ScopePanelVm } from './scope-panel';
 
@@ -9,6 +10,7 @@ const VM: ScopePanelVm = {
   retired: false,
   renderedRetired: false,
   relatedRoutines: [{ name: 'nightly', isDefault: true }],
+  swept: { at: '2026-03-05T00:00:00Z', notSwept: 'not in 28 days' },
 };
 
 describe('FleetScopePanel', () => {
@@ -22,7 +24,7 @@ describe('FleetScopePanel', () => {
   }) {
     await TestBed.configureTestingModule({
       imports: [FleetScopePanel],
-      providers: [provideZonelessChangeDetection()],
+      providers: [provideZonelessChangeDetection(), provideRouter([])],
     }).compileComponents();
     const fixture = TestBed.createComponent(FleetScopePanel);
     fixture.componentRef.setInput('vm', inputs.vm === undefined ? VM : inputs.vm);
@@ -33,6 +35,11 @@ describe('FleetScopePanel', () => {
     fixture.componentRef.setInput('lifecyclePending', inputs.lifecyclePending ?? false);
     await fixture.whenStable();
     return fixture;
+  }
+
+  async function openEditor(fixture: Awaited<ReturnType<typeof mount>>) {
+    (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>('[data-testid="gardening-scope-panel-edit"]')?.click();
+    await fixture.whenStable();
   }
 
   it('renders the slug, its enabled state, and the description as plain text without graph:edit', async () => {
@@ -73,10 +80,15 @@ describe('FleetScopePanel', () => {
     expect(el.querySelector('[data-testid="gardening-scope-panel-state"]')?.textContent).toContain('retired');
   });
 
-  it('shows the description editor and retire control for an identity with graph:edit', async () => {
+  it('shows Edit and Retire in the header for an identity with graph:edit, the editor opening on Edit', async () => {
     const fixture = await mount({ canEdit: true });
     const el = fixture.nativeElement as HTMLElement;
 
+    const head = el.querySelector('.sp-head')!;
+    expect(head.querySelector('[data-testid="gardening-scope-panel-edit"]')).toBeTruthy();
+    expect(head.querySelector('[data-testid="gardening-scope-panel-retire"]')).toBeTruthy();
+    expect(el.querySelector('[data-testid="gardening-scope-panel-description-input"]')).toBeNull();
+    await openEditor(fixture);
     expect(el.querySelector('[data-testid="gardening-scope-panel-description-input"]')).toBeTruthy();
     expect(el.querySelector('[data-testid="gardening-scope-panel-retire"]')).toBeTruthy();
     expect(el.querySelector('[data-testid="gardening-scope-panel-enable"]')).toBeNull();
@@ -95,6 +107,7 @@ describe('FleetScopePanel', () => {
     const el = fixture.nativeElement as HTMLElement;
     let emitted: { slug: string; description: string } | undefined;
     fixture.componentInstance.editDescription.subscribe((e) => (emitted = e));
+    await openEditor(fixture);
 
     const input = el.querySelector<HTMLInputElement>('[data-testid="gardening-scope-panel-description-input"]')!;
     input.value = '  updated description  ';
@@ -102,11 +115,18 @@ describe('FleetScopePanel', () => {
     el.querySelector<HTMLButtonElement>('[data-testid="gardening-scope-panel-description-submit"]')?.click();
 
     expect(emitted).toEqual({ slug: 'blizzard', description: 'updated description' });
+    await fixture.whenStable();
+    expect(el.querySelector('[data-testid="gardening-scope-panel-description-input"]'), 'open until it reads back').toBeTruthy();
+
+    fixture.componentRef.setInput('vm', { ...VM, description: 'updated description' });
+    await fixture.whenStable();
+    expect(el.querySelector('[data-testid="gardening-scope-panel-description-input"]')).toBeNull();
   });
 
   it('disables Set while the edit mutation is pending, re-enabling once it settles', async () => {
     const fixture = await mount({ canEdit: true, editPending: true });
     const el = fixture.nativeElement as HTMLElement;
+    await openEditor(fixture);
 
     expect(el.querySelector<HTMLButtonElement>('[data-testid="gardening-scope-panel-description-submit"]')?.disabled).toBe(
       true,
@@ -206,7 +226,7 @@ describe('FleetScopePanel', () => {
     await fixture.whenStable();
 
     expect(el.querySelector('[data-testid="gardening-scope-panel-routines"]')?.textContent).toContain(
-      'No routine is related to this scope.',
+      'No routine tends this scope.',
     );
   });
 
@@ -224,20 +244,26 @@ describe('FleetScopePanel', () => {
     expect(el.querySelector('[data-testid="gardening-scope-panel-error"]')?.textContent).toBe('Retire failed.');
   });
 
-  it('renders Retire at the cta size', async () => {
-    const fixture = await mount({ canEdit: true });
+  it('lists the description and when the scope was last swept, relatively, or that the window holds none', async () => {
+    const fixture = await mount({});
     const el = fixture.nativeElement as HTMLElement;
 
-    const retire = el.querySelector('[data-testid="gardening-scope-panel-retire"]');
-    expect(retire?.classList.contains('cta')).toBe(true);
+    expect(el.querySelector('[data-testid="gardening-scope-panel-description"]')?.textContent).toContain(
+      'the blizzard monorepo',
+    );
+    expect(el.querySelector('[data-testid="gardening-scope-panel-last-swept"]')?.textContent).toMatch(/ago|yesterday/);
+
+    fixture.componentRef.setInput('vm', { ...VM, swept: { at: null, notSwept: 'not in 28 days' } });
+    await fixture.whenStable();
+    expect(el.querySelector('[data-testid="gardening-scope-panel-last-swept"]')?.textContent).toContain('not in 28 days');
   });
 
-  it('renders Re-enable at the cta size', async () => {
-    const fixture = await mount({ vm: { ...VM, retired: true, renderedRetired: true }, canEdit: true });
-    const el = fixture.nativeElement as HTMLElement;
+  it('links each tending routine to its own detail', async () => {
+    const el = (await mount({})).nativeElement as HTMLElement;
 
-    const enable = el.querySelector('[data-testid="gardening-scope-panel-enable"]');
-    expect(enable?.classList.contains('cta')).toBe(true);
+    expect(el.querySelector('[data-testid="gardening-scope-panel-routine-nightly"]')?.getAttribute('href')).toBe(
+      '/gardening/routines/nightly',
+    );
   });
 
   // --- Pending lifecycle override (`bzh:frontend-pending-override`) ----------------

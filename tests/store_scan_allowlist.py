@@ -489,6 +489,21 @@ HUB_ALLOWED_SCANS: list[Allowance] = [
         _TENANT_SNAPSHOT_REASON,
     ),
     IndexWalkAllowance(
+        IReadChunkFactsRepository,
+        "done_since_count",
+        (
+            "chunk_completed",
+            "chunk_migrations",
+            "chunk_restarts",
+            "chunks",
+            "decision_resolutions",
+            "decisions",
+            "escalations",
+            "transitions",
+        ),
+        _TENANT_SNAPSHOT_REASON,
+    ),
+    IndexWalkAllowance(
         IReadChunkQuestionsRepository,
         "get_question",
         ("answer_deliveries",),
@@ -584,6 +599,13 @@ HUB_ALLOWED_SCANS: list[Allowance] = [
         _SIGNATURE_REASON,
     ),
     IndexWalkAllowance(IReadConfigChanges, "page", ("config_changes",), _PAGED_LISTING_REASON),
+    IndexWalkAllowance(
+        IReadConfigChanges,
+        "count",
+        ("config_changes",),
+        "a scalar count over the tenant's change rows, which grow only by configuration writes — one covering-index "
+        "walk with no row loaded.",
+    ),
     IndexWalkAllowance(
         IReadConfigImports,
         "commit_coordinates",

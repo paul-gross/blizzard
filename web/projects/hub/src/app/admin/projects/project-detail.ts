@@ -15,6 +15,7 @@ import {
   asyncState,
   errorMessage,
   FleetWhen,
+  injectNowSignal,
   type KitAsyncStateValue,
   KitAsyncState,
   KitButton,
@@ -31,10 +32,10 @@ import { map } from 'rxjs';
 
 import { hasPermission, injectMeQuery } from '../../core/auth/me.query';
 import { TenantContext } from '../../core/auth/tenant-context';
+import { startOfLocalDayIso } from '../../core/local-day';
 import { ProjectLens, lensLink } from '../../core/project-lens';
 import { injectHubRunnersQuery } from '../../core/runners.query';
 import { type ConfigFormValues, configEdit } from '../config-edit.model';
-import { injectActorName } from '../actor-names';
 import { ConfigFormDialog } from '../config-form-dialog';
 import { lastChange, revisionRows } from '../config-history.model';
 import { injectConfigHistoryQuery } from '../config-history.query';
@@ -120,7 +121,12 @@ export class ProjectDetail {
   private readonly repositoriesQuery = injectRepositoriesQuery(() => true);
   private readonly runnersQuery = injectHubRunnersQuery();
   private readonly historyQuery = injectConfigHistoryQuery(RecordKind.PROJECT, () => this.projectId());
-  private readonly countsQuery = injectProjectChunkCountsQuery(() => this.project()?.slug ?? null);
+  /** The minute tick today's boundary is cut from; the key changes only when the local day does. */
+  private readonly now = injectNowSignal(60_000);
+  private readonly countsQuery = injectProjectChunkCountsQuery(
+    () => this.project()?.slug ?? null,
+    () => startOfLocalDayIso(this.now()),
+  );
 
   /** The open tab — Overview again whenever another project opens. */
   protected readonly tab = linkedSignal<string | null, ProjectTab>({
@@ -157,9 +163,8 @@ export class ProjectDetail {
     ),
   );
   private readonly formerSlugs = computed(() => formerSlugs(this.historyQuery.data(), this.project()));
-  private readonly actorName = injectActorName();
-  protected readonly lastChange = computed(() => lastChange(this.historyQuery.data(), this.actorName()));
-  protected readonly revisions = computed(() => revisionRows(this.historyQuery.data(), this.actorName()));
+  protected readonly lastChange = computed(() => lastChange(this.historyQuery.data()));
+  protected readonly revisions = computed(() => revisionRows(this.historyQuery.data()));
   protected readonly revisionsState = computed<KitAsyncStateValue>(() =>
     asyncState(this.historyQuery, this.revisions().length === 0),
   );

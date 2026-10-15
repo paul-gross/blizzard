@@ -177,6 +177,7 @@ async function render() {
     if (method === 'GET' && path === '/api/routines/proposal-counts') return PROPOSAL_COUNTS;
     if (method === 'GET' && path === '/api/scopes') return SCOPES;
     if (method === 'GET' && path === '/api/me') return ME;
+    if (method === 'GET' && path === '/api/runs') return [];
     return {};
   });
   await TestBed.configureTestingModule({
@@ -281,7 +282,9 @@ describe('gardening routines page retired-marker shell sweep (web:shell-sweep)',
       if (method === 'GET' && path === '/api/routines/trend') return TREND;
       if (method === 'GET' && path === '/api/scopes') return SCOPES;
       if (method === 'GET' && path === '/api/me') return ME;
-      return {};
+      if (method === 'GET' && path === '/api/runs') return [];
+      if (method === 'GET' && path === '/api/runs') return [];
+    return {};
     });
     await TestBed.configureTestingModule({
       imports: [TestRoutinesShellHost],
@@ -351,7 +354,9 @@ describe('gardening routines page independent-scroll shell sweep (web:shell-swee
       if (method === 'GET' && path === '/api/routines/proposal-counts') return PROPOSAL_COUNTS;
       if (method === 'GET' && path === '/api/scopes') return SCOPES;
       if (method === 'GET' && path === '/api/me') return ME;
-      return {};
+      if (method === 'GET' && path === '/api/runs') return [];
+      if (method === 'GET' && path === '/api/runs') return [];
+    return {};
     });
 
     await TestBed.configureTestingModule({

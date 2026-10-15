@@ -6,14 +6,17 @@ import {
   type GraphView,
   type KitAsyncStateValue,
   type RoutineView,
+  type RunRowView,
   type TrendView,
   restingAsyncState,
 } from 'fleet';
 import { effectiveGraphByName } from './gardening-effective-graph';
+import type { RoutineEditVars } from './routine-edit.mutations';
 import type { RoutineLifecycleVars } from './routine-lifecycle.mutations';
 import type {
   LastSweptRowVm,
   MeasurementReadingVm,
+  RecentRunVm,
   RelatedScopeVm,
   RoutinePanelVm,
   StrategyStepVm,
@@ -47,6 +50,14 @@ export function routineOverrideRetired(
   if (routine === null) return null;
   const vars = pending.find((v) => v.routineId === routine.routine_id);
   return vars ? vars.retired : null;
+}
+
+/** The edit setting `routine`'s graph to `graphName`, trimmed — `null` with no routine, on a blank name, or on the
+ * graph it already runs, so nothing is sent that would change nothing. */
+export function routineGraphEdit(routine: RoutineView | null, graphName: string): RoutineEditVars | null {
+  const trimmed = graphName.trim();
+  if (routine === null || trimmed === '' || trimmed === routine.graph_name) return null;
+  return { routineId: routine.routine_id, graphName: trimmed };
 }
 
 /** The read-only strategy steps of the routine's effective graph, in node order. */
@@ -111,6 +122,36 @@ export function trendTotals(trend: TrendView): TrendSummaryVm {
   };
 }
 
+/**
+ * The default model and effort as one fact: `opus · high`, several models joined by commas. A part the routine leaves
+ * unset reads `—`, and both unset read a single `—`.
+ */
+export function modelEffortLabel(models: readonly string[], effort: string | null): string {
+  if (models.length === 0 && effort === null) return '—';
+  return `${models.length > 0 ? models.join(', ') : '—'} · ${effort ?? '—'}`;
+}
+
+/** The routine `name`'s runs in the runs window, newest first, each with the findings its delivered sets added — `null`
+ * while the runs read is pending. */
+export function routineRecentRuns(runs: readonly RunRowView[] | undefined, name: string | null): readonly RecentRunVm[] | null {
+  if (runs === undefined || name === null) return null;
+  return runs
+    .filter((run) => run.routine_name === name)
+    .sort((a, b) => Date.parse(b.minted_at) - Date.parse(a.minted_at))
+    .map((run) => ({
+      chunkId: run.chunk_id,
+      scopeSlug: run.scope_slug,
+      mode: run.mode,
+      findings: run.delivered.reduce((sum, set) => sum + set.added_count, 0),
+      mintedAt: run.minted_at,
+    }));
+}
+
+/** The Runs fact: how many runs the window holds, labelled with it — `3 in the last 28 days`; `null` while pending. */
+export function routineRunsLabel(recent: readonly RecentRunVm[] | null, windowLabel: string): string | null {
+  return recent === null ? null : `${recent.length} in the ${windowLabel}`;
+}
+
 /** Everything {@link routinePanelVm} composes beside the routine itself. */
 export interface RoutinePanelParts {
   readonly blocked: boolean;
@@ -121,6 +162,8 @@ export interface RoutinePanelParts {
   readonly windowLabel: string;
   readonly relatedScopes: readonly RelatedScopeVm[] | null;
   readonly overrideRetired: boolean | null;
+  readonly recentRuns: readonly RecentRunVm[] | null;
+  readonly recentRunsState: KitAsyncStateValue;
 }
 
 /** The routine panel's view model — `null` with no routine selected. `renderedRetired`
@@ -132,8 +175,7 @@ export function routinePanelVm(routine: RoutineView | null, parts: RoutinePanelP
       name: routine.name,
       graphName: routine.graph_name,
       defaultScopeSlug: routine.default_scope_slug,
-      defaultModel: routine.default_model ?? [],
-      defaultEffort: routine.default_effort ?? null,
+      modelEffort: modelEffortLabel(routine.default_model ?? [], routine.default_effort ?? null),
     },
     blockedReason: parts.blocked ? `graph ${routine.graph_name} has no effective mint` : null,
     strategy: parts.strategy,
@@ -144,6 +186,9 @@ export function routinePanelVm(routine: RoutineView | null, parts: RoutinePanelP
     relatedScopes: parts.relatedScopes,
     retired: routine.retired ?? false,
     renderedRetired: parts.overrideRetired ?? (routine.retired ?? false),
+    recentRuns: parts.recentRuns,
+    recentRunsState: parts.recentRunsState,
+    runsLabel: routineRunsLabel(parts.recentRuns, parts.windowLabel),
   };
 }
 

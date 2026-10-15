@@ -68,6 +68,11 @@ describe('changeEntryRows', () => {
       { key: '3', title: 'work source winter · retire', sub: ['pgross', 'via cli'], badges: [], revision: null, retired: false },
     ]);
   });
+
+  it("names the entry's author by the hub's name for them, else as recorded", () => {
+    const rows = changeEntryRows(changeEntries([change(4, { actor: 'usr_1', actor_name: 'Ada Lovelace' }), change(3, { actor_name: null })]));
+    expect(rows.map((row) => row.sub[0])).toEqual(['Ada Lovelace', 'pgross']);
+  });
 });
 
 describe('entryByKey', () => {

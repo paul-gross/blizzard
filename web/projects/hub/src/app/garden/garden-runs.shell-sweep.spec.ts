@@ -216,6 +216,7 @@ const PANEL_SCOPE: ScopePanelVm = {
     { name: 'nightly', isDefault: true },
     { name: 'weekly', isDefault: false },
   ],
+  swept: { at: null, notSwept: 'not in 28 days' },
 };
 
 describe('gardening panels shell sweep (web:shell-sweep)', () => {
@@ -264,7 +265,7 @@ describe('gardening panels shell sweep (web:shell-sweep)', () => {
   it('keeps the scope panel description editor inside its column, at 1280/390/320px', async () => {
     await TestBed.configureTestingModule({
       imports: [FleetScopePanel],
-      providers: [provideZonelessChangeDetection()],
+      providers: [provideZonelessChangeDetection(), provideRouter([])],
     }).compileComponents();
     const fixture = TestBed.createComponent(FleetScopePanel);
     fixture.componentRef.setInput('vm', PANEL_SCOPE);
@@ -272,6 +273,8 @@ describe('gardening panels shell sweep (web:shell-sweep)', () => {
     fixture.componentRef.setInput('canEdit', true);
     const root = fixture.nativeElement as HTMLElement;
     document.body.appendChild(root);
+    await fixture.whenStable();
+    root.querySelector<HTMLButtonElement>('[data-testid="gardening-scope-panel-edit"]')!.click();
     await fixture.whenStable();
 
     try {

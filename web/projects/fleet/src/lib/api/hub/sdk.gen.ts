@@ -353,7 +353,8 @@ export const repositionBacklogApiBacklogPositionPost = <ThrowOnError extends boo
  *
  * The all-time fleet count per derived status — over exactly the chunks
  * ``GET /api/chunks`` pages over, with no window applied; ``?project=`` counts that
- * project's chunks alone.
+ * project's chunks alone. With ``done_since``, ``done_since`` answers how many of the ``done`` ones finished at or
+ * after that instant; the caller chooses the boundary.
  */
 export const chunkCountsApiChunkCountsGet = <ThrowOnError extends boolean = false>(options?: Options<ChunkCountsApiChunkCountsGetData, ThrowOnError>): RequestResult<ChunkCountsApiChunkCountsGetResponses, ChunkCountsApiChunkCountsGetErrors, ThrowOnError> => (options?.client ?? client).get<ChunkCountsApiChunkCountsGetResponses, ChunkCountsApiChunkCountsGetErrors, ThrowOnError>({ url: '/api/chunk-counts', ...options });
 

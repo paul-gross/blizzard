@@ -1,21 +1,22 @@
-/* A routed container: the admin shell's body sizes it, and the master/detail frame fills it. */
+/* A routed container: the admin shell's body sizes it, and the master/detail frame fills it with two panels. */
 :host {
   display: flex;
   flex-direction: column;
   flex: 1;
   min-height: 0;
 }
-.new {
-  display: flex;
-  padding-bottom: 8px;
+.split {
+  --kit-master-detail-gap: 6px;
+  --kit-master-detail-divider: none;
+}
+.list-pane,
+.detail-pane {
+  flex: 1;
+  min-width: 0;
 }
 .foot {
   margin: 0;
   padding: 8px;
   color: var(--label-dim);
   font-size: var(--fs-sm);
-}
-.detail-pane {
-  min-width: 0;
-  padding: 8px 12px;
 }

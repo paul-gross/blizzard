@@ -9,7 +9,7 @@ import type {
 
 import { lensLink } from '../../core/project-lens';
 import { servingRunners } from '../../core/project-serving';
-import { GARDENING_DOORWAY_URL, GARDENING_FIRST_TAB } from '../core/garden-project';
+import { GARDENING_DOORWAY_URL, GARDENING_LANDING_TAB } from '../core/garden-project';
 import type { TenantResolution } from '../../core/auth/tenant-context';
 import { isGardenProposalWaiting, waitingLabel } from '../proposals/gardening-proposals-page.model';
 
@@ -23,7 +23,7 @@ export interface DoorwayCard {
   readonly projectId: string;
   readonly slug: string;
   readonly name: string;
-  /** The way into the project's garden: its first tab, under its lens. */
+  /** The way into the project's garden: its landing tab, under its lens. */
   readonly link: readonly unknown[];
   /** The names of the project's routines that are not retired, in the order the hub lists them. */
   readonly routines: readonly string[];
@@ -71,7 +71,7 @@ export function doorwayCards(reads: DoorwayReads): readonly DoorwayCard[] {
         projectId: id,
         slug: project.slug,
         name: project.name,
-        link: lensLink([GARDENING_DOORWAY_URL, GARDENING_FIRST_TAB], project.slug),
+        link: lensLink([GARDENING_DOORWAY_URL, GARDENING_LANDING_TAB], project.slug),
         routines: routines.map((routine) => routine.name),
         scopes: scopes.length,
         inProgress: runs.filter((run) => IN_PROGRESS.has(run.outcome)).length,

@@ -7,7 +7,7 @@ import { injectChildRouteParam } from '../../core/route-state';
 import { GardeningRunsState } from './gardening-runs-state';
 import { ProjectLens } from '../../core/project-lens';
 import { injectLensedProject } from '../../core/lensed-project';
-import { firstRowToOpen } from '../core/garden-first-row';
+import { firstRowToOpen } from '../../core/first-row';
 
 /**
  * The `/gardening/runs` sub-tab — the run list, beside a `<router-outlet>` holding

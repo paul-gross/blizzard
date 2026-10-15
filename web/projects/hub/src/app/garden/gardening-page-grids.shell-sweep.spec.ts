@@ -7,6 +7,7 @@ import { OPERATOR_ME_RESPONSE, settle, stubRequestClient } from 'fleet/testing';
 import { commands, page } from 'vitest/browser';
 
 import { GardeningFindingsPage } from './findings/gardening-findings-page';
+import { GardeningRoutinesPage } from './routines/gardening-routines-page';
 import { GardeningRunsPage } from './runs/gardening-runs-page';
 import { GardeningScopesPage } from './scopes/gardening-scopes-page';
 
@@ -154,6 +155,14 @@ const routes: Routes = [
     ],
   },
   {
+    path: 'gardening/routines',
+    component: GardeningRoutinesPage,
+    children: [
+      { path: '', component: TestGardeningDetail },
+      { path: ':routineName', component: TestGardeningDetail },
+    ],
+  },
+  {
     path: 'gardening/runs',
     component: GardeningRunsPage,
     children: [
@@ -171,11 +180,17 @@ const routes: Routes = [
   },
 ];
 
-async function render(url: string) {
+/** A read that never answers — the list stays on its loading state. */
+const NEVER = new Promise<never>(() => undefined);
+
+async function render(url: string, override: (method: string, path: string) => unknown = () => undefined) {
   const stub = stubRequestClient(hubClient, (method, path) => {
+    const overridden = override(method, path);
+    if (overridden !== undefined) return overridden;
     if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
     if (method === 'GET' && path === '/api/scopes') return SCOPES;
     if (method === 'GET' && path === '/api/routines') return ROUTINES;
+    if (method === 'GET' && path === '/api/graphs') return [];
     if (method === 'GET' && path === '/api/runs') return RUNS;
     if (method === 'GET' && path === '/api/findings') return { findings: FINDINGS, next_cursor: null };
     if (method === 'GET' && path === '/api/garden-proposals') return { proposals: [], next_cursor: null };
@@ -370,4 +385,103 @@ describe('gardening sub-tab layout shell sweep (web:shell-sweep)', () => {
       await page.viewport(1280, 800);
     }
   });
+
+  it.each([1280, 390])('scopes: dates each row relatively, or says the window holds no sweep, at %ipx', async (width) => {
+    const { fixture, router, stub, viewport } = await render('/gardening/scopes');
+    const root = fixture.nativeElement as HTMLElement;
+    document.body.appendChild(root);
+
+    try {
+      await page.viewport(width, 800);
+      if (width < 720) viewport.setOverride('mobile');
+      await router.navigateByUrl('/gardening/scopes');
+      await settle(fixture);
+
+      const swept = root.querySelector<HTMLElement>('[data-testid="gardening-scope-swept-blizzard"]')!;
+      expect(swept.tagName.toLowerCase()).toBe('fleet-when');
+      expect(swept.textContent).toMatch(/ago/);
+      expect(swept.getAttribute('title'), 'the relative time keeps its absolute tooltip').toBeTruthy();
+      expect(swept.getBoundingClientRect().width, `${width}px: the list is not on screen`).toBeGreaterThan(0);
+      const unswept = root.querySelector<HTMLElement>('[data-testid="gardening-scope-swept-web"]')!;
+      expect(unswept.textContent?.trim()).toBe('not in 28 days');
+      const row = root.querySelector<HTMLElement>('[data-testid="gardening-scope-row-web"]')!;
+      expect(unswept.getBoundingClientRect().right).toBeLessThanOrEqual(row.getBoundingClientRect().right + 1);
+      const left = root.querySelector<HTMLElement>('.gs-left')!;
+      expect(left.scrollWidth, `${width}px: scope list overflows horizontally`).toBeLessThanOrEqual(left.clientWidth);
+    } finally {
+      viewport.setOverride('auto');
+      root.remove();
+      stub.restore();
+      await page.viewport(1280, 800);
+    }
+  });
+
+  it.each([1280, 390])('routines: puts "manual" at the row\'s right and the graph beneath the name, at %ipx', async (width) => {
+    const { fixture, router, stub, viewport } = await render('/gardening/routines');
+    const root = fixture.nativeElement as HTMLElement;
+    document.body.appendChild(root);
+
+    try {
+      await page.viewport(width, 800);
+      if (width < 720) viewport.setOverride('mobile');
+      await router.navigateByUrl('/gardening/routines');
+      await settle(fixture);
+
+      const row = root.querySelector<HTMLElement>('[data-testid="gardening-routine-row-nightly"]')!;
+      const name = row.querySelector<HTMLElement>('.rt-name')!;
+      const cadence = row.querySelector<HTMLElement>('[data-testid="gardening-routine-cadence"]')!;
+      const graph = row.querySelector<HTMLElement>('.rt-graph')!;
+      expect(cadence.textContent?.trim()).toBe('manual');
+      expect(graph.textContent?.trim()).toBe('graph garden-routine');
+      expect(cadence.getBoundingClientRect().left).toBeGreaterThan(name.getBoundingClientRect().right);
+      expect(cadence.getBoundingClientRect().right).toBeLessThanOrEqual(row.getBoundingClientRect().right + 1);
+      expect(graph.getBoundingClientRect().top).toBeGreaterThanOrEqual(name.getBoundingClientRect().bottom - 1);
+    } finally {
+      viewport.setOverride('auto');
+      root.remove();
+      stub.restore();
+      await page.viewport(1280, 800);
+    }
+  });
+
+  const LIST_STATES = [
+    { tab: 'scopes', path: '/api/scopes', empty: [] as unknown[] },
+    { tab: 'routines', path: '/api/routines', empty: [] as unknown[] },
+  ] as const;
+  for (const { tab, path, empty } of LIST_STATES) {
+    it.each([1280, 390])(`${tab}: renders loading until the read answers, then the empty state, at %ipx`, async (width) => {
+      await page.viewport(width, 800);
+      const loading = await render(`/gardening/${tab}`, (method, p) => (method === 'GET' && p === path ? NEVER : undefined));
+      let root = loading.fixture.nativeElement as HTMLElement;
+      document.body.appendChild(root);
+      try {
+        if (width < 720) loading.viewport.setOverride('mobile');
+        await settle(loading.fixture);
+        expect(root.querySelector(`[data-testid="gardening-${tab}-loading"]`), `${width}px: no loading state`).not.toBeNull();
+        expect(root.querySelector(`[data-testid="gardening-${tab}-empty"]`), `${width}px: empty before the read`).toBeNull();
+      } finally {
+        loading.viewport.setOverride('auto');
+        root.remove();
+        loading.stub.restore();
+      }
+
+      TestBed.resetTestingModule();
+      const settled = await render(`/gardening/${tab}`, (method, p) => (method === 'GET' && p === path ? empty : undefined));
+      root = settled.fixture.nativeElement as HTMLElement;
+      document.body.appendChild(root);
+      try {
+        if (width < 720) settled.viewport.setOverride('mobile');
+        await settle(settled.fixture);
+        const shown = root.querySelector<HTMLElement>(`[data-testid="gardening-${tab}-empty"]`);
+        expect(shown, `${width}px: no empty state`).not.toBeNull();
+        expect(shown!.getBoundingClientRect().right).toBeLessThanOrEqual(width);
+        expect(root.querySelector(`[data-testid="gardening-${tab}-loading"]`)).toBeNull();
+      } finally {
+        settled.viewport.setOverride('auto');
+        root.remove();
+        settled.stub.restore();
+        await page.viewport(1280, 800);
+      }
+    });
+  }
 });

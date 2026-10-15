@@ -7,6 +7,7 @@ this seam declares no write half."""
 from __future__ import annotations
 
 from collections.abc import Sequence
+from datetime import datetime
 from typing import Protocol
 
 from blizzard.foundation.chunk_status import ChunkStatus
@@ -50,6 +51,13 @@ class IReadChunkFactsRepository(Protocol):
         Settled-terminal chunks are counted in the store query without being loaded
         (``bzh:live-set-read``); only the candidates a terminal fact doesn't already settle are
         derived per chunk."""
+        ...
+
+    def done_since_count(self, since: datetime, *, project: ProjectId | None = None) -> int:
+        """How many non-ephemeral chunks derive ``done`` with a completion instant at or after ``since`` — over the
+        set :meth:`status_counts` counts, or ``project``'s chunks of it. Settled-done chunks are counted in the
+        store query without being loaded (``bzh:live-set-read``); only the candidates a terminal fact doesn't
+        already settle are derived per chunk."""
         ...
 
     def status_facts_for(self, chunk_ids: Sequence[str]) -> dict[str, ChunkFacts]:

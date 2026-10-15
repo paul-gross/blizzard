@@ -1,35 +1,40 @@
-<nav fleetKitTabStrip class="subnav" data-testid="admin-subnav">
-  <a fleetKitTab routerLink="members" routerLinkActive="active" data-testid="admin-tab-members"
+<nav fleetKitTabStrip variant="sub" class="subnav" data-testid="admin-subnav">
+  <a fleetKitTab variant="sub" routerLink="members" routerLinkActive="active" data-testid="admin-tab-members"
     >Members
     @if (counts().members !== null) {
       <span class="cnt">{{ counts().members }}</span>
     }
   </a>
-  <a fleetKitTab routerLink="projects" routerLinkActive="active" data-testid="admin-tab-projects"
+  <a fleetKitTab variant="sub" routerLink="projects" routerLinkActive="active" data-testid="admin-tab-projects"
     >Projects
     @if (counts().projects !== null) {
       <span class="cnt">{{ counts().projects }}</span>
     }
   </a>
-  <a fleetKitTab routerLink="work-sources" routerLinkActive="active" data-testid="admin-tab-work-sources"
+  <a fleetKitTab variant="sub" routerLink="work-sources" routerLinkActive="active" data-testid="admin-tab-work-sources"
     >Work sources
     @if (counts().sources !== null) {
       <span class="cnt">{{ counts().sources }}</span>
     }
   </a>
-  <a fleetKitTab routerLink="repositories" routerLinkActive="active" data-testid="admin-tab-repositories"
+  <a fleetKitTab variant="sub" routerLink="repositories" routerLinkActive="active" data-testid="admin-tab-repositories"
     >Repositories
     @if (counts().repositories !== null) {
       <span class="cnt">{{ counts().repositories }}</span>
     }
   </a>
-  <a fleetKitTab routerLink="secrets" routerLinkActive="active" data-testid="admin-tab-secrets"
+  <a fleetKitTab variant="sub" routerLink="secrets" routerLinkActive="active" data-testid="admin-tab-secrets"
     >Secrets
     @if (counts().secrets !== null) {
       <span class="cnt">{{ counts().secrets }}</span>
     }
   </a>
-  <a fleetKitTab routerLink="changes" routerLinkActive="active" data-testid="admin-tab-changes">Changes</a>
+  <a fleetKitTab variant="sub" routerLink="changes" routerLinkActive="active" data-testid="admin-tab-changes"
+    >Changes
+    @if (counts().changes !== null) {
+      <span class="cnt">{{ counts().changes }}</span>
+    }
+  </a>
 </nav>
 <div class="body">
   <router-outlet />

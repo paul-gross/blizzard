@@ -67,6 +67,7 @@ const HISTORY = {
     {
       id: 7,
       actor: 'ada',
+      actor_name: 'Ada Lovelace',
       door: 'board',
       op: 'edit',
       record_key: 'proj_b',
@@ -83,17 +84,6 @@ const EDITOR = {
   ...OPERATOR_ME_RESPONSE,
   permissions: [...OPERATOR_ME_RESPONSE.permissions, 'config:edit', 'user:manage'],
 };
-const MEMBERS = [
-  {
-    user_id: 'ada',
-    display_name: 'Ada Lovelace',
-    username: 'ada',
-    email: null,
-    hub_admin: false,
-    role: 'admin',
-    created_at: '2026-10-01T00:00:00Z',
-  },
-];
 
 function lensOn(project: ProjectView | null) {
   const slug = project?.slug ?? null;
@@ -123,8 +113,7 @@ describe('ProjectDetail', () => {
       if (path === '/api/repositories') return REPOSITORIES;
       if (path === '/api/runners') return { runners };
       if (path === '/api/config/changes') return HISTORY;
-      if (path === '/api/members') return MEMBERS;
-      if (path === '/api/chunk-counts') return { ready: 2, running: 1, done: 4 };
+      if (path === '/api/chunk-counts') return { ready: 2, running: 1, done: 40, done_since: 4 };
       return {};
     });
     TestBed.configureTestingModule({
@@ -156,7 +145,7 @@ describe('ProjectDetail', () => {
     expect(text(el, 'admin-projects-detail')).toContain('Blizzard');
     expect(text(el, 'admin-projects-description')).toContain('The platform');
     expect(text(el, 'admin-projects-former-slugs')).toContain('default');
-    expect(text(el, 'admin-projects-queue')).toContain('2 ready · 1 running · 4 done');
+    expect(text(el, 'admin-projects-queue')).toContain('2 ready · 1 running · 4 done today');
     expect(text(el, 'admin-projects-draws')).toContain('jira');
     expect(text(el, 'admin-projects-draws')).toContain('jira · acme.atlassian.net');
     expect(text(el, 'admin-projects-lands')).toContain('No repository is linked');
@@ -167,11 +156,22 @@ describe('ProjectDetail', () => {
     expect(text(el, 'admin-projects-tab-repositories')).toContain('0');
   });
 
-  it('names who made each revision by their member name', async () => {
+  it("names who made each revision by the hub's name for them", async () => {
     const { el } = await open('/admin/projects/proj_b');
     expect(text(el, 'admin-projects-last-change')).toContain('by Ada Lovelace via board');
     expect(text(el, 'admin-projects-revisions')).toContain('Ada Lovelace via board');
     expect(text(el, 'admin-projects-revisions')).not.toContain('ada via');
+    expect(stub.forRoute('/api/members')).toHaveLength(0);
+  });
+
+  it("asks for today's done from the browser's local midnight", async () => {
+    await open('/admin/projects/proj_b');
+    const now = new Date();
+    const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+    const reads = stub.forRoute('/api/chunk-counts');
+    const search = new URLSearchParams(reads.at(-1)?.search ?? '');
+    expect(search.get('project')).toBe('blizzard');
+    expect(search.get('done_since')).toBe(midnight);
   });
 
   it('opens the Linked sources tab from its overview card, where the links are edited', async () => {

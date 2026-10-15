@@ -8,7 +8,7 @@ import { injectChildRouteParam } from '../../core/route-state';
 import { presentScopeSlug, scopeRows } from './gardening-scopes-page.model';
 import { ProjectLens } from '../../core/project-lens';
 import { injectLensedProject } from '../../core/lensed-project';
-import { firstRowToOpen } from '../core/garden-first-row';
+import { firstRowToOpen } from '../../core/first-row';
 import { defaultRoutineWindow } from '../core/routine-window';
 import { injectHubRunsQuery } from '../runs/garden-runs.query';
 
@@ -70,7 +70,7 @@ export class GardeningScopesPage {
     void this.router.navigate(this.lens.link(['/gardening', 'scopes']), { queryParamsHandling: 'preserve' });
   }
 
-  protected readonly scopeRows = computed<readonly ScopeRowVm[]>(() => scopeRows(this.scopes(), this.runsQuery.data() ?? []));
+  protected readonly scopeRows = computed<readonly ScopeRowVm[]>(() => scopeRows(this.scopes(), this.runsQuery.data(), this.window));
 
   protected readonly scopesState = computed<KitAsyncStateValue>(() =>
     asyncState(this.scopesQuery, this.scopeRows().length === 0),

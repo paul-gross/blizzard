@@ -8,8 +8,10 @@ import {
   lastSweptRows,
   measurementReadings,
   proposalCountsRows,
+  routineRecentRuns,
   relatedScopeRows,
   routineByName,
+  routineGraphEdit,
   routineEffectiveGraph,
   routineOverrideRetired,
   routinePanelState,
@@ -20,11 +22,14 @@ import { FleetRoutineProposalCounts, type ProposalCountsRowVm } from './routine-
 import { hasPermission, injectMeQuery } from '../../core/auth/me.query';
 import { injectHubGraphQuery, injectHubGraphsQuery } from '../../graphs/graphs.query';
 import { injectHubRoutineProposalCountsQuery, injectHubRoutineScopesQuery, injectHubRoutineSweepsQuery, injectHubRoutineTrendQuery, injectHubRoutinesQuery } from '../core/routines.query';
+import { injectEditRoutineMutation, type RoutineEditVars } from './routine-edit.mutations';
 import { injectRoutineLifecycleMutation, type RoutineLifecycleVars } from './routine-lifecycle.mutations';
-import { routineLifecycleMutationKey } from '../../core/mutation-keys';
+import { editRoutineMutationKey, routineLifecycleMutationKey } from '../../core/mutation-keys';
 import { map } from 'rxjs';
 
 import { isRoutineBlocked } from './gardening-effective-graph';
+import { injectLensedProject } from '../../core/lensed-project';
+import { injectHubRunsQuery } from '../runs/garden-runs.query';
 import { GardeningRunDialog } from '../runs/gardening-run-dialog';
 
 /**
@@ -32,8 +37,8 @@ import { GardeningRunDialog } from '../runs/gardening-run-dialog';
  * `/gardening/routines` (`gardening-routines-page.ts` owns the list beside it):
  * the record, its read-only strategy, its three health readings, and its
  * garden-proposal counts. Mounted by both of that route's children,
- * so the bare one renders the panel's own "nothing selected" empty state. It ships
- * no New/Edit affordance here.
+ * so the bare one renders the panel's own "nothing selected" empty state. Edit sets
+ * the graph the routine runs, gated on `graph:edit` like the scope detail's own Edit.
  *
  * A container: it injects the routine, graph, trend, sweeps, scopes, and
  * proposal-counts queries and forwards a plain view model to the presentational
@@ -63,6 +68,10 @@ export class GardeningRoutineDetail {
   private readonly graphsQuery = injectHubGraphsQuery();
   private readonly meQuery = injectMeQuery();
   private readonly routineLifecycleMutation = injectRoutineLifecycleMutation();
+  private readonly editRoutineMutation = injectEditRoutineMutation();
+
+  /** Every routine id a graph edit is currently pending for. */
+  private readonly pendingRoutineEdits = injectPendingMutationVariables<RoutineEditVars>(editRoutineMutationKey);
 
   /** Every routine id a Retire/Enable mutation is currently pending for, and its own
    * variables (`bzh:frontend-pending-override`) — `GardeningScopeDetail`'s own
@@ -75,6 +84,14 @@ export class GardeningRoutineDetail {
   private readonly window = defaultRoutineWindow(inject(FLEET_CLOCK)());
 
   private readonly routines = computed<readonly RoutineView[]>(() => this.routinesQuery.data() ?? []);
+
+  private readonly project = injectLensedProject();
+
+  /** The project the routine belongs to, for the chip beside its name. */
+  protected readonly projectName = computed(() => this.project()?.name ?? null);
+
+  /** The project's runs in the reporting window — the selected routine's recent runs and its Runs count. */
+  private readonly runsQuery = injectHubRunsQuery(() => this.window.since);
   private readonly graphs = computed<readonly GraphSummaryView[]>(() => this.graphsQuery.data() ?? []);
 
   /** The `routineName` route param, or `null` on the bare child route. Routines are
@@ -97,7 +114,7 @@ export class GardeningRoutineDetail {
     return routine !== null && isRoutineBlocked(this.graphs(), this.graphsQuery.isPending(), routine.graph_name);
   });
 
-  /** Whether the current identity may retire/enable a routine (`graph:edit`, the
+  /** Whether the current identity may edit or retire/enable a routine (`graph:edit`, the
    * scope panel's own permission) — `null`/pending resolves to `false`,
    * `GardeningScopeDetail.canEditScopes`'s own shape. */
   protected readonly canEdit = computed(() => hasPermission(this.meQuery.data(), 'graph:edit'));
@@ -158,6 +175,14 @@ export class GardeningRoutineDetail {
     asyncState(this.proposalCountsQuery, (this.proposalCountsQuery.data()?.rows.length ?? 0) === 0),
   );
 
+  private readonly recentRuns = computed(() =>
+    routineRecentRuns(this.runsQuery.data(), this.selectedRoutine()?.name ?? null),
+  );
+
+  private readonly recentRunsState = computed<KitAsyncStateValue>(() =>
+    asyncState(this.runsQuery, (this.recentRuns()?.length ?? 0) === 0),
+  );
+
   protected readonly panelVm = computed<RoutinePanelVm | null>(() =>
     routinePanelVm(this.selectedRoutine(), {
       blocked: this.blocked(),
@@ -168,6 +193,8 @@ export class GardeningRoutineDetail {
       windowLabel: this.window.label,
       relatedScopes: this.relatedScopes(),
       overrideRetired: this.overrideRetired(),
+      recentRuns: this.recentRuns(),
+      recentRunsState: this.recentRunsState(),
     }),
   );
 
@@ -200,7 +227,7 @@ export class GardeningRoutineDetail {
     this.runningRoutine.set(null);
   }
 
-  /** Set on a failed retire/enable; cleared at the start of the next attempt —
+  /** Set on a failed edit/retire/enable; cleared at the start of the next attempt —
    * `GardeningScopeDetail.scopeActionError`'s own shape. */
   protected readonly lifecycleActionError = signal<string | null>(null);
 
@@ -210,6 +237,20 @@ export class GardeningRoutineDetail {
   protected readonly lifecyclePending = computed(() =>
     isPendingFor(this.pendingRoutineLifecycle(), (v) => v.routineId === this.selectedRoutine()?.routine_id),
   );
+
+  /** Whether a graph edit is in flight for the selected routine — disables the editor's Set. */
+  protected readonly editPending = computed(() =>
+    isPendingFor(this.pendingRoutineEdits(), (v) => v.routineId === this.selectedRoutine()?.routine_id),
+  );
+
+  protected onEditGraph(graphName: string): void {
+    const vars = routineGraphEdit(this.selectedRoutine(), graphName);
+    if (vars === null) return;
+    this.lifecycleActionError.set(null);
+    this.editRoutineMutation.mutate(vars, {
+      onError: (error: unknown) => this.lifecycleActionError.set(errorMessage(error, 'Set graph failed.')),
+    });
+  }
 
   protected onRetireRoutine(name: string): void {
     const routineId = this.routines().find((r) => r.name === name)?.routine_id;

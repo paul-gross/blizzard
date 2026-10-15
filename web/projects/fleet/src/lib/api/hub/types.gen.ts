@@ -981,6 +981,10 @@ export type ChunkCountsView = {
      */
     done: number;
     /**
+     * Done Since
+     */
+    done_since?: number | null;
+    /**
      * Needs Human
      */
     needs_human: number;
@@ -1969,6 +1973,10 @@ export type ConfigChangeView = {
      */
     actor: string;
     /**
+     * Actor Name
+     */
+    actor_name?: string | null;
+    /**
      * Apply Id
      */
     apply_id?: string | null;
@@ -2028,6 +2036,10 @@ export type ConfigChangesPage = {
      * Next Before
      */
     next_before?: number | null;
+    /**
+     * Total
+     */
+    total?: number;
 };
 
 /**
@@ -10939,6 +10951,10 @@ export type ChunkCountsApiChunkCountsGetData = {
     body?: never;
     path?: never;
     query?: {
+        /**
+         * Done Since
+         */
+        done_since?: string | null;
         /**
          * Project
          */

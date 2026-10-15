@@ -10,5 +10,7 @@ describe('defaultRoutineWindow', () => {
     expect(window.since).toBe('2026-01-01T00:00:00.000Z');
     expect(window.introducedBoundary).toBe(window.since);
     expect(window.periodDays).toBe(7);
+    expect(window.days).toBe(28);
+    expect(window.label).toBe('last 28 days');
   });
 });

@@ -413,7 +413,7 @@ describe('the views under the project lens', () => {
     ['/p/blizzard', '/p/blizzard/board'],
     ['/p/blizzard/board', '/p/blizzard/board'],
     ['/p/blizzard/graphs', '/p/blizzard/graphs'],
-    ['/p/blizzard/gardening', '/p/blizzard/gardening/runs'],
+    ['/p/blizzard/gardening', '/p/blizzard/gardening/proposals'],
     ['/p/blizzard/admin', '/p/blizzard/admin/members'],
     ['/p/blizzard/admin/users', '/p/blizzard/admin/members'],
     ['/p/blizzard/fleet', '/p/blizzard/board'],

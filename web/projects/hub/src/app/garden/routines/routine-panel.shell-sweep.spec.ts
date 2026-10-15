@@ -45,8 +45,7 @@ const VM: RoutinePanelVm = {
     name: 'nightly',
     graphName: 'garden-routine',
     defaultScopeSlug: 'blizzard',
-    defaultModel: ['claude-sonnet-5'],
-    defaultEffort: 'medium',
+    modelEffort: 'claude-sonnet-5 · medium',
   },
   blockedReason: null,
   strategy: [
@@ -70,16 +69,29 @@ const VM: RoutinePanelVm = {
   relatedScopes: [{ slug: 'blizzard', isDefault: true }],
   retired: false,
   renderedRetired: false,
+  recentRuns: [
+    {
+      chunkId: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9',
+      scopeSlug: 'a-scope-with-a-long-slug-that-must-wrap-inside-its-row',
+      mode: 'delta',
+      findings: 3,
+      mintedAt: '2026-01-10T00:00:00Z',
+    },
+    { chunkId: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJA', scopeSlug: 'blizzard', mode: 'full', findings: 0, mintedAt: '2026-01-03T00:00:00Z' },
+  ],
+  recentRunsState: 'ready',
+  runsLabel: '2 in the last 28 days',
 };
 
-async function render(vm: RoutinePanelVm = VM, canEdit = false) {
+async function render(vm: RoutinePanelVm | null = VM, canEdit = false, state: 'loading' | 'empty' | 'ready' = 'ready') {
   await TestBed.configureTestingModule({
     imports: [FleetRoutinePanel],
     providers: [provideZonelessChangeDetection()],
   }).compileComponents();
   const fixture = TestBed.createComponent(FleetRoutinePanel);
-  fixture.componentRef.setInput('state', 'ready');
+  fixture.componentRef.setInput('state', state);
   fixture.componentRef.setInput('vm', vm);
+  fixture.componentRef.setInput('project', 'Blizzard');
   fixture.componentRef.setInput('canEdit', canEdit);
   await fixture.whenStable();
   return fixture;
@@ -107,6 +119,8 @@ describe('gardening routine panel layout shell sweep (web:shell-sweep, blizzard#
 
       const blockIds = [
         'gardening-routine-record',
+        'gardening-routine-record-facts',
+        'gardening-routine-recent-runs',
         'gardening-routine-scopes',
         'gardening-routine-strategy',
         'gardening-routine-trend',
@@ -150,20 +164,21 @@ describe('gardening routine record label column shell sweep (web:shell-sweep)', 
       await page.viewport(width, 900);
       await new Promise((resolve) => requestAnimationFrame(resolve));
 
-      // `default scope`/`default model`/`default effort` are all wider than the kit
-      // fact grid's own 74px label column and wrapped to a second line against it —
-      // `routine-panel.css` sizes this list's column to `max-content` instead. Line
-      // count is what the fix is about, so the claim is that every label is exactly
-      // as tall as the shortest one (`graph`, one line at any width): a wrapped
-      // label is taller, and jsdom lays out text without ever measuring it.
+      // `Default scope` and `Model · effort` are wider than the kit fact grid's own
+      // label column and would wrap to a second line against it — `routine-panel.css`
+      // sizes this list's column to `max-content` instead. Line count is what the fix
+      // is about, so the claim is that every label is exactly as tall as the shortest
+      // one (`Graph`, one line at any width): a wrapped label is taller, and jsdom lays
+      // out text without ever measuring it.
       const labels = Array.from(
         root.querySelectorAll<HTMLElement>('[data-testid="gardening-routine-record-facts"] dt'),
       );
       expect(labels.map((l) => l.textContent?.trim())).toEqual([
-        'graph',
-        'default scope',
-        'default model',
-        'default effort',
+        'Graph',
+        'Default scope',
+        'Model · effort',
+        'Cadence',
+        'Runs',
       ]);
       const heights = labels.map((l) => l.getBoundingClientRect().height);
       expect(
@@ -224,6 +239,86 @@ describe('gardening routine panel lifecycle controls shell sweep (web:shell-swee
       const state = root.querySelector<HTMLElement>('[data-testid="gardening-routine-panel-state"]')!;
       expect(state.textContent?.trim()).toBe('enabled');
       expect(getComputedStyle(state.querySelector<HTMLElement>('.badge')!).color).toBe(tokenColor('--cyan'));
+    } finally {
+      root.remove();
+    }
+  });
+});
+
+describe('gardening routine detail header shell sweep (web:shell-sweep)', () => {
+  it.each([1280, 390])('holds the name, project chip, Run…, Edit and Retire, all on screen, at %ipx', async (width) => {
+    const fixture = await render(VM, true);
+    const root = fixture.nativeElement as HTMLElement;
+    document.body.appendChild(root);
+    await fixture.whenStable();
+
+    try {
+      await page.viewport(width, 900);
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+
+      const record = root.querySelector<HTMLElement>('[data-testid="gardening-routine-record"]')!;
+      const parts = [
+        record.querySelector('h3'),
+        record.querySelector('[data-testid="gardening-routine-panel-project"]'),
+        record.querySelector('[data-testid="gardening-routine-run"]'),
+        record.querySelector('[data-testid="gardening-routine-panel-edit"]'),
+        record.querySelector('[data-testid="gardening-routine-panel-retire"]'),
+      ];
+      for (const part of parts) {
+        expect(part, `a header part is missing at ${width}px`).not.toBeNull();
+        expect(part!.getBoundingClientRect().right).toBeLessThanOrEqual(width);
+      }
+      if (width >= 1280) {
+        const top = parts[0]!.getBoundingClientRect().top;
+        for (const part of parts) expect(Math.abs(part!.getBoundingClientRect().top - top)).toBeLessThan(12);
+      }
+      expect(record.scrollWidth).toBeLessThanOrEqual(record.clientWidth);
+
+      record.querySelector<HTMLButtonElement>('[data-testid="gardening-routine-panel-edit"]')!.click();
+      await fixture.whenStable();
+      const editor = root.querySelector<HTMLElement>('[data-testid="gardening-routine-panel-graph-input"]');
+      expect(editor, `the graph editor did not open at ${width}px`).not.toBeNull();
+      expect(editor!.getBoundingClientRect().right).toBeLessThanOrEqual(width);
+      const facts = root.querySelector<HTMLElement>('[data-testid="gardening-routine-record-facts"]')!;
+      expect(facts.scrollWidth, `the open editor overflows at ${width}px`).toBeLessThanOrEqual(facts.clientWidth);
+
+      const recent = root.querySelector<HTMLElement>('[data-testid="gardening-routine-recent-runs"]')!;
+      expect(recent.querySelectorAll('li')).toHaveLength(2);
+      expect(recent.scrollWidth, `recent runs overflow at ${width}px`).toBeLessThanOrEqual(recent.clientWidth);
+    } finally {
+      root.remove();
+    }
+  });
+
+  it.each([1280, 390])('renders the loading, nothing-selected and no-runs states on their own at %ipx', async (width) => {
+    const fixture = await render(null, false, 'loading');
+    const root = fixture.nativeElement as HTMLElement;
+    document.body.appendChild(root);
+    await fixture.whenStable();
+
+    try {
+      await page.viewport(width, 900);
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      expect(root.querySelector('[data-testid="gardening-routine-panel-empty"]')).toBeNull();
+      expect(root.querySelector('[data-testid="gardening-routine-record"]')).toBeNull();
+
+      fixture.componentRef.setInput('state', 'empty');
+      await fixture.whenStable();
+      const empty = root.querySelector<HTMLElement>('[data-testid="gardening-routine-panel-empty"]')!;
+      expect(empty.getBoundingClientRect().right).toBeLessThanOrEqual(width);
+
+      fixture.componentRef.setInput('state', 'ready');
+      fixture.componentRef.setInput('vm', { ...VM, recentRuns: null, recentRunsState: 'loading', runsLabel: null });
+      await fixture.whenStable();
+      expect(root.querySelector('[data-testid="gardening-routine-recent-runs-loading"]')).not.toBeNull();
+      expect(root.querySelector('[data-testid="gardening-routine-recent-runs-empty"]')).toBeNull();
+      expect(root.querySelector('[data-testid="gardening-routine-fact-runs"]')?.textContent).toContain('…');
+
+      fixture.componentRef.setInput('vm', { ...VM, recentRuns: [], recentRunsState: 'empty', runsLabel: '0 in the last 28 days' });
+      await fixture.whenStable();
+      const none = root.querySelector<HTMLElement>('[data-testid="gardening-routine-recent-runs-empty"]')!;
+      expect(none.textContent).toContain('No runs in the last 28 days.');
+      expect(none.getBoundingClientRect().right).toBeLessThanOrEqual(width);
     } finally {
       root.remove();
     }

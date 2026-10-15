@@ -44,7 +44,12 @@ from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_decisions_store import decision_closure_ids
 from blizzard.hub.store.internal.chunk_rows import ephemeral_ids_select, graph_id_of_batch
-from blizzard.hub.store.internal.chunk_terminal_predicates import maybe_live, settled_done, settled_stopped
+from blizzard.hub.store.internal.chunk_terminal_predicates import (
+    done_completed_at,
+    maybe_live,
+    settled_done,
+    settled_stopped,
+)
 from blizzard.hub.store.scoped import ScopedConnections, ScopedStatements, statements_of
 
 #: Every fact family `ChunkFacts` carries — the default selection for `load_facts` and kin.
@@ -235,6 +240,33 @@ class ChunkFactsStore:
         counts[ChunkStatus.STOPPED] += stopped
         counts[ChunkStatus.DONE] += done
         return {status: counts[status] for status in ChunkStatus}
+
+    def done_since_count(self, since: datetime, *, project: ProjectId | None = None) -> int:
+        """See :meth:`~blizzard.hub.domain.chunk.ports.facts.IReadChunkFactsRepository.done_since_count` —
+        the settled-done chunks finishing at or after ``since`` are counted in SQL
+        (:func:`settled_done`, :func:`done_completed_at`); the :func:`maybe_live` residue that derives ``done``
+        resolves its instant through :meth:`ChunkFacts.completed_at`."""
+        counted = s.chunks.c.chunk_id.not_in(ephemeral_ids_select(self._store))
+        if project is not None:
+            counted = and_(s.chunks.c.project_id == project, counted)
+        with self._store.read("done_since_count") as conn:
+            settled = conn.execute(
+                self._store.select(s.chunks, func.count()).where(
+                    counted, settled_done(self._store), done_completed_at(self._store) >= since
+                )
+            ).scalar_one()
+            candidates = self._store.select(s.chunks, s.chunks.c.chunk_id).where(
+                maybe_live(self._store), s.chunks.c.chunk_id.not_in(ephemeral_ids_select(self._store))
+            )
+            if project is not None:
+                candidates = candidates.where(s.chunks.c.project_id == project)
+            facts_by_id = self._load(conn, [r.chunk_id for r in conn.execute(candidates)], families=_STATUS_FAMILIES)
+        residue = 0
+        for facts in facts_by_id.values():
+            finished = facts.completed_at() if facts.status() is ChunkStatus.DONE else None
+            if finished is not None and finished >= since:
+                residue += 1
+        return settled + residue
 
     def _maybe_live_statuses(self, conn, project: ProjectId | None = None) -> dict[str, ChunkStatus]:  # type: ignore[no-untyped-def]
         """Every :func:`maybe_live` candidate's derived status, terminal ones included — the

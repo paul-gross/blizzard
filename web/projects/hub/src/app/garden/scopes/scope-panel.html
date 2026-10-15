@@ -1,7 +1,7 @@
 <fleet-kit-async-state
   [state]="state()"
   placement="inline"
-  emptyText="Select a scope to see its description, lifecycle, and defaulting routines."
+  emptyText="Select a scope to see its description, lifecycle, and the routines that tend it."
   emptyTestid="gardening-scope-panel-empty"
 >
   @let panel = vm();
@@ -12,74 +12,106 @@
         @if (project(); as projectName) {
           <span class="sp-project" data-testid="gardening-scope-panel-project">{{ projectName }}</span>
         }
-        <span class="sp-grow"></span>
         <fleet-kit-badge data-testid="gardening-scope-panel-state" [tone]="lifecycleTone(panel.renderedRetired)">{{
           panel.renderedRetired ? 'retired' : 'enabled'
         }}</fleet-kit-badge>
+        <span class="sp-grow"></span>
+        <!-- The lifecycle control shown stays keyed off the real `panel.retired`, not
+             `panel.renderedRetired` — a pending Retire/Enable's own predicted outcome
+             must never flip which verb the next click would fire
+             (`graph-detail-header.html`'s own control-choice comment). -->
+        @if (canEdit()) {
+          <span class="sp-actions">
+            <fleet-kit-button
+              testid="gardening-scope-panel-edit"
+              [disabled]="isEditing(panel)"
+              (click)="startEditing(panel)"
+            >
+              Edit
+            </fleet-kit-button>
+            @if (panel.retired) {
+              <fleet-kit-button
+                variant="primary"
+                testid="gardening-scope-panel-enable"
+                [disabled]="lifecyclePending()"
+                (click)="onEnable()"
+              >
+                Re-enable
+              </fleet-kit-button>
+            } @else {
+              <fleet-kit-button
+                variant="danger"
+                testid="gardening-scope-panel-retire"
+                [disabled]="lifecyclePending()"
+                (click)="onRetire()"
+              >
+                Retire
+              </fleet-kit-button>
+            }
+          </span>
+        }
       </header>
-
-      @if (canEdit()) {
-        <span class="sp-edit">
-          <fleet-kit-text-input
-            class="edit-input"
-            [value]="descriptionValue(panel)"
-            testid="gardening-scope-panel-description-input"
-            [ariaLabel]="'Set description for scope ' + panel.slug"
-            (valueChange)="updateDescription(panel, $event)"
-          />
-          <fleet-kit-button
-            testid="gardening-scope-panel-description-submit"
-            [disabled]="editPending()"
-            (click)="submitDescription(descriptionValue(panel))"
-          >
-            Set
-          </fleet-kit-button>
-        </span>
-      } @else {
-        <p class="sp-description">{{ panel.description || '—' }}</p>
-      }
-
-      <!-- The control shown stays keyed off the real `panel.retired`, not
-           `panel.renderedRetired` — a pending Retire/Enable's own predicted outcome
-           must never flip which verb the next click would fire
-           (`graph-detail-header.html`'s own control-choice comment). -->
-      @if (canEdit()) {
-        <div class="sp-actions">
-          @if (panel.retired) {
-            <fleet-kit-button
-              size="cta"
-              testid="gardening-scope-panel-enable"
-              [disabled]="lifecyclePending()"
-              (click)="onEnable()"
-            >
-              Re-enable
-            </fleet-kit-button>
-          } @else {
-            <fleet-kit-button
-              variant="danger"
-              size="cta"
-              testid="gardening-scope-panel-retire"
-              [disabled]="lifecyclePending()"
-              (click)="onRetire()"
-            >
-              Retire
-            </fleet-kit-button>
-          }
-        </div>
-      }
 
       @if (actionError(); as err) {
         <p class="sp-error" data-testid="gardening-scope-panel-error">{{ err }}</p>
       }
 
+      <ng-template #descriptionFact>
+        @if (isEditing(panel)) {
+          <span class="sp-edit">
+            <fleet-kit-text-input
+              class="edit-input"
+              [value]="descriptionValue(panel)"
+              testid="gardening-scope-panel-description-input"
+              [ariaLabel]="'Set description for scope ' + panel.slug"
+              (valueChange)="updateDescription(panel, $event)"
+            />
+            <fleet-kit-button
+              variant="primary"
+              testid="gardening-scope-panel-description-submit"
+              [disabled]="editPending()"
+              (click)="submitDescription(descriptionValue(panel))"
+            >
+              Set
+            </fleet-kit-button>
+            <fleet-kit-button testid="gardening-scope-panel-description-cancel" (click)="stopEditing()">
+              Cancel
+            </fleet-kit-button>
+          </span>
+        } @else {
+          <span class="sp-description">{{ panel.description || '—' }}</span>
+        }
+      </ng-template>
+      <ng-template #lastSweptFact>
+        @if (panel.swept; as swept) {
+          @if (swept.at; as at) {
+            <fleet-when [iso]="at" [relative]="true" />
+          } @else {
+            <span class="sp-unswept">{{ swept.notSwept }}</span>
+          }
+        } @else {
+          <span class="sp-unswept">…</span>
+        }
+      </ng-template>
+      <fleet-kit-fact-list
+        class="sp-facts"
+        testid="gardening-scope-panel-facts"
+        [rows]="factRows(descriptionFact, lastSweptFact)"
+      />
+
       @if (panel.relatedRoutines; as relatedRoutines) {
         <section class="sp-routines" data-testid="gardening-scope-panel-routines">
-          <h4>Related routines</h4>
+          <h4>Tended by</h4>
           @if (relatedRoutines.length) {
             <ul>
               @for (routine of relatedRoutines; track routine.name) {
                 <li>
-                  {{ routine.name }}
+                  <a
+                    class="sp-routine-link"
+                    [routerLink]="['/gardening', 'routines', routine.name] | lensLink"
+                    [attr.data-testid]="'gardening-scope-panel-routine-' + routine.name"
+                    >{{ routine.name }}</a
+                  >
                   @if (routine.isDefault) {
                     <fleet-kit-badge tone="spawning" variant="pill" data-testid="gardening-scope-panel-routine-default">
                       default
@@ -89,7 +121,7 @@
               }
             </ul>
           } @else {
-            <p>No routine is related to this scope.</p>
+            <p data-testid="gardening-scope-panel-routines-none">No routine tends this scope.</p>
           }
         </section>
       }

@@ -45,6 +45,34 @@ export function formatWhen(iso: string, now: Date): string {
   return `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())}`;
 }
 
+/** Plain-language distance between an instant and `now`, past or future —
+ * `just now` inside a minute either way, then `5 minutes ago` / `in 5 minutes`,
+ * hours, `yesterday` / `tomorrow`, days, weeks, months, years. Each unit is the
+ * whole count of elapsed units, floored. Empty string for an unparseable input.
+ *
+ * `now` is the caller's clock reading (see {@link formatWhen}). */
+export function formatRelative(iso: string, now: Date): string {
+  const ms = Date.parse(iso);
+  if (Number.isNaN(ms)) return '';
+  const delta = now.getTime() - ms;
+  const future = delta < 0;
+  const minutes = Math.floor(Math.abs(delta) / 60_000);
+  if (minutes < 1) return 'just now';
+  const phrase = (n: number, unit: string): string => {
+    const counted = `${n} ${unit}${n === 1 ? '' : 's'}`;
+    return future ? `in ${counted}` : `${counted} ago`;
+  };
+  if (minutes < 60) return phrase(minutes, 'minute');
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return phrase(hours, 'hour');
+  const days = Math.floor(hours / 24);
+  if (days === 1) return future ? 'tomorrow' : 'yesterday';
+  if (days < 7) return phrase(days, 'day');
+  if (days < 30) return phrase(Math.floor(days / 7), 'week');
+  if (days < 365) return phrase(Math.floor(days / 30), 'month');
+  return phrase(Math.floor(days / 365), 'year');
+}
+
 /** The full local date + time behind a short {@link formatWhen}/
  * {@link formatLocalClockWithDay} stamp — a hover tooltip's text, so a
  * board reader can always reach the precise instant a short form necessarily drops.

@@ -120,6 +120,13 @@
  *     projects table: with a project name, slug and description of any length
  *     and the "no runner" badge showing, the page never scrolls sideways at
  *     360/768/1280px and the badge stays on screen.
+ *   - projects/hub/src/app/admin/admin-shell.shell-sweep.spec.ts — Admin →
+ *     Projects through the real shell: the cyan-active sub strip with its counts
+ *     in --snow (Changes by the log's total), list and project in two panels 6px
+ *     apart, the first project opened on desktop and the list kept at 390px.
+ *   - projects/hub/src/app/admin/projects/project-detail.shell-sweep.spec.ts — the
+ *     project overview's loading and empty states at 1280/390px: no project
+ *     picked, queue and revisions held back while in flight, no revisions.
  *   - projects/hub/src/app/garden/garden-runs.shell-sweep.spec.ts — the
  *     gardening runs-and-findings tab's two presentational components
  *     (blizzard#401 Phase 3): `FleetRunList`'s escalated row carries a
@@ -253,6 +260,9 @@
  *     pane, sized to `--master-list-col`, at 1024px, and genuinely stacks above it with
  *     no horizontal overflow at 390/320px — the `@media (min-width: 720px)` row/column
  *     flip jsdom cannot resolve.
+ *   - projects/fleet/src/lib/kit/kit-tabs.shell-sweep.spec.ts — the kit tab strip's
+ *     sub variant renders 30px tall on `--panel-deep` with a cyan active tab, beside
+ *     the 32px amber-active top strip, at 1280px and 390px.
  *   - projects/fleet/src/lib/transcripts/chunk-transcripts-provenance.shell-sweep.spec.ts —
  *     two transcript segments recording distinct harnesses (blizzard#441) render two
  *     genuinely distinct provenance badges with no horizontal overflow at 390px.
@@ -281,6 +291,10 @@
  *     gardening doorway on All: one card per project reflows to a single column at
  *     phone widths with no horizontal overflow, a long project name or routine list
  *     wraps inside its card, and every card's way in stays on screen.
+ *   - projects/hub/src/app/garden/gardening-page.shell-sweep.spec.ts — a project's
+ *     garden page: a bare gardening path lands on Proposals, the gardening strip wears
+ *     the kit's sub-strip, the Proposals count is amber while any wait, and the strip
+ *     scrolls inside itself at a phone width.
  */
 
 const { spawnSync } = require('node:child_process');
@@ -312,6 +326,8 @@ const SWEEPS = [
   { project: 'hub', spec: 'projects/hub/src/app/admin/admin-config.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/admin/members/members-table.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/admin/projects/projects-table.shell-sweep.spec.ts' },
+  { project: 'hub', spec: 'projects/hub/src/app/admin/admin-shell.shell-sweep.spec.ts' },
+  { project: 'hub', spec: 'projects/hub/src/app/admin/projects/project-detail.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/garden/garden-runs.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/garden/findings/finding-fact-timeline.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/garden/routines/gardening-routines-page.shell-sweep.spec.ts' },
@@ -319,6 +335,7 @@ const SWEEPS = [
   { project: 'fleet', spec: 'projects/fleet/src/lib/kit/kit-select.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/kit/kit-confirm-dialog.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/kit/kit-tooltip.shell-sweep.spec.ts' },
+  { project: 'fleet', spec: 'projects/fleet/src/lib/kit/kit-tabs.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/garden/runs/gardening-run-dialog.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/garden/proposals/gardening-proposals-page.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/garden/proposals/gardening-proposal-pass-dialog.shell-sweep.spec.ts' },
@@ -348,6 +365,7 @@ const SWEEPS = [
   { project: 'hub', spec: 'projects/hub/src/app/core/auth/tenant-picker.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/shell/nav/project-lens-control.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/garden/doorway/gardening-doorway.shell-sweep.spec.ts' },
+  { project: 'hub', spec: 'projects/hub/src/app/garden/gardening-page.shell-sweep.spec.ts' },
 ];
 
 /** Every `*.shell-sweep.spec.ts` under `projects/`, repo-relative and POSIX-separated.

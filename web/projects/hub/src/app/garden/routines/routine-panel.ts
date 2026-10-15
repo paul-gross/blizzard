@@ -1,19 +1,41 @@
-import { ChangeDetectionStrategy, Component, input, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, type TemplateRef, input, output, signal } from '@angular/core';
 
-import { KitAsyncState, type KitAsyncStateValue, KitBadge, KitButton, KitConfirmDialog, KitFactList, type KitFact, KitPanel, KitProseBlock, FleetWhen } from 'fleet';
+import {
+  compactRef,
+  FleetWhen,
+  KitAsyncState,
+  type KitAsyncStateValue,
+  KitBadge,
+  KitButton,
+  KitConfirmDialog,
+  type KitFact,
+  KitFactList,
+  KitPanel,
+  KitProseBlock,
+  KitTextInput,
+} from 'fleet';
 
 import { lifecycleTone } from '../../core/lifecycle-tone';
 
-/** The routine's own record — read-only: this panel ships no New/Edit
- * affordance. `RoutineView` also carries `routine_id`/`created_at`, neither
+/** The routine's own record — its graph alone is editable here. `RoutineView` also carries `routine_id`/`created_at`, neither
  * displayed here — identity is the list's own compact ref (`RoutineListRowVm`),
  * and `created_at` earns no row of its own on this record. */
 export interface RoutineRecordVm {
   readonly name: string;
   readonly graphName: string;
   readonly defaultScopeSlug: string;
-  readonly defaultModel: readonly string[];
-  readonly defaultEffort: string | null;
+  /** The default model and effort as one fact, `opus · high`. */
+  readonly modelEffort: string;
+}
+
+/** One of the routine's runs in the runs window, newest first. */
+export interface RecentRunVm {
+  readonly chunkId: string;
+  readonly scopeSlug: string;
+  readonly mode: string;
+  /** How many findings the run's delivered sets added. */
+  readonly findings: number;
+  readonly mintedAt: string;
 }
 
 /** One node of the effective graph's strategy — read-only prose. */
@@ -81,13 +103,20 @@ export interface RoutinePanelVm {
    * any currently pending Retire/Enable's own predicted outcome
    * (`bzh:frontend-pending-override`, `ScopePanelVm.renderedRetired`'s own shape). */
   readonly renderedRetired: boolean;
+  /** The routine's runs in the runs window, newest first — `null` while the runs read is pending. */
+  readonly recentRuns: readonly RecentRunVm[] | null;
+  /** The recent-runs section's own async state, gated on the runs read (`bzh:frontend-empty-state-gated`). */
+  readonly recentRunsState: KitAsyncStateValue;
+  /** The Runs fact: how many runs the window holds, labelled with the window — `null` while the runs read is pending. */
+  readonly runsLabel: string | null;
 }
 
 /**
  * The gardening routine panel's single-routine detail, as three stacked
  * `fleet-kit-panel`s (blizzard-product:/delivered/garden/user-interface.md §Declaring
- * and running a routine): **Routine** — what the routine *is*, its record plus the
- * Run action; **Activity** — what it *has done*, the inflow/outflow trend,
+ * and running a routine): **Routine** — what the routine *is*: a header holding its
+ * name, project chip and lifecycle with Run…, Edit and Retire at the right, its record as a
+ * fact list, and its recent runs in the runs window; **Activity** — what it *has done*, the inflow/outflow trend,
  * measurements, and last-swept table, all runtime observations rather than routine
  * definition; and **Strategy** — the effective graph's read-only prompts.
  * Presentational only: it renders exactly the view model it is handed and injects no
@@ -105,13 +134,16 @@ export interface RoutinePanelVm {
  * definition, so the Strategy panel reads the same whether or not a run is currently
  * offered.
  *
+ * Edit opens the graph in place; Set emits the new graph name, and the editor closes
+ * once the new graph reads back — `FleetScopePanel`'s own description editor.
+ *
  * Retire/enable confirm before emitting — `FleetScopePanel`'s own confirm-then-emit
  * pattern.
  */
 @Component({
   selector: 'app-routine-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitAsyncState, FleetWhen, KitBadge, KitButton, KitConfirmDialog, KitFactList, KitPanel, KitProseBlock],
+  imports: [KitAsyncState, FleetWhen, KitBadge, KitButton, KitConfirmDialog, KitFactList, KitPanel, KitProseBlock, KitTextInput],
   templateUrl: './routine-panel.html',
   styleUrl: './routine-panel.css',
 })
@@ -119,12 +151,15 @@ export class FleetRoutinePanel {
   readonly vm = input<RoutinePanelVm | null>(null);
   readonly state = input.required<KitAsyncStateValue>();
 
-  /** Whether the current identity may retire/enable this routine (`graph:edit`) —
-   * withholds the lifecycle controls when `false`, `FleetScopePanel.canEdit`'s own
+  /** The project the routine belongs to, shown beside its name; `null` until read. */
+  readonly project = input<string | null>(null);
+
+  /** Whether the current identity may edit or retire/enable this routine (`graph:edit`) —
+   * withholds Edit and the lifecycle controls when `false`, `FleetScopePanel.canEdit`'s own
    * shape. */
   readonly canEdit = input(false);
 
-  /** Set on a failed retire/enable; rendered beside the controls that raise it. */
+  /** Set on a failed edit/retire/enable; rendered beside the controls that raise it. */
   readonly actionError = input<string | null>(null);
 
   /** Whether the retire/enable mutation is in flight — disables both Re-enable and
@@ -132,7 +167,11 @@ export class FleetRoutinePanel {
    * state. */
   readonly lifecyclePending = input(false);
 
+  /** Whether the graph edit is in flight — disables the Set button. */
+  readonly editPending = input(false);
+
   readonly run = output<void>();
+  readonly editGraph = output<string>();
   readonly retire = output<string>();
   readonly enable = output<string>();
 
@@ -147,18 +186,51 @@ export class FleetRoutinePanel {
     readonly run: () => void;
   } | null>(null);
 
+  /** The routine whose graph is open for editing, with the graph it opened on, and the draft typed so far — `null`
+   * while none is. Keyed by name so a pick of another routine never carries an open editor across, and by the graph
+   * so a saved edit, reading back a new one, closes the editor while a failed one leaves it open beside its error. */
+  private readonly editing = signal<{ readonly name: string; readonly original: string; readonly value: string } | null>(
+    null,
+  );
+
+  protected isEditing(panel: RoutinePanelVm): boolean {
+    const editing = this.editing();
+    return editing?.name === panel.record.name && editing.original === panel.record.graphName;
+  }
+
+  protected startEditing(panel: RoutinePanelVm): void {
+    const { name, graphName } = panel.record;
+    this.editing.set({ name, original: graphName, value: graphName });
+  }
+
+  protected stopEditing(): void {
+    this.editing.set(null);
+  }
+
+  protected graphDraft(panel: RoutinePanelVm): string {
+    return this.isEditing(panel) ? (this.editing()?.value ?? panel.record.graphName) : panel.record.graphName;
+  }
+
+  protected updateGraphDraft(panel: RoutinePanelVm, value: string): void {
+    this.editing.set({ name: panel.record.name, original: panel.record.graphName, value });
+  }
+
   /** The record as an aligned fact grid (`fleet-kit-fact-list`, `KitFact`'s own
    * shape) — a method, not a stored computed, since it depends on the selected
-   * routine's record, already read off `vm()` at the one call site in the
-   * template. */
-  protected recordRows(record: RoutineRecordVm): readonly KitFact[] {
+   * routine's record and on the view's own templates for the rows whose value is
+   * markup. Cadence says the routine runs only on a manual kickoff: no schedule
+   * starts one. */
+  protected recordRows(panel: RoutinePanelVm, graph: TemplateRef<unknown>, runs: TemplateRef<unknown>): readonly KitFact[] {
     return [
-      { label: 'graph', value: record.graphName },
-      { label: 'default scope', value: record.defaultScopeSlug },
-      { label: 'default model', value: record.defaultModel.length ? record.defaultModel.join(', ') : '—' },
-      { label: 'default effort', value: record.defaultEffort ?? '—' },
+      { label: 'Graph', template: graph, testid: 'gardening-routine-fact-graph' },
+      { label: 'Default scope', value: panel.record.defaultScopeSlug, testid: 'gardening-routine-fact-scope' },
+      { label: 'Model · effort', value: panel.record.modelEffort, testid: 'gardening-routine-fact-model' },
+      { label: 'Cadence', value: 'manual — runs only when kicked off', testid: 'gardening-routine-fact-cadence' },
+      { label: 'Runs', template: runs, testid: 'gardening-routine-fact-runs' },
     ];
   }
+
+  protected readonly compactRef = compactRef;
 
   /** The trend's four counts as an aligned fact grid — `recordRows`' own shape. */
   protected trendRows(trend: TrendSummaryVm): readonly KitFact[] {

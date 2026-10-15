@@ -96,21 +96,24 @@ async function readRepositoryLinks(project: string): Promise<RepositoryLinkView[
   return data?.repository_links ?? [];
 }
 
-async function readChunkCounts(slug: string): Promise<ChunkCountsView> {
-  const { data, error } = await chunkCountsApiChunkCountsGet({ query: { project: slug }, throwOnError: false });
+async function readChunkCounts(slug: string, doneSince: string | null = null): Promise<ChunkCountsView> {
+  const query = doneSince === null ? { project: slug } : { project: slug, done_since: doneSince };
+  const { data, error } = await chunkCountsApiChunkCountsGet({ query, throwOnError: false });
   if (error) throw error;
   return data!;
 }
 
-/** `GET /api/chunk-counts?project=` — the project's chunks per status, at rest while `slug()` is `null`. Keyed as the
- * header's read under that project's lens, so the two share one cache entry. */
-export function injectProjectChunkCountsQuery(slug: () => string | null) {
+/** `GET /api/chunk-counts?project=&done_since=` — the project's chunks per status and how many finished since
+ * `doneSince()`, the caller's own day boundary, at rest while `slug()` is `null`. Keyed under the header's read for
+ * that project's lens, so the live chunk events refresh it with the header's. */
+export function injectProjectChunkCountsQuery(slug: () => string | null, doneSince: () => string) {
   return injectQuery(() => {
     const project = slug();
+    const since = doneSince();
     return {
-      queryKey: lensedKey(hubChunkCountsKey, project),
+      queryKey: [...lensedKey(hubChunkCountsKey, project), 'done-since', since],
       enabled: project !== null,
-      queryFn: () => readChunkCounts(project!),
+      queryFn: () => readChunkCounts(project!, since),
     };
   });
 }
@@ -143,7 +146,7 @@ export function injectProjectFigures(projects: () => readonly ProjectView[]): Si
     return {
       queryKey: [...hubChunkCountsKey, 'per-project', slugs],
       enabled: slugs.length > 0,
-      queryFn: (): Promise<ChunkCountsView[]> => Promise.all(slugs.map(readChunkCounts)),
+      queryFn: (): Promise<ChunkCountsView[]> => Promise.all(slugs.map((slug) => readChunkCounts(slug))),
     };
   });
   return computed(() => {

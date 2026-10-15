@@ -1,12 +1,16 @@
-import type { AsyncStateQuery, GardenProposalCountsView, GardenSweepsView, GraphSummaryView, GraphView, RoutineView, TrendView } from 'fleet';
+import type { AsyncStateQuery, GardenProposalCountsView, GardenSweepsView, GraphSummaryView, GraphView, RoutineView, RunRowView, TrendView } from 'fleet';
 import { describe, expect, it } from 'vitest';
 
 import {
+  modelEffortLabel,
+  routineRecentRuns,
+  routineRunsLabel,
   lastSweptRows,
   measurementReadings,
   proposalCountsRows,
   relatedScopeRows,
   routineByName,
+  routineGraphEdit,
   routineEffectiveGraph,
   routineOverrideRetired,
   routinePanelState,
@@ -108,6 +112,8 @@ const PARTS: RoutinePanelParts = {
   windowLabel: 'last 28 days',
   relatedScopes: null,
   overrideRetired: null,
+  recentRuns: null,
+  recentRunsState: 'loading',
 };
 
 describe('routineByName', () => {
@@ -262,8 +268,7 @@ describe('routinePanelVm', () => {
         name: 'nightly',
         graphName: 'garden-routine',
         defaultScopeSlug: 'blizzard',
-        defaultModel: ['claude-sonnet-5'],
-        defaultEffort: 'medium',
+        modelEffort: 'claude-sonnet-5 · medium',
       },
       blockedReason: null,
       strategy: PARTS.strategy,
@@ -274,13 +279,15 @@ describe('routinePanelVm', () => {
       relatedScopes: null,
       retired: false,
       renderedRetired: false,
+      recentRuns: null,
+      recentRunsState: 'loading',
+      runsLabel: null,
     });
   });
 
   it('defaults an unset model and effort', () => {
     const vm = routinePanelVm({ ...ROUTINE, default_model: undefined, default_effort: undefined }, PARTS);
-    expect(vm?.record.defaultModel).toEqual([]);
-    expect(vm?.record.defaultEffort).toBeNull();
+    expect(vm?.record.modelEffort).toBe('—');
   });
 
   it("names the routine's graph as the blocked reason", () => {
@@ -324,5 +331,69 @@ describe('routinePanelState', () => {
 
   it('is ready once the routine and the graph read resolve', () => {
     expect(routinePanelState('nightly', ROUTINE, query({}), false, false)).toBe('ready');
+  });
+});
+
+describe('modelEffortLabel', () => {
+  it('merges the model and effort into one fact', () => {
+    expect(modelEffortLabel(['opus'], 'high')).toBe('opus · high');
+    expect(modelEffortLabel(['opus', 'sonnet'], 'medium')).toBe('opus, sonnet · medium');
+  });
+
+  it('dashes a part the routine leaves unset, and reads a single dash when both are', () => {
+    expect(modelEffortLabel([], 'high')).toBe('— · high');
+    expect(modelEffortLabel(['opus'], null)).toBe('opus · —');
+    expect(modelEffortLabel([], null)).toBe('—');
+  });
+});
+
+function runRow(chunk_id: string, routine_name: string, minted_at: string, added: number[]): RunRowView {
+  return {
+    chunk_id,
+    routine_name,
+    minted_at,
+    scope_slug: 'hub-api',
+    mode: 'delta',
+    outcome: 'done',
+    escalation: null,
+    delivered: added.map((added_count, i) => ({ finding_set_id: `fs_${i}`, added_count, gone_count: 0 })),
+  } as RunRowView;
+}
+
+describe('routineRecentRuns', () => {
+  const runs = [
+    runRow('ch_1', 'nightly', '2026-03-01T00:00:00Z', [2]),
+    runRow('ch_2', 'weekly', '2026-03-04T00:00:00Z', [9]),
+    runRow('ch_3', 'nightly', '2026-03-05T00:00:00Z', [1, 3]),
+  ];
+
+  it("keeps the routine's own runs, newest first, counting the findings each added", () => {
+    expect(routineRecentRuns(runs, 'nightly')).toEqual([
+      { chunkId: 'ch_3', scopeSlug: 'hub-api', mode: 'delta', findings: 4, mintedAt: '2026-03-05T00:00:00Z' },
+      { chunkId: 'ch_1', scopeSlug: 'hub-api', mode: 'delta', findings: 2, mintedAt: '2026-03-01T00:00:00Z' },
+    ]);
+  });
+
+  it('answers null while the runs read is pending or no routine is selected', () => {
+    expect(routineRecentRuns(undefined, 'nightly')).toBeNull();
+    expect(routineRecentRuns(runs, null)).toBeNull();
+  });
+
+  it('counts the runs the window holds, labelled with the window', () => {
+    expect(routineRunsLabel(routineRecentRuns(runs, 'nightly'), 'last 28 days')).toBe('2 in the last 28 days');
+    expect(routineRunsLabel([], 'last 28 days')).toBe('0 in the last 28 days');
+    expect(routineRunsLabel(null, 'last 28 days')).toBeNull();
+  });
+});
+
+describe('routineGraphEdit', () => {
+  it('sets the trimmed graph onto the routine', () => {
+    expect(routineGraphEdit(ROUTINE, '  garden-delta  ')).toEqual({ routineId: 'rtn_1', graphName: 'garden-delta' });
+  });
+
+  it('is null with no routine, on a blank graph, or on the graph the routine already runs', () => {
+    expect(routineGraphEdit(null, 'garden-delta')).toBeNull();
+    expect(routineGraphEdit(ROUTINE, '   ')).toBeNull();
+    expect(routineGraphEdit(ROUTINE, ' garden-routine ')).toBeNull();
   });
 });

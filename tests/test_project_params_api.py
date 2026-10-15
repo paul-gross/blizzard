@@ -33,7 +33,7 @@ def _create(hub: HubHarness, slug: str, name: str) -> str:
 
 def _change_keys(hub: HubHarness, project: str) -> list[tuple[str, str, str | None]]:
     changes = _ok(hub.client.get("/api/config/changes", params={"project": project}))["changes"]
-    return [(c["record_kind"], c["record_key"], c["project_id"]) for c in changes]
+    return [(c["record_kind"], c["record_key"], c["project_id"]) for c in changes if c["project_id"] is not None]
 
 
 def test_the_change_log_narrows_to_one_project_named_by_id_slug_or_former_slug(hub: HubHarness) -> None:
@@ -48,6 +48,8 @@ def test_the_change_log_narrows_to_one_project_named_by_id_slug_or_former_slug(h
     every = _ok(hub.client.get("/api/config/changes"))["changes"]
     assert {c["record_kind"]: c["project_id"] for c in every}["secret"] is None
     assert len(every) > len(expected)
+    lensed = _ok(hub.client.get("/api/config/changes", params={"project": widgets}))["changes"]
+    assert "secret" in {c["record_kind"] for c in lensed}, "the lens keeps the tenant-wide changes"
 
 
 @pytest.mark.parametrize("value", ["nope", "Widgets", "proj_01JZZZZZZZZZZZZZZZZZZZZZZZ", "default slug"])

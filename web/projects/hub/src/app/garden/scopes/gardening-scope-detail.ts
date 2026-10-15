@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute } from '@angular/router';
-import { errorMessage, injectPendingMutationVariables, isPendingFor, restingAsyncState, type KitAsyncStateValue, type ScopeView } from 'fleet';
+import { FLEET_CLOCK, errorMessage, injectPendingMutationVariables, isPendingFor, restingAsyncState, type KitAsyncStateValue, type ScopeView } from 'fleet';
 import { FleetScopePanel, type RelatedRoutineVm, type ScopePanelVm } from './scope-panel';
 import { relatedRoutineRows, sameSlugProjects, scopeBySlug, scopeOverrideRetired, scopePanelVm } from './gardening-scope-detail.model';
 import { hasPermission, injectMeQuery } from '../../core/auth/me.query';
@@ -13,6 +13,9 @@ import { injectScopeLifecycleMutation, type ScopeLifecycleVars } from './scope-l
 import { editScopeMutationKey, scopeLifecycleMutationKey } from '../../core/mutation-keys';
 import { type ScopeDescriptionEditEvent } from './scope-list';
 import { map } from 'rxjs';
+import { defaultRoutineWindow } from '../core/routine-window';
+import { injectHubRunsQuery } from '../runs/garden-runs.query';
+import { scopeSwept } from './gardening-scopes-page.model';
 
 /**
  * The selected scope's own detail — the right-hand child of `/gardening/scopes`
@@ -50,6 +53,9 @@ export class GardeningScopeDetail {
   private readonly scopesQuery = injectHubScopesQuery();
   private readonly tenantScopesQuery = injectHubScopesQuery({ tenantWide: true });
   private readonly project = injectLensedProject();
+  private readonly window = defaultRoutineWindow(inject(FLEET_CLOCK)());
+  /** The runs window's read, the list beside this pane's own — for when the selected scope was last swept. */
+  private readonly runsQuery = injectHubRunsQuery(() => this.window.since);
 
   /** The project the scope belongs to, for the chip beside its slug. */
   protected readonly projectName = computed(() => this.project()?.name ?? null);
@@ -118,7 +124,12 @@ export class GardeningScopeDetail {
   /** The selected scope's panel view model: real `retired`, overridden
    * `renderedRetired` — see `ScopePanelVm`. */
   protected readonly scopePanelVm = computed<ScopePanelVm | null>(() =>
-    scopePanelVm(this.selectedScope(), this.overrideRetired(), this.relatedRoutines()),
+    scopePanelVm(
+      this.selectedScope(),
+      this.overrideRetired(),
+      this.relatedRoutines(),
+      scopeSwept(this.selectedScope()?.slug ?? '', this.runsQuery.data(), this.window),
+    ),
   );
 
   /** "Nothing selected" is its own rest state, branched before the read's own

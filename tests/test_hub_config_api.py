@@ -795,3 +795,33 @@ def test_an_export_with_scopes_and_routines_applies_back_as_a_no_op(hub: HubHarn
     before = _changes(hub)
     assert {op for _, _, op in _rows(_apply_json(hub, document))} == {"unchanged"}
     assert _changes(hub) == before
+
+
+def test_the_change_log_names_user_actors_total_and_lenses_a_project(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path, auth_mode="oauth", repositories=(), link=False)
+    ada = seed_user(hub, username="ada", role=Role.ADMIN, display_name="Ada Lovelace")
+    ada_headers = {"Authorization": f"Bearer {seed_session(hub, ada)}"}
+    guest = {"Authorization": f"Bearer {seed_session(hub, seed_user(hub, username='gus', role=Role.GUEST))}"}
+    for slug in ("alpha", "beta"):
+        created = hub.client.post("/api/projects", json={"slug": slug, "name": slug}, headers=ada_headers)
+        assert created.status_code == 201, created.text
+    assert hub.client.post("/api/secrets", json={"name": "gh", "value": "v"}, headers=ada_headers).status_code == 201
+    alpha = hub.client.get("/api/projects/alpha", headers=guest).json()["project_id"]
+
+    def read(**params: object) -> dict:
+        resp = hub.client.get("/api/config/changes", params=params, headers=guest)  # type: ignore[arg-type]
+        assert resp.status_code == 200, resp.text
+        return resp.json()
+
+    everything = read()
+    one = read(limit=1)
+    assert len(one["changes"]) == 1 and one["total"] == everything["total"] == len(everything["changes"]) > 2
+    assert read(limit=1, before=one["changes"][0]["id"])["total"] == everything["total"]
+
+    named = {c["actor"]: c["actor_name"] for c in everything["changes"]}
+    assert named[ada.user_id] == "Ada Lovelace"
+    assert named["migration"] is None
+
+    lensed = read(project="alpha")
+    assert {c["project_id"] for c in lensed["changes"]} == {alpha, None}
+    assert lensed["total"] == len(lensed["changes"]) < everything["total"]

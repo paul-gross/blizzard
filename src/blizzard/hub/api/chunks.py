@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -18,7 +18,7 @@ from pydantic import BaseModel
 
 from blizzard.auth_core import Permission
 from blizzard.foundation.chunk_status import TERMINAL_STATUSES, ChunkStatus
-from blizzard.foundation.store.utc import iso_utc
+from blizzard.foundation.store.utc import as_utc, iso_utc
 from blizzard.foundation.work_items import WorkItemPriority
 from blizzard.hub.api import chunk_events
 from blizzard.hub.api.auth import reject_runner_principal
@@ -320,12 +320,20 @@ def list_chunks(
 
 
 @router.get("/chunk-counts", response_model=ChunkCountsView, dependencies=[Depends(require(Permission.FLEET_VIEW))])
-def chunk_counts(services: Services, project: QueryProject) -> ChunkCountsView:
+def chunk_counts(
+    services: Services, project: QueryProject, done_since: Annotated[datetime | None, Query()] = None
+) -> ChunkCountsView:
     """The all-time fleet count per derived status — over exactly the chunks
     ``GET /api/chunks`` pages over, with no window applied; ``?project=`` counts that
-    project's chunks alone."""
+    project's chunks alone. With ``done_since``, ``done_since`` answers how many of the ``done`` ones finished at or
+    after that instant; the caller chooses the boundary."""
     counts = services.chunks.facts.status_counts(project=project)
     return ChunkCountsView(
+        done_since=(
+            services.chunks.facts.done_since_count(as_utc(done_since), project=project)
+            if done_since is not None
+            else None
+        ),
         total=sum(counts.values()),
         terminal=sum(n for st, n in counts.items() if st in TERMINAL_STATUSES),
         **{st.value: n for st, n in counts.items()},

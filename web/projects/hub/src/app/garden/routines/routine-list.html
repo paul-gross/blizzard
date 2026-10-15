@@ -2,6 +2,7 @@
   [state]="state()"
   placement="inline"
   emptyText="No routines declared yet — tending begins when there is growth worth pruning."
+  loadingTestid="gardening-routines-loading"
   emptyTestid="gardening-routines-empty"
 >
   <ul class="rt-list" data-testid="gardening-routines-list">
@@ -12,9 +13,13 @@
           [testid]="'gardening-routine-row-' + row.name"
           (picked)="pick(row.name)"
         >
-          <span class="rt-name">{{ row.name }}</span>
+          <span class="rt-top">
+            <span class="rt-name">{{ row.name }}</span>
+            <!-- A routine runs only when kicked off by hand: no cadence schedules it. -->
+            <span class="rt-cadence" data-testid="gardening-routine-cadence">manual</span>
+          </span>
           <span class="rt-line2">
-            <span class="rt-graph">{{ row.graphName }}</span>
+            <span class="rt-graph">graph {{ row.graphName }}</span>
             <span class="rt-ref" [title]="row.routineId">{{ compactRef(row.routineId) }}</span>
           </span>
           @if (row.blocked) {

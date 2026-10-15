@@ -16,7 +16,6 @@ import { ProjectLens } from '../../core/project-lens';
 import { injectRepositoryLifecycleMutation, injectEditRepositoryMutation } from './repositories.mutations';
 import { type ConfigFailure, configActions, failureFor } from '../config-actions.model';
 import { type ConfigFormValues, configEdit, shownFormValues } from '../config-edit.model';
-import { injectActorName } from '../actor-names';
 import { ConfigFormDialog } from '../config-form-dialog';
 import { detailCliCommand } from '../config-cli.model';
 import { lastChange, revisionRows } from '../config-history.model';
@@ -55,9 +54,8 @@ export class RepositoryDetail {
   protected readonly state = computed<KitAsyncStateValue>(() =>
     restingAsyncState(this.key() === null, this.repositoryQuery, this.vm() === null),
   );
-  private readonly actorName = injectActorName();
-  protected readonly lastChange = computed(() => lastChange(this.historyQuery.data(), this.actorName()));
-  protected readonly revisions = computed(() => revisionRows(this.historyQuery.data(), this.actorName()));
+  protected readonly lastChange = computed(() => lastChange(this.historyQuery.data()));
+  protected readonly revisions = computed(() => revisionRows(this.historyQuery.data()));
   protected readonly revisionsState = computed<KitAsyncStateValue>(() =>
     asyncState(this.historyQuery, this.revisions().length === 0),
   );

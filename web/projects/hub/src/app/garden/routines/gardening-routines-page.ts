@@ -9,7 +9,7 @@ import { injectChildRouteParam } from '../../core/route-state';
 import { presentRoutineName, routineListRows } from './gardening-routines-page.model';
 import { ProjectLens } from '../../core/project-lens';
 import { injectLensedProject } from '../../core/lensed-project';
-import { firstRowToOpen } from '../core/garden-first-row';
+import { firstRowToOpen } from '../../core/first-row';
 
 /**
  * The `/gardening/routines` sub-tab (`plans/garden/user-interface.md` §Declaring

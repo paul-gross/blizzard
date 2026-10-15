@@ -5,6 +5,7 @@ import {
   formatHeldFor,
   formatLocalClockWithDay,
   formatRefreshedAgo,
+  formatRelative,
   formatSeenAgo,
   formatUtcYmd,
   formatWhen,
@@ -197,5 +198,47 @@ describe('formatUtcYmd', () => {
 describe('formatClockTime', () => {
   it('renders zero-padded local HH:MM:SS from an epoch-ms instant', () => {
     expect(formatClockTime(new Date(2026, 6, 18, 9, 5, 3).getTime())).toBe('09:05:03');
+  });
+});
+
+describe('formatRelative', () => {
+  const at = (deltaMs: number): string => new Date(NOW.getTime() + deltaMs).toISOString();
+  const MIN = 60_000;
+  const HOUR = 60 * MIN;
+  const DAY = 24 * HOUR;
+
+  it('reads anything inside a minute, either way, as "just now"', () => {
+    expect(formatRelative(at(0), NOW)).toBe('just now');
+    expect(formatRelative(at(-59_999), NOW)).toBe('just now');
+    expect(formatRelative(at(59_999), NOW)).toBe('just now');
+  });
+
+  it('reads past minutes, hours, days, weeks, months, and years at their boundaries', () => {
+    expect(formatRelative(at(-MIN), NOW)).toBe('1 minute ago');
+    expect(formatRelative(at(-59 * MIN), NOW)).toBe('59 minutes ago');
+    expect(formatRelative(at(-HOUR), NOW)).toBe('1 hour ago');
+    expect(formatRelative(at(-(DAY - 1)), NOW)).toBe('23 hours ago');
+    expect(formatRelative(at(-DAY), NOW)).toBe('yesterday');
+    expect(formatRelative(at(-2 * DAY), NOW)).toBe('2 days ago');
+    expect(formatRelative(at(-(7 * DAY - 1)), NOW)).toBe('6 days ago');
+    expect(formatRelative(at(-7 * DAY), NOW)).toBe('1 week ago');
+    expect(formatRelative(at(-29 * DAY), NOW)).toBe('4 weeks ago');
+    expect(formatRelative(at(-30 * DAY), NOW)).toBe('1 month ago');
+    expect(formatRelative(at(-365 * DAY), NOW)).toBe('1 year ago');
+  });
+
+  it('reads future instants with "in", mirroring the past boundaries', () => {
+    expect(formatRelative(at(MIN), NOW)).toBe('in 1 minute');
+    expect(formatRelative(at(5 * MIN), NOW)).toBe('in 5 minutes');
+    expect(formatRelative(at(2 * HOUR), NOW)).toBe('in 2 hours');
+    expect(formatRelative(at(DAY), NOW)).toBe('tomorrow');
+    expect(formatRelative(at(3 * DAY), NOW)).toBe('in 3 days');
+    expect(formatRelative(at(14 * DAY), NOW)).toBe('in 2 weeks');
+    expect(formatRelative(at(60 * DAY), NOW)).toBe('in 2 months');
+  });
+
+  it('returns an empty string for an unparseable input', () => {
+    expect(formatRelative('not-a-date', NOW)).toBe('');
+    expect(formatRelative('', NOW)).toBe('');
   });
 });

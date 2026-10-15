@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 
-import { KitTab, KitTabStrip } from './kit-tab';
+import { KitTab, KitTabStrip, type KitTabVariant } from './kit-tab';
 
 /** One tab in a {@link KitTabs} strip. */
 export interface KitTabOption {
@@ -33,6 +33,8 @@ export interface KitTabOption {
 export class KitTabs {
   readonly options = input.required<readonly KitTabOption[]>();
   readonly activeValue = input<string | null>(null);
+  /** `sub` for a strip nested inside a page beneath the app's top strip. */
+  readonly variant = input<KitTabVariant>('top');
 
   /** Emits the clicked option's `value`. */
   readonly choose = output<string>();

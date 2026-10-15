@@ -13,7 +13,6 @@ import { map } from 'rxjs';
 
 import { hasPermission, injectMeQuery } from '../../core/auth/me.query';
 import { type ConfigFailure, configActions, failureFor } from '../config-actions.model';
-import { injectActorName } from '../actor-names';
 import { ConfigFormDialog } from '../config-form-dialog';
 import type { ConfigFormValues } from '../config-edit.model';
 import { detailCliCommand } from '../config-cli.model';
@@ -52,9 +51,8 @@ export class SecretDetail {
   protected readonly state = computed<KitAsyncStateValue>(() =>
     restingAsyncState(this.key() === null, this.secretQuery, this.vm() === null),
   );
-  private readonly actorName = injectActorName();
-  protected readonly lastChange = computed(() => lastChange(this.historyQuery.data(), this.actorName()));
-  protected readonly revisions = computed(() => revisionRows(this.historyQuery.data(), this.actorName()));
+  protected readonly lastChange = computed(() => lastChange(this.historyQuery.data()));
+  protected readonly revisions = computed(() => revisionRows(this.historyQuery.data()));
   protected readonly revisionsState = computed<KitAsyncStateValue>(() =>
     asyncState(this.historyQuery, this.revisions().length === 0),
   );
