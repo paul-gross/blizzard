@@ -253,6 +253,9 @@
  *     pane, sized to `--master-list-col`, at 1024px, and genuinely stacks above it with
  *     no horizontal overflow at 390/320px — the `@media (min-width: 720px)` row/column
  *     flip jsdom cannot resolve.
+ *   - projects/fleet/src/lib/kit/kit-tabs.shell-sweep.spec.ts — the kit tab strip's
+ *     sub variant renders 30px tall on `--panel-deep` with a cyan active tab, beside
+ *     the 32px amber-active top strip, at 1280px and 390px.
  *   - projects/fleet/src/lib/transcripts/chunk-transcripts-provenance.shell-sweep.spec.ts —
  *     two transcript segments recording distinct harnesses (blizzard#441) render two
  *     genuinely distinct provenance badges with no horizontal overflow at 390px.
@@ -319,6 +322,7 @@ const SWEEPS = [
   { project: 'fleet', spec: 'projects/fleet/src/lib/kit/kit-select.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/kit/kit-confirm-dialog.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/kit/kit-tooltip.shell-sweep.spec.ts' },
+  { project: 'fleet', spec: 'projects/fleet/src/lib/kit/kit-tabs.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/garden/runs/gardening-run-dialog.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/garden/proposals/gardening-proposals-page.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/garden/proposals/gardening-proposal-pass-dialog.shell-sweep.spec.ts' },

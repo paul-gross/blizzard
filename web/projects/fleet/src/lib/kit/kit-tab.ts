@@ -1,4 +1,9 @@
-import { ChangeDetectionStrategy, Component } from '@angular/core';
+import { ChangeDetectionStrategy, Component, input } from '@angular/core';
+
+/** Which tier a tab strip sits at: `top` is the app's primary strip (amber
+ * active tab), `sub` a strip nested inside a page (cyan active tab, a shorter
+ * `--panel-deep` row) — so the hierarchy reads at a glance. */
+export type KitTabVariant = 'top' | 'sub';
 
 /**
  * The tab-strip chrome shared by every tab strip in the app —
@@ -17,8 +22,13 @@ import { ChangeDetectionStrategy, Component } from '@angular/core';
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './kit-tab-strip.html',
   styleUrl: './kit-tab-strip.css',
+  host: {
+    '[class.sub]': "variant() === 'sub'",
+  },
 })
-export class KitTabStrip {}
+export class KitTabStrip {
+  readonly variant = input<KitTabVariant>('top');
+}
 
 /**
  * One tab's chrome inside a {@link KitTabStrip} — the amber-hi-on-`--header-hi`
@@ -32,5 +42,11 @@ export class KitTabStrip {}
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './kit-tab.html',
   styleUrl: './kit-tab.css',
+  host: {
+    '[class.sub]': "variant() === 'sub'",
+  },
 })
-export class KitTab {}
+export class KitTab {
+  /** Must match the enclosing {@link KitTabStrip}'s `variant`. */
+  readonly variant = input<KitTabVariant>('top');
+}

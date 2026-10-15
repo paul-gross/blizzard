@@ -7,10 +7,11 @@ import { FleetWhen } from './fleet-when';
 @Component({
   selector: 'fleet-test-host',
   imports: [FleetWhen],
-  template: `<fleet-when class="time" data-testid="stamp" [iso]="iso()" />`,
+  template: `<fleet-when class="time" data-testid="stamp" [iso]="iso()" [relative]="relative()" />`,
 })
 class TestHost {
   readonly iso = signal('');
+  readonly relative = signal(false);
 }
 
 describe('FleetWhen', () => {
@@ -44,6 +45,17 @@ describe('FleetWhen', () => {
 
     expect(el.classList.contains('time')).toBe(true);
     expect(el.getAttribute('data-testid')).toBe('stamp');
+  });
+
+  it('renders the relative distance when opted in, keeping the absolute tooltip', async () => {
+    const fixture = TestBed.createComponent(TestHost);
+    fixture.componentInstance.iso.set(new Date(2026, 6, 15, 15, 30).toISOString());
+    fixture.componentInstance.relative.set(true);
+    await fixture.whenStable();
+    const el = (fixture.nativeElement as HTMLElement).querySelector('[data-testid="stamp"]') as HTMLElement;
+
+    expect(el.textContent?.trim()).toBe('3 days ago');
+    expect(el.getAttribute('title')).toBe('2026/07/15 15:30:00');
   });
 
   it('renders no title for an unparseable input, never "Invalid Date"', async () => {

@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 
 import { injectNowSignal } from '../now-signal';
-import { formatAbsolute, formatWhen } from '../when';
+import { formatAbsolute, formatRelative, formatWhen } from '../when';
 
 /**
  * The board's short-form timestamp with its full local date + time as a hover
@@ -13,6 +13,9 @@ import { formatAbsolute, formatWhen } from '../when';
  *
  * Renders as its own host element (`<fleet-when>`), so a caller's `class`/`data-*`
  * attributes land on it exactly as they would on the `<span>` it replaces.
+ *
+ * `relative` swaps the short text for {@link formatRelative}'s `3 days ago` /
+ * `in 2 hours` form; the tooltip stays absolute either way.
  *
  * `text` reads {@link injectNowSignal} (a minute's granularity — `formatWhen`'s
  * coarsest unit) rather than a reading taken inside `formatWhen`: for a static
@@ -33,9 +36,14 @@ import { formatAbsolute, formatWhen } from '../when';
 export class FleetWhen {
   /** The ISO instant to render. */
   readonly iso = input.required<string>();
+  /** Render the distance from now instead of the board's short stamp. */
+  readonly relative = input(false);
 
   private readonly now = injectNowSignal(60_000);
 
-  protected readonly text = computed(() => formatWhen(this.iso(), new Date(this.now())));
+  protected readonly text = computed(() => {
+    const now = new Date(this.now());
+    return this.relative() ? formatRelative(this.iso(), now) : formatWhen(this.iso(), now);
+  });
   protected readonly title = computed(() => formatAbsolute(this.iso()) || null);
 }
