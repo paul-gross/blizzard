@@ -38,6 +38,7 @@ from blizzard.runner.composition import build_host_stores
 from blizzard.runner.config import DEFAULT_WORKSPACE_ID
 from blizzard.runner.environments.internal.basic_provider import BasicWorkspaceProvider
 from blizzard.runner.harness.identity import OPENCODE_HARNESS_ID
+from blizzard.runner.hub.token_file import assigned_token
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.store import schema as runner_schema
 from blizzard.tools.invariants import Invariants
@@ -3680,15 +3681,15 @@ def test_kill9_at_host_lane_crash_point(crash_env: CrashEnv, tmp_path: Path, poi
     hub = httpx.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
     try:
         await_http(hub, "/api/health", proc=hub_proc)
-        config = write_runner_config(
+        write_runner_config(
             runner_dir, workspace=crash_env.workspace, bin_dir=crash_env.bin_dir, hub_port=hub_port, port=runner_port
         )
-        # The runner init joined stands under the host from its start: the host adopts it as it is added.
-        added = hub.post("/api/hosts", json={"name": "crash-host", "adopt": [config.served_id()]})
-        assert added.status_code == 201, added.text
-        host_id = added.json()["host_id"]
-        with (runner_dir / ".env").open("a") as env:
-            env.write(f"BZ_HOST_TOKEN={added.json()['token']}\n")
+        # `runner init` registered the host and wrote its token, and the runner stands under it from its start.
+        host_token = assigned_token((runner_dir / ".env").read_text(), "BZ_HOST_TOKEN")
+        assert host_token, "runner init wrote no host token"
+        record = hub.get("/api/fleet/host", headers={"Authorization": f"Bearer {host_token}"})
+        assert record.status_code == 200, record.text
+        host_id = record.json()["host_id"]
         runner_proc = start_runner(runner_dir, crash_point=point)
 
         code = wait_death(runner_proc, timeout=90.0)
