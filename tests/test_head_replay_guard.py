@@ -6,11 +6,12 @@ from pathlib import Path
 
 import pytest
 
+from blizzard.foundation.store.migrations import MigrationRunner
 from blizzard.hub.config import HubConfig
 from blizzard.hub.runtime import migration_runner as hub_migration_runner
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.runtime import migration_runner as runner_migration_runner
-from tests.support import migrate_to
+from tests.support import hub_migration_prototype, migrate_to
 from tests.test_pin_migration_prototype import test_the_hub_prototype_matches_a_fresh_migration
 
 
@@ -40,6 +41,32 @@ def test_a_tail_upgrade_and_a_migration_module_replay_pass(tmp_path: Path) -> No
     fresh = tmp_path / "fresh"
     fresh.mkdir()
     test_the_hub_prototype_matches_a_fresh_migration(fresh)
+
+
+@pytest.mark.unit
+def test_migrate_to_copies_a_fresh_head_store_without_replaying(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    prototype = hub_migration_prototype()
+    db = tmp_path / "hub.db"
+    assert not db.exists()
+
+    def refuse_replay(self: MigrationRunner, revision: str = "head") -> None:
+        pytest.fail(f"migrate_to replayed {revision} instead of copying the prototype")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(MigrationRunner, "upgrade", refuse_replay)
+        runner, engine = migrate_to(tmp_path, "head")
+    try:
+        assert db.read_bytes() == prototype.read_bytes()
+        assert runner.current_revision() == runner.script_head()
+    finally:
+        engine.dispose()
+
+    runner.downgrade("-1")
+    assert runner.current_revision() != runner.script_head()
+    runner.upgrade("head")
+    assert runner.current_revision() == runner.script_head()
 
 
 @pytest.mark.unit
