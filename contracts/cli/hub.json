@@ -2265,8 +2265,20 @@
     "decision": {
       "commands": {
         "list": {
-          "help": "List open decisions awaiting a human (gate surfacing).",
+          "help": "List open decisions awaiting a human (gate surfacing), or only one project's.",
           "params": [
+            {
+              "help": "Show only this project's records, by id or slug. Without it, every project of the tenant is shown.",
+              "hidden": false,
+              "kind": "option",
+              "name": "project",
+              "opts": [
+                "--project"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
             {
               "help": "Print the raw response body as JSON.",
               "hidden": false,
@@ -2305,7 +2317,7 @@
             }
           ],
           "path": "hub decision list",
-          "short_help": "List open decisions awaiting a human (gate surfacing)."
+          "short_help": "List open decisions awaiting a human (gate surfacing), or only one project's."
         },
         "resolve": {
           "help": "Resolve an open decision by picking CHOICE (first-write-wins).\n\nA racing second resolution loses and is told who already resolved; a decision closed undecided \u2014 by a\nrestart, or by its chunk ending \u2014 is refused with the hub's reason. A pure client of\n``POST /api/decisions/{id}/resolutions``.",
@@ -5601,8 +5613,20 @@
           "short_help": "Answer an open question (first-write-wins CAS at the hub)."
         },
         "list": {
-          "help": "Every open (unanswered) question across the fleet.",
+          "help": "Every open (unanswered) question across the fleet, or only one project's.",
           "params": [
+            {
+              "help": "Show only this project's records, by id or slug. Without it, every project of the tenant is shown.",
+              "hidden": false,
+              "kind": "option",
+              "name": "project",
+              "opts": [
+                "--project"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
             {
               "help": "Print the raw response body as JSON.",
               "hidden": false,
@@ -5641,7 +5665,7 @@
             }
           ],
           "path": "hub question list",
-          "short_help": "Every open (unanswered) question across the fleet."
+          "short_help": "Every open (unanswered) question across the fleet, or only one project's."
         }
       },
       "help": "Operator verbs over open questions: list, answer.",

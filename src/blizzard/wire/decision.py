@@ -52,6 +52,10 @@ class DecisionView(BaseModel):
     imposed_by_runner_id: str | None = None
     #: That runner's name — not unique, never a key; ``None`` when the registry holds no such runner.
     imposed_by_runner_name: str | None = None
+    #: The chunk's project, with its current slug and name; absent only from a hub older than the project fields.
+    project_id: str | None = None
+    project_slug: str | None = None
+    project_name: str | None = None
 
 
 class OpenDecisionsResponse(BaseModel):

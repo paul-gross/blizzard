@@ -9,6 +9,7 @@ import httpx
 
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
+from blizzard.hub.cli.project_option import project_option, project_query
 from blizzard.hub.cli.views import Listing
 
 
@@ -26,9 +27,10 @@ def decision_group() -> None:
 
 
 @decision_group.command("list", cls=FleetCommand)
-def decision_list(cli: CliContext) -> None:
-    """List open decisions awaiting a human (gate surfacing)."""
-    body = cli.get("/api/decisions", "GET /decisions").json()
+@project_option(required_by_hub=False)
+def decision_list(cli: CliContext, project: str | None) -> None:
+    """List open decisions awaiting a human (gate surfacing), or only one project's."""
+    body = cli.get("/api/decisions", "GET /decisions", params=project_query(project)).json()
     cli.show(body, DecisionListing(body.get("decisions", [])))
 
 

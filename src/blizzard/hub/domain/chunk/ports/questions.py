@@ -8,6 +8,7 @@ from typing import Protocol
 
 from blizzard.hub.domain.chunk.model import AnswerOutcome, NodeQuestion
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, FenceRefusal
+from blizzard.hub.domain.projects.model import ProjectId
 
 
 class IReadChunkQuestionsRepository(Protocol):
@@ -17,9 +18,9 @@ class IReadChunkQuestionsRepository(Protocol):
         """One question row with its derived answer state, or None."""
         ...
 
-    def list_open_questions(self) -> list[NodeQuestion]:
+    def list_open_questions(self, *, project: ProjectId | None = None) -> list[NodeQuestion]:
         """Every unanswered question on a chunk not yet stopped or done, across the fleet — the
-        ``hub status`` surface."""
+        ``hub status`` surface — or only the given project's."""
         ...
 
     def load_questions(self, chunk_id: str) -> list[NodeQuestion]:

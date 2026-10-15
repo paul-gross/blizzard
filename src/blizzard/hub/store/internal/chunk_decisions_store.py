@@ -19,6 +19,7 @@ from blizzard.hub.domain.chunk.model import DecisionChoice, GateDecision
 from blizzard.hub.domain.chunk.ports.decisions import IWriteChunkDecisionsRepository, LiveDecisionStatus
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, FenceRefusal
+from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_rows import (
     conn_of,
@@ -147,14 +148,17 @@ class ChunkDecisionsStore:
             for row in rows
         }
 
-    def list_open_decisions(self) -> list[GateDecision]:
+    def list_open_decisions(self, *, project: ProjectId | None = None) -> list[GateDecision]:
         """The gates still awaiting a resolution, hydrated in one batched pass through :meth:`_hydrate`.
         The SQL drops resolved gates and gates whose chunk has ended — a read optimization mirroring
         :meth:`GateDecision.require_resolvable`, pinned by ``tests/test_open_decisions_closure.py`` —
-        and :attr:`GateDecision.is_open` drops the ones a transition closed undecided."""
+        and :attr:`GateDecision.is_open` drops the ones a transition closed undecided. ``project`` narrows to
+        one project's gates."""
         not_resolved = ~self._store.exists(
             s.decision_resolutions, s.decision_resolutions.c.decision_id == s.decisions.c.decision_id
         )
+        if project is not None:
+            not_resolved &= s.decisions.c.project_id == project
         with self._store.read("list_open_decisions") as conn:
             rows = conn.execute(
                 self._store.select(s.decisions)
@@ -253,10 +257,14 @@ class ChunkDecisionsStore:
         refusal = fence(conn, chunk_id, epoch=epoch, admission=admission, claimant=claimant)
         if refusal is not None:
             return refusal
+        project_id = conn.execute(
+            self._store.select(s.chunks, s.chunks.c.project_id).where(s.chunks.c.chunk_id == chunk_id)
+        ).scalar_one()
         conn.execute(
             self._store.insert(s.decisions).values(
                 decision_id=decision_id,
                 chunk_id=chunk_id,
+                project_id=project_id,
                 node_id=node_id,
                 node_name=node_name,
                 epoch=epoch,
@@ -373,6 +381,7 @@ class ChunkDecisionsStore:
             resolved_at=resolution.resolved_at if resolution is not None else None,
             transitioned=transitioned,
             imposed_by_runner_id=row.imposed_by_runner_id,
+            project_id=row.project_id,
         )
 
 

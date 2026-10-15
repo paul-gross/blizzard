@@ -53,10 +53,7 @@ def status(cli: CliContext, project: str | None) -> None:
     lens = project_query(project)
     chunks = cli.get_all("/api/chunks", "GET /chunks", key="chunks", params=lens)
     runners = cli.get("/api/runners", "GET /runners")
-    questions = cli.get("/api/questions", "GET /questions").json()
-    if project is not None:
-        shown = {chunk["chunk_id"] for chunk in chunks}
-        questions = [question for question in questions if question.get("chunk_id") in shown]
+    questions = cli.get("/api/questions", "GET /questions", params=lens).json()
     spend = cli.get("/api/spend", "GET /spend", params={"since": _FLEET_SPEND_SINCE} | lens)
 
     view = FleetStatus(

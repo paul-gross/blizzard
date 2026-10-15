@@ -74,3 +74,7 @@ class QuestionView(BaseModel):
     answered_at: str | None = None
     delivered: bool = False
     delivered_at: str | None = None
+    #: The chunk's project, with its current slug and name; absent only from a hub older than the project fields.
+    project_id: str | None = None
+    project_slug: str | None = None
+    project_name: str | None = None

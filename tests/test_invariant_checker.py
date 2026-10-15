@@ -2248,6 +2248,8 @@ _PROJECT_INVARIANTS = frozenset(
         "hub:routine-scope-same-project",
         "hub:finding-scope-in-project",
         "hub:review-finding-project-is-chunks",
+        "hub:question-project-is-chunks",
+        "hub:decision-project-is-chunks",
         "hub:proposal-cites-own-project",
         "hub:work-item-project-in-tenant",
         "hub:slug-not-current-and-former",
@@ -2492,6 +2494,55 @@ def test_a_review_finding_outside_its_chunks_project_is_a_violation(tmp_path: Pa
 
     assert _project_breaches(engine, "hub:review-finding-project-is-chunks") == [
         f"review finding fin_review of project {home} was raised by chunk ch_1 of project proj_other"
+    ]
+
+
+def test_a_question_or_decision_of_another_project_than_its_chunk_is_a_violation(tmp_path: Path) -> None:
+    engine = _hub_engine(tmp_path)
+    home = default_project(engine)
+    with engine.begin() as conn:
+        _add_project(conn, "proj_other", slug="other")
+        conn.execute(
+            insert(hub.chunks).values(
+                stamp(hub.chunks, chunk_id="ch_1", graph_id="gr_1", minted_at=_NOW, model="m", project_id="proj_other")
+            )
+        )
+        conn.execute(
+            insert(hub.questions).values(
+                stamp(
+                    hub.questions,
+                    question_id="qn_1",
+                    chunk_id="ch_1",
+                    runner_id="rn_1",
+                    epoch=1,
+                    question="q",
+                    options="[]",
+                    asked_at=_NOW,
+                    project_id=home,
+                )
+            )
+        )
+        conn.execute(
+            insert(hub.decisions).values(
+                stamp(
+                    hub.decisions,
+                    decision_id="dec_1",
+                    chunk_id="ch_1",
+                    node_id="nd_1",
+                    node_name="gate",
+                    epoch=1,
+                    choices="[]",
+                    submitted_at=_NOW,
+                    project_id=home,
+                )
+            )
+        )
+
+    assert _project_breaches(engine, "hub:question-project-is-chunks") == [
+        f"question qn_1 of project {home} was asked on chunk ch_1 of project proj_other"
+    ]
+    assert _project_breaches(engine, "hub:decision-project-is-chunks") == [
+        f"decision dec_1 of project {home} gates chunk ch_1 of project proj_other"
     ]
 
 

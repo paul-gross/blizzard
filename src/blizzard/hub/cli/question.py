@@ -9,6 +9,7 @@ import httpx
 
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
+from blizzard.hub.cli.project_option import project_option, project_query
 from blizzard.hub.cli.views import Listing, QuestionLine
 
 
@@ -25,9 +26,10 @@ def question_group() -> None:
 
 
 @question_group.command("list", cls=FleetCommand)
-def question_list(cli: CliContext) -> None:
-    """Every open (unanswered) question across the fleet."""
-    rows = cli.get("/api/questions", "GET /questions").json()
+@project_option(required_by_hub=False)
+def question_list(cli: CliContext, project: str | None) -> None:
+    """Every open (unanswered) question across the fleet, or only one project's."""
+    rows = cli.get("/api/questions", "GET /questions", params=project_query(project)).json()
     cli.show(rows, QuestionListing(rows))
 
 

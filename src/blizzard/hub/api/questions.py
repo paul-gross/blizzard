@@ -19,6 +19,9 @@ from blizzard.hub.api import chunk_events
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.deps import Services
+from blizzard.hub.api.project_label_fields import ProjectLabelFields
+from blizzard.hub.api.project_labels import ProjectLabels
+from blizzard.hub.api.project_params import QueryProject
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.domain.chunk.model import ChunkFacts, NodeQuestion, QuestionClosed
 from blizzard.hub.domain.execution.questions import AskedQuestion
@@ -29,9 +32,10 @@ router = APIRouter(
 )
 
 
-def question_view(row: NodeQuestion, runner_names: Mapping[str, str]) -> QuestionView:
-    """Render a stored question row as its wire view — derived answer + delivery state, and the
-    asking runner's registered name out of ``runner_names``, the caller's one batched read."""
+def question_view(row: NodeQuestion, runner_names: Mapping[str, str], project: ProjectLabelFields) -> QuestionView:
+    """Render a stored question row as its wire view — derived answer + delivery state, the
+    asking runner's registered name out of ``runner_names``, the caller's one batched read, and
+    the chunk's project labels."""
     return QuestionView(
         question_id=row.question_id,
         chunk_id=row.chunk_id,
@@ -50,6 +54,7 @@ def question_view(row: NodeQuestion, runner_names: Mapping[str, str]) -> Questio
         answered_at=iso_utc(row.answered_at) if row.answered_at is not None else None,
         delivered=row.delivered,
         delivered_at=iso_utc(row.delivered_at) if row.delivered_at is not None else None,
+        **project,
     )
 
 
@@ -136,8 +141,10 @@ def answer_question(
 
 
 @router.get("/questions", response_model=list[QuestionView], dependencies=[Depends(require(Permission.FLEET_VIEW))])
-def list_open_questions(services: Services) -> list[QuestionView]:
-    """Every open (unanswered) question across the fleet — the ``hub status`` surface."""
-    rows = services.chunks.questions.list_open_questions()
+def list_open_questions(services: Services, project: QueryProject) -> list[QuestionView]:
+    """Every open (unanswered) question across the fleet — the ``hub status`` surface — or only
+    ``?project=``'s."""
+    rows = services.chunks.questions.list_open_questions(project=project)
     runner_names = services.registry.names_for(row.runner_id for row in rows)
-    return [question_view(row, runner_names) for row in rows]
+    labels = ProjectLabels.read(services, (row.project_id for row in rows))
+    return [question_view(row, runner_names, labels.fields(row.project_id)) for row in rows]

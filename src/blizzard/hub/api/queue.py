@@ -20,8 +20,9 @@ from blizzard.foundation.roles import dto
 from blizzard.hub.api import chunk_events
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
-from blizzard.hub.api.chunk_views import blocked_view, project_label_fields
+from blizzard.hub.api.chunk_views import blocked_view
 from blizzard.hub.api.deps import Services
+from blizzard.hub.api.project_label_fields import project_label_fields
 from blizzard.hub.api.project_params import QueryProject
 from blizzard.hub.composition import TenantServices
 from blizzard.hub.domain.chunk.dependencies import derive_blocked_prerequisites

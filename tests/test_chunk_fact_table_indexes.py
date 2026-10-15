@@ -194,6 +194,18 @@ _HOT_PATH_INDEX_SEARCHES = (
         "ix_chunk_work_refs_tenant_source_ref",
     ),
     (
+        "open questions of one project",
+        "SELECT * FROM questions WHERE tenant_id = 'ten_index' AND project_id = 'proj_1' "
+        "ORDER BY asked_at, question_id",
+        "ix_questions_tenant_project_asked_at_question_id",
+    ),
+    (
+        "open decisions of one project",
+        "SELECT * FROM decisions WHERE tenant_id = 'ten_index' AND project_id = 'proj_1' "
+        "ORDER BY submitted_at, decision_id",
+        "ix_decisions_tenant_project_submitted_at_decision_id",
+    ),
+    (
         "close_intents pending",
         "SELECT chunk_id, source, ref FROM close_intents WHERE retired_at IS NULL ORDER BY id",
         "ix_close_intents_pending",

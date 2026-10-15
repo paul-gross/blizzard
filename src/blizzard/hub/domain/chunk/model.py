@@ -792,6 +792,8 @@ class GateDecision:
     transitioned: bool = False
     #: The runner whose configuration imposed this gate; ``None`` when the graph declared it.
     imposed_by_runner_id: str | None = None
+    #: The project of the chunk the gate is on; ``None`` for a gate built outside the store.
+    project_id: ProjectId | None = None
 
     @property
     def resolved(self) -> bool:  # ast-grep-ignore: bzh:property-delegates
@@ -1677,6 +1679,8 @@ class NodeQuestion:
     delivered: bool = False
     delivered_at: datetime | None = None
     harness_id: str | None = None
+    #: The project of the asking chunk; ``None`` for a question built outside the store.
+    project_id: ProjectId | None = None
 
     def require_answerable(self, chunk_status: ChunkStatus) -> None:
         """Refuse an answer once the question's chunk has ended (:class:`QuestionClosed`): no

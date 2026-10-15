@@ -3,7 +3,8 @@ each of the facts/route/decisions seams, and to the chunks' projects."""
 
 from __future__ import annotations
 
-from blizzard.hub.api.chunk_views import pause_view, project_label_fields, usage_total_view
+from blizzard.hub.api.chunk_views import pause_view, usage_total_view
+from blizzard.hub.api.project_label_fields import project_label_fields
 from blizzard.hub.composition import TenantServices
 from blizzard.wire.chunk import ChunkDecisionStatusView, ChunkStatusView
 
