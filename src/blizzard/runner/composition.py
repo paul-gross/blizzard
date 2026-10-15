@@ -682,7 +682,6 @@ def _build_host_graph(
         connections = RunnerStoreConnections(engine, errors)
         clock = SystemClock()
         host_stores = _build_host_stores(connections, clock)
-        host_identity = HostIdentityHolder(host_stores.host_identity.host_identity())
         usage_http_client = LazyUsageHttpClient()
         span_limiter = SpanRateLimiter(clock)
         receiver_counter = ReceiverCounter()
@@ -731,8 +730,10 @@ def _build_host_graph(
             subscriptions=tuple(subscriptions),
             platform_tracing=platform_tracing,
             received_telemetry=received_telemetry,
-            host_identity=host_identity,
         )
+        # Seeded only from a store at the code's schema head: a store mid-migration fails readiness, not boot.
+        if readiness.evaluate().ready and (recorded := host_stores.host_identity.host_identity()) is not None:
+            host.host_identity.hold(recorded)
         built.append(host)
         return host
     except BaseException:
