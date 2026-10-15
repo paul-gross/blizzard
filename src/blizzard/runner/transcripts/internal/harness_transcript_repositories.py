@@ -23,6 +23,6 @@ class HarnessTranscriptRepositories:
 
 
 # Typecheck-time Protocol/adapter conformance sentinel
-# (`blizzard-context:/exemplars/python/repo_pattern.py`).
+# (`exemplars/python/exemplar/hub/store/internal/permit_store.py`).
 def _conforms_transcript_repository_resolver(x: HarnessTranscriptRepositories) -> ITranscriptRepositoryResolver:
     return x
