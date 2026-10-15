@@ -4,7 +4,8 @@ import { KitTab, KitTabStrip } from 'fleet';
 
 import { hasPermission, injectMeQuery } from '../core/auth/me.query';
 import { injectProjectsQuery } from '../core/projects.query';
-import { tabCount } from './admin-shell.model';
+import { changesTotal, tabCount } from './admin-shell.model';
+import { injectConfigChangesQuery } from './changes/changes.query';
 import { injectMembersQuery } from './members/members.query';
 import { injectLensLinks } from './projects/lens-links';
 import { injectRepositoriesQuery } from './repositories/repositories.query';
@@ -18,7 +19,8 @@ import { injectWorkSourcesQuery } from './work-sources/work-sources.query';
  * noun — work sources, repositories, secrets — and the change log across all of them. Members
  * stays in the strip at every width. Each tab counts what it holds — under a project lens, Work
  * sources and Repositories count what that project links — once its read answers; Members only
- * for an actor who may read them, and Changes, read a page at a time, not at all.
+ * for an actor who may read them. Changes counts every change the lens selects, the change log's
+ * own `total`, read off the log's first page (the cache entry the Changes tab reads).
  */
 @Component({
   selector: 'app-admin-shell',
@@ -36,6 +38,7 @@ export class AdminShell {
   private readonly secretsQuery = injectSecretsQuery(() => false);
   private readonly sourceLinks = injectLensLinks('source');
   private readonly repositoryLinks = injectLensLinks('repository');
+  private readonly changesQuery = injectConfigChangesQuery();
 
   protected readonly counts = computed(() => ({
     members: tabCount(this.membersQuery.data()),
@@ -43,5 +46,6 @@ export class AdminShell {
     sources: tabCount(this.sourcesQuery.data(), this.sourceLinks.names()),
     repositories: tabCount(this.repositoriesQuery.data(), this.repositoryLinks.names()),
     secrets: tabCount(this.secretsQuery.data()),
+    changes: changesTotal(this.changesQuery.data()?.pages),
   }));
 }

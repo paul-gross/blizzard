@@ -48,7 +48,9 @@
                   >{{ card.findings }} from the last runs</span
                 >
                 @if (card.lastRun; as lastRun) {
-                  <span class="fact-right">last run <fleet-when [iso]="lastRun" /></span>
+                  <span class="fact-right" [attr.data-testid]="'gardening-doorway-last-run-' + card.slug">
+                    last run <fleet-when [iso]="lastRun" [relative]="true" />
+                  </span>
                 }
               </li>
             </ul>

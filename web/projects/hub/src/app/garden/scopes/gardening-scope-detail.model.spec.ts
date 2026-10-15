@@ -71,26 +71,28 @@ describe('scopeOverrideRetired', () => {
 
 describe('scopePanelVm', () => {
   it('answers null with no scope selected', () => {
-    expect(scopePanelVm(null, null, null)).toBeNull();
+    expect(scopePanelVm(null, null, null, null)).toBeNull();
   });
 
   it('renders the real retired flag with nothing pending', () => {
     const related = [{ name: 'nightly', isDefault: true }];
-    expect(scopePanelVm({ ...BLIZZARD, retired: true }, null, related)).toEqual({
+    const swept = { at: null, notSwept: 'not in 28 days' };
+    expect(scopePanelVm({ ...BLIZZARD, retired: true }, null, related, swept)).toEqual({
       slug: 'blizzard',
       description: 'The whole repo',
       retired: true,
       renderedRetired: true,
       relatedRoutines: related,
+      swept,
     });
   });
 
   it('reads an unset retired flag as false', () => {
-    expect(scopePanelVm(BLIZZARD, null, null)?.retired).toBe(false);
+    expect(scopePanelVm(BLIZZARD, null, null, null)?.retired).toBe(false);
   });
 
   it('renders a pending override over the real retired flag', () => {
-    const vm = scopePanelVm(BLIZZARD, true, null);
+    const vm = scopePanelVm(BLIZZARD, true, null, null);
     expect(vm?.retired).toBe(false);
     expect(vm?.renderedRetired).toBe(true);
   });

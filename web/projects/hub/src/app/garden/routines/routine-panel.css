@@ -26,15 +26,44 @@ fleet-kit-panel {
   padding: 8px;
   min-width: 0;
 }
-.rp-record h3 {
-  margin: 0 0 6px;
-  display: inline-block;
-}
-.rp-state {
-  margin-left: 8px;
-}
-.rp-lifecycle-actions {
+/* The detail header: the name, its project chip and lifecycle, then the routine's own actions at the right. */
+.rp-record {
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+  margin: -8px -8px 0;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+}
+.rp-record h3 {
+  margin: 0;
+  min-width: 0;
+  color: var(--snow);
+  font-size: var(--fs-lg);
+  font-weight: normal;
+  letter-spacing: 0.02em;
+  overflow-wrap: anywhere;
+}
+/* The project chip: the routine's owner, in the lens's own amber. */
+.rp-project {
+  flex: none;
+  padding: 0 6px;
+  border: 1px solid var(--bezel-hi);
+  color: var(--amber);
+  font-size: var(--fs-label);
+  letter-spacing: 0.08em;
+  text-transform: lowercase;
+}
+.rp-grow {
+  flex: 1;
+}
+.rp-actions {
+  display: flex;
+  gap: 6px;
+}
+.rp-dim {
+  color: var(--label);
 }
 .rp-error {
   margin: 0;
@@ -50,10 +79,36 @@ fleet-kit-panel {
 .rp-record-facts {
   --kv-label-col: max-content;
 }
+.rp-recent h4,
 .rp-scopes h4 {
   margin: 0 0 4px;
   font-size: var(--fs-sm);
   color: var(--label);
+}
+/* Recent runs: the run's ref, what it swept, and when — the time pinned to the trailing edge. */
+.rp-runs {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--fs-sm);
+}
+.rp-runs li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 10px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--line);
+}
+.rp-run-ref {
+  color: var(--snow);
+}
+.rp-run-what {
+  overflow-wrap: anywhere;
+}
+.rp-run-when {
+  color: var(--label);
+  font-size: var(--fs-xs);
+  white-space: nowrap;
 }
 .rp-scopes ul {
   margin: 0;

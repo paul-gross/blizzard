@@ -124,6 +124,7 @@ describe('GardeningRoutineDetail', () => {
       // The run dialog's own scope picker (`gardening-run-dialog.ts`) injects
       // `injectHubScopesQuery` independently of this pane.
       if (method === 'GET' && path === '/api/scopes') return [];
+      if (method === 'GET' && path === '/api/runs') return [];
       if (method === 'GET' && path === '/api/me') return me;
       return {};
     });
@@ -187,7 +188,7 @@ describe('GardeningRoutineDetail', () => {
     const fixture = await render({ params: { routineName: 'nightly' } });
     const el = fixture.nativeElement as HTMLElement;
 
-    const record = el.querySelector('[data-testid="gardening-routine-record"]');
+    const record = el.querySelector('[data-testid="gardening-routine-panel"]');
     expect(record?.textContent).toContain('nightly');
     expect(record?.textContent).toContain('garden-routine');
     expect(record?.textContent).toContain('blizzard');

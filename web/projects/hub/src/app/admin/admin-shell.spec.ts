@@ -43,6 +43,7 @@ describe('AdminShell', () => {
       if (path === '/api/work-sources') return SOURCES;
       if (path === '/api/repositories') return REPOSITORIES;
       if (path === '/api/secrets') return SECRETS;
+      if (path === '/api/config/changes') return { changes: [], total: slug === null ? 42 : 7 };
       if (path === '/api/projects/winter/source-links') {
         return { source_links: [{ project_id: 'proj_w', name: 'hub', linked: true, built_in: true }] };
       }
@@ -68,14 +69,14 @@ describe('AdminShell', () => {
   const count = (el: HTMLElement, tab: string) =>
     el.querySelector(`[data-testid="admin-tab-${tab}"] .cnt`)?.textContent?.trim() ?? null;
 
-  it('counts what each tab holds, and nothing on Changes', async () => {
+  it('counts what each tab holds, Changes by the log\'s total', async () => {
     const el = await open(null, [...OPERATOR_ME_RESPONSE.permissions, 'user:manage']);
     expect(count(el, 'members')).toBe('3');
     expect(count(el, 'projects')).toBe('2');
     expect(count(el, 'work-sources')).toBe('3');
     expect(count(el, 'repositories')).toBe('2');
     expect(count(el, 'secrets')).toBe('1');
-    expect(count(el, 'changes')).toBeNull();
+    expect(count(el, 'changes')).toBe('42');
   });
 
   it("counts what the lensed project links, and no members for an actor who may not read them", async () => {
@@ -88,5 +89,6 @@ describe('AdminShell', () => {
     expect(count(el, 'projects')).toBe('2');
     expect(count(el, 'members')).toBeNull();
     expect(stub.forRoute('/api/members')).toHaveLength(0);
+    expect(count(el, 'changes')).toBe('7');
   });
 });

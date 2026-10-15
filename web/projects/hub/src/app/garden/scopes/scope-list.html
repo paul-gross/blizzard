@@ -2,6 +2,7 @@
   [state]="state()"
   placement="inline"
   emptyText="No scopes declared yet."
+  loadingTestid="gardening-scopes-loading"
   emptyTestid="gardening-scopes-empty"
 >
   <ul class="sc-list" data-testid="gardening-scopes-list">
@@ -17,8 +18,19 @@
             @if (row.retired) {
               <fleet-kit-badge class="sc-flag" [tone]="lifecycleTone(true)">retired</fleet-kit-badge>
             }
-            @if (row.lastSwept; as swept) {
-              <fleet-when class="sc-swept" [iso]="swept" [attr.data-testid]="'gardening-scope-swept-' + row.slug" />
+            @if (row.swept; as swept) {
+              @if (swept.at; as at) {
+                <fleet-when
+                  class="sc-swept"
+                  [iso]="at"
+                  [relative]="true"
+                  [attr.data-testid]="'gardening-scope-swept-' + row.slug"
+                />
+              } @else {
+                <span class="sc-swept" [attr.data-testid]="'gardening-scope-swept-' + row.slug">{{
+                  swept.notSwept
+                }}</span>
+              }
             }
           </div>
           @if (row.description) {

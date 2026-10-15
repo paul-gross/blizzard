@@ -1,4 +1,4 @@
-import { firstRowToOpen } from './garden-first-row';
+import { firstRowToOpen } from './first-row';
 
 describe('firstRowToOpen', () => {
   it('opens the first row of a settled list on desktop when the URL names none', () => {

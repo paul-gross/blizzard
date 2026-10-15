@@ -1,9 +1,21 @@
-import { ChangeDetectionStrategy, Component, input, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, type TemplateRef, input, output, signal } from '@angular/core';
+import { RouterLink } from '@angular/router';
 
-import { KitAsyncState, type KitAsyncStateValue, KitBadge, KitButton, KitConfirmDialog, KitTextInput } from 'fleet';
+import {
+  FleetWhen,
+  KitAsyncState,
+  type KitAsyncStateValue,
+  KitBadge,
+  KitButton,
+  KitConfirmDialog,
+  type KitFact,
+  KitFactList,
+  KitTextInput,
+} from 'fleet';
+import { LensLink } from 'fleet/shell';
 
 import { lifecycleTone } from '../../core/lifecycle-tone';
-import type { ScopeDescriptionEditEvent } from './scope-list';
+import type { ScopeDescriptionEditEvent, ScopeSweptVm } from './scope-list';
 
 /** One routine related to the selected scope — `isDefault` marks whether this scope
  * is that routine's own default, `RelatedScopeVm`'s own shape (`routine-panel.ts`). */
@@ -32,20 +44,23 @@ export interface ScopePanelVm {
   /** Every routine linked to this scope, each marked whether it defaults here
    * — `null` while the relation read is still pending. */
   readonly relatedRoutines: readonly RelatedRoutineVm[] | null;
+  /** When a run in the runs window last swept this scope — `null` while the runs read is pending. */
+  readonly swept: ScopeSweptVm | null;
 }
 
 /**
- * The gardening scope panel's single-scope detail — the description (in-place
- * editable when `canEdit`, else plain text), retire/re-enable, and the routines
- * related to this scope, each marked whether it defaults here. Presentational
- * only: it renders exactly the view model it is handed and injects no query.
+ * The gardening scope panel's single-scope detail — a header holding the slug, its project chip and lifecycle, with
+ * Edit and Retire (or Re-enable) at its right; the description and when the scope was last swept as a fact list; the
+ * routines that tend it, each a link to that routine and marked whether it defaults here; and a callout for each other
+ * project holding a scope of the same slug. Presentational only: it renders exactly the view model it is handed and
+ * injects no query.
  *
- * Retire and re-enable confirm, then emit.
+ * Edit opens the description in place; Set emits the edit, and the editor closes once the new description reads back. Retire and re-enable confirm, then emit.
  */
 @Component({
   selector: 'app-scope-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitAsyncState, KitBadge, KitButton, KitConfirmDialog, KitTextInput],
+  imports: [FleetWhen, KitAsyncState, KitBadge, KitButton, KitConfirmDialog, KitFactList, KitTextInput, LensLink, RouterLink],
   templateUrl: './scope-panel.html',
   styleUrl: './scope-panel.css',
 })
@@ -79,6 +94,32 @@ export class FleetScopePanel {
 
   /** The lifecycle badge's tone, from the hub's one lifecycle owner. */
   protected readonly lifecycleTone = lifecycleTone;
+
+  /** The scope whose description is open for editing, with the description it opened on — `null` while none is. Keyed
+   * by slug so a pick of another scope never carries an open editor across, and by the description so a saved edit,
+   * reading back a new one, closes the editor while a failed one leaves it open beside its error. */
+  private readonly editing = signal<{ readonly slug: string; readonly original: string } | null>(null);
+
+  protected isEditing(panel: ScopePanelVm): boolean {
+    const editing = this.editing();
+    return editing?.slug === panel.slug && editing.original === panel.description;
+  }
+
+  protected startEditing(panel: ScopePanelVm): void {
+    this.editing.set({ slug: panel.slug, original: panel.description });
+  }
+
+  protected stopEditing(): void {
+    this.editing.set(null);
+  }
+
+  /** The record's facts — the description and the last sweep, each markup rendered from the view's own templates. */
+  protected factRows(description: TemplateRef<unknown>, lastSwept: TemplateRef<unknown>): readonly KitFact[] {
+    return [
+      { label: 'Description', template: description, testid: 'gardening-scope-panel-description' },
+      { label: 'Last swept', template: lastSwept, testid: 'gardening-scope-panel-last-swept' },
+    ];
+  }
 
   protected readonly descriptionDraft = signal<{ slug: string; original: string; value: string } | null>(null);
 

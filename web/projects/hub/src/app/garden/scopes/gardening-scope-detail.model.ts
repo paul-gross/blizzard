@@ -1,5 +1,6 @@
 import type { RoutineView, ScopeView } from 'fleet';
 import type { ScopeLifecycleVars } from './scope-lifecycle.mutations';
+import type { ScopeSweptVm } from './scope-list';
 import type { RelatedRoutineVm, ScopePanelVm } from './scope-panel';
 
 /** The scope `slug` names, or `null` when `slug` is `null` (the bare child route) or
@@ -39,6 +40,7 @@ export function scopePanelVm(
   scope: ScopeView | null,
   overrideRetired: boolean | null,
   relatedRoutines: readonly RelatedRoutineVm[] | null,
+  swept: ScopeSweptVm | null,
 ): ScopePanelVm | null {
   if (scope === null) return null;
   const real = scope.retired ?? false;
@@ -48,6 +50,7 @@ export function scopePanelVm(
     retired: real,
     renderedRetired: overrideRetired ?? real,
     relatedRoutines,
+    swept,
   };
 }
 

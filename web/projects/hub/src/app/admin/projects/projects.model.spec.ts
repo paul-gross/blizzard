@@ -156,8 +156,13 @@ describe('projects model', () => {
       revision: undefined,
     });
     expect(labels(full)).toEqual(['Tenant', 'Slug', 'Former slugs', 'Queue', 'Id']);
-    expect(full.find((fact) => fact.label === 'Queue')?.value).toBe('1 ready · 1 running · 3 done');
-    expect(queueText(counts(0, 2, 0))).toBe('0 ready · 2 running · 0 done');
+    expect(full.find((fact) => fact.label === 'Queue')?.value).toBe('1 ready · 1 running');
+  });
+
+  it("reads the queue with today's done from the read's done_since, not its all-time done", () => {
+    expect(queueText({ ...counts(1, 2, 40), done_since: 3 })).toBe('1 ready · 2 running · 3 done today');
+    expect(queueText({ ...counts(0, 0, 40), done_since: 0 })).toBe('0 ready · 0 running · 0 done today');
+    expect(queueText({ ...counts(0, 2, 40), done_since: null })).toBe('0 ready · 2 running');
   });
 
   it('sends a cleared description as empty text, and leaves unchanged fields out', () => {

@@ -90,16 +90,16 @@ describe('the /gardening route subtree', () => {
     }
   });
 
-  it('opens a project\'s bare gardening path on its runs tab, selecting nothing', async () => {
+  it('opens a project\'s bare gardening path on its proposals tab, selecting nothing', async () => {
     const fixture = TestBed.createComponent(TestGardeningRouteHost);
     const router = TestBed.inject(Router);
 
     await router.navigateByUrl('/p/blizzard/gardening');
     await settle(fixture);
 
-    expect(router.url).toBe('/p/blizzard/gardening/runs');
+    expect(router.url).toBe('/p/blizzard/gardening/proposals');
     const el = fixture.nativeElement as HTMLElement;
-    expect(el.querySelector('[data-testid="gardening-runs-empty"]')).toBeTruthy();
+    expect(el.querySelector('[data-testid="gardening-proposals-empty"]')).toBeTruthy();
   });
 
   it('resolves /gardening/scopes/:scopeSlug to the scope detail', async () => {

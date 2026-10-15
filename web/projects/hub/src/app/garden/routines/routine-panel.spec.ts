@@ -8,8 +8,7 @@ const VM: RoutinePanelVm = {
     name: 'nightly',
     graphName: 'garden-routine',
     defaultScopeSlug: 'blizzard',
-    defaultModel: ['claude-sonnet-5'],
-    defaultEffort: 'medium',
+    modelEffort: 'claude-sonnet-5 · medium',
   },
   blockedReason: null,
   strategy: [
@@ -33,6 +32,11 @@ const VM: RoutinePanelVm = {
   relatedScopes: [{ slug: 'blizzard', isDefault: true }],
   retired: false,
   renderedRetired: false,
+  recentRuns: [
+    { chunkId: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9', scopeSlug: 'blizzard', mode: 'delta', findings: 3, mintedAt: '2026-01-10T00:00:00Z' },
+  ],
+  recentRunsState: 'ready',
+  runsLabel: '1 in the last 28 days',
 };
 
 describe('FleetRoutinePanel', () => {
@@ -80,7 +84,7 @@ describe('FleetRoutinePanel', () => {
     expect(el.querySelector('[data-testid="gardening-routine-strategy-panel"]')).toBeNull();
   });
 
-  it('renders the record as a fact list with the same four rows, name/graph/scope/model/effort', async () => {
+  it('renders the record as a fact list: graph, default scope, model · effort, cadence and runs', async () => {
     const fixture = await mount({});
     const el = fixture.nativeElement as HTMLElement;
 
@@ -88,20 +92,50 @@ describe('FleetRoutinePanel', () => {
     expect(record?.textContent).toContain('nightly');
     const facts = el.querySelector('[data-testid="gardening-routine-record-facts"]');
     expect(facts?.tagName.toLowerCase()).toBe('dl');
-    expect(facts?.textContent).toContain('garden-routine');
-    expect(facts?.textContent).toContain('blizzard');
-    expect(facts?.textContent).toContain('claude-sonnet-5');
-    expect(facts?.textContent).toContain('medium');
+    expect(Array.from(facts!.querySelectorAll('dt')).map((dt) => dt.textContent?.trim())).toEqual([
+      'Graph',
+      'Default scope',
+      'Model · effort',
+      'Cadence',
+      'Runs',
+    ]);
+    expect(el.querySelector('[data-testid="gardening-routine-fact-graph"]')?.textContent).toContain(
+      'garden-routine · tenant-wide library',
+    );
+    expect(el.querySelector('[data-testid="gardening-routine-fact-model"]')?.textContent).toContain(
+      'claude-sonnet-5 · medium',
+    );
+    expect(el.querySelector('[data-testid="gardening-routine-fact-cadence"]')?.textContent).toContain('manual');
+    expect(el.querySelector('[data-testid="gardening-routine-fact-runs"]')?.textContent).toContain('1 in the last 28 days');
   });
 
-  it('falls back to an em dash for an empty default model and effort', async () => {
-    const fixture = await mount({
-      vm: { ...VM, record: { ...VM.record, defaultModel: [], defaultEffort: null } },
-    });
+  it('lists the recent runs, and says the window holds none once the read answers empty', async () => {
+    const fixture = await mount({});
     const el = fixture.nativeElement as HTMLElement;
 
-    const facts = el.querySelector('[data-testid="gardening-routine-record-facts"]');
-    expect(facts?.textContent).toContain('—');
+    const run = el.querySelector('[data-testid="gardening-routine-recent-run-ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9"]');
+    expect(run?.textContent).toContain('blizzard · delta · 3 findings');
+
+    fixture.componentRef.setInput('vm', { ...VM, recentRuns: null, recentRunsState: 'loading', runsLabel: null });
+    await fixture.whenStable();
+    expect(el.querySelector('[data-testid="gardening-routine-recent-runs-loading"]')).toBeTruthy();
+    expect(el.querySelector('[data-testid="gardening-routine-recent-runs-empty"]')).toBeNull();
+
+    fixture.componentRef.setInput('vm', { ...VM, recentRuns: [], recentRunsState: 'empty', runsLabel: '0 in the last 28 days' });
+    await fixture.whenStable();
+    expect(el.querySelector('[data-testid="gardening-routine-recent-runs-empty"]')?.textContent).toContain(
+      'No runs in the last 28 days.',
+    );
+  });
+
+  it('names the project beside the routine', async () => {
+    const fixture = await mount({});
+    fixture.componentRef.setInput('project', 'Blizzard');
+    await fixture.whenStable();
+
+    expect(
+      (fixture.nativeElement as HTMLElement).querySelector('[data-testid="gardening-routine-panel-project"]')?.textContent,
+    ).toContain('Blizzard');
   });
 
   it('sits the definition inside a kit panel labelled Routine', async () => {
@@ -132,14 +166,15 @@ describe('FleetRoutinePanel', () => {
     for (const body of bodies) expect(body.classList.contains('p-body--noscroll')).toBe(true);
   });
 
-  it('offers a cta-sized Run button alone, naming no CLI invocation, and emits run on click', async () => {
+  it('offers Run… as the header\'s primary action, naming no CLI invocation, and emits run on click', async () => {
     const fixture = await mount({});
     const el = fixture.nativeElement as HTMLElement;
 
-    const actions = el.querySelector('[data-testid="gardening-routine-actions"]');
+    const actions = el.querySelector('[data-testid="gardening-routine-record"] [data-testid="gardening-routine-actions"]');
     const button = actions?.querySelector('[data-testid="gardening-routine-run"]');
     expect(button).toBeTruthy();
-    expect(button?.classList.contains('cta')).toBe(true);
+    expect(button?.textContent).toContain('Run…');
+    expect(button?.classList.contains('primary')).toBe(true);
     expect(actions?.textContent).not.toContain('hub routine run');
 
     let emitted = false;

@@ -1,6 +1,10 @@
 import type { ConfigChangeView, ConfigChangesPage } from 'fleet';
 
-import { type ActorName, RAW_ACTOR } from './actor-names';
+/** Who made a change, as a person reads it: the hub's name for the acting member, else the actor as recorded (the hub
+ * itself, a removed member). */
+export function changeActor(change: ConfigChangeView): string {
+  return change.actor_name ?? change.actor;
+}
 
 /** Who last changed a record, and through which door — its newest change row. */
 export interface LastChangeVm {
@@ -24,28 +28,22 @@ export interface RevisionRowVm {
 }
 
 /** A record's newest change, or `null` before the history resolves or when it is
- * empty. The history read is newest first; `name` names its actor. */
-export function lastChange(
-  history: readonly ConfigChangeView[] | undefined,
-  name: ActorName = RAW_ACTOR,
-): LastChangeVm | null {
+ * empty. The history read is newest first. */
+export function lastChange(history: readonly ConfigChangeView[] | undefined): LastChangeVm | null {
   const newest = history?.[0];
   if (!newest) return null;
-  return { revision: newest.revision, at: newest.recorded_at, actor: name(newest.actor), door: newest.door };
+  return { revision: newest.revision, at: newest.recorded_at, actor: changeActor(newest), door: newest.door };
 }
 
-/** The Revisions list — one row per change, newest first, each actor named by `name`. */
-export function revisionRows(
-  history: readonly ConfigChangeView[] | undefined,
-  name: ActorName = RAW_ACTOR,
-): readonly RevisionRowVm[] {
+/** The Revisions list — one row per change, newest first. */
+export function revisionRows(history: readonly ConfigChangeView[] | undefined): readonly RevisionRowVm[] {
   return (history ?? []).map((change) => ({
     id: change.id,
     revision: change.revision,
     op: change.op,
     fields: change.diff.map((field) => field.field).join(', '),
     at: change.recorded_at,
-    actor: name(change.actor),
+    actor: changeActor(change),
     door: change.door,
   }));
 }

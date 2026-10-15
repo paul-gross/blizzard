@@ -62,6 +62,7 @@ describe('GardeningScopeDetail', () => {
       if (method === 'GET' && path === '/api/projects/acme/scopes') return scopes;
       if (method === 'GET' && path === '/api/projects/acme/routines') return routines;
       if (method === 'GET' && path === '/api/projects/acme/scopes/blizzard/routines') return [ROUTINE.routine_id];
+      if (method === 'GET' && path === '/api/projects/acme/runs') return [];
       if (method === 'GET' && path === '/api/me') return me;
       return {};
     });
@@ -124,7 +125,7 @@ describe('GardeningScopeDetail', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     expect(el.querySelector('[data-testid="gardening-scope-panel-routines"]')?.textContent).toContain(
-      'No routine is related to this scope.',
+      'No routine tends this scope.',
     );
   });
 
@@ -132,6 +133,8 @@ describe('GardeningScopeDetail', () => {
     const fixture = await render({ me: OPERATOR_ME_RESPONSE, params: { scopeSlug: 'blizzard' } });
     const el = fixture.nativeElement as HTMLElement;
 
+    el.querySelector<HTMLButtonElement>('[data-testid="gardening-scope-panel-edit"]')!.click();
+    await fixture.whenStable();
     expect(el.querySelector('[data-testid="gardening-scope-panel-description-input"]')).toBeTruthy();
     expect(el.querySelector('[data-testid="gardening-scope-panel-retire"]')).toBeTruthy();
   });
@@ -140,6 +143,8 @@ describe('GardeningScopeDetail', () => {
     const fixture = await render({ me: OPERATOR_ME_RESPONSE, params: { scopeSlug: 'blizzard' } });
     const el = fixture.nativeElement as HTMLElement;
 
+    el.querySelector<HTMLButtonElement>('[data-testid="gardening-scope-panel-edit"]')!.click();
+    await fixture.whenStable();
     const input = el.querySelector<HTMLInputElement>('[data-testid="gardening-scope-panel-description-input"]')!;
     input.value = 'updated description';
     input.dispatchEvent(new Event('input', { bubbles: true }));
@@ -213,15 +218,23 @@ describe('GardeningScopeDetail', () => {
       const submit = () =>
         el.querySelector<HTMLButtonElement>('[data-testid="gardening-scope-panel-description-submit"]');
 
+      el.querySelector<HTMLButtonElement>('[data-testid="gardening-scope-panel-edit"]')!.click();
+      await fixture.whenStable();
       el.querySelector<HTMLInputElement>('[data-testid="gardening-scope-panel-description-input"]')!.value = 'changed';
       submit()?.click();
       await tick(fixture);
       expect(submit()?.disabled).toBe(true);
 
+      const openEditor = async () => {
+        el.querySelector<HTMLButtonElement>('[data-testid="gardening-scope-panel-edit"]')!.click();
+        await tick(fixture);
+      };
       await select(fixture, 'other');
+      await openEditor();
       expect(submit()?.disabled).toBe(false);
 
       await select(fixture, 'blizzard');
+      await openEditor();
       expect(submit()?.disabled).toBe(true);
     });
   });
@@ -317,6 +330,8 @@ describe('GardeningScopeDetail', () => {
     });
     const el = fixture.nativeElement as HTMLElement;
 
+    el.querySelector<HTMLButtonElement>('[data-testid="gardening-scope-panel-edit"]')!.click();
+    await fixture.whenStable();
     const input = el.querySelector<HTMLInputElement>('[data-testid="gardening-scope-panel-description-input"]')!;
     input.value = 'updated description';
     el.querySelector<HTMLButtonElement>('[data-testid="gardening-scope-panel-description-submit"]')?.click();

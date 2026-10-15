@@ -4,7 +4,6 @@ import { ActivatedRoute } from '@angular/router';
 import { type KitAsyncStateValue, restingAsyncState } from 'fleet';
 import { map } from 'rxjs';
 
-import { injectActorName } from '../actor-names';
 import { changesOfPages } from '../config-history.model';
 import { ChangeEntryPanel } from './change-entry-panel';
 import { changeDetailEmptyText, changeEntries, changeEntryVm, entryByKey } from './changes.model';
@@ -25,14 +24,13 @@ import { injectConfigChangesQuery } from './changes.query';
 export class ChangeDetail {
   private readonly route = inject(ActivatedRoute);
   private readonly changesQuery = injectConfigChangesQuery();
-  private readonly actorName = injectActorName();
 
   private readonly key = toSignal(this.route.paramMap.pipe(map((params) => params.get('key'))), {
     initialValue: null,
   });
 
   protected readonly vm = computed(() =>
-    changeEntryVm(entryByKey(changeEntries(changesOfPages(this.changesQuery.data()?.pages), this.actorName()), this.key())),
+    changeEntryVm(entryByKey(changeEntries(changesOfPages(this.changesQuery.data()?.pages)), this.key())),
   );
   protected readonly state = computed<KitAsyncStateValue>(() =>
     restingAsyncState(this.key() === null, this.changesQuery, this.vm() === null),

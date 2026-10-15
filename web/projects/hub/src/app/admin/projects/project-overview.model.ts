@@ -28,9 +28,11 @@ export function linkCount(links: readonly (SourceLinkView | RepositoryLinkView)[
   return links ? links.filter((link) => link.linked).length : null;
 }
 
-/** The project's queue: `1 ready · 1 running · 3 done`. */
+/** The project's queue: `1 ready · 1 running · 3 done today`, today's done counted from the read's own
+ * `done_since` — left off when the read carries none. */
 export function queueText(counts: ChunkCountsView): string {
-  return `${counts.ready} ready · ${counts.running} running · ${counts.done} done`;
+  const queue = `${counts.ready} ready · ${counts.running} running`;
+  return counts.done_since === null || counts.done_since === undefined ? queue : `${queue} · ${counts.done_since} done today`;
 }
 
 /** One line of an overview card: a linked record or a serving runner, and what it is. */

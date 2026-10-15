@@ -44,10 +44,11 @@
     No runner serves {{ projectName() }}: the work its garden raises waits until a runner declares it.
   </p>
 }
-<nav fleetKitTabStrip class="subnav" data-testid="gardening-subnav">
+<nav fleetKitTabStrip variant="sub" class="subnav" data-testid="gardening-subnav">
   @for (tab of tabs(); track tab.surface) {
     <a
       fleetKitTab
+      variant="sub"
       [routerLink]="tab.surface | lensLink"
       [class.active]="tab.surface === surface()"
       [attr.aria-current]="tab.surface === surface() ? 'page' : null"

@@ -17,7 +17,7 @@
             <span class="fields">{{ row.fields }}</span>
           }
         </span>
-        <span class="who"><fleet-when [iso]="row.at" /> · {{ row.actor }} via {{ row.door }}</span>
+        <span class="who"><fleet-when [iso]="row.at" [relative]="relative()" /> · {{ row.actor }} via {{ row.door }}</span>
       </li>
     }
   </ul>

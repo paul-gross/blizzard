@@ -1,7 +1,7 @@
 import type { ConfigChangeView } from 'fleet';
 import { describe, expect, it } from 'vitest';
 
-import { changesOfPages, historyRecordKey, lastChange, revisionRows } from './config-history.model';
+import { changeActor, changesOfPages, historyRecordKey, lastChange, revisionRows } from './config-history.model';
 
 function change(id: number, revision: number, overrides: Partial<ConfigChangeView> = {}): ConfigChangeView {
   return {
@@ -24,6 +24,10 @@ describe('lastChange', () => {
     expect(lastChange(history)).toEqual({ revision: 2, at: '2026-01-02T00:00:00Z', actor: 'ana', door: 'board' });
   });
 
+  it("names its author by the hub's name for them", () => {
+    expect(lastChange([change(9, 2, { actor: 'usr_1', actor_name: 'Ana' })])?.actor).toBe('Ana');
+  });
+
   it('answers null before the history resolves or when it is empty', () => {
     expect(lastChange(undefined)).toBeNull();
     expect(lastChange([])).toBeNull();
@@ -44,6 +48,22 @@ describe('revisionRows', () => {
 
   it('answers no rows before the history resolves', () => {
     expect(revisionRows(undefined)).toEqual([]);
+  });
+
+  it("names each author by the hub's name for them", () => {
+    const rows = revisionRows([change(9, 2, { actor: 'usr_1', actor_name: 'Ada Lovelace' }), change(3, 1)]);
+    expect(rows.map((r) => r.actor)).toEqual(['Ada Lovelace', 'pgross']);
+  });
+});
+
+describe('changeActor', () => {
+  it("reads the hub's name for the actor", () => {
+    expect(changeActor(change(1, 1, { actor: 'usr_1', actor_name: 'Ada Lovelace' }))).toBe('Ada Lovelace');
+  });
+
+  it('falls back to the actor as recorded when the hub names no member', () => {
+    expect(changeActor(change(1, 1, { actor: 'migration', actor_name: null }))).toBe('migration');
+    expect(changeActor(change(1, 1, { actor: 'migration' }))).toBe('migration');
   });
 });
 

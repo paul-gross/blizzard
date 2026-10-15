@@ -18,4 +18,6 @@ export class ConfigRevisions {
   readonly rows = input.required<readonly RevisionRowVm[]>();
   readonly state = input.required<KitAsyncStateValue>();
   readonly testidPrefix = input.required<string>();
+  /** Stamp each revision with its distance from now rather than the board's short stamp. */
+  readonly relative = input(false);
 }

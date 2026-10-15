@@ -4,8 +4,14 @@ import { TestBed } from '@angular/core/testing';
 import { FleetScopeList, type ScopeRowVm } from './scope-list';
 
 const ROWS: readonly ScopeRowVm[] = [
-  { slug: 'blizzard', description: 'the blizzard monorepo', retired: false, lastSwept: '2026-03-05T00:00:00Z' },
-  { slug: 'stale-scope', description: 'no longer tended', retired: true, lastSwept: null },
+  {
+    slug: 'blizzard',
+    description: 'the blizzard monorepo',
+    retired: false,
+    swept: { at: '2026-03-05T00:00:00Z', notSwept: 'not in 28 days' },
+  },
+  { slug: 'stale-scope', description: 'no longer tended', retired: true, swept: { at: null, notSwept: 'not in 28 days' } },
+  { slug: 'unread', description: 'runs not yet read', retired: false, swept: null },
 ];
 
 describe('FleetScopeList', () => {
@@ -38,13 +44,18 @@ describe('FleetScopeList', () => {
     expect(retired?.textContent).toContain('retired');
   });
 
-  it("shows each scope's description, and when it was last swept only for a swept scope", async () => {
+  it("shows each scope's description, and when it was last swept — or that the window holds no sweep", async () => {
     const fixture = await mount({});
     const el = fixture.nativeElement as HTMLElement;
 
     expect(el.querySelector('[data-testid="gardening-scope-row-blizzard"]')?.textContent).toContain('the blizzard monorepo');
-    expect(el.querySelector('[data-testid="gardening-scope-swept-blizzard"]')).toBeTruthy();
-    expect(el.querySelector('[data-testid="gardening-scope-swept-stale-scope"]')).toBeNull();
+    const swept = el.querySelector('[data-testid="gardening-scope-swept-blizzard"]');
+    expect(swept?.tagName.toLowerCase()).toBe('fleet-when');
+    expect(swept?.textContent).toMatch(/ago|yesterday|just now/);
+    expect(el.querySelector('[data-testid="gardening-scope-swept-stale-scope"]')?.textContent?.trim()).toBe(
+      'not in 28 days',
+    );
+    expect(el.querySelector('[data-testid="gardening-scope-swept-unread"]')).toBeNull();
   });
 
   it('reflects selectedSlug onto the matching row only', async () => {

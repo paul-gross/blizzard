@@ -6,6 +6,8 @@ import {
   type KitAsyncStateValue,
   KitButton,
   KitMasterDetail,
+  KitPanel,
+  KitPanelHeader,
   ViewportService,
 } from 'fleet';
 
@@ -29,19 +31,20 @@ import {
   SLUG_HINT,
   servedProjectIds,
 } from './projects.model';
+import { projectToOpen, rowKeys } from './project-open.model';
 import { injectProjectFigures } from './projects.query';
 import { ProjectsTable } from './projects-table';
 
 /**
  * `/admin/projects` — the tenant's projects beside a `<router-outlet>` holding the project the
- * URL names by id (`project-detail.ts`). On All it lists every project; under a project lens it
- * lists that one project and opens it. Each row tells how the project is wired — its linked
+ * URL names by id (`project-detail.ts`), list and detail each a panel. On All it lists every project
+ * and, on desktop, opens the first; under a project lens it lists that one project and opens it. Each row tells how the project is wired — its linked
  * sources and repositories and its queue — and what it still needs, a runner among them.
  */
 @Component({
   selector: 'app-projects-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ConfigFormDialog, KitButton, KitMasterDetail, ProjectsTable, RouterOutlet],
+  imports: [ConfigFormDialog, KitButton, KitMasterDetail, KitPanel, KitPanelHeader, ProjectsTable, RouterOutlet],
   templateUrl: './projects-page.html',
   styleUrl: './projects-page.css',
 })
@@ -85,11 +88,17 @@ export class ProjectsPage {
   protected readonly canCreate = computed(() => !this.mobile() && hasPermission(this.meQuery.data(), 'config:edit'));
 
   constructor() {
-    // Under a lens the Projects tab opens the lensed project rather than an empty detail.
+    // A bare Projects tab opens a project rather than an empty detail: the lensed one, else on desktop the first.
     effect(() => {
-      const lensId = this.lensId();
-      if (lensId !== null && this.selectedKey() === null) {
-        void this.router.navigate(this.lens.link(['/admin', 'projects', lensId]), { replaceUrl: true });
+      const open = projectToOpen({
+        selected: this.selectedKey(),
+        lensId: this.lensId(),
+        rows: rowKeys(this.rows()),
+        settled: !this.projectsQuery.isPending() && !this.projectsQuery.isError(),
+        mobile: this.mobile(),
+      });
+      if (open !== null) {
+        void this.router.navigate(this.lens.link(['/admin', 'projects', open]), { replaceUrl: true });
       }
     });
   }

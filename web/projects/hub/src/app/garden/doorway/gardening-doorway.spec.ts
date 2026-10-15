@@ -125,10 +125,10 @@ describe('doorwayCards', () => {
     );
   });
 
-  it('opens each project\'s garden on its first tab, under its lens', () => {
+  it('opens each project\'s garden on its landing tab, under its lens', () => {
     expect(doorwayCards(READS).map((card) => card.link)).toEqual([
-      ['/p', 'blizzard', 'gardening', 'runs'],
-      ['/p', 'winter', 'gardening', 'runs'],
+      ['/p', 'blizzard', 'gardening', 'proposals'],
+      ['/p', 'winter', 'gardening', 'proposals'],
     ]);
   });
 
@@ -215,7 +215,7 @@ describe('GardeningDoorway', () => {
     );
     expect(blizzard.querySelector('[data-testid="gardening-doorway-unserved"]')).toBeNull();
     const open = blizzard.querySelector<HTMLAnchorElement>('[data-testid="gardening-doorway-open-blizzard"]')!;
-    expect(open.getAttribute('href')).toBe('/p/blizzard/gardening/runs');
+    expect(open.getAttribute('href')).toBe('/p/blizzard/gardening/proposals');
 
     expect(open.textContent).toContain("Open Blizzard's garden");
     expect(blizzard.querySelector('[data-testid="gardening-doorway-sweeping-blizzard"]')?.textContent).toContain(

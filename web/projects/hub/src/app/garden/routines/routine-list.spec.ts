@@ -44,7 +44,8 @@ describe('FleetRoutineList', () => {
 
     const row = el.querySelector('[data-testid="gardening-routine-row-nightly"]');
     expect(row?.textContent).toContain('nightly');
-    expect(row?.textContent).toContain('garden-routine');
+    expect(row?.textContent).toContain('graph garden-routine');
+    expect(row?.querySelector('[data-testid="gardening-routine-cadence"]')?.textContent).toBe('manual');
   });
 
   it('renders the routine id as a compact ref, right-aligned, with the full id as its title', async () => {

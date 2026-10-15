@@ -7,72 +7,120 @@
 .sp {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 8px;
+  min-width: 0;
 }
+/* The detail header: the slug, its project chip and lifecycle, then the scope's own actions at the right. */
 .sp-head {
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
 }
 .sp-head h3 {
   margin: 0;
+  min-width: 0;
+  color: var(--snow);
+  font-size: var(--fs-lg);
+  font-weight: normal;
+  letter-spacing: 0.02em;
+  overflow-wrap: anywhere;
 }
 /* The project chip: the scope's owner, in the lens's own amber. */
 .sp-project {
   flex: none;
-  padding: 1px 6px;
-  border: 1px solid var(--amber);
-  color: var(--amber-hi);
-  font-size: var(--fs-xs);
+  padding: 0 6px;
+  border: 1px solid var(--bezel-hi);
+  color: var(--amber);
+  font-size: var(--fs-label);
+  letter-spacing: 0.08em;
+  text-transform: lowercase;
 }
 .sp-grow {
   flex: 1;
 }
-/* Another project's scope of the same slug: a different record, called out so the shared name never misleads. */
-.sp-same-slug {
-  margin: 12px 0 0;
-  padding: 8px 12px;
-  border-left: 2px solid var(--cyan);
-  background: var(--overlay-20);
-  font-size: var(--fs-sm);
+.sp-actions {
+  display: flex;
+  gap: 6px;
 }
-.sp-same-slug code {
-  color: var(--amber-hi);
+.sp-error {
+  margin: 8px 12px 0;
+  color: var(--red);
+  font-size: var(--fs-xs);
+}
+.sp-facts {
+  --kv-label-col: max-content;
+  padding: 8px 12px;
 }
 .sp-description {
-  margin: 0;
-  color: var(--amber);
   overflow-wrap: anywhere;
+}
+.sp-unswept {
+  color: var(--label);
 }
 .sp-edit {
   display: flex;
+  flex-wrap: wrap;
   gap: 4px;
 }
 .edit-input {
   flex: 1;
   min-width: 0;
 }
-.sp-actions {
-  display: flex;
-}
-.sp-error {
-  margin: 0;
-  color: var(--red);
-  font-size: var(--fs-xs);
+.sp-routines {
+  padding: 0 12px 10px;
 }
 .sp-routines h4 {
-  margin: 0 0 4px;
-  font-size: var(--fs-sm);
+  margin: 0;
+  padding: 10px 0 4px;
   color: var(--label);
+  font-size: var(--fs-label);
+  font-weight: normal;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
 }
 .sp-routines ul {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
   margin: 0;
-  padding-left: 16px;
+  padding: 0;
+  list-style: none;
+  font-size: var(--fs-sm);
+}
+.sp-routines li {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+.sp-routine-link {
+  min-width: 0;
+  color: var(--cyan);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+.sp-routine-link:hover,
+.sp-routine-link:focus-visible {
+  text-decoration: underline;
 }
 .sp-routines p {
   margin: 0;
   color: var(--label-dim);
   font-size: var(--fs-xs);
+}
+/* Another project's scope of the same slug: a different record, called out so the shared name never misleads. */
+.sp-same-slug {
+  margin: 8px 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-left: 2px solid var(--cyan-dim);
+  background: var(--overlay-20);
+  font-size: var(--fs-xs);
+}
+.sp-same-slug code {
+  padding: 0 3px;
+  background: var(--overlay-30);
+  color: var(--amber);
 }

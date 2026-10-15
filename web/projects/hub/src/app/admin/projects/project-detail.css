@@ -5,15 +5,23 @@
 .record {
   display: flex;
   flex-direction: column;
-  gap: 8px;
   min-width: 0;
 }
 .hdr {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
+  gap: 8px 10px;
+  min-width: 0;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+}
+.body {
+  display: flex;
+  flex-direction: column;
   gap: 8px;
   min-width: 0;
+  padding: 8px 12px 14px;
 }
 .name {
   margin: 0;

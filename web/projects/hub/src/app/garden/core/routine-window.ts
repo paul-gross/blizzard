@@ -6,6 +6,8 @@ export interface RoutineWindow {
   readonly until: string;
   readonly introducedBoundary: string;
   readonly periodDays: number;
+  /** How many days the window reaches back. */
+  readonly days: number;
   readonly label: string;
 }
 
@@ -21,6 +23,7 @@ export function defaultRoutineWindow(nowMs: number): RoutineWindow {
     until: until.toISOString(),
     introducedBoundary: since.toISOString(),
     periodDays: PERIOD_DAYS,
+    days: WINDOW_DAYS,
     label: `last ${WINDOW_DAYS} days`,
   };
 }

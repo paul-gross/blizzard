@@ -10,8 +10,15 @@ export interface ScopeRowVm {
   readonly slug: string;
   readonly description: string;
   readonly retired: boolean;
-  /** When a run last swept the scope, `null` when no run in the list's window did. */
-  readonly lastSwept: string | null;
+  /** When a run last swept the scope; `null` until the runs read answers. */
+  readonly swept: ScopeSweptVm | null;
+}
+
+/** When a run in the runs window last swept a scope: `at` is that run's mint instant, `null` when the window holds no
+ * sweep of it — then `notSwept` is what the scope shows instead. */
+export interface ScopeSweptVm {
+  readonly at: string | null;
+  readonly notSwept: string;
 }
 
 /** Emitted when the operator sets a scope's description in place — `FleetScopePanel`'s

@@ -8,6 +8,7 @@ import {
   lastSweptRows,
   measurementReadings,
   proposalCountsRows,
+  routineRecentRuns,
   relatedScopeRows,
   routineByName,
   routineEffectiveGraph,
@@ -25,6 +26,8 @@ import { routineLifecycleMutationKey } from '../../core/mutation-keys';
 import { map } from 'rxjs';
 
 import { isRoutineBlocked } from './gardening-effective-graph';
+import { injectLensedProject } from '../../core/lensed-project';
+import { injectHubRunsQuery } from '../runs/garden-runs.query';
 import { GardeningRunDialog } from '../runs/gardening-run-dialog';
 
 /**
@@ -75,6 +78,14 @@ export class GardeningRoutineDetail {
   private readonly window = defaultRoutineWindow(inject(FLEET_CLOCK)());
 
   private readonly routines = computed<readonly RoutineView[]>(() => this.routinesQuery.data() ?? []);
+
+  private readonly project = injectLensedProject();
+
+  /** The project the routine belongs to, for the chip beside its name. */
+  protected readonly projectName = computed(() => this.project()?.name ?? null);
+
+  /** The project's runs in the reporting window — the selected routine's recent runs and its Runs count. */
+  private readonly runsQuery = injectHubRunsQuery(() => this.window.since);
   private readonly graphs = computed<readonly GraphSummaryView[]>(() => this.graphsQuery.data() ?? []);
 
   /** The `routineName` route param, or `null` on the bare child route. Routines are
@@ -158,6 +169,14 @@ export class GardeningRoutineDetail {
     asyncState(this.proposalCountsQuery, (this.proposalCountsQuery.data()?.rows.length ?? 0) === 0),
   );
 
+  private readonly recentRuns = computed(() =>
+    routineRecentRuns(this.runsQuery.data(), this.selectedRoutine()?.name ?? null),
+  );
+
+  private readonly recentRunsState = computed<KitAsyncStateValue>(() =>
+    asyncState(this.runsQuery, (this.recentRuns()?.length ?? 0) === 0),
+  );
+
   protected readonly panelVm = computed<RoutinePanelVm | null>(() =>
     routinePanelVm(this.selectedRoutine(), {
       blocked: this.blocked(),
@@ -168,6 +187,8 @@ export class GardeningRoutineDetail {
       windowLabel: this.window.label,
       relatedScopes: this.relatedScopes(),
       overrideRetired: this.overrideRetired(),
+      recentRuns: this.recentRuns(),
+      recentRunsState: this.recentRunsState(),
     }),
   );
 
