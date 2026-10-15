@@ -128,6 +128,29 @@ _RUNNER_HOME_KEYS = (
     "worker_settings_path",
     "claude_code_credentials_path",
 )
+
+
+@domain_model
+@dataclass(frozen=True)
+class RunnerPathKey:
+    """A key of a ``[[runner]]`` that names a file or directory: its path under the runner, such as
+    ``("harness", "config_dir")``, and the parsed field it fills, as ``<class>.<field>``."""
+
+    key: tuple[str, ...]
+    field: str
+
+
+#: Every ``[[runner]]`` path key, the harness sections' with the runner's: what ``runner ingest`` copies and rewrites.
+RUNNER_PATH_KEYS: tuple[RunnerPathKey, ...] = (
+    RunnerPathKey(("runner_prompt_file",), "RunnerConfig.runner_prompt_file"),
+    RunnerPathKey(("transcripts_root",), "RunnerConfig.transcripts_root"),
+    RunnerPathKey(("harness", "config_dir"), "RunnerConfig.harness_config_dir"),
+    RunnerPathKey(("worker_settings_path",), "ClaudeCodeSection.worker_settings_path"),
+    RunnerPathKey(("claude_code_credentials_path",), "ClaudeCodeSection.credentials_path"),
+    RunnerPathKey(("opencode", "worker_config_path"), "OpenCodeSection.worker_config_path"),
+    RunnerPathKey(("opencode", "auth_path"), "OpenCodeSection.auth_path"),
+)
+
 _WORKSPACE_HOME_KEYS = (
     "provider",
     "repo",
@@ -579,6 +602,16 @@ def scaffold_runner(
 def runner_toml(entry: RunnerEntry) -> str:
     """``entry`` as the ``[[runner]]`` table text the host file holds, its sub-tables beneath it."""
     return _runner_toml(entry)
+
+
+def workspace_toml(workspace: HostWorkspace) -> str:
+    """``workspace`` as the ``[[workspace]]`` table text the host file holds, its repos beneath it."""
+    return _workspace_toml(workspace)
+
+
+def subscription_toml(subscription: SubscriptionDeclaration) -> str:
+    """``subscription`` as the ``[[subscription]]`` table text the host file holds."""
+    return _subscription_toml(subscription)
 
 
 def _dotenv_text(root: Path) -> str:

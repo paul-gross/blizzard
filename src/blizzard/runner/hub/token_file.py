@@ -41,6 +41,12 @@ def with_token(text: str, token_env: str, token: str) -> str:
     return "\n".join(kept) + "\n"
 
 
+def without_token(text: str, token_env: str) -> str:
+    """``text`` with every ``token_env`` assignment removed, every other line kept as it was."""
+    kept = [line for line in text.splitlines() if (assigned := _assignment(line)) is None or assigned[0] != token_env]
+    return "\n".join(kept) + "\n" if kept else ""
+
+
 def _assignment(line: str) -> tuple[str, str] | None:
     """A ``NAME=value`` line's name and unquoted value; ``None`` for a blank line, a comment, or
     anything else that assigns nothing."""

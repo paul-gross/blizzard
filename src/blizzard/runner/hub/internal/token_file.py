@@ -12,7 +12,7 @@ from pathlib import Path
 from blizzard.foundation.roles import collaborator
 from blizzard.runner.hub.bootstrap import ITokenWriter
 from blizzard.runner.hub.held_token import IHubTokenFile
-from blizzard.runner.hub.token_file import ENV_FILENAME, assigned_token, with_token
+from blizzard.runner.hub.token_file import ENV_FILENAME, assigned_token, with_token, without_token
 
 _OWNER_ONLY = 0o600
 _OTHERS_ACCESS = stat.S_IRWXG | stat.S_IRWXO
@@ -42,7 +42,20 @@ class HubTokenFile:
         """Replace the token's assignment, keeping every other line as it was, through a temp file
         renamed over the original — a crash leaves the old file or the new one, never half of
         either. The file is owner-only (``0600``)."""
-        text = with_token(self.path.read_text() if self.path.exists() else "", self.token_env, token)
+        self._replace(with_token(self.path.read_text() if self.path.exists() else "", self.token_env, token))
+
+    def remove(self) -> None:
+        """Remove the token's every assignment, keeping every other line as it was, as :meth:`write` replaces it; a
+        file or assignment already absent is left as it is."""
+        try:
+            text = self.path.read_text()
+        except FileNotFoundError:
+            return
+        edited = without_token(text, self.token_env)
+        if edited.rstrip("\n") != text.rstrip("\n"):
+            self._replace(edited)
+
+    def _replace(self, text: str) -> None:
         fd, pending = tempfile.mkstemp(dir=self.path.parent, prefix=f"{ENV_FILENAME}.", suffix=".tmp")
         try:
             with os.fdopen(fd, "w") as handle:
