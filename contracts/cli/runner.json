@@ -829,6 +829,60 @@
       "path": "runner host",
       "short_help": "Become the blizzard host: the reconciliation loop of each runner + the local API."
     },
+    "ingest": {
+      "help": "Move one runner from SOURCE \u2014 another host's directory, or a `store reset --runner` archive \u2014 into this host:\nits rows, its workspace, subscription and `[[runner]]` where this host lacks them, and its token; then delete its\nrows from SOURCE, moving a source left with no runner aside. An archive's `[[runner]]` and token must already be\nhere. Refused while either host runs, or the hub does not hold the runner under this host; a re-run completes an\ninterrupted ingest.",
+      "params": [
+        {
+          "hidden": false,
+          "kind": "argument",
+          "name": "source",
+          "opts": [
+            "source"
+          ],
+          "required": true,
+          "secondary_opts": [],
+          "type": "path"
+        },
+        {
+          "help": "Host directory (overrides $BZ_RUNNER_DIR).",
+          "hidden": false,
+          "kind": "option",
+          "name": "directory",
+          "opts": [
+            "--dir"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "type": "text"
+        },
+        {
+          "help": "The runner to take in, by name or id.",
+          "hidden": false,
+          "kind": "option",
+          "name": "runner",
+          "opts": [
+            "--runner"
+          ],
+          "required": true,
+          "secondary_opts": [],
+          "type": "text"
+        },
+        {
+          "help": "The new id the runner's workspace takes here, when this host gives its id to another workspace.",
+          "hidden": false,
+          "kind": "option",
+          "name": "workspace_id",
+          "opts": [
+            "--workspace-id"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "type": "text"
+        }
+      ],
+      "path": "runner ingest",
+      "short_help": "Move one runner from SOURCE \u2014 another host's directory, or a `store reset --runner` archive \u2014 into this host: its rows, its workspace, subscription and `[[runner]]` where this host lacks them, and its token; then delete its rows from SOURCE, moving a source left with no runner aside."
+    },
     "init": {
       "help": "Scaffold the host file + data dir + a migrated store under DIRECTORY, then register the host at its hub and\njoin each of its runners under it. Idempotent.\n\nA host token the hub knows \u2014 $BZ_HOST_TOKEN, the host file's `host_token`, then DIRECTORY/.env \u2014 keeps its host.\nHolding none, the host is added at the hub under your `blizzard hub login` session when you hold one, in the\ntenant --tenant names or else the only one you may enter, named after its first `[[runner]]`; its token is\nwritten to DIRECTORY/.env as BZ_HOST_TOKEN. A runner holding no token is added under the host, its token\nwritten to DIRECTORY/.env as BZ_HUB_TOKEN_<NAME> and its id to its `[[runner]]`; a runner whose token the hub\nknows is kept when it stands under the host. A held token in another tenant than --tenant names stops: neither\na host nor a runner moves between tenants. A fresh host serves the projects --project names, else `default`. A\ndirectory a pre-host runner left behind is refused, naming graduation, unless --allow-readd sets its store\naside. DIRECTORY defaults to $BZ_RUNNER_DIR, then the cwd.",
       "params": [
@@ -1549,7 +1603,7 @@
     "store": {
       "commands": {
         "reset": {
-          "help": "Move the store under DIRECTORY aside under a timestamped name, then migrate a fresh one.\n\nNothing is deleted: the old store keeps its undelivered events and in-flight leases beside the\nnew one. Refused while the host holds the directory or a pre-host daemon answers on its socket, and for a\nstore that is not a SQLite file. DIRECTORY defaults to $BZ_RUNNER_DIR, then the cwd.",
+          "help": "Move the store under DIRECTORY aside under a timestamped name, then migrate a fresh one; nothing is deleted.\n\nWith --runner, that runner's rows move to an archive store beside the host's, which `runner ingest` takes back,\nand its outbox counters stay. Refused while the host holds the directory or a pre-host daemon answers on its\nsocket, and for a store that is not a SQLite file. DIRECTORY defaults to $BZ_RUNNER_DIR, then the cwd.",
           "params": [
             {
               "hidden": false,
@@ -1561,10 +1615,22 @@
               "required": false,
               "secondary_opts": [],
               "type": "text"
+            },
+            {
+              "help": "Reset only this runner, by name or id: its rows move to an archive store beside the host's.",
+              "hidden": false,
+              "kind": "option",
+              "name": "runner",
+              "opts": [
+                "--runner"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
             }
           ],
           "path": "runner store reset",
-          "short_help": "Move the store under DIRECTORY aside under a timestamped name, then migrate a fresh one."
+          "short_help": "Move the store under DIRECTORY aside under a timestamped name, then migrate a fresh one; nothing is deleted."
         }
       },
       "help": "Administer the host's local store while the host is down.",

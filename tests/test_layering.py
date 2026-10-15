@@ -961,6 +961,8 @@ _COMPOSITION_ROOTS = frozenset(
         _RUNNER_DIR / "loop_wiring.py",
         _RUNNER_DIR / "cli" / "runtime.py",
         _RUNNER_DIR / "cli" / "external_usage.py",
+        _RUNNER_DIR / "cli" / "runners.py",
+        _RUNNER_DIR / "cli" / "store.py",
         _RUNNER_COMPOSITION_FILE,
         _RUNNER_DIR / "cli" / "opencode.py",
         _SRC_DIR / "tools" / "invariants.py",
@@ -2128,7 +2130,7 @@ _RUNNER_PACKAGE_LAYERS: dict[str, frozenset[str]] = {
 _RUNNER_EDGE_PACKAGES = frozenset({"api", "cli", "store"})
 #: Top-level runner modules that assemble or serve the graph (composition roots, config loader, runtime).
 _RUNNER_EDGE_MODULES = frozenset(
-    {"app", "composition", "config", "host_config", "host_layout", "listeners", "loop_wiring", "runtime"}
+    {"app", "composition", "config", "host_config", "host_layout", "ingest", "listeners", "loop_wiring", "runtime"}
 )
 _RUNNER_SUBNODES = frozenset({"harness/claude_code", "harness/opencode", "harness/wiring"})
 

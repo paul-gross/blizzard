@@ -113,6 +113,7 @@ _DEDICATED_PREFIXES = (
     "hostlane.",
     "egress.",
     "teardown.",
+    "ingest.",
 )
 _RESUME_POINTS = [p for p in _ALL_POINTS if p.startswith("resume.")]
 _ABANDON_POINTS = [p for p in _ALL_POINTS if p.startswith("abandon.")]
@@ -159,6 +160,9 @@ _EGRESS_POINTS = [p for p in _ALL_POINTS if p.startswith("egress.")]
 # `teardown.*` fires inside the HUB's tenant deletion — after its close, between drain batches, and after its drain.
 # Swept by `test_kill9_at_teardown_crash_point`.
 _TEARDOWN_POINTS = [p for p in _ALL_POINTS if p.startswith("teardown.")]
+# `ingest.*` fires inside `blizzard runner ingest`, between its store copy, its configuration edits and its removal
+# from the source.
+_INGEST_POINTS = [p for p in _ALL_POINTS if p.startswith("ingest.")]
 _GENERIC_POINTS = [p for p in _ALL_POINTS if not p.startswith(_DEDICATED_PREFIXES)]
 
 # A representative CI subset, one point per family, run as a bounded-runtime gate under
@@ -249,6 +253,9 @@ _EGRESS_CI_SUBSET = ("egress.after-commit.before-cursor",)
 # The teardown CI subset: the mid-drain window, where a committed batch must be neither redone nor counted twice.
 _TEARDOWN_CI_SUBSET = ("teardown.after-batch.before-next",)
 
+# The ingest CI subset: the later window, where the source has lost its token but still holds the runner's rows.
+_INGEST_CI_SUBSET = ("ingest.after-config.before-removal",)
+
 
 def _select(points: list[str], ci_subset: tuple[str, ...]) -> list[str]:
     """The points to parametrize: all of ``points``, or its CI subset under the CI profile."""
@@ -309,6 +316,7 @@ def test_ci_subset_covers_every_family(monkeypatch: pytest.MonkeyPatch) -> None:
         | set(_select(_HOST_LANE_POINTS, _HOST_LANE_CI_SUBSET))
         | set(_select(_EGRESS_POINTS, _EGRESS_CI_SUBSET))
         | set(_select(_TEARDOWN_POINTS, _TEARDOWN_CI_SUBSET))
+        | set(_select(_INGEST_POINTS, _INGEST_CI_SUBSET))
     )
     uncovered = {family for family in families if not any(p.startswith(f"{family}.") for p in ci_selected)}
     assert not uncovered, f"registry families with zero CI-subset coverage: {sorted(uncovered)}"

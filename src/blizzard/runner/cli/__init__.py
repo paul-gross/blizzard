@@ -19,6 +19,7 @@ _COMMANDS = {
     "tick": f"{_CLI}.runtime:tick_cmd",
     "add": f"{_CLI}.runners:add",
     "retire": f"{_CLI}.runners:retire",
+    "ingest": f"{_CLI}.runners:ingest",
     "store": f"{_CLI}.store:store_group",
     "external-usage": f"{_CLI}.external_usage:external_usage_group",
     "heartbeat": f"{_CLI}.worker:heartbeat",
