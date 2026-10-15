@@ -165,6 +165,28 @@ jobs:
           cd "$GITHUB_WORKSPACE" && git diff --exit-code -- web/ \
             || { echo "::error::generated API client is stale — regenerate and commit."; exit 1; }
 
+  # The web exemplars (blizzard:exemplar-check). The Python exemplars ride the ruff, pyright, and pytest jobs above;
+  # this half needs node, and the Python env as well to export the exemplar router's spec.
+  exemplars:
+    name: exemplar check (web)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          python-version: "3.12"
+      - run: uv sync
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: npm ci
+        run: cd web && npm ci
+      - name: exemplar check
+        run: web/scripts/exemplar-check.sh
+
   process-ref-lint:
     name: process-reference and change-history lint
     runs-on: ubuntu-latest

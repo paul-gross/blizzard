@@ -9,4 +9,4 @@ exceptions:
   - 'conftest\.py'
   - 'setup\.py'
 tokens:
-  - '(?<![\w./~:@$*…-])(?!(?:src|tests|scripts|docs|web|contracts|openapi|packaging|mutants|dist|styles|blizzard|blizzard-mock|blizzard-context|blizzard-infra)/)(?:\.\./|\./)*[\w.-]+(?:/[\w.-]+)*\.py\b'
+  - '(?<![\w./~:@$*…-])(?!(?:src|tests|scripts|docs|web|exemplars|contracts|openapi|packaging|mutants|dist|styles|blizzard|blizzard-mock|blizzard-context|blizzard-infra)/)(?:\.\./|\./)*[\w.-]+(?:/[\w.-]+)*\.py\b'

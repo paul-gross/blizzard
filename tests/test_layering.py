@@ -3,6 +3,7 @@ from __future__ import annotations
 import ast
 import builtins
 import functools
+import importlib.util
 import json
 import os
 import re
@@ -3843,3 +3844,53 @@ def test_every_configured_record_noun_carries_its_whole_verb_set() -> None:
         if absent:
             missing[noun] = absent
     assert missing == {}, f"configured-record nouns missing verbs: {missing}"
+
+
+#: The exemplar package (``bzh:exemplar-conformance``): checked by the same scans as ``src/``.
+_EXEMPLAR_DIR = _REPO_ROOT / "exemplars" / "python" / "exemplar"
+
+
+def test_the_exemplars_declare_their_data_roles() -> None:
+    """Every exemplar data class meets the same role checks ``src/`` does (``bzh:data-roles``)."""
+    checks = (
+        _role_marker_violations,
+        _boundary_violations,
+        _adapter_model_violations,
+        _domain_model_collaborator_violations,
+        _collaborator_violations,
+        _dto_method_violations,
+    )
+    violations = [violation for check in checks for violation in check(_EXEMPLAR_DIR)]
+    violations += _wire_import_violations(_EXEMPLAR_DIR, exempt=frozenset())
+    assert not violations, f"exemplar data roles: {violations}"
+
+
+def test_the_exemplar_domain_core_imports_no_framework_or_driver() -> None:
+    """An exemplar ``hub/domain/`` module imports nothing ``src/``'s domain core may not (``bzh:domain-core``)."""
+    violations = [
+        f"{path.relative_to(_EXEMPLAR_DIR)} imports {module}"
+        for path in sorted((_EXEMPLAR_DIR / "hub" / "domain").rglob("*.py"))
+        for module in sorted(_imported_modules(path))
+        if any(module == prefix or module.startswith(f"{prefix}.") for prefix in _DOMAIN_CORE_FORBIDDEN)
+    ]
+    assert not violations, f"exemplar domain core: {violations}"
+
+
+def test_the_exemplars_cross_no_internal_package() -> None:
+    """An exemplar imports another package's ``internal/`` only from a composition root (``bzh:internal-visibility``)."""
+    roots = frozenset(_EXEMPLAR_DIR.rglob("composition.py"))
+    violations = _internal_crossings(_EXEMPLAR_DIR, exempt=roots)
+    assert not violations, f"exemplar internal crossings: {violations}"
+
+
+def test_the_exemplars_keep_every_block_within_its_cap() -> None:
+    """Every exemplar comment and docstring fits its ``bzh:prose-budget`` cap outright, with no baseline."""
+    spec = importlib.util.spec_from_file_location("prose_density", _REPO_ROOT / "scripts" / "prose_density.py")
+    assert spec is not None and spec.loader is not None
+    prose_density = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(prose_density)
+    trees = (_EXEMPLAR_DIR, _EXEMPLAR_DIR.parent / "tests")
+    violations = [
+        v for tree in trees for path in sorted(tree.rglob("*.py")) for v in prose_density._over_cap_blocks(path)
+    ]
+    assert not violations, f"exemplar prose over cap: {violations}"

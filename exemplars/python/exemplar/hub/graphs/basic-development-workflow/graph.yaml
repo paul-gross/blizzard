@@ -1,0 +1,38 @@
+# An excerpt: the build node, and the review edge that carries build.from-review.md.
+name: bas-dwf
+entry: build
+
+nodes:
+  build:
+    executor: runner
+    prompt: ./prompts/build.md
+    session: resume:code
+    produces:
+      - review-finding-refutes  # declared by build.md's Refutations section
+      - {name: commit, kind: git_commit}  # covered by any declared commit, by kind
+    judgement:
+      prompt: ./prompts/build.judgement.md
+      choices:
+        pass:
+          description: The work meets the item's intent, committed and pushed.
+          to: review
+        fail:
+          description: The work does not yet meet the criteria; the failure output is attached.
+          to: build
+
+  review:
+    executor: runner
+    prompt: ./prompts/review.md
+    session: fresh:gate
+    produces:
+      - review-findings
+    judgement:
+      prompt: ./prompts/review.judgement.md
+      choices:
+        pass:
+          description: The submitted work passes review.
+          to: pre-push
+        fail:
+          description: Review found blocking issues, recorded in the review-findings asset.
+          to: build
+          prompt_addendum: ./prompts/build.from-review.md  # appended to build's prompt on this edge only

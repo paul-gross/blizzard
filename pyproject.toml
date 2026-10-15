@@ -141,7 +141,9 @@ mutation = [
 ]
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["tests", "exemplars/python/tests"]
+# The exemplar tests import the `exemplar` package beside them and `tests.support`.
+pythonpath = [".", "exemplars/python"]
 asyncio_mode = "auto"
 # The verification tiers (blizzard-context verification/blizzard.md): the default
 # run is unit + component; `-m component` selects the component tier alone.
@@ -192,6 +194,8 @@ also_copy = [
     "tests/fixtures/claude_code_telemetry",
     # These test-loaded Python scripts live outside mutmut's src/ and tests/ copies.
     "scripts/prose_spans.py",
+    "scripts/prose_density.py",
+    "exemplars/python",
     "scripts/restated_invariants.py",
     "scripts/mutation.py",
     "docs/deployment/transcripts.md",
@@ -221,7 +225,8 @@ also_copy = [
 ]
 
 [tool.pyright]
-include = ["src", "tests"]
+include = ["src", "tests", "exemplars/python"]
+extraPaths = ["exemplars/python"]
 pythonVersion = "3.12"
 typeCheckingMode = "standard"
 reportMissingTypeStubs = false
@@ -229,6 +234,8 @@ reportMissingTypeStubs = false
 [tool.ruff]
 line-length = 120
 target-version = "py312"
+# `exemplar` is first-party, as `blizzard` is.
+src = [".", "src", "exemplars/python"]
 # Alembic migration scripts are generated from a template and follow Alembic's
 # own conventions, not ours.
 extend-exclude = ["src/blizzard/*/store/migrations/versions"]
