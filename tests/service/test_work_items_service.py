@@ -14,7 +14,7 @@ import pytest
 
 from tests.e2e.test_acceptance_loop import REPO, _free_port, _runner_api, _runner_config
 from tests.runner_join import pin_runner, seed_pinned_runner
-from tests.service.support import mock_hub, mock_hub_chunk_spec, require_mock_fleet, require_winter_source, service_gate
+from tests.service.support import mock_hub, mock_hub_chunk_spec, require_mock_fleet, service_gate
 
 pytestmark = [pytest.mark.service, service_gate]
 
@@ -26,7 +26,6 @@ def test_work_items_proxy_carries_the_widened_fields_unchanged_over_a_real_hop(t
     re-validated through the runner's own ``WorkItemsView`` model on the proxy hop; a
     field the hop dropped or defaulted differently would fail this."""
     bin_dir = require_mock_fleet()
-    require_winter_source()
 
     hub_port = _free_port()
     with mock_hub(bin_dir, hub_port) as hub:
@@ -63,7 +62,6 @@ def test_a_worker_lane_proxied_read_rides_out_a_real_mock_hub_restart(tmp_path: 
     the read still answers ``200``, never surfacing the restart window's `502` to the
     worker."""
     bin_dir = require_mock_fleet()
-    require_winter_source()
 
     # A fixed id: the mock hub's state is in-memory and per-process, so the respawned
     # instance below needs the same chunk re-seeded onto it under the id the runner

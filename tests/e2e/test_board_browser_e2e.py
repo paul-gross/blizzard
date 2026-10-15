@@ -11,7 +11,6 @@ import contextlib
 import dataclasses
 import os
 import re
-import subprocess
 import threading
 import time
 from collections.abc import Iterator
@@ -35,8 +34,8 @@ from tests.e2e.test_acceptance_loop import (
     _hub,
     _mock_bin_dir,
     _runner_config,
-    _winter_source,
 )
+from tests.fleet_world import mint_world, scripted_build_prompt
 
 if TYPE_CHECKING:  # playwright is imported lazily below — the module must import unskipped
     from playwright.sync_api import Locator, Page
@@ -54,7 +53,7 @@ pytestmark = [
 _ASK_SCRIPT = 'ask("Which API style should the grouped endpoint use?", ["rest", "graphql"])\n'
 # The board's answer <input> is single-line and collapses newlines, so this resume
 # script is written as one line of semicolon-separated Python.
-_ANSWER_SCRIPT = (
+_ANSWER_SCRIPT = scripted_build_prompt(
     "import subprocess, pathlib; "
     f"repo = {REPO_NAME!r}; "
     '(pathlib.Path(repo) / "LANDED.md").write_text("landed after the board answer\\n"); '
@@ -235,32 +234,14 @@ def test_board_browser_live_group_reorder_answer_and_pause(tmp_path: Path, chrom
     bin_dir = _mock_bin_dir()
     if bin_dir is None:
         pytest.skip("no provisioned sibling blizzard-mock worktree (run `winter provision <env>`)")
-    winter_source = _winter_source()
-    if winter_source is None:
-        pytest.skip("no local winter source (set BLIZZARD_MOCK_WINTER_SOURCE)")
 
     # 1. Mint a fresh, disposable fixture world and fence it for the mock harness.
     scratch = tmp_path / "scratch"
-    subprocess.run(
-        [
-            str(bin_dir / "blizzard-mock-fixture"),
-            "reset",
-            "--env",
-            FIXTURE_ENV,
-            "--scratch-root",
-            str(scratch),
-            "--winter-source",
-            str(winter_source),
-        ],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
+    mint_world(bin_dir, scratch)
     fixture_root = scratch / FIXTURE_ENV
     workspace = fixture_root / "workspace"
     origins = fixture_root / "origins"
     origin_bare = origins / f"{REPO_NAME}.git"
-    (workspace / ".blizzard-mock-harness-fence").write_text("e2e fence marker\n")
 
     forge_port, hub_port = _free_port(), _free_port()
     with _forge(bin_dir, origins, forge_port) as forge, _hub(tmp_path / "hub", forge_port, hub_port) as hub:

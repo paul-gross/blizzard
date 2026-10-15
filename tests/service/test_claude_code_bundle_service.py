@@ -19,13 +19,12 @@ import pytest
 from blizzard.runner.harness.wiring import publish_harness_bundle
 from blizzard.runner.loop_wiring import LoopWiring
 from tests.e2e.test_acceptance_loop import _free_port, _runner_config
+from tests.fleet_world import mint_world
 from tests.service.support import (
-    mint_fixture,
     mock_hub,
     mock_hub_chunk_spec,
     poll_until,
     require_mock_fleet,
-    require_winter_source,
     service_gate,
 )
 from tests.service.test_runner_service import _WORK_REF_URL, _status, _tick_env
@@ -35,7 +34,7 @@ pytestmark = [pytest.mark.service, service_gate]
 
 def test_a_bundled_runners_mock_worker_runs_the_operators_and_the_runners_hooks(tmp_path: Path) -> None:
     bin_dir = require_mock_fleet()
-    workspace, _origins, _bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
+    workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
     fenced = _tick_env()
 
     marker = tmp_path / "operator-hook.log"

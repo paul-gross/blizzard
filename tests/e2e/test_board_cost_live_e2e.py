@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import os
 import re
-import subprocess
 from pathlib import Path
 
 import httpx
@@ -24,8 +23,8 @@ from tests.e2e.test_acceptance_loop import (
     _graph_yaml,
     _hub,
     _mock_bin_dir,
-    _winter_source,
 )
+from tests.fleet_world import mint_world
 from tests.runner_join import fleet_headers
 
 pytestmark = [
@@ -112,27 +111,10 @@ def test_board_renders_cost_and_updates_live_over_sse(tmp_path: Path, chromium_a
     bin_dir = _mock_bin_dir()
     if bin_dir is None:
         pytest.skip("no provisioned sibling blizzard-mock worktree (run `winter provision <env>`)")
-    winter_source = _winter_source()
-    if winter_source is None:
-        pytest.skip("no local winter source (set BLIZZARD_MOCK_WINTER_SOURCE)")
 
     # 1. Mint a fresh, disposable fixture world (bare origins + a forge over them).
     scratch = tmp_path / "scratch"
-    subprocess.run(
-        [
-            str(bin_dir / "blizzard-mock-fixture"),
-            "reset",
-            "--env",
-            FIXTURE_ENV,
-            "--scratch-root",
-            str(scratch),
-            "--winter-source",
-            str(winter_source),
-        ],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
+    mint_world(bin_dir, scratch)
     origins = scratch / FIXTURE_ENV / "origins"
 
     forge_port, hub_port = _free_port(), _free_port()

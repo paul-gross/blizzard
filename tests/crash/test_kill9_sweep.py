@@ -36,7 +36,7 @@ from blizzard.hub.store.scoped import is_tenant_owned
 from blizzard.hub.tenancy import TenantId
 from blizzard.runner.composition import build_host_stores
 from blizzard.runner.config import DEFAULT_WORKSPACE_ID
-from blizzard.runner.environments.internal.winter_cli import SubprocessWinterCli
+from blizzard.runner.environments.internal.basic_provider import BasicWorkspaceProvider
 from blizzard.runner.harness.identity import OPENCODE_HARNESS_ID
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.store import schema as runner_schema
@@ -47,7 +47,6 @@ from tests.crash.support import (
     OWNER,
     REPO,
     REPO_NAME,
-    RUNNER_ENV,
     CrashEnv,
     await_host,
     await_http,
@@ -76,6 +75,7 @@ from tests.crash.support import (
     write_runner_config,
 )
 from tests.crash_points import discover_crash_points
+from tests.fleet_world import BUILD_BRANCH, scripted_build, world_repos
 from tests.host_files import load_runner_config
 from tests.otlp_sink import OtlpSink, otlp_sink
 from tests.runner_fakes import (
@@ -827,9 +827,9 @@ def test_kill9_at_attach_crash_point(crash_env: CrashEnv, tmp_path: Path, point:
 
 
 _DECLARE_COMMIT_TOKEN = "the-declare-commit-lease-token"
-# The fixture workspace's one env and its one repo — the declare edge checks the repo
-# against that env's real manifest, so these must be the actual ones, not stand-ins.
-_DECLARE_COMMIT_ENV = RUNNER_ENV
+# The env the basic provider allocates for the seeded chunk (named by the chunk id) and its repo — the
+# declare edge checks the repo against that env's real manifest, so these must be the actual ones.
+_DECLARE_COMMIT_ENV = "ch_declare_commit"
 _DECLARE_COMMIT_REPO = REPO_NAME
 _DECLARE_COMMIT_BRANCH = "feat/declare-commit"
 _DECLARE_COMMIT_SHA = "deadbeefcafef00d"
@@ -842,10 +842,10 @@ def test_kill9_at_declare_commit_crash_point(crash_env: CrashEnv, tmp_path: Path
     it, with full provenance readable against the same store after the ungraceful death."""
     runner_dir = tmp_path / "runner"
     # Materialize the env's worktrees directly (this scenario seeds its lease + binding,
-    # skipping FILL's acquire), via the same winter-CLI seam the daemon uses.
-    winter_cli = SubprocessWinterCli()
-    winter_cli.ensure_ready(crash_env.workspace)
-    winter_cli.run(crash_env.workspace, ["ws", "init", _DECLARE_COMMIT_ENV])
+    # skipping FILL's acquire), through the same basic provider the daemon uses.
+    [acquired] = BasicWorkspaceProvider(
+        str(crash_env.workspace), repos=world_repos(crash_env.workspace), max_environments=1
+    ).acquire("ch_declare_commit", 1, [])
     # Nothing listens on ``hub_port`` — the declare path never calls the hub; the loop's
     # hub polls just fail and are swallowed, and the local API serves regardless.
     hub_port, runner_port = free_port(), free_port()
@@ -881,7 +881,7 @@ def test_kill9_at_declare_commit_crash_point(crash_env: CrashEnv, tmp_path: Path
     store.record_binding(
         chunk_id="ch_declare_commit",
         environment_id=_DECLARE_COMMIT_ENV,
-        workdir=str(crash_env.workspace / _DECLARE_COMMIT_ENV),
+        workdir=acquired.workdir,
         bound_at=_DECLARE_COMMIT_NOW,
         workspace_id=DEFAULT_WORKSPACE_ID,
     )
@@ -1922,6 +1922,7 @@ def test_kill9_at_resume_crash_point_under_opencode(crash_env: CrashEnv, tmp_pat
 # --- Live detach recovery — the abandon crash point ---
 
 
+@scripted_build
 def _hang_once_build_script(landed_file: str, marker: Path) -> str:
     """Commit ``landed_file``, then ``hang()`` — but only the *first* time, so a fresh
     re-claim after the detach finds the marker and returns normally instead of hanging
@@ -2670,6 +2671,8 @@ def _two_repo_build_script(landed_file: str) -> str:
     return (
         "import subprocess, pathlib\n"
         f"for repo in [{REPO_NAME!r}, {_WEB_REPO_NAME!r}]:\n"
+        # The basic provider's worktrees arrive detached; the worker owns its branch.
+        f'    subprocess.run(["git", "-C", repo, "switch", "-C", {BUILD_BRANCH!r}], check=True)\n'
         f"    (pathlib.Path(repo) / {landed_file!r}).write_text('landed by the mid-script sweep\\n')\n"
         '    subprocess.run(["git", "-C", repo, "add", "-A"], check=True)\n'
         "    subprocess.run(\n"

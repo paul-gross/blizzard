@@ -46,8 +46,8 @@ from tests.e2e.test_acceptance_loop import (
     _mock_bin_dir,
     _runner_api,
     _runner_config,
-    _winter_source,
 )
+from tests.fleet_world import mint_world, scripted_build_prompt
 from tests.runner_join import fleet_headers
 
 pytestmark = [
@@ -69,7 +69,7 @@ _ASK_SCRIPT = (
 )
 # The human's answer, delivered as `blizzard hub question answer <qid> "<script>"`. It
 # arrives as the resume message and makes the real commit the build node owes.
-_ANSWER_SCRIPT = (
+_ANSWER_SCRIPT = scripted_build_prompt(
     PLANT_LEASE_TOKEN_SCRIPT + "import subprocess, pathlib\n"
     f"repo = {REPO_NAME!r}\n"
     '(pathlib.Path(repo) / "LANDED.md").write_text("landed after the human answered\\n")\n'
@@ -187,31 +187,13 @@ def test_ask_parks_then_answer_resumes_session_to_done(
     bin_dir = _mock_bin_dir()
     if bin_dir is None:
         pytest.skip("no provisioned sibling blizzard-mock worktree (run `winter provision <env>`)")
-    winter_source = _winter_source()
-    if winter_source is None:
-        pytest.skip("no local winter source (set BLIZZARD_MOCK_WINTER_SOURCE)")
 
     scratch = tmp_path / "scratch"
-    subprocess.run(
-        [
-            str(bin_dir / "blizzard-mock-fixture"),
-            "reset",
-            "--env",
-            FIXTURE_ENV,
-            "--scratch-root",
-            str(scratch),
-            "--winter-source",
-            str(winter_source),
-        ],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
+    mint_world(bin_dir, scratch)
     fixture_root = scratch / FIXTURE_ENV
     workspace = fixture_root / "workspace"
     origins = fixture_root / "origins"
     origin_bare = origins / f"{REPO_NAME}.git"
-    (workspace / ".blizzard-mock-harness-fence").write_text("e2e fence marker\n")
 
     forge_port, hub_port = _free_port(), _free_port()
     with (

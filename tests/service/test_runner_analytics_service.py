@@ -15,13 +15,12 @@ import pytest
 
 from blizzard.runner.config import RunnerConfig
 from tests.e2e.test_acceptance_loop import _free_port, _runner_api, _runner_config
+from tests.fleet_world import mint_world
 from tests.service.support import (
-    mint_fixture,
     mock_hub,
     mock_hub_chunk_spec,
     poll_until,
     require_mock_fleet,
-    require_winter_source,
     service_gate,
 )
 from tests.service.test_runner_service import _tick_env, _tick_then, _worker_credential
@@ -74,7 +73,7 @@ def test_a_workers_analytics_reads_proxy_through_to_the_mock_hubs_seeded_rows(tm
     hub-proxied to a real mock hub — no ``BZ_HUB_URL``, no hub credential, in the
     worker's own call at all."""
     bin_dir = require_mock_fleet()
-    workspace, _origins, _bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
+    workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
     fenced = _tick_env()
 
     hub_port = _free_port()
@@ -126,7 +125,7 @@ def test_a_leases_chunk_with_no_run_context_is_a_legible_refusal_not_an_empty_bu
     """A chunk that is not a routine run — no seeded ``garden_run`` — refuses the read
     rather than answering an empty bucket, forwarded verbatim from the mock hub."""
     bin_dir = require_mock_fleet()
-    workspace, _origins, _bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
+    workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
     fenced = _tick_env()
 
     hub_port = _free_port()

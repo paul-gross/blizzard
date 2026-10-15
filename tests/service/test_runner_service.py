@@ -45,20 +45,19 @@ from tests.e2e.test_acceptance_loop import (
     _runner_config,
     _terminate,
 )
+from tests.fleet_world import BUILD_BRANCH, mint_world
 from tests.host_files import init_runner_environment, write_host_file
 from tests.runner_fakes import daemon_store
 from tests.runner_join import fleet_headers, pin_runner, runner_spawn_env, seed_pinned_runner
 from tests.service.support import (
     JUDGEMENT_SCRIPT,
     SseTap,
-    mint_fixture,
     mock_hub,
     mock_hub_chunk_spec,
     mock_hub_escalating_chunk_spec,
     mock_hub_usage_limited_chunk_spec,
     poll_until,
     require_mock_fleet,
-    require_winter_source,
     runner_fleet_view,
     service_gate,
     sse_tap,
@@ -113,7 +112,7 @@ def _seed(hub: httpx.Client) -> str:
 
 def test_unreachable_hub_buffers_the_completion_then_lands_on_recovery(tmp_path: Path) -> None:
     bin_dir = require_mock_fleet()
-    workspace, _origins, origin_bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
+    workspace, _origins, origin_bare = mint_world(bin_dir, tmp_path / "scratch")
     fenced = _tick_env()
 
     hub_port = _free_port()
@@ -147,7 +146,7 @@ def test_unreachable_hub_buffers_the_completion_then_lands_on_recovery(tmp_path:
 
 def test_dropped_ack_reapplies_idempotently_through_to_done(tmp_path: Path) -> None:
     bin_dir = require_mock_fleet()
-    workspace, _origins, _bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
+    workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
     fenced = _tick_env()
 
     hub_port = _free_port()
@@ -180,7 +179,7 @@ def test_usage_limit_engages_the_local_brake_and_reports_the_reason_without_fail
     brake, its reason mirrored to the hub, with the chunk still running, unescalated, on
     its first epoch."""
     bin_dir = require_mock_fleet()
-    workspace, _origins, _bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
+    workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
     fenced = _tick_env()
 
     hub_port = _free_port()
@@ -223,7 +222,7 @@ def test_fill_absorbs_a_dependency_denial_then_claims_once_it_clears(tmp_path: P
     denies FILL's claim with a 409 the runner has no special case for — the chunk stays
     unclaimed while the lever stands, and lands once the prerequisite is cleared."""
     bin_dir = require_mock_fleet()
-    workspace, _origins, _bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
+    workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
     fenced = _tick_env()
 
     hub_port = _free_port()
@@ -251,7 +250,7 @@ def test_fill_reaches_past_a_marked_head_by_default_against_a_real_mock_hub(tmp_
     unmarked entry behind it, the default (``queue_strict=False``) reaches past the
     marked head and claims the unmarked one — the marked one stays ``ready``."""
     bin_dir = require_mock_fleet()
-    workspace, _origins, _bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
+    workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
     fenced = _tick_env()
 
     hub_port = _free_port()
@@ -277,7 +276,7 @@ def test_fill_strict_holds_at_a_marked_head_against_a_real_mock_hub(tmp_path: Pa
     time under ``[queue] strict`` — FILL claims neither entry, holding at the head
     rather than reaching past it."""
     bin_dir = require_mock_fleet()
-    workspace, _origins, _bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
+    workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
     fenced = _tick_env()
 
     hub_port = _free_port()
@@ -313,7 +312,7 @@ def test_transcript_route_failure_never_blocks_the_fact_lane(tmp_path: Path) -> 
     """With the transcript route 503ing, the fact lane still lands the chunk while
     transcript facts buffer; the backlog drains once the route returns."""
     bin_dir = require_mock_fleet()
-    workspace, _origins, _bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
+    workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
     transcripts_root = tmp_path / "transcripts"
     fenced = _tick_env()
     fenced["BZ_TRANSCRIPTS_ROOT"] = str(transcripts_root)
@@ -347,7 +346,7 @@ def test_transcript_route_slow_never_blocks_the_fact_lane(tmp_path: Path) -> Non
     """The slow-route counterpart to the test above: that one proves wedged (hard-down);
     `delay_transcripts` proves the route can answer, slowly, and the chunk still lands."""
     bin_dir = require_mock_fleet()
-    workspace, _origins, _bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
+    workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
     transcripts_root = tmp_path / "transcripts"
     fenced = _tick_env()
     fenced["BZ_TRANSCRIPTS_ROOT"] = str(transcripts_root)
@@ -374,7 +373,7 @@ def test_transcript_route_slow_never_blocks_the_fact_lane(tmp_path: Path) -> Non
 
 def test_stale_envelope_is_tolerated_and_the_chunk_still_lands(tmp_path: Path) -> None:
     bin_dir = require_mock_fleet()
-    workspace, _origins, _bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
+    workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
     fenced = _tick_env()
 
     hub_port = _free_port()
@@ -442,7 +441,7 @@ def test_a_real_runners_registration_carries_every_declared_subscription(tmp_pat
     """The mock hub's view lists every slug the real runner declared, including one whose
     provider binds no sampler."""
     bin_dir = require_mock_fleet()
-    workspace, _origins, _bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
+    workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
     fenced = _tick_env()
 
     hub_port = _free_port()
@@ -461,7 +460,7 @@ def test_a_real_runners_registration_carries_every_declared_subscription(tmp_pat
 def test_a_real_runners_registration_carries_the_gates_it_imposes(tmp_path: Path) -> None:
     """The mock hub's view echoes the node names the real runner's config gates."""
     bin_dir = require_mock_fleet()
-    workspace, _origins, _bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
+    workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
     fenced = _tick_env()
 
     hub_port = _free_port()
@@ -478,7 +477,7 @@ def test_a_real_runners_registration_carries_the_gates_it_imposes(tmp_path: Path
 def test_pull_abandons_the_active_lease_when_the_hub_reports_the_chunk_stopped(tmp_path: Path) -> None:
     """The stopped-chunk lease-abandon backstop, driven over a real hub response rather than ``FakeHub``."""
     bin_dir = require_mock_fleet()
-    workspace, _origins, _bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
+    workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
     fenced = _tick_env()
 
     hub_port = _free_port()
@@ -505,7 +504,7 @@ def test_pull_abandons_the_active_lease_when_the_hub_reports_the_chunk_stopped(t
 def test_pull_closes_the_local_escalation_when_the_hub_reports_the_chunk_stopped(tmp_path: Path) -> None:
     """The stopped-chunk escalation-closure sweep, driven over a real hub response."""
     bin_dir = require_mock_fleet()
-    workspace, _origins, _bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
+    workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
     fenced = _tick_env()
 
     hub_port = _free_port()
@@ -556,6 +555,8 @@ _TRANSCRIPT_BUILD_SCRIPT = (
     "from blizzard_mock.harness.engine import current_context\n"
     "ctx = current_context()\n"
     f"ctx.cwd = pathlib.Path(ctx.cwd) / {REPO_NAME!r}\n"
+    # The basic provider's worktree arrives detached; the worker owns its branch.
+    f'subprocess.run(["git", "-C", str(ctx.cwd), "switch", "-C", {BUILD_BRANCH!r}], check=True, capture_output=True)\n'
     f"apply_diff({_TRANSCRIPT_DIFF!r})\n"
     f"commit({_TRANSCRIPT_COMMIT_MESSAGE!r})\n"
     # Push the branch and declare it — the worker does this itself,
@@ -614,7 +615,7 @@ def test_transcript_is_read_back_through_the_runner_http_api(tmp_path: Path) -> 
     the runner's own local HTTP API. Pins provenance: the Bash turn's tool output carries
     the real commit sha, cross-checked against the bare origin."""
     bin_dir = require_mock_fleet()
-    workspace, _origins, origin_bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
+    workspace, _origins, origin_bare = mint_world(bin_dir, tmp_path / "scratch")
     transcripts_root = tmp_path / "transcripts"
     fenced = _tick_env()
     fenced["BZ_TRANSCRIPTS_ROOT"] = str(transcripts_root)
@@ -721,7 +722,7 @@ def test_graph_scoped_artifact_reads_from_the_runners_own_pin_with_the_hub_unrea
     declaration answers ``--scope graph`` with the hub unreachable, while the node
     half — still hub-dependent — fails the same call would otherwise take."""
     bin_dir = require_mock_fleet()
-    workspace, _origins, _bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
+    workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
     fenced = _tick_env()
 
     hub_port = _free_port()
@@ -788,7 +789,7 @@ def test_a_closed_leases_transcript_resolves_to_the_hub_through_the_runner_api(t
     wiring — local while open, the hub once closed (even with the local file rotated
     away), and the distinct hub-unreachable state once the hub process is gone."""
     bin_dir = require_mock_fleet()
-    workspace, _origins, _bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
+    workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
     transcripts_root = tmp_path / "transcripts"
     fenced = _tick_env()
     fenced["BZ_TRANSCRIPTS_ROOT"] = str(transcripts_root)
@@ -1142,7 +1143,7 @@ def test_a_hung_trace_export_never_delays_a_tick_or_holds_shutdown(tmp_path: Pat
     """The sweep runs on its own thread: with an export hung on a sink that never answers,
     ticks continue on schedule and SIGTERM still exits within the sweep's bounded stop."""
     bin_dir = require_mock_fleet()
-    workspace, _origins, _bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
+    workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
     hub_port = _free_port()
     with mock_hub(bin_dir, hub_port) as hub, _hung_otlp_sink() as (endpoint, accepted):
         config = _traced(_runner_config(tmp_path / "runner", workspace, bin_dir, hub_port))
@@ -1197,7 +1198,7 @@ def _trace_config_rejections(config: RunnerConfig, *, pending: bool) -> int:
 
 def test_a_grpc_protocol_serves_with_tracing_off_and_one_rejection_reaches_the_hub(tmp_path: Path) -> None:
     bin_dir = require_mock_fleet()
-    workspace, _origins, _bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
+    workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
     hub_port = _free_port()
     with mock_hub(bin_dir, hub_port) as hub:
         config = _traced(_runner_config(tmp_path / "runner", workspace, bin_dir, hub_port))

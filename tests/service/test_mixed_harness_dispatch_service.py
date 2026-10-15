@@ -26,18 +26,17 @@ from blizzard.runner.loop_wiring import LoopWiring
 from blizzard.runner.store.schema import leases, transcript_segments, usage_facts
 from blizzard.wire.transcript_segment import TurnSegmentView
 from tests.e2e.test_acceptance_loop import REPO_NAME, _free_port, _runner_api, _runner_config
+from tests.fleet_world import mint_world, scripted_build_prompt
 from tests.runner_fakes import daemon_store, loop_graph
 from tests.runner_join import fleet_headers
 from tests.service.support import (
     BUILD_SCRIPT,
     JUDGEMENT_SCRIPT,
     OPENCODE_BUILD_SCRIPT,
-    mint_fixture,
     mock_hub,
     mock_hub_chunk_spec,
     poll_until,
     require_mock_fleet,
-    require_winter_source,
     service_gate,
 )
 
@@ -148,7 +147,7 @@ def test_under_strict_an_incompatible_head_starves_the_workable_entry_behind_it_
     matched peek empty on every tick, starving the workable entry; stopping the incompatible
     one lets the same runner loop reach and land the workable one."""
     bin_dir = require_mock_fleet()
-    workspace, _origins, _bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
+    workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
     fenced = _tick_env()
 
     hub_port = _free_port()
@@ -178,7 +177,7 @@ def test_by_default_the_matched_peek_passes_over_an_incompatible_head_to_the_wor
     incompatible head, so the runner loop lands the workable entry behind it and never leases
     the incompatible one."""
     bin_dir = require_mock_fleet()
-    workspace, _origins, _bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
+    workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
     fenced = _tick_env()
 
     hub_port = _free_port()
@@ -217,7 +216,7 @@ def test_claim_revalidates_against_a_regressed_registration_through_the_real_run
     separately here only to inject a regressed registration between them: this runner's
     registration goes stale after it peeked truthfully but before its real claim."""
     bin_dir = require_mock_fleet()
-    workspace, _origins, _bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
+    workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
     fenced = _tick_env()
 
     hub_port = _free_port()
@@ -273,7 +272,7 @@ def test_preference_order_resolves_the_first_available_member_over_the_configure
     """``opencode`` listed ahead of ``claude_code`` — both bound on this runner — wins the
     fresh mint even though ``claude_code`` is this runner's own registry-order default."""
     bin_dir = require_mock_fleet()
-    workspace, _origins, _bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
+    workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
     fenced = _tick_env()
 
     hub_port = _free_port()
@@ -296,7 +295,7 @@ def test_preference_order_skips_an_unresolvable_member_and_falls_through_to_the_
     """A first-listed member this runner never binds is skipped — recorded, never fatal —
     and the fresh mint falls through to the next member it actually has configured."""
     bin_dir = require_mock_fleet()
-    workspace, _origins, _bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
+    workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
     fenced = _tick_env()
 
     hub_port = _free_port()
@@ -326,7 +325,7 @@ def test_a_bare_node_with_no_declared_preference_resolves_through_this_runners_c
     chunk itself declares no `default_harnesses` — the absolute bare-node case
     (`Spawner.spawn`'s own no-`session_harnesses` fallback to `default_harness_id`)."""
     bin_dir = require_mock_fleet()
-    workspace, _origins, _bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
+    workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
     fenced = _tick_env()
 
     hub_port = _free_port()
@@ -345,7 +344,7 @@ def test_a_bare_node_still_honors_the_chunks_own_declared_default(tmp_path: Path
     both ways under `[queue] strict`: never offered and starved behind an unbound default, then
     claimed once a compatible chunk's own default takes its place."""
     bin_dir = require_mock_fleet()
-    workspace, _origins, _bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
+    workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
     fenced = _tick_env()
 
     hub_port = _free_port()
@@ -383,7 +382,7 @@ def test_a_bare_node_still_honors_the_chunks_own_declared_default(tmp_path: Path
 # --------------------------------------------------------------------------- #
 # 5. Two declared session lineages, live together on one RunnerConfig.
 
-_CLAUDE_SKILL_BUILD_SCRIPT = (
+_CLAUDE_SKILL_BUILD_SCRIPT = scripted_build_prompt(
     "import subprocess, pathlib\n"
     f"repo = {REPO_NAME!r}\n"
     # skill_invocation via `_CLAUDE_CODE_JSONL_2` in src/blizzard/hub/domain/observability/analytics/dialects.py.
@@ -408,7 +407,7 @@ _CLAUDE_SKILL_BUILD_SCRIPT = (
     ")\n"
 )
 
-_OPENCODE_TASK_BUILD_SCRIPT = (
+_OPENCODE_TASK_BUILD_SCRIPT = scripted_build_prompt(
     "import subprocess, pathlib\n"
     f"repo = {REPO_NAME!r}\n"
     # agent_spawn via `_OPENCODE_EXPORT_1` in src/blizzard/hub/domain/observability/analytics/dialects.py.
@@ -487,7 +486,7 @@ def test_two_session_lineages_interleave_on_one_dispatch_loop_with_no_cross_talk
     tick loop, proving no cross-talk at any seam: spawn, completion, usage, transcript
     segments, and analytics provenance."""
     bin_dir = require_mock_fleet()
-    workspace, _origins, _bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
+    workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
     transcripts_root = tmp_path / "transcripts"
     fenced = _tick_env()
     fenced["BZ_TRANSCRIPTS_ROOT"] = str(transcripts_root)
@@ -540,7 +539,8 @@ def test_two_session_lineages_interleave_on_one_dispatch_loop_with_no_cross_talk
                 assert cwds, chunk_id
                 assert all(cwds), cwds
                 assert config.home_workspace.root
-                assert set(cwds) == {config.home_workspace.root}, cwds
+                # The basic provider spawns into the chunk's own environment, named after the chunk.
+                assert set(cwds) == {str(Path(config.home_workspace.root) / chunk_id)}, cwds
 
             # --- usage recorded (judgement resolved into a completion means both a spawn
             # and a judge invocation earned their own facts), per lineage — never crossed ---

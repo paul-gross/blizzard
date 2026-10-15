@@ -27,7 +27,7 @@ from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.observability.egress.config import EgressConfig
 from blizzard.runner.app import build_hosted_app
 from blizzard.runner.composition import RunnerProcess
-from blizzard.runner.config import DEFAULT_WORKSPACE_ID, ENV_TRANSCRIPTS_ROOT, HostWorkspace, RunnerConfig
+from blizzard.runner.config import ENV_TRANSCRIPTS_ROOT, RunnerConfig
 from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.loop_wiring import LoopWiring
 from tests.e2e.fleet_traces import (
@@ -49,6 +49,7 @@ from tests.e2e.fleet_traces import (
     whole_chunk_decision_wait,
 )
 from tests.e2e.harness_variants import CLAUDE_CODE, MockHarness, both_mock_harnesses
+from tests.fleet_world import FIXTURE_ENV, REPO_NAME, basic_workspace, mint_world, scripted_build_prompt
 from tests.harness_sections import claude_code, opencode, sections
 from tests.host_files import init_runner_environment, sampler_without_credentials
 from tests.runner_join import join_runner
@@ -74,12 +75,7 @@ pytestmark = [
 # The fixture project repo the loop drives and the owner the forge/hub address it under
 # (the repository record's owner; see `src/blizzard/hub/graphs/scripts/land_default.py`).
 OWNER = "blizzard"
-REPO_NAME = "toy-api"
 REPO = f"{OWNER}/{REPO_NAME}"
-# The env keying the disposable fixture world (outer). The runner acquires its own
-# INNER env (``e1``, the runner's default pool) inside the fixture workspace.
-FIXTURE_ENV = "e2e"
-RUNNER_ENV = "e1"
 
 # The mock harness's fence var, forwarded to workers through the spawn-environment
 # allowlist's operator-extension knob; see MOCK_HARNESS_ENV_PASSTHROUGH.
@@ -109,7 +105,7 @@ _PUSH_AND_DECLARE_SCRIPT = (
 
 # The scripted build-node prompt: the prompt is the program, run under the mock harness
 # with the acquired env dir as cwd, so it targets `toy-api` by relative path.
-_BUILD_SCRIPT = (
+_BUILD_SCRIPT = scripted_build_prompt(
     "import subprocess, pathlib\n"
     f"repo = {REPO_NAME!r}\n"
     '(pathlib.Path(repo) / "LANDED.md").write_text("landed by the mock harness\\n")\n'
@@ -152,7 +148,7 @@ _WORK_ITEM_COMMENT = "PASSTHROUGH-COMMENT: attached a failing repro in the linke
 
 # Build turn: reads the chunk's work item via the real `blizzard runner work-items` verb,
 # then commits the fetched body + comment so the pass-through's output lands as git truth.
-_WORK_ITEM_BUILD_SCRIPT = (
+_WORK_ITEM_BUILD_SCRIPT = scripted_build_prompt(
     "import os, json, subprocess, pathlib\n"
     f"repo = {REPO_NAME!r}\n"
     "chunk_id = os.environ['BLIZZARD_CHUNK_ID']\n"
@@ -233,7 +229,7 @@ def _graph_yaml(harness: MockHarness = CLAUDE_CODE, *, probed: bool = False) -> 
 
 
 # --------------------------------------------------------------------------- #
-# Workspace-layout discovery (the sibling blizzard-mock worktree + winter source)
+# Workspace-layout discovery (the sibling blizzard-mock worktree)
 
 
 def _blizzard_root() -> Path:
@@ -246,16 +242,6 @@ def _mock_bin_dir() -> Path | None:
     bin_dir = mock / ".venv" / "bin"
     if (bin_dir / "blizzard-mock-fixture").is_file() and (bin_dir / "mock-claude-code").is_file():
         return bin_dir
-    return None
-
-
-def _winter_source() -> Path | None:
-    """A local winter workspace (``.winter/config.toml`` + ``tools/winter-cli``) to clone."""
-    explicit = os.environ.get("BLIZZARD_MOCK_WINTER_SOURCE")
-    start = Path(explicit).resolve() if explicit else _blizzard_root()
-    for directory in [start, *start.parents]:
-        if (directory / ".winter" / "config.toml").is_file() and (directory / "tools" / "winter-cli").is_dir():
-            return directory
     return None
 
 
@@ -408,37 +394,19 @@ def test_acceptance_loop_one_chunk_ingest_to_landed(
     bin_dir = _mock_bin_dir()
     if bin_dir is None:
         pytest.skip("no provisioned sibling blizzard-mock worktree (run `winter provision <env>`)")
-    winter_source = _winter_source()
-    if winter_source is None:
-        pytest.skip("no local winter source (set BLIZZARD_MOCK_WINTER_SOURCE)")
 
     scratch = tmp_path / "scratch"
-    # 1. Mint a fresh, disposable fixture world: bare file:// origins + a real winter
-    #    workspace over them. `reset` re-mints from clean, so the test is repeatable.
-    subprocess.run(
-        [
-            str(bin_dir / "blizzard-mock-fixture"),
-            "reset",
-            "--env",
-            FIXTURE_ENV,
-            "--scratch-root",
-            str(scratch),
-            "--winter-source",
-            str(winter_source),
-        ],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
+    # 1. Mint a fresh, disposable fixture world: bare file:// origins + an
+    #    empty workspace dir (no winter). `reset` re-mints from clean, so the test is repeatable.
+    mint_world(bin_dir, scratch)
     fixture_root = scratch / FIXTURE_ENV
     workspace = fixture_root / "workspace"
     origins = fixture_root / "origins"
     origin_bare = origins / f"{REPO_NAME}.git"
     assert workspace.is_dir() and origin_bare.is_dir(), "fixture mint did not lay out the expected tree"
 
-    # Fence the fixture tree so the mock harness will run (gated on this marker file + env
-    # var); it covers every acquired env worktree under it via the engine's ancestor walk.
-    (workspace / ".blizzard-mock-harness-fence").write_text("e2e fence marker\n")
+    # `mint_world` fenced the tree so the mock harness will run (gated on a marker file + env
+    # var); the fence covers every acquired env worktree under it via the engine's ancestor walk.
 
     forge_port, hub_port = _free_port(), _free_port()
     with (
@@ -567,29 +535,11 @@ def test_a_tail_sampling_decision_wait_splits_or_keeps_the_chunk_trace(
     bin_dir = _mock_bin_dir()
     if bin_dir is None:
         pytest.skip("no provisioned sibling blizzard-mock worktree (run `winter provision <env>`)")
-    winter_source = _winter_source()
-    if winter_source is None:
-        pytest.skip("no local winter source (set BLIZZARD_MOCK_WINTER_SOURCE)")
 
     scratch = tmp_path / "scratch"
-    subprocess.run(
-        [
-            str(bin_dir / "blizzard-mock-fixture"),
-            "reset",
-            "--env",
-            FIXTURE_ENV,
-            "--scratch-root",
-            str(scratch),
-            "--winter-source",
-            str(winter_source),
-        ],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
+    mint_world(bin_dir, scratch)
     workspace = scratch / FIXTURE_ENV / "workspace"
     origins = scratch / FIXTURE_ENV / "origins"
-    (workspace / ".blizzard-mock-harness-fence").write_text("e2e fence marker\n")
 
     forge_port, hub_port = _free_port(), _free_port()
     with (
@@ -664,11 +614,7 @@ def _runner_config(
         host="127.0.0.1",
         port=_free_port(),
         hub_url=f"http://127.0.0.1:{hub_port}",
-        workspaces=(
-            HostWorkspace(
-                DEFAULT_WORKSPACE_ID, root=str(workspace), provider="winter", envs=(RUNNER_ENV,), base_branch="main"
-            ),
-        ),
+        workspaces=(basic_workspace(workspace),),
         harness_sections=sections(
             # The mock façade rejects any ``--permission-mode``, so ``None`` omits it; both health
             # probes read a fixture credential file, since neither mock is a logged-in provider CLI.
@@ -810,31 +756,13 @@ def test_build_worker_reads_work_item_through_the_passthrough(tmp_path: Path) ->
     bin_dir = _mock_bin_dir()
     if bin_dir is None:
         pytest.skip("no provisioned sibling blizzard-mock worktree (run `winter provision <env>`)")
-    winter_source = _winter_source()
-    if winter_source is None:
-        pytest.skip("no local winter source (set BLIZZARD_MOCK_WINTER_SOURCE)")
 
     scratch = tmp_path / "scratch"
-    subprocess.run(
-        [
-            str(bin_dir / "blizzard-mock-fixture"),
-            "reset",
-            "--env",
-            FIXTURE_ENV,
-            "--scratch-root",
-            str(scratch),
-            "--winter-source",
-            str(winter_source),
-        ],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
+    mint_world(bin_dir, scratch)
     fixture_root = scratch / FIXTURE_ENV
     workspace = fixture_root / "workspace"
     origins = fixture_root / "origins"
     origin_bare = origins / f"{REPO_NAME}.git"
-    (workspace / ".blizzard-mock-harness-fence").write_text("e2e fence marker\n")
 
     forge_port, hub_port = _free_port(), _free_port()
     with _forge(bin_dir, origins, forge_port) as forge, _hub(tmp_path / "hub", forge_port, hub_port) as hub:

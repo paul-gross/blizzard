@@ -28,46 +28,14 @@ import pytest
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.hub.internal.http_hub import HttpHubClient
 from tests.e2e.test_acceptance_loop import (
-    FIXTURE_ENV,
     REPO_NAME,
     _await_http,
     _mock_bin_dir,
     _terminate,
-    _winter_source,
 )
+from tests.fleet_world import scripted_build_prompt
 from tests.runner_join import add_runner, runner_spawn_env
 from tests.support import daemon_log_sink, shared_daemon_log_dir
-
-
-def mint_fixture(bin_dir: Path, winter_source: Path, scratch: Path) -> tuple[Path, Path, Path]:
-    """Mint a fresh, disposable fixture world (bare origins + a winter workspace) and fence it.
-
-    Returns ``(workspace, origins, origin_bare)``. Idempotent via ``reset`` — repeatable per run.
-    """
-    minted = subprocess.run(
-        [
-            str(bin_dir / "blizzard-mock-fixture"),
-            "reset",
-            "--env",
-            FIXTURE_ENV,
-            "--scratch-root",
-            str(scratch),
-            "--winter-source",
-            str(winter_source),
-        ],
-        capture_output=True,
-        text=True,
-    )
-    if minted.returncode != 0:
-        pytest.fail(f"fixture reset exited {minted.returncode}:\n{minted.stdout}\n{minted.stderr}")
-    fixture_root = scratch / FIXTURE_ENV
-    workspace = fixture_root / "workspace"
-    origins = fixture_root / "origins"
-    origin_bare = origins / f"{REPO_NAME}.git"
-    # Fence the tree so the mock harness will run (arbitrary code execution, gated on a marker).
-    (workspace / ".blizzard-mock-harness-fence").write_text("service fence marker\n")
-    return workspace, origins, origin_bare
-
 
 # The service tier's own gate — independent of BLIZZARD_E2E so a run can select one tier.
 SERVICE_ENABLED = os.environ.get("BLIZZARD_SERVICE") == "1"
@@ -93,13 +61,6 @@ def require_mock_fleet() -> Path:
             "no provisioned sibling blizzard-mock worktree with the mock hub/runner (run `winter provision <env>`)"
         )
     return bin_dir
-
-
-def require_winter_source() -> Path:
-    src = _winter_source()
-    if src is None:
-        pytest.skip("no local winter source (set BLIZZARD_MOCK_WINTER_SOURCE)")
-    return src
 
 
 def require_stub_idp() -> Path:
@@ -187,7 +148,7 @@ def stub_idp(bin_dir: Path, port: int, *, log_dir: Path | None = None) -> Iterat
 
 # The scripted build node: commits a file, pushes the branch, and declares it via
 # `blizzard runner artifact commit`.
-BUILD_SCRIPT = (
+BUILD_SCRIPT = scripted_build_prompt(
     "import subprocess, pathlib\n"
     f"repo = {REPO_NAME!r}\n"
     '(pathlib.Path(repo) / "LANDED.md").write_text("landed by the mock harness\\n")\n'
@@ -212,7 +173,7 @@ BUILD_SCRIPT = (
 JUDGEMENT_SCRIPT = "verdict('pass', 'the mock harness committed the change; checks are green')\n"
 
 # The OpenCode-safe build node: like `BUILD_SCRIPT`, but every `subprocess.run` captures its own output — mock-opencode reads the first stdout line as the fresh-session identity.
-OPENCODE_BUILD_SCRIPT = (
+OPENCODE_BUILD_SCRIPT = scripted_build_prompt(
     "import subprocess, pathlib\n"
     f"repo = {REPO_NAME!r}\n"
     '(pathlib.Path(repo) / "LANDED.md").write_text("landed by the mock harness\\n")\n'

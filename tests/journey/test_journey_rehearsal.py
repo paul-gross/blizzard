@@ -30,11 +30,11 @@ from tests.crash.support import (
     start_runner,
     terminate,
     wait_status,
-    winter_source,
     write_runner_config,
 )
 from tests.host_files import load_runner_config, with_workspace, write_host_file
 from tests.support import fixture_work_source, free_port
+from tests.winter.support import winter_source
 
 pytestmark = [
     pytest.mark.journey,
@@ -480,7 +480,7 @@ def _widen_runner_pool(runner_dir: Path) -> None:
     import dataclasses
 
     config = load_runner_config(runner_dir)
-    config = with_workspace(config, envs=RUNNER_ENVS)
+    config = with_workspace(config, provider="winter", envs=RUNNER_ENVS, repos=())
     config = dataclasses.replace(
         config, bindings=tuple(dataclasses.replace(binding, agents=MAX_AGENTS) for binding in config.bindings or ())
     )

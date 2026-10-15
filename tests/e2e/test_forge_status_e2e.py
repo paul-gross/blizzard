@@ -8,7 +8,6 @@ full-pass floor (the hub keeps only in-memory probe state); a down forge degradi
 from __future__ import annotations
 
 import os
-import subprocess
 import time
 from pathlib import Path
 
@@ -27,8 +26,8 @@ from tests.e2e.test_acceptance_loop import (
     _mock_bin_dir,
     _runner_api,
     _runner_config,
-    _winter_source,
 )
+from tests.fleet_world import mint_world
 from tests.support import read_daemon_log
 
 pytestmark = [
@@ -100,30 +99,12 @@ def test_forge_status_projection_e2e(tmp_path: Path) -> None:
     bin_dir = _mock_bin_dir()
     if bin_dir is None:
         pytest.skip("no provisioned sibling blizzard-mock worktree (run `winter provision <env>`)")
-    winter_source = _winter_source()
-    if winter_source is None:
-        pytest.skip("no local winter source (set BLIZZARD_MOCK_WINTER_SOURCE)")
 
     scratch = tmp_path / "scratch"
-    subprocess.run(
-        [
-            str(bin_dir / "blizzard-mock-fixture"),
-            "reset",
-            "--env",
-            FIXTURE_ENV,
-            "--scratch-root",
-            str(scratch),
-            "--winter-source",
-            str(winter_source),
-        ],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
+    mint_world(bin_dir, scratch)
     fixture_root = scratch / FIXTURE_ENV
     workspace = fixture_root / "workspace"
     origins = fixture_root / "origins"
-    (workspace / ".blizzard-mock-harness-fence").write_text("e2e fence marker\n")
 
     hub_dir = tmp_path / "hub"
     forge_port, hub_port = _free_port(), _free_port()

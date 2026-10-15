@@ -7,14 +7,14 @@
 # service tier, a structurally different shape from the bounded CI profile below.
 #
 # Both tiers need what a single-repo checkout does not carry: the sibling
-# `blizzard-mock` worktree (the mock fleet + fixture scaffold) and a local winter
-# source (its committed `tools/winter-cli`, which the fixture clones to mint a real
-# disposable winter workspace over `file://` origins — no tokens, no forge, no network
-# beyond package installs). This workflow provides them with a multi-repo checkout:
-# `blizzard`, `blizzard-mock`, and the public `blizzard-workspace` (the winter source)
-# laid out as SIBLINGS under $GITHUB_WORKSPACE — exactly the on-disk layout the tiers'
-# discovery expects (`tests/service/support.py`, `tests/crash/support.py`:
-# `blizzard_root().parent / "blizzard-mock"`, `BLIZZARD_MOCK_WINTER_SOURCE`).
+# `blizzard-mock` worktree (the mock fleet + fixture scaffold). The tiers are winter-free:
+# their runners run on the built-in `basic` provider over a fixture of bare `file://`
+# origins the scaffold mints with no winter source — no tokens, no forge, no network
+# beyond package installs. This workflow provides the sibling with a two-repo checkout:
+# `blizzard` and `blizzard-mock` laid out as SIBLINGS under $GITHUB_WORKSPACE — exactly the
+# on-disk layout the tiers' discovery expects (`tests/service/support.py`,
+# `tests/crash/support.py`: `blizzard_root().parent / "blizzard-mock"`). The winter
+# binding's own tests are the local-only `winter-binding` tier and never run here.
 #
 # The FULL kill-9 sweep is too slow to run as a per-PR gate, so the pr/push callers run
 # the sweep's bounded CI profile (`crash_sweep_ci: "1"` — a representative crash point
@@ -54,6 +54,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           path: blizzard
+          persist-credentials: false
       # Coordinated changes can span blizzard + blizzard-mock (the mutual-mock design:
       # a new hub wire verb needs a matching mock verb). When a same-named feature
       # branch exists on blizzard-mock, build against it so the pair is tested
@@ -76,12 +77,8 @@ jobs:
         with:
           repository: paul-gross/blizzard-mock
           path: blizzard-mock
+          persist-credentials: false
           ref: ${{ steps.mock_ref.outputs.ref }}
-      - name: checkout blizzard-workspace (the winter source)
-        uses: actions/checkout@v4
-        with:
-          repository: paul-gross/blizzard-workspace
-          path: blizzard-workspace
       - uses: astral-sh/setup-uv@v6
         with:
           enable-cache: true
@@ -93,13 +90,6 @@ jobs:
           cache-dependency-glob: |
             uv.lock
             ../blizzard-mock/uv.lock
-      - name: install mise (the fixture drives the winter CLI via `mise exec -- uv run`)
-        uses: jdx/mise-action@v2
-        with:
-          # Pinned: mise's VERSION endpoint can advertise a release before that
-          # release's assets exist, and the unpinned action then 404s fetching one.
-          version: 2026.9.2
-          install: false
       - name: git identity for fixture/forge git operations
         run: |
           git config --global user.email "ci@blizzard.local"
@@ -112,7 +102,6 @@ jobs:
         # `mise run service-test` == `BLIZZARD_SERVICE=1 uv run pytest -n auto tests/service/`.
         env:
           BLIZZARD_SERVICE: "1"
-          BLIZZARD_MOCK_WINTER_SOURCE: ${{ github.workspace }}/blizzard-workspace
           BLIZZARD_TEST_SHARD: ${{ matrix.shard }}/${{ matrix.shards }}
         run: cd blizzard && uv run pytest -n auto tests/service/ -v
 
@@ -135,6 +124,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           path: blizzard
+          persist-credentials: false
       # Coordinated changes can span blizzard + blizzard-mock (the mutual-mock design:
       # a new hub wire verb needs a matching mock verb). When a same-named feature
       # branch exists on blizzard-mock, build against it so the pair is tested
@@ -157,12 +147,8 @@ jobs:
         with:
           repository: paul-gross/blizzard-mock
           path: blizzard-mock
+          persist-credentials: false
           ref: ${{ steps.mock_ref.outputs.ref }}
-      - name: checkout blizzard-workspace (the winter source)
-        uses: actions/checkout@v4
-        with:
-          repository: paul-gross/blizzard-workspace
-          path: blizzard-workspace
       - uses: astral-sh/setup-uv@v6
         with:
           enable-cache: true
@@ -174,13 +160,6 @@ jobs:
           cache-dependency-glob: |
             uv.lock
             ../blizzard-mock/uv.lock
-      - name: install mise (the fixture drives the winter CLI via `mise exec -- uv run`)
-        uses: jdx/mise-action@v2
-        with:
-          # Pinned: mise's VERSION endpoint can advertise a release before that
-          # release's assets exist, and the unpinned action then 404s fetching one.
-          version: 2026.9.2
-          install: false
       - name: git identity for fixture/forge git operations
         run: |
           git config --global user.email "ci@blizzard.local"
@@ -202,5 +181,4 @@ jobs:
         env:
           BLIZZARD_CRASH_SWEEP: "1"
           BLIZZARD_CRASH_SWEEP_CI: ${{ inputs.crash_sweep_ci }}
-          BLIZZARD_MOCK_WINTER_SOURCE: ${{ github.workspace }}/blizzard-workspace
         run: cd blizzard && uv run pytest -n auto -m crash_sweep tests/crash/ -v

@@ -20,16 +20,15 @@ from blizzard.runner.harness.capability_snapshot import HarnessCapability
 from blizzard.runner.hub.client import ClaimRequest, PushedFact
 from blizzard.runner.loop_wiring import LoopWiring
 from tests.e2e.test_acceptance_loop import REPO, _free_port, _runner_config
+from tests.fleet_world import mint_world
 from tests.runner_fakes import daemon_store
 from tests.runner_join import fleet_headers
 from tests.service.support import (
     http_hub_client,
-    mint_fixture,
     mock_hub,
     mock_hub_chunk_spec,
     poll_until,
     require_mock_fleet,
-    require_winter_source,
     service_gate,
 )
 
@@ -206,7 +205,7 @@ def test_runner_releases_held_environment_when_hub_reports_chunk_unknown(tmp_pat
     is terminal, not transient — the runner releases every bound environment for the
     chunk. The mock's lever manufactures the 404 without deleting seeded state."""
     bin_dir = require_mock_fleet()
-    workspace, _origins, _bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
+    workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
     fenced = _tick_env()
 
     hub_port = _free_port()

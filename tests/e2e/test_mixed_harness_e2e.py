@@ -17,7 +17,7 @@ unarmed); crash recovery belongs to `tests/crash/test_kill9_sweep.py` (`bzh:cras
    the same lease/epoch/session rather than retry it. Every start from here on uses the
    crash tier's brisk tick (`tests.crash.support.start_runner`, `TICK_SECONDS`).
 
-Needs the sibling provisioned `blizzard-mock` worktree plus a local winter source; skips
+Needs the sibling provisioned `blizzard-mock` worktree; skips
 without `BLIZZARD_E2E=1`."""
 
 from __future__ import annotations
@@ -56,11 +56,11 @@ from tests.crash.support import (
     start_runner,
     terminate,
     wait_status,
-    winter_source,
     write_runner_config,
 )
 from tests.e2e.fleet_traces import FleetCollector, InvocationExpect, assert_invocations
 from tests.e2e.harness_variants import MOCK_CLAUDE_CODE_MODEL
+from tests.fleet_world import mint_world
 from tests.host_files import load_runner_config, write_host_file
 from tests.runner_fakes import daemon_store
 from tests.runner_join import runner_spawn_env
@@ -403,31 +403,11 @@ def test_mixed_lineage_crosses_a_harness_boundary_and_survives_two_operator_rest
     bin_dir = mock_bin_dir()
     if bin_dir is None:
         pytest.skip("no provisioned sibling blizzard-mock worktree (run `winter provision <env>`)")
-    source = winter_source()
-    if source is None:
-        pytest.skip("no local winter source (set BLIZZARD_MOCK_WINTER_SOURCE)")
-
     scratch = tmp_path / "scratch"
-    minted = subprocess.run(
-        [
-            str(bin_dir / "blizzard-mock-fixture"),
-            "reset",
-            "--env",
-            FIXTURE_ENV,
-            "--scratch-root",
-            str(scratch),
-            "--winter-source",
-            str(source),
-        ],
-        capture_output=True,
-        text=True,
-    )
-    assert minted.returncode == 0, f"fixture reset exited {minted.returncode}:\n{minted.stdout}\n{minted.stderr}"
+    mint_world(bin_dir, scratch, env=FIXTURE_ENV)
     fixture_root = scratch / FIXTURE_ENV
     workspace = fixture_root / "workspace"
     origins = fixture_root / "origins"
-    assert workspace.is_dir() and (origins / f"{REPO_NAME}.git").is_dir(), "fixture mint did not lay out the tree"
-    (workspace / ".blizzard-mock-harness-fence").write_text("mixed-harness e2e fence marker\n")
 
     transcripts_root = tmp_path / "transcripts"
     monkeypatch.setenv(ENV_TRANSCRIPTS_ROOT, str(transcripts_root))

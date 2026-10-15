@@ -20,8 +20,9 @@ from pathlib import Path
 import httpx
 
 from blizzard.foundation.runner_paths import runner_prefix
-from blizzard.runner.config import DEFAULT_WORKSPACE_ID, HostWorkspace, RunnerConfig
+from blizzard.runner.config import RunnerConfig
 from blizzard.wire.work_source import WorkSourceDocument
+from tests.fleet_world import REPO_NAME, basic_workspace, scripted_build
 from tests.harness_sections import claude_code, opencode, sections
 from tests.host_files import init_runner_environment, load_runner_config, sampler_without_credentials, write_host_file
 from tests.runner_join import join_runner, runner_spawn_env
@@ -35,10 +36,7 @@ from tests.support import (
 )
 
 OWNER = "blizzard"
-REPO_NAME = "toy-api"
 REPO = f"{OWNER}/{REPO_NAME}"
-FIXTURE_ENV = "crash"
-RUNNER_ENV = "e1"
 
 # A brisk tick so a scenario converges in seconds, not the daemon's 30s production cadence.
 TICK_SECONDS = "0.3"
@@ -87,18 +85,10 @@ def mock_bin_dir() -> Path | None:
     return None
 
 
-def winter_source() -> Path | None:
-    explicit = os.environ.get("BLIZZARD_MOCK_WINTER_SOURCE")
-    start = Path(explicit).resolve() if explicit else blizzard_root()
-    for directory in [start, *start.parents]:
-        if (directory / ".winter" / "config.toml").is_file() and (directory / "tools" / "winter-cli").is_dir():
-            return directory
-    return None
-
-
 # The build → deliver sweep graph (prompt-is-the-program)
 
 
+@scripted_build
 def build_script(landed_file: str) -> str:
     """A scripted build node that makes a real commit adding ``landed_file``, then pushes
     its branch and declares it through the real `blizzard runner artifact commit` verb
@@ -132,6 +122,7 @@ def build_script(landed_file: str) -> str:
     )
 
 
+@scripted_build
 def usage_limited_build_script(landed_file: str) -> str:
     """:func:`build_script`'s twin for the usage-limit crash scenario: commits,
     pushes, and declares the same as always — so ``produces: commit`` is already met and the
@@ -267,6 +258,7 @@ def usage_limited_graph_yaml(landed_file: str) -> str:
     return yaml.safe_dump(graph, sort_keys=False)
 
 
+@scripted_build
 def opencode_build_script(landed_file: str) -> str:
     """:func:`build_script`'s twin, but every ``subprocess.run`` call passes
     ``capture_output=True`` — unlike ``build_script``'s plain calls, ``mock-opencode``
@@ -346,6 +338,7 @@ def sigint_trap_hang_script(body: str) -> str:
     )
 
 
+@scripted_build
 def pre_declare_build_script(landed_file: str, pushed_marker: Path, go_marker: Path) -> str:
     """:func:`build_script`'s commit + push, then an in-test fence (``bzh:crash-sweep``):
     write ``pushed_marker`` once pushed, then block on ``go_marker`` before declaring — pinning
@@ -856,11 +849,7 @@ def write_runner_config(
         host="127.0.0.1",
         port=port,
         hub_url=f"http://127.0.0.1:{hub_port}",
-        workspaces=(
-            HostWorkspace(
-                DEFAULT_WORKSPACE_ID, root=str(workspace), provider="winter", envs=(RUNNER_ENV,), base_branch="main"
-            ),
-        ),
+        workspaces=(basic_workspace(workspace),),
         # The mock façade's own fence-relative default (``ClaudeTranscriptWriter``'s
         # ``transcripts_root``) — without this the real adapter's transcript reads (usage-limit
         # classification, the transcript-summed usage fallback) fall back to the real

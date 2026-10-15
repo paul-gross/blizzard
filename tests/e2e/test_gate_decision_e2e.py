@@ -32,8 +32,8 @@ from tests.e2e.test_acceptance_loop import (
     _mock_bin_dir,
     _runner_api,
     _runner_config,
-    _winter_source,
 )
+from tests.fleet_world import mint_world, scripted_build_prompt
 
 pytestmark = [
     pytest.mark.e2e,
@@ -45,7 +45,7 @@ pytestmark = [
 
 # build: write a file and make a real commit — the work the gate stands in front of, and
 # the artifact the gated decision must carry.
-_BUILD_SCRIPT = (
+_BUILD_SCRIPT = scripted_build_prompt(
     "import subprocess, pathlib\n"
     f"repo = {REPO_NAME!r}\n"
     '(pathlib.Path(repo) / "LANDED.md").write_text("landed behind a human gate\\n")\n'
@@ -146,31 +146,13 @@ def test_graph_gate_parks_a_decision_then_decide_delivers(
     bin_dir = _mock_bin_dir()
     if bin_dir is None:
         pytest.skip("no provisioned sibling blizzard-mock worktree (run `winter provision <env>`)")
-    winter_source = _winter_source()
-    if winter_source is None:
-        pytest.skip("no local winter source (set BLIZZARD_MOCK_WINTER_SOURCE)")
 
     scratch = tmp_path / "scratch"
-    subprocess.run(
-        [
-            str(bin_dir / "blizzard-mock-fixture"),
-            "reset",
-            "--env",
-            FIXTURE_ENV,
-            "--scratch-root",
-            str(scratch),
-            "--winter-source",
-            str(winter_source),
-        ],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
+    mint_world(bin_dir, scratch)
     fixture_root = scratch / FIXTURE_ENV
     workspace = fixture_root / "workspace"
     origins = fixture_root / "origins"
     origin_bare = origins / f"{REPO_NAME}.git"
-    (workspace / ".blizzard-mock-harness-fence").write_text("e2e fence marker\n")
 
     forge_port, hub_port = _free_port(), _free_port()
     hub_url = f"http://127.0.0.1:{hub_port}"

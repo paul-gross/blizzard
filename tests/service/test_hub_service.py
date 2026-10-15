@@ -20,13 +20,12 @@ import pytest
 from blizzard.hub.domain.execution.auth.produces import PRODUCES_ENFORCE
 from blizzard.hub.domain.execution.auth.route import ROUTE_TOKEN_ENFORCE
 from tests.e2e.test_acceptance_loop import REPO, REPO_NAME, _await_http, _forge, _free_port, _hub, _terminate
+from tests.fleet_world import mint_world
 from tests.service.support import (
-    mint_fixture,
     mock_runner,
     poll_until,
     registered_runner_id,
     require_mock_fleet,
-    require_winter_source,
     service_gate,
     sse_tap,
 )
@@ -91,7 +90,7 @@ def _ingest(forge: httpx.Client, hub: httpx.Client, title: str) -> str:
 def _stack(tmp_path: Path):
     """Stand up mock forge + real hub over a minted fixture's origins. Returns a context tuple."""
     bin_dir = require_mock_fleet()
-    _workspace, origins, _bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
+    _workspace, origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
     forge_port, hub_port = _free_port(), _free_port()
     return bin_dir, origins, forge_port, hub_port
 

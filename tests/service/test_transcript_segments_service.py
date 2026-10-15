@@ -12,13 +12,12 @@ import pytest
 
 from blizzard.hub.domain.observability.transcripts import RECORD_MAX_BYTES
 from tests.e2e.test_acceptance_loop import REPO, REPO_NAME, _forge, _free_port, _hub
+from tests.fleet_world import mint_world
 from tests.runner_join import add_runner, fleet_headers
 from tests.service.support import (
-    mint_fixture,
     mock_hub,
     mock_hub_chunk_spec,
     require_mock_fleet,
-    require_winter_source,
     service_gate,
     transcript_segment_record,
 )
@@ -28,7 +27,7 @@ pytestmark = [pytest.mark.service, service_gate]
 
 def _stack(tmp_path: Path):  # type: ignore[no-untyped-def]
     bin_dir = require_mock_fleet()
-    _workspace, origins, _bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
+    _workspace, origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
     forge_port, hub_port = _free_port(), _free_port()
     return bin_dir, origins, forge_port, hub_port
 

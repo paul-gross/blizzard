@@ -23,12 +23,11 @@ import yaml
 
 from blizzard.hub.graphs import PACKAGED
 from tests.e2e.test_acceptance_loop import REPO_NAME, _forge, _free_port, _hub
+from tests.fleet_world import mint_world
 from tests.service.support import (
-    mint_fixture,
     mock_runner,
     poll_until,
     require_mock_fleet,
-    require_winter_source,
     service_gate,
 )
 
@@ -54,7 +53,7 @@ class Garden:
 @contextlib.contextmanager
 def garden_stack(tmp_path: Path) -> Iterator[Garden]:
     bin_dir = require_mock_fleet()
-    _workspace, origins, bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
+    _workspace, origins, bare = mint_world(bin_dir, tmp_path / "scratch")
     head = subprocess.run(
         ["git", "-C", str(bare), "rev-parse", "HEAD"], check=True, capture_output=True, text=True
     ).stdout.strip()
