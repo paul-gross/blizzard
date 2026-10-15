@@ -178,6 +178,7 @@ def test_summary_reports_the_identity_verdict_naming_both_runners_and_the_reset_
         "token_runner_id": "rn_other",
         "checked_at": "2026-07-16T12:00:00+00:00",
         "reset_command": "blizzard runner store reset /runner",
+        "reason": None,
     }
     assert_all_timestamps_utc(body)
 
@@ -194,6 +195,7 @@ def test_an_unchecked_verdict_reports_no_ids_and_no_check_yet(tmp_path: Path) ->
         "token_runner_id": None,
         "checked_at": None,
         "reset_command": "blizzard runner store reset /r",
+        "reason": None,
     }
 
 

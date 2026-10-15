@@ -13,7 +13,6 @@ from typing import Protocol
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.harness.capability_snapshot import TickCapabilities
 from blizzard.runner.hub.chunk_status_cache import MemoizingChunkViewCache
-from blizzard.runner.hub.identity import IdentityState
 from blizzard.runner.lifecycle.identity_check import IdentityCheck
 from blizzard.runner.lifecycle.registration import Registration
 from blizzard.runner.loop.context import LoopContext
@@ -75,9 +74,10 @@ def _tick(ctx: LoopContext) -> None:
     # Before any other hub call: until the token is verified to name the configured runner, `ctx.hub`
     # answers every call as an outage, so nothing below can read another runner's chunks as its own.
     _traced(ctx, IdentityCheck)
-    # A token naming another runner drives no lease and delivers nothing; liveness, retention and
-    # the observation samples below stay local and keep running, so the status stays readable.
-    refusing = ctx.identity_verdict.verdict().state is IdentityState.MISMATCHED
+    # A token naming another runner or refused by the hub, or a runner its host's hub does not hold under the
+    # host, drives no lease and delivers nothing; liveness, retention and the observation samples below stay
+    # local and keep running, so the status stays readable.
+    refusing = ctx.identity_verdict.verdict().refusing()
     if not refusing:
         ctx.chunk_views.prime(_primed_chunk_ids(ctx))
     elif ctx.identity_verdict.registration_checks():

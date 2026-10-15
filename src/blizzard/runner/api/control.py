@@ -155,4 +155,5 @@ def _identity_view(verdict: IdentityVerdict) -> IdentityVerdictView:
         token_runner_id=verdict.token_runner_id,
         checked_at=iso_utc(verdict.checked_at) if verdict.checked_at is not None else None,
         reset_command=verdict.reset_command,
+        reason=verdict.reason,
     )

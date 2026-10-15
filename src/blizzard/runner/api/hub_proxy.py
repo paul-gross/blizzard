@@ -47,6 +47,10 @@ def _unverified(verdict: IdentityVerdict) -> str:
             f"runner_identity_mismatch: this runner's token belongs to runner {verdict.token_runner_id}, but the "
             f"configured runner is {verdict.store_runner_id}; {verdict.reset_command}"
         )
+    if verdict.state is IdentityState.REFUSED:
+        return f"runner_token_refused: {verdict.reason}; {verdict.reset_command}"
+    if verdict.state in (IdentityState.NOT_HELD, IdentityState.TENANT_DIFFERS):
+        return f"runner_halted_by_host: {verdict.reason}"
     return "runner_identity_unverified: this runner has not yet verified its token with the hub"
 
 

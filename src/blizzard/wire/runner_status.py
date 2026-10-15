@@ -68,14 +68,18 @@ class IdentityVerdictView(BaseModel):
     """Whether the runner's token resolves to the runner its host file configures (``store_runner_id``).
 
     ``unchecked`` until the hub first answers the check, ``matched`` while it does, ``mismatched``
-    while the token names another runner — the runner then drives no lease until the right token
-    returns. ``reset_command`` names how to restore it: the token variable and the configured id."""
+    while the token names another runner, ``refused`` while the hub refuses the token (unknown, revoked,
+    retired) — the runner then drives no lease until a check resolves it again. On a registered host,
+    ``not_held`` while the hub does not hold the runner under the host and ``tenant_differs`` while it stands
+    in another tenant than the host's halt the runner alone. ``reason`` says why for those last three.
+    ``reset_command`` names how to restore the token: the token variable and the configured id."""
 
-    state: Literal["unchecked", "matched", "mismatched"]
+    state: Literal["unchecked", "matched", "mismatched", "refused", "not_held", "tenant_differs"]
     store_runner_id: str | None
     token_runner_id: str | None
     checked_at: str | None
     reset_command: str
+    reason: str | None = None
 
 
 class ServedProjectStatusView(BaseModel):
