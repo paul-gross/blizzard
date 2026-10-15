@@ -210,6 +210,12 @@ RUNNER_ALLOWED_SCANS: list[Allowance] = [
         "same smallness the transcript lane's buffer leans on.",
     ),
     TableWideAllowance(
+        "host_ingests",
+        50,
+        "one row per runner the host ever took in from another store — an operator verb's rare record, read only by "
+        "the next ingest.",
+    ),
+    TableWideAllowance(
         "host_high_water_seen",
         1,
         "the host lane's high-water singleton — one row, so a probe reads at most one.",

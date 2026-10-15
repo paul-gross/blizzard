@@ -2,11 +2,12 @@
 
 A shape reflected from a store at the revision before the runner key names no ``runner_id``, so a row built from it
 writes exactly as that release did; reflected at head, the caller decides the key. Shared by the runner-scope
-migration's tests."""
+migration's tests and the runner transfer's."""
 
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable, Mapping
 from datetime import UTC, datetime
 
 import sqlalchemy as sa
@@ -47,19 +48,42 @@ def _value_for(column: sa.Column) -> object:
     return f"{column.name}-1"
 
 
-def seed_every_keyed_table(engine: sa.Engine, shapes: sa.MetaData, *, omit: frozenset[str] = frozenset()) -> None:
+def seed_every_keyed_table(
+    engine: sa.Engine,
+    shapes: sa.MetaData,
+    *,
+    omit: frozenset[str] = frozenset(),
+    values: Mapping[str, object] | None = None,
+) -> None:
     """One row in every keyed table, built from SHAPES: every column gets a value of its own type, or the first value
     its ``IN (...)`` CHECK constraint allows; a column named in ``omit`` is left out, to its default. The shapes name
     only the columns they reflected, so built from the parent's they write exactly as the previous release's statements
     do."""
+    seed_tables(engine, shapes, KEYED, omit=omit, values=values)
+
+
+def seed_tables(
+    engine: sa.Engine,
+    shapes: sa.MetaData,
+    names: Iterable[str],
+    *,
+    omit: frozenset[str] = frozenset(),
+    values: Mapping[str, object] | None = None,
+) -> None:
+    """One row in each of the tables ``names``, built as :func:`seed_every_keyed_table` builds one; a column named in
+    ``values`` takes that value instead, in every table."""
     inspector = sa.inspect(engine)
     with engine.begin() as conn:
-        for name in sorted(KEYED):
+        for name in sorted(names):
             table = shapes.tables[name]
             allowed = {
                 match.group(1): match.group(2)
                 for check in inspector.get_check_constraints(name)
                 if (match := _ALLOWED_VALUES.match(check["sqltext"])) is not None
             }
-            values = {c.name: allowed.get(c.name, _value_for(c)) for c in table.columns if c.name not in omit}
-            conn.execute(sa.insert(table).values(values))
+            row = {
+                c.name: (values or {}).get(c.name, allowed.get(c.name, _value_for(c)))
+                for c in table.columns
+                if c.name not in omit
+            }
+            conn.execute(sa.insert(table).values(row))

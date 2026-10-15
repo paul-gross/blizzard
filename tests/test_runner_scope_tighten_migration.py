@@ -603,6 +603,7 @@ def test_the_downgrade_restores_the_parent_schema_and_keeps_each_lanes_last_issu
 def test_the_downgrade_refuses_a_store_of_two_runners_naming_both_and_changes_nothing(tmp_path: Path) -> None:
     config = runner_runtime.init_environment(tmp_path)
     migration = runner_runtime.migration_runner(config)
+    migration.downgrade(_REVISION)
     engine = create_engine_from_url(config.db_url)
     try:
         _seed_identity(engine)
