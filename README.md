@@ -138,11 +138,12 @@ blizzard hub graph sync     # mint the packaged graphs; idempotent, re-run after
 Set up a runner on the machine that will run the agents. The same wheel carries it, and with the hub still up:
 
 ```bash
-blizzard runner init .      # scaffold blizzard-host.toml + its own sqlite store, then add this runner at the hub
+blizzard runner init .      # scaffold blizzard-host.toml + its own sqlite store, then register the host and its runner at the hub
 ```
 
-`init` adds the runner at the local hub above and writes the token the hub issues to `.env`; for a hub elsewhere, pass
-`--hub <url>`.
+`init` registers the host at the local hub above, adds its runner under it, and writes both tokens the hub issues to
+`.env`; for a hub elsewhere, pass `--hub <url>`. `blizzard runner add <name> --project <p>` adds another runner to the
+host, and `blizzard runner retire --runner <name>` retires one.
 
 Edit `blizzard-host.toml` to declare a git origin. A new runner defaults to the built-in `basic` workspace: it clones
 repos into `workspace/projects/` under the host directory and creates one worktree per repo under each chunk's folder.
