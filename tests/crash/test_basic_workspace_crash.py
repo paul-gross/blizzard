@@ -15,7 +15,7 @@ from blizzard.tools.invariants import Invariants
 from tests.crash.support import start_runner, terminate, wait_death, wait_status
 from tests.crash.test_kill9_sweep import _abandon_graph_yaml, _await_marker, _leases_for_chunk, _wait_for_closure
 from tests.e2e.test_acceptance_loop import REPO, REPO_NAME, _forge, _free_port, _git_bare, _hub, _mock_bin_dir
-from tests.e2e.test_basic_workspace import bare_origin, basic_build_prompt, basic_config, basic_graph_yaml, trap_winter
+from tests.e2e.test_basic_workspace import bare_origin, basic_config, basic_graph_yaml, trap_winter
 from tests.runner_fakes import daemon_store
 
 pytestmark = pytest.mark.crash_sweep
@@ -91,10 +91,6 @@ def test_basic_runner_releases_and_reclaims_after_abandon_kill9(
     marker = tmp_path / "hang-once.marker"
     landed_file = "LANDED.md"
     graph = yaml.safe_load(_abandon_graph_yaml(landed_file, marker))
-    # Reset the worker-owned branch after reacquiring a fresh detached worktree.
-    graph["nodes"]["build"]["prompt"] = basic_build_prompt(
-        graph["nodes"]["build"]["prompt"], branch="feature/basic-recovered", reset=True
-    )
     forge_port, hub_port = _free_port(), _free_port()
     with _forge(bin_dir, bare.parent, forge_port) as forge, _hub(tmp_path / "hub", forge_port, hub_port) as hub:
         minted = hub.post("/api/graphs", json={"definition_yaml": yaml.safe_dump(graph, sort_keys=False)})

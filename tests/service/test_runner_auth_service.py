@@ -17,14 +17,13 @@ import pytest
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.hub.internal.token_file import HubTokenFile
 from tests.e2e.test_acceptance_loop import _forge, _free_port, _hub, _runner_api, _runner_config
+from tests.fleet_world import mint_world
 from tests.runner_fakes import make_store
 from tests.service.support import (
     add_runner,
-    mint_fixture,
     mock_hub,
     poll_until,
     require_mock_fleet,
-    require_winter_source,
     service_gate,
 )
 from tests.service.test_hub_service import _stack
@@ -52,7 +51,7 @@ def _status(hub: httpx.Client, chunk_id: str) -> str:
 
 def test_runner_presents_the_bearer_token_on_every_hub_call(tmp_path: Path) -> None:
     bin_dir = require_mock_fleet()
-    workspace, _origins, _bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
+    workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
     fenced = _tick_env()
 
     hub_port = _free_port()
@@ -110,7 +109,7 @@ def test_a_runner_no_hub_added_sends_no_authorization_header_and_never_registers
 ) -> None:
     monkeypatch.delenv("BZ_HUB_TOKEN", raising=False)
     bin_dir = require_mock_fleet()
-    workspace, _origins, _bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
+    workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
     fenced = _tick_env()
 
     hub_port = _free_port()

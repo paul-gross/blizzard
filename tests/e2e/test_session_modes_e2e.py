@@ -26,8 +26,8 @@ from tests.e2e.test_acceptance_loop import (
     _hub,
     _mock_bin_dir,
     _runner_config,
-    _winter_source,
 )
+from tests.fleet_world import mint_world, scripted_build_prompt
 from tests.runner_fakes import daemon_store
 
 pytestmark = [
@@ -40,7 +40,7 @@ pytestmark = [
 
 # build: append a line to BUILD.md and commit — always a real change, so a re-entry after
 # a review fail commits again (two commits => build ran twice, entered twice).
-_BUILD_SCRIPT = (
+_BUILD_SCRIPT = scripted_build_prompt(
     "import subprocess, pathlib\n"
     f"repo = {REPO_NAME!r}\n"
     'p = pathlib.Path(repo) / "BUILD.md"\n'
@@ -156,31 +156,13 @@ def test_session_modes_resume_targeted_and_fresh_across_a_cycle(tmp_path: Path) 
     bin_dir = _mock_bin_dir()
     if bin_dir is None:
         pytest.skip("no provisioned sibling blizzard-mock worktree (run `winter provision <env>`)")
-    winter_source = _winter_source()
-    if winter_source is None:
-        pytest.skip("no local winter source (set BLIZZARD_MOCK_WINTER_SOURCE)")
 
     scratch = tmp_path / "scratch"
-    subprocess.run(
-        [
-            str(bin_dir / "blizzard-mock-fixture"),
-            "reset",
-            "--env",
-            FIXTURE_ENV,
-            "--scratch-root",
-            str(scratch),
-            "--winter-source",
-            str(winter_source),
-        ],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
+    mint_world(bin_dir, scratch)
     fixture_root = scratch / FIXTURE_ENV
     workspace = fixture_root / "workspace"
     origins = fixture_root / "origins"
     origin_bare = origins / f"{REPO_NAME}.git"
-    (workspace / ".blizzard-mock-harness-fence").write_text("e2e fence marker\n")
 
     forge_port, hub_port = _free_port(), _free_port()
     runner_dir = tmp_path / "runner"
@@ -299,29 +281,11 @@ def test_a_named_pool_threads_one_session_across_nodes_and_reasserts_its_model(t
     bin_dir = _mock_bin_dir()
     if bin_dir is None:
         pytest.skip("no provisioned sibling blizzard-mock worktree (run `winter provision <env>`)")
-    winter_source = _winter_source()
-    if winter_source is None:
-        pytest.skip("no local winter source (set BLIZZARD_MOCK_WINTER_SOURCE)")
 
     scratch = tmp_path / "scratch"
-    subprocess.run(
-        [
-            str(bin_dir / "blizzard-mock-fixture"),
-            "reset",
-            "--env",
-            FIXTURE_ENV,
-            "--scratch-root",
-            str(scratch),
-            "--winter-source",
-            str(winter_source),
-        ],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
+    mint_world(bin_dir, scratch)
     fixture_root = scratch / FIXTURE_ENV
     workspace = fixture_root / "workspace"
-    (workspace / ".blizzard-mock-harness-fence").write_text("e2e fence marker\n")
 
     forge_port, hub_port = _free_port(), _free_port()
     runner_dir = tmp_path / "runner"

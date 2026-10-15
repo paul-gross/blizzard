@@ -16,8 +16,9 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.leases.model import NewLease
 from tests.e2e.test_acceptance_loop import _free_port, _runner_api, _runner_config
+from tests.fleet_world import mint_world
 from tests.runner_fakes import SqlAlchemyRunnerStore, registered_fixture_store
-from tests.service.support import mint_fixture, mock_hub, require_mock_fleet, require_winter_source, service_gate
+from tests.service.support import mock_hub, require_mock_fleet, service_gate
 
 pytestmark = [pytest.mark.service, service_gate]
 
@@ -94,7 +95,7 @@ def test_dashboard_matches_the_individual_reads_over_a_real_running_daemon(tmp_p
     individual route answers over the same connection. The mock hub carries no
     `/api/fleet/summary` route, so `fleet_summary` degrades to `null` for real."""
     bin_dir = require_mock_fleet()
-    workspace, _origins, _bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
+    workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
     hub_port = _free_port()
 
     with mock_hub(bin_dir, hub_port) as hub:

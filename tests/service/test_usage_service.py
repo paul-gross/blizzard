@@ -20,16 +20,15 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.loop_wiring import LoopWiring
 from tests.e2e.test_acceptance_loop import REPO, REPO_NAME, _forge, _free_port, _hub, _runner_config
+from tests.fleet_world import mint_world
 from tests.runner_fakes import daemon_store
 from tests.runner_join import fleet_headers
 from tests.service.support import (
-    mint_fixture,
     mock_hub,
     mock_hub_chunk_spec,
     mock_runner,
     poll_until,
     require_mock_fleet,
-    require_winter_source,
     service_gate,
 )
 
@@ -106,7 +105,7 @@ def test_runner_buffers_usage_facts_through_a_hub_outage_and_flushes_once(tmp_pa
     """A real runner's usage facts ride the store-and-forward buffer: buffered while the
     build runs, held durable through a hub outage, flushed on recovery, recorded once."""
     bin_dir = require_mock_fleet()
-    workspace, _origins, _bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
+    workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
     fenced = _tick_env()
 
     hub_port = _free_port()
@@ -235,7 +234,7 @@ def test_hub_derives_chunk_usage_totals_off_a_live_api_from_pushed_facts(tmp_pat
     per-node-step usage + a chunk total off the live API, with ``cost_partial`` on an
     absent-cost row and idempotent replay."""
     bin_dir = require_mock_fleet()
-    _workspace, origins, _bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
+    _workspace, origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
     forge_port, hub_port = _free_port(), _free_port()
 
     with _forge(bin_dir, origins, forge_port) as forge, _hub(tmp_path / "hub", forge_port, hub_port) as hub:
@@ -311,7 +310,7 @@ def test_hub_reads_back_an_estimate_apart_from_billed_cost_off_a_live_api(tmp_pa
     derived totals ``GET /api/chunks/{id}`` and ``GET /api/chunks`` carry, kept apart from
     ``cost_usd`` and not flagging the total partial."""
     bin_dir = require_mock_fleet()
-    _workspace, origins, _bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
+    _workspace, origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
     forge_port, hub_port = _free_port(), _free_port()
 
     with _forge(bin_dir, origins, forge_port) as forge, _hub(tmp_path / "hub", forge_port, hub_port) as hub:

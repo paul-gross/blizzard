@@ -18,12 +18,11 @@ import pytest
 import yaml
 
 from tests.e2e.test_acceptance_loop import OWNER, REPO, REPO_NAME, _forge, _free_port, _hub
+from tests.fleet_world import mint_world
 from tests.service.support import (
-    mint_fixture,
     mock_runner,
     poll_until,
     require_mock_fleet,
-    require_winter_source,
     service_gate,
 )
 from tests.support import fixture_work_source
@@ -41,7 +40,7 @@ def _two_projects(tmp_path: Path) -> Iterator[tuple[httpx.Client, httpx.Client, 
     and whose ``second`` project links only :data:`_SECOND_SOURCE` — no repository. Yields the forge, the hub and
     the hub's port."""
     bin_dir = require_mock_fleet()
-    _workspace, origins, bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
+    _workspace, origins, bare = mint_world(bin_dir, tmp_path / "scratch")
     subprocess.run(["git", "clone", "-q", "--bare", str(bare), str(origins / f"{_SECOND_SOURCE}.git")], check=True)
     forge_port, hub_port = _free_port(), _free_port()
     with _forge(bin_dir, origins, forge_port) as forge, _hub(tmp_path / "hub", forge_port, hub_port) as hub:

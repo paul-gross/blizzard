@@ -8,7 +8,6 @@ in flight "Needs you" shows loading, never empty. Skipped unless `BLIZZARD_E2E=1
 from __future__ import annotations
 
 import os
-import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -27,9 +26,9 @@ from tests.e2e.test_acceptance_loop import (
     _hub,
     _mock_bin_dir,
     _runner_config,
-    _winter_source,
 )
 from tests.e2e.test_board_cost_live_e2e import _ingest_promote_claim, _push_usage
+from tests.fleet_world import mint_world
 
 _HUB_BUNDLE = Path(__file__).resolve().parents[2] / "src" / "blizzard" / "static" / "hub" / "index.html"
 
@@ -91,32 +90,14 @@ def test_the_glance_board_shows_loading_before_rows_and_never_empty_on_a_populat
     bin_dir = _mock_bin_dir()
     if bin_dir is None:
         pytest.skip("no provisioned sibling blizzard-mock worktree (run `winter provision <env>`)")
-    winter_source = _winter_source()
-    if winter_source is None:
-        pytest.skip("no local winter source (set BLIZZARD_MOCK_WINTER_SOURCE)")
 
     from playwright.sync_api import expect, sync_playwright
 
     scratch = tmp_path / "scratch"
-    subprocess.run(
-        [
-            str(bin_dir / "blizzard-mock-fixture"),
-            "reset",
-            "--env",
-            FIXTURE_ENV,
-            "--scratch-root",
-            str(scratch),
-            "--winter-source",
-            str(winter_source),
-        ],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
+    mint_world(bin_dir, scratch)
     fixture_root = scratch / FIXTURE_ENV
     workspace = fixture_root / "workspace"
     origins = fixture_root / "origins"
-    (workspace / ".blizzard-mock-harness-fence").write_text("e2e fence marker\n")
 
     forge_port, hub_port = _free_port(), _free_port()
     with _forge(bin_dir, origins, forge_port) as forge, _hub(tmp_path / "hub", forge_port, hub_port) as hub:
@@ -175,28 +156,11 @@ def test_the_glance_board_shows_a_cost_estimate_never_a_plain_billed_zero(
     bin_dir = _mock_bin_dir()
     if bin_dir is None:
         pytest.skip("no provisioned sibling blizzard-mock worktree (run `winter provision <env>`)")
-    winter_source = _winter_source()
-    if winter_source is None:
-        pytest.skip("no local winter source (set BLIZZARD_MOCK_WINTER_SOURCE)")
 
     from playwright.sync_api import expect, sync_playwright
 
     scratch = tmp_path / "scratch"
-    subprocess.run(
-        [
-            str(bin_dir / "blizzard-mock-fixture"),
-            "reset",
-            "--env",
-            FIXTURE_ENV,
-            "--scratch-root",
-            str(scratch),
-            "--winter-source",
-            str(winter_source),
-        ],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
+    mint_world(bin_dir, scratch)
     origins = scratch / FIXTURE_ENV / "origins"
 
     forge_port, hub_port = _free_port(), _free_port()

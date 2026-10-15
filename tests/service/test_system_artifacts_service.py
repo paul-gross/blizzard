@@ -23,8 +23,9 @@ from blizzard.runner.config import RunnerConfig
 from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.leases.model import NewLease
 from tests.e2e.test_acceptance_loop import _free_port, _runner_api, _runner_config
+from tests.fleet_world import mint_world
 from tests.runner_fakes import SqlAlchemyRunnerStore, runner_store_errors
-from tests.service.support import mint_fixture, mock_hub, require_mock_fleet, require_winter_source, service_gate
+from tests.service.support import mock_hub, require_mock_fleet, service_gate
 
 pytestmark = [pytest.mark.service, service_gate]
 
@@ -71,7 +72,7 @@ def _cli_env(config: RunnerConfig, *, lease_id: str, token: str) -> dict[str, st
 
 def test_system_scope_list_and_get_serve_the_seeded_set_end_to_end(tmp_path: Path) -> None:
     bin_dir = require_mock_fleet()
-    workspace, _origins, _bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
+    workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
     hub_port = _free_port()
 
     with mock_hub(bin_dir, hub_port) as hub:
@@ -113,7 +114,7 @@ def test_system_scope_read_fails_rather_than_resolving_locally_when_the_hub_is_u
     read, there is no runner-local fallback, so a hub the runner cannot reach must fail the
     read outright rather than ever answering it from nothing."""
     bin_dir = require_mock_fleet()
-    workspace, _origins, _bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
+    workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
     unreachable_hub_port = _free_port()  # nothing is listening here
 
     base_config = _runner_config(tmp_path / "runner", workspace, bin_dir, unreachable_hub_port, join=False)
@@ -143,7 +144,7 @@ def test_a_worker_on_a_graph_with_no_artifacts_block_reads_a_packaged_name_verba
     packaged_text = packaged.text
 
     bin_dir = require_mock_fleet()
-    workspace, _origins, _bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
+    workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
     hub_port = _free_port()
 
     with mock_hub(bin_dir, hub_port) as hub:

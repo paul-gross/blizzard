@@ -7,18 +7,16 @@ Skipped unless ``BLIZZARD_CRASH_SWEEP=1``; run with ``BLIZZARD_CRASH_SWEEP=1 uv 
 from __future__ import annotations
 
 import os
-import subprocess
 from collections.abc import Iterator
 
 import pytest
 
 from tests.crash.support import (
-    FIXTURE_ENV,
     CrashEnv,
     forge_daemon,
     mock_bin_dir,
-    winter_source,
 )
+from tests.fleet_world import mint_world
 from tests.support import free_port
 
 pytestmark = pytest.mark.crash_sweep
@@ -32,34 +30,8 @@ def crash_env(tmp_path_factory: pytest.TempPathFactory) -> Iterator[CrashEnv]:
     bin_dir = mock_bin_dir()
     if bin_dir is None:
         pytest.skip("no provisioned sibling blizzard-mock worktree (run `winter provision <env>`)")
-    source = winter_source()
-    if source is None:
-        pytest.skip("no local winter source (set BLIZZARD_MOCK_WINTER_SOURCE)")
-
     scratch = tmp_path_factory.mktemp("crash-scratch")
-    subprocess.run(
-        [
-            str(bin_dir / "blizzard-mock-fixture"),
-            "reset",
-            "--env",
-            FIXTURE_ENV,
-            "--scratch-root",
-            str(scratch),
-            "--winter-source",
-            str(source),
-        ],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    fixture_root = scratch / FIXTURE_ENV
-    workspace = fixture_root / "workspace"
-    origins = fixture_root / "origins"
-    assert workspace.is_dir() and (origins / "toy-api.git").is_dir(), "fixture mint did not lay out the tree"
-
-    # Fence the tree so the mock harness will run (arbitrary code execution is the
-    # feature, gated on a marker file + BLIZZARD_MOCK_HARNESS_FENCE).
-    (workspace / ".blizzard-mock-harness-fence").write_text("crash-sweep fence marker\n")
+    workspace, origins, _bare = mint_world(bin_dir, scratch, fence="crash-sweep fence marker\n")
 
     forge_port = free_port()
     with forge_daemon(bin_dir, origins, forge_port) as forge:

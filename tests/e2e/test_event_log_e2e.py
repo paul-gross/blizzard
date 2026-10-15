@@ -8,7 +8,6 @@ event must read back off `GET /api/events` and arrive on the SSE spine. Skipped 
 from __future__ import annotations
 
 import os
-import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -31,8 +30,8 @@ from tests.e2e.test_acceptance_loop import (
     _hub,
     _mock_bin_dir,
     _runner_config,
-    _winter_source,
 )
+from tests.fleet_world import mint_world
 from tests.runner_join import add_runner, fleet_headers
 from tests.service.support import mock_runner
 from tests.service.test_hub_service import _graph_yaml as _activity_graph_yaml
@@ -107,30 +106,12 @@ def test_a_verdict_less_exit_surfaces_a_critical_worker_lost_event(tmp_path: Pat
     bin_dir = _mock_bin_dir()
     if bin_dir is None:
         pytest.skip("no provisioned sibling blizzard-mock worktree (run `winter provision <env>`)")
-    winter_source = _winter_source()
-    if winter_source is None:
-        pytest.skip("no local winter source (set BLIZZARD_MOCK_WINTER_SOURCE)")
 
     scratch = tmp_path / "scratch"
-    subprocess.run(
-        [
-            str(bin_dir / "blizzard-mock-fixture"),
-            "reset",
-            "--env",
-            FIXTURE_ENV,
-            "--scratch-root",
-            str(scratch),
-            "--winter-source",
-            str(winter_source),
-        ],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
+    mint_world(bin_dir, scratch)
     fixture_root = scratch / FIXTURE_ENV
     workspace = fixture_root / "workspace"
     origins = fixture_root / "origins"
-    (workspace / ".blizzard-mock-harness-fence").write_text("e2e fence marker\n")
 
     forge_port, hub_port = _free_port(), _free_port()
     with _forge(bin_dir, origins, forge_port) as forge, _hub(tmp_path / "hub", forge_port, hub_port) as hub:
@@ -159,25 +140,10 @@ def test_a_verdict_less_exit_surfaces_a_critical_worker_lost_event(tmp_path: Pat
         assert HubEventType.EVENT_LOGGED in _sse_event_types(hub)
 
 
-def _reset_fixture(bin_dir: Path, winter_source: Path, scratch: Path) -> tuple[Path, Path]:
-    subprocess.run(
-        [
-            str(bin_dir / "blizzard-mock-fixture"),
-            "reset",
-            "--env",
-            FIXTURE_ENV,
-            "--scratch-root",
-            str(scratch),
-            "--winter-source",
-            str(winter_source),
-        ],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
+def _reset_fixture(bin_dir: Path, scratch: Path) -> tuple[Path, Path]:
+    mint_world(bin_dir, scratch)
     fixture_root = scratch / FIXTURE_ENV
     workspace = fixture_root / "workspace"
-    (workspace / ".blizzard-mock-harness-fence").write_text("e2e fence marker\n")
     return workspace, fixture_root / "origins"
 
 
@@ -217,13 +183,10 @@ def test_the_events_tab_renders_filters_and_updates_live_in_the_browser(
     bin_dir = _mock_bin_dir()
     if bin_dir is None:
         pytest.skip("no provisioned sibling blizzard-mock worktree (run `winter provision <env>`)")
-    winter_source = _winter_source()
-    if winter_source is None:
-        pytest.skip("no local winter source (set BLIZZARD_MOCK_WINTER_SOURCE)")
 
     from playwright.sync_api import expect, sync_playwright
 
-    _workspace, origins = _reset_fixture(bin_dir, winter_source, tmp_path / "scratch")
+    _workspace, origins = _reset_fixture(bin_dir, tmp_path / "scratch")
     forge_port, hub_port = _free_port(), _free_port()
     with _forge(bin_dir, origins, forge_port) as forge, _hub(tmp_path / "hub", forge_port, hub_port) as hub:
         # A chunk the events name (the event_log.chunk_id FK) — its own state is immaterial.
@@ -310,13 +273,10 @@ def test_the_events_grid_does_not_collapse_at_a_narrow_viewport(
     bin_dir = _mock_bin_dir()
     if bin_dir is None:
         pytest.skip("no provisioned sibling blizzard-mock worktree (run `winter provision <env>`)")
-    winter_source = _winter_source()
-    if winter_source is None:
-        pytest.skip("no local winter source (set BLIZZARD_MOCK_WINTER_SOURCE)")
 
     from playwright.sync_api import expect, sync_playwright
 
-    _workspace, origins = _reset_fixture(bin_dir, winter_source, tmp_path / "scratch")
+    _workspace, origins = _reset_fixture(bin_dir, tmp_path / "scratch")
     forge_port, hub_port = _free_port(), _free_port()
     with _forge(bin_dir, origins, forge_port) as forge, _hub(tmp_path / "hub", forge_port, hub_port) as hub:
         issue = forge.post(f"/repos/{REPO}/issues", json={"title": "narrow events", "body": "the chunk"})
@@ -373,13 +333,12 @@ def test_activity_rail_tracks_claim_transition_and_fact_burst_across_reload(
     if not _HUB_BUNDLE.is_file():
         pytest.skip("no built hub bundle")
     bin_dir = _mock_bin_dir()
-    winter_source = _winter_source()
-    if bin_dir is None or winter_source is None:
-        pytest.skip("no provisioned mock worktree or local winter source")
+    if bin_dir is None:
+        pytest.skip("no provisioned mock worktree")
 
     from playwright.sync_api import expect, sync_playwright
 
-    _workspace, origins = _reset_fixture(bin_dir, winter_source, tmp_path / "scratch")
+    _workspace, origins = _reset_fixture(bin_dir, tmp_path / "scratch")
     forge_port, hub_port = _free_port(), _free_port()
     with _forge(bin_dir, origins, forge_port) as forge, _hub(tmp_path / "hub", forge_port, hub_port) as hub:
         assert hub.post("/api/graphs", json={"definition_yaml": _activity_graph_yaml()}).status_code == 201
@@ -497,13 +456,10 @@ def test_the_rail_survives_a_reload_with_no_duplicate_or_missing_rows(tmp_path: 
     bin_dir = _mock_bin_dir()
     if bin_dir is None:
         pytest.skip("no provisioned sibling blizzard-mock worktree (run `winter provision <env>`)")
-    winter_source = _winter_source()
-    if winter_source is None:
-        pytest.skip("no local winter source (set BLIZZARD_MOCK_WINTER_SOURCE)")
 
     from playwright.sync_api import expect, sync_playwright
 
-    _workspace, origins = _reset_fixture(bin_dir, winter_source, tmp_path / "scratch")
+    _workspace, origins = _reset_fixture(bin_dir, tmp_path / "scratch")
     forge_port, hub_port = _free_port(), _free_port()
     hub_dir = tmp_path / "hub"  # reused verbatim across the restart — the durable store lives here
 

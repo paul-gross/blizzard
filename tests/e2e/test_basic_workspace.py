@@ -7,7 +7,6 @@ import subprocess
 from pathlib import Path
 
 import pytest
-import yaml
 
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.environments.provider import WorkspaceRepo
@@ -48,35 +47,14 @@ def bare_origin(tmp_path: Path) -> Path:
     return bare
 
 
-def basic_build_prompt(build: str, *, branch: str, reset: bool = False) -> str:
-    # The mock runs inside the environment, but a real worker starts at the
-    # workspace root. Both resolve git paths from the injected workdir.
-    # Git uses the injected workdir; artifact declaration uses the repo's name.
-    repo_path = f"str(pathlib.Path(os.environ['BLIZZARD_ENV_WORKDIRS'].split(',')[0]) / {REPO_NAME!r})"
-    build = build.replace(f"repo = {REPO_NAME!r}", f"repo = {REPO_NAME!r}\nrepo_path = {repo_path}")
-    build = build.replace("pathlib.Path(repo)", "pathlib.Path(repo_path)")
-    build = build.replace('["git", "-C", repo', '["git", "-C", repo_path')
-    return (
-        "import os, pathlib, subprocess\n"
-        f"subprocess.run(['git', '-C', {repo_path}, 'switch', {'-C' if reset else '-c'!r}, {branch!r}], "
-        "check=True)\n" + build
-    )
-
-
 def basic_graph_yaml() -> str:
-    graph = yaml.safe_load(_graph_yaml())
-    # The provider allocates a clean detached worktree. The worker owns its branch.
-    graph["nodes"]["build"]["prompt"] = basic_build_prompt(
-        graph["nodes"]["build"]["prompt"], branch="feature/basic-chunk"
-    )
-    return yaml.safe_dump(graph, sort_keys=False)
+    """The scripted graph, whose build already switches to its own branch on the detached worktree."""
+    return _graph_yaml()
 
 
 def basic_config(runner_dir: Path, workspace: Path, bin_dir: Path, hub_port: int, origin: Path) -> RunnerConfig:
     config = with_workspace(
-        _runner_config(runner_dir, workspace, bin_dir, hub_port),
-        provider="basic",
-        repos=(WorkspaceRepo(REPO_NAME, f"file://{origin}"),),
+        _runner_config(runner_dir, workspace, bin_dir, hub_port), repos=(WorkspaceRepo(REPO_NAME, f"file://{origin}"),)
     )
     write_host_file(config)
     return config

@@ -1,8 +1,7 @@
-"""``.github/workflows/release.yml``'s ``release`` job — two static properties a tag
-cut can't rehearse locally: the image build-push step runs before `gh release create`,
-and the job's `permissions:` block declares both `contents: write` and
-`packages: write` (a job-level block replaces the workflow-level one rather than
-merging). A pure YAML parse — no docker/GHCR credentials needed.
+"""``.github/workflows/release.yml`` — static properties a tag cut can't rehearse locally: the image
+build-push step runs before `gh release create`, the ``release`` job's `permissions:` block declares both
+`contents: write` and `packages: write` (a job-level block replaces the workflow-level one rather than merging),
+and no other job holds a write scope. A pure YAML parse — no docker/GHCR credentials needed.
 """
 
 from __future__ import annotations
@@ -59,13 +58,12 @@ def test_image_build_push_step_pushes_and_targets_both_platforms() -> None:
 
 def test_job_permissions_declare_both_contents_and_packages_write() -> None:
     """The regression this pins: adding `packages: write` alone would silently
-    strip the workflow-level `contents: write` the same job's `gh release create`
+    strip the `contents: write` the same job's `gh release create`
     step depends on, since a job-level block replaces rather than merges."""
     permissions = _release_job().get("permissions")
     assert permissions, (
         "the release job must declare its own job-level `permissions:` block "
-        "(needed once it writes GHCR packages) — an absent block would inherit only "
-        "the workflow-level contents:write and leave the GHCR push unauthorized"
+        "(it writes GHCR packages and the Release) — the workflow level grants only read"
     )
     assert permissions.get("contents") == "write"
     assert permissions.get("packages") == "write"
@@ -113,3 +111,22 @@ def test_tags_are_derived_from_the_image_tags_script_not_hardcoded() -> None:
     build_push = steps[build_push_idx]
     tags_input = str(build_push.get("with", {}).get("tags", ""))
     assert "image_meta" in tags_input, "the build-push step must consume the derived tag list, not a literal"
+
+
+def _workflow() -> dict:
+    return yaml.safe_load(_WORKFLOW_PATH.read_text())
+
+
+def test_workflow_level_permissions_are_read_only() -> None:
+    """The test jobs inherit the workflow level, so it must grant no write scope."""
+    assert _workflow()["permissions"] == {"contents": "read"}
+
+
+def test_only_the_release_job_holds_a_write_scope() -> None:
+    for name, job in _workflow()["jobs"].items():
+        if name == "release":
+            continue
+        granted = job.get("permissions") or {}
+        assert "write" not in (granted.values() if isinstance(granted, dict) else [granted]), (
+            f"job {name!r} holds a write scope; only `release` publishes"
+        )

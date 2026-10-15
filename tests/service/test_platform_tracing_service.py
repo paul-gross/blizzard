@@ -22,16 +22,15 @@ from blizzard.runner.config import RunnerConfig
 from blizzard.runner.leases.model import NewLease
 from tests import claude_code_telemetry
 from tests.e2e.test_acceptance_loop import _await_http, _free_port, _runner_config
+from tests.fleet_world import mint_world
 from tests.host_files import write_host_file
 from tests.otlp_sink import OtlpSink, otlp_sink
 from tests.runner_fakes import make_store
 from tests.runner_join import runner_spawn_env
 from tests.service.support import (
-    mint_fixture,
     mock_hub,
     poll_until,
     require_mock_fleet,
-    require_winter_source,
     service_gate,
 )
 from tests.support import daemon_log_sink, read_daemon_log
@@ -107,7 +106,7 @@ def test_a_hub_with_platform_unset_delivers_no_platform_span(tmp_path: Path) -> 
 
 def test_a_runner_host_delivers_server_spans_over_tcp_and_the_socket_and_tick_spans(tmp_path: Path) -> None:
     bin_dir = require_mock_fleet()
-    workspace, _origins, _bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
+    workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
     hub_port = _free_port()
     with mock_hub(bin_dir, hub_port), otlp_sink() as sink:
         config: RunnerConfig = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
@@ -169,7 +168,7 @@ def _cli_export(trace: int) -> str:
 
 def test_a_worker_span_posted_over_tcp_and_the_socket_reaches_the_real_exporter(tmp_path: Path) -> None:
     bin_dir = require_mock_fleet()
-    workspace, _origins, _bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
+    workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
     hub_port = _free_port()
     token = "service-lease-token"
     with mock_hub(bin_dir, hub_port), otlp_sink() as sink:
@@ -224,7 +223,7 @@ def test_a_worker_span_posted_over_tcp_and_the_socket_reaches_the_real_exporter(
 
 def test_claude_code_metrics_and_logs_posted_over_tcp_and_the_socket_reach_the_real_exporters(tmp_path: Path) -> None:
     bin_dir = require_mock_fleet()
-    workspace, _origins, _bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
+    workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
     hub_port = _free_port()
     token = "service-lease-token"
     with mock_hub(bin_dir, hub_port), otlp_sink() as sink:

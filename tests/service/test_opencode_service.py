@@ -20,16 +20,15 @@ from blizzard.runner.harness.wiring import publish_harness_bundle
 from blizzard.runner.loop_wiring import LoopWiring
 from blizzard.runner.store.schema import leases, usage_facts
 from tests.e2e.test_acceptance_loop import REPO_NAME, _free_port, _git_bare, _runner_api, _runner_config
+from tests.fleet_world import BUILD_BRANCH, mint_world
 from tests.runner_fakes import daemon_store
 from tests.runner_join import fleet_headers
 from tests.service.support import (
     JUDGEMENT_SCRIPT,
-    mint_fixture,
     mock_hub,
     mock_hub_opencode_chunk_spec,
     poll_until,
     require_mock_fleet,
-    require_winter_source,
     service_gate,
 )
 
@@ -82,7 +81,7 @@ def test_opencode_build_and_review_resume_the_same_session_to_done(tmp_path: Pat
     session rather than minting its own — asserted off the one session file
     ``mock-opencode`` ever wrote: spawn, then three resumes, in order."""
     bin_dir = require_mock_fleet()
-    workspace, _origins, _bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
+    workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
     fenced = _tick_env()
 
     hub_port = _free_port()
@@ -108,7 +107,7 @@ def test_opencode_build_and_review_resume_the_same_session_to_done(tmp_path: Pat
 
 def test_runner_serves_a_mock_opencode_lease_with_a_published_bundle(tmp_path: Path) -> None:
     bin_dir = require_mock_fleet()
-    workspace, _origins, _bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
+    workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
     bundle = tmp_path / "bundle" / "opencode"
     bundle.mkdir(parents=True)
     (bundle / "opencode.json").write_text('{"permission":{"bash":"deny"}}')
@@ -167,6 +166,8 @@ _OPENCODE_TRANSCRIPT_BUILD_SCRIPT = (
     "from blizzard_mock.harness.engine import current_context\n"
     "ctx = current_context()\n"
     f"ctx.cwd = pathlib.Path(ctx.cwd) / {REPO_NAME!r}\n"
+    # The basic provider's worktree arrives detached; the worker owns its branch.
+    f'subprocess.run(["git", "-C", str(ctx.cwd), "switch", "-C", {BUILD_BRANCH!r}], check=True, capture_output=True)\n'
     f"apply_diff({_OPENCODE_TRANSCRIPT_DIFF!r})\n"
     f"commit({_OPENCODE_TRANSCRIPT_COMMIT_MESSAGE!r})\n"
     "_repo_dir = str(ctx.cwd)\n"
@@ -225,7 +226,7 @@ def test_opencode_transcript_is_read_back_through_the_runner_http_api(tmp_path: 
     runner's own local HTTP API. Pins provenance: the Bash turn's tool output carries the
     real commit sha, cross-checked against the bare origin."""
     bin_dir = require_mock_fleet()
-    workspace, _origins, origin_bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
+    workspace, _origins, origin_bare = mint_world(bin_dir, tmp_path / "scratch")
     transcripts_root = tmp_path / "transcripts"
     fenced = _tick_env()
     fenced["BZ_TRANSCRIPTS_ROOT"] = str(transcripts_root)
@@ -306,7 +307,7 @@ def test_opencode_transcript_segment_carries_opencode_provenance_through_the_run
     `harness_id` provenance column `"opencode"`, not `"claude_code"` or unset, through the
     runner's own local segment index."""
     bin_dir = require_mock_fleet()
-    workspace, _origins, _bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
+    workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
     transcripts_root = tmp_path / "transcripts"
     fenced = _tick_env()
     fenced["BZ_TRANSCRIPTS_ROOT"] = str(transcripts_root)
@@ -362,6 +363,8 @@ _OPENCODE_CRASH_BUILD_SCRIPT = (
     "from blizzard_mock.harness.engine import current_context\n"
     "ctx = current_context()\n"
     f"ctx.cwd = pathlib.Path(ctx.cwd) / {REPO_NAME!r}\n"
+    # The basic provider's worktree arrives detached; the worker owns its branch.
+    f'subprocess.run(["git", "-C", str(ctx.cwd), "switch", "-C", {BUILD_BRANCH!r}], check=True, capture_output=True)\n'
     f"apply_diff({_OPENCODE_TRANSCRIPT_DIFF!r})\n"
     f"commit({_OPENCODE_TRANSCRIPT_COMMIT_MESSAGE!r})\n"
     "_repo_dir = str(ctx.cwd)\n"
@@ -453,7 +456,7 @@ def test_opencode_crash_mid_turn_recovers_with_usage_recorded_exactly_once(tmp_p
     envelope, no ``SessionEnd``. Judgement resumes that SAME crashed session, finds no
     completed work, fails, and requeues a clean retry — no generation's usage double-charged."""
     bin_dir = require_mock_fleet()
-    workspace, _origins, origin_bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
+    workspace, _origins, origin_bare = mint_world(bin_dir, tmp_path / "scratch")
     transcripts_root = tmp_path / "transcripts"
     fenced = _tick_env()
     fenced["BZ_TRANSCRIPTS_ROOT"] = str(transcripts_root)
@@ -502,7 +505,7 @@ def test_opencode_crash_mid_task_records_child_without_a_stdout_tool_use(tmp_pat
     """A crashed task whose tool_use never reached stdout still contributes its child's
     completed steps to the exited worker's usage fact through the root export."""
     bin_dir = require_mock_fleet()
-    workspace, _origins, _bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
+    workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
     transcripts_root = tmp_path / "transcripts"
     fenced = _tick_env()
     fenced["BZ_TRANSCRIPTS_ROOT"] = str(transcripts_root)
@@ -570,7 +573,7 @@ def test_opencode_spawn_usage_includes_the_task_childs_steps(tmp_path: Path) -> 
     """A build program that spawns one ``task`` child records a spawn usage fact whose input
     tokens are the root's steps plus the child's, read back through the mock's own exports."""
     bin_dir = require_mock_fleet()
-    workspace, _origins, _origin_bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
+    workspace, _origins, _origin_bare = mint_world(bin_dir, tmp_path / "scratch")
     transcripts_root = tmp_path / "transcripts"
     fenced = _tick_env()
     fenced["BZ_TRANSCRIPTS_ROOT"] = str(transcripts_root)

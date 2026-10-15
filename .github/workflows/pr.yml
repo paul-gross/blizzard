@@ -8,14 +8,14 @@
 # own check instead of only breaking master after merge.
 #
 # Both upper tiers need what a single-repo checkout does not carry: the sibling
-# `blizzard-mock` worktree (the mock fleet + fixture scaffold) and a local winter
-# source (its committed `tools/winter-cli`, which the fixture clones to mint a real
-# disposable winter workspace over `file://` origins — no tokens, no forge, no network
-# beyond package installs). This workflow provides them with a multi-repo checkout:
-# `blizzard`, `blizzard-mock`, and the public `blizzard-workspace` (the winter source)
-# laid out as SIBLINGS under $GITHUB_WORKSPACE — exactly the on-disk layout the tiers'
-# discovery expects (`tests/service/support.py`, `tests/crash/support.py`:
-# `blizzard_root().parent / "blizzard-mock"`, `BLIZZARD_MOCK_WINTER_SOURCE`).
+# `blizzard-mock` worktree (the mock fleet + fixture scaffold). The tiers are winter-free:
+# their runners run on the built-in `basic` provider over a fixture of bare `file://`
+# origins the scaffold mints with no winter source — no tokens, no forge, no network
+# beyond package installs. This workflow provides the sibling with a two-repo checkout:
+# `blizzard` and `blizzard-mock` laid out as SIBLINGS under $GITHUB_WORKSPACE — exactly the
+# on-disk layout the tiers' discovery expects (`tests/service/support.py`,
+# `tests/crash/support.py`: `blizzard_root().parent / "blizzard-mock"`). The winter
+# binding's own tests are the local-only `winter-binding` tier and never run here.
 #
 # The crash-sweep-profile rationale (why this workflow runs the bounded CI subset rather
 # than the FULL sweep, and where the wall-time figures live) is owned by

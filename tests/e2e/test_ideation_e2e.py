@@ -25,10 +25,10 @@ from tests.e2e.test_acceptance_loop import (
     _hub,
     _mock_bin_dir,
     _runner_config,
-    _winter_source,
 )
 from tests.e2e.test_ask_answer_e2e import _runner_api, _tick_until
 from tests.e2e.test_session_modes_e2e import _sessions_by_node
+from tests.fleet_world import mint_world
 
 pytestmark = [
     pytest.mark.e2e,
@@ -311,28 +311,10 @@ def test_ideation_runs_end_to_end_on_all_authored_paths(tmp_path: Path) -> None:
     bin_dir = _mock_bin_dir()
     if bin_dir is None:
         pytest.skip("no provisioned sibling blizzard-mock worktree (run `winter provision <env>`)")
-    winter_source = _winter_source()
-    if winter_source is None:
-        pytest.skip("no local winter source (set BLIZZARD_MOCK_WINTER_SOURCE)")
 
     scratch = tmp_path / "scratch"
-    subprocess.run(
-        [
-            str(bin_dir / "blizzard-mock-fixture"),
-            "reset",
-            "--env",
-            FIXTURE_ENV,
-            "--scratch-root",
-            str(scratch),
-            "--winter-source",
-            str(winter_source),
-        ],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
+    mint_world(bin_dir, scratch)
     workspace = scratch / FIXTURE_ENV / "workspace"
-    (workspace / ".blizzard-mock-harness-fence").write_text("e2e fence marker\n")
     crash_dir = tmp_path / "crash-once"
     crash_dir.mkdir()
 

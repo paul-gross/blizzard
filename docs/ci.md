@@ -1,6 +1,6 @@
 # CI
 
-The policy behind CI — the branch and release model, one repo one wheel, the four test tiers — is owned by
+The policy behind CI — the branch and release model, one repo one wheel, the five test tiers — is owned by
 blizzard-context's
 [`verification/blizzard.md`](https://github.com/paul-gross/blizzard-context/blob/master/verification/blizzard.md); this
 file is the in-repo operator reference for running it.
@@ -52,12 +52,18 @@ the current branch's own merge-base.
 
 [`.github/workflows/upper-tiers.yml`](../.github/workflows/upper-tiers.yml) is reusable (`workflow_call`) and runs the
 service tier (`blizzard:service-test`) and the kill-9 crash sweep's bounded CI profile (`blizzard:crash-sweep`) over a
-multi-repo checkout of `blizzard` + `blizzard-mock` + `blizzard-workspace`; `pr.yml` and `push.yml` both call it.
+two-repo checkout of `blizzard` + `blizzard-mock`; `pr.yml` and `push.yml` both call it. The tiers are winter-free: their
+runners use the built-in `basic` provider over a fixture of bare `file://` origins, minted with no winter source. Every
+checkout in a job that runs tests sets `persist-credentials: false`; `tests/test_winter_free_ci.py` pins both.
 
 Locally the upper tiers need the sibling `blizzard-mock` worktree provisioned (`winter provision <env>`); their exact
 local equivalents are `mise run service-test` (`BLIZZARD_SERVICE=1 uv run pytest -n auto tests/service/`) and
 `mise run crash-sweep-ci`
 (`BLIZZARD_CRASH_SWEEP=1 BLIZZARD_CRASH_SWEEP_CI=1 uv run pytest -n auto -m crash_sweep tests/crash/`).
+
+The winter binding's own tests are the `winter-binding` tier (`mise run winter-binding`, gated on
+`BLIZZARD_WINTER_BINDING=1`): local-only, run against a winter source found via `BLIZZARD_MOCK_WINTER_SOURCE` or the
+enclosing winter workspace, and never in CI.
 
 The e2e tier runs only locally and in the tag `release` workflow — it is never a `pr`/`push` gate job.
 
@@ -109,10 +115,11 @@ The release tag fan-out (`vX.Y.Z` → exact + minor + `latest`; `vX.Y.Z-rc.*` �
 [`scripts/image-tags.sh`](../scripts/image-tags.sh), unit-tested by `tests/test_image_tags.py`, never inline in workflow
 YAML.
 
-The `release` job's job-level `permissions:` block declares both `contents: write` (`gh release create`) and
+The workflow-level `permissions:` is `contents: read`, so the release workflow's test jobs hold no write scope. The
+`release` job's job-level `permissions:` block declares both `contents: write` (`gh release create`) and
 `packages: write` (the GHCR push) — job-level blocks replace the workflow-level one — and the image push runs before
 `gh release create`, so a failed image build cannot leave a Release advertising a missing image;
-`tests/test_release_workflow.py` pins both.
+`tests/test_release_workflow.py` pins both scopes and the read-only workflow level.
 
 The `ghcr.io/paul-gross/blizzard-hub` package must be **public** — package visibility is a GHCR repository setting no
 workflow can assert, and every unauthenticated `docker pull` the operator docs prescribe depends on it. It is verified

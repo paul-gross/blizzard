@@ -35,6 +35,10 @@ run = "BLIZZARD_CRASH_SWEEP=1 BLIZZARD_CRASH_SWEEP_CI=1 uv run pytest -n auto -m
 description = "Run the capstone MVP acceptance-journey rehearsal (blizzard:journey) — the whole MVP acceptance journey end to end over real host daemons: five issues in (two grouped, the riskiest reordered to the top), an autonomous build→review→deliver night exhibiting a clean multi-repo land, a review-fail loop, an ask that parks and is answered, and a genuine failure that escalates, a mid-run SIGKILL reboot of both daemons, and the morning-after assertions (merged to bare main, full hub history+artifacts, resumed-without-takeover, nothing worked twice, no orphaned env, truthful `hub status`). Local-only like the crash sweep — needs the sibling blizzard-mock worktree provisioned (winter provision <env>)"
 run = "BLIZZARD_JOURNEY=1 uv run pytest -m journey tests/journey/"
 
+[tasks.winter-binding]
+description = "Run the winter-binding tier (blizzard:winter-binding) — the winter workspace provider against the real winter CLI, plus one chunk landed end to end over provider=\"winter\". Local-only, never run in CI: it needs BLIZZARD_WINTER_BINDING=1 (set by this task), a winter source (BLIZZARD_MOCK_WINTER_SOURCE, else the enclosing winter workspace), and the sibling blizzard-mock worktree provisioned (winter provision <env>)"
+run = "BLIZZARD_WINTER_BINDING=1 uv run pytest -m winter_binding tests/winter/"
+
 [tasks.service-test]
 description = "Run the service tier — a running daemon's HTTP API exercised from outside with the counterpart mocked: the runner against the mock hub (unreachable→buffered, dropped-ack→idempotent, stale-envelope), and the hub against the mock runner + mock forge (claim/completion, stale-epoch rejection, queue shaping, the SSE contract + live fan-out to a connected subscriber). sqlite only, no tokens/network; needs the sibling blizzard-mock worktree provisioned (winter provision <env>) — skips cleanly without it"
 run = "BLIZZARD_SERVICE=1 uv run pytest -n auto tests/service/"

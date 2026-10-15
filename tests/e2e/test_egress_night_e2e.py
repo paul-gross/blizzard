@@ -42,9 +42,9 @@ from tests.e2e.test_acceptance_loop import (
     _mock_bin_dir,
     _runner_api,
     _runner_config,
-    _winter_source,
 )
 from tests.e2e.test_ask_answer_e2e import _tick_until
+from tests.fleet_world import mint_world, scripted_build
 from tests.runner_join import held_token, token_identity
 
 pytestmark = [
@@ -77,6 +77,7 @@ _LOCAL_FORMAT = "%Y-%m-%dT%H:%M:%S"
 _UTC_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
 
 
+@scripted_build
 def _commit_script(filename: str, message: str, *, before: str = "", after: str = "") -> str:
     """A worker turn: ``before``, a real commit adding ``filename``, then push and declare."""
     return (
@@ -436,30 +437,12 @@ def exported(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Exported]:
     bin_dir = _mock_bin_dir()
     if bin_dir is None:
         pytest.skip("no provisioned sibling blizzard-mock worktree (run `winter provision <env>`)")
-    winter_source = _winter_source()
-    if winter_source is None:
-        pytest.skip("no local winter source (set BLIZZARD_MOCK_WINTER_SOURCE)")
 
     tmp_path = tmp_path_factory.mktemp("night")
     scratch = tmp_path / "scratch"
-    subprocess.run(
-        [
-            str(bin_dir / "blizzard-mock-fixture"),
-            "reset",
-            "--env",
-            FIXTURE_ENV,
-            "--scratch-root",
-            str(scratch),
-            "--winter-source",
-            str(winter_source),
-        ],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
+    mint_world(bin_dir, scratch)
     workspace = scratch / FIXTURE_ENV / "workspace"
     origins = scratch / FIXTURE_ENV / "origins"
-    (workspace / ".blizzard-mock-harness-fence").write_text("e2e fence marker\n")
 
     ndjson_dir, parquet_dir = tmp_path / "export-ndjson", tmp_path / "export-parquet"
     ndjson_dir.mkdir()

@@ -31,17 +31,16 @@ from tests.e2e.test_acceptance_loop import (
     FIXTURE_ENV,
     REPO,
     REPO_NAME,
-    RUNNER_ENV,
     _forge,
     _free_port,
     _hub,
     _mock_bin_dir,
     _runner_api,
     _runner_config,
-    _winter_source,
 )
 from tests.e2e.test_ask_answer_e2e import _tick_until
 from tests.egress_recipes import FILES_A_STATION_READ_LAST_WEEK, recipe
+from tests.fleet_world import mint_world, scripted_build
 from tests.host_files import write_host_file
 
 pytestmark = [
@@ -77,6 +76,7 @@ def _read(tool: str, key: str, path: str) -> str:
     return f"tool_call({tool!r}, {{{key!r}: os.path.join(_cwd, {path!r}), 'note': {_PLANTED_INPUT!r}}}, {_PLANTED_OUTPUT!r})\n"
 
 
+@scripted_build
 def _commit(filename: str) -> str:
     return (
         "import subprocess, pathlib\n"
@@ -244,9 +244,10 @@ def _relative(path: str, working_directories: list[str]) -> str:
     raise AssertionError(f"{path!r} is under none of {working_directories}")
 
 
-def _exported(path: str) -> str:
-    """A path a script read inside the repository, as the export names it: below the runner's workspace."""
-    return f"{RUNNER_ENV}/{path}"
+def _in_environment(path: str) -> str:
+    """A path below the runner's workspace, as the export names it: relative to the environment the basic provider
+    names after the chunk, which is the worker's own working directory."""
+    return path.split("/", 1)[1]
 
 
 def _hub_counts_agree(world: World, directory: Path) -> list[str]:
@@ -264,7 +265,10 @@ def _hub_counts_agree(world: World, directory: Path) -> list[str]:
     def grouped(sql: str) -> dict[str, int]:
         return dict(connection.execute(sql).fetchall())
 
-    hub_files = {_relative(key, cwds): count for key, count in world.counts("counts-files").items()}
+    hub_files: dict[str, int] = {}
+    for key, count in world.counts("counts-files").items():
+        path = _in_environment(_relative(key, cwds))
+        hub_files[path] = hub_files.get(path, 0) + count
     compare(
         "files",
         grouped("SELECT subject, count(*) FROM events_current WHERE kind = 'file_read' GROUP BY subject"),
@@ -293,29 +297,11 @@ def test_the_exported_events_agree_with_the_hubs_own_counts(tmp_path: Path, monk
     bin_dir = _mock_bin_dir()
     if bin_dir is None:
         pytest.skip("no provisioned sibling blizzard-mock worktree (run `winter provision <env>`)")
-    winter_source = _winter_source()
-    if winter_source is None:
-        pytest.skip("no local winter source (set BLIZZARD_MOCK_WINTER_SOURCE)")
 
     scratch = tmp_path / "scratch"
-    subprocess.run(
-        [
-            str(bin_dir / "blizzard-mock-fixture"),
-            "reset",
-            "--env",
-            FIXTURE_ENV,
-            "--scratch-root",
-            str(scratch),
-            "--winter-source",
-            str(winter_source),
-        ],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
+    mint_world(bin_dir, scratch)
     workspace = scratch / FIXTURE_ENV / "workspace"
     origins = scratch / FIXTURE_ENV / "origins"
-    (workspace / ".blizzard-mock-harness-fence").write_text("e2e fence marker\n")
 
     export = tmp_path / "export"
     export.mkdir()
@@ -363,7 +349,7 @@ def test_the_exported_events_agree_with_the_hubs_own_counts(tmp_path: Path, monk
         # 2. The docs' recipe names the files the review station read, the child's included.
         files = proof.events_warehouse(export).execute(recipe(FILES_A_STATION_READ_LAST_WEEK)).fetchall()
         read_by_review = {path for _graph, node, path, _reads in files if node == "review"}
-        assert read_by_review == {_exported(p) for p in (*_REVIEW_READS, *_CHILD_READS)}
+        assert read_by_review == {*_REVIEW_READS, *_CHILD_READS}
 
         # 3. Nothing the transcripts carried but the event itself leaves.
         planted = {

@@ -8,7 +8,6 @@ re-entry, and build runs twice — both commits land on bare `main`. Runs under 
 from __future__ import annotations
 
 import os
-import subprocess
 from pathlib import Path
 
 import pytest
@@ -35,8 +34,8 @@ from tests.e2e.test_acceptance_loop import (
     _hub,
     _mock_bin_dir,
     _runner_config,
-    _winter_source,
 )
+from tests.fleet_world import mint_world, scripted_build_prompt
 
 pytestmark = [
     pytest.mark.e2e,
@@ -48,7 +47,7 @@ pytestmark = [
 
 # build: append a line to BUILD.md and commit — always a real change, so a re-entry
 # after a review fail commits again (two commits => build ran twice).
-_BUILD_SCRIPT = (
+_BUILD_SCRIPT = scripted_build_prompt(
     "import subprocess, pathlib\n"
     f"repo = {REPO_NAME!r}\n"
     'p = pathlib.Path(repo) / "BUILD.md"\n'
@@ -156,31 +155,13 @@ def test_review_cycle_fails_once_then_delivers(
     bin_dir = _mock_bin_dir()
     if bin_dir is None:
         pytest.skip("no provisioned sibling blizzard-mock worktree (run `winter provision <env>`)")
-    winter_source = _winter_source()
-    if winter_source is None:
-        pytest.skip("no local winter source (set BLIZZARD_MOCK_WINTER_SOURCE)")
 
     scratch = tmp_path / "scratch"
-    subprocess.run(
-        [
-            str(bin_dir / "blizzard-mock-fixture"),
-            "reset",
-            "--env",
-            FIXTURE_ENV,
-            "--scratch-root",
-            str(scratch),
-            "--winter-source",
-            str(winter_source),
-        ],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
+    mint_world(bin_dir, scratch)
     fixture_root = scratch / FIXTURE_ENV
     workspace = fixture_root / "workspace"
     origins = fixture_root / "origins"
     origin_bare = origins / f"{REPO_NAME}.git"
-    (workspace / ".blizzard-mock-harness-fence").write_text("e2e fence marker\n")
 
     forge_port, hub_port = _free_port(), _free_port()
     with (
