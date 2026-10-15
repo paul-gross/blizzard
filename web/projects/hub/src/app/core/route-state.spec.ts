@@ -4,7 +4,7 @@ import { By } from '@angular/platform-browser';
 import { provideRouter, Router, RouterOutlet } from '@angular/router';
 import { settle } from 'fleet/testing';
 
-import { injectChildRouteParam, injectQueryFilters, type QueryFilters } from './route-state';
+import { injectChildRouteParam, injectQueryFilters, injectRouteParam, type QueryFilters } from './route-state';
 
 /**
  * Pins the two router reads every gardening tab's list route is built on
@@ -44,7 +44,19 @@ class TestParent {
 })
 class TestHost {}
 
+/** Renders its own route's `itemId`. */
+@Component({
+  selector: 'app-test-own-param',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  template: '<span data-testid="own">{{ itemId() ?? "none" }}</span>',
+})
+class TestOwnParam {
+  readonly itemId: Signal<string | null> = injectRouteParam('itemId');
+}
+
 const routes = [
+  { path: 'own', component: TestOwnParam },
+  { path: 'own/:itemId', component: TestOwnParam },
   {
     path: 'things',
     component: TestParent,
@@ -119,5 +131,24 @@ describe('route-state', () => {
 
     // Still the same parent: a filter change never rebuilt it.
     expect(parentConstructions).toBe(1);
+  });
+
+  it("reads the route's own param, and follows it as the route is reused", async () => {
+    const fixture = TestBed.createComponent(TestHost);
+    const router = TestBed.inject(Router);
+    const own = (): string | undefined =>
+      (fixture.nativeElement as HTMLElement).querySelector('[data-testid="own"]')?.textContent?.trim();
+
+    await router.navigateByUrl('/own/abc');
+    await settle(fixture);
+    expect(own()).toBe('abc');
+
+    await router.navigateByUrl('/own/def');
+    await settle(fixture);
+    expect(own()).toBe('def');
+
+    await router.navigateByUrl('/own');
+    await settle(fixture);
+    expect(own()).toBe('none');
   });
 });
