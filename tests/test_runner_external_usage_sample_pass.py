@@ -1,9 +1,9 @@
-"""``ExternalUsageSample`` — the tick's last step.
+"""``ExternalUsageSamplePass`` — the host tick's sampling pass.
 
 Unit and component tiers against a real (tmp sqlite) store and a scriptable
-``FakeSubscriptionSampler``: the per-slug cadence gate, that a sample never perturbs other
-steps, and several declared subscriptions sampled independently — a failed one isolated to
-its own slug, an unbound provider staying declared and unsampled."""
+``FakeSubscriptionSampler``: the per-slug cadence gate, the report each attempt buffers, and several declared
+subscriptions sampled independently — a failed one isolated to its own slug, an unbound provider staying declared and
+unsampled."""
 
 from __future__ import annotations
 
@@ -14,57 +14,44 @@ import pytest
 from structlog.testing import capture_logs
 
 from blizzard.foundation.clock import FixedClock
-from blizzard.runner.harness.adapter import WorkerHandle
-from blizzard.runner.hub.client import QueueEntry
-from blizzard.runner.loop.context import LoopConfig, ResolvedSubscription
-from blizzard.runner.loop.steps import ExternalUsageSample
-from blizzard.runner.loop.tick import tick
 from blizzard.runner.subscriptions.subscription_sampler import (
     ExternalSubscriptionUsageSnapshot,
     ExternalSubscriptionUsageWindow,
     SampleMissReason,
 )
-from tests.runner_fakes import (
-    FIXTURE_RUNNER_ID,
-    FakeHarness,
-    FakeHub,
-    FakeProbe,
-    FakeProvider,
-    FakeSubscriptionSampler,
-    claimed_outcome,
-    make_context,
-    make_envelope,
-    make_store,
-    serving,
-)
+from blizzard.runner.usage.external_usage_sample import ExternalUsageSamplePass, SampledSubscription
+from tests.runner_fakes import FakeSubscriptionSampler, make_store
 
 pytestmark = pytest.mark.unit
 
 _NOW = datetime(2026, 8, 1, 12, 0, 0, tzinfo=UTC)
-_HANDLE = WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100)
-_CHOICES = [("pass", "meets criteria"), ("fail", "does not")]
 _SAMPLED_KIND = "external_subscription_usage.sampled"
 _MISSED_KIND = "external_subscription_usage.missed"
 _SLUG = "anthropic"
+
+
+class _StoreSink:
+    """Records through the store's own runner-lane write, as an unregistered host's first runner does."""
+
+    def __init__(self, store) -> None:  # type: ignore[no-untyped-def]
+        self._store = store
+
+    def record(self, **attempt) -> None:  # type: ignore[no-untyped-def]
+        self._store.record_external_usage_attempt(**attempt)
 
 
 def _store(tmp_path):  # type: ignore[no-untyped-def]
     return make_store(f"sqlite:///{tmp_path / 'runner.db'}")
 
 
-def _resolved(
-    slug: str = _SLUG,
-    *,
-    interval_seconds: int = 300,
-    sampler: FakeSubscriptionSampler | None = None,
-) -> ResolvedSubscription:
-    return ResolvedSubscription(
-        slug=slug,
-        name=slug.title(),
-        provider=slug,
-        sample_interval_seconds=interval_seconds,
-        sampler=sampler,
-    )
+def _declared(
+    slug: str = _SLUG, *, interval_seconds: int = 300, sampler: FakeSubscriptionSampler | None = None
+) -> SampledSubscription:
+    return SampledSubscription(slug=slug, name=slug.title(), sample_interval_seconds=interval_seconds, sampler=sampler)
+
+
+def _pass(store, clock: FixedClock, *subscriptions: SampledSubscription) -> ExternalUsageSamplePass:  # type: ignore[no-untyped-def]
+    return ExternalUsageSamplePass(subscriptions=subscriptions, attempts=store, sink=_StoreSink(store), clock=clock)
 
 
 def _snapshot(*, sampled_at: datetime = _NOW) -> ExternalSubscriptionUsageSnapshot:
@@ -84,46 +71,8 @@ def _snapshot(*, sampled_at: datetime = _NOW) -> ExternalSubscriptionUsageSnapsh
     )
 
 
-def _ctx(
-    store,  # type: ignore[no-untyped-def]
-    *,
-    sampler: FakeSubscriptionSampler,
-    clock: FixedClock,
-    interval_seconds: int = 300,
-):
-    return make_context(
-        store,
-        hub=FakeHub(),
-        provider=FakeProvider({}),
-        harness=FakeHarness(handle=_HANDLE, verdict="pass"),
-        probe=FakeProbe(),
-        clock=clock,
-        config=LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID, bindings=serving(1)),
-        subscriptions=(_resolved(interval_seconds=interval_seconds, sampler=sampler),),
-    )
-
-
-def _ctx_with_a_claimable_chunk(
-    store, *, sampler: FakeSubscriptionSampler, clock: FixedClock, interval_seconds: int = 300
-):  # type: ignore[no-untyped-def]
-    hub = FakeHub()
-    env = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES)
-    hub.queue = [QueueEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
-    hub.claim_outcome = claimed_outcome("ch_1", env)
-    # The spawned worker's (pid, start_time) reads as alive to the probe, so a full
-    # `tick()` call's own ADVANCE never treats this same-tick spawn as an exited worker.
-    probe = FakeProbe(alive={(_HANDLE.pid, _HANDLE.process_start_time)})
-    ctx = make_context(
-        store,
-        hub=hub,
-        provider=FakeProvider({"e1": "/ws/e1"}),
-        harness=FakeHarness(handle=_HANDLE, verdict="pass"),
-        probe=probe,
-        clock=clock,
-        config=LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID, bindings=serving(1)),
-        subscriptions=(_resolved(interval_seconds=interval_seconds, sampler=sampler),),
-    )
-    return ctx, hub
+def _ctx(store, *, sampler: FakeSubscriptionSampler, clock: FixedClock, interval_seconds: int = 300):  # type: ignore[no-untyped-def]
+    return _pass(store, clock, _declared(interval_seconds=interval_seconds, sampler=sampler))
 
 
 # AC 1 — cadence gate.
@@ -137,7 +86,7 @@ def test_first_ever_attempt_samples_immediately(tmp_path) -> None:  # type: igno
     ctx = _ctx(store, sampler=sampler, clock=FixedClock(_NOW))
 
     assert store.last_external_usage_attempt_at(_SLUG) is None
-    ExternalUsageSample(ctx).run()
+    ctx.run()
 
     assert sampler.sample_calls == 1
     assert store.last_external_usage_attempt_at(_SLUG) == _NOW
@@ -150,11 +99,11 @@ def test_within_the_interval_the_adapter_is_not_called(tmp_path) -> None:  # typ
     clock = FixedClock(_NOW)
     ctx = _ctx(store, sampler=sampler, clock=clock, interval_seconds=300)
 
-    ExternalUsageSample(ctx).run()
+    ctx.run()
     assert sampler.sample_calls == 1
 
     clock.advance(timedelta(seconds=299))
-    ExternalUsageSample(ctx).run()
+    ctx.run()
     assert sampler.sample_calls == 1  # still gated — under the interval
 
 
@@ -165,11 +114,11 @@ def test_at_exactly_the_interval_the_adapter_is_called(tmp_path) -> None:  # typ
     clock = FixedClock(_NOW)
     ctx = _ctx(store, sampler=sampler, clock=clock, interval_seconds=300)
 
-    ExternalUsageSample(ctx).run()
+    ctx.run()
     assert sampler.sample_calls == 1
 
     clock.advance(timedelta(seconds=300))
-    ExternalUsageSample(ctx).run()
+    ctx.run()
     assert sampler.sample_calls == 2  # exactly at the interval — samples
 
 
@@ -180,9 +129,9 @@ def test_past_the_interval_the_adapter_is_called(tmp_path) -> None:  # type: ign
     clock = FixedClock(_NOW)
     ctx = _ctx(store, sampler=sampler, clock=clock, interval_seconds=300)
 
-    ExternalUsageSample(ctx).run()
+    ctx.run()
     clock.advance(timedelta(seconds=301))
-    ExternalUsageSample(ctx).run()
+    ctx.run()
 
     assert sampler.sample_calls == 2
 
@@ -198,7 +147,7 @@ def test_a_successful_sample_records_one_attempt_and_enqueues_one_runner_scoped_
     sampler = FakeSubscriptionSampler(snapshot=snapshot)
     ctx = _ctx(store, sampler=sampler, clock=FixedClock(_NOW))
 
-    ExternalUsageSample(ctx).run()
+    ctx.run()
 
     assert store.last_external_usage_attempt_at(_SLUG) == _NOW
 
@@ -245,7 +194,7 @@ def test_an_invalid_utilization_window_is_dropped_before_it_is_persisted_or_buff
     )
     ctx = _ctx(store, sampler=sampler, clock=FixedClock(_NOW))
 
-    ExternalUsageSample(ctx).run()
+    ctx.run()
 
     payload = json.loads(next(f.payload for f in store.pending_outbound() if f.kind == _SAMPLED_KIND))
     assert payload["windows"] == [
@@ -264,7 +213,7 @@ def test_an_empty_sample_is_persisted_and_buffered_as_an_empty_windows_collectio
     sampler = FakeSubscriptionSampler(snapshot=ExternalSubscriptionUsageSnapshot(sampled_at=_NOW, windows=()))
     ctx = _ctx(store, sampler=sampler, clock=FixedClock(_NOW))
 
-    ExternalUsageSample(ctx).run()
+    ctx.run()
 
     payload = json.loads(next(f.payload for f in store.pending_outbound() if f.kind == _SAMPLED_KIND))
     assert payload["windows"] == []
@@ -281,7 +230,7 @@ def test_no_sample_records_a_null_payload_attempt_and_enqueues_no_sampled_report
     clock = FixedClock(_NOW)
     ctx = _ctx(store, sampler=sampler, clock=clock, interval_seconds=300)
 
-    ExternalUsageSample(ctx).run()
+    ctx.run()
 
     assert store.last_external_usage_attempt_at(_SLUG) == _NOW
     assert [f for f in store.pending_outbound() if f.kind == _SAMPLED_KIND] == []
@@ -294,7 +243,7 @@ def test_no_sample_records_a_null_payload_attempt_and_enqueues_no_sampled_report
     # The next tick, still within the interval, must not re-sample — the NULL-payload
     # attempt still counts as "tried" for cadence purposes.
     clock.advance(timedelta(seconds=100))
-    ExternalUsageSample(ctx).run()
+    ctx.run()
     assert sampler.sample_calls == 1
     assert store.last_external_usage_attempt_at(_SLUG) == _NOW  # unchanged — no new attempt
 
@@ -307,7 +256,7 @@ def test_a_miss_buffers_exactly_one_missed_report_with_the_exact_key_set(tmp_pat
     sampler = FakeSubscriptionSampler(miss_reason=SampleMissReason.CREDENTIAL_LAPSED)
     ctx = _ctx(store, sampler=sampler, clock=FixedClock(_NOW))
 
-    ExternalUsageSample(ctx).run()
+    ctx.run()
 
     pending = [f for f in store.pending_outbound() if f.kind == _MISSED_KIND]
     assert len(pending) == 1
@@ -330,7 +279,7 @@ def test_a_successful_sample_enqueues_no_missed_report(tmp_path) -> None:  # typ
     sampler = FakeSubscriptionSampler(snapshot=_snapshot())
     ctx = _ctx(store, sampler=sampler, clock=FixedClock(_NOW))
 
-    ExternalUsageSample(ctx).run()
+    ctx.run()
 
     assert [f for f in store.pending_outbound() if f.kind == _MISSED_KIND] == []
 
@@ -341,7 +290,7 @@ def test_a_successful_sample_records_an_attempt_with_no_miss_reason(tmp_path) ->
     sampler = FakeSubscriptionSampler(snapshot=_snapshot())
     ctx = _ctx(store, sampler=sampler, clock=FixedClock(_NOW))
 
-    ExternalUsageSample(ctx).run()
+    ctx.run()
 
     attempt = store.latest_external_usage_attempt(_SLUG)
     assert attempt is not None
@@ -349,91 +298,44 @@ def test_a_successful_sample_records_an_attempt_with_no_miss_reason(tmp_path) ->
     assert attempt.miss_reason is None
 
 
-# AC 4 — a raising adapter leaves the tick completing normally, other steps intact.
+# AC 4 — a raising adapter leaves the pass completing normally.
 # --------------------------------------------------------------------------- #
 
 
 @pytest.mark.unit
-def test_a_raising_adapter_still_lets_the_tick_complete_and_fill_spawn(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_a_raising_adapter_is_logged_and_records_nothing(tmp_path) -> None:  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
     sampler = FakeSubscriptionSampler(raises=RuntimeError("boom"))
-    clock = FixedClock(_NOW)
-    ctx, hub = _ctx_with_a_claimable_chunk(store, sampler=sampler, clock=clock)
+    ctx = _ctx(store, sampler=sampler, clock=FixedClock(_NOW))
 
     with capture_logs() as logs:
-        tick(ctx)  # must not raise
+        ctx.run()  # must not raise
 
-    # FILL's own normal effect (claim + lease mint) still happened this same tick.
-    assert len(hub.claims) == 1
-    assert len(store.list_active_leases()) == 1
-    # The sampler was reached (last step) and its failure was swallowed, logged.
     assert sampler.sample_calls == 1
-    warnings = [e for e in logs if "external subscription usage sample step failed" in e["event"]]
+    warnings = [e for e in logs if "external subscription usage sample pass failed" in e["event"]]
     assert len(warnings) == 1
     # No attempt row survives a raise inside the try (the store write never ran).
     assert store.last_external_usage_attempt_at(_SLUG) is None
 
 
-@pytest.mark.unit
-def test_a_raising_step_called_directly_returns_without_raising(tmp_path) -> None:  # type: ignore[no-untyped-def]
-    store = _store(tmp_path)
-    sampler = FakeSubscriptionSampler(raises=ValueError("nope"))
-    ctx = _ctx(store, sampler=sampler, clock=FixedClock(_NOW))
-
-    ExternalUsageSample(ctx).run()  # must not raise
-
-    assert store.last_external_usage_attempt_at(_SLUG) is None
-
-
-# AC 5 — component: several ticks across a virtual clock match the adapter-call count.
+# AC 5 — several passes across a virtual clock match the adapter-call count.
 # --------------------------------------------------------------------------- #
 
 
 @pytest.mark.unit
-def test_several_ticks_sample_at_the_expected_cadence(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_several_passes_sample_at_the_expected_cadence(tmp_path) -> None:  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
     sampler = FakeSubscriptionSampler(snapshot=_snapshot())
     clock = FixedClock(_NOW)
-    ctx, _hub = _ctx_with_a_claimable_chunk(store, sampler=sampler, clock=clock, interval_seconds=300)
+    sampling = _ctx(store, sampler=sampler, clock=clock, interval_seconds=300)
 
-    # Ticks at t=0, 100, 200, 300, 400, 500, 600 (7 ticks, 100s apart): the gate fires
+    # Passes at t=0, 100, 200, 300, 400, 500, 600 (7 passes, 100s apart): the gate fires
     # on t=0, t=300, t=600 — 3 calls.
     for _ in range(7):
-        tick(ctx)
+        sampling.run()
         clock.advance(timedelta(seconds=100))
 
     assert sampler.sample_calls == 3
-
-
-@pytest.mark.unit
-def test_a_very_large_interval_never_resamples_and_every_other_step_behaves_identically(tmp_path) -> None:  # type: ignore[no-untyped-def]
-    """With the sampler effectively disabled (an interval far beyond the run), FILL still
-    claims and spawns exactly as it does with the sampler enabled — the step is inert to
-    every other step's own decisions."""
-    (tmp_path / "a").mkdir()
-    (tmp_path / "b").mkdir()
-    clock_a = FixedClock(_NOW)
-    store_a = _store(tmp_path / "a")
-    sampler_a = FakeSubscriptionSampler(snapshot=_snapshot())
-    ctx_a, hub_a = _ctx_with_a_claimable_chunk(store_a, sampler=sampler_a, clock=clock_a, interval_seconds=300)
-
-    clock_b = FixedClock(_NOW)
-    store_b = _store(tmp_path / "b")
-    sampler_b = FakeSubscriptionSampler(snapshot=_snapshot())
-    ctx_b, hub_b = _ctx_with_a_claimable_chunk(
-        store_b, sampler=sampler_b, clock=clock_b, interval_seconds=1_000_000_000
-    )
-
-    for _ in range(5):
-        tick(ctx_a)
-        tick(ctx_b)
-        clock_a.advance(timedelta(seconds=100))
-        clock_b.advance(timedelta(seconds=100))
-
-    assert len(hub_a.claims) == len(hub_b.claims) == 1
-    assert len(store_a.list_active_leases()) == len(store_b.list_active_leases()) == 1
-    assert sampler_a.sample_calls >= 1
-    assert sampler_b.sample_calls == 1  # the very first, never-attempted-before sample only
 
 
 # AC 6 — several declared subscriptions, sampled independently.
@@ -448,26 +350,19 @@ def test_two_declarations_with_different_cadences_only_the_due_one_samples(tmp_p
     fast = FakeSubscriptionSampler(snapshot=_snapshot())
     slow = FakeSubscriptionSampler(snapshot=_snapshot())
     clock = FixedClock(_NOW)
-    ctx = make_context(
+    ctx = _pass(
         store,
-        hub=FakeHub(),
-        provider=FakeProvider({}),
-        harness=FakeHarness(handle=_HANDLE, verdict="pass"),
-        probe=FakeProbe(),
-        clock=clock,
-        config=LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID, bindings=serving(1)),
-        subscriptions=(
-            _resolved("fast", interval_seconds=100, sampler=fast),
-            _resolved("slow", interval_seconds=10_000, sampler=slow),
-        ),
+        clock,
+        _declared("fast", interval_seconds=100, sampler=fast),
+        _declared("slow", interval_seconds=10_000, sampler=slow),
     )
 
-    ExternalUsageSample(ctx).run()
+    ctx.run()
     assert fast.sample_calls == 1
     assert slow.sample_calls == 1
 
     clock.advance(timedelta(seconds=200))
-    ExternalUsageSample(ctx).run()
+    ctx.run()
 
     assert fast.sample_calls == 2  # due again — 200s > its 100s interval
     assert slow.sample_calls == 1  # not due — 200s < its 10_000s interval
@@ -482,21 +377,14 @@ def test_a_failed_sample_advances_only_its_own_slugs_cadence_and_leaves_the_othe
     ok = FakeSubscriptionSampler(snapshot=_snapshot(sampled_at=_NOW))
     failing = FakeSubscriptionSampler(snapshot=_snapshot())
     clock = FixedClock(_NOW)
-    ctx = make_context(
+    ctx = _pass(
         store,
-        hub=FakeHub(),
-        provider=FakeProvider({}),
-        harness=FakeHarness(handle=_HANDLE, verdict="pass"),
-        probe=FakeProbe(),
-        clock=clock,
-        config=LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID, bindings=serving(1)),
-        subscriptions=(
-            _resolved("good", interval_seconds=100, sampler=ok),
-            _resolved("bad", interval_seconds=100, sampler=failing),
-        ),
+        clock,
+        _declared("good", interval_seconds=100, sampler=ok),
+        _declared("bad", interval_seconds=100, sampler=failing),
     )
 
-    ExternalUsageSample(ctx).run()  # both sample cleanly the first time
+    ctx.run()  # both sample cleanly the first time
     assert store.last_external_usage_attempt_at("good") == _NOW
     assert store.last_external_usage_attempt_at("bad") == _NOW
     good_reports_after_first = [f for f in store.pending_outbound() if f.kind == _SAMPLED_KIND]
@@ -504,7 +392,7 @@ def test_a_failed_sample_advances_only_its_own_slugs_cadence_and_leaves_the_othe
 
     clock.advance(timedelta(seconds=200))
     failing.snapshot = None  # "bad" now fails this tick; "good" still produces a snapshot
-    ExternalUsageSample(ctx).run()
+    ctx.run()
 
     later = _NOW + timedelta(seconds=200)
     # "bad"'s cadence advanced (a NULL-payload attempt was still recorded for it)...
@@ -527,21 +415,14 @@ def test_a_declared_provider_with_no_sampler_stays_declared_and_unsampled(tmp_pa
     store = _store(tmp_path)
     known = FakeSubscriptionSampler(snapshot=_snapshot())
     clock = FixedClock(_NOW)
-    ctx = make_context(
+    ctx = _pass(
         store,
-        hub=FakeHub(),
-        provider=FakeProvider({}),
-        harness=FakeHarness(handle=_HANDLE, verdict="pass"),
-        probe=FakeProbe(),
-        clock=clock,
-        config=LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID, bindings=serving(1)),
-        subscriptions=(
-            _resolved("known", interval_seconds=100, sampler=known),
-            _resolved("no-binding", interval_seconds=100, sampler=None),
-        ),
+        clock,
+        _declared("known", interval_seconds=100, sampler=known),
+        _declared("no-binding", interval_seconds=100, sampler=None),
     )
 
-    ExternalUsageSample(ctx).run()  # must not raise
+    ctx.run()  # must not raise
 
     assert known.sample_calls == 1
     assert store.last_external_usage_attempt_at("known") == _NOW

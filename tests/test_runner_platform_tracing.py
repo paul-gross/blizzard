@@ -367,7 +367,6 @@ def test_a_tick_is_a_root_with_one_child_per_step_and_hub_calls_under_their_step
         "TranscriptDrain",
         "Retention",
         "ContextSample",
-        "ExternalUsageSample",
     ]
     assert all(_parent_id(s) == _span_id(roots[0]) for s in steps)
     step_ids = {_span_id(s) for s in steps}

@@ -349,34 +349,29 @@ def test_hosted_winter_reacquire_updates_worker_declarations_on_the_shared_provi
     hosted = build_hosted_app(config, process_graph=graph)
     try:
         loop = LoopWiring(config, "").context(FakeHub(), graph)
-        try:
-            assert hosted.app.state.workspace_registry is loop.workspaces
-            assert loop.workspaces.provider(DEFAULT_WORKSPACE_ID) is provider
-            provider.acquire("ch_1", 1, held_ids=[])
-            _seed_lease(store)
-            headers = {"X-Blizzard-Lease-Token": _TOKEN}
-            with runner_client(hosted.app) as client:
-                assert client.get("/api/runner").status_code == 200
-                old = client.post("/api/leases/lease_1/git-commits", json={**_BODY, "repo": "old"}, headers=headers)
-                assert old.status_code == 200, old.text
+        assert hosted.app.state.workspace_registry is loop.workspaces
+        assert loop.workspaces.provider(DEFAULT_WORKSPACE_ID) is provider
+        provider.acquire("ch_1", 1, held_ids=[])
+        _seed_lease(store)
+        headers = {"X-Blizzard-Lease-Token": _TOKEN}
+        with runner_client(hosted.app) as client:
+            assert client.get("/api/runner").status_code == 200
+            old = client.post("/api/leases/lease_1/git-commits", json={**_BODY, "repo": "old"}, headers=headers)
+            assert old.status_code == 200, old.text
 
-                store.record_closure(
-                    lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="transitioned", closed_at=_NOW
-                )
-                membership("new")
-                provider.acquire("ch_2", 1, held_ids=[])
-                _seed_lease(store, lease_id="lease_2", chunk_id="ch_2")
-                accepted = client.post(
-                    "/api/leases/lease_2/git-commits", json={**_BODY, "repo": "new"}, headers=headers
-                )
-                removed = client.post("/api/leases/lease_2/git-commits", json={**_BODY, "repo": "old"}, headers=headers)
-                assert accepted.status_code == 200, accepted.text
-                assert removed.status_code == 400, removed.text
-                assert "new" in removed.json()["detail"]
-            assert ("e1", "new") in store.git_commit_declarations_for_lease("lease_2")
-            assert ("e1", "old") not in store.git_commit_declarations_for_lease("lease_2")
-        finally:
-            loop.usage_http_client.close()
+            store.record_closure(
+                lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="transitioned", closed_at=_NOW
+            )
+            membership("new")
+            provider.acquire("ch_2", 1, held_ids=[])
+            _seed_lease(store, lease_id="lease_2", chunk_id="ch_2")
+            accepted = client.post("/api/leases/lease_2/git-commits", json={**_BODY, "repo": "new"}, headers=headers)
+            removed = client.post("/api/leases/lease_2/git-commits", json={**_BODY, "repo": "old"}, headers=headers)
+            assert accepted.status_code == 200, accepted.text
+            assert removed.status_code == 400, removed.text
+            assert "new" in removed.json()["detail"]
+        assert ("e1", "new") in store.git_commit_declarations_for_lease("lease_2")
+        assert ("e1", "old") not in store.git_commit_declarations_for_lease("lease_2")
     finally:
         hosted.close()
         graph.close()

@@ -17,8 +17,6 @@ from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.fact_kinds import (
     EVENT_RECORDED,
-    EXTERNAL_SUBSCRIPTION_USAGE_MISSED,
-    EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED,
     RUNNER_LOCALLY_PAUSED,
     USAGE_RECORDED,
 )
@@ -37,15 +35,10 @@ from blizzard.runner.leases.model import NewLease
 from blizzard.runner.lifecycle.dormant import DormantSession
 from blizzard.runner.lifecycle.drain import OutboundDrain
 from blizzard.runner.lifecycle.takeover import TakeoverCloseScope, TakeoverOpenScope, TakeoverService
-from blizzard.runner.loop.context import LoopConfig, ResolvedSubscription
-from blizzard.runner.loop.steps import Advance, ContextSample, ExternalUsageSample, Fill, Pull, SpendCeiling
+from blizzard.runner.loop.context import LoopConfig
+from blizzard.runner.loop.steps import Advance, ContextSample, Fill, Pull, SpendCeiling
 from blizzard.runner.node_steps.chunk_state import ChunkPause, ChunkState
 from blizzard.runner.status.view import RunnerStatusService
-from blizzard.runner.subscriptions.subscription_sampler import (
-    ExternalSubscriptionUsageSnapshot,
-    ExternalSubscriptionUsageWindow,
-    SampleMissReason,
-)
 from tests.runner_client import runner_client
 from tests.runner_fakes import (
     FIXTURE_RUNNER_ID,
@@ -53,7 +46,6 @@ from tests.runner_fakes import (
     FakeHub,
     FakeProbe,
     FakeProvider,
-    FakeSubscriptionSampler,
     FakeTranscriptSource,
     claimed_outcome,
     make_context,
@@ -808,80 +800,6 @@ def test_context_sample_crossing_publishes_fact_changed(tmp_path: Path) -> None:
     assert fact_frames[0]["kind"] == EVENT_RECORDED
     assert fact_frames[0]["chunk_id"] == "ch_1"
     assert fact_frames[0]["lease_id"] == "lease_1"
-
-
-def test_external_usage_sample_publishes_fact_changed(tmp_path: Path) -> None:
-    """`record_external_usage_attempt` buffers a report only when the harness produced a
-    sample — this pins that the occasional row it does buffer is announced."""
-    store = _store(tmp_path)
-    events = EventBroker()
-    snapshot = ExternalSubscriptionUsageSnapshot(
-        sampled_at=_NOW,
-        windows=(
-            ExternalSubscriptionUsageWindow(
-                window="5h", utilization_pct=42.0, resets_at=_NOW + timedelta(hours=5), window_seconds=18_000
-            ),
-        ),
-    )
-    resolved = ResolvedSubscription(
-        slug="anthropic",
-        name="Anthropic",
-        provider="anthropic",
-        sample_interval_seconds=300,
-        sampler=FakeSubscriptionSampler(snapshot=snapshot),
-    )
-    ctx = make_context(
-        store,
-        hub=FakeHub(),
-        provider=FakeProvider({}),
-        harness=FakeHarness(handle=_HANDLE, verdict=None),
-        probe=FakeProbe(),
-        clock=FixedClock(_NOW),
-        config=LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID, bindings=serving(1)),
-        events=events,
-        subscriptions=(resolved,),
-    )
-
-    ExternalUsageSample(ctx).run()
-
-    fact_frames = _frames(events, "fact-changed")
-    assert len(fact_frames) == 1
-    assert fact_frames[0]["kind"] == EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED
-    assert fact_frames[0]["chunk_id"] is None
-    assert fact_frames[0]["lease_id"] is None
-
-
-def test_external_usage_miss_publishes_fact_changed(tmp_path: Path) -> None:
-    """A miss now buffers its own `missed` report — this pins that the
-    row it buffers is announced, mirroring the sampled sibling above."""
-    store = _store(tmp_path)
-    events = EventBroker()
-    resolved = ResolvedSubscription(
-        slug="openai",
-        name="OpenAI",
-        provider="openai",
-        sample_interval_seconds=300,
-        sampler=FakeSubscriptionSampler(miss_reason=SampleMissReason.CREDENTIAL_LAPSED),
-    )
-    ctx = make_context(
-        store,
-        hub=FakeHub(),
-        provider=FakeProvider({}),
-        harness=FakeHarness(handle=_HANDLE, verdict=None),
-        probe=FakeProbe(),
-        clock=FixedClock(_NOW),
-        config=LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID, bindings=serving(1)),
-        events=events,
-        subscriptions=(resolved,),
-    )
-
-    ExternalUsageSample(ctx).run()
-
-    fact_frames = _frames(events, "fact-changed")
-    assert len(fact_frames) == 1
-    assert fact_frames[0]["kind"] == EXTERNAL_SUBSCRIPTION_USAGE_MISSED
-    assert fact_frames[0]["chunk_id"] is None
-    assert fact_frames[0]["lease_id"] is None
 
 
 def test_attempt_retry_closure_publishes_fact_changed_for_its_own_event(tmp_path: Path) -> None:

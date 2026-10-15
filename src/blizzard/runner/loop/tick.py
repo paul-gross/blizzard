@@ -21,7 +21,6 @@ from blizzard.runner.loop.steps import (
     Advance,
     CompleteHeldBindings,
     ContextSample,
-    ExternalUsageSample,
     Fill,
     Pull,
     Reap,
@@ -106,9 +105,6 @@ def _tick(ctx: LoopContext) -> None:
     # reads its samples. Placed after ADVANCE so a lease that finished this tick is already
     # closed and not sampled one last time on its way out.
     _traced(ctx, ContextSample)
-    # Last — its own docstring reserves this position; still safe to run
-    # before or after TranscriptDrain, since either's fact-lane enqueue waits for PULL anyway.
-    _traced(ctx, ExternalUsageSample)
     _log.debug("tick end", runner_name=ctx.config.runner_name)
 
 

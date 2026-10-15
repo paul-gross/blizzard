@@ -46,55 +46,52 @@ def test_basic_takeover_escalation_and_transcript_resolve_to_the_environment_wor
     hosted = build_hosted_app(config, process_graph=graph)
     try:
         ctx = LoopWiring(config, "", graph.host.events).context(FakeHub(), graph)
-        try:
-            for lease_id, chunk_id in (("lease_1", "ch_1"), ("lease_2", "ch_2")):
-                store.record_lease(
-                    NewLease(
-                        lease_id=lease_id,
-                        chunk_id=chunk_id,
-                        graph_id="gr_1",
-                        node_id="nd_build",
-                        node_name="build",
-                        epoch=1,
-                        retries_max=2,
-                        created_at=_NOW,
-                    )
-                )
-                store.record_spawn(
-                    lease_id,
-                    pid=100,
-                    process_start_time="start-100",
-                    session=SessionReference(CLAUDE_CODE_HARNESS_ID, f"sess-{chunk_id}"),
-                    spawned_at=_NOW,
-                )
-            for chunk_id, environment_id in (("ch_1", "e1"), ("ch_2", "e2")):
-                store.record_binding(
+        for lease_id, chunk_id in (("lease_1", "ch_1"), ("lease_2", "ch_2")):
+            store.record_lease(
+                NewLease(
+                    lease_id=lease_id,
                     chunk_id=chunk_id,
-                    environment_id=environment_id,
-                    workdir=workdir,
-                    bound_at=_NOW,
-                    workspace_id=DEFAULT_WORKSPACE_ID,
+                    graph_id="gr_1",
+                    node_id="nd_build",
+                    node_name="build",
+                    epoch=1,
+                    retries_max=2,
+                    created_at=_NOW,
                 )
-            store.record_park(lease_id="lease_1", chunk_id="ch_1", question_id="qn_1", parked_at=_NOW)
-            store.record_closure(
-                lease_id="lease_2", chunk_id="ch_2", node_id="nd_build", reason="escalated", closed_at=_NOW
             )
+            store.record_spawn(
+                lease_id,
+                pid=100,
+                process_start_time="start-100",
+                session=SessionReference(CLAUDE_CODE_HARNESS_ID, f"sess-{chunk_id}"),
+                spawned_at=_NOW,
+            )
+        for chunk_id, environment_id in (("ch_1", "e1"), ("ch_2", "e2")):
+            store.record_binding(
+                chunk_id=chunk_id,
+                environment_id=environment_id,
+                workdir=workdir,
+                bound_at=_NOW,
+                workspace_id=DEFAULT_WORKSPACE_ID,
+            )
+        store.record_park(lease_id="lease_1", chunk_id="ch_1", question_id="qn_1", parked_at=_NOW)
+        store.record_closure(
+            lease_id="lease_2", chunk_id="ch_2", node_id="nd_build", reason="escalated", closed_at=_NOW
+        )
 
-            # The directory the loop spawns a worker in for this environment.
-            loop_cwd = SpawnCwd.of_session(ctx.workspaces.spawn_root(DEFAULT_WORKSPACE_ID), workdir)
-            assert loop_cwd == workdir
+        # The directory the loop spawns a worker in for this environment.
+        loop_cwd = SpawnCwd.of_session(ctx.workspaces.spawn_root(DEFAULT_WORKSPACE_ID), workdir)
+        assert loop_cwd == workdir
 
-            with runner_client(hosted.app) as client:
-                takeover = client.post("/api/chunks/ch_1/takeovers", json={})
-                escalations = client.get("/api/escalations")
-            assert takeover.status_code == 201, takeover.text
-            assert takeover.json()["command"].startswith(f"cd {workdir} && ")
-            (escalation,) = escalations.json()["items"]
-            assert escalation["resume_command"].startswith(f"cd {workdir} && ")
+        with runner_client(hosted.app) as client:
+            takeover = client.post("/api/chunks/ch_1/takeovers", json={})
+            escalations = client.get("/api/escalations")
+        assert takeover.status_code == 201, takeover.text
+        assert takeover.json()["command"].startswith(f"cd {workdir} && ")
+        (escalation,) = escalations.json()["items"]
+        assert escalation["resume_command"].startswith(f"cd {workdir} && ")
 
-            assert runner_seams(hosted.app).transcripts._spawn_cwd("ch_1") == workdir
-        finally:
-            ctx.usage_http_client.close()
+        assert runner_seams(hosted.app).transcripts._spawn_cwd("ch_1") == workdir
     finally:
         hosted.close()
         graph.close()

@@ -898,11 +898,8 @@ class RunnerSweep:
         config = self._config
         with httpx.Client(base_url=config.hub_url, headers=config.auth_headers(), timeout=30.0) as client:
             ctx = LoopWiring.of(config).context(HttpHubClient(client), self.process)
-            try:
-                IdentityCheck(ctx).run()
-                Registration(ctx).run()
-            finally:
-                ctx.usage_http_client.close()
+            IdentityCheck(ctx).run()
+            Registration(ctx).run()
         assert self.process.identity.current() is not None, "the hub refused the runner's first registration"
         self._sweep.sweep()
 

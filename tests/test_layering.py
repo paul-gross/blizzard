@@ -2111,7 +2111,6 @@ _RUNNER_PACKAGE_LAYERS: dict[str, frozenset[str]] = {
             "events",
             "environments",
             "harness",
-            "subscriptions",
             "leases",
             "hub",
             "transcripts",

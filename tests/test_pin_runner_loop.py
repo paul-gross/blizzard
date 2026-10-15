@@ -15,36 +15,29 @@ import pytest
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.node_steps import ApplyOutcome
-from blizzard.foundation.subscription_miss import SampleMissReason
 from blizzard.runner.config import ConfigError, RunnerConfig
 from blizzard.runner.harness.adapter import ResumeHandle, WorkerHandle, WorkerPreamble
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
-from blizzard.runner.hub.client import QueueEntry
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.lifecycle.judgement.check_runner import DEFAULT_CHECK_TIMEOUT, CheckOutcome
 from blizzard.runner.lifecycle.judgement.judgement import Judgement
-from blizzard.runner.loop.context import DEFAULT_RETRIES_MAX, LoopConfig, ResolvedSubscription
+from blizzard.runner.loop.context import DEFAULT_RETRIES_MAX
 from blizzard.runner.loop.steps import Advance, Resume
-from blizzard.runner.loop.tick import tick
 from blizzard.runner.node_steps.chunk_state import ChunkPause, ChunkState
 from blizzard.runner.node_steps.submissions import ApplyReply
 from blizzard.runner.runtime import migration_runner
-from blizzard.runner.subscriptions.subscription_sampler import SampleMiss
 from tests.host_files import one_workspace
 from tests.runner_fakes import (
-    FIXTURE_RUNNER_ID,
     FakeCheckRunner,
     FakeHarness,
     FakeHub,
     FakeProbe,
     FakeProvider,
     FakeWorktreeGit,
-    claimed_outcome,
     loop_context,
     make_context,
     make_envelope,
     make_store,
-    serving,
 )
 
 _NOW = datetime(2026, 8, 4, 12, 0, 0, tzinfo=UTC)
@@ -283,55 +276,3 @@ def test_loop_wiring_uses_the_injected_runner_prompt_and_never_re_derives_it(tmp
         pytest.fail(f"the runner prompt was re-derived here instead of taken from the caller: {exc}")
 
     assert prompt == "runner prose"
-
-
-# The external-subscription-usage sample is the tick's LAST step.
-# --------------------------------------------------------------------------- #
-
-
-class _ClaimObservingSampler:
-    """A scriptable :class:`ISubscriptionSampler` recording how many route claims the hub
-    had taken by the time it ran."""
-
-    def __init__(self, *, hub: FakeHub) -> None:
-        self._hub = hub
-        self.claims_at_sample: list[int] = []
-
-    def sample(self) -> SampleMiss:
-        self.claims_at_sample.append(len(self._hub.claims))
-        return SampleMiss(SampleMissReason.ENDPOINT_UNREACHABLE)
-
-
-@pytest.mark.unit
-def test_the_external_usage_sample_runs_after_fill_has_claimed(tmp_path) -> None:  # type: ignore[no-untyped-def]
-    """The sample runs after FILL's claim in the same tick, so its network call never
-    delays the claim."""
-    store = _store(tmp_path)
-    hub = FakeHub()
-    envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES)
-    hub.queue = [QueueEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
-    hub.claim_outcome = claimed_outcome("ch_1", envelope)
-    harness = FakeHarness(handle=_HANDLE, verdict="pass")
-    sampler = _ClaimObservingSampler(hub=hub)
-    resolved = ResolvedSubscription(
-        slug="anthropic",
-        name="Anthropic",
-        provider="anthropic",
-        sample_interval_seconds=300,
-        sampler=sampler,
-    )
-    ctx = make_context(
-        store,
-        hub=hub,
-        provider=FakeProvider({"e1": "/ws/e1"}),
-        harness=harness,
-        probe=FakeProbe(alive={(_HANDLE.pid, _HANDLE.process_start_time)}),
-        clock=FixedClock(_NOW),
-        config=LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID, bindings=serving(1)),
-        subscriptions=(resolved,),
-    )
-
-    tick(ctx)
-
-    assert len(hub.claims) == 1  # FILL did claim this tick
-    assert sampler.claims_at_sample == [1], "the sampler ran ahead of FILL's claim — it must be the tick's last step"

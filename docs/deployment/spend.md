@@ -74,10 +74,19 @@ A harness can hit its own subscription's usage limit mid-turn, independently of 
 OpenCode each report this in a recognizable shape (a synthetic rate-limit transcript record, an OpenCode 429 `error`
 event), never inferred from cost or token figures. The runner classifies an exited worker generation or judge
 elicitation against that shape and, on a match, engages its own local pause brake — the same brake the ceiling and
-`runner pause` set — with a reason naming the harness and, where the harness reported one, its reset time; where it did
-not, the reason falls back to the soonest reset among this runner's own declared subscriptions' latest sampled windows
-already past 100% utilization ([External subscription usage](#external-subscription-usage) below), or carries no reset
-time at all. The limited lease is not failed and consumes no retry: it is parked in place, exactly like a per-chunk
+`runner pause` set — with a reason naming the subscription the runner spends beside the harness, as
+`usage limit: <slug> via <harness>`, and the reset time where the harness reported one; a runner that spends no
+subscription names the harness alone. Where the harness reported no reset, the reason falls back to the reset of this
+runner's own subscription's latest sampled window already past 100% utilization ([External subscription
+usage](#external-subscription-usage) below) — never another subscription's sample — or carries no reset time at all.
+
+The limit belongs to the subscription, so the brake reaches every runner on the host that spends it: the reporting
+runner and each other runner naming the same `[[subscription]]` are braked together, in one write, each with the same
+reason and reset. A fault partway leaves none of them braked and the limited lease unparked. A runner on another
+subscription, or on none, is untouched, and an already-engaged brake keeps its standing reason. Lifting stays per
+runner: `blizzard runner start --runner <id>` clears that runner's brake alone and leaves its neighbours braked.
+
+The limited lease is not failed and consumes no retry: it is parked in place, exactly like a per-chunk
 pause leaves a chunk, and resumes automatically once the brake lifts. As with the ceiling, only an explicit operator act
 clears it — `blizzard runner start`, or the runner panel's Resume — never an elapsed reset time the runner read out of
 the harness's own report.
@@ -158,9 +167,11 @@ reached the caps.
 ## External subscription usage
 
 A harness on a metered subscription tracks its own account's rate-limit window utilization independently of anything
-blizzard spends or caps; the runner samples it on the cadence the `sample_interval_seconds` of the `[[subscription]]`
-its `[[runner]]` names sets in `blizzard-host.toml` (default 300 seconds when the key is absent) — a runner naming none
-samples none. The sampled utilization is advisory only — it never throttles claiming, scheduling, or spawning, and no
+blizzard spends or caps; the host samples it. `blizzard runner host` samples every `[[subscription]]` that
+`blizzard-host.toml` declares, once per `sample_interval_seconds` (default 300 seconds when the key is absent), however
+many of its runners spend that subscription — and a subscription no runner names is still sampled. Sampling runs on the
+host's own thread, apart from every runner's tick, so a slow provider endpoint never holds a runner up; `blizzard runner
+tick` never samples. The sampled utilization is advisory only — it never throttles claiming, scheduling, or spawning, and no
 cost cap consults it.
 
 Every sample crosses the wire carrying the `slug` of the subscription it belongs to, and the hub rejects one that does
@@ -236,7 +247,7 @@ provider = "openai"
 sample_interval_seconds = 300
 ```
 
-`blizzard runner external-usage probe <slug>` samples one declared subscription, by its slug, once and prints the parsed
+`blizzard runner external-usage probe <slug>` samples one subscription the host declares, by its slug, once and prints the parsed
 snapshot without writing, ticking, or reporting to the hub — confirming that subscription's credentials and cadence
 without waiting on a scheduled sample. It is also where the two silent outcomes separate: a declaration whose `provider`
 names no binding — a typo, most often — prints that it has no sampler, where a declared-and-bound subscription that got

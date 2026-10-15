@@ -4,19 +4,23 @@ host only through ``runners``, and each runner's tick and the host's own tick ru
 from __future__ import annotations
 
 import dataclasses
+import json
 import threading
 import time
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 import pytest
+from sqlalchemy import func, select
 
 import blizzard.runner.loop_wiring as loop_wiring
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.composition import HostProcess, add_runner, build_host_process
-from blizzard.runner.config import RunnerConfig
+from blizzard.runner.config import RunnerConfig, SubscriptionDeclaration
+from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.harness.registry import HarnessRegistry
 from blizzard.runner.host_config import BuiltRunner, HaltedRunner, ResolvedToken
 from blizzard.runner.host_layout import HostLayout
@@ -24,12 +28,14 @@ from blizzard.runner.hub.held_token import HubTokenHolder
 from blizzard.runner.hub.identity import IdentityVerdictHolder, RunnerIdentityHolder
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop_wiring import PeriodicDriver
+from blizzard.runner.store.schema import host_identity, host_outbound_buffer
 from blizzard.runner.stores import RunnerStores
+from blizzard.runner.subscriptions.subscription_sampler import PROVIDER_ANTHROPIC, ExternalSubscriptionUsageSnapshot
 from blizzard.runner.usage.credential_renewal import CredentialRenewalPass
 from blizzard.runner.usage.host_tick import HostTick
 from blizzard.runner.usage.periodic_pass_driver import PeriodicPassDriver
 from tests.host_files import host_config_of
-from tests.runner_fakes import migrated_store_at
+from tests.runner_fakes import FakeSubscriptionSampler, migrated_store_at
 
 pytestmark = pytest.mark.component
 
@@ -181,5 +187,100 @@ def test_the_readiness_names_each_halted_runner_and_keeps_meaning_the_stores(tmp
         assert readiness.ready is True
         assert halted.describe() in readiness.detail
         assert "r-broken" in readiness.detail and "rn_c" in readiness.detail and "has no hub token" in readiness.detail
+    finally:
+        host.close()
+
+
+_SAMPLED_KIND = "external_subscription_usage.sampled"
+_SAMPLED_AT = datetime(2026, 8, 1, 12, 0, tzinfo=UTC)
+
+
+def _sampling_config(tmp_path: Path) -> RunnerConfig:
+    return dataclasses.replace(
+        _config(tmp_path),
+        subscriptions=(
+            SubscriptionDeclaration(slug="anthropic", name="Anthropic", provider=PROVIDER_ANTHROPIC),
+            SubscriptionDeclaration(slug="spare", name="Spare", provider=PROVIDER_ANTHROPIC),
+        ),
+    )
+
+
+def _fake_samplers(host: HostProcess) -> dict[str, FakeSubscriptionSampler]:
+    """Stand a scriptable sampler in for every declared subscription's real one."""
+    sampling = host.host_tick.external_usage_sample
+    assert sampling is not None
+    fakes = {
+        sampled.slug: FakeSubscriptionSampler(snapshot=ExternalSubscriptionUsageSnapshot(_SAMPLED_AT, ()))
+        for sampled in sampling._subscriptions
+    }
+    sampling._subscriptions = tuple(
+        dataclasses.replace(sampled, sampler=fakes[sampled.slug]) for sampled in sampling._subscriptions
+    )
+    return fakes
+
+
+def test_two_runners_spending_one_subscription_share_one_sample_per_cadence(tmp_path: Path) -> None:
+    host = _host(_sampling_config(tmp_path), "rn_a", "rn_b")
+    try:
+        samplers = _fake_samplers(host)
+        for _ in range(4):
+            host.host_tick.run()
+        assert samplers["anthropic"].sample_calls == 1
+        assert host.host_stores.external_usage.latest_external_usage_attempt("anthropic") is not None
+    finally:
+        host.close()
+
+
+def test_a_subscription_no_runner_spends_is_still_sampled(tmp_path: Path) -> None:
+    host = _host(_sampling_config(tmp_path), "rn_a")
+    try:
+        samplers = _fake_samplers(host)
+        host.host_tick.run()
+        assert samplers["spare"].sample_calls == 1
+        assert host.host_stores.external_usage.latest_external_usage_attempt("spare") is not None
+    finally:
+        host.close()
+
+
+def test_an_unregistered_hosts_sample_reaches_its_runners_outbound_buffer_and_is_announced(tmp_path: Path) -> None:
+    events = EventBroker()
+    config = _sampling_config(tmp_path)
+    host = build_host_process(
+        host_config_of(config),
+        [BuiltRunner("rn_a", dataclasses.replace(config, runner_id="rn_a"), ResolvedToken())],
+        events=events,
+    )
+    try:
+        _fake_samplers(host)
+        host.host_tick.run()
+        runner = host.runners[0]
+        pending = runner.stores.outbound.pending_outbound()
+        assert [fact.kind for fact in pending] == [_SAMPLED_KIND, _SAMPLED_KIND]
+        assert {json.loads(fact.payload)["slug"] for fact in pending} == {"anthropic", "spare"}
+        assert all(fact.chunk_id is None and fact.lease_id is None for fact in pending)
+        frames = [json.loads(e.data) for e in events.snapshot() if e.type == "fact-changed"]
+        assert [frame["kind"] for frame in frames] == [_SAMPLED_KIND, _SAMPLED_KIND]
+        assert {frame["runner_id"] for frame in frames} == {"rn_a"}
+        with host.engine.connect() as conn:
+            assert conn.execute(select(func.count()).select_from(host_outbound_buffer)).scalar_one() == 0
+    finally:
+        host.close()
+
+
+def test_a_registered_hosts_sample_reaches_its_own_outbound_lane_and_no_runners(tmp_path: Path) -> None:
+    host = _host(_sampling_config(tmp_path), "rn_a")
+    try:
+        with host.engine.begin() as conn:
+            conn.execute(host_identity.insert().values(host_id="ho_1", tenant_id=None, registered_at=_SAMPLED_AT))
+        _fake_samplers(host)
+        host.host_tick.run()
+        assert host.runners[0].stores.outbound.pending_outbound() == []
+        with host.engine.connect() as conn:
+            lane = conn.execute(select(host_outbound_buffer).order_by(host_outbound_buffer.c.seq)).all()
+        assert [row.kind for row in lane] == [_SAMPLED_KIND, _SAMPLED_KIND]
+        assert [json.loads(row.payload)["slug"] for row in lane] == ["anthropic", "spare"]
+        assert all(row.acked_at is None for row in lane)
+        # The attempt is the host's own: its cadence anchor holds the same either way.
+        assert host.host_stores.external_usage.last_external_usage_attempt_at("anthropic") is not None
     finally:
         host.close()

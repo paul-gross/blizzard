@@ -13,7 +13,7 @@ from blizzard.runner.subscriptions.subscription_sampler import MISS_REASON_TEXT,
 
 @click.group("external-usage")
 def external_usage_group() -> None:
-    """Diagnostics for the runner's own external-subscription usage sampling."""
+    """Diagnostics for the host's external-subscription usage sampling."""
 
 
 @external_usage_group.command("probe")

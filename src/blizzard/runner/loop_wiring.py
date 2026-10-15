@@ -42,7 +42,7 @@ from blizzard.runner.loop.tick import tick
 from blizzard.runner.process.internal.worker_scratch_dirs import WorkerScratchDirs
 from blizzard.runner.process.probe import IProcessProbe
 from blizzard.runner.stores import HostStores, RunnerStores
-from blizzard.runner.subscriptions.internal.subscription_sampler_factory import select_sampler
+from blizzard.runner.throttle.pause import SpendingRunner
 from blizzard.runner.transcripts.transcript_backfill import (
     TranscriptBackfill,
     TranscriptBackfillReport,
@@ -55,25 +55,6 @@ _log = get_logger("blizzard.runner.loop")
 _HTTP_TIMEOUT = 30.0
 
 _T = TypeVar("_T")
-
-
-class _LazyUsageHttpClient:
-    """One ``httpx.Client`` every declared subscription's sampler shares, built only when a
-    sample first runs — a runner with no live subscription opens no connection pool.
-    Implements :class:`~blizzard.runner.loop.context.ICloseableUsageHttpClient`
-    and the zero-arg provider shape every sampler's ``http_client`` expects."""
-
-    def __init__(self) -> None:
-        self._client: httpx.Client | None = None
-
-    def __call__(self) -> httpx.Client:
-        if self._client is None:
-            self._client = httpx.Client()
-        return self._client
-
-    def close(self) -> None:
-        if self._client is not None:
-            self._client.close()
 
 
 @collaborator
@@ -108,8 +89,7 @@ class LoopWiring:
         tracer: IPlatformTracer | None = None,
     ) -> LoopContext:
         """Wire a :class:`LoopContext` over ``graph``, the process's one composition-root graph;
-        the caller owns the ``httpx.Client`` behind ``hub``, and the returned context's own
-        ``usage_http_client`` — closed the same way, once the caller is done with the context.
+        the caller owns the ``httpx.Client`` behind ``hub``.
 
         ``sweep_worker_scratch`` runs the per-lease scratch directory's one-shot orphan sweep — safe
         only when no spawn can race it, so off by default. ``tracer`` is the tick's span seam, absent by default."""
@@ -120,15 +100,13 @@ class LoopWiring:
         default_id = default_harness_id(harnesses)
         if default_id is not None:
             harnesses.transcript_source(default_id)
-        # Each subscription declaration paired with its resolved sampler; all share one HTTP client.
-        usage_http_client = _LazyUsageHttpClient()
+        # Each subscription declaration the runner reads; the host samples them.
         resolved_subscriptions = tuple(
             ResolvedSubscription(
                 slug=declaration.slug,
                 name=declaration.name,
                 provider=declaration.provider,
                 sample_interval_seconds=declaration.sample_interval_seconds,
-                sampler=select_sampler(declaration, clock=clock, http_client=usage_http_client),
             )
             for declaration in config.resolved_subscriptions()
         )
@@ -197,7 +175,12 @@ class LoopWiring:
             chunk_views=ReadThroughChunkViews(verified),
             workspaces=workspaces,
             subscriptions=resolved_subscriptions,
-            usage_http_client=usage_http_client,
+            slug_spenders=tuple(
+                SpendingRunner(spender.stores.pause, spender.events)
+                for spender in graph.host.spenders_of(
+                    resolved_subscriptions[0].slug if resolved_subscriptions else None, excluding=graph.runner_id
+                )
+            ),
             process=graph.process,
             worktree_git=SubprocessWorktreeGit(),
             # The check-runner seam — see `src/blizzard/runner/lifecycle/judgement/check_runner.py`.
@@ -257,10 +240,7 @@ class LoopWiring:
             ) as client:
                 graph.platform_tracing.instrument_client(client)
                 ctx = self.context(HttpHubClient(client), graph, tracer=graph.platform_tracing.tracer)
-                try:
-                    return use(ctx)
-                finally:
-                    ctx.usage_http_client.close()
+                return use(ctx)
         finally:
             if process is None:
                 graph.close()
@@ -378,7 +358,6 @@ class PeriodicDriver:
             base_url=config.hub_url, timeout=_HTTP_TIMEOUT, auth=HeldTokenAuth(self._graph.hub_token)
         )
         self._graph.platform_tracing.instrument_client(self._client)
-        ctx: LoopContext | None = None
         try:
             ctx = self._wiring.context(
                 HttpHubClient(self._client),
@@ -394,7 +373,5 @@ class PeriodicDriver:
                     _log.error("tick failed", detail=str(exc))
                 self._stop.wait(self._interval)
         finally:
-            if ctx is not None:
-                ctx.usage_http_client.close()
             self._client.close()
             _log.info("reconciliation loop stopped", runner_name=config.name)
