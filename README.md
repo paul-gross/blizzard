@@ -143,7 +143,8 @@ blizzard runner init .      # scaffold blizzard-host.toml + its own sqlite store
 
 `init` registers the host at the local hub above, adds its runner under it, and writes both tokens the hub issues to
 `.env`; for a hub elsewhere, pass `--hub <url>`. `blizzard runner add <name> --project <p>` adds another runner to the
-host, and `blizzard runner retire --runner <name>` retires one.
+host, `blizzard runner retire --runner <name>` retires one, and `blizzard runner ingest <source> --runner <name>` moves
+one in from another host's directory.
 
 Edit `blizzard-host.toml` to declare a git origin. A new runner defaults to the built-in `basic` workspace: it clones
 repos into `workspace/projects/` under the host directory and creates one worktree per repo under each chunk's folder.

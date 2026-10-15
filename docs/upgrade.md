@@ -253,6 +253,10 @@ whichever is left.
 
 The result is an unregistered host of one runner, under the same id and token, with every chunk it held.
 
+To gather several graduated hosts into one registered host, take each runner under it at the hub, then move it in
+with `blizzard runner ingest`
+([runner-auth.md](./deployment/runner-auth.md#ingesting-a-runner-from-another-store)).
+
 **One directory per store.** `data/host.lock` and `host.sock` guard the host directory, not a store named by `db_url`;
 `runner.sock` is only probed for a pre-host daemon left running, in the host directory and beside a configured store
 that sits in another directory's `data`, where `migrate` and `host --check` refuse while one answers. A configured store

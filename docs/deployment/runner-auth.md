@@ -232,6 +232,51 @@ other rows stay in the host's store, inert. Both verbs refuse a host holding no 
 The host page of the panel shows it. A served runner its hub halts is listed by `GET /api/host/runners` as `halted`,
 naming why, and its own views still read.
 
+### Ingesting a runner from another store
+
+`blizzard runner ingest <source> --runner <name|id> [--workspace-id <id>] [--dir <host dir>]` moves one runner into
+this host: its rows, its configuration and its token. The source is another host's directory, or an archive store that
+`blizzard runner store reset --runner` wrote. A runner directory that has not graduated is refused, naming graduation.
+Take the runner under this host at the hub first: `blizzard hub runner-host release <host_id> <runner_id>` on the
+host that holds it, then `blizzard hub runner-host adopt <host_id> <runner_id>` on this one.
+
+The ingest reads the source only through a copy taken with SQLite's backup API over a read-only connection, migrated to
+this build's schema, so the source's store is not written until the runner's rows leave it. Then it:
+
+1. copies the runner's rows into this host's store in one transaction, which records the ingest;
+2. appends the runner's `[[workspace]]` unless this host declares one with the same root and environments, its
+   `[[subscription]]` unless this host declares that slug, and its `[[runner]]`, with each path key that points into
+   the source rewritten to a copy of that file or directory under `runners/<name>/`;
+3. writes its token to this host's `.env` as `BZ_HUB_TOKEN_<NAME>` and removes it from the source's, so the source can
+   no longer run the runner;
+4. deletes the runner's rows from the source. A source store left with no runner is moved aside whole under a
+   timestamped name.
+
+An archive carries rows only, so the runner's `[[runner]]` and token must already be in this host, as a reset leaves
+them; ingest refuses an archive otherwise. The source host keeps the runner's `[[runner]]`, which halts there for want
+of its token.
+
+The ingest refuses, changing nothing, when:
+
+- this host or the source is running: its lock is held, or something answers on its `host.sock` or `runner.sock`;
+- this host holds no host token, its hub does not hold the runner under it — the refusal names the `adopt` to run —
+  or the runner's identity in the source names another tenant than this host's. A host that has not recorded its
+  identity yet records the hub's answer;
+- the runner holds an open elicitation or takeover in the source;
+- this host already declares a runner of that name or id, or its store holds the runner from no ingest of this source;
+- this host gives the runner's workspace id to another root or set of environments. `--workspace-id` names a new id,
+  which the copied rows and the workspace's prompt override take. It is refused on a runner bound to more than one
+  workspace, and for an id this host gives to another workspace. A source workspace that is one of this host's under
+  another id is refused, naming that id for `--workspace-id`;
+- a held environment of the runner is one a runner of this host holds;
+- the source's `.env` holds no token for the runner, or this host's holds a different one;
+- both stores hold a different prompt override for one workspace, naming both;
+- the source store is at a revision this build does not know.
+
+Re-running an interrupted ingest completes it: a runner this host's store holds from an ingest of the same source
+skips the copy and finishes the configuration and the removal. If the source has run since the copy, its liveness stamp
+moved, and the ingest refuses, naming both stores.
+
 ## A token that names another runner
 
 At the head of every tick the runner asks the hub which runner its token belongs to (`GET /api/fleet/identity`) and
@@ -261,6 +306,14 @@ answers on its `runner.sock`, and for a store that is not a SQLite file. Start t
 bound to the configured `[[runner]] id`. A store that names the runner is not reset: a runner with history keeps its
 facts at the hub, and the fresh store drops every fact below the hub's high-water mark, so restore the right store
 instead. Reset only a store that is foreign to the configured runner and holds nothing to keep.
+
+`blizzard runner store reset <dir> --runner <name|id>` resets one runner alone. It writes that runner's rows to an
+archive store beside `host.db`, named `host.db.<runner>.<UTC stamp>`, migrated to the current schema and renamed into
+place whole, and only then deletes them from the host's store. The runner's outbox counters stay, so a runner that runs
+here again never numbers a fact at or below one its hub already holds. A runner the host file no longer declares is
+named by its id. The archive is an ingest source
+([Ingesting a runner from another store](#ingesting-a-runner-from-another-store)). It refuses as the whole-store reset
+does.
 
 `blizzard runner status` also names the runner's tenant beside its id, as `tenant=<name> (<tenant_id>)`, once a hub that
 names it has answered.

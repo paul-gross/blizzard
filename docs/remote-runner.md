@@ -117,6 +117,9 @@ A registered host takes more runners with no sign-in: `blizzard-runner add <name
 adds one under the host's token and appends its `[[runner]]`, and the host starts it at its next start.
 `blizzard-runner retire --runner <name|id> --dir <runtime dir>` retires one and removes its entry; a running host halts it
 at its next tick ([runner-auth.md](./deployment/runner-auth.md#adding-and-retiring-a-hosts-runners)).
+`blizzard-runner ingest <source> --runner <name|id> --dir <runtime dir>` moves one in from another host's directory,
+with its rows, configuration and token
+([runner-auth.md](./deployment/runner-auth.md#ingesting-a-runner-from-another-store)).
 
 ## Verify
 
