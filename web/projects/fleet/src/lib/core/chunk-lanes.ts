@@ -13,9 +13,9 @@ export interface Lane {
 export const LANES: readonly Lane[] = [
   { key: 'notready', label: 'BACKLOG', headerLabel: 'Backlog' },
   { key: 'ready', label: 'READY', headerLabel: 'Ready' },
-  { key: 'running', label: 'RUNNING', headerLabel: 'Running' },
   { key: 'waiting', label: 'WAIT/HUMAN', headerLabel: 'Waiting' },
   { key: 'needs', label: 'NEEDS HUMAN', headerLabel: 'Needs human' },
+  { key: 'running', label: 'RUNNING', headerLabel: 'Running' },
   { key: 'done', label: 'DONE', headerLabel: 'Done' },
 ];
 
