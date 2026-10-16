@@ -190,10 +190,12 @@ describe('GardeningDoorway', () => {
     expect(blizzard.querySelector('[data-testid="gardening-doorway-waiting"]')?.textContent).toContain(
       '1 proposal waiting',
     );
-    const open = blizzard.querySelector<HTMLAnchorElement>('[data-testid="gardening-doorway-open-blizzard"]')!;
+    const open = el.querySelector<HTMLAnchorElement>('[data-testid="gardening-doorway-card-blizzard"]')!;
+    expect(open.tagName).toBe('A');
     expect(open.getAttribute('href')).toBe('/p/blizzard/gardening/proposals');
-
-    expect(open.textContent).toContain("Open Blizzard's garden");
+    expect(open.getAttribute('aria-label')).toBe("Open Blizzard's garden");
+    expect(open.querySelector('a'), 'no nested link inside the tile').toBeNull();
+    expect(open.contains(blizzard.querySelector('[data-testid="gardening-doorway-findings-blizzard"]'))).toBe(true);
     expect(blizzard.querySelector('[data-testid="gardening-doorway-sweeping-blizzard"]')?.textContent).toContain(
       '1 run in progress',
     );

@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
-import { FLEET_CLOCK, FleetWhen, KitAsyncState, KitBadge, KitPanel, asyncStateOf } from 'fleet';
+import { FLEET_CLOCK, FleetWhen, KitAsyncState, KitBadge, KitLinkTile, KitPanel, asyncStateOf } from 'fleet';
 import { LensLink } from 'fleet/shell';
 
 import { injectProjectsQuery } from '../../core/projects.query';
@@ -24,7 +24,7 @@ import { doorwayCards, openGardenLabel, sweepingLabel, waitingLabel } from './ga
 @Component({
   selector: 'app-gardening-doorway',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FleetWhen, KitAsyncState, KitBadge, KitPanel, LensLink, RouterLink],
+  imports: [FleetWhen, KitAsyncState, KitBadge, KitLinkTile, KitPanel, LensLink, RouterLink],
   templateUrl: './gardening-doorway.html',
   styleUrl: './gardening-doorway.css',
 })
