@@ -109,7 +109,7 @@ describe('GardeningRunsPage', () => {
     });
 
     expect(el.querySelector('[data-testid="gardening-runs-empty"]')?.textContent).toContain(
-      'tending begins when there is growth worth pruning',
+      'No runs yet.',
     );
   });
 

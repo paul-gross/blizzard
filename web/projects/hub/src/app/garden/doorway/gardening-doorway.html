@@ -2,10 +2,8 @@
   <span class="crumb current">Gardening</span>
   <span class="sep" aria-hidden="true">›</span>
   <span class="crumb current">All projects</span>
-  <span class="crumb-hint">gardening belongs to a project — pick one to go in</span>
 </nav>
 <fleet-kit-panel class="doorway" [label]="title()">
-  <span fleetKitPanelHeader class="panel-hint" data-testid="gardening-doorway-hint">each project tends its own</span>
   <fleet-kit-async-state
     [state]="state()"
     emptyText="NO PROJECTS IN THIS TENANT"
@@ -25,7 +23,7 @@
             }
           </div>
           @if (card.unplanted) {
-            <p class="unplanted">Nothing planted yet — no scopes or routines. Gardening starts with a scope.</p>
+            <p class="unplanted">Gardening isn't set up for this project.</p>
           } @else {
             <ul class="facts">
               <li>
@@ -54,11 +52,6 @@
                 }
               </li>
             </ul>
-          }
-          @if (card.unserved === true) {
-            <p class="unserved" data-testid="gardening-doorway-unserved">
-              No runner serves this project: the work its garden raises waits until one does.
-            </p>
           }
           <div class="card-foot">
             <a class="open" [routerLink]="card.link | lensLink" [attr.data-testid]="'gardening-doorway-open-' + card.slug">{{

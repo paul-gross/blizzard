@@ -39,11 +39,6 @@
     }
   </fleet-kit-menu-panel>
 </ng-template>
-@if (unserved()) {
-  <p class="unserved" role="status" data-testid="gardening-unserved">
-    No runner serves {{ projectName() }}: the work its garden raises waits until a runner declares it.
-  </p>
-}
 <nav fleetKitTabStrip variant="sub" class="subnav" data-testid="gardening-subnav">
   @for (tab of tabs(); track tab.surface) {
     <a
@@ -65,9 +60,6 @@
       }
     </a>
   }
-  <span class="owner" data-testid="gardening-owner">
-    every record here belongs to <b>{{ projectName() }}</b>
-  </span>
 </nav>
 @if (surface() === 'runs') {
   <nav class="surface-switch" aria-label="Runs and findings" data-testid="gardening-runs-switch">

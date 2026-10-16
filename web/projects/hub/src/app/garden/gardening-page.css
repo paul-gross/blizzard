@@ -18,22 +18,6 @@
 }
 /* Whose records these are, at the strip's right end. It gives way first on a narrow screen, where the crumb above
  * already names the project. */
-.owner {
-  margin-left: auto;
-  align-self: center;
-  padding: 0 14px;
-  color: var(--label);
-  white-space: nowrap;
-}
-.owner b {
-  color: var(--snow);
-  font-weight: normal;
-}
-@media (max-width: 720px) {
-  .owner {
-    display: none;
-  }
-}
 /* Runs and findings share a surface; this pair switches between its two lists. */
 .surface-switch {
   display: flex;
@@ -120,12 +104,4 @@
 .project-crumb [trigger] {
   color: var(--amber-hi);
   white-space: nowrap;
-}
-.unserved {
-  flex: none;
-  margin: 0;
-  padding: 6px 14px;
-  border-bottom: 1px solid var(--line);
-  color: var(--amber-hi);
-  font-size: var(--fs-sm);
 }

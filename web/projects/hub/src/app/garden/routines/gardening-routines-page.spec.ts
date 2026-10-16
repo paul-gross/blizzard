@@ -142,7 +142,7 @@ describe('GardeningRoutinesPage', () => {
     const { el } = await render({ routines: [] });
 
     expect(el.querySelector('[data-testid="gardening-routines-empty"]')?.textContent).toContain(
-      'tending begins when there is growth worth pruning',
+      'No routines yet.',
     );
   });
 

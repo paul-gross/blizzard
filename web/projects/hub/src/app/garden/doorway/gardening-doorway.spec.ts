@@ -2,7 +2,7 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { type GardenProposalView, type ProjectView, type RoutineView, type RunRowView, type RunnerRegistryView, type ScopeView, hubClient } from 'fleet';
+import { type GardenProposalView, type ProjectView, type RoutineView, type RunRowView, type ScopeView, hubClient } from 'fleet';
 import { type RequestClientStub, settle, stubRequestClient } from 'fleet/testing';
 
 import { GardeningDoorway } from './gardening-doorway';
@@ -58,10 +58,6 @@ const DOORWAY_PROPOSALS = [
   { proposal_id: 'gp_3', project_id: 'proj_w', closure: null },
 ] as unknown as GardenProposalView[];
 
-const DOORWAY_RUNNERS = [
-  { runner_id: 'run_1', runner_name: 'r1', online: true, retired: false, projects: [{ entry: 'blizzard', project_id: 'proj_b' }] },
-] as unknown as RunnerRegistryView[];
-
 /** A stub table answering the doorway's reads on All. */
 function doorwayRoute(method: string, path: string): unknown {
   if (method !== 'GET') return {};
@@ -76,8 +72,6 @@ function doorwayRoute(method: string, path: string): unknown {
       return DOORWAY_RUNS;
     case '/api/garden-proposals':
       return { proposals: DOORWAY_PROPOSALS, next_cursor: null };
-    case '/api/runners':
-      return { runners: DOORWAY_RUNNERS };
     case '/api/me':
       return { tenants: [{ tenant_id: 't_1', name: 'grosscode', role: 'owner', permissions: [] }] };
     default:
@@ -91,7 +85,6 @@ const READS = {
   routines: DOORWAY_ROUTINES,
   runs: DOORWAY_RUNS,
   proposals: DOORWAY_PROPOSALS,
-  runners: DOORWAY_RUNNERS,
 };
 
 describe('doorwayCards', () => {
@@ -108,7 +101,6 @@ describe('doorwayCards', () => {
         lastRun: '2026-03-05T00:00:00Z',
         waiting: 1,
         unplanted: false,
-        unserved: false,
       }),
     );
     expect(winter).toEqual(
@@ -130,13 +122,6 @@ describe('doorwayCards', () => {
       ['/p', 'blizzard', 'gardening', 'proposals'],
       ['/p', 'winter', 'gardening', 'proposals'],
     ]);
-  });
-
-  it('marks a project no live runner serves, and says nothing until the runners are read', () => {
-    expect(doorwayCards(READS).map((card) => card.unserved)).toEqual([false, true]);
-    expect(doorwayCards({ ...READS, runners: undefined }).map((card) => card.unserved)).toEqual([null, null]);
-    const offline = DOORWAY_RUNNERS.map((runner) => ({ ...runner, online: false }));
-    expect(doorwayCards({ ...READS, runners: offline }).map((card) => card.unserved)).toEqual([true, true]);
   });
 
   it('counts a waiting proposal in the singular and the plural', () => {
@@ -184,15 +169,15 @@ describe('GardeningDoorway', () => {
     return fixture.nativeElement as HTMLElement;
   }
 
-  it('says where it is — every project\'s gardening — and whose gardens these are', async () => {
+  it('says where it is and whose gardens these are', async () => {
     const el = await render();
 
     const crumbs = el.querySelector('[data-testid="gardening-doorway-crumbs"]')?.textContent ?? '';
     expect(crumbs).toContain('Gardening');
     expect(crumbs).toContain('All projects');
-    expect(crumbs).toContain('gardening belongs to a project — pick one to go in');
+    expect(crumbs).not.toContain('pick one to go in');
     expect(el.textContent).toContain('Gardens in grosscode');
-    expect(el.querySelector('[data-testid="gardening-doorway-hint"]')?.textContent).toContain('each project tends its own');
+    expect(el.querySelector('[data-testid="gardening-doorway-hint"]')).toBeNull();
   });
 
   it('reads the tenant-wide lists, never a project\'s nested ones', async () => {
@@ -203,6 +188,7 @@ describe('GardeningDoorway', () => {
       expect(paths).toContain(read);
     }
     expect(paths.filter((path) => path.startsWith('/api/projects/'))).toEqual([]);
+    expect(paths).not.toContain('/api/runners');
   });
 
   it('renders a card per project with its standing and the way in', async () => {
@@ -213,7 +199,6 @@ describe('GardeningDoorway', () => {
     expect(blizzard.querySelector('[data-testid="gardening-doorway-waiting"]')?.textContent).toContain(
       '1 proposal waiting',
     );
-    expect(blizzard.querySelector('[data-testid="gardening-doorway-unserved"]')).toBeNull();
     const open = blizzard.querySelector<HTMLAnchorElement>('[data-testid="gardening-doorway-open-blizzard"]')!;
     expect(open.getAttribute('href')).toBe('/p/blizzard/gardening/proposals');
 
@@ -227,9 +212,7 @@ describe('GardeningDoorway', () => {
     expect(blizzard.textContent).toContain('last run');
 
     const winter = el.querySelector('[data-testid="gardening-doorway-card-winter"]')!;
-    expect(winter.textContent).toContain('Nothing planted yet');
-    expect(winter.querySelector('[data-testid="gardening-doorway-unserved"]')?.textContent).toContain(
-      'No runner serves this project',
-    );
+    expect(winter.textContent).toContain("Gardening isn't set up for this project.");
+    expect(winter.querySelector('[data-testid="gardening-doorway-unserved"]')).toBeNull();
   });
 });

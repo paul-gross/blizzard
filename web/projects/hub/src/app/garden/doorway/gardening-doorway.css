@@ -27,15 +27,6 @@
 .sep {
   color: var(--label-dim);
 }
-.crumb-hint {
-  margin-left: 4px;
-  color: var(--label);
-  font-size: var(--fs-xs);
-}
-.panel-hint {
-  color: var(--label);
-  font-size: var(--fs-xs);
-}
 .cards {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr));
@@ -102,18 +93,11 @@
 .fact-right.sweeping {
   color: var(--cyan);
 }
-.unplanted,
-.unserved {
+.unplanted {
   margin: 0;
   padding: 8px 10px;
   font-size: var(--fs-sm);
-}
-.unplanted {
   color: var(--label);
-}
-.unserved {
-  color: var(--amber-hi);
-  border-top: 1px solid var(--line);
 }
 .card-foot {
   padding: 6px 10px;

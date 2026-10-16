@@ -34,10 +34,3 @@
 }
 
 /* The list's footing: what every row above it has in common. */
-.list-foot {
-  margin: 0;
-  padding: 6px 10px;
-  border-top: 1px solid var(--line);
-  color: var(--label);
-  font-size: var(--fs-xs);
-}

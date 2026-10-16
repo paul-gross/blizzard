@@ -1,6 +1,5 @@
-import { type GardenProposalView, type ProjectView, type RunnerRegistryView } from 'fleet';
+import { type GardenProposalView, type ProjectView } from 'fleet';
 
-import { servingRunners } from '../core/project-serving';
 import { isGardenProposalWaiting, waitingLabel } from './proposals/gardening-proposals-page.model';
 
 export { waitingLabel };
@@ -99,16 +98,4 @@ export function gardenProjectChoices(
       })),
     { slug: null, label: 'All projects', waiting: null },
   ];
-}
-
-/**
- * Whether no live runner serves `project`, so the work its garden raises waits — `false` until both the project and
- * the runners are read, so the warning never flashes on a read still in flight.
- */
-export function gardenUnserved(
-  project: ProjectView | null,
-  runners: readonly RunnerRegistryView[] | undefined,
-): boolean {
-  if (project === null || runners === undefined) return false;
-  return servingRunners(project.project_id, runners).length === 0;
 }

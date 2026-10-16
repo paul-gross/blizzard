@@ -1,14 +1,6 @@
-import type {
-  GardenProposalView,
-  ProjectView,
-  RoutineView,
-  RunRowView,
-  RunnerRegistryView,
-  ScopeView,
-} from 'fleet';
+import type { GardenProposalView, ProjectView, RoutineView, RunRowView, ScopeView } from 'fleet';
 
 import { lensLink } from '../../core/project-lens';
-import { servingRunners } from '../../core/project-serving';
 import { GARDENING_DOORWAY_URL, GARDENING_LANDING_TAB } from '../core/garden-project';
 import type { TenantResolution } from '../../core/auth/tenant-context';
 import { isGardenProposalWaiting, waitingLabel } from '../proposals/gardening-proposals-page.model';
@@ -39,8 +31,6 @@ export interface DoorwayCard {
   readonly waiting: number;
   /** Whether nothing is planted yet: no scope and no routine. */
   readonly unplanted: boolean;
-  /** Whether no live runner serves the project, so the work its garden raises waits; `null` until runners are read. */
-  readonly unserved: boolean | null;
 }
 
 /** The tenant-wide garden reads the doorway groups by project; a read not yet answered is `undefined`. */
@@ -50,7 +40,6 @@ export interface DoorwayReads {
   readonly routines: readonly RoutineView[];
   readonly runs: readonly RunRowView[];
   readonly proposals: readonly GardenProposalView[];
-  readonly runners: readonly RunnerRegistryView[] | undefined;
 }
 
 function ownedBy<T extends { readonly project_id?: string | null }>(rows: readonly T[], projectId: string): T[] {
@@ -79,7 +68,6 @@ export function doorwayCards(reads: DoorwayReads): readonly DoorwayCard[] {
         lastRun: newest(finished.map((run) => run.minted_at)),
         waiting: ownedBy(reads.proposals, id).filter(isGardenProposalWaiting).length,
         unplanted: routines.length === 0 && scopes.length === 0,
-        unserved: reads.runners === undefined ? null : servingRunners(id, reads.runners).length === 0,
       };
     });
 }
