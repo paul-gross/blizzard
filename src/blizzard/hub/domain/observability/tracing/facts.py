@@ -195,6 +195,12 @@ class TracedPromotion:
 
 @domain_model
 @dataclass(frozen=True)
+class TracedDemotion:
+    demoted_at: datetime
+
+
+@domain_model
+@dataclass(frozen=True)
 class TracedPrerequisiteMet:
     """The instant a prerequisite completed."""
 
@@ -233,6 +239,7 @@ class StepFacts:
     bounces: tuple[TracedBounce, ...] = ()
     routes_created: tuple[TracedRouteCreation, ...] = ()
     promotions: tuple[TracedPromotion, ...] = ()
+    demotions: tuple[TracedDemotion, ...] = ()
     prerequisites_met: tuple[TracedPrerequisiteMet, ...] = ()
     usage: tuple[UsageFact, ...] = ()
     #: Source-native work-ref tokens (``acme#42``).

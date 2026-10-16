@@ -459,6 +459,7 @@ HUB_ALLOWED_SCANS: list[Allowance] = [
         (
             "chunk_bounces",
             "chunk_completed",
+            "chunk_demoted",
             "chunk_migrations",
             "chunk_pause_facts",
             "chunk_promoted",
@@ -602,6 +603,7 @@ HUB_ALLOWED_SCANS: list[Allowance] = [
         "live_work_refs_signature",
         (
             "chunk_completed",
+            "chunk_demoted",
             "chunk_migrations",
             "chunk_pause_facts",
             "chunk_promoted",
@@ -689,6 +691,7 @@ HUB_ALLOWED_SCANS: list[Allowance] = [
         "live_work_refs_signature",
         (
             "chunk_completed",
+            "chunk_demoted",
             "chunk_migrations",
             "chunk_pause_facts",
             "chunk_promoted",

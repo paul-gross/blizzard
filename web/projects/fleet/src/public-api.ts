@@ -250,7 +250,7 @@ export {
   patchChunkApiChunksChunkIdPatch,
   pauseChunkApiChunksChunkIdPausePost,
   pauseRunnerApiRunnersRunnerIdPausePost,
-  promoteChunkApiChunksChunkIdPromotePost,
+  promoteChunkApiChunksChunkIdPromotePost, demoteChunkApiChunksChunkIdDemotePost,
   reopenFindingsApiFindingsReopenPost,
   repositionBacklogApiBacklogPositionPost,
   repositionQueueApiQueuePositionPost,

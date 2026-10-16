@@ -1,9 +1,10 @@
 """The operator verbs' rules (unit tier) — which statuses admit each verb, and the pure
-decisions promote, pause, stop, complete, restart, delete, and edit take over loaded facts,
+decisions promote, demote, pause, stop, complete, restart, delete, and edit take over loaded facts,
 pinned by value: no repository, no clock."""
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime
 
 import pytest
@@ -36,6 +37,7 @@ from blizzard.hub.domain.operations.delete import (
     require_deletable,
     require_no_dependents,
 )
+from blizzard.hub.domain.operations.demote import ChunkNotDemotable, demotion_writes
 from blizzard.hub.domain.operations.edit import (
     ChunkAlreadyMoved,
     ChunkDefaults,
@@ -129,6 +131,7 @@ def test_each_fixture_derives_the_status_it_is_keyed_by() -> None:
     ("verb", "legal"),
     [
         (ChunkVerb.PROMOTE, _NON_TERMINAL),
+        (ChunkVerb.DEMOTE, frozenset({ChunkStatus.READY})),
         (ChunkVerb.PAUSE, _NON_TERMINAL - {ChunkStatus.DELIVERING}),
         (ChunkVerb.RESUME, frozenset(ChunkStatus)),
         (ChunkVerb.STOP, _NON_TERMINAL),
@@ -193,6 +196,43 @@ def test_promote_replays_on_an_already_promoted_chunk_even_once_terminal() -> No
     promoted_and_done = ChunkFacts(minted=True, promoted=True, operator_completed=True, operator_completed_at=_T0)
     assert promotion_writes("chk_1", promoted_and_done) is False
     assert promotion_writes("chk_1", _AT[ChunkStatus.RUNNING]) is False
+
+
+# --- demote -------------------------------------------------------------------
+
+
+def test_demote_writes_for_a_promoted_ready_chunk() -> None:
+    assert demotion_writes("chk_1", _AT[ChunkStatus.READY]) is True
+
+
+def test_demote_writes_for_a_promoted_chunk_only_a_pause_withholds() -> None:
+    assert _AT[ChunkStatus.PAUSED].is_ready_but_for_pause()
+    assert demotion_writes("chk_1", _AT[ChunkStatus.PAUSED]) is True
+
+
+@pytest.mark.parametrize("status", sorted(ChunkStatus))
+def test_demote_replays_on_a_chunk_not_currently_promoted_at_any_status(status: ChunkStatus) -> None:
+    assert demotion_writes("chk_1", replace(_AT[status], promoted=False)) is False
+
+
+@pytest.mark.parametrize(
+    "status",
+    sorted(frozenset(ChunkStatus) - {ChunkStatus.READY, ChunkStatus.PAUSED, ChunkStatus.NOT_READY}),
+)
+def test_demote_refuses_a_promoted_chunk_outside_the_ready_lane(status: ChunkStatus) -> None:
+    facts = replace(_AT[status], promoted=True)
+    assert facts.status() is status
+    with pytest.raises(ChunkNotDemotable) as excinfo:
+        demotion_writes("chk_1", facts)
+    assert excinfo.value.status is status
+    assert str(excinfo.value) == f"chunk chk_1 is {status.value}, not demotable"
+
+
+def test_demote_refuses_a_promoted_paused_chunk_on_a_live_route() -> None:
+    paused_running = replace(_AT[ChunkStatus.RUNNING], pauses=[PauseFact(paused=True, set_at=_T0, set_by="op")])
+    assert paused_running.status() is ChunkStatus.PAUSED
+    with pytest.raises(ChunkNotDemotable):
+        demotion_writes("chk_1", paused_running)
 
 
 def test_only_the_paused_chunks_a_pause_alone_withholds_rank_with_the_queue() -> None:

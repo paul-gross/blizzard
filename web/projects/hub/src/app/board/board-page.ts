@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, signal } from '@angular/core';
 import { BoardShell } from './board-shell/board-shell';
-import { type BoardReposition } from './board-shell/board-column';
+import { type BoardLaneMove, type BoardReposition } from './board-shell/board-column';
 import { type ChunkSummary, asyncState, errorMessage, injectChunkUrlSelection, type KitAsyncStateValue, injectHubChunkDetailQuery, injectPendingMutationVariables } from 'fleet';
 import { ChunkDetail } from './chunk-dock/chunk-detail';
 import { ActivityPanel } from './activity/activity-panel';
@@ -8,15 +8,16 @@ import { QuestionsPanel } from './questions/questions-panel';
 import { GatesPanel } from './gates/gates-panel';
 import { injectHubDecisionsQuery } from './gates/gates.query';
 import { RunnerPanel } from '../runners/runner-panel';
-import { chunkDeleteMutationKey, promoteChunkMutationKey, repositionBacklogMutationKey, repositionQueueMutationKey } from '../core/mutation-keys';
+import { chunkDeleteMutationKey, demoteChunkMutationKey, promoteChunkMutationKey, repositionBacklogMutationKey, repositionQueueMutationKey } from '../core/mutation-keys';
 import { hasPermission, injectMeQuery } from '../core/auth/me.query';
 import { type DeleteVars } from './chunks/delete.mutations';
 import { injectHubBacklogQuery, injectHubQueueQuery } from './queue/queue.query';
 import { injectHubBoardChunksQuery } from '../core/chunks.query';
 import { injectHubChunkCountsQuery } from './chunks/chunk-counts.query';
+import { injectDemoteChunkMutation, type DemoteVars } from './chunks/demote.mutations';
 import { injectPromoteChunkMutation, type PromoteVars } from './chunks/promote.mutations';
 import { injectRepositionBacklogMutation, injectRepositionQueueMutation, type RepositionVars } from './queue/queue.mutations';
-import { foldRepositions, gatedChunkIds, orderedChunkIds, resolveSelectedChunk, withPendingBoardChanges } from './board-page.model';
+import { foldRepositions, gatedChunkIds, orderedChunkIds, placedMoves, resolveSelectedChunk, withPendingBoardChanges } from './board-page.model';
 import { UnservedBanner } from './unserved/unserved-banner';
 
 /**
@@ -42,7 +43,7 @@ import { UnservedBanner } from './unserved/unserved-banner';
   styleUrl: './board-page.css',
 })
 export class BoardPage {
-  /** The board's last operator-action failure — a promote or a reorder — or `null`.
+  /** The board's last operator-action failure — a promote, a demote, or a reorder — or `null`.
    * Reset at the start of every new attempt. */
   protected readonly actionError = signal<string | null>(null);
 
@@ -78,6 +79,12 @@ export class BoardPage {
   /** Every chunk id the shared `promoteChunk` mutation is currently in flight for — scoped
    * by variables, since its bare `isPending()` is true while any card is promoting. */
   private readonly pendingPromotes = injectPendingMutationVariables<PromoteVars>(promoteChunkMutationKey);
+
+  /** Demote a ready chunk to the backlog from a cross-lane drop. */
+  private readonly demoteChunk = injectDemoteChunkMutation();
+
+  /** Every chunk id (with its requested placement) a demote is currently in flight for. */
+  private readonly pendingDemotes = injectPendingMutationVariables<DemoteVars>(demoteChunkMutationKey);
 
   /** Every reposition the shared `repositionQueue`/`repositionBacklog` mutations are
    * currently in flight for. */
@@ -125,17 +132,17 @@ export class BoardPage {
   /** {@link chunks} with pending board changes applied (`withPendingBoardChanges`);
    * {@link boardState} and {@link selected} stay off the real list. */
   protected readonly boardChunks = computed<readonly ChunkSummary[]>(() =>
-    withPendingBoardChanges(this.chunks(), this.pendingPromotes(), this.pendingDeletes()),
+    withPendingBoardChanges(this.chunks(), this.pendingPromotes(), this.pendingDeletes(), this.pendingDemotes()),
   );
 
-  /** {@link readyOrder} with pending ready-queue repositions folded in (`foldRepositions`). */
+  /** {@link readyOrder} with pending ready-queue repositions and anchored promotes folded in (`foldRepositions`). */
   protected readonly readyLaneOrder = computed<readonly string[]>(() =>
-    foldRepositions(this.readyOrder(), this.pendingRepositionQueue()),
+    foldRepositions(this.readyOrder(), [...this.pendingRepositionQueue(), ...placedMoves(this.pendingPromotes())]),
   );
 
-  /** {@link backlogOrder} with pending backlog repositions folded in (`foldRepositions`). */
+  /** {@link backlogOrder} with pending backlog repositions and demotes folded in (`foldRepositions`). */
   protected readonly backlogLaneOrder = computed<readonly string[]>(() =>
-    foldRepositions(this.backlogOrder(), this.pendingRepositionBacklog()),
+    foldRepositions(this.backlogOrder(), [...this.pendingRepositionBacklog(), ...placedMoves(this.pendingDemotes())]),
   );
 
   /** A READY or BACKLOG card dropped somewhere new — placed after the anchor it
@@ -144,6 +151,23 @@ export class BoardPage {
     this.actionError.set(null);
     const mutation = move.list === 'notready' ? this.repositionBacklog : this.repositionQueue;
     mutation.mutate({ chunkId: move.chunkId, afterChunkId: move.afterChunkId });
+  }
+
+  /** A card dropped into the other ranked list — a promote into READY or a demote into BACKLOG, placed
+   * after the anchor it landed on (`null` = the very top). */
+  protected moveAcrossLanes(move: BoardLaneMove): void {
+    this.actionError.set(null);
+    if (move.to === 'ready') {
+      this.promoteChunk.mutate(
+        { chunkId: move.chunkId, afterChunkId: move.afterChunkId },
+        { onError: (error) => this.actionError.set(errorMessage(error, 'Promote failed.')) },
+      );
+      return;
+    }
+    this.demoteChunk.mutate(
+      { chunkId: move.chunkId, afterChunkId: move.afterChunkId },
+      { onError: (error) => this.actionError.set(errorMessage(error, 'Demote failed.')) },
+    );
   }
 
   /** Promote a backlog chunk. */

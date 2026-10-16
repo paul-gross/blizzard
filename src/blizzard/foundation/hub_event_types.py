@@ -25,6 +25,7 @@ class HubEventType(StrEnum):
 ActivityChunkChangeCause = Literal[
     "minted",
     "promoted",
+    "demoted",
     "grouped",
     "claimed",
     "node-completed",

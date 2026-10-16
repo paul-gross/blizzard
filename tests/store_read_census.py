@@ -1509,9 +1509,9 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
     _mint(chunk_ready_1, "1001", at=_ht(30))
     _mint(chunk_ready_2, "1002", at=_ht(31))
     with write.exclusive.locked([chunk_ready_1]) as handle:
-        write.queue.record_promote_with_tail_position_locked(handle, chunk_ready_1, position=1.0, at=_ht(32))
+        write.queue.record_promote_with_position_locked(handle, chunk_ready_1, position=1.0, at=_ht(32))
     with write.exclusive.locked([chunk_ready_2]) as handle:
-        write.queue.record_promote_with_tail_position_locked(handle, chunk_ready_2, position=2.0, at=_ht(33))
+        write.queue.record_promote_with_position_locked(handle, chunk_ready_2, position=2.0, at=_ht(33))
     chunk_not_ready = "ch_hub_not_ready"
     _mint(chunk_not_ready, "1003", at=_ht(34))
 

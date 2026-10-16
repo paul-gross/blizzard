@@ -822,3 +822,21 @@ def test_chunk_list_drains_every_page(monkeypatch: pytest.MonkeyPatch) -> None:
     assert "ch_1" in result.output
     assert "ch_2" in result.output
     assert "ch_3" in result.output
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("verb", ["promote", "demote"])
+def test_placement_verbs_post_the_anchor_when_named(monkeypatch: pytest.MonkeyPatch, verb: str) -> None:
+    calls: list[tuple[str, object]] = []
+
+    def fake_post(url: str, *, json: object = None, timeout: float) -> _FakeResponse:
+        calls.append((url, json))
+        return _FakeResponse(202, {"chunk_id": "ch_1", "status": "not_ready"})
+
+    monkeypatch.setattr(httpx, "post", fake_post)
+    result = CliRunner().invoke(
+        hub_group, ["chunk", verb, "ch_1", "--after", "ch_2"], env={"BZ_HUB_URL": "http://hub.local:8421"}
+    )
+
+    assert result.exit_code == 0, result.output
+    assert calls == [(f"http://hub.local:8421/api/chunks/ch_1/{verb}", {"after_chunk_id": "ch_2"})]

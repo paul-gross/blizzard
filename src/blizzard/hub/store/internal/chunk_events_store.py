@@ -85,6 +85,16 @@ def _chunk_promoted_stmt(stmts: ScopedStatements, deleted: Select[Any]) -> Selec
     ).where(s.chunk_promoted.c.chunk_id.not_in(deleted))
 
 
+def _chunk_demoted_stmt(stmts: ScopedStatements, deleted: Select[Any]) -> Select[Any]:
+    return stmts.select(
+        stmts.scope_join(s.chunk_demoted, s.chunks, s.chunks.c.chunk_id == s.chunk_demoted.c.chunk_id),
+        s.chunk_demoted.c.id,
+        s.chunk_demoted.c.chunk_id,
+        s.chunk_demoted.c.demoted_at,
+        s.chunks.c.graph_id,
+    ).where(s.chunk_demoted.c.chunk_id.not_in(deleted))
+
+
 def _chunk_grouped_stmt(stmts: ScopedStatements) -> Select[Any]:
     return stmts.select(
         stmts.scope_join(s.chunk_grouped, s.chunks, s.chunks.c.chunk_id == s.chunk_grouped.c.chunk_id),
@@ -383,6 +393,23 @@ class ChunkEventsStore:
                     at=r.promoted_at,
                     chunk_id=r.chunk_id,
                     cause="promoted",
+                    graph_id=r.graph_id,
+                ),
+            )
+            rows += self._bounded(
+                conn,
+                _chunk_demoted_stmt(self._store, deleted),
+                ts_col=s.chunk_demoted.c.demoted_at,
+                pk_col=s.chunk_demoted.c.id,
+                since=since,
+                limit=limit,
+                chunks=chunks,
+                builder=lambda r: ActivityEntry(
+                    type="chunk-changed",
+                    key=f"chunk_demoted:{r.id}",
+                    at=r.demoted_at,
+                    chunk_id=r.chunk_id,
+                    cause="demoted",
                     graph_id=r.graph_id,
                 ),
             )

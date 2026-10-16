@@ -16,6 +16,7 @@
         "enum": [
           "minted",
           "promoted",
+          "demoted",
           "grouped",
           "claimed",
           "node-completed",
@@ -1300,6 +1301,7 @@
         "enum": [
           "minted",
           "promoted",
+          "demoted",
           "grouped",
           "claimed",
           "node-completed",
@@ -1343,6 +1345,7 @@
                 "enum": [
                   "minted",
                   "promoted",
+                  "demoted",
                   "grouped",
                   "claimed",
                   "node-completed",
@@ -2473,6 +2476,29 @@
           }
         },
         "title": "ChunkPauseRequest",
+        "type": "object"
+      },
+      "ChunkPlacementRequest": {
+        "description": "Where a chunk lands in the list it enters \u2014 the optional body of ``POST /api/chunks/{id}/promote`` and\n``POST /api/chunks/{id}/demote``. ``after_chunk_id`` lands it right after that member of the target list;\n``to_top`` lands it at the head; neither lands it at the tail. Naming both is ``422``, as is a self-anchor; an\nanchor outside the target list is ``409``.",
+        "properties": {
+          "after_chunk_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "After Chunk Id"
+          },
+          "to_top": {
+            "default": false,
+            "title": "To Top",
+            "type": "boolean"
+          }
+        },
+        "title": "ChunkPlacementRequest",
         "type": "object"
       },
       "ChunkRestartRequest": {
@@ -18889,6 +18915,66 @@
         ]
       }
     },
+    "/api/chunks/{chunk_id}/demote": {
+      "post": {
+        "description": "Demote a ready chunk back to not-ready, keeping its id, history, edges, pin, and defaults.\n\nIt lands at the backlog's tail unless the optional body names an anchor or the top.\nIdempotent: demoting a chunk that is not currently promoted is a harmless no-op. 404 when the\nchunk is unknown; 409 naming the status when the chunk is claimed, delivering, gated on a human,\nor ended, or the anchor is not in the backlog; 422 for a self-anchor.",
+        "operationId": "demote_chunk_api_chunks__chunk_id__demote_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "chunk_id",
+            "required": true,
+            "schema": {
+              "title": "Chunk Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/ChunkPlacementRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Request"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChunkSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Demote Chunk",
+        "tags": [
+          "chunks"
+        ]
+      }
+    },
     "/api/chunks/{chunk_id}/dependencies": {
       "post": {
         "description": "Declare that CHUNK depends on ``prerequisite_chunk_id``.\n\nIdempotent: an already-standing pair is reported back, even past the dependent's window or once the\nprerequisite goes ephemeral. 404 for an unknown or concurrently deleted dependent or prerequisite;\n409 for a dependent past its window, a cycle the edge would close, or an ephemeral prerequisite.",
@@ -19332,7 +19418,7 @@
     },
     "/api/chunks/{chunk_id}/promote": {
       "post": {
-        "description": "Promote a not-ready chunk to ready so a runner may claim it.\n\nIdempotent: promoting an already-promoted chunk is a harmless no-op. 404 when the chunk\nis unknown; 409 when a never-promoted chunk is already ``done`` or ``stopped``.",
+        "description": "Promote a not-ready chunk to ready so a runner may claim it.\n\nIt lands at the ready queue's tail unless the optional body names an anchor or the top.\nIdempotent: promoting a currently promoted chunk is a harmless no-op. 404 when the chunk\nis unknown; 409 when a not-currently-promoted chunk is already ``done`` or ``stopped``, or the\nanchor is not in the ready queue; 422 for a self-anchor.",
         "operationId": "promote_chunk_api_chunks__chunk_id__promote_post",
         "parameters": [
           {
@@ -19345,6 +19431,23 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/ChunkPlacementRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Request"
+              }
+            }
+          }
+        },
         "responses": {
           "202": {
             "content": {

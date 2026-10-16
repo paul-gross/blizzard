@@ -157,6 +157,7 @@ _HUMAN: dict[tuple[str, str], Permission] = {
     ("POST", "/api/chunks/{chunk_id}/stop"): Permission.CHUNK_CONTROL,
     ("POST", "/api/chunks/{chunk_id}/complete"): Permission.CHUNK_CONTROL,
     ("POST", "/api/chunks/{chunk_id}/promote"): Permission.CHUNK_CONTROL,
+    ("POST", "/api/chunks/{chunk_id}/demote"): Permission.CHUNK_CONTROL,
     # Declare/release a dependency edge — the same Permission.CHUNK_CONTROL every
     # other chunk-control-plane verb here already carries.
     ("POST", "/api/chunks/{chunk_id}/dependencies"): Permission.CHUNK_CONTROL,

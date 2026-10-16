@@ -883,8 +883,11 @@ class ChunkVerb(StrEnum):
     DECLARE_DEPENDENCY = "declare-dependency"
     #: Let a new ingest mint over a work ref this chunk holds: only once the holder is finished.
     INGEST_HELD_WORK_REF = "ingest-held-work-ref"
-    #: The operator's promote; on an already-promoted chunk, a replay that writes nothing whatever the status.
+    #: The operator's promote; on a currently promoted chunk, a replay that writes nothing whatever the status.
     PROMOTE = "promote"
+    #: The operator's demote, back to ``not_ready``; on a chunk not currently promoted, a replay that writes
+    #: nothing whatever the status.
+    DEMOTE = "demote"
     #: The operator's per-chunk pause brake.
     PAUSE = "pause"
     #: Lift the operator's per-chunk pause brake.
@@ -933,6 +936,7 @@ CHUNK_VERB_LEGALITY: Mapping[ChunkVerb, frozenset[ChunkStatus]] = MappingProxyTy
         ChunkVerb.DECLARE_DEPENDENCY: PRE_CLAIM_STATUSES,
         ChunkVerb.INGEST_HELD_WORK_REF: TERMINAL_STATUSES,
         ChunkVerb.PROMOTE: _NON_TERMINAL,
+        ChunkVerb.DEMOTE: frozenset({ChunkStatus.READY}),
         ChunkVerb.PAUSE: _NON_TERMINAL - {ChunkStatus.DELIVERING},
         ChunkVerb.RESUME: _EVERY_STATUS,
         ChunkVerb.STOP: _NON_TERMINAL,
@@ -975,6 +979,7 @@ class ChunkFacts:
     pure function of this aggregate — the unit tests build it directly, no store."""
 
     minted: bool
+    # Currently promoted: the newest promotion is later than the newest demotion.
     promoted: bool = False
     stopped: bool = False
     # ``chunk.stopped``'s own instant; ``None`` exactly when not stopped.
@@ -1249,7 +1254,7 @@ class ChunkFacts:
             # is still, first, waiting on a human) and above delivering/running.
             return ChunkStatus.PAUSED
         if not self.promoted and not self._has_live_route():
-            # An un-promoted chunk rests ``not_ready``. Above the hub-node test, so a restart that re-aims a
+            # A chunk not currently promoted rests ``not_ready``. Above the hub-node test, so a restart that re-aims a
             # resting chunk onto a hub-executed node does not promote it: only an explicit promote moves it on.
             return ChunkStatus.NOT_READY
         if self._latest_movement_enters_hub_node():

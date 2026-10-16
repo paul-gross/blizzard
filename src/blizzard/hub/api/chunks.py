@@ -59,6 +59,7 @@ from blizzard.hub.domain.graph.model import TargetGraphRetired
 from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.domain.kernel.pagination import DEFAULT_LIMIT, MAX_LIMIT, MalformedCursor
 from blizzard.hub.domain.operations.delete import ChunkHasDependents, ChunkNotDeletable
+from blizzard.hub.domain.operations.demote import ChunkNotDemotable
 from blizzard.hub.domain.operations.edit import (
     ChunkAlreadyMoved,
     ChunkNotEditable,
@@ -67,6 +68,7 @@ from blizzard.hub.domain.operations.edit import (
 )
 from blizzard.hub.domain.operations.pause import ChunkNotPausable
 from blizzard.hub.domain.operations.promote import ChunkNotPromotable
+from blizzard.hub.domain.operations.queue import NotInList, SelfAnchoredMove
 from blizzard.hub.domain.operations.restart import (
     ChunkNotRestartable,
     RestartCurrentNodeUnknown,
@@ -90,6 +92,7 @@ from blizzard.wire.chunk import (
     ChunkPatchRequest,
     ChunkPatchResponse,
     ChunkPauseRequest,
+    ChunkPlacementRequest,
     ChunkRestartRequest,
     ChunksPageView,
     ChunkStopRequest,
@@ -726,25 +729,67 @@ def complete_chunk(chunk_id: str, request: ChunkCompleteRequest, services: Servi
     status_code=status.HTTP_202_ACCEPTED,
     dependencies=[Depends(require(Permission.CHUNK_CONTROL))],
 )
-def promote_chunk(chunk_id: str, services: Services) -> ChunkSummary:
+def promote_chunk(chunk_id: str, services: Services, request: ChunkPlacementRequest | None = None) -> ChunkSummary:
     """Promote a not-ready chunk to ready so a runner may claim it.
 
-    Idempotent: promoting an already-promoted chunk is a harmless no-op. 404 when the chunk
-    is unknown; 409 when a never-promoted chunk is already ``done`` or ``stopped``."""
+    It lands at the ready queue's tail unless the optional body names an anchor or the top.
+    Idempotent: promoting a currently promoted chunk is a harmless no-op. 404 when the chunk
+    is unknown; 409 when a not-currently-promoted chunk is already ``done`` or ``stopped``, or the
+    anchor is not in the ready queue; 422 for a self-anchor."""
     chunk = services.chunks.record.get(chunk_id)
     if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
+    placement = request or ChunkPlacementRequest()
     change = chunk_events.ChunkChanged.before(services, chunk_id)
     statuses = services.chunks.facts.load_live_statuses()
     try:
-        promoted_id = services.promote.promote(chunk, statuses=statuses)
+        promoted_id = services.promote.promote(
+            chunk, statuses=statuses, after_chunk_id=placement.after_chunk_id, to_top=placement.to_top
+        )
     except ChunkNotFound as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
-    except ChunkNotPromotable as exc:
+    except (ChunkNotPromotable, NotInList) as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except SelfAnchoredMove as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
     key = f"chunk_promoted:{promoted_id}" if promoted_id is not None else None
     facts = change.publish(cause="promoted", key=key)
     services.events.publish_queue_changed()  # a promoted chunk enters the ready queue
+    return ChunkView.of(services, chunk, facts=facts).summary()
+
+
+@router.post(
+    "/chunks/{chunk_id}/demote",
+    response_model=ChunkSummary,
+    status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(require(Permission.CHUNK_CONTROL))],
+)
+def demote_chunk(chunk_id: str, services: Services, request: ChunkPlacementRequest | None = None) -> ChunkSummary:
+    """Demote a ready chunk back to not-ready, keeping its id, history, edges, pin, and defaults.
+
+    It lands at the backlog's tail unless the optional body names an anchor or the top.
+    Idempotent: demoting a chunk that is not currently promoted is a harmless no-op. 404 when the
+    chunk is unknown; 409 naming the status when the chunk is claimed, delivering, gated on a human,
+    or ended, or the anchor is not in the backlog; 422 for a self-anchor."""
+    chunk = services.chunks.record.get(chunk_id)
+    if chunk is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
+    placement = request or ChunkPlacementRequest()
+    change = chunk_events.ChunkChanged.before(services, chunk_id)
+    statuses = services.chunks.facts.load_live_statuses()
+    try:
+        demoted_id = services.demote.demote(
+            chunk, statuses=statuses, after_chunk_id=placement.after_chunk_id, to_top=placement.to_top
+        )
+    except ChunkNotFound as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except (ChunkNotDemotable, NotInList) as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except SelfAnchoredMove as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+    key = f"chunk_demoted:{demoted_id}" if demoted_id is not None else None
+    facts = change.publish(cause="demoted", key=key)
+    services.events.publish_queue_changed()  # a demoted chunk leaves the ready queue
     return ChunkView.of(services, chunk, facts=facts).summary()
 
 

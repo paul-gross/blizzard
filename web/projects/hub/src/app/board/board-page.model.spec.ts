@@ -5,6 +5,7 @@ import {
   foldRepositions,
   gatedChunkIds,
   orderedChunkIds,
+  placedMoves,
   resolveSelectedChunk,
   withPendingBoardChanges,
 } from './board-page.model';
@@ -111,5 +112,34 @@ describe('resolveSelectedChunk', () => {
   it('is null for a selection neither read knows', () => {
     expect(resolveSelectedChunk('ch_gone', chunks, undefined)).toBeNull();
     expect(resolveSelectedChunk('ch_gone', chunks, 'ch_other')).toBeNull();
+  });
+});
+
+describe('withPendingBoardChanges demotes', () => {
+  it('predicts not_ready for a pending demote of a ready chunk', () => {
+    const chunks = [chunk('ch_a', 'ready'), chunk('ch_b', 'ready')];
+    const shown = withPendingBoardChanges(chunks, [], [], [{ chunkId: 'ch_a' }]);
+    expect(shown.map((c) => c.status)).toEqual(['not_ready', 'ready']);
+  });
+
+  it('leaves a paused chunk as read — the hub has not said where it lands', () => {
+    const shown = withPendingBoardChanges([chunk('ch_a', 'paused')], [], [], [{ chunkId: 'ch_a' }]);
+    expect(shown[0].status).toBe('paused');
+  });
+
+  it('returns the list itself when no override applies', () => {
+    const chunks = [chunk('ch_a', 'ready')];
+    expect(withPendingBoardChanges(chunks, [], [], [])).toBe(chunks);
+  });
+});
+
+describe('placedMoves', () => {
+  it('keeps the placements that name an anchor, null for the top, and skips the tail', () => {
+    expect(
+      placedMoves([{ chunkId: 'ch_a', afterChunkId: 'ch_b' }, { chunkId: 'ch_c', afterChunkId: null }, { chunkId: 'ch_d' }]),
+    ).toEqual([
+      { chunkId: 'ch_a', afterChunkId: 'ch_b' },
+      { chunkId: 'ch_c', afterChunkId: null },
+    ]);
   });
 });

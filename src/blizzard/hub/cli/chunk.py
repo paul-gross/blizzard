@@ -242,18 +242,50 @@ def chunk_set(
 
 @chunk_group.command("promote", cls=FleetCommand)
 @click.argument("chunk_id")
-def chunk_promote(cli: CliContext, chunk_id: str) -> None:
+@click.option("--after", "after", default=None, help="Land right after this ready chunk; default is the queue tail.")
+def chunk_promote(cli: CliContext, chunk_id: str, after: str | None) -> None:
     """Promote a not-ready CHUNK to ready so a runner may claim it.
 
     A pure client of the hub API: ``POST /api/chunks/{id}/promote``. Idempotent — promoting
-    an already-promoted chunk is a harmless no-op; 404 when the chunk is unknown, 409 when a
-    never-promoted chunk is already done or stopped."""
+    a currently promoted chunk is a harmless no-op; 404 when the chunk is unknown, 409 when a
+    not-currently-promoted chunk is already done or stopped, or ``--after`` names a chunk outside
+    the ready queue."""
     resp = cli.post(
         f"/api/chunks/{chunk_id}/promote",
         "POST /chunks/{id}/promote",
-        on_status={409: "chunk is not promotable", 404: f"no such chunk {chunk_id}"},
+        json_body={"after_chunk_id": after} if after is not None else None,
+        on_status={
+            409: "chunk is not promotable, or --after is not in the ready queue",
+            404: f"no such chunk {chunk_id}",
+            422: "a chunk cannot be placed after itself",
+        },
     )
     cli.finish(resp, f"promoted {chunk_id} — now ready for a runner to claim")
+
+
+@chunk_group.command("demote", cls=FleetCommand)
+@click.argument("chunk_id")
+@click.option(
+    "--after", "after", default=None, help="Land right after this backlog chunk; default is the backlog tail."
+)
+def chunk_demote(cli: CliContext, chunk_id: str, after: str | None) -> None:
+    """Demote a ready CHUNK back to not-ready, keeping its id, history, edges, pin, and defaults.
+
+    A pure client of the hub API: ``POST /api/chunks/{id}/demote``. Idempotent — demoting a
+    chunk that is not currently promoted is a harmless no-op; 404 when the chunk is unknown, 409
+    when it is claimed, delivering, gated on a human, or ended, or ``--after`` names a chunk outside
+    the backlog. Detach a held chunk first."""
+    resp = cli.post(
+        f"/api/chunks/{chunk_id}/demote",
+        "POST /chunks/{id}/demote",
+        json_body={"after_chunk_id": after} if after is not None else None,
+        on_status={
+            409: "chunk is not demotable, or --after is not in the backlog",
+            404: f"no such chunk {chunk_id}",
+            422: "a chunk cannot be placed after itself",
+        },
+    )
+    cli.finish(resp, f"demoted {chunk_id} — back to not ready")
 
 
 @chunk_group.command("pause", cls=FleetCommand)

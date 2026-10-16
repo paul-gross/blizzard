@@ -35,8 +35,8 @@ The waits that belong to a step stay under its root.
 ### The lifetime trace
 
 The lifetime trace's root is named `chunk` and covers the chunk from ingest to its first terminal fact. It carries the
-outcome, the time the chunk rested in the backlog (`blizzard.chunk.backlog_ms`), the time from when it left the backlog
-to its finish (`blizzard.chunk.active_ms`) and the chunk's totals. It is one level deep: under the root hang
+outcome, the time the chunk rested in the backlog, summed over every stretch (`blizzard.chunk.backlog_ms`), the rest of
+its lifetime (`blizzard.chunk.active_ms`) and the chunk's totals. It is one level deep: under the root hang
 
 - **a span for each step and gate,** named for its node, such as `triage` or `build`. It covers the step's whole share
   of the chunk's life: from the start of its `queue wait` and `claim` (else the step's start), but never before the end
@@ -46,13 +46,14 @@ to its finish (`blizzard.chunk.active_ms`) and the chunk's totals. It is one lev
   including its node, outcome and epoch, its token and cost totals, its wait totals (`blizzard.step.wait.*`) and
   `blizzard.step.kind`, which is `step` or `gate`. It links to that step's root in the work trace, with the reason
   `work`. A step that ends by escalating has an `ERROR` status.
-- **the waits that belong to the chunk, not a step:** `backlog wait` while the chunk rests `not_ready`, from ingest to
-  the earliest of its first promotion, its first lease and its finish; `escalation wait` while it sits `needs_human`,
-  from the escalation to the first requeue, restart (including a migration restart) or lease mint after it, or to the
-  finish if nothing did; and `pause wait` while it is paused and nothing else covers it, from the pause to the resume.
-  Every wait is clipped around the step spans, and a pause also around the other waits, so what is left of a pause that
-  began inside one starts once that step span ended or that wait ended, and a pause can split into several `pause wait`
-  spans. No two waits overlap, and none overlaps a step span. A chunk is promoted once, so it has one `backlog wait`.
+- **the waits that belong to the chunk, not a step:** `backlog wait` while the chunk rests `not_ready`, one for each
+  stretch: from ingest, or from a demotion, to the earliest of the next promotion, the next lease and its finish;
+  `escalation wait` while it sits `needs_human`, from the escalation to the first requeue, restart (including a
+  migration restart) or lease mint after it, or to the finish if nothing did; and `pause wait` while it is paused and
+  nothing else covers it, from the pause to the resume. Every wait is clipped around the step spans, and a pause also
+  around the other waits, so what is left of a pause that began inside one starts once that step span ended or that wait
+  ended, and a pause can split into several `pause wait` spans. No two waits overlap, and none overlaps a step span. A
+  chunk that is demoted and promoted again has one `backlog wait` for each stretch it rested.
 - **a marker for a later completion.** A `stopped` chunk can still be hand-completed, and the later fact decides its
   status. The root keeps its `stopped` outcome and end; a zero-length `chunk completed` span, at the completion instant
   and carrying the outcome `done`, records the completion.
@@ -106,7 +107,7 @@ status is unset.
 | `chunk`                     | `chunk/lifetime`        | The chunk from ingest to its first terminal fact, `done` or `stopped`, the root of its lifetime trace. Told once, when it finishes.                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | `<node>`                    | `chunk/step`            | One step or gate of the chunk, named for its node, under the lifetime root; links to the step's root in the work trace. It runs from the start of the step's queue wait and claim, else its start, but never before the end of the previous step span or of a backlog or escalation wait that ended by its start, and never after its own start, to the later of its end and its close, so a gate's decision pickup is inside it; step spans never overlap, and it carries the step's wait totals. The work root keeps the role `chunk` for its unchanged span id; the lifetime spans are `chunk/*`. |
 | `chunk completed`           | `chunk/completed`       | A stopped chunk hand-completed, a zero-length span at the completion under the lifetime root.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| `backlog wait`              | `chunk/backlog-wait`    | The chunk resting `not_ready`, from ingest to its first promotion, its first lease or its finish, less what a step span covers.                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `backlog wait`              | `chunk/backlog-wait`    | The chunk resting `not_ready`, one span per stretch in the backlog: from ingest, or from a demotion, to the next promotion, lease or finish, less what a step span covers.                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | `escalation wait`           | `chunk/escalation-wait` | The chunk parked `needs_human`, from the escalation to the requeue, restart, migration restart or lease mint that released it, less what a step span covers.                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | `pause wait`                | `chunk/pause-wait`      | The chunk paused while no step span and no other chunk wait covered it, from the pause (or the end of the step span it began in) to the resume.                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | `worker <node>`             | `runner/worker`         | One runner lease, from its minting to its close, parented to the hub's step root.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
@@ -125,87 +126,87 @@ lifetime step span repeats the token and cost totals and the wait totals. The in
 names the roles it rides in [`dictionary.json`](../../contracts/traces/dictionary.json). Attributes marked optional are
 absent rather than empty when there is nothing to say.
 
-| Attribute                                  | Type       | Meaning                                                                                                                                                                                                       |
-| ------------------------------------------ | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `blizzard.chunk.id`                        | `string`   | The chunk the span belongs to.                                                                                                                                                                                |
-| `blizzard.chunk.work_refs`                 | `string[]` | The chunk's work items as source-native tokens, such as `acme#42`.                                                                                                                                            |
-| `blizzard.graph.name`                      | `string`   | The name of the graph the chunk was on.                                                                                                                                                                       |
-| `blizzard.graph.id`                        | `string`   | The id of that graph version.                                                                                                                                                                                 |
-| `blizzard.node.name`                       | `string`   | The node the step was at.                                                                                                                                                                                     |
-| `blizzard.node.id`                         | `string`   | The id of that node in its graph version.                                                                                                                                                                     |
-| `blizzard.node.executor`                   | `string`   | Who ran the step: `runner`, `hub` or `human`.                                                                                                                                                                 |
-| `blizzard.step.epoch`                      | `int`      | The attempt counter the step ran under.                                                                                                                                                                       |
-| `blizzard.step.visit`                      | `int`      | How many times the chunk has arrived at this node, counting this one.                                                                                                                                         |
-| `blizzard.step.outcome`                    | `string`   | How the step ended: `transitioned`, `gated`, `migrated`, `escalated`, `released`, `stopped`, `completed`, `superseded`, `decided` or `restarted`.                                                             |
-| `blizzard.step.choice`                     | `string`   | The name of the choice that moved the chunk on.                                                                                                                                                               |
-| `blizzard.step.to_node.name`               | `string`   | The node the step moved the chunk to; `graph:<name>` for a move to another graph.                                                                                                                             |
-| `blizzard.step.preceded_by`                | `string`   | What sits between this step and the previous one: `restart`, `requeue` or `released-claim`.                                                                                                                   |
-| `blizzard.step.kind`                       | `string`   | Whether the step was a `step` or a `gate`.                                                                                                                                                                    |
-| `blizzard.runner.id`                       | `string`   | The runner that held the step or ran the lease.                                                                                                                                                               |
-| `blizzard.runner.name`                     | `string`   | The latest registered name of the runner that held the step or ran the lease, as of when the span was told.                                                                                                   |
-| `blizzard.tenant`                          | `string`   | The tenant the runner that ran the lease serves, as its hub last answered; absent until a hub that names it answers.                                                                                          |
-| `blizzard.tenant_name`                     | `string`   | The name of the tenant the runner that ran the lease serves, as of when the span was told.                                                                                                                    |
-| `blizzard.harness.id`                      | `string`   | The harness: on a step, the one its last invocation that recorded one ran under; on a runner span, the one the lease or invocation ran under.                                                                 |
-| `blizzard.harness.version`                 | `string`   | The version of that harness.                                                                                                                                                                                  |
-| `blizzard.step.models`                     | `string[]` | The distinct models the step's invocations used, in first-use order.                                                                                                                                          |
-| `blizzard.bounce.cause`                    | `string`   | Why the chunk was bounced back from this step.                                                                                                                                                                |
-| `blizzard.ask.answered`                    | `bool`     | Whether a person had answered the question when the span ended.                                                                                                                                               |
-| `blizzard.clock_skew`                      | `bool`     | Set when the answer is stamped before the question, so the span is clamped to zero length.                                                                                                                    |
-| `blizzard.link.reason`                     | `string`   | Why a span links to the one it names: `next`, `retry`, `bounce`, `restart` or `migration` for the step before; `work` for the step root a lifetime span summarizes; `lifetime` for the lifetime trace's root. |
-| `blizzard.step.input_tokens`               | `int`      | Input tokens the step's invocations used, not counting cache.                                                                                                                                                 |
-| `blizzard.step.output_tokens`              | `int`      | Output tokens the step's invocations produced.                                                                                                                                                                |
-| `blizzard.step.cache_read_tokens`          | `int`      | Input tokens the step's invocations read from the cache.                                                                                                                                                      |
-| `blizzard.step.cache_create_tokens`        | `int`      | Input tokens the step's invocations wrote to the cache.                                                                                                                                                       |
-| `blizzard.step.cost.usd`                   | `double`   | The step's cost in US dollars, including any estimate.                                                                                                                                                        |
-| `blizzard.step.cost.estimated`             | `bool`     | Whether part of the cost is a subscription estimate rather than a billed amount.                                                                                                                              |
-| `blizzard.step.cost.partial`               | `bool`     | Whether some invocation reported no cost, so the total is a floor.                                                                                                                                            |
-| `blizzard.step.wait.queue_ms`              | `int`      | Milliseconds the chunk waited claimable before a runner or the hub took it.                                                                                                                                   |
-| `blizzard.step.wait.claim_ms`              | `int`      | Milliseconds between the claim and the step starting.                                                                                                                                                         |
-| `blizzard.step.wait.ask_ms`                | `int`      | Milliseconds the step spent waiting on a person's answer.                                                                                                                                                     |
-| `blizzard.step.wait.pause_ms`              | `int`      | Milliseconds the step spent paused.                                                                                                                                                                           |
-| `blizzard.step.wait.pickup_ms`             | `int`      | Milliseconds between a person deciding a gate and the decision being picked up.                                                                                                                               |
-| `blizzard.chunk.outcome`                   | `string`   | How the chunk finished: `done` or `stopped`. A `chunk completed` marker reads `done`.                                                                                                                         |
-| `blizzard.chunk.backlog_ms`                | `int`      | Milliseconds the chunk rested `not_ready` before it left the backlog.                                                                                                                                         |
-| `blizzard.chunk.active_ms`                 | `int`      | Milliseconds from when the chunk left the backlog to its finish.                                                                                                                                              |
-| `blizzard.chunk.steps`                     | `int`      | How many steps the chunk took, gates included.                                                                                                                                                                |
-| `blizzard.chunk.bounces`                   | `int`      | How many times the chunk was bounced back.                                                                                                                                                                    |
-| `blizzard.chunk.input_tokens`              | `int`      | Input tokens the chunk's invocations used, not counting cache.                                                                                                                                                |
-| `blizzard.chunk.output_tokens`             | `int`      | Output tokens the chunk's invocations produced.                                                                                                                                                               |
-| `blizzard.chunk.cache_read_tokens`         | `int`      | Input tokens the chunk's invocations read from the cache.                                                                                                                                                     |
-| `blizzard.chunk.cache_create_tokens`       | `int`      | Input tokens the chunk's invocations wrote to the cache.                                                                                                                                                      |
-| `blizzard.chunk.cost.usd`                  | `double`   | The chunk's cost in US dollars, including any estimate.                                                                                                                                                       |
-| `blizzard.chunk.cost.estimated`            | `bool`     | Whether part of the cost is a subscription estimate rather than a billed amount.                                                                                                                              |
-| `blizzard.chunk.cost.partial`              | `bool`     | Whether some invocation reported no cost, so the total is a floor.                                                                                                                                            |
-| `blizzard.invocation.kind`                 | `string`   | What the invocation was: `spawn`, `resume` or `judge`; a nudge reads `resume`.                                                                                                                                |
-| `blizzard.invocation.input_tokens`         | `int`      | Input tokens, not counting cache.                                                                                                                                                                             |
-| `blizzard.invocation.output_tokens`        | `int`      | Output tokens.                                                                                                                                                                                                |
-| `blizzard.invocation.cache_read_tokens`    | `int`      | Input tokens read from the cache.                                                                                                                                                                             |
-| `blizzard.invocation.cache_create_tokens`  | `int`      | Input tokens written to the cache.                                                                                                                                                                            |
-| `blizzard.invocation.cost.usd`             | `double`   | The invocation's cost in US dollars, including any estimate.                                                                                                                                                  |
-| `blizzard.invocation.cost.estimated`       | `bool`     | Whether the cost is a subscription estimate.                                                                                                                                                                  |
-| `gen_ai.response.model`                    | `string`   | The model that answered.                                                                                                                                                                                      |
-| `gen_ai.usage.input_tokens`                | `int`      | All input tokens, cache reads and writes included.                                                                                                                                                            |
-| `gen_ai.usage.output_tokens`               | `int`      | Output tokens.                                                                                                                                                                                                |
-| `gen_ai.usage.cache_read.input_tokens`     | `int`      | Input tokens read from the cache.                                                                                                                                                                             |
-| `gen_ai.usage.cache_creation.input_tokens` | `int`      | Input tokens written to the cache.                                                                                                                                                                            |
-| `blizzard.lease.id`                        | `string`   | The runner lease the span belongs to.                                                                                                                                                                         |
-| `blizzard.lease.close_reason`              | `string`   | Why the lease closed, such as `transitioned`; either escalation reads `escalated`.                                                                                                                            |
-| `blizzard.session.name`                    | `string`   | The declared session the node ran in.                                                                                                                                                                         |
-| `blizzard.model.resolved`                  | `string`   | The model the runner resolved the session's tier to.                                                                                                                                                          |
-| `blizzard.effort.resolved`                 | `string`   | The effort the runner resolved the session's effort to.                                                                                                                                                       |
-| `blizzard.invocation.nudge`                | `bool`     | Whether a nudge opened the invocation.                                                                                                                                                                        |
-| `blizzard.invocation.generation`           | `int`      | The worker generation the invocation belongs to.                                                                                                                                                              |
-| `blizzard.invocation.end_source`           | `string`   | What ended the invocation: `session_end`, `next_invocation` or `lease_close`.                                                                                                                                 |
-| `blizzard.overload.streak`                 | `int`      | The backoff's place in its streak of overloads, counting from 1.                                                                                                                                              |
-| `blizzard.context.tokens`                  | `int`      | The session's context size in tokens when sampled.                                                                                                                                                            |
-| `blizzard.check.index`                     | `int`      | The check's position in the node's declared checks, counting from 1.                                                                                                                                          |
-| `blizzard.check.passed`                    | `bool`     | Whether that check passed.                                                                                                                                                                                    |
-| `blizzard.checks.passed`                   | `bool`     | Whether every check passed.                                                                                                                                                                                   |
-| `blizzard.checks.count`                    | `int`      | How many checks ran.                                                                                                                                                                                          |
-| `gen_ai.operation.name`                    | `string`   | Always `invoke_agent`.                                                                                                                                                                                        |
-| `gen_ai.agent.name`                        | `string`   | The declared session the node ran in.                                                                                                                                                                         |
-| `gen_ai.conversation.id`                   | `string`   | The harness session id, for a worker invocation.                                                                                                                                                              |
-| `gen_ai.request.model`                     | `string`   | The model the runner resolved for the session.                                                                                                                                                                |
+| Attribute                                  | Type       | Meaning                                                                                                                                                                                                        |
+| ------------------------------------------ | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `blizzard.chunk.id`                        | `string`   | The chunk the span belongs to.                                                                                                                                                                                 |
+| `blizzard.chunk.work_refs`                 | `string[]` | The chunk's work items as source-native tokens, such as `acme#42`.                                                                                                                                             |
+| `blizzard.graph.name`                      | `string`   | The name of the graph the chunk was on.                                                                                                                                                                        |
+| `blizzard.graph.id`                        | `string`   | The id of that graph version.                                                                                                                                                                                  |
+| `blizzard.node.name`                       | `string`   | The node the step was at.                                                                                                                                                                                      |
+| `blizzard.node.id`                         | `string`   | The id of that node in its graph version.                                                                                                                                                                      |
+| `blizzard.node.executor`                   | `string`   | Who ran the step: `runner`, `hub` or `human`.                                                                                                                                                                  |
+| `blizzard.step.epoch`                      | `int`      | The attempt counter the step ran under.                                                                                                                                                                        |
+| `blizzard.step.visit`                      | `int`      | How many times the chunk has arrived at this node, counting this one.                                                                                                                                          |
+| `blizzard.step.outcome`                    | `string`   | How the step ended: `transitioned`, `gated`, `migrated`, `escalated`, `released`, `stopped`, `completed`, `superseded`, `decided` or `restarted`.                                                              |
+| `blizzard.step.choice`                     | `string`   | The name of the choice that moved the chunk on.                                                                                                                                                                |
+| `blizzard.step.to_node.name`               | `string`   | The node the step moved the chunk to; `graph:<name>` for a move to another graph.                                                                                                                              |
+| `blizzard.step.preceded_by`                | `string`   | What sits between this step and the previous one: `restart`, `requeue` or `released-claim`.                                                                                                                    |
+| `blizzard.step.kind`                       | `string`   | Whether the step was a `step` or a `gate`.                                                                                                                                                                     |
+| `blizzard.runner.id`                       | `string`   | The runner that held the step or ran the lease.                                                                                                                                                                |
+| `blizzard.runner.name`                     | `string`   | The latest registered name of the runner that held the step or ran the lease, as of when the span was told.                                                                                                    |
+| `blizzard.tenant`                          | `string`   | The tenant the runner that ran the lease serves, as its hub last answered; absent until a hub that names it answers.                                                                                           |
+| `blizzard.tenant_name`                     | `string`   | The name of the tenant the runner that ran the lease serves, as of when the span was told.                                                                                                                     |
+| `blizzard.harness.id`                      | `string`   | The harness: on a step, the one its last invocation that recorded one ran under; on a runner span, the one the lease or invocation ran under.                                                                  |
+| `blizzard.harness.version`                 | `string`   | The version of that harness.                                                                                                                                                                                   |
+| `blizzard.step.models`                     | `string[]` | The distinct models the step's invocations used, in first-use order.                                                                                                                                           |
+| `blizzard.bounce.cause`                    | `string`   | Why the chunk was bounced back from this step.                                                                                                                                                                 |
+| `blizzard.ask.answered`                    | `bool`     | Whether a person had answered the question when the span ended.                                                                                                                                                |
+| `blizzard.clock_skew`                      | `bool`     | Set when the answer is stamped before the question, so the span is clamped to zero length.                                                                                                                     |
+| `blizzard.link.reason`                     | `string`   | Why a span links to the one it names: `next`, `retry`, `bounce`, `restart` or `migration` for the step before; `work` for the step root a lifetime span summarizes; `lifetime` for the lifetime trace's root.  |
+| `blizzard.step.input_tokens`               | `int`      | Input tokens the step's invocations used, not counting cache.                                                                                                                                                  |
+| `blizzard.step.output_tokens`              | `int`      | Output tokens the step's invocations produced.                                                                                                                                                                 |
+| `blizzard.step.cache_read_tokens`          | `int`      | Input tokens the step's invocations read from the cache.                                                                                                                                                       |
+| `blizzard.step.cache_create_tokens`        | `int`      | Input tokens the step's invocations wrote to the cache.                                                                                                                                                        |
+| `blizzard.step.cost.usd`                   | `double`   | The step's cost in US dollars, including any estimate.                                                                                                                                                         |
+| `blizzard.step.cost.estimated`             | `bool`     | Whether part of the cost is a subscription estimate rather than a billed amount.                                                                                                                               |
+| `blizzard.step.cost.partial`               | `bool`     | Whether some invocation reported no cost, so the total is a floor.                                                                                                                                             |
+| `blizzard.step.wait.queue_ms`              | `int`      | Milliseconds the chunk waited claimable before a runner or the hub took it.                                                                                                                                    |
+| `blizzard.step.wait.claim_ms`              | `int`      | Milliseconds between the claim and the step starting.                                                                                                                                                          |
+| `blizzard.step.wait.ask_ms`                | `int`      | Milliseconds the step spent waiting on a person's answer.                                                                                                                                                      |
+| `blizzard.step.wait.pause_ms`              | `int`      | Milliseconds the step spent paused.                                                                                                                                                                            |
+| `blizzard.step.wait.pickup_ms`             | `int`      | Milliseconds between a person deciding a gate and the decision being picked up.                                                                                                                                |
+| `blizzard.chunk.outcome`                   | `string`   | How the chunk finished: `done` or `stopped`. A `chunk completed` marker reads `done`.                                                                                                                          |
+| `blizzard.chunk.backlog_ms`                | `int`      | Milliseconds the chunk rested `not_ready`, summed over every stretch in the backlog: from ingest to its first promotion, first lease or finish, and from each demotion to the next promotion, lease or finish. |
+| `blizzard.chunk.active_ms`                 | `int`      | Milliseconds of the chunk's lifetime outside the backlog: its lifetime less `blizzard.chunk.backlog_ms`.                                                                                                       |
+| `blizzard.chunk.steps`                     | `int`      | How many steps the chunk took, gates included.                                                                                                                                                                 |
+| `blizzard.chunk.bounces`                   | `int`      | How many times the chunk was bounced back.                                                                                                                                                                     |
+| `blizzard.chunk.input_tokens`              | `int`      | Input tokens the chunk's invocations used, not counting cache.                                                                                                                                                 |
+| `blizzard.chunk.output_tokens`             | `int`      | Output tokens the chunk's invocations produced.                                                                                                                                                                |
+| `blizzard.chunk.cache_read_tokens`         | `int`      | Input tokens the chunk's invocations read from the cache.                                                                                                                                                      |
+| `blizzard.chunk.cache_create_tokens`       | `int`      | Input tokens the chunk's invocations wrote to the cache.                                                                                                                                                       |
+| `blizzard.chunk.cost.usd`                  | `double`   | The chunk's cost in US dollars, including any estimate.                                                                                                                                                        |
+| `blizzard.chunk.cost.estimated`            | `bool`     | Whether part of the cost is a subscription estimate rather than a billed amount.                                                                                                                               |
+| `blizzard.chunk.cost.partial`              | `bool`     | Whether some invocation reported no cost, so the total is a floor.                                                                                                                                             |
+| `blizzard.invocation.kind`                 | `string`   | What the invocation was: `spawn`, `resume` or `judge`; a nudge reads `resume`.                                                                                                                                 |
+| `blizzard.invocation.input_tokens`         | `int`      | Input tokens, not counting cache.                                                                                                                                                                              |
+| `blizzard.invocation.output_tokens`        | `int`      | Output tokens.                                                                                                                                                                                                 |
+| `blizzard.invocation.cache_read_tokens`    | `int`      | Input tokens read from the cache.                                                                                                                                                                              |
+| `blizzard.invocation.cache_create_tokens`  | `int`      | Input tokens written to the cache.                                                                                                                                                                             |
+| `blizzard.invocation.cost.usd`             | `double`   | The invocation's cost in US dollars, including any estimate.                                                                                                                                                   |
+| `blizzard.invocation.cost.estimated`       | `bool`     | Whether the cost is a subscription estimate.                                                                                                                                                                   |
+| `gen_ai.response.model`                    | `string`   | The model that answered.                                                                                                                                                                                       |
+| `gen_ai.usage.input_tokens`                | `int`      | All input tokens, cache reads and writes included.                                                                                                                                                             |
+| `gen_ai.usage.output_tokens`               | `int`      | Output tokens.                                                                                                                                                                                                 |
+| `gen_ai.usage.cache_read.input_tokens`     | `int`      | Input tokens read from the cache.                                                                                                                                                                              |
+| `gen_ai.usage.cache_creation.input_tokens` | `int`      | Input tokens written to the cache.                                                                                                                                                                             |
+| `blizzard.lease.id`                        | `string`   | The runner lease the span belongs to.                                                                                                                                                                          |
+| `blizzard.lease.close_reason`              | `string`   | Why the lease closed, such as `transitioned`; either escalation reads `escalated`.                                                                                                                             |
+| `blizzard.session.name`                    | `string`   | The declared session the node ran in.                                                                                                                                                                          |
+| `blizzard.model.resolved`                  | `string`   | The model the runner resolved the session's tier to.                                                                                                                                                           |
+| `blizzard.effort.resolved`                 | `string`   | The effort the runner resolved the session's effort to.                                                                                                                                                        |
+| `blizzard.invocation.nudge`                | `bool`     | Whether a nudge opened the invocation.                                                                                                                                                                         |
+| `blizzard.invocation.generation`           | `int`      | The worker generation the invocation belongs to.                                                                                                                                                               |
+| `blizzard.invocation.end_source`           | `string`   | What ended the invocation: `session_end`, `next_invocation` or `lease_close`.                                                                                                                                  |
+| `blizzard.overload.streak`                 | `int`      | The backoff's place in its streak of overloads, counting from 1.                                                                                                                                               |
+| `blizzard.context.tokens`                  | `int`      | The session's context size in tokens when sampled.                                                                                                                                                             |
+| `blizzard.check.index`                     | `int`      | The check's position in the node's declared checks, counting from 1.                                                                                                                                           |
+| `blizzard.check.passed`                    | `bool`     | Whether that check passed.                                                                                                                                                                                     |
+| `blizzard.checks.passed`                   | `bool`     | Whether every check passed.                                                                                                                                                                                    |
+| `blizzard.checks.count`                    | `int`      | How many checks ran.                                                                                                                                                                                           |
+| `gen_ai.operation.name`                    | `string`   | Always `invoke_agent`.                                                                                                                                                                                         |
+| `gen_ai.agent.name`                        | `string`   | The declared session the node ran in.                                                                                                                                                                          |
+| `gen_ai.conversation.id`                   | `string`   | The harness session id, for a worker invocation.                                                                                                                                                               |
+| `gen_ai.request.model`                     | `string`   | The model the runner resolved for the session.                                                                                                                                                                 |
 
 The hub renders each work ref in `blizzard.chunk.work_refs` under its work source's slug as it tells a span, so a span
 told after a source's slug changes carries the new slug. A runner's spans carry the labels its lease was handed when the
@@ -371,8 +372,8 @@ step's root, as described under **Nesting under a step** below. The [Spans](#spa
   runner continues an incoming `traceparent` as before.
 - **Which runner.** The runner stamps each of its platform spans with the id and name of its latest registration, read
   as the span starts, so a rename by restart shows from the first span after it; a span started before the runner's
-  first registration is never exported. The hub stamps a request a runner bearer authenticated with that runner's id
-  and the name the hub holds for it.
+  first registration is never exported. The hub stamps a request a runner bearer authenticated with that runner's id and
+  the name the hub holds for it.
 - **What is left out.** A worker's `POST /runners/{runner_id}/api/heartbeat` and any `/v1/traces`, `/v1/metrics` or
   `/v1/logs` path make no span, and neither do the store queries they run.
 - **Names.** `service.name` follows the rule in [Resource attributes](#resource-attributes). Sweep and tick spans carry
@@ -420,12 +421,12 @@ parent that is never exported, so a backend shows them grouped under a root that
 ### Worker spans
 
 A worker's own tools can send spans to the runner that spawned them. The runner serves OTLP over HTTP at
-`POST /runners/{runner_id}/v1/traces` on the same TCP port and unix socket as its API, and forwards what it accepts through its own platform
-pipeline, so the spans leave to the same endpoint, through the same redacting export, as its own. The receiver exists
-only while platform tracing is on and the runner has registered with its hub; otherwise the path answers `404`, and a
-sender is expected to carry on.
-[Harness telemetry](#harness-telemetry) adds `/v1/metrics` and `/v1/logs` under the same prefix, which follow the same
-authentication, encodings and caps, with the exceptions listed there.
+`POST /runners/{runner_id}/v1/traces` on the same TCP port and unix socket as its API, and forwards what it accepts
+through its own platform pipeline, so the spans leave to the same endpoint, through the same redacting export, as its
+own. The receiver exists only while platform tracing is on and the runner has registered with its hub; otherwise the
+path answers `404`, and a sender is expected to carry on. [Harness telemetry](#harness-telemetry) adds `/v1/metrics` and
+`/v1/logs` under the same prefix, which follow the same authentication, encodings and caps, with the exceptions listed
+there.
 
 - **Authentication.** The worker's lease token, in `X-Blizzard-Lease-Token` or as an `Authorization: Bearer` header. The
   request names no lease: the runner finds the lease the token was minted for, which must still be active or under an
@@ -465,10 +466,10 @@ alongside `platform = true`, the runner also lets the programs a worker runs sen
 environment then carries `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` (`$BLIZZARD_RUNNER_URL/v1/traces`),
 `OTEL_EXPORTER_OTLP_TRACES_PROTOCOL=http/protobuf` and `OTEL_EXPORTER_OTLP_TRACES_HEADERS` (the lease token). It also
 sets winter's own switch, which ignores the generic names: `WINTER_OTEL_EXPORTER_OTLP_ENDPOINT` (`$BLIZZARD_RUNNER_URL`,
-the runner's base under its prefix; winter appends `/v1/traces`) and `WINTER_OTEL_EXPORTER_OTLP_HEADERS` (the lease token), so `winter` command spans nest
-under the step. With it off, no `WINTER_OTEL_*` variable and none of these `OTEL_EXPORTER_*` variables reaches a worker
-(a Claude Code worker may still get its own under [harness telemetry](#harness-telemetry)), and `WINTER_OTEL_*` names in
-`env_passthrough` are always withheld.
+the runner's base under its prefix; winter appends `/v1/traces`) and `WINTER_OTEL_EXPORTER_OTLP_HEADERS` (the lease
+token), so `winter` command spans nest under the step. With it off, no `WINTER_OTEL_*` variable and none of these
+`OTEL_EXPORTER_*` variables reaches a worker (a Claude Code worker may still get its own under
+[harness telemetry](#harness-telemetry)), and `WINTER_OTEL_*` names in `env_passthrough` are always withheld.
 
 - **What changes.** The receiver keeps spans under any scope with any attributes, and their `service.name` is
   `blizzard-worker-program`, except Claude Code's own scopes, which are `blizzard-claude-code`. Everything else holds:
@@ -499,26 +500,26 @@ alongside `platform = true`, a Claude Code worker exports its metrics, logs and 
 `claude` 2.1.288 to 2.1.289; the managed-settings behavior below is read from `claude`'s code, not run.
 
 - **What a worker gets.** For each signal you have not configured, each invocation's environment carries that signal's
-  exporter (`otlp`), endpoint (`$BLIZZARD_RUNNER_URL/v1/traces`, `/v1/metrics` or `/v1/logs`), protocol `http/protobuf` and
-  header (the lease token), plus `CLAUDE_CODE_ENABLE_TELEMETRY=1` and `CLAUDE_CODE_ENHANCED_TELEMETRY_BETA=1`. Only a
-  worker holding a lease token is pointed at the runner, and a takeover's attended session never is.
+  exporter (`otlp`), endpoint (`$BLIZZARD_RUNNER_URL/v1/traces`, `/v1/metrics` or `/v1/logs`), protocol `http/protobuf`
+  and header (the lease token), plus `CLAUDE_CODE_ENABLE_TELEMETRY=1` and `CLAUDE_CODE_ENHANCED_TELEMETRY_BETA=1`. Only
+  a worker holding a lease token is pointed at the runner, and a takeover's attended session never is.
 - **What the runner keeps.** Claude Code's scopes only: `com.anthropic.claude_code` for metrics, `.events` for logs,
   `.tracing` for traces. Each span, data point and log record is stamped with `blizzard.caller=worker`,
   `blizzard.chunk.id`, `blizzard.lease.id`, `blizzard.runner.id` and `blizzard.runner.name`, and with `blizzard.tenant`
   and `blizzard.tenant_name` once the runner's hub has named its tenant.
 - **Where it goes.** Under `service.name` `blizzard-claude-code` through the runner's own OpenTelemetry settings for
   that signal. Claude Code's own resource name is `claude-code`; `[tracing.worker_program_services]` renames by scope.
-- **Judgement turns.** A judgement, a `--resume` turn, was observed exporting metrics and logs but no spans on
-  `claude` 2.1.289.
+- **Judgement turns.** A judgement, a `--resume` turn, was observed exporting metrics and logs but no spans on `claude`
+  2.1.289.
 - **Yielding.** A signal is left to you when its own exporter or endpoint, or the generic `OTEL_EXPORTER_OTLP_ENDPOINT`,
   is set in the worker's allowlisted env or in the `env` of the settings document the runner passes as `--settings`: the
   published bundle's composed `settings.json` when there is one, otherwise `worker_settings_path`. A `--settings` `env`
   that sets that signal's `OTEL_EXPORTER_OTLP_<SIGNAL>_HEADERS` or `_PROTOCOL` yields it too, since either would replace
   the runner's own. For traces and logs, `BETA_TRACING_ENDPOINT` together with `ENABLE_BETA_TRACING_DETAILED` counts
   too, and so does a falsy `CLAUDE_CODE_ENABLE_TELEMETRY` in the `--settings` `env`, which switches telemetry off. The
-  variables the runner sets itself never cause a yield. With `worker_programs` on, its traces endpoint in the
-  process env beats a generic endpoint in settings, so a traces signal reported `operator-configured` can still reach
-  the runner.
+  variables the runner sets itself never cause a yield. With `worker_programs` on, its traces endpoint in the process
+  env beats a generic endpoint in settings, so a traces signal reported `operator-configured` can still reach the
+  runner.
 - **Opting out.** Put that signal's exporter, such as `OTEL_METRICS_EXPORTER=none`, in the `--settings` document's
   `env`. An edit to the default `<runner dir>/worker-settings.json` is erased by `runner init`; its durable homes are a
   bundle or a `worker_settings_path` that points elsewhere. The plan is derived when the runner starts, so a change to
@@ -529,10 +530,9 @@ alongside `platform = true`, a Claude Code worker exports its metrics, logs and 
   count is its spans, apart from the `worker spans` line. A signal has no runner destination when the runner's own
   OpenTelemetry variables give it none, such as a traces-only endpoint; the runner then sets nothing for it rather than
   letting Claude Code's localhost default take it.
-- **Precedence.** A `--settings` or user-settings `env` entry beats a same-named process variable, a
-  process signal-specific endpoint beats a settings generic one, and managed settings win per signal family (read from
-  `claude`'s code, not run). The
-  record of what was measured and what inferred, and when to measure again, is in
+- **Precedence.** A `--settings` or user-settings `env` entry beats a same-named process variable, a process
+  signal-specific endpoint beats a settings generic one, and managed settings win per signal family (read from
+  `claude`'s code, not run). The record of what was measured and what inferred, and when to measure again, is in
   blizzard-context's
   [`blizzard:manual-claude-code-harness-telemetry`](https://github.com/paul-gross/blizzard-context/blob/master/verification/blizzard/manual.md).
 - **Accepted overrides.** A generic endpoint, or an exporter with no endpoint, set only in the user's own Claude
@@ -540,20 +540,19 @@ alongside `platform = true`, a Claude Code worker exports its metrics, logs and 
   headers, the lease token goes to it as `X-Blizzard-Lease-Token`. A per-signal `OTEL_EXPORTER_OTLP_<SIGNAL>_HEADERS` or
   `_PROTOCOL` in the user's own Claude settings beats the runner's process variables and replaces its lease-token
   header: the runner refuses that signal `403`, nothing captures it, and status still says `captured`. Your header
-  value, an API key say, is then sent to the runner's receiver. Put that signal's exporter in the `--settings`
-  document, which opts it out, or set no per-signal headers or protocol.
+  value, an API key say, is then sent to the runner's receiver. Put that signal's exporter in the `--settings` document,
+  which opts it out, or set no per-signal headers or protocol.
 - **Your destinations switch on.** Claude Code exports nothing until `CLAUDE_CODE_ENABLE_TELEMETRY=1`, which the runner
   sets once any signal is captured, so the destinations you configured start receiving then. Traces also need
-  `CLAUDE_CODE_ENHANCED_TELEMETRY_BETA=1`, which the runner sets with it; you need both in your settings `env` only
-  when the runner captures nothing, such as when every signal is yielded.
+  `CLAUDE_CODE_ENHANCED_TELEMETRY_BETA=1`, which the runner sets with it; you need both in your settings `env` only when
+  the runner captures nothing, such as when every signal is yielded.
 - **Receivers.** `POST /v1/metrics` and `POST /v1/logs` take the trace receiver's authentication, encodings and 1 MiB
   cap, but answer `404` unless platform tracing and `harness_telemetry` are both on and the runner has registered. Each
   signal has its own per-lease rate, the same burst and sustained rates as the trace receiver's caps, counted in data
-  points or log records,
-  charged only for what is kept. A summary
-  metric point is refused and counted. Exponential histograms are carried, without their `zero_threshold`. Metrics leave
-  through a bounded background queue that drops its oldest batch when full, and logs through the SDK's batch log
-  processor. A log record keeps its trace context only inside the lease's work trace.
+  points or log records, charged only for what is kept. A summary metric point is refused and counted. Exponential
+  histograms are carried, without their `zero_threshold`. Metrics leave through a bounded background queue that drops
+  its oldest batch when full, and logs through the SDK's batch log processor. A log record keeps its trace context only
+  inside the lease's work trace.
 - **`TRACEPARENT`.** With traces captured Claude Code's spans join the chunk's trace under the step's root. It passes
   its own `claude_code.tool.execution` span on as `TRACEPARENT` to a tool it runs, so a
   [worker program](#worker-programs) that reads `TRACEPARENT` nests under that tool's span. A `blizzard runner`
@@ -656,19 +655,18 @@ event's `since` and `until` paste straight in. Replay takes `export:admin` too.
 - **Both traces come with them.** A replay tells the work root, the lifetime trace (its root, step spans and wait spans)
   and any `chunk completed` marker of each chunk that finished in the window, with the ids the sweep uses.
 - **Each request is bounded, a range is not.** A request's window is half-open, from `since` up to but not including
-  `until`. It must be positive, no wider than `replay_max_window` seconds in the `[tracing]` block, and end at or
-  before now; the daemon refuses a wider one with the limit named, and one ending in the future outright. The
-  `hub traces replay` and `runner traces replay` commands take any past range and refuse a future `--until` against the command line's own clock before sending any
-  window: they read the limit from the daemon and split the range
-  into consecutive windows of at most that width, printing a
-  line per window to standard error. Replay runs inside each request, so a window takes a while, and a command line
-  client waits up to ten minutes for each. If a window fails, whether the daemon refuses it or the request itself fails
-  or times out, the command stops and names the window and the `--since` value to resume from; the windows before it are
-  told and need not be told again. The resume value is rounded down to the second, and the overlap is deduped by span
-  id.
+  `until`. It must be positive, no wider than `replay_max_window` seconds in the `[tracing]` block, and end at or before
+  now; the daemon refuses a wider one with the limit named, and one ending in the future outright. The
+  `hub traces replay` and `runner traces replay` commands take any past range and refuse a future `--until` against the
+  command line's own clock before sending any window: they read the limit from the daemon and split the range into
+  consecutive windows of at most that width, printing a line per window to standard error. Replay runs inside each
+  request, so a window takes a while, and a command line client waits up to ten minutes for each. If a window fails,
+  whether the daemon refuses it or the request itself fails or times out, the command stops and names the window and the
+  `--since` value to resume from; the windows before it are told and need not be told again. The resume value is rounded
+  down to the second, and the overlap is deduped by span id.
 - **`--dry-run` sends nothing.** It reports the steps, chunks, spans and batches the window would tell, and works with
-  tracing off, which is a cheap way to size a window. Without `--dry-run`, a hub with tracing off refuses the replay.
-  A runner refuses any replay, a dry run too, until its first registration with its hub.
+  tracing off, which is a cheap way to size a window. Without `--dry-run`, a hub with tracing off refuses the replay. A
+  runner refuses any replay, a dry run too, until its first registration with its hub.
 
 If the exporter refuses a batch, the replay stops and reports what it had told by then.
 
@@ -680,13 +678,13 @@ and the trace schema and scope versions stay `3`. From the upgrade on:
 
 - **`blizzard.runner.id` carries the `rn_` id.** Spans told before the upgrade carry the runner's name there, and a
   backend keeps them as they were told; no replay is needed, and none rewrites them.
-- **`blizzard.runner.name` rides beside it** on every span that carries the id: the hub's step spans, the runner's
-  lease spans, the harness spans, data points and log records it forwards, and both daemons' platform spans.
+- **`blizzard.runner.name` rides beside it** on every span that carries the id: the hub's step spans, the runner's lease
+  spans, the harness spans, data points and log records it forwards, and both daemons' platform spans.
 
 To select one runner across the upgrade, match its name in `blizzard.runner.name`, or in `blizzard.runner.id` on a span
 that has no `blizzard.runner.name`. A hub replay of a window from before the upgrade tells its steps again under the
-same span ids, now with the `rn_` id and the name, and a runner replay tells a lease minted before the upgrade under
-the id of the runner's current registration, the one the hub's spans carry; a backend that dedupes on span ids keeps
+same span ids, now with the `rn_` id and the name, and a runner replay tells a lease minted before the upgrade under the
+id of the runner's current registration, the one the hub's spans carry; a backend that dedupes on span ids keeps
 whichever it was told first. An upgraded runner tells nothing until its first registration with the upgraded hub, then
 tells the leases that closed meanwhile.
 

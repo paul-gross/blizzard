@@ -77,10 +77,12 @@ def _ms(start: datetime, end: datetime) -> int:
     return max(0, round((end - start).total_seconds() * 1000))
 
 
-def _backlog_end(facts: StepFacts, finish: datetime) -> datetime:
-    """When the chunk left the backlog: its first promotion, else its first lease, else its finish."""
-    ends = [finish, *(p.promoted_at for p in facts.promotions), *(lease.minted_at for lease in facts.lease_facts)]
-    return min(ends)
+def _backlog_stretches(facts: StepFacts, minted: datetime, finish: datetime) -> list[tuple[datetime, datetime]]:
+    """Each stretch the chunk spent in the backlog. The first runs from the mint, each later one from a demotion;
+    a stretch ends at the next promotion, else the next lease, else the finish."""
+    leaves = [*(p.promoted_at for p in facts.promotions), *(lease.minted_at for lease in facts.lease_facts)]
+    starts = [minted, *sorted(d.demoted_at for d in facts.demotions if minted <= d.demoted_at < finish)]
+    return [(start, min([finish, *(at for at in leaves if at >= start)])) for start in starts]
 
 
 def _escalation_waits(facts: StepFacts, finish: datetime) -> list[_Wait]:
@@ -137,7 +139,9 @@ def _pause_waits(facts: StepFacts, finish: datetime, held: list[tuple[datetime, 
 
 def _chunk_waits(facts: StepFacts, minted: datetime, finish: datetime) -> list[_Wait]:
     """The backlog and escalation waits, each ending no later than the finish."""
-    waits = [_Wait(ChunkRole.BACKLOG, "backlog wait", minted, _backlog_end(facts, finish))]
+    waits = [
+        _Wait(ChunkRole.BACKLOG, "backlog wait", start, end) for start, end in _backlog_stretches(facts, minted, finish)
+    ]
     waits += _escalation_waits(facts, finish)
     return [_Wait(w.role, w.name, w.start, min(w.end, finish)) for w in waits]
 
@@ -257,7 +261,7 @@ def assemble_lifetime(facts: StepFacts) -> tuple[FinishedSpan, ...]:
     """The lifetime root, a span per closed step, then the wait spans. An unfinished chunk is refused."""
     end, finish = _finish(facts)
     minted = _minted(facts)
-    backlog_end = _backlog_end(facts, finish)
+    backlog_ms = sum(_ms(start, end) for start, end in _backlog_stretches(facts, minted, finish))
     dims = _dimensions(facts)
     root = FinishedSpan(
         context=lifetime_context(facts.chunk_id),
@@ -268,8 +272,8 @@ def assemble_lifetime(facts: StepFacts) -> tuple[FinishedSpan, ...]:
         attributes={
             **dims,
             attr.CHUNK_OUTCOME: end.outcome.value,
-            attr.CHUNK_BACKLOG_MS: _ms(minted, backlog_end),
-            attr.CHUNK_ACTIVE_MS: _ms(backlog_end, finish),
+            attr.CHUNK_BACKLOG_MS: backlog_ms,
+            attr.CHUNK_ACTIVE_MS: max(0, _ms(minted, finish) - backlog_ms),
             **_totals(facts),
         },
         service_name=attr.CHUNK_SERVICE_NAME,

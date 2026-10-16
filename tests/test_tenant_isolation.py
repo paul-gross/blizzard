@@ -225,6 +225,7 @@ _PROBES: dict[tuple[str, str], _Probe] = {
     ("POST", "/api/chunks/{chunk_id}/complete"): _f({}),
     ("POST", "/api/chunks/{chunk_id}/dependencies"): _f({"prerequisite_chunk_id": "{chunk_id}"}),
     ("POST", "/api/chunks/{chunk_id}/dependencies/release"): _f({"prerequisite_chunk_id": "{chunk_id}"}),
+    ("POST", "/api/chunks/{chunk_id}/demote"): _f(),
     ("POST", "/api/chunks/{chunk_id}/detach"): _f(),
     ("POST", "/api/chunks/{chunk_id}/garden-delivery"): _f({}, params=_MARKER),
     ("POST", "/api/chunks/{chunk_id}/group"): _f({"merge_chunk_ids": ["{chunk_id}"]}),

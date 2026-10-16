@@ -17,9 +17,15 @@
      refuse, not merely hide a button. A guest on a reorderable lane
      falls to the plain, undraggable branch below, same as every non-reorderable lane. -->
 @if (reorderControls() && canReorder()) {
-  <div class="b-col-body" cdkDropList (cdkDropListDropped)="dropped($event)">
+  <div
+    class="b-col-body"
+    cdkDropList
+    [id]="dropId()"
+    [cdkDropListConnectedTo]="connectedTo()"
+    (cdkDropListDropped)="dropped($event)"
+  >
     @for (card of cards(); track card.chunkId) {
-      <div class="q-card" cdkDrag>
+      <div class="q-card" cdkDrag [cdkDragData]="card.chunkId">
         <span class="reorder-grip" data-testid="board-reorder-grip" aria-hidden="true">
           <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
         </span>

@@ -40,6 +40,7 @@ from blizzard.hub.domain.observability.tracing.facts import (
     TracedChunkStop,
     TracedDecision,
     TracedDecisionResolution,
+    TracedDemotion,
     TracedEpochOwner,
     TracedEscalation,
     TracedPause,
@@ -75,7 +76,6 @@ def _done(**extra: Any) -> StepFacts:
     """build, review (bounced), build again, review, then the terminal: one chunk, four steps."""
     parts = fx.merge(fx.runner_epoch(1, 10), fx.runner_epoch(2, 35), fx.runner_epoch(3, 60), fx.runner_epoch(4, 85))
     return fx.make_facts(
-        promotions=(TracedPromotion(fx.at(5)),),
         routes_created=(TracedRouteCreation(fx.at(6)),),
         transitions=(
             fx.to("g1", "review", 30, 1),
@@ -86,7 +86,7 @@ def _done(**extra: Any) -> StepFacts:
         bounces=(TracedBounce(2, "conflict", fx.at(50)),),
         usage=(_usage(1, 20), _usage(3, 70)),
         work_refs=("acme#42",),
-        **{**parts, **extra},
+        **{"promotions": (TracedPromotion(fx.at(5)),), **parts, **extra},
     )
 
 
@@ -551,3 +551,33 @@ def test_a_chunk_without_an_ingest_instant_is_not_a_finished_item() -> None:
     facts = _done(minted_at=None)
 
     assert _window(facts, CursorKey.opening(fx.at(0))).finished_chunks() == ()
+
+
+def test_a_promote_demote_promote_cycle_tells_one_backlog_wait_per_stretch() -> None:
+    facts = fx.make_facts(
+        promotions=(TracedPromotion(fx.at(5)), TracedPromotion(fx.at(20))),
+        demotions=(TracedDemotion(fx.at(10)),),
+        chunk_stopped=(TracedChunkStop(fx.at(40)),),
+    )
+
+    spans = assemble_lifetime(facts)
+
+    chunk = spans[0]
+    backlog = [(s.start, s.end) for s in spans if s.name == "backlog wait"]
+    assert backlog == [(fx.at(0), fx.at(5)), (fx.at(10), fx.at(20))]
+    assert chunk.attributes[attr.CHUNK_BACKLOG_MS] == 15000
+    assert chunk.attributes[attr.CHUNK_ACTIVE_MS] == 25000
+
+
+def test_a_demoted_chunk_claimed_after_its_re_promotion_has_no_wait_over_a_step_span() -> None:
+    facts = _done(
+        promotions=(TracedPromotion(fx.at(2)), TracedPromotion(fx.at(8))), demotions=(TracedDemotion(fx.at(4)),)
+    )
+
+    spans = assemble_lifetime(facts)
+
+    waits = [s for s in spans if s.name == "backlog wait"]
+    steps = [s for s in spans if s.attributes.get(attr.STEP_KIND) is not None]
+    assert len(waits) == 2 and steps
+    for wait in waits:
+        assert not [s for s in steps if s.start < wait.end and wait.start < s.end]

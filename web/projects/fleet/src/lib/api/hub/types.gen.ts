@@ -7,6 +7,7 @@ export type ClientOptions = {
 export const ActivityChunkChangeCause = {
     MINTED: 'minted',
     PROMOTED: 'promoted',
+    DEMOTED: 'demoted',
     GROUPED: 'grouped',
     CLAIMED: 'claimed',
     NODE_COMPLETED: 'node-completed',
@@ -875,6 +876,7 @@ export type ChoiceTargetKind = typeof ChoiceTargetKind[keyof typeof ChoiceTarget
 export const ChunkChangeCause = {
     MINTED: 'minted',
     PROMOTED: 'promoted',
+    DEMOTED: 'demoted',
     GROUPED: 'grouped',
     CLAIMED: 'claimed',
     NODE_COMPLETED: 'node-completed',
@@ -909,7 +911,7 @@ export type ChunkChangedPayload = {
     /**
      * Cause
      */
-    cause?: 'minted' | 'promoted' | 'grouped' | 'claimed' | 'node-completed' | 'migrated' | 'decision-submitted' | 'decision-resolved' | 'question-asked' | 'question-answered' | 'escalated' | 'requeued' | 'restarted' | 'detached' | 'paused' | 'resumed' | 'stopped' | 'completed' | 'hub-advanced' | 'deleted' | 'edited' | null;
+    cause?: 'minted' | 'promoted' | 'demoted' | 'grouped' | 'claimed' | 'node-completed' | 'migrated' | 'decision-submitted' | 'decision-resolved' | 'question-asked' | 'question-answered' | 'escalated' | 'requeued' | 'restarted' | 'detached' | 'paused' | 'resumed' | 'stopped' | 'completed' | 'hub-advanced' | 'deleted' | 'edited' | null;
     /**
      * Chunk Id
      */
@@ -1521,6 +1523,25 @@ export type ChunkPauseRequest = {
      * By
      */
     by?: string;
+};
+
+/**
+ * ChunkPlacementRequest
+ *
+ * Where a chunk lands in the list it enters — the optional body of ``POST /api/chunks/{id}/promote`` and
+ * ``POST /api/chunks/{id}/demote``. ``after_chunk_id`` lands it right after that member of the target list;
+ * ``to_top`` lands it at the head; neither lands it at the tail. Naming both is ``422``, as is a self-anchor; an
+ * anchor outside the target list is ``409``.
+ */
+export type ChunkPlacementRequest = {
+    /**
+     * After Chunk Id
+     */
+    after_chunk_id?: string | null;
+    /**
+     * To Top
+     */
+    to_top?: boolean;
 };
 
 /**
@@ -11168,6 +11189,39 @@ export type CompleteChunkApiChunksChunkIdCompletePostResponses = {
 
 export type CompleteChunkApiChunksChunkIdCompletePostResponse = CompleteChunkApiChunksChunkIdCompletePostResponses[keyof CompleteChunkApiChunksChunkIdCompletePostResponses];
 
+export type DemoteChunkApiChunksChunkIdDemotePostData = {
+    /**
+     * Request
+     */
+    body?: ChunkPlacementRequest | null;
+    path: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+    };
+    query?: never;
+    url: '/api/chunks/{chunk_id}/demote';
+};
+
+export type DemoteChunkApiChunksChunkIdDemotePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DemoteChunkApiChunksChunkIdDemotePostError = DemoteChunkApiChunksChunkIdDemotePostErrors[keyof DemoteChunkApiChunksChunkIdDemotePostErrors];
+
+export type DemoteChunkApiChunksChunkIdDemotePostResponses = {
+    /**
+     * Successful Response
+     */
+    202: ChunkSummary;
+};
+
+export type DemoteChunkApiChunksChunkIdDemotePostResponse = DemoteChunkApiChunksChunkIdDemotePostResponses[keyof DemoteChunkApiChunksChunkIdDemotePostResponses];
+
 export type DeclareDependencyApiChunksChunkIdDependenciesPostData = {
     body: ChunkDependencyDeclareRequest;
     path: {
@@ -11427,7 +11481,10 @@ export type GetPmItemsDeprecatedAliasApiChunksChunkIdPmItemsGetResponses = {
 export type GetPmItemsDeprecatedAliasApiChunksChunkIdPmItemsGetResponse = GetPmItemsDeprecatedAliasApiChunksChunkIdPmItemsGetResponses[keyof GetPmItemsDeprecatedAliasApiChunksChunkIdPmItemsGetResponses];
 
 export type PromoteChunkApiChunksChunkIdPromotePostData = {
-    body?: never;
+    /**
+     * Request
+     */
+    body?: ChunkPlacementRequest | null;
     path: {
         /**
          * Chunk Id

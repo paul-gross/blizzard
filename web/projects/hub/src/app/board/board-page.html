@@ -15,6 +15,7 @@
       (selectChunk)="select($event)"
       (promote)="onPromote($event)"
       (reposition)="reposition($event)"
+      (laneMove)="moveAcrossLanes($event)"
     />
     @if (actionError(); as err) {
       <p class="notice action-notice" data-testid="board-action-error" role="alert">{{ err }}</p>
