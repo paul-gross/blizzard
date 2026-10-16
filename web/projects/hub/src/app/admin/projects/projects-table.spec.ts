@@ -5,15 +5,9 @@ import { ProjectsTable } from './projects-table';
 import type { ProjectRowVm } from './projects.model';
 
 const ROWS: readonly ProjectRowVm[] = [
-  {
-    key: 'proj_b',
-    name: 'Blizzard',
-    revision: 4,
-    figures: ['3 linked sources', '3 linked repos', '5 in queue'],
-    needs: null,
-    wired: true,
-  },
-  { key: 'proj_c', name: 'Celestial', revision: 1, figures: [], needs: 'needs a runner', wired: false },
+  { key: 'proj_b', name: 'Blizzard', projectId: 'proj_01ABCDEFGHJKMNPQRSTVWXYZ12', needs: null, wired: true },
+  { key: 'proj_c', name: 'Celestial', projectId: 'proj_01ABCDEFGHJKMNPQRSTVWXYZ34', needs: 'needs a runner', wired: false },
+  { key: 'proj_d', name: 'Dormant', projectId: 'proj_01ABCDEFGHJKMNPQRSTVWXYZ56', needs: null, wired: false },
 ];
 
 describe('ProjectsTable', () => {
@@ -30,19 +24,22 @@ describe('ProjectsTable', () => {
     return { fixture, el: fixture.nativeElement as HTMLElement };
   }
 
-  it('shows each project with its revision and figures, a dot when wired and what a wanting one needs', async () => {
+  it('shows a light and the name, the needs badge when wanting, and the short id', async () => {
     const { el } = await mount(ROWS);
-    const blizzard = el.querySelector('[data-testid="projects-table-row-proj_b"]')!.textContent!;
-    expect(blizzard).toContain('Blizzard');
-    expect(blizzard).toContain('r4');
-    expect(el.querySelector('[data-testid="projects-table-figures-proj_b"]')!.textContent).toContain(
-      '3 linked sources',
-    );
-    expect(el.querySelector('[data-testid="projects-table-wired-proj_b"]')).not.toBeNull();
+    const light = (key: string) => el.querySelector(`[data-testid="projects-table-light-${key}"]`)!;
+    expect(el.querySelector('[data-testid="projects-table-row-proj_b"]')!.textContent).toContain('Blizzard');
+    expect(light('proj_b').getAttribute('aria-label')).toBe('wired');
+    expect(light('proj_b').classList).toContain('wired');
+    expect(light('proj_c').getAttribute('aria-label')).toBe('missing wiring');
+    expect(light('proj_c').classList).toContain('missing');
+    expect(light('proj_d').getAttribute('aria-label')).toBe('not yet judged');
+    expect(light('proj_d').classList).not.toContain('wired');
+    expect(light('proj_d').classList).not.toContain('missing');
     expect(el.querySelector('[data-testid="projects-table-needs-proj_b"]')).toBeNull();
     expect(el.querySelector('[data-testid="projects-table-needs-proj_c"]')!.textContent).toContain('needs a runner');
-    expect(el.querySelector('[data-testid="projects-table-wired-proj_c"]')).toBeNull();
-    expect(el.querySelector('[data-testid="projects-table-figures-proj_c"]')).toBeNull();
+    expect(el.querySelector('[data-testid="projects-table-ref-proj_b"]')!.textContent).toBe('PROJ-YZ12');
+    const row = el.querySelector('[data-testid="projects-table-row-proj_b"]')!.textContent!;
+    expect(row).not.toMatch(/\br\d/);
   });
 
   it('picks a project by its id', async () => {

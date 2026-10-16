@@ -123,9 +123,8 @@ interface ProjectLinkSets {
   readonly repositoryLinks: readonly RepositoryLinkView[];
 }
 
-/** Each listed project's links and chunk counts, by project id — the figures the projects list shows per row. Two
- * reads over the listed projects, one per freshness: the links sit under `hubProjectsKey`, so a project or link write
- * refreshes them, and the counts under `hubChunkCountsKey`, so the live chunk events do. */
+/** Each listed project's links, by project id — what the projects list judges a row's wiring by. The links sit under
+ * `hubProjectsKey`, so a project or link write refreshes them. */
 export function injectProjectFigures(projects: () => readonly ProjectView[]): Signal<ReadonlyMap<string, ProjectFigures>> {
   const links = injectQuery(() => {
     const ids = projects().map((project) => project.project_id);
@@ -141,24 +140,14 @@ export function injectProjectFigures(projects: () => readonly ProjectView[]): Si
         ),
     };
   });
-  const counts = injectQuery(() => {
-    const slugs = projects().map((project) => project.slug);
-    return {
-      queryKey: [...hubChunkCountsKey, 'per-project', slugs],
-      enabled: slugs.length > 0,
-      queryFn: (): Promise<ChunkCountsView[]> => Promise.all(slugs.map((slug) => readChunkCounts(slug))),
-    };
-  });
   return computed(() => {
     const linkSets = links.data();
-    const chunkCounts = counts.data();
     return new Map(
       projects().map((project, index) => [
         project.project_id,
         {
           sourceLinks: linkSets?.[index]?.sourceLinks,
           repositoryLinks: linkSets?.[index]?.repositoryLinks,
-          counts: chunkCounts?.[index],
         },
       ]),
     );

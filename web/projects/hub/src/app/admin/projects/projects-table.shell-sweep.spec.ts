@@ -7,8 +7,8 @@ import type { ProjectRowVm } from './projects.model';
 
 /**
  * The projects table's real-render proof (the tooled half of `blizzard-context:/verification/blizzard.md`'s
- * `web:shell-sweep` method): at every width, with a project name of any length, every figure and the longest
- * "needs a …" badge showing, the page never scrolls sideways and the badge and revision stay on screen.
+ * `web:shell-sweep` method): at every width, with a project name of any length, the longest
+ * "needs a …" badge and the short id showing, the page never scrolls sideways and both stay on screen.
  * A real CSS layout claim jsdom cannot make.
  *
  * Excluded from the default `ng test hub` run (`angular.json`'s `test.exclude`) because it needs
@@ -20,16 +20,14 @@ const ROWS: readonly ProjectRowVm[] = [
   {
     key: 'proj_long',
     name: LONG,
-    revision: 128,
-    figures: ['12 linked sources', '10 linked repos', '1024 in queue'],
+    projectId: 'proj_01ABCDEFGHJKMNPQRSTVWXYZ12',
     needs: 'needs a work source, a repository, a runner',
     wired: false,
   },
   {
     key: 'proj_b',
     name: 'Blizzard',
-    revision: 4,
-    figures: ['3 linked sources', '3 linked repos', '5 in queue'],
+    projectId: 'proj_01ABCDEFGHJKMNPQRSTVWXYZ34',
     needs: null,
     wired: true,
   },
@@ -66,6 +64,8 @@ async function sweep(width: number) {
     const box = badge.getBoundingClientRect();
     expect(box.width, 'the badge has no width').toBeGreaterThan(0);
     expect(box.right, `the badge is pushed off screen at ${width}px`).toBeLessThanOrEqual(width);
+    const ref = root.querySelector<HTMLElement>('[data-testid="projects-table-ref-proj_long"]')!;
+    expect(ref.getBoundingClientRect().right, `the short id is pushed off screen at ${width}px`).toBeLessThanOrEqual(width);
   } finally {
     root.remove();
     window.removeEventListener('error', onError);

@@ -52,6 +52,8 @@ export const ENTITY_DISPLAY: Readonly<Partial<Record<IdPrefix, EntityDisplay>>> 
   /* `rtn` (a routine) and `rn` (a runner) would both default to `R`; the runner keeps the bare letter. */
   rtn: { sigil: 'RTN', tailLength: 4 },
   rn: { sigil: 'R', tailLength: 4 },
+  /* `proj` (a project) would default to `P`; the full word reads as a project at a glance. */
+  proj: { sigil: 'PROJ', tailLength: 4 },
 };
 
 const DEFAULT_TAIL_LENGTH = 4;

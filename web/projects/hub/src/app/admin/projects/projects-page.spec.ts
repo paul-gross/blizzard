@@ -95,21 +95,16 @@ describe('ProjectsPage', () => {
     return { harness, el: harness.routeNativeElement as HTMLElement, router: TestBed.inject(Router) };
   }
 
-  it('lists every project on All with its figures, marking the wired one and what the other needs, and opens the first', async () => {
+  it('lists every project on All with its light and short id, marking the wired one and what the other needs, and opens the first', async () => {
     const { el, router } = await open('/admin/projects');
     expect(el.querySelector('[data-testid="projects-table-row-proj_w"]')).not.toBeNull();
-    const figures = el.querySelector('[data-testid="projects-table-figures-proj_b"]')!.textContent!;
-    expect(figures).toContain('1 linked source');
-    expect(figures).toContain('1 linked repo');
-    expect(figures).toContain('3 in queue');
-    expect(el.querySelector('[data-testid="projects-table-wired-proj_b"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="projects-table-light-proj_b"]')!.getAttribute('aria-label')).toBe('wired');
+    expect(el.querySelector('[data-testid="projects-table-ref-proj_b"]')!.textContent).toContain('PROJ-');
     expect(el.querySelector('[data-testid="projects-table-needs-proj_w"]')!.textContent).toContain(
       'needs a work source, a repository, a runner',
     );
     expect(router.url).toBe('/admin/projects/proj_b');
-    expect(stub.forRoute('/api/chunk-counts', 'GET').map((call) => call.search)).toEqual(
-      expect.arrayContaining(['?project=blizzard', '?project=winter']),
-    );
+    expect(stub.forRoute('/api/chunk-counts', 'GET').map((call) => call.search)).not.toContain('?project=winter');
   });
 
   it('heads the list and puts New project beside it', async () => {
