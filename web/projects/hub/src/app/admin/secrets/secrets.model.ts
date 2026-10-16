@@ -23,7 +23,7 @@ export function secretRows(secrets: readonly SecretView[], filter: LifecycleFilt
   return filterByLifecycle(secrets, filter).map((secret) => ({
     key: secret.name,
     title: secret.name,
-    sub: [`replaced by ${secret.replaced_by}`, referenceCount(secret)],
+    sub: [referenceCount(secret)],
     badges: secretBadges(secret),
     revision: secret.revision,
     retired: secret.retired ?? false,

@@ -1,7 +1,5 @@
 import { type MemberView, type hubApi, errorMessage } from 'fleet';
 
-import type { TenantResolution } from '../../core/auth/tenant-context';
-
 /** A refused membership change's message through `errorMessage` (its 422 handling included), a generic failure line
  * when it carries none, or `null` with no error. */
 export function memberChangeErrorText(error: unknown): string | null {
@@ -31,23 +29,12 @@ export function canRevoke(member: MemberView, currentUserId: string | null): boo
   return member.user_id !== currentUserId && member.revocable === true;
 }
 
-/** The selected tenant's name, empty while none is selected. */
-export function tenantNameOf(resolution: TenantResolution): string {
-  return resolution.kind === 'selected' ? resolution.tenant.name : '';
-}
-
-/** The members page's label, naming the tenant when it has a name. */
-export function membersLabel(tenantName: string): string {
-  return tenantName === '' ? 'Members' : `Members of ${tenantName}`;
-}
-
-/** What the revocation dialog asks before ending `member`'s membership in `tenantName`; `null` with no member. */
-export function revokePrompt(member: MemberView | null, tenantName: string) {
+/** What the revocation dialog asks before ending `member`'s membership; `null` with no member. */
+export function revokePrompt(member: MemberView | null) {
   if (member === null) return null;
-  const where = tenantName === '' ? 'this tenant' : tenantName;
   return {
     heading: 'Revoke membership',
-    message: `${member.display_name} (${member.username}) loses access to ${where}. An invitation brings them back.`,
+    message: `${member.display_name} (${member.username}) loses access to this tenant. An invitation brings them back.`,
     confirmLabel: 'Revoke',
     variant: 'danger' as const,
   };

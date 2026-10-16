@@ -2,7 +2,6 @@ import type { GardenProposalView, ProjectView, RoutineView, RunRowView, ScopeVie
 
 import { lensLink } from '../../core/project-lens';
 import { GARDENING_DOORWAY_URL, GARDENING_LANDING_TAB } from '../core/garden-project';
-import type { TenantResolution } from '../../core/auth/tenant-context';
 import { isGardenProposalWaiting, waitingLabel } from '../proposals/gardening-proposals-page.model';
 
 export { waitingLabel };
@@ -84,14 +83,4 @@ export function sweepingLabel(inProgress: number): string {
 /** The way-in's text, its possessive following the name: "Open Default's garden", "Open Widgets' garden". */
 export function openGardenLabel(name: string): string {
   return `Open ${name}${/s$/i.test(name) ? "'" : "'s"} garden`;
-}
-
-/** The tenant a garden doorway shows, from the identity's memberships settled by `resolve`; empty until settled. */
-export function doorwayTenantName(resolution: TenantResolution | null): string {
-  return resolution?.kind === 'selected' ? resolution.tenant.name : '';
-}
-
-/** The doorway panel's title: "Gardens in {tenant}", or "Gardens" while the tenant is not yet named. */
-export function doorwayTitle(tenantName: string): string {
-  return tenantName === '' ? 'Gardens' : `Gardens in ${tenantName}`;
 }

@@ -11,7 +11,6 @@ import {
   projectCreate,
   projectPatch,
   projectRows,
-  projectsCaption,
   repositoryLinkRows,
   servedProjectIds,
   sourceLinkRows,
@@ -119,11 +118,9 @@ describe('projects model', () => {
     expect(servedProjectIds([WINTER], undefined)).toBeNull();
   });
 
-  it('lists the lensed project alone, captions the list by tenant, and counts only links in force', () => {
+  it('lists the lensed project alone, and counts only links in force', () => {
     expect(listedProjects([BLIZZARD, WINTER], 'proj_w')).toEqual([WINTER]);
     expect(listedProjects(undefined, null)).toEqual([]);
-    expect(projectsCaption('grosscode')).toBe('Projects in grosscode');
-    expect(projectsCaption('')).toBe('Projects');
     expect(linkCount([JIRA_LINK, GONE_LINK])).toBe(1);
     expect(linkCount(undefined)).toBeNull();
     expect(projectTabs(2, null).map((tab) => [tab.label, tab.count ?? null])).toEqual([
@@ -144,18 +141,17 @@ describe('projects model', () => {
 
   it("states the overview's facts, leaving out the ones not yet read", () => {
     const labels = (facts: readonly { label: string }[]) => facts.map((fact) => fact.label);
-    expect(labels(projectFacts(BLIZZARD, { tenant: '', former: [], counts: undefined, created: undefined, revision: undefined }))).toEqual([
+    expect(labels(projectFacts(BLIZZARD, { former: [], counts: undefined, created: undefined, revision: undefined }))).toEqual([
       'Slug',
       'Id',
     ]);
     const full = projectFacts(BLIZZARD, {
-      tenant: 'grosscode',
       former: ['default'],
       counts: counts(1, 1, 3),
       created: undefined,
       revision: undefined,
     });
-    expect(labels(full)).toEqual(['Tenant', 'Slug', 'Former slugs', 'Queue', 'Id']);
+    expect(labels(full)).toEqual(['Slug', 'Former slugs', 'Queue', 'Id']);
     expect(full.find((fact) => fact.label === 'Queue')?.value).toBe('1 ready · 1 running');
   });
 

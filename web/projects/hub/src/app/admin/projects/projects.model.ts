@@ -41,11 +41,6 @@ export function listedProjects(projects: readonly ProjectView[] | undefined, len
   return (projects ?? []).filter((project) => lensId === null || project.project_id === lensId);
 }
 
-/** The list's caption, naming the tenant once it is known. */
-export function projectsCaption(tenantName: string): string {
-  return tenantName === '' ? 'Projects' : `Projects in ${tenantName}`;
-}
-
 /** What one project's own reads hold for its list row — each `undefined` until it answers. */
 export interface ProjectFigures {
   readonly sourceLinks?: readonly SourceLinkView[];

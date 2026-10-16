@@ -5,11 +5,9 @@ import {
   canChangeRole,
   canRevoke,
   memberChangeErrorText,
-  membersLabel,
   pendingMemberIds,
   revokePrompt,
   roleChoices,
-  tenantNameOf,
 } from './members-page.model';
 
 const GRACE: MemberView = {
@@ -85,32 +83,17 @@ describe('canChangeRole / canRevoke', () => {
 
 describe('revokePrompt', () => {
   it('is null with no member', () => {
-    expect(revokePrompt(null, 'Acme')).toBeNull();
+    expect(revokePrompt(null)).toBeNull();
   });
 
   it('names the member and the tenant', () => {
-    const prompt = revokePrompt(GRACE, 'Acme')!;
+    const prompt = revokePrompt(GRACE)!;
     expect(prompt.message).toContain('Grace (grace)');
-    expect(prompt.message).toContain('Acme');
+    expect(prompt.message).toContain('this tenant');
     expect(prompt.variant).toBe('danger');
   });
 
-  it('reads "this tenant" without a name', () => {
-    expect(revokePrompt(GRACE, '')!.message).toContain('this tenant');
-  });
-});
-
-describe('tenantNameOf / membersLabel', () => {
-  const ACME = { tenant_id: 'ten_acme', name: 'Acme', role: 'admin' as const, permissions: [] };
-
-  it("reads the selected tenant's name, and none otherwise", () => {
-    expect(tenantNameOf({ kind: 'selected', tenant: ACME, tenants: [ACME] })).toBe('Acme');
-    expect(tenantNameOf({ kind: 'choose', tenants: [ACME] })).toBe('');
-    expect(tenantNameOf({ kind: 'none' })).toBe('');
-  });
-
-  it('labels the page with the tenant when it has a name', () => {
-    expect(membersLabel('Acme')).toBe('Members of Acme');
-    expect(membersLabel('')).toBe('Members');
+  it('names no tenant', () => {
+    expect(revokePrompt(GRACE)!.message).toContain('loses access to this tenant');
   });
 });

@@ -14,9 +14,3 @@
   flex: 1;
   min-width: 0;
 }
-.foot {
-  margin: 0;
-  padding: 8px;
-  color: var(--label-dim);
-  font-size: var(--fs-sm);
-}

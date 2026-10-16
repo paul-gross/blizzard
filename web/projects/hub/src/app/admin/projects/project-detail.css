@@ -52,25 +52,6 @@
   flex-wrap: wrap;
   gap: 8px;
 }
-.pointer {
-  margin: 0;
-  padding: 6px 10px;
-  border-left: 2px solid var(--cyan-dim);
-  color: var(--label);
-  font-size: var(--fs-sm);
-  overflow-wrap: anywhere;
-}
-.pointer b {
-  color: var(--text);
-}
-.pointer a {
-  color: var(--cyan);
-  text-decoration: none;
-}
-.pointer a:hover,
-.pointer a:focus-visible {
-  text-decoration: underline;
-}
 .section {
   margin: 8px 0 0;
   font-size: var(--fs-label);

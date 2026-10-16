@@ -10,12 +10,6 @@
 .older {
   padding: 6px 8px;
 }
-.foot {
-  margin: 0;
-  padding: 8px;
-  color: var(--label-dim);
-  font-size: var(--fs-sm);
-}
 .detail-pane {
   min-width: 0;
   padding: 8px 12px;

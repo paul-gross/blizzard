@@ -77,10 +77,10 @@ describe('MembersTable', () => {
   });
 
   it('labels the panel with its label input', async () => {
-    const { el } = await mount({ label: 'Members of Acme' });
+    const { el } = await mount({ label: 'Members' });
 
-    expect(el.querySelector('[data-testid="members-table"]')?.getAttribute('aria-label')).toBe('Members of Acme');
-    expect(el.textContent).toContain('Members of Acme');
+    expect(el.querySelector('[data-testid="members-table"]')?.getAttribute('aria-label')).toBe('Members');
+    expect(el.textContent).toContain('Members');
   });
 
   it('tags a member who is a hub administrator', async () => {

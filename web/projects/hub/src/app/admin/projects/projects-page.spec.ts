@@ -112,7 +112,7 @@ describe('ProjectsPage', () => {
     );
   });
 
-  it('heads the list with the tenant and puts New project beside it', async () => {
+  it('heads the list and puts New project beside it', async () => {
     const { el } = await open('/admin/projects');
     const head = el.querySelector('[data-testid="admin-projects-list-panel"] .p-hdr')!;
     expect(head.textContent).toContain('Projects');

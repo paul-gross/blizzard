@@ -48,8 +48,6 @@ export function servedByLines(runners: readonly RunnerRegistryView[]): readonly 
 
 /** What the overview's facts read besides the project itself. */
 export interface ProjectFactsInput {
-  /** The tenant the project belongs to, by name; empty until known. */
-  readonly tenant: string;
   /** The slugs the project left, newest first. */
   readonly former: readonly string[];
   /** The project's chunk counts, once read. */
@@ -60,12 +58,11 @@ export interface ProjectFactsInput {
   readonly revision: TemplateRef<unknown> | undefined;
 }
 
-/** The project's facts: its tenant, its slug and the slugs it left, when it was made, its queue, its revision and
+/** The project's facts: its slug and the slugs it left, when it was made, its queue, its revision and
  * its id. A fact whose read has not answered is left out rather than shown empty. */
 export function projectFacts(project: ProjectView | null, input: ProjectFactsInput): readonly KitFact[] {
   if (project === null) return [];
   const facts: KitFact[] = [];
-  if (input.tenant) facts.push({ label: 'Tenant', value: input.tenant, testid: 'admin-projects-tenant' });
   facts.push({ label: 'Slug', value: project.slug, testid: 'admin-projects-slug' });
   if (input.former.length > 0) {
     facts.push({ label: 'Former slugs', value: input.former.join(', '), testid: 'admin-projects-former-slugs' });

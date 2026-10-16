@@ -6,7 +6,7 @@ import { type GardenProposalView, type ProjectView, type RoutineView, type RunRo
 import { type RequestClientStub, settle, stubRequestClient } from 'fleet/testing';
 
 import { GardeningDoorway } from './gardening-doorway';
-import { doorwayCards, doorwayTenantName, doorwayTitle, openGardenLabel, sweepingLabel, waitingLabel } from './gardening-doorway.model';
+import { doorwayCards, openGardenLabel, sweepingLabel, waitingLabel } from './gardening-doorway.model';
 
 /** The doorway's tenant-wide reads, for a tenant of two projects — `blizzard` planted and served, `winter` neither. */
 const DOORWAY_PROJECTS = [
@@ -139,15 +139,6 @@ describe('doorwayCards', () => {
     expect(openGardenLabel('Default')).toBe("Open Default's garden");
     expect(openGardenLabel('Widgets')).toBe("Open Widgets' garden");
   });
-
-  it('names the tenant only once the shell has one selected', () => {
-    const tenant = { tenant_id: 't_1', name: 'grosscode', role: 'owner', permissions: [] };
-    expect(doorwayTenantName({ kind: 'selected', tenant, tenants: [tenant] } as never)).toBe('grosscode');
-    expect(doorwayTenantName({ kind: 'choose', tenants: [tenant] } as never)).toBe('');
-    expect(doorwayTenantName(null)).toBe('');
-    expect(doorwayTitle('grosscode')).toBe('Gardens in grosscode');
-    expect(doorwayTitle('')).toBe('Gardens');
-  });
 });
 
 describe('GardeningDoorway', () => {
@@ -176,7 +167,7 @@ describe('GardeningDoorway', () => {
     expect(crumbs).toContain('Gardening');
     expect(crumbs).toContain('All projects');
     expect(crumbs).not.toContain('pick one to go in');
-    expect(el.textContent).toContain('Gardens in grosscode');
+    expect(el.textContent).toContain('Gardens');
     expect(el.querySelector('[data-testid="gardening-doorway-hint"]')).toBeNull();
   });
 
