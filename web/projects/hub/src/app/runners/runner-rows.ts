@@ -40,10 +40,10 @@ export function injectRunnerRows(includeRetired: () => boolean = () => false): {
   const projectFilter = injectProjectFilter();
 
 
-  /** A slow-ticking clock — this data refreshes on `runner-changed` SSE,
-   * not by polling, so the only job here is keeping each pace bar's *elapsed* fraction
-   * visually live between those pushes, not driving fresh reads. */
-  const now = injectNowSignal(30_000);
+  /** The shared one-second clock — this data refreshes on `runner-changed` SSE,
+   * not by polling, so the job here is keeping each row's "seen Ns ago" and each pace
+   * bar's *elapsed* fraction visually live between those pushes, not driving fresh reads. */
+  const now = injectNowSignal();
 
   /** Every runner, unlensed, with its claims, slot-bar numerator, subscription pace groups and
    * bindings folded on; recomputes on {@link now} so elapsed bars keep advancing between

@@ -149,7 +149,7 @@ export class MachineDetail {
 
   /** Ticks once a second so {@link heartbeatLabel} advances between polls, the
    * same cadence `HeartbeatFreshness`'s own bar reads (`bzh:frontend-formatters`). */
-  private readonly now = injectNowSignal(1000);
+  private readonly now = injectNowSignal();
 
   /** `-34s` since the newest lease's last beat, or `—` — decoration only; the
    * server-derived state carries liveness (`bzh:utc-instants`). */

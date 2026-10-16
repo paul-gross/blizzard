@@ -17,8 +17,8 @@ import { formatAbsolute, formatRelative, formatWhen } from '../when';
  * `relative` swaps the short text for {@link formatRelative}'s `3 days ago` /
  * `in 2 hours` form; the tooltip stays absolute either way.
  *
- * `text` reads {@link injectNowSignal} (a minute's granularity — `formatWhen`'s
- * coarsest unit) rather than a reading taken inside `formatWhen`: for a static
+ * `text` reads {@link injectNowSignal} (the shared one-second clock; the string
+ * equality of the `computed()` gates re-render to when the text changes) rather than a reading taken inside `formatWhen`: for a static
  * `iso` (a completed chunk's `completedAt`, an immutable event's `recorded_at`),
  * `iso` is the only otherwise-tracked signal, so `computed()` would never
  * re-invoke past first render and a long-lived card would read a stale "23:45"
@@ -39,7 +39,7 @@ export class FleetWhen {
   /** Render the distance from now instead of the board's short stamp. */
   readonly relative = input(false);
 
-  private readonly now = injectNowSignal(60_000);
+  private readonly now = injectNowSignal();
 
   protected readonly text = computed(() => {
     const now = new Date(this.now());

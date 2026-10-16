@@ -121,11 +121,12 @@ export class ProjectDetail {
   private readonly repositoriesQuery = injectRepositoriesQuery(() => true);
   private readonly runnersQuery = injectHubRunnersQuery();
   private readonly historyQuery = injectConfigHistoryQuery(RecordKind.PROJECT, () => this.projectId());
-  /** The minute tick today's boundary is cut from; the key changes only when the local day does. */
-  private readonly now = injectNowSignal(60_000);
+  private readonly now = injectNowSignal();
+  /** Today's boundary, cut from the shared clock; string equality stops the tick here, so the key changes only when the local day does. */
+  private readonly dayStart = computed(() => startOfLocalDayIso(this.now()));
   private readonly countsQuery = injectProjectChunkCountsQuery(
     () => this.project()?.slug ?? null,
-    () => startOfLocalDayIso(this.now()),
+    () => this.dayStart(),
   );
 
   /** The open tab — Overview again whenever another project opens. */

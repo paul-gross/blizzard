@@ -27,5 +27,5 @@ export class FleetFindingFactTimeline {
   protected readonly rows = computed<readonly FindingFactRow[]>(() => deriveFactTimelineRows(this.facts(), new Date(this.now())));
 
   /** The tick the stamps read against, so "HH:MM" rolls over to "Yesterday". */
-  private readonly now = injectNowSignal(60_000);
+  private readonly now = injectNowSignal();
 }

@@ -17,7 +17,7 @@ export class FactLogView {
   readonly facts = input<readonly runnerApi.FactView[]>([]);
 
   /** The tick `clockInfo` reads against, so the day label rolls over at midnight. */
-  private readonly now = injectNowSignal(60_000);
+  private readonly now = injectNowSignal();
 
   protected ref(id: string): string {
     return compactRef(id);

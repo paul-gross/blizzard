@@ -106,7 +106,7 @@ export class TranscriptViewer {
   }
 
   /** The tick `turnClockInfo` reads against, so the day label rolls over at midnight. */
-  private readonly now = injectNowSignal(60_000);
+  private readonly now = injectNowSignal();
 
   protected sidechainLabel(sidechain: TranscriptSidechain): string {
     const who = sidechain.agent_type ?? sidechain.agent_id ?? 'subagent';

@@ -32,7 +32,7 @@ export class LocalAsks {
 
   /** Ticks once a second so each row's `askedFor` advances between polls instead of
    * sitting frozen at whatever age the last read carried. */
-  private readonly now = injectNowSignal(1000);
+  private readonly now = injectNowSignal();
 
   protected readonly rows = computed<readonly AskRow[]>(() => askRows(this.asks(), this.now()));
 }

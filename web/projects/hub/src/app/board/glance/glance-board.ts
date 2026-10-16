@@ -36,14 +36,18 @@ export class GlanceBoard {
   private readonly health = injectHubHealthQuery();
   private readonly live = inject(FleetLiveUpdates);
 
-  /** The fleet-wide spend since local midnight (`startOfLocalDayIso`), cut from the minute tick. */
-  protected readonly spendToday = injectHubFleetSpendQuery(() => startOfLocalDayIso(this.now()));
+  private readonly now = injectNowSignal();
+
+  /** Local midnight, cut from the shared clock; string equality stops the tick here, so the spend key changes only when the day does. */
+  private readonly dayStart = computed(() => startOfLocalDayIso(this.now()));
+
+  /** The fleet-wide spend since local midnight (`startOfLocalDayIso`). */
+  protected readonly spendToday = injectHubFleetSpendQuery(() => this.dayStart());
 
   private readonly chunks = computed<readonly ChunkSummary[]>(() => this.chunksQuery.data() ?? []);
   private readonly questions = computed(() => this.questionsQuery.data() ?? []);
   private readonly decisions = computed(() => this.decisionsQuery.data() ?? []);
   private readonly runners = computed(() => liveRunners(this.runnersQuery.data() ?? []));
-  private readonly now = injectNowSignal(60_000);
 
   protected readonly needsYou = computed<readonly AttentionRow[]>(() => needsYouRows(this.questions(), this.decisions(), this.chunks()));
 
