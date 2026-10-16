@@ -54,6 +54,8 @@ def test_demote_after_an_anchor_lands_in_its_slot(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     first, second = _chunk(hub, "1", promote=False), _chunk(hub, "2", promote=False)
     ready = _chunk(hub, "3", promote=True)
+    # Mint instants tie on the test clock; fix the backlog order explicitly.
+    assert hub.client.put("/api/backlog", json={"chunk_ids": [first, second]}).status_code == 200
 
     resp = hub.client.post(f"/api/chunks/{ready}/demote", json={"after_chunk_id": first})
 
