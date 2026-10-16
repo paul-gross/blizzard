@@ -20,6 +20,7 @@
         <fleet-kit-select-row
           class="gg"
           data-testid="rail-gate"
+          [ariaLabel]="'Open chunk ' + shortId(gate.chunk_id) + ' to resolve its gate'"
           [attr.data-chunk]="gate.chunk_id"
           (click)="selectChunk.emit(gate.chunk_id)"
         >

@@ -20,6 +20,7 @@
         <fleet-kit-select-row
           class="qq"
           data-testid="rail-question"
+          [ariaLabel]="'Open chunk ' + shortId(q.chunk_id) + ' to answer its question'"
           [attr.data-chunk]="q.chunk_id"
           (click)="selectChunk.emit(q.chunk_id)"
         >

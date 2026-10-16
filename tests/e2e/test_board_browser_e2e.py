@@ -404,8 +404,8 @@ def test_board_browser_live_group_reorder_answer_and_pause(tmp_path: Path, chrom
                     f"http://127.0.0.1:{hub_port}/board/chunk/{chunk_b}?tab=artifacts&artifact={target_key}"
                 )
                 expect(page.get_by_test_id("tab-artifacts")).to_have_attribute("aria-selected", "true")
-                active_row = page.locator(f'[data-testid="artifacts-tab-nav-item"][data-artifact-key="{target_key}"]')
-                expect(active_row).to_have_class(re.compile(r"\bactive\b"))
+                active_row = page.locator(f'[data-artifact-key="{target_key}"]').get_by_test_id("artifacts-tab-nav-item")
+                expect(active_row).to_have_class(re.compile(r"\bselected\b"))
                 target_artifact = next(
                     art for art in hub.get(f"/api/chunks/{chunk_b}").json()["artifacts"] if art["key"] == target_key
                 )

@@ -18,6 +18,11 @@ fleet-kit-panel.fill {
   display: block;
   margin-bottom: 3px;
 }
+/* The rows' vertical rhythm is margin-between, so the last child carries none —
+   it would otherwise add to the kit row's own bottom padding. */
+.qq .h:last-child, .qq .qt:last-child, .qq .opts:last-child {
+  margin-bottom: 0;
+}
 .h {
   display: flex;
   margin-bottom: 3px;

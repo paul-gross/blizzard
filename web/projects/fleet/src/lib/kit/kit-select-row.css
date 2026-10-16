@@ -39,3 +39,25 @@
 .row.selected:hover {
   background: var(--surface-selected);
 }
+/* Bare: the consumer owns layout and chrome, so every kit-drawn piece is dropped in
+   every state and the button borrows its arrangement from the host (`display: contents`
+   would lose the button's focusability and accessible role). */
+.row.bare,
+.row.bare:hover,
+.row.bare.selected,
+.row.bare.selected:hover {
+  padding: 0;
+  border: none;
+  background: transparent;
+}
+.row.bare {
+  display: inherit;
+  flex-direction: inherit;
+  gap: inherit;
+  align-items: inherit;
+  justify-content: inherit;
+  color: inherit;
+}
+.row.bare:focus-visible {
+  outline: none;
+}

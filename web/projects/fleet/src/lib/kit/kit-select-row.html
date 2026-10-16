@@ -1,3 +1,11 @@
-<button type="button" class="row" [class.selected]="selected()" [attr.data-testid]="testid()" (click)="picked.emit()">
+<button
+  type="button"
+  class="row"
+  [class.selected]="selected()"
+  [class.bare]="bare()"
+  [attr.data-testid]="testid()"
+  [attr.aria-label]="ariaLabel()"
+  (click)="picked.emit()"
+>
   <ng-content />
 </button>

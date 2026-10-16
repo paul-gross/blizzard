@@ -265,3 +265,12 @@ describe('BoardCardComponent gate marker', () => {
     expect(el.querySelector('[data-testid="chunk-gate"]')).toBeNull();
   });
 });
+
+describe('BoardCardComponent open control', () => {
+  it("names the focusable button 'Open chunk <id>'", async () => {
+    const el = await render({ ...BASE, shortId: 'C-OPEN' });
+
+    const button = el.querySelector('fleet-kit-select-row button');
+    expect(button?.getAttribute('aria-label')).toBe('Open chunk C-OPEN');
+  });
+});

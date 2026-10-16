@@ -22,7 +22,6 @@
 }
 .art-item {
   display: block;
-  border-bottom: 1px solid var(--line);
 }
 .art-item .key {
   display: block;

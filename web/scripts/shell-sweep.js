@@ -213,6 +213,10 @@
  *     the blocked marking's adjacency to a card's status: it renders directly below the
  *     status row without moving the status's own position or overflowing the card, at
  *     800px and at 390/320px.
+ *   - projects/hub/src/app/board/board-card/board-card-selected.shell-sweep.spec.ts — a
+ *     selected card draws only the outer card's cyan edge (the bare kit select row
+ *     inside has no padding, border or background), its PR links sit inside the card,
+ *     and the content inset is the card's own padding, at 800px, 390px and 320px.
  *   - projects/hub/src/app/board/board-card/board-card-cost.shell-sweep.spec.ts — a
  *     done-lane card's completion stamp, billed cost, and estimate stay side by side on
  *     one line without overflowing the card, at 800px and at 390/320px.
@@ -263,6 +267,10 @@
  *   - projects/fleet/src/lib/kit/kit-tabs.shell-sweep.spec.ts — the kit tab strip's
  *     sub variant renders 30px tall on `--panel-deep` with a cyan active tab, beside
  *     the 32px amber-active top strip, at 1280px and 390px.
+ *   - projects/fleet/src/lib/kit/kit-select-row.shell-sweep.spec.ts — the kit select row's
+ *     default chrome (6px 8px padding, hairline and left edge, selected background) is
+ *     unchanged, while `bare` draws none of it in any state and lets a host flex rule
+ *     reach the projected children, at 800px, 390px and 320px.
  *   - projects/fleet/src/lib/transcripts/chunk-transcripts-provenance.shell-sweep.spec.ts —
  *     two transcript segments recording distinct harnesses (blizzard#441) render two
  *     genuinely distinct provenance badges with no horizontal overflow at 390px.
@@ -336,6 +344,7 @@ const SWEEPS = [
   { project: 'fleet', spec: 'projects/fleet/src/lib/kit/kit-confirm-dialog.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/kit/kit-tooltip.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/kit/kit-tabs.shell-sweep.spec.ts' },
+  { project: 'fleet', spec: 'projects/fleet/src/lib/kit/kit-select-row.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/garden/runs/gardening-run-dialog.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/garden/proposals/gardening-proposals-page.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/garden/proposals/gardening-proposal-pass-dialog.shell-sweep.spec.ts' },
@@ -346,6 +355,7 @@ const SWEEPS = [
   { project: 'hub', spec: 'projects/hub/src/app/garden/findings/gardening-findings-filters.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/board/board-card/board-card-blocked.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/board/board-card/board-card-cost.shell-sweep.spec.ts' },
+  { project: 'hub', spec: 'projects/hub/src/app/board/board-card/board-card-selected.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/board/board-shell/board-column.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/board/board-shell/board-shell.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/board/chunk-dock/chunk-detail-header.shell-sweep.spec.ts' },
