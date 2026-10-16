@@ -14,8 +14,10 @@ tables are other objects, so they pass."""
 
 from __future__ import annotations
 
+from collections import OrderedDict
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
+from threading import Lock
 from typing import Any
 
 from sqlalchemy import MetaData, Table
@@ -87,6 +89,9 @@ class _Condition:
     filters: frozenset[FromClause]
 
 
+_VERDICT_CACHE_SIZE = 4096
+
+
 class KeyedStatementGuard:
     """Checks statements against the keyed tables of one ``MetaData`` under one :class:`KeyScoping`.
 
@@ -94,7 +99,11 @@ class KeyedStatementGuard:
     ``WHERE``, a column or an ``EXISTS`` auto-correlates to the enclosing FROM elements only when it names more than
     one FROM element, and never under ``correlate(None)``; a subquery in a ``FROM`` is not auto-correlated to its
     siblings unless it is ``LATERAL``; a CTE is rendered at the top-level ``WITH`` and correlates to nothing. A
-    correlated table is the enclosing statement's to scope."""
+    correlated table is the enclosing statement's to scope.
+
+    The walk's verdict depends only on a statement's structure, so it is remembered per statement shape — SQLAlchemy's
+    cache key, which ignores bound values, with the parameter keys — in a bounded, least-recently-used cache owned by
+    the instance. A statement without a cache key is walked every time."""
 
     def __init__(
         self,
@@ -110,6 +119,8 @@ class KeyedStatementGuard:
         self.scoping = scoping
         self._exempt_option = exempt_option
         self._unscoped = unscoped
+        self._verdicts: OrderedDict[tuple[object, frozenset[str]], tuple[str, ...]] = OrderedDict()
+        self._verdicts_lock = Lock()
 
     def before_execute(
         self,
@@ -131,10 +142,34 @@ class KeyedStatementGuard:
         ``parameter_keys`` are the keys of the parameters it executes with, which add to an insert's column list."""
         if not isinstance(statement, Select | CompoundSelect | Insert | Update | Delete):
             return
-        walk = _Walk(self, parameter_keys)
-        walk.visit(statement, _TOP)
-        if walk.violations:
-            raise self._unscoped(sorted(set(walk.violations)), statement)
+        cache_key = statement._generate_cache_key()
+        key = None if cache_key is None else (cache_key.key, parameter_keys)
+        violations = self._remembered(key)
+        if violations is None:
+            walk = _Walk(self, parameter_keys)
+            walk.visit(statement, _TOP)
+            violations = tuple(sorted(set(walk.violations)))
+            self._remember(key, violations)
+        if violations:
+            raise self._unscoped(list(violations), statement)
+
+    def _remembered(self, key: tuple[object, frozenset[str]] | None) -> tuple[str, ...] | None:
+        if key is None:
+            return None
+        with self._verdicts_lock:
+            violations = self._verdicts.get(key)
+            if violations is not None:
+                self._verdicts.move_to_end(key)
+            return violations
+
+    def _remember(self, key: tuple[object, frozenset[str]] | None, violations: tuple[str, ...]) -> None:
+        if key is None:
+            return
+        with self._verdicts_lock:
+            self._verdicts[key] = violations
+            self._verdicts.move_to_end(key)
+            while len(self._verdicts) > _VERDICT_CACHE_SIZE:
+                self._verdicts.popitem(last=False)
 
     def guards(self, leaf: FromClause) -> bool:
         """Whether ``leaf`` is a keyed table of this guard's ``MetaData``, or an alias (of an alias…) of it."""
