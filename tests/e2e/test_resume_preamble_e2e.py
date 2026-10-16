@@ -25,21 +25,12 @@ from blizzard.runner.harness.preamble import (
     RESUME_UPDATED_NOTICE,
 )
 from blizzard.runner.loop_wiring import LoopWiring
-from tests.e2e.test_acceptance_loop import (
-    FIXTURE_ENV,
-    REPO,
-    REPO_NAME,
-    _forge,
-    _free_port,
-    _hub,
-    _mock_bin_dir,
-    _runner_api,
-    _runner_config,
-)
 from tests.e2e.test_session_modes_e2e import _graph_yaml
-from tests.fleet_world import mint_world
+from tests.fleet_launchers import REPO, mock_bin_dir, run_forge, run_hub, runner_api, runner_config
+from tests.fleet_world import FIXTURE_ENV, REPO_NAME, mint_world
 from tests.host_files import with_workspace
 from tests.runner_fakes import daemon_store
+from tests.support import free_port
 
 pytestmark = [
     pytest.mark.e2e,
@@ -121,7 +112,7 @@ def _live_stack(tmp_path: Path):  # type: ignore[no-untyped-def]
     Yields ``(hub, chunk_id, config, workspace, origin_bare, fenced_env)`` with the graph
     published, an issue promoted, and both standing preamble layers set to their sentinels.
     """
-    bin_dir = _mock_bin_dir()
+    bin_dir = mock_bin_dir()
     if bin_dir is None:
         pytest.skip("no provisioned sibling blizzard-mock worktree (run `winter provision <env>`)")
 
@@ -131,8 +122,8 @@ def _live_stack(tmp_path: Path):  # type: ignore[no-untyped-def]
     workspace = fixture_root / "workspace"
     origins = fixture_root / "origins"
 
-    forge_port, hub_port = _free_port(), _free_port()
-    with _forge(bin_dir, origins, forge_port) as forge, _hub(tmp_path / "hub", forge_port, hub_port) as hub:
+    forge_port, hub_port = free_port(), free_port()
+    with run_forge(bin_dir, origins, forge_port) as forge, run_hub(tmp_path / "hub", forge_port, hub_port) as hub:
         assert hub.post("/api/graphs", json={"definition_yaml": _graph_yaml()}).status_code == 201
         issue = forge.post(f"/repos/{REPO}/issues", json={"title": "resume preamble", "body": "the chunk"})
         assert issue.status_code == 201, issue.text
@@ -141,7 +132,7 @@ def _live_stack(tmp_path: Path):  # type: ignore[no-untyped-def]
         chunk_id = ingested.json()["chunk_id"]
         assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
 
-        config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+        config = runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
         # Both standing layers set: this scenario is about what happens to them, so a
         # deployment with an empty layer 2 would prove only half of it.
         config = dataclasses.replace(
@@ -163,7 +154,7 @@ def _drive(config, hub, chunk_id, fenced_env, *, on_tick=None, timeout: float = 
     prior = dict(os.environ)
     os.environ.update(fenced_env)
     try:
-        with _runner_api(config):
+        with runner_api(config):
             runner = httpx.Client(base_url=f"http://{config.host}:{config.port}", timeout=10.0)
             try:
                 deadline = time.monotonic() + timeout

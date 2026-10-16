@@ -19,8 +19,8 @@ import pytest
 
 from blizzard.hub.domain.execution.auth.produces import PRODUCES_ENFORCE
 from blizzard.hub.domain.execution.auth.route import ROUTE_TOKEN_ENFORCE
-from tests.e2e.test_acceptance_loop import REPO, REPO_NAME, _await_http, _forge, _free_port, _hub, _terminate
-from tests.fleet_world import mint_world
+from tests.fleet_launchers import REPO, await_http, run_forge, run_hub, terminate
+from tests.fleet_world import REPO_NAME, mint_world
 from tests.service.support import (
     mock_runner,
     poll_until,
@@ -29,7 +29,7 @@ from tests.service.support import (
     service_gate,
     sse_tap,
 )
-from tests.support import daemon_log_sink
+from tests.support import daemon_log_sink, free_port
 
 pytestmark = [pytest.mark.service, service_gate]
 
@@ -91,17 +91,17 @@ def _stack(tmp_path: Path):
     """Stand up mock forge + real hub over a minted fixture's origins. Returns a context tuple."""
     bin_dir = require_mock_fleet()
     _workspace, origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
-    forge_port, hub_port = _free_port(), _free_port()
+    forge_port, hub_port = free_port(), free_port()
     return bin_dir, origins, forge_port, hub_port
 
 
 def test_claim_and_completion_advance_the_chunk_over_the_wire(tmp_path: Path) -> None:
     bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
-    with _forge(bin_dir, origins, forge_port) as forge, _hub(tmp_path / "hub", forge_port, hub_port) as hub:
+    with run_forge(bin_dir, origins, forge_port) as forge, run_hub(tmp_path / "hub", forge_port, hub_port) as hub:
         assert hub.post("/api/graphs", json={"definition_yaml": _graph_yaml()}).status_code == 201
         chunk_id = _ingest(forge, hub, "claim + complete")
 
-        with mock_runner(bin_dir, _free_port(), hub_port) as runner:
+        with mock_runner(bin_dir, free_port(), hub_port) as runner:
             assert runner.post("/_drive/register").json()["status"] == 201
             peek = runner.post("/_drive/peek").json()["response"]
             assert any(e["chunk_id"] == chunk_id for e in peek["entries"])
@@ -122,11 +122,11 @@ def test_claim_and_completion_advance_the_chunk_over_the_wire(tmp_path: Path) ->
 
 def test_stale_epoch_completion_is_rejected_over_the_wire(tmp_path: Path) -> None:
     bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
-    with _forge(bin_dir, origins, forge_port) as forge, _hub(tmp_path / "hub", forge_port, hub_port) as hub:
+    with run_forge(bin_dir, origins, forge_port) as forge, run_hub(tmp_path / "hub", forge_port, hub_port) as hub:
         assert hub.post("/api/graphs", json={"definition_yaml": _graph_yaml()}).status_code == 201
         chunk_id = _ingest(forge, hub, "stale epoch")
 
-        with mock_runner(bin_dir, _free_port(), hub_port) as runner:
+        with mock_runner(bin_dir, free_port(), hub_port) as runner:
             runner.post("/_drive/register")
             assert runner.post("/_drive/claim", json={"chunk_id": chunk_id}).json()["claimed"] is True
             before = hub.get(f"/api/chunks/{chunk_id}").json()["current_node_id"]
@@ -142,7 +142,7 @@ def test_stale_epoch_completion_is_rejected_over_the_wire(tmp_path: Path) -> Non
 
 def test_queue_shaping_group_and_reorder_reflected_in_peek(tmp_path: Path) -> None:
     bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
-    with _forge(bin_dir, origins, forge_port) as forge, _hub(tmp_path / "hub", forge_port, hub_port) as hub:
+    with run_forge(bin_dir, origins, forge_port) as forge, run_hub(tmp_path / "hub", forge_port, hub_port) as hub:
         assert hub.post("/api/graphs", json={"definition_yaml": _graph_yaml()}).status_code == 201
         chunk_a = _ingest(forge, hub, "A — stays")
         chunk_b = _ingest(forge, hub, "B — survivor")
@@ -161,7 +161,7 @@ def test_queue_shaping_group_and_reorder_reflected_in_peek(tmp_path: Path) -> No
 
 def test_sse_stream_serves_the_eventsource_contract(tmp_path: Path) -> None:
     bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
-    with _forge(bin_dir, origins, forge_port) as forge, _hub(tmp_path / "hub", forge_port, hub_port) as hub:
+    with run_forge(bin_dir, origins, forge_port) as forge, run_hub(tmp_path / "hub", forge_port, hub_port) as hub:
         assert hub.post("/api/graphs", json={"definition_yaml": _graph_yaml()}).status_code == 201
         _ingest(forge, hub, "an event")  # a chunk-changed event enters the broker's buffer
 
@@ -179,7 +179,7 @@ def test_sigterm_returns_promptly_with_a_client_parked_on_the_stream(tmp_path: P
     uvicorn's own graceful drain (bounded at 5s) — the process exits well inside that
     bound even with an SSE client still connected, rather than riding out the drain."""
     hub_dir = tmp_path / "hub"
-    hub_port = _free_port()
+    hub_port = free_port()
     hub_bin = str(Path(sys.executable).parent / "blizzard-hub")
     subprocess.run([hub_bin, "init", str(hub_dir)], check=True, capture_output=True, text=True)
     log = hub_dir / "daemon.log"
@@ -192,7 +192,7 @@ def test_sigterm_returns_promptly_with_a_client_parked_on_the_stream(tmp_path: P
     client = httpx.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
     exit_code: int | None = None
     try:
-        _await_http(proc, client, "/api/health", log=log)
+        await_http(proc, client, "/api/health", log=log)
         # The server dies mid-stream by design; closing our own end of a now-dead
         # connection is expected to raise, not a failure of what this test asserts.
         with contextlib.suppress(httpx.HTTPError), client.stream("GET", "/api/events/stream") as resp:
@@ -213,7 +213,7 @@ def test_sigterm_returns_promptly_with_a_client_parked_on_the_stream(tmp_path: P
         assert exit_code is not None
     finally:
         client.close()
-        _terminate(proc)
+        terminate(proc)
 
 
 def _migration_graphs_yaml() -> tuple[str, str]:
@@ -265,12 +265,12 @@ def test_a_fresh_migration_publishes_queue_changed_to_a_live_subscriber(tmp_path
     the fan-out leg, unlike the component tier's replay-tail check."""
     bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
     source_yaml, target_yaml = _migration_graphs_yaml()
-    with _forge(bin_dir, origins, forge_port) as forge, _hub(tmp_path / "hub", forge_port, hub_port) as hub:
+    with run_forge(bin_dir, origins, forge_port) as forge, run_hub(tmp_path / "hub", forge_port, hub_port) as hub:
         assert hub.post("/api/graphs", json={"definition_yaml": source_yaml}).status_code == 201
         assert hub.post("/api/graphs", json={"definition_yaml": target_yaml}).status_code == 201
         chunk_id = _ingest(forge, hub, "migrate me")
 
-        with mock_runner(bin_dir, _free_port(), hub_port) as runner:
+        with mock_runner(bin_dir, free_port(), hub_port) as runner:
             runner.post("/_drive/register")
             assert runner.post("/_drive/claim", json={"chunk_id": chunk_id}).json()["claimed"] is True
 
@@ -298,7 +298,7 @@ def test_chunk_pause_field_reflects_the_operator_chunk_brake(tmp_path: Path) -> 
     present only on the detail shape, never the summary card —
     ``bzh:sweep-release-only-tiers``."""
     bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
-    with _forge(bin_dir, origins, forge_port) as forge, _hub(tmp_path / "hub", forge_port, hub_port) as hub:
+    with run_forge(bin_dir, origins, forge_port) as forge, run_hub(tmp_path / "hub", forge_port, hub_port) as hub:
         assert hub.post("/api/graphs", json={"definition_yaml": _graph_yaml()}).status_code == 201
         chunk_id = _ingest(forge, hub, "pause over the wire")
 
@@ -325,9 +325,9 @@ def test_chunk_pause_field_reflects_the_operator_chunk_brake(tmp_path: Path) -> 
 def test_runner_registers_and_reads_its_pause_brake(tmp_path: Path) -> None:
     bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
     with (
-        _forge(bin_dir, origins, forge_port),
-        _hub(tmp_path / "hub", forge_port, hub_port) as hub,
-        mock_runner(bin_dir, _free_port(), hub_port, name="runner-brake") as runner,
+        run_forge(bin_dir, origins, forge_port),
+        run_hub(tmp_path / "hub", forge_port, hub_port) as hub,
+        mock_runner(bin_dir, free_port(), hub_port, name="runner-brake") as runner,
     ):
         runner_id = registered_runner_id(runner)
         assert poll_until(lambda: any(r["runner_id"] == runner_id for r in hub.get("/api/runners").json()["runners"]))
@@ -345,9 +345,9 @@ def test_external_subscription_usage_round_trips_a_slug_and_rejects_a_non_string
     bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
     sampled_at = datetime.now(UTC).replace(microsecond=0).isoformat()
     with (
-        _forge(bin_dir, origins, forge_port),
-        _hub(tmp_path / "hub", forge_port, hub_port) as hub,
-        mock_runner(bin_dir, _free_port(), hub_port, name="runner-subscriptions") as runner,
+        run_forge(bin_dir, origins, forge_port),
+        run_hub(tmp_path / "hub", forge_port, hub_port) as hub,
+        mock_runner(bin_dir, free_port(), hub_port, name="runner-subscriptions") as runner,
     ):
         runner_id = registered_runner_id(runner)
         valid = runner.post(
@@ -383,9 +383,9 @@ def test_external_subscription_usage_miss_lands_as_a_lapsed_condition_over_the_w
     bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
     missed_at = datetime.now(UTC).replace(microsecond=0).isoformat()
     with (
-        _forge(bin_dir, origins, forge_port),
-        _hub(tmp_path / "hub", forge_port, hub_port) as hub,
-        mock_runner(bin_dir, _free_port(), hub_port, name="runner-lapsed") as runner,
+        run_forge(bin_dir, origins, forge_port),
+        run_hub(tmp_path / "hub", forge_port, hub_port) as hub,
+        mock_runner(bin_dir, free_port(), hub_port, name="runner-lapsed") as runner,
     ):
         runner_id = registered_runner_id(runner)
         driven = runner.post(
@@ -419,9 +419,9 @@ def test_a_declared_roster_shows_a_never_sampled_member_over_the_wire(tmp_path: 
     has never sampled or missed at all."""
     bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
     with (
-        _forge(bin_dir, origins, forge_port),
-        _hub(tmp_path / "hub", forge_port, hub_port) as hub,
-        mock_runner(bin_dir, _free_port(), hub_port, name="runner-roster") as runner,
+        run_forge(bin_dir, origins, forge_port),
+        run_hub(tmp_path / "hub", forge_port, hub_port) as hub,
+        mock_runner(bin_dir, free_port(), hub_port, name="runner-roster") as runner,
     ):
         runner_id = registered_runner_id(
             runner, {"subscriptions": [{"slug": "probe", "name": "Probe", "provider": "none-such"}]}
@@ -445,9 +445,9 @@ def test_reregistering_a_declared_roster_without_a_slug_removes_it_over_the_wire
     """A slug dropped from the re-declared roster is no longer a member."""
     bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
     with (
-        _forge(bin_dir, origins, forge_port),
-        _hub(tmp_path / "hub", forge_port, hub_port) as hub,
-        mock_runner(bin_dir, _free_port(), hub_port, name="runner-roster-2") as runner,
+        run_forge(bin_dir, origins, forge_port),
+        run_hub(tmp_path / "hub", forge_port, hub_port) as hub,
+        mock_runner(bin_dir, free_port(), hub_port, name="runner-roster-2") as runner,
     ):
         runner_id = registered_runner_id(
             runner, {"subscriptions": [{"slug": "probe", "name": "Probe", "provider": "none-such"}]}
@@ -463,9 +463,9 @@ def test_a_registration_without_a_roster_keeps_the_legacy_path_over_the_wire(tmp
     fallback always has: a never-sampled slug is not a member at all."""
     bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
     with (
-        _forge(bin_dir, origins, forge_port),
-        _hub(tmp_path / "hub", forge_port, hub_port) as hub,
-        mock_runner(bin_dir, _free_port(), hub_port, name="runner-no-roster") as runner,
+        run_forge(bin_dir, origins, forge_port),
+        run_hub(tmp_path / "hub", forge_port, hub_port) as hub,
+        mock_runner(bin_dir, free_port(), hub_port, name="runner-no-roster") as runner,
     ):
         runner_id = registered_runner_id(runner)
         assert hub.get(f"/api/runners/{runner_id}").json()["subscriptions"] == []
@@ -478,13 +478,13 @@ def test_a_registration_without_a_roster_keeps_the_legacy_path_over_the_wire(tmp
 def test_route_token_present_by_default_is_accepted_under_enforce(tmp_path: Path) -> None:
     bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
     with (
-        _forge(bin_dir, origins, forge_port) as forge,
-        _hub(tmp_path / "hub", forge_port, hub_port, route_token_mode=ROUTE_TOKEN_ENFORCE) as hub,
+        run_forge(bin_dir, origins, forge_port) as forge,
+        run_hub(tmp_path / "hub", forge_port, hub_port, route_token_mode=ROUTE_TOKEN_ENFORCE) as hub,
     ):
         assert hub.post("/api/graphs", json={"definition_yaml": _graph_yaml()}).status_code == 201
         chunk_id = _ingest(forge, hub, "route token present")
 
-        with mock_runner(bin_dir, _free_port(), hub_port) as runner:
+        with mock_runner(bin_dir, free_port(), hub_port) as runner:
             runner.post("/_drive/register")
             claim = runner.post("/_drive/claim", json={"chunk_id": chunk_id}).json()
             assert claim["claimed"] is True
@@ -497,13 +497,13 @@ def test_route_token_present_by_default_is_accepted_under_enforce(tmp_path: Path
 def test_route_token_stale_is_rejected_under_enforce_over_the_wire(tmp_path: Path) -> None:
     bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
     with (
-        _forge(bin_dir, origins, forge_port) as forge,
-        _hub(tmp_path / "hub", forge_port, hub_port, route_token_mode=ROUTE_TOKEN_ENFORCE) as hub,
+        run_forge(bin_dir, origins, forge_port) as forge,
+        run_hub(tmp_path / "hub", forge_port, hub_port, route_token_mode=ROUTE_TOKEN_ENFORCE) as hub,
     ):
         assert hub.post("/api/graphs", json={"definition_yaml": _graph_yaml()}).status_code == 201
         chunk_id = _ingest(forge, hub, "route token stale")
 
-        with mock_runner(bin_dir, _free_port(), hub_port) as runner:
+        with mock_runner(bin_dir, free_port(), hub_port) as runner:
             runner.post("/_drive/register")
             assert runner.post("/_drive/claim", json={"chunk_id": chunk_id}).json()["claimed"] is True
             before = hub.get(f"/api/chunks/{chunk_id}").json()["current_node_id"]
@@ -518,13 +518,13 @@ def test_route_token_stale_is_rejected_under_enforce_over_the_wire(tmp_path: Pat
 def test_route_token_omitted_is_rejected_under_enforce_over_the_wire(tmp_path: Path) -> None:
     bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
     with (
-        _forge(bin_dir, origins, forge_port) as forge,
-        _hub(tmp_path / "hub", forge_port, hub_port, route_token_mode=ROUTE_TOKEN_ENFORCE) as hub,
+        run_forge(bin_dir, origins, forge_port) as forge,
+        run_hub(tmp_path / "hub", forge_port, hub_port, route_token_mode=ROUTE_TOKEN_ENFORCE) as hub,
     ):
         assert hub.post("/api/graphs", json={"definition_yaml": _graph_yaml()}).status_code == 201
         chunk_id = _ingest(forge, hub, "route token omitted")
 
-        with mock_runner(bin_dir, _free_port(), hub_port) as runner:
+        with mock_runner(bin_dir, free_port(), hub_port) as runner:
             runner.post("/_drive/register")
             assert runner.post("/_drive/claim", json={"chunk_id": chunk_id}).json()["claimed"] is True
             before = hub.get(f"/api/chunks/{chunk_id}").json()["current_node_id"]
@@ -600,11 +600,11 @@ def test_fallback_only_completion_is_accepted_under_warn_over_the_wire(tmp_path:
     """The default ``warn``: a build completion with no explicit ``notes`` attachment
     (only the assessment fallback) still applies over the wire — the fallback lands."""
     bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
-    with _forge(bin_dir, origins, forge_port) as forge, _hub(tmp_path / "hub", forge_port, hub_port) as hub:
+    with run_forge(bin_dir, origins, forge_port) as forge, run_hub(tmp_path / "hub", forge_port, hub_port) as hub:
         assert hub.post("/api/graphs", json={"definition_yaml": _produces_graph_yaml()}).status_code == 201
         chunk_id = _ingest(forge, hub, "produces warn")
 
-        with mock_runner(bin_dir, _free_port(), hub_port) as runner:
+        with mock_runner(bin_dir, free_port(), hub_port) as runner:
             runner.post("/_drive/register")
             assert runner.post("/_drive/claim", json={"chunk_id": chunk_id}).json()["claimed"] is True
 
@@ -620,13 +620,13 @@ def test_fallback_only_completion_is_rejected_under_enforce_over_the_wire(tmp_pa
     fenced out and the chunk does not advance — the produces backstop over the wire."""
     bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
     with (
-        _forge(bin_dir, origins, forge_port) as forge,
-        _hub(tmp_path / "hub", forge_port, hub_port, produces_mode=PRODUCES_ENFORCE) as hub,
+        run_forge(bin_dir, origins, forge_port) as forge,
+        run_hub(tmp_path / "hub", forge_port, hub_port, produces_mode=PRODUCES_ENFORCE) as hub,
     ):
         assert hub.post("/api/graphs", json={"definition_yaml": _produces_graph_yaml()}).status_code == 201
         chunk_id = _ingest(forge, hub, "produces enforce reject")
 
-        with mock_runner(bin_dir, _free_port(), hub_port) as runner:
+        with mock_runner(bin_dir, free_port(), hub_port) as runner:
             runner.post("/_drive/register")
             assert runner.post("/_drive/claim", json={"chunk_id": chunk_id}).json()["claimed"] is True
             before = hub.get(f"/api/chunks/{chunk_id}").json()["current_node_id"]
@@ -645,13 +645,13 @@ def test_explicit_attachment_is_accepted_under_enforce_over_the_wire(tmp_path: P
     artifact passes the backstop and advances over the wire — the accept side."""
     bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
     with (
-        _forge(bin_dir, origins, forge_port) as forge,
-        _hub(tmp_path / "hub", forge_port, hub_port, produces_mode=PRODUCES_ENFORCE) as hub,
+        run_forge(bin_dir, origins, forge_port) as forge,
+        run_hub(tmp_path / "hub", forge_port, hub_port, produces_mode=PRODUCES_ENFORCE) as hub,
     ):
         assert hub.post("/api/graphs", json={"definition_yaml": _produces_graph_yaml()}).status_code == 201
         chunk_id = _ingest(forge, hub, "produces enforce accept")
 
-        with mock_runner(bin_dir, _free_port(), hub_port) as runner:
+        with mock_runner(bin_dir, free_port(), hub_port) as runner:
             runner.post("/_drive/register")
             claim = runner.post("/_drive/claim", json={"chunk_id": chunk_id}).json()
             assert claim["claimed"] is True
@@ -670,13 +670,13 @@ def test_git_commit_covered_produces_name_is_accepted_under_enforce_over_the_wir
     False``) still passes the backstop and advances."""
     bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
     with (
-        _forge(bin_dir, origins, forge_port) as forge,
-        _hub(tmp_path / "hub", forge_port, hub_port, produces_mode=PRODUCES_ENFORCE) as hub,
+        run_forge(bin_dir, origins, forge_port) as forge,
+        run_hub(tmp_path / "hub", forge_port, hub_port, produces_mode=PRODUCES_ENFORCE) as hub,
     ):
         assert hub.post("/api/graphs", json={"definition_yaml": _produces_graph_yaml()}).status_code == 201
         chunk_id = _ingest(forge, hub, "produces enforce git commit")
 
-        with mock_runner(bin_dir, _free_port(), hub_port) as runner:
+        with mock_runner(bin_dir, free_port(), hub_port) as runner:
             runner.post("/_drive/register")
             claim = runner.post("/_drive/claim", json={"chunk_id": chunk_id}).json()
             assert claim["claimed"] is True
@@ -752,13 +752,13 @@ def test_git_commit_kind_expectation_is_accepted_by_kind_not_name_under_enforce_
     declared produces name ``commit`` — proving coverage is a kind match."""
     bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
     with (
-        _forge(bin_dir, origins, forge_port) as forge,
-        _hub(tmp_path / "hub", forge_port, hub_port, produces_mode=PRODUCES_ENFORCE) as hub,
+        run_forge(bin_dir, origins, forge_port) as forge,
+        run_hub(tmp_path / "hub", forge_port, hub_port, produces_mode=PRODUCES_ENFORCE) as hub,
     ):
         assert hub.post("/api/graphs", json={"definition_yaml": _git_commit_kind_graph_yaml()}).status_code == 201
         chunk_id = _ingest(forge, hub, "produces enforce git-commit kind accept")
 
-        with mock_runner(bin_dir, _free_port(), hub_port) as runner:
+        with mock_runner(bin_dir, free_port(), hub_port) as runner:
             runner.post("/_drive/register")
             claim = runner.post("/_drive/claim", json={"chunk_id": chunk_id}).json()
             assert claim["claimed"] is True
@@ -780,13 +780,13 @@ def test_git_commit_kind_expectation_with_zero_commits_is_rejected_under_enforce
     No asset artifact of any name can satisfy a kind expectation."""
     bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
     with (
-        _forge(bin_dir, origins, forge_port) as forge,
-        _hub(tmp_path / "hub", forge_port, hub_port, produces_mode=PRODUCES_ENFORCE) as hub,
+        run_forge(bin_dir, origins, forge_port) as forge,
+        run_hub(tmp_path / "hub", forge_port, hub_port, produces_mode=PRODUCES_ENFORCE) as hub,
     ):
         assert hub.post("/api/graphs", json={"definition_yaml": _git_commit_kind_graph_yaml()}).status_code == 201
         chunk_id = _ingest(forge, hub, "produces enforce git-commit kind reject")
 
-        with mock_runner(bin_dir, _free_port(), hub_port) as runner:
+        with mock_runner(bin_dir, free_port(), hub_port) as runner:
             runner.post("/_drive/register")
             assert runner.post("/_drive/claim", json={"chunk_id": chunk_id}).json()["claimed"] is True
             before = hub.get(f"/api/chunks/{chunk_id}").json()["current_node_id"]
@@ -846,11 +846,11 @@ def test_checks_gate_fences_a_red_gated_pass_over_the_wire(tmp_path: Path) -> No
     """A ``requires_checks`` pass whose reported checks are red is fenced out by the hub
     over the wire — the chunk never advances off build (AC #4, service tier)."""
     bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
-    with _forge(bin_dir, origins, forge_port) as forge, _hub(tmp_path / "hub", forge_port, hub_port) as hub:
+    with run_forge(bin_dir, origins, forge_port) as forge, run_hub(tmp_path / "hub", forge_port, hub_port) as hub:
         assert hub.post("/api/graphs", json={"definition_yaml": _checks_gated_graph_yaml()}).status_code == 201
         chunk_id = _ingest(forge, hub, "checks gate red")
 
-        with mock_runner(bin_dir, _free_port(), hub_port) as runner:
+        with mock_runner(bin_dir, free_port(), hub_port) as runner:
             runner.post("/_drive/register")
             assert runner.post("/_drive/claim", json={"chunk_id": chunk_id}).json()["claimed"] is True
             before = hub.get(f"/api/chunks/{chunk_id}").json()["current_node_id"]
@@ -867,11 +867,11 @@ def test_checks_gate_fences_a_red_gated_pass_over_the_wire(tmp_path: Path) -> No
 def test_a_green_gated_pass_applies_over_the_wire(tmp_path: Path) -> None:
     """A ``requires_checks`` pass with green checks passes the backstop and advances."""
     bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
-    with _forge(bin_dir, origins, forge_port) as forge, _hub(tmp_path / "hub", forge_port, hub_port) as hub:
+    with run_forge(bin_dir, origins, forge_port) as forge, run_hub(tmp_path / "hub", forge_port, hub_port) as hub:
         assert hub.post("/api/graphs", json={"definition_yaml": _checks_gated_graph_yaml()}).status_code == 201
         chunk_id = _ingest(forge, hub, "checks gate green")
 
-        with mock_runner(bin_dir, _free_port(), hub_port) as runner:
+        with mock_runner(bin_dir, free_port(), hub_port) as runner:
             runner.post("/_drive/register")
             assert runner.post("/_drive/claim", json={"chunk_id": chunk_id}).json()["claimed"] is True
 
@@ -886,11 +886,11 @@ def test_a_red_check_through_a_non_gated_fail_applies_over_the_wire(tmp_path: Pa
     """A red check reported through the non-gated ``fail`` choice routes normally over the
     wire — a transition, not a gate rejection (AC #5, service tier)."""
     bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
-    with _forge(bin_dir, origins, forge_port) as forge, _hub(tmp_path / "hub", forge_port, hub_port) as hub:
+    with run_forge(bin_dir, origins, forge_port) as forge, run_hub(tmp_path / "hub", forge_port, hub_port) as hub:
         assert hub.post("/api/graphs", json={"definition_yaml": _checks_gated_graph_yaml()}).status_code == 201
         chunk_id = _ingest(forge, hub, "checks gate non-gated fail")
 
-        with mock_runner(bin_dir, _free_port(), hub_port) as runner:
+        with mock_runner(bin_dir, free_port(), hub_port) as runner:
             runner.post("/_drive/register")
             assert runner.post("/_drive/claim", json={"chunk_id": chunk_id}).json()["claimed"] is True
 

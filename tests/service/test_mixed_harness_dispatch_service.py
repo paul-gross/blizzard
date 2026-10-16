@@ -25,8 +25,8 @@ from blizzard.runner.loop.steps import Fill, Pull
 from blizzard.runner.loop_wiring import LoopWiring
 from blizzard.runner.store.schema import leases, transcript_segments, usage_facts
 from blizzard.wire.transcript_segment import TurnSegmentView
-from tests.e2e.test_acceptance_loop import REPO_NAME, _free_port, _runner_api, _runner_config
-from tests.fleet_world import mint_world, scripted_build_prompt
+from tests.fleet_launchers import runner_api, runner_config
+from tests.fleet_world import REPO_NAME, mint_world, scripted_build_prompt
 from tests.runner_fakes import daemon_store, loop_graph
 from tests.runner_join import fleet_headers
 from tests.service.support import (
@@ -39,12 +39,13 @@ from tests.service.support import (
     require_mock_fleet,
     service_gate,
 )
+from tests.support import free_port
 
 pytestmark = [pytest.mark.service, service_gate]
 
 _WORK_REF_URL = "blizzard/toy-api/issues/1"
 
-#: A harness id `_runner_config` never wires, so this name is guaranteed unresolvable.
+#: A harness id `runner_config` never wires, so this name is guaranteed unresolvable.
 _UNBOUND_HARNESS = "special-harness"
 
 
@@ -150,12 +151,12 @@ def test_under_strict_an_incompatible_head_starves_the_workable_entry_behind_it_
     workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
     fenced = _tick_env()
 
-    hub_port = _free_port()
+    hub_port = free_port()
     with mock_hub(bin_dir, hub_port) as hub:
         incompatible_id = _seed(hub, _incompatible_chunk_spec(_WORK_REF_URL))  # seeded first — the peek's head
         workable_id = _seed(hub, mock_hub_chunk_spec(_WORK_REF_URL))
         config = dataclasses.replace(
-            _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port), queue_strict=True
+            runner_config(tmp_path / "runner", workspace, bin_dir, hub_port), queue_strict=True
         )
 
         _drive(config, fenced, ticks=5, pause=0.3)
@@ -180,11 +181,11 @@ def test_by_default_the_matched_peek_passes_over_an_incompatible_head_to_the_wor
     workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
     fenced = _tick_env()
 
-    hub_port = _free_port()
+    hub_port = free_port()
     with mock_hub(bin_dir, hub_port) as hub:
         incompatible_id = _seed(hub, _incompatible_chunk_spec(_WORK_REF_URL))  # seeded first — the queue's head
         workable_id = _seed(hub, mock_hub_chunk_spec(_WORK_REF_URL))
-        config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+        config = runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
 
         landed = poll_until(lambda: _run_and_check(config, fenced, hub, workable_id, "done"), timeout=90.0)
         assert landed, (
@@ -219,10 +220,10 @@ def test_claim_revalidates_against_a_regressed_registration_through_the_real_run
     workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
     fenced = _tick_env()
 
-    hub_port = _free_port()
+    hub_port = free_port()
     with mock_hub(bin_dir, hub_port) as hub:
         chunk_id = _seed(hub, _opencode_only_chunk_spec(_WORK_REF_URL))
-        config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+        config = runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
 
         for key, value in fenced.items():
             monkeypatch.setenv(key, value)
@@ -275,7 +276,7 @@ def test_preference_order_resolves_the_first_available_member_over_the_configure
     workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
     fenced = _tick_env()
 
-    hub_port = _free_port()
+    hub_port = free_port()
     with mock_hub(bin_dir, hub_port) as hub:
         chunk_id = _seed(
             hub,
@@ -283,7 +284,7 @@ def test_preference_order_resolves_the_first_available_member_over_the_configure
                 _WORK_REF_URL, harnesses=["opencode", "claude_code"], build_script=OPENCODE_BUILD_SCRIPT
             ),
         )
-        config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+        config = runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
 
         landed = poll_until(lambda: _run_and_check(config, fenced, hub, chunk_id, "done"), timeout=90.0)
         assert landed, f"chunk did not land (status {_status(hub, chunk_id)!r})"
@@ -298,7 +299,7 @@ def test_preference_order_skips_an_unresolvable_member_and_falls_through_to_the_
     workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
     fenced = _tick_env()
 
-    hub_port = _free_port()
+    hub_port = free_port()
     with mock_hub(bin_dir, hub_port) as hub:
         chunk_id = _seed(
             hub,
@@ -306,7 +307,7 @@ def test_preference_order_skips_an_unresolvable_member_and_falls_through_to_the_
                 _WORK_REF_URL, harnesses=[_UNBOUND_HARNESS, "claude_code"], build_script=BUILD_SCRIPT
             ),
         )
-        config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+        config = runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
 
         landed = poll_until(lambda: _run_and_check(config, fenced, hub, chunk_id, "done"), timeout=90.0)
         assert landed, f"chunk did not land (status {_status(hub, chunk_id)!r})"
@@ -328,10 +329,10 @@ def test_a_bare_node_with_no_declared_preference_resolves_through_this_runners_c
     workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
     fenced = _tick_env()
 
-    hub_port = _free_port()
+    hub_port = free_port()
     with mock_hub(bin_dir, hub_port) as hub:
         chunk_id = _seed(hub, mock_hub_chunk_spec(_WORK_REF_URL))
-        config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+        config = runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
 
         landed = poll_until(lambda: _run_and_check(config, fenced, hub, chunk_id, "done"), timeout=90.0)
         assert landed, f"chunk did not land (status {_status(hub, chunk_id)!r})"
@@ -347,7 +348,7 @@ def test_a_bare_node_still_honors_the_chunks_own_declared_default(tmp_path: Path
     workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
     fenced = _tick_env()
 
-    hub_port = _free_port()
+    hub_port = free_port()
     with mock_hub(bin_dir, hub_port) as hub:
         incompatible_spec = mock_hub_chunk_spec(_WORK_REF_URL)
         incompatible_spec["default_harnesses"] = [_UNBOUND_HARNESS]  # the node's own field stays empty
@@ -356,7 +357,7 @@ def test_a_bare_node_still_honors_the_chunks_own_declared_default(tmp_path: Path
         incompatible_id = _seed(hub, incompatible_spec)  # seeded first — the peek's head
         compatible_id = _seed(hub, compatible_spec)
         config = dataclasses.replace(
-            _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port), queue_strict=True
+            runner_config(tmp_path / "runner", workspace, bin_dir, hub_port), queue_strict=True
         )
 
         _drive(config, fenced, ticks=5, pause=0.3)
@@ -491,16 +492,16 @@ def test_two_session_lineages_interleave_on_one_dispatch_loop_with_no_cross_talk
     fenced = _tick_env()
     fenced["BZ_TRANSCRIPTS_ROOT"] = str(transcripts_root)
 
-    hub_port = _free_port()
+    hub_port = free_port()
     with mock_hub(bin_dir, hub_port) as hub:
         claude_id = _seed(hub, _claude_skill_chunk_spec(_WORK_REF_URL))
         opencode_id = _seed(hub, _opencode_task_chunk_spec(_WORK_REF_URL))
 
-        config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+        config = runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
         config = dataclasses.replace(
             config,
             host="127.0.0.1",
-            port=_free_port(),
+            port=free_port(),
             transcripts_root=str(transcripts_root),
             transcripts_ship=True,
         )
@@ -509,7 +510,7 @@ def test_two_session_lineages_interleave_on_one_dispatch_loop_with_no_cross_talk
         # merely at spawn time, so the fenced env stays applied for this whole block.
         for key, value in fenced.items():
             monkeypatch.setenv(key, value)
-        with _runner_api(config):
+        with runner_api(config):
             both_landed = poll_until(
                 lambda: _tick_then(
                     config,

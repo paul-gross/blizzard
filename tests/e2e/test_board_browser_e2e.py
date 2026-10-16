@@ -24,18 +24,9 @@ import uvicorn
 from blizzard.runner.app import build_hosted_app
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.loop_wiring import LoopWiring
-from tests.e2e.test_acceptance_loop import (
-    FIXTURE_ENV,
-    REPO,
-    REPO_NAME,
-    _forge,
-    _free_port,
-    _git_bare,
-    _hub,
-    _mock_bin_dir,
-    _runner_config,
-)
-from tests.fleet_world import mint_world, scripted_build_prompt
+from tests.fleet_launchers import REPO, git_bare, mock_bin_dir, run_forge, run_hub, runner_config
+from tests.fleet_world import FIXTURE_ENV, REPO_NAME, mint_world, scripted_build_prompt
+from tests.support import free_port
 
 if TYPE_CHECKING:  # playwright is imported lazily below — the module must import unskipped
     from playwright.sync_api import Locator, Page
@@ -231,7 +222,7 @@ def test_board_browser_live_group_reorder_answer_and_pause(tmp_path: Path, chrom
         pytest.skip("no Playwright Chromium installed (run `uv run playwright install chromium`)")
     from playwright.sync_api import expect, sync_playwright
 
-    bin_dir = _mock_bin_dir()
+    bin_dir = mock_bin_dir()
     if bin_dir is None:
         pytest.skip("no provisioned sibling blizzard-mock worktree (run `winter provision <env>`)")
 
@@ -243,8 +234,8 @@ def test_board_browser_live_group_reorder_answer_and_pause(tmp_path: Path, chrom
     origins = fixture_root / "origins"
     origin_bare = origins / f"{REPO_NAME}.git"
 
-    forge_port, hub_port = _free_port(), _free_port()
-    with _forge(bin_dir, origins, forge_port) as forge, _hub(tmp_path / "hub", forge_port, hub_port) as hub:
+    forge_port, hub_port = free_port(), free_port()
+    with run_forge(bin_dir, origins, forge_port) as forge, run_hub(tmp_path / "hub", forge_port, hub_port) as hub:
         assert hub.post("/api/graphs", json={"definition_yaml": _graph_yaml()}).status_code == 201
 
         # Three ready chunks: A (stays behind for the pause proof), B and C (grouped).
@@ -252,8 +243,8 @@ def test_board_browser_live_group_reorder_answer_and_pause(tmp_path: Path, chrom
         chunk_b = _ingest_chunk(forge, hub, "chunk B — group survivor")
         chunk_c = _ingest_chunk(forge, hub, "chunk C — group merged")
 
-        config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
-        config = dataclasses.replace(config, host="127.0.0.1", port=_free_port())
+        config = runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+        config = dataclasses.replace(config, host="127.0.0.1", port=free_port())
         fenced = dict(os.environ)
         fenced["BLIZZARD_MOCK_HARNESS_FENCE"] = "1"
 
@@ -507,5 +498,5 @@ def test_board_browser_live_group_reorder_answer_and_pause(tmp_path: Path, chrom
         pulls = forge.get(f"/repos/{REPO}/pulls", params={"state": "all"}).json()
         assert any(p.get("merged") for p in pulls), f"no PR merged at the forge: {pulls}"
 
-    tree = _git_bare(origin_bare, "ls-tree", "-r", "--name-only", "main")
+    tree = git_bare(origin_bare, "ls-tree", "-r", "--name-only", "main")
     assert "LANDED.md" in tree.split(), f"landed file not reachable from bare main:\n{tree}"

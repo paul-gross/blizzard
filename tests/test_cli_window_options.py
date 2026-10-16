@@ -28,7 +28,8 @@ def _command(factory: Callable[..., Any], name: str, *, required: bool | None) -
     @click.command()
     @option
     def probe(**values: Any) -> None:
-        click.echo(repr(values[name]))
+        value = values[name]
+        click.echo("None" if value is None else value.isoformat())
 
     return probe
 
@@ -58,13 +59,13 @@ def test_a_valid_iso_datetime_parses_to_the_naive_local_value(
     result = CliRunner().invoke(_command(factory, name, required=required), [f"--{name}", "2026-08-12T09:30:15"])
 
     assert result.exit_code == 0, result.output
-    assert result.output.strip() == repr(datetime(2026, 8, 12, 9, 30, 15))
+    assert result.output.strip() == datetime(2026, 8, 12, 9, 30, 15).isoformat()
 
 
 def _instant(factory: Callable[..., Any], name: str, value: str) -> datetime:
     result = CliRunner().invoke(_command(factory, name, required=False), [f"--{name}", value])
     assert result.exit_code == 0, result.output
-    return eval(result.output.strip(), {"datetime": __import__("datetime")})
+    return datetime.fromisoformat(result.output.strip())
 
 
 @pytest.mark.parametrize(("factory", "name"), _OPTIONS)

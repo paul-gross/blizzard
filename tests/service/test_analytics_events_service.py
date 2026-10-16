@@ -9,10 +9,11 @@ from pathlib import Path
 
 import pytest
 
-from tests.e2e.test_acceptance_loop import REPO, REPO_NAME, _forge, _free_port, _hub
-from tests.fleet_world import mint_world
+from tests.fleet_launchers import REPO, run_forge, run_hub
+from tests.fleet_world import REPO_NAME, mint_world
 from tests.runner_join import fleet_headers
 from tests.service.support import require_mock_fleet, service_gate
+from tests.support import free_port
 
 pytestmark = [pytest.mark.service, service_gate]
 
@@ -20,7 +21,7 @@ pytestmark = [pytest.mark.service, service_gate]
 def _stack(tmp_path: Path):  # type: ignore[no-untyped-def]
     bin_dir = require_mock_fleet()
     _workspace, origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
-    forge_port, hub_port = _free_port(), _free_port()
+    forge_port, hub_port = free_port(), free_port()
     return bin_dir, origins, forge_port, hub_port
 
 
@@ -77,7 +78,7 @@ def _record(chunk_id: str) -> dict:
 
 def test_both_encodings_serve_the_same_derived_events_in_the_same_order(tmp_path: Path) -> None:
     bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
-    with _forge(bin_dir, origins, forge_port) as forge, _hub(tmp_path / "hub", forge_port, hub_port) as hub:
+    with run_forge(bin_dir, origins, forge_port) as forge, run_hub(tmp_path / "hub", forge_port, hub_port) as hub:
         chunk_id = _ingest(forge, hub, "analytics events over a real hub")
         push = hub.post("/api/fleet/transcripts", json={"records": [_record(chunk_id)]}, headers=fleet_headers(hub))
         assert push.status_code == 200, push.text
@@ -98,7 +99,7 @@ def test_both_encodings_serve_the_same_derived_events_in_the_same_order(tmp_path
 
 def test_a_json_page_bounded_below_the_total_covers_it_exactly_once_via_its_cursor(tmp_path: Path) -> None:
     bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
-    with _forge(bin_dir, origins, forge_port) as forge, _hub(tmp_path / "hub", forge_port, hub_port) as hub:
+    with run_forge(bin_dir, origins, forge_port) as forge, run_hub(tmp_path / "hub", forge_port, hub_port) as hub:
         chunk_id = _ingest(forge, hub, "analytics paging over a real hub")
         push = hub.post("/api/fleet/transcripts", json={"records": [_record(chunk_id)]}, headers=fleet_headers(hub))
         assert push.status_code == 200, push.text

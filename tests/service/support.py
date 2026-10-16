@@ -27,13 +27,8 @@ import pytest
 
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.hub.internal.http_hub import HttpHubClient
-from tests.e2e.test_acceptance_loop import (
-    REPO_NAME,
-    _await_http,
-    _mock_bin_dir,
-    _terminate,
-)
-from tests.fleet_world import scripted_build_prompt
+from tests.fleet_launchers import await_http, mock_bin_dir, terminate
+from tests.fleet_world import REPO_NAME, scripted_build_prompt
 from tests.runner_join import add_runner, runner_spawn_env
 from tests.support import daemon_log_sink, shared_daemon_log_dir
 
@@ -51,7 +46,7 @@ service_gate = pytest.mark.skipif(
 
 def require_mock_fleet() -> Path:
     """The provisioned sibling ``blizzard-mock`` venv bin with the fleet binaries, or skip."""
-    bin_dir = _mock_bin_dir()
+    bin_dir = mock_bin_dir()
     if (
         bin_dir is None
         or not (bin_dir / "blizzard-mock-hub").is_file()
@@ -67,7 +62,7 @@ def require_stub_idp() -> Path:
     """The provisioned sibling ``blizzard-mock`` venv bin with the stub IdP,
     or skip — a separate check from :func:`require_mock_fleet` since most service-tier
     scenarios need no OAuth counterpart at all."""
-    bin_dir = _mock_bin_dir()
+    bin_dir = mock_bin_dir()
     if bin_dir is None or not (bin_dir / "blizzard-mock-idp").is_file():
         pytest.skip("no provisioned sibling blizzard-mock worktree with the stub IdP (run `winter provision <env>`)")
     return bin_dir
@@ -139,11 +134,11 @@ def stub_idp(bin_dir: Path, port: int, *, log_dir: Path | None = None) -> Iterat
     )
     client = httpx.Client(base_url=f"http://127.0.0.1:{port}", timeout=15.0)
     try:
-        _await_http(proc, client, "/healthz", log=log)
+        await_http(proc, client, "/healthz", log=log)
         yield client
     finally:
         client.close()
-        _terminate(proc)
+        terminate(proc)
 
 
 # The scripted build node: commits a file, pushes the branch, and declares it via
@@ -349,11 +344,11 @@ def mock_hub(bin_dir: Path, port: int, *, log_dir: Path | None = None) -> Iterat
     )
     client = httpx.Client(base_url=f"http://127.0.0.1:{port}", timeout=15.0)
     try:
-        _await_http(proc, client, "/api/health", log=log)
+        await_http(proc, client, "/api/health", log=log)
         yield client
     finally:
         client.close()
-        _terminate(proc)
+        terminate(proc)
 
 
 @contextlib.contextmanager
@@ -393,11 +388,11 @@ def mock_runner(
     )
     client = httpx.Client(base_url=f"http://127.0.0.1:{port}", timeout=15.0)
     try:
-        _await_http(proc, client, "/api/health", log=log)
+        await_http(proc, client, "/api/health", log=log)
         yield client
     finally:
         client.close()
-        _terminate(proc)
+        terminate(proc)
 
 
 def registered_runner_id(runner: httpx.Client, body: dict[str, object] | None = None) -> str:

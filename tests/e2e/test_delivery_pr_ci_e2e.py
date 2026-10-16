@@ -18,20 +18,9 @@ import pytest
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.loop_wiring import LoopWiring
 from tests.e2e.fleet_traces import FleetCollector, StepExpect, assert_skeleton
-from tests.e2e.test_acceptance_loop import (
-    _PUSH_AND_DECLARE_SCRIPT,
-    FIXTURE_ENV,
-    REPO,
-    REPO_NAME,
-    _forge,
-    _free_port,
-    _git_bare,
-    _hub,
-    _mock_bin_dir,
-    _runner_api,
-    _runner_config,
-)
-from tests.fleet_world import mint_world, scripted_build_prompt
+from tests.fleet_launchers import REPO, git_bare, mock_bin_dir, run_forge, run_hub, runner_api, runner_config
+from tests.fleet_world import FIXTURE_ENV, PUSH_AND_DECLARE_SCRIPT, REPO_NAME, mint_world, scripted_build_prompt
+from tests.support import free_port
 
 pytestmark = [
     pytest.mark.e2e,
@@ -51,7 +40,7 @@ _BUILD_SCRIPT = scripted_build_prompt(
     '     "-c", "user.email=mock@blizzard.local", "-c", "user.name=Mock Harness",\n'
     '     "commit", "-m", "feat: a change the PR+CI policy lands once CI goes green"],\n'
     "    check=True,\n"
-    ")\n" + _PUSH_AND_DECLARE_SCRIPT
+    ")\n" + PUSH_AND_DECLARE_SCRIPT
 )
 _BUILD_JUDGEMENT = "verdict('pass', 'committed the change; checks are green')\n"
 
@@ -103,7 +92,7 @@ def _graph_yaml(poll_timeout: int = 600) -> str:
 
 def _reset_fixture(tmp_path: Path) -> tuple[Path, Path, Path, Path]:
     """Reset the mock fixture workspace; skip if the sibling mock isn't present."""
-    bin_dir = _mock_bin_dir()
+    bin_dir = mock_bin_dir()
     if bin_dir is None:
         pytest.skip("no provisioned sibling blizzard-mock worktree (run `winter provision <env>`)")
 
@@ -130,13 +119,13 @@ def _ingest_and_promote(hub: httpx.Client, forge: httpx.Client, *, poll_timeout:
 def _drive_until(config: RunnerConfig, hub: httpx.Client, chunk_id: str, env: dict[str, str], predicate, timeout=60.0):
     """Tick until `predicate(detail)` is truthy; return that detail. Raises on timeout.
 
-    Wrapped in :func:`_runner_api` so the build node's scripted push+declare has a live
+    Wrapped in :func:`runner_api` so the build node's scripted push+declare has a live
     local API to POST to.
     """
     prior = dict(os.environ)
     os.environ.update(env)
     try:
-        with _runner_api(config):
+        with runner_api(config):
             deadline = time.monotonic() + timeout
             while time.monotonic() < deadline:
                 LoopWiring.of(config).tick_once()
@@ -174,14 +163,14 @@ def test_pr_ci_pends_on_blocked_then_lands_when_green(tmp_path: Path) -> None:
     blocked-wait path also pins exactly one unchanging `delivery-findings`
     artifact across the repeated polls."""
     bin_dir, workspace, origins, origin_bare = _reset_fixture(tmp_path)
-    main_before = _git_bare(origin_bare, "rev-parse", "main").strip()
+    main_before = git_bare(origin_bare, "rev-parse", "main").strip()
 
-    forge_port, hub_port = _free_port(), _free_port()
-    with _forge(bin_dir, origins, forge_port) as forge, _hub(tmp_path / "hub", forge_port, hub_port) as hub:
+    forge_port, hub_port = free_port(), free_port()
+    with run_forge(bin_dir, origins, forge_port) as forge, run_hub(tmp_path / "hub", forge_port, hub_port) as hub:
         # `blocked` (required CI not green yet) — the correct "not green" wait state.
         assert forge.post("/_levers/checks_pending", json={"repo": REPO}).status_code == 200
         chunk_id = _ingest_and_promote(hub, forge)
-        config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+        config = runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
         fenced = _fenced_env()
 
         # Pending: the PR is open but blocked, so nothing merges.
@@ -190,7 +179,7 @@ def test_pr_ci_pends_on_blocked_then_lands_when_green(tmp_path: Path) -> None:
         assert pending["landed"] is False
         pulls = forge.get(f"/repos/{REPO}/pulls", params={"state": "all"}).json()
         assert pulls and not any(p.get("merged") for p in pulls), f"a blocked PR merged while pending: {pulls}"
-        assert _git_bare(origin_bare, "rev-parse", "main").strip() == main_before, "bare main moved while pending"
+        assert git_bare(origin_bare, "rev-parse", "main").strip() == main_before, "bare main moved while pending"
         reference = {"repo": REPO, "number": pulls[0]["number"], "url": pulls[0]["html_url"]}
         assert pending["open_prs"] == [reference]
         assert pending["awaiting_external_merge"] is False
@@ -240,14 +229,14 @@ def test_pr_ci_pends_on_blocked_then_lands_when_green(tmp_path: Path) -> None:
         summary = next(row for row in hub.get("/api/chunks").json()["chunks"] if row["chunk_id"] == chunk_id)
         assert summary["landed_repos"] == landed
 
-    main_after = _git_bare(origin_bare, "rev-parse", "main").strip()
+    main_after = git_bare(origin_bare, "rev-parse", "main").strip()
     assert main_after != main_before, "bare main did not move despite a clean merge"
-    merge_sha, base_parent, head_parent = _git_bare(origin_bare, "rev-list", "--parents", "-n", "1", "main").split()
+    merge_sha, base_parent, head_parent = git_bare(origin_bare, "rev-list", "--parents", "-n", "1", "main").split()
     assert merge_sha == main_after and base_parent == main_before
     assert landed[0]["commit_hash"] == merge_sha
     assert head_parent == pulls[0]["head"]["sha"], "merge commit did not preserve the checked PR head"
     landings = [
-        ln for ln in _git_bare(origin_bare, "log", "--oneline", "--", "PR_CI_LANDED.md").splitlines() if ln.strip()
+        ln for ln in git_bare(origin_bare, "log", "--oneline", "--", "PR_CI_LANDED.md").splitlines() if ln.strip()
     ]
     assert len(landings) == 1, f"PR_CI_LANDED.md landed {len(landings)} times on bare main"
 
@@ -257,14 +246,14 @@ def test_pr_ci_routes_failure_on_a_terminally_failed_check(tmp_path: Path) -> No
     ruling out a `poll_timeout`-driven trigger. Two passes assert the findings content:
     plain CI failure, then a red base check ("not this change")."""
     bin_dir, workspace, origins, origin_bare = _reset_fixture(tmp_path)
-    main_before = _git_bare(origin_bare, "rev-parse", "main").strip()
+    main_before = git_bare(origin_bare, "rev-parse", "main").strip()
 
-    forge_port, hub_port = _free_port(), _free_port()
-    with _forge(bin_dir, origins, forge_port) as forge, _hub(tmp_path / "hub", forge_port, hub_port) as hub:
+    forge_port, hub_port = free_port(), free_port()
+    with run_forge(bin_dir, origins, forge_port) as forge, run_hub(tmp_path / "hub", forge_port, hub_port) as hub:
         # `checks_failed` — blocked with a completed, failing check run on the PR head.
         assert forge.post("/_levers/checks_failed", json={"repo": REPO}).status_code == 200
         chunk_id = _ingest_and_promote(hub, forge)
-        config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+        config = runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
         fenced = _fenced_env()
 
         bounced = _drive_until(config, hub, chunk_id, fenced, lambda b: bool(b.get("bounces")))
@@ -284,18 +273,18 @@ def test_pr_ci_routes_failure_on_a_terminally_failed_check(tmp_path: Path) -> No
             "the base wasn't armed red in this pass — the findings must not claim it is"
         )
 
-    assert _git_bare(origin_bare, "rev-parse", "main").strip() == main_before, "bare main moved on a CI failure"
+    assert git_bare(origin_bare, "rev-parse", "main").strip() == main_before, "bare main moved on a CI failure"
 
     # Second pass: the base's own check is also failing (AC3/AC5). Fresh tmp_path — reusing
     # the first pass's hub dir would carry over its bounced `toy-api:1` chunk.
     second_pass = tmp_path / "second-pass"
     bin_dir, workspace, origins, origin_bare = _reset_fixture(second_pass)
-    forge_port, hub_port = _free_port(), _free_port()
-    with _forge(bin_dir, origins, forge_port) as forge, _hub(second_pass / "hub", forge_port, hub_port) as hub:
+    forge_port, hub_port = free_port(), free_port()
+    with run_forge(bin_dir, origins, forge_port) as forge, run_hub(second_pass / "hub", forge_port, hub_port) as hub:
         assert forge.post("/_levers/checks_failed", json={"repo": REPO}).status_code == 200
         assert forge.post("/_levers/base_checks_failed", json={"repo": REPO}).status_code == 200
         chunk_id = _ingest_and_promote(hub, forge)
-        config = _runner_config(second_pass / "runner", workspace, bin_dir, hub_port)
+        config = runner_config(second_pass / "runner", workspace, bin_dir, hub_port)
         fenced = _fenced_env()
 
         bounced = _drive_until(config, hub, chunk_id, fenced, lambda b: bool(b.get("bounces")))
@@ -313,15 +302,15 @@ def test_pr_ci_self_heals_a_behind_branch_and_lands(tmp_path: Path) -> None:
     advances the head past the submitted commit and delivery still lands it."""
     bin_dir, workspace, origins, origin_bare = _reset_fixture(tmp_path)
     _push_commit(origin_bare, "main", tmp_path / "base-clone", "BASE_MOVED.md")
-    main_before = _git_bare(origin_bare, "rev-parse", "main").strip()
+    main_before = git_bare(origin_bare, "rev-parse", "main").strip()
 
-    forge_port, hub_port = _free_port(), _free_port()
-    with _forge(bin_dir, origins, forge_port) as forge, _hub(tmp_path / "hub", forge_port, hub_port) as hub:
+    forge_port, hub_port = free_port(), free_port()
+    with run_forge(bin_dir, origins, forge_port) as forge, run_hub(tmp_path / "hub", forge_port, hub_port) as hub:
         # `behind` — base moved, no conflict. The `stale_branch` lever clears ONLY via
         # `PUT .../update-branch`, so reaching `done` proves the script self-healed.
         assert forge.post("/_levers/stale_branch", json={"repo": REPO}).status_code == 200
         chunk_id = _ingest_and_promote(hub, forge)
-        config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+        config = runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
         fenced = _fenced_env()
 
         # The behind PR fires update-branch and pends at least once before healing.
@@ -336,25 +325,25 @@ def test_pr_ci_self_heals_a_behind_branch_and_lands(tmp_path: Path) -> None:
         pulls = forge.get(f"/repos/{REPO}/pulls", params={"state": "all"}).json()
         assert len([p for p in pulls if p.get("merged")]) == 1, f"expected one merged PR, got {pulls}"
 
-    main_after = _git_bare(origin_bare, "rev-parse", "main").strip()
+    main_after = git_bare(origin_bare, "rev-parse", "main").strip()
     assert main_after != main_before, "bare main did not move despite the self-healed land"
-    _, base_parent, head_parent = _git_bare(origin_bare, "rev-list", "--parents", "-n", "1", "main").split()
+    _, base_parent, head_parent = git_bare(origin_bare, "rev-list", "--parents", "-n", "1", "main").split()
     assert base_parent == main_before
-    assert main_before in _git_bare(origin_bare, "rev-list", "--parents", "-n", "1", head_parent).split()[1:], (
+    assert main_before in git_bare(origin_bare, "rev-list", "--parents", "-n", "1", head_parent).split()[1:], (
         "the advanced head is not a merge of the moved base"
     )
 
 
 def test_pr_ci_bounces_a_dirty_conflict_back_to_build(tmp_path: Path) -> None:
     bin_dir, workspace, origins, origin_bare = _reset_fixture(tmp_path)
-    main_before = _git_bare(origin_bare, "rev-parse", "main").strip()
+    main_before = git_bare(origin_bare, "rev-parse", "main").strip()
 
-    forge_port, hub_port = _free_port(), _free_port()
-    with _forge(bin_dir, origins, forge_port) as forge, _hub(tmp_path / "hub", forge_port, hub_port) as hub:
+    forge_port, hub_port = free_port(), free_port()
+    with run_forge(bin_dir, origins, forge_port) as forge, run_hub(tmp_path / "hub", forge_port, hub_port) as hub:
         # `dirty` — a real merge conflict. The script bounces to `build` immediately.
         assert forge.post("/_levers/merge_conflict", json={"repo": REPO}).status_code == 200
         chunk_id = _ingest_and_promote(hub, forge)
-        config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+        config = runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
         fenced = _fenced_env()
 
         # A conflict routes back to build — the FIRST recorded bounce carries cause `conflict`.
@@ -366,20 +355,20 @@ def test_pr_ci_bounces_a_dirty_conflict_back_to_build(tmp_path: Path) -> None:
         pulls = forge.get(f"/repos/{REPO}/pulls", params={"state": "all"}).json()
         assert pulls and not any(p.get("merged") for p in pulls), f"a dirty PR merged: {pulls}"
 
-    assert _git_bare(origin_bare, "rev-parse", "main").strip() == main_before, "bare main moved despite the conflict"
+    assert git_bare(origin_bare, "rev-parse", "main").strip() == main_before, "bare main moved despite the conflict"
 
 
 def test_pr_ci_refuses_a_foreign_commit_on_the_head(tmp_path: Path) -> None:
     """A commit pushed onto the PR's branch after the chunk submitted is not the submitted
     work: delivery bounces `failure` naming it, and nothing merges."""
     bin_dir, workspace, origins, origin_bare = _reset_fixture(tmp_path)
-    main_before = _git_bare(origin_bare, "rev-parse", "main").strip()
+    main_before = git_bare(origin_bare, "rev-parse", "main").strip()
 
-    forge_port, hub_port = _free_port(), _free_port()
-    with _forge(bin_dir, origins, forge_port) as forge, _hub(tmp_path / "hub", forge_port, hub_port) as hub:
+    forge_port, hub_port = free_port(), free_port()
+    with run_forge(bin_dir, origins, forge_port) as forge, run_hub(tmp_path / "hub", forge_port, hub_port) as hub:
         assert forge.post("/_levers/checks_pending", json={"repo": REPO}).status_code == 200
         chunk_id = _ingest_and_promote(hub, forge)
-        config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+        config = runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
         fenced = _fenced_env()
 
         pending = _drive_until(config, hub, chunk_id, fenced, lambda b: b["pending"] is not None)
@@ -401,7 +390,7 @@ def test_pr_ci_refuses_a_foreign_commit_on_the_head(tmp_path: Path) -> None:
         assert findings is not None, f"no foreign-head findings artifact recorded: {artifacts}"
         assert foreign in (findings.get("content") or "")
 
-    assert _git_bare(origin_bare, "rev-parse", "main").strip() == main_before, "bare main moved on a foreign head"
+    assert git_bare(origin_bare, "rev-parse", "main").strip() == main_before, "bare main moved on a foreign head"
 
 
 def test_pr_ci_bounces_a_poll_timeout_back_to_build(
@@ -410,17 +399,17 @@ def test_pr_ci_bounces_a_poll_timeout_back_to_build(
     """A PR that stays blocked past `poll_timeout` is a kick-back, not a failure that ends the chunk: the
     delivery bounces with cause `poll-timeout` and the chunk re-enters build."""
     bin_dir, workspace, origins, origin_bare = _reset_fixture(tmp_path)
-    main_before = _git_bare(origin_bare, "rev-parse", "main").strip()
+    main_before = git_bare(origin_bare, "rev-parse", "main").strip()
 
-    forge_port, hub_port = _free_port(), _free_port()
+    forge_port, hub_port = free_port(), free_port()
     with (
-        _forge(bin_dir, origins, forge_port) as forge,
-        _hub(tmp_path / "hub", forge_port, hub_port, collector=fleet_traces) as hub,
+        run_forge(bin_dir, origins, forge_port) as forge,
+        run_hub(tmp_path / "hub", forge_port, hub_port, collector=fleet_traces) as hub,
     ):
         # `blocked` for good: polls pend every second until the node's few-second timeout fires.
         assert forge.post("/_levers/checks_pending", json={"repo": REPO}).status_code == 200
         chunk_id = _ingest_and_promote(hub, forge, poll_timeout=4)
-        config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+        config = runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
         fenced = _fenced_env()
 
         bounced = _drive_until(config, hub, chunk_id, fenced, lambda b: bool(b.get("bounces")))
@@ -460,4 +449,4 @@ def test_pr_ci_bounces_a_poll_timeout_back_to_build(
                 ],
             )
 
-    assert _git_bare(origin_bare, "rev-parse", "main").strip() == main_before, "bare main moved on a poll timeout"
+    assert git_bare(origin_bare, "rev-parse", "main").strip() == main_before, "bare main moved on a poll timeout"

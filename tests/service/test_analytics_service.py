@@ -9,14 +9,15 @@ from pathlib import Path
 
 import pytest
 
-from tests.e2e.test_acceptance_loop import REPO, REPO_NAME, _forge, _free_port, _hub
-from tests.fleet_world import mint_world
+from tests.fleet_launchers import REPO, run_forge, run_hub
+from tests.fleet_world import REPO_NAME, mint_world
 from tests.runner_join import fleet_headers
 from tests.service.support import (
     require_mock_fleet,
     service_gate,
     transcript_segment_record,
 )
+from tests.support import free_port
 
 pytestmark = [pytest.mark.service, service_gate]
 
@@ -24,7 +25,7 @@ pytestmark = [pytest.mark.service, service_gate]
 def _stack(tmp_path: Path):  # type: ignore[no-untyped-def]
     bin_dir = require_mock_fleet()
     _workspace, origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
-    forge_port, hub_port = _free_port(), _free_port()
+    forge_port, hub_port = free_port(), free_port()
     return bin_dir, origins, forge_port, hub_port
 
 
@@ -44,7 +45,7 @@ def _record(chunk_id: str, *, segment_id: str, seq: int) -> dict:
 
 def test_a_segment_scoped_call_forces_that_one_segment(tmp_path: Path) -> None:
     bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
-    with _forge(bin_dir, origins, forge_port) as forge, _hub(tmp_path / "hub", forge_port, hub_port) as hub:
+    with run_forge(bin_dir, origins, forge_port) as forge, run_hub(tmp_path / "hub", forge_port, hub_port) as hub:
         chunk_id = _ingest(forge, hub, "re-derive segment scope")
         ack = hub.post(
             "/api/fleet/transcripts",
@@ -61,7 +62,7 @@ def test_a_segment_scoped_call_forces_that_one_segment(tmp_path: Path) -> None:
 
 def test_a_chunk_scoped_bounded_call_converges_over_repeated_calls(tmp_path: Path) -> None:
     bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
-    with _forge(bin_dir, origins, forge_port) as forge, _hub(tmp_path / "hub", forge_port, hub_port) as hub:
+    with run_forge(bin_dir, origins, forge_port) as forge, run_hub(tmp_path / "hub", forge_port, hub_port) as hub:
         chunk_id = _ingest(forge, hub, "re-derive chunk scope")
         records = [_record(chunk_id, segment_id=f"sg_{i}", seq=i) for i in range(1, 4)]
         ack = hub.post("/api/fleet/transcripts", json={"records": records}, headers=fleet_headers(hub))
@@ -82,7 +83,7 @@ def test_a_chunk_scoped_bounded_call_converges_over_repeated_calls(tmp_path: Pat
 
 def test_a_call_naming_both_a_segment_and_a_chunk_is_422(tmp_path: Path) -> None:
     bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
-    with _forge(bin_dir, origins, forge_port) as forge, _hub(tmp_path / "hub", forge_port, hub_port) as hub:
+    with run_forge(bin_dir, origins, forge_port) as forge, run_hub(tmp_path / "hub", forge_port, hub_port) as hub:
         chunk_id = _ingest(forge, hub, "re-derive mutually exclusive scope")
 
         resp = hub.post("/api/analytics/re-derive", json={"segment_id": "sg_1", "chunk_id": chunk_id})

@@ -19,8 +19,8 @@ from blizzard.foundation.fact_kinds import USAGE_RECORDED
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.loop_wiring import LoopWiring
-from tests.e2e.test_acceptance_loop import REPO, REPO_NAME, _forge, _free_port, _hub, _runner_config
-from tests.fleet_world import mint_world
+from tests.fleet_launchers import REPO, run_forge, run_hub, runner_config
+from tests.fleet_world import REPO_NAME, mint_world
 from tests.runner_fakes import daemon_store
 from tests.runner_join import fleet_headers
 from tests.service.support import (
@@ -31,6 +31,7 @@ from tests.service.support import (
     require_mock_fleet,
     service_gate,
 )
+from tests.support import free_port
 
 pytestmark = [pytest.mark.service, service_gate]
 
@@ -108,12 +109,12 @@ def test_runner_buffers_usage_facts_through_a_hub_outage_and_flushes_once(tmp_pa
     workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
     fenced = _tick_env()
 
-    hub_port = _free_port()
+    hub_port = free_port()
     with mock_hub(bin_dir, hub_port) as hub:
         resp = hub.post("/_seed/chunk", json=mock_hub_chunk_spec(_WORK_REF_URL))
         assert resp.status_code == 201, resp.text
         chunk_id = resp.json()["chunk_id"]
-        config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+        config = runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
 
         # Drive until the mock worker commits and ADVANCE buffers its usage fact(s),
         # caught before the next PULL would flush them.
@@ -235,13 +236,13 @@ def test_hub_derives_chunk_usage_totals_off_a_live_api_from_pushed_facts(tmp_pat
     absent-cost row and idempotent replay."""
     bin_dir = require_mock_fleet()
     _workspace, origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
-    forge_port, hub_port = _free_port(), _free_port()
+    forge_port, hub_port = free_port(), free_port()
 
-    with _forge(bin_dir, origins, forge_port) as forge, _hub(tmp_path / "hub", forge_port, hub_port) as hub:
+    with run_forge(bin_dir, origins, forge_port) as forge, run_hub(tmp_path / "hub", forge_port, hub_port) as hub:
         assert hub.post("/api/graphs", json={"definition_yaml": _graph_yaml()}).status_code == 201
         chunk_id = _ingest(forge, hub, "usage totals over the wire")
 
-        with mock_runner(bin_dir, _free_port(), hub_port, name="runner-usage") as runner:
+        with mock_runner(bin_dir, free_port(), hub_port, name="runner-usage") as runner:
             assert runner.post("/_drive/register").json()["status"] == 201
             claim = runner.post("/_drive/claim", json={"chunk_id": chunk_id}).json()
             assert claim["claimed"] is True, claim
@@ -311,13 +312,13 @@ def test_hub_reads_back_an_estimate_apart_from_billed_cost_off_a_live_api(tmp_pa
     ``cost_usd`` and not flagging the total partial."""
     bin_dir = require_mock_fleet()
     _workspace, origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
-    forge_port, hub_port = _free_port(), _free_port()
+    forge_port, hub_port = free_port(), free_port()
 
-    with _forge(bin_dir, origins, forge_port) as forge, _hub(tmp_path / "hub", forge_port, hub_port) as hub:
+    with run_forge(bin_dir, origins, forge_port) as forge, run_hub(tmp_path / "hub", forge_port, hub_port) as hub:
         assert hub.post("/api/graphs", json={"definition_yaml": _graph_yaml()}).status_code == 201
         chunk_id = _ingest(forge, hub, "usage estimate over the wire")
 
-        with mock_runner(bin_dir, _free_port(), hub_port, name="runner-usage-estimate") as runner:
+        with mock_runner(bin_dir, free_port(), hub_port, name="runner-usage-estimate") as runner:
             assert runner.post("/_drive/register").json()["status"] == 201
             claim = runner.post("/_drive/claim", json={"chunk_id": chunk_id}).json()
             assert claim["claimed"] is True, claim

@@ -22,7 +22,7 @@ from blizzard.runner.host_config import HOST_TOKEN_VARIABLE, RunnerEntry
 from blizzard.runner.host_layout import HostLayout
 from blizzard.runner.hub.internal.token_file import HubTokenFile
 from blizzard.runner.runtime import sqlite_store_file
-from tests.e2e.test_acceptance_loop import REPO, _await_http, _free_port, _runner_config, _terminate
+from tests.fleet_launchers import REPO, await_http, runner_config, terminate
 from tests.fleet_world import mint_world
 from tests.host_files import host_config_of, init_runner_environment, write_host_file
 from tests.runner_join import RUNNER_BIN, JoinedRunner, fleet_headers, runner_spawn_env, seed_pinned_runner
@@ -33,7 +33,7 @@ from tests.service.support import (
     require_mock_fleet,
     service_gate,
 )
-from tests.support import daemon_log_sink, read_daemon_log
+from tests.support import daemon_log_sink, free_port, read_daemon_log
 
 pytestmark = [pytest.mark.service, service_gate]
 
@@ -47,7 +47,7 @@ def _host(
 ) -> Iterator[httpx.Client]:
     """``blizzard-runner host`` over ``root``, its one runner configured as ``_CONFIGURED`` and holding ``token``,
     naming ``subscription`` when given and over a store whose identity row names ``store_names`` when given; yields a client to its port once it answers ``/api/health``."""
-    port = _free_port()
+    port = free_port()
     config = init_runner_environment(root)
     write_host_file(
         dataclasses.replace(
@@ -76,11 +76,11 @@ def _host(
     )
     client = httpx.Client(base_url=f"http://127.0.0.1:{port}", timeout=10.0)
     try:
-        _await_http(proc, client, "/api/health", log=log)
+        await_http(proc, client, "/api/health", log=log)
         yield client
     finally:
         client.close()
-        _terminate(proc)
+        terminate(proc)
 
 
 def _identity_state(local: httpx.Client) -> str | None:
@@ -101,7 +101,7 @@ def _status(root: Path, hub_url: str) -> subprocess.CompletedProcess[str]:
 
 def test_a_token_that_resolves_to_another_runner_halts_that_runner_while_the_host_serves(tmp_path: Path) -> None:
     bin_dir = require_mock_fleet()
-    hub_port = _free_port()
+    hub_port = free_port()
     hub_url = f"http://127.0.0.1:{hub_port}"
     root = tmp_path / "host"
     with mock_hub(bin_dir, hub_port) as hub:
@@ -123,7 +123,7 @@ def test_a_token_that_resolves_to_another_runner_halts_that_runner_while_the_hos
 
 def test_a_runner_only_config_error_halts_that_runner_while_the_host_serves(tmp_path: Path) -> None:
     bin_dir = require_mock_fleet()
-    hub_port = _free_port()
+    hub_port = free_port()
     hub_url = f"http://127.0.0.1:{hub_port}"
     root = tmp_path / "host"
     with mock_hub(bin_dir, hub_port) as hub:
@@ -141,7 +141,7 @@ def test_a_runner_only_config_error_halts_that_runner_while_the_host_serves(tmp_
 
 def test_a_store_that_names_another_runner_halts_that_runner_while_the_host_serves(tmp_path: Path) -> None:
     bin_dir = require_mock_fleet()
-    hub_port = _free_port()
+    hub_port = free_port()
     hub_url = f"http://127.0.0.1:{hub_port}"
     root = tmp_path / "host"
     with mock_hub(bin_dir, hub_port) as hub:
@@ -210,7 +210,7 @@ def _token_host(
     ``runners`` entry — each bound to its own project in the fixture workspace and holding its own token in
     ``.env`` — on the mock harness; yields a client to its port once it answers ``/api/health``."""
     hub_url = f"http://127.0.0.1:{hub_port}"
-    base = _runner_config(root, workspace, bin_dir, hub_port, join=False)
+    base = runner_config(root, workspace, bin_dir, hub_port, join=False)
     base = dataclasses.replace(
         base,
         workspaces=(dataclasses.replace(base.workspaces[0], envs=tuple(f"e{i + 1}" for i in range(len(runners)))),),
@@ -242,11 +242,11 @@ def _token_host(
     )
     client = httpx.Client(base_url=f"http://127.0.0.1:{base.port}", timeout=10.0)
     try:
-        _await_http(proc, client, "/api/health", log=log)
+        await_http(proc, client, "/api/health", log=log)
         yield client
     finally:
         client.close()
-        _terminate(proc)
+        terminate(proc)
 
 
 def _rows(root: Path, query: str, *params: object) -> list[tuple]:
@@ -296,7 +296,7 @@ def _fixture(tmp_path: Path) -> tuple[Path, Path]:
 
 def test_a_host_with_a_token_reports_itself_and_records_its_identity(tmp_path: Path) -> None:
     bin_dir, workspace = _fixture(tmp_path)
-    hub_port = _free_port()
+    hub_port = free_port()
     root = tmp_path / "host"
     with mock_hub(bin_dir, hub_port) as hub:
         host_id, host_token = _add_host(hub)
@@ -334,7 +334,7 @@ def test_a_host_with_a_token_reports_itself_and_records_its_identity(tmp_path: P
 
 def test_two_held_runners_claim_and_lease_independently(tmp_path: Path) -> None:
     bin_dir, workspace = _fixture(tmp_path)
-    hub_port = _free_port()
+    hub_port = free_port()
     root = tmp_path / "host"
     with mock_hub(bin_dir, hub_port) as hub:
         host_id, host_token = _add_host(hub)
@@ -357,7 +357,7 @@ def test_two_held_runners_claim_and_lease_independently(tmp_path: Path) -> None:
 
 def test_a_refused_and_a_not_held_runner_halt_alone_while_the_held_runner_works(tmp_path: Path) -> None:
     bin_dir, workspace = _fixture(tmp_path)
-    hub_port = _free_port()
+    hub_port = free_port()
     root = tmp_path / "host"
     with mock_hub(bin_dir, hub_port) as hub:
         host_id, host_token = _add_host(hub)
@@ -398,7 +398,7 @@ def test_a_refused_and_a_not_held_runner_halt_alone_while_the_held_runner_works(
 
 def test_against_a_hub_with_no_hosts_both_runners_work_and_the_host_buffers_its_facts(tmp_path: Path) -> None:
     bin_dir, workspace = _fixture(tmp_path)
-    hub_port = _free_port()
+    hub_port = free_port()
     root = tmp_path / "host"
     with mock_hub(bin_dir, hub_port) as hub:
         host_id, host_token = _add_host(hub)

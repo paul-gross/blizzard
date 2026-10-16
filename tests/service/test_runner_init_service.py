@@ -18,7 +18,7 @@ from sqlalchemy.engine import make_url
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.hub.internal.token_file import HubTokenFile
-from tests.e2e.test_acceptance_loop import _await_http, _free_port, _terminate
+from tests.fleet_launchers import await_http, terminate
 from tests.host_files import load_runner_config, sampler_without_credentials, write_host_file
 from tests.runner_fakes import make_store
 from tests.runner_join import (
@@ -30,7 +30,7 @@ from tests.runner_join import (
     token_identity,
 )
 from tests.service.support import poll_until, service_gate
-from tests.support import daemon_log_sink, read_daemon_log
+from tests.support import daemon_log_sink, free_port, read_daemon_log
 
 pytestmark = [pytest.mark.service, service_gate]
 
@@ -52,11 +52,11 @@ def _hub(hub_dir: Path, port: int) -> Iterator[httpx.Client]:
     )
     client = httpx.Client(base_url=f"http://127.0.0.1:{port}", timeout=30.0)
     try:
-        _await_http(proc, client, "/api/health", log=log)
+        await_http(proc, client, "/api/health", log=log)
         yield client
     finally:
         client.close()
-        _terminate(proc)
+        terminate(proc)
 
 
 def _identity(config: RunnerConfig) -> RunnerIdentity | None:
@@ -75,7 +75,7 @@ def _runner(runner_dir: Path, hub_url: str) -> Iterator[RunnerConfig]:
     write_host_file(config)
     log = runner_dir / "daemon.log"
     proc = subprocess.Popen(
-        [str(RUNNER_BIN), "host", "--dir", str(runner_dir), "--host", "127.0.0.1", "--port", str(_free_port())],
+        [str(RUNNER_BIN), "host", "--dir", str(runner_dir), "--host", "127.0.0.1", "--port", str(free_port())],
         env=runner_spawn_env(hub_url, {"BZ_RUNNER_TICK_SECONDS": "0.5"}),
         stdout=daemon_log_sink(log),
         stderr=subprocess.STDOUT,
@@ -85,7 +85,7 @@ def _runner(runner_dir: Path, hub_url: str) -> Iterator[RunnerConfig]:
         assert poll_until(lambda: _online(hub_url, config), timeout=30.0), read_daemon_log(log)
         yield config
     finally:
-        _terminate(proc)
+        terminate(proc)
 
 
 def _online(hub_url: str, config: RunnerConfig) -> bool:
@@ -106,7 +106,7 @@ def _view(hub: httpx.Client, runner_id: str) -> dict:
 def test_init_adds_a_runner_at_a_hub_without_sign_in_and_its_daemon_connects_under_the_minted_id(
     tmp_path: Path,
 ) -> None:
-    port = _free_port()
+    port = free_port()
     hub_url = f"http://127.0.0.1:{port}"
     runner_dir = tmp_path / "runner"
     with _hub(tmp_path / "hub", port) as hub:
@@ -131,7 +131,7 @@ def test_init_adds_a_runner_at_a_hub_without_sign_in_and_its_daemon_connects_und
 def test_a_runner_renamed_in_its_config_shows_the_new_name_under_the_same_id_after_a_restart(
     tmp_path: Path,
 ) -> None:
-    port = _free_port()
+    port = free_port()
     hub_url = f"http://127.0.0.1:{port}"
     runner_dir = tmp_path / "runner"
     with _hub(tmp_path / "hub", port) as hub:
@@ -154,7 +154,7 @@ def test_a_runner_renamed_in_its_config_shows_the_new_name_under_the_same_id_aft
 
 
 def test_a_runner_whose_store_is_deleted_re_registers_under_the_same_id(tmp_path: Path) -> None:
-    port = _free_port()
+    port = free_port()
     hub_url = f"http://127.0.0.1:{port}"
     runner_dir = tmp_path / "runner"
     with _hub(tmp_path / "hub", port) as hub:
@@ -173,7 +173,7 @@ def test_a_runner_whose_store_is_deleted_re_registers_under_the_same_id(tmp_path
 
 
 def test_init_for_a_retired_runner_names_reinstate_and_leaves_the_token_untouched(tmp_path: Path) -> None:
-    port = _free_port()
+    port = free_port()
     hub_url = f"http://127.0.0.1:{port}"
     runner_dir = tmp_path / "runner"
     with _hub(tmp_path / "hub", port) as hub:
@@ -192,7 +192,7 @@ def test_init_for_a_retired_runner_names_reinstate_and_leaves_the_token_untouche
 
 
 def test_after_its_hub_s_data_is_reset_init_re_adds_the_runner_only_with_allow_readd(tmp_path: Path) -> None:
-    port = _free_port()
+    port = free_port()
     hub_url = f"http://127.0.0.1:{port}"
     runner_dir = tmp_path / "runner"
     with _hub(tmp_path / "hub", port):

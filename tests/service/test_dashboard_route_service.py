@@ -15,10 +15,11 @@ import pytest
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.leases.model import NewLease
-from tests.e2e.test_acceptance_loop import _free_port, _runner_api, _runner_config
+from tests.fleet_launchers import runner_api, runner_config
 from tests.fleet_world import mint_world
 from tests.runner_fakes import SqlAlchemyRunnerStore, registered_fixture_store
 from tests.service.support import mock_hub, require_mock_fleet, service_gate
+from tests.support import free_port
 
 pytestmark = [pytest.mark.service, service_gate]
 
@@ -96,10 +97,10 @@ def test_dashboard_matches_the_individual_reads_over_a_real_running_daemon(tmp_p
     `/api/fleet/summary` route, so `fleet_summary` degrades to `null` for real."""
     bin_dir = require_mock_fleet()
     workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
-    hub_port = _free_port()
+    hub_port = free_port()
 
     with mock_hub(bin_dir, hub_port) as hub:
-        config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+        config = runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
 
         assert config.runner_id is not None
         engine = create_engine_from_url(config.db_url)
@@ -108,7 +109,7 @@ def test_dashboard_matches_the_individual_reads_over_a_real_running_daemon(tmp_p
         finally:
             engine.dispose()
 
-        with _runner_api(config):
+        with runner_api(config):
             client = httpx.Client(base_url=config.local_api_url, timeout=10.0)
             try:
                 dashboard = client.get("/api/dashboard")

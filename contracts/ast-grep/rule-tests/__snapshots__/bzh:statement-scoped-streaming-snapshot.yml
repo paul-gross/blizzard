@@ -16,6 +16,63 @@ snapshots:
       start: 30
       end: 44
   ? |
+    stmt = select(t).execution_options(**opts)
+  : labels:
+    - source: select(t).execution_options(**opts)
+      style: primary
+      start: 7
+      end: 42
+    - source: '**opts'
+      style: secondary
+      start: 35
+      end: 41
+  ? |
+    stmt = select(t).execution_options(**{"stream_results": True})
+  : labels:
+    - source: 'select(t).execution_options(**{"stream_results": True})'
+      style: primary
+      start: 7
+      end: 62
+    - source: '"stream_results"'
+      style: secondary
+      start: 38
+      end: 54
+    - source: '"stream_results": True'
+      style: secondary
+      start: 38
+      end: 60
+    - source: '{"stream_results": True}'
+      style: secondary
+      start: 37
+      end: 61
+    - source: '**{"stream_results": True}'
+      style: secondary
+      start: 35
+      end: 61
+  ? |
+    stmt = select(t).execution_options(**{"yield_per": 1000})
+  : labels:
+    - source: 'select(t).execution_options(**{"yield_per": 1000})'
+      style: primary
+      start: 7
+      end: 57
+    - source: '"yield_per"'
+      style: secondary
+      start: 38
+      end: 49
+    - source: '"yield_per": 1000'
+      style: secondary
+      start: 38
+      end: 55
+    - source: '{"yield_per": 1000}'
+      style: secondary
+      start: 37
+      end: 56
+    - source: '**{"yield_per": 1000}'
+      style: secondary
+      start: 35
+      end: 56
+  ? |
     stmt = select(t).execution_options(stream_results=True)
   : labels:
     - source: select(t).execution_options(stream_results=True)

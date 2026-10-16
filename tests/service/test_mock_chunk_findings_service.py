@@ -11,9 +11,9 @@ from pathlib import Path
 
 import pytest
 
-from tests.e2e.test_acceptance_loop import _free_port
 from tests.runner_join import fleet_headers
 from tests.service.support import mock_hub, mock_hub_chunk_spec, require_mock_fleet, service_gate
+from tests.support import free_port
 
 pytestmark = [pytest.mark.service, service_gate]
 
@@ -37,7 +37,7 @@ def _answered_chunk_spec(work_ref: str) -> dict:
 
 def test_the_mock_hub_serves_the_chunk_findings_list_and_get_routes(tmp_path: Path) -> None:
     bin_dir = require_mock_fleet()
-    hub_port = _free_port()
+    hub_port = free_port()
 
     with mock_hub(bin_dir, hub_port) as hub:
         seeded = hub.post("/_seed/chunk", json=_answered_chunk_spec(_WORK_REF_URL))
@@ -55,7 +55,7 @@ def test_the_mock_hub_serves_the_chunk_findings_list_and_get_routes(tmp_path: Pa
 
 def test_the_mock_hub_404s_a_chunk_answering_no_proposal(tmp_path: Path) -> None:
     bin_dir = require_mock_fleet()
-    hub_port = _free_port()
+    hub_port = free_port()
 
     with mock_hub(bin_dir, hub_port) as hub:
         seeded = hub.post("/_seed/chunk", json=mock_hub_chunk_spec(_WORK_REF_URL))  # no garden_answered_findings

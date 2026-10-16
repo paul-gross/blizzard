@@ -22,10 +22,11 @@ from blizzard.runner.cli import runner as runner_group
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.leases.model import NewLease
-from tests.e2e.test_acceptance_loop import _free_port, _runner_api, _runner_config
+from tests.fleet_launchers import runner_api, runner_config
 from tests.fleet_world import mint_world
 from tests.runner_fakes import SqlAlchemyRunnerStore, runner_store_errors
 from tests.service.support import mock_hub, require_mock_fleet, service_gate
+from tests.support import free_port
 
 pytestmark = [pytest.mark.service, service_gate]
 
@@ -73,7 +74,7 @@ def _cli_env(config: RunnerConfig, *, lease_id: str, token: str) -> dict[str, st
 def test_system_scope_list_and_get_serve_the_seeded_set_end_to_end(tmp_path: Path) -> None:
     bin_dir = require_mock_fleet()
     workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
-    hub_port = _free_port()
+    hub_port = free_port()
 
     with mock_hub(bin_dir, hub_port) as hub:
         seeded = hub.post(
@@ -81,12 +82,12 @@ def test_system_scope_list_and_get_serve_the_seeded_set_end_to_end(tmp_path: Pat
         )
         assert seeded.status_code == 201, seeded.text
 
-        base_config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
-        config = dataclasses.replace(base_config, host="127.0.0.1", port=_free_port())
+        base_config = runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+        config = dataclasses.replace(base_config, host="127.0.0.1", port=free_port())
         lease_id, token = "lease_sys_list_get", "tok_sys_list_get"
         _seed_lease(config, tmp_path / "runner", lease_id=lease_id, token=token, graph_id="gr_service_system_1")
 
-        with _runner_api(config):
+        with runner_api(config):
             env = _cli_env(config, lease_id=lease_id, token=token)
 
             listed = CliRunner().invoke(runner_group, ["artifact", "list", "--scope", "system"], env=env)
@@ -115,14 +116,14 @@ def test_system_scope_read_fails_rather_than_resolving_locally_when_the_hub_is_u
     read outright rather than ever answering it from nothing."""
     bin_dir = require_mock_fleet()
     workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
-    unreachable_hub_port = _free_port()  # nothing is listening here
+    unreachable_hub_port = free_port()  # nothing is listening here
 
-    base_config = _runner_config(tmp_path / "runner", workspace, bin_dir, unreachable_hub_port, join=False)
-    config = dataclasses.replace(base_config, host="127.0.0.1", port=_free_port())
+    base_config = runner_config(tmp_path / "runner", workspace, bin_dir, unreachable_hub_port, join=False)
+    config = dataclasses.replace(base_config, host="127.0.0.1", port=free_port())
     lease_id, token = "lease_sys_unreachable", "tok_sys_unreachable"
     _seed_lease(config, tmp_path / "runner", lease_id=lease_id, token=token, graph_id="gr_service_system_2")
 
-    with _runner_api(config):
+    with runner_api(config):
         env = _cli_env(config, lease_id=lease_id, token=token)
 
         listed = CliRunner().invoke(runner_group, ["artifact", "list", "--scope", "system"], env=env)
@@ -145,20 +146,20 @@ def test_a_worker_on_a_graph_with_no_artifacts_block_reads_a_packaged_name_verba
 
     bin_dir = require_mock_fleet()
     workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
-    hub_port = _free_port()
+    hub_port = free_port()
 
     with mock_hub(bin_dir, hub_port) as hub:
         seeded = hub.post("/_seed/system-artifacts", json={"name": "garden/finding-format", "content": packaged_text})
         assert seeded.status_code == 201, seeded.text
 
-        base_config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
-        config = dataclasses.replace(base_config, host="127.0.0.1", port=_free_port())
+        base_config = runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+        config = dataclasses.replace(base_config, host="127.0.0.1", port=free_port())
         lease_id, token = "lease_sys_no_artifacts_block", "tok_sys_no_artifacts_block"
         # A graph id nothing declares graph-scoped artifacts for — `_graph_rows` reads it
         # empty, exactly as a graph with no `artifacts:` block leaves it.
         _seed_lease(config, tmp_path / "runner", lease_id=lease_id, token=token, graph_id="gr_no_artifacts_block")
 
-        with _runner_api(config):
+        with runner_api(config):
             env = _cli_env(config, lease_id=lease_id, token=token)
             result = CliRunner().invoke(
                 runner_group,

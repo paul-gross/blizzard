@@ -7,8 +7,8 @@ from __future__ import annotations
 import httpx
 import pytest
 
-from tests.e2e.test_acceptance_loop import _free_port
 from tests.service.support import mock_hub, require_mock_fleet, service_gate
+from tests.support import free_port
 
 pytestmark = [pytest.mark.service, service_gate]
 
@@ -34,7 +34,7 @@ def _added_host(hub: httpx.Client) -> dict[str, str]:
 
 def test_the_host_token_reaches_the_host_routes_and_no_runner_route() -> None:
     bin_dir = require_mock_fleet()
-    with mock_hub(bin_dir, _free_port()) as hub:
+    with mock_hub(bin_dir, free_port()) as hub:
         host = _added_host(hub)
         reported = hub.post("/api/fleet/host", json=_REPORT, headers=_bearer(host["token"]))
         record = hub.get("/api/fleet/host", headers=_bearer(host["token"]))
@@ -48,7 +48,7 @@ def test_the_host_token_reaches_the_host_routes_and_no_runner_route() -> None:
 
 def test_a_runner_token_is_refused_on_the_host_routes() -> None:
     bin_dir = require_mock_fleet()
-    with mock_hub(bin_dir, _free_port()) as hub:
+    with mock_hub(bin_dir, free_port()) as hub:
         assert hub.post("/_seed/runners", json={"name": "r", "token": _RUNNER_TOKEN}).status_code in (200, 201)
         refused = hub.get("/api/fleet/host", headers=_bearer(_RUNNER_TOKEN))
         unknown = hub.get("/api/fleet/host", headers=_bearer("never-issued"))

@@ -17,15 +17,15 @@ import httpx
 import pytest
 import yaml
 
-from tests.e2e.test_acceptance_loop import OWNER, REPO, REPO_NAME, _forge, _free_port, _hub
-from tests.fleet_world import mint_world
+from tests.fleet_launchers import OWNER, REPO, run_forge, run_hub
+from tests.fleet_world import REPO_NAME, mint_world
 from tests.service.support import (
     mock_runner,
     poll_until,
     require_mock_fleet,
     service_gate,
 )
-from tests.support import fixture_work_source
+from tests.support import fixture_work_source, free_port
 
 pytestmark = [pytest.mark.service, service_gate]
 
@@ -42,8 +42,8 @@ def _two_projects(tmp_path: Path) -> Iterator[tuple[httpx.Client, httpx.Client, 
     bin_dir = require_mock_fleet()
     _workspace, origins, bare = mint_world(bin_dir, tmp_path / "scratch")
     subprocess.run(["git", "clone", "-q", "--bare", str(bare), str(origins / f"{_SECOND_SOURCE}.git")], check=True)
-    forge_port, hub_port = _free_port(), _free_port()
-    with _forge(bin_dir, origins, forge_port) as forge, _hub(tmp_path / "hub", forge_port, hub_port) as hub:
+    forge_port, hub_port = free_port(), free_port()
+    with run_forge(bin_dir, origins, forge_port) as forge, run_hub(tmp_path / "hub", forge_port, hub_port) as hub:
         created = hub.post("/api/projects", json={"slug": "second", "name": "Second"})
         assert created.status_code == 201, created.text
         source = fixture_work_source(_SECOND_SOURCE, _SECOND_REPO, f"http://127.0.0.1:{forge_port}")
@@ -161,7 +161,7 @@ def test_a_commit_its_project_does_not_link_is_refused_at_deliver_before_the_lan
         added = hub.post("/api/runners", json={"name": "runner-second", "projects": ["second"]})
         assert added.status_code == 201, added.text
 
-        with mock_runner(bin_dir, _free_port(), hub_port, token=added.json()["token"]) as runner:
+        with mock_runner(bin_dir, free_port(), hub_port, token=added.json()["token"]) as runner:
             assert runner.post("/_drive/register").json()["status"] == 201
             assert runner.post("/_drive/claim", json={"chunk_id": chunk_id}).json()["claimed"] is True
             completed = runner.post(

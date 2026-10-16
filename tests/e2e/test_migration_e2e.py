@@ -13,20 +13,9 @@ from pathlib import Path
 import pytest
 
 from tests.e2e.fleet_traces import FleetCollector, StepExpect, assert_skeleton
-from tests.e2e.test_acceptance_loop import (
-    _PUSH_AND_DECLARE_SCRIPT,
-    FIXTURE_ENV,
-    REPO,
-    REPO_NAME,
-    _drive_until_done,
-    _forge,
-    _free_port,
-    _git_bare,
-    _hub,
-    _mock_bin_dir,
-    _runner_config,
-)
-from tests.fleet_world import mint_world, scripted_build_prompt
+from tests.fleet_launchers import REPO, drive_until_done, git_bare, mock_bin_dir, run_forge, run_hub, runner_config
+from tests.fleet_world import FIXTURE_ENV, PUSH_AND_DECLARE_SCRIPT, REPO_NAME, mint_world, scripted_build_prompt
+from tests.support import free_port
 
 pytestmark = [
     pytest.mark.e2e,
@@ -52,7 +41,7 @@ _TARGET_BUILD_SCRIPT = scripted_build_prompt(
     '     "-c", "user.email=mock@blizzard.local", "-c", "user.name=Mock Harness",\n'
     '     "commit", "-m", "feat: land a change after migrating graphs"],\n'
     "    check=True,\n"
-    ")\n" + _PUSH_AND_DECLARE_SCRIPT
+    ")\n" + PUSH_AND_DECLARE_SCRIPT
 )
 _TARGET_JUDGEMENT = "verdict('pass', 'committed the change; checks are green')\n"
 
@@ -118,7 +107,7 @@ def test_cross_graph_migration_repins_requeues_and_lands_under_the_new_graph(
     tmp_path: Path, chromium_available: bool, fleet_traces: FleetCollector, subtests: pytest.Subtests
 ) -> None:
     """A worker's cross-graph choice migrates the chunk, which then lands under the target graph."""
-    bin_dir = _mock_bin_dir()
+    bin_dir = mock_bin_dir()
     if bin_dir is None:
         pytest.skip("no provisioned sibling blizzard-mock worktree (run `winter provision <env>`)")
 
@@ -129,10 +118,10 @@ def test_cross_graph_migration_repins_requeues_and_lands_under_the_new_graph(
     origins = fixture_root / "origins"
     origin_bare = origins / f"{REPO_NAME}.git"
 
-    forge_port, hub_port = _free_port(), _free_port()
+    forge_port, hub_port = free_port(), free_port()
     with (
-        _forge(bin_dir, origins, forge_port) as forge,
-        _hub(tmp_path / "hub", forge_port, hub_port, collector=fleet_traces) as hub,
+        run_forge(bin_dir, origins, forge_port) as forge,
+        run_hub(tmp_path / "hub", forge_port, hub_port, collector=fleet_traces) as hub,
     ):
         # Mint the target first (so the source's cross-graph choice resolves at mint without a
         # warning), then the source that ingest pins.
@@ -149,10 +138,10 @@ def test_cross_graph_migration_repins_requeues_and_lands_under_the_new_graph(
         chunk_id = ingested.json()["chunk_id"]
         assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
 
-        config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+        config = runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
         fenced = dict(os.environ)
         fenced["BLIZZARD_MOCK_HARNESS_FENCE"] = "1"
-        status = _drive_until_done(config, hub, chunk_id, fenced)
+        status = drive_until_done(config, hub, chunk_id, fenced)
 
         assert status == "done", f"chunk did not reach done (last status {status!r})"
 
@@ -240,6 +229,6 @@ def test_cross_graph_migration_repins_requeues_and_lands_under_the_new_graph(
 
     # Git truth: the change is reachable from bare main exactly once — only the target
     # graph's build branch lands it.
-    tree = _git_bare(origin_bare, "log", "--oneline", "--", "LANDED.md")
+    tree = git_bare(origin_bare, "log", "--oneline", "--", "LANDED.md")
     commits = [line for line in tree.splitlines() if line.strip()]
     assert len(commits) == 1, f"LANDED.md landed {len(commits)} times on bare main:\n{tree}"

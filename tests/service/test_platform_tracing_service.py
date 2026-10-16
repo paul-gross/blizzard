@@ -21,7 +21,7 @@ from blizzard.hub.config import HubConfig
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.leases.model import NewLease
 from tests import claude_code_telemetry
-from tests.e2e.test_acceptance_loop import _await_http, _free_port, _runner_config
+from tests.fleet_launchers import await_http, runner_config
 from tests.fleet_world import mint_world
 from tests.host_files import write_host_file
 from tests.otlp_sink import OtlpSink, otlp_sink
@@ -33,7 +33,7 @@ from tests.service.support import (
     require_mock_fleet,
     service_gate,
 )
-from tests.support import daemon_log_sink, read_daemon_log
+from tests.support import daemon_log_sink, free_port, read_daemon_log
 
 pytestmark = [pytest.mark.service, service_gate]
 
@@ -75,14 +75,14 @@ def _hub(hub_dir: Path, port: int, env: dict[str, str], *, platform: bool) -> su
 
 
 def _drive_hub(tmp_path: Path, *, platform: bool) -> list[tuple[dict[str, str], object]]:
-    port = _free_port()
+    port = free_port()
     hub_dir = tmp_path / "hub"
     with otlp_sink() as sink:
         env = {**os.environ, "OTEL_EXPORTER_OTLP_ENDPOINT": sink.url}
         proc = _hub(hub_dir, port, env, platform=platform)
         client = httpx.Client(base_url=f"http://127.0.0.1:{port}", timeout=30.0)
         try:
-            _await_http(proc, client, "/api/health", log=hub_dir / "daemon.log")
+            await_http(proc, client, "/api/health", log=hub_dir / "daemon.log")
             client.get("/api/chunks/ch_service?token=planted-secret")
         finally:
             client.close()
@@ -107,9 +107,9 @@ def test_a_hub_with_platform_unset_delivers_no_platform_span(tmp_path: Path) -> 
 def test_a_runner_host_delivers_server_spans_over_tcp_and_the_socket_and_tick_spans(tmp_path: Path) -> None:
     bin_dir = require_mock_fleet()
     workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
-    hub_port = _free_port()
+    hub_port = free_port()
     with mock_hub(bin_dir, hub_port), otlp_sink() as sink:
-        config: RunnerConfig = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+        config: RunnerConfig = runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
         config = dataclasses.replace(config, tracing=TracingConfig(platform=True, platform_sample_ratio=1.0))
         write_host_file(config)
         env = runner_spawn_env(
@@ -133,7 +133,7 @@ def test_a_runner_host_delivers_server_spans_over_tcp_and_the_socket_and_tick_sp
             base_url="http://runner", transport=httpx.HTTPTransport(uds=str(config.socket_path)), timeout=10.0
         )
         try:
-            _await_http(proc, tcp, "/api/health", log=log)
+            await_http(proc, tcp, "/api/health", log=log)
             # No platform span leaves before the runner's first registration, which its first tick makes.
             assert poll_until(lambda: read_daemon_log(log).count('"tick end"') >= 1, timeout=30.0)
             assert tcp.get("/api/health?token=planted-secret").status_code == 200
@@ -169,10 +169,10 @@ def _cli_export(trace: int) -> str:
 def test_a_worker_span_posted_over_tcp_and_the_socket_reaches_the_real_exporter(tmp_path: Path) -> None:
     bin_dir = require_mock_fleet()
     workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
-    hub_port = _free_port()
+    hub_port = free_port()
     token = "service-lease-token"
     with mock_hub(bin_dir, hub_port), otlp_sink() as sink:
-        config: RunnerConfig = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+        config: RunnerConfig = runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
         config = dataclasses.replace(config, tracing=TracingConfig(platform=True, platform_sample_ratio=1.0))
         write_host_file(config)
         env = runner_spawn_env(
@@ -192,7 +192,7 @@ def test_a_worker_span_posted_over_tcp_and_the_socket_reaches_the_real_exporter(
         )
         headers = {"Content-Type": "application/json", "X-Blizzard-Lease-Token": token}
         try:
-            _await_http(proc, tcp, "/api/health", log=log)
+            await_http(proc, tcp, "/api/health", log=log)
             assert poll_until(lambda: '"tick end"' in read_daemon_log(log), timeout=30.0)
             store = make_store(config.db_url, runner_id=config.runner_id)
             now = datetime.now(UTC)
@@ -224,10 +224,10 @@ def test_a_worker_span_posted_over_tcp_and_the_socket_reaches_the_real_exporter(
 def test_claude_code_metrics_and_logs_posted_over_tcp_and_the_socket_reach_the_real_exporters(tmp_path: Path) -> None:
     bin_dir = require_mock_fleet()
     workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
-    hub_port = _free_port()
+    hub_port = free_port()
     token = "service-lease-token"
     with mock_hub(bin_dir, hub_port), otlp_sink() as sink:
-        config: RunnerConfig = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+        config: RunnerConfig = runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
         tracing = TracingConfig(platform=True, platform_sample_ratio=1.0, harness_telemetry=True)
         config = dataclasses.replace(config, tracing=tracing)
         write_host_file(config)
@@ -247,7 +247,7 @@ def test_claude_code_metrics_and_logs_posted_over_tcp_and_the_socket_reach_the_r
             base_url="http://runner", transport=httpx.HTTPTransport(uds=str(config.socket_path)), timeout=10.0
         )
         try:
-            _await_http(proc, tcp, "/api/health", log=log)
+            await_http(proc, tcp, "/api/health", log=log)
             assert poll_until(lambda: '"tick end"' in read_daemon_log(log), timeout=30.0)
             store = make_store(config.db_url, runner_id=config.runner_id)
             # The first tick registered: the identity every forwarded item is stamped with.

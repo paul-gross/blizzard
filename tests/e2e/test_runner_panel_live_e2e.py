@@ -14,24 +14,20 @@ from pathlib import Path
 
 import pytest
 
-from tests.e2e.test_acceptance_loop import (
-    FIXTURE_ENV,
+from tests.fleet_launchers import (
     MOCK_HARNESS_FENCE_VAR,
     REPO,
-    REPO_NAME,
-    _await_http,
-    _forge,
-    _free_port,
-    _graph_yaml,
-    _hub,
-    _mock_bin_dir,
-    _runner_config,
-    _terminate,
+    await_http,
+    mock_bin_dir,
+    run_forge,
+    run_hub,
+    runner_config,
+    terminate,
 )
-from tests.fleet_world import mint_world
+from tests.fleet_world import FIXTURE_ENV, REPO_NAME, graph_yaml, mint_world
 from tests.host_files import write_host_file
 from tests.runner_join import runner_spawn_env
-from tests.support import daemon_log_sink
+from tests.support import daemon_log_sink, free_port
 
 pytestmark = [
     pytest.mark.e2e,
@@ -54,7 +50,7 @@ def test_runner_panel_updates_live_over_sse_with_no_reload(tmp_path: Path, chrom
         pytest.skip("no Playwright Chromium installed (run `uv run playwright install chromium`)")
     from playwright.sync_api import expect, sync_playwright
 
-    bin_dir = _mock_bin_dir()
+    bin_dir = mock_bin_dir()
     if bin_dir is None:
         pytest.skip("no provisioned sibling blizzard-mock worktree (run `winter provision <env>`)")
 
@@ -64,9 +60,9 @@ def test_runner_panel_updates_live_over_sse_with_no_reload(tmp_path: Path, chrom
     workspace = fixture_root / "workspace"
     origins = fixture_root / "origins"
 
-    forge_port, hub_port = _free_port(), _free_port()
-    with _forge(bin_dir, origins, forge_port) as forge, _hub(tmp_path / "hub", forge_port, hub_port) as hub:
-        assert hub.post("/api/graphs", json={"definition_yaml": _graph_yaml()}).status_code == 201
+    forge_port, hub_port = free_port(), free_port()
+    with run_forge(bin_dir, origins, forge_port) as forge, run_hub(tmp_path / "hub", forge_port, hub_port) as hub:
+        assert hub.post("/api/graphs", json={"definition_yaml": graph_yaml()}).status_code == 201
 
         issue = forge.post(f"/repos/{REPO}/issues", json={"title": "panel live update", "body": "prove SSE, no poll"})
         assert issue.status_code == 201, issue.text
@@ -79,7 +75,7 @@ def test_runner_panel_updates_live_over_sse_with_no_reload(tmp_path: Path, chrom
         # Persisted to disk, unlike the other scenarios' in-process config, so a real
         # `blizzard-runner host --dir` subprocess can load it.
         runner_dir = tmp_path / "runner"
-        config = _runner_config(runner_dir, workspace, bin_dir, hub_port)
+        config = runner_config(runner_dir, workspace, bin_dir, hub_port)
         write_host_file(config)
 
         log = runner_dir / "daemon.log"
@@ -103,7 +99,7 @@ def test_runner_panel_updates_live_over_sse_with_no_reload(tmp_path: Path, chrom
             import httpx
 
             runner_client = httpx.Client(base_url=f"http://{config.host}:{config.port}", timeout=15.0)
-            _await_http(proc, runner_client, "/api/health", log=log)
+            await_http(proc, runner_client, "/api/health", log=log)
             # The panel's board is the runner's own page, under the id the host serves it at.
             (served,) = runner_client.get("/api/host/runners").json()["items"]
             board_url = f"http://{config.host}:{config.port}/runners/{served['runner_id']}/board"
@@ -135,4 +131,4 @@ def test_runner_panel_updates_live_over_sse_with_no_reload(tmp_path: Path, chrom
         finally:
             if runner_client is not None:
                 runner_client.close()
-            _terminate(proc)
+            terminate(proc)

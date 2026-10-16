@@ -11,7 +11,7 @@ import httpx
 import pytest
 from pydantic import BaseModel
 
-from tests.e2e.test_acceptance_loop import _forge, _hub
+from tests.fleet_launchers import run_forge, run_hub
 from tests.service.support import service_gate
 from tests.service.test_hub_service import _ingest, _stack
 
@@ -93,7 +93,7 @@ def test_a_registration_naming_no_projects_keeps_the_declaration_and_an_empty_li
     tmp_path: Path,
 ) -> None:
     bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
-    with _forge(bin_dir, origins, forge_port) as forge, _hub(tmp_path / "hub", forge_port, hub_port) as hub:
+    with run_forge(bin_dir, origins, forge_port) as forge, run_hub(tmp_path / "hub", forge_port, hub_port) as hub:
         default = _project(hub, "default")
         chunk_id = _ingest(forge, hub, "a chunk of the served project")
         runner_id, bearer = _add(hub, "declared", projects=["default"])
@@ -115,7 +115,7 @@ def test_a_registration_naming_no_projects_keeps_the_declaration_and_an_empty_li
 
 def test_adding_a_runner_naming_no_projects_serves_a_one_project_tenants_project_by_id(tmp_path: Path) -> None:
     bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
-    with _forge(bin_dir, origins, forge_port), _hub(tmp_path / "hub", forge_port, hub_port) as hub:
+    with run_forge(bin_dir, origins, forge_port), run_hub(tmp_path / "hub", forge_port, hub_port) as hub:
         default = _project(hub, "default")
         runner_id, bearer = _add(hub, "sole-default")
 
@@ -126,7 +126,7 @@ def test_adding_a_runner_naming_no_projects_serves_a_one_project_tenants_project
 
 def test_adding_a_runner_naming_no_projects_serves_nothing_on_a_two_project_tenant(tmp_path: Path) -> None:
     bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
-    with _forge(bin_dir, origins, forge_port), _hub(tmp_path / "hub", forge_port, hub_port) as hub:
+    with run_forge(bin_dir, origins, forge_port), run_hub(tmp_path / "hub", forge_port, hub_port) as hub:
         _create_project(hub, "beta")
         runner_id, bearer = _add(hub, "no-default")
 
@@ -138,7 +138,7 @@ def test_claiming_an_unserved_projects_chunk_is_a_project_denial_an_older_runner
     tmp_path: Path,
 ) -> None:
     bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
-    with _forge(bin_dir, origins, forge_port) as forge, _hub(tmp_path / "hub", forge_port, hub_port) as hub:
+    with run_forge(bin_dir, origins, forge_port) as forge, run_hub(tmp_path / "hub", forge_port, hub_port) as hub:
         chunk_id = _ingest(forge, hub, "a chunk of the default project")
         beta = _create_project(hub, "beta")
         runner_id, bearer = _add(hub, "beta-only", projects=["beta"])

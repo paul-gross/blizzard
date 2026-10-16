@@ -12,9 +12,10 @@ from pathlib import Path
 import httpx
 import pytest
 
-from tests.e2e.test_acceptance_loop import REPO, _free_port, _runner_api, _runner_config
+from tests.fleet_launchers import REPO, runner_api, runner_config
 from tests.runner_join import pin_runner, seed_pinned_runner
 from tests.service.support import mock_hub, mock_hub_chunk_spec, require_mock_fleet, service_gate
+from tests.support import free_port
 
 pytestmark = [pytest.mark.service, service_gate]
 
@@ -27,15 +28,15 @@ def test_work_items_proxy_carries_the_widened_fields_unchanged_over_a_real_hop(t
     field the hop dropped or defaulted differently would fail this."""
     bin_dir = require_mock_fleet()
 
-    hub_port = _free_port()
+    hub_port = free_port()
     with mock_hub(bin_dir, hub_port) as hub:
         seeded = hub.post("/_seed/chunk", json=mock_hub_chunk_spec(_WORK_REF_URL))
         assert seeded.status_code == 201, seeded.text
         chunk_id = seeded.json()["chunk_id"]
 
-        config = _runner_config(tmp_path / "runner", tmp_path / "workspace", bin_dir, hub_port)
+        config = runner_config(tmp_path / "runner", tmp_path / "workspace", bin_dir, hub_port)
 
-        with _runner_api(config):
+        with runner_api(config):
             client = httpx.Client(base_url=config.local_api_url, timeout=10.0)
             try:
                 resp = client.get(f"/api/chunks/{chunk_id}/work-items")
@@ -73,7 +74,7 @@ def test_a_worker_lane_proxied_read_rides_out_a_real_mock_hub_restart(tmp_path: 
     # proxied reads present.
     runner = pin_runner(tmp_path / "runner", runner_id="rn_restart_test", name="runner-restart")
 
-    hub_port = _free_port()
+    hub_port = free_port()
     with mock_hub(bin_dir, hub_port) as hub:
         seed_pinned_runner(hub, runner)
         seeded = hub.post("/_seed/chunk", json=chunk_spec)
@@ -82,7 +83,7 @@ def test_a_worker_lane_proxied_read_rides_out_a_real_mock_hub_restart(tmp_path: 
 
     # The mock hub is down now (its process was terminated on the `with` block's exit) —
     # the runner started below points at its now-unoccupied port.
-    config = _runner_config(tmp_path / "runner", tmp_path / "workspace", bin_dir, hub_port, join=False)
+    config = runner_config(tmp_path / "runner", tmp_path / "workspace", bin_dir, hub_port, join=False)
 
     respawned = threading.Event()
 
@@ -96,7 +97,7 @@ def test_a_worker_lane_proxied_read_rides_out_a_real_mock_hub_restart(tmp_path: 
 
     respawn_thread = threading.Thread(target=respawn_after_a_beat, daemon=True)
 
-    with _runner_api(config):
+    with runner_api(config):
         respawn_thread.start()
         client = httpx.Client(base_url=config.local_api_url, timeout=40.0)
         try:

@@ -26,22 +26,12 @@ from blizzard.runner.config import ENV_TRANSCRIPTS_ROOT, RunnerConfig
 from blizzard.runner.harness.identity import OPENCODE_HARNESS_ID
 from tests.e2e import egress_proof as proof
 from tests.e2e.harness_variants import CLAUDE_CODE, OPENCODE_SESSION_MODEL
-from tests.e2e.test_acceptance_loop import (
-    _PUSH_AND_DECLARE_SCRIPT,
-    FIXTURE_ENV,
-    REPO,
-    REPO_NAME,
-    _forge,
-    _free_port,
-    _hub,
-    _mock_bin_dir,
-    _runner_api,
-    _runner_config,
-)
 from tests.e2e.test_ask_answer_e2e import _tick_until
 from tests.egress_recipes import FILES_A_STATION_READ_LAST_WEEK, recipe
-from tests.fleet_world import mint_world, scripted_build
+from tests.fleet_launchers import REPO, mock_bin_dir, run_forge, run_hub, runner_api, runner_config
+from tests.fleet_world import FIXTURE_ENV, PUSH_AND_DECLARE_SCRIPT, REPO_NAME, mint_world, scripted_build
 from tests.host_files import write_host_file
+from tests.support import free_port
 
 pytestmark = [
     pytest.mark.e2e,
@@ -87,7 +77,7 @@ def _commit(filename: str) -> str:
         '    ["git", "-C", repo, "-c", "user.email=mock@blizzard.local", "-c", "user.name=Mock Harness",\n'
         f'     "commit", "-m", "{filename}"],\n'
         "    check=True, capture_output=True,\n"
-        ")\n" + _PUSH_AND_DECLARE_SCRIPT
+        ")\n" + PUSH_AND_DECLARE_SCRIPT
     )
 
 
@@ -294,7 +284,7 @@ def _hub_counts_agree(world: World, directory: Path) -> list[str]:
 
 def test_the_exported_events_agree_with_the_hubs_own_counts(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A reader holding only the dictionary and the view gets the numbers the hub's analytics report."""
-    bin_dir = _mock_bin_dir()
+    bin_dir = mock_bin_dir()
     if bin_dir is None:
         pytest.skip("no provisioned sibling blizzard-mock worktree (run `winter provision <env>`)")
 
@@ -310,21 +300,23 @@ def test_the_exported_events_agree_with_the_hubs_own_counts(tmp_path: Path, monk
     fenced = dict(os.environ)
     fenced["BLIZZARD_MOCK_HARNESS_FENCE"] = "1"
     egress = EgressConfig(directory=export, sweep_seconds=1, settle_seconds=0, min_free_bytes=0)
-    forge_port, hub_port = _free_port(), _free_port()
+    forge_port, hub_port = free_port(), free_port()
 
     with (
-        _forge(bin_dir, origins, forge_port) as forge,
-        _hub(tmp_path / "hub", forge_port, hub_port, egress=egress, extra_env={egress.path_key_env: _PATH_KEY}) as hub,
+        run_forge(bin_dir, origins, forge_port) as forge,
+        run_hub(
+            tmp_path / "hub", forge_port, hub_port, egress=egress, extra_env={egress.path_key_env: _PATH_KEY}
+        ) as hub,
     ):
         runner_dir = tmp_path / "runner"
         config = dataclasses.replace(
-            _runner_config(runner_dir, workspace, bin_dir, hub_port),
+            runner_config(runner_dir, workspace, bin_dir, hub_port),
             transcripts_root=str(transcripts_root),
             transcripts_ship=True,
         )
         write_host_file(config)
         world = World(hub, forge, f"http://127.0.0.1:{hub_port}", config, fenced)
-        with _runner_api(config):
+        with runner_api(config):
             reads = world.ingest(_reads_graph(), "reads")
             assert world.tick_until(reads, _TERMINAL) == "done"
 

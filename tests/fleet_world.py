@@ -2,8 +2,9 @@
 
 The service, e2e, and crash tiers prove platform behavior, not the winter binding: their runners run on the
 built-in ``basic`` provider over a ``blizzard-mock`` fixture minted without a winter source (bare ``file://``
-origins plus an empty ``workspace/``). This module owns the three things every such scenario shares — the
-fixture mint, the runner's workspace over it, and the scripted build prompt that works on a basic worktree.
+origins plus an empty ``workspace/``). This module owns what every such scenario shares — the fixture mint, the
+runner's workspace over it, the scripted build prompt that works on a basic worktree, and the scripted
+``default-delivery`` graph with its node scripts.
 The winter binding's own cases live in ``tests/winter/``.
 """
 
@@ -20,6 +21,8 @@ import pytest
 
 from blizzard.runner.config import DEFAULT_WORKSPACE_ID, HostWorkspace
 from blizzard.runner.environments.provider import WorkspaceRepo
+from tests.e2e.fleet_traces import PLANT_LEASE_TOKEN_SCRIPT, SENTINEL_ARTIFACT_BODY
+from tests.e2e.harness_variants import CLAUDE_CODE, MockHarness
 
 #: The fixture project repo the platform tiers drive and the env keying the disposable fixture world.
 REPO_NAME = "toy-api"
@@ -114,3 +117,120 @@ def scripted_build[**P](script: Callable[P, str]) -> Callable[P, str]:
         return scripted_build_prompt(script(*args, **kwargs))
 
     return wrapped
+
+
+# Appended to a build prompt after a real commit: pushes the branch and declares it via
+# `blizzard runner artifact commit`; declaring twice per lease is harmless.
+PUSH_AND_DECLARE_SCRIPT = (
+    "_branch = subprocess.run(\n"
+    '    ["git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD"],\n'
+    "    check=True, capture_output=True, text=True,\n"
+    ").stdout.strip()\n"
+    "_commit = subprocess.run(\n"
+    '    ["git", "-C", repo, "rev-parse", "HEAD"],\n'
+    "    check=True, capture_output=True, text=True,\n"
+    ").stdout.strip()\n"
+    'subprocess.run(["git", "-C", repo, "push", "origin", _branch], check=True, capture_output=True)\n'
+    "subprocess.run(\n"
+    '    ["blizzard", "runner", "artifact", "commit",\n'
+    '     "--repo", repo, "--branch", _branch, "--commit", _commit],\n'
+    "    check=True, capture_output=True,\n"
+    ")\n"
+)
+
+# The scripted build-node prompt: the prompt is the program, run under the mock harness
+# with the acquired env dir as cwd, so it targets `toy-api` by relative path.
+BUILD_SCRIPT = scripted_build_prompt(
+    "import subprocess, pathlib\n"
+    f"repo = {REPO_NAME!r}\n"
+    '(pathlib.Path(repo) / "LANDED.md").write_text("landed by the mock harness\\n")\n'
+    'subprocess.run(["git", "-C", repo, "add", "-A"], check=True, capture_output=True)\n'
+    "subprocess.run(\n"
+    '    ["git", "-C", repo,\n'
+    '     "-c", "user.email=mock@blizzard.local", "-c", "user.name=Mock Harness",\n'
+    '     "commit", "-m", "feat: land a change from the mock harness"],\n'
+    "    check=True, capture_output=True,\n"
+    ")\n" + PUSH_AND_DECLARE_SCRIPT
+)
+# The build, probed: it plants its lease token for the leak scan and calls the hub through the runner.
+PROBED_BUILD_SCRIPT = (
+    PLANT_LEASE_TOKEN_SCRIPT
+    + "import os, subprocess\n"
+    + 'subprocess.run(["blizzard", "runner", "work-items", os.environ["BLIZZARD_CHUNK_ID"]], check=True, capture_output=True)\n'
+    + BUILD_SCRIPT
+)
+# The judgement-resume prompt: also arrives as code.
+JUDGEMENT_SCRIPT = "verdict('pass', 'the mock harness committed the change; checks are green')\n"
+
+# The review node scripted to PASS on first look, so the build commit travels straight to
+# deliver with no re-build; the base turn is a no-op, the verdict comes on judgement resume.
+REVIEW_SCRIPT = "pass\n"
+REVIEW_JUDGEMENT = "verdict('pass', 'cold-eyes review: the committed change is clean; ready to deliver')\n"
+# The review, probed: it submits the sentinel body as its findings artifact.
+PROBED_REVIEW_SCRIPT = (
+    PLANT_LEASE_TOKEN_SCRIPT
+    + "import subprocess\n"
+    + "subprocess.run(\n"
+    + '    ["blizzard", "runner", "artifact", "create", "--name", "review-findings"],\n'
+    + f"    input={SENTINEL_ARTIFACT_BODY!r}, text=True, check=True, capture_output=True,\n"
+    + ")\n"
+)
+
+
+def graph_yaml(harness: MockHarness = CLAUDE_CODE, *, probed: bool = False) -> str:
+    """The scripted ``default-delivery`` graph — ``build -> review -> deliver``.
+
+    Named ``default-delivery`` so the hub's lazy default-graph mint reuses this
+    pre-minted graph by name — the packaged prompts are LLM prose the mock cannot ``exec``. ``probed`` swaps in
+    the build and review scripts a trace proof reads back.
+    """
+    graph = {
+        "name": "default-delivery",
+        "entry": "build",
+        "nodes": {
+            "build": {
+                "executor": "runner",
+                "prompt": PROBED_BUILD_SCRIPT if probed else BUILD_SCRIPT,
+                "judgement": {
+                    "prompt": JUDGEMENT_SCRIPT,
+                    "choices": {
+                        "pass": {
+                            "description": "The change is committed and the node's checks are green.",
+                            "to": "review",
+                        }
+                    },
+                },
+                "retries": {"max": 1, "exhausted": "escalate"},
+            },
+            "review": {
+                "executor": "runner",
+                "prompt": PROBED_REVIEW_SCRIPT if probed else REVIEW_SCRIPT,
+                "session": "fresh",
+                "produces": ["review-findings"],
+                "judgement": {
+                    "prompt": REVIEW_JUDGEMENT,
+                    "choices": {
+                        "pass": {"description": "The change passes cold-eyes review.", "to": "deliver"},
+                        "fail": {
+                            "description": "Blocking issues found.",
+                            "to": "build",
+                            "prompt_addendum": "# address the review findings\n",
+                        },
+                    },
+                },
+                "retries": {"max": 1, "exhausted": "escalate"},
+            },
+            "deliver": {
+                "executor": "hub",
+                "run": [{"command": "python3 -m blizzard.hub.graphs.scripts.land_default"}],
+                "judgement": {
+                    "choices": {
+                        "landed": {"description": "Landed.", "to": "done"},
+                        "conflict": {"description": "Conflict.", "to": "build"},
+                        "failure": {"description": "Failed.", "to": "build"},
+                    }
+                },
+            },
+        },
+    }
+    return harness.graph_yaml(graph)

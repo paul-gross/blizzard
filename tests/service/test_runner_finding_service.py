@@ -15,7 +15,7 @@ import httpx
 import pytest
 
 from blizzard.runner.config import RunnerConfig
-from tests.e2e.test_acceptance_loop import _free_port, _runner_api, _runner_config
+from tests.fleet_launchers import runner_api, runner_config
 from tests.fleet_world import mint_world
 from tests.service.support import (
     mock_hub,
@@ -25,6 +25,7 @@ from tests.service.support import (
     service_gate,
 )
 from tests.service.test_runner_service import _tick_env, _tick_then, _worker_credential
+from tests.support import free_port
 
 pytestmark = [pytest.mark.service, service_gate]
 
@@ -67,16 +68,16 @@ def test_a_workers_finding_reads_proxy_through_to_the_mock_hubs_answered_set(tmp
     workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
     fenced = _tick_env()
 
-    hub_port = _free_port()
+    hub_port = free_port()
     with mock_hub(bin_dir, hub_port) as hub:
         seeded = hub.post("/_seed/chunk", json=_answered_chunk_spec(_WORK_REF_URL))
         assert seeded.status_code == 201, seeded.text
         chunk_id = seeded.json()["chunk_id"]
 
-        config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
-        config = dataclasses.replace(config, host="127.0.0.1", port=_free_port())
+        config = runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+        config = dataclasses.replace(config, host="127.0.0.1", port=free_port())
 
-        with _runner_api(config):
+        with runner_api(config):
             runner_client = httpx.Client(base_url=config.local_api_url, timeout=10.0)
             try:
                 lease_id = _mint_lease(config, fenced, runner_client, chunk_id)
@@ -101,16 +102,16 @@ def test_a_leases_chunk_answering_no_proposal_is_a_legible_refusal_not_an_empty_
     workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
     fenced = _tick_env()
 
-    hub_port = _free_port()
+    hub_port = free_port()
     with mock_hub(bin_dir, hub_port) as hub:
         seeded = hub.post("/_seed/chunk", json=mock_hub_chunk_spec(_WORK_REF_URL))  # no answered-findings at all
         assert seeded.status_code == 201, seeded.text
         chunk_id = seeded.json()["chunk_id"]
 
-        config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
-        config = dataclasses.replace(config, host="127.0.0.1", port=_free_port())
+        config = runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+        config = dataclasses.replace(config, host="127.0.0.1", port=free_port())
 
-        with _runner_api(config):
+        with runner_api(config):
             runner_client = httpx.Client(base_url=config.local_api_url, timeout=10.0)
             try:
                 lease_id = _mint_lease(config, fenced, runner_client, chunk_id)

@@ -35,20 +35,10 @@ from tests.e2e.fleet_traces import (
     stashed_route_tokens,
 )
 from tests.e2e.harness_variants import MockHarness, both_mock_harnesses
-from tests.e2e.test_acceptance_loop import (
-    _PUSH_AND_DECLARE_SCRIPT,
-    FIXTURE_ENV,
-    REPO,
-    REPO_NAME,
-    _forge,
-    _free_port,
-    _hub,
-    _mock_bin_dir,
-    _runner_api,
-    _runner_config,
-)
-from tests.fleet_world import mint_world, scripted_build_prompt
+from tests.fleet_launchers import REPO, mock_bin_dir, run_forge, run_hub, runner_api, runner_config
+from tests.fleet_world import FIXTURE_ENV, PUSH_AND_DECLARE_SCRIPT, REPO_NAME, mint_world, scripted_build_prompt
 from tests.runner_join import fleet_headers
+from tests.support import free_port
 
 pytestmark = [
     pytest.mark.e2e,
@@ -79,7 +69,7 @@ _ANSWER_SCRIPT = scripted_build_prompt(
     '     "-c", "user.email=mock@blizzard.local", "-c", "user.name=Mock Harness",\n'
     '     "commit", "-m", "feat: resolve the ask and land the change"],\n'
     "    check=True, capture_output=True,\n"
-    ")\n" + _PUSH_AND_DECLARE_SCRIPT
+    ")\n" + PUSH_AND_DECLARE_SCRIPT
 )
 # build judgement (elicited on the resumed session after the commit): pass to review.
 _JUDGEMENT_SCRIPT = "verdict('pass', 'resumed with the human answer; committed and green')\n"
@@ -184,7 +174,7 @@ def test_ask_parks_then_answer_resumes_session_to_done(
     tmp_path: Path, fleet_traces: FleetCollector, subtests: pytest.Subtests, harness: MockHarness
 ) -> None:
     """A worker asks and parks; the human's answer resumes the session and the chunk lands."""
-    bin_dir = _mock_bin_dir()
+    bin_dir = mock_bin_dir()
     if bin_dir is None:
         pytest.skip("no provisioned sibling blizzard-mock worktree (run `winter provision <env>`)")
 
@@ -195,10 +185,10 @@ def test_ask_parks_then_answer_resumes_session_to_done(
     origins = fixture_root / "origins"
     origin_bare = origins / f"{REPO_NAME}.git"
 
-    forge_port, hub_port = _free_port(), _free_port()
+    forge_port, hub_port = free_port(), free_port()
     with (
-        _forge(bin_dir, origins, forge_port) as forge,
-        _hub(tmp_path / "hub", forge_port, hub_port, collector=fleet_traces, platform_spans=True) as hub,
+        run_forge(bin_dir, origins, forge_port) as forge,
+        run_hub(tmp_path / "hub", forge_port, hub_port, collector=fleet_traces, platform_spans=True) as hub,
     ):
         assert hub.post("/api/graphs", json={"definition_yaml": _graph_yaml(harness)}).status_code == 201
         issue = forge.post(f"/repos/{REPO}/issues", json={"title": "ask/answer", "body": "the chunk"})
@@ -213,15 +203,15 @@ def test_ask_parks_then_answer_resumes_session_to_done(
         assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202  # ready for the runner
 
         # A free local-API port the worker's `blizzard runner ask` will POST to.
-        config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
-        config = dataclasses.replace(config, host="127.0.0.1", port=_free_port())
+        config = runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+        config = dataclasses.replace(config, host="127.0.0.1", port=free_port())
         planted = tmp_path / "planted"
         planted.mkdir()
         fenced = dict(os.environ)
         fenced["BLIZZARD_MOCK_HARNESS_FENCE"] = "1"
         fenced[PLANT_DIR_VAR] = str(planted)
 
-        with runner_sweep(config, fleet_traces) as sweep, _runner_api(config, process=sweep.process):
+        with runner_sweep(config, fleet_traces) as sweep, runner_api(config, process=sweep.process):
             process = sweep.process
             sweep.plant()
             # The worker asks and the chunk parks — derived waiting_on_human.

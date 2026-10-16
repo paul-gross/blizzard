@@ -27,13 +27,13 @@ from blizzard.runner.host_config import HOST_TOKEN_VARIABLE, HostConfig
 from blizzard.runner.host_layout import HostLayout
 from blizzard.runner.hub.internal.token_file import HubTokenFile
 from blizzard.runner.runtime import init_environment, migration_runner
-from tests.e2e.test_acceptance_loop import _await_http, _free_port, _terminate
+from tests.fleet_launchers import await_http, terminate
 from tests.host_files import sampler_without_credentials, write_host_file
 from tests.runner_fakes import make_store
 from tests.runner_join import RUNNER_BIN, run_runner_init, runner_spawn_env, token_identity
 from tests.runner_scope_seeding import reflect
 from tests.service.support import mock_hub, poll_until, require_mock_fleet, service_gate
-from tests.support import daemon_log_sink, read_daemon_log
+from tests.support import daemon_log_sink, free_port, read_daemon_log
 
 pytestmark = [pytest.mark.service, service_gate]
 
@@ -73,7 +73,7 @@ def _tree(root: Path) -> dict[str, str]:
 
 def test_init_with_allow_readd_sets_a_pre_host_store_aside_adds_a_runner_and_the_host_starts(tmp_path: Path) -> None:
     bin_dir = require_mock_fleet()
-    hub_port = _free_port()
+    hub_port = free_port()
     hub_url = f"http://127.0.0.1:{hub_port}"
     root = tmp_path / "runner"
     _left_behind(root)
@@ -102,7 +102,7 @@ def test_init_with_allow_readd_sets_a_pre_host_store_aside_adds_a_runner_and_the
         row = make_store(config.db_url, runner_id=config.runner_id).runner_identity()
         assert row is not None and (row.runner_id, row.runner_name) == (config.runner_id, config.name)
 
-        port = _free_port()
+        port = free_port()
         write_host_file(dataclasses.replace(config, host="127.0.0.1", port=port, subscriptions=()))
         log = root / "daemon.log"
         proc = subprocess.Popen(
@@ -114,7 +114,7 @@ def test_init_with_allow_readd_sets_a_pre_host_store_aside_adds_a_runner_and_the
         )
         local = httpx.Client(base_url=f"http://127.0.0.1:{port}", timeout=10.0)
         try:
-            _await_http(proc, local, "/api/health", log=log)
+            await_http(proc, local, "/api/health", log=log)
             own_read = f"/api/fleet/runners/{config.runner_id}"
             bearer = {"Authorization": f"Bearer {token}"}
             assert poll_until(lambda: hub.get(own_read, headers=bearer).status_code == 200, timeout=30.0), (
@@ -123,7 +123,7 @@ def test_init_with_allow_readd_sets_a_pre_host_store_aside_adds_a_runner_and_the
             assert local.get(f"/runners/{config.runner_id}/api/runner").json()["runner_id"] == config.runner_id
         finally:
             local.close()
-            _terminate(proc)
+            terminate(proc)
 
 
 def _runner_verb(root: Path, hub_url: str, *args: str) -> subprocess.CompletedProcess[str]:
@@ -145,11 +145,11 @@ def _running_host(root: Path, hub_url: str, port: int, log: Path) -> Iterator[ht
     )
     local = httpx.Client(base_url=f"http://127.0.0.1:{port}", timeout=10.0)
     try:
-        _await_http(proc, local, "/api/health", log=log)
+        await_http(proc, local, "/api/health", log=log)
         yield local
     finally:
         local.close()
-        _terminate(proc)
+        terminate(proc)
 
 
 def _identity_state(local: httpx.Client, runner_id: str) -> str | None:
@@ -159,10 +159,10 @@ def _identity_state(local: httpx.Client, runner_id: str) -> str | None:
 
 def test_runner_add_with_no_session_runs_after_a_restart_and_retire_halts_it_within_a_tick(tmp_path: Path) -> None:
     bin_dir = require_mock_fleet()
-    hub_port = _free_port()
+    hub_port = free_port()
     hub_url = f"http://127.0.0.1:{hub_port}"
     root = tmp_path / "host"
-    port = _free_port()
+    port = free_port()
     log = root / "daemon.log"
 
     with mock_hub(bin_dir, hub_port) as hub:

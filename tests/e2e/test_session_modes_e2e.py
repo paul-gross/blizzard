@@ -15,20 +15,10 @@ from pathlib import Path
 import pytest
 
 from blizzard.foundation.store.engine import create_engine_from_url
-from tests.e2e.test_acceptance_loop import (
-    _PUSH_AND_DECLARE_SCRIPT,
-    FIXTURE_ENV,
-    REPO,
-    REPO_NAME,
-    _drive_until_done,
-    _forge,
-    _free_port,
-    _hub,
-    _mock_bin_dir,
-    _runner_config,
-)
-from tests.fleet_world import mint_world, scripted_build_prompt
+from tests.fleet_launchers import REPO, drive_until_done, mock_bin_dir, run_forge, run_hub, runner_config
+from tests.fleet_world import FIXTURE_ENV, PUSH_AND_DECLARE_SCRIPT, REPO_NAME, mint_world, scripted_build_prompt
 from tests.runner_fakes import daemon_store
+from tests.support import free_port
 
 pytestmark = [
     pytest.mark.e2e,
@@ -51,7 +41,7 @@ _BUILD_SCRIPT = scripted_build_prompt(
     '     "-c", "user.email=mock@blizzard.local", "-c", "user.name=Mock Harness",\n'
     '     "commit", "-m", "feat: a build pass"],\n'
     "    check=True,\n"
-    ")\n" + _PUSH_AND_DECLARE_SCRIPT
+    ")\n" + PUSH_AND_DECLARE_SCRIPT
 )
 _BUILD_JUDGEMENT = "verdict('pass', 'checks are green')\n"
 
@@ -153,7 +143,7 @@ def _session_turns(workspace: Path, session_id: str) -> int:
 
 def test_session_modes_resume_targeted_and_fresh_across_a_cycle(tmp_path: Path) -> None:
     """build (`resume:build`) re-entry resumes its own session; `fresh` review is new each time."""
-    bin_dir = _mock_bin_dir()
+    bin_dir = mock_bin_dir()
     if bin_dir is None:
         pytest.skip("no provisioned sibling blizzard-mock worktree (run `winter provision <env>`)")
 
@@ -164,10 +154,10 @@ def test_session_modes_resume_targeted_and_fresh_across_a_cycle(tmp_path: Path) 
     origins = fixture_root / "origins"
     origin_bare = origins / f"{REPO_NAME}.git"
 
-    forge_port, hub_port = _free_port(), _free_port()
+    forge_port, hub_port = free_port(), free_port()
     runner_dir = tmp_path / "runner"
     db_url = ""
-    with _forge(bin_dir, origins, forge_port) as forge, _hub(tmp_path / "hub", forge_port, hub_port) as hub:
+    with run_forge(bin_dir, origins, forge_port) as forge, run_hub(tmp_path / "hub", forge_port, hub_port) as hub:
         assert hub.post("/api/graphs", json={"definition_yaml": _graph_yaml()}).status_code == 201
 
         issue = forge.post(f"/repos/{REPO}/issues", json={"title": "session modes", "body": "the chunk"})
@@ -178,11 +168,11 @@ def test_session_modes_resume_targeted_and_fresh_across_a_cycle(tmp_path: Path) 
         chunk_id = ingested.json()["chunk_id"]
         assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202  # ready for the runner
 
-        config = _runner_config(runner_dir, workspace, bin_dir, hub_port)
+        config = runner_config(runner_dir, workspace, bin_dir, hub_port)
         db_url = config.db_url
         fenced = dict(os.environ)
         fenced["BLIZZARD_MOCK_HARNESS_FENCE"] = "1"
-        status = _drive_until_done(config, hub, chunk_id, fenced)
+        status = drive_until_done(config, hub, chunk_id, fenced)
 
         assert status == "done", f"chunk did not reach done (last status {status!r})"
 
@@ -278,7 +268,7 @@ def _session_invocations(workspace: Path, session_id: str) -> list[dict]:
 def test_a_named_pool_threads_one_session_across_nodes_and_reasserts_its_model(tmp_path: Path) -> None:
     """`fresh:code` mints; `resume:code` at a *different* node continues it; the mint
     and every resume carry the same resolved model."""
-    bin_dir = _mock_bin_dir()
+    bin_dir = mock_bin_dir()
     if bin_dir is None:
         pytest.skip("no provisioned sibling blizzard-mock worktree (run `winter provision <env>`)")
 
@@ -287,12 +277,12 @@ def test_a_named_pool_threads_one_session_across_nodes_and_reasserts_its_model(t
     fixture_root = scratch / FIXTURE_ENV
     workspace = fixture_root / "workspace"
 
-    forge_port, hub_port = _free_port(), _free_port()
+    forge_port, hub_port = free_port(), free_port()
     runner_dir = tmp_path / "runner"
     db_url = ""
     with (
-        _forge(bin_dir, fixture_root / "origins", forge_port) as forge,
-        _hub(tmp_path / "hub", forge_port, hub_port) as hub,
+        run_forge(bin_dir, fixture_root / "origins", forge_port) as forge,
+        run_hub(tmp_path / "hub", forge_port, hub_port) as hub,
     ):
         assert hub.post("/api/graphs", json={"definition_yaml": _pooled_graph_yaml()}).status_code == 201
 
@@ -303,11 +293,11 @@ def test_a_named_pool_threads_one_session_across_nodes_and_reasserts_its_model(t
         chunk_id = ingested.json()["chunk_id"]
         assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
 
-        config = _runner_config(runner_dir, workspace, bin_dir, hub_port)
+        config = runner_config(runner_dir, workspace, bin_dir, hub_port)
         db_url = config.db_url
         fenced = dict(os.environ)
         fenced["BLIZZARD_MOCK_HARNESS_FENCE"] = "1"
-        status = _drive_until_done(config, hub, chunk_id, fenced)
+        status = drive_until_done(config, hub, chunk_id, fenced)
 
         assert status == "done", f"chunk did not reach done (last status {status!r})"
 

@@ -14,7 +14,21 @@ rule:
   pattern: $X.execution_options($$$ARGS)
   has:
     stopBy: end
-    kind: keyword_argument
-    has:
-      field: name
-      regex: ^(yield_per|stream_results)$
+    any:
+      - kind: keyword_argument
+        has:
+          field: name
+          regex: ^(yield_per|stream_results)$
+      - kind: dictionary_splat
+        has:
+          kind: dictionary
+          has:
+            kind: pair
+            has:
+              field: key
+              kind: string
+              regex: (yield_per|stream_results)
+      - kind: dictionary_splat
+        not:
+          has:
+            kind: dictionary

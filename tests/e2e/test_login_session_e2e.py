@@ -23,10 +23,10 @@ import pytest
 
 from blizzard.auth_core import Role
 from blizzard.hub.config import AuthConfig, HubConfig, OAuthProviderConfig
-from tests.e2e.test_acceptance_loop import _await_http, _free_port, _terminate
+from tests.fleet_launchers import await_http, terminate
 from tests.service.support import require_stub_idp, stub_idp
 from tests.service.test_auth_login_service import invite
-from tests.support import daemon_log_sink
+from tests.support import daemon_log_sink, free_port
 
 pytestmark = [
     pytest.mark.e2e,
@@ -77,7 +77,7 @@ def _start_hub(hub_dir: Path, port: int) -> subprocess.Popen[str]:
     )
     client = httpx.Client(base_url=f"http://127.0.0.1:{port}", timeout=30.0)
     try:
-        _await_http(proc, client, "/api/health", log=log)
+        await_http(proc, client, "/api/health", log=log)
     finally:
         client.close()
     return proc
@@ -145,8 +145,8 @@ def test_browser_login_dance_and_mid_stream_session_expiry(tmp_path: Path) -> No
 
     bin_dir = require_stub_idp()
 
-    idp_port = _free_port()
-    hub_port = _free_port()
+    idp_port = free_port()
+    hub_port = free_port()
     hub_dir = tmp_path / "hub"
     chunk_id = "ch_01e2eloginchunk00000000000"
     graph_id = "gr_01e2eloginchunk00000000000"
@@ -184,7 +184,7 @@ def test_browser_login_dance_and_mid_stream_session_expiry(tmp_path: Path) -> No
             assert not [cookie for cookie in page.context.cookies() if cookie.get("name") == "bz_session"]
 
             # --- 2. Invited as `guest`, the board is reachable read-only -------------
-            _terminate(proc)
+            terminate(proc)
             _seed_not_ready_chunk(hub_dir, chunk_id=chunk_id, graph_id=graph_id)
             proc = _start_hub(hub_dir, hub_port)
             token = invite(hub_dir, "octocat@example.com", role=Role.GUEST)
@@ -206,7 +206,7 @@ def test_browser_login_dance_and_mid_stream_session_expiry(tmp_path: Path) -> No
             expect(page.get_by_test_id("promote-chunk")).to_have_count(0)
 
             # --- 3. Promoted to `contributor`, the write control appears -----------
-            _terminate(proc)
+            terminate(proc)
             _set_role(hub_dir, "octocat", "contributor")
             proc = _start_hub(hub_dir, hub_port)
 
@@ -216,7 +216,7 @@ def test_browser_login_dance_and_mid_stream_session_expiry(tmp_path: Path) -> No
 
             # --- 4. Expire the session mid-stream; the hub restart force-drops the
             # SSE connection and the client's reconnect discovers the invalid session.
-            _terminate(proc)
+            terminate(proc)
             _expire_session(hub_dir)
             proc = _start_hub(hub_dir, hub_port)
 
@@ -226,4 +226,4 @@ def test_browser_login_dance_and_mid_stream_session_expiry(tmp_path: Path) -> No
             expect(page.get_by_test_id(f"login-provider-{_PROVIDER_NAME}")).to_be_visible()
         finally:
             browser.close()
-            _terminate(proc)
+            terminate(proc)

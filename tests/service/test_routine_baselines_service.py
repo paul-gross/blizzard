@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.e2e.test_acceptance_loop import REPO_NAME
+from tests.fleet_world import REPO_NAME
 from tests.service.support import service_gate
 from tests.service.test_finding_exits_service import Garden, add_op, deliver, garden_stack, seed
 

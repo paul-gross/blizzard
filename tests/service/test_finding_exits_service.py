@@ -22,14 +22,15 @@ import pytest
 import yaml
 
 from blizzard.hub.graphs import PACKAGED
-from tests.e2e.test_acceptance_loop import REPO_NAME, _forge, _free_port, _hub
-from tests.fleet_world import mint_world
+from tests.fleet_launchers import run_forge, run_hub
+from tests.fleet_world import REPO_NAME, mint_world
 from tests.service.support import (
     mock_runner,
     poll_until,
     require_mock_fleet,
     service_gate,
 )
+from tests.support import free_port
 
 pytestmark = [pytest.mark.service, service_gate]
 
@@ -57,11 +58,11 @@ def garden_stack(tmp_path: Path) -> Iterator[Garden]:
     head = subprocess.run(
         ["git", "-C", str(bare), "rev-parse", "HEAD"], check=True, capture_output=True, text=True
     ).stdout.strip()
-    forge_port, hub_port = _free_port(), _free_port()
+    forge_port, hub_port = free_port(), free_port()
     with (
-        _forge(bin_dir, origins, forge_port),
-        _hub(tmp_path / "hub", forge_port, hub_port) as hub,
-        mock_runner(bin_dir, _free_port(), hub_port) as runner,
+        run_forge(bin_dir, origins, forge_port),
+        run_hub(tmp_path / "hub", forge_port, hub_port) as hub,
+        mock_runner(bin_dir, free_port(), hub_port) as runner,
     ):
         minted = hub.post(
             "/api/graphs", json={"definition_yaml": yaml.safe_dump(PACKAGED.named("garden-routine").body)}

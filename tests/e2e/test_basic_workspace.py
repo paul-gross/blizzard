@@ -10,20 +10,19 @@ import pytest
 
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.environments.provider import WorkspaceRepo
-from tests.e2e.test_acceptance_loop import (
+from tests.fleet_launchers import (
     MOCK_HARNESS_FENCE_VAR,
     REPO,
-    REPO_NAME,
-    _drive_until_done,
-    _forge,
-    _free_port,
-    _git_bare,
-    _graph_yaml,
-    _hub,
-    _mock_bin_dir,
-    _runner_config,
+    drive_until_done,
+    git_bare,
+    mock_bin_dir,
+    run_forge,
+    run_hub,
+    runner_config,
 )
+from tests.fleet_world import REPO_NAME, graph_yaml
 from tests.host_files import with_workspace, write_host_file
+from tests.support import free_port
 
 
 def bare_origin(tmp_path: Path) -> Path:
@@ -49,12 +48,12 @@ def bare_origin(tmp_path: Path) -> Path:
 
 def basic_graph_yaml() -> str:
     """The scripted graph, whose build already switches to its own branch on the detached worktree."""
-    return _graph_yaml()
+    return graph_yaml()
 
 
 def basic_config(runner_dir: Path, workspace: Path, bin_dir: Path, hub_port: int, origin: Path) -> RunnerConfig:
     config = with_workspace(
-        _runner_config(runner_dir, workspace, bin_dir, hub_port), repos=(WorkspaceRepo(REPO_NAME, f"file://{origin}"),)
+        runner_config(runner_dir, workspace, bin_dir, hub_port), repos=(WorkspaceRepo(REPO_NAME, f"file://{origin}"),)
     )
     write_host_file(config)
     return config
@@ -76,7 +75,7 @@ def trap_winter(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 def test_basic_workspace_chunk_lands_without_winter(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     if os.environ.get("BLIZZARD_E2E") != "1":
         pytest.skip("set BLIZZARD_E2E=1 to drive the real mock fleet")
-    bin_dir = _mock_bin_dir()
+    bin_dir = mock_bin_dir()
     if bin_dir is None:
         pytest.skip("provision the sibling blizzard-mock worktree")
 
@@ -85,8 +84,8 @@ def test_basic_workspace_chunk_lands_without_winter(tmp_path: Path, monkeypatch:
     workspace = tmp_path / "ordinary-workspace"
     workspace.mkdir()
     (workspace / ".blizzard-mock-harness-fence").write_text("basic workspace test\n")
-    forge_port, hub_port = _free_port(), _free_port()
-    with _forge(bin_dir, bare.parent, forge_port) as forge, _hub(tmp_path / "hub", forge_port, hub_port) as hub:
+    forge_port, hub_port = free_port(), free_port()
+    with run_forge(bin_dir, bare.parent, forge_port) as forge, run_hub(tmp_path / "hub", forge_port, hub_port) as hub:
         assert forge.get(f"/repos/{REPO}").status_code == 200
         graph = hub.post("/api/graphs", json={"definition_yaml": basic_graph_yaml()})
         assert graph.status_code == 201, graph.text
@@ -99,10 +98,10 @@ def test_basic_workspace_chunk_lands_without_winter(tmp_path: Path, monkeypatch:
 
         config = basic_config(tmp_path / "runner", workspace, bin_dir, hub_port, bare)
         fenced = {**os.environ, MOCK_HARNESS_FENCE_VAR: "1"}
-        assert _drive_until_done(config, hub, chunk_id, fenced) == "done"
+        assert drive_until_done(config, hub, chunk_id, fenced) == "done"
         assert (workspace / chunk_id / REPO_NAME / "LANDED.md").exists()
         assert (workspace / "projects" / REPO_NAME).is_dir()
         assert not (workspace / ".winter").exists()
 
-    assert "LANDED.md" in _git_bare(bare, "ls-tree", "-r", "--name-only", "main").split()
+    assert "LANDED.md" in git_bare(bare, "ls-tree", "-r", "--name-only", "main").split()
     assert not winter_invoked.exists(), "the basic runner invoked winter"

@@ -17,9 +17,9 @@ from pathlib import Path
 import httpx
 import pytest
 
-from tests.e2e.test_acceptance_loop import _await_http, _free_port, _terminate
+from tests.fleet_launchers import await_http, terminate
 from tests.service.support import require_mock_fleet, service_gate
-from tests.support import daemon_log_sink
+from tests.support import daemon_log_sink, free_port
 
 pytestmark = [pytest.mark.service, service_gate]
 
@@ -45,7 +45,7 @@ def _require_mock_data_binary() -> Path:
 def _zero_work_source_hub(hub_dir: Path, port: int) -> Iterator[httpx.Client]:
     """Host a real hub with **zero** configured work sources.
 
-    Mirrors ``tests.e2e.test_acceptance_loop._hub`` minus ``create_work_sources`` — every
+    Mirrors ``tests.fleet_launchers.run_hub`` minus ``create_work_sources`` — every
     chunk here is seeded directly, never ingested, so no work source is needed."""
     hub_bin = str(Path(sys.executable).parent / "blizzard-hub")
     subprocess.run([hub_bin, "init", str(hub_dir)], check=True, capture_output=True, text=True)
@@ -58,11 +58,11 @@ def _zero_work_source_hub(hub_dir: Path, port: int) -> Iterator[httpx.Client]:
     )
     client = httpx.Client(base_url=f"http://127.0.0.1:{port}", timeout=30.0)
     try:
-        _await_http(proc, client, "/api/health", log=log)
+        await_http(proc, client, "/api/health", log=log)
         yield client
     finally:
         client.close()
-        _terminate(proc)
+        terminate(proc)
 
 
 def _mock_data(bin_dir: Path, *args: str) -> str:
@@ -104,7 +104,7 @@ def test_scenario_board_status_composition_agrees_with_the_hub_and_survives_a_co
 ) -> None:
     bin_dir = _require_mock_data_binary()
     hub_dir = tmp_path / "hub"
-    port = _free_port()
+    port = free_port()
 
     with _zero_work_source_hub(hub_dir, port) as hub:
         # --- 1. seed via the real hub's own runtime dir, live, no restart ------------ #
@@ -239,7 +239,7 @@ def test_create_runner_seeds_a_declared_roster_that_reads_back_through_the_real_
     with no restart: one member per declared slug, the undeclared slug absent."""
     bin_dir = _require_mock_data_binary()
     hub_dir = tmp_path / "hub"
-    port = _free_port()
+    port = free_port()
     runner_id = "runner-roster-seed"
 
     with _zero_work_source_hub(hub_dir, port) as hub:
@@ -302,7 +302,7 @@ def test_create_garden_proposal_seeds_a_proposal_citing_no_findings(tmp_path: Pa
     that shape without a hand-built API call."""
     bin_dir = _require_mock_data_binary()
     hub_dir = tmp_path / "hub"
-    port = _free_port()
+    port = free_port()
 
     with _zero_work_source_hub(hub_dir, port) as hub:
         proposal_id = _mock_data(

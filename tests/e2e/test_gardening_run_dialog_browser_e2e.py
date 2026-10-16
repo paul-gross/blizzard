@@ -12,7 +12,8 @@ from pathlib import Path
 import pytest
 import yaml
 
-from tests.e2e.test_acceptance_loop import _free_port, _hub
+from tests.fleet_launchers import run_hub
+from tests.support import free_port
 
 pytestmark = [
     pytest.mark.e2e,
@@ -54,10 +55,10 @@ def test_gardening_run_dialog_browser(tmp_path: Path, chromium_available: bool) 
         pytest.skip("no Playwright Chromium installed (run `uv run playwright install chromium`)")
     from playwright.sync_api import expect, sync_playwright
 
-    forge_port, hub_port = _free_port(), _free_port()
+    forge_port, hub_port = free_port(), free_port()
     # No forge is started: minting a queued run needs no work-source traffic, and this
     # scenario never drives a runner to execute it.
-    with _hub(tmp_path / "hub", forge_port, hub_port) as hub:
+    with run_hub(tmp_path / "hub", forge_port, hub_port) as hub:
         graph_created = hub.post("/api/graphs", json={"definition_yaml": _graph_yaml("gardening-e2e-graph")})
         assert graph_created.status_code == 201, graph_created.text
 

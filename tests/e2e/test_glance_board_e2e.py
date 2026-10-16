@@ -16,19 +16,10 @@ import pytest
 if TYPE_CHECKING:
     from playwright.sync_api import Route, ViewportSize
 
-from tests.e2e.test_acceptance_loop import (
-    FIXTURE_ENV,
-    REPO,
-    REPO_NAME,
-    _drive_until_done,
-    _forge,
-    _free_port,
-    _hub,
-    _mock_bin_dir,
-    _runner_config,
-)
 from tests.e2e.test_board_cost_live_e2e import _ingest_promote_claim, _push_usage
-from tests.fleet_world import mint_world
+from tests.fleet_launchers import REPO, drive_until_done, mock_bin_dir, run_forge, run_hub, runner_config
+from tests.fleet_world import FIXTURE_ENV, REPO_NAME, mint_world
+from tests.support import free_port
 
 _HUB_BUNDLE = Path(__file__).resolve().parents[2] / "src" / "blizzard" / "static" / "hub" / "index.html"
 
@@ -87,7 +78,7 @@ def test_the_glance_board_shows_loading_before_rows_and_never_empty_on_a_populat
         pytest.skip("no Playwright Chromium installed (run `uv run playwright install chromium`)")
     if not _HUB_BUNDLE.is_file():
         pytest.skip("no built hub bundle (run the web build — release tier drives `mise run e2e`)")
-    bin_dir = _mock_bin_dir()
+    bin_dir = mock_bin_dir()
     if bin_dir is None:
         pytest.skip("no provisioned sibling blizzard-mock worktree (run `winter provision <env>`)")
 
@@ -99,8 +90,8 @@ def test_the_glance_board_shows_loading_before_rows_and_never_empty_on_a_populat
     workspace = fixture_root / "workspace"
     origins = fixture_root / "origins"
 
-    forge_port, hub_port = _free_port(), _free_port()
-    with _forge(bin_dir, origins, forge_port) as forge, _hub(tmp_path / "hub", forge_port, hub_port) as hub:
+    forge_port, hub_port = free_port(), free_port()
+    with run_forge(bin_dir, origins, forge_port) as forge, run_hub(tmp_path / "hub", forge_port, hub_port) as hub:
         assert hub.post("/api/graphs", json={"definition_yaml": _graph_yaml()}).status_code == 201
         issue = forge.post(f"/repos/{REPO}/issues", json={"title": "glance board", "body": "the chunk"})
         assert issue.status_code == 201, issue.text
@@ -109,10 +100,10 @@ def test_the_glance_board_shows_loading_before_rows_and_never_empty_on_a_populat
         chunk_id = ingested.json()["chunk_id"]
         assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
 
-        config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+        config = runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
         fenced = dict(os.environ)
         fenced["BLIZZARD_MOCK_HARNESS_FENCE"] = "1"
-        status = _drive_until_done(config, hub, chunk_id, fenced)
+        status = drive_until_done(config, hub, chunk_id, fenced)
         assert status == "needs_human", f"chunk did not derive needs_human (last status {status!r})"
 
         with sync_playwright() as pw:
@@ -153,7 +144,7 @@ def test_the_glance_board_shows_a_cost_estimate_never_a_plain_billed_zero(
         pytest.skip("no Playwright Chromium installed (run `uv run playwright install chromium`)")
     if not _HUB_BUNDLE.is_file():
         pytest.skip("no built hub bundle (run the web build — release tier drives `mise run e2e`)")
-    bin_dir = _mock_bin_dir()
+    bin_dir = mock_bin_dir()
     if bin_dir is None:
         pytest.skip("no provisioned sibling blizzard-mock worktree (run `winter provision <env>`)")
 
@@ -163,8 +154,8 @@ def test_the_glance_board_shows_a_cost_estimate_never_a_plain_billed_zero(
     mint_world(bin_dir, scratch)
     origins = scratch / FIXTURE_ENV / "origins"
 
-    forge_port, hub_port = _free_port(), _free_port()
-    with _forge(bin_dir, origins, forge_port) as forge, _hub(tmp_path / "hub", forge_port, hub_port) as hub:
+    forge_port, hub_port = free_port(), free_port()
+    with run_forge(bin_dir, origins, forge_port) as forge, run_hub(tmp_path / "hub", forge_port, hub_port) as hub:
         assert hub.post("/api/graphs", json={"definition_yaml": _graph_yaml()}).status_code == 201
         chunk_id, node_id = _ingest_promote_claim(forge, hub, "chunk — glance cost estimate")
 

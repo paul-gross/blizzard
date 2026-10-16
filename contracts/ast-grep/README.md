@@ -98,7 +98,12 @@ load-bearing: without it a stale `# ast-grep-ignore` comment goes unreported ins
   never on a connection, where it outlives the read and breaks the writes that follow it on Postgres. The prose home is
   the `bzh:sql-portable` rule's **Detect** in `blizzard-context:/standards/persistence.md`.
   - Scoped to `src/**`.
-  - Matches any `.execution_options(...)` call passing `yield_per=` or `stream_results=`. The one admitted form is the
+  - Matches any `.execution_options(...)` call passing `yield_per=` or `stream_results=` as a keyword, through a
+    dict-literal splat with a string-literal key (`**{"yield_per": n}`), or through an opaque splat (`**opts`, any `**`
+    operand that is not a dict literal), whose keys cannot be seen. The one admitted form is the
     `execution_options={...}` argument of a single `execute(...)`. The rule is syntactic and cannot tell a connection
     receiver from a statement receiver, so it admits only that form.
+  - Declared limit: a dict-literal splat keyed by a named constant (`**{_SCOPE_OPTION: …}`, as `src/` uses) is admitted,
+    because a syntactic rule cannot resolve the constant. A constant naming `yield_per` or `stream_results` is the
+    residual lookalike.
   - No exemption stands.

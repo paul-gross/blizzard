@@ -20,11 +20,11 @@ from blizzard.foundation.runner_token_names import hub_token_variable
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.host_layout import HostLayout
 from blizzard.runner.runtime import init_environment, migration_runner
-from tests.e2e.test_acceptance_loop import _await_http, _free_port, _terminate
+from tests.fleet_launchers import await_http, terminate
 from tests.runner_join import RUNNER_BIN, JoinedRunner, runner_spawn_env, seed_pinned_runner
 from tests.runner_scope_seeding import reflect
 from tests.service.support import mock_hub, poll_until, require_mock_fleet, service_gate
-from tests.support import daemon_log_sink, read_daemon_log
+from tests.support import daemon_log_sink, free_port, read_daemon_log
 
 pytestmark = [pytest.mark.service, service_gate]
 
@@ -189,7 +189,7 @@ def test_a_graduated_pre_host_directory_resumes_its_leases_and_delivers_its_back
     tmp_path: Path,
 ) -> None:
     bin_dir = require_mock_fleet()
-    hub_port, port = _free_port(), _free_port()
+    hub_port, port = free_port(), free_port()
     hub_url = f"http://127.0.0.1:{hub_port}"
     root = tmp_path / "runner"
     with mock_hub(bin_dir, hub_port) as hub:
@@ -225,7 +225,7 @@ def test_a_graduated_pre_host_directory_resumes_its_leases_and_delivers_its_back
         )
         local = httpx.Client(base_url=f"http://127.0.0.1:{port}", timeout=10.0)
         try:
-            _await_http(proc, local, "/api/health", log=log)
+            await_http(proc, local, "/api/health", log=log)
             assert poll_until(lambda: _hub_mark(hub) >= _ACKED + _BACKLOG, timeout=30.0), read_daemon_log(log)
 
             runner = f"/runners/{_RUNNER.runner_id}"
@@ -242,7 +242,7 @@ def test_a_graduated_pre_host_directory_resumes_its_leases_and_delivers_its_back
             assert poll_until(lambda: "park resumed" in read_daemon_log(log)), read_daemon_log(log)
         finally:
             local.close()
-            _terminate(proc)
+            terminate(proc)
 
     engine = create_engine_from_url(f"sqlite:///{layout.store_path}")
     try:

@@ -20,17 +20,10 @@ import yaml
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.graphs import PACKAGED
-from tests.e2e.test_acceptance_loop import (
-    FIXTURE_ENV,
-    _drive_until_done,
-    _forge,
-    _free_port,
-    _hub,
-    _mock_bin_dir,
-    _runner_config,
-)
 from tests.e2e.test_session_modes_e2e import _sessions_by_node
-from tests.fleet_world import mint_world
+from tests.fleet_launchers import drive_until_done, mock_bin_dir, run_forge, run_hub, runner_config
+from tests.fleet_world import FIXTURE_ENV, mint_world
+from tests.support import free_port
 
 pytestmark = [
     pytest.mark.e2e,
@@ -214,7 +207,7 @@ def test_garden_routine_runs_end_to_end_on_all_six_paths(tmp_path: Path) -> None
     """Seven runs of one routine over the packaged graph: found, clean, excessive twice
     (the convergence), invalid (the bounce), virgin (a first run citing its own delta's
     refs), and no-strategy (an undeclared axis delivered as a finding)."""
-    bin_dir = _mock_bin_dir()
+    bin_dir = mock_bin_dir()
     if bin_dir is None:
         pytest.skip("no provisioned sibling blizzard-mock worktree (run `winter provision <env>`)")
 
@@ -222,11 +215,11 @@ def test_garden_routine_runs_end_to_end_on_all_six_paths(tmp_path: Path) -> None
     mint_world(bin_dir, scratch)
     workspace = scratch / FIXTURE_ENV / "workspace"
 
-    forge_port, hub_port = _free_port(), _free_port()
+    forge_port, hub_port = free_port(), free_port()
     runner_dir = tmp_path / "runner"
     with (
-        _forge(bin_dir, scratch / FIXTURE_ENV / "origins", forge_port),
-        _hub(tmp_path / "hub", forge_port, hub_port) as hub,
+        run_forge(bin_dir, scratch / FIXTURE_ENV / "origins", forge_port),
+        run_hub(tmp_path / "hub", forge_port, hub_port) as hub,
     ):
         minted = hub.post("/api/graphs", json={"definition_yaml": _scripted_garden_graph_yaml()})
         assert minted.status_code == 201, minted.text
@@ -252,7 +245,7 @@ def test_garden_routine_runs_end_to_end_on_all_six_paths(tmp_path: Path) -> None
             scope_linked = hub.put(f"/api/routines/{routine_id}/scopes/{slug}")
             assert scope_linked.status_code == 204, scope_linked.text
 
-        config = _runner_config(runner_dir, workspace, bin_dir, hub_port)
+        config = runner_config(runner_dir, workspace, bin_dir, hub_port)
         fenced = dict(os.environ)
         fenced["BLIZZARD_MOCK_HARNESS_FENCE"] = "1"
 
@@ -265,7 +258,7 @@ def test_garden_routine_runs_end_to_end_on_all_six_paths(tmp_path: Path) -> None
             chunk_id = minted_run.json()["chunk_id"]
             promoted = hub.post(f"/api/chunks/{chunk_id}/promote")
             assert promoted.status_code == 202, promoted.text
-            status = _drive_until_done(config, hub, chunk_id, fenced, timeout=180.0)
+            status = drive_until_done(config, hub, chunk_id, fenced, timeout=180.0)
             assert status == "done", f"{path} run did not reach done (last status {status!r}): {_edges(hub, chunk_id)}"
             return chunk_id
 

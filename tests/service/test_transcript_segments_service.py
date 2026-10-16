@@ -11,8 +11,8 @@ from pathlib import Path
 import pytest
 
 from blizzard.hub.domain.observability.transcripts import RECORD_MAX_BYTES
-from tests.e2e.test_acceptance_loop import REPO, REPO_NAME, _forge, _free_port, _hub
-from tests.fleet_world import mint_world
+from tests.fleet_launchers import REPO, run_forge, run_hub
+from tests.fleet_world import REPO_NAME, mint_world
 from tests.runner_join import add_runner, fleet_headers
 from tests.service.support import (
     mock_hub,
@@ -21,6 +21,7 @@ from tests.service.support import (
     service_gate,
     transcript_segment_record,
 )
+from tests.support import free_port
 
 pytestmark = [pytest.mark.service, service_gate]
 
@@ -28,7 +29,7 @@ pytestmark = [pytest.mark.service, service_gate]
 def _stack(tmp_path: Path):  # type: ignore[no-untyped-def]
     bin_dir = require_mock_fleet()
     _workspace, origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
-    forge_port, hub_port = _free_port(), _free_port()
+    forge_port, hub_port = free_port(), free_port()
     return bin_dir, origins, forge_port, hub_port
 
 
@@ -46,7 +47,7 @@ def _record(chunk_id: str, *, seq: int) -> dict:
 
 def test_ingest_and_read_back_round_trip_over_the_wire(tmp_path: Path) -> None:
     bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
-    with _forge(bin_dir, origins, forge_port) as forge, _hub(tmp_path / "hub", forge_port, hub_port) as hub:
+    with run_forge(bin_dir, origins, forge_port) as forge, run_hub(tmp_path / "hub", forge_port, hub_port) as hub:
         chunk_id = _ingest(forge, hub, "transcript segments")
 
         ack = hub.post(
@@ -68,7 +69,7 @@ def test_ingest_and_read_back_round_trip_over_the_wire(tmp_path: Path) -> None:
 
 def test_a_segment_is_not_readable_through_another_chunks_path(tmp_path: Path) -> None:
     bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
-    with _forge(bin_dir, origins, forge_port) as forge, _hub(tmp_path / "hub", forge_port, hub_port) as hub:
+    with run_forge(bin_dir, origins, forge_port) as forge, run_hub(tmp_path / "hub", forge_port, hub_port) as hub:
         owning = _ingest(forge, hub, "owning chunk")
         other = _ingest(forge, hub, "other chunk")
         ack = hub.post("/api/fleet/transcripts", json={"records": [_record(owning, seq=1)]}, headers=fleet_headers(hub))
@@ -80,7 +81,7 @@ def test_a_segment_is_not_readable_through_another_chunks_path(tmp_path: Path) -
 
 def test_a_cap_rejected_record_re_offered_under_a_fresh_seq_is_re_adjudicated(tmp_path: Path) -> None:
     bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
-    with _forge(bin_dir, origins, forge_port) as forge, _hub(tmp_path / "hub", forge_port, hub_port) as hub:
+    with run_forge(bin_dir, origins, forge_port) as forge, run_hub(tmp_path / "hub", forge_port, hub_port) as hub:
         chunk_id = _ingest(forge, hub, "re-adjudicated segment")
         oversized = _record(chunk_id, seq=1)
         oversized["turns"][0]["text"] = "x" * (RECORD_MAX_BYTES + 1)
@@ -106,7 +107,7 @@ def test_a_cap_rejected_record_re_offered_under_a_fresh_seq_is_re_adjudicated(tm
 
 def test_an_enrolled_runner_reads_back_the_lease_segments_it_shipped(tmp_path: Path) -> None:
     bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
-    with _forge(bin_dir, origins, forge_port) as forge, _hub(tmp_path / "hub", forge_port, hub_port) as hub:
+    with run_forge(bin_dir, origins, forge_port) as forge, run_hub(tmp_path / "hub", forge_port, hub_port) as hub:
         chunk_id = _ingest(forge, hub, "lease transcript read")
         runner_id, _added_token = add_runner(hub, "r1")
         enroll = hub.post(f"/api/runners/{runner_id}/enrollments")
@@ -145,7 +146,7 @@ def test_the_mock_hubs_counterpart_route_round_trips_a_shipped_lease(tmp_path: P
     """The mock hub's retention and its own counterpart route, driven from the app
     side over real HTTP against a real ``blizzard-mock-hub`` subprocess."""
     bin_dir = require_mock_fleet()
-    hub_port = _free_port()
+    hub_port = free_port()
     with mock_hub(bin_dir, hub_port) as hub:
         seeded = hub.post("/_seed/chunk", json=mock_hub_chunk_spec(f"{REPO}/issues/1"))
         assert seeded.status_code == 201, seeded.text

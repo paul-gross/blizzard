@@ -14,17 +14,10 @@ from pathlib import Path
 import httpx
 import pytest
 
-from tests.e2e.test_acceptance_loop import (
-    FIXTURE_ENV,
-    REPO,
-    REPO_NAME,
-    _forge,
-    _free_port,
-    _hub,
-    _mock_bin_dir,
-)
-from tests.fleet_world import mint_world
+from tests.fleet_launchers import REPO, mock_bin_dir, run_forge, run_hub
+from tests.fleet_world import FIXTURE_ENV, REPO_NAME, mint_world
 from tests.runner_join import fleet_headers
+from tests.support import free_port
 
 pytestmark = [
     pytest.mark.e2e,
@@ -166,14 +159,14 @@ def test_chunk_transcripts_tab_browser(tmp_path: Path, chromium_available: bool)
         pytest.skip("no Playwright Chromium installed (run `uv run playwright install chromium`)")
     from playwright.sync_api import expect, sync_playwright
 
-    bin_dir = _mock_bin_dir()
+    bin_dir = mock_bin_dir()
     if bin_dir is None:
         pytest.skip("no provisioned sibling blizzard-mock worktree (run `winter provision <env>`)")
 
     origins = _mint(bin_dir, tmp_path / "scratch")
-    forge_port, hub_port = _free_port(), _free_port()
+    forge_port, hub_port = free_port(), free_port()
 
-    with _forge(bin_dir, origins, forge_port) as forge, _hub(tmp_path / "hub", forge_port, hub_port) as hub:
+    with run_forge(bin_dir, origins, forge_port) as forge, run_hub(tmp_path / "hub", forge_port, hub_port) as hub:
         chunk_id = _ingest(forge, hub, "transcript tab browser scenario")
         ack = hub.post(
             "/api/fleet/transcripts",

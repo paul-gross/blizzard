@@ -12,9 +12,10 @@ from pathlib import Path
 import httpx
 import pytest
 
-from tests.e2e.test_acceptance_loop import REPO, REPO_NAME, _forge, _free_port, _hub
-from tests.fleet_world import mint_world
+from tests.fleet_launchers import REPO, run_forge, run_hub
+from tests.fleet_world import REPO_NAME, mint_world
 from tests.service.support import poll_until, require_mock_fleet, service_gate
+from tests.support import free_port
 
 pytestmark = [pytest.mark.service, service_gate]
 
@@ -22,7 +23,7 @@ pytestmark = [pytest.mark.service, service_gate]
 def _stack(tmp_path: Path) -> tuple[Path, Path, int, int]:
     bin_dir = require_mock_fleet()
     _workspace, origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
-    forge_port, hub_port = _free_port(), _free_port()
+    forge_port, hub_port = free_port(), free_port()
     return bin_dir, origins, forge_port, hub_port
 
 
@@ -35,8 +36,8 @@ def _forge_labels(forge: httpx.Client, number: int) -> set[str]:
 def test_an_opted_in_source_sweeps_the_real_forge(tmp_path: Path) -> None:
     bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
     with (
-        _forge(bin_dir, origins, forge_port) as forge,
-        _hub(tmp_path / "hub", forge_port, hub_port, annotate=True, annotation_interval_seconds=1) as hub,
+        run_forge(bin_dir, origins, forge_port) as forge,
+        run_hub(tmp_path / "hub", forge_port, hub_port, annotate=True, annotation_interval_seconds=1) as hub,
     ):
         issue = forge.post(f"/repos/{REPO}/issues", json={"title": "sweep me", "body": "b"})
         assert issue.status_code == 201, issue.text
@@ -55,8 +56,8 @@ def test_an_opted_in_source_sweeps_the_real_forge(tmp_path: Path) -> None:
 def test_a_non_opted_in_source_starts_no_sweep_loop(tmp_path: Path) -> None:
     bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
     with (
-        _forge(bin_dir, origins, forge_port) as forge,
-        _hub(tmp_path / "hub", forge_port, hub_port, annotation_interval_seconds=1) as hub,
+        run_forge(bin_dir, origins, forge_port) as forge,
+        run_hub(tmp_path / "hub", forge_port, hub_port, annotation_interval_seconds=1) as hub,
     ):
         issue = forge.post(f"/repos/{REPO}/issues", json={"title": "don't sweep me", "body": "b"})
         assert issue.status_code == 201, issue.text
