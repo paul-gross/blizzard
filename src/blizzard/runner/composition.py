@@ -409,8 +409,10 @@ _log = get_logger("blizzard.runner.composition")
 
 class _HostAttemptSink:
     """Where the host's sampling pass records an attempt: a registered host's own lane — one holding a host token,
-    whether or not its hub has answered yet — else, an unregistered host having none, its first runner's bound stores
-    and event publisher, as a runner's own sample did."""
+    whether or not its hub has answered yet — else, an unregistered host having none, the bound stores and event
+    publisher of its first runner whose identity row exists, as a runner's own sample did: a runner-scoped row names a
+    registered runner (``runner:rows-name-registered-runner``). With no such runner the attempt is not recorded, and
+    the pass samples again on the next host tick, until a runner registers."""
 
     def __init__(
         self,
@@ -443,11 +445,10 @@ class _HostAttemptSink:
                 miss_reason=miss_reason,
             )
             return
-        runners = self._runners()
-        if not runners:
-            _log.warning("external usage attempt not recorded: the host has no runner to report through", slug=slug)
+        reporter = next((runner for runner in self._runners() if runner.identity.current() is not None), None)
+        if reporter is None:
+            _log.warning("external usage attempt not recorded: no runner of the host has registered", slug=slug)
             return
-        reporter = runners[0]
         seq = reporter.host_stores.external_usage.record_external_usage_attempt(
             slug=slug,
             sampled_at=sampled_at,

@@ -386,7 +386,9 @@ def create_app(
         title="blizzard-runner",
         version=__version__,
         lifespan=_lifespan,
-        telemetry=platform_tracing.fastapi_telemetry(exclude=is_excluded) if platform_tracing else DISABLED_TELEMETRY,
+        telemetry=platform_tracing.fastapi_telemetry(exclude=is_excluded)
+        if platform_tracing is not None
+        else DISABLED_TELEMETRY,
     )
     app.state.config = config
     app.state.runners = RunnerRegistry(tuple(runners), tuple(halted))
@@ -423,7 +425,7 @@ def create_app(
     # The worker telemetry receiver, built once by the composition root and shared by every runner.
     app.state.telemetry_receiver = telemetry_receiver
     app.state.workspace_prompts = workspace_prompts or (
-        WorkspacePromptService(host_stores.workspace_prompt, clock) if host_stores else None
+        WorkspacePromptService(host_stores.workspace_prompt, clock) if host_stores is not None else None
     )
     # This default must **not** reach the network — pinned by
     # tests/test_pin_runner_misc.py::test_the_default_hub_client_never_reaches_the_configured_hub_url
@@ -437,7 +439,7 @@ def create_app(
     app.state.jwks_cache = JwksCache(hub_http_client, "/api/auth/jwks.json")
     # The monotonic clock the hub retry schedule reads — the system clock unless one is injected.
     app.state.hub_retry_clock = hub_retry_clock or SystemMonotonicClock()
-    app.state.jti_cache = jti_cache or (host_stores.jti_cache if host_stores else None)
+    app.state.jti_cache = jti_cache or (host_stores.jti_cache if host_stores is not None else None)
     # The reverse-proxy trust set, empty by default — so
     # `X-Forwarded-Proto` is ignored from every peer.
     app.state.trusted_proxies = TrustedProxies.parse(config.trusted_proxies)

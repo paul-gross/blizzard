@@ -1444,3 +1444,26 @@ def test_a_summary_point_is_refused_and_counted_not_lost(tmp_path: Path) -> None
     assert ExportMetricsServiceResponse.FromString(response.content).partial_success.rejected_data_points == 2
     assert (bounds.counter.count().accepted, bounds.counter.count().dropped) == (2, 2)
     assert len(telemetry.metric_points()) == 2
+
+
+class _FalsyTracing:
+    """A tracing handle that reads false as a truth value, as one defining ``__len__`` over nothing would."""
+
+    def __init__(self) -> None:
+        self.telemetry_requests = 0
+
+    def __bool__(self) -> bool:
+        return False
+
+    def fastapi_telemetry(self, *, exclude: object = None) -> dict[str, bool]:
+        self.telemetry_requests += 1
+        return {"tracing": False, "auto_configure": False}
+
+
+def test_an_app_wires_a_platform_tracing_handle_that_is_falsy(tmp_path: Path) -> None:
+    tracing = _FalsyTracing()
+    config = RunnerConfig(root=tmp_path, db_url="sqlite://")
+
+    create_app(config, platform_tracing=cast(IPlatformTracing, tracing))
+
+    assert tracing.telemetry_requests == 1

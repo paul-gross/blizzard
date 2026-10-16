@@ -17,8 +17,8 @@ import pytest
 from sqlalchemy import func, select
 
 import blizzard.runner.loop_wiring as loop_wiring
-from blizzard.foundation.logging import get_logger
-from blizzard.runner.composition import HostProcess, add_runner, build_host_process
+from blizzard.runner.cli.runtime import _host_tick_driver
+from blizzard.runner.composition import HostProcess, RunnerProcess, add_runner, build_host_process
 from blizzard.runner.config import RunnerConfig, SubscriptionDeclaration
 from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.harness.registry import HarnessRegistry
@@ -26,7 +26,7 @@ from blizzard.runner.host_config import BuiltRunner, HaltedRunner, ResolvedToken
 from blizzard.runner.host_layout import HostLayout
 from blizzard.runner.hub.held_token import HubTokenHolder
 from blizzard.runner.hub.host_identity import HostIdentity
-from blizzard.runner.hub.identity import IdentityVerdictHolder, RunnerIdentityHolder
+from blizzard.runner.hub.identity import IdentityVerdictHolder, RunnerIdentity, RunnerIdentityHolder
 from blizzard.runner.lifecycle.host_tick import HostTick
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop_wiring import PeriodicDriver
@@ -34,7 +34,6 @@ from blizzard.runner.store.schema import host_outbound_buffer
 from blizzard.runner.stores import RunnerStores
 from blizzard.runner.subscriptions.subscription_sampler import PROVIDER_ANTHROPIC, ExternalSubscriptionUsageSnapshot
 from blizzard.runner.usage.credential_renewal import CredentialRenewalPass
-from blizzard.runner.usage.periodic_pass_driver import PeriodicPassDriver
 from tests.host_files import host_config_of
 from tests.runner_fakes import FakeSubscriptionSampler, migrated_store_at
 
@@ -141,19 +140,13 @@ def test_one_runners_blocked_tick_delays_neither_the_other_runner_nor_the_host_t
     renewal: Any = _CountingRenewal()
     host.host_tick = HostTick(credential_renewal=renewal)
     drivers = [PeriodicDriver(config, interval_seconds=0.01, process_graph=runner) for runner in (blocked, free)]
-    host_tick = PeriodicPassDriver(
-        host.host_tick.run,
-        name="test-host-tick",
-        label="host tick",
-        log=get_logger("blizzard.runner.test"),
-        interval_seconds=0.01,
-        jitter_seconds=0,
-    )
+    host_tick = _host_tick_driver(host, tick_seconds=0.01)
     assert not isinstance(renewal, CredentialRenewalPass)  # a counting double stands in for the renewal pass
     try:
         for driver in drivers:
             driver.start()
         host_tick.start()
+        assert host_tick._thread.name == "blizzard-host-tick"
         assert entered.wait(timeout=10), "the blocking runner's tick never ran"
         free_before, host_before = ticks[id(free.stores)], renewal.passes
         _wait_until(
@@ -206,6 +199,13 @@ def _sampling_config(tmp_path: Path) -> RunnerConfig:
     )
 
 
+def _register(runner: RunnerProcess) -> None:
+    """``runner`` as registered: its identity row recorded, and the holder answering it."""
+    identity = RunnerIdentity(runner.runner_id, "runner-local", _SAMPLED_AT)
+    runner.stores.identity.record_runner_identity(identity)
+    runner.identity.hold(identity)
+
+
 def _fake_samplers(host: HostProcess) -> dict[str, FakeSubscriptionSampler]:
     """Stand a scriptable sampler in for every declared subscription's real one."""
     sampling = host.host_tick.external_usage_sample
@@ -224,6 +224,7 @@ def test_two_runners_spending_one_subscription_share_one_sample_per_cadence(tmp_
     host = _host(_sampling_config(tmp_path), "rn_a", "rn_b")
     try:
         samplers = _fake_samplers(host)
+        _register(host.runners[0])
         for _ in range(4):
             host.host_tick.run()
         assert samplers["anthropic"].sample_calls == 1
@@ -236,6 +237,7 @@ def test_a_subscription_no_runner_spends_is_still_sampled(tmp_path: Path) -> Non
     host = _host(_sampling_config(tmp_path), "rn_a")
     try:
         samplers = _fake_samplers(host)
+        _register(host.runners[0])
         host.host_tick.run()
         assert samplers["spare"].sample_calls == 1
         assert host.host_stores.external_usage.latest_external_usage_attempt("spare") is not None
@@ -253,6 +255,7 @@ def test_an_unregistered_hosts_sample_reaches_its_runners_outbound_buffer_and_is
     )
     try:
         _fake_samplers(host)
+        _register(host.runners[0])
         host.host_tick.run()
         runner = host.runners[0]
         pending = runner.stores.outbound.pending_outbound()
@@ -285,6 +288,7 @@ def test_a_host_identity_row_without_a_host_token_leaves_the_host_unregistered(t
     try:
         assert host.host_identity.current() == HostIdentity("hs_1", "tn_1", _SAMPLED_AT)
         _fake_samplers(host)
+        _register(host.runners[0])
         host.host_tick.run()
         assert [fact.kind for fact in host.runners[0].stores.outbound.pending_outbound()] == [_SAMPLED_KIND] * 2
         with host.engine.connect() as conn:
@@ -310,3 +314,107 @@ def test_a_registered_hosts_sample_reaches_its_own_outbound_lane_and_no_runners(
         assert host.host_stores.external_usage.last_external_usage_attempt_at("anthropic") is not None
     finally:
         host.close()
+
+
+def test_an_unregistered_hosts_sample_is_recorded_under_the_first_runner_that_has_registered(tmp_path: Path) -> None:
+    config = _sampling_config(tmp_path)
+    host = _host(config, "rn_a", "rn_b")
+    try:
+        _fake_samplers(host)
+        _register(host.runners[1])
+        host.host_tick.run()
+        assert host.runners[0].stores.outbound.pending_outbound() == []
+        assert [fact.kind for fact in host.runners[1].stores.outbound.pending_outbound()] == [_SAMPLED_KIND] * 2
+    finally:
+        host.close()
+
+
+def test_an_unregistered_hosts_sample_is_not_recorded_while_no_runner_has_registered_and_is_taken_again_after(
+    tmp_path: Path,
+) -> None:
+    host = _host(_sampling_config(tmp_path), "rn_a")
+    try:
+        samplers = _fake_samplers(host)
+        host.host_tick.run()
+        runner = host.runners[0]
+        assert runner.stores.outbound.pending_outbound() == []
+        assert host.host_stores.external_usage.latest_external_usage_attempt("anthropic") is None
+
+        _register(runner)
+        host.host_tick.run()
+
+        assert [fact.kind for fact in runner.stores.outbound.pending_outbound()] == [_SAMPLED_KIND] * 2
+        assert samplers["anthropic"].sample_calls == 2
+    finally:
+        host.close()
+
+
+class _Recorded:
+    def __init__(self, name: str, order: list[str]) -> None:
+        self._name, self._order = name, order
+
+    def run(self) -> None:
+        self._order.append(self._name)
+
+
+def test_a_host_tick_renews_credentials_before_sampling_and_drains_after_sampling() -> None:
+    order: list[str] = []
+    tick: Any = HostTick(
+        registration=None,
+        external_usage_sample=_Recorded("sample", order),
+        lane_drain=_Recorded("drain", order),
+        credential_renewal=_Recorded("renew", order),
+    )
+
+    tick.run()
+
+    assert order == ["renew", "sample", "drain"]
+
+
+def test_a_hosts_close_shuts_every_runners_executor_down_waiting_before_it_disposes_the_engine(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    host = _host(config, "rn_a")
+    add_runner(dataclasses.replace(config, runner_id="rn_b"), host, runner_id="rn_b")
+    order: list[str] = []
+    for runner in host.runners:
+        shutdown = runner.executor.shutdown
+        waited: list[bool] = []
+
+        def record(
+            wait: bool = True,
+            *,
+            name: str = runner.runner_id,
+            original: Any = shutdown,
+            seen: list[bool] = waited,
+            **kw: Any,
+        ) -> None:
+            seen.append(wait)
+            order.append(f"{name}:{'wait' if wait else 'nowait'}")
+            original(wait=wait, **kw)
+
+        runner.executor.shutdown = record  # type: ignore[method-assign]
+    dispose = host.engine.dispose
+
+    def disposed(*args: Any, **kw: Any) -> None:
+        order.append("engine")
+        dispose(*args, **kw)
+
+    host.engine.dispose = disposed  # type: ignore[method-assign]
+
+    host.close()
+
+    assert order == ["rn_b:wait", "rn_a:wait", "engine"] or order == ["rn_a:wait", "rn_b:wait", "engine"]
+
+
+def test_a_runner_closes_its_host_only_when_it_was_built_over_a_host_of_one(tmp_path: Path) -> None:
+    host = _host(_config(tmp_path), "rn_a")
+    disposed: list[bool] = []
+    dispose = host.engine.dispose
+    host.engine.dispose = lambda *a, **k: (disposed.append(True), dispose(*a, **k))[1]  # type: ignore[method-assign]
+    [runner] = host.runners
+
+    dataclasses.replace(runner, closes_host=False).close()
+    assert disposed == []
+
+    dataclasses.replace(runner, closes_host=True).close()
+    assert disposed == [True]
