@@ -59,20 +59,13 @@
   border-left-color: var(--label-dim);
 }
 .card-open {
-  border: 0;
-  background: transparent;
-  padding: 0;
   display: flex;
   flex-direction: column;
   gap: 2px;
   width: 100%;
   min-width: 0;
-  text-align: left;
-  font: inherit;
-  color: inherit;
-  cursor: pointer;
 }
-.card-open:focus-visible {
+.card-open:has(:focus-visible) {
   outline: 1px solid var(--cyan);
   outline-offset: 1px;
 }

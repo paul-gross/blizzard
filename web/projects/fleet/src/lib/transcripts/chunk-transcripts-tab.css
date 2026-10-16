@@ -18,7 +18,7 @@
   overflow-y: auto;
 }
 /* Owns no horizontal padding (`design/tokens.css`'s `--surface-*` doc comment) — it
-   wraps `.seg-item`, a full-bleed interactive row that carries its own, so that row's
+   wraps the kit select row, a full-bleed interactive row that carries its own, so that row's
    hover/active background reaches this container's full width rather than floating
    inset from it. Only `.step-head` — plain, non-interactive text — pads itself back
    in; the empty state (`fleet-kit-async-state[placement=inline]`) pads its own. */
@@ -42,37 +42,12 @@
   margin: 0;
   padding: 0;
 }
-.seg-item {
+.seg-line {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  width: 100%;
-  text-align: left;
-  font-family: inherit;
-  background: transparent;
-  border: none;
-  border-left: 2px solid transparent;
-  color: var(--text);
-  cursor: pointer;
-  padding: 4px 8px;
+  gap: 6px;
   font-size: var(--fs-sm);
-}
-/* The interaction-state scale (`design/tokens.css`'s `--surface-*` note) — reserved
-   transparent left edge recolored on selection, background alone on hover, the same
-   split every other row list this migration touched moved to (the board card, both
-   timelines, the artifacts panel, the accordion header). */
-.seg-item:hover {
-  background: var(--surface-hover);
-}
-.seg-item.active {
-  border-left-color: var(--cyan);
-  background: var(--surface-selected);
-}
-/* Selection is the "stickier" state: hovering an already-active row keeps the
-   selected background rather than dimming to the hover tone, the same stance
-   every other row list on this scale takes. */
-.seg-item.active:hover {
-  background: var(--surface-selected);
 }
 .tx-view {
   position: relative;

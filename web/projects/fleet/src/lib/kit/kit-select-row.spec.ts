@@ -17,10 +17,17 @@ class TestHost {
   picks = 0;
 }
 
+@Component({
+  selector: 'fleet-test-bare-host',
+  imports: [KitSelectRow],
+  template: `<fleet-kit-select-row bare ariaLabel="Open chunk ch_1">Row B</fleet-kit-select-row>`,
+})
+class BareHost {}
+
 describe('KitSelectRow', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      imports: [TestHost],
+      imports: [TestHost, BareHost],
       providers: [provideZonelessChangeDetection()],
     }).compileComponents();
   });
@@ -51,5 +58,23 @@ describe('KitSelectRow', () => {
 
     button.click();
     expect(fixture.componentInstance.picks).toBe(1);
+  });
+
+  it('renders no bare class or aria-label by default', async () => {
+    const fixture = TestBed.createComponent(TestHost);
+    await fixture.whenStable();
+    const button = (fixture.nativeElement as HTMLElement).querySelector('button.row') as HTMLButtonElement;
+
+    expect(button.classList.contains('bare')).toBe(false);
+    expect(button.hasAttribute('aria-label')).toBe(false);
+  });
+
+  it('toggles the bare class and forwards ariaLabel onto the button', async () => {
+    const fixture = TestBed.createComponent(BareHost);
+    await fixture.whenStable();
+    const button = (fixture.nativeElement as HTMLElement).querySelector('button.row') as HTMLButtonElement;
+
+    expect(button.classList.contains('bare')).toBe(true);
+    expect(button.getAttribute('aria-label')).toBe('Open chunk ch_1');
   });
 });

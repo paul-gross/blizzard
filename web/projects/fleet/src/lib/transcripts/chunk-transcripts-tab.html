@@ -60,22 +60,23 @@
              [attr.data-segment-id]="seg.segment_id"
              (picked)="pickSegment.emit(seg.segment_id)"
           >
-            <span>Segment {{ seg.spawn_generation }}</span>
-            @if (seg.harness_id) {
-            <fleet-kit-badge
-              variant="pill"
-              tone="idle"
-              data-testid="transcript-segment-harness"
-              [attr.data-harness-id]="seg.harness_id"
-              [attr.aria-label]="harnessName(seg.harness_id)"
-            >
-              {{ harnessName(seg.harness_id) }}
-            </fleet-kit-badge>
-            } @if (seg.truncated) {
-            <fleet-kit-badge variant="pill" tone="running">truncated</fleet-kit-badge>
-            } @if (!seg.final) {
-            <fleet-kit-badge variant="pill" tone="idle">open</fleet-kit-badge>
-            }
+            <span class="seg-line">
+              <span>Segment {{ seg.spawn_generation }}</span>
+              @if (seg.harness_id) {
+              <fleet-kit-badge
+                variant="pill"
+                tone="idle"
+                data-testid="transcript-segment-harness"
+                [attr.data-harness-id]="seg.harness_id"
+                [attr.aria-label]="harnessName(seg.harness_id)"
+                >{{ harnessName(seg.harness_id) }}</fleet-kit-badge
+              >
+              } @if (seg.truncated) {
+              <fleet-kit-badge variant="pill" tone="running">truncated</fleet-kit-badge>
+              } @if (!seg.final) {
+              <fleet-kit-badge variant="pill" tone="idle">open</fleet-kit-badge>
+              }
+            </span>
            </fleet-kit-select-row>
         </li>
         }

@@ -104,7 +104,7 @@ describe('chunk transcripts harness-provenance layout shell sweep (web:shell-swe
       const badges = [...root.querySelectorAll<HTMLElement>('[data-testid="transcripts-tab-nav"] [data-testid="transcript-segment-harness"]')];
       expect(badges).toHaveLength(2);
       const labels = [...root.querySelectorAll('[data-testid="transcript-segment-item"]')].map((item) =>
-        item.querySelector('span')?.textContent?.trim(),
+        item.querySelector('.seg-line > span')?.textContent?.trim(),
       );
       expect(labels).toEqual(['Segment 1', 'Segment 2']);
 
@@ -186,6 +186,48 @@ describe('chunk transcripts harness-provenance layout shell sweep (web:shell-swe
       }
       const tab = root.querySelector<HTMLElement>('[data-testid="chunk-transcripts-tab"]')!;
       expect(tab.scrollWidth, 'tab overflows horizontally at 390px').toBeLessThanOrEqual(tab.clientWidth);
+    } finally {
+      root.remove();
+    }
+  });
+
+  it('lays each segment row out on one centred line with the label left of its pills and no whitespace inside the badges at ~390px', async () => {
+    await loadDesignTokens();
+    await TestBed.configureTestingModule({
+      imports: [ChunkTranscriptsTab],
+      providers: [provideZonelessChangeDetection()],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(ChunkTranscriptsTab);
+    fixture.componentRef.setInput('history', HISTORY);
+    fixture.componentRef.setInput('segments', [
+      segment({ segment_id: 'sg_row', spawn_generation: 3, harness_id: 'claude_code', final: false, truncated: true }),
+    ]);
+    fixture.componentRef.setInput('indexState', 'ready');
+    fixture.componentRef.setInput('segmentState', 'empty');
+    await fixture.whenStable();
+    const root = fixture.nativeElement as HTMLElement;
+    document.body.appendChild(root);
+    await fixture.whenStable();
+
+    try {
+      await page.viewport(390, 800);
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+
+      const row = root.querySelector<HTMLElement>('fleet-kit-select-row[data-segment-id="sg_row"]')!;
+      const label = row.querySelector<HTMLElement>('.seg-line > span')!.getBoundingClientRect();
+      const pills = [...row.querySelectorAll<HTMLElement>('fleet-kit-badge')].map((b) => b.getBoundingClientRect());
+      expect(pills).toHaveLength(3);
+      const centre = (r: DOMRect) => r.top + r.height / 2;
+      for (const pill of pills) {
+        expect(Math.abs(centre(pill) - centre(label)), 'label and pill share one line').toBeLessThanOrEqual(1);
+        expect(pill.left - label.right, 'pill sits right of the label with a gap').toBeGreaterThan(0);
+      }
+      for (let i = 1; i < pills.length; i += 1) {
+        expect(pills[i].left, 'pills do not overlap').toBeGreaterThanOrEqual(pills[i - 1].right);
+      }
+      for (const badge of row.querySelectorAll<HTMLElement>('fleet-kit-badge')) {
+        expect(badge.textContent, 'no leading or trailing whitespace projected into the badge').toBe(badge.textContent?.trim());
+      }
     } finally {
       root.remove();
     }

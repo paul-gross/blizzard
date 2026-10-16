@@ -47,6 +47,16 @@ describe('QuestionsPanelView', () => {
     expect(first.querySelector('[data-testid="rail-question-options"]')?.textContent).toContain('rest · graphql');
   });
 
+  it("names each row's button after its chunk and the question it answers", async () => {
+    const fixture = TestBed.createComponent(QuestionsPanelView);
+    fixture.componentRef.setInput('state', 'ready');
+    fixture.componentRef.setInput('questions', QUESTIONS);
+    await fixture.whenStable();
+    const button = (fixture.nativeElement as HTMLElement).querySelector('[data-testid="rail-question"] button');
+
+    expect(button?.getAttribute('aria-label')).toBe('Open chunk C-3YJ9 to answer its question');
+  });
+
   it("names each ask's runner by display name, a runner with no name by its compact id", async () => {
     const fixture = TestBed.createComponent(QuestionsPanelView);
     fixture.componentRef.setInput('state', 'ready');

@@ -58,6 +58,13 @@ describe('GatesPanelView', () => {
     expect(rows[0].querySelector('[data-testid="rail-gate-choices"]')?.textContent).toContain('approve · reject');
   });
 
+  it("names each row's button after its chunk and the gate it resolves", async () => {
+    const fixture = await render('ready', GATES);
+    const button = (fixture.nativeElement as HTMLElement).querySelector('[data-testid="rail-gate"] button');
+
+    expect(button?.getAttribute('aria-label')).toBe('Open chunk C-3YJ9 to resolve its gate');
+  });
+
   it('names the origin: the graph, or the runner that imposed the gate', async () => {
     const fixture = await render('ready', GATES);
     const rows = (fixture.nativeElement as HTMLElement).querySelectorAll('[data-testid="rail-gate"]');

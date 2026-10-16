@@ -8,7 +8,8 @@
 >
   <fleet-kit-select-row
     class="card-open"
-    [attr.aria-label]="'Open chunk ' + card().shortId"
+    bare
+    [ariaLabel]="'Open chunk ' + card().shortId"
     [selected]="selected()"
     (click)="selectChunk.emit(card().chunkId)"
   >

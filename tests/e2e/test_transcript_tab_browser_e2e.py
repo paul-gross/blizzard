@@ -201,7 +201,7 @@ def test_chunk_transcripts_tab_browser(tmp_path: Path, chromium_available: bool)
                 expect(page.get_by_test_id("transcript-segment-item").nth(1)).to_contain_text("Segment 2")
 
                 # Open the step's first segment.
-                page.locator('[data-testid="transcript-segment-item"][data-segment-id="sg_1"]').click()
+                page.locator('[data-segment-id="sg_1"]').get_by_test_id("transcript-segment-item").click()
                 expect(page.get_by_test_id("transcript-segment-body")).to_be_visible()
 
                 # Expand the thinking turn, collapsed by default.
@@ -220,9 +220,9 @@ def test_chunk_transcripts_tab_browser(tmp_path: Path, chromium_available: bool)
                 # Follow the continues-in link to the second segment.
                 expect(page.get_by_test_id("transcript-continues-in")).to_contain_text("segment 2")
                 page.get_by_test_id("transcript-continues-in").click()
-                expect(page.locator('[data-testid="transcript-segment-item"][data-segment-id="sg_2"]')).to_have_class(
-                    re.compile("active")
-                )
+                expect(
+                    page.locator('[data-segment-id="sg_2"]').get_by_test_id("transcript-segment-item")
+                ).to_have_class(re.compile(r"\bselected\b"))
 
                 # Open its unlinked sidechain standalone, then back to the segment.
                 page.get_by_test_id("transcript-sidechain-open").click()
@@ -234,8 +234,8 @@ def test_chunk_transcripts_tab_browser(tmp_path: Path, chromium_available: bool)
                 # Follow the continued-from link back to the first segment.
                 expect(page.get_by_test_id("transcript-continued-from")).to_contain_text("segment 1")
                 page.get_by_test_id("transcript-continued-from").click()
-                expect(page.locator('[data-testid="transcript-segment-item"][data-segment-id="sg_1"]')).to_have_class(
-                    re.compile("active")
-                )
+                expect(
+                    page.locator('[data-segment-id="sg_1"]').get_by_test_id("transcript-segment-item")
+                ).to_have_class(re.compile(r"\bselected\b"))
             finally:
                 browser.close()
