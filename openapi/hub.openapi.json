@@ -20610,11 +20610,53 @@
           },
           {
             "in": "query",
+            "name": "class",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Class"
+            }
+          },
+          {
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/FindingState"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "State"
+            }
+          },
+          {
+            "in": "query",
             "name": "include_gone",
             "required": false,
             "schema": {
               "default": false,
               "title": "Include Gone",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "descending",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Descending",
               "type": "boolean"
             }
           },
@@ -20686,6 +20728,92 @@
           }
         },
         "summary": "List Findings",
+        "tags": [
+          "findings"
+        ]
+      }
+    },
+    "/api/findings/classes": {
+      "get": {
+        "description": "Distinct class labels for the entire routine/scope bucket, independent of list filters.",
+        "operationId": "list_finding_classes_api_findings_classes_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "routine",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Routine"
+            }
+          },
+          {
+            "in": "query",
+            "name": "scope",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Scope"
+            }
+          },
+          {
+            "in": "query",
+            "name": "project",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Project"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "title": "Response List Finding Classes Api Findings Classes Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Finding Classes",
         "tags": [
           "findings"
         ]
@@ -24741,11 +24869,53 @@
           },
           {
             "in": "query",
+            "name": "class",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Class"
+            }
+          },
+          {
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/FindingState"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "State"
+            }
+          },
+          {
+            "in": "query",
             "name": "include_gone",
             "required": false,
             "schema": {
               "default": false,
               "title": "Include Gone",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "descending",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Descending",
               "type": "boolean"
             }
           },
@@ -24801,6 +24971,85 @@
           }
         },
         "summary": "List Project Findings",
+        "tags": [
+          "findings"
+        ]
+      }
+    },
+    "/api/projects/{project}/findings/classes": {
+      "get": {
+        "description": "Distinct class labels in this project's routine/scope bucket.",
+        "operationId": "list_project_finding_classes_api_projects__project__findings_classes_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project",
+            "required": true,
+            "schema": {
+              "title": "Project",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "routine",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Routine"
+            }
+          },
+          {
+            "in": "query",
+            "name": "scope",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Scope"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "title": "Response List Project Finding Classes Api Projects  Project  Findings Classes Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Project Finding Classes",
         "tags": [
           "findings"
         ]

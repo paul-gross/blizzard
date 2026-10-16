@@ -12163,9 +12163,21 @@ export type ListFindingsApiFindingsGetData = {
          */
         source?: string | null;
         /**
+         * Class
+         */
+        class?: string | null;
+        /**
+         * State
+         */
+        state?: FindingState | null;
+        /**
          * Include Gone
          */
         include_gone?: boolean;
+        /**
+         * Descending
+         */
+        descending?: boolean;
         /**
          * Cursor
          */
@@ -12199,6 +12211,46 @@ export type ListFindingsApiFindingsGetResponses = {
 };
 
 export type ListFindingsApiFindingsGetResponse = ListFindingsApiFindingsGetResponses[keyof ListFindingsApiFindingsGetResponses];
+
+export type ListFindingClassesApiFindingsClassesGetData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Routine
+         */
+        routine?: string | null;
+        /**
+         * Scope
+         */
+        scope?: string | null;
+        /**
+         * Project
+         */
+        project?: string | null;
+    };
+    url: '/api/findings/classes';
+};
+
+export type ListFindingClassesApiFindingsClassesGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListFindingClassesApiFindingsClassesGetError = ListFindingClassesApiFindingsClassesGetErrors[keyof ListFindingClassesApiFindingsClassesGetErrors];
+
+export type ListFindingClassesApiFindingsClassesGetResponses = {
+    /**
+     * Response List Finding Classes Api Findings Classes Get
+     *
+     * Successful Response
+     */
+    200: Array<string>;
+};
+
+export type ListFindingClassesApiFindingsClassesGetResponse = ListFindingClassesApiFindingsClassesGetResponses[keyof ListFindingClassesApiFindingsClassesGetResponses];
 
 export type ConfirmGoneFindingsApiFindingsConfirmGonePostData = {
     body: FindingExitRequest;
@@ -14683,9 +14735,21 @@ export type ListProjectFindingsApiProjectsProjectFindingsGetData = {
          */
         source?: string | null;
         /**
+         * Class
+         */
+        class?: string | null;
+        /**
+         * State
+         */
+        state?: FindingState | null;
+        /**
          * Include Gone
          */
         include_gone?: boolean;
+        /**
+         * Descending
+         */
+        descending?: boolean;
         /**
          * Cursor
          */
@@ -14715,6 +14779,47 @@ export type ListProjectFindingsApiProjectsProjectFindingsGetResponses = {
 };
 
 export type ListProjectFindingsApiProjectsProjectFindingsGetResponse = ListProjectFindingsApiProjectsProjectFindingsGetResponses[keyof ListProjectFindingsApiProjectsProjectFindingsGetResponses];
+
+export type ListProjectFindingClassesApiProjectsProjectFindingsClassesGetData = {
+    body?: never;
+    path: {
+        /**
+         * Project
+         */
+        project: string;
+    };
+    query?: {
+        /**
+         * Routine
+         */
+        routine?: string | null;
+        /**
+         * Scope
+         */
+        scope?: string | null;
+    };
+    url: '/api/projects/{project}/findings/classes';
+};
+
+export type ListProjectFindingClassesApiProjectsProjectFindingsClassesGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListProjectFindingClassesApiProjectsProjectFindingsClassesGetError = ListProjectFindingClassesApiProjectsProjectFindingsClassesGetErrors[keyof ListProjectFindingClassesApiProjectsProjectFindingsClassesGetErrors];
+
+export type ListProjectFindingClassesApiProjectsProjectFindingsClassesGetResponses = {
+    /**
+     * Response List Project Finding Classes Api Projects  Project  Findings Classes Get
+     *
+     * Successful Response
+     */
+    200: Array<string>;
+};
+
+export type ListProjectFindingClassesApiProjectsProjectFindingsClassesGetResponse = ListProjectFindingClassesApiProjectsProjectFindingsClassesGetResponses[keyof ListProjectFindingClassesApiProjectsProjectFindingsClassesGetResponses];
 
 export type ListProjectGardenProposalsApiProjectsProjectGardenProposalsGetData = {
     body?: never;

@@ -21,7 +21,6 @@ import {
   surfaceOf,
   waitingLabel,
 } from './gardening-page.model';
-import { injectHubFindingsBucketQuery } from './core/finding.query';
 import { injectHubGardenProposalsQuery } from './proposals/garden-proposals.query';
 import { injectHubRunsQuery } from './runs/garden-runs.query';
 
@@ -64,10 +63,6 @@ export class GardeningPage {
   private readonly scopesQuery = injectHubScopesQuery();
   private readonly routinesQuery = injectHubRoutinesQuery();
   private readonly runsQuery = injectHubRunsQuery(() => this.window.since);
-  private readonly findingsQuery = injectHubFindingsBucketQuery(
-    () => null,
-    () => null,
-  );
   private readonly proposalsQuery = injectHubGardenProposalsQuery();
   private readonly tenantProposalsQuery = injectHubGardenProposalsQuery({ tenantWide: true });
   private readonly projectsQuery = injectProjectsQuery();
@@ -90,7 +85,7 @@ export class GardeningPage {
         scopes: this.scopesQuery.data(),
         routines: this.routinesQuery.data(),
         runs: this.runsQuery.data(),
-        findings: this.findingsQuery.data(),
+        findings: undefined,
         proposals: this.proposalsQuery.data(),
       }),
     ),

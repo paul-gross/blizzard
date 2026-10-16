@@ -31,7 +31,7 @@
     [label]="mobile() ? 'State' : null"
     testid="gardening-findings-state-filter"
     [options]="filters.stateChips"
-    [selectedValue]="filters.stateFilter() ?? 'all'"
+    [selectedValue]="filters.stateFilter()"
     (choose)="filters.onStateChoose($event)"
   />
 </div>
@@ -52,6 +52,11 @@
       [selectedId]="findingId()"
       (findingPick)="selectFinding($event)"
     />
+    @if (filters.bucketQuery.hasNextPage()) {
+      <fleet-kit-button testid="gardening-findings-older" [disabled]="filters.bucketQuery.isFetchingNextPage()" (click)="older()">
+        {{ filters.bucketQuery.isFetchingNextPage() ? 'Loading…' : 'Older' }}
+      </fleet-kit-button>
+    }
   </fleet-kit-panel>
 
   <fleet-kit-panel kit-master-detail-detail class="gf-detail" label="Finding">

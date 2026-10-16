@@ -199,10 +199,18 @@ class _FakeFindings:
         routine_name: str | None,
         scope_slug: str | None,
         source: str | None = None,
+        class_: str | None = None,
+        state: str | None = None,
         include_gone: bool = False,
+        descending: bool = False,
         cursor: str | None = None,
         limit: int,
     ) -> FindingPage:
+        raise NotImplementedError
+
+    def distinct_classes(
+        self, *, project_id: str | None, routine_name: str | None, scope_slug: str | None
+    ) -> list[str]:
         raise NotImplementedError
 
     def count_by_class(self, project_id: str, routine_name: str, class_: str) -> int:

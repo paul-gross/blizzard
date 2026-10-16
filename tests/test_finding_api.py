@@ -467,6 +467,89 @@ def test_list_page_pages_through_interleaved_gone_findings_matching_the_full_ord
     assert paged_all == expected_all_order
 
 
+def test_filtered_descending_pages_and_complete_class_options(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _seed_paging_fixture(hub)
+    store = FindingStore(hub_store_connections(hub.engine))
+    project = default_project(hub.engine)
+    store.add(
+        "fin_9",
+        project_id=project,
+        routine_name="nightly",
+        scope_slug="blizzard",
+        class_="other",
+        locus="b.py:1",
+        summary="other",
+        introduced=None,
+        at=_NOW,
+    )
+    store.record_fact("fin_9", kind="resolved", at=_NOW, note="fixed")
+    params = {
+        "routine": "nightly",
+        "scope": "blizzard",
+        "class": "stale-docstring",
+        "state": "gone",
+        "descending": True,
+        "include_gone": True,
+        "limit": 1,
+    }
+    assert _page_through(hub, params=params, pages=4) == ["fin_6", "fin_5", "fin_2"]
+    assert _page_through(hub, params={**params, "state": "live"}, pages=6) == [
+        "fin_8",
+        "fin_7",
+        "fin_4",
+        "fin_3",
+        "fin_1",
+    ]
+    assert _page_through(hub, params={**params, "class": "other", "state": "resolved"}, pages=2) == ["fin_9"]
+    assert hub.client.get("/api/findings/classes", params={"routine": "nightly", "scope": "blizzard"}).json() == [
+        "other",
+        "stale-docstring",
+    ]
+    path = f"/api/projects/{project}/findings"
+    response = hub.client.get(path, params={**params, "class": "other", "state": "resolved"})
+    assert response.status_code == 200, response.text
+    assert [f["finding_id"] for f in response.json()["findings"]] == ["fin_9"]
+    assert hub.client.get(f"{path}/classes", params={"routine": "nightly", "scope": "blizzard"}).json() == [
+        "other",
+        "stale-docstring",
+    ]
+    assert hub.client.get("/api/findings/classes", params={"routine": "not-nightly"}).json() == []
+    store.record_fact("fin_9", kind="reopened", at=_NOW, note="reproduces")
+    assert _page_through(hub, params={**params, "class": "other", "state": "live"}, pages=2) == ["fin_9"]
+    assert _page_through(hub, params={**params, "class": "other", "state": "resolved"}, pages=2) == []
+    assert hub.client.get("/api/findings", params={**params, "state": "invalid"}).status_code == 422
+
+
+def test_class_options_and_filtered_pages_stay_inside_the_project(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _seed_scope(hub, "blizzard")
+    first = default_project(hub.engine)
+    second_response = hub.client.post("/api/projects", json={"slug": "second", "name": "Second"})
+    assert second_response.status_code == 201, second_response.text
+    second = second_response.json()["project_id"]
+    scope_response = hub.client.post("/api/projects/second/scopes", json={"slug": "blizzard"})
+    assert scope_response.status_code == 201, scope_response.text
+    store = FindingStore(hub_store_connections(hub.engine))
+    for project, class_ in ((first, "first-only"), (second, "second-only")):
+        store.add(
+            f"fin_{class_}",
+            project_id=project,
+            routine_name="nightly",
+            scope_slug="blizzard",
+            class_=class_,
+            locus="a.py:1",
+            summary="finding",
+            introduced=None,
+            at=_NOW,
+        )
+    for project, class_ in ((first, "first-only"), (second, "second-only")):
+        path = f"/api/projects/{project}/findings"
+        assert hub.client.get(f"{path}/classes", params={"routine": "nightly"}).json() == [class_]
+        page = hub.client.get(path, params={"routine": "nightly", "class": class_, "state": "live"}).json()
+        assert [f["finding_id"] for f in page["findings"]] == [f"fin_{class_}"]
+
+
 def test_list_over_ceiling_limit_is_422(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     _seed_scope(hub, "blizzard")

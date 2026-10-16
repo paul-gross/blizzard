@@ -443,7 +443,10 @@ class IReadFindingRepository(Protocol):
         routine_name: str | None,
         scope_slug: str | None,
         source: str | None = None,
+        class_: str | None = None,
+        state: FindingState | None = None,
         include_gone: bool = False,
+        descending: bool = False,
         cursor: str | None = None,
         limit: int,
     ) -> FindingPage:
@@ -452,7 +455,15 @@ class IReadFindingRepository(Protocol):
         tenant; `source` narrows to `"routine"` or `"review"`, `None` reads both.
         Statements and rows read are set by the page, not by how many findings have exited:
         `include_gone=False` drops non-live findings in the query itself.
-        `cursor` is a prior :attr:`FindingPage.next_cursor`."""
+        `class_` and derived `state` filter before `limit`; an explicit state
+        overrides `include_gone`. `descending` reverses both order and cursor
+        direction; `cursor` is a prior :attr:`FindingPage.next_cursor`."""
+        ...
+
+    def distinct_classes(
+        self, *, project_id: str | None, routine_name: str | None, scope_slug: str | None
+    ) -> list[str]:
+        """All classes in the scoped bucket, independent of the list page and its filters."""
         ...
 
     def has_delivery_for_proposal(self, proposal_id: str) -> bool:
