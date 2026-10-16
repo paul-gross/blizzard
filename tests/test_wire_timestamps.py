@@ -24,6 +24,8 @@ _REPO_ROOT = repo_root()
 _SRC_DIR = _REPO_ROOT / "src" / "blizzard"
 # The one legitimate owner of a raw `.isoformat()` call — iso_utc's own implementation.
 _EXCLUDED_FILES = {_SRC_DIR / "foundation" / "store" / "utc.py"}
+# Store-migration tests sit beside their revisions but are test code, like ``tests/``.
+_MIGRATION_TESTS = "migrations/tests"
 
 
 def _isoformat_calls(path: Path) -> list[str]:
@@ -39,7 +41,7 @@ def _isoformat_calls(path: Path) -> list[str]:
 def test_no_raw_isoformat_at_an_api_edge() -> None:
     violations: list[str] = []
     for path in sorted(_SRC_DIR.rglob("*.py")):
-        if path in _EXCLUDED_FILES:
+        if path in _EXCLUDED_FILES or _MIGRATION_TESTS in path.as_posix():
             continue
         violations.extend(_isoformat_calls(path))
     assert not violations, (

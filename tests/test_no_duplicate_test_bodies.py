@@ -16,6 +16,7 @@ import pytest
 pytestmark = pytest.mark.unit
 
 _TESTS = Path(__file__).resolve().parent
+_ROOT = _TESTS.parent
 
 #: Bodies duplicated on purpose, keyed by test name — the parity guard's endpoint-table
 #: check is re-run under the service tier's own gate, off one shared helper.
@@ -41,7 +42,8 @@ def _bodies() -> dict[tuple[str, str], list[str]]:
     """Every test function keyed by ``(name, normalized body)`` — docstrings dropped,
     since a differing docstring is exactly how a duplicate hides."""
     found: dict[tuple[str, str], list[str]] = collections.defaultdict(list)
-    for path in sorted(_TESTS.rglob("test_*.py")):
+    colocated = (_ROOT / "src" / "blizzard").glob("*/store/migrations/tests/*_test.py")
+    for path in sorted([*_TESTS.rglob("test_*.py"), *colocated]):
         tree = ast.parse(path.read_text())
         constants = _module_constants(tree)
         for node in ast.walk(tree):
@@ -58,7 +60,7 @@ def _bodies() -> dict[tuple[str, str], list[str]]:
                 if any(isinstance(n, ast.Name) and n.id == name for n in ast.walk(node))
             )
             key = (node.name, dumped + decorators + "".join(read))
-            found[key].append(f"{path.relative_to(_TESTS)}::{node.name}")
+            found[key].append(f"{path.relative_to(_ROOT)}::{node.name}")
     return found
 
 

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from tests.conftest import UNMARKED_TEST_NODEIDS
+from tests.suite_plugin import UNMARKED_TEST_NODEIDS
 
 pytestmark = pytest.mark.unit
 

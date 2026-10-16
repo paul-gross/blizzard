@@ -20,27 +20,19 @@ from sqlalchemy.exc import IntegrityError, SAWarning
 from blizzard.hub.config import HubConfig
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import MIGRATIONS_DIR
+from tests.migration_support_tenant_tighten_migration import _KEYS, _index_names, _seeded_at_the_keys
 from tests.test_tenant_keys_migration import (
     _SECOND_TENANT,
     _T0,
     _rows,
-    _seeded_at_the_backfill,
     _snapshot,
     _tenant_column_nullable,
     _tenant_ids,
 )
 
-pytestmark = [pytest.mark.component, pytest.mark.migration_revision("20261008_1400_tenant_tighten")]
+pytestmark = [pytest.mark.component]
 
-_KEYS = "20261008_1300_tenant_keys"
 _TIGHTEN = "20261008_1400_tenant_tighten"
-
-
-def _seeded_at_the_keys(tmp_path: Path) -> tuple[str, sa.Engine]:
-    """A store holding one row in every tenant-owned table, keyed by its one tenant where the key changes."""
-    db_url, engine = _seeded_at_the_backfill(tmp_path)
-    migration_runner(HubConfig(root=tmp_path, db_url=db_url)).upgrade(_KEYS)
-    return db_url, engine
 
 
 def _untightened(engine: sa.Engine) -> set[str]:
@@ -53,8 +45,18 @@ def _untightened(engine: sa.Engine) -> set[str]:
     }
 
 
-def _index_names(engine: sa.Engine, table: str) -> set[str]:
-    return {str(index["name"]) for index in sa.inspect(engine).get_indexes(table)}
+def _tighten_only(engine: sa.Engine, tables: set[str]) -> None:
+    """Run the revision's upgrade over ``tables`` alone, leaving the store as a run stopped after tightening them."""
+    script = ScriptDirectory(str(MIGRATIONS_DIR)).get_revision(_TIGHTEN)
+    assert script is not None
+    module = script.module
+    with (
+        engine.begin() as conn,
+        Operations.context(MigrationContext.configure(conn)),
+        pytest.MonkeyPatch.context() as mp,
+    ):
+        mp.setattr(module, "_PLAN", tuple(plan for plan in module._PLAN if plan[0] in tables))
+        module.upgrade()
 
 
 def test_the_upgrade_keeps_every_row_in_its_tenant_and_requires_it_on_every_table(tmp_path: Path) -> None:
@@ -107,20 +109,6 @@ def test_after_the_upgrade_a_row_must_name_a_tenant_the_store_holds(tmp_path: Pa
         assert "tenants" in violated
     finally:
         engine.dispose()
-
-
-def _tighten_only(engine: sa.Engine, tables: set[str]) -> None:
-    """Run the revision's upgrade over ``tables`` alone, leaving the store as a run stopped after tightening them."""
-    script = ScriptDirectory(str(MIGRATIONS_DIR)).get_revision(_TIGHTEN)
-    assert script is not None
-    module = script.module
-    with (
-        engine.begin() as conn,
-        Operations.context(MigrationContext.configure(conn)),
-        pytest.MonkeyPatch.context() as mp,
-    ):
-        mp.setattr(module, "_PLAN", tuple(plan for plan in module._PLAN if plan[0] in tables))
-        module.upgrade()
 
 
 def test_a_rerun_over_a_store_tightened_part_way_finishes(tmp_path: Path) -> None:

@@ -20,6 +20,8 @@ ignores:
   - src/blizzard/hub/store/internal/hub_scoped_*.py
   - src/blizzard/hub/auth/**
   - src/blizzard/hub/api/auth*.py
+  # Test code colocated beside the store revisions it proves.
+  - src/blizzard/*/store/migrations/tests/**
 rule:
   any:
     - kind: identifier

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from tests.conftest import parse_shard, shard_of
+from tests.suite_plugin import parse_shard, shard_of
 
 pytestmark = pytest.mark.unit
 
