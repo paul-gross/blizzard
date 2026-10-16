@@ -37,10 +37,11 @@ describe('waitingProposalCount', () => {
 });
 
 describe('surfaceOf and surfaceLabel', () => {
-  it('puts runs and findings on one surface, labelled for both', () => {
+  it('gives runs and findings a surface each', () => {
     expect(surfaceOf('runs')).toBe('runs');
-    expect(surfaceOf('findings')).toBe('runs');
-    expect(surfaceLabel('findings')).toBe('Runs & findings');
+    expect(surfaceOf('findings')).toBe('findings');
+    expect(surfaceLabel('runs')).toBe('Runs');
+    expect(surfaceLabel('findings')).toBe('Findings');
     expect(surfaceLabel('scopes')).toBe('Scopes');
   });
 
@@ -51,11 +52,12 @@ describe('surfaceOf and surfaceLabel', () => {
 });
 
 describe('gardenSurfaceTabs', () => {
-  it('orders the four tabs scopes, routines, runs and findings, proposals, each with its count', () => {
-    expect(gardenSurfaceTabs({ scopes: 4, routines: 2, runs: null, proposals: 3 })).toEqual([
+  it('orders the five tabs scopes, routines, runs, findings, proposals, each with its count', () => {
+    expect(gardenSurfaceTabs({ scopes: 4, routines: 2, runs: null, findings: 7, proposals: 3 })).toEqual([
       { surface: 'scopes', label: 'Scopes', count: 4 },
       { surface: 'routines', label: 'Routines', count: 2 },
-      { surface: 'runs', label: 'Runs & findings', count: null },
+      { surface: 'runs', label: 'Runs', count: null },
+      { surface: 'findings', label: 'Findings', count: 7 },
       { surface: 'proposals', label: 'Proposals', count: 3 },
     ]);
   });
@@ -100,16 +102,18 @@ describe('gardenSurfaceCounts', () => {
         scopes: [{}, {}],
         routines: [{}],
         runs: [],
+        findings: [{}, {}, {}],
         proposals: [proposal('gp_1', false), proposal('gp_2', true)],
       }),
-    ).toEqual({ scopes: 2, routines: 1, runs: 0, proposals: 1 });
+    ).toEqual({ scopes: 2, routines: 1, runs: 0, findings: 3, proposals: 1 });
   });
 
   it('leaves a count out until its read answers', () => {
-    expect(gardenSurfaceCounts({ scopes: undefined, routines: undefined, runs: undefined, proposals: undefined })).toEqual({
+    expect(gardenSurfaceCounts({ scopes: undefined, routines: undefined, runs: undefined, findings: undefined, proposals: undefined })).toEqual({
       scopes: null,
       routines: null,
       runs: null,
+      findings: null,
       proposals: null,
     });
   });

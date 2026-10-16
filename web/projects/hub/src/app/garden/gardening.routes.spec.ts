@@ -228,7 +228,7 @@ describe('the /gardening route subtree', () => {
     expect(el.querySelector('[data-testid="gardening-run-delta"]')).toBeTruthy();
   });
 
-  it('resolves /gardening/findings to the findings list of the Runs & findings tab', async () => {
+  it('resolves /gardening/findings to the findings list on the Findings tab', async () => {
     const fixture = TestBed.createComponent(TestGardeningRouteHost);
     const router = TestBed.inject(Router);
 
@@ -237,8 +237,8 @@ describe('the /gardening route subtree', () => {
 
     const el = fixture.nativeElement as HTMLElement;
     expect(el.querySelector('[data-testid="gardening-findings-empty"]')).toBeTruthy();
-    expect(el.querySelector('[data-testid="gardening-tab-runs"].active')).toBeTruthy();
-    expect(el.querySelector('[data-testid="gardening-switch-findings"].on')).toBeTruthy();
+    expect(el.querySelector('[data-testid="gardening-tab-findings"].active')).toBeTruthy();
+    expect(el.querySelector('[data-testid="gardening-tab-runs"].active')).toBeNull();
   });
 
   it('resolves /gardening/findings/:findingId to the finding detail', async () => {

@@ -61,12 +61,6 @@
     </a>
   }
 </nav>
-@if (surface() === 'runs') {
-  <nav class="surface-switch" aria-label="Runs and findings" data-testid="gardening-runs-switch">
-    <a routerLink="runs" routerLinkActive="on" data-testid="gardening-switch-runs">Runs</a>
-    <a routerLink="findings" routerLinkActive="on" data-testid="gardening-switch-findings">Findings</a>
-  </nav>
-}
 <div class="body">
   <router-outlet />
 </div>

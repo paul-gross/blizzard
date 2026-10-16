@@ -18,36 +18,21 @@
      layout is a single stacked column and this width never applies. */
   --master-list-col: 640px;
 }
-/* A fixed label column beside a chips column, one grid row per filter group —
- * `kit-fact-list.css`'s own `.kv` two-column shape (`--kv-label-col`), so this
- * filter block's label column lines up with the fact lists used elsewhere in
- * gardening rather than drifting to its own measurements. `fleet-kit-chips`
- * itself is `display: contents` (`kit-chips.css`), so each chips row becomes a
- * real grid item here with no wrapper element needed, and wraps within its own
- * row on overflow rather than spilling into the row below. */
+/* The four filter selects in one row, unlabelled: each select's selected-option text ("All routines", the chosen
+ * value) names the filter, and each keeps its `ariaLabel`. */
 .gf-filters {
   display: grid;
-  grid-template-columns: var(--kv-label-col, 74px) 1fr;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   align-items: start;
   gap: 8px 12px;
   margin-bottom: 12px;
   flex: none;
-}
-.gf-filter-label {
-  font-size: var(--fs-label);
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--label);
-  padding-top: 4px;
 }
 /* The filters sit outside the kit's split, so they collapse with the page's own
  * host state: two per row on mobile, and gone while a finding's detail is open. */
 :host(.mobile) .gf-filters {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 6px;
-}
-:host(.mobile) .gf-filter-label {
-  display: none;
 }
 :host(.mobile.detail-open) .gf-filters {
   display: none;

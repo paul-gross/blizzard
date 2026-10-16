@@ -34,13 +34,14 @@ describe('GardeningPage (blizzard#397)', () => {
     return fixture;
   }
 
-  it('renders the four surfaces in their order, runs and findings sharing one', async () => {
+  it('renders the five surfaces in their order', async () => {
     const fixture = await render([]);
     const el = fixture.nativeElement as HTMLElement;
 
     const tabs = Array.from(el.querySelectorAll('[fleetKitTab]')).map((t) => t.getAttribute('data-testid'));
-    expect(tabs).toEqual(['gardening-tab-scopes', 'gardening-tab-routines', 'gardening-tab-runs', 'gardening-tab-proposals']);
-    expect(el.querySelector('[data-testid="gardening-tab-runs"]')?.textContent).toContain('Runs & findings');
+    expect(tabs).toEqual(['gardening-tab-scopes', 'gardening-tab-routines', 'gardening-tab-runs', 'gardening-tab-findings', 'gardening-tab-proposals']);
+    expect(el.querySelector('[data-testid="gardening-tab-runs"]')?.textContent).toContain('Runs');
+    expect(el.querySelector('[data-testid="gardening-tab-findings"]')?.textContent).toContain('Findings');
   });
 
   it('draws the proposals count plain when nothing is waiting', async () => {
@@ -182,19 +183,19 @@ describe('GardeningPage under a project lens', () => {
     expect(router.url).toBe('/gardening');
   });
 
-  it('keeps a findings link on the Runs & findings tab, with a switch between its two lists', async () => {
+  it('activates the Findings tab alone on a findings link', async () => {
     const { el } = await render('/p/blizzard/gardening/findings');
 
-    expect(el.querySelector('[data-testid="gardening-tab-runs"]')?.classList.contains('active')).toBe(true);
-    expect(el.querySelector('[data-testid="gardening-crumb-surface"]')?.textContent).toContain('Runs & findings');
-    expect(el.querySelector('[data-testid="gardening-switch-findings"]')?.classList.contains('on')).toBe(true);
-    expect(el.querySelector('[data-testid="gardening-switch-runs"]')?.classList.contains('on')).toBe(false);
+    expect(el.querySelector('[data-testid="gardening-tab-findings"]')?.classList.contains('active')).toBe(true);
+    expect(el.querySelector('[data-testid="gardening-tab-runs"]')?.classList.contains('active')).toBe(false);
+    expect(el.querySelector('[data-testid="gardening-crumb-surface"]')?.textContent).toContain('Findings');
   });
 
-  it('shows no runs and findings switch on another surface', async () => {
-    const { el } = await render();
+  it('activates the Runs tab alone on a runs link', async () => {
+    const { el } = await render('/p/blizzard/gardening/runs');
 
-    expect(el.querySelector('[data-testid="gardening-runs-switch"]')).toBeNull();
+    expect(el.querySelector('[data-testid="gardening-tab-runs"]')?.classList.contains('active')).toBe(true);
+    expect(el.querySelector('[data-testid="gardening-tab-findings"]')?.classList.contains('active')).toBe(false);
   });
 
   it('opens the doorway from the project crumb\'s All projects choice', async () => {
