@@ -3,7 +3,11 @@
 You are re-entering the **build** node after the review returned `fail`. The review's `review-findings` asset is in this
 envelope — every finding per axis, blocking and should-fix alike.
 
-Answer every blocking finding by fixing or refuting. The work returns to review for another pass.
+Answer by fixing or refuting every `blocking` finding and every `should-fix` tagged `in-diff` — a defect in what this
+change wrote, which you hold the context to repair now. Skipping one is not an answer: left open, an `in-diff`
+should-fix is deferred at landing into a hub finding that a later chunk repairs with none of your context. An
+`outside-diff` should-fix defers that way by design; fix it when the change's scale warrants. The work returns to review
+for another pass.
 
 Do not rebase or merge the base branch while repairing: verify and review re-visit by diffing from the tip they last
 judged, and base motion folded into that delta buries the repair in it. Integration is `pre-push`'s.
