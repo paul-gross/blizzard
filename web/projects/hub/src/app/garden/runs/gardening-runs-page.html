@@ -14,7 +14,6 @@
       [state]="runs.listState()"
       (runPick)="selectRun($event)"
     />
-    <p class="list-foot" data-testid="gardening-runs-foot">each run sweeps {{ projectName() }}'s repositories only</p>
   </fleet-kit-panel>
   <fleet-kit-panel kit-master-detail-detail class="gr-detail" label="Run">
     <router-outlet />

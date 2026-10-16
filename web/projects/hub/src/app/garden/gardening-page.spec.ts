@@ -103,11 +103,10 @@ describe('GardeningPage under a project lens', () => {
   });
   const TENANT_PROPOSALS = [waiting('gp_1', 'proj_w'), waiting('gp_2', 'proj_w'), waiting('gp_3', 'proj_b')];
 
-  async function render(runners: readonly unknown[], url = '/p/blizzard/gardening/scopes') {
+  async function render(url = '/p/blizzard/gardening/scopes') {
     stub = stubRequestClient(hubClient, (method, path) => {
       if (method !== 'GET') return {};
       if (path === '/api/projects') return { projects: PROJECTS };
-      if (path === '/api/runners') return { runners };
       if (path === '/api/garden-proposals') return { proposals: TENANT_PROPOSALS, next_cursor: null };
       if (path.endsWith('/garden-proposals')) return { proposals: [], next_cursor: null };
       return {};
@@ -138,7 +137,7 @@ describe('GardeningPage under a project lens', () => {
   }
 
   it('shows the breadcrumb Gardening › {project} › {surface}', async () => {
-    const { el } = await render([]);
+    const { el } = await render();
 
     const crumbs = el.querySelector('[data-testid="gardening-crumbs"]')!;
     expect(crumbs.textContent).toContain('Gardening');
@@ -147,7 +146,7 @@ describe('GardeningPage under a project lens', () => {
   });
 
   it('switches the lens from the project crumb and keeps the surface', async () => {
-    const { fixture, router } = await render([]);
+    const { fixture, router } = await render();
 
     document.querySelector<HTMLElement>('[data-testid="gardening-crumb-project"]')!.click();
     await settle(fixture, 4);
@@ -158,7 +157,7 @@ describe('GardeningPage under a project lens', () => {
   });
 
   it('lists each project with its proposals waiting, under a header naming the surface a switch keeps', async () => {
-    const { fixture } = await render([]);
+    const { fixture } = await render();
 
     document.querySelector<HTMLElement>('[data-testid="gardening-crumb-project"]')!.click();
     await settle(fixture, 4);
@@ -175,7 +174,7 @@ describe('GardeningPage under a project lens', () => {
   });
 
   it('opens the doorway from the Gardening crumb', async () => {
-    const { fixture, router, el } = await render([]);
+    const { fixture, router, el } = await render();
 
     el.querySelector<HTMLElement>('[data-testid="gardening-crumb-doorway"]')!.click();
     await settle(fixture, 8);
@@ -183,14 +182,8 @@ describe('GardeningPage under a project lens', () => {
     expect(router.url).toBe('/gardening');
   });
 
-  it('says whose records the strip holds', async () => {
-    const { el } = await render([]);
-
-    expect(el.querySelector('[data-testid="gardening-owner"]')?.textContent).toContain('every record here belongs to Blizzard');
-  });
-
   it('keeps a findings link on the Runs & findings tab, with a switch between its two lists', async () => {
-    const { el } = await render([], '/p/blizzard/gardening/findings');
+    const { el } = await render('/p/blizzard/gardening/findings');
 
     expect(el.querySelector('[data-testid="gardening-tab-runs"]')?.classList.contains('active')).toBe(true);
     expect(el.querySelector('[data-testid="gardening-crumb-surface"]')?.textContent).toContain('Runs & findings');
@@ -199,13 +192,13 @@ describe('GardeningPage under a project lens', () => {
   });
 
   it('shows no runs and findings switch on another surface', async () => {
-    const { el } = await render([]);
+    const { el } = await render();
 
     expect(el.querySelector('[data-testid="gardening-runs-switch"]')).toBeNull();
   });
 
   it('opens the doorway from the project crumb\'s All projects choice', async () => {
-    const { fixture, router } = await render([]);
+    const { fixture, router } = await render();
 
     document.querySelector<HTMLElement>('[data-testid="gardening-crumb-project"]')!.click();
     await settle(fixture, 4);
@@ -215,19 +208,11 @@ describe('GardeningPage under a project lens', () => {
     expect(router.url).toBe('/gardening/scopes');
   });
 
-  it('says so when no live runner serves the project', async () => {
-    const { el } = await render([
-      { runner_id: 'r1', runner_name: 'r1', online: true, retired: false, projects: [{ entry: 'winter', project_id: 'proj_w' }] },
-    ]);
-
-    expect(el.querySelector('[data-testid="gardening-unserved"]')?.textContent).toContain('No runner serves Blizzard');
-  });
-
-  it('says nothing when a live runner serves the project', async () => {
-    const { el } = await render([
-      { runner_id: 'r1', runner_name: 'r1', online: true, retired: false, projects: [{ entry: 'blizzard', project_id: 'proj_b' }] },
-    ]);
+  it('renders no no-runner warning and never reads the runners', async () => {
+    const { el } = await render();
 
     expect(el.querySelector('[data-testid="gardening-unserved"]')).toBeNull();
+    expect(el.querySelector('[data-testid="gardening-owner"]')).toBeNull();
+    expect(stub.requests.map((request) => request.path)).not.toContain('/api/runners');
   });
 });

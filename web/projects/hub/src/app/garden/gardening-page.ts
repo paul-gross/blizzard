@@ -8,7 +8,6 @@ import { LensLink } from 'fleet/shell';
 import { injectLensedProject } from '../core/lensed-project';
 import { ProjectLens } from '../core/project-lens';
 import { injectProjectsQuery } from '../core/projects.query';
-import { injectHubRunnersQuery } from '../core/runners.query';
 import { gardenPathOf } from './garden-lens.guard';
 import { GARDENING_DOORWAY_URL } from './core/garden-project';
 import { injectHubRoutinesQuery } from './core/routines.query';
@@ -18,7 +17,6 @@ import {
   gardenProjectChoices,
   gardenSurfaceCounts,
   gardenSurfaceTabs,
-  gardenUnserved,
   surfaceLabel,
   surfaceOf,
   waitingLabel,
@@ -37,11 +35,10 @@ import { injectHubRunsQuery } from './runs/garden-runs.query';
  *
  * Above the strip, the breadcrumb `Gardening › {project} › {surface}` is the lens shown in place: `Gardening` opens the
  * doorway, and the project crumb switches the lens and keeps the surface, each choice showing that project's proposals
- * waiting. A project no live runner serves says so here, since nothing its garden raises is worked until one does.
+ * waiting.
  *
  * Each tab counts its own list, from the read the list itself makes, so the two never disagree. Proposals counts the
  * ones waiting on a person and is the one count drawn in amber: scopes, routines and runs accumulate, they do not wait.
- * The strip's right-hand line says whose records these are.
  */
 @Component({
   selector: 'app-gardening-page',
@@ -70,7 +67,6 @@ export class GardeningPage {
   private readonly proposalsQuery = injectHubGardenProposalsQuery();
   private readonly tenantProposalsQuery = injectHubGardenProposalsQuery({ tenantWide: true });
   private readonly projectsQuery = injectProjectsQuery();
-  private readonly runnersQuery = injectHubRunnersQuery();
   private readonly project = injectLensedProject();
   private readonly url = toSignal(
     this.router.events.pipe(
@@ -112,8 +108,6 @@ export class GardeningPage {
 
   /** The surface crumb: the surface's label. */
   protected readonly surfaceLabel = computed(() => surfaceLabel(this.tab()));
-
-  protected readonly unserved = computed(() => gardenUnserved(this.project(), this.runnersQuery.data()));
 
   protected readonly waitingLabel = waitingLabel;
 
