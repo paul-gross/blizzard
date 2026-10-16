@@ -359,12 +359,10 @@ class _Recorded:
 
 def test_a_host_tick_renews_credentials_before_sampling_and_drains_after_sampling() -> None:
     order: list[str] = []
-    tick: Any = HostTick(
-        registration=None,
-        external_usage_sample=_Recorded("sample", order),
-        lane_drain=_Recorded("drain", order),
-        credential_renewal=_Recorded("renew", order),
-    )
+    sample: Any = _Recorded("sample", order)
+    drain: Any = _Recorded("drain", order)
+    renew: Any = _Recorded("renew", order)
+    tick = HostTick(registration=None, external_usage_sample=sample, lane_drain=drain, credential_renewal=renew)
 
     tick.run()
 
