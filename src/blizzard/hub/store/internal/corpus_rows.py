@@ -41,6 +41,7 @@ from blizzard.hub.domain.observability.tracing.facts import (
     TracedChunkStop,
     TracedDecision,
     TracedDecisionResolution,
+    TracedDemotion,
     TracedEpochOwner,
     TracedEscalation,
     TracedHubExecSlot,
@@ -186,6 +187,7 @@ def _hydrate(conn: Connection, batch: Sequence[str]) -> dict[str, tuple[TenantId
     bounces = _by_chunk(conn, s.chunk_bounces, ids, s.chunk_bounces.c.id)
     created = _by_chunk(conn, s.route_created, ids, s.route_created.c.created_at)
     promoted = _by_chunk(conn, s.chunk_promoted, ids, s.chunk_promoted.c.id)
+    demoted = _by_chunk(conn, s.chunk_demoted, ids, s.chunk_demoted.c.id)
     usage = _by_chunk(conn, s.usage_facts, ids, s.usage_facts.c.id)
     met = _prerequisites_met(conn, ids)
     return {
@@ -221,6 +223,7 @@ def _hydrate(conn: Connection, batch: Sequence[str]) -> dict[str, tuple[TenantId
                 bounces=tuple(TracedBounce(r.epoch, r.cause, r.recorded_at) for r in bounces[chunk_id]),
                 routes_created=tuple(TracedRouteCreation(r.created_at) for r in created[chunk_id]),
                 promotions=tuple(TracedPromotion(r.promoted_at) for r in promoted[chunk_id]),
+                demotions=tuple(TracedDemotion(r.demoted_at) for r in demoted[chunk_id]),
                 prerequisites_met=tuple(met[chunk_id]),
                 usage=tuple(_usage(r) for r in usage[chunk_id]),
             ),

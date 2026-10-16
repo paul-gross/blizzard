@@ -609,7 +609,7 @@
       "type": "string"
     },
     {
-      "meaning": "Milliseconds the chunk rested `not_ready` before it left the backlog.",
+      "meaning": "Milliseconds the chunk rested `not_ready`, summed over every stretch in the backlog: from ingest to its first promotion, first lease or finish, and from each demotion to the next promotion, lease or finish.",
       "name": "blizzard.chunk.backlog_ms",
       "on": [
         "chunk/lifetime"
@@ -618,7 +618,7 @@
       "type": "int"
     },
     {
-      "meaning": "Milliseconds from when the chunk left the backlog to its finish.",
+      "meaning": "Milliseconds of the chunk's lifetime outside the backlog: its lifetime less `blizzard.chunk.backlog_ms`.",
       "name": "blizzard.chunk.active_ms",
       "on": [
         "chunk/lifetime"
@@ -1429,7 +1429,7 @@
       "service": "blizzard-chunk"
     },
     {
-      "meaning": "The chunk resting `not_ready`, from ingest to its first promotion, its first lease or its finish, less what a step span covers.",
+      "meaning": "The chunk resting `not_ready`, one span per stretch in the backlog: from ingest, or from a demotion, to the next promotion, lease or finish, less what a step span covers.",
       "name": "backlog wait",
       "role": "chunk/backlog-wait",
       "scope": "blizzard.hub.fleet_spans",
