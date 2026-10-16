@@ -544,7 +544,7 @@ def _reflect_write_protocol_methods() -> set[tuple[type, str]]:
     declares."""
     keys: set[tuple[type, str]] = set()
     for modinfo in pkgutil.walk_packages(runner_pkg.__path__, runner_pkg.__name__ + "."):
-        if modinfo.name.endswith(".migrations.env"):
+        if modinfo.name.endswith(".migrations.env") or ".migrations.tests" in modinfo.name:
             continue
         module = importlib.import_module(modinfo.name)
         for name, obj in inspect.getmembers(module, inspect.isclass):

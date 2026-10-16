@@ -29,8 +29,8 @@ from blizzard.runner.harness.internal.process_launcher import ProcessLauncher
 from blizzard.runner.node_steps.envelope import Envelope, GraphArtifact
 from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
 from tests import transcript_fixtures
-from tests.conftest import _WORKER_IDENTITY_ENV
 from tests.runner_fakes import FakeProbe, make_envelope
+from tests.suite_plugin import _WORKER_IDENTITY_ENV
 
 _JSON_PASS = '{"type":"result","subtype":"success","is_error":false,"result":"Looks good. <Choice>pass</Choice>","session_id":"s1"}'
 

@@ -9,10 +9,19 @@ import sys
 import tomllib
 from pathlib import Path
 
+_STORES = ("hub", "runner")
+
 
 def repo_root() -> Path:
     """Return this test package's checkout, including when copied into mutants/."""
     return Path(__file__).resolve().parent.parent
+
+
+def audited_roots() -> tuple[Path, ...]:
+    """The test code the repo-read guard audits: ``tests/`` and the store-migration tests beside the shipped revisions."""
+    root = repo_root()
+    colocated = (root / "src" / "blizzard" / component / "store" / "migrations" / "tests" for component in _STORES)
+    return (root / "tests", *colocated)
 
 
 def copied_repo_files() -> frozenset[Path]:
@@ -58,7 +67,7 @@ def check_repo_read(path: str | bytes | Path, copied: frozenset[Path] | None = N
 def install_repo_read_guard() -> None:
     """Catch repo-file opens and subprocess launches from fast-tier tests."""
     copied = copied_repo_files()
-    tests = repo_root() / "tests"
+    roots = audited_roots()
     test_pid = os.getpid()
 
     def audit(event: str, args: tuple[object, ...]) -> None:
@@ -72,7 +81,7 @@ def install_repo_read_guard() -> None:
             # by a library may instead be relative to an unreported dir_fd.
             if not isinstance(mode, str) and not Path(os.fsdecode(args[0])).is_absolute():
                 caller = Path(sys._getframe(1).f_globals.get("__file__", "")).resolve()
-                if "/" not in os.fsdecode(args[0]) and not caller.is_relative_to(tests):
+                if "/" not in os.fsdecode(args[0]) and not any(caller.is_relative_to(audited) for audited in roots):
                     return
             if not isinstance(mode, str) and isinstance(args[2], int) and args[2] & os.O_ACCMODE != os.O_RDONLY:
                 return
@@ -81,7 +90,7 @@ def install_repo_read_guard() -> None:
         frame = sys._getframe(1)
         while frame:
             filename = Path(frame.f_globals.get("__file__", frame.f_code.co_filename)).resolve()
-            if filename.is_relative_to(tests) and filename.name != "repo_files.py":
+            if any(filename.is_relative_to(audited) for audited in roots) and filename.name != "repo_files.py":
                 if event == "open":
                     if isinstance(args[0], (str, bytes, Path)):
                         check_repo_read(args[0], copied)

@@ -32,7 +32,7 @@ _graphs = sa.Table(
     sa.Column("created_at", UtcDateTime, nullable=False),
 )
 # This revision's own frozen shape — none of the columns later revisions add to ``graph_nodes``
-# (``bzh:frozen-revisions``); the reshapes are enumerated in tests/test_store_migrations.py.
+# (``bzh:frozen-revisions``); each reshape is pinned by the colocated test of the revision that makes it.
 _graph_nodes = sa.Table(
     "graph_nodes",
     _frozen_metadata,

@@ -21,6 +21,15 @@ from tests.repo_files import repo_root
 
 pytestmark = pytest.mark.unit
 
+
+def _production_files(root: Path) -> list[Path]:
+    """Every module under ``root`` bar the store-migration tests colocated beside their revisions, which are test code
+    held to the standards of ``tests/``."""
+    return sorted(
+        path for path in root.rglob("*.py") if path.parent.name != "tests" or path.parent.parent.name != "migrations"
+    )
+
+
 _REPO_ROOT = repo_root()
 _SRC_DIR = _REPO_ROOT / "src" / "blizzard"
 _TESTS_DIR = _REPO_ROOT / "tests"
@@ -148,7 +157,7 @@ def _imported_modules(path: Path) -> set[str]:
 
 
 def _violations(root: Path, forbidden_prefixes: tuple[str, ...]) -> list[str]:
-    return _file_violations(sorted(root.rglob("*.py")), forbidden_prefixes)
+    return _file_violations(_production_files(root), forbidden_prefixes)
 
 
 def _file_violations(paths: Iterable[Path], forbidden_prefixes: tuple[str, ...]) -> list[str]:
@@ -162,7 +171,7 @@ def _file_violations(paths: Iterable[Path], forbidden_prefixes: tuple[str, ...])
 
 def _misrouted_moved_names(root: Path) -> list[str]:
     violations: list[str] = []
-    for path in sorted(root.rglob("*.py")):
+    for path in _production_files(root):
         tree = ast.parse(path.read_text(), filename=str(path))
         for node in ast.walk(tree):
             if not isinstance(node, ast.ImportFrom):
@@ -197,7 +206,7 @@ def _kernel_modules() -> list[str]:
     return [
         ".".join(path.relative_to(_SRC_DIR.parent).with_suffix("").parts).removesuffix(".__init__")
         for root in _KERNEL_DIRS
-        for path in sorted(root.rglob("*.py"))
+        for path in _production_files(root)
     ]
 
 
@@ -250,7 +259,7 @@ def _docstring_ids(tree: ast.Module) -> set[int]:
 
 def _daemon_named_strings(root: Path, forbidden_prefixes: tuple[str, ...]) -> list[str]:
     violations: list[str] = []
-    for path in sorted(root.rglob("*.py")):
+    for path in _production_files(root):
         tree = ast.parse(path.read_text(), filename=str(path))
         docstring_ids = _docstring_ids(tree)
         for node in ast.walk(tree):
@@ -272,7 +281,7 @@ def test_foundation_names_neither_daemon_in_a_string_literal() -> None:
 
 def _bare_engine_accesses(root: Path, *, exempt: frozenset[Path] = frozenset()) -> list[str]:
     violations: list[str] = []
-    for path in sorted(root.rglob("*.py")):
+    for path in _production_files(root):
         if path in exempt:
             continue
         tree = ast.parse(path.read_text(), filename=str(path))
@@ -305,7 +314,7 @@ def _tenant_seam_breaches(src_root: Path) -> list[str]:
     store_dir = src_root / "hub" / "store"
     guard_importers = (src_root / "hub" / "app.py",)
     breaches: list[str] = []
-    for path in sorted(src_root.rglob("*.py")):
+    for path in _production_files(src_root):
         in_store = path.is_relative_to(store_dir)
         holds_exemption = _holds_hub_scoped_exemption(path, src_root)
         where = path.relative_to(src_root.parent)
@@ -422,7 +431,7 @@ def _hub_scoped_member_imports(src_root: Path) -> list[str]:
     one would re-export it to every module that imports the holder, past ``bzh:hub-scoped-reads-confined``."""
     internal = src_root / "hub" / "store" / "internal"
     imports: list[str] = []
-    for path in sorted(src_root.rglob("*.py")):
+    for path in _production_files(src_root):
         if path.parent == internal and path.name.startswith("hub_scoped_"):
             continue
         where = path.relative_to(src_root.parent)
@@ -552,7 +561,7 @@ def _runner_seam_breaches(src_root: Path) -> list[str]:
         store / "internal" / name for name in _HOST_EXEMPT_MEMBER_MODULES
     }
     breaches: list[str] = []
-    for path in sorted(src_root.rglob("*.py")):
+    for path in _production_files(src_root):
         if path in holders or path.is_relative_to(store / "migrations"):
             continue
         where = path.relative_to(src_root.parent)
@@ -652,7 +661,7 @@ def _outbox_insert_breaches(src_root: Path) -> list[str]:
     table itself) given either table, under any name it was imported as, or raw ``INSERT INTO`` text naming one. Runner
     migrations write the tables as they were and are not judged."""
     breaches: list[str] = []
-    for path in sorted(src_root.rglob("*.py")):
+    for path in _production_files(src_root):
         relative = path.relative_to(src_root)
         if relative == _OUTBOX_SEAM_FILE or relative.is_relative_to(Path("runner") / "store" / "migrations"):
             continue
@@ -768,7 +777,7 @@ _CHUNK_EVENTS_STORE_FILE = _HUB_DIR / "store" / "internal" / "chunk_events_store
 
 def _record_event_call_sites(root: Path) -> list[str]:
     violations: list[str] = []
-    for path in sorted(root.rglob("*.py")):
+    for path in _production_files(root):
         if path in (_EVENT_LOG_SERVICE_FILE, _CHUNK_EVENTS_STORE_FILE):
             continue
         tree = ast.parse(path.read_text(), filename=str(path))
@@ -808,7 +817,7 @@ def test_hub_store_internal_holds_no_http_client() -> None:
 
 def _protocol_declarations(root: Path) -> list[str]:
     violations: list[str] = []
-    for path in sorted(root.rglob("*.py")):
+    for path in _production_files(root):
         tree = ast.parse(path.read_text(), filename=str(path))
         for node in ast.walk(tree):
             if not isinstance(node, ast.ClassDef):
@@ -873,7 +882,7 @@ def test_sqlalchemy_is_imported_only_from_the_store_seam() -> None:
     schema, errors, statement guard and migrations may hold — every other module takes the Protocol seam,
     never the driver underneath it, bar the individually-justified exceptions above."""
     violations: list[str] = []
-    for path in sorted(_RUNNER_DIR.rglob("*.py")):
+    for path in _production_files(_RUNNER_DIR):
         if (
             path.is_relative_to(_RUNNER_STORE_INTERNAL_DIR)
             or path in (_RUNNER_STORE_SCHEMA_FILE, _RUNNER_STORE_ERRORS_FILE, _RUNNER_STORE_GUARD_FILE)
@@ -908,7 +917,7 @@ def test_composition_is_the_only_module_naming_a_concrete_runner_store_adapter()
     takes a Protocol seam or the ``RunnerStores`` bundle it builds."""
     adapters = _runner_store_adapter_names()
     violations: list[str] = []
-    for path in sorted(_SRC_DIR.rglob("*.py")):
+    for path in _production_files(_SRC_DIR):
         if path.is_relative_to(_RUNNER_STORE_INTERNAL_DIR) or path == _RUNNER_COMPOSITION_FILE:
             continue
         tree = ast.parse(path.read_text(), filename=str(path))
@@ -939,7 +948,7 @@ def test_composition_is_the_only_module_constructing_the_runner_process_graph_co
     """I: the process-graph constructors are called from ``src/blizzard/runner/composition.py`` and nowhere
     else under ``src/`` — every other root takes the one ``RunnerProcess`` graph."""
     violations: list[str] = []
-    for path in sorted(_SRC_DIR.rglob("*.py")):
+    for path in _production_files(_SRC_DIR):
         if path == _RUNNER_COMPOSITION_FILE:
             continue
         tree = ast.parse(path.read_text(), filename=str(path))
@@ -987,7 +996,7 @@ def _resolved_imports(path: Path, tree: ast.Module, src_root: Path) -> list[tupl
 
 def _runner_composition_imports(root: Path, *, exempt: frozenset[Path], src_root: Path = _SRC_DIR) -> list[str]:
     violations: list[str] = []
-    for path in sorted(root.rglob("*.py")):
+    for path in _production_files(root):
         if path in exempt:
             continue
         tree = ast.parse(path.read_text(), filename=str(path))
@@ -1015,7 +1024,7 @@ def test_only_the_composition_roots_import_the_runner_composition_module() -> No
 
 def _write_session_store_accesses(root: Path, *, exempt: frozenset[Path]) -> list[str]:
     violations: list[str] = []
-    for path in sorted(root.rglob("*.py")):
+    for path in _production_files(root):
         if path in exempt:
             continue
         tree = ast.parse(path.read_text(), filename=str(path))
@@ -1048,7 +1057,7 @@ def test_runner_api_names_no_write_capable_store_or_bundle() -> None:
     per-concept mutation services — never ``RunnerStores`` nor an ``IWrite*`` seam, which
     would let a route mutate directly instead of delegating to a domain service."""
     violations: list[str] = []
-    for path in sorted(_RUNNER_API_DIR.rglob("*.py")):
+    for path in _production_files(_RUNNER_API_DIR):
         tree = ast.parse(path.read_text(), filename=str(path))
         for node in ast.walk(tree):
             if not isinstance(node, ast.ImportFrom):
@@ -1106,7 +1115,7 @@ def _internal_crossings(src_root: Path, *, exempt: frozenset[Path]) -> list[str]
     path they name before the owner comparison."""
     top = src_root.name
     violations: list[str] = []
-    for path in sorted(src_root.rglob("*.py")):
+    for path in _production_files(src_root):
         if path in exempt:
             continue
         importer = list(path.relative_to(src_root.parent).with_suffix("").parts)
@@ -1230,7 +1239,7 @@ def _adapter_isolation_violations(src_root: Path, *, exempt: frozenset[Path]) ->
     harness = f"{src_root.name}.runner.harness"
     wiring = src_root / "runner" / "harness" / "wiring.py"
     violations: list[str] = []
-    for path in sorted(src_root.rglob("*.py")):
+    for path in _production_files(src_root):
         parts = path.relative_to(src_root).parts
         in_harness = parts[:2] == ("runner", "harness")
         own = parts[2] if in_harness and len(parts) > 3 and parts[2] in _ADAPTER_PACKAGES else None
@@ -1346,7 +1355,7 @@ _LOOP_CONTEXT = frozenset({"LoopContext"})
 def _scanned(root: Path, exempt: frozenset[Path], exempt_dirs: tuple[Path, ...]) -> list[tuple[Path, ast.Module]]:
     return [
         (path, ast.parse(path.read_text(), filename=str(path)))
-        for path in sorted(root.rglob("*.py"))
+        for path in _production_files(root)
         if path not in exempt and not any(path.is_relative_to(d) for d in exempt_dirs)
     ]
 
@@ -1757,7 +1766,7 @@ def _domain_layer_crossings(
     umbrella = list(domain_dir.relative_to(src_root).parts)
     refused = [[*umbrella[:-1], edge] for edge in edges]
     violations: list[str] = []
-    for path in sorted(domain_dir.rglob("*.py")):
+    for path in _production_files(domain_dir):
         rel = path.relative_to(domain_dir).parts
         if len(rel) == 1 and rel[0] != "__init__.py":
             violations.append(f"{path.name} sits in no package")
@@ -1896,7 +1905,7 @@ def _domain_second_spellings(src_root: Path, domain_dir: Path, importer_roots: I
 
     violations: list[str] = []
     for root in importer_roots:
-        for path in sorted(root.rglob("*.py")):
+        for path in _production_files(root):
             package = (
                 list(path.relative_to(src_root).with_suffix("").parts)[:-1] if path.is_relative_to(src_root) else None
             )
@@ -2158,7 +2167,7 @@ def _runner_node_imports(
     node)])`` over the ``blizzard.runner`` modules it names, resolved as :func:`_import_statements` resolves it."""
     src_root = runner_dir.parent.parent
     umbrella = list(runner_dir.relative_to(src_root).parts)
-    for path in sorted(runner_dir.rglob("*.py")):
+    for path in _production_files(runner_dir):
         own = _runner_module_node(path, runner_dir)
         if own is None or own not in layers:
             continue
@@ -2220,7 +2229,7 @@ def _runner_domain_core_files(runner_dir: Path, layers: Mapping[str, frozenset[s
     adapters binding a framework or driver sit in its ``internal/`` (``bzh:internal-visibility``)."""
     return [
         path
-        for path in sorted(runner_dir.rglob("*.py"))
+        for path in _production_files(runner_dir)
         if _runner_module_node(path, runner_dir) in layers and "internal" not in path.relative_to(runner_dir).parts[:-1]
     ]
 
@@ -2753,7 +2762,7 @@ def test_no_request_plane_module_imports_the_secret_plaintext_seams() -> None:
     violations = {
         str(path.relative_to(_REPO_ROOT)): names
         for directory in _REQUEST_PLANE_DIRS
-        for path in sorted(directory.rglob("*.py"))
+        for path in _production_files(directory)
         if (names := _secret_plaintext_imports(path))
     }
     assert not violations, f"api/, cli/, and wire/ must not import the secret plaintext seams: {violations}"
@@ -2799,7 +2808,7 @@ def _configured_write_imports(path: Path) -> list[str]:
 def _configured_write_holders(root: Path, *, exempt: frozenset[Path]) -> dict[str, list[str]]:
     return {
         str(path.relative_to(_REPO_ROOT)): names
-        for path in sorted(root.rglob("*.py"))
+        for path in _production_files(root)
         if path not in exempt and "store/internal" not in path.as_posix() and (names := _configured_write_imports(path))
     }
 
@@ -3026,7 +3035,7 @@ class _RoleScan:
         self.imports: dict[Path, dict[str, tuple[str, str]]] = {}
         self.modules: dict[Path, dict[str, str]] = {}
         self.functions: dict[Path, set[str]] = {}
-        for path in sorted(src_root.rglob("*.py")):
+        for path in _production_files(src_root):
             tree = ast.parse(path.read_text(), filename=str(path))
             names, modules = _marker_bindings(path, src_root, tree)
             self.imports[path] = {
@@ -3300,7 +3309,7 @@ def _wire_import_violations(src_root: Path, *, exempt: frozenset[Path]) -> list[
     """Every module under ``src_root`` — outside the app boundary, the wire adapters, and
     ``exempt`` — importing ``blizzard.wire``."""
     violations: list[str] = []
-    for path in sorted(src_root.rglob("*.py")):
+    for path in _production_files(src_root):
         rel = path.relative_to(src_root)
         if _in_app_boundary(rel) or any(rel.is_relative_to(a) for a in _WIRE_ADAPTERS) or path in exempt:
             continue

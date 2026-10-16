@@ -2,12 +2,11 @@
 
 ``event_log`` is an append-only operational-fact table (``bzh:facts-not-status``): one
 row per thing that happened, no status column. These tests pin round-trip, filtering,
-supersession, feed ordering, and the migration.
-"""
+supersession, feed ordering, and the migration."""
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -21,10 +20,10 @@ from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
 from blizzard.hub.store import schema as s
+from tests.migration_support_event_log import _T0
 from tests.support import (
     chunk_stores,
     count_queries,
-    hub_store_connections,
     migrate_to,
     seed_chunk,
     seed_graph,
@@ -32,10 +31,7 @@ from tests.support import (
     stamp,
 )
 
-pytestmark = pytest.mark.unit
-
-_T0 = datetime(2026, 1, 1, tzinfo=UTC)
-_HEAD_BEFORE_EVENT_LOG = "20260721_1500_hub_cli_auth_state_user"
+pytestmark = [pytest.mark.unit]
 
 
 def _at(seconds: int) -> datetime:
@@ -395,39 +391,6 @@ def test_event_feed_escalation_message_does_not_overclaim_resume() -> None:
     # the message. These fire on any wording that embeds it.
     assert "claude --resume" not in by_chunk["ch_a"]
     assert "cross-graph" not in by_chunk["ch_c"]
-
-
-@pytest.mark.migration_revision("20260721_1600_hub_event_log")
-def test_migration_creates_event_log_on_in_place_upgrade(tmp_path: Path) -> None:
-    runner, engine = migrate_to(tmp_path, _HEAD_BEFORE_EVENT_LOG)
-    assert not _has_table(engine, "event_log")  # absent before the revision
-    runner.upgrade("head")
-    # After the in-place upgrade the table exists and is insertable.
-    with engine.begin() as conn:
-        conn.execute(
-            insert(s.event_log).values(
-                stamp(
-                    s.event_log,
-                    severity="info",
-                    kind="k",
-                    runner_id="r",
-                    chunk_id=None,
-                    lease_id=None,
-                    node_name=None,
-                    message="m",
-                    detail=None,
-                    recorded_at=_T0,
-                )
-            )
-        )
-        rows = conn.execute(hub_store_connections(engine).select(s.event_log)).all()
-    assert len(rows) == 1
-
-
-def _has_table(engine, name: str) -> bool:  # type: ignore[no-untyped-def]
-    from sqlalchemy import inspect
-
-    return name in inspect(engine).get_table_names()
 
 
 def test_newest_escalation_per_chunk_breaks_a_recorded_at_tie_by_id(tmp_path: Path) -> None:

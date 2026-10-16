@@ -91,6 +91,8 @@ packages = ["src/blizzard"]
 # packaged default workflow graph (YAML + prompt files) rides along too, so
 # a fresh hub mints it with no authoring.
 artifacts = ["src/blizzard/static/**/*", "src/blizzard/hub/graphs/**/*"]
+# The store-migration tests sit beside the revisions they prove, but they are test code and never ship.
+exclude = ["src/blizzard/*/store/migrations/tests"]
 
 # One binary, verbs namespaced by target. The hyphenated aliases are the
 # systemd / `ps` entry points for the daemon `host` personalities.
@@ -141,7 +143,14 @@ mutation = [
 ]
 
 [tool.pytest.ini_options]
-testpaths = ["tests", "exemplars/python/tests"]
+# The store-migration tests live beside their revisions, so each migrations/tests directory is a path of its own.
+testpaths = [
+    "tests",
+    "exemplars/python/tests",
+    "src/blizzard/hub/store/migrations/tests",
+    "src/blizzard/runner/store/migrations/tests",
+    "exemplars/python/exemplar/hub/store/migrations/tests",
+]
 # The exemplar tests import the `exemplar` package beside them and `tests.support`.
 pythonpath = [".", "exemplars/python"]
 asyncio_mode = "auto"
@@ -155,7 +164,6 @@ markers = [
     "service: a running daemon's HTTP API exercised from outside with the counterpart mocked; skipped when the mock fleet is absent",
     "journey: the capstone MVP acceptance-journey rehearsal — real host daemons, a mid-run reboot, and the human loop, end to end; skipped without BLIZZARD_JOURNEY=1",
     "winter_binding: the winter workspace binding against the real winter CLI — local-only, never run in CI; skipped without BLIZZARD_WINTER_BINDING=1",
-    "migration_revision(stem): the store revision (a versions/ filename stem) the test exists to prove; skipped once that revision is over 30 days old, unless BLIZZARD_RUN_RETIRED_MIGRATION_TESTS=1",
 ]
 
 [tool.mutmut]
@@ -167,6 +175,7 @@ markers = [
 # scripts/mutation.py reads this list and layers each scope's own exclusions on top.
 do_not_mutate = [
     "src/blizzard/*/store/migrations/versions/*",
+    "src/blizzard/*/store/migrations/tests/*",
 ]
 # Applied to every mutmut-driven pytest invocation (stats collection and mutant runs
 # alike); scripts/mutation.py layers a per-scope test-selection on top via
@@ -246,4 +255,6 @@ select = ["E", "F", "I", "UP", "B", "C4", "SIM", "RUF"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["E501", "B008"]
+"src/blizzard/*/store/migrations/tests/*" = ["E501", "B008"]
+"exemplars/python/exemplar/hub/store/migrations/tests/*" = ["E501", "B008"]
 "src/blizzard/*/store/migrations/env.py" = ["E402"]

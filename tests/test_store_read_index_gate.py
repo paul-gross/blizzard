@@ -61,8 +61,8 @@ def _reflect_read_protocol_methods(package: ModuleType) -> set[tuple[type, str]]
     ``blizzard.runner`` and once for ``blizzard.hub``, rather than duplicated per store."""
     keys: set[tuple[type, str]] = set()
     for modinfo in pkgutil.walk_packages(package.__path__, package.__name__ + "."):
-        if modinfo.name.endswith(".migrations.env"):
-            continue  # src/blizzard/*/store/migrations/env.py needs an active `alembic` CLI context
+        if modinfo.name.endswith(".migrations.env") or ".migrations.tests" in modinfo.name:
+            continue  # the migrations env module needs an active `alembic` CLI context
         module = importlib.import_module(modinfo.name)
         for name, obj in inspect.getmembers(module, inspect.isclass):
             if not name.startswith("IRead") or obj.__module__ != module.__name__:
