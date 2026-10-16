@@ -465,6 +465,11 @@ def bound_workspaces(
     return tuple(by_id[workspace_id] for workspace_id in bound) or declared[:1]
 
 
+def bound_workspace_ids(bindings: tuple[ProjectBinding, ...] | None) -> tuple[str, ...]:
+    """The workspace each of ``bindings`` names, in binding order, declared or not."""
+    return tuple(dict.fromkeys(binding.workspace for binding in bindings or ()))
+
+
 @domain_model
 @dataclass(frozen=True)
 class ProjectBinding:
@@ -666,7 +671,7 @@ class RunnerConfig:
     @property
     def bound_workspace_ids(self) -> tuple[str, ...]:
         """The workspace each of this runner's bindings names, in binding order, declared or not."""
-        return tuple(dict.fromkeys(binding.workspace for binding in self.bindings or ()))
+        return bound_workspace_ids(self.bindings)
 
     @property
     def socket_path(self) -> Path:
