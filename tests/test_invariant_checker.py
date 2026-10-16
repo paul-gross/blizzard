@@ -94,6 +94,15 @@ def test_a_runner_scoped_row_naming_an_unregistered_runner_is_a_violation(tmp_pa
     assert details == {"1 leases row(s) name unregistered runner rn_other"}
 
 
+def test_outbox_counters_left_by_a_reset_runner_are_not_a_violation(tmp_path: Path) -> None:
+    engine = _runner_engine(tmp_path)
+    with engine.begin() as conn:
+        conn.execute(
+            sa.insert(runner.outbox_counters).values(runner_id="rn_reset", lane=runner.OUTBOX_LANE_OUTBOUND, last_seq=7)
+        )
+    assert RunnerInvariants(engine).run() == []
+
+
 def test_runner_scoped_rows_naming_the_registered_runner_are_not_a_violation(tmp_path: Path) -> None:
     engine = _runner_engine(tmp_path)
     with engine.begin() as conn:

@@ -241,6 +241,12 @@ def write_runner_token(root: Path, token_env: str, token: str) -> None:
     HubTokenFile.of(root, token_env).write(token)
 
 
+def remove_runner_token(root: Path, token_env: str) -> None:
+    """Remove ``token_env``'s assignment from the host directory's ``.env``, every other line kept — the move of a
+    runner's token out of a host it leaves."""
+    HubTokenFile.of(root, token_env).remove()
+
+
 @dataclass(frozen=True)
 class HostJoin:
     """The host init registered, and its own hub calls under the token it holds."""

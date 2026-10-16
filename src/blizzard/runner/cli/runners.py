@@ -1,5 +1,5 @@
-"""``blizzard runner add`` / ``retire`` — add a runner to a registered host, or retire one from it, under the host's
-own credential.
+"""``blizzard runner add`` / ``retire`` / ``ingest`` — add a runner to a registered host, retire one from it, under the
+host's own credential, or take one in from another store.
 
 ``add`` writes in the order that leaves no entry without its token: the hub's mint, then the token in ``.env``, then
 ``runners/<name>/``, then the appended ``[[runner]]``. ``retire`` retires at the hub, then forgets the runner's identity
@@ -9,6 +9,8 @@ configures, which a start would take for another host's."""
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import click
 
 from blizzard.cli.operator_trace import OperatorTrace
@@ -17,6 +19,7 @@ from blizzard.runner.cli.daemon import daemon_holding
 from blizzard.runner.cli.directory import load_host
 from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
 from blizzard.runner.cli.runtime import InitCollaborators, forget_identity, write_runner_token
+from blizzard.runner.composition import build_runner_ingest
 from blizzard.runner.config import SCAFFOLD_AGENTS, ProjectBinding
 from blizzard.runner.config_table import ConfigError
 from blizzard.runner.host_config import (
@@ -26,7 +29,7 @@ from blizzard.runner.host_config import (
     runner_toml,
     scaffold_runner,
 )
-from blizzard.runner.host_layout import HostHeld, HostLayout, HostLock, append_runner, remove_runner
+from blizzard.runner.host_layout import RUNNERS_DIRNAME, HostHeld, HostLayout, HostLock, append_runner, remove_runner
 from blizzard.runner.hub.client import (
     HostRefusalReason,
     HostRefused,
@@ -35,9 +38,7 @@ from blizzard.runner.hub.client import (
     RunnerAddRefused,
 )
 from blizzard.runner.hub.token_file import ENV_FILENAME
-
-#: Where a host keeps each runner's own files, by runner name.
-RUNNERS_DIRNAME = "runners"
+from blizzard.runner.ingest import IngestRefused, IngestRequest
 
 _DIR_OPTION = click.option(
     "--dir",
@@ -191,6 +192,42 @@ def retire(ctx: click.Context, directory: str, runner: str, force: bool) -> None
     running = _running(ctx, config.layout)
     if running is not None:
         click.echo(f"{running}: it halts runner {entry.name} at its next tick")
+
+
+@click.command("ingest")
+@click.argument("source", type=click.Path(path_type=Path))
+@_DIR_OPTION
+@click.option("--runner", "runner", required=True, help="The runner to take in, by name or id.")
+@click.option(
+    "--workspace-id",
+    "workspace_id",
+    default=None,
+    help="The new id the runner's workspace takes here, when this host gives its id to another workspace.",
+)
+@click.pass_context
+def ingest(ctx: click.Context, source: Path, directory: str, runner: str, workspace_id: str | None) -> None:
+    """Move one runner from SOURCE — another host's directory, a `store reset --runner` archive, or a runner directory
+    that has not graduated — into this host:
+    its rows, its workspace, subscription and `[[runner]]` where this host lacks them, and its token; then delete its
+    rows from SOURCE, moving a source left with no runner aside. An archive's `[[runner]]` and token must already be
+    here. Refused while either host runs, or the hub does not hold the runner under this host; a re-run completes an
+    interrupted ingest."""
+    config = load_host(directory)
+    trace = OperatorTrace.source(ctx)
+    with InitCollaborators.of(ctx).host_clients(config.hub_url) as host_clients:
+        service = build_runner_ingest(
+            config, host_clients(config.host_token.value), holder=lambda sock: daemon_holding(sock, trace)
+        )
+        try:
+            outcome = service.run(IngestRequest(source=source, runner=runner, workspace_id=workspace_id))
+        except IngestRefused as exc:
+            raise click.ClickException(str(exc)) from exc
+        except ConfigError as exc:
+            raise click.ClickException(f"cannot ingest runner {runner}: {exc}") from exc
+    verb = "completed the ingest of" if outcome.resumed else "ingested"
+    click.echo(f"{verb} runner {outcome.runner_name} ({outcome.runner_id}) from {source} into {config.root}")
+    for moved in outcome.set_aside:
+        click.echo(f"set aside {moved}")
 
 
 def _host_token(config: HostConfig) -> str:

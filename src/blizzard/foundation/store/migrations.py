@@ -15,6 +15,8 @@ from alembic import command, op
 from alembic.config import Config
 from alembic.runtime.migration import MigrationContext
 from alembic.script import ScriptDirectory
+from alembic.script.revision import ResolutionError
+from alembic.util import CommandError
 from sqlalchemy import Column, MetaData, String, Table
 from sqlalchemy.exc import OperationalError
 
@@ -102,6 +104,13 @@ class MigrationRunner:
     def script_head(self) -> str | None:
         """The head revision the code carries (the tree's latest script)."""
         return ScriptDirectory.from_config(self._config()).get_current_head()
+
+    def knows_revision(self, revision: str) -> bool:
+        """Whether the code's tree holds ``revision`` — ``False`` for a store a newer build migrated."""
+        try:
+            return ScriptDirectory.from_config(self._config()).get_revision(revision) is not None
+        except (CommandError, ResolutionError):
+            return False
 
     def current_revision(self) -> str | None:
         """The revision applied to the store, or ``None`` if unmigrated."""

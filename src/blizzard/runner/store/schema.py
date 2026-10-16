@@ -30,6 +30,20 @@ from blizzard.foundation.store.utc import UtcDateTime
 
 metadata = MetaData()
 
+# --- How a runner transfer treats each host-scoped table (``info["transfer"]``) ---
+# A runner-scoped row moves with its runner; a host row belongs to none, so its table declares what a copy does with it.
+
+#: Inserted where the destination holds no row under the same primary key.
+HOST_TRANSFER_MERGE = "merge"
+#: Appended under new surrogate keys, references rewritten, unless an otherwise identical row is already held.
+HOST_TRANSFER_APPEND = "append"
+#: Carried only for the moving runner's workspaces, under the id each takes in the destination.
+HOST_TRANSFER_WORKSPACE = "workspace"
+#: Never carried: a fact about the source host itself.
+HOST_TRANSFER_NONE = "none"
+
+HOST_TRANSFERS = frozenset({HOST_TRANSFER_MERGE, HOST_TRANSFER_APPEND, HOST_TRANSFER_WORKSPACE, HOST_TRANSFER_NONE})
+
 # --- Leases (the machine's execution right now) -----------------------------
 # Pid alone is ambiguous across reuse, so liveness keys on (pid, process_start_time).
 
@@ -451,7 +465,7 @@ workspace_prompt = Table(
     Column("workspace_id", String, primary_key=True),
     Column("prompt", Text, nullable=False),
     Column("updated_at", UtcDateTime, nullable=False),
-    info={"scope": "host"},
+    info={"scope": "host", "transfer": HOST_TRANSFER_WORKSPACE},
 )
 
 # --- Daemon liveness (when the runner was last known alive) -------
@@ -462,7 +476,7 @@ daemon_liveness = Table(
     metadata,
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column("alive_at", UtcDateTime, nullable=False),  # injected-clock stamp of the newest tick
-    info={"scope": "host"},
+    info={"scope": "host", "transfer": HOST_TRANSFER_NONE},
 )
 
 # --- Takeovers (the operator's session over a parked chunk) -------
@@ -736,7 +750,7 @@ jwt_jti_seen = Table(
     Column("jti", String, primary_key=True),
     Column("aud", String, nullable=False),
     Column("expires_at", UtcDateTime, nullable=False),
-    info={"scope": "host"},
+    info={"scope": "host", "transfer": HOST_TRANSFER_NONE},
 )
 
 # --- Git-commit declarations -------------------------------------
@@ -792,7 +806,7 @@ external_usage_samples = Table(
     # The closed-set SampleMissReason value on a miss, NULL on a successful sample.
     # Read-only for this table's own writer — never derived at read time.
     Column("miss_reason", String, nullable=True),
-    info={"scope": "host"},
+    info={"scope": "host", "transfer": HOST_TRANSFER_APPEND},
 )
 
 # `prune_external_usage_samples`'s per-slug newest-attempt lookup reads
@@ -807,7 +821,7 @@ credential_renewal_claims = Table(
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column("slug", String, nullable=False),
     Column("claimed_at", UtcDateTime, nullable=False),
-    info={"scope": "host"},
+    info={"scope": "host", "transfer": HOST_TRANSFER_APPEND},
 )
 
 Index(
@@ -833,7 +847,7 @@ credential_renewal_outcomes = Table(
         "('renewer_unavailable', 'timed_out', 'vendor_refused', 'protocol_error')",
         name="ck_credential_renewal_outcomes_failure_reason",
     ),
-    info={"scope": "host"},
+    info={"scope": "host", "transfer": HOST_TRANSFER_APPEND},
 )
 
 # --- Live session-context samples (the warn lane) ----------------------------
@@ -949,7 +963,7 @@ graph_artifacts = Table(
     Column("kind", String, nullable=False),
     Column("content", Text, nullable=False),
     Column("recorded_at", UtcDateTime, nullable=False),
-    info={"scope": "host"},
+    info={"scope": "host", "transfer": HOST_TRANSFER_MERGE},
 )
 
 # --- Selftest results — latest-wins-per-harness_id (bzh:facts-not-status) ---
@@ -1011,7 +1025,7 @@ host_identity = Table(
     Column("host_id", String, nullable=False),  # hub-minted
     Column("tenant_id", String, nullable=True),  # NULL until a hub that names it answers
     Column("registered_at", UtcDateTime, nullable=False),  # injected-clock stamp of the registration
-    info={"scope": "host"},
+    info={"scope": "host", "transfer": HOST_TRANSFER_NONE},
 )
 
 # --- Host outbound buffer (the host's own fact lane, per-host monotonic seq) ---
@@ -1028,7 +1042,7 @@ host_outbound_buffer = Table(
     # A deleted tail row's rowid must never be reissued as a later `seq`; recorded `bzh:sql-portable`
     # exemption in blizzard-context:/standards/persistence.md.
     sqlite_autoincrement=True,
-    info={"scope": "host"},
+    info={"scope": "host", "transfer": HOST_TRANSFER_NONE},
 )
 
 # --- Host high-water seen (the last mark the hub answered on the host's lane) ---
@@ -1040,5 +1054,19 @@ host_high_water_seen = Table(
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column("seq", Integer, nullable=False),  # the greatest seq the hub answered as applied
     Column("updated_at", UtcDateTime, nullable=False),
-    info={"scope": "host"},
+    info={"scope": "host", "transfer": HOST_TRANSFER_NONE},
+)
+
+# --- Host ingests (each runner this host took in from another store) -----------
+# Append-only; a runner's newest row is the ingest a re-run resumes, keyed on the source and its liveness stamp.
+
+host_ingests = Table(
+    "host_ingests",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("runner_id", String, nullable=False),  # the runner ingested; a host row, not a runner-scoped one
+    Column("source", String, nullable=False),  # the resolved source the rows were copied from
+    Column("source_alive_at", UtcDateTime, nullable=True),  # the source's last liveness stamp; NULL if it never ticked
+    Column("ingested_at", UtcDateTime, nullable=False),
+    info={"scope": "host", "transfer": HOST_TRANSFER_NONE},
 )

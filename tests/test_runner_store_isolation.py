@@ -39,6 +39,7 @@ from blizzard.runner.harness.workspace_prompts import IWriteWorkspacePromptRepos
 from blizzard.runner.hub.host_identity import IWriteHostIdentityRepository
 from blizzard.runner.hub.identity import IWriteRetiredRunnerIdentity, IWriteRunnerIdentityRepository, RunnerIdentity
 from blizzard.runner.hub.outbound_buffer import IWriteOutboundRepository
+from blizzard.runner.hub.runner_transfer import IWriteHostIngestRepository
 from blizzard.runner.hub.served_projects import IWriteServedProjectsRepository, ServedProject
 from blizzard.runner.leases.asks import IWriteAskRepository
 from blizzard.runner.leases.elicitation import IWriteElicitationRepository
@@ -527,6 +528,8 @@ WRITE_EXEMPTIONS: dict[tuple[type, str], str] = {
     (IWriteHostLaneRepository, "record_host_external_usage_attempt"): _HOST_ONLY
     + " (external_usage_samples, host_outbound_buffer)",
     (IWriteHostIdentityRepository, "record_host_identity"): _HOST_ONLY + " (host_identity)",
+    (IWriteHostIngestRepository, "merge_host_rows_locked"): _HOST_ONLY + " (every carried host table)",
+    (IWriteHostIngestRepository, "record_host_ingest_locked"): _HOST_ONLY + " (host_ingests)",
     (IWriteHostLaneRepository, "pending_host_facts"): _HOST_ONLY + " (host_outbound_buffer, read only)",
     (IWriteHostLaneRepository, "record_host_high_water"): _HOST_ONLY + " (host_high_water_seen, host_outbound_buffer)",
     (IWriteCredentialRenewalRepository, "claim_credential_renewal"): _HOST_ONLY + " (credential_renewal_claims)",

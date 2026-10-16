@@ -26,6 +26,7 @@ from sqlalchemy import Engine, Row, insert, select
 
 from blizzard.foundation.clock import SystemClock
 from blizzard.foundation.node_steps import Executor
+from blizzard.foundation.runner_token_names import hub_token_variable
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.tokens import TokenHash
 from blizzard.hub.app import CLOSE_DRAIN_INTERVAL_SECONDS
@@ -38,11 +39,17 @@ from blizzard.runner.composition import build_host_stores
 from blizzard.runner.config import DEFAULT_WORKSPACE_ID
 from blizzard.runner.environments.internal.basic_provider import BasicWorkspaceProvider
 from blizzard.runner.harness.identity import OPENCODE_HARNESS_ID
+from blizzard.runner.host_config import HOST_TOKEN_VARIABLE, HostConfig
+from blizzard.runner.host_layout import HostLayout
+from blizzard.runner.hub.internal.token_file import HubTokenFile
 from blizzard.runner.hub.token_file import assigned_token
 from blizzard.runner.leases.model import NewLease
+from blizzard.runner.runtime import init_environment
 from blizzard.runner.store import schema as runner_schema
 from blizzard.tools.invariants import Invariants
 from tests.crash.support import (
+    ENV_CRASH_FENCE,
+    ENV_CRASH_POINT,
     LAND_STEP,
     OPENCODE_SESSION_NAME,
     OWNER,
@@ -86,6 +93,8 @@ from tests.runner_fakes import (
     registered_fixture_store,
     runner_store_errors,
 )
+from tests.runner_ingest_support import RUNNER_TABLES, contents, invariant_violations, seed_runner
+from tests.runner_join import RUNNER_BIN, runner_spawn_env
 from tests.support import create_repositories, fixture_repository, free_port, hub_scoped, seed_drainable_history
 
 pytestmark = pytest.mark.crash_sweep
@@ -113,6 +122,7 @@ _DEDICATED_PREFIXES = (
     "hostlane.",
     "egress.",
     "teardown.",
+    "ingest.",
 )
 _RESUME_POINTS = [p for p in _ALL_POINTS if p.startswith("resume.")]
 _ABANDON_POINTS = [p for p in _ALL_POINTS if p.startswith("abandon.")]
@@ -159,6 +169,9 @@ _EGRESS_POINTS = [p for p in _ALL_POINTS if p.startswith("egress.")]
 # `teardown.*` fires inside the HUB's tenant deletion — after its close, between drain batches, and after its drain.
 # Swept by `test_kill9_at_teardown_crash_point`.
 _TEARDOWN_POINTS = [p for p in _ALL_POINTS if p.startswith("teardown.")]
+# `ingest.*` fires inside `blizzard runner ingest`, between its store copy, its configuration edits and its removal
+# from the source.
+_INGEST_POINTS = [p for p in _ALL_POINTS if p.startswith("ingest.")]
 _GENERIC_POINTS = [p for p in _ALL_POINTS if not p.startswith(_DEDICATED_PREFIXES)]
 
 # A representative CI subset, one point per family, run as a bounded-runtime gate under
@@ -249,6 +262,9 @@ _EGRESS_CI_SUBSET = ("egress.after-commit.before-cursor",)
 # The teardown CI subset: the mid-drain window, where a committed batch must be neither redone nor counted twice.
 _TEARDOWN_CI_SUBSET = ("teardown.after-batch.before-next",)
 
+# The ingest CI subset: the later window, where the source has lost its token but still holds the runner's rows.
+_INGEST_CI_SUBSET = ("ingest.after-config.before-removal",)
+
 
 def _select(points: list[str], ci_subset: tuple[str, ...]) -> list[str]:
     """The points to parametrize: all of ``points``, or its CI subset under the CI profile."""
@@ -281,6 +297,7 @@ _LEASE_TRACE_SWEEP = _select(_LEASE_TRACE_POINTS, _LEASE_TRACE_CI_SUBSET)
 _HOST_LANE_SWEEP = _select(_HOST_LANE_POINTS, _HOST_LANE_CI_SUBSET)
 _EGRESS_SWEEP = _select(_EGRESS_POINTS, _EGRESS_CI_SUBSET)
 _TEARDOWN_SWEEP = _select(_TEARDOWN_POINTS, _TEARDOWN_CI_SUBSET)
+_INGEST_SWEEP = _select(_INGEST_POINTS, _INGEST_CI_SUBSET)
 
 
 def test_ci_subset_covers_every_family(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -309,6 +326,7 @@ def test_ci_subset_covers_every_family(monkeypatch: pytest.MonkeyPatch) -> None:
         | set(_select(_HOST_LANE_POINTS, _HOST_LANE_CI_SUBSET))
         | set(_select(_EGRESS_POINTS, _EGRESS_CI_SUBSET))
         | set(_select(_TEARDOWN_POINTS, _TEARDOWN_CI_SUBSET))
+        | set(_select(_INGEST_POINTS, _INGEST_CI_SUBSET))
     )
     uncovered = {family for family in families if not any(p.startswith(f"{family}.") for p in ci_selected)}
     assert not uncovered, f"registry families with zero CI-subset coverage: {sorted(uncovered)}"
@@ -3895,3 +3913,152 @@ def test_kill9_at_teardown_crash_point(crash_env: CrashEnv, tmp_path: Path, poin
     finally:
         hub.close()
         terminate(hub_proc)
+
+
+# --- Ingest — `blizzard runner ingest` moves a runner between two hosts registered at one hub ---
+
+_INGEST_MOVING = "r2"
+_INGEST_WORKSPACE = "ws-there"
+
+
+def _runner_cli(hub_url: str, *args: str, crash_point: str | None = None) -> subprocess.CompletedProcess[str]:
+    env = runner_spawn_env(hub_url)
+    if crash_point is not None:
+        env[ENV_CRASH_FENCE] = "1"
+        env[ENV_CRASH_POINT] = crash_point
+    return subprocess.run([str(RUNNER_BIN), *args], capture_output=True, text=True, env=env, check=False, timeout=120)
+
+
+def _cli_ok(hub_url: str, *args: str) -> subprocess.CompletedProcess[str]:
+    done = _runner_cli(hub_url, *args)
+    assert done.returncode == 0, f"{args} failed ({done.returncode}):\n{done.stdout}\n{done.stderr}"
+    return done
+
+
+def _host_id(hub: httpx.Client, root: Path) -> str:
+    token = assigned_token((root / ".env").read_text(), HOST_TOKEN_VARIABLE)
+    assert token, f"{root} holds no host token"
+    record = hub.get("/api/fleet/host", headers={"Authorization": f"Bearer {token}"})
+    assert record.status_code == 200, record.text
+    return str(record.json()["host_id"])
+
+
+def _ingest_world(hub: httpx.Client, hub_url: str, here: Path, there: Path) -> str:
+    """``here`` and ``there``, each a host registered at the hub, ``there`` holding ``r2`` beside its own runner with
+    one row in every runner table, and the hub holding ``r2`` under ``here`` — as `blizzard hub runner-host release`
+    then `adopt` leave it. Answers ``r2``'s id."""
+    _cli_ok(hub_url, "init", str(here), "--hub", hub_url)
+    # A host is named after its first runner, and two live hosts cannot share a name.
+    layout = HostLayout(init_environment(there, hub_url=hub_url).root)
+    layout.config_path.write_text(layout.config_path.read_text().replace('"runner-local"', '"runner-there"', 1))
+    _cli_ok(hub_url, "init", str(there), "--hub", hub_url)
+    _cli_ok(hub_url, "add", _INGEST_MOVING, "--project", "default", "--dir", str(there))
+    # Its identity is recorded in the store as `init` keeps a runner the hub holds.
+    _cli_ok(hub_url, "init", str(there), "--hub", hub_url)
+    moving_id = HostConfig.load(there).sole_runner(_INGEST_MOVING).id
+    assert moving_id is not None
+    for verb, root in (("releases", there), ("adoptions", here)):
+        moved = hub.post(
+            f"/api/hosts/{_host_id(hub, root)}/{verb}", json={"by": "crash-sweep", "runner_ids": [moving_id]}
+        )
+        assert moved.status_code == 200, moved.text
+    engine = create_engine_from_url(HostConfig.load(there).db_url)
+    try:
+        seed_runner(engine, moving_id, tag="b", workspace_id="workspace-local")
+    finally:
+        engine.dispose()
+    return moving_id
+
+
+def _ingest_end_state(here: Path, there: Path, moving_id: str) -> dict[str, object]:
+    """What an ingest leaves: the runner's rows here and in the source, both host files' runners and workspaces, and
+    where its token is."""
+    variable = hub_token_variable(_INGEST_MOVING)
+    here_engine = create_engine_from_url(HostConfig.load(here).db_url)
+    there_engine = create_engine_from_url(HostConfig.load(there).db_url)
+    try:
+        state: dict[str, object] = {
+            "here": {name: contents(here_engine, name, runner_id=moving_id) for name in RUNNER_TABLES},
+            "there": {name: contents(there_engine, name, runner_id=moving_id) for name in RUNNER_TABLES},
+            "here violations": [str(v) for v in invariant_violations(here_engine)],
+            "there violations": [str(v) for v in invariant_violations(there_engine)],
+        }
+    finally:
+        here_engine.dispose()
+        there_engine.dispose()
+    for name, root in (("here", here), ("there", there)):
+        config = HostConfig.load(root)
+        state[f"{name} runners"] = sorted((r.name, r.id) for r in config.runners)
+        state[f"{name} workspaces"] = sorted(w.id for w in config.workspaces)
+        state[f"{name} token"] = bool(HubTokenFile.of(root, variable).held())
+    return state
+
+
+def _expected_ingest(moving: dict[str, list[dict[str, Any]]]) -> dict[str, list[dict[str, Any]]]:
+    """``moving`` as an ingest under ``--workspace-id`` copies it: each binding in the new workspace."""
+    return {
+        name: sorted(({**row, "workspace_id": _INGEST_WORKSPACE} for row in held), key=repr)
+        if name == "env_bindings"
+        else held
+        for name, held in moving.items()
+    }
+
+
+@pytest.mark.parametrize("point", _INGEST_SWEEP)
+def test_kill9_at_ingest_crash_point(crash_env: CrashEnv, tmp_path: Path, point: str) -> None:
+    """A ``kill -9`` of ``blizzard runner ingest`` after it copied the runner's rows, or after it moved the runner's
+    configuration and token, is completed by an unarmed re-run: the end state is the one an uninterrupted ingest
+    leaves, and both stores hold their invariants at every step."""
+    hub_dir, hub_port = tmp_path / "hub", free_port()
+    hub_url = f"http://127.0.0.1:{hub_port}"
+    here, there = tmp_path / "here", tmp_path / "there"
+    hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=None, work_sources=())
+    hub = httpx.Client(base_url=hub_url, timeout=30.0)
+    try:
+        await_http(hub, "/api/health", proc=hub_proc)
+        moving_id = _ingest_world(hub, hub_url, here, there)
+        engine = create_engine_from_url(HostConfig.load(there).db_url)
+        try:
+            moving = {name: contents(engine, name, runner_id=moving_id) for name in RUNNER_TABLES}
+        finally:
+            engine.dispose()
+        before = _ingest_end_state(here, there, moving_id)
+        ingest = ("ingest", str(there), "--runner", _INGEST_MOVING, "--workspace-id", _INGEST_WORKSPACE)
+
+        killed = _runner_cli(hub_url, *ingest, "--dir", str(here), crash_point=point)
+        assert killed.returncode == -9, f"armed ingest at {point} exited {killed.returncode}, not SIGKILL (-9):\n" + (
+            killed.stdout + killed.stderr
+        )
+        at_kill = _ingest_end_state(here, there, moving_id)
+        assert at_kill["here"] == _expected_ingest(moving), f"{point}: the copy is not whole at the kill"
+        assert at_kill["there"] == moving, f"{point}: the source lost rows before its removal"
+        assert (at_kill["here violations"], at_kill["there violations"]) == ([], []), at_kill
+        assert at_kill["there token"] is (point == "ingest.after-copy.before-config"), at_kill
+
+        resumed = _runner_cli(hub_url, *ingest, "--dir", str(here))
+        assert resumed.returncode == 0, resumed.stdout + resumed.stderr
+        assert "completed the ingest of runner r2" in resumed.stdout, resumed.stdout
+        for root in (here, there):
+            violations = Invariants(
+                runner_db_url=HostConfig.load(root).db_url, hub_db_url=HubConfig.load(hub_dir).db_url
+            ).run(after_recovery=False)
+            assert not violations, f"invariant violations in {root.name} after the re-run past {point}:\n" + "\n".join(
+                str(v) for v in violations
+            )
+    finally:
+        hub.close()
+        terminate(hub_proc)
+
+    end = _ingest_end_state(here, there, moving_id)
+    assert end == {
+        "here": _expected_ingest(moving),
+        "there": {name: [] for name in RUNNER_TABLES},
+        "here violations": [],
+        "there violations": [],
+        "here runners": sorted([*before["here runners"], (_INGEST_MOVING, moving_id)]),  # type: ignore[misc]
+        "there runners": before["there runners"],
+        "here workspaces": ["workspace-local", _INGEST_WORKSPACE],
+        "there workspaces": ["workspace-local"],
+        "here token": True,
+        "there token": False,
+    }, f"{point}: the re-run's end state differs from an uninterrupted ingest's"

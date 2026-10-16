@@ -33,6 +33,7 @@ from blizzard.runner.harness.workspace_prompts import IReadWorkspacePromptReposi
 from blizzard.runner.hub.host_identity import IReadHostIdentityRepository, IWriteHostIdentityRepository
 from blizzard.runner.hub.identity import IReadRunnerIdentityRepository, IWriteRunnerIdentityRepository
 from blizzard.runner.hub.outbound_buffer import IReadOutboundRepository, IWriteOutboundRepository
+from blizzard.runner.hub.runner_transfer import IReadHostIngestRepository, IWriteHostIngestRepository
 from blizzard.runner.hub.served_projects import IReadServedProjectsRepository, IWriteServedProjectsRepository
 from blizzard.runner.leases.asks import IReadAskRepository, IWriteAskRepository
 from blizzard.runner.leases.elicitation import IReadElicitationRepository, IWriteElicitationRepository
@@ -275,6 +276,8 @@ class HostStores:
     external_usage: IWriteExternalUsageRepository
     host_lane: IWriteHostLaneRepository
     host_identity: IWriteHostIdentityRepository
+    #: The host half of a runner transfer into this store, and the ingests it recorded.
+    host_ingests: IWriteHostIngestRepository
     #: Exempt: reads every runner's rows at once — the invariant audit, ``init``'s which-runners read, and a workspace
     #: pool's held read.
     runner_audit: IRunnerAudit
@@ -291,6 +294,7 @@ class HostReadStores:
     external_usage: IReadExternalUsageRepository
     host_identity: IReadHostIdentityRepository
     host_lane: IReadHostLaneRepository
+    host_ingests: IReadHostIngestRepository
 
     @classmethod
     def of(cls, stores: HostStores) -> HostReadStores:
@@ -301,4 +305,5 @@ class HostReadStores:
             external_usage=stores.external_usage,
             host_identity=stores.host_identity,
             host_lane=stores.host_lane,
+            host_ingests=stores.host_ingests,
         )

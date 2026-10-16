@@ -11,7 +11,7 @@ from __future__ import annotations
 import contextlib
 import functools
 import os
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field, replace
 from datetime import datetime
@@ -28,6 +28,7 @@ from blizzard.foundation.platform_tracing.handle import (
     IPlatformTracing,
     build_platform_tracing,
 )
+from blizzard.foundation.roles import collaborator
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.internal.store_status_reader import SqlAlchemyStoreStatusReader
 from blizzard.foundation.store.readiness import Readiness, ReadinessService
@@ -54,11 +55,11 @@ from blizzard.runner.harness.wiring import (
     declared_telemetry_names,
 )
 from blizzard.runner.host_config import BuiltRunner, HaltedRunner, HostConfig, ResolvedToken
-from blizzard.runner.host_layout import HostLayout
-from blizzard.runner.hub.client import HostReport, HostReportedWorkspace
+from blizzard.runner.host_layout import HostFileEditor, HostLayout
+from blizzard.runner.hub.client import HostReport, HostReportedWorkspace, IHostHubClient
 from blizzard.runner.hub.client import SubscriptionDeclaration as HubSubscriptionDeclaration
 from blizzard.runner.hub.held_token import HubTokenHolder
-from blizzard.runner.hub.host_identity import HostIdentityHolder
+from blizzard.runner.hub.host_identity import HostIdentity, HostIdentityHolder
 from blizzard.runner.hub.host_registration import HostRegistration, HostRegistrationHolder, ICurrentHostRegistration
 from blizzard.runner.hub.identity import (
     ICurrentRunnerIdentity,
@@ -69,11 +70,14 @@ from blizzard.runner.hub.identity import (
 )
 from blizzard.runner.hub.internal.http_hub import HttpHostHubClient
 from blizzard.runner.hub.internal.token_file import HubTokenFile
+from blizzard.runner.hub.runner_transfer import HostIngest, IRunnerRowRemoval, IRunnerTransfer
+from blizzard.runner.hub.served_projects import ServedProjectsAnswer
+from blizzard.runner.ingest import HeldBinding, IIngestStores, ITokenFiles, RunnerIngest, RunnerStoreView
 from blizzard.runner.lifecycle.host_lane_drain import HostLaneDrain
 from blizzard.runner.lifecycle.host_tick import HostTick
 from blizzard.runner.listeners import Listeners
 from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
-from blizzard.runner.runtime import migration_runner
+from blizzard.runner.runtime import IRunnerRowMoves, migration_runner
 from blizzard.runner.store.errors import RunnerStoreConnections, RunnerStoreErrorFactory
 from blizzard.runner.store.internal.ask_store import AskStore
 from blizzard.runner.store.internal.attachment_store import AttachmentStore
@@ -86,6 +90,7 @@ from blizzard.runner.store.internal.host_daemon_liveness_store import DaemonLive
 from blizzard.runner.store.internal.host_external_usage_store import ExternalUsageStore
 from blizzard.runner.store.internal.host_graph_artifact_store import GraphArtifactStore
 from blizzard.runner.store.internal.host_identity_store import HostIdentityStore
+from blizzard.runner.store.internal.host_ingest_store import HostIngestStore
 from blizzard.runner.store.internal.host_jti_cache_store import JtiCacheRepository
 from blizzard.runner.store.internal.host_lane_store import HostLaneStore
 from blizzard.runner.store.internal.host_runner_audit import RunnerAudit
@@ -102,6 +107,7 @@ from blizzard.runner.store.internal.overload_store import OverloadStore
 from blizzard.runner.store.internal.pause_store import PauseStore
 from blizzard.runner.store.internal.projects_answer_store import ServedProjectsStore
 from blizzard.runner.store.internal.requeue_store import RequeueStore
+from blizzard.runner.store.internal.runner_transfer_store import RunnerRowRemovalStore, RunnerTransferStore
 from blizzard.runner.store.internal.selftest_result_store import SelfTestResultStore
 from blizzard.runner.store.internal.takeover_store import TakeoverStore
 from blizzard.runner.store.internal.token_store import TokenStore
@@ -1003,5 +1009,155 @@ def _build_host_stores(connections: RunnerStoreConnections, clock: IClock) -> Ho
         external_usage=ExternalUsageStore(connections),
         host_lane=HostLaneStore(connections),
         host_identity=HostIdentityStore(connections),
+        host_ingests=HostIngestStore(connections),
         runner_audit=RunnerAudit(connections),
+    )
+
+
+def build_runner_transfer(
+    source: Engine, destination: Engine, *, errors: RunnerStoreErrorFactory, runner_id: str, clock: IClock
+) -> IRunnerTransfer:
+    """The copy of ``runner_id`` from the migrated ``source`` store into ``destination``: both stores' connections bound
+    to it, and the destination's host member running the host half on the copy's transaction."""
+    into = RunnerStoreConnections(destination, errors, runner_id)
+    return RunnerTransferStore(
+        RunnerStoreConnections(source, errors, runner_id), into, _build_host_stores(into, clock).host_ingests
+    )
+
+
+def build_runner_removal(engine: Engine, *, errors: RunnerStoreErrorFactory, runner_id: str) -> IRunnerRowRemoval:
+    """The removal of ``runner_id``'s rows from the store ``engine`` opens, its connections bound to it."""
+    return RunnerRowRemovalStore(RunnerStoreConnections(engine, errors, runner_id))
+
+
+@dataclass(frozen=True)
+class RunnerStoreFiles:
+    """The offline verbs' reach into store files by URL — each call opens its engines and disposes of them before it
+    returns, so a verb holds no store open between its steps."""
+
+    errors: RunnerStoreErrorFactory
+    clock: IClock
+
+    def copy_runner(
+        self,
+        source_url: str,
+        destination_url: str,
+        runner_id: str,
+        *,
+        workspace_ids: Mapping[str, str] | None = None,
+        ingest: HostIngest | None = None,
+    ) -> None:
+        with _engine(source_url) as source, _engine(destination_url) as destination:
+            build_runner_transfer(
+                source, destination, errors=self.errors, runner_id=runner_id, clock=self.clock
+            ).copy_runner(workspace_ids=workspace_ids, ingest=ingest)
+
+    def remove_runner_rows(self, url: str, runner_id: str, *, keep_counters: bool) -> None:
+        with _engine(url) as engine:
+            build_runner_removal(engine, errors=self.errors, runner_id=runner_id).remove_runner_rows(
+                keep_counters=keep_counters
+            )
+
+    def runner_view(self, url: str, runner_id: str) -> RunnerStoreView:
+        with _engine(url) as engine:
+            runner = build_read_stores(engine, errors=self.errors, runner_id=runner_id)
+            host = build_host_stores(engine, errors=self.errors, clock=self.clock)
+            return RunnerStoreView(
+                named_runners=host.runner_audit.named_runners(),
+                identity=runner.identity.runner_identity(),
+                open_elicitation_lease_ids=frozenset(runner.elicitations.in_flight_elicitation_lease_ids()),
+                open_takeover_chunk_ids=frozenset(runner.takeover.open_takeover_chunk_ids()),
+                held_bindings=tuple(runner.environments.held_bindings()),
+                last_alive_at=host.daemon_liveness.last_daemon_liveness(),
+                served_projects=_served_slugs(runner.served_projects.served_projects_answer()),
+            )
+
+    def named_runners(self, url: str) -> tuple[str, ...]:
+        with _engine(url) as engine:
+            return build_host_stores(engine, errors=self.errors, clock=self.clock).runner_audit.named_runners()
+
+    def host_identity(self, url: str) -> HostIdentity | None:
+        with _engine(url) as engine:
+            return build_host_read_stores(engine, errors=self.errors).host_identity.host_identity()
+
+    def held_bindings(self, url: str) -> tuple[HeldBinding, ...]:
+        with _engine(url) as engine:
+            named = build_host_stores(engine, errors=self.errors, clock=self.clock).runner_audit.named_runners()
+            return tuple(
+                HeldBinding(runner_id, binding)
+                for runner_id in named
+                for binding in build_read_stores(
+                    engine, errors=self.errors, runner_id=runner_id
+                ).environments.held_bindings()
+            )
+
+    def latest_host_ingest(self, url: str, runner_id: str) -> HostIngest | None:
+        with _engine(url) as engine:
+            return build_host_read_stores(engine, errors=self.errors).host_ingests.latest_host_ingest(runner_id)
+
+    def record_host_identity(self, url: str, identity: HostIdentity) -> None:
+        with _engine(url) as engine:
+            build_host_stores(engine, errors=self.errors, clock=self.clock).host_identity.record_host_identity(identity)
+
+
+def _served_slugs(answer: ServedProjectsAnswer | None) -> tuple[str, ...]:
+    if answer is None:
+        return ()
+    return tuple(p.slug or p.entry for p in answer.projects if p.resolved())
+
+
+def build_runner_store_files(clock: IClock | None = None) -> RunnerStoreFiles:
+    """The store-file seams an offline verb moves a runner's rows through."""
+    return RunnerStoreFiles(RunnerStoreErrorFactory(get_logger("blizzard.runner.store")), clock or SystemClock())
+
+
+@contextlib.contextmanager
+def _engine(url: str) -> Iterator[Engine]:
+    engine = create_engine_from_url(url)
+    try:
+        yield engine
+    finally:
+        engine.dispose()
+
+
+def _conforms_runner_row_moves(x: RunnerStoreFiles) -> IRunnerRowMoves:
+    return x
+
+
+def _conforms_ingest_stores(x: RunnerStoreFiles) -> IIngestStores:
+    return x
+
+
+@collaborator
+@dataclass(frozen=True)
+class DotenvTokenFiles:
+    """Runner tokens in host directories' ``.env`` files."""
+
+    def held(self, root: Path, token_env: str) -> str:
+        return HubTokenFile.of(root, token_env).held()
+
+    def write(self, root: Path, token_env: str, token: str) -> None:
+        HubTokenFile.of(root, token_env).write(token)
+
+    def remove(self, root: Path, token_env: str) -> None:
+        HubTokenFile.of(root, token_env).remove()
+
+
+def _conforms_token_files(x: DotenvTokenFiles) -> ITokenFiles:
+    return x
+
+
+def build_runner_ingest(
+    host: HostConfig, hub: IHostHubClient, *, holder: Callable[[Path], str | None], clock: IClock | None = None
+) -> RunnerIngest:
+    """The ingest into the host ``host``, reaching its hub through ``hub`` and probing sockets with ``holder``."""
+    resolved = clock or SystemClock()
+    return RunnerIngest(
+        host=host,
+        stores=build_runner_store_files(resolved),
+        host_file=HostFileEditor(),
+        tokens=DotenvTokenFiles(),
+        hub=hub,
+        holder=holder,
+        clock=resolved,
     )

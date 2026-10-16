@@ -299,6 +299,14 @@ WRITE_PROTOCOL_CENSUS: dict[str, Disposition] = {
         "the host's registration step, once, from its first answered report — the identity is the host's own, "
         "which no runner's board or SSE stream carries."
     ),
+    "merge_host_rows_locked": Silent(
+        "a runner transfer's copy, offline, with no daemon running — host rows merged into a store, which no runner's "
+        "board or SSE stream carries."
+    ),
+    "record_host_ingest_locked": Silent(
+        "a runner transfer's copy, offline, with no daemon running — the host's own ingest record, which no runner's "
+        "board or SSE stream carries."
+    ),
     "claim_credential_renewal": Silent(
         "CredentialRenewalPass (runner/usage/credential_renewal.py) — runner-local diagnostics only: no kind "
         "in the vocabulary represents a renewal, nothing reaches the fact log, and the panel's subscriptions "

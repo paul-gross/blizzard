@@ -128,6 +128,29 @@ _RUNNER_HOME_KEYS = (
     "worker_settings_path",
     "claude_code_credentials_path",
 )
+
+
+@domain_model
+@dataclass(frozen=True)
+class RunnerPathKey:
+    """A key of a ``[[runner]]`` that names a file or directory: its path under the runner, such as
+    ``("harness", "config_dir")``, and the parsed field it fills, as ``<class>.<field>``."""
+
+    key: tuple[str, ...]
+    field: str
+
+
+#: Every ``[[runner]]`` path key, the harness sections' with the runner's: what ``runner ingest`` copies and rewrites.
+RUNNER_PATH_KEYS: tuple[RunnerPathKey, ...] = (
+    RunnerPathKey(("runner_prompt_file",), "RunnerConfig.runner_prompt_file"),
+    RunnerPathKey(("transcripts_root",), "RunnerConfig.transcripts_root"),
+    RunnerPathKey(("harness", "config_dir"), "RunnerConfig.harness_config_dir"),
+    RunnerPathKey(("worker_settings_path",), "ClaudeCodeSection.worker_settings_path"),
+    RunnerPathKey(("claude_code_credentials_path",), "ClaudeCodeSection.credentials_path"),
+    RunnerPathKey(("opencode", "worker_config_path"), "OpenCodeSection.worker_config_path"),
+    RunnerPathKey(("opencode", "auth_path"), "OpenCodeSection.auth_path"),
+)
+
 _WORKSPACE_HOME_KEYS = (
     "provider",
     "repo",
@@ -464,6 +487,15 @@ class HostConfig:
         )
 
     @classmethod
+    def graduated(cls, root: Path, legacy: Mapping[str, Any], *, runner_id: str, served: tuple[str, ...]) -> HostConfig:
+        """The host a pre-host runner directory at ``root`` graduates to, from its ``blizzard-runner.toml`` as
+        ``legacy`` holds it — by graduation's key placement (``GRADUATION_PROCEDURE``): its ``[[runner]]`` takes the
+        hub id its store records, ``runner_id``, and binds each project ``served`` when the file names none. Every
+        host error is refused."""
+        layout = HostLayout(root.resolve())
+        return _parse(_graduated_raw(legacy, runner_id=runner_id, served=served), layout=layout, host=None, port=None)
+
+    @classmethod
     def scaffold(cls, root: Path, *, hub_url: str | None = None, projects: tuple[str, ...] | None = None) -> HostConfig:
         """The default host for a fresh directory (used by ``init``): today's runner scaffold, graduated —
         one ``[[workspace]]`` and one ``[[runner]]`` seeded from the injected ``BZ_*`` environment, naming
@@ -581,6 +613,16 @@ def runner_toml(entry: RunnerEntry) -> str:
     return _runner_toml(entry)
 
 
+def workspace_toml(workspace: HostWorkspace) -> str:
+    """``workspace`` as the ``[[workspace]]`` table text the host file holds, its repos beneath it."""
+    return _workspace_toml(workspace)
+
+
+def subscription_toml(subscription: SubscriptionDeclaration) -> str:
+    """``subscription`` as the ``[[subscription]]`` table text the host file holds."""
+    return _subscription_toml(subscription)
+
+
 def _dotenv_text(root: Path) -> str:
     try:
         return (root / ENV_FILENAME).read_text()
@@ -670,6 +712,89 @@ def _parse(raw: dict[str, Any], *, layout: HostLayout, host: str | None, port: i
         runners=entries,
         warnings=_permission_warnings(path, holds_credentials="host_token" in raw or bool(hub_tokens)),
     )
+
+
+#: The flat runner file's keys that graduation moves into its one ``[[workspace]]``, by their name there.
+_GRADUATED_WORKSPACE_KEYS: Mapping[str, str] = {
+    "workspace_id": "id",
+    "workspace_root": "root",
+    "workspace_provider": "provider",
+    "workspace_envs": "envs",
+    "workspace_repo": "repo",
+    "workspace_prompt": "prompt",
+    "workspace_prompt_file": "prompt_file",
+    "workspace_prompt_package": "prompt_package",
+    "max_environments": "max_environments",
+    "base_branch": "base_branch",
+}
+
+#: The flat runner file's keys that stay at the top of the host file.
+_GRADUATED_HOST_KEYS = (
+    "hub_url",
+    "host",
+    "port",
+    "public_url",
+    "trusted_proxies",
+    "session_secret_env",
+    "auth",
+    "tracing",
+    "transcripts",
+    "worker_stdout",
+    "host_token",
+    "hub_tokens",
+    "subscription",
+)
+
+#: The flat runner file's keys graduation reads into another home, or drops.
+_GRADUATED_CONSUMED_KEYS = (
+    "db_url",
+    "token_env",
+    "runner_id",
+    "name",
+    "projects",
+    "max_agents",
+    "external_subscription_usage",
+)
+
+#: The agent count a flat runner file declaring no ``max_agents`` ran with.
+_LEGACY_MAX_AGENTS = 1
+
+
+def _graduated_raw(legacy: Mapping[str, Any], *, runner_id: str, served: tuple[str, ...]) -> dict[str, Any]:
+    """The host file a flat runner file graduates to, as parsed TOML: the host keys at the top, its ``workspace_*``
+    and prompt keys as one ``[[workspace]]``, and everything else as one ``[[runner]]``."""
+    raw: dict[str, Any] = {key: legacy[key] for key in _GRADUATED_HOST_KEYS if key in legacy}
+    workspace = {home: legacy[key] for key, home in _GRADUATED_WORKSPACE_KEYS.items() if key in legacy}
+    workspace.setdefault("id", DEFAULT_WORKSPACE_ID)
+    retired = (*_GRADUATED_HOST_KEYS, *_GRADUATED_WORKSPACE_KEYS, *_GRADUATED_CONSUMED_KEYS)
+    runner: dict[str, Any] = {key: value for key, value in legacy.items() if key not in retired}
+    runner["id"] = runner_id
+    runner["name"] = legacy.get("name", legacy.get("runner_id", DEFAULT_RUNNER_NAME))
+    agents = legacy.get("max_agents", _LEGACY_MAX_AGENTS)
+    projects = legacy["projects"] if "projects" in legacy else list(served)
+    runner["projects"] = [{"project": project, "workspace": workspace["id"], "agents": agents} for project in projects]
+    declared = legacy.get("subscription")
+    if declared is None:
+        usage = legacy.get("external_subscription_usage", {})
+        synthesized = {
+            "slug": SCAFFOLD_SUBSCRIPTION.slug,
+            "name": SCAFFOLD_SUBSCRIPTION.name,
+            "provider": SCAFFOLD_SUBSCRIPTION.provider,
+            **{key: usage[key] for key in ("credentials_path", "sample_interval_seconds") if key in usage},
+        }
+        raw["subscription"] = [synthesized]
+        runner["subscription"] = SCAFFOLD_SUBSCRIPTION.slug
+    elif isinstance(declared, list) and len(declared) == 1 and isinstance(declared[0], dict):
+        runner["subscription"] = declared[0].get("slug")
+    elif isinstance(declared, list) and declared:
+        # Which plan the runner spends is the one its enabled harness spends — a choice no key records.
+        raise ConfigError(
+            f"the runner file declares {len(declared)} [[subscription]]s, and which one the runner spends is not "
+            f"recorded: graduate it by hand ({GRADUATION_PROCEDURE})"
+        )
+    raw["workspace"] = [workspace]
+    raw["runner"] = [runner]
+    return raw
 
 
 def _refuse_misplaced_keys(raw: Mapping[str, Any], errors: _Errors) -> None:

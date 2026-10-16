@@ -3,7 +3,8 @@
 The ``init``/``migrate``/``store reset`` verbs run while the host is **down** — the only carve-out
 to "only a daemon opens its own store". ``init`` is idempotent; ``Migrations.check_current``
 is the startup guard that refuses to run on a schema mismatch. A store is never deleted: resetting
-one moves its files aside under a timestamped name and migrates a fresh one in their place.
+one moves its files aside under a timestamped name and migrates a fresh one in their place. Resetting one runner
+extracts its rows into an archive store beside the host's, written whole before they are deleted.
 
 A host directory has one owner. Every verb that moves or rewrites the store but a plain upgrade holds the directory's
 lock for its write and refuses while the lock is held or a pre-host daemon answers on ``runner.sock``; a plain upgrade
@@ -12,8 +13,9 @@ refuses only the daemon, so the standard redeploy pass migrates beside a running
 from __future__ import annotations
 
 import contextlib
+import os
 import sqlite3
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -37,6 +39,7 @@ from blizzard.runner.host_layout import (
     migrate_remedy,
     write_scaffold,
 )
+from blizzard.runner.hub.runner_transfer import HostIngest
 from blizzard.runner.store import MIGRATIONS_DIR, STORE_NAME
 
 STORE_RESET_COMMAND = "blizzard runner store reset"
@@ -146,6 +149,59 @@ def set_aside_sqlite(database: Path, *, now: datetime) -> SetAsideStore:
     return SetAsideStore(moved=move_sqlite(database, database.with_name(f"{database.name}.{stamp}")))
 
 
+def sqlite_url(database: Path) -> str:
+    """The store URL that opens the SQLite file ``database``."""
+    return f"sqlite:///{database.resolve()}"
+
+
+def single_file(database: Path) -> None:
+    """Fold ``database``'s write-ahead log into it and leave it in rollback-journal mode, so the file alone holds the
+    whole store and moves in one rename."""
+    with contextlib.closing(sqlite3.connect(database)) as conn:
+        conn.execute("PRAGMA journal_mode=DELETE")
+
+
+def backup_sqlite(database: Path, copy: Path) -> None:
+    """Copy the SQLite store ``database`` into ``copy`` through SQLite's backup API, read over a read-only connection:
+    the copy holds every committed transaction, its write-ahead log's among them, and neither the database nor its log
+    is written — a read-only connection runs no checkpoint."""
+    with (
+        contextlib.closing(sqlite3.connect(f"{database.resolve().as_uri()}?mode=ro", uri=True)) as source,
+        contextlib.closing(sqlite3.connect(copy)) as destination,
+    ):
+        source.backup(destination)
+
+
+class IRunnerRowMoves(Protocol):
+    """One runner's rows moved between two stores, each named by its URL — the transfer's two seams over store files."""
+
+    def copy_runner(
+        self,
+        source_url: str,
+        destination_url: str,
+        runner_id: str,
+        *,
+        workspace_ids: Mapping[str, str] | None = None,
+        ingest: HostIngest | None = None,
+    ) -> None:
+        """Copy ``runner_id``'s rows from the store at ``source_url`` into the one at ``destination_url``, in one
+        destination transaction; the source is only read."""
+        ...
+
+    def remove_runner_rows(self, url: str, runner_id: str, *, keep_counters: bool) -> None:
+        """Delete ``runner_id``'s rows from the store at ``url``, its outbox counters too unless ``keep_counters``."""
+        ...
+
+
+@domain_model
+@dataclass(frozen=True)
+class RunnerArchive:
+    """One runner's rows extracted from the host store: the runner, and the archive store that now holds them."""
+
+    runner_id: str
+    archive: Path
+
+
 def _holds_no_tables(database: Path) -> bool:
     """Whether the SQLite file at ``database`` exists and holds no table — a file a connect created, not a store."""
     if not database.exists():
@@ -230,6 +286,34 @@ class Runtime:
             self._migrate_to_head(config)
         _log.info("runner store set aside", root=str(self.root), moved=[str(p) for p in moved.moved])
         return moved
+
+    def reset_runner(self, runner: str, *, now: datetime, rows: IRunnerRowMoves) -> RunnerArchive:
+        """Extract the runner ``runner`` names — by name or id, or a runner the host file no longer configures by its
+        id — into an archive store beside the host's, named by the runner and a ``now`` stamp, then delete its rows
+        from the host store, keeping its outbox counters. The archive is migrated to head and written whole under a
+        temporary name, then renamed, before anything is deleted. Refused while the directory is held."""
+        config = HostConfig.load(self.root)
+        config.refuse_unadopted()
+        store = sqlite_store_file(config.db_url)
+        runner_id, label = _reset_target(config, runner)
+        stamp = now.astimezone(UTC).strftime("%Y%m%dT%H%M%SZ")
+        archive = store.with_name(f"{store.name}.{label}.{stamp}")
+        with self._exclusive(config.layout, f"reset runner {label}"):
+            if archive.exists():
+                raise StoreResetRefused(f"cannot archive runner {label}: {archive} already exists")
+            pending = archive.with_name(archive.name + ".tmp")
+            for leftover in (pending, *(pending.with_name(pending.name + s) for s in _SQLITE_SIBLING_SUFFIXES)):
+                leftover.unlink(missing_ok=True)
+            try:
+                MigrationRunner(script_location=MIGRATIONS_DIR, url=sqlite_url(pending)).upgrade("head")
+            except (MigrationConnectionError, MigrationRefused) as exc:
+                raise ConfigError(f"cannot create the archive store at {pending}: {exc}") from exc
+            rows.copy_runner(config.db_url, sqlite_url(pending), runner_id)
+            single_file(pending)
+            os.replace(pending, archive)
+            rows.remove_runner_rows(config.db_url, runner_id, keep_counters=True)
+        _log.info("runner reset", root=str(self.root), runner_id=runner_id, archive=str(archive))
+        return RunnerArchive(runner_id=runner_id, archive=archive)
 
     def migrate(self, *, down: str | None = None) -> None:
         """Apply pending revisions — adopting a pre-host store first, when the directory holds one and no host
@@ -331,6 +415,29 @@ class Runtime:
             yield
 
 
+def _reset_target(config: HostConfig, runner: str) -> tuple[str, str]:
+    """The id of the runner ``runner`` names and the label its archive is named by: a configured runner by its name or
+    id, labelled by its name, or a runner the host file no longer configures by its ``rn_`` id."""
+    for entry in config.runners:
+        if runner in (entry.name, entry.id):
+            if entry.id is None:
+                raise ConfigError(
+                    f"runner {entry.name} has no id in {config.config_path}, so the store holds no rows of it"
+                )
+            return entry.id, entry.name
+    if runner.startswith(_RUNNER_ID_PREFIX):
+        return runner, runner
+    held = ", ".join(entry.name for entry in config.runners) or "none"
+    raise ConfigError(
+        f"{config.config_path} declares no runner {runner!r} (it holds {held}); name a runner it declares, or one it "
+        "no longer declares by its id"
+    )
+
+
+#: The prefix every hub-minted runner id carries.
+_RUNNER_ID_PREFIX = "rn_"
+
+
 def migration_runner(location: IStoreLocation) -> MigrationRunner:
     return Migrations(location).runner
 
@@ -356,10 +463,13 @@ def ensure_current_revision(location: IStoreLocation) -> None:
 __all__ = [
     "MIGRATE_COMMAND",
     "STORE_RESET_COMMAND",
+    "IRunnerRowMoves",
     "Migrations",
+    "RunnerArchive",
     "Runtime",
     "SetAsideStore",
     "StoreResetRefused",
+    "backup_sqlite",
     "ensure_current_revision",
     "init_environment",
     "migrate",
@@ -367,5 +477,7 @@ __all__ = [
     "move_sqlite",
     "reset_command",
     "set_aside_sqlite",
+    "single_file",
     "sqlite_store_file",
+    "sqlite_url",
 ]

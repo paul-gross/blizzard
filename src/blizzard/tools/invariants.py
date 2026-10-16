@@ -281,12 +281,13 @@ class UniqueEnvBinding(QueryCheck):
 class RowsNameRegisteredRunner(QueryCheck):
     """Every runner-scoped row names a runner the store's ``runner_identity`` records. A row the bound runner's scoped
     reads cannot see is lost to it: a lease never reaped, a binding never released, an outbound fact never flushed.
-    ``runner_identity`` keys itself by its own id, so it is not judged."""
+    ``runner_identity`` keys itself by its own id, so it is not judged; nor is ``outbox_counters``, which outlives a
+    runner reset out of the store by design, so that runner never issues a ``seq`` at or below its hub's mark again."""
 
     _TABLES: ClassVar[tuple[Table, ...]] = tuple(
         table
         for table in runner.metadata.sorted_tables
-        if RUNNER_SCOPING.is_keyed(table) and table is not runner.runner_identity
+        if RUNNER_SCOPING.is_keyed(table) and table not in (runner.runner_identity, runner.outbox_counters)
     )
 
     def run(self) -> list[Violation]:

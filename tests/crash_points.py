@@ -25,6 +25,7 @@ _INSTRUMENTED_MODULES = (
     "blizzard.runner.lifecycle.judgement.git_commit_declaration",
     "blizzard.runner.tracing.sweep",
     "blizzard.runner.lifecycle.host_lane_drain",
+    "blizzard.runner.ingest",
     "blizzard.hub.delivery.hub_node",
     "blizzard.hub.domain.execution.claim",
     "blizzard.hub.domain.execution.apply",

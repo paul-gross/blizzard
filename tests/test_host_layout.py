@@ -18,8 +18,12 @@ from blizzard.runner.host_layout import (
     HostLayout,
     HostLock,
     append_runner,
+    append_subscription,
+    append_workspace,
     remove_runner,
     repoint_workspace_prompt,
+    runner_table,
+    with_runner_values,
     write_runner_id,
     write_scaffold,
 )
@@ -308,3 +312,61 @@ def test_removing_a_runner_the_file_does_not_name_is_refused(tmp_path: Path) -> 
     with pytest.raises(ConfigError, match="r-none"):
         remove_runner(layout, "r-none")
     assert layout.config_path.read_text() == _FILE
+
+
+def test_an_appended_workspace_and_subscription_land_whole_after_everything(tmp_path: Path) -> None:
+    layout = HostLayout(tmp_path)
+    layout.config_path.write_text(_FILE)
+    workspace = '\n[[workspace]]\nid = "ws-two"\nroot = "/w2"\n\n[[workspace.repo]]\nname = "a"\nurl = "u"\n'
+    subscription = '\n[[subscription]]\nslug = "s"\nname = "S"\nprovider = "anthropic"\n'
+    append_workspace(layout, workspace)
+    append_subscription(layout, subscription)
+    parsed = tomllib.loads(layout.config_path.read_text())
+    assert layout.config_path.read_text() == _FILE + workspace + subscription
+    assert [w["id"] for w in parsed["workspace"]] == ["ws", "ws-two"]
+    assert parsed["workspace"][1]["repo"] == [{"name": "a", "url": "u"}]
+    assert [s["slug"] for s in parsed["subscription"]] == ["s"]
+
+
+def test_an_append_of_another_kind_of_table_is_refused_leaving_the_file(tmp_path: Path) -> None:
+    layout = HostLayout(tmp_path)
+    layout.config_path.write_text(_FILE)
+    with pytest.raises(ConfigError):
+        append_workspace(layout, '\n[[runner]]\nname = "x"\n')
+    with pytest.raises(ConfigError):
+        append_subscription(layout, '\n[[subscription]]\nslug = "a"\n\n[[subscription]]\nslug = "b"\n')
+    assert layout.config_path.read_text() == _FILE
+
+
+def test_a_runners_table_is_read_whole_and_appends_to_another_file_as_it_was(tmp_path: Path) -> None:
+    source, destination = HostLayout(tmp_path / "a"), HostLayout(tmp_path / "b")
+    for layout in (source, destination):
+        layout.root.mkdir()
+    source.config_path.write_text(_FILE)
+    destination.config_path.write_text('hub_url = "https://hub.example"\n')
+    append_runner(destination, runner_table(source, "r-one"))
+    [runner] = tomllib.loads(destination.config_path.read_text())["runner"]
+    assert runner == tomllib.loads(_FILE)["runner"][0]
+
+
+def test_runner_values_replace_the_keys_they_name_in_the_runner_and_its_sub_tables() -> None:
+    table = (
+        '\n[[runner]]\nname = "r"\nprojects = []\nworker_settings_path = "/old/w.json"\n'
+        '\n[runner.harness]\nconfig_dir = "/old/bundle"\n\n[runner.opencode]\nworker_config_path = "/old/o.json"\n'
+    )
+    edited = with_runner_values(
+        table,
+        {
+            ("worker_settings_path",): '"/new/w.json"',
+            ("harness", "config_dir"): '"/new/bundle"',
+            ("opencode", "worker_config_path"): '"/new/o.json"',
+            ("projects",): '[{ project = "p", workspace = "w", agents = 1 }]',
+        },
+    )
+    [runner] = tomllib.loads(edited)["runner"]
+    assert runner["worker_settings_path"] == "/new/w.json"
+    assert runner["harness"] == {"config_dir": "/new/bundle"}
+    assert runner["opencode"] == {"worker_config_path": "/new/o.json"}
+    assert runner["projects"] == [{"project": "p", "workspace": "w", "agents": 1}]
+    with pytest.raises(ConfigError, match="sets none of"):
+        with_runner_values(table, {("opencode", "auth_path"): '"/x"'})
