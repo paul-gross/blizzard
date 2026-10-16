@@ -34,6 +34,7 @@ from blizzard.hub.domain.config.secrets import (
     SecretRevisionConflict,
     SecretValueBlank,
     listed,
+    retirable,
 )
 from blizzard.wire.secret import RecordRefView, SecretCreateRequest, SecretReplaceRequest, SecretView
 
@@ -51,6 +52,7 @@ def secret_view(
     retired: bool,
     references: list[RecordRef] | None = None,
 ) -> SecretView:
+    referrers = references or []
     return SecretView(
         name=record.name,
         revision=record.revision,
@@ -59,7 +61,8 @@ def secret_view(
         replaced_by_name=names.get(record.replaced_by),
         created_at=iso_utc(record.created_at),
         retired=retired,
-        references=[RecordRefView(kind=r.kind.value, key=r.key, label=r.label) for r in references or []],
+        retirable=retirable(referrers, retired=retired),
+        references=[RecordRefView(kind=r.kind.value, key=r.key, label=r.label) for r in referrers],
     )
 
 

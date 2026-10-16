@@ -170,7 +170,9 @@ def list_graphs(services: Services) -> list[GraphSummaryView]:
     and few."""
     graphs = services.graphs.list_summaries()
     retired_ids = services.graphs.retired_graph_ids()
-    effective_by_id = Mints.of(graphs, retired_ids=retired_ids).effective
+    mints = Mints.of(graphs, retired_ids=retired_ids)
+    effective_by_id = mints.effective
+    lifecycle_by_id = mints.lifecycle
     return [
         GraphSummaryView(
             graph_id=g.graph_id,
@@ -179,6 +181,7 @@ def list_graphs(services: Services) -> list[GraphSummaryView]:
             created_at=iso_utc(g.created_at),
             effective=effective_by_id[g.graph_id],
             retired=g.graph_id in retired_ids,
+            lifecycle=lifecycle_by_id[g.graph_id],
         )
         for g in graphs
     ]

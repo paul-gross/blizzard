@@ -3,6 +3,7 @@ import { QueryClient } from '@tanstack/angular-query-experimental';
 
 import {
   ActivityChunkChangeCause,
+  ActivityRunnerChangeKind,
   type ActivityView,
   type ChunkChangedPayload,
   type DecisionOpenedPayload,
@@ -107,9 +108,8 @@ export type LoggedEventData = Omit<ActivityView, 'at' | 'type' | 'key'> & { read
  * The general rule behind every Activity feed drop: a frame belongs in the ring only when
  * its kind carries a durable fact behind it. `queue-changed` reports a reorder with no
  * per-chunk row behind it (`bzh:ranking-is-per-list`) — never a fact, so it is dropped
- * whole, unconditionally, whichever hub sent it. {@link MUTED_RUNNER_KINDS} is the same
- * rule applied within `runner-changed`, whose frames are factual for most kinds
- * (`paused`, `resumed`, …) but not for these.
+ * whole, unconditionally, whichever hub sent it. {@link ACTIVITY_RUNNER_KINDS} is the same
+ * rule applied within `runner-changed`, whose frames are factual only for the pause kinds.
  *
  * The test is "this kind has no durable fact", never "this frame has no `key`" — `key`'s
  * absence is ambiguous (it also marks a frame from a hub older than this stamp,
@@ -123,25 +123,12 @@ const NO_DURABLE_FACT_TYPES: ReadonlySet<string> = new Set<HubEventType>([
   HubEventType.HOST_CHANGED,
 ]);
 
-/**
- * The `runner-changed` kinds the Activity feed drops — {@link
- * NO_DURABLE_FACT_TYPES}'s rule applied within this one type. A runner re-registers on
- * every pull-loop cycle as its liveness heartbeat, so these two are the overwhelming
- * majority of all frames and carry no news an operator can act on — left in, they would
- * evict every other event out of the {@link LOG_LIMIT} ring within a few cycles, so this
- * is what keeps the feed legible rather than merely tidier. Dropping is scoped to the
- * feed: {@link LiveInvalidationSpine.dispatch} still invalidates on them, so queries
- * keyed on runner liveness keep refreshing on every heartbeat.
- *
- * `external-usage` is muted for a different reason: it is not an
- * operator-visible activity-feed entry, and carries no `key` — there is no fact-table row
- * identity worth naming, only an advisory display field the fleet registry re-reads.
- */
-const MUTED_RUNNER_KINDS: ReadonlySet<string> = new Set<RunnerChangeKind>([
-  RunnerChangeKind.REGISTERED,
-  RunnerChangeKind.HEARTBEAT,
-  RunnerChangeKind.EXTERNAL_USAGE,
-]);
+/** The `runner-changed` kinds the hub's activity read backfills from a durable pause fact —
+ * the wire's own {@link ActivityRunnerChangeKind}. Every other kind (a liveness `registered`
+ * or `heartbeat`, `external-usage`, a roster `added`/`retired`) has no row on reload, so the
+ * feed drops it live too. Dropping is scoped to the feed: {@link LiveInvalidationSpine.dispatch}
+ * still invalidates on every kind, so queries keyed on runner liveness keep refreshing. */
+const ACTIVITY_RUNNER_KINDS: ReadonlySet<string> = new Set<string>(Object.values(ActivityRunnerChangeKind));
 
 /** The causes the hub's activity read backfills from its chunk fact sources — the wire's own
  * {@link ActivityChunkChangeCause}. A chunk-scoped telemetry fact can repeat the last
@@ -149,11 +136,11 @@ const MUTED_RUNNER_KINDS: ReadonlySet<string> = new Set<RunnerChangeKind>([
 const ACTIVITY_CHUNK_CAUSES: ReadonlySet<string> = new Set<string>(Object.values(ActivityChunkChangeCause));
 
 /** Whether a frame belongs in the Activity feed — see {@link NO_DURABLE_FACT_TYPES} and
- * {@link MUTED_RUNNER_KINDS}. */
+ * {@link ACTIVITY_RUNNER_KINDS}. */
 function isLoggable(type: string, data: LoggedEventData): boolean {
   if (NO_DURABLE_FACT_TYPES.has(type)) return false;
   if (type === HubEventType.CHUNK_CHANGED) return ACTIVITY_CHUNK_CAUSES.has(data.cause ?? '');
-  return type !== HubEventType.RUNNER_CHANGED || !MUTED_RUNNER_KINDS.has(data.kind ?? '');
+  return type !== HubEventType.RUNNER_CHANGED || ACTIVITY_RUNNER_KINDS.has(data.kind ?? '');
 }
 
 /** The named chunk's own detail key, when the frame names a chunk. */

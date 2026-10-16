@@ -53,6 +53,15 @@
         "title": "ActivityResponse",
         "type": "object"
       },
+      "ActivityRunnerChangeKind": {
+        "enum": [
+          "paused",
+          "resumed",
+          "locally-paused",
+          "locally-resumed"
+        ],
+        "type": "string"
+      },
       "ActivityView": {
         "description": "One activity-feed row on the wire \u2014 present-when-meaningful: a field its source\ndoesn't fill is absent, never a placeholder ``None``-as-a-present-field. ``type`` is\none of ``\"chunk-changed\"`` / ``\"event-logged\"`` / ``\"runner-changed\"``; ``key`` is the\nidentity of the underlying fact, never a stable frame id.",
         "properties": {
@@ -6388,6 +6397,16 @@
         "title": "GraphFlagsPatchRequest",
         "type": "object"
       },
+      "GraphLifecycle": {
+        "description": "A graph is ``retired`` by its own fact, ``effective`` when it is the newest non-retired\nmint of its name, and ``superseded`` when it is neither.",
+        "enum": [
+          "effective",
+          "retired",
+          "superseded"
+        ],
+        "title": "GraphLifecycle",
+        "type": "string"
+      },
       "GraphMintRequest": {
         "description": "A graph definition to mint \u2014 the raw YAML body.",
         "properties": {
@@ -6618,7 +6637,7 @@
         "type": "object"
       },
       "GraphSummaryView": {
-        "description": "One graph's summary row \u2014 a name-lineage entry as served by ``GET /graphs``.\n\n``effective`` marks the newest **non-retired** graph of this ``name``, while\n``retired`` is this graph's own state: a non-retired non-effective graph is superseded.",
+        "description": "One graph's summary row \u2014 a name-lineage entry as served by ``GET /graphs``.\n\n``effective`` marks the newest **non-retired** graph of this ``name``, while\n``retired`` is this graph's own state: a non-retired non-effective graph is superseded.\n``lifecycle`` names that three-way standing, so a client never re-derives it.",
         "properties": {
           "created_at": {
             "title": "Created At",
@@ -6635,6 +6654,10 @@
           "graph_id": {
             "title": "Graph Id",
             "type": "string"
+          },
+          "lifecycle": {
+            "$ref": "#/components/schemas/GraphLifecycle",
+            "default": "effective"
           },
           "name": {
             "title": "Name",
@@ -11205,13 +11228,13 @@
       },
       "RunnerChangeKind": {
         "enum": [
-          "added",
-          "registered",
-          "heartbeat",
           "paused",
           "resumed",
           "locally-paused",
           "locally-resumed",
+          "added",
+          "registered",
+          "heartbeat",
           "external-usage",
           "retired",
           "reinstated",
@@ -11248,13 +11271,13 @@
           },
           "kind": {
             "enum": [
-              "added",
-              "registered",
-              "heartbeat",
               "paused",
               "resumed",
               "locally-paused",
               "locally-resumed",
+              "added",
+              "registered",
+              "heartbeat",
               "external-usage",
               "retired",
               "reinstated",
@@ -12512,6 +12535,11 @@
               }
             ],
             "title": "Replaced By Name"
+          },
+          "retirable": {
+            "default": true,
+            "title": "Retirable",
+            "type": "boolean"
           },
           "retired": {
             "default": false,

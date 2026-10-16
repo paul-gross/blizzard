@@ -143,9 +143,15 @@ def require_revealable(name: str, *, retired: bool) -> None:
         raise SecretRetired(name)
 
 
+def retirable(referrers: Sequence[RecordRef], *, retired: bool) -> bool:
+    """Whether retiring the secret would be accepted: an already-retired one is a no-op,
+    a live one needs no active configured record still naming it."""
+    return retired or not referrers
+
+
 def require_unreferenced(name: str, referrers: list[RecordRef]) -> None:
     """A secret an active configured record still names cannot be retired."""
-    if referrers:
+    if not retirable(referrers, retired=False):
         raise SecretReferenced(name, referrers)
 
 

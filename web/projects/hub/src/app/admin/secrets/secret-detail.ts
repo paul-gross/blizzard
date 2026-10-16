@@ -74,7 +74,6 @@ export class SecretDetail {
     const secret = this.secretQuery.data();
     return configActions(this.viewport.mode(), hasPermission(this.meQuery.data(), 'config:edit'), secret, {
       replace: true,
-      referenceCount: (secret?.references ?? []).length,
     });
   });
   protected readonly busy = computed(() => this.pendingKey() !== null && this.pendingKey() === this.key());

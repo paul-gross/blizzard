@@ -42,6 +42,15 @@ export type ActivityResponse = {
     activity?: Array<ActivityView>;
 };
 
+export const ActivityRunnerChangeKind = {
+    PAUSED: 'paused',
+    RESUMED: 'resumed',
+    LOCALLY_PAUSED: 'locally-paused',
+    LOCALLY_RESUMED: 'locally-resumed'
+} as const;
+
+export type ActivityRunnerChangeKind = typeof ActivityRunnerChangeKind[keyof typeof ActivityRunnerChangeKind];
+
 /**
  * ActivityView
  *
@@ -3951,6 +3960,26 @@ export type GraphFlagsPatchRequest = {
 };
 
 /**
+ * GraphLifecycle
+ *
+ * A graph is ``retired`` by its own fact, ``effective`` when it is the newest non-retired
+ * mint of its name, and ``superseded`` when it is neither.
+ */
+export const GraphLifecycle = {
+    EFFECTIVE: 'effective',
+    RETIRED: 'retired',
+    SUPERSEDED: 'superseded'
+} as const;
+
+/**
+ * GraphLifecycle
+ *
+ * A graph is ``retired`` by its own fact, ``effective`` when it is the newest non-retired
+ * mint of its name, and ``superseded`` when it is neither.
+ */
+export type GraphLifecycle = typeof GraphLifecycle[keyof typeof GraphLifecycle];
+
+/**
  * GraphMintRequest
  *
  * A graph definition to mint — the raw YAML body.
@@ -4075,6 +4104,7 @@ export type GraphSessionView = {
  *
  * ``effective`` marks the newest **non-retired** graph of this ``name``, while
  * ``retired`` is this graph's own state: a non-retired non-effective graph is superseded.
+ * ``lifecycle`` names that three-way standing, so a client never re-derives it.
  */
 export type GraphSummaryView = {
     /**
@@ -4093,6 +4123,7 @@ export type GraphSummaryView = {
      * Graph Id
      */
     graph_id: string;
+    lifecycle?: GraphLifecycle;
     /**
      * Name
      */
@@ -7122,13 +7153,13 @@ export type RunnerCapability = {
 };
 
 export const RunnerChangeKind = {
-    ADDED: 'added',
-    REGISTERED: 'registered',
-    HEARTBEAT: 'heartbeat',
     PAUSED: 'paused',
     RESUMED: 'resumed',
     LOCALLY_PAUSED: 'locally-paused',
     LOCALLY_RESUMED: 'locally-resumed',
+    ADDED: 'added',
+    REGISTERED: 'registered',
+    HEARTBEAT: 'heartbeat',
     EXTERNAL_USAGE: 'external-usage',
     RETIRED: 'retired',
     REINSTATED: 'reinstated',
@@ -7152,7 +7183,7 @@ export type RunnerChangedPayload = {
     /**
      * Kind
      */
-    kind: 'added' | 'registered' | 'heartbeat' | 'paused' | 'resumed' | 'locally-paused' | 'locally-resumed' | 'external-usage' | 'retired' | 'reinstated' | 'token-revoked';
+    kind: 'paused' | 'resumed' | 'locally-paused' | 'locally-resumed' | 'added' | 'registered' | 'heartbeat' | 'external-usage' | 'retired' | 'reinstated' | 'token-revoked';
     /**
      * Reason
      */
@@ -7955,6 +7986,10 @@ export type SecretView = {
      * Replaced By Name
      */
     replaced_by_name?: string | null;
+    /**
+     * Retirable
+     */
+    retirable?: boolean;
     /**
      * Retired
      */

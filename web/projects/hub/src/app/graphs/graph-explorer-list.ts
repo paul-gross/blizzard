@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
 
-import { type GraphSummaryView, compactRef, KitBadge, KitChip, KitSelectRow, type Tone, FleetWhen } from 'fleet';
+import { type GraphLifecycle, type GraphSummaryView, compactRef, KitBadge, KitChip, KitSelectRow, type Tone, FleetWhen } from 'fleet';
 
 import { lifecycleTone } from '../core/lifecycle-tone';
 
@@ -22,18 +22,13 @@ interface ExpansionOverride {
   readonly selectionAtToggle: string | null;
 }
 
-/** A version's lifecycle label, {@link GraphExplorerList.versionLabel}'s own return
- * union, kept local since nothing else in `graphs/` needs the wire's `effective`/
- * `retired` booleans folded this way. */
-type VersionLabel = 'effective' | 'superseded' | 'retired';
-
-/** A version's lifecycle label → badge tone — borrows the shared `Tone` ladder for
+/** A version's wire `lifecycle` → badge tone — borrows the shared `Tone` ladder for
  * its color rather than inventing a graph-lifecycle-specific one. `effective` and
  * `retired` are the hub's enabled/retired lifecycle, read from its one owner
  * ({@link lifecycleTone}); `superseded` reuses `idle`'s dim — chosen for colour,
  * a reasonable double meaning, since a superseded version really is this
  * lineage's spent, inert entry. */
-const LIFECYCLE_TONE: Readonly<Record<VersionLabel, Tone>> = {
+const LIFECYCLE_TONE: Readonly<Record<GraphLifecycle, Tone>> = {
   effective: lifecycleTone(false),
   superseded: 'idle',
   retired: lifecycleTone(true),
@@ -183,18 +178,14 @@ export class GraphExplorerList {
     return compactRef(graphId);
   }
 
-  /** `effective` takes precedence (a graph can be both, briefly nonsensical, only if
-   * the wire ever disagreed with itself); otherwise `retired` names a lifecycle
-   * state distinct from "merely superseded by a newer version". */
-  protected versionLabel(version: GraphSummaryView): VersionLabel {
-    if (version.effective) return 'effective';
-    if (version.retired) return 'retired';
-    return 'superseded';
+  /** The version's wire `lifecycle`; the hub always sends it, and `effective` is its default. */
+  protected lifecycle(version: GraphSummaryView): GraphLifecycle {
+    return version.lifecycle ?? 'effective';
   }
 
-  /** {@link LIFECYCLE_TONE}'s lookup, bound to a version rather than a bare label so
+  /** {@link LIFECYCLE_TONE}'s lookup, bound to a version rather than a bare lifecycle so
    * the template calls one method per row. */
   protected badgeTone(version: GraphSummaryView): Tone {
-    return LIFECYCLE_TONE[this.versionLabel(version)];
+    return LIFECYCLE_TONE[this.lifecycle(version)];
   }
 }

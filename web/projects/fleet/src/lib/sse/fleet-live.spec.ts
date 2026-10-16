@@ -3,6 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { QueryClient, QueryObserver, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { vi } from 'vitest';
 
+import { ActivityRunnerChangeKind, RunnerChangeKind } from '../api/hub';
 import { HUB_PROJECT_FILTER } from '../core/project-filter';
 import { hubChunkTranscriptSegmentKey, hubChunkTranscriptsKey, hubDecisionsKey } from '../core/query-keys';
 import { EVENT_SOURCE_FACTORY, type EventSourceFactory, type FleetEventSource } from './sse.service';
@@ -379,27 +380,27 @@ describe('FleetLiveUpdates', () => {
     expect(registryHits).toHaveLength(2);
   });
 
-  it('keeps registration, heartbeat, and external usage out of the event feed', () => {
-    // Re-registration, heartbeat, and usage updates are not feed activity; left
-    // in the ring they would evict events an operator actually wants.
+  it('admits exactly the activity runner kinds into the event feed', () => {
+    // Only the kinds the hub's activity read backfills belong in the ring: anything else
+    // vanishes on reload, and heartbeat-rate frames would evict events an operator wants.
     TestBed.runInInjectionContext(() => TestBed.inject(FleetLiveUpdates).start());
     const live = TestBed.inject(FleetLiveUpdates);
 
     const source = FakeEventSource.instances[0];
     source.open();
-    source.emitNamed('runner-changed', JSON.stringify({ runner_id: 'rn_1', kind: 'registered' }));
-    source.emitNamed('runner-changed', JSON.stringify({ runner_id: 'rn_1', kind: 'heartbeat' }));
-    source.emitNamed('runner-changed', JSON.stringify({ runner_id: 'rn_1', kind: 'external-usage' }));
-    source.emitNamed('runner-changed', JSON.stringify({ runner_id: 'rn_1', kind: 'paused', by: 'alice' }));
-    // A frame from a hub too old to name a kind is news, not noise — it stays.
+    for (const kind of [...Object.values(ActivityRunnerChangeKind), ...Object.values(RunnerChangeKind)]) {
+      source.emitNamed('runner-changed', JSON.stringify({ runner_id: 'rn_1', kind }));
+    }
     source.emitNamed('runner-changed', JSON.stringify({ runner_id: 'rn_1' }));
 
-    expect(live.log().map((e) => e.data.kind)).toEqual(['paused', undefined]);
+    const admitted = new Set<string>(Object.values(ActivityRunnerChangeKind));
+    expect(live.log().map((e) => e.data.kind)).toEqual([
+      ...Object.values(ActivityRunnerChangeKind),
+      ...Object.values(RunnerChangeKind).filter((kind) => admitted.has(kind)),
+    ]);
   });
 
-  it('keeps an added runner in the event feed with the name its frame carries', () => {
-    // Adding a runner is an operator action with a registry row behind it: feed news,
-    // unlike the registration and heartbeat kinds muted above.
+  it('keeps an added runner out of the event feed but still invalidates the registry', () => {
     TestBed.runInInjectionContext(() => TestBed.inject(FleetLiveUpdates).start());
     const live = TestBed.inject(FleetLiveUpdates);
 
@@ -407,7 +408,7 @@ describe('FleetLiveUpdates', () => {
     source.open();
     source.emitNamed('runner-changed', JSON.stringify({ runner_id: 'rn_1', runner_name: 'r-claude', kind: 'added', by: 'alice' }));
 
-    expect(live.log().map((e) => [e.data.kind, e.data.runner_name])).toEqual([['added', 'r-claude']]);
+    expect(live.log()).toEqual([]);
   });
 
   it('accumulates the event feed into the log, oldest first, without touching dispatch', () => {
@@ -563,7 +564,7 @@ describe('FleetLiveUpdates', () => {
       TestBed.runInInjectionContext(() => live.start());
       const first = FakeEventSource.instances[0];
       first.open();
-      first.emitNamed('runner-changed', JSON.stringify({ runner_id: 'r1', runner_name: 'one', kind: 'added' }));
+      first.emitNamed('runner-changed', JSON.stringify({ runner_id: 'r1', runner_name: 'one', kind: 'paused' }));
       TestBed.flushEffects();
       expect(live.log()).toHaveLength(1);
       expect(live.status()).toBe('open');
