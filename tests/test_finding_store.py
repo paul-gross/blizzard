@@ -290,7 +290,7 @@ def test_list_across_routines_orders_by_finding_id(tmp_path: Path) -> None:
     assert [f.finding_id for f in store.list_across_routines(project)] == ["fin_1", "fin_2"]
 
 
-def test_facts_for_many_batches_across_a_batch_boundary(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_fact_summaries_batch_across_a_batch_boundary(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Shrinks the batch size so seeding stays cheap, then seeds one more
     finding than two full batches to prove a chain landing in the second (or third)
     batch still comes back correctly via `list_across_routines`, the unbounded caller."""
@@ -312,7 +312,7 @@ def test_facts_for_many_batches_across_a_batch_boundary(tmp_path: Path, monkeypa
 
 def test_get_many_batches_across_a_batch_boundary(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """`get_many`'s own row read batches through `id_batches` too, not just
-    `_facts_for_many` — a chain landing in the second (or third) batch of either query
+    `fact_summaries` — a chain landing in the second (or third) batch of either query
     must still come back correctly."""
     monkeypatch.setattr(batching_module, "BATCH_SIZE", 3)
     store, engine = _store_and_engine(tmp_path)
