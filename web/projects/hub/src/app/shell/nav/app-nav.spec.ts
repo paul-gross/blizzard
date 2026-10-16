@@ -23,6 +23,15 @@ describe('AppNav', () => {
     expect(el.querySelector('[data-testid="nav-graphs"]')).not.toBeNull();
   });
 
+  it('orders the tabs Board, Fleet, Graphs, Events, Gardening', async () => {
+    const fixture = TestBed.createComponent(AppNav);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    const order = [...el.querySelectorAll('[data-testid^="nav-"]')].map((tab) => tab.getAttribute('data-testid'));
+    expect(order.slice(0, 5)).toEqual(['nav-board', 'nav-fleet', 'nav-graphs', 'nav-events', 'nav-gardening']);
+  });
+
   it('renders the gardening tab (blizzard#397)', async () => {
     const fixture = TestBed.createComponent(AppNav);
     await fixture.whenStable();

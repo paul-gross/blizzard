@@ -6,7 +6,7 @@ import { PROJECT_SEGMENT_PARAM, projectLensGuard } from './project-lens.guard';
 /**
  * The board's views, mounted twice by {@link routes}: at the root, the lens on All, and under `p/:projectSlug`, the
  * lens on one project — so every view and every deep link is reachable with and without a lens. Every path here is
- * relative to its mount, so a redirect (`''` → `board`, desktop `fleet` → `board`) stays under the lens it was hit in.
+ * relative to its mount, so a redirect (`''` → `board`, a lens's own views) stays under the lens it was hit in.
  *
  * The view table. `''` redirects to `/board` (today's default
  * surface). `/graphs` and `/graphs/:graphId` both render `GraphsPage` — the list
@@ -49,15 +49,21 @@ export const VIEW_ROUTES: Routes = [
   { path: 'graphs', loadComponent: () => import('../graphs/graphs-page').then((m) => m.GraphsPage) },
   { path: 'graphs/:graphId', loadComponent: () => import('../graphs/graphs-page').then((m) => m.GraphsPage) },
   { path: 'events', loadComponent: () => import('../events/events-page').then((m) => m.EventsPage) },
-  // The mobile Fleet tab, mobile-only by `canMatch`. A desktop-width hit on
-  // this path (a shared link opened on a laptop, or a live viewport flip)
-  // redirects to `board` instead of mounting a desktop-only `RunnersPage`.
+  // The Fleet tab is **one URL, two shells**, like `board`: the phone's `RunnersPage` first, guarded by
+  // `matchesMobileViewport`, then the desktop `FleetPage` the router falls through to. Each carries the `:id`
+  // child that selects within it — a host or runner id the desktop list keeps mounted across, and which a phone
+  // opening a shared `/fleet/<id>` link still resolves to `RunnersPage` rather than the desktop shell.
   {
     path: 'fleet',
     canMatch: [matchesMobileViewport],
     loadComponent: () => import('../runners/runners-page').then((m) => m.RunnersPage),
+    children: [{ path: ':id', children: [] }],
   },
-  { path: 'fleet', redirectTo: 'board' },
+  {
+    path: 'fleet',
+    loadComponent: () => import('../runners/fleet-page').then((m) => m.FleetPage),
+    children: [{ path: ':id', children: [] }],
+  },
   // The gardening tab and the admin surface — each subtree is its folder's own route file.
   { path: 'gardening', loadChildren: () => import('../garden/gardening.routes').then((m) => m.GARDENING_ROUTES) },
   { path: 'admin', loadChildren: () => import('../admin/admin.routes').then((m) => m.ADMIN_ROUTES) },

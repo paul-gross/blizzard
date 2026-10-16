@@ -127,12 +127,11 @@ describe('the board route (route-table mobile/desktop fork)', () => {
 });
 
 /**
- * The route table's `/fleet` entry: mobile-only, with no desktop counterpart —
- * a desktop-width hit redirects to `/board`. Exercised through the real
- * router rather than by rendering `RunnersPage` directly, so a regression that
- * breaks the guard or redirect wiring itself is caught here.
+ * The route table's `/fleet` entry: **one URL, two shells**, like `/board` — the phone's `RunnersPage` at mobile width,
+ * the desktop `FleetPage` otherwise, each also serving `/fleet/<id>`. Exercised through the real router, so a
+ * regression in the guard or the child wiring itself is caught here.
  */
-describe('the fleet route (mobile-only, redirects to /board on desktop)', () => {
+describe('the fleet route (mobile RunnersPage, desktop FleetPage)', () => {
   let authStub: RequestClientStub;
 
   beforeEach(async () => {
@@ -143,6 +142,7 @@ describe('the fleet route (mobile-only, redirects to /board on desktop)', () => 
       if (path === '/api/chunks') return { chunks: [], next_cursor: null };
       if (path === '/api/questions' || path === '/api/graphs') return [];
       if (path === '/api/runners') return { runners: [] };
+      if (path === '/api/hosts') return { hosts: [] };
       if (path === '/api/spend') return { cost_usd: 0, cost_partial: false };
       return {};
     });
@@ -173,19 +173,34 @@ describe('the fleet route (mobile-only, redirects to /board on desktop)', () => 
     expect(router.url).toBe('/fleet');
   });
 
-  it('redirects to /board when /fleet is hit at desktop width', async () => {
-    TestBed.inject(ViewportService).setOverride('desktop');
+  it('renders the mobile Fleet screen at /fleet/<id> when forced to mobile', async () => {
+    TestBed.inject(ViewportService).setOverride('mobile');
     const fixture = TestBed.createComponent(App);
     const router = TestBed.inject(Router);
 
-    await router.navigateByUrl('/fleet');
+    await router.navigateByUrl('/fleet/hs_x');
     await settle(fixture);
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(router.url).toBe('/board');
-    expect(el.querySelector('[data-testid="board-shell"]')).toBeTruthy();
-    expect(el.querySelector('[data-testid="mobile-fleet-panel"]')).toBeNull();
+    expect(el.querySelector('[data-testid="mobile-fleet-panel"]')).toBeTruthy();
+    expect(el.querySelector('[data-testid="fleet-split"]')).toBeNull();
   });
+
+  for (const url of ['/fleet', '/fleet/hs_x']) {
+    it(`mounts the desktop FleetPage at ${url}, without redirecting`, async () => {
+      TestBed.inject(ViewportService).setOverride('desktop');
+      const fixture = TestBed.createComponent(App);
+      const router = TestBed.inject(Router);
+
+      await router.navigateByUrl(url);
+      await settle(fixture);
+      const el = fixture.nativeElement as HTMLElement;
+
+      expect(router.url).toBe(url);
+      expect(el.querySelector('[data-testid="fleet-split"]')).toBeTruthy();
+      expect(el.querySelector('[data-testid="mobile-fleet-panel"]')).toBeNull();
+    });
+  }
 });
 
 /**
@@ -416,7 +431,7 @@ describe('the views under the project lens', () => {
     ['/p/blizzard/gardening', '/p/blizzard/gardening/proposals'],
     ['/p/blizzard/admin', '/p/blizzard/admin/members'],
     ['/p/blizzard/admin/users', '/p/blizzard/admin/members'],
-    ['/p/blizzard/fleet', '/p/blizzard/board'],
+    ['/p/blizzard/fleet', '/p/blizzard/fleet'],
   ] as const) {
     it(`lands ${url} on ${landed}, under the lens`, async () => {
       const { router } = await open(url);

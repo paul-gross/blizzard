@@ -185,6 +185,10 @@ retire, revoke-token and enroll. Retire and revoke-token each ask for confirmati
 shows the refusal and asks again before forcing it. Enroll shows the new token once. Releasing a runner back to standing
 alone is a CLI and API verb (`blizzard hub runner-host release`, `POST /api/hosts/{host_id}/releases`), not a button.
 
+On a desktop-width screen the Fleet tab lists the hosts, then the runners under no host, and shows the selected one
+beside the list. A host's detail carries the same retire, revoke-token and enroll in its title bar, with the same
+confirmations, over its connection facts, workspaces, subscription usage and runners.
+
 ### A registered host
 
 A host that holds a host token is **registered**; one that holds none is unchanged, runs one runner, and that runner

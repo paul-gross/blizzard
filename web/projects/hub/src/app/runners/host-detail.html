@@ -1,0 +1,80 @@
+<div class="title" data-testid="fleet-detail-title">
+  <span
+    class="dot"
+    [class.online]="detail().card.online"
+    [class.offline]="detail().card.connection === connection.OFFLINE"
+    aria-hidden="true"
+  ></span>
+  <h2 class="name" data-testid="fleet-detail-name">{{ detail().card.hostName }}</h2>
+  <span class="ref" data-testid="fleet-detail-ref">{{ detail().ref }}</span>
+  <fleet-kit-badge data-testid="fleet-detail-state" [tone]="detail().card.online ? 'running' : 'idle'" variant="soft">{{
+    detail().card.online ? 'ONLINE' : detail().card.connection === connection.NEVER_CONNECTED ? 'NEVER CONNECTED' : 'OFFLINE'
+  }}</fleet-kit-badge>
+  <span class="report" data-testid="fleet-detail-report">{{ detail().card.reportLabel }}</span>
+  <app-host-verb-bar
+    class="verbs"
+    [hostId]="detail().card.hostId"
+    [hostName]="detail().card.hostName"
+    [verbs]="verbs()"
+    (verb)="hostVerb.emit($event)"
+  />
+</div>
+<fleet-kit-panel label="Connection" [bodyScroll]="false" data-testid="fleet-connection">
+  <fleet-kit-fact-list [rows]="detail().facts" />
+</fleet-kit-panel>
+<fleet-kit-panel label="Workspaces · environments" [bodyScroll]="false" data-testid="fleet-workspaces">
+  @for (ws of detail().workspaces; track ws.workspaceId) {
+    <div class="ws" data-testid="fleet-workspace" [attr.data-workspace-id]="ws.workspaceId">
+      <div class="ws-head">
+        <span>{{ ws.workspaceId }}</span>
+        <span data-testid="fleet-workspace-in-use">{{
+          ws.capacity === null ? ws.inUse + ' in use' : ws.inUse + ' / ' + ws.capacity + ' in use'
+        }}</span>
+      </div>
+      @for (line of ws.lines; track $index) {
+        @if (line.kind === 'held') {
+          <div class="env held" data-testid="fleet-env-held">
+            <span>{{ line.chunk.shortRef }}</span>
+            <span>{{ line.chunk.step }}</span>
+            <span>{{ line.chunk.runnerName }}</span>
+          </div>
+        } @else {
+          <div class="env free" data-testid="fleet-env-free">FREE</div>
+        }
+      }
+    </div>
+  } @empty {
+    <p class="none" data-testid="fleet-workspaces-empty">No workspaces reported.</p>
+  }
+</fleet-kit-panel>
+<fleet-kit-panel label="Subscription usage" [bodyScroll]="false" data-testid="fleet-subscriptions">
+  @if (detail().card.subscriptionPaces.length > 0) {
+    <fleet-subscription-pace-group [subscriptionPaces]="detail().card.subscriptionPaces" />
+  } @else {
+    <p class="none">No subscriptions reported.</p>
+  }
+</fleet-kit-panel>
+<fleet-kit-panel
+  label="Runners"
+  [bodyScroll]="false"
+  [count]="detail().rows.length || null"
+  countTestid="fleet-runners-count"
+  data-testid="fleet-runners"
+>
+  <p class="agents" data-testid="fleet-agents">
+    Agents {{ detail().agentsBusy }} busy{{ detail().agentsDeclared === null ? '' : ' / ' + detail().agentsDeclared + ' declared' }}
+  </p>
+  <div role="list">
+    @for (row of detail().rows; track row.runner_id) {
+      <app-fleet-runner-row
+        [row]="row"
+        [hosted]="true"
+        [canPause]="canPause()"
+        [pausePending]="isPausePending(row)"
+        (togglePause)="togglePause.emit($event)"
+      />
+    } @empty {
+      <p class="none">No runners under this host.</p>
+    }
+  </div>
+</fleet-kit-panel>

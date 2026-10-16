@@ -1,0 +1,13 @@
+<app-fleet-view
+  [list]="list()"
+  [selection]="selection()"
+  [selectedId]="selectedId()"
+  [state]="state()"
+  [canPause]="canPause()"
+  [pendingRunnerIds]="pendingRunnerIds()"
+  [actionError]="actionError()"
+  [hostVerbs]="hostVerbsVm()"
+  (pick)="onPick($event)"
+  (hostVerb)="runHostVerb($event)"
+  (togglePause)="toggle($event)"
+/>
