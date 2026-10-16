@@ -80,7 +80,7 @@ class _FakeChunkRepo:
     def load_facts(self, chunk_id: str) -> ChunkFacts | None:
         return self.facts
 
-    def record_promote_with_tail_position_locked(
+    def record_promote_with_position_locked(
         self, handle: ILockedChunkRead, chunk_id: str, *, position: float, at: datetime
     ) -> int | None:
         self.promoted.append((chunk_id, at))

@@ -21,9 +21,9 @@ class IReadChunkQueueRepository(Protocol):
         ...
 
     def promoted_ats(self, chunk_ids: Sequence[str]) -> dict[str, datetime]:
-        """Each promoted chunk's ``chunk_promoted.promoted_at`` among ``chunk_ids`` — the
+        """Each currently promoted chunk's newest ``chunk_promoted.promoted_at`` among ``chunk_ids`` — the
         ready-queue's fallback sort instant once a chunk has never had an explicit
-        position stamped, superseding a never-promoted chunk's own ``minted_at``."""
+        position stamped, superseding a not-currently-promoted chunk's own ``minted_at``."""
         ...
 
 
@@ -38,15 +38,26 @@ class IWriteChunkQueueRepository(IReadChunkQueueRepository, Protocol):
         no-op replay — there is no fresh row to name."""
         ...
 
-    def record_promote_with_tail_position_locked(
+    def record_promote_with_position_locked(
         self, handle: ILockedChunkRead, chunk_id: str, *, position: float, at: datetime
     ) -> int:
-        """Record ``chunk.promoted`` and its tail queue position on ``handle``'s already-locked
-        connection (``bzh:store-exclusive-write``;
+        """Record ``chunk.promoted`` and its resolved queue position (the tail or an anchor's slot) on
+        ``handle``'s already-locked connection (``bzh:store-exclusive-write``;
         :class:`~blizzard.hub.domain.operations.promote.PromoteService`'s only write) — a crash
         lands both facts or neither, never one without the other. Not idempotent: the caller
-        judged, under the same lock, that the chunk is not yet promoted. Returns the freshly-written
+        judged, under the same lock, that the chunk is not currently promoted. Returns the freshly-written
         ``chunk_promoted.id``."""
+        ...
+
+    def record_demote_with_position_locked(
+        self, handle: ILockedChunkRead, chunk_id: str, *, position: float, at: datetime
+    ) -> int:
+        """Record ``chunk.demoted`` and its resolved backlog position on ``handle``'s already-locked
+        connection (``bzh:store-exclusive-write``;
+        :class:`~blizzard.hub.domain.operations.demote.DemoteService`'s only write) — a crash lands both
+        facts or neither, never a demoted chunk ranked by its stale ready-queue position. Not idempotent:
+        the caller judged, under the same lock, that the chunk is currently promoted. Returns the
+        freshly-written ``chunk_demoted.id``."""
         ...
 
     def record_queue_positions(self, positions: Sequence[tuple[str, float]], *, at: datetime) -> None:

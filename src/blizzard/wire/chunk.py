@@ -435,6 +435,16 @@ class ChunkStopRequest(BaseModel):
     by: str = "operator"
 
 
+class ChunkPlacementRequest(BaseModel):
+    """Where a chunk lands in the list it enters — the optional body of ``POST /api/chunks/{id}/promote`` and
+    ``POST /api/chunks/{id}/demote``. ``after_chunk_id`` lands it right after that member of the target list;
+    ``to_top`` lands it at the head; neither lands it at the tail. A self-anchor is ``422``, an anchor outside the
+    target list ``409``."""
+
+    after_chunk_id: str | None = None
+    to_top: bool = False
+
+
 class ChunkCompleteRequest(BaseModel):
     """Manually complete a chunk, from any non-``done`` status — records who completed it."""
 

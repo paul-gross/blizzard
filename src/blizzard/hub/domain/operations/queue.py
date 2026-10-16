@@ -366,6 +366,48 @@ class QueueRanking:
         return (after_pos + next_pos) / 2
 
 
+def resolve_landing(
+    queue: IWriteChunkQueueRepository,
+    list_: QueueList,
+    candidates: Sequence[Chunk],
+    *,
+    chunk_id: str,
+    after_chunk_id: str | None,
+    to_top: bool,
+    statuses: Mapping[str, ChunkStatus],
+    at: datetime,
+) -> float:
+    """The explicit position a chunk entering ``list_`` from the other list lands at, among
+    ``candidates`` (the members it joins): the top when ``to_top``, right after ``after_chunk_id``
+    when named, else the tail. A self-anchor is refused (:class:`SelfAnchoredMove`) before an anchor
+    outside ``candidates`` (:class:`NotInList`). Bisection exhausting the representable doubles
+    renormalizes ``candidates`` through ``list_``'s own write before the slot is taken."""
+    if after_chunk_id == chunk_id:
+        raise SelfAnchoredMove()
+    after = None
+    if after_chunk_id is not None and not to_top:
+        after = next((c for c in candidates if c.chunk_id == after_chunk_id), None)
+        if after is None:
+            raise NotInList.of(after_chunk_id, list_, statuses)
+    candidate_ids = [c.chunk_id for c in candidates]
+    ranking = QueueRanking(
+        positions=queue.queue_positions(candidate_ids), promoted_ats=queue.promoted_ats(candidate_ids)
+    )
+    ordered = ranking.ordered(candidates)
+    if after_chunk_id is None and not to_top:
+        return ranking.tail(candidates)
+    position = ranking.slot_after(ordered, after)
+    if position is None:
+        write = queue.record_backlog_positions if list_ is QueueList.NOT_READY else queue.record_queue_positions
+        write([(c.chunk_id, float(i)) for i, c in enumerate(ordered)], at=at)
+        renormalized = QueueRanking(
+            positions={c.chunk_id: float(i) for i, c in enumerate(ordered)}, promoted_ats=ranking.promoted_ats
+        )
+        position = renormalized.slot_after(ordered, after)
+        assert position is not None  # whole-number positions always leave a gap
+    return position
+
+
 class QueueService:
     """Reorder the ``ready`` queue and the ``not_ready`` list, each as its own explicit
     hub-side property, ranked independently (``bzh:ranking-is-per-list``)."""

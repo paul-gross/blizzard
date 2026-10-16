@@ -14,7 +14,13 @@ from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.queue import IWriteChunkQueueRepository
 from blizzard.hub.store import schema as s
-from blizzard.hub.store.internal.chunk_rows import conn_of, currently_promoted_ats, insert_promote_rows
+from blizzard.hub.store.internal.chunk_rows import (
+    after_newest,
+    conn_of,
+    currently_promoted_ats,
+    insert_demote_rows,
+    insert_promote_rows,
+)
 from blizzard.hub.store.internal.newest_fact import newest_fact_select
 from blizzard.hub.store.scoped import ScopedConnections
 
@@ -59,16 +65,24 @@ class ChunkQueueStore:
         with self._store.write("record_promote") as conn:
             if currently_promoted_ats(conn, [chunk_id]):
                 return None
+            at = after_newest(conn, s.chunk_demoted.c.demoted_at, chunk_id, at)
             result = conn.execute(self._store.insert(s.chunk_promoted).values(chunk_id=chunk_id, promoted_at=at))
             key = result.inserted_primary_key
             return int(key[0]) if key is not None else None
 
-    def record_promote_with_tail_position_locked(
+    def record_promote_with_position_locked(
         self, handle: ILockedChunkRead, chunk_id: str, *, position: float, at: datetime
     ) -> int:
         # One transaction: a crash between the two writes would otherwise let a stale
-        # backlog position outrank the tail stamp on restart.
+        # backlog position outrank the stamp on restart.
         return insert_promote_rows(conn_of(handle), chunk_id, position=position, at=at) or 0
+
+    def record_demote_with_position_locked(
+        self, handle: ILockedChunkRead, chunk_id: str, *, position: float, at: datetime
+    ) -> int:
+        # One transaction: a crash between the two writes would otherwise rank the demoted chunk
+        # by its stale ready-queue position, which the shared newest-wins positions would keep.
+        return insert_demote_rows(conn_of(handle), chunk_id, position=position, at=at) or 0
 
     def record_queue_positions(self, positions: Sequence[tuple[str, float]], *, at: datetime) -> None:
         """Append every ``(chunk_id, position)`` pair in one multi-row insert — a

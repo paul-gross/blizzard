@@ -187,6 +187,7 @@ an item at it mints that item's chunk in the same call:
 blizzard hub item create --title "One-shot a TODO MVC application in Rust." --body-file spec.md
 # created hub:1 → chunk 01JT…
 blizzard hub chunk promote 01JT…   # a minted chunk rests not_ready until promoted
+blizzard hub chunk demote 01JT…    # an unclaimed ready chunk goes back to not_ready, keeping its history
 ```
 
 Local blizzard instances need no sign-in by default.

@@ -129,7 +129,7 @@ def test_two_concurrent_first_default_graph_resolutions_mint_it_once(tmp_path: P
 def test_a_chunk_stopped_between_promote_reads_and_its_locked_write_is_not_promoted(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Stop the chunk from inside the pre-lock tail computation — after the caller's reads,
+    """Stop the chunk from inside the pre-lock landing resolution — after the caller's reads,
     before the locked write — and prove promotability is judged from the facts read under the lock."""
     from blizzard.hub.domain.operations import promote as promote_module
 
@@ -137,14 +137,14 @@ def test_a_chunk_stopped_between_promote_reads_and_its_locked_write_is_not_promo
     chunk_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=False)
     chunk = hub.services.chunks.record.get(chunk_id)
     assert chunk is not None
-    real_tail_position = promote_module.tail_position
+    real_landing = promote_module.resolve_landing
 
-    def _stopping_tail_position(*args, **kwargs):  # type: ignore[no-untyped-def]
+    def _stopping_landing(*args, **kwargs):  # type: ignore[no-untyped-def]
         stopped = hub.client.post(f"/api/chunks/{chunk_id}/stop", json={"by": "operator"})
         assert stopped.status_code == 202, stopped.text
-        return real_tail_position(*args, **kwargs)
+        return real_landing(*args, **kwargs)
 
-    monkeypatch.setattr(promote_module, "tail_position", _stopping_tail_position)
+    monkeypatch.setattr(promote_module, "resolve_landing", _stopping_landing)
 
     with pytest.raises(ChunkNotPromotable):
         hub.services.promote.promote(chunk, statuses=hub.services.chunks.facts.load_live_statuses())

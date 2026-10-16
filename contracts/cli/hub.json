@@ -795,6 +795,72 @@
           "path": "hub chunk delete",
           "short_help": "Delete unacquired CHUNK, withdrawing every open hub item it holds \u2014 a pure client of ``DELETE /api/chunks/{id}``."
         },
+        "demote": {
+          "help": "Demote a ready CHUNK back to not-ready, keeping its id, history, edges, pin, and defaults.\n\nA pure client of the hub API: ``POST /api/chunks/{id}/demote``. Idempotent \u2014 demoting a\nchunk that is not currently promoted is a harmless no-op; 404 when the chunk is unknown, 409\nwhen it is claimed, delivering, gated on a human, or ended, or ``--after`` names a chunk outside\nthe backlog. Detach a held chunk first.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "chunk_id",
+              "opts": [
+                "chunk_id"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Land right after this backlog chunk; default is the backlog tail.",
+              "hidden": false,
+              "kind": "option",
+              "name": "after",
+              "opts": [
+                "--after"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id; needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub chunk demote",
+          "short_help": "Demote a ready CHUNK back to not-ready, keeping its id, history, edges, pin, and defaults."
+        },
         "depend": {
           "help": "Declare that CHUNK_ID depends on PREREQUISITE_CHUNK_ID.\n\nA pure client of ``POST /api/chunks/{id}/dependencies``. Idempotent \u2014 an\nalready-standing pair is reported back rather than refused. 404 for an unknown\ndependent or prerequisite; 409 for a dependent past its declarable window, a\ncycle the edge would close, or an ephemeral prerequisite.",
           "params": [
@@ -1389,7 +1455,7 @@
           "short_help": "Deprecated alias for ``blizzard hub chunk work-items``."
         },
         "promote": {
-          "help": "Promote a not-ready CHUNK to ready so a runner may claim it.\n\nA pure client of the hub API: ``POST /api/chunks/{id}/promote``. Idempotent \u2014 promoting\nan already-promoted chunk is a harmless no-op; 404 when the chunk is unknown, 409 when a\nnever-promoted chunk is already done or stopped.",
+          "help": "Promote a not-ready CHUNK to ready so a runner may claim it.\n\nA pure client of the hub API: ``POST /api/chunks/{id}/promote``. Idempotent \u2014 promoting\na currently promoted chunk is a harmless no-op; 404 when the chunk is unknown, 409 when a\nnot-currently-promoted chunk is already done or stopped, or ``--after`` names a chunk outside\nthe ready queue.",
           "params": [
             {
               "hidden": false,
@@ -1399,6 +1465,18 @@
                 "chunk_id"
               ],
               "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Land right after this ready chunk; default is the queue tail.",
+              "hidden": false,
+              "kind": "option",
+              "name": "after",
+              "opts": [
+                "--after"
+              ],
+              "required": false,
               "secondary_opts": [],
               "type": "text"
             },

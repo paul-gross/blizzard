@@ -148,6 +148,7 @@ from blizzard.hub.domain.observability.transcripts import (
 )
 from blizzard.hub.domain.operations.complete import CompleteService
 from blizzard.hub.domain.operations.delete import DeleteService
+from blizzard.hub.domain.operations.demote import DemoteService
 from blizzard.hub.domain.operations.edit import EditService
 from blizzard.hub.domain.operations.pause import PauseService
 from blizzard.hub.domain.operations.promote import PromoteService
@@ -239,6 +240,7 @@ class TenantServices:
     graphs: IReadGraphRepository
     ingest: IngestService
     promote: PromoteService
+    demote: DemoteService
     claim: ClaimService
     apply: ApplyService
     decisions: DecisionService
@@ -1000,6 +1002,9 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
             clock=clock,
         ),
         promote=PromoteService(
+            record=chunk_record, queue=chunk_queue, facts=chunk_facts, exclusive=chunk_exclusive, clock=clock
+        ),
+        demote=DemoteService(
             record=chunk_record, queue=chunk_queue, facts=chunk_facts, exclusive=chunk_exclusive, clock=clock
         ),
         claim=ClaimService(

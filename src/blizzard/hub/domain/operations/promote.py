@@ -1,7 +1,7 @@
 """Chunk promotion — flip a not-ready chunk to ready.
 
 Appending the ``chunk.promoted`` fact flips a chunk to ``ready``; facts append, status
-derives (``bzh:facts-not-status``). Promotion also stamps a tail queue position
+derives (``bzh:facts-not-status``). Promotion also stamps an explicit queue position
 in the same transaction — a crash lands both facts or neither, never a stale backlog
 position outranking the tail stamp on restart."""
 
@@ -15,9 +15,9 @@ from blizzard.hub.domain.chunk.errors import ChunkNotFound
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, ChunkVerb
 from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
-from blizzard.hub.domain.chunk.ports.queue import IReadChunkQueueRepository, IWriteChunkQueueRepository
+from blizzard.hub.domain.chunk.ports.queue import IWriteChunkQueueRepository
 from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
-from blizzard.hub.domain.operations.queue import QueueRanking
+from blizzard.hub.domain.operations.queue import QueueList, resolve_landing
 
 
 class ChunkNotPromotable(Exception):
@@ -48,27 +48,17 @@ def withheld_by_pause(facts_by_id: Mapping[str, ChunkFacts]) -> list[str]:
     return [chunk_id for chunk_id, facts in facts_by_id.items() if facts.is_ready_but_for_pause()]
 
 
-def tail_position(
-    record: IReadChunkRecordRepository,
-    queue: IReadChunkQueueRepository,
-    facts: IReadChunkFactsRepository,
-    *,
-    statuses: Mapping[str, ChunkStatus],
-) -> float:
-    """The position one past every queue-ranked chunk's own effective position
-    (:meth:`QueueRanking.tail`) — the rule :meth:`PromoteService.promote` stamps a fresh tail
-    position by, read *before* the write that stamps it. The candidates are the ready chunks
-    plus :func:`withheld_by_pause`'s; ``statuses`` is the caller's already-derived fleet statuses."""
+def ready_members(
+    record: IReadChunkRecordRepository, facts: IReadChunkFactsRepository, *, statuses: Mapping[str, ChunkStatus]
+) -> list[Chunk]:
+    """The chunks the ``ready`` queue ranks: the ready chunks plus :func:`withheld_by_pause`'s.
+    ``statuses`` is the caller's already-derived fleet statuses."""
     candidates = record.list_ready(statuses=statuses)
     paused_ids = [chunk_id for chunk_id, status in statuses.items() if status is ChunkStatus.PAUSED]
     if paused_ids:
         withheld = withheld_by_pause(facts.status_facts_for(paused_ids))
         candidates = [*candidates, *record.get_many(withheld).values()]
-    candidate_ids = [c.chunk_id for c in candidates]
-    ranking = QueueRanking(
-        positions=queue.queue_positions(candidate_ids), promoted_ats=queue.promoted_ats(candidate_ids)
-    )
-    return ranking.tail(candidates)
+    return candidates
 
 
 class PromoteService:
@@ -91,25 +81,41 @@ class PromoteService:
         self._exclusive = exclusive
         self._clock = clock
 
-    def promote(self, chunk: Chunk, *, statuses: Mapping[str, ChunkStatus]) -> int | None:
-        """Append the ``chunk.promoted`` fact and stamp an explicit tail position, in one
+    def promote(
+        self,
+        chunk: Chunk,
+        *,
+        statuses: Mapping[str, ChunkStatus],
+        after_chunk_id: str | None = None,
+        to_top: bool = False,
+    ) -> int | None:
+        """Append the ``chunk.promoted`` fact and stamp an explicit ready-queue position, in one
         transaction, as :func:`promotion_writes` decides over facts read under the row lock:
-        ``None`` for a replay on an already-promoted chunk, :class:`ChunkNotPromotable` for a
+        ``None`` for a replay on a currently promoted chunk, :class:`ChunkNotPromotable` for a
         terminal one, :class:`ChunkNotFound` for a chunk gone under the lock; otherwise stamps
-        :func:`tail_position` and returns the fresh ``chunk_promoted.id``.
+        the landing :func:`~blizzard.hub.domain.operations.queue.resolve_landing` resolves — the
+        tail, the top, or right after ``after_chunk_id`` — and returns the fresh ``chunk_promoted.id``.
 
-        The tail ranks other chunks — a different aggregate — so it is computed before the
+        The landing ranks other chunks — a different aggregate — so it is resolved before the
         lock from ``statuses``; the chunk's own promotability is not."""
         pre_lock = self._facts.load_facts(chunk.chunk_id)
         if pre_lock is not None and pre_lock.promoted:
-            return None  # promotion is permanent: a replay needs no lock
-        tail = tail_position(self._record, self._queue, self._facts, statuses=statuses)
+            return None  # a replay needs no lock
+        now = self._clock.now()
+        position = resolve_landing(
+            self._queue,
+            QueueList.READY,
+            ready_members(self._record, self._facts, statuses=statuses),
+            chunk_id=chunk.chunk_id,
+            after_chunk_id=after_chunk_id,
+            to_top=to_top,
+            statuses=statuses,
+            at=now,
+        )
         with self._exclusive.locked([chunk.chunk_id]) as handle:
             facts = handle.facts(chunk.chunk_id)
             if facts is None:
                 raise ChunkNotFound(chunk.chunk_id)
             if not promotion_writes(chunk.chunk_id, facts):
                 return None
-            return self._queue.record_promote_with_tail_position_locked(
-                handle, chunk.chunk_id, position=tail, at=self._clock.now()
-            )
+            return self._queue.record_promote_with_position_locked(handle, chunk.chunk_id, position=position, at=now)

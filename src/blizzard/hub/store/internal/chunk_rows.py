@@ -16,7 +16,7 @@ import json
 from collections import defaultdict
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Protocol, cast
 
 from sqlalchemy import Column, Connection, Select, Table, func, literal, select
@@ -211,13 +211,34 @@ def currently_promoted_ats(conn: Connection, batch: Sequence[str] | None) -> dic
     return {chunk_id: at for chunk_id, at in promoted.items() if chunk_id not in demoted or at > demoted[chunk_id]}
 
 
+def after_newest(conn: Connection, column: Column[Any], chunk_id: str, at: datetime) -> datetime:
+    """``at``, moved one microsecond past the chunk's newest ``column`` instant when that is not earlier — the
+    instant a promote or demote is stamped, so it is strictly later than the opposing fact it supersedes even on a
+    coarse or skewed clock. :func:`currently_promoted_ats` orders the two by instant alone."""
+    newest = _newest_instants(conn, column, [chunk_id]).get(chunk_id)
+    return max(at, newest + timedelta(microseconds=1)) if newest is not None else at
+
+
 def insert_promote_rows(conn: Connection, chunk_id: str, *, position: float, at: datetime) -> int | None:
     """Insert one chunk's ``chunk_promoted`` and ``queue_positions`` rows on a
     caller-supplied ``conn`` — mirrors :func:`insert_chunk_rows`'s shared-connection
     shape. No idempotency check; the caller owns it. Returns the freshly-inserted
     ``chunk_promoted.id``."""
     stmts = statements_of(conn)
+    at = after_newest(conn, s.chunk_demoted.c.demoted_at, chunk_id, at)
     result = conn.execute(stmts.insert(s.chunk_promoted).values(chunk_id=chunk_id, promoted_at=at))
+    conn.execute(stmts.insert(s.queue_positions).values(chunk_id=chunk_id, position=position, set_at=at))
+    key = result.inserted_primary_key
+    return int(key[0]) if key is not None else None
+
+
+def insert_demote_rows(conn: Connection, chunk_id: str, *, position: float, at: datetime) -> int | None:
+    """Insert one chunk's ``chunk_demoted`` and ``queue_positions`` rows on a caller-supplied
+    ``conn`` — the demote twin of :func:`insert_promote_rows`. No idempotency check; the caller
+    owns it. Returns the freshly-inserted ``chunk_demoted.id``."""
+    stmts = statements_of(conn)
+    at = after_newest(conn, s.chunk_promoted.c.promoted_at, chunk_id, at)
+    result = conn.execute(stmts.insert(s.chunk_demoted).values(chunk_id=chunk_id, demoted_at=at))
     conn.execute(stmts.insert(s.queue_positions).values(chunk_id=chunk_id, position=position, set_at=at))
     key = result.inserted_primary_key
     return int(key[0]) if key is not None else None
