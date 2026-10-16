@@ -112,6 +112,13 @@ class MigrationRunner:
         except (CommandError, ResolutionError):
             return False
 
+    def reaches(self, revision: str | None, floor: str) -> bool:
+        """Whether ``revision`` is ``floor`` or a revision built on it; ``False`` for an unmigrated store."""
+        if revision is None:
+            return False
+        script = ScriptDirectory.from_config(self._config())
+        return floor in {step.revision for step in script.iterate_revisions(revision, "base")}
+
     def current_revision(self) -> str | None:
         """The revision applied to the store, or ``None`` if unmigrated."""
         engine = create_engine_from_url(self.url)

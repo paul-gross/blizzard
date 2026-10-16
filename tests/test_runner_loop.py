@@ -2761,7 +2761,7 @@ def test_restart_adopt_holds_while_a_takeover_is_open(tmp_path):  # type: ignore
     assert store.active_lease_for_chunk("ch_1") is None
     assert store.held_environment_ids() == ["e1"]  # the binding is kept
     held = [entry for entry in logs if entry["event"].startswith("holding interrupted claim")]
-    assert [(e["log_level"], e["chunk_id"], e["takeover_id"]) for e in held] == [("info", "ch_1", "tko_1")]
+    assert [(e["log_level"], e["chunk_id"], e["takeover_id"]) for e in held] == [("debug", "ch_1", "tko_1")]
 
 
 @pytest.mark.unit

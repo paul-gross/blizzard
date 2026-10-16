@@ -14,6 +14,7 @@ import pytest
 
 from blizzard.foundation.fact_kinds import EVENT_RECORDED
 from blizzard.foundation.repo_ref import pointer_key
+from blizzard.runner.environments.workspaces import WorkspaceEntry, WorkspaceRegistry
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.lifecycle.judgement.git_commits import DeclaredCommits
@@ -187,3 +188,57 @@ def test_later_agreeing_pointer_resubmits_nothing(tmp_path: Path) -> None:
 
     assert lease.reports() == []
     assert lease.git.verified_calls == [(_ORIGIN, "feat/x", "c1"), (_ORIGIN, "feat/x", "c1")]
+
+
+_ORIGIN_B = "git@github.com:acme/widget-b.git"
+
+
+@pytest.mark.unit
+def test_each_declaration_is_confirmed_against_the_origin_of_the_workspace_its_environment_is_bound_in(
+    tmp_path: Path,
+) -> None:
+    store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
+    store.record_lease(
+        NewLease(
+            lease_id="lease_1",
+            chunk_id="ch_1",
+            graph_id="gr_1",
+            node_id="nd_build",
+            node_name="build",
+            epoch=1,
+            retries_max=2,
+            created_at=_NOW,
+        )
+    )
+    for env, workspace in (("e1", "ws_a"), ("e2", "ws_b")):
+        store.record_binding(
+            chunk_id="ch_1", environment_id=env, workdir=f"/{workspace}/{env}", bound_at=_NOW, workspace_id=workspace
+        )
+    git = FakeWorktreeGit()
+    ctx = make_context(
+        store,
+        hub=FakeHub(),
+        provider=FakeProvider({}),
+        harness=FakeHarness(handle=WorkerHandle(session_id="s", pid=1, process_start_time="t", pgid=1), verdict="pass"),
+        probe=FakeProbe(),
+        worktree_git=git,
+        workspaces=WorkspaceRegistry(
+            [
+                WorkspaceEntry(
+                    "ws_a", FakeProvider({"e1": "/ws_a/e1"}, repos={"e1": [("widget", _ORIGIN)]}), spawn_root="/a"
+                ),
+                WorkspaceEntry(
+                    "ws_b", FakeProvider({"e2": "/ws_b/e2"}, repos={"e2": [("widget", _ORIGIN_B)]}), spawn_root="/b"
+                ),
+            ]
+        ),
+    )
+    lease = store.active_lease_for_chunk("ch_1")
+    assert lease is not None
+    declared = _Lease(store, git, DeclaredCommits(ctx, lease, store.bindings_for_chunk("ch_1")))
+    declared.declare("e1", "c1")
+    declared.declare("e2", "c2")
+
+    declared.verified()
+
+    assert sorted(git.verified_calls) == sorted([(_ORIGIN, "feat/x", "c1"), (_ORIGIN_B, "feat/x", "c2")])

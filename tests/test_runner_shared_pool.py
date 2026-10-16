@@ -21,6 +21,7 @@ from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.hub.client import ClaimRequest, HubClientError, QueueEntry, RouteClaimOutcome
 from blizzard.runner.lifecycle.claim import ReadyQueue
 from blizzard.runner.loop.context import LoopConfig
+from blizzard.runner.loop.tick import tick
 from tests.runner_fakes import (
     FIXTURE_PROJECT_ID,
     FakeHarness,
@@ -102,15 +103,14 @@ def test_two_runners_on_one_workspace_never_hold_one_environment(tmp_path) -> No
     )
     assert [row.seq for row in store_b.pending_outbound()] == [seq]
 
-    runner_b = threading.Thread(target=lambda: ReadyQueue.peeked(ctx_b, fixture_route()).claim_one())
-    runner_b.start()
-    assert not provider.entered.acquire(timeout=0.3)  # B waits on the lock, not inside the provider
+    # B cannot take the lock: its claim is "nothing this tick" and never enters the provider.
+    assert not ReadyQueue.peeked(ctx_b, fixture_route()).claim_one()
     assert provider.acquisitions == ["ch_a"]
 
     provider.release_first.set()
     runner_a.join(_WAIT)
-    runner_b.join(_WAIT)
-    assert not runner_a.is_alive() and not runner_b.is_alive()
+    assert not runner_a.is_alive()
+    ReadyQueue.peeked(ctx_b, fixture_route()).claim_one()
 
     held = {
         binding.chunk_id: binding.environment_id
@@ -118,3 +118,26 @@ def test_two_runners_on_one_workspace_never_hold_one_environment(tmp_path) -> No
     }
     assert held == {"ch_a": "e1", "ch_b": "e2"}
     assert [v for v in runner_invariant_violations(store_a) if v.invariant == "runner:unique-env-binding"] == []
+
+
+def test_a_runner_that_cannot_take_the_workspace_lock_still_finishes_its_tick(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    provider = _BlockingProvider({"e1": "/ws/e1", "e2": "/ws/e2"})
+    workspaces = WorkspaceRegistry([WorkspaceEntry("ws1", provider, spawn_root="")])
+    store_a = make_store(f"sqlite:///{tmp_path / 'runner.db'}", runner_id="r_a")
+    store_b = SqlAlchemyRunnerStore(store_a._engine, runner_store_errors(), "r_b")
+    ctx_a = _runner(store_a, "r_a", workspaces, "ch_a")
+    ctx_b = dataclasses.replace(_runner(store_b, "r_b", workspaces, "ch_b"), host_stores=ctx_a.host_stores)
+
+    runner_a = threading.Thread(target=lambda: ReadyQueue.peeked(ctx_a, fixture_route()).claim_one())
+    runner_a.start()
+    assert provider.entered.acquire(timeout=_WAIT)  # A is inside the provider, holding the workspace's lock
+
+    ticking = threading.Thread(target=lambda: tick(ctx_b))
+    ticking.start()
+    ticking.join(_WAIT)
+    try:
+        assert not ticking.is_alive()  # B's tick returned while A held the lock
+        assert provider.acquisitions == ["ch_a"]
+    finally:
+        provider.release_first.set()
+        runner_a.join(_WAIT)

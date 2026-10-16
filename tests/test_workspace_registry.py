@@ -5,6 +5,7 @@ declare, resolves to no provider, an empty spawn root and no prompt."""
 
 from __future__ import annotations
 
+import threading
 from pathlib import Path
 
 import pytest
@@ -12,7 +13,12 @@ import pytest
 from blizzard.runner.composition import bound_spawn_roots, build_workspaces
 from blizzard.runner.config import HostWorkspace, ProjectBinding, RunnerConfig
 from blizzard.runner.config_table import ConfigError
-from blizzard.runner.environments.workspaces import WorkspaceEntry, WorkspaceRegistry, home_workspace_id
+from blizzard.runner.environments.workspaces import (
+    WorkspaceEntry,
+    WorkspaceRegistry,
+    held_workspace_id,
+    home_workspace_id,
+)
 from tests.runner_fakes import FakeProvider
 
 pytestmark = pytest.mark.unit
@@ -55,11 +61,48 @@ def test_the_home_workspace_is_the_first_bound_else_the_hosts_first() -> None:
     assert home_workspace_id((), ("ws_x",)) == "ws_x"
 
 
-def test_each_workspace_has_its_own_reentrant_acquisition_lock() -> None:
+def test_the_home_workspace_skips_a_bound_id_the_host_does_not_declare() -> None:
     registry = _registry()
 
-    with registry.acquisition_lock("ws_a"), registry.acquisition_lock("ws_a"):
-        assert registry.acquisition_lock("ws_a") is not registry.acquisition_lock("ws_b")
+    assert registry.home(("ws_undeclared", "ws_b")) == "ws_b"
+    assert registry.home(("ws_undeclared",)) == "ws_a"
+
+
+@pytest.mark.parametrize(
+    ("held", "bound", "expected"),
+    [
+        ("ws_a", ("ws_b",), "ws_a"),
+        (None, ("ws_b",), "ws_b"),
+        ("ws_undeclared", ("ws_b",), "ws_b"),
+        ("ws_undeclared", ("ws_undeclared",), "ws_a"),
+        (None, (), "ws_a"),
+    ],
+)
+def test_a_held_row_resolves_to_its_declared_workspace_else_the_runners_home(
+    held: str | None, bound: tuple[str, ...], expected: str
+) -> None:
+    assert _registry().held(held, bound) == expected
+    assert held_workspace_id(held, bound, ("ws_a", "ws_b")) == expected
+
+
+def test_the_try_lock_is_reentrant_and_never_waits_on_another_thread() -> None:
+    registry = _registry()
+    outcome: list[bool] = []
+
+    def other_thread() -> None:
+        with registry.try_acquisition_lock("ws_a") as taken:
+            outcome.append(taken)
+        with registry.try_acquisition_lock("ws_b") as taken:
+            outcome.append(taken)
+
+    with registry.try_acquisition_lock("ws_a") as outer, registry.try_acquisition_lock("ws_a") as inner:
+        assert outer and inner
+        thread = threading.Thread(target=other_thread)
+        thread.start()
+        thread.join(5)
+    assert outcome == [False, True]  # held workspace refused, the other workspace free
+    with registry.try_acquisition_lock("ws_a") as taken:
+        assert taken  # released once the holder leaves
 
 
 def test_a_registry_needs_a_workspace() -> None:
@@ -101,3 +144,16 @@ def test_a_runner_is_addressed_by_the_first_workspace_its_bindings_name(tmp_path
     registry = build_workspaces(workspaces, tmp_path)
     assert bound_spawn_roots(bound_to_b, registry) == (str(tmp_path / "b"),)
     assert bound_spawn_roots(unbound, registry) == (str(tmp_path / "a"),)
+
+
+def test_a_runners_home_skips_a_bound_workspace_the_host_does_not_declare(tmp_path: Path) -> None:
+    workspaces = (HostWorkspace("ws_a", root=str(tmp_path / "a")), HostWorkspace("ws_b", root=str(tmp_path / "b")))
+    config = RunnerConfig(
+        root=tmp_path,
+        db_url="sqlite://",
+        workspaces=workspaces,
+        bindings=(ProjectBinding("pr_1", "ws_gone", 1), ProjectBinding("pr_2", "ws_b", 1)),
+    )
+
+    assert config.bound_workspace_ids == ("ws_gone", "ws_b")
+    assert config.home_workspace.id == "ws_b"

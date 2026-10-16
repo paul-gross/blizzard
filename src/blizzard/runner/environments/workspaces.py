@@ -8,17 +8,23 @@ provider, an empty spawn root and no prompt."""
 from __future__ import annotations
 
 import threading
-from collections.abc import Mapping, Sequence
-from contextlib import AbstractContextManager
+from collections.abc import Iterator, Mapping, Sequence
+from contextlib import AbstractContextManager, contextmanager
 from typing import Protocol
 
 from blizzard.runner.environments.provider import IWorkspaceProvider
 
 
 def home_workspace_id(bound: Sequence[str], declared: Sequence[str]) -> str:
-    """The workspace a runner is reported and addressed by as such: the first workspace its bindings name, else the
-    host's first. ``declared`` is never empty."""
-    return bound[0] if bound else declared[0]
+    """The workspace a runner is reported and addressed by as such: the first workspace its bindings name that the
+    host declares, else the host's first. ``declared`` is never empty."""
+    return next((workspace_id for workspace_id in bound if workspace_id in declared), declared[0])
+
+
+def held_workspace_id(held: str | None, bound: Sequence[str], declared: Sequence[str]) -> str:
+    """The workspace a held ``env_bindings`` row is listed and claimed under: the one it names when the host declares
+    it, else the runner's home (:func:`home_workspace_id`)."""
+    return held if held is not None and held in declared else home_workspace_id(bound, declared)
 
 
 class IWorkspaces(Protocol):
@@ -30,6 +36,10 @@ class IWorkspaces(Protocol):
 
     def home(self, bound: Sequence[str]) -> str:
         """:func:`home_workspace_id` over this host's declared workspaces."""
+        ...
+
+    def held(self, workspace_id: str | None, bound: Sequence[str]) -> str:
+        """:func:`held_workspace_id` over this host's declared workspaces."""
         ...
 
     def provider(self, workspace_id: str | None) -> IWorkspaceProvider | None:
@@ -46,8 +56,9 @@ class IWorkspaces(Protocol):
         undeclared one."""
         ...
 
-    def acquisition_lock(self, workspace_id: str) -> AbstractContextManager[object]:
-        """The in-process lock serialising acquisition from the workspace's pool."""
+    def try_acquisition_lock(self, workspace_id: str) -> AbstractContextManager[bool]:
+        """The in-process lock serialising acquisition from the workspace's pool, taken without waiting: the context
+        yields whether it was taken, and releases only a lock it took. Reentrant on the owning thread."""
         ...
 
     def environment_workdirs(self) -> dict[str, dict[str, str]]:
@@ -92,6 +103,9 @@ class WorkspaceRegistry:
     def home(self, bound: Sequence[str]) -> str:
         return home_workspace_id(bound, self.ids())
 
+    def held(self, workspace_id: str | None, bound: Sequence[str]) -> str:
+        return held_workspace_id(workspace_id, bound, self.ids())
+
     def provider(self, workspace_id: str | None) -> IWorkspaceProvider | None:
         workspace = self._get(workspace_id)
         return workspace.provider if workspace is not None else None
@@ -104,8 +118,15 @@ class WorkspaceRegistry:
         workspace = self._get(workspace_id)
         return workspace.prompt if workspace is not None else ""
 
-    def acquisition_lock(self, workspace_id: str) -> AbstractContextManager[object]:
-        return self._workspaces[workspace_id].lock
+    @contextmanager
+    def try_acquisition_lock(self, workspace_id: str) -> Iterator[bool]:
+        lock = self._workspaces[workspace_id].lock
+        taken = lock.acquire(blocking=False)
+        try:
+            yield taken
+        finally:
+            if taken:
+                lock.release()
 
     def environment_workdirs(self) -> dict[str, dict[str, str]]:
         return {

@@ -16,6 +16,7 @@ from blizzard.foundation.subscription_miss import SampleMissReason
 from blizzard.runner.api.wiring import RunnerWiring, ServedWorkspace
 from blizzard.runner.config import SubscriptionDeclaration
 from blizzard.runner.environments.repository import EnvBinding
+from blizzard.runner.environments.workspaces import held_workspace_id
 from blizzard.runner.hub.identity import ICurrentIdentityVerdict
 from blizzard.runner.usage.repository import IReadExternalUsageRepository
 from blizzard.wire.runner_host import (
@@ -140,12 +141,13 @@ def list_workspaces(request: Request) -> HostWorkspaceListResponse:
 def list_environments(request: Request) -> HostEnvironmentListResponse:
     """Every workspace's environments, held or free; a held one names its runner and its chunk's project."""
     wiring = RunnerWiring.of(request)
+    declared = tuple(workspace.workspace_id for workspace in wiring.workspaces())
     held: list[tuple[str, str, EnvBinding]] = []
     for served in wiring.runners().served:
         runner = wiring.for_runner(served)
-        home = runner.config().home_workspace.id
+        bound = runner.config().bound_workspace_ids
         held.extend(
-            (served.runner_id, binding.workspace_id or home, binding)
+            (served.runner_id, held_workspace_id(binding.workspace_id, bound, declared), binding)
             for binding in runner.read_stores().environments.held_bindings()
         )
     return HostEnvironmentListResponse(

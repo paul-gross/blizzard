@@ -15,7 +15,7 @@ from __future__ import annotations
 import contextlib
 import os
 import sqlite3
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -182,10 +182,12 @@ class IRunnerRowMoves(Protocol):
         runner_id: str,
         *,
         workspace_ids: Mapping[str, str] | None = None,
+        bound_workspaces: Sequence[str] = (),
         ingest: HostIngest | None = None,
     ) -> None:
         """Copy ``runner_id``'s rows from the store at ``source_url`` into the one at ``destination_url``, in one
-        destination transaction; the source is only read."""
+        destination transaction; the source is only read. ``bound_workspaces`` are the workspaces the runner binds
+        (:meth:`IRunnerTransfer.copy_runner`)."""
         ...
 
     def remove_runner_rows(self, url: str, runner_id: str, *, keep_counters: bool) -> None:
@@ -308,7 +310,9 @@ class Runtime:
                 MigrationRunner(script_location=MIGRATIONS_DIR, url=sqlite_url(pending)).upgrade("head")
             except (MigrationConnectionError, MigrationRefused) as exc:
                 raise ConfigError(f"cannot create the archive store at {pending}: {exc}") from exc
-            rows.copy_runner(config.db_url, sqlite_url(pending), runner_id)
+            rows.copy_runner(
+                config.db_url, sqlite_url(pending), runner_id, bound_workspaces=_bound_workspaces(config, runner_id)
+            )
             single_file(pending)
             os.replace(pending, archive)
             rows.remove_runner_rows(config.db_url, runner_id, keep_counters=True)
@@ -432,6 +436,14 @@ def _reset_target(config: HostConfig, runner: str) -> tuple[str, str]:
         f"{config.config_path} declares no runner {runner!r} (it holds {held}); name a runner it declares, or one it "
         "no longer declares by its id"
     )
+
+
+def _bound_workspaces(config: HostConfig, runner_id: str) -> tuple[str, ...]:
+    """The workspaces the host file's ``[[runner]]`` for ``runner_id`` binds; none for one it no longer declares."""
+    for entry in config.runners:
+        if entry.id == runner_id:
+            return tuple(dict.fromkeys(binding.workspace for binding in entry.bindings))
+    return ()
 
 
 #: The prefix every hub-minted runner id carries.

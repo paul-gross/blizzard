@@ -21,9 +21,12 @@ from blizzard.runner.cli import runners as runners_cli
 from blizzard.runner.composition import DotenvTokenFiles, RunnerStoreFiles, build_host_stores, build_identity_writer
 from blizzard.runner.host_config import HOST_TOKEN_VARIABLE, BuiltRunner, HostConfig
 from blizzard.runner.host_layout import HostFileEditor, HostLayout, HostLock, append_workspace
+from blizzard.runner.hub.client import HostRefusalReason, HostRefused, HubClientError
+from blizzard.runner.hub.host_identity import HostIdentity
 from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.hub.internal.token_file import HubTokenFile
 from blizzard.runner.hub.token_file import ENV_FILENAME
+from blizzard.runner.ingest import RunnerIngest
 from blizzard.runner.runtime import init_environment, migration_runner
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
 from tests.runner_ingest_support import (
@@ -409,11 +412,11 @@ def _fail_once(monkeypatch: pytest.MonkeyPatch, owner: type, method: str) -> Non
     original = getattr(owner, method)
     calls: list[int] = []
 
-    def failing(self: object, *args: object) -> None:
+    def failing(self: object, *args: object) -> object:
         calls.append(1)
         if len(calls) == 1:
             raise OSError(f"injected failure in {method}")
-        original(self, *args)
+        return original(self, *args)
 
     monkeypatch.setattr(owner, method, failing)
 
@@ -474,6 +477,8 @@ def test_a_rerun_after_the_source_ran_is_refused_naming_both_stores(
 #: The revision a runner before hosts left its store at.
 _PRE_HOST_REVISION = "20261011_1000_runner_scope"
 _PRE_HOST_TOKEN = "tok_pre_host"
+#: The revision before the one that scopes every runner table by runner.
+_BEFORE_RUNNER_SCOPE = "20261009_1000_runner_lease_closures_lease_id_index"
 
 
 def _pre_host_directory(root: Path) -> None:
@@ -610,3 +615,156 @@ def test_a_rerun_after_a_kill_at_either_point_is_refused_once_the_source_ran(
 class _Clock:
     def now(self):  # type: ignore[no-untyped-def]
         return T0
+
+
+def test_ingest_carries_a_relative_prompt_file_as_a_path_into_the_source_host(
+    tmp_path: Path, fake_init_hub: FakeInitHub
+) -> None:
+    hosts = two_hosts(tmp_path, fake_init_hub)
+    theirs = HostLayout(hosts.there).config_path
+    (hosts.there / "standing.md").write_text("standing prompt\n")
+    theirs.write_text(theirs.read_text().replace('prompt_file = ""', 'prompt_file = "standing.md"', 1))
+    assert HostConfig.load(hosts.there).workspaces[0].prompt_file == "standing.md"
+
+    result = _ingest(fake_init_hub, hosts, "--workspace-id", _NEW_WORKSPACE)
+
+    assert result.exit_code == 0, result.output
+    carried = next(w for w in HostConfig.load(hosts.here).workspaces if w.id == _NEW_WORKSPACE)
+    assert carried.prompt_file == str(HostConfig.load(hosts.there).root / "standing.md")
+    assert carried.resolved_prompt(HostConfig.load(hosts.here).root) == "standing prompt\n"
+
+
+def _downgraded(root: Path, revision: str) -> None:
+    """``root``'s store at ``revision``, holding the moving runner alone: a downgrade refuses a store of several."""
+    engine = _engine(root)
+    with engine.begin() as conn:
+        shape = reflect(engine).tables["runner_identity"]
+        conn.execute(sa.delete(shape).where(shape.c.runner_id != MOVING_ID))
+    engine.dispose()
+    migration_runner(HostConfig.load(root)).downgrade(revision)
+
+
+def test_ingest_removes_a_runner_from_a_source_store_behind_head(tmp_path: Path, fake_init_hub: FakeInitHub) -> None:
+    hosts = two_hosts(tmp_path, fake_init_hub)
+    _downgraded(hosts.there, _PRE_HOST_REVISION)
+
+    result = _ingest(fake_init_hub, hosts, "--workspace-id", _NEW_WORKSPACE)
+
+    assert result.exit_code == 0, result.output
+    assert "set aside" in result.output and not HostLayout(hosts.there).store_path.exists()
+    here = _engine(hosts.here)
+    assert len(rows(here, "runner_identity", runner_id=MOVING_ID)) == 1
+    here.dispose()
+    assert HubTokenFile.of(hosts.here, _VARIABLE).held() == _TOKEN
+
+
+def test_ingest_is_refused_for_a_source_store_behind_the_revision_that_scopes_its_tables_by_runner(
+    tmp_path: Path, fake_init_hub: FakeInitHub
+) -> None:
+    hosts = two_hosts(tmp_path, fake_init_hub)
+    _downgraded(hosts.there, _BEFORE_RUNNER_SCOPE)
+
+    _refuse(fake_init_hub, hosts, "predates the revision", "--workspace-id", _NEW_WORKSPACE)
+
+
+def test_ingest_is_refused_when_the_hub_cannot_be_reached_for_this_hosts_record(
+    tmp_path: Path, fake_init_hub: FakeInitHub
+) -> None:
+    hosts = two_hosts(tmp_path, fake_init_hub)
+    fake_init_hub.host_record = HubClientError("connection refused")
+
+    _refuse(fake_init_hub, hosts, "cannot read this host's record at the hub")
+
+
+def test_ingest_is_refused_when_the_hub_refuses_this_hosts_record(tmp_path: Path, fake_init_hub: FakeInitHub) -> None:
+    hosts = two_hosts(tmp_path, fake_init_hub)
+    fake_init_hub.host_record = HostRefused(HostRefusalReason.CREDENTIAL_REFUSED, 401, "unknown host token")
+
+    _refuse(fake_init_hub, hosts, "refuses this host's record (401: unknown host token)")
+
+
+def test_ingest_is_refused_when_this_host_is_recorded_as_another_host(
+    tmp_path: Path, fake_init_hub: FakeInitHub
+) -> None:
+    hosts = two_hosts(tmp_path, fake_init_hub, identified=False)
+    engine = _engine(hosts.here)
+    build_host_stores(engine, errors=_errors(), clock=_Clock()).host_identity.record_host_identity(
+        HostIdentity("hs_other", TENANT, T0)
+    )
+    engine.dispose()
+
+    _refuse(fake_init_hub, hosts, f"this host is recorded as hs_other in {TENANT}, but its hub answers as {HERE_HOST}")
+
+
+def test_a_rerun_after_the_removal_completes_a_host_directory_ingest_without_touching_its_rows(
+    tmp_path: Path, fake_init_hub: FakeInitHub, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    hosts = _seeded(tmp_path, fake_init_hub)
+    _fail_once(monkeypatch, RunnerIngest, "_set_aside_emptied")
+    assert _ingest(fake_init_hub, hosts, "--workspace-id", _NEW_WORKSPACE).exit_code != 0
+    there = _engine(hosts.there)
+    assert rows(there, "runner_identity", runner_id=MOVING_ID) == [], "the rows left the source before the failure"
+    here = _engine(hosts.here)
+    held = {name: contents(here, name, runner_id=MOVING_ID) for name in RUNNER_TABLES}
+
+    result = _ingest(fake_init_hub, hosts, "--workspace-id", _NEW_WORKSPACE)
+
+    assert result.exit_code == 0 and "completed the ingest of runner r2" in result.output, result.output
+    assert {name: contents(here, name, runner_id=MOVING_ID) for name in RUNNER_TABLES} == held
+    assert invariant_violations(here) == []
+    here.dispose()
+    there.dispose()
+
+
+def test_a_rerun_after_the_removal_moves_an_emptied_archive_aside(
+    tmp_path: Path, fake_init_hub: FakeInitHub, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    hosts = _seeded(tmp_path, fake_init_hub)
+    assert _ingest(fake_init_hub, hosts, "--workspace-id", _NEW_WORKSPACE).exit_code == 0
+    ok(fake_init_hub, "store", "reset", str(hosts.here), "--runner", MOVING)
+    [archive] = [p for p in HostLayout(hosts.here).data_dir.iterdir() if p.name.startswith("host.db.r2.")]
+    _fail_once(monkeypatch, RunnerIngest, "_set_aside_emptied")
+    assert _ingest(fake_init_hub, hosts, source=archive).exit_code != 0
+    assert archive.exists()
+
+    result = _ingest(fake_init_hub, hosts, source=archive)
+
+    assert result.exit_code == 0 and "completed the ingest of runner r2" in result.output, result.output
+    assert not archive.exists() and f"set aside {archive}." in result.output
+
+
+def test_an_archive_carries_the_prompt_of_the_workspace_its_runner_is_bound_to_though_no_row_names_it(
+    tmp_path: Path, fake_init_hub: FakeInitHub
+) -> None:
+    hosts = _seeded(tmp_path, fake_init_hub)
+    there = _engine(hosts.there)
+    with there.begin() as conn:
+        conn.execute(
+            sa.insert(reflect(there).tables["workspace_prompt"]).values(
+                workspace_id="workspace-local", prompt="the standing prompt", updated_at=T0
+            )
+        )
+        conn.execute(sa.delete(reflect(there).tables["env_bindings"]).where(sa.column("runner_id") == MOVING_ID))
+    there.dispose()
+
+    assert _ingest(fake_init_hub, hosts, "--workspace-id", _NEW_WORKSPACE).exit_code == 0
+
+    here = _engine(hosts.here)
+    prompts = {r["workspace_id"]: r["prompt"] for r in rows(here, "workspace_prompt")}
+    assert prompts[_NEW_WORKSPACE] == "the standing prompt"
+    ok(fake_init_hub, "store", "reset", str(hosts.here), "--runner", MOVING)
+    [archive] = [p for p in HostLayout(hosts.here).data_dir.iterdir() if p.name.startswith("host.db.r2.")]
+    archived = create_engine_from_url(f"sqlite:///{archive}")
+    assert {r["workspace_id"] for r in rows(archived, "workspace_prompt")} >= {_NEW_WORKSPACE}
+    archived.dispose()
+    with here.begin() as conn:
+        conn.execute(
+            sa.delete(reflect(here).tables["workspace_prompt"]).where(sa.column("workspace_id") == _NEW_WORKSPACE)
+        )
+
+    result = _ingest(fake_init_hub, hosts, source=archive)
+
+    assert result.exit_code == 0, result.output
+    prompts = {r["workspace_id"]: r["prompt"] for r in rows(here, "workspace_prompt")}
+    assert prompts[_NEW_WORKSPACE] == "the standing prompt"
+    here.dispose()

@@ -16,7 +16,14 @@ from blizzard.runner.config import (
     ConfigError,
     RunnerConfig,
 )
-from blizzard.runner.host_config import HaltedRunner, HostConfig, HostConfigError
+from blizzard.runner.host_config import (
+    _GRADUATED_WORKSPACE_KEYS,
+    _RETIRED_KEYS,
+    HaltedRunner,
+    HostConfig,
+    HostConfigError,
+    _graduated_raw,
+)
 from tests.harness_sections import claude_code, opencode
 from tests.host_files import write_minimal_host
 
@@ -242,3 +249,19 @@ def test_the_default_store_is_omitted_from_the_written_file_and_a_custom_one_is_
     custom: Any = _config(tmp_path / "b", top='db_url = "postgresql://runner@db.test/runner"\n')
     assert custom.db_url == "postgresql://runner@db.test/runner"
     assert 'db_url = "postgresql://runner@db.test/runner"' in HostConfig.load(tmp_path / "b").to_toml()
+
+
+def test_every_retired_key_graduates_to_its_placement_and_never_into_the_runner() -> None:
+    legacy: dict[str, object] = {key: f"v-{key}" for key in _RETIRED_KEYS}
+    legacy.update(workspace_envs=["e1"], workspace_repo=[], max_agents=2, external_subscription_usage={})
+
+    raw = _graduated_raw(legacy, runner_id="rn_graduated", served=("p",))
+
+    (runner,) = raw["runner"]
+    (workspace,) = raw["workspace"]
+    assert not set(_RETIRED_KEYS) & (set(runner) | set(raw))
+    assert {_GRADUATED_WORKSPACE_KEYS[key] for key in _RETIRED_KEYS if key in _GRADUATED_WORKSPACE_KEYS} <= set(
+        workspace
+    )
+    assert [binding["agents"] for binding in runner["projects"]] == [2]
+    assert runner["subscription"] == "anthropic"

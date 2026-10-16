@@ -248,9 +248,10 @@ The ingest reads the source only through a copy taken with SQLite's backup API o
 this build's schema, so the source's store is not written until the runner's rows leave it. Then it:
 
 1. copies the runner's rows into this host's store in one transaction, which records the ingest;
-2. appends the runner's `[[workspace]]` unless this host declares one with the same root and environments, its
-   `[[subscription]]` unless this host declares that slug, and its `[[runner]]`, with each path key that points into
-   the source rewritten to a copy of that file or directory under `runners/<name>/`;
+2. appends the runner's `[[workspace]]` unless this host declares one with the same root and environments, with a
+   relative `prompt_file` made absolute against the source host's directory, its `[[subscription]]` unless this host
+   declares that slug, and its `[[runner]]`, with each path key that points into the source rewritten to a copy of that
+   file or directory under `runners/<name>/`;
 3. writes its token to this host's `.env` as `BZ_HUB_TOKEN_<NAME>` and removes it from the source's, so the source can
    no longer run the runner;
 4. deletes the runner's rows from the source. A source store left with no runner is moved aside whole under a
@@ -284,7 +285,9 @@ The ingest refuses, changing nothing, when:
 - a held environment of the runner is one a runner of this host holds;
 - the source's `.env` holds no token for the runner, or this host's holds a different one;
 - both stores hold a different prompt override for one workspace, naming both;
-- the source store is at a revision this build does not know.
+- the source store is at a revision this build does not know, or behind the one that scopes every table by runner, which
+  leaves its rows no way to be removed one runner at a time. A source between that revision and this build's head is
+  ingested, and the removal deletes only from the tables it has.
 
 Re-running an interrupted ingest completes it: a runner this host's store holds from an ingest of the same source
 skips the copy and finishes the configuration and the removal. If the source has run since the copy, its liveness stamp

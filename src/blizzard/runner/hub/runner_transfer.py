@@ -7,7 +7,7 @@ there too; it never writes the source. A removal deletes one runner's rows from 
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
@@ -95,11 +95,20 @@ class IWriteHostIngestRepository(IReadHostIngestRepository, Protocol):
 class IRunnerTransfer(Protocol):
     """Copy one runner from a source store into a destination store."""
 
-    def copy_runner(self, *, workspace_ids: Mapping[str, str] | None = None, ingest: HostIngest | None = None) -> None:
+    def copy_runner(
+        self,
+        *,
+        workspace_ids: Mapping[str, str] | None = None,
+        bound_workspaces: Sequence[str] = (),
+        ingest: HostIngest | None = None,
+    ) -> None:
         """Copy every runner-scoped row of the runner, its outbox rows under their own ``seq``s and each lane's counter
         at the larger of the two stores', then merge the source's host rows and record ``ingest`` when given — all in
         one destination transaction, so a failure leaves the destination as it was. ``workspace_ids`` renames a
-        workspace id the copied rows name; an id it leaves out keeps its name."""
+        workspace id the copied rows name; an id it leaves out keeps its name. The workspaces the host merge carries
+        are the ``bound_workspaces`` the runner's ``[[runner]]`` binds, each under its renamed id, and then the ones
+        its rows name: a runner bound to a workspace that no row of it names still carries that workspace's
+        host-scoped rows."""
         ...
 
 

@@ -372,25 +372,21 @@ class RunnerStatusService:
 
     def environments(self) -> list[EnvironmentSlot]:
         """The pool of every workspace the runner binds, in binding order, each joined against this runner's held
-        binding facts (``EnvironmentSlot.pool_view``). A held row naming no workspace joins the first."""
+        binding facts (``EnvironmentSlot.pool_view``), then the pool of any other workspace a held row of this runner
+        names and the host declares. A held row naming no declared workspace joins the runner's home
+        (``IWorkspaces.held``)."""
         held = self._environments.held_bindings()
-        workspace_ids = self._workspaces_bound()
+        bound = tuple(dict.fromkeys(binding.workspace_id for binding in self._bindings))
+        declared = self._workspaces.ids()
+        listed = tuple(w for w in bound if w in declared) or (self._workspaces.home(bound),)
+        workspace_ids = tuple(dict.fromkeys((*listed, *(self._workspaces.held(b.workspace_id, bound) for b in held))))
         slots: list[EnvironmentSlot] = []
-        for position, workspace_id in enumerate(workspace_ids):
+        for workspace_id in workspace_ids:
             provider = self._workspaces.provider(workspace_id)
             pool = provider.pool() if provider is not None else ()
-            own = [
-                b
-                for b in held
-                if b.workspace_id == workspace_id or (position == 0 and b.workspace_id not in workspace_ids)
-            ]
+            own = [b for b in held if self._workspaces.held(b.workspace_id, bound) == workspace_id]
             slots.extend(EnvironmentSlot.pool_view(pool, own, workspace_id=workspace_id))
         return slots
-
-    def _workspaces_bound(self) -> tuple[str, ...]:
-        """Each workspace the runner's bindings name, in binding order; else the one it is reported by."""
-        bound = tuple(dict.fromkeys(binding.workspace_id for binding in self._bindings))
-        return bound or (self._workspace_id,)
 
     def open_asks(self) -> list[OpenAsk]:
         return self._asks.open_asks()

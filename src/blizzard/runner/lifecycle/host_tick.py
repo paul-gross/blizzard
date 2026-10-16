@@ -15,10 +15,10 @@ from blizzard.runner.usage.external_usage_sample import ExternalUsageSamplePass
 
 @dataclass(frozen=True)
 class HostTick:
-    """One pass over the host-scoped steps: the host's registration, absent on a host with no host token; the
-    usage-sampling pass, absent when the host declares no subscription; the host's lane drain, absent with the
-    registration — after sampling, so a sample buffered this pass leaves in it; then the credential-renewal pass,
-    absent when no provider binds a renewer."""
+    """One pass over the host-scoped steps, in this order: the host's registration, absent on a host with no host
+    token; the credential-renewal pass, absent when no provider binds a renewer — before sampling, so a slow vendor
+    endpoint never delays it; the usage-sampling pass, absent when the host declares no subscription; then the host's
+    lane drain, absent with the registration — after sampling, so a sample buffered this pass leaves in it."""
 
     registration: HostRegistration | None = None
     external_usage_sample: ExternalUsageSamplePass | None = None
@@ -32,9 +32,9 @@ class HostTick:
 
     def run(self) -> None:
         self.report()
+        if self.credential_renewal is not None:
+            self.credential_renewal.run()
         if self.external_usage_sample is not None:
             self.external_usage_sample.run()
         if self.lane_drain is not None:
             self.lane_drain.run()
-        if self.credential_renewal is not None:
-            self.credential_renewal.run()

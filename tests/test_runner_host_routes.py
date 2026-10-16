@@ -351,6 +351,22 @@ def test_a_released_binding_reverts_its_slot_to_free(tmp_path: Path) -> None:
     ]
 
 
+def test_a_held_binding_naming_an_undeclared_workspace_is_listed_under_its_runners_home(tmp_path: Path) -> None:
+    app, a_stores, _b = _two_runner_app(tmp_path)
+    a_stores.environments.record_binding(
+        chunk_id="ch_1", environment_id="e2", workdir="/ws/e2", bound_at=_NOW, workspace_id="ws-gone"
+    )
+
+    (workspace,) = TestClient(app).get("/api/host/environments").json()["workspaces"]
+
+    assert workspace["workspace_id"] == "ws-1"
+    assert [(i["environment_id"], i["chunk_id"]) for i in workspace["items"]] == [
+        ("e1", None),
+        ("e2", "ch_1"),
+        ("e3", None),
+    ]
+
+
 def test_a_held_binding_off_the_pool_or_doubled_on_a_slot_still_surfaces(tmp_path: Path) -> None:
     """A binding on an id no longer in the (resized) pool, or a second one on the same slot after a crash/requeue
     race, still holds a chunk — neither collapses nor vanishes."""
