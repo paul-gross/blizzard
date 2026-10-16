@@ -146,14 +146,14 @@ describe('BoardShell', () => {
     expect(el.querySelectorAll('[data-col]')).toHaveLength(6);
   });
 
-  it('engraves the backlog column BACKLOG and the queue column READY, in dispatch order', async () => {
+  it('engraves the backlog column BACKLOG and the queue column READY, in lane order', async () => {
     const fixture = TestBed.createComponent(BoardShell);
     fixture.componentRef.setInput('state', 'ready');
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
     const heads = [...el.querySelectorAll('[data-col] .col-lbl')].map((n) => n.textContent?.trim());
-    expect(heads).toEqual(['BACKLOG', 'READY', 'RUNNING', 'WAIT/HUMAN', 'NEEDS HUMAN', 'DONE']);
+    expect(heads).toEqual(['BACKLOG', 'READY', 'WAIT/HUMAN', 'NEEDS HUMAN', 'RUNNING', 'DONE']);
   });
 
   it('renders a not-ready chunk in the backlog column with a Promote action that emits its id', async () => {
