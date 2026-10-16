@@ -2,7 +2,6 @@ import { inject } from '@angular/core';
 import { QueryClient, injectMutation } from '@tanstack/angular-query-experimental';
 
 import {
-  type HostRegistryView,
   enrollHostApiHostsHostIdEnrollmentsPost,
   hubHostsKey,
   hubRunnersKey,
