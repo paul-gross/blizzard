@@ -23,6 +23,7 @@ from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.deps import Services
 from blizzard.hub.api.project_params import PROJECT_REQUIRED, QueryProject
+from blizzard.hub.api.user_names import user_names
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.composition import TenantServices
 from blizzard.hub.documents.codec import ConfigDecodeError, codec_for_media_type
@@ -135,8 +136,7 @@ def _labels(changes: list[ConfigChange], services: TenantServices) -> dict[tuple
 def _actor_names(changes: list[ConfigChange], services: TenantServices) -> dict[str, str]:
     """The display name — else the username — of each user actor a page of changes names, in one read
     (``bzh:bulk-reconstitution``); an actor that is no user is absent."""
-    users = services.users.get_many(list({c.actor for c in changes}))
-    return {user_id: user.display_name or user.username for user_id, user in users.items()}
+    return user_names(services, (c.actor for c in changes))
 
 
 def _view(change: ConfigChange, labels: dict[tuple[RecordKind, str], str], names: dict[str, str]) -> ConfigChangeView:

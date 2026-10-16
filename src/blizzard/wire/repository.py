@@ -21,6 +21,7 @@ class RepositorySummary(BaseModel):
     revision: int
     created_at: str
     created_by: str
+    created_by_name: str | None = None
     retired: bool = False
 
 

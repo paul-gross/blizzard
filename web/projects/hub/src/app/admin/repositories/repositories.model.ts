@@ -42,7 +42,7 @@ export function repositoryRecordVm(repository: RepositorySummary | undefined): C
       { label: 'Owner', value: factText(repository.owner) },
       { label: 'Repository', value: factText(repository.repo) },
       { label: 'Base branch', value: factText(repository.base_branch) },
-      { label: 'Created by', value: factText(repository.created_by) },
+      { label: 'Created by', value: factText(repository.created_by_name ?? repository.created_by) },
     ],
     revision: repository.revision,
     note: repository.retired ? 'Retired — nothing new lands in it.' : null,

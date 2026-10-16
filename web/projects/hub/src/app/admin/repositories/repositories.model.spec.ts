@@ -61,6 +61,12 @@ describe('repositoryRecordVm', () => {
     expect(vm.hasHistory).toBe(true);
   });
 
+  it('shows who created it by name, falling back to the id', () => {
+    const createdBy = (repository: RepositorySummary) => repositoryRecordVm(repository)!.facts.find((f) => f.label === 'Created by')?.value;
+    expect(createdBy({ ...BLIZZARD, created_by_name: 'Paul Gross' })).toBe('Paul Gross');
+    expect(createdBy(BLIZZARD)).toBe('pgross');
+  });
+
   it('titles a row by slug and shows a name that differs from it', () => {
     expect(repositoryRows([OLD], 'all')[0]).toMatchObject({ title: 'old', sub: ['Old one', 'paul-gross/blizzard', 'base master'] });
   });

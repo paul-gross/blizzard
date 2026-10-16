@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from blizzard.auth_core import Role
+from blizzard.hub.api.user_names import user_names
 from tests.support import HubHarness, build_hub, seed_session, seed_user
 
 pytestmark = pytest.mark.component
@@ -825,3 +826,29 @@ def test_the_change_log_names_user_actors_total_and_lenses_a_project(tmp_path: P
     lensed = read(project="alpha")
     assert {c["project_id"] for c in lensed["changes"]} == {alpha, None}
     assert lensed["total"] == len(lensed["changes"]) < everything["total"]
+
+
+def test_admin_records_name_a_user_actor_and_leave_a_non_user_actor_to_its_id(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path, auth_mode="oauth", repositories=(), link=False)
+    ada = seed_user(hub, username="ada", role=Role.ADMIN, display_name="Ada Lovelace")
+    headers = {"Authorization": f"Bearer {seed_session(hub, ada)}"}
+    assert hub.client.post("/api/secrets", json={"name": "gh", "value": "v"}, headers=headers).status_code == 201
+    repository = {"slug": "r", "forge_api_url": "https://api.github.com", "owner": "o", "repo": "r"}
+    assert (
+        hub.client.post(
+            "/api/repositories", json={**repository, "base_branch": "master", "secret_name": "gh"}, headers=headers
+        ).status_code
+        == 201
+    )
+    assert hub.client.post("/api/work-sources", json={**_DEMO, "secret": "gh"}, headers=headers).status_code == 201
+
+    secret = hub.client.get("/api/secrets/gh", headers=headers).json()
+    listed_repository = hub.client.get("/api/repositories", headers=headers).json()["repositories"][0]
+    source = hub.client.get("/api/work-sources/demo", headers=headers).json()
+    assert secret["replaced_by"] == ada.user_id and secret["replaced_by_name"] == "Ada Lovelace"
+    assert listed_repository["created_by_name"] == "Ada Lovelace"
+    assert source["created_by"] == ada.user_id and source["created_by_name"] == "Ada Lovelace"
+
+    # A stored id that is no user — a config door, a deleted user — carries no name.
+    assert user_names(hub.services, [ada.user_id, "migration", "usr_gone"]) == {ada.user_id: "Ada Lovelace"}
+    assert hub.client.get("/api/work-sources/hub", headers=headers).json()["created_by_name"] is None

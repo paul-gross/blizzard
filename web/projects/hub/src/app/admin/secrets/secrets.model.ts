@@ -39,7 +39,7 @@ export function secretRecordVm(secret: SecretView | undefined): ConfigRecordVm |
     badges: secretBadges(secret),
     facts: [
       { label: 'Value', value: '•••••••• write-only, never shown' },
-      { label: 'Replaced by', value: secret.replaced_by },
+      { label: 'Replaced by', value: secret.replaced_by_name ?? secret.replaced_by },
     ],
     revision: secret.revision,
     note: null,

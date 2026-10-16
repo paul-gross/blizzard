@@ -33,6 +33,7 @@ class WorkSourceSummary(BaseModel):
     revision: int | None = None
     created_at: str | None = None
     created_by: str | None = None
+    created_by_name: str | None = None
     retired: bool = False
     built_in: bool = False
 

@@ -66,6 +66,12 @@ describe('workSourceRecordVm', () => {
     expect(vm.note).toBeNull();
   });
 
+  it('shows who created it by name, falling back to the id', () => {
+    const createdBy = (source: WorkSourceSummary) => workSourceRecordVm(source)!.facts.find((f) => f.label === 'Created by')?.value;
+    expect(createdBy({ ...WINTER, created_by: 'usr_1', created_by_name: 'Paul Gross' })).toBe('Paul Gross');
+    expect(createdBy({ ...WINTER, created_by: 'usr_1' })).toBe('usr_1');
+  });
+
   it('titles the record by slug and shows the display name as a fact', () => {
     const vm = workSourceRecordVm(OLD)!;
     expect(vm.name).toBe('old');
