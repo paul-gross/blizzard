@@ -204,9 +204,7 @@ describe('gardening findings filter row and row disambiguation shell sweep (web:
       ]) {
         expect(root.querySelector(`[data-testid="${testid}"]`), `${width}px: missing ${testid}`).not.toBeNull();
       }
-      for (const label of root.querySelectorAll<HTMLElement>('.gf-filter-label')) {
-        expect(getComputedStyle(label).display, `${width}px: ${label.textContent} label column still shows`).toBe('none');
-      }
+      expect(root.querySelector('.gf-filter-label'), `${width}px: a filter label column is back`).toBeNull();
 
       const row = root.querySelector<HTMLElement>('[data-testid="gardening-finding-row-fnd_1"]')!;
       expect(row).not.toBeNull();

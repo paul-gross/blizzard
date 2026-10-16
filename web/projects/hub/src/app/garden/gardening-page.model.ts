@@ -10,10 +10,10 @@ export function waitingProposalCount(proposals: readonly GardenProposalView[]): 
 }
 
 /**
- * The surfaces of a project's garden, in the strip's order. Runs and findings share one surface: a run is a sweep and
- * its findings are what it found, so the findings list is that surface's second view.
+ * The surfaces of a project's garden, in the strip's order. A run is read once, when it lands; a finding is read
+ * repeatedly until it is gone — so each is its own surface.
  */
-export const GARDEN_SURFACES = ['scopes', 'routines', 'runs', 'proposals'] as const;
+export const GARDEN_SURFACES = ['scopes', 'routines', 'runs', 'findings', 'proposals'] as const;
 export type GardenSurface = (typeof GARDEN_SURFACES)[number];
 
 /** The route segments each surface covers. */
@@ -21,14 +21,15 @@ const SURFACE_TABS: Readonly<Record<string, GardenSurface>> = {
   scopes: 'scopes',
   routines: 'routines',
   runs: 'runs',
-  findings: 'runs',
+  findings: 'findings',
   proposals: 'proposals',
 };
 
 const SURFACE_LABELS: Readonly<Record<GardenSurface, string>> = {
   scopes: 'Scopes',
   routines: 'Routines',
-  runs: 'Runs & findings',
+  runs: 'Runs',
+  findings: 'Findings',
   proposals: 'Proposals',
 };
 
@@ -51,24 +52,26 @@ export interface GardenSurfaceTab {
 }
 
 /**
- * The tabs' counts from the lists' reads, each `null` until its read answers: the scopes, routines and runs listed,
- * and the proposals waiting on a person.
+ * The tabs' counts from the lists' reads, each `null` until its read answers: the scopes, routines, runs and findings
+ * listed, and the proposals waiting on a person.
  */
 export function gardenSurfaceCounts(reads: {
   readonly scopes: readonly unknown[] | undefined;
   readonly routines: readonly unknown[] | undefined;
   readonly runs: readonly unknown[] | undefined;
+  readonly findings: readonly unknown[] | undefined;
   readonly proposals: readonly GardenProposalView[] | undefined;
 }): Readonly<Record<GardenSurface, number | null>> {
   return {
     scopes: reads.scopes?.length ?? null,
     routines: reads.routines?.length ?? null,
     runs: reads.runs?.length ?? null,
+    findings: reads.findings?.length ?? null,
     proposals: reads.proposals === undefined ? null : waitingProposalCount(reads.proposals),
   };
 }
 
-/** The strip's four tabs with their counts: the lists' own lengths, and for Proposals the ones waiting on a person. */
+/** The strip's five tabs with their counts: the lists' own lengths, and for Proposals the ones waiting on a person. */
 export function gardenSurfaceTabs(counts: Readonly<Record<GardenSurface, number | null>>): readonly GardenSurfaceTab[] {
   return GARDEN_SURFACES.map((surface) => ({ surface, label: SURFACE_LABELS[surface], count: counts[surface] }));
 }
