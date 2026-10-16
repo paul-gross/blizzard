@@ -60,6 +60,24 @@ On mobile, the Findings sub-tab opens on its filters and list alone. Selecting a
 full-width finding panel; its Back row restores the same filtered list because the filter query parameters remain in the
 URL throughout the drill-down.
 
+### Local findings-read latency
+
+On one migrated synthetic SQLite hub store with 5,000 findings under one routine/scope (half with a newer `gone` fact),
+the historical and paged `FindingStore.list_page` implementations were run against the **same unchanged store**. Each
+reading is the mean of seven calls after one warm-up, in milliseconds; the historical implementation was loaded from the
+feature branch's base revision while the paged implementation came from the feature branch. These are adapter read-path
+timings, not HTTP or hosted-fleet latencies.
+
+| Read | Historical | Paged implementation |
+| --- | ---: | ---: |
+| First 50 live findings, ascending | 10.96 | 10.47 |
+| First 1,000 findings, all states, ascending | 31.22 | 29.06 |
+| First 50 live findings, descending | — | 16.39 |
+
+The board's previous all-states drain paid for every page; its initial read now requests only 50 live findings. The
+descending page costs more than the old ascending first page on this synthetic store, but bounds first-load response size
+independently of the finding count. This local ratio does not predict absolute latency on a hosted volume.
+
 ### Review-sourced findings
 
 A delivery lane's review round can raise a finding too, alongside a routine's own — carrying no routine, a `severity`
