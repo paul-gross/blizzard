@@ -13,6 +13,7 @@ import zlib
 from collections.abc import Iterator
 from concurrent.futures import Executor, ThreadPoolExecutor
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -32,6 +33,7 @@ from blizzard.runner.host_config import HostConfig
 from blizzard.runner.store.runner_guard import GUARD_ENVIRONMENT_VARIABLE as RUNNER_GUARD_ENVIRONMENT_VARIABLE
 from blizzard.runner.store.runner_guard import install_runner_guard
 from tests.head_replay_guard import install_head_replay_guard
+from tests.revision_age import InvalidRevisionMarker, decide, revision_index
 from tests.repo_files import install_repo_read_guard
 
 # Its autouse fixture joins every in-process runner init to a fake hub.
@@ -78,6 +80,7 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
     UNMARKED_TEST_NODEIDS[:] = [
         item.nodeid for item in items if not (_TIER_MARKERS & {mark.name for mark in item.iter_markers()})
     ]
+    _retire_aged_revision_tests(items)
     spec = os.environ.get(SHARD_ENV)
     if not spec:
         return
@@ -86,6 +89,25 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
     if deselected:
         config.hook.pytest_deselected(items=deselected)
         items[:] = [item for item in items if shard_of(item.nodeid, count) == index]
+
+
+def _retire_aged_revision_tests(items: list[pytest.Item]) -> None:
+    """Skip each ``migration_revision`` test whose revision has aged out; refuse a marker naming no revision.
+
+    Runs before sharding, so a bad marker fails every shard and shard membership stays a nodeid hash.
+    """
+    today = datetime.now(UTC).date()
+    index = revision_index()
+    for item in items:
+        marker = item.get_closest_marker("migration_revision")
+        if marker is None:
+            continue
+        try:
+            retired = decide(marker.args, today=today, environ=os.environ, index=index)
+        except InvalidRevisionMarker as error:
+            raise pytest.UsageError(f"{item.nodeid}: migration_revision: {error}") from error
+        if retired is not None:
+            item.add_marker(pytest.mark.skip(reason=retired.reason))
 
 
 def parse_shard(spec: str) -> tuple[int, int]:
