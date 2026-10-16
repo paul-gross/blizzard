@@ -117,7 +117,7 @@ nodes:
           description: The submitted work passes review and is ready for the pre-push integration step.
           to: pre-push
         fail:
-          description: Review found blocking issues, recorded in the review-findings asset.
+          description: Review found findings that block this round, recorded in the review-findings asset.
           to: build  # THE LOOP: the findings asset rides this edge back into build
           prompt_addendum: ./prompts/build.from-review.md
     retries:

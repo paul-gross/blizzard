@@ -272,10 +272,10 @@ nodes:
       prompt: ./prompts/review.judgement.md
       choices:
         pass:
-          description: The work passes the multi-axes review with no blocking findings.
+          description: The work passes the multi-axes review and nothing blocks this round.
           to: pre-push
         fail:
-          description: Review found blocking issues, recorded in the review-findings asset.
+          description: Review found findings that block this round, recorded in the review-findings asset.
           to: build
           prompt_addendum: ./prompts/build.from-review.md
     retries:

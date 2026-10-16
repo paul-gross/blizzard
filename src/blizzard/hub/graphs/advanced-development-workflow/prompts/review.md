@@ -47,10 +47,10 @@ judged per repo (`<repo> <branch> <full-sha>`, the next round's diff base), this
 delta and what it resolved), what you checked per axis, how you adjudicated every refutation, and every finding with:
 
 - **id** — `F1`, `F2`, …, stable within this submission only.
-- **severity** — `blocking` for what must be fixed before this passes, `should-fix` for a real defect below that bar; a
-  `should-fix` also carries `in-diff` when its anchor is a line or passage this change's own commits added or modified,
-  else `outside-diff` (untouched neighbouring code, a defect the change merely exposed, a chunk asset) — the judgement
-  decides by round whether it blocks.
+- **severity** — `blocking` for what must be fixed before this can land, `should-fix` for a real defect below that bar;
+  a `should-fix` also carries `in-diff` when its anchor is a line or passage this change's own commits added or
+  modified, else `outside-diff` (untouched neighbouring code, a defect the change merely exposed, a chunk asset) — the
+  round decides whether it blocks.
 - **anchor** — `<repo>/<path>:<line>`, `<repo>/<path>::<symbol>`, or `<asset-name>::<section>`.
 - a **description** — one or two sentences, at most 300 characters: the defect and its consequence, never the
   derivation; a fact needed to act on it (a reproduction command, an expected/actual pair) rides a `detail:`

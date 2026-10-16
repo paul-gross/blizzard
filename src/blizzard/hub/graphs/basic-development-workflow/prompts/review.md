@@ -18,10 +18,10 @@ inside the chunk's environment. Do not commit fixes from this node — review ob
 Anchor every finding — `<repo>/<path>:<line>` or `<repo>/<path>::<symbol>` — an unanchored finding can be neither acted
 on nor matched to a refutation.
 
-Grade each finding `blocking` — must be fixed before this passes — or `should-fix` — a real defect below that bar. A
+Grade each finding `blocking` — must be fixed before this can land — or `should-fix` — a real defect below that bar. A
 should-fix also carries `in-diff` when its anchor is a line or passage this change's own commits added or modified, else
-`outside-diff` (untouched neighbouring code, or a defect the change merely exposed). The tag only locates it; the
-judgement decides by round whether it blocks.
+`outside-diff` (untouched neighbouring code, or a defect the change merely exposed). The tag only locates it; the round
+decides whether it blocks.
 
 ## A re-visit reviews the delta
 

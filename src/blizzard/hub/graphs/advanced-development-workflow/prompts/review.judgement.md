@@ -12,9 +12,8 @@ A `blocking` finding blocks on every round. A `should-fix` blocks only on a firs
 from an earlier round — and only when tagged `in-diff`: a defect in what this change itself wrote is repaired while the
 build still holds the context. On a re-visit — any round with one, re-entry after `pre-push` included — no should-fix
 blocks, a still-open round-one `in-diff` one included: it is deferred on `pass`, so the loop converges after one repair
-round. A rejected refutation re-raises its finding as a should-fix that, on that re-visit, defers rather than blocks.
-Severity describes the defect and the round decides whether a should-fix blocks — never re-grade or re-tag a finding to
-steer the verdict.
+round. Severity describes the defect and the round decides whether a should-fix blocks — never re-grade or re-tag a
+finding to steer the verdict.
 
 Select `pass` if the work meets the plan and the item's intent and nothing blocks on any axis — on a re-visit, judged
 over the delta and the prior round's findings it resolved. Select `fail` if anything blocks; your findings ride back

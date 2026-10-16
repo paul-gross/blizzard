@@ -22,10 +22,9 @@ code, since this lane's subject is harness work — agent-facing conventions, sk
 
 Use the workspace's review tooling where it exists.
 
-Grade each finding `blocking` — must be fixed before this passes — or `should-fix` — a real defect below that bar. A
+Grade each finding `blocking` — must be fixed before this can land — or `should-fix` — a real defect below that bar. A
 should-fix also carries `in-diff` when its anchor is a line or passage this change's own commits added or modified, else
-`outside-diff` (an untouched passage, or a defect the change merely exposed); the judgement decides by round whether it
-blocks.
+`outside-diff` (an untouched passage, or a defect the change merely exposed); the round decides whether it blocks.
 
 ## A re-visit reviews the delta
 
@@ -48,7 +47,7 @@ first pass, and where present its newest submission is the whole record.
 
 Match a refutation to its finding by anchor, never id: every pass renumbers. A refutation is a claim to adjudicate,
 never a veto — findings about prose and convention are judgements, so good-faith disagreement is ordinary, and neither
-reflexive deference nor re-raising is review.
+reflexive deference nor reflexive re-raising is review.
 
 Answer every entry explicitly: silence is not acceptance. One marked `accepted` stays accepted, carried into this
 round's findings with its anchor. An `open` entry is accepted when its argument holds — the finding was wrong, rested on
