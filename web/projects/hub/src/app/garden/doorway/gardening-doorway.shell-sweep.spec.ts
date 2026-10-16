@@ -118,8 +118,8 @@ describe('gardening doorway layout shell sweep (web:shell-sweep)', () => {
         const card = root.querySelector<HTMLElement>(`[data-testid="gardening-doorway-card-${project.slug}"]`)!;
         expect(card, `${project.slug}'s card`).not.toBeNull();
         expect(card.scrollWidth, `${project.slug}'s card overflows at ${width}px`).toBeLessThanOrEqual(card.clientWidth);
-        const open = card.querySelector<HTMLElement>(`[data-testid="gardening-doorway-open-${project.slug}"]`)!;
-        const rect = open.getBoundingClientRect();
+        expect(card.tagName, `${project.slug}'s whole tile is the link`).toBe('A');
+        const rect = card.getBoundingClientRect();
         expect(rect.right, `${project.slug}'s way in leaves the viewport at ${width}px`).toBeLessThanOrEqual(width);
         expect(rect.width).toBeGreaterThan(0);
         if (cards.clientWidth >= 340) {

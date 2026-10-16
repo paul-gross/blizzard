@@ -37,10 +37,10 @@
 }
 .card {
   display: flex;
-  flex-direction: column;
   min-width: 0;
-  border: 1px solid var(--bezel);
-  background: var(--overlay-20);
+}
+.card > a {
+  flex: 1;
 }
 .card-head {
   display: flex;
@@ -98,21 +98,4 @@
   padding: 8px 10px;
   font-size: var(--fs-sm);
   color: var(--label);
-}
-.card-foot {
-  padding: 6px 10px;
-}
-/* The way in, drawn as the kit's primary button: it is the card's one action. */
-.open {
-  display: inline-block;
-  padding: 2px 7px;
-  border: 1px solid var(--line);
-  background: var(--overlay-30);
-  color: var(--cyan);
-  text-decoration: none;
-  font-size: var(--fs-sm);
-}
-.open:hover,
-.open:focus-visible {
-  border-color: var(--cyan);
 }
