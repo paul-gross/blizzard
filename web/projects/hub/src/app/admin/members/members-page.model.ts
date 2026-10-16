@@ -1,6 +1,5 @@
 import { type MemberView, type hubApi, errorMessage } from 'fleet';
 
-
 /** A refused membership change's message through `errorMessage` (its 422 handling included), a generic failure line
  * when it carries none, or `null` with no error. */
 export function memberChangeErrorText(error: unknown): string | null {
