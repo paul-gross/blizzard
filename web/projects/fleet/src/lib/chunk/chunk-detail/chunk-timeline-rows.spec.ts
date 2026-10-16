@@ -66,6 +66,12 @@ describe('deriveHistoryRows', () => {
     expect(rowChoice(bounce)).toBe('bounced');
   });
 
+  it('titles a bounce whose envelope names no reason without its JSON', () => {
+    const detail = { ...BASE, bounces: [{ cause: 'x', envelope: '{}', recorded_at: '2026-07-13T00:00:02Z' }] } as ChunkDetail;
+    const bounce = deriveHistoryRows(detail, NOW).find((r) => r.kind === 'bounce')!;
+    expect(bounce.title).toBe('bounced');
+  });
+
   it('reads a same-graph restart as from → to, by its operator, with no usage of its own', () => {
     const detail = {
       ...BASE,

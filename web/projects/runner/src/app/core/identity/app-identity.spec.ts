@@ -2,7 +2,7 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { runnerClient } from 'fleet';
-import { type RequestClientStub, settle, stubRequestClient } from 'fleet/testing';
+import { type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
 import { vi } from 'vitest';
 
 import { RunnerLogout } from './runner-logout';
@@ -105,6 +105,25 @@ describe('LocalIdentity', () => {
     const user = el.querySelector<HTMLElement>('[data-testid="identity-username"]')!;
     expect(getComputedStyle(user).overflow).toBe('hidden');
     expect(getComputedStyle(user).textOverflow).toBe('ellipsis');
+  });
+
+  it('renders a failed logout in the control shape only, never inside the label shape a menu hosts', async () => {
+    const { fixture, stub: s } = await render({ auth_enabled: true, username: 'alice' });
+    s.restore();
+    stub = stubRequestClient(runnerClient, (method, path) => {
+      if (method === 'GET' && path === '/api/auth/session') return { auth_enabled: true, username: 'alice' };
+      if (method === 'POST' && path === '/api/auth/logout') return stubError(500, { detail: 'nope' });
+      return {};
+    });
+    const el = fixture.nativeElement as HTMLElement;
+    await TestBed.inject(RunnerLogout).logout();
+    await settle(fixture);
+
+    expect(el.querySelector('[data-testid="identity-logout-error"]')).not.toBeNull();
+
+    fixture.componentRef.setInput('variant', 'label');
+    await settle(fixture);
+    expect(el.querySelector('[data-testid="identity-logout-error"]')).toBeNull();
   });
 
   it('POSTs /api/auth/logout and reloads when the logout control is activated', async () => {

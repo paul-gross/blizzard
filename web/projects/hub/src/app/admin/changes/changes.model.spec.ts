@@ -112,6 +112,13 @@ describe('changeEntryVm', () => {
     )!;
     expect(vm.rows[0].revisionStep).toBe('r2 → r3');
   });
+
+  it('gives a create with no field diff no revision step', () => {
+    const vm = changeEntryVm(
+      changeEntries([change(5, { record_kind: 'secret', record_key: 'gh', op: 'create', revision: 1, diff: [] })])[0],
+    )!;
+    expect(vm.rows[0].revisionStep).toBeNull();
+  });
 });
 
 describe('changeDetailEmptyText', () => {

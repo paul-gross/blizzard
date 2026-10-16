@@ -83,6 +83,20 @@ describe('ChunkGeneralTab', () => {
     expect(emitted).toEqual({ chunkId: DETAIL.chunk_id, graphId: 'gr_alt' });
   });
 
+  it('disables Set while a repin is in flight for this chunk, and not for another', async () => {
+    const fixture = TestBed.createComponent(ChunkGeneralTab);
+    fixture.componentRef.setInput('detail', DETAIL);
+    fixture.componentRef.setInput('canControl', true);
+    fixture.componentRef.setInput('pendingGraphChunkIds', ['ch_other']);
+    await fixture.whenStable();
+    const set = () => (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>('[data-testid="graph-submit"]');
+    expect(set()?.disabled).toBe(false);
+
+    fixture.componentRef.setInput('pendingGraphChunkIds', [DETAIL.chunk_id]);
+    await fixture.whenStable();
+    expect(set()?.disabled).toBe(true);
+  });
+
   it('withholds the graph edit row when canControl defaults off', async () => {
     const fixture = TestBed.createComponent(ChunkGeneralTab);
     fixture.componentRef.setInput('detail', DETAIL);

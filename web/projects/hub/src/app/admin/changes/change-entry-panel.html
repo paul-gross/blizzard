@@ -26,7 +26,7 @@
             }
             @if (row.revisionStep; as step) {
               <span class="step">value {{ step }}</span>
-            } @else {
+            } @else if (row.diff.length > 0) {
               <app-config-field-diff [diff]="row.diff" />
             }
           </li>

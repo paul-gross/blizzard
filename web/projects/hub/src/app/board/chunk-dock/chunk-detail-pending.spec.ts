@@ -25,6 +25,8 @@ const BASE: ChunkDetailModel = {
 const DETAILS: Record<string, ChunkDetailModel> = {
   ch_routed: BASE,
   ch_routed_b: { ...BASE, chunk_id: 'ch_routed_b' },
+  ch_nr_a: { ...BASE, chunk_id: 'ch_nr_a', status: 'not_ready', current_node_id: null, graph_editable: true, latest_epoch: null },
+  ch_nr_b: { ...BASE, chunk_id: 'ch_nr_b', status: 'not_ready', current_node_id: null, graph_editable: true, latest_epoch: null },
   ch_gate: { ...BASE, chunk_id: 'ch_gate', status: 'waiting_on_human', status_if_paused: 'waiting_on_human' },
 };
 
@@ -136,6 +138,38 @@ describe('ChunkDetail pending scope', () => {
     fixture.componentRef.setInput('chunkId', 'ch_routed');
     await tick(fixture);
     expect(await detachDisabled()).toBe('true');
+
+    resolveInvalidate();
+    await settle(fixture);
+  });
+
+  it('scopes a pending Set graph to its own chunk across a selection change', async () => {
+    const fixture = TestBed.createComponent(ChunkDetail);
+    fixture.componentRef.setInput('chunkId', 'ch_nr_a');
+    await settle(fixture);
+    const el = fixture.nativeElement as HTMLElement;
+    const queryClient = TestBed.inject(QueryClient);
+    let resolveInvalidate!: () => void;
+    vi.spyOn(queryClient, 'invalidateQueries').mockReturnValue(
+      new Promise<void>((resolve) => (resolveInvalidate = resolve)),
+    );
+    const setDisabled = () => el.querySelector<HTMLButtonElement>('[data-testid="graph-submit"]')?.disabled;
+
+    const input = el.querySelector<HTMLInputElement>('[data-testid="graph-input"]')!;
+    input.value = 'gr_alt';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    await tick(fixture);
+    el.querySelector<HTMLButtonElement>('[data-testid="graph-submit"]')?.click();
+    await tick(fixture);
+    expect(setDisabled()).toBe(true);
+
+    fixture.componentRef.setInput('chunkId', 'ch_nr_b');
+    await tick(fixture);
+    expect(setDisabled()).toBe(false);
+
+    fixture.componentRef.setInput('chunkId', 'ch_nr_a');
+    await tick(fixture);
+    expect(setDisabled()).toBe(true);
 
     resolveInvalidate();
     await settle(fixture);

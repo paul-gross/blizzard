@@ -112,7 +112,7 @@ export function changeEntryVm(entry: ChangeEntry | null): ChangeEntryVm | null {
       title: changeTitle(change),
       route: recordRoute(change.record_kind, change.record_key),
       diff: change.diff,
-      revisionStep: change.diff.length === 0 ? `r${change.revision - 1} → r${change.revision}` : null,
+      revisionStep: change.op === 'replace' && change.diff.length === 0 ? `r${change.revision - 1} → r${change.revision}` : null,
     })),
   };
 }

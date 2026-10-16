@@ -19,6 +19,7 @@ const ENTRY: ChangeEntryVm = {
       revisionStep: null,
     },
     { id: 7, title: 'secret gh · replace', route: ['/admin', 'secrets', 'gh'], diff: [], revisionStep: 'r1 → r2' },
+    { id: 6, title: 'secret gh · create', route: ['/admin', 'secrets', 'gh'], diff: [], revisionStep: null },
   ],
 };
 
@@ -44,5 +45,8 @@ describe('ChangeEntryPanel', () => {
       'main',
     ]);
     expect(el.querySelector('[data-testid="admin-change-row-7"]')?.textContent).toContain('value r1 → r2');
+    const created = el.querySelector('[data-testid="admin-change-row-6"]')!;
+    expect(created.textContent).not.toContain('value r');
+    expect(created.querySelector('app-config-field-diff')).toBeNull();
   });
 });

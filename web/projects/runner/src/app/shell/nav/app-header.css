@@ -10,6 +10,17 @@
 app-pause-control {
   flex: none;
 }
+/* Content-dependent like the username: it truncates rather than pushing the
+   profile menu off a narrow header. */
+.logout-error {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 0 10px;
+  color: var(--red);
+  font-size: var(--fs-sm);
+}
 app-identity {
   min-width: 0;
 }

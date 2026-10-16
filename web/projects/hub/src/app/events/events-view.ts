@@ -2,16 +2,17 @@ import { ChangeDetectionStrategy, Component, computed, input, output } from '@an
 
 import { type EventView, hubApi, compactRef, runnerDisplayName, runnerTitle, KitAsyncState, type KitAsyncStateValue, KitBadge, KitButton, KitChips, type KitChipOption, KitSelect, KitPanel, type Tone, FleetWhen } from 'fleet';
 
-/** The severity filter row's options — `''` reads as "no filter" (every event). A
- * fixed closed set (unlike the runner/chunk axes, whose values are open and so are
- * derived from the feed's own ids — {@link EventsView.toOptions}). */
+/** Each severity's chip label. */
 const SEVERITY_LABEL: Readonly<Record<hubApi.EventLogSeverity, string>> = {
   info: 'Info',
   warning: 'Warning',
   critical: 'Critical',
 };
 
-/** The severity chips read in ascending severity, the generated const's order reversed. */
+/** The severity filter row's options — `''` reads as "no filter" (every event). A
+ * fixed closed set (unlike the runner/chunk axes, whose values are open and so are
+ * derived from the feed's own ids — {@link EventsView.toOptions}). The chips read in
+ * ascending severity, the generated const's order reversed. */
 const SEVERITY_OPTIONS: readonly KitChipOption[] = [
   { value: '', label: 'All', testid: 'events-filter-all' },
   ...[...Object.values(hubApi.EventLogSeverity)].reverse().map((severity) => ({

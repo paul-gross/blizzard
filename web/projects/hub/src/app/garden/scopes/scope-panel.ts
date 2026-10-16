@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, type TemplateRef, input, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, type TemplateRef, effect, input, output, signal, untracked } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
 import {
@@ -95,10 +95,23 @@ export class FleetScopePanel {
   /** The lifecycle badge's tone, from the hub's one lifecycle owner. */
   protected readonly lifecycleTone = lifecycleTone;
 
-  /** The scope whose description is open for editing, with the description it opened on — `null` while none is. Keyed
-   * by slug so a pick of another scope never carries an open editor across, and by the description so a saved edit,
-   * reading back a new one, closes the editor while a failed one leaves it open beside its error. */
-  private readonly editing = signal<{ readonly slug: string; readonly original: string } | null>(null);
+  /** The scope whose description is open for editing, with the description it opened on and the draft typed so far —
+   * `null` while none is. Keyed by slug so a pick of another scope never carries an open editor, or its draft, across,
+   * and by the description so a saved edit, reading back a new one, closes the editor while a failed one leaves it open
+   * beside its error. */
+  private readonly editing = signal<{
+    readonly slug: string;
+    readonly original: string;
+    readonly value: string;
+  } | null>(null);
+
+  /** Picking another scope closes the editor and drops its draft, so coming back finds the saved description. */
+  private readonly closeOnPick = effect(() => {
+    const slug = this.vm()?.slug;
+    untracked(() => {
+      if (this.editing()?.slug !== slug) this.editing.set(null);
+    });
+  });
 
   protected isEditing(panel: ScopePanelVm): boolean {
     const editing = this.editing();
@@ -106,7 +119,7 @@ export class FleetScopePanel {
   }
 
   protected startEditing(panel: ScopePanelVm): void {
-    this.editing.set({ slug: panel.slug, original: panel.description });
+    this.editing.set({ slug: panel.slug, original: panel.description, value: panel.description });
   }
 
   protected stopEditing(): void {
@@ -121,15 +134,12 @@ export class FleetScopePanel {
     ];
   }
 
-  protected readonly descriptionDraft = signal<{ slug: string; original: string; value: string } | null>(null);
-
   protected descriptionValue(panel: ScopePanelVm): string {
-    const draft = this.descriptionDraft();
-    return draft?.slug === panel.slug && draft.original === panel.description ? draft.value : panel.description;
+    return this.isEditing(panel) ? (this.editing()?.value ?? panel.description) : panel.description;
   }
 
   protected updateDescription(panel: ScopePanelVm, value: string): void {
-    this.descriptionDraft.set({ slug: panel.slug, original: panel.description, value });
+    this.editing.set({ slug: panel.slug, original: panel.description, value });
   }
 
   protected readonly pendingConfirm = signal<{

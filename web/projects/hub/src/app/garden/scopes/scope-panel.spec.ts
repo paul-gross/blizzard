@@ -123,6 +123,40 @@ describe('FleetScopePanel', () => {
     expect(el.querySelector('[data-testid="gardening-scope-panel-description-input"]')).toBeNull();
   });
 
+  it('drops an unsaved draft when another scope is picked and the first is returned to', async () => {
+    const fixture = await mount({ canEdit: true });
+    const el = fixture.nativeElement as HTMLElement;
+    const input = () => el.querySelector<HTMLInputElement>('[data-testid="gardening-scope-panel-description-input"]');
+    await openEditor(fixture);
+    input()!.value = 'half-typed';
+    input()!.dispatchEvent(new Event('input', { bubbles: true }));
+    await fixture.whenStable();
+
+    fixture.componentRef.setInput('vm', { ...VM, slug: 'other', description: 'other description' });
+    await fixture.whenStable();
+    fixture.componentRef.setInput('vm', VM);
+    await fixture.whenStable();
+
+    expect(input()).toBeNull();
+    expect(el.querySelector('[data-testid="gardening-scope-panel-description"]')?.textContent).toContain(VM.description);
+    await openEditor(fixture);
+    expect(input()!.value).toBe(VM.description);
+  });
+
+  it('drops an unsaved draft on Cancel', async () => {
+    const fixture = await mount({ canEdit: true });
+    const el = fixture.nativeElement as HTMLElement;
+    const input = () => el.querySelector<HTMLInputElement>('[data-testid="gardening-scope-panel-description-input"]');
+    await openEditor(fixture);
+    input()!.value = 'half-typed';
+    input()!.dispatchEvent(new Event('input', { bubbles: true }));
+    el.querySelector<HTMLButtonElement>('[data-testid="gardening-scope-panel-description-cancel"]')?.click();
+    await fixture.whenStable();
+    await openEditor(fixture);
+
+    expect(input()!.value).toBe(VM.description);
+  });
+
   it('disables Set while the edit mutation is pending, re-enabling once it settles', async () => {
     const fixture = await mount({ canEdit: true, editPending: true });
     const el = fixture.nativeElement as HTMLElement;

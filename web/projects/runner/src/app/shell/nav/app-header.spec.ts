@@ -236,6 +236,25 @@ describe('AppHeader', () => {
       expect(reload).toHaveBeenCalledTimes(1);
     });
 
+    it('shows a failed logout once, in the header beside the menu and not in the identity block', async () => {
+      stub.restore();
+      stub = stubRequestClient(runnerClient, (method, path) => {
+        if (method === 'GET' && path === '/api/auth/session') return { auth_enabled: true, username: 'alice' };
+        if (method === 'POST' && path === '/api/auth/logout') return stubError(500, { detail: 'nope' });
+        return { items: [] };
+      });
+      const fixture = await render();
+      const el = fixture.nativeElement as HTMLElement;
+      expect(el.querySelector('[data-testid="local-panel-logout-error"]')).toBeNull();
+
+      await TestBed.inject(RunnerLogout).logout();
+      await settle(fixture);
+
+      expect(el.querySelectorAll('[role="alert"]')).toHaveLength(1);
+      expect(el.querySelector('[data-testid="local-panel-logout-error"]')).not.toBeNull();
+      expect(el.querySelector('[data-testid="identity-logout-error"]')).toBeNull();
+    });
+
     it('offers no Log out under a none-mode hub, where the surface is authless', async () => {
       withSession({ auth_enabled: false, username: null });
       const panel = await openMenu(await render());

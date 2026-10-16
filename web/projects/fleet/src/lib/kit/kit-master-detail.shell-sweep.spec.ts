@@ -152,15 +152,20 @@ describe('KitMasterDetail collapse shell sweep (web:shell-sweep)', () => {
     }
   });
 
-  it("fills the host with a drill-down's lone detail pane in the 720–767px band and at phone width", async () => {
+  it("fills the host with a drill-down's lone detail pane in the 720–767px band and at phone width — proven able to fail by deleting .kmd-pane--hidden", async () => {
     await loadDesignTokens();
     const root = await mountDrillHost();
     try {
       const host = root.querySelector<HTMLElement>('fleet-kit-master-detail')!;
       const detail = root.querySelector<HTMLElement>('.kmd-detail')!;
+      const list = root.querySelector<HTMLElement>('.kmd-list')!;
       for (const width of [740, 390]) {
         await page.viewport(width, 700);
         await nextFrame();
+        expect(
+          getComputedStyle(list).display,
+          `${width}px: the inactive list pane is mounted but not hidden, so it takes layout beside the detail`,
+        ).toBe('none');
         expect(
           detail.getBoundingClientRect().width,
           `${width}px: the lone detail pane does not fill the host (${host.getBoundingClientRect().width})`,

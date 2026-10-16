@@ -36,10 +36,10 @@ const CORNER_RADIUS = 9;
 })
 export class GraphDiagramNodeShape {
   readonly node = input.required<LaidOutNode>();
-  protected readonly Executor = hubApi.Executor;
-
   readonly selected = input(false);
   readonly incident = input(false);
+
+  protected readonly Executor = hubApi.Executor;
 
   /** Baseline y of the node's `index`-th wrapped meta line — the same step
    * `graph-layout.ts` grew the box height by, so the lines land inside it. */
