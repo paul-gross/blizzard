@@ -20,7 +20,7 @@ rule flags the change-history phrases its own token list names, which is the one
 gate check is seams-mocked and token-free, needing no real forge, no tokens, and no network beyond package installs.
 
 The pytest tier runs as four parallel shard jobs, and the service tier below as three.
-`BLIZZARD_TEST_SHARD=<index>/<count>` (`tests/conftest.py`) keeps one disjoint slice of the collected suite, chosen by a
+`BLIZZARD_TEST_SHARD=<index>/<count>` (`tests/suite_plugin.py`) keeps one disjoint slice of the collected suite, chosen by a
 stable hash of each test's nodeid, so the shards together run every test exactly once. A `*-result` job reports each
 sharded tier under its single check name — `gate / pytest (unit + component)`,
 `upper-tiers / service tier (blizzard:service-test)` — so a required-check list names the tier, not its shard count.
@@ -56,8 +56,9 @@ two-repo checkout of `blizzard` + `blizzard-mock`; `pr.yml` and `push.yml` both 
 runners use the built-in `basic` provider over a fixture of bare `file://` origins, minted with no winter source. Every
 checkout in a job that runs tests sets `persist-credentials: false`; `tests/test_winter_free_ci.py` pins both.
 
-Migration tests whose revision is more than 30 days old report as skips in `uv run pytest -n auto`; set
-`BLIZZARD_RUN_RETIRED_MIGRATION_TESTS=1` to run them (`bzh:migration-revision-marker` in blizzard-context's tier rules).
+Store-migration tests live beside their revisions, in `src/blizzard/{hub,runner}/store/migrations/tests/`. Those whose
+revision is more than 30 days old report as skips in `uv run pytest -n auto`; set
+`BLIZZARD_RUN_RETIRED_MIGRATION_TESTS=1` to run them (`bzh:colocated-migration-tests` in blizzard-context's tier rules).
 
 Locally the upper tiers need the sibling `blizzard-mock` worktree provisioned (`winter provision <env>`); their exact
 local equivalents are `mise run service-test` (`BLIZZARD_SERVICE=1 uv run pytest -n auto tests/service/`) and

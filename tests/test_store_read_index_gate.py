@@ -62,7 +62,7 @@ def _reflect_read_protocol_methods(package: ModuleType) -> set[tuple[type, str]]
     keys: set[tuple[type, str]] = set()
     for modinfo in pkgutil.walk_packages(package.__path__, package.__name__ + "."):
         if modinfo.name.endswith(".migrations.env") or ".migrations.tests" in modinfo.name:
-            continue  # env.py needs an active `alembic` CLI context; the colocated migration tests are test code
+            continue  # the migrations env module needs an active `alembic` CLI context
         module = importlib.import_module(modinfo.name)
         for name, obj in inspect.getmembers(module, inspect.isclass):
             if not name.startswith("IRead") or obj.__module__ != module.__name__:

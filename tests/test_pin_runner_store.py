@@ -49,6 +49,31 @@ class _FakeRunnerStoreErrors(RunnerStoreErrorFactory):
         return RunnerStoreError(f"fake wrap: {operation}")
 
 
+def _counter(engine: sa.Engine, lane: str) -> int:
+    counters = outbox_counters
+    with engine.connect() as conn:
+        return conn.execute(
+            sa.select(counters.c.last_seq)
+            .where(counters.c.runner_id == FIXTURE_RUNNER_ID, counters.c.lane == lane)
+            .execution_options(**{RUNNER_SCOPED_OPTION: True})
+        ).scalar_one()
+
+
+def _delta(store: SqlAlchemyRunnerStore, segment_id: str, *, cursor: str) -> int:
+    (seq,) = store.record_transcript_deltas(
+        segment_id=segment_id,
+        chunk_id="ch_1",
+        cursor=cursor,
+        shipped_bytes=1,
+        shipped_turns=1,
+        normalizer_version="v1",
+        harness_version=None,
+        payloads=["{}"],
+        created_at=_NOW,
+    )
+    return seq
+
+
 @pytest.mark.unit
 def test_the_driver_error_wrap_is_substitutable_by_injection(tmp_path: Path) -> None:
     """``_wrap`` is an injected ``RunnerStoreErrorFactory``, not a module-level logger
@@ -223,50 +248,6 @@ def test_set_route_token_keeps_one_current_row_per_chunk(tmp_path):  # type: ign
 
 
 @pytest.mark.component
-@pytest.mark.migration_revision("20260726_1000_declaration_environment_id")
-def test_declaration_environment_id_migration_discards_the_pre_revision_rows(tmp_path: Path) -> None:
-    """``20260726_1000`` drops and recreates ``git_commit_declarations`` — no
-    back-fill; a row seeded at the parent revision must not survive the upgrade."""
-    parent = "20260725_1200_runner_check_results"
-    config = runner_runtime.init_environment(tmp_path)
-    migrations = runner_runtime.migration_runner(config)
-    migrations.downgrade(parent)
-
-    engine = create_engine_from_url(config.db_url)
-    try:
-        with engine.begin() as conn:
-            conn.execute(
-                sa.text(
-                    "INSERT INTO git_commit_declarations"
-                    ' (lease_id, chunk_id, node_id, epoch, forge, repo, branch, "commit", declared_at)'
-                    " VALUES ('lease_1', 'ch_1', 'nd_build', 1, 'github', 'r', 'b', 'abc', '2026-07-01 00:00:00')"
-                )
-            )
-
-        migrations.upgrade("head")
-
-        with engine.connect() as conn:
-            surviving = conn.execute(sa.text("SELECT count(*) FROM git_commit_declarations")).scalar_one()
-        columns = {c["name"] for c in sa.inspect(engine).get_columns("git_commit_declarations")}
-    finally:
-        engine.dispose()
-
-    assert surviving == 0
-    assert "environment_id" in columns
-    assert "forge" not in columns
-
-
-def _counter(engine: sa.Engine, lane: str) -> int:
-    counters = outbox_counters
-    with engine.connect() as conn:
-        return conn.execute(
-            sa.select(counters.c.last_seq)
-            .where(counters.c.runner_id == FIXTURE_RUNNER_ID, counters.c.lane == lane)
-            .execution_options(**{RUNNER_SCOPED_OPTION: True})
-        ).scalar_one()
-
-
-@pytest.mark.component
 def test_a_migrated_transcript_outbound_seq_is_never_reissued_after_a_prune(tmp_path: Path) -> None:
     """The lane's ``seq`` comes from its durable counter, not the table: pruning the table's only, and highest, row
     leaves the counter on it, so the next delta takes the next ``seq``. Production migrates
@@ -356,18 +337,3 @@ def test_each_runner_counts_its_own_outbound_seq_in_one_store(tmp_path: Path) ->
 
     assert seqs == ([1, 2], [1, 2, 3], [3])
     assert pending == ([1, 2, 3], [1, 2, 3])
-
-
-def _delta(store: SqlAlchemyRunnerStore, segment_id: str, *, cursor: str) -> int:
-    (seq,) = store.record_transcript_deltas(
-        segment_id=segment_id,
-        chunk_id="ch_1",
-        cursor=cursor,
-        shipped_bytes=1,
-        shipped_turns=1,
-        normalizer_version="v1",
-        harness_version=None,
-        payloads=["{}"],
-        created_at=_NOW,
-    )
-    return seq

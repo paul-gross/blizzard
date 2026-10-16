@@ -1,0 +1,50 @@
+"""The chunk-promoted back-fill — existing chunks stay claimable after not-ready lands.
+
+A bare table create would silently un-ready every chunk already in flight, so the
+migration back-fills a ``chunk.promoted`` fact for every pre-existing chunk. Pins that a
+chunk minted the old way derives ``ready`` after the upgrade — unaffected by the change."""
+
+from __future__ import annotations
+
+from datetime import UTC, datetime
+from pathlib import Path
+
+import pytest
+from sqlalchemy import insert
+
+from blizzard.foundation.chunk_status import ChunkStatus
+from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.store.engine import create_engine_from_url
+from blizzard.hub.config import HubConfig
+from blizzard.hub.runtime import migration_runner
+from blizzard.hub.store import schema as s
+from tests.support import chunk_stores, hub_scoped_engine
+
+pytestmark = [pytest.mark.component]
+
+_BEFORE = "20260714_0819_hub_delivery_pr_facts"  # the head just before chunk_promoted
+
+_T0 = datetime(2026, 1, 1, tzinfo=UTC)
+
+
+def test_backfill_keeps_preexisting_chunks_ready(tmp_path: Path) -> None:
+    db_url = f"sqlite:///{tmp_path / 'hub.db'}"
+    runner = migration_runner(HubConfig(root=tmp_path, db_url=db_url))
+
+    # Migrate to the revision before chunk_promoted, then mint a chunk the old way.
+    runner.upgrade(_BEFORE)
+    engine = hub_scoped_engine(create_engine_from_url(db_url))
+    with engine.begin() as conn:
+        conn.execute(
+            insert(s.graphs).values(graph_id="gr_1", name="g", entry_node_id="nd_1", definition_yaml="", created_at=_T0)
+        )
+        conn.execute(insert(s.chunks).values(chunk_id="ch_legacy", graph_id="gr_1", minted_at=_T0))
+
+    # Upgrade to head — the chunk-promoted migration adds the table and back-fills the pre-existing chunk.
+    runner.upgrade("head")
+
+    store = chunk_stores(engine, FixedClock(_T0))
+    facts = store.facts.load_facts("ch_legacy")
+    assert facts is not None and facts.promoted is True
+    assert facts.status() is ChunkStatus.READY  # unaffected — still claimable
+    assert [c.chunk_id for c in store.record.list_ready(statuses=store.facts.load_live_statuses())] == ["ch_legacy"]

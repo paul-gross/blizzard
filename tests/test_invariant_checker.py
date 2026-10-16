@@ -24,35 +24,22 @@ from blizzard.hub.tenancy import TenantId
 from blizzard.runner.runtime import init_environment as init_runner
 from blizzard.runner.store import schema as runner
 from blizzard.tools.invariants import HubInvariants, RunnerInvariants
+from tests.migration_support_invariant_checker import _NOW, _PROJECT_INVARIANTS, insert
 from tests.runner_fakes import FIXTURE_RUNNER_ID, FakeProbe
 from tests.support import (
-    MIGRATION_CLOCK,
     add_tenant,
     close_tenant,
     default_project,
     default_tenant,
     hub_level_connections,
     hub_scoped,
-    hub_scoped_engine,
-    migrate_to,
-    seed_chunk,
     seed_drainable_history,
     seed_graph,
     seed_membership,
     stamp,
 )
 
-pytestmark = pytest.mark.component
-
-_NOW = datetime(2026, 7, 14, tzinfo=UTC)
-
-
-def insert(table: sa.Table) -> sa.Insert:
-    """An insert that names the fixture runner on runner-scoped tables, as the statement guard requires."""
-    statement = sa.insert(table)
-    if table.info.get("scope") == "runner":
-        return statement.values(runner_id=FIXTURE_RUNNER_ID)
-    return statement
+pytestmark = [pytest.mark.component]
 
 
 def _runner_engine(tmp_path: Path):
@@ -75,6 +62,390 @@ def _set_counters(engine, *, outbound: int | None = None, transcript: int | None
 
 def _hub_engine(tmp_path: Path):
     return create_engine_from_url(init_hub(tmp_path / "hub").db_url)
+
+
+def _bind_held(engine, *rows: tuple[str, str, str | None]) -> None:
+    """Held bindings, each ``(chunk_id, environment_id, workspace_id)``."""
+    with engine.begin() as conn:
+        for chunk_id, environment_id, workspace_id in rows:
+            conn.execute(
+                insert(runner.env_bindings).values(
+                    chunk_id=chunk_id,
+                    environment_id=environment_id,
+                    workdir=f"/{workspace_id}/{environment_id}",
+                    bound_at=_NOW,
+                    workspace_id=workspace_id,
+                )
+            )
+
+
+def _unique_env_violations(engine) -> list[str]:
+    return [v.detail for v in RunnerInvariants(engine).run() if v.invariant == "runner:unique-env-binding"]
+
+
+_OTHER_RUNNER = "rn_other"
+
+
+def _two_runner_engine(tmp_path: Path):
+    """A store holding two registered runners, each with its own outbox rows 1..3 on both lanes and counters at 3."""
+    engine = _runner_engine(tmp_path)
+    with engine.begin() as conn:
+        conn.execute(
+            sa.insert(runner.runner_identity).values(runner_id=_OTHER_RUNNER, runner_name="o", registered_at=_NOW)
+        )
+        for runner_id in (FIXTURE_RUNNER_ID, _OTHER_RUNNER):
+            for lane, last_seq in ((runner.OUTBOX_LANE_OUTBOUND, 3), (runner.OUTBOX_LANE_TRANSCRIPT, 3)):
+                conn.execute(
+                    sa.insert(runner.outbox_counters).values(runner_id=runner_id, lane=lane, last_seq=last_seq)
+                )
+            for seq in (1, 2, 3):
+                conn.execute(
+                    sa.insert(runner.outbound_buffer).values(
+                        runner_id=runner_id, seq=seq, kind="lease.minted", payload="{}", created_at=_NOW
+                    )
+                )
+                conn.execute(
+                    sa.insert(runner.transcript_outbound_buffer).values(
+                        runner_id=runner_id,
+                        seq=seq,
+                        final=False,
+                        segment_id="seg_1",
+                        chunk_id="ch_1",
+                        payload="{}",
+                        created_at=_NOW,
+                    )
+                )
+    return engine
+
+
+def _segment_row(**overrides: object) -> dict:
+    row: dict = {
+        "segment_id": "seg_1",
+        "chunk_id": "ch_1",
+        "node_id": "nd_build",
+        "epoch": 1,
+        "generation": 1,
+        "lease_id": "lease_1",
+        "session_id": "sess_1",
+        "harness_id": "claude_code",
+        "cursor": None,
+        "shipped_bytes": 0,
+        "shipped_turns": 0,
+        # The source seam's own "never ran" sentinel (`""`) — a real spawn always has SOME
+        # normalizer_version to declare, never `None`.
+        "normalizer_version": "",
+        "harness_version": None,
+        "truncated_reason": None,
+        "shipping_stopped_reason": None,
+        "finalized_at": None,
+        "stamped_at": _NOW,
+    }
+    row.update(overrides)
+    return row
+
+
+def _usage_row(*, generation: int = 1, kind: str = "spawn") -> dict:
+    return {
+        "lease_id": "lease_1",
+        "chunk_id": "ch_1",
+        "node_id": "nd_build",
+        "epoch": 1,
+        "generation": generation,
+        "kind": kind,
+        "model": "claude-x",
+        "input_tokens": 100,
+        "output_tokens": 50,
+        "cache_read_tokens": 0,
+        "cache_create_tokens": 0,
+        "cost_usd": 0.1,
+        "recorded_at": _NOW,
+    }
+
+
+def _seed_owned_chunk(conn) -> None:  # type: ignore[no-untyped-def]
+    conn.execute(
+        insert(hub.chunks).values(stamp(hub.chunks, chunk_id="ch_1", graph_id="gr_1", minted_at=_NOW, model="m"))
+    )
+    conn.execute(
+        insert(hub.epoch_owners).values(
+            stamp(hub.epoch_owners, chunk_id="ch_1", epoch=1, runner_id="r_a", recorded_at=_NOW)
+        )
+    )
+
+
+def _seed_migration(
+    conn,
+    *,
+    to_graph: str,
+    model_after: str | None,
+    pin_graph: str,
+    pin_default_model: list[str],
+    release_route: bool = True,
+    landed_executor: str | None = None,
+    source: str | None = None,
+) -> None:
+    """A chunk pinned to (pin_graph, pin_default_model) with one migration targeting
+    to_graph (#90). ``release_route=False`` seeds a torn write where the migration fact
+    landed but the route release did not. ``landed_executor`` seeds a ``graph_nodes``
+    row for the landing node; a ``"hub"`` landing and a ``"restart"``
+    ``source`` (#371) are exempt from the route-released check."""
+    # `chunks.model` is retained-and-unread since #144; the re-pin the invariant checks
+    # lands in `default_model`, so that is what a seeded pin has to carry.
+    conn.execute(
+        insert(hub.chunks).values(
+            stamp(
+                hub.chunks,
+                chunk_id="ch_1",
+                graph_id=pin_graph,
+                minted_at=_NOW,
+                model="unread-since-144",
+                default_model=json.dumps(pin_default_model) if pin_default_model else None,
+            )
+        )
+    )
+    if landed_executor is not None:
+        conn.execute(
+            insert(hub.graph_nodes).values(
+                stamp(
+                    hub.graph_nodes,
+                    node_id="nd_landed",
+                    graph_id=to_graph,
+                    name="build",
+                    executor=landed_executor,
+                    session="fresh",
+                    judged_by="worker",
+                )
+            )
+        )
+    conn.execute(
+        insert(hub.chunk_migrations).values(
+            stamp(
+                hub.chunk_migrations,
+                migration_id="mg_1",
+                chunk_id="ch_1",
+                from_node_id="nd_from",
+                from_graph_id="gr_src",
+                to_graph_id=to_graph,
+                landed_node_id="nd_landed",
+                choice_name="migrate",
+                model_after=model_after,
+                epoch=1,
+                recorded_at=_NOW,
+                source=source,
+            )
+        )
+    )
+    if release_route:
+        conn.execute(
+            insert(hub.route_released).values(stamp(hub.route_released, chunk_id="ch_1", released_at=_NOW, seq=1))
+        )
+
+
+def _segment_values(**overrides: object) -> dict[str, object]:
+    values: dict[str, object] = {
+        "segment_id": "sg_1",
+        "chunk_id": "ch_1",
+        "node_id": "nd_build",
+        "epoch": 1,
+        "spawn_generation": 1,
+        "runner_id": "r1",
+        "turn_range_start": 0,
+        "turn_range_end": 0,
+        "final": True,
+        "rejected": False,
+        "byte_count": 10,
+        "codec": "zlib",
+        "content": b"",
+        "content_digest": "dg_test",  # this suite inserts the raw row directly, bypassing the adapter that derives it
+        "normalizer_version": "claude-code-jsonl/2",
+        "received_at": _NOW,
+    }
+    values.update(overrides)
+    return values
+
+
+def _dependency_edge_values(**overrides: object) -> dict:
+    values: dict = {
+        "dependency_id": "dep_1",
+        "dependent_chunk_id": "ch_dependent",
+        "prerequisite_chunk_id": "ch_prereq",
+        "declared_at": _NOW,
+        "declared_by": "user:alice",
+        "released_at": None,
+        "released_by": None,
+    }
+    values.update(overrides)
+    return values
+
+
+def _seed_landed_mid_flight(conn: sa.Connection, tenant: str) -> None:
+    """A chunk in ``tenant`` whose ``delivery.landed`` fact sits beside a non-terminal newest transition."""
+    conn.execute(
+        insert(hub.chunks).values(
+            stamp(hub.chunks, tenant_id=tenant, chunk_id="ch_1", graph_id="gr_1", minted_at=_NOW, model="m")
+        )
+    )
+    conn.execute(
+        insert(hub.lease_facts).values(
+            stamp(hub.lease_facts, tenant_id=tenant, chunk_id="ch_1", epoch=2, runner_id="hub", minted_at=_NOW)
+        )
+    )
+    conn.execute(
+        insert(hub.transitions).values(
+            stamp(
+                hub.transitions,
+                tenant_id=tenant,
+                transition_id="tr_1",
+                chunk_id="ch_1",
+                graph_id="gr_1",
+                from_node_id="nd_deliver",
+                to_node_id="nd_verify",
+                choice_name="landed",
+                epoch=2,
+                runner_id="hub",
+                recorded_at=_NOW,
+            )
+        )
+    )
+    conn.execute(
+        insert(hub.delivery_landed).values(
+            stamp(hub.delivery_landed, tenant_id=tenant, chunk_id="ch_1", landed_at=_NOW)
+        )
+    )
+
+
+def _drained_tables(engine: sa.Engine, tenant: TenantId) -> set[str]:
+    """The tables still holding a row of ``tenant``."""
+    with engine.connect() as conn:
+        return {
+            table.name
+            for table in hub.metadata.sorted_tables
+            if is_tenant_owned(table)
+            and conn.execute(
+                hub_scoped(sa.select(sa.func.count()).select_from(table).where(table.c.tenant_id == tenant))
+            ).scalar_one()
+        }
+
+
+def _project_breaches(engine: sa.Engine, invariant: str) -> list[str]:
+    return [v.detail for v in HubInvariants(engine).run() if v.invariant == invariant]
+
+
+def _add_project(conn: sa.Connection, project_id: str, *, slug: str) -> None:
+    """A second project in the store's only tenant, beside its ``default``."""
+    conn.execute(
+        insert(hub.projects).values(
+            stamp(
+                hub.projects,
+                project_id=project_id,
+                slug=slug,
+                name=slug.title(),
+                description="",
+                revision=1,
+                created_at=_NOW,
+            )
+        )
+    )
+
+
+def _scope_values(scope_id: str, project_id: str) -> dict[str, object]:
+    return stamp(hub.scopes, scope_id=scope_id, slug=scope_id, description="", created_at=_NOW, project_id=project_id)
+
+
+def _routine_values(routine_id: str, project_id: str, *, default_scope_id: str) -> dict[str, object]:
+    return stamp(
+        hub.routines,
+        routine_id=routine_id,
+        name=routine_id,
+        graph_name="gr",
+        default_scope_id=default_scope_id,
+        created_at=_NOW,
+        project_id=project_id,
+    )
+
+
+def _finding_values(finding_id: str, project_id: str, *, scope_id: str, **overrides: object) -> dict[str, object]:
+    values: dict[str, object] = {
+        "finding_id": finding_id,
+        "routine_name": "rtn_1",
+        "scope_id": scope_id,
+        "scope_slug": scope_id,
+        "class_": "dead-code",
+        "locus": "src/a.py",
+        "summary": "s",
+        "project_id": project_id,
+    }
+    values.update(overrides)
+    return stamp(hub.findings, **values)
+
+
+def _work_item_values(work_item_id: str, *, tenant: str, project_id: str) -> dict[str, object]:
+    return stamp(
+        hub.work_items,
+        tenant_id=tenant,
+        work_item_id=work_item_id,
+        source="hub",
+        ref=work_item_id,
+        title="t",
+        body="",
+        author_kind="fleet",
+        author_payload="{}",
+        created_at=_NOW,
+        edited_at=_NOW,
+        project_id=project_id,
+    )
+
+
+def _hours(n: float) -> datetime:
+    return _NOW + timedelta(hours=n)
+
+
+def _source_fact(conn: sa.Connection, source: str, *, linked: bool, at: datetime, project_id: str = "proj_app") -> None:
+    conn.execute(
+        insert(hub.project_source_link_facts).values(
+            stamp(
+                hub.project_source_link_facts,
+                project_id=project_id,
+                work_source_id=source,
+                linked=linked,
+                set_at=at,
+                set_by="op",
+            )
+        )
+    )
+
+
+def _repository_fact(
+    conn: sa.Connection, repository: str, *, linked: bool, at: datetime, project_id: str = "proj_app"
+) -> None:
+    conn.execute(
+        insert(hub.project_repository_link_facts).values(
+            stamp(
+                hub.project_repository_link_facts,
+                project_id=project_id,
+                repository_id=repository,
+                linked=linked,
+                set_at=at,
+                set_by="op",
+            )
+        )
+    )
+
+
+def _mint(
+    conn: sa.Connection, chunk_id: str, *, at: datetime, refs: tuple[str, ...], project_id: str = "proj_app"
+) -> None:
+    """A chunk of ``project_id`` minted ``at``, naming ``refs`` (``source:ref``) in order, the first originating."""
+    conn.execute(
+        insert(hub.chunks).values(
+            stamp(hub.chunks, chunk_id=chunk_id, graph_id="gr_1", minted_at=at, model="m", project_id=project_id)
+        )
+    )
+    for pointer in refs:
+        source, ref = pointer.split(":")
+        conn.execute(
+            insert(hub.chunk_work_refs).values(stamp(hub.chunk_work_refs, chunk_id=chunk_id, source=source, ref=ref))
+        )
 
 
 def test_clean_stores_have_no_violations(tmp_path: Path) -> None:
@@ -337,25 +708,6 @@ def test_env_bound_to_two_chunks_is_a_violation(tmp_path: Path) -> None:
     assert "runner:unique-env-binding" in slugs
 
 
-def _bind_held(engine, *rows: tuple[str, str, str | None]) -> None:
-    """Held bindings, each ``(chunk_id, environment_id, workspace_id)``."""
-    with engine.begin() as conn:
-        for chunk_id, environment_id, workspace_id in rows:
-            conn.execute(
-                insert(runner.env_bindings).values(
-                    chunk_id=chunk_id,
-                    environment_id=environment_id,
-                    workdir=f"/{workspace_id}/{environment_id}",
-                    bound_at=_NOW,
-                    workspace_id=workspace_id,
-                )
-            )
-
-
-def _unique_env_violations(engine) -> list[str]:
-    return [v.detail for v in RunnerInvariants(engine).run() if v.invariant == "runner:unique-env-binding"]
-
-
 def test_two_workspaces_holding_environments_of_one_name_is_not_a_violation(tmp_path: Path) -> None:
     engine = _runner_engine(tmp_path)
     _bind_held(engine, ("ch_1", "r1", "ws_a"), ("ch_2", "r1", "ws_b"), ("ch_3", "r2", "ws_a"), ("ch_4", "r2", "ws_b"))
@@ -548,41 +900,6 @@ def test_a_hole_among_acked_transcript_rows_is_not_a_violation(tmp_path: Path) -
     assert "runner:gapless-transcript-outbound-seq" not in slugs
 
 
-_OTHER_RUNNER = "rn_other"
-
-
-def _two_runner_engine(tmp_path: Path):
-    """A store holding two registered runners, each with its own outbox rows 1..3 on both lanes and counters at 3."""
-    engine = _runner_engine(tmp_path)
-    with engine.begin() as conn:
-        conn.execute(
-            sa.insert(runner.runner_identity).values(runner_id=_OTHER_RUNNER, runner_name="o", registered_at=_NOW)
-        )
-        for runner_id in (FIXTURE_RUNNER_ID, _OTHER_RUNNER):
-            for lane, last_seq in ((runner.OUTBOX_LANE_OUTBOUND, 3), (runner.OUTBOX_LANE_TRANSCRIPT, 3)):
-                conn.execute(
-                    sa.insert(runner.outbox_counters).values(runner_id=runner_id, lane=lane, last_seq=last_seq)
-                )
-            for seq in (1, 2, 3):
-                conn.execute(
-                    sa.insert(runner.outbound_buffer).values(
-                        runner_id=runner_id, seq=seq, kind="lease.minted", payload="{}", created_at=_NOW
-                    )
-                )
-                conn.execute(
-                    sa.insert(runner.transcript_outbound_buffer).values(
-                        runner_id=runner_id,
-                        seq=seq,
-                        final=False,
-                        segment_id="seg_1",
-                        chunk_id="ch_1",
-                        payload="{}",
-                        created_at=_NOW,
-                    )
-                )
-    return engine
-
-
 def test_two_runners_each_count_their_own_gapless_seq_and_hold_every_invariant(tmp_path: Path) -> None:
     assert RunnerInvariants(_two_runner_engine(tmp_path)).run() == []
 
@@ -643,32 +960,6 @@ def test_a_counter_above_every_retained_seq_is_not_a_violation(tmp_path: Path) -
             )
         )
     assert RunnerInvariants(engine).run() == []
-
-
-def _segment_row(**overrides: object) -> dict:
-    row: dict = {
-        "segment_id": "seg_1",
-        "chunk_id": "ch_1",
-        "node_id": "nd_build",
-        "epoch": 1,
-        "generation": 1,
-        "lease_id": "lease_1",
-        "session_id": "sess_1",
-        "harness_id": "claude_code",
-        "cursor": None,
-        "shipped_bytes": 0,
-        "shipped_turns": 0,
-        # The source seam's own "never ran" sentinel (`""`) — a real spawn always has SOME
-        # normalizer_version to declare, never `None`.
-        "normalizer_version": "",
-        "harness_version": None,
-        "truncated_reason": None,
-        "shipping_stopped_reason": None,
-        "finalized_at": None,
-        "stamped_at": _NOW,
-    }
-    row.update(overrides)
-    return row
 
 
 def test_finalized_segment_with_no_final_marker_is_a_violation(tmp_path: Path) -> None:
@@ -749,24 +1040,6 @@ def test_an_open_segment_needs_no_final_marker(tmp_path: Path) -> None:
     with engine.begin() as conn:
         conn.execute(insert(runner.transcript_segments).values(**_segment_row(finalized_at=None)))
     assert RunnerInvariants(engine).run() == []
-
-
-def _usage_row(*, generation: int = 1, kind: str = "spawn") -> dict:
-    return {
-        "lease_id": "lease_1",
-        "chunk_id": "ch_1",
-        "node_id": "nd_build",
-        "epoch": 1,
-        "generation": generation,
-        "kind": kind,
-        "model": "claude-x",
-        "input_tokens": 100,
-        "output_tokens": 50,
-        "cache_read_tokens": 0,
-        "cache_create_tokens": 0,
-        "cost_usd": 0.1,
-        "recorded_at": _NOW,
-    }
 
 
 def test_duplicate_usage_attribution_for_one_lease_generation_kind_is_a_violation(tmp_path: Path) -> None:
@@ -1074,17 +1347,6 @@ def test_transition_epoch_beyond_latest_lease_is_a_violation(tmp_path: Path) -> 
     assert "hub:epoch-consistent-transitions" in slugs
 
 
-def _seed_owned_chunk(conn) -> None:  # type: ignore[no-untyped-def]
-    conn.execute(
-        insert(hub.chunks).values(stamp(hub.chunks, chunk_id="ch_1", graph_id="gr_1", minted_at=_NOW, model="m"))
-    )
-    conn.execute(
-        insert(hub.epoch_owners).values(
-            stamp(hub.epoch_owners, chunk_id="ch_1", epoch=1, runner_id="r_a", recorded_at=_NOW)
-        )
-    )
-
-
 def test_owned_epochs_with_matching_leases_are_clean(tmp_path: Path) -> None:
     """``hub:epochs-owned`` holds for a runner lease at its own epoch, a hub lease at a
     hub-owned one, a restart at a hub-owned one, and a reservation with no lease yet."""
@@ -1344,74 +1606,6 @@ def test_a_double_park_after_a_repause_is_still_a_violation(tmp_path: Path) -> N
         conn.execute(insert(runner.pause_parks).values(lease_id="lease_a", chunk_id="ch_1", parked_at=t2))
     slugs = {v.invariant for v in RunnerInvariants(engine).run()}
     assert "runner:one-open-pause-park-per-lease" in slugs
-
-
-def _seed_migration(
-    conn,
-    *,
-    to_graph: str,
-    model_after: str | None,
-    pin_graph: str,
-    pin_default_model: list[str],
-    release_route: bool = True,
-    landed_executor: str | None = None,
-    source: str | None = None,
-) -> None:
-    """A chunk pinned to (pin_graph, pin_default_model) with one migration targeting
-    to_graph (#90). ``release_route=False`` seeds a torn write where the migration fact
-    landed but the route release did not. ``landed_executor`` seeds a ``graph_nodes``
-    row for the landing node; a ``"hub"`` landing and a ``"restart"``
-    ``source`` (#371) are exempt from the route-released check."""
-    # `chunks.model` is retained-and-unread since #144; the re-pin the invariant checks
-    # lands in `default_model`, so that is what a seeded pin has to carry.
-    conn.execute(
-        insert(hub.chunks).values(
-            stamp(
-                hub.chunks,
-                chunk_id="ch_1",
-                graph_id=pin_graph,
-                minted_at=_NOW,
-                model="unread-since-144",
-                default_model=json.dumps(pin_default_model) if pin_default_model else None,
-            )
-        )
-    )
-    if landed_executor is not None:
-        conn.execute(
-            insert(hub.graph_nodes).values(
-                stamp(
-                    hub.graph_nodes,
-                    node_id="nd_landed",
-                    graph_id=to_graph,
-                    name="build",
-                    executor=landed_executor,
-                    session="fresh",
-                    judged_by="worker",
-                )
-            )
-        )
-    conn.execute(
-        insert(hub.chunk_migrations).values(
-            stamp(
-                hub.chunk_migrations,
-                migration_id="mg_1",
-                chunk_id="ch_1",
-                from_node_id="nd_from",
-                from_graph_id="gr_src",
-                to_graph_id=to_graph,
-                landed_node_id="nd_landed",
-                choice_name="migrate",
-                model_after=model_after,
-                epoch=1,
-                recorded_at=_NOW,
-                source=source,
-            )
-        )
-    )
-    if release_route:
-        conn.execute(
-            insert(hub.route_released).values(stamp(hub.route_released, chunk_id="ch_1", released_at=_NOW, seq=1))
-        )
 
 
 def test_a_consistent_migration_is_not_a_violation(tmp_path: Path) -> None:
@@ -1829,29 +2023,6 @@ def test_a_grouped_chunks_missing_intent_is_not_a_violation(tmp_path: Path) -> N
     assert "hub:no-unenqueued-closable-ref" not in slugs
 
 
-def _segment_values(**overrides: object) -> dict[str, object]:
-    values: dict[str, object] = {
-        "segment_id": "sg_1",
-        "chunk_id": "ch_1",
-        "node_id": "nd_build",
-        "epoch": 1,
-        "spawn_generation": 1,
-        "runner_id": "r1",
-        "turn_range_start": 0,
-        "turn_range_end": 0,
-        "final": True,
-        "rejected": False,
-        "byte_count": 10,
-        "codec": "zlib",
-        "content": b"",
-        "content_digest": "dg_test",  # this suite inserts the raw row directly, bypassing the adapter that derives it
-        "normalizer_version": "claude-code-jsonl/2",
-        "received_at": _NOW,
-    }
-    values.update(overrides)
-    return values
-
-
 def test_a_segment_naming_no_chunk_is_a_violation(tmp_path: Path) -> None:
     """The production shape this check exists to name: sqlite enforces none of the schema's
     foreign keys, so a segment can outlive — or never have had — the chunk row it declares."""
@@ -1881,20 +2052,6 @@ def test_a_segment_naming_a_minted_chunk_is_not_a_violation(tmp_path: Path) -> N
     slugs = {v.invariant for v in HubInvariants(engine).run()}
 
     assert "hub:segment-chunk-resolves" not in slugs
-
-
-def _dependency_edge_values(**overrides: object) -> dict:
-    values: dict = {
-        "dependency_id": "dep_1",
-        "dependent_chunk_id": "ch_dependent",
-        "prerequisite_chunk_id": "ch_prereq",
-        "declared_at": _NOW,
-        "declared_by": "user:alice",
-        "released_at": None,
-        "released_by": None,
-    }
-    values.update(overrides)
-    return values
 
 
 def test_a_standing_dependency_cycle_is_a_violation(tmp_path: Path) -> None:
@@ -2107,66 +2264,6 @@ def test_a_released_edge_onto_an_ephemeral_chunk_is_not_a_violation(tmp_path: Pa
     assert "hub:no-standing-dependency-onto-ephemeral-chunk" not in slugs
 
 
-@pytest.mark.migration_revision("20260930_1000_epoch_owners")
-def test_a_backfilled_epoch_with_two_runners_lease_rows_is_clean(tmp_path: Path) -> None:
-    """The real backfill owns an epoch by its first lease row, so a later level row from
-    another runner — legacy data — is not a violation."""
-    runner, engine = migrate_to(tmp_path, "20260930_1000_artifact_seq")
-    at = "2026-09-29 12:00:00"
-    with engine.begin() as conn:
-        seed_graph(conn, "gr_1", at=datetime(2026, 9, 29, tzinfo=UTC))
-        seed_chunk(conn, "ch_1", graph_id="gr_1", at=datetime(2026, 9, 29, tzinfo=UTC))
-        for runner_id in ("r_a", "r_b"):
-            conn.execute(
-                sa.text(
-                    "insert into lease_facts (chunk_id, epoch, runner_id, minted_at) "
-                    "values ('ch_1', 1, :runner_id, :at)"
-                ),
-                {"runner_id": runner_id, "at": at},
-            )
-    runner.upgrade("head")
-    try:
-        assert [v for v in HubInvariants(engine).run() if v.invariant == "hub:epochs-owned"] == []
-    finally:
-        engine.dispose()
-
-
-def _seed_landed_mid_flight(conn: sa.Connection, tenant: str) -> None:
-    """A chunk in ``tenant`` whose ``delivery.landed`` fact sits beside a non-terminal newest transition."""
-    conn.execute(
-        insert(hub.chunks).values(
-            stamp(hub.chunks, tenant_id=tenant, chunk_id="ch_1", graph_id="gr_1", minted_at=_NOW, model="m")
-        )
-    )
-    conn.execute(
-        insert(hub.lease_facts).values(
-            stamp(hub.lease_facts, tenant_id=tenant, chunk_id="ch_1", epoch=2, runner_id="hub", minted_at=_NOW)
-        )
-    )
-    conn.execute(
-        insert(hub.transitions).values(
-            stamp(
-                hub.transitions,
-                tenant_id=tenant,
-                transition_id="tr_1",
-                chunk_id="ch_1",
-                graph_id="gr_1",
-                from_node_id="nd_deliver",
-                to_node_id="nd_verify",
-                choice_name="landed",
-                epoch=2,
-                runner_id="hub",
-                recorded_at=_NOW,
-            )
-        )
-    )
-    conn.execute(
-        insert(hub.delivery_landed).values(
-            stamp(hub.delivery_landed, tenant_id=tenant, chunk_id="ch_1", landed_at=_NOW)
-        )
-    )
-
-
 def test_each_tenants_chunks_are_facts_checked_in_that_tenant(tmp_path: Path) -> None:
     engine = _hub_engine(tmp_path)
     second = add_tenant(engine, "second")
@@ -2190,19 +2287,6 @@ def test_a_closed_tenants_chunks_are_not_facts_checked(tmp_path: Path) -> None:
     close_tenant(engine, second)
 
     assert [v for v in HubInvariants(engine).run() if v.invariant == "hub:merge-queue-single-state"] == []
-
-
-def _drained_tables(engine: sa.Engine, tenant: TenantId) -> set[str]:
-    """The tables still holding a row of ``tenant``."""
-    with engine.connect() as conn:
-        return {
-            table.name
-            for table in hub.metadata.sorted_tables
-            if is_tenant_owned(table)
-            and conn.execute(
-                hub_scoped(sa.select(sa.func.count()).select_from(table).where(table.c.tenant_id == tenant))
-            ).scalar_one()
-        }
 
 
 def test_a_closed_tenant_mid_drain_breaks_no_check(tmp_path: Path) -> None:
@@ -2291,93 +2375,6 @@ def test_a_row_naming_a_tenant_absent_from_tenants_is_a_violation(tmp_path: Path
         f"graphs holds 1 row(s) of tenant {second}, which is not in tenants",
         f"projects holds 1 row(s) of tenant {second}, which is not in tenants",
     ]
-
-
-_PROJECT_INVARIANTS = frozenset(
-    {
-        "hub:chunk-project-in-tenant",
-        "hub:routine-scope-same-project",
-        "hub:finding-scope-in-project",
-        "hub:review-finding-project-is-chunks",
-        "hub:question-project-is-chunks",
-        "hub:decision-project-is-chunks",
-        "hub:proposal-cites-own-project",
-        "hub:work-item-project-in-tenant",
-        "hub:slug-not-current-and-former",
-        "hub:work-source-references-in-tenant",
-        "hub:chunk-sources-linked",
-        "hub:landed-repository-linked",
-    }
-)
-
-
-def _project_breaches(engine: sa.Engine, invariant: str) -> list[str]:
-    return [v.detail for v in HubInvariants(engine).run() if v.invariant == invariant]
-
-
-def _add_project(conn: sa.Connection, project_id: str, *, slug: str) -> None:
-    """A second project in the store's only tenant, beside its ``default``."""
-    conn.execute(
-        insert(hub.projects).values(
-            stamp(
-                hub.projects,
-                project_id=project_id,
-                slug=slug,
-                name=slug.title(),
-                description="",
-                revision=1,
-                created_at=_NOW,
-            )
-        )
-    )
-
-
-def _scope_values(scope_id: str, project_id: str) -> dict[str, object]:
-    return stamp(hub.scopes, scope_id=scope_id, slug=scope_id, description="", created_at=_NOW, project_id=project_id)
-
-
-def _routine_values(routine_id: str, project_id: str, *, default_scope_id: str) -> dict[str, object]:
-    return stamp(
-        hub.routines,
-        routine_id=routine_id,
-        name=routine_id,
-        graph_name="gr",
-        default_scope_id=default_scope_id,
-        created_at=_NOW,
-        project_id=project_id,
-    )
-
-
-def _finding_values(finding_id: str, project_id: str, *, scope_id: str, **overrides: object) -> dict[str, object]:
-    values: dict[str, object] = {
-        "finding_id": finding_id,
-        "routine_name": "rtn_1",
-        "scope_id": scope_id,
-        "scope_slug": scope_id,
-        "class_": "dead-code",
-        "locus": "src/a.py",
-        "summary": "s",
-        "project_id": project_id,
-    }
-    values.update(overrides)
-    return stamp(hub.findings, **values)
-
-
-def _work_item_values(work_item_id: str, *, tenant: str, project_id: str) -> dict[str, object]:
-    return stamp(
-        hub.work_items,
-        tenant_id=tenant,
-        work_item_id=work_item_id,
-        source="hub",
-        ref=work_item_id,
-        title="t",
-        body="",
-        author_kind="fleet",
-        author_payload="{}",
-        created_at=_NOW,
-        edited_at=_NOW,
-        project_id=project_id,
-    )
 
 
 def test_a_chunk_filed_under_another_tenants_project_is_a_violation(tmp_path: Path) -> None:
@@ -2711,58 +2708,6 @@ def test_a_work_source_reference_outside_its_tenant_is_a_violation(tmp_path: Pat
     ]
 
 
-def _hours(n: float) -> datetime:
-    return _NOW + timedelta(hours=n)
-
-
-def _source_fact(conn: sa.Connection, source: str, *, linked: bool, at: datetime, project_id: str = "proj_app") -> None:
-    conn.execute(
-        insert(hub.project_source_link_facts).values(
-            stamp(
-                hub.project_source_link_facts,
-                project_id=project_id,
-                work_source_id=source,
-                linked=linked,
-                set_at=at,
-                set_by="op",
-            )
-        )
-    )
-
-
-def _repository_fact(
-    conn: sa.Connection, repository: str, *, linked: bool, at: datetime, project_id: str = "proj_app"
-) -> None:
-    conn.execute(
-        insert(hub.project_repository_link_facts).values(
-            stamp(
-                hub.project_repository_link_facts,
-                project_id=project_id,
-                repository_id=repository,
-                linked=linked,
-                set_at=at,
-                set_by="op",
-            )
-        )
-    )
-
-
-def _mint(
-    conn: sa.Connection, chunk_id: str, *, at: datetime, refs: tuple[str, ...], project_id: str = "proj_app"
-) -> None:
-    """A chunk of ``project_id`` minted ``at``, naming ``refs`` (``source:ref``) in order, the first originating."""
-    conn.execute(
-        insert(hub.chunks).values(
-            stamp(hub.chunks, chunk_id=chunk_id, graph_id="gr_1", minted_at=at, model="m", project_id=project_id)
-        )
-    )
-    for pointer in refs:
-        source, ref = pointer.split(":")
-        conn.execute(
-            insert(hub.chunk_work_refs).values(stamp(hub.chunk_work_refs, chunk_id=chunk_id, source=source, ref=ref))
-        )
-
-
 def test_a_chunk_naming_a_source_its_project_did_not_link_is_a_violation(tmp_path: Path) -> None:
     """A chunk's first ref must have been linked by its mint; a ref folded in later, only linked at some time. The
     hub source needs no link, a later unlink breaks nothing, and a chunk minted before its project existed predates
@@ -2825,114 +2770,3 @@ def test_a_landing_in_a_repository_its_project_had_not_linked_is_a_violation(tmp
         f"chunk ch_home of project {home} landed acme/app in repository app-repo, which its project had not "
         "linked by then",
     ]
-
-
-@pytest.mark.migration_revision("20261008_1800_projects")
-def test_a_carried_over_store_keeps_every_project_invariant(tmp_path: Path) -> None:
-    """Rows written before projects existed, in two tenants, each land in their own tenant's ``default`` project. A
-    carried chunk was minted before the migration created that project, and a carried landing names no repository."""
-    runner, engine = migrate_to(tmp_path, "20261008_1720_tenant_deletion_closed_at")
-    carried_mint = MIGRATION_CLOCK.now() - timedelta(days=1)
-    seeding = hub_scoped_engine(engine)
-    with seeding.begin() as conn:
-        first = conn.execute(sa.select(hub.tenants.c.tenant_id)).scalar_one()
-        conn.execute(
-            insert(hub.tenants).values(tenant_id="tnt_second", name="second", created_at=_NOW, created_by="test")
-        )
-        for n, tenant in enumerate((first, "tnt_second")):
-            scope, routine, chunk, finding = f"scp_{n}", f"rtn_{n}", f"ch_{n}", f"fin_{n}"
-            conn.execute(
-                insert(hub.scopes).values(tenant_id=tenant, scope_id=scope, slug="s", description="", created_at=_NOW)
-            )
-            conn.execute(
-                insert(hub.routines).values(
-                    tenant_id=tenant,
-                    routine_id=routine,
-                    name="r",
-                    graph_name="g",
-                    default_scope_id=scope,
-                    created_at=_NOW,
-                )
-            )
-            conn.execute(insert(hub.routine_scopes).values(tenant_id=tenant, routine_id=routine, scope_id=scope))
-            conn.execute(
-                insert(hub.chunks).values(
-                    tenant_id=tenant, chunk_id=chunk, graph_id="gr_1", minted_at=carried_mint, model="m"
-                )
-            )
-            conn.execute(
-                insert(hub.work_sources).values(
-                    tenant_id=tenant,
-                    name="acme",
-                    provider="github",
-                    locator="acme/app",
-                    annotate=False,
-                    revision=1,
-                    created_at=_NOW,
-                    created_by="test",
-                )
-            )
-            # A stored source, a source never stored as a record, and the built-in hub source.
-            for source in ("acme", "default", "hub"):
-                conn.execute(
-                    insert(hub.chunk_work_refs).values(tenant_id=tenant, chunk_id=chunk, source=source, ref="1")
-                )
-            conn.execute(
-                insert(hub.delivery_repo_landed).values(
-                    tenant_id=tenant, chunk_id=chunk, repo="acme/app", commit_hash="c0ffee", landed_at=_NOW
-                )
-            )
-            conn.execute(
-                insert(hub.findings).values(
-                    tenant_id=tenant,
-                    finding_id=finding,
-                    scope_id=scope,
-                    scope_slug="s",
-                    class_="c",
-                    locus="a.py",
-                    summary="s",
-                    source="review",
-                    raised_by_chunk_id=chunk,
-                )
-            )
-            conn.execute(
-                insert(hub.garden_proposals).values(
-                    tenant_id=tenant,
-                    proposal_id=f"gprop_{n}",
-                    routine_name="r",
-                    class_="c",
-                    title="t",
-                    body="",
-                    created_at=_NOW,
-                )
-            )
-            conn.execute(
-                insert(hub.garden_proposal_findings).values(
-                    tenant_id=tenant, proposal_id=f"gprop_{n}", finding_id=finding
-                )
-            )
-            conn.execute(
-                insert(hub.work_items).values(
-                    tenant_id=tenant,
-                    work_item_id=f"wi_{n}",
-                    source="hub",
-                    ref="1",
-                    title="t",
-                    body="",
-                    author_kind="fleet",
-                    author_payload="{}",
-                    created_at=_NOW,
-                    edited_at=_NOW,
-                )
-            )
-    runner.upgrade("head")
-    try:
-        violations = HubInvariants(engine).run()
-        stranded = [v for v in violations if v.invariant == "hub:work-source-references-in-tenant"]
-        assert {v.invariant for v in violations} & _PROJECT_INVARIANTS == {"hub:work-source-references-in-tenant"}
-        # Only the ref naming a source never stored as a record is left as stored, and reported.
-        assert [v.detail.split(" names ")[1] for v in stranded] == [
-            "work source default, not a work source of its tenant"
-        ] * 2
-    finally:
-        engine.dispose()

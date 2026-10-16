@@ -8,7 +8,7 @@ import sqlalchemy as sa
 
 from blizzard.hub.config import HubConfig
 from blizzard.hub.runtime import migration_runner
-from tests.test_tenant_keys_migration import (
+from tests.migration_support_tenant_keys_migration import (
     _seeded_at_the_backfill,
 )
 

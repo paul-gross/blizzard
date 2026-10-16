@@ -36,7 +36,7 @@ jobs:
         run: uv run ast-grep scan --error=unused-suppression . && uv run ast-grep test
 
   # The tier is the gate's longest job, so it runs as parallel shards — each a disjoint,
-  # stable slice of the collected suite (`BLIZZARD_TEST_SHARD`, tests/conftest.py) — and
+  # stable slice of the collected suite (`BLIZZARD_TEST_SHARD`, tests/suite_plugin.py) — and
   # `python-tests-result` reports them under the single check name a required-check list
   # names.
   python-tests:

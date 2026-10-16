@@ -20,8 +20,7 @@ from sqlalchemy.exc import IntegrityError, SAWarning
 from blizzard.hub.config import HubConfig
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import MIGRATIONS_DIR
-from tests.migration_support_tenant_tighten_migration import _KEYS, _index_names, _seeded_at_the_keys
-from tests.test_tenant_keys_migration import (
+from tests.migration_support_tenant_keys_migration import (
     _SECOND_TENANT,
     _T0,
     _rows,
@@ -29,6 +28,7 @@ from tests.test_tenant_keys_migration import (
     _tenant_column_nullable,
     _tenant_ids,
 )
+from tests.migration_support_tenant_tighten_migration import _KEYS, _index_names, _seeded_at_the_keys
 
 pytestmark = [pytest.mark.component]
 

@@ -164,7 +164,6 @@ markers = [
     "service: a running daemon's HTTP API exercised from outside with the counterpart mocked; skipped when the mock fleet is absent",
     "journey: the capstone MVP acceptance-journey rehearsal — real host daemons, a mid-run reboot, and the human loop, end to end; skipped without BLIZZARD_JOURNEY=1",
     "winter_binding: the winter workspace binding against the real winter CLI — local-only, never run in CI; skipped without BLIZZARD_WINTER_BINDING=1",
-    "migration_revision(stem): the store revision (a versions/ filename stem) the test exists to prove; skipped once that revision is over 30 days old, unless BLIZZARD_RUN_RETIRED_MIGRATION_TESTS=1",
 ]
 
 [tool.mutmut]

@@ -20,13 +20,10 @@ from blizzard.runner.store.runner_guard import install_runner_guard
 from tests.head_replay_guard import install_head_replay_guard
 from tests.repo_files import install_repo_read_guard
 from tests.revision_age import (
-    InvalidRevisionMarker,
     InvalidRevisionTest,
     Retired,
     colocated_versions,
-    decide,
     decide_colocated,
-    revision_index,
 )
 
 # Install before test-module imports so collection-time reads are covered too.
@@ -71,31 +68,21 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
 
 
 def _retire_aged_revision_tests(items: list[pytest.Item]) -> None:
-    """Skip each ``migration_revision`` test whose revision has aged out; refuse a marker naming no revision.
+    """Skip each colocated store-migration test whose revision has aged out; refuse a file naming no sibling revision.
 
-    Runs before sharding, so a bad marker fails every shard and shard membership stays a nodeid hash.
+    Runs before sharding, so a bad name fails every shard and shard membership stays a nodeid hash.
     """
     today = datetime.now(UTC).date()
-    index = revision_index()
     decided: dict[Path, Retired | None] = {}
     for item in items:
-        if colocated_versions(item.path) is not None:
-            if item.path not in decided:
-                try:
-                    decided[item.path] = decide_colocated(item.path, today=today, environ=os.environ)
-                except InvalidRevisionTest as error:
-                    raise pytest.UsageError(f"{item.nodeid}: {error}") from error
-            colocated = decided[item.path]
-            if colocated is not None:
-                item.add_marker(pytest.mark.skip(reason=colocated.reason))
+        if colocated_versions(item.path) is None:
             continue
-        marker = item.get_closest_marker("migration_revision")
-        if marker is None:
-            continue
-        try:
-            retired = decide(marker.args, today=today, environ=os.environ, index=index)
-        except InvalidRevisionMarker as error:
-            raise pytest.UsageError(f"{item.nodeid}: migration_revision: {error}") from error
+        if item.path not in decided:
+            try:
+                decided[item.path] = decide_colocated(item.path, today=today, environ=os.environ)
+            except InvalidRevisionTest as error:
+                raise pytest.UsageError(f"{item.nodeid}: {error}") from error
+        retired = decided[item.path]
         if retired is not None:
             item.add_marker(pytest.mark.skip(reason=retired.reason))
 
