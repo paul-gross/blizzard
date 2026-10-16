@@ -295,6 +295,20 @@ def test_release_invalidates_the_old_token_and_the_next_claims_token_is_accepted
 # Re-key — rotates the token; the old plaintext is rejected afterward (AC 6)
 
 
+def test_rekeyed_unleased_claim_accepts_its_first_completion(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path, route_token_mode=ROUTE_TOKEN_ENFORCE)
+    chunk_id, node_id = _ingest(hub)
+    _claim(hub, chunk_id)  # the claim committed, but its response never reached the runner
+
+    rekeyed = hub.client.post(f"/api/fleet/chunks/{chunk_id}/route-token")
+    assert rekeyed.status_code == 200, rekeyed.text
+    token = rekeyed.json()["route_token"]
+    report_lease(hub, chunk_id, epoch=1, seq=1, route_token=token)
+
+    accepted = _submit(hub, chunk_id, node_id=node_id, epoch=1, route_token=token)
+    assert accepted.json()["outcome"] != "failure", accepted.text
+
+
 def test_rekey_rotates_the_token_and_the_old_one_is_rejected_afterward(tmp_path: Path) -> None:
     hub = build_hub(tmp_path, route_token_mode=ROUTE_TOKEN_ENFORCE)
     chunk_id, node_id = _ingest(hub)

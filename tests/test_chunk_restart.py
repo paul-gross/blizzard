@@ -17,7 +17,7 @@ from blizzard.hub.domain.chunk.ports.hub_exec import IWriteChunkHubExecRepositor
 from blizzard.hub.domain.chunk.ports.record import IWriteChunkRecordRepository
 from blizzard.hub.domain.operations.restart import SUPERSEDED_ANSWER, RestartGraphPinChanged
 from blizzard.runner.hub.internal.http_hub import _chunk_state
-from blizzard.runner.lifecycle.model import HeldChunkMove, held_chunk_move
+from blizzard.runner.lifecycle.model import HeldChunkMove, held_chunk_move, owns_node_entry
 from blizzard.tools.invariants import HubInvariants
 from blizzard.wire.chunk import ChunkStatusView
 from tests.support import assert_all_timestamps_utc, build_hub, chunk_stores, emitted_events, ingest, report_lease
@@ -322,8 +322,15 @@ def test_restart_closes_a_resolved_decision_the_runner_has_not_acted_on(tmp_path
     statuses = hub.client.get("/api/fleet/chunk-statuses", params={"chunk_id": [chunk_id]})
     view = _chunk_state(ChunkStatusView.model_validate(statuses.json()[0]))
     assert view.decision is None
-    move = held_chunk_move(view, runner_id="r1", local_latest_epoch=1, taken_over=False)
-    assert move == HeldChunkMove.SPAWN_ADVANCED
+    move = held_chunk_move(
+        view,
+        runner_id="r1",
+        local_latest_epoch=1,
+        lease_in_binding_tenure=True,
+        taken_over=False,
+    )
+    assert move == HeldChunkMove.HOLD
+    assert owns_node_entry(view, local_epoch=1, open_escalation_epoch=None, lease_in_binding_tenure=True)
 
 
 def test_restart_supersedes_an_open_escalation(tmp_path) -> None:  # type: ignore[no-untyped-def]
