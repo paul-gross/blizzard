@@ -190,6 +190,27 @@ def insert_chunk_rows(conn: Connection, chunk: Chunk) -> None:
         )
 
 
+def _newest_instants(conn: Connection, column: Column[Any], batch: Sequence[str] | None) -> dict[str, datetime]:
+    """The newest ``column`` instant per chunk of ``column``'s fact table, for the chunks in ``batch`` —
+    every chunk's when ``batch`` is ``None``."""
+    table = cast(Table, column.table)
+    stmt = statements_of(conn).select(table, table.c.chunk_id, func.max(column).label("at"))
+    if batch is not None:
+        stmt = stmt.where(table.c.chunk_id.in_(batch))
+    return {r.chunk_id: r.at for r in conn.execute(stmt.group_by(table.c.chunk_id)).all()}
+
+
+def currently_promoted_ats(conn: Connection, batch: Sequence[str] | None) -> dict[str, datetime]:
+    """Each currently promoted chunk's newest ``promoted_at``, among ``batch`` — every chunk's when
+    ``None``. A chunk is currently promoted when its newest promotion is strictly later than its
+    newest demotion; a chunk never promoted, or demoted since, is absent."""
+    promoted = _newest_instants(conn, s.chunk_promoted.c.promoted_at, batch)
+    if not promoted:
+        return {}
+    demoted = _newest_instants(conn, s.chunk_demoted.c.demoted_at, batch)
+    return {chunk_id: at for chunk_id, at in promoted.items() if chunk_id not in demoted or at > demoted[chunk_id]}
+
+
 def insert_promote_rows(conn: Connection, chunk_id: str, *, position: float, at: datetime) -> int | None:
     """Insert one chunk's ``chunk_promoted`` and ``queue_positions`` rows on a
     caller-supplied ``conn`` — mirrors :func:`insert_chunk_rows`'s shared-connection

@@ -14,7 +14,7 @@ from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.queue import IWriteChunkQueueRepository
 from blizzard.hub.store import schema as s
-from blizzard.hub.store.internal.chunk_rows import conn_of, insert_promote_rows, row_exists
+from blizzard.hub.store.internal.chunk_rows import conn_of, currently_promoted_ats, insert_promote_rows
 from blizzard.hub.store.internal.newest_fact import newest_fact_select
 from blizzard.hub.store.scoped import ScopedConnections
 
@@ -46,23 +46,18 @@ class ChunkQueueStore:
         return result
 
     def promoted_ats(self, chunk_ids: Sequence[str]) -> dict[str, datetime]:
-        """Each promoted chunk's ``chunk_promoted.promoted_at`` among ``chunk_ids``."""
+        """Each currently promoted chunk's newest ``chunk_promoted.promoted_at`` among ``chunk_ids``."""
         result: dict[str, datetime] = {}
         with self._store.read("promoted_ats") as conn:
             for batch in id_batches(chunk_ids):
-                rows = conn.execute(
-                    self._store.select(
-                        s.chunk_promoted, s.chunk_promoted.c.chunk_id, s.chunk_promoted.c.promoted_at
-                    ).where(s.chunk_promoted.c.chunk_id.in_(batch))
-                ).all()
-                result.update((r.chunk_id, r.promoted_at) for r in rows)
+                result.update(currently_promoted_ats(conn, batch))
         return result
 
     def record_promote(self, chunk_id: str, *, at: datetime) -> int | None:
-        # Idempotent by chunk_id: a chunk already promoted keeps its first row, so a
-        # double promote (board click, CLI retry) is a harmless no-op.
+        # Idempotent while promoted: a chunk already currently promoted writes nothing, so a
+        # double promote (board click, CLI retry) is a harmless no-op; one demoted since promotes again.
         with self._store.write("record_promote") as conn:
-            if row_exists(conn, s.chunk_promoted, chunk_id):
+            if currently_promoted_ats(conn, [chunk_id]):
                 return None
             result = conn.execute(self._store.insert(s.chunk_promoted).values(chunk_id=chunk_id, promoted_at=at))
             key = result.inserted_primary_key
@@ -91,21 +86,15 @@ class ChunkQueueStore:
             return
         with self._store.write("record_backlog_positions") as conn:
             chunk_ids = [chunk_id for chunk_id, _ in positions]
-            # `.in_()` reads over id_batches, not one `row_exists` per pair.
+            # `.in_()` reads over id_batches, not one read per pair.
             promoted: set[str] = set()
             for batch in id_batches(chunk_ids):
-                promoted |= {
-                    r.chunk_id
-                    for r in conn.execute(
-                        self._store.select(s.chunk_promoted, s.chunk_promoted.c.chunk_id).where(
-                            s.chunk_promoted.c.chunk_id.in_(batch)
-                        )
-                    ).all()
-                }
+                promoted |= currently_promoted_ats(conn, batch).keys()
             rows = [
                 {"chunk_id": chunk_id, "position": position, "set_at": at}
                 for chunk_id, position in positions
-                # promoted since the caller resolved backlog candidates — not this write's chunk anymore
+                # promoted since the caller resolved backlog candidates — not this write's chunk anymore;
+                # a chunk demoted since its promotion is a backlog chunk again and keeps its stamp
                 if chunk_id not in promoted
             ]
             if rows:

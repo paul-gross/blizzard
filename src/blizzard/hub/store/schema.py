@@ -1363,8 +1363,9 @@ hub_node_poll = Table(
 )
 Index("ix_hub_node_poll_tenant_chunk_id", hub_node_poll.c.tenant_id, hub_node_poll.c.chunk_id)
 
-# --- Readiness: the not-ready resting state and its promotion --------
-# A chunk with no ``chunk_promoted`` row derives ``not_ready`` and is never claimed.
+# --- Readiness: the not-ready resting state, its promotion and demotion --------
+# A chunk is currently promoted when its newest ``chunk_promoted`` row is later than its newest
+# ``chunk_demoted`` row; any other chunk derives ``not_ready`` and is never claimed.
 
 chunk_promoted = Table(
     "chunk_promoted",
@@ -1381,6 +1382,22 @@ Index(
     chunk_promoted.c.tenant_id,
     chunk_promoted.c.promoted_at,
     chunk_promoted.c.id,
+)
+
+chunk_demoted = Table(
+    "chunk_demoted",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),
+    Column("demoted_at", UtcDateTime, nullable=False),  # ready -> not_ready
+    Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_chunk_demoted_tenant_id"), nullable=False),
+)
+Index("ix_chunk_demoted_tenant_chunk_id", chunk_demoted.c.tenant_id, chunk_demoted.c.chunk_id)
+Index(
+    "ix_chunk_demoted_tenant_demoted_at_id",
+    chunk_demoted.c.tenant_id,
+    chunk_demoted.c.demoted_at,
+    chunk_demoted.c.id,
 )
 
 # --- Facts that make the derivation precedence correct (shaped) -------------

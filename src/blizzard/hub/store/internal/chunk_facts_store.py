@@ -43,7 +43,7 @@ from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_decisions_store import decision_closure_ids
-from blizzard.hub.store.internal.chunk_rows import ephemeral_ids_select, graph_id_of_batch
+from blizzard.hub.store.internal.chunk_rows import currently_promoted_ats, ephemeral_ids_select, graph_id_of_batch
 from blizzard.hub.store.internal.chunk_terminal_predicates import (
     done_completed_at,
     maybe_live,
@@ -104,7 +104,7 @@ _MOVEMENT_FAMILIES: frozenset[str] = frozenset({"transitions", "migrations", "re
 
 #: Each status family's tables — the change probe's list, so a new family joins it here.
 _STATUS_FAMILY_TABLES: dict[str, tuple[Table, ...]] = {
-    "promoted": (s.chunk_promoted,),
+    "promoted": (s.chunk_promoted, s.chunk_demoted),
     "stopped": (s.chunk_stopped,),
     "operator_completed": (s.chunk_completed,),
     "escalations": (s.escalations,),
@@ -542,9 +542,7 @@ class ChunkFactsStore:
 
         promoted_ids: set[str] = set()
         if "promoted" in families:
-            promoted_ids = {
-                r.chunk_id for r in _rows(stmts, conn, s.chunk_promoted, batch, s.chunk_promoted.c.chunk_id)
-            }
+            promoted_ids = set(currently_promoted_ats(conn, batch))
 
         delivery_landed_ids: set[str] = set()
         if "delivery_landed" in families:
