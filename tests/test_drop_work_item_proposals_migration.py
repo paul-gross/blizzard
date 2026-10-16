@@ -16,7 +16,7 @@ from blizzard.hub.config import HubConfig
 from blizzard.hub.runtime import migration_runner
 from tests.support import hub_scoped_engine
 
-pytestmark = pytest.mark.component
+pytestmark = [pytest.mark.component, pytest.mark.migration_revision("20261008_1000_drop_work_item_proposals")]
 
 _BEFORE = "20261006_1200_runner_minted_ids"
 _DROP = "20261008_1000_drop_work_item_proposals"

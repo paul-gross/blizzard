@@ -21,7 +21,7 @@ from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import schema as s
 from tests.support import chunk_stores, hub_scoped_engine
 
-pytestmark = pytest.mark.component
+pytestmark = [pytest.mark.component, pytest.mark.migration_revision("20260715_1817_chunk_promoted")]
 
 _BEFORE = "20260714_0819_hub_delivery_pr_facts"  # the head just before chunk_promoted
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)

@@ -13,7 +13,7 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub import runtime as hub_runtime
 from tests.support import hub_scoped_engine, seed_chunk, seed_graph
 
-pytestmark = pytest.mark.component
+pytestmark = [pytest.mark.component, pytest.mark.migration_revision("20260809_1200_transcript_segments")]
 
 
 def _table_names(db_url: str) -> set[str]:
@@ -46,6 +46,7 @@ def test_transcript_tables_survive_a_downgrade_upgrade_roundtrip(tmp_path: Path)
     assert "transcript_high_water" in tables
 
 
+@pytest.mark.migration_revision("20260713_1801_questions_and_answers")
 def test_questions_historical_revision_does_not_create_later_harness_provenance(tmp_path: Path) -> None:
     """The later provenance migration must see a column to add and backfill itself."""
     config = hub_runtime.init_environment(tmp_path)
@@ -62,6 +63,7 @@ def test_questions_historical_revision_does_not_create_later_harness_provenance(
     assert "harness_id" not in columns
 
 
+@pytest.mark.migration_revision("20260913_1000_transcript_segments_content_digest")
 def test_harness_provenance_backfills_concrete_session_rows_without_versions(tmp_path: Path) -> None:
     config = hub_runtime.init_environment(tmp_path)
     runner = hub_runtime.migration_runner(config)

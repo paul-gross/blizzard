@@ -30,7 +30,7 @@ from tests.test_tenant_keys_migration import (
     _tenant_ids,
 )
 
-pytestmark = pytest.mark.component
+pytestmark = [pytest.mark.component, pytest.mark.migration_revision("20261008_1400_tenant_tighten")]
 
 _KEYS = "20261008_1300_tenant_keys"
 _TIGHTEN = "20261008_1400_tenant_tighten"

@@ -31,7 +31,7 @@ from tests.test_tenant_carry_over_migration import _rows_each_update_changed
 from tests.test_tenant_keys_migration import _SECOND_TENANT, _T0, _snapshot, _tenant_ids
 from tests.test_tenant_tighten_migration import _index_names, _seeded_at_the_keys
 
-pytestmark = pytest.mark.component
+pytestmark = [pytest.mark.component, pytest.mark.migration_revision("20261008_1500_scope_surrogate")]
 
 _TIGHTEN = "20261008_1400_tenant_tighten"
 _SURROGATE = "20261008_1500_scope_surrogate"

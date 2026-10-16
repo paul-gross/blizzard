@@ -14,7 +14,7 @@ import sqlalchemy as sa
 
 from tests.support import migrate_to, seed_chunk, seed_graph
 
-pytestmark = pytest.mark.component
+pytestmark = [pytest.mark.component, pytest.mark.migration_revision("20260930_1000_artifact_seq")]
 
 _BEFORE = "20260929_1100_drop_open_pr_facts"
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)

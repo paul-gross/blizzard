@@ -14,7 +14,7 @@ import sqlalchemy as sa
 from blizzard.foundation.store.engine import create_engine_from_url
 from tests.support import migrate_to, seed_chunk, seed_graph
 
-pytestmark = pytest.mark.component
+pytestmark = [pytest.mark.component, pytest.mark.migration_revision("20260929_1000_decision_imposed_by_runner")]
 
 _BEFORE = "20260928_1100_runner_retirement"  # the head just before this revision
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)

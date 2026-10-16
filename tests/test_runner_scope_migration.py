@@ -22,7 +22,7 @@ from blizzard.foundation.store.migrations import MigrationRunner
 from blizzard.runner import runtime as runner_runtime
 from tests.runner_scope_seeding import KEYED, T0, reflect, seed_every_keyed_table
 
-pytestmark = pytest.mark.component
+pytestmark = [pytest.mark.component, pytest.mark.migration_revision("20261011_1000_runner_scope")]
 
 _PARENT = "20261009_1000_runner_lease_closures_lease_id_index"
 _REVISION = "20261011_1000_runner_scope"

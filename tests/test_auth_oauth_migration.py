@@ -16,7 +16,7 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import HubConfig
 from blizzard.hub.runtime import migration_runner
 
-pytestmark = pytest.mark.component
+pytestmark = [pytest.mark.component, pytest.mark.migration_revision("20260721_1200_auth_oauth")]
 
 _BEFORE = "20260721_1100_hub_auth_identity_spine"  # the head just before this revision
 

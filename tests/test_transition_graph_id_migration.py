@@ -18,7 +18,7 @@ from blizzard.hub.config import HubConfig
 from blizzard.hub.runtime import migration_runner
 from tests.support import hub_scoped_engine
 
-pytestmark = pytest.mark.component
+pytestmark = [pytest.mark.component, pytest.mark.migration_revision("20260718_1215_transition_graph_id")]
 
 _BEFORE = "20260718_1200_hub_route_token_minted"  # the head just before graph-provenance
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)

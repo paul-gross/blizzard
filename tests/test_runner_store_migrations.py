@@ -135,6 +135,7 @@ def _rows(engine: sa.Engine, statement: str) -> list[tuple[object, ...]]:
         return [tuple(r) for r in conn.execute(sa.text(statement))]
 
 
+@pytest.mark.migration_revision("20261006_1000_runner_identity")
 def test_identity_migration_keeps_the_newest_liveness_ids_singletons_and_every_history_row(tmp_path: Path) -> None:
     migration, engine = _store_at_parent(tmp_path)
     try:
@@ -168,6 +169,7 @@ _CEILING = "spend ceiling: $50.00 over 24h"
     ],
     ids=["former-id-paused-last", "former-id-cleared-last"],
 )
+@pytest.mark.migration_revision("20261006_1000_runner_identity")
 def test_identity_migration_keeps_the_kept_ids_local_brake_when_a_former_id_wrote_the_newest_fact(
     tmp_path: Path, facts: list[tuple[str, bool, datetime, str | None]], paused: bool, reason: str | None
 ) -> None:
@@ -193,6 +195,7 @@ def test_identity_migration_keeps_the_kept_ids_local_brake_when_a_former_id_wrot
         engine.dispose()
 
 
+@pytest.mark.migration_revision("20261006_1000_runner_identity")
 def test_identity_migration_downgrades_onto_the_identity_rows_name_and_upgrades_back(tmp_path: Path) -> None:
     migration, engine = _store_at_parent(tmp_path)
     try:
@@ -223,6 +226,7 @@ def test_identity_migration_downgrades_onto_the_identity_rows_name_and_upgrades_
         engine.dispose()
 
 
+@pytest.mark.migration_revision("20261006_1000_runner_identity")
 def test_identity_migration_downgrades_a_never_registered_store_onto_the_pre_change_default_id(tmp_path: Path) -> None:
     migration, engine = _store_at_parent(tmp_path)
     try:
@@ -235,6 +239,7 @@ def test_identity_migration_downgrades_a_never_registered_store_onto_the_pre_cha
 
 
 @pytest.mark.parametrize("table", _KEYED_TABLES)
+@pytest.mark.migration_revision("20261006_1000_runner_identity")
 def test_frozen_keyed_tables_carry_the_runner_id_until_the_identity_revision(table: str, tmp_path: Path) -> None:
     """``bzh:frozen-revisions``: migrated forward from ``base``, never down from head, so a freeze
     that wrongly absorbed the drop shows."""
@@ -292,6 +297,7 @@ _binding_releases_at_floor = sa.table(
 )
 
 
+@pytest.mark.migration_revision("20261004_1000_binding_release_epoch_floor")
 def test_release_floor_backfill_does_not_include_a_later_equal_instant_mint(tmp_path: Path) -> None:
     config = runner_runtime.init_environment(tmp_path)
     migration = runner_runtime.migration_runner(config)
@@ -330,6 +336,7 @@ def test_release_floor_backfill_does_not_include_a_later_equal_instant_mint(tmp_
 _TENANT_REVISION = "20261008_1000_runner_identity_tenant"
 
 
+@pytest.mark.migration_revision("20261008_1100_runner_hub_projects")
 def test_hub_projects_migration_adds_the_answer_and_its_marker_and_drops_both_losslessly(tmp_path: Path) -> None:
     """``20261008_1100_runner_hub_projects``: a carried identity row holds no answer until its next
     registration; down drops the table and the marker, and up again restores an empty, unanswered shape."""
@@ -375,6 +382,7 @@ def test_hub_projects_migration_adds_the_answer_and_its_marker_and_drops_both_lo
         engine.dispose()
 
 
+@pytest.mark.migration_revision("20261009_1000_lease_closures_lease_id_index")
 def test_lease_closures_lease_id_index_migration_creates_and_drops_the_index_idempotently(tmp_path: Path) -> None:
     """``20261009_1000_runner_lease_closures_lease_id_index``: up creates the index, down drops it, up restores it."""
     config = runner_runtime.init_environment(tmp_path)

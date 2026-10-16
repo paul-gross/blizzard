@@ -33,8 +33,8 @@ from blizzard.runner.host_config import HostConfig
 from blizzard.runner.store.runner_guard import GUARD_ENVIRONMENT_VARIABLE as RUNNER_GUARD_ENVIRONMENT_VARIABLE
 from blizzard.runner.store.runner_guard import install_runner_guard
 from tests.head_replay_guard import install_head_replay_guard
-from tests.revision_age import InvalidRevisionMarker, decide, revision_index
 from tests.repo_files import install_repo_read_guard
+from tests.revision_age import InvalidRevisionMarker, decide, revision_index
 
 # Its autouse fixture joins every in-process runner init to a fake hub.
 pytest_plugins = ("tests.runner_init_fakes",)

@@ -53,6 +53,7 @@ _SEED = (
 )
 
 
+@pytest.mark.migration_revision("20261008_1100_tenants")
 def test_a_carried_store_applies_its_own_export_without_a_change(tmp_path: Path) -> None:
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
     Migrations(HubConfig(root=tmp_path, db_url=db_url), FixedClock(_NOW)).runner.upgrade(_BEFORE_TENANTS)

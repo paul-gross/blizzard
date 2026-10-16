@@ -18,7 +18,7 @@ from blizzard.hub.config import HubConfig
 from blizzard.hub.runtime import migration_runner
 from tests.support import hub_scoped_engine
 
-pytestmark = pytest.mark.component
+pytestmark = [pytest.mark.component, pytest.mark.migration_revision("20260716_2206_pr_opened_idempotent")]
 
 _BEFORE = "20260716_1512_hub_pm_pointer_source_ref"  # the head just before the idempotent constraint
 _AFTER = "20260716_2206_hub_pr_opened_idempotent"  # the revision under test; later heads drop the table

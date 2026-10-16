@@ -132,6 +132,7 @@ def _tenant_hub(tenant_id: str | None = "ten_default", tenant_name: str | None =
     return hub
 
 
+@pytest.mark.migration_revision("20261008_1000_runner_identity_tenant")
 def test_the_upgrade_adds_both_columns_empty_and_keeps_the_row(tmp_path: Path) -> None:
     migration, engine = _store_at_parent(tmp_path)
     try:
@@ -150,6 +151,7 @@ def test_the_upgrade_adds_both_columns_empty_and_keeps_the_row(tmp_path: Path) -
         engine.dispose()
 
 
+@pytest.mark.migration_revision("20261008_1000_runner_identity_tenant")
 def test_the_upgrade_skips_a_column_already_present(tmp_path: Path) -> None:
     migration, engine = _store_at_parent(tmp_path)
     try:
@@ -161,6 +163,7 @@ def test_the_upgrade_skips_a_column_already_present(tmp_path: Path) -> None:
         engine.dispose()
 
 
+@pytest.mark.migration_revision("20261008_1000_runner_identity_tenant")
 def test_the_downgrade_drops_both_columns_keeping_the_row_and_upgrades_back(tmp_path: Path) -> None:
     migration, engine = _store_at_parent(tmp_path)
     try:
@@ -207,6 +210,7 @@ def test_no_table_but_the_identity_rows_carries_a_tenant(tmp_path: Path) -> None
         engine.dispose()
 
 
+@pytest.mark.migration_revision("20261008_1000_runner_identity_tenant")
 def test_a_runner_upgraded_from_before_tenants_adopts_its_tenant_at_its_first_contact(tmp_path: Path) -> None:
     """No configuration change and no stranded chunk: the same token, the same runner, the same lease."""
     migration, engine = _store_at_parent(tmp_path)

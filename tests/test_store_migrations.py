@@ -82,6 +82,7 @@ def test_ensure_current_revision_passes_at_head(daemon: Daemon, tmp_path: Path) 
     daemon.runtime.ensure_current_revision(config)
 
 
+@pytest.mark.migration_revision("20260803_1000_escalation_wrapped_takeover_command")
 def test_wrapped_takeover_command_column_survives_migration_roundtrip(tmp_path: Path) -> None:
     """Hub-only (``escalations.wrapped_takeover_command`` has no runner counterpart) —
     downgrades to this revision's own parent by id, not ``"-1"``, so a future revision
@@ -106,6 +107,7 @@ def test_wrapped_takeover_command_column_survives_migration_roundtrip(tmp_path: 
     assert _has_column()
 
 
+@pytest.mark.migration_revision("20260920_1100_usage_harness_provenance")
 def test_hub_usage_facts_harness_columns_survive_migration_roundtrip(tmp_path: Path) -> None:
     """``usage_facts.harness_id``/``harness_version`` — downgrades to this
     revision's own parent by id, so the drop half is asserted rather than inferred from a
@@ -129,6 +131,7 @@ def test_hub_usage_facts_harness_columns_survive_migration_roundtrip(tmp_path: P
     assert {"harness_id", "harness_version"} <= _columns()
 
 
+@pytest.mark.migration_revision("20260922_1200_hub_usage_estimated_cost")
 def test_hub_usage_facts_estimated_cost_column_survives_migration_roundtrip(tmp_path: Path) -> None:
     """``usage_facts.estimated_cost_usd`` — downgrades to this revision's own parent by
     id, so the drop half is asserted rather than inferred from a revision marker, which a
@@ -152,6 +155,7 @@ def test_hub_usage_facts_estimated_cost_column_survives_migration_roundtrip(tmp_
     assert "estimated_cost_usd" in _columns()
 
 
+@pytest.mark.migration_revision("20260920_0300_usage_harness_provenance")
 def test_runner_usage_facts_harness_columns_survive_migration_roundtrip(tmp_path: Path) -> None:
     """``usage_facts.harness_id``/``harness_version``, the runner's own
     durable row — downgrades to this revision's own parent by id, so the drop half is
@@ -175,6 +179,7 @@ def test_runner_usage_facts_harness_columns_survive_migration_roundtrip(tmp_path
     assert {"harness_id", "harness_version"} <= _columns()
 
 
+@pytest.mark.migration_revision("20260817_0900_graph_artifacts")
 def test_graph_artifacts_table_survives_migration_roundtrip(tmp_path: Path) -> None:
     """Hub-only (the graph mint's own child table) — downgrades to this revision's own
     parent by id, so the drop half is asserted rather than inferred from a revision
@@ -198,6 +203,7 @@ def test_graph_artifacts_table_survives_migration_roundtrip(tmp_path: Path) -> N
     assert _has_table()
 
 
+@pytest.mark.migration_revision("20261001_1000_trace_cursor")
 def test_trace_cursor_table_and_epoch_owner_index_survive_migration_roundtrip(tmp_path: Path) -> None:
     """Hub-only — downgrades to the revision's own parent, so both the dropped table and the
     dropped ``epoch_owners`` index are asserted rather than inferred from a revision marker."""
@@ -222,6 +228,7 @@ def test_trace_cursor_table_and_epoch_owner_index_survive_migration_roundtrip(tm
     assert _shape() == (True, True)
 
 
+@pytest.mark.migration_revision("20261003_0900_egress_cursor")
 def test_egress_cursor_table_and_usage_index_survive_migration_roundtrip(tmp_path: Path) -> None:
     """Hub-only — downgrades to the revision's own parent, so the dropped table and the dropped
     ``usage_facts`` index are each asserted rather than inferred from a revision marker."""
@@ -257,6 +264,7 @@ _DERIVATIONS_EGRESS_ORDER = {
 _DROPS_BY_CHUNK = {"ix_transcript_event_drops_chunk_id_epoch", "ix_transcript_event_drops_tenant_chunk_id_epoch"}
 
 
+@pytest.mark.migration_revision("20261003_1200_transcript_event_drops")
 def test_transcript_event_drops_table_survives_migration_roundtrip(tmp_path: Path) -> None:
     """Hub-only — downgrades to the revision's own parent, so the dropped table is asserted
     rather than inferred from a revision marker."""
@@ -284,6 +292,7 @@ def test_transcript_event_drops_table_survives_migration_roundtrip(tmp_path: Pat
     assert _shape() == (True, True)
 
 
+@pytest.mark.migration_revision("20261004_1300_egress_events")
 def test_egress_events_indexes_and_cursor_columns_survive_migration_roundtrip(tmp_path: Path) -> None:
     """Hub-only — downgrades to the revision's own parent, so each index and cursor column is asserted."""
     config = hub_runtime.init_environment(tmp_path)  # upgrades to head
@@ -316,6 +325,7 @@ def test_egress_events_indexes_and_cursor_columns_survive_migration_roundtrip(tm
     assert _shape() == (True, True, True, {"segment_id", "extractor_version"})
 
 
+@pytest.mark.migration_revision("20261008_1300_tenant_keys")
 def test_legacy_long_derivations_index_is_renamed_on_the_way_to_head(tmp_path: Path) -> None:
     """Hub-only — a store the egress revision once gave a 71-character index name reaches head holding the head name."""
     legacy = "ix_transcript_event_derivations_derived_at_segment_id_extractor_version"
@@ -346,6 +356,7 @@ def test_legacy_long_derivations_index_is_renamed_on_the_way_to_head(tmp_path: P
     assert legacy not in names
 
 
+@pytest.mark.migration_revision("20261003_1400_escalation_cause")
 def test_escalation_cause_columns_survive_migration_roundtrip(tmp_path: Path) -> None:
     """A pre-cause escalation row reads back with no cause or detail: no backfill."""
     config = hub_runtime.init_environment(tmp_path)
@@ -385,6 +396,7 @@ def test_escalation_cause_columns_survive_migration_roundtrip(tmp_path: Path) ->
     assert tuple(row) == (None, None)
 
 
+@pytest.mark.migration_revision("20260819_1100_work_items")
 def test_work_items_tables_survive_migration_roundtrip(tmp_path: Path) -> None:
     """``work_items`` + ``work_item_sequence`` — downgrades to this
     revision's own parent by id, so the drop half is asserted rather than inferred from
@@ -409,6 +421,7 @@ def test_work_items_tables_survive_migration_roundtrip(tmp_path: Path) -> None:
     assert _has_tables()
 
 
+@pytest.mark.migration_revision("20260828_1000_scopes_and_routines")
 def test_scopes_and_routines_tables_survive_migration_roundtrip(tmp_path: Path) -> None:
     """``scopes``, ``scope_lifecycle_facts``, ``routines`` — one
     hand-written revision mints all three; downgrades to its own parent by id, so the
@@ -433,6 +446,7 @@ def test_scopes_and_routines_tables_survive_migration_roundtrip(tmp_path: Path) 
     assert set(tables) <= _table_names()
 
 
+@pytest.mark.migration_revision("20260829_0900_findings_and_proposals")
 def test_findings_and_proposals_tables_survive_migration_roundtrip(tmp_path: Path) -> None:
     """``findings``, ``finding_sets``, ``finding_facts``, ``garden_proposals``,
     ``garden_proposal_findings`` — one hand-written revision mints all
@@ -458,6 +472,7 @@ def test_findings_and_proposals_tables_survive_migration_roundtrip(tmp_path: Pat
     assert set(tables) <= _table_names()
 
 
+@pytest.mark.migration_revision("20260831_0900_work_items_routine_run")
 def test_work_items_routine_run_columns_survive_migration_roundtrip(tmp_path: Path) -> None:
     """``work_items.routine_name``/``scope_slug``/``run_mode`` —
     downgrades to this revision's own parent by id, so the drop half is asserted rather
@@ -483,6 +498,7 @@ def test_work_items_routine_run_columns_survive_migration_roundtrip(tmp_path: Pa
     assert set(columns) <= _columns()
 
 
+@pytest.mark.migration_revision("20260831_0930_finding_sets_routine_name")
 def test_finding_sets_routine_name_column_survives_migration_roundtrip(tmp_path: Path) -> None:
     """``finding_sets.routine_name`` — downgrades to this revision's own
     parent by id, so the drop half is asserted rather than inferred from a revision
@@ -507,6 +523,7 @@ def test_finding_sets_routine_name_column_survives_migration_roundtrip(tmp_path:
     assert _has_column()
 
 
+@pytest.mark.migration_revision("20260831_0945_garden_proposal_closures")
 def test_garden_proposal_closures_table_survives_migration_roundtrip(tmp_path: Path) -> None:
     """``garden_proposal_closures`` — one hand-written revision mints the
     table; downgrades to its own parent by id, so the drop half is asserted rather than
@@ -530,6 +547,7 @@ def test_garden_proposal_closures_table_survives_migration_roundtrip(tmp_path: P
     assert "garden_proposal_closures" in _table_names()
 
 
+@pytest.mark.migration_revision("20260902_0900_chunk_dependencies")
 def test_chunk_dependencies_table_survives_migration_roundtrip(tmp_path: Path) -> None:
     """``chunk_dependencies`` — one hand-written revision mints the table;
     downgrades to its own parent by id, so the drop half is asserted rather than inferred
@@ -553,6 +571,7 @@ def test_chunk_dependencies_table_survives_migration_roundtrip(tmp_path: Path) -
     assert "chunk_dependencies" in _table_names()
 
 
+@pytest.mark.migration_revision("20260922_1100_runner_external_usage_misses")
 def test_runner_external_usage_misses_table_survives_migration_roundtrip(tmp_path: Path) -> None:
     """``runner_external_usage_misses`` — one hand-written revision mints
     the table; downgrades to its own parent by id, so the drop half is asserted rather than
@@ -576,6 +595,7 @@ def test_runner_external_usage_misses_table_survives_migration_roundtrip(tmp_pat
     assert _has_table()
 
 
+@pytest.mark.migration_revision("20261004_1000_runner_invocation_boundary_advances")
 def test_runner_invocation_boundary_advances_table_survives_migration_roundtrip(tmp_path: Path) -> None:
     """``invocation_boundary_advances`` — downgrades to its own parent by id, so the drop half
     is asserted rather than inferred from a revision marker."""
@@ -602,6 +622,7 @@ def test_runner_invocation_boundary_advances_table_survives_migration_roundtrip(
     assert _shape() == (True, True)
 
 
+@pytest.mark.migration_revision("20261004_1100_runner_lease_closure_escalation_cause")
 def test_runner_lease_closure_escalation_cause_survives_migration_roundtrip(tmp_path: Path) -> None:
     """``lease_closures.escalation_cause`` — downgrades to its own parent by id, so the drop
     half is asserted rather than inferred from a revision marker."""
@@ -628,6 +649,7 @@ _ROUTINE_SCOPES_JOIN_PARENT = "20260905_1100_hub_runner_external_usage_slug"
 _ROUTINE_SCOPES_JOIN = "20260906_1130_routine_scopes_join"
 
 
+@pytest.mark.migration_revision("20260906_1130_routine_scopes_join")
 def test_routine_scopes_table_survives_migration_roundtrip(tmp_path: Path) -> None:
     """``routine_scopes`` — downgrades to this revision's own parent by
     id, so the drop half is asserted rather than inferred from a revision marker a
@@ -651,6 +673,7 @@ def test_routine_scopes_table_survives_migration_roundtrip(tmp_path: Path) -> No
     assert "routine_scopes" in _table_names()
 
 
+@pytest.mark.migration_revision("20260906_1130_routine_scopes_join")
 def test_routine_scopes_seeds_from_findings_finding_sets_and_routine_defaults(tmp_path: Path) -> None:
     """Backfills ``routine_scopes`` from every distinct ``(routine_name, scope_slug)``
     pair ``findings``/``finding_sets`` carried plus each routine's default; an empty or
@@ -728,6 +751,7 @@ def test_routine_scopes_seeds_from_findings_finding_sets_and_routine_defaults(tm
     }
 
 
+@pytest.mark.migration_revision("20260817_1000_graph_artifacts")
 def test_runner_graph_artifacts_table_survives_migration_roundtrip(tmp_path: Path) -> None:
     """The runner's own graph-artifact mirror table — downgrades to this
     revision's own parent by id, so the drop half is asserted rather than inferred from a
@@ -751,6 +775,7 @@ def test_runner_graph_artifacts_table_survives_migration_roundtrip(tmp_path: Pat
     assert _has_table()
 
 
+@pytest.mark.migration_revision("20260918_1000_invocation_boundaries")
 def test_invocation_boundaries_table_survives_migration_roundtrip(tmp_path: Path) -> None:
     """The transcript invocation-boundary ledger — downgrades to this
     revision's own parent by id, so the drop half is asserted rather than inferred from a
@@ -774,6 +799,7 @@ def test_invocation_boundaries_table_survives_migration_roundtrip(tmp_path: Path
     assert _has_table()
 
 
+@pytest.mark.migration_revision("20261005_1000_runner_credential_renewal_facts")
 def test_external_usage_samples_miss_reason_and_renewal_columns_survive_migration_roundtrip(tmp_path: Path) -> None:
     """``external_usage_samples.miss_reason``/``renewal`` — both nullable,
     no backfill since no historical row carries either fact; downgrading past this
@@ -805,6 +831,7 @@ def test_external_usage_samples_miss_reason_and_renewal_columns_survive_migratio
 _RENEWAL_FACTS_PARENT = "20261004_1200_runner_takeover_hold_epoch"
 
 
+@pytest.mark.migration_revision("20261005_1000_runner_credential_renewal_facts")
 def test_credential_renewal_history_moves_into_typed_facts_and_downgrades_back(tmp_path: Path) -> None:
     """Every legacy ``renewal`` string becomes a claim at its attempt's ``sampled_at`` and a typed
     outcome, and the column is retired; downgrading re-encodes each recorded outcome onto its
@@ -890,6 +917,7 @@ def test_credential_renewal_history_moves_into_typed_facts_and_downgrades_back(t
         engine.dispose()
 
 
+@pytest.mark.migration_revision("20260905_1000_external_usage_samples_slug")
 def test_external_usage_samples_slug_backfills_the_legacy_anthropic_slug(tmp_path: Path) -> None:
     """``external_usage_samples.slug`` backfills a pre-existing row
     to the legacy Anthropic slug, and downgrading past it drops the column again."""
@@ -935,6 +963,7 @@ def test_external_usage_samples_slug_backfills_the_legacy_anthropic_slug(tmp_pat
     assert "slug" in _columns()
 
 
+@pytest.mark.migration_revision("20260920_0100_usage_reported_cost")
 def test_usage_facts_reported_cost_backfills_every_historical_row_from_its_cost(tmp_path: Path) -> None:
     """``usage_facts.reported_cost_usd`` starts as a copy of ``cost_usd``: before the
     split every recorded cost *was* the harness's own figure, and a row that predates it
@@ -977,6 +1006,7 @@ def test_usage_facts_reported_cost_backfills_every_historical_row_from_its_cost(
     assert _rows() == [(2.00, 2.00), (None, None)]
 
 
+@pytest.mark.migration_revision("20260905_1100_runner_external_usage_slug")
 def test_runner_external_usage_slug_widens_the_primary_key_and_backfills_the_legacy_row(tmp_path: Path) -> None:
     """``runner_external_usage``'s join key backfills a pre-existing
     row to the legacy slug/name, widens the primary key to ``(runner_id, slug)``, and
@@ -1043,6 +1073,7 @@ def test_runner_external_usage_slug_widens_the_primary_key_and_backfills_the_leg
     assert "name" in _columns()
 
 
+@pytest.mark.migration_revision("20260907_1000_event_log_runner_id_nullable")
 def test_event_log_runner_id_becomes_nullable_and_downgrade_restores_the_hub_sentinel(tmp_path: Path) -> None:
     """``event_log.runner_id`` (blizzard-context:/domain/operations.md) widens to nullable
     — a hub-authored event names no runner. Reached forward from ``base``, never by
@@ -1104,6 +1135,7 @@ def test_event_log_runner_id_becomes_nullable_and_downgrade_restores_the_hub_sen
 _PRE_EPOCH_OWNERS = "20260930_1000_artifact_seq"
 
 
+@pytest.mark.migration_revision("20260930_1000_epoch_owners")
 def test_epoch_owners_backfill_restarts_to_the_hub_and_runner_epochs_to_their_earliest_runner(
     tmp_path: Path,
 ) -> None:
@@ -1188,6 +1220,7 @@ def _old_formula_fingerprint(rows: list[tuple[int, bool, bytes]]) -> str:
     return digest.hexdigest()
 
 
+@pytest.mark.migration_revision("20260913_1000_transcript_segments_content_digest")
 def test_transcript_segments_content_digest_backfills_and_carries_markers_forward(tmp_path: Path) -> None:
     """The backfill computes every digest from raw stored bytes with
     no decompression; a marker matching the retired whole-segment formula carries forward,
@@ -1285,6 +1318,7 @@ def test_transcript_segments_content_digest_backfills_and_carries_markers_forwar
         engine.dispose()
 
 
+@pytest.mark.migration_revision("20260913_1000_transcript_segments_content_digest")
 def test_transcript_segments_content_digest_resumes_after_an_interrupted_first_pass(tmp_path: Path) -> None:
     """A crash between `add_column` and the closing `alter_column(...,
     nullable=False)` leaves the column present but still nullable and unbackfilled; a
@@ -1570,6 +1604,70 @@ _HISTORICAL_RESHAPES: list[tuple[str, str, str, tuple[str, ...]] | tuple[str, st
 ]
 
 
+#: The revision each ``_HISTORICAL_RESHAPES`` entry exists to prove, keyed by its parametrize id.
+_RESHAPING_REVISION = {
+    "hub.escalations.takeover_command": "20260713_1424_escalation_takeover_command",
+    "hub.graph_nodes.produces": "20260713_1716_graph_node_produces_checks",
+    "hub.graph_nodes.bounce_cap": "20260717_2345_chunk_bounces",
+    "hub.graph_nodes.run": "20260717_2359_hub_command_nodes",
+    "hub.graph_nodes.poll_interval_seconds": "20260718_0030_hub_node_poll",
+    "hub.escalations.decision_id": "20260721_1000_escalation_decision_id",
+    "hub.graph_nodes.session_source": "20260721_1008_graph_node_session_source",
+    "hub.artifacts.forge": "20260722_1200_hub_artifact_forge",
+    "hub.graph_nodes.checks_cwd": "20260725_1200_graph_checks_gating",
+    "hub.graph_choices.requires_checks": "20260725_1200_graph_checks_gating",
+    "hub.escalations.wrapped_takeover_command": "20260803_1000_escalation_wrapped_takeover_command",
+    "hub.runner_registrations.token_hash": "20260718_1130_runner_token",
+    "hub.runner_registrations.env_capacity": "20260718_1300_runner_env_capacity",
+    "hub.runner_registrations.public_url": "20260721_1400_runner_redirect_uris",
+    "hub.runner_local_pause_facts.reason": "20260718_0930_runner_local_pause_reason",
+    "hub.chunk_migrations.source": "20260728_1230_chunk_migration_source",
+    "hub.auth_state.user_id": "20260721_1500_cli_auth_state_user",
+    "hub.transcript_segments.record_truncated": "20260809_1800_transcript_segment_record_truncated",
+    "hub.transcript_segments.supersedes": "20260811_0905_transcript_segment_supersedes",
+    "hub.transcript_events.subject": "20260812_1300_transcript_events_subject_tool",
+    "hub.graph_sessions.compaction_window": "20260818_0900_graph_sessions_compaction_window",
+    "hub.chunk_restarts.from_graph_id": "20260819_2200_chunk_restart_from_graph",
+    "hub.garden_proposals.source_artifact_id": "20260830_2015_garden_proposals_source_artifact",
+    "hub.graph_nodes.mode.removed": "20260907_0900_drop_node_mode",
+    "hub.graph_nodes.proposes_work_items.removed": "20261008_1000_drop_work_item_proposals",
+    "hub.transcript_segments.content_digest": "20260913_1000_transcript_segments_content_digest",
+    "hub.graph_sessions.harnesses": "20260916_1000_authored_harnesses",
+    "hub.chunks.default_harnesses": "20260916_1000_authored_harnesses",
+    "hub.routines.default_harnesses": "20260916_1000_authored_harnesses",
+    "hub.runner_registrations.capabilities": "20260916_1100_runner_capabilities",
+    "hub.lease_facts.lease_id": "20260930_1000_epoch_owners",
+    "hub.escalations.cause": "20261003_1400_escalation_cause",
+    "hub.runner_registrations.name": "20261006_1200_runner_minted_ids",
+    "hub.auth_state.invitation_token_hash": "20261008_1710_auth_state_invitation",
+    "hub.tenant_deletions.closed_at": "20261008_1720_tenant_deletion_closed_at",
+    "hub.chunks.project_id": "20261008_1800_projects",
+    "hub.scopes.project_id": "20261008_1800_projects",
+    "hub.routines.project_id": "20261008_1800_projects",
+    "hub.findings.project_id": "20261008_1800_projects",
+    "hub.finding_sets.project_id": "20261008_1800_projects",
+    "hub.garden_proposals.project_id": "20261008_1800_projects",
+    "hub.work_item_runs.project_id": "20261008_1800_projects",
+    "hub.work_items.project_id": "20261008_1800_projects",
+    "hub.config_changes.project_id": "20261008_1800_projects",
+    "hub.runner_registrations.projects": "20261008_1900_project_columns",
+    "hub.delivery_repo_landed.repository_name.removed": "20261012_0900_repository_identity",
+    "hub.delivery_repo_landed.repository_id": "20261012_0900_repository_identity",
+    "hub.runner_registrations.host_id": "20261012_1000_hosts",
+    "runner.lease_context.session_name": "20260728_1500_lease_session_stamps",
+    "runner.lease_context.resolved_compaction_window": "20260818_0900_lease_compaction_window",
+    "runner.lease_context.graph_name": "20260925_1000_lease_graph_name_work_refs",
+    "runner.usage_facts.estimated_cost_usd": "20261002_1000_usage_facts_estimated_cost",
+    "runner.git_commit_declarations.environment_id": "20260726_1000_declaration_environment_id",
+    "runner.git_commit_declarations.forge.removed": "20260726_1000_declaration_environment_id",
+    "runner.external_usage_samples.slug": "20260905_1000_external_usage_samples_slug",
+    "hub.runner_external_usage.slug": "20260905_1100_runner_external_usage_slug",
+    "runner.usage_facts.reported_cost_usd": "20260920_0100_usage_reported_cost",
+    "runner.usage_facts.cost_is_share": "20260920_0200_usage_cost_is_share",
+    "runner.external_usage_samples.renewal.removed": "20261005_1000_runner_credential_renewal_facts",
+}
+
+
 def _reshape_id(entry: tuple) -> str:
     tree, _parent, table, columns = entry[0], entry[1], entry[2], entry[3]
     direction = entry[4] if len(entry) > 4 else "added"
@@ -1579,8 +1677,14 @@ def _reshape_id(entry: tuple) -> str:
 
 @pytest.mark.parametrize(
     "tree,parent_revision,table,columns,direction",
-    [entry if len(entry) == 5 else (*entry, "added") for entry in _HISTORICAL_RESHAPES],
-    ids=[_reshape_id(entry) for entry in _HISTORICAL_RESHAPES],
+    [
+        pytest.param(
+            *(entry if len(entry) == 5 else (*entry, "added")),
+            marks=pytest.mark.migration_revision(_RESHAPING_REVISION[_reshape_id(entry)]),
+            id=_reshape_id(entry),
+        )
+        for entry in _HISTORICAL_RESHAPES
+    ],
 )
 def test_frozen_table_lacks_a_later_revisions_columns(
     tree: str, parent_revision: str, table: str, columns: tuple[str, ...], direction: str, tmp_path: Path
@@ -1643,6 +1747,7 @@ def _spawn_cwd_round_trip(  # type: ignore[no-untyped-def]
         engine.dispose()
 
 
+@pytest.mark.migration_revision("20261003_1000_runner_transcript_segment_spawn_cwd")
 def test_runner_transcript_segments_spawn_cwd_leaves_a_preexisting_row_null(tmp_path: Path) -> None:
     config = runner_runtime.init_environment(tmp_path)
     row: dict[str, object] = {
@@ -1671,6 +1776,7 @@ def test_runner_transcript_segments_spawn_cwd_leaves_a_preexisting_row_null(tmp_
     assert values == [None]
 
 
+@pytest.mark.migration_revision("20261003_1300_hub_transcript_segment_spawn_cwd")
 def test_hub_transcript_segments_spawn_cwd_leaves_a_preexisting_row_null(tmp_path: Path) -> None:
     config = hub_runtime.init_environment(tmp_path)
     row: dict[str, object] = {
@@ -1698,6 +1804,7 @@ def test_hub_transcript_segments_spawn_cwd_leaves_a_preexisting_row_null(tmp_pat
 _SECRETS_PARENT = "20261003_1400_escalation_cause"
 
 
+@pytest.mark.migration_revision("20261004_1000_hub_secrets")
 def test_secret_tables_survive_migration_roundtrip(tmp_path: Path) -> None:
     """``secrets``/``secret_lifecycle_facts`` — downgraded to the revision's own parent by id."""
     config = hub_runtime.init_environment(tmp_path)
@@ -1723,6 +1830,7 @@ def test_secret_tables_survive_migration_roundtrip(tmp_path: Path) -> None:
 _WORK_SOURCE_RECORDS_PARENT = "20261004_1000_hub_secrets"
 
 
+@pytest.mark.migration_revision("20261004_1100_work_source_records")
 def test_work_source_record_tables_survive_migration_roundtrip(tmp_path: Path) -> None:
     """``work_sources``/``work_source_lifecycle_facts``/``config_changes`` — downgraded to the revision's parent."""
     config = hub_runtime.init_environment(tmp_path)
@@ -1749,6 +1857,7 @@ def test_work_source_record_tables_survive_migration_roundtrip(tmp_path: Path) -
 _REPOSITORY_RECORDS_PARENT = "20261004_1100_work_source_records"
 
 
+@pytest.mark.migration_revision("20261004_1200_repository_records")
 def test_repository_record_tables_survive_migration_roundtrip(tmp_path: Path) -> None:
     """``repositories``/``repository_lifecycle_facts`` — downgraded to the revision's parent."""
     config = hub_runtime.init_environment(tmp_path)
@@ -1775,6 +1884,7 @@ def test_repository_record_tables_survive_migration_roundtrip(tmp_path: Path) ->
 _CONFIG_IMPORT_FACTS_PARENT = "20261005_1000_scope_routine_revisions"
 
 
+@pytest.mark.migration_revision("20261006_0900_config_import_facts")
 def test_config_import_facts_table_survives_migration_roundtrip(tmp_path: Path) -> None:
     """``config_import_facts`` — downgraded to the revision's parent."""
     config = hub_runtime.init_environment(tmp_path)

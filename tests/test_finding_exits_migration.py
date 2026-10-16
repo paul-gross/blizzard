@@ -17,7 +17,7 @@ from blizzard.hub.config import HubConfig
 from blizzard.hub.runtime import migration_runner
 from tests.support import hub_scoped_engine
 
-pytestmark = pytest.mark.component
+pytestmark = [pytest.mark.component, pytest.mark.migration_revision("20260831_1030_finding_exits")]
 
 _BEFORE = "20260831_0945_garden_proposal_closures"  # the head just before finding_exits
 _AFTER = "20260831_1030_finding_exits"  # the revision under test; later revisions require a tenant on these rows

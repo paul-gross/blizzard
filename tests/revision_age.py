@@ -6,7 +6,6 @@ import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date, datetime
-from pathlib import Path
 
 from tests.repo_files import repo_root
 

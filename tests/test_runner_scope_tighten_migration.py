@@ -37,6 +37,8 @@ _RUNNER_ID = "rn_01JX0000000000000000000000"
 _OTHER_RUNNER_ID = "rn_01JX0000000000000000000001"
 _OUTBOXES = {"outbound": "outbound_buffer", "transcript": "transcript_outbound_buffer"}
 
+pytestmark = pytest.mark.migration_revision("20261013_1000_runner_scope_tighten")
+
 
 def _store_at_parent(tmp_path: Path) -> tuple[MigrationRunner, sa.Engine]:
     config = runner_runtime.init_environment(tmp_path)

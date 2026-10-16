@@ -223,6 +223,7 @@ def test_set_route_token_keeps_one_current_row_per_chunk(tmp_path):  # type: ign
 
 
 @pytest.mark.component
+@pytest.mark.migration_revision("20260726_1000_declaration_environment_id")
 def test_declaration_environment_id_migration_discards_the_pre_revision_rows(tmp_path: Path) -> None:
     """``20260726_1000`` drops and recreates ``git_commit_declarations`` — no
     back-fill; a row seeded at the parent revision must not survive the upgrade."""

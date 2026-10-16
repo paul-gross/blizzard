@@ -20,7 +20,7 @@ from blizzard.hub.config import HubConfig
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import schema as s
 
-pytestmark = pytest.mark.component
+pytestmark = [pytest.mark.component, pytest.mark.migration_revision("20260721_1100_auth_identity_spine")]
 
 _BEFORE = "20260721_1008_hub_graph_node_session_source"  # the head just before this revision
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)

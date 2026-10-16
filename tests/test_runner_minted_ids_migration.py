@@ -20,7 +20,7 @@ from blizzard.hub.domain.runners.registration import RunnerAddition
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
 from tests.support import hub_store_connections, migrate_to
 
-pytestmark = pytest.mark.component
+pytestmark = [pytest.mark.component, pytest.mark.migration_revision("20261006_1200_runner_minted_ids")]
 
 _BEFORE = "20261006_0900_config_import_facts"  # the head just before this revision
 _REVISION = "20261006_1200_runner_minted_ids"

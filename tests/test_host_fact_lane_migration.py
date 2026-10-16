@@ -13,7 +13,7 @@ from blizzard.hub.store import schema as s
 from tests.support import migrate_to
 from tests.test_store_migrations import _schema_snapshot
 
-pytestmark = pytest.mark.component
+pytestmark = [pytest.mark.component, pytest.mark.migration_revision("20261013_0900_host_fact_lane")]
 
 _PARENT = "20261012_1500_work_source_identity"
 _LANE = "20261013_0900_host_fact_lane"

@@ -16,7 +16,7 @@ from blizzard.foundation.store.migrations import MigrationRunner
 from blizzard.runner import runtime as runner_runtime
 from tests.runner_scope_seeding import T0, reflect, seed_every_keyed_table
 
-pytestmark = pytest.mark.component
+pytestmark = [pytest.mark.component, pytest.mark.migration_revision("20261015_1000_host_ingests")]
 
 _PARENT = "20261013_1000_runner_scope_tighten"
 _REVISION = "20261015_1000_host_ingests"

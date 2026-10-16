@@ -31,7 +31,7 @@ from tests.support import hub_store_connections, migrate_to, seed_chunk, seed_gr
 
 _PROJECT = "proj_test"
 
-pytestmark = pytest.mark.component
+pytestmark = [pytest.mark.component, pytest.mark.migration_revision("20260902_1000_finding_facts_ref")]
 
 _BEFORE = "20260902_0900_chunk_dependencies"  # the head just before finding_facts.ref
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
