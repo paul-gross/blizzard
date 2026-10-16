@@ -33,7 +33,7 @@ from blizzard.hub.runtime import Migrations
 from blizzard.hub.store import MIGRATIONS_DIR
 from tests.test_store_migrations import _schema_snapshot
 
-pytestmark = pytest.mark.component
+pytestmark = [pytest.mark.component, pytest.mark.migration_revision("20261008_1800_projects")]
 
 _CLOSED_AT = "20261008_1720_tenant_deletion_closed_at"
 _PROJECTS = "20261008_1800_projects"

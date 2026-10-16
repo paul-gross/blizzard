@@ -56,6 +56,9 @@ two-repo checkout of `blizzard` + `blizzard-mock`; `pr.yml` and `push.yml` both 
 runners use the built-in `basic` provider over a fixture of bare `file://` origins, minted with no winter source. Every
 checkout in a job that runs tests sets `persist-credentials: false`; `tests/test_winter_free_ci.py` pins both.
 
+Migration tests whose revision is more than 30 days old report as skips in `uv run pytest -n auto`; set
+`BLIZZARD_RUN_RETIRED_MIGRATION_TESTS=1` to run them (`bzh:migration-revision-marker` in blizzard-context's tier rules).
+
 Locally the upper tiers need the sibling `blizzard-mock` worktree provisioned (`winter provision <env>`); their exact
 local equivalents are `mise run service-test` (`BLIZZARD_SERVICE=1 uv run pytest -n auto tests/service/`) and
 `mise run crash-sweep-ci`

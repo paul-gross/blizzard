@@ -18,7 +18,7 @@ from blizzard.hub.config import HubConfig
 from blizzard.hub.runtime import migration_runner
 from tests.support import migrate_to, seed_chunk, seed_graph
 
-pytestmark = pytest.mark.component
+pytestmark = [pytest.mark.component, pytest.mark.migration_revision("20260716_2207_route_seq_tiebreak")]
 
 _BEFORE = "20260716_1512_hub_pm_pointer_source_ref"  # the head just before the route seq tiebreak
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)

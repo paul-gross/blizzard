@@ -9,7 +9,7 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.migrations import MigrationRunner
 from blizzard.runner.store import MIGRATIONS_DIR, schema
 
-pytestmark = pytest.mark.component
+pytestmark = [pytest.mark.component, pytest.mark.migration_revision("20261002_1300_lease_tokens_token_hash_index")]
 
 
 def test_fresh_lease_tables_keep_their_historical_shapes_through_head(tmp_path: Path) -> None:

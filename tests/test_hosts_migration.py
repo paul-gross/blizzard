@@ -15,7 +15,7 @@ from blizzard.hub.store import schema as s
 from tests.support import default_tenant, migrate_to
 from tests.test_store_migrations import _schema_snapshot
 
-pytestmark = pytest.mark.component
+pytestmark = [pytest.mark.component, pytest.mark.migration_revision("20261012_1000_hosts")]
 
 _PARENT = "20261012_0900_repository_identity"
 _HOSTS = "20261012_1000_hosts"

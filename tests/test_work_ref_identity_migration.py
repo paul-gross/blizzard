@@ -18,7 +18,7 @@ from blizzard.hub.config import HubConfig
 from blizzard.hub.runtime import migration_runner
 from tests.support import hub_scoped_engine
 
-pytestmark = pytest.mark.component
+pytestmark = [pytest.mark.component, pytest.mark.migration_revision("20260716_1512_pm_pointer_source_ref")]
 
 _BEFORE = "20260716_1511_hub_runner_local_pause"  # the head just before the pointer reshape
 # Pinned to the reshape revision itself, never ``head``: a later rename

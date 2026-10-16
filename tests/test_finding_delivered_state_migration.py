@@ -17,7 +17,7 @@ from blizzard.hub.config import HubConfig
 from blizzard.hub.runtime import migration_runner
 from tests.support import hub_scoped_engine
 
-pytestmark = pytest.mark.component
+pytestmark = [pytest.mark.component, pytest.mark.migration_revision("20260920_1200_finding_delivered_state")]
 
 _BEFORE = "20260920_1100_hub_usage_harness_provenance"  # the head just before finding_delivered_state
 _AFTER = (

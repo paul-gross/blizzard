@@ -73,14 +73,30 @@ def _unique_constraint_names(url: str, table: str) -> set[str]:
 @pytest.mark.parametrize(
     ("revision", "table", "expected"),
     [
-        (_WALKING_SKELETON, "chunks", {"chunk_id", "graph_id", "minted_at"}),
-        (
+        pytest.param(
+            _WALKING_SKELETON,
+            "chunks",
+            {"chunk_id", "graph_id", "minted_at"},
+            marks=pytest.mark.migration_revision("20260713_1218_walking_skeleton_facts"),
+        ),
+        pytest.param(
             _WALKING_SKELETON,
             "route_created",
             {"route_id", "chunk_id", "runner_id", "workspace_id", "created_at"},
+            marks=pytest.mark.migration_revision("20260713_1218_walking_skeleton_facts"),
         ),
-        (_WALKING_SKELETON, "chunk_pm_pointers", {"id", "chunk_id", "provider", "url"}),
-        (_PM_POINTER_SOURCE_REF, "chunk_pm_pointers", {"id", "chunk_id", "source", "ref"}),
+        pytest.param(
+            _WALKING_SKELETON,
+            "chunk_pm_pointers",
+            {"id", "chunk_id", "provider", "url"},
+            marks=pytest.mark.migration_revision("20260713_1218_walking_skeleton_facts"),
+        ),
+        pytest.param(
+            _PM_POINTER_SOURCE_REF,
+            "chunk_pm_pointers",
+            {"id", "chunk_id", "source", "ref"},
+            marks=pytest.mark.migration_revision("20260716_1512_pm_pointer_source_ref"),
+        ),
     ],
 )
 def test_a_revisions_table_shape_is_frozen_at_its_own_revision(
@@ -94,6 +110,7 @@ def test_a_revisions_table_shape_is_frozen_at_its_own_revision(
     assert _columns(url, table) == expected
 
 
+@pytest.mark.migration_revision("20260716_2206_pr_opened_idempotent")
 def test_delivery_pr_opened_gains_its_uniqueness_only_at_the_revision_that_adds_it(tmp_path: Path) -> None:
     """``0014`` is the one revision that constrains (chunk_id, repo); the revision that
     *creates* the table must not already carry the constraint off ``src/blizzard/hub/store/schema.py``."""
@@ -107,6 +124,7 @@ def test_delivery_pr_opened_gains_its_uniqueness_only_at_the_revision_that_adds_
 # Data migrations
 
 
+@pytest.mark.migration_revision("20260716_2206_pr_opened_idempotent")
 def test_pr_opened_upgrade_keeps_only_the_earliest_duplicate(tmp_path: Path) -> None:
     """A store carrying the dogfood duplicates upgrades rather than failing the
     constraint add: every row but the earliest (lowest ``id``) per (chunk_id, repo) is
@@ -136,6 +154,7 @@ def test_pr_opened_upgrade_keeps_only_the_earliest_duplicate(tmp_path: Path) -> 
     assert surviving == [1, 3]
 
 
+@pytest.mark.migration_revision("20260716_1512_pm_pointer_source_ref")
 def test_pm_pointer_reshape_backfills_and_survives_a_down_then_up_cycle(tmp_path: Path) -> None:
     """The ``{provider, url}`` -> ``{source, ref}`` reshape reads and writes this
     revision's own table shape, and ``downgrade()``'s canonicalized reconstruction (the
@@ -173,6 +192,7 @@ def test_pm_pointer_reshape_backfills_and_survives_a_down_then_up_cycle(tmp_path
     assert _pointer("source, ref") == ("blizzard", "26")  # down-then-up is stable
 
 
+@pytest.mark.migration_revision("20260728_1410_chunk_defaults")
 def test_chunk_defaults_retains_model_and_backfills_no_default_model(tmp_path: Path) -> None:
     """``chunks.model`` is kept (it is the only record of what a pre-#144 chunk ran) and
     ``default_model`` is left NULL rather than filled in from it."""

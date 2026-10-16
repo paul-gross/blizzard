@@ -23,7 +23,7 @@ from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import MIGRATIONS_DIR
 from tests.test_store_migrations import _schema_snapshot
 
-pytestmark = pytest.mark.component
+pytestmark = [pytest.mark.component, pytest.mark.migration_revision("20261008_1700_tenant_identity_move")]
 
 _TABLES = "20261008_1650_identity_tables"
 _MOVE = "20261008_1700_tenant_identity_move"

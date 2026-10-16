@@ -25,7 +25,7 @@ from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import MIGRATIONS_DIR
 from tests.test_store_migrations import _schema_snapshot
 
-pytestmark = pytest.mark.component
+pytestmark = [pytest.mark.component, pytest.mark.migration_revision("20261008_1600_hub_event_log_move")]
 
 _SURROGATE = "20261008_1500_scope_surrogate"
 _MOVE = "20261008_1600_hub_event_log_move"

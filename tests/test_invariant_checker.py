@@ -2107,6 +2107,7 @@ def test_a_released_edge_onto_an_ephemeral_chunk_is_not_a_violation(tmp_path: Pa
     assert "hub:no-standing-dependency-onto-ephemeral-chunk" not in slugs
 
 
+@pytest.mark.migration_revision("20260930_1000_epoch_owners")
 def test_a_backfilled_epoch_with_two_runners_lease_rows_is_clean(tmp_path: Path) -> None:
     """The real backfill owns an epoch by its first lease row, so a later level row from
     another runner — legacy data — is not a violation."""
@@ -2826,6 +2827,7 @@ def test_a_landing_in_a_repository_its_project_had_not_linked_is_a_violation(tmp
     ]
 
 
+@pytest.mark.migration_revision("20261008_1800_projects")
 def test_a_carried_over_store_keeps_every_project_invariant(tmp_path: Path) -> None:
     """Rows written before projects existed, in two tenants, each land in their own tenant's ``default`` project. A
     carried chunk was minted before the migration created that project, and a carried landing names no repository."""

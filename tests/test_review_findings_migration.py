@@ -14,7 +14,7 @@ import sqlalchemy as sa
 from blizzard.foundation.store.engine import create_engine_from_url
 from tests.support import migrate_to, seed_chunk, seed_graph
 
-pytestmark = pytest.mark.component
+pytestmark = [pytest.mark.component, pytest.mark.migration_revision("20260922_1000_review_findings")]
 
 _BEFORE = "20260920_1200_finding_delivered_state"  # the head just before this revision
 _AFTER = "20260922_1000_review_findings"  # the revision under test; later revisions require a tenant on these rows

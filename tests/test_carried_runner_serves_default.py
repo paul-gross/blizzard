@@ -43,6 +43,7 @@ def _carried_store(root: Path) -> None:
         engine.dispose()
 
 
+@pytest.mark.migration_revision("20261008_1100_tenants")
 def test_a_carried_runner_naming_no_projects_keeps_serving_default(tmp_path: Path) -> None:
     _carried_store(tmp_path / "hub")
     hub = build_hub(tmp_path / "hub")

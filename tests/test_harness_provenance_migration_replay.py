@@ -43,7 +43,7 @@ from tests.runner_fakes import (
     single_workspace,
 )
 
-pytestmark = pytest.mark.component
+pytestmark = [pytest.mark.component, pytest.mark.migration_revision("20261011_1000_runner_scope")]
 
 _PARENT = "20260913_1100_runner_store_indexes"
 _KEYED_REVISION = "20261011_1000_runner_scope"

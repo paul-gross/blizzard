@@ -32,7 +32,7 @@ from blizzard.hub.store import MIGRATIONS_DIR
 from tests.test_project_columns_migration import _insert, _query, _run_step
 from tests.test_store_migrations import _schema_snapshot
 
-pytestmark = pytest.mark.component
+pytestmark = [pytest.mark.component, pytest.mark.migration_revision("20261012_0900_repository_identity")]
 
 _BEFORE = "20261011_1300_chunk_recorded_at_indexes"
 _IDENTITY = "20261012_0900_repository_identity"

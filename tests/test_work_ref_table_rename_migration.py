@@ -19,7 +19,7 @@ from blizzard.hub.config import HubConfig
 from blizzard.hub.runtime import migration_runner
 from tests.support import hub_scoped_engine
 
-pytestmark = pytest.mark.component
+pytestmark = [pytest.mark.component, pytest.mark.migration_revision("20260726_1200_chunk_work_refs_rename")]
 
 _BEFORE = "20260725_1200_hub_graph_checks_gating"  # the head just before the rename
 _RENAME = "20260726_1200_hub_chunk_work_refs_rename"

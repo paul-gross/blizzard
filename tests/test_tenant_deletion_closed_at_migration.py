@@ -25,7 +25,7 @@ from blizzard.hub.store import MIGRATIONS_DIR
 from blizzard.hub.store import schema as s
 from tests.test_store_migrations import _schema_snapshot
 
-pytestmark = pytest.mark.component
+pytestmark = [pytest.mark.component, pytest.mark.migration_revision("20261008_1720_tenant_deletion_closed_at")]
 
 _INVITATION = "20261008_1710_auth_state_invitation"
 _CLOSED_AT = "20261008_1720_tenant_deletion_closed_at"

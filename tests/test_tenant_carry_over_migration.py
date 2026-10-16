@@ -37,7 +37,7 @@ from blizzard.hub.store.schema import GLOBAL_TABLES
 from tests.support import hub_store_connections
 from tests.test_store_migrations import _schema_snapshot
 
-pytestmark = pytest.mark.component
+pytestmark = [pytest.mark.component, pytest.mark.migration_revision("20261008_1100_tenants")]
 
 _BEFORE = "20261008_1000_drop_work_item_proposals"
 _TENANTS = "20261008_1100_tenants"
@@ -570,6 +570,7 @@ def _carried_over_with_links(tmp_path: Path, revision: str) -> tuple[MigrationRu
     return runner, engine
 
 
+@pytest.mark.migration_revision("20261008_1500_scope_surrogate")
 def test_a_carried_over_store_keeps_every_link_through_the_rescoped_keys(tmp_path: Path) -> None:
     runner, engine = _carried_over_with_links(tmp_path, _BEFORE)
     try:
@@ -591,6 +592,7 @@ def test_a_carried_over_store_keeps_every_link_through_the_rescoped_keys(tmp_pat
         engine.dispose()
 
 
+@pytest.mark.migration_revision("20261008_1500_scope_surrogate")
 def test_the_tightened_keys_downgrade_to_the_backfill_only_once_one_tenant_remains_and_then_exactly(
     tmp_path: Path,
 ) -> None:
@@ -636,6 +638,7 @@ def _rows_by_column(engine: sa.Engine) -> dict[str, list[str]]:
         }
 
 
+@pytest.mark.migration_revision("20261008_1200_tenant_id_backfill")
 def test_a_rerun_of_the_backfill_over_a_partly_keyed_store_finishes(tmp_path: Path) -> None:
     """Re-entry: a run that stopped after keying some tables, and stamping some of their rows, is
     completed — no column added twice, every row still null stamped."""
@@ -714,6 +717,7 @@ def _rows_each_update_changed() -> Iterator[list[tuple[str, int]]]:
         event.remove(sa.Engine, "after_cursor_execute", record)
 
 
+@pytest.mark.migration_revision("20261008_1200_tenant_id_backfill")
 def test_the_backfill_stamps_every_row_of_a_table_holding_more_than_one_batch(tmp_path: Path) -> None:
     db_url, engine = _store(tmp_path)
     runner = migration_runner(HubConfig(root=tmp_path, db_url=db_url))
@@ -735,6 +739,7 @@ def test_the_backfill_stamps_every_row_of_a_table_holding_more_than_one_batch(tm
         engine.dispose()
 
 
+@pytest.mark.migration_revision("20261008_1200_tenant_id_backfill")
 def test_a_rerun_of_the_backfill_over_rows_stamped_across_batches_stamps_the_rest(tmp_path: Path) -> None:
     """Re-entry inside a table: the rows a stopped run already stamped are scattered through the key range and span
     whole pages, and the rerun stamps every row between and after them."""
@@ -765,6 +770,7 @@ def test_a_rerun_of_the_backfill_over_rows_stamped_across_batches_stamps_the_res
         engine.dispose()
 
 
+@pytest.mark.migration_revision("20261008_1200_tenant_id_backfill")
 def test_the_backfill_refuses_a_store_holding_two_tenants_and_changes_nothing(tmp_path: Path) -> None:
     db_url, engine = _store(tmp_path)
     runner = migration_runner(HubConfig(root=tmp_path, db_url=db_url))
@@ -785,6 +791,7 @@ def test_the_backfill_refuses_a_store_holding_two_tenants_and_changes_nothing(tm
         engine.dispose()
 
 
+@pytest.mark.migration_revision("20261008_1200_tenant_id_backfill")
 def test_the_backfill_downgrade_removes_exactly_the_column_it_added(tmp_path: Path) -> None:
     db_url, engine = _store(tmp_path)
     runner = migration_runner(HubConfig(root=tmp_path, db_url=db_url))

@@ -16,7 +16,7 @@ from blizzard.hub.config import HubConfig
 from blizzard.hub.runtime import migration_runner
 from tests.support import hub_scoped_engine
 
-pytestmark = pytest.mark.component
+pytestmark = [pytest.mark.component, pytest.mark.migration_revision("20260929_1100_drop_open_pr_facts")]
 
 _BEFORE = "20260929_1000_decision_imposed_by_runner"
 _DROP = "20260929_1100_drop_open_pr_facts"

@@ -25,7 +25,7 @@ from tests.runner_fakes import SqlAlchemyRunnerStore, make_store, runner_store_e
 from tests.runner_trace_leases import closed_lease
 from tests.support import InMemoryTraceExporter, upgrade_runner_store_as_registered
 
-pytestmark = pytest.mark.component
+pytestmark = [pytest.mark.component, pytest.mark.migration_revision("20261006_1000_runner_identity")]
 
 # The runner store's revision before it kept an identity row, when every lease carried the runner's name.
 _PRE_IDENTITY = "20261005_1000_runner_credential_renewal_facts"

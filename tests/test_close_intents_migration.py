@@ -18,7 +18,7 @@ from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import schema as s
 from tests.support import hub_scoped_engine
 
-pytestmark = pytest.mark.component
+pytestmark = [pytest.mark.component, pytest.mark.migration_revision("20260826_0900_close_intents")]
 
 _BEFORE = "20260825_1300_work_item_strikes"  # the head just before close_intents
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)

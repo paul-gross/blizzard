@@ -16,7 +16,7 @@ from sqlalchemy.exc import IntegrityError
 from blizzard.foundation.store.engine import create_engine_from_url
 from tests.support import migrate_to
 
-pytestmark = pytest.mark.component
+pytestmark = [pytest.mark.component, pytest.mark.migration_revision("20260926_1000_operator_garden_proposals")]
 
 _BEFORE = "20260923_1000_routine_lifecycle_facts"  # the head just before this revision
 _AFTER = (

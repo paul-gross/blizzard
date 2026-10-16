@@ -21,7 +21,7 @@ from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import schema as s
 from tests.support import chunk_stores, hub_scoped_engine, stamp
 
-pytestmark = pytest.mark.component
+pytestmark = [pytest.mark.component, pytest.mark.migration_revision("20260825_1000_chunk_deleted")]
 
 _BEFORE = "20260819_2200_chunk_restart_from_graph"  # the head just before chunk_deleted
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)

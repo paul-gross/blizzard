@@ -23,7 +23,7 @@ from blizzard.hub.store import MIGRATIONS_DIR
 from tests.test_store_migrations import _schema_snapshot
 from tests.test_tenant_carry_over_migration import _seed_every_tenant_owned_table
 
-pytestmark = pytest.mark.component
+pytestmark = [pytest.mark.component, pytest.mark.migration_revision("20261008_1300_tenant_keys")]
 
 _BEFORE_TENANTS = "20261008_1000_drop_work_item_proposals"
 _BACKFILL = "20261008_1200_tenant_id_backfill"

@@ -19,7 +19,7 @@ from blizzard.hub.config import HubConfig
 from blizzard.hub.runtime import Migrations
 from tests.test_store_migrations import _schema_snapshot
 
-pytestmark = pytest.mark.component
+pytestmark = [pytest.mark.component, pytest.mark.migration_revision("20261008_1810_project_read_indexes")]
 
 _PROJECTS = "20261008_1800_projects"
 _READ_INDEXES = "20261008_1810_project_read_indexes"

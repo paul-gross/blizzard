@@ -25,6 +25,7 @@ _STAMP = "2026-09-11 12:00:00"
 _NOW = datetime(2026, 9, 11, 12, 0, tzinfo=UTC)
 
 
+@pytest.mark.migration_revision("20260914_1000_session_harness_provenance")
 def test_session_owner_migration_stamps_old_runner_observations_without_inventing_versions(tmp_path: Path) -> None:
     """Every historic session fact gets its frozen owner; invocation versions stay unknown."""
     url = f"sqlite:///{tmp_path / 'runner.db'}"

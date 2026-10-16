@@ -28,7 +28,7 @@ from blizzard.hub.runtime import Migrations
 from blizzard.hub.store import MIGRATIONS_DIR
 from tests.test_store_migrations import _schema_snapshot
 
-pytestmark = pytest.mark.component
+pytestmark = [pytest.mark.component, pytest.mark.migration_revision("20261014_0900_question_decision_project")]
 
 _PARENT = "20261013_0900_host_fact_lane"
 _REVISION = "20261014_0900_question_decision_project"

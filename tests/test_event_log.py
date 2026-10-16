@@ -397,6 +397,7 @@ def test_event_feed_escalation_message_does_not_overclaim_resume() -> None:
     assert "cross-graph" not in by_chunk["ch_c"]
 
 
+@pytest.mark.migration_revision("20260721_1600_hub_event_log")
 def test_migration_creates_event_log_on_in_place_upgrade(tmp_path: Path) -> None:
     runner, engine = migrate_to(tmp_path, _HEAD_BEFORE_EVENT_LOG)
     assert not _has_table(engine, "event_log")  # absent before the revision

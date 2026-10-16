@@ -11,7 +11,7 @@ import sqlalchemy as sa
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner import runtime as runner_runtime
 
-pytestmark = pytest.mark.component
+pytestmark = [pytest.mark.component, pytest.mark.migration_revision("20260831_1000_in_flight_elicitations")]
 
 
 def _table_names(db_url: str) -> set[str]:
