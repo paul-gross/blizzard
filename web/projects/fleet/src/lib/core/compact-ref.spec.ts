@@ -28,6 +28,7 @@ describe('compactRef', () => {
     expect(compactRef('fins_01KXKVVF1J3D6H6VYZ3XYN3YJ9')).toBe('FS-3YJ9');
     expect(compactRef('gprop_01KXKVVF1J3D6H6VYZ3XYN3YJ9')).toBe('GP-3YJ9');
     expect(compactRef('rtn_01KXKVVF1J3D6H6VYZ3XYN3YJ9')).toBe('RTN-3YJ9');
+    expect(compactRef('proj_01KXKVVF1J3D6H6VYZ3XYN3YJ9')).toBe('PROJ-3YJ9');
   });
 
   it('keeps a runner and a routine with the same tail apart via the registry', () => {

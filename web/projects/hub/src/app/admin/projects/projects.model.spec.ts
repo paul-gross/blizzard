@@ -84,21 +84,11 @@ describe('projects model', () => {
     expect(projectRows([WINTER, BLIZZARD], new Map(), null, 'proj_w').map((row) => row.key)).toEqual(['proj_w']);
   });
 
-  it("counts each row's links in force and its queue, each once read", () => {
-    const figures = new Map([
-      [
-        'proj_b',
-        {
-          sourceLinks: [HUB_LINK, JIRA_LINK, GONE_LINK],
-          repositoryLinks: [REPO_LINK],
-          counts: counts(2, 3, 9),
-        },
-      ],
-      ['proj_w', { sourceLinks: [HUB_LINK] }],
+  it("carries each row's project id for its short id", () => {
+    expect(projectRows([BLIZZARD, WINTER], new Map(), null, null).map((row) => row.projectId)).toEqual([
+      'proj_b',
+      'proj_w',
     ]);
-    const rows = projectRows([BLIZZARD, WINTER], figures, null, null);
-    expect(rows[0].figures).toEqual(['2 linked sources', '1 linked repo', '5 in queue']);
-    expect(rows[1].figures).toEqual(['1 linked source']);
   });
 
   it('marks a wired project, names what a wanting one needs, and judges neither before its reads answer', () => {

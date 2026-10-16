@@ -1,5 +1,4 @@
 import type {
-  ChunkCountsView,
   ConfigChangeView,
   KitAsyncStateValue,
   ProjectCreateRequest,
@@ -45,16 +44,14 @@ export function listedProjects(projects: readonly ProjectView[] | undefined, len
 export interface ProjectFigures {
   readonly sourceLinks?: readonly SourceLinkView[];
   readonly repositoryLinks?: readonly RepositoryLinkView[];
-  readonly counts?: ChunkCountsView;
 }
 
 /** One row of the projects list. The key is the project's id: nothing holds a slug as a key. */
 export interface ProjectRowVm {
   readonly key: string;
   readonly name: string;
-  readonly revision: number;
-  /** How the project is wired, in order: its linked sources, its linked repositories, its queue — each once read. */
-  readonly figures: readonly string[];
+  /** The project's id, which the card's short id is built from. */
+  readonly projectId: string;
   /** What it still needs to take work in, land it and get it done (`needs a runner`), `null` while it is wired or
    * not yet judged. */
   readonly needs: string | null;
@@ -64,25 +61,6 @@ export interface ProjectRowVm {
 
 function plural(count: number, one: string, many: string): string {
   return `${count} ${count === 1 ? one : many}`;
-}
-
-/** The links in force — an unlinked link stays in the listing with `linked: false`. */
-function inForce(links: readonly (SourceLinkView | RepositoryLinkView)[]): number {
-  return links.filter((link) => link.linked).length;
-}
-
-/** The chunks a project has waiting or under way: ready, plus running. */
-export function inQueue(counts: ChunkCountsView): number {
-  return counts.ready + counts.running;
-}
-
-/** A row's figures, each once its read answers. */
-export function rowFigures(figures: ProjectFigures | undefined): readonly string[] {
-  const out: string[] = [];
-  if (figures?.sourceLinks) out.push(plural(inForce(figures.sourceLinks), 'linked source', 'linked sources'));
-  if (figures?.repositoryLinks) out.push(plural(inForce(figures.repositoryLinks), 'linked repo', 'linked repos'));
-  if (figures?.counts) out.push(`${inQueue(figures.counts)} in queue`);
-  return out;
 }
 
 /** What a project lacks, or `null` until its links and the runners are all read. */
@@ -113,8 +91,7 @@ export function projectRows(
       return {
         key: project.project_id,
         name: project.name,
-        revision: project.revision,
-        figures: rowFigures(own),
+        projectId: project.project_id,
         needs: missing !== null && missing.length > 0 ? needsText(missing) : null,
         wired: missing !== null && missing.length === 0,
       };

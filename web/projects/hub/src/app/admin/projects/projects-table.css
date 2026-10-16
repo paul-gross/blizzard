@@ -12,50 +12,39 @@
 }
 .top {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: 4px 8px;
+  gap: 8px;
   min-width: 0;
 }
 .title {
-  flex: 1 1 8ch;
+  flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.right {
-  display: flex;
-  align-items: center;
-  gap: 6px;
+.light {
   flex: none;
-  max-width: 100%;
-  margin-left: auto;
-}
-.rev {
-  color: var(--label);
-  font-size: var(--fs-label);
-}
-.rev b {
-  color: var(--text);
-  font-weight: normal;
-}
-.wired {
   width: 7px;
   height: 7px;
   border-radius: 50%;
+  background: var(--label);
+}
+.light.wired {
   background: var(--green);
+}
+.light.missing {
+  background: var(--red);
 }
 .sub {
   display: flex;
-  flex-wrap: wrap;
-  gap: 4px 10px;
+  align-items: center;
+  gap: 4px 8px;
   margin-top: 2px;
-  color: var(--label);
-  font-size: var(--fs-sm);
   min-width: 0;
 }
-.sub span {
-  overflow-wrap: anywhere;
-  min-width: 0;
+.ref {
+  margin-left: auto;
+  color: var(--label);
+  font-size: var(--fs-sm);
 }
