@@ -4,15 +4,13 @@ import { RouterLink } from '@angular/router';
 import { FLEET_CLOCK, FleetWhen, KitAsyncState, KitBadge, KitPanel, asyncStateOf } from 'fleet';
 import { LensLink } from 'fleet/shell';
 
-import { injectMeQuery } from '../../core/auth/me.query';
-import { TenantContext } from '../../core/auth/tenant-context';
 import { injectProjectsQuery } from '../../core/projects.query';
 import { injectHubRoutinesQuery } from '../core/routines.query';
 import { defaultRoutineWindow } from '../core/routine-window';
 import { injectHubScopesQuery } from '../core/scopes.query';
 import { injectHubGardenProposalsQuery } from '../proposals/garden-proposals.query';
 import { injectHubRunsQuery } from '../runs/garden-runs.query';
-import { doorwayCards, doorwayTenantName, doorwayTitle, openGardenLabel, sweepingLabel, waitingLabel } from './gardening-doorway.model';
+import { doorwayCards, openGardenLabel, sweepingLabel, waitingLabel } from './gardening-doorway.model';
 
 /**
  * The gardening tab on All — a doorway, not a garden. Every scope, routine, run, finding and proposal belongs to one
@@ -37,13 +35,6 @@ export class GardeningDoorway {
   private readonly routinesQuery = injectHubRoutinesQuery();
   private readonly runsQuery = injectHubRunsQuery(() => this.window.since);
   private readonly proposalsQuery = injectHubGardenProposalsQuery();
-  private readonly meQuery = injectMeQuery();
-  private readonly tenant = inject(TenantContext);
-
-  /** The panel's title: the gardens of the tenant the shell is in. */
-  protected readonly title = computed(() =>
-    doorwayTitle(doorwayTenantName(this.tenant.resolve(this.meQuery.data()?.tenants ?? []))),
-  );
 
   protected readonly cards = computed(() =>
     doorwayCards({

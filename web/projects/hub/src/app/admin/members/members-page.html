@@ -11,7 +11,7 @@
   }
   <app-members-table
     [members]="membersQuery.data() ?? []"
-    [label]="label()"
+    label="Members"
     [currentUserId]="currentUserId()"
     [pendingUserIds]="pendingUserIds()"
     (changeRole)="onChangeRole($event)"

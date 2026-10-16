@@ -67,11 +67,6 @@
               />
             </div>
 
-            <p class="pointer" data-testid="admin-projects-gardening">
-              Gardening — this project's scopes, routines, runs, findings and proposals — lives under
-              <a [routerLink]="gardeningLink() | lensLink">Gardening</a> with the lens on <b>{{ p.name }}</b>.
-            </p>
-
             <h3 class="section">Revisions</h3>
             <app-config-revisions [rows]="revisions()" [state]="revisionsState()" [relative]="true" testidPrefix="admin-projects" />
           }

@@ -12,7 +12,6 @@ import {
 } from 'fleet';
 
 import { hasPermission, injectMeQuery } from '../../core/auth/me.query';
-import { TenantContext } from '../../core/auth/tenant-context';
 import { lensedProject } from '../../core/lensed-project';
 import { ProjectLens, lensLink } from '../../core/project-lens';
 import { injectProjectsQuery } from '../../core/projects.query';
@@ -21,13 +20,11 @@ import { injectHubRunnersQuery } from '../../core/runners.query';
 import { type ConfigFormValues, createBody } from '../config-edit.model';
 import { ConfigFormDialog } from '../config-form-dialog';
 import { injectCreateProjectMutation } from './projects.mutations';
-import { tenantNameOf } from '../members/members-page.model';
 import {
   listedProjects,
   PROJECT_FIELDS,
   projectCreate,
   projectRows,
-  projectsCaption,
   SLUG_HINT,
   servedProjectIds,
 } from './projects.model';
@@ -74,10 +71,6 @@ export class ProjectsPage {
   );
 
   private readonly meQuery = injectMeQuery();
-  private readonly tenant = inject(TenantContext);
-  protected readonly caption = computed(() =>
-    projectsCaption(tenantNameOf(this.tenant.resolver()(this.meQuery.data()?.tenants ?? []))),
-  );
   protected readonly createMutation = injectCreateProjectMutation();
   protected readonly fields = PROJECT_FIELDS;
   protected readonly slugHint = SLUG_HINT;

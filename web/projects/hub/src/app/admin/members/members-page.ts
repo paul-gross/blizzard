@@ -1,8 +1,7 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, signal } from '@angular/core';
 
 import { type hubApi, type MemberView, asyncState, injectPendingMutationVariables, KitAsyncState, KitConfirmDialog } from 'fleet';
 import { injectMeQuery } from '../../core/auth/me.query';
-import { TenantContext } from '../../core/auth/tenant-context';
 import { memberRoleMutationKey, revokeMemberMutationKey } from '../../core/mutation-keys';
 import { MembersTable } from './members-table';
 import { injectMembersQuery } from './members.query';
@@ -12,7 +11,7 @@ import {
   injectMemberRoleMutation,
   injectRevokeMemberMutation,
 } from './members.mutations';
-import { memberChangeErrorText, membersLabel, pendingMemberIds, revokePrompt, tenantNameOf } from './members-page.model';
+import { memberChangeErrorText, pendingMemberIds, revokePrompt } from './members-page.model';
 import { LensNote } from '../../core/lens-note';
 
 /**
@@ -38,7 +37,6 @@ import { LensNote } from '../../core/lens-note';
 export class MembersPage {
   protected readonly membersQuery = injectMembersQuery();
   private readonly meQuery = injectMeQuery();
-  private readonly tenant = inject(TenantContext);
   private readonly roleMutation = injectMemberRoleMutation();
   private readonly revokeMutation = injectRevokeMemberMutation();
 
@@ -49,11 +47,6 @@ export class MembersPage {
   protected readonly pendingUserIds = computed(() => pendingMemberIds(this.pendingRoles(), this.pendingRevokes()));
 
   protected readonly currentUserId = computed(() => this.meQuery.data()?.user_id ?? null);
-
-  /** The selected tenant's name, as the header shows it. */
-  private readonly tenantName = computed(() => tenantNameOf(this.tenant.resolver()(this.meQuery.data()?.tenants ?? [])));
-
-  protected readonly label = computed(() => membersLabel(this.tenantName()));
 
   /** `KitAsyncState`'s triad — `empty` is never reached here: an empty listing renders the table's own empty state. */
   protected readonly triadState = computed(() => asyncState(this.membersQuery, false));
@@ -67,7 +60,7 @@ export class MembersPage {
   /** The member a revocation is waiting on confirmation for. */
   protected readonly revoking = signal<MemberView | null>(null);
 
-  protected readonly revokeConfirm = computed(() => revokePrompt(this.revoking(), this.tenantName()));
+  protected readonly revokeConfirm = computed(() => revokePrompt(this.revoking()));
 
   protected onChangeRole(vars: { userId: string; role: hubApi.Role }): void {
     this.revokeMutation.reset();

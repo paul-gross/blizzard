@@ -10,7 +10,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import {
   asyncState,
   errorMessage,
@@ -27,11 +27,9 @@ import {
   restingAsyncState,
   ViewportService,
 } from 'fleet';
-import { LensLink } from 'fleet/shell';
 import { map } from 'rxjs';
 
 import { hasPermission, injectMeQuery } from '../../core/auth/me.query';
-import { TenantContext } from '../../core/auth/tenant-context';
 import { startOfLocalDayIso } from '../../core/local-day';
 import { ProjectLens, lensLink } from '../../core/project-lens';
 import { injectHubRunnersQuery } from '../../core/runners.query';
@@ -40,7 +38,6 @@ import { ConfigFormDialog } from '../config-form-dialog';
 import { lastChange, revisionRows } from '../config-history.model';
 import { injectConfigHistoryQuery } from '../config-history.query';
 import { ConfigRevisions } from '../config-revisions';
-import { tenantNameOf } from '../members/members-page.model';
 import { injectRepositoriesQuery } from '../repositories/repositories.query';
 import { injectWorkSourcesQuery } from '../work-sources/work-sources.query';
 import { ProjectLinkDialog } from './project-link-dialog';
@@ -93,11 +90,9 @@ export type ProjectTab = 'overview' | 'sources' | 'repositories';
     KitButton,
     KitFactList,
     KitTabs,
-    LensLink,
     ProjectLinkDialog,
     ProjectLinkPanel,
     ProjectOverviewCard,
-    RouterLink,
   ],
   templateUrl: './project-detail.html',
   styleUrl: './project-detail.css',
@@ -170,20 +165,11 @@ export class ProjectDetail {
     asyncState(this.historyQuery, this.revisions().length === 0),
   );
 
-  /** Gardening under this project's own lens, whichever lens the board is on; a link already under a lens passes
-   * through `lensLink` unchanged. */
-  protected readonly gardeningLink = computed(() => lensLink(['/gardening'], this.project()?.slug ?? null));
-
   private readonly meQuery = injectMeQuery();
-  private readonly tenant = inject(TenantContext);
-  private readonly tenantName = computed(() =>
-    tenantNameOf(this.tenant.resolver()(this.meQuery.data()?.tenants ?? [])),
-  );
   private readonly createdTemplate = viewChild<TemplateRef<unknown>>('createdFact');
   private readonly revisionTemplate = viewChild<TemplateRef<unknown>>('revisionFact');
   protected readonly facts = computed<readonly KitFact[]>(() =>
     projectFacts(this.project(), {
-      tenant: this.tenantName(),
       former: this.formerSlugs(),
       counts: this.countsQuery.data(),
       created: this.createdTemplate(),

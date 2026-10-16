@@ -7,14 +7,13 @@
   testidPrefix="admin-projects"
   (back)="onBack()"
 >
-  <fleet-kit-panel kit-master-detail-list class="list-pane" [label]="caption()" data-testid="admin-projects-list-panel">
+  <fleet-kit-panel kit-master-detail-list class="list-pane" label="Projects" data-testid="admin-projects-list-panel">
     @if (canCreate()) {
       <fleet-kit-button fleetKitPanelHeader variant="primary" testid="admin-projects-new" (click)="onNew()"
         >+ New project</fleet-kit-button
       >
     }
     <app-projects-table [rows]="rows()" [state]="state()" [selectedKey]="selectedKey()" (pick)="onPick($event)" />
-    <p class="foot">A project is a lens over the tenant.</p>
   </fleet-kit-panel>
   <fleet-kit-panel kit-master-detail-detail class="detail-pane" data-testid="admin-projects-detail-panel">
     <router-outlet />

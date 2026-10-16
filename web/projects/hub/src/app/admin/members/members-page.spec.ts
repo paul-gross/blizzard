@@ -4,11 +4,9 @@ import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-exper
 import { hubClient } from 'fleet';
 import { type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
 
-import { TAB_TENANT_KEY } from '../../core/auth/tenant-context';
 import { MembersPage } from './members-page';
 
 const ACME = { tenant_id: 'ten_acme', name: 'Acme', role: 'admin', permissions: ['user:manage'] };
-const GLOBEX = { tenant_id: 'ten_globex', name: 'Globex', role: 'admin', permissions: ['user:manage'] };
 
 const ME_ADMIN = {
   user_id: 'usr_admin',
@@ -91,17 +89,10 @@ describe('MembersPage', () => {
     expect(stub.forRoute('/api/users', 'GET')).toHaveLength(0);
   });
 
-  it('names the tenant it is opened in', async () => {
+  it('labels the table Members', async () => {
     const { el } = await mount(ME_ADMIN, MEMBERS);
 
-    expect(el.querySelector('[data-testid="members-table"]')?.getAttribute('aria-label')).toBe('Members of Acme');
-  });
-
-  it('names the tab\'s tenant among several memberships', async () => {
-    sessionStorage.setItem(TAB_TENANT_KEY, 'ten_globex');
-    const { el } = await mount({ ...ME_ADMIN, tenants: [ACME, GLOBEX] }, MEMBERS);
-
-    expect(el.querySelector('[data-testid="members-table"]')?.getAttribute('aria-label')).toBe('Members of Globex');
+    expect(el.querySelector('[data-testid="members-table"]')?.getAttribute('aria-label')).toBe('Members');
   });
 
   it('renders an error state when the listing is refused (403, below user:manage)', async () => {
@@ -152,7 +143,7 @@ describe('MembersPage', () => {
     await settle(fixture);
     expect(stub.forRoute('/api/members/usr_guest', 'DELETE')).toHaveLength(0);
     expect(document.querySelector('[data-testid="members-page-revoke-confirm"]')?.textContent).toContain('Grace (grace)');
-    expect(document.querySelector('[data-testid="members-page-revoke-confirm"]')?.textContent).toContain('Acme');
+    expect(document.querySelector('[data-testid="members-page-revoke-confirm"]')?.textContent).toContain('this tenant');
 
     document.querySelector<HTMLElement>('[data-testid="members-page-revoke-confirm-confirm"]')!.click();
     await settle(fixture);

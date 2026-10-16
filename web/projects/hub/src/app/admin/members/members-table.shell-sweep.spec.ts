@@ -55,7 +55,7 @@ async function sweep(width: number) {
   }).compileComponents();
   const fixture = TestBed.createComponent(MembersTable);
   fixture.componentRef.setInput('members', MEMBERS);
-  fixture.componentRef.setInput('label', `Members of ${LONG}`);
+  fixture.componentRef.setInput('label', `Members ${LONG}`);
   fixture.componentRef.setInput('currentUserId', 'usr_admin');
   const root = fixture.nativeElement as HTMLElement;
   document.body.appendChild(root);

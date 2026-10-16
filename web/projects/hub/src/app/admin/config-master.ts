@@ -31,8 +31,6 @@ export class ConfigMaster {
   readonly drilldown = input(false);
   readonly backLabel = input.required<string>();
   readonly testidPrefix = input.required<string>();
-  /** A standing note under the list, or `null` for none. */
-  readonly footer = input<string | null>(null);
   /** Whether an older page exists to load. */
   readonly hasOlder = input(false);
   readonly olderPending = input(false);

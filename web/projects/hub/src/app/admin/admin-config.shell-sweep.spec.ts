@@ -67,7 +67,7 @@ async function mountMaster(canCreate: boolean) {
   fixture.componentRef.setInput('listCaption', 'Secrets');
   fixture.componentRef.setInput('filter', 'active');
   fixture.componentRef.setInput('rows', [
-    { key: LONG_NAME, title: LONG_NAME, sub: ['replaced by pgross'], badges: [], revision: 3, retired: false },
+    { key: LONG_NAME, title: LONG_NAME, sub: ['3 references'], badges: [], revision: 3, retired: false },
   ]);
   fixture.componentRef.setInput('state', 'ready');
   fixture.componentRef.setInput('emptyText', 'No secrets.');

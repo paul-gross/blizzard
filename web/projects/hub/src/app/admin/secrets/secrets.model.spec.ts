@@ -46,7 +46,7 @@ describe('secretRows', () => {
     expect(secretRows([USED], 'all')[0]).toEqual({
       key: 'gh-blizzard',
       title: 'gh-blizzard',
-      sub: ['replaced by pgross', '2 references'],
+      sub: ['2 references'],
       badges: [],
       revision: 3,
       retired: false,
