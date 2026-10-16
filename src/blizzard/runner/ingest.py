@@ -430,6 +430,10 @@ class RunnerIngest:
         runner_id = entry.id
         assert runner_id is not None
         here = self.host.db_url
+        try:
+            sqlite_store_file(here)
+        except StoreResetRefused as exc:
+            raise SourceUnsupported(f"this host's store cannot take an ingest: {exc}") from exc
         present = runner_id in self.stores.named_runners(here)
         record = self.stores.latest_host_ingest(here, runner_id)
         resuming = present and record is not None and record.source == str(source.path)
@@ -453,7 +457,9 @@ class RunnerIngest:
                     raise SourceMoved(
                         f"the source {source.store} has run since this host {self.host.db_url} copied runner "
                         f"{entry.name} from it (its liveness stamp moved from {record.source_alive_at} to "
-                        f"{view.last_alive_at}), so the copy may be stale; nothing was changed"
+                        f"{view.last_alive_at}), so the copy may be stale; nothing was changed. To start over, run "
+                        f"`blizzard runner store reset --runner "
+                        f"{entry.name}` on this host, then ingest again"
                     )
             else:
                 self._refuse_fresh(source, entry, runner_id, view)
