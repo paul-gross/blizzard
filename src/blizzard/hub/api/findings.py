@@ -175,23 +175,10 @@ def list_findings(
     cursor: Annotated[str | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=MAX_LIMIT)] = DEFAULT_LIMIT,
 ) -> FindingsPageView:
-    """The findings bucket, widened to every routine and every scope,
-    bounded and keyset-paginated — live only, unless `include_gone`,
-    which also surfaces every exited finding, not just a merely `gone` one.
-    `routine` and `scope` are both optional, independently:
-
-    - both named — one routine's findings under one scope
-    - `routine` named, `scope` absent — one routine's findings across every scope it holds
-    - `routine` absent, `scope` named — every routine's findings under one scope
-    - both absent — every finding across every routine and every scope
-
-    `source` further narrows to `"routine"` or `"review"`; absent reads
-    both. `class` and `state` filter before the page limit; an explicit state
-    overrides `include_gone`. `descending=true` reads newest IDs first and
-    its cursor moves toward older IDs; ascending remains the default.
-    `?project=` narrows to that project. A named
-    `routine` or `scope` with no `?project=` is read in the call's project (the tenant's only one, else `422
-    project_required`); naming none of the three reads the whole tenant."""
+    """Keyset page across optional routine, scope, source, class and derived state.
+    An explicit state overrides `include_gone`; descending cursors walk older IDs.
+    A named routine/scope without `?project=` resolves the call's project;
+    absent routine, scope and project read the whole tenant."""
     project_id: str | None = project
     if project_id is None and (routine is not None or scope is not None):
         project_id = project_of_call(services).project_id

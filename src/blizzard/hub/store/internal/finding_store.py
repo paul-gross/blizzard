@@ -409,12 +409,9 @@ class FindingStore:
         cursor: str | None = None,
         limit: int,
     ) -> FindingPage:
-        """`list_for`/`list_for_routine`/`list_across_routines` unified into one bounded,
-        keyset-paginated read. With `include_gone=False` the query itself drops every finding
-        whose newest fact is not live, so `LIMIT limit+1` bounds the page: one page query plus
-        one `fact_summaries` read over the page's own ids. The only per-skipped-finding cost
-        is the indexed newest-fact probe. `state` uses the same newest-fact
-        order as the reconstituted finding, including a factless live row."""
+        """Keyset page whose filters precede `LIMIT limit+1` and fact reconstitution.
+        The state predicate shares the fold's newest-fact order, including factless live
+        rows; the skipped-finding cost is an indexed newest-fact probe."""
         if limit < 1:
             raise ValueError(f"limit must be at least 1, got {limit}")
         stmt = (

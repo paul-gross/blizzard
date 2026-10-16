@@ -450,14 +450,10 @@ class IReadFindingRepository(Protocol):
         cursor: str | None = None,
         limit: int,
     ) -> FindingPage:
-        """Bounded, keyset-paginated read unifying `list_for`/`list_for_routine`/
-        `list_across_routines`; `project_id` narrows to one project, `None` reads the whole
-        tenant; `source` narrows to `"routine"` or `"review"`, `None` reads both.
-        Statements and rows read are set by the page, not by how many findings have exited:
-        `include_gone=False` drops non-live findings in the query itself.
-        `class_` and derived `state` filter before `limit`; an explicit state
-        overrides `include_gone`. `descending` reverses both order and cursor
-        direction; `cursor` is a prior :attr:`FindingPage.next_cursor`."""
+        """Tenant-wide or project-scoped keyset page, bounded before reconstitution.
+        Source, class and derived state filter before `limit`; explicit state overrides
+        `include_gone`. `descending` reverses order and cursor direction;
+        `cursor` is a prior :attr:`FindingPage.next_cursor`."""
         ...
 
     def distinct_classes(

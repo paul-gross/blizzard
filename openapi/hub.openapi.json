@@ -20557,7 +20557,7 @@
     },
     "/api/findings": {
       "get": {
-        "description": "The findings bucket, widened to every routine and every scope,\nbounded and keyset-paginated \u2014 live only, unless `include_gone`,\nwhich also surfaces every exited finding, not just a merely `gone` one.\n`routine` and `scope` are both optional, independently:\n\n- both named \u2014 one routine's findings under one scope\n- `routine` named, `scope` absent \u2014 one routine's findings across every scope it holds\n- `routine` absent, `scope` named \u2014 every routine's findings under one scope\n- both absent \u2014 every finding across every routine and every scope\n\n`source` further narrows to `\"routine\"` or `\"review\"`; absent reads\nboth. All share `list_page`'s own total `finding_id` order. `?project=` narrows to that project. A named\n`routine` or `scope` with no `?project=` is read in the call's project (the tenant's only one, else `422\nproject_required`); naming none of the three reads the whole tenant.",
+        "description": "Keyset page across optional routine, scope, source, class and derived state.\nAn explicit state overrides `include_gone`; descending cursors walk older IDs.\nA named routine/scope without `?project=` resolves the call's project;\nabsent routine, scope and project read the whole tenant.",
         "operationId": "list_findings_api_findings_get",
         "parameters": [
           {
@@ -24807,7 +24807,7 @@
     },
     "/api/projects/{project}/findings": {
       "get": {
-        "description": "The project's findings bucket, bounded and keyset-paginated, narrowed as `GET /api/findings` narrows by\n`routine`, `scope`, `source` and `include_gone`; 404 on an unknown project.",
+        "description": "The project's findings bucket, bounded and keyset-paginated, narrowed as `GET /api/findings` narrows by\n`routine`, `scope`, `source`, `class`, `state`, `descending` and `include_gone`; 404 on an unknown project.",
         "operationId": "list_project_findings_api_projects__project__findings_get",
         "parameters": [
           {

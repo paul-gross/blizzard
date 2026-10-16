@@ -820,20 +820,10 @@ export const listEventsApiEventsGet = <ThrowOnError extends boolean = false>(opt
 /**
  * List Findings
  *
- * The findings bucket, widened to every routine and every scope,
- * bounded and keyset-paginated — live only, unless `include_gone`,
- * which also surfaces every exited finding, not just a merely `gone` one.
- * `routine` and `scope` are both optional, independently:
- *
- * - both named — one routine's findings under one scope
- * - `routine` named, `scope` absent — one routine's findings across every scope it holds
- * - `routine` absent, `scope` named — every routine's findings under one scope
- * - both absent — every finding across every routine and every scope
- *
- * `source` further narrows to `"routine"` or `"review"`; absent reads
- * both. All share `list_page`'s own total `finding_id` order. `?project=` narrows to that project. A named
- * `routine` or `scope` with no `?project=` is read in the call's project (the tenant's only one, else `422
- * project_required`); naming none of the three reads the whole tenant.
+ * Keyset page across optional routine, scope, source, class and derived state.
+ * An explicit state overrides `include_gone`; descending cursors walk older IDs.
+ * A named routine/scope without `?project=` resolves the call's project;
+ * absent routine, scope and project read the whole tenant.
  */
 export const listFindingsApiFindingsGet = <ThrowOnError extends boolean = false>(options?: Options<ListFindingsApiFindingsGetData, ThrowOnError>): RequestResult<ListFindingsApiFindingsGetResponses, ListFindingsApiFindingsGetErrors, ThrowOnError> => (options?.client ?? client).get<ListFindingsApiFindingsGetResponses, ListFindingsApiFindingsGetErrors, ThrowOnError>({ url: '/api/findings', ...options });
 
@@ -1840,7 +1830,7 @@ export const patchProjectApiProjectsProjectPatch = <ThrowOnError extends boolean
  * List Project Findings
  *
  * The project's findings bucket, bounded and keyset-paginated, narrowed as `GET /api/findings` narrows by
- * `routine`, `scope`, `source` and `include_gone`; 404 on an unknown project.
+ * `routine`, `scope`, `source`, `class`, `state`, `descending` and `include_gone`; 404 on an unknown project.
  */
 export const listProjectFindingsApiProjectsProjectFindingsGet = <ThrowOnError extends boolean = false>(options: Options<ListProjectFindingsApiProjectsProjectFindingsGetData, ThrowOnError>): RequestResult<ListProjectFindingsApiProjectsProjectFindingsGetResponses, ListProjectFindingsApiProjectsProjectFindingsGetErrors, ThrowOnError> => (options.client ?? client).get<ListProjectFindingsApiProjectsProjectFindingsGetResponses, ListProjectFindingsApiProjectsProjectFindingsGetErrors, ThrowOnError>({ url: '/api/projects/{project}/findings', ...options });
 
