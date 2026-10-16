@@ -90,21 +90,78 @@ GRADUATION_PROCEDURE = "docs/upgrade.md"
 #: What a scaffolded host declares for the plan today's scaffold synthesizes.
 SCAFFOLD_SUBSCRIPTION = SubscriptionDeclaration(slug="anthropic", name="Anthropic", provider=PROVIDER_ANTHROPIC)
 
-#: Keys of the flat runner file that have no home under a host, with where graduation places each.
-_RETIRED_KEYS: Mapping[str, str] = {
-    "token_env": "a runner's token variable is derived from its name (BZ_HUB_TOKEN_<NAME>)",
-    "runner_id": "the runner's name is `[[runner]] name` and its hub id is `[[runner]] id`",
-    "workspace_id": "`[[workspace]] id`",
-    "workspace_root": "`[[workspace]] root`",
-    "workspace_provider": "`[[workspace]] provider`",
-    "workspace_envs": "`[[workspace]] envs`",
-    "workspace_repo": "`[[workspace.repo]]`",
-    "workspace_prompt": "`[[workspace]] prompt`",
-    "workspace_prompt_file": "`[[workspace]] prompt_file`",
-    "workspace_prompt_package": "`[[workspace]] prompt_package`",
-    "max_agents": "the `agents` of each binding in `[[runner]] projects`",
-    "external_subscription_usage": "a `[[subscription]]` the runner names",
+
+class _Placement(StrEnum):
+    """Where graduation places a key of the flat runner file."""
+
+    HOST = "host"
+    WORKSPACE = "workspace"
+    RUNNER = "runner"
+    CONSUMED = "consumed"
+
+
+@domain_model
+@dataclass(frozen=True)
+class _LegacyKey:
+    """One flat-runner-file key's placement: where it goes, its name there when that is a ``[[workspace]]``, and —
+    for a key with no home under a host — the prose naming what replaced it."""
+
+    placement: _Placement
+    home: str = ""
+    retired: str = ""
+
+
+#: Every flat-runner-file key graduation treats specially; a key absent here graduates into the ``[[runner]]`` as is.
+#: The retired prose, the graduated maps and the top-level ``[[workspace]]`` refusals all derive from this one table.
+_LEGACY_KEYS: Mapping[str, _LegacyKey] = {
+    "hub_url": _LegacyKey(_Placement.HOST),
+    "host": _LegacyKey(_Placement.HOST),
+    "port": _LegacyKey(_Placement.HOST),
+    "public_url": _LegacyKey(_Placement.HOST),
+    "trusted_proxies": _LegacyKey(_Placement.HOST),
+    "session_secret_env": _LegacyKey(_Placement.HOST),
+    "auth": _LegacyKey(_Placement.HOST),
+    "tracing": _LegacyKey(_Placement.HOST),
+    "transcripts": _LegacyKey(_Placement.HOST),
+    "worker_stdout": _LegacyKey(_Placement.HOST),
+    "host_token": _LegacyKey(_Placement.HOST),
+    "hub_tokens": _LegacyKey(_Placement.HOST),
+    "subscription": _LegacyKey(_Placement.HOST),
+    "workspace_id": _LegacyKey(_Placement.WORKSPACE, "id", "`[[workspace]] id`"),
+    "workspace_root": _LegacyKey(_Placement.WORKSPACE, "root", "`[[workspace]] root`"),
+    "workspace_provider": _LegacyKey(_Placement.WORKSPACE, "provider", "`[[workspace]] provider`"),
+    "workspace_envs": _LegacyKey(_Placement.WORKSPACE, "envs", "`[[workspace]] envs`"),
+    "workspace_repo": _LegacyKey(_Placement.WORKSPACE, "repo", "`[[workspace.repo]]`"),
+    "workspace_prompt": _LegacyKey(_Placement.WORKSPACE, "prompt", "`[[workspace]] prompt`"),
+    "workspace_prompt_file": _LegacyKey(_Placement.WORKSPACE, "prompt_file", "`[[workspace]] prompt_file`"),
+    "workspace_prompt_package": _LegacyKey(_Placement.WORKSPACE, "prompt_package", "`[[workspace]] prompt_package`"),
+    "max_environments": _LegacyKey(_Placement.WORKSPACE, "max_environments"),
+    "base_branch": _LegacyKey(_Placement.WORKSPACE, "base_branch"),
+    "db_url": _LegacyKey(_Placement.CONSUMED),
+    "token_env": _LegacyKey(
+        _Placement.CONSUMED, retired="a runner's token variable is derived from its name (BZ_HUB_TOKEN_<NAME>)"
+    ),
+    "runner_id": _LegacyKey(
+        _Placement.CONSUMED, retired="the runner's name is `[[runner]] name` and its hub id is `[[runner]] id`"
+    ),
+    "name": _LegacyKey(_Placement.RUNNER),
+    "projects": _LegacyKey(_Placement.RUNNER),
+    "max_agents": _LegacyKey(_Placement.RUNNER, retired="the `agents` of each binding in `[[runner]] projects`"),
+    "external_subscription_usage": _LegacyKey(_Placement.HOST, retired="a `[[subscription]]` the runner names"),
 }
+
+#: Keys of the flat runner file that have no home under a host, with where graduation places each.
+_RETIRED_KEYS: Mapping[str, str] = {key: placed.retired for key, placed in _LEGACY_KEYS.items() if placed.retired}
+
+#: The flat runner file's keys that graduation moves into its one ``[[workspace]]``, by their name there.
+_GRADUATED_WORKSPACE_KEYS: Mapping[str, str] = {
+    key: placed.home for key, placed in _LEGACY_KEYS.items() if placed.placement is _Placement.WORKSPACE
+}
+
+#: The flat runner file's keys that stay at the top of the host file, as they are.
+_GRADUATED_HOST_KEYS = tuple(
+    key for key, placed in _LEGACY_KEYS.items() if placed.placement is _Placement.HOST and not placed.retired
+)
 
 #: Keys that belong to a `[[runner]]` or `[[workspace]]`, so are refused at the top level.
 _RUNNER_HOME_KEYS = (
@@ -151,17 +208,8 @@ RUNNER_PATH_KEYS: tuple[RunnerPathKey, ...] = (
     RunnerPathKey(("opencode", "auth_path"), "OpenCodeSection.auth_path"),
 )
 
-_WORKSPACE_HOME_KEYS = (
-    "provider",
-    "repo",
-    "base_branch",
-    "max_environments",
-    "envs",
-    "root",
-    "prompt",
-    "prompt_file",
-    "prompt_package",
-)
+#: Keys that belong to a ``[[workspace]]``, so are refused at the top level: every graduated workspace key but its id.
+_WORKSPACE_HOME_KEYS = tuple(home for home in _GRADUATED_WORKSPACE_KEYS.values() if home != "id")
 
 
 class HostConfigError(ConfigError):
@@ -664,7 +712,7 @@ def _parse(raw: dict[str, Any], *, layout: HostLayout, host: str | None, port: i
     subscriptions = errors.attempt(
         "[[subscription]]", lambda: SubscriptionDeclaration.declared(raw.get("subscription", [])), ()
     )
-    workspaces = _workspaces(raw.get("workspace", []), errors)
+    workspaces = _workspaces(raw.get("workspace", []), root=root, errors=errors)
     db_url = str(raw["db_url"]) if "db_url" in raw else layout.default_db_url
     if not db_url.strip():
         errors.add("db_url must not be blank")
@@ -714,48 +762,6 @@ def _parse(raw: dict[str, Any], *, layout: HostLayout, host: str | None, port: i
     )
 
 
-#: The flat runner file's keys that graduation moves into its one ``[[workspace]]``, by their name there.
-_GRADUATED_WORKSPACE_KEYS: Mapping[str, str] = {
-    "workspace_id": "id",
-    "workspace_root": "root",
-    "workspace_provider": "provider",
-    "workspace_envs": "envs",
-    "workspace_repo": "repo",
-    "workspace_prompt": "prompt",
-    "workspace_prompt_file": "prompt_file",
-    "workspace_prompt_package": "prompt_package",
-    "max_environments": "max_environments",
-    "base_branch": "base_branch",
-}
-
-#: The flat runner file's keys that stay at the top of the host file.
-_GRADUATED_HOST_KEYS = (
-    "hub_url",
-    "host",
-    "port",
-    "public_url",
-    "trusted_proxies",
-    "session_secret_env",
-    "auth",
-    "tracing",
-    "transcripts",
-    "worker_stdout",
-    "host_token",
-    "hub_tokens",
-    "subscription",
-)
-
-#: The flat runner file's keys graduation reads into another home, or drops.
-_GRADUATED_CONSUMED_KEYS = (
-    "db_url",
-    "token_env",
-    "runner_id",
-    "name",
-    "projects",
-    "max_agents",
-    "external_subscription_usage",
-)
-
 #: The agent count a flat runner file declaring no ``max_agents`` ran with.
 _LEGACY_MAX_AGENTS = 1
 
@@ -766,8 +772,7 @@ def _graduated_raw(legacy: Mapping[str, Any], *, runner_id: str, served: tuple[s
     raw: dict[str, Any] = {key: legacy[key] for key in _GRADUATED_HOST_KEYS if key in legacy}
     workspace = {home: legacy[key] for key, home in _GRADUATED_WORKSPACE_KEYS.items() if key in legacy}
     workspace.setdefault("id", DEFAULT_WORKSPACE_ID)
-    retired = (*_GRADUATED_HOST_KEYS, *_GRADUATED_WORKSPACE_KEYS, *_GRADUATED_CONSUMED_KEYS)
-    runner: dict[str, Any] = {key: value for key, value in legacy.items() if key not in retired}
+    runner: dict[str, Any] = {key: value for key, value in legacy.items() if key not in _LEGACY_KEYS}
     runner["id"] = runner_id
     runner["name"] = legacy.get("name", legacy.get("runner_id", DEFAULT_RUNNER_NAME))
     agents = legacy.get("max_agents", _LEGACY_MAX_AGENTS)
@@ -824,7 +829,7 @@ def _entries(raw: object, table: str, errors: _Errors) -> list[dict[str, Any]]:
     return entries
 
 
-def _workspaces(raw: object, errors: _Errors) -> tuple[HostWorkspace, ...]:
+def _workspaces(raw: object, *, root: Path, errors: _Errors) -> tuple[HostWorkspace, ...]:
     workspaces: list[HostWorkspace] = []
     for position, entry in enumerate(_entries(raw, "workspace", errors), start=1):
         label = f"[[workspace]] {entry['id']!r}" if isinstance(entry.get("id"), str) else f"[[workspace]] #{position}"
@@ -834,11 +839,17 @@ def _workspaces(raw: object, errors: _Errors) -> tuple[HostWorkspace, ...]:
         if any(other.id == workspace.id for other in workspaces):
             errors.add(f"{label}: duplicate [[workspace]] id {workspace.id!r}")
             continue
+        resolved = workspace.settings(root).effective_workspace_root
         for other in workspaces:
+            if other.settings(root).effective_workspace_root != resolved:
+                continue
             shared = sorted(set(other.envs) & set(workspace.envs))
-            if other.root == workspace.root and shared:
+            if workspace.provider == other.provider == "basic":
+                # A basic pool owns its root's managed directories outright, so a second one there evicts the first's.
+                errors.add(f"{label}: is a basic workspace on root {resolved!r}, as is workspace {other.id!r}")
+            elif shared:
                 errors.add(
-                    f"{label}: shares root {workspace.root!r} with workspace {other.id!r} "
+                    f"{label}: shares root {resolved!r} with workspace {other.id!r} "
                     f"and both name environment(s) {', '.join(shared)}"
                 )
         workspaces.append(workspace)

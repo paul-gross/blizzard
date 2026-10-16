@@ -440,8 +440,7 @@ class InterruptedClaims:
         The route is claimed with the environment already held rather than re-acquired; a lost
         race releases the binding."""
         envs = Environments(bindings).acquired
-        # The workspace the held row names; a row naming none claims under the runner's own.
-        workspace_id = bindings[0].workspace_id or self.ctx.workspaces.home(self.ctx.config.bound_workspace_ids)
+        workspace_id = self.ctx.workspaces.held(bindings[0].workspace_id, self.ctx.config.bound_workspace_ids)
         claim = ClaimRequest(
             chunk_id=chunk_id,
             workspace_id=workspace_id,

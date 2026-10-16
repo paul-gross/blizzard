@@ -22,6 +22,7 @@ from blizzard.runner.auth.session import CALLBACK_PATH
 from blizzard.runner.config_table import ConfigError, Table
 from blizzard.runner.environments.factory import WorkspaceSettings
 from blizzard.runner.environments.provider import WorkspaceRepo
+from blizzard.runner.environments.workspaces import home_workspace_id
 from blizzard.runner.harness.autonomy import Autonomy
 from blizzard.runner.harness.bundle import HARNESS_CONFIG_DIRNAME
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
@@ -658,9 +659,14 @@ class RunnerConfig:
 
     @property
     def home_workspace(self) -> HostWorkspace:
-        """The workspace this runner is reported and addressed by as such: the first its bindings name, else the
-        host's first."""
-        return self.bound_workspaces[0]
+        """The workspace this runner is reported and addressed by as such (:func:`home_workspace_id`)."""
+        by_id = {workspace.id: workspace for workspace in self.workspaces}
+        return by_id[home_workspace_id(self.bound_workspace_ids, tuple(by_id))]
+
+    @property
+    def bound_workspace_ids(self) -> tuple[str, ...]:
+        """The workspace each of this runner's bindings names, in binding order, declared or not."""
+        return tuple(dict.fromkeys(binding.workspace for binding in self.bindings or ()))
 
     @property
     def socket_path(self) -> Path:

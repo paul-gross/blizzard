@@ -286,6 +286,15 @@ def test_a_scaffold_seeds_its_workspace_and_runner_from_the_environment(
             '[[workspace]]\nid = "w1"\nroot = "/r"\nenvs = ["e1", "e2"]\n[[workspace]]\nid = "w2"\nroot = "/r"\nenvs = ["e2"]\n',
             ["[[workspace]] 'w2'", "e2"],
         ),
+        (
+            '[[workspace]]\nid = "w1"\nroot = "/r"\nenvs = ["e1"]\n[[workspace]]\nid = "w2"\nroot = "/r/x/.."\nenvs = ["e1"]\n',
+            ["[[workspace]] 'w2'", "'w1'", "e1"],
+        ),
+        (
+            '[[workspace]]\nid = "w1"\nprovider = "basic"\nroot = "/r"\nenvs = ["e1"]\n'
+            '[[workspace]]\nid = "w2"\nprovider = "basic"\nroot = "/r/"\nenvs = ["e2"]\n',
+            ["[[workspace]] 'w2'", "basic workspace", "'w1'"],
+        ),
         ('[[workspace]]\nroot = "/r"\n', ["[[workspace]] #1"]),
         ('[[workspace]]\nid = "w"\nprovider = "nope"\n', ["[[workspace]] 'w'", "provider"]),
         (
@@ -608,6 +617,29 @@ def test_a_flat_runner_file_graduates_to_one_workspace_and_one_runner_under_the_
         "anthropic",
         900,
     )
+
+
+def test_two_basic_workspaces_whose_roots_resolve_to_one_directory_are_refused_naming_both(tmp_path: Path) -> None:
+    (tmp_path / "host" / "pool").mkdir(parents=True)
+    (tmp_path / "alias").symlink_to(tmp_path / "host" / "pool")
+    text = (
+        '[[workspace]]\nid = "w1"\nprovider = "basic"\nroot = "pool"\nenvs = ["e1"]\n'
+        f'[[workspace]]\nid = "w2"\nprovider = "basic"\nroot = "{tmp_path / "alias"}"\nenvs = ["e2"]\n'
+    )
+
+    message = _refusal(tmp_path, text)
+
+    assert "[[workspace]] 'w2'" in message and "workspace 'w1'" in message
+    assert str((tmp_path / "host" / "pool").resolve()) in message
+
+
+def test_winter_workspaces_on_one_root_naming_disjoint_environments_load(tmp_path: Path) -> None:
+    text = (
+        '[[workspace]]\nid = "w1"\nroot = "/r"\nenvs = ["e1"]\n[[workspace]]\nid = "w2"\nroot = "/r/"\nenvs = ["e2"]\n'
+    )
+    _write(tmp_path, text)
+
+    assert [w.id for w in HostConfig.load(tmp_path).workspaces] == ["w1", "w2"]
 
 
 def test_a_flat_runner_file_naming_no_projects_graduates_bound_to_what_the_hub_last_served(tmp_path: Path) -> None:

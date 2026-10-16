@@ -16,9 +16,15 @@ from blizzard.runner.environments.provider import IWorkspaceProvider
 
 
 def home_workspace_id(bound: Sequence[str], declared: Sequence[str]) -> str:
-    """The workspace a runner is reported and addressed by as such: the first workspace its bindings name, else the
-    host's first. ``declared`` is never empty."""
-    return bound[0] if bound else declared[0]
+    """The workspace a runner is reported and addressed by as such: the first workspace its bindings name that the
+    host declares, else the host's first. ``declared`` is never empty."""
+    return next((workspace_id for workspace_id in bound if workspace_id in declared), declared[0])
+
+
+def held_workspace_id(held: str | None, bound: Sequence[str], declared: Sequence[str]) -> str:
+    """The workspace a held ``env_bindings`` row is listed and claimed under: the one it names when the host declares
+    it, else the runner's home (:func:`home_workspace_id`)."""
+    return held if held is not None and held in declared else home_workspace_id(bound, declared)
 
 
 class IWorkspaces(Protocol):
@@ -30,6 +36,10 @@ class IWorkspaces(Protocol):
 
     def home(self, bound: Sequence[str]) -> str:
         """:func:`home_workspace_id` over this host's declared workspaces."""
+        ...
+
+    def held(self, workspace_id: str | None, bound: Sequence[str]) -> str:
+        """:func:`held_workspace_id` over this host's declared workspaces."""
         ...
 
     def provider(self, workspace_id: str | None) -> IWorkspaceProvider | None:
@@ -91,6 +101,9 @@ class WorkspaceRegistry:
 
     def home(self, bound: Sequence[str]) -> str:
         return home_workspace_id(bound, self.ids())
+
+    def held(self, workspace_id: str | None, bound: Sequence[str]) -> str:
+        return held_workspace_id(workspace_id, bound, self.ids())
 
     def provider(self, workspace_id: str | None) -> IWorkspaceProvider | None:
         workspace = self._get(workspace_id)

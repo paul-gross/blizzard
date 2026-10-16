@@ -122,7 +122,6 @@ class Registration:
 
     def run(self) -> None:
         ctx = self.ctx
-        # The workspace this runner is reported by: the first its bindings name, else the host's first.
         workspace_id = ctx.workspaces.home(ctx.config.bound_workspace_ids)
         provider = ctx.workspaces.provider(workspace_id)
         try:
