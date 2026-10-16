@@ -614,19 +614,38 @@ def held_chunk_reads_local_epoch(view: ChunkState) -> bool:
     return view.status == ChunkStatus.RUNNING and view.latest_epoch is not None
 
 
-def held_chunk_move(view: ChunkState, *, runner_id: str, local_latest_epoch: int, taken_over: bool) -> HeldChunkMove:
+def held_chunk_move(
+    view: ChunkState,
+    *,
+    runner_id: str,
+    local_latest_epoch: int,
+    lease_in_binding_tenure: bool,
+    taken_over: bool,
+) -> HeldChunkMove:
     """A held chunk with no active lease: an ended chunk releases; a decided gate whose route left
     this runner releases, one still here resolves; a running chunk at a strictly newer hub epoch
-    enters its node (a just-escalated one stays at the SAME epoch until its fact flushes); a chunk
-    at a hub node is stepped. Non-releasing moves hold the environments until a terminal outcome.
+    enters its node only when FILL does not own that entry (a just-escalated one stays at the
+    SAME epoch until its fact flushes); a chunk at a hub node is stepped. Non-releasing moves
+    hold the environments until a terminal outcome.
     ``taken_over`` holds only moves that start a session or advance the chunk."""
-    move = _held_chunk_move(view, runner_id=runner_id, local_latest_epoch=local_latest_epoch)
+    move = _held_chunk_move(
+        view,
+        runner_id=runner_id,
+        local_latest_epoch=local_latest_epoch,
+        lease_in_binding_tenure=lease_in_binding_tenure,
+    )
     if taken_over and move in TAKEOVER_SUPPRESSED_HELD_MOVES:
         return HeldChunkMove.HOLD
     return move
 
 
-def _held_chunk_move(view: ChunkState, *, runner_id: str, local_latest_epoch: int) -> HeldChunkMove:
+def _held_chunk_move(
+    view: ChunkState,
+    *,
+    runner_id: str,
+    local_latest_epoch: int,
+    lease_in_binding_tenure: bool,
+) -> HeldChunkMove:
     if view.status == ChunkStatus.DONE:
         return HeldChunkMove.RELEASE_DONE
     if view.status == ChunkStatus.STOPPED:
@@ -637,7 +656,17 @@ def _held_chunk_move(view: ChunkState, *, runner_id: str, local_latest_epoch: in
     if decision is not None and decision.resolved_choice is not None and not decision.transitioned:
         return HeldChunkMove.RESOLVE_GATE
     hub_epoch = view.latest_epoch
-    if view.status == ChunkStatus.RUNNING and hub_epoch is not None and hub_epoch > local_latest_epoch:
+    if (
+        view.status == ChunkStatus.RUNNING
+        and hub_epoch is not None
+        and hub_epoch > local_latest_epoch
+        and not owns_node_entry(
+            view,
+            local_epoch=local_latest_epoch,
+            open_escalation_epoch=None,
+            lease_in_binding_tenure=lease_in_binding_tenure,
+        )
+    ):
         return HeldChunkMove.SPAWN_ADVANCED
     if view.status == ChunkStatus.DELIVERING:
         return HeldChunkMove.POLL_HUB_NODE

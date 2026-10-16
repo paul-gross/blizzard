@@ -51,7 +51,13 @@ from blizzard.runner.harness.preamble import (
 )
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.harness.transcript import NullTranscriptSource
-from blizzard.runner.hub.client import QueueEntry, SubscriptionDeclaration
+from blizzard.runner.hub.client import (
+    ClaimRequest,
+    HubClientError,
+    QueueEntry,
+    RouteClaimOutcome,
+    SubscriptionDeclaration,
+)
 from blizzard.runner.leases.activity import HEARTBEAT_STALENESS_THRESHOLD
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.lifecycle.attempt import Attempt
@@ -158,6 +164,41 @@ def _chunk_with_cost(  # type: ignore[no-untyped-def]
 
 
 # FILL
+
+
+@pytest.mark.unit
+def test_ambiguous_claim_waits_for_next_fill_to_rekey_before_advance_spawns(tmp_path):  # type: ignore[no-untyped-def]
+    class TimedOutClaimHub(FakeHub):
+        def claim_route(self, claim: ClaimRequest) -> RouteClaimOutcome:
+            self.claims.append(claim)
+            self.chunks[claim.chunk_id] = ChunkState(
+                chunk_id=claim.chunk_id, status=ChunkStatus.RUNNING, route_runner_id="r1", latest_epoch=1
+            )
+            raise HubClientError("The read operation timed out")
+
+    store = _store(tmp_path)
+    hub = TimedOutClaimHub()
+    hub.queue = [QueueEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
+    hub.envelopes["ch_1"] = _build_envelope()
+    harness = FakeHarness(handle=_HANDLE, verdict="pass")
+    ctx = make_context(store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=FakeProbe())
+
+    Fill(ctx).run()
+    Advance(ctx).run()
+    assert store.held_environment_ids() == ["e1"]
+    assert store.active_lease_for_chunk("ch_1") is None
+    assert store.route_token("ch_1") is None
+    assert harness.spawns == []
+
+    with capture_logs() as logs:
+        Fill(ctx).run()
+    assert hub.rekey_calls == ["ch_1"]
+    assert store.route_token("ch_1") == "rtok_rekeyed"
+    assert [entry["event"] for entry in logs].index("route token stashed") < [entry["event"] for entry in logs].index(
+        "adopting interrupted claim — spawning current node"
+    )
+    assert store.active_lease_for_chunk("ch_1") is not None
+    assert len(harness.spawns) == 1
 
 
 @pytest.mark.unit
@@ -2867,6 +2908,7 @@ def test_advance_held_chunk_spawns_into_post_merge_node(tmp_path):  # type: igno
     store = _store(tmp_path)
     # A chunk held at the (former) deliver hub node: its prior build lease is closed, the
     # binding retained; the coordinator advanced it into ``verify`` at a HIGHER hub_epoch.
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
     store.record_lease(
         NewLease(
             lease_id="lease_build",
@@ -2882,7 +2924,6 @@ def test_advance_held_chunk_spawns_into_post_merge_node(tmp_path):  # type: igno
     store.record_closure(
         lease_id="lease_build", chunk_id="ch_1", node_id="nd_build", reason="transitioned", closed_at=_NOW
     )
-    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
     hub = FakeHub()
     hub.chunks["ch_1"] = ChunkState(
         chunk_id="ch_1",

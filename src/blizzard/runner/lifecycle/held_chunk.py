@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol
 
+from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.node_steps import ApplyOutcome
 from blizzard.foundation.trace_ids import StepKey, step_root
@@ -79,10 +80,20 @@ class HeldChunk:
         runner_id = registered_runner_id(self.ctx.identity)
         if runner_id is None:
             return  # whether the route is still ours waits for the runner's first registration
+        entering = (
+            view.status == ChunkStatus.RUNNING and view.latest_epoch is not None and view.latest_epoch > local_epoch
+        )
+        bindings = self.ctx.stores.environments.bindings_for_chunk(self.chunk_id) if entering else []
+        bound_at = min((binding.bound_at for binding in bindings), default=None)
         move = held_chunk_move(
             view,
             runner_id=runner_id,
             local_latest_epoch=local_epoch,
+            lease_in_binding_tenure=(
+                self.ctx.stores.lease_record.has_lease_in_binding_tenure(self.chunk_id, bound_at)
+                if bound_at is not None
+                else False
+            ),
             taken_over=takeovers.holds(self.chunk_id, local_epoch),
         )
         if move is HeldChunkMove.RELEASE_DONE:

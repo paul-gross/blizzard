@@ -539,7 +539,13 @@ def test_held_chunk_reads_local_epoch_only_for_a_running_chunk() -> None:
 
 def test_held_chunk_move_table() -> None:
     def move(view: ChunkState, *, local: int = 1) -> HeldChunkMove:
-        return held_chunk_move(view, runner_id=_ME, local_latest_epoch=local, taken_over=False)
+        return held_chunk_move(
+            view,
+            runner_id=_ME,
+            local_latest_epoch=local,
+            lease_in_binding_tenure=True,
+            taken_over=False,
+        )
 
     resolved = ChunkGate(decision_id="dc_1", node_id="nd_gate", epoch=1, resolved_choice="ok")
     assert move(_view(ChunkStatus.DONE)) is HeldChunkMove.RELEASE_DONE
@@ -553,6 +559,32 @@ def test_held_chunk_move_table() -> None:
     assert move(_view(epoch=2), local=1) is HeldChunkMove.SPAWN_ADVANCED
     assert move(_view(epoch=1), local=1) is HeldChunkMove.HOLD  # same epoch: a just-escalated chunk
     assert move(_view(ChunkStatus.DELIVERING)) is HeldChunkMove.POLL_HUB_NODE
+
+
+def test_advance_holds_first_claim_for_fill_but_enters_a_genuinely_advanced_node() -> None:
+    view = _view(epoch=1)
+    for tenure, expected in ((False, HeldChunkMove.HOLD), (True, HeldChunkMove.SPAWN_ADVANCED)):
+        assert (
+            held_chunk_move(
+                view,
+                runner_id=_ME,
+                local_latest_epoch=0,
+                lease_in_binding_tenure=tenure,
+                taken_over=False,
+            )
+            is expected
+        )
+    restarted = _view(epoch=2, restart_epochs=[2])
+    assert (
+        held_chunk_move(
+            restarted,
+            runner_id=_ME,
+            local_latest_epoch=1,
+            lease_in_binding_tenure=True,
+            taken_over=False,
+        )
+        is HeldChunkMove.HOLD
+    )
 
 
 @pytest.mark.unit
@@ -573,12 +605,27 @@ def test_held_chunk_move_detaches_a_gate_only_with_a_decision_routed_away(
         ChunkGate(decision_id="dc_1", node_id="nd_gate", epoch=1, resolved_choice="ok") if with_decision else None
     )
     view = _view(ChunkStatus.WAITING_ON_HUMAN, route=route, decision=decision)
-    assert held_chunk_move(view, runner_id=_ME, local_latest_epoch=1, taken_over=False) is expected
+    assert (
+        held_chunk_move(
+            view,
+            runner_id=_ME,
+            local_latest_epoch=1,
+            lease_in_binding_tenure=True,
+            taken_over=False,
+        )
+        is expected
+    )
 
 
 def test_takeover_suppresses_only_session_arms() -> None:
     def move(view: ChunkState) -> HeldChunkMove:
-        return held_chunk_move(view, runner_id=_ME, local_latest_epoch=1, taken_over=True)
+        return held_chunk_move(
+            view,
+            runner_id=_ME,
+            local_latest_epoch=1,
+            lease_in_binding_tenure=True,
+            taken_over=True,
+        )
 
     resolved = ChunkGate(decision_id="dc_1", node_id="nd_gate", epoch=1, resolved_choice="ok")
     assert move(_view(ChunkStatus.WAITING_ON_HUMAN, decision=resolved)) is HeldChunkMove.HOLD

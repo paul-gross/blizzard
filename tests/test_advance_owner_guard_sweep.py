@@ -483,6 +483,21 @@ def test_pool_head_owner_unresolvable_at_node_entry_escalates_but_a_sibling_chun
     store.record_binding(
         chunk_id="ch_sibling", environment_id="e2", workdir="/ws/e2", bound_at=_NOW, workspace_id="ws1"
     )
+    store.record_lease(
+        NewLease(
+            lease_id="lease_sibling_prior",
+            chunk_id="ch_sibling",
+            graph_id="gr_1",
+            node_id="nd_build",
+            node_name="build",
+            epoch=1,
+            retries_max=2,
+            created_at=_NOW,
+        )
+    )
+    store.record_closure(
+        lease_id="lease_sibling_prior", chunk_id="ch_sibling", node_id="nd_build", reason="transitioned", closed_at=_NOW
+    )
 
     hub = FakeHub()
     # Routed here still — only its recorded owner is unresolvable, so `Attempt.detached`'s
@@ -491,7 +506,7 @@ def test_pool_head_owner_unresolvable_at_node_entry_escalates_but_a_sibling_chun
         chunk_id="ch_pool", status=ChunkStatus.RUNNING, route_runner_id="r1", latest_epoch=2
     )
     hub.envelopes["ch_pool"] = _pooled_envelope("ch_pool", "verify", "nd_verify")
-    hub.chunks["ch_sibling"] = ChunkState(chunk_id="ch_sibling", status=ChunkStatus.RUNNING, latest_epoch=1)
+    hub.chunks["ch_sibling"] = ChunkState(chunk_id="ch_sibling", status=ChunkStatus.RUNNING, latest_epoch=2)
     hub.envelopes["ch_sibling"] = make_envelope(
         "ch_sibling", "verify", node_id="nd_verify", choices=_CHOICES, session=SessionMode.FRESH
     )
@@ -552,6 +567,21 @@ def test_a_plain_resumes_unresolvable_owner_escalates_node_entry_but_a_sibling_s
     store.record_binding(
         chunk_id="ch_sibling", environment_id="e2", workdir="/ws/e2", bound_at=_NOW, workspace_id="ws1"
     )
+    store.record_lease(
+        NewLease(
+            lease_id="lease_sibling_prior",
+            chunk_id="ch_sibling",
+            graph_id="gr_1",
+            node_id="nd_build",
+            node_name="build",
+            epoch=1,
+            retries_max=2,
+            created_at=_NOW,
+        )
+    )
+    store.record_closure(
+        lease_id="lease_sibling_prior", chunk_id="ch_sibling", node_id="nd_build", reason="transitioned", closed_at=_NOW
+    )
 
     hub = FakeHub()
     # Routed here still — only its recorded owner is unresolvable.
@@ -566,7 +596,7 @@ def test_a_plain_resumes_unresolvable_owner_escalates_node_entry_but_a_sibling_s
         session=SessionMode.RESUME,
         session_source="build",  # a targeted, un-pooled resume — no `session_name`
     )
-    hub.chunks["ch_sibling"] = ChunkState(chunk_id="ch_sibling", status=ChunkStatus.RUNNING, latest_epoch=1)
+    hub.chunks["ch_sibling"] = ChunkState(chunk_id="ch_sibling", status=ChunkStatus.RUNNING, latest_epoch=2)
     hub.envelopes["ch_sibling"] = make_envelope(
         "ch_sibling", "verify", node_id="nd_verify", choices=_CHOICES, session=SessionMode.FRESH
     )
