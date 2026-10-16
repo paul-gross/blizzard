@@ -98,4 +98,13 @@ describe('FleetWhen day-boundary rollover (review gate finding)', () => {
     // The tooltip is time-independent for a fixed `iso` — unaffected by the tick.
     expect(el.getAttribute('title')).toBe('2026/07/18 23:45:00');
   });
+
+  it('drives every mounted instance off one shared timer', () => {
+    vi.useFakeTimers();
+    const before = vi.getTimerCount();
+    const fixtures = [1, 2, 3].map(() => TestBed.createComponent(TestHost));
+    fixtures.forEach((f) => f.detectChanges());
+
+    expect(vi.getTimerCount()).toBe(before + 1);
+  });
 });

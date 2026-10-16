@@ -72,7 +72,7 @@ export class ChunkTimelineSelection {
   protected readonly historyRows = computed<readonly HistoryRow[]>(() => deriveHistoryRows(this.detail(), new Date(this.now())));
 
   /** The tick `historyRows` stamps read against, so "HH:MM" rolls over to "Yesterday". */
-  private readonly now = injectNowSignal(60_000);
+  private readonly now = injectNowSignal();
 
   /** Whether the timeline spans more than one graph — see {@link ChunkTimeline.multiGraph}
    * for why a single-graph chunk shows no graph badge. */

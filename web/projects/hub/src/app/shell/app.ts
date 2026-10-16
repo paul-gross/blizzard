@@ -157,15 +157,18 @@ export class App {
   /** The fleet's chunk counts for the header, in the selected tenant. */
   private readonly countsQuery = injectHubChunkCountsQuery(() => this.ready());
 
-  /** The minute tick the spend windows are cut from — reading it inside the query
-   * options makes the key reactive, yet it changes only when the local day does, so a
-   * tick within the day leaves the key equal and refetches nothing. */
-  private readonly now = injectNowSignal(60_000);
+  /** The shared one-second clock the spend windows are cut from. */
+  private readonly now = injectNowSignal();
 
-  /** The fleet's spend-today read — `since` is local start-of-day off {@link now},
+  /** The day boundaries, derived so string equality stops the tick: the query keys
+   * change only when the local day does, so a tick within the day refetches nothing. */
+  private readonly dayStart = computed(() => startOfLocalDayIso(this.now()));
+  private readonly previousDayStart = computed(() => startOfPreviousLocalDayIso(this.now()));
+
+  /** The fleet's spend-today read — `since` is local start-of-day off {@link dayStart},
    * so the window rolls forward at local midnight without a reload. */
   protected readonly spendToday = injectHubFleetSpendQuery(
-    () => startOfLocalDayIso(this.now()),
+    () => this.dayStart(),
     undefined,
     () => this.ready(),
   );
@@ -177,8 +180,8 @@ export class App {
    * from {@link spendToday}'s in both `since` and `until`, so it is its own cache
    * entry rather than colliding on one. */
   protected readonly spendYesterday = injectHubFleetSpendQuery(
-    () => startOfPreviousLocalDayIso(this.now()),
-    () => startOfLocalDayIso(this.now()),
+    () => this.previousDayStart(),
+    () => this.dayStart(),
     () => this.ready(),
   );
 

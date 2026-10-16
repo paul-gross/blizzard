@@ -32,7 +32,7 @@ export class HeartbeatFreshness {
   readonly stale = input(false);
 
   /** Ticks once a second so the bar drains between fresh `lastHeartbeatAt` values. */
-  private readonly now = injectNowSignal(1000);
+  private readonly now = injectNowSignal();
 
   protected readonly freshAgeMs = computed(() => ageMs(this.lastHeartbeatAt(), this.now()));
 

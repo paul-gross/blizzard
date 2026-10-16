@@ -26,7 +26,7 @@ export class HostEnvironments {
 
   /** Ticks once a second so each row's `heldFor` advances between polls instead of
    * sitting frozen at whatever age the last read carried. */
-  private readonly now = injectNowSignal(1000);
+  private readonly now = injectNowSignal();
 
   protected readonly workspaces = computed<readonly WorkspaceRow[]>(() =>
     runnerWorkspaceRows(

@@ -39,7 +39,7 @@ export class HostSubscriptions {
 
   /** Ticks once a second so each row's `sampledAgo` advances between polls instead of
    * sitting frozen at whatever age the last read carried. */
-  private readonly now = injectNowSignal(1000);
+  private readonly now = injectNowSignal();
 
   protected readonly rows = computed<readonly SubscriptionPace[]>(() =>
     runnerSubscriptionPaces(this.subscriptions(), this.now(), this.runnerNames()),
