@@ -1,8 +1,11 @@
 # Re-entering build from review
 
-You are re-entering build after review found blocking issues, each recorded in the envelope's `review-findings` asset.
-Your commits are intact on the feature branch; nothing has landed. Answer every finding by fixing or refuting it, then
-commit, push, re-declare the tip, and declare done again.
+You are re-entering build after review failed the round; every finding is recorded in the envelope's `review-findings`
+asset. Your commits are intact on the feature branch; nothing has landed. Answer every finding by fixing or refuting it,
+then commit, push, re-declare the tip, and declare done again. Besides every `blocking` finding, a `should-fix` tagged
+`in-diff` is a defect in what this change wrote, which you hold the context to repair now; skipping one is not an
+answer, since left open it is deferred at landing into a hub finding that a later chunk repairs with none of your
+context.
 
 Check each finding against the current code first — one an earlier attempt already resolved needs no second fix.
 

@@ -1,12 +1,14 @@
 ## Arriving from review
 
-Review found blocking issues, so you are here; the commits are intact on the feature branch. The blocking issues are in
-the `review-findings` asset carried into this arrival — read it with
-`blizzard runner artifact get review-findings --content`.
+Review failed the round, so you are here; the commits are intact on the feature branch. The findings are in the
+`review-findings` asset carried into this arrival — read it with
+`blizzard runner artifact get review-findings --content`. Besides every `blocking` finding, a `should-fix` tagged
+`in-diff` is a defect in what this change wrote, which you hold the context to repair now.
 
 Check each finding against the work as it now stands first: one an earlier attempt already resolved needs no second fix.
 Answer every finding, by fixing it or by refuting it on the record; disagreement is never expressed by quietly ignoring
-one.
+one, and an `in-diff` should-fix left open is deferred at landing into a hub finding that a later chunk repairs with
+none of your context.
 
 A finding is refuted when it is factually wrong, rests on a false premise, or demands work this change's scale does not
 warrant — not merely because fixing it is inconvenient or because a different call would have been made: a defensible

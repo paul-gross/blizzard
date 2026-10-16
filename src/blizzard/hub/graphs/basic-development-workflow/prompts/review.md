@@ -12,12 +12,16 @@ environment(s) and confirm it before reading any diff.
 
 ## Review the work
 
-Use whatever review tooling this workspace provides — blizzard builds no review machinery of its own. Exercise the
-change's end-to-end flows inside the chunk's environment, where its services run. Do not commit fixes from this node —
-review observes, build repairs.
+Use the review tooling this workspace provides — blizzard builds none of its own. Exercise the change's end-to-end flows
+inside the chunk's environment. Do not commit fixes from this node — review observes, build repairs.
 
 Anchor every finding — `<repo>/<path>:<line>` or `<repo>/<path>::<symbol>` — an unanchored finding can be neither acted
 on nor matched to a refutation.
+
+Grade each finding `blocking` — must be fixed before this passes — or `should-fix` — a real defect below that bar. A
+should-fix also carries `in-diff` when its anchor is a line or passage this change's own commits added or modified, else
+`outside-diff` (untouched neighbouring code, or a defect the change merely exposed). The tag only locates it; the
+judgement decides by round whether it blocks.
 
 ## A re-visit reviews the delta
 
@@ -35,12 +39,12 @@ findings.
 ## Adjudicate refutations
 
 The `review-finding-refutes` asset holds findings the build declined, with its arguments; the newest epoch is the
-complete record by design — never dig for an older, shadowed one. A refutes asset with no recognizable entries (e.g. a
-bare build status) reads as "nothing refuted"; move on.
+complete record — never dig for an older, shadowed one. One with no recognizable entries (e.g. a bare build status)
+reads as "nothing refuted"; move on.
 
-Match a refutation to a finding by its anchor, never its id — every pass renumbers, so the anchor is the only stable
-handle. Give every refutation entry an explicit answer — silence is not acceptance. A refutation is a claim you
-adjudicate, never a veto; an accepted refutation resolves its finding like a fix and does not block `pass`.
+Match a refutation to a finding by its anchor, never its id — every pass renumbers. Give every refutation entry an
+explicit answer — silence is not acceptance. A refutation is a claim you adjudicate, never a veto; an accepted
+refutation resolves its finding like a fix and does not block `pass`.
 
 - Accept an `open` entry whose argument holds — finding wrong, false premise, or work beyond this change's scale; do not
   raise it again, and record the acceptance with anchor and why.
@@ -52,5 +56,6 @@ adjudicate, never a veto; an accepted refutation resolves its finding like a fix
 
 Submit findings before declaring done: `blizzard runner artifact create --name review-findings`, content on stdin — the
 tip you judged per repo (`<repo> <branch> <full-sha>`, the next round's diff base), this round's scope (the whole
-change, or the delta and the prior findings it resolved), what you checked, what passed, every blocking issue. On `fail`
-the findings asset rides back into build's envelope, so make each finding specific and actionable.
+change, or the delta and the prior findings it resolved), what you checked, what passed, every finding with its severity
+and, on a should-fix, its tag. On `fail` the findings asset rides back into build's envelope, so make each finding
+specific and actionable.

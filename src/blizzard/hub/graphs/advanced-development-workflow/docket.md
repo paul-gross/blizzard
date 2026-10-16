@@ -7,7 +7,9 @@ Every finding recorded in a `plan-findings` or `review-findings` asset carries:
   finding the gate already fixed in the `reviewed-plan` it published under an `acceptable` verdict. Recording `folded`
   is itself the closure; on a `must-fix` verdict no fold survives the verbatim republish, so improvement-tier findings
   are `should-fix` there. (`plan-review.md` calls its blocking tier "must-fix" in prose — same value, `blocking`, in the
-  entry.)
+  entry.) A `review-findings` `should-fix` additionally carries `in-diff` — its anchor is a line or passage the change's
+  own commits added or modified — or `outside-diff`; the tag locates the defect, and the review's judgement decides by
+  round whether it blocks.
 - **anchor** — `<repo>/<path>:<line>` or `<repo>/<path>::<symbol>`; a finding targeting a chunk asset rather than a repo
   file anchors as `<asset-name>::<section>`, e.g. `plan::Acceptance criteria`.
 - a **description** — one or two sentences, **at most 300 characters**: what is wrong and why it matters, specific and
@@ -20,7 +22,7 @@ Every finding recorded in a `plan-findings` or `review-findings` asset carries:
 Example, inside a `review-findings` asset — the `detail:` continuation optional, and only ever the acting-on fact:
 
 ```text
-F1 — should-fix — payments-api/src/payments/worker.py:142
+F1 — should-fix, in-diff — payments-api/src/payments/worker.py:142
   Retry counter isn't reset after a successful heartbeat, so a flaky-then-recovered
   worker still escalates on its next transient failure.
   detail: reproduce with `pytest -k recovered_worker` — expected 0 escalations, saw 1.
@@ -29,7 +31,7 @@ F1 — should-fix — payments-api/src/payments/worker.py:142
 The same finding over-long — its derivation transcribed into the entry instead of summarized by it:
 
 ```text
-F1 — should-fix — payments-api/src/payments/worker.py:142
+F1 — should-fix, in-diff — payments-api/src/payments/worker.py:142
   `Worker.heartbeat` returns early at line 138 when the lease is healthy, and `retries` is
   only reset on the fallthrough at line 151; `test_heartbeat_ok` pins the early return
   (payments-api/tests/test_worker.py:88), and the retry counter is declared cumulative in
