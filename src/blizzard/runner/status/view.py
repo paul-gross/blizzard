@@ -372,12 +372,14 @@ class RunnerStatusService:
 
     def environments(self) -> list[EnvironmentSlot]:
         """The pool of every workspace the runner binds, in binding order, each joined against this runner's held
-        binding facts (``EnvironmentSlot.pool_view``). A held row naming no declared workspace joins the runner's
-        home (``IWorkspaces.held``)."""
+        binding facts (``EnvironmentSlot.pool_view``), then the pool of any other workspace a held row of this runner
+        names and the host declares. A held row naming no declared workspace joins the runner's home
+        (``IWorkspaces.held``)."""
         held = self._environments.held_bindings()
         bound = tuple(dict.fromkeys(binding.workspace_id for binding in self._bindings))
         declared = self._workspaces.ids()
-        workspace_ids = tuple(w for w in bound if w in declared) or (self._workspaces.home(bound),)
+        listed = tuple(w for w in bound if w in declared) or (self._workspaces.home(bound),)
+        workspace_ids = tuple(dict.fromkeys((*listed, *(self._workspaces.held(b.workspace_id, bound) for b in held))))
         slots: list[EnvironmentSlot] = []
         for workspace_id in workspace_ids:
             provider = self._workspaces.provider(workspace_id)
