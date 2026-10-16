@@ -6,22 +6,14 @@ import {
   enrollHostApiHostsHostIdEnrollmentsPost,
   hubHostsKey,
   hubRunnersKey,
-  releaseRunnersApiHostsHostIdReleasesPost,
   retireHostApiHostsHostIdRetirePost,
   revokeHostTokenApiHostsHostIdTokenRevocationsPost,
 } from 'fleet';
 import {
   hostEnrollMutationKey,
-  hostReleaseMutationKey,
   hostRetireMutationKey,
   hostRevokeTokenMutationKey,
 } from '../core/mutation-keys';
-
-/** Release one runner from the host it sits under, back to standing alone. */
-export interface HostReleaseVars {
-  readonly hostId: string;
-  readonly runnerId: string;
-}
 
 /** Retire a host; `force` releases the chunks its runners hold instead of being refused. */
 export interface HostRetireVars {
@@ -43,25 +35,6 @@ function settleHostReads(queryClient: QueryClient): Promise<unknown> {
     queryClient.invalidateQueries({ queryKey: hubHostsKey }),
     queryClient.invalidateQueries({ queryKey: hubRunnersKey }),
   ]);
-}
-
-/** `POST /api/hosts/{id}/releases` for one runner, through the generated client
- * (bzh:generated-client). The runner keeps its id and token. */
-export function injectHostReleaseMutation() {
-  const queryClient = inject(QueryClient);
-  return injectMutation(() => ({
-    mutationKey: hostReleaseMutationKey,
-    mutationFn: async (vars: HostReleaseVars): Promise<HostRegistryView> => {
-      const { data, error } = await releaseRunnersApiHostsHostIdReleasesPost({
-        path: { host_id: vars.hostId },
-        body: { runner_ids: [vars.runnerId], by: 'operator' },
-        throwOnError: false,
-      });
-      if (error) throw error;
-      return data!;
-    },
-    onSettled: () => settleHostReads(queryClient),
-  }));
 }
 
 /** `POST /api/hosts/{id}/retire`. An unforced retire the hub refuses with a 409 — its

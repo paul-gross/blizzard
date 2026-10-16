@@ -18,9 +18,8 @@ interface PendingConfirm {
  * The card's runner rows are projected in by the registry view rendering it, so the rail
  * and the phone each keep their own row markup under one card.
  *
- * It carries the host verbs: retire, revoke-token and enroll on the card, and release on
- * each projected row through {@link askRelease}. Release, retire and revoke-token ask for a
- * danger confirm first; a retire the hub refused asks again, showing the hub's refusal,
+ * It carries the host verbs: retire, revoke-token and enroll on the card. Retire and
+ * revoke-token ask for a danger confirm first; a retire the hub refused asks again, showing the hub's refusal,
  * before it is forced. An enrolled token is shown once, in a dialog, until dismissed.
  *
  * Presentational only: the container folds the hosts read into {@link HostCard} and runs
@@ -62,22 +61,6 @@ export class HostCardView {
     const enrolled = this.verbs().enrolled;
     return enrolled?.hostId === this.card().hostId ? enrolled.token : null;
   });
-
-  /** Whether `runnerId`'s release is in flight — the per-row disable. */
-  isReleasePending(runnerId: string): boolean {
-    return this.verbs().pendingRunnerIds.includes(runnerId);
-  }
-
-  /** Ask to release one of the card's runners back to standing alone. */
-  askRelease(runnerId: string, runnerName: string): void {
-    const hostName = this.card().hostName;
-    this.pendingConfirm.set({
-      heading: `Release ${runnerName}`,
-      message: `Release ${runnerName} from host ${hostName}? It keeps its id and token and stands alone.`,
-      confirmLabel: 'Release',
-      event: { kind: 'release', hostId: this.card().hostId, runnerId },
-    });
-  }
 
   protected askRetire(): void {
     const { hostId, hostName } = this.card();
