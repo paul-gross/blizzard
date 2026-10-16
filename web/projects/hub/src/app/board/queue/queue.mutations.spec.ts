@@ -119,9 +119,9 @@ describe('injectRepositionQueueMutation', () => {
     await second;
   });
 
-  it('does not serialize the ready queue and backlog with each other', async () => {
+  it('serializes the ready queue and backlog repositions behind one another, since a lane move may anchor on either', async () => {
     const refreshResolvers: (() => void)[] = [];
-    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries').mockImplementation(
+    vi.spyOn(queryClient, 'invalidateQueries').mockImplementation(
       () => new Promise<void>((resolve) => refreshResolvers.push(resolve)),
     );
     const queueMutation = TestBed.runInInjectionContext(() => injectRepositionQueueMutation());
@@ -133,11 +133,15 @@ describe('injectRepositionQueueMutation', () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(stub.forRoute('/api/queue/position', 'POST')).toHaveLength(1);
-    expect(stub.forRoute('/api/backlog/position', 'POST')).toHaveLength(1);
-    expect(invalidateSpy).toHaveBeenCalledTimes(4);
+    expect(stub.forRoute('/api/backlog/position', 'POST')).toHaveLength(0);
 
     refreshResolvers.splice(0).forEach((resolve) => resolve());
-    await Promise.all([queue, backlog]);
+    await queue;
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(stub.forRoute('/api/backlog/position', 'POST')).toHaveLength(1);
+
+    refreshResolvers.splice(0).forEach((resolve) => resolve());
+    await backlog;
   });
 
   it('runs the next reposition after an earlier POST is rejected and refreshed', async () => {

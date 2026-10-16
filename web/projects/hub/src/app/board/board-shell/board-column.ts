@@ -28,6 +28,23 @@ export interface BoardReposition {
 }
 
 /**
+ * A card dropped into the other ranked list — `chunkId` leaves `from` for `to`, landing immediately
+ * after `afterChunkId` in the destination, or at its very top when that is `null`. The container
+ * turns it into a promote (into READY) or a demote (into BACKLOG).
+ */
+export interface BoardLaneMove {
+  readonly chunkId: string;
+  readonly afterChunkId: string | null;
+  readonly from: BoardReorderList;
+  readonly to: BoardReorderList;
+}
+
+/** The DOM id of a ranked lane's drop list — what the other lane's list connects to. */
+export function laneDropId(list: BoardReorderList): string {
+  return `board-drop-${list}`;
+}
+
+/**
  * One board column — a lane's engraved head (label, occupancy beacon, count)
  * over its card list.
  *
@@ -89,6 +106,21 @@ export class BoardColumn {
    * tagged with which list ({@link BoardReorderList}) the move belongs to. */
   readonly reposition = output<BoardReposition>();
 
+  /** Emitted when a card from the other ranked list is dropped here. */
+  readonly laneMove = output<BoardLaneMove>();
+
+  /** This lane's drop list id, and the other ranked lane's the list connects to while
+   * {@link crossLane} holds — none otherwise, so a board without both permissions has no
+   * connected lists. */
+  protected readonly dropId = computed(() => laneDropId(this.list));
+  protected readonly connectedTo = computed<string[]>(() =>
+    this.crossLane() ? [laneDropId(this.list === 'ready' ? 'notready' : 'ready')] : [],
+  );
+
+  /** Whether a card may cross between READY and BACKLOG — a demote or promote
+   * (`chunk:control`) from lists that exist at all (`queue:reorder`). */
+  protected readonly crossLane = computed(() => this.reorderControls() && this.canReorder() && this.canControl());
+
   /** The beacon color for an occupied lane's header, or null for the quiet lanes:
    * amber for work in flight or parked on a human, red for an escalation. */
   protected readonly blink = computed<'amber' | 'red' | null>(() => {
@@ -117,6 +149,16 @@ export class BoardColumn {
    * A drop that changed nothing writes nothing.
    */
   protected dropped(event: CdkDragDrop<unknown>): void {
+    if (event.previousContainer !== event.container) {
+      const cards = this.cards();
+      this.laneMove.emit({
+        chunkId: String(event.item.data),
+        afterChunkId: event.currentIndex === 0 ? null : cards[event.currentIndex - 1].chunkId,
+        from: this.list === 'ready' ? 'notready' : 'ready',
+        to: this.list,
+      });
+      return;
+    }
     if (event.previousIndex === event.currentIndex) return;
     const ids = this.cards().map((card) => card.chunkId);
     moveItemInArray(ids, event.previousIndex, event.currentIndex);

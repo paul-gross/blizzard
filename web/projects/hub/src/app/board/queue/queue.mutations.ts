@@ -2,7 +2,7 @@ import { inject } from '@angular/core';
 import { QueryClient, injectMutation } from '@tanstack/angular-query-experimental';
 
 import { type BacklogPeekResponse, type QueuePeekResponse, repositionBacklogApiBacklogPositionPost, repositionQueueApiQueuePositionPost, hubBacklogKey, hubChunksKey, hubQueueKey } from 'fleet';
-import { repositionBacklogMutationKey, repositionQueueMutationKey } from '../../core/mutation-keys';
+import { laneMoveScopeId, repositionBacklogMutationKey, repositionQueueMutationKey } from '../../core/mutation-keys';
 
 /** Move a chunk to sit immediately after `afterChunkId` — `null` is the very top
  * of the list. Shared by both {@link injectRepositionQueueMutation} (the ready
@@ -28,7 +28,7 @@ export function injectRepositionQueueMutation(onError?: (error: Error) => void) 
     mutationKey: repositionQueueMutationKey,
     // QueryClient-wide, so rapid drags remain ordered across component remounts.
     // A queued mutation is still pending, so its requested position renders now.
-    scope: { id: 'hub-reposition-queue' },
+    scope: { id: laneMoveScopeId },
     mutationFn: async (vars: RepositionVars): Promise<QueuePeekResponse> => {
       const { data, error } = await repositionQueueApiQueuePositionPost({
         body: { chunk_id: vars.chunkId, after_chunk_id: vars.afterChunkId },
@@ -59,7 +59,7 @@ export function injectRepositionBacklogMutation(onError?: (error: Error) => void
   const queryClient = inject(QueryClient);
   return injectMutation(() => ({
     mutationKey: repositionBacklogMutationKey,
-    scope: { id: 'hub-reposition-backlog' },
+    scope: { id: laneMoveScopeId },
     mutationFn: async (vars: RepositionVars): Promise<BacklogPeekResponse> => {
       const { data, error } = await repositionBacklogApiBacklogPositionPost({
         body: { chunk_id: vars.chunkId, after_chunk_id: vars.afterChunkId },

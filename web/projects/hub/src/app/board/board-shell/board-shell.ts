@@ -2,9 +2,9 @@ import { ChangeDetectionStrategy, Component, computed, input, output } from '@an
 
 import { type ChunkCountsView, type ChunkSummary, compactRef, LANES, STATUS_LANE, laneCounts, KitAsyncState, type KitAsyncStateValue, KitPanel, KitPanelHeader, KitSkeleton } from 'fleet';
 import type { BoardCard } from '../board-card/board-card';
-import { BoardColumn, type BoardReposition } from './board-column';
+import { BoardColumn, type BoardLaneMove, type BoardReposition } from './board-column';
 
-export type { BoardCard, BoardReposition };
+export type { BoardCard, BoardLaneMove, BoardReposition };
 
 /**
  * The mission-control chunk board — the six status columns and their
@@ -67,6 +67,10 @@ export class BoardShell {
    * the anchor it now sits after (`null` = the very top of that list), and which
    * list it belongs to (forwarded as-is from {@link BoardColumn}). */
   readonly reposition = output<BoardReposition>();
+
+  /** Emitted when a card is dropped into the other ranked list — a demote out of READY or a
+   * promote out of BACKLOG, with the destination anchor (forwarded as-is from {@link BoardColumn}). */
+  readonly laneMove = output<BoardLaneMove>();
 
   /** Whether the current identity may promote a backlog chunk (`chunk:control`),
    * forwarded to every {@link BoardColumn}. `null`/pending resolves to

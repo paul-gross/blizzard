@@ -590,6 +590,79 @@ describe('BoardShell', () => {
     });
   });
 
+  /** A card dragged between the two ranked lists. */
+  describe('crossing between READY and BACKLOG', () => {
+    const A = READY('aaaaaaaaaaaaaaaaaaaa');
+    const B = READY('bbbbbbbbbbbbbbbbbbbb');
+    const P = BACKLOG('pppppppppppppppppppp');
+    const Q = BACKLOG('qqqqqqqqqqqqqqqqqqqq');
+
+    const dropListIn = (fixture: ComponentFixture<BoardShell>, column: string): CdkDropList => {
+      const lists = fixture.debugElement.queryAll(By.directive(CdkDropList));
+      const found = lists.find((list) => list.nativeElement.closest('[data-col]').getAttribute('data-col') === column);
+      expect(found).toBeTruthy();
+      return found!.injector.get(CdkDropList);
+    };
+
+    /** A drop from the other list: distinct containers, the dragged chunk id as the item's data. */
+    const crossDrop = (chunkId: string, currentIndex: number) =>
+      ({
+        previousContainer: {},
+        container: {},
+        previousIndex: 0,
+        currentIndex,
+        item: { data: chunkId },
+      }) as unknown as CdkDragDrop<unknown>;
+
+    it('connects each ranked list to the other with chunk:control and queue:reorder', async () => {
+      const fixture = await render([A, P], [A.chunk_id], 'ready', {}, [P.chunk_id]);
+
+      expect(dropListIn(fixture, 'ready').connectedTo).toEqual(['board-drop-notready']);
+      expect(dropListIn(fixture, 'notready').connectedTo).toEqual(['board-drop-ready']);
+    });
+
+    it.each([
+      ['chunk:control', { canControl: false }],
+      ['queue:reorder', { canReorder: false }],
+    ])('connects no list without %s', async (_name, permissions) => {
+      const fixture = await render([A, P], [A.chunk_id], 'ready', permissions, [P.chunk_id]);
+
+      for (const list of fixture.debugElement.queryAll(By.directive(CdkDropList))) {
+        expect(list.injector.get(CdkDropList).connectedTo).toEqual([]);
+      }
+    });
+
+    it('resolves a READY card dropped into BACKLOG to the anchor above it — null at the top', async () => {
+      const fixture = await render([A, B, P, Q], [A.chunk_id, B.chunk_id], 'ready', {}, [P.chunk_id, Q.chunk_id]);
+      const moves: unknown[] = [];
+      fixture.componentInstance.laneMove.subscribe((move) => moves.push(move));
+      const backlog = dropListIn(fixture, 'notready');
+
+      backlog.dropped.emit(crossDrop(A.chunk_id, 0));
+      backlog.dropped.emit(crossDrop(A.chunk_id, 1));
+      backlog.dropped.emit(crossDrop(A.chunk_id, 2));
+
+      expect(moves).toEqual([
+        { chunkId: A.chunk_id, afterChunkId: null, from: 'ready', to: 'notready' },
+        { chunkId: A.chunk_id, afterChunkId: P.chunk_id, from: 'ready', to: 'notready' },
+        { chunkId: A.chunk_id, afterChunkId: Q.chunk_id, from: 'ready', to: 'notready' },
+      ]);
+    });
+
+    it('resolves a BACKLOG card dropped into READY, and leaves the same-lane output silent', async () => {
+      const fixture = await render([A, B, P], [A.chunk_id, B.chunk_id], 'ready', {}, [P.chunk_id]);
+      const moves: unknown[] = [];
+      const repositions: unknown[] = [];
+      fixture.componentInstance.laneMove.subscribe((move) => moves.push(move));
+      fixture.componentInstance.reposition.subscribe((move) => repositions.push(move));
+
+      dropListIn(fixture, 'ready').dropped.emit(crossDrop(P.chunk_id, 0));
+
+      expect(moves).toEqual([{ chunkId: P.chunk_id, afterChunkId: null, from: 'notready', to: 'ready' }]);
+      expect(repositions).toEqual([]);
+    });
+  });
+
   /*
    * The DONE lane's newest-first order — a second lane-scoped ordering,
    * the same shape as READY's own above but keyed on the completion instant instead

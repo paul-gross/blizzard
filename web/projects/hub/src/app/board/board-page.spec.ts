@@ -284,6 +284,59 @@ describe('BoardPage', () => {
     expect(calls[0].body).toEqual({ chunk_id: READY_NEXT, after_chunk_id: null });
   });
 
+  describe('a cross-lane drop', () => {
+    const laneIds = (el: HTMLElement, column: string): string[] =>
+      [...el.querySelectorAll(`[data-col="${column}"] [data-testid="chunk-id"]`)].map((n) => n.textContent?.trim());
+    const shellOf = (harness: RouterTestingHarness) =>
+      harness.fixture.debugElement.query(By.css('app-board-shell')).componentInstance as BoardShell;
+
+    it('demotes a READY card with the drop anchor and shows it in BACKLOG while pending', async () => {
+      const pendingPost = deferred<object>();
+      stub.restore();
+      stub = stubRequestClient(hubClient, (method, path) => {
+        if (method === 'POST' && path === `/api/chunks/${READY}/demote`) return pendingPost.promise;
+        return hubRoutes()(method, path);
+      });
+      const { el, harness } = await open();
+
+      shellOf(harness).laneMove.emit({ chunkId: READY, afterChunkId: BACKLOG, from: 'ready', to: 'notready' });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      harness.fixture.detectChanges();
+
+      expect(stub.forRoute(`/api/chunks/${READY}/demote`, 'POST')[0].body).toEqual({ after_chunk_id: BACKLOG });
+      expect(laneIds(el, 'notready')).toEqual([compactRef(BACKLOG), compactRef(READY), compactRef(BACKLOG_NEXT)]);
+      expect(laneIds(el, 'ready')).toEqual([compactRef(READY_NEXT)]);
+      pendingPost.resolve({});
+      await settle(harness.fixture);
+    });
+
+    it('promotes a BACKLOG card to the head of READY with the top placement', async () => {
+      const { harness } = await open();
+
+      shellOf(harness).laneMove.emit({ chunkId: BACKLOG, afterChunkId: null, from: 'notready', to: 'ready' });
+      await settle(harness.fixture);
+
+      expect(stub.forRoute(`/api/chunks/${BACKLOG}/promote`, 'POST').map((call) => call.body)).toEqual([{ to_top: true }]);
+    });
+
+    it('reverts the card and reports the refusal inline when the demote fails', async () => {
+      stub.restore();
+      stub = stubRequestClient(hubClient, (method, path) => {
+        if (method === 'POST' && path === `/api/chunks/${READY}/demote`) {
+          return stubError(409, { detail: 'chunk is running, not demotable' });
+        }
+        return hubRoutes()(method, path);
+      });
+      const { el, harness } = await open();
+
+      shellOf(harness).laneMove.emit({ chunkId: READY, afterChunkId: null, from: 'ready', to: 'notready' });
+      await settle(harness.fixture);
+
+      expect(el.querySelector('[data-testid="board-action-error"]')?.textContent).toBe('chunk is running, not demotable');
+      expect(card(el, READY).closest('[data-col]')?.getAttribute('data-col')).toBe('ready');
+    });
+  });
+
   /*
    * The BACKLOG lane's reorder wiring, reading `GET /api/backlog` and writing
    * `POST /api/backlog/position` instead of the queue's own routes
@@ -407,7 +460,7 @@ describe('BoardPage', () => {
 
     /**
      * The hub assigns a freshly-promoted chunk a **tail** position
-     * (`src/blizzard/hub/domain/operations/promote.py::tail_position` owns it), so the pending
+     * (`src/blizzard/hub/domain/operations/queue.py::resolve_landing` owns it), so the pending
      * override must not predict a top-of-lane rank: it lands at the *bottom* of READY, behind the real queue order,
      * via `BoardShell`'s "unranked id" fallback.
      */
