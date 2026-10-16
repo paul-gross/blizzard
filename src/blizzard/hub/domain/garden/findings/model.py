@@ -289,31 +289,62 @@ class FindingLiveness:
     actor: str | None = None
 
 
-def derive_liveness(facts: Sequence[FindingFact]) -> FindingLiveness:
-    """The newest-fact-wins read over a finding's facts: any later
-    fact reverses `gone` or `delivered`, but only `reopened` reverses an
-    `EXIT_KINDS` verb. `first_observed_at`/`last_seen_at` are the min/max of the same
-    `add`/`observed` span and use `recorded_at`, not insertion order, so out-of-order
-    ingestion still derives correctly."""
+@domain_model
+@dataclass(frozen=True)
+class FindingFactSummary:
+    """The bounded read of a finding's facts that `liveness_of` derives from: the newest fact
+    under `(recorded_at, id)` — `None` for a finding with no facts — plus the aggregates over the
+    `add`/`observed` span. Never persisted."""
+
+    newest: FindingFact | None
+    first_observed_at: datetime | None
+    last_seen_at: datetime | None
+    observed_count: int
+
+
+def summarize_facts(facts: Sequence[FindingFact]) -> FindingFactSummary:
+    """The summary of `facts` given oldest first (ascending `id`). `first_observed_at`/`last_seen_at`
+    are the min/max of the `add`/`observed` span and use `recorded_at`, not insertion order, so
+    out-of-order ingestion still derives correctly."""
     if not facts:
-        return FindingLiveness(
-            state=FindingState.LIVE, live=True, note=None, first_observed_at=None, last_seen_at=None, observed_count=0
-        )
+        return FindingFactSummary(newest=None, first_observed_at=None, last_seen_at=None, observed_count=0)
     seen = [f for f in facts if f.kind in ("add", "observed")]
     newest = facts[0]
     for fact in facts[1:]:
         if fact.recorded_at >= newest.recorded_at:  # a tie keeps the later-inserted fact
             newest = fact
+    return FindingFactSummary(
+        newest=newest,
+        first_observed_at=min((f.recorded_at for f in seen), default=None),
+        last_seen_at=max((f.recorded_at for f in seen), default=None),
+        observed_count=sum(1 for f in facts if f.kind == "observed"),
+    )
+
+
+def liveness_of(summary: FindingFactSummary) -> FindingLiveness:
+    """The newest-fact-wins read over a finding's fact summary: any later
+    fact reverses `gone` or `delivered`, but only `reopened` reverses an
+    `EXIT_KINDS` verb. A finding with no facts reads live."""
+    newest = summary.newest
+    if newest is None:
+        return FindingLiveness(
+            state=FindingState.LIVE, live=True, note=None, first_observed_at=None, last_seen_at=None, observed_count=0
+        )
     state = FindingState.LIVE if newest.kind in LIVE_KINDS else FindingState(newest.kind)
     return FindingLiveness(
         state=state,
         live=state is FindingState.LIVE,
         note=newest.note,
-        first_observed_at=min((f.recorded_at for f in seen), default=None),
-        last_seen_at=max((f.recorded_at for f in seen), default=None),
-        observed_count=sum(1 for f in facts if f.kind == "observed"),
+        first_observed_at=summary.first_observed_at,
+        last_seen_at=summary.last_seen_at,
+        observed_count=summary.observed_count,
         actor=newest.actor,
     )
+
+
+def derive_liveness(facts: Sequence[FindingFact]) -> FindingLiveness:
+    """The newest-fact-wins read over a finding's whole fact chain, oldest first."""
+    return liveness_of(summarize_facts(facts))
 
 
 def finding_exit(state: str) -> FindingExit | None:

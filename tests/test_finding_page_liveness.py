@@ -51,8 +51,9 @@ def _store_and_engine(tmp_path: Path) -> tuple[FindingStore, Engine]:
     return FindingStore(hub_store_connections(engine)), engine
 
 
-def _finding(engine: Engine, finding_id: str, facts: list[tuple[str, int]]) -> None:
-    """Insert a finding and raw facts as ``(kind, recorded_at seconds)``, in insertion order."""
+def _finding(engine: Engine, finding_id: str, facts: list[tuple[str, int]], *, annotate: bool = False) -> None:
+    """Insert a finding and raw facts as ``(kind, recorded_at seconds)``, in insertion order;
+    ``annotate`` gives every fact other than ``add``/``observed`` a note and an actor."""
     with engine.begin() as conn:
         conn.execute(
             insert(s.findings).values(
@@ -71,9 +72,17 @@ def _finding(engine: Engine, finding_id: str, facts: list[tuple[str, int]]) -> N
             )
         )
         for kind, seconds in facts:
+            human = annotate and kind not in ("add", "observed")
             conn.execute(
                 insert(s.finding_facts).values(
-                    stamp(s.finding_facts, finding_id=finding_id, kind=kind, recorded_at=_at(seconds))
+                    stamp(
+                        s.finding_facts,
+                        finding_id=finding_id,
+                        kind=kind,
+                        recorded_at=_at(seconds),
+                        note="why" if human else None,
+                        actor="pat" if human else None,
+                    )
                 )
             )
 
@@ -196,6 +205,62 @@ def test_bucket_read_cost_is_flat_in_exited_finding_count(tmp_path: Path) -> Non
 
         def read(store: FindingStore = store, project: str = project):  # type: ignore[no-untyped-def]
             return store.list_for_routine(project, "nightly", include_gone=True, exclude_exited=True)
+
+        measured.append((count_queries(engine, read), count_rows_read(engine, read), [f.finding_id for f in read()]))
+    assert measured[0] == measured[1]
+
+
+def test_bounded_read_derives_what_the_full_chain_does(tmp_path: Path) -> None:
+    """Every `FindingLiveness` field of a `Finding` from `list_page` and `get_many` equals
+    `derive_liveness` over the chain `get_with_facts` returns."""
+    store, engine = _store_and_engine(tmp_path)
+    fixtures = _fixtures()
+    fixtures["many_observed"] = [("add", 0), *[("observed", n) for n in range(1, 40)], ("gone", 50)]
+    fixtures["noted_exit_then_reopened"] = [("add", 0), ("observed", 3), ("wont-fix", 5), ("reopened", 10)]
+    for fid, facts in fixtures.items():
+        _finding(engine, fid, facts, annotate=True)
+
+    paged = {
+        f.finding_id: f
+        for f in store.list_page(
+            project_id=None, routine_name=None, scope_slug=None, include_gone=True, limit=100
+        ).findings
+    }
+    many = store.get_many(list(fixtures))
+
+    assert set(paged) == set(many) == set(fixtures)
+    for fid in fixtures:
+        loaded = store.get_with_facts(fid)
+        assert loaded is not None
+        _, chain = loaded
+        expected = derive_liveness(chain)
+        for found in (paged[fid], many[fid], store.get(fid)):
+            assert found is not None
+            assert (found.state, found.live, found.note, found.actor) == (
+                expected.state,
+                expected.live,
+                expected.note,
+                expected.actor,
+            )
+            assert (found.first_observed_at, found.last_seen_at, found.observed_count) == (
+                expected.first_observed_at,
+                expected.last_seen_at,
+                expected.observed_count,
+            )
+
+
+def test_page_read_cost_is_flat_in_observation_depth(tmp_path: Path) -> None:
+    measured = []
+    for depth in (1, 30):
+        (tmp_path / f"d{depth}").mkdir()
+        store, engine = _store_and_engine(tmp_path / f"d{depth}")
+        for index in range(3):
+            _finding(engine, f"fin_{index}", [("add", 0), *[("observed", n) for n in range(1, depth + 1)]])
+
+        def read(store: FindingStore = store):  # type: ignore[no-untyped-def]
+            return store.list_page(
+                project_id=None, routine_name=None, scope_slug=None, include_gone=True, limit=10
+            ).findings
 
         measured.append((count_queries(engine, read), count_rows_read(engine, read), [f.finding_id for f in read()]))
     assert measured[0] == measured[1]

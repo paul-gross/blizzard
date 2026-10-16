@@ -11,7 +11,14 @@ from datetime import UTC, datetime
 import pytest
 
 from blizzard.foundation.findings import FindingExit, FindingState
-from blizzard.hub.domain.garden.findings.model import FindingFact, derive_liveness, finding_exit
+from blizzard.hub.domain.garden.findings.model import (
+    FindingFact,
+    FindingFactSummary,
+    derive_liveness,
+    finding_exit,
+    liveness_of,
+    summarize_facts,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -238,3 +245,22 @@ def test_a_withdrawing_state_exits_as_withdrawn(state: FindingState) -> None:
 @pytest.mark.parametrize("state", [FindingState.LIVE, FindingState.GONE, FindingState.DELIVERED])
 def test_a_state_that_has_not_exited_has_no_exit(state: FindingState) -> None:
     assert finding_exit(state) is None
+
+
+def test_the_empty_summary_derives_what_no_facts_do() -> None:
+    assert liveness_of(summarize_facts([])) == derive_liveness([])
+    assert liveness_of(FindingFactSummary(None, None, None, 0)).live
+
+
+def test_a_summary_derives_state_from_its_newest_fact_and_carries_the_aggregates() -> None:
+    summary = FindingFactSummary(
+        newest=FindingFact(kind="wont-fix", recorded_at=_T1, note=_NOTE, actor="pat"),
+        first_observed_at=_T0,
+        last_seen_at=_T0,
+        observed_count=4,
+    )
+
+    state = liveness_of(summary)
+
+    assert (state.state.value, state.live, state.note, state.actor) == ("wont-fix", False, _NOTE, "pat")
+    assert (state.first_observed_at, state.last_seen_at, state.observed_count) == (_T0, _T0, 4)

@@ -11,7 +11,7 @@ import json
 from collections.abc import Callable, Mapping, Sequence
 from datetime import datetime
 
-from sqlalchemy import ColumnElement, Connection, and_, desc, func, or_
+from sqlalchemy import ColumnElement, Connection, and_, case, desc, func, or_
 
 from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.garden.findings.model import (
@@ -21,14 +21,17 @@ from blizzard.hub.domain.garden.findings.model import (
     FactEntry,
     Finding,
     FindingFact,
+    FindingFactSummary,
     FindingPage,
     FindingSet,
     IWriteFindingRepository,
     IWriteFindingSetRepository,
     UnknownFactKindError,
-    derive_liveness,
+    liveness_of,
+    summarize_facts,
 )
 from blizzard.hub.domain.kernel.pagination import MalformedCursor, decode_cursor, encode_cursor
+from blizzard.hub.store.internal.newest_fact import newer_row_exists
 from blizzard.hub.store.internal.scope_store import scope_id_of
 from blizzard.hub.store.schema import finding_facts, finding_sets, findings
 from blizzard.hub.store.scoped import ScopedConnections, ScopedStatements, statements_of
@@ -58,13 +61,13 @@ def _no_newest_fact_in(
 
 def _newest_fact_is_live(stmts: ScopedStatements) -> ColumnElement[bool]:
     """True exactly when no fact of the finding is both outside `LIVE_KINDS` and its newest —
-    `derive_liveness`'s answer, so a finding with no facts reads live."""
+    `liveness_of`'s answer, so a finding with no facts reads live."""
     return _no_newest_fact_in(stmts, lambda kind: kind.not_in(sorted(LIVE_KINDS)))
 
 
 def _newest_fact_is_not_exited(stmts: ScopedStatements) -> ColumnElement[bool]:
     """True exactly when the finding's newest fact is not an `EXIT_KINDS` one — the
-    complement of `Finding.exited`, under the same newest order as `derive_liveness`."""
+    complement of `Finding.exited`, under the same newest order as `liveness_of`."""
     return _no_newest_fact_in(stmts, lambda kind: kind.in_(sorted(EXIT_KINDS)))
 
 
@@ -98,8 +101,8 @@ def moved_findings(conn: Connection, expect: Mapping[str, str]) -> list[str]:
     guarded = sorted(expect)
     for batch in id_batches(guarded):
         lock_findings(conn, batch)
-    current = facts_by_finding(conn, guarded)
-    return [fid for fid in guarded if derive_liveness(current[fid]).state != expect[fid]]
+    current = fact_summaries(conn, guarded)
+    return [fid for fid in guarded if liveness_of(current[fid]).state != expect[fid]]
 
 
 def findings_outside_project(conn: Connection, finding_ids: Sequence[str], project_id: str) -> list[str]:
@@ -115,22 +118,56 @@ def findings_outside_project(conn: Connection, finding_ids: Sequence[str], proje
     return sorted(outside)
 
 
-def facts_by_finding(conn: Connection, finding_ids: list[str]) -> dict[str, list[FindingFact]]:
-    """One query per `id_batches` batch over `finding_ids` (index-backed on
-    `ix_finding_facts_tenant_finding_id_id`), each finding's facts oldest first — `list_across_routines`
-    can hand this an unbounded id list, and one unbatched `IN (...)` would eventually exceed
-    the driver's own per-statement bind-parameter ceiling."""
-    grouped: dict[str, list[FindingFact]] = {finding_id: [] for finding_id in finding_ids}
-    for batch in id_batches(finding_ids):
-        rows = conn.execute(
-            statements_of(conn)
-            .select(finding_facts)
+def fact_summaries(conn: Connection, finding_ids: Sequence[str]) -> dict[str, FindingFactSummary]:
+    """Each finding's bounded `FindingFactSummary`, two statements per `id_batches` batch
+    (``bzh:bulk-reconstitution``, ``bzh:page-bounded-read``), each returning at most one row per
+    finding however long its chain — index-backed on `ix_finding_facts_tenant_finding_id_id`.
+    The newest fact is the `(recorded_at, id)` anti-join (``bzh:newest-per-key-read``); the
+    aggregates are conditional `min`/`max`/`count` grouped by finding. What the newest kind means
+    is `liveness_of`'s alone. A finding with no facts reads the empty summary."""
+    summaries = {finding_id: summarize_facts([]) for finding_id in finding_ids}
+    for batch in id_batches(list(finding_ids)):
+        stmts = statements_of(conn)
+        seen_at = case((finding_facts.c.kind.in_(("add", "observed")), finding_facts.c.recorded_at))
+        observed = case((finding_facts.c.kind == "observed", 1), else_=0)
+        aggregates = conn.execute(
+            stmts.select(
+                finding_facts,
+                finding_facts.c.finding_id,
+                func.min(seen_at).label("first_observed_at"),
+                func.max(seen_at).label("last_seen_at"),
+                func.sum(observed).label("observed_count"),
+            )
             .where(finding_facts.c.finding_id.in_(batch))
-            .order_by(finding_facts.c.finding_id, finding_facts.c.id.asc())
+            .group_by(finding_facts.c.finding_id)
         ).all()
-        for r in rows:
-            grouped[r.finding_id].append(FindingStore._fact_of(r))
-    return grouped
+        newest_by_finding = {
+            row.finding_id: FindingStore._fact_of(row)
+            for row in conn.execute(
+                stmts.select(finding_facts)
+                .where(finding_facts.c.finding_id.in_(batch))
+                .where(~_newer_fact_exists(stmts))
+            ).all()
+        }
+        for agg in aggregates:
+            summaries[agg.finding_id] = FindingFactSummary(
+                newest=newest_by_finding[agg.finding_id],
+                first_observed_at=agg.first_observed_at,
+                last_seen_at=agg.last_seen_at,
+                observed_count=int(agg.observed_count),
+            )
+    return summaries
+
+
+def _newer_fact_exists(stmts: ScopedStatements) -> ColumnElement[bool]:
+    """True when a later fact (`(recorded_at, id)` order) of the same finding exists."""
+    newer = finding_facts.alias("newer")
+    return newer_row_exists(
+        stmts,
+        newer,
+        partition=[(finding_facts.c.finding_id, newer.c.finding_id)],
+        order=[(finding_facts.c.recorded_at, newer.c.recorded_at), (finding_facts.c.id, newer.c.id)],
+    )
 
 
 class FindingStore:
@@ -251,12 +288,12 @@ class FindingStore:
             row = conn.execute(self._store.select(findings).where(findings.c.finding_id == finding_id)).one_or_none()
             if row is None:
                 return None
-            facts = self._facts(conn, finding_id)
-        return self._of(row, facts)
+            summary = fact_summaries(conn, [finding_id])[finding_id]
+        return self._of(row, summary)
 
     def get_many(self, finding_ids: Sequence[str]) -> dict[str, Finding]:
         """`get`'s batched sibling (`bzh:bulk-reconstitution`) — one row query and one
-        `_facts_for_many` query per `id_batches` batch over `finding_ids`, so a bulk exit
+        `fact_summaries` read per `id_batches` batch over `finding_ids`, so a bulk exit
         verb's read side never issues one query pair per row."""
         if not finding_ids:
             return {}
@@ -264,8 +301,8 @@ class FindingStore:
         with self._store.read("get_many") as conn:
             for batch in id_batches(finding_ids):
                 rows = conn.execute(self._store.select(findings).where(findings.c.finding_id.in_(batch))).all()
-                facts_by_id = self._facts_for_many(conn, [row.finding_id for row in rows])
-                result.update({row.finding_id: self._of(row, facts_by_id[row.finding_id]) for row in rows})
+                summaries = fact_summaries(conn, [row.finding_id for row in rows])
+                result.update({row.finding_id: self._of(row, summaries[row.finding_id]) for row in rows})
         return result
 
     def get_with_facts(self, finding_id: str) -> tuple[Finding, list[FindingFact]] | None:
@@ -274,7 +311,7 @@ class FindingStore:
             if row is None:
                 return None
             facts = self._facts(conn, finding_id)
-            finding = self._of(row, facts)
+            finding = self._of(row, summarize_facts(facts))
         return finding, facts
 
     def list_for(
@@ -292,8 +329,8 @@ class FindingStore:
                 )
                 .order_by(findings.c.finding_id)
             ).all()
-            facts_by_id = self._facts_for_many(conn, [row.finding_id for row in rows])
-            result = [self._of(row, facts_by_id[row.finding_id]) for row in rows]
+            summaries = fact_summaries(conn, [row.finding_id for row in rows])
+            result = [self._of(row, summaries[row.finding_id]) for row in rows]
         return [f for f in result if include_gone or f.live]
 
     def list_for_routine(
@@ -311,8 +348,8 @@ class FindingStore:
             stmt = stmt.where(_newest_fact_is_not_exited(self._store))
         with self._store.read("list_for_routine") as conn:
             rows = conn.execute(stmt).all()
-            facts_by_id = self._facts_for_many(conn, [row.finding_id for row in rows])
-            result = [self._of(row, facts_by_id[row.finding_id]) for row in rows]
+            summaries = fact_summaries(conn, [row.finding_id for row in rows])
+            result = [self._of(row, summaries[row.finding_id]) for row in rows]
         return [f for f in result if include_gone or f.live]
 
     def list_across_routines(
@@ -325,8 +362,8 @@ class FindingStore:
             if scope_slug is not None:
                 stmt = stmt.where(findings.c.scope_slug == scope_slug)
             rows = conn.execute(stmt).all()
-            facts_by_id = self._facts_for_many(conn, [row.finding_id for row in rows])
-            result = [self._of(row, facts_by_id[row.finding_id]) for row in rows]
+            summaries = fact_summaries(conn, [row.finding_id for row in rows])
+            result = [self._of(row, summaries[row.finding_id]) for row in rows]
         return [f for f in result if include_gone or f.live]
 
     def list_by_source(
@@ -353,8 +390,8 @@ class FindingStore:
             stmt = stmt.where(_newest_fact_is_not_exited(self._store))
         with self._store.read("list_by_source") as conn:
             rows = conn.execute(stmt).all()
-            facts_by_id = self._facts_for_many(conn, [row.finding_id for row in rows])
-            result = [self._of(row, facts_by_id[row.finding_id]) for row in rows]
+            summaries = fact_summaries(conn, [row.finding_id for row in rows])
+            result = [self._of(row, summaries[row.finding_id]) for row in rows]
         return [f for f in result if include_gone or f.live]
 
     def list_page(
@@ -371,7 +408,7 @@ class FindingStore:
         """`list_for`/`list_for_routine`/`list_across_routines` unified into one bounded,
         keyset-paginated read. With `include_gone=False` the query itself drops every finding
         whose newest fact is not live, so `LIMIT limit+1` bounds the page: one page query plus
-        one `_facts_for_many` read over the page's own ids. The only per-skipped-finding cost
+        one `fact_summaries` read over the page's own ids. The only per-skipped-finding cost
         is the indexed newest-fact probe."""
         if limit < 1:
             raise ValueError(f"limit must be at least 1, got {limit}")
@@ -390,8 +427,8 @@ class FindingStore:
             stmt = stmt.where(_newest_fact_is_live(self._store))
         with self._store.read("list_page") as conn:
             rows = conn.execute(stmt).all()
-            facts_by_id = self._facts_for_many(conn, [row.finding_id for row in rows[:limit]])
-        page = [self._of(row, facts_by_id[row.finding_id]) for row in rows[:limit]]
+            summaries = fact_summaries(conn, [row.finding_id for row in rows[:limit]])
+        page = [self._of(row, summaries[row.finding_id]) for row in rows[:limit]]
         next_cursor = _encode_finding_cursor(page[-1]) if len(rows) > limit else None
         return FindingPage(findings=page, next_cursor=next_cursor)
 
@@ -425,10 +462,6 @@ class FindingStore:
         return [self._fact_of(r) for r in rows]
 
     @staticmethod
-    def _facts_for_many(conn, finding_ids: list[str]) -> dict[str, list[FindingFact]]:  # type: ignore[no-untyped-def]
-        return facts_by_finding(conn, finding_ids)
-
-    @staticmethod
     def _fact_of(row) -> FindingFact:  # type: ignore[no-untyped-def]
         return FindingFact(
             kind=row.kind,
@@ -440,8 +473,8 @@ class FindingStore:
         )
 
     @staticmethod
-    def _of(row, facts: list[FindingFact]) -> Finding:  # type: ignore[no-untyped-def]
-        state = derive_liveness(facts)
+    def _of(row, summary: FindingFactSummary) -> Finding:  # type: ignore[no-untyped-def]
+        state = liveness_of(summary)
         return Finding(
             finding_id=row.finding_id,
             routine_name=row.routine_name,
