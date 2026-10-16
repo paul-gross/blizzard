@@ -30,9 +30,11 @@ export function parseBounceEnvelope(raw: string): BounceEnvelope | null {
 }
 
 /** The envelope as one readable line: its `detail` with markdown code ticks dropped, else
- * its `cause`, else — for an unparseable or field-less envelope — the raw text. */
+ * its `cause`, else a fixed word for an envelope that parses but names neither — never its JSON.
+ * Unparseable text is a human reason already, so it stands as it is. */
 export function bounceReason(raw: string): string {
   const envelope = parseBounceEnvelope(raw);
   const text = envelope?.detail ?? envelope?.cause;
-  return text ? text.replaceAll('`', '') : raw;
+  if (text) return text.replaceAll('`', '');
+  return envelope === null ? raw : 'bounced';
 }

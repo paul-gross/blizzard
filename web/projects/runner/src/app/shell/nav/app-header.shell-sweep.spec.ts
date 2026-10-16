@@ -3,7 +3,8 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { runnerClient } from 'fleet';
-import { stubRequestClient } from 'fleet/testing';
+import { stubError, stubRequestClient } from 'fleet/testing';
+import { RunnerLogout } from '../../core/identity/runner-logout';
 import { RunnerLiveUpdates } from '../../core/live/runner-live-updates';
 import { page } from 'vitest/browser';
 
@@ -164,6 +165,60 @@ describe('runner AppHeader shell sweep (web:shell-sweep, issue #163/#171/#325)',
         const rect = menu!.getBoundingClientRect();
 
         expect(rect.width, `${label}: menu has zero width`).toBeGreaterThan(0);
+        expect(rect.left, `${label}: menu's left edge is off-viewport (${rect.left})`).toBeGreaterThanOrEqual(0);
+        expect(
+          rect.right,
+          `${label}: menu's right edge is past the viewport (${rect.right} > ${window.innerWidth})`,
+        ).toBeLessThanOrEqual(window.innerWidth);
+
+        const header = root.querySelector<HTMLElement>('[data-testid="board-header"]')!;
+        expect(
+          header.scrollWidth,
+          `${label}: the header overflows horizontally (${header.scrollWidth} > ${window.innerWidth})`,
+        ).toBeLessThanOrEqual(window.innerWidth);
+      }
+    } finally {
+      root.remove();
+      stub.restore();
+      window.removeEventListener('error', onError);
+      window.removeEventListener('unhandledrejection', onRejection);
+    }
+
+    expect(pageErrors, `page errors fired during the sweep: ${pageErrors.join('; ')}`).toEqual([]);
+  });
+
+  it('shows a failed logout in the header without pushing the profile menu off-viewport or overflowing it', async () => {
+    const pageErrors: string[] = [];
+    const onError = (e: ErrorEvent) => pageErrors.push(e.message);
+    const onRejection = (e: PromiseRejectionEvent) => pageErrors.push(String(e.reason));
+    window.addEventListener('error', onError);
+    window.addEventListener('unhandledrejection', onRejection);
+
+    const stub = stubRequestClient(runnerClient, (method, path) => {
+      if (method === 'GET' && path === '/api/auth/session') return { auth_enabled: true, username: usernameOfLength(38) };
+      if (method === 'POST' && path === '/api/auth/logout') return stubError(500, { detail: 'nope' });
+      return { items: [] };
+    });
+
+    const fixture = await render();
+    const root = fixture.nativeElement as HTMLElement;
+    document.body.appendChild(root);
+    await fixture.whenStable();
+    await TestBed.inject(RunnerLogout).logout();
+    await fixture.whenStable();
+
+    try {
+      for (const width of WIDTHS) {
+        await page.viewport(width, 800);
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+
+        const label = `failed logout, width=${width}`;
+        const alert = root.querySelector<HTMLElement>('[data-testid="local-panel-logout-error"]');
+        expect(alert, `${label}: no logout error in the header`).not.toBeNull();
+        expect(alert!.getBoundingClientRect().width, `${label}: the logout error has zero width`).toBeGreaterThan(0);
+
+        const menu = root.querySelector<HTMLElement>('[data-testid="local-panel-menu"]')!;
+        const rect = menu.getBoundingClientRect();
         expect(rect.left, `${label}: menu's left edge is off-viewport (${rect.left})`).toBeGreaterThanOrEqual(0);
         expect(
           rect.right,

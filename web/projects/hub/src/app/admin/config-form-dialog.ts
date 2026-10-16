@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
-import { KitButton, KitChip, KitDialog, KitTextInput } from 'fleet';
+import { KitButton, KitCheckbox, KitDialog, KitTextInput } from 'fleet';
 
 import { ConfigFieldDiff } from './config-field-diff';
 import {
@@ -27,7 +27,7 @@ export type ConfigFormMode = 'create' | 'edit' | 'replace';
 @Component({
   selector: 'app-config-form-dialog',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ConfigFieldDiff, KitButton, KitChip, KitDialog, KitTextInput],
+  imports: [ConfigFieldDiff, KitButton, KitCheckbox, KitDialog, KitTextInput],
   templateUrl: './config-form-dialog.html',
   styleUrl: './config-form-dialog.css',
 })
@@ -47,10 +47,13 @@ export class ConfigFormDialog {
   readonly closed = output<void>();
   readonly submitted = output<ConfigFormValues>();
 
-  private readonly typed = signal<ConfigFormValues | null>(null);
+  /** Only the keys the user has edited. Untouched fields read through to `shown()`, so a
+   * refetched `initial` — another writer's change after a failed save — reaches them
+   * instead of a snapshot taken at the first keystroke. */
+  private readonly typed = signal<ConfigFormValues>({});
 
   protected readonly shown = computed(() => this.initial() ?? emptyFormValues(this.fields()));
-  protected readonly values = computed(() => this.typed() ?? this.shown());
+  protected readonly values = computed(() => ({ ...this.shown(), ...this.typed() }));
   protected readonly visibleFields = computed(() =>
     this.mode() === 'edit' ? editableFields(this.fields()) : this.fields(),
   );
@@ -72,14 +75,11 @@ export class ConfigFormDialog {
   }
 
   protected onText(key: string, value: string): void {
-    this.typed.set({ ...this.values(), [key]: value });
+    this.typed.update((typed) => ({ ...typed, [key]: value }));
   }
 
-  protected onFlag(key: string): void {
-    this.typed.set({
-      ...this.values(),
-      [key]: !this.flagOf(key),
-    });
+  protected onFlag(key: string, checked: boolean): void {
+    this.typed.update((typed) => ({ ...typed, [key]: checked }));
   }
 
   protected onSubmit(): void {
@@ -90,7 +90,7 @@ export class ConfigFormDialog {
    * flight. Closing drops the typed values, a password with them. */
   protected onClosed(): void {
     if (this.submitting()) return;
-    this.typed.set(null);
+    this.typed.set({});
     this.closed.emit();
   }
 }

@@ -76,20 +76,35 @@ describe('ConfigFormDialog', () => {
     expect(input.getAttribute('type')).toBe('password');
   });
 
-  it('toggles a flag through the kit chip and submits its boolean value', async () => {
+  it('toggles a flag through the kit checkbox and submits its boolean value', async () => {
     const fixture = await mount('create');
     fixture.componentRef.setInput('fields', [{ key: 'annotate', label: 'Annotates', kind: 'checkbox' }]);
     await fixture.whenStable();
-    const flag = el(fixture, 'dlg-field-annotate') as HTMLButtonElement;
+    expect(fixture.nativeElement.querySelector('fleet-kit-checkbox')).not.toBeNull();
+    const flag = el(fixture, 'dlg-field-annotate') as HTMLInputElement;
     const emitted: ConfigFormValues[] = [];
     fixture.componentInstance.submitted.subscribe((values) => emitted.push(values));
 
-    expect(flag.getAttribute('aria-pressed')).toBe('false');
+    expect(flag.checked).toBe(false);
     flag.click();
     await fixture.whenStable();
-    expect(flag.getAttribute('aria-pressed')).toBe('true');
+    expect(flag.checked).toBe(true);
     (el(fixture, 'dlg-submit') as HTMLButtonElement).click();
     expect(emitted).toEqual([{ annotate: true }]);
+  });
+
+  it('edit: a refetched initial reaches untouched fields after a failed save', async () => {
+    const fixture = await mount('edit', 'revision conflict');
+    const emitted: ConfigFormValues[] = [];
+    fixture.componentInstance.submitted.subscribe((values) => emitted.push(values));
+    await type(fixture, 'dlg-field-owner', 'ana');
+
+    fixture.componentRef.setInput('initial', { ...SHOWN, name: 'renamed-elsewhere' });
+    await fixture.whenStable();
+
+    expect(el(fixture, 'dlg-diff')!.textContent).not.toContain('renamed-elsewhere');
+    (el(fixture, 'dlg-submit') as HTMLButtonElement).click();
+    expect(emitted).toEqual([{ name: 'renamed-elsewhere', owner: 'ana', value: '' }]);
   });
 
   it('shows the failed write inline', async () => {

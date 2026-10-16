@@ -1,4 +1,4 @@
-import { Component, provideZonelessChangeDetection } from '@angular/core';
+import { Component, provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
@@ -8,7 +8,7 @@ import { type RequestClientStub, settle, stubError, stubRequestClient } from 'fl
 import { client as runnerClient } from '../../api/runner/client.gen';
 import { ViewportService } from '../../core/viewport/viewport-service';
 import { ChunkPage } from './chunk-page';
-import { provideChunkPageDaemon } from './chunk-page-daemon';
+import { type ChunkPageActions, provideChunkPageDaemon } from './chunk-page-daemon';
 
 /**
  * The shared chunk detail page (`/board/chunk/:chunkId`) mounted with a runner's daemon —
@@ -68,6 +68,17 @@ class BoardStub {}
 const ROUTES = [
   { path: 'board', component: BoardStub },
   {
+    path: 'acting/chunk/:chunkId',
+    component: ChunkPage,
+    providers: [
+      provideChunkPageDaemon(() => ({
+        target: () => ({ plane: 'runner', client: runnerClient, runnerId: 'rn_1' }),
+        boardLinkBase: () => ['/board'],
+        actions: () => ACTIONS,
+      })),
+    ],
+  },
+  {
     path: 'board/chunk/:chunkId',
     component: ChunkPage,
     providers: [
@@ -78,6 +89,25 @@ const ROUTES = [
     ],
   },
 ];
+
+/** A hub-shaped actions port whose only live member is the repin-in-flight set. */
+const PENDING_GRAPH_CHUNK_IDS = signal<readonly string[]>([]);
+const ACTIONS: ChunkPageActions = {
+  canControl: signal(true),
+  canAnswer: signal(false),
+  canResolve: signal(false),
+  canReadTranscripts: signal(true),
+  resolvePending: signal(false),
+  pendingAnswerQuestionIds: signal([]),
+  pendingGraphChunkIds: PENDING_GRAPH_CHUNK_IDS,
+  actionError: signal(null),
+  actionOutcome: signal(null),
+  graphLinkBase: [],
+  eventsLinkBase: [],
+  answer: () => undefined,
+  resolve: () => undefined,
+  editGraph: () => undefined,
+};
 
 const SEGMENT = {
   segment_id: 'sg_1',
@@ -443,6 +473,26 @@ describe('ChunkPage on a runner daemon', () => {
     expect(el.querySelector('[data-testid="decision-choice"]')).toBeNull();
     expect(el.querySelector('[data-testid="mobile-chunk-action-error"]')).toBeNull();
     expect(el.querySelector('[data-testid="mobile-chunk-action-outcome"]')).toBeNull();
+  });
+
+  it("disables Set while the daemon port reports a repin in flight for this chunk", async () => {
+    stub.restore();
+    stub = stubRequestClient(runnerClient, (method, path) => {
+      if (method === 'GET' && path === `/runners/rn_1/api/chunks/${CHUNK_ID}`) return { ...DETAIL, status: 'not_ready', graph_editable: true };
+      return routes()(method, path);
+    });
+    PENDING_GRAPH_CHUNK_IDS.set(['ch_other']);
+    const harness = await RouterTestingHarness.create();
+    await harness.navigateByUrl(`/acting/chunk/${CHUNK_ID}`);
+    await settle(harness.fixture);
+    const el = harness.fixture.nativeElement as HTMLElement;
+    const set = () => el.querySelector<HTMLButtonElement>('[data-testid="graph-submit"]');
+    expect(set()?.disabled).toBe(false);
+
+    PENDING_GRAPH_CHUNK_IDS.set([CHUNK_ID]);
+    await settle(harness.fixture);
+    expect(set()?.disabled).toBe(true);
+    PENDING_GRAPH_CHUNK_IDS.set([]);
   });
 
   it('renders no graph edit for a not-ready chunk', async () => {

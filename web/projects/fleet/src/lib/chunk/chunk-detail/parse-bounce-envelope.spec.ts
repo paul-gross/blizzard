@@ -18,10 +18,11 @@ describe('parseBounceEnvelope', () => {
 });
 
 describe('bounceReason', () => {
-  it('prefers detail with code ticks dropped, then cause, then the raw text', () => {
+  it('prefers detail with code ticks dropped, then cause, then a fixed word for a field-less envelope, and unparseable text as it is', () => {
     expect(bounceReason('{"cause":"failure","detail":"node `a` routed `b`"}')).toBe('node a routed b');
     expect(bounceReason('{"cause":"poll-timeout"}')).toBe('poll-timeout');
-    expect(bounceReason('{"x":1}')).toBe('{"x":1}');
+    expect(bounceReason('{}')).toBe('bounced');
+    expect(bounceReason('{"x":1}')).toBe('bounced');
     expect(bounceReason('garbled')).toBe('garbled');
   });
 });

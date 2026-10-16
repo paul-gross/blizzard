@@ -6,6 +6,12 @@
        not vanish with the header cell at the narrow tier, and all three of
        the app's profile menus carry the same two items. -->
   <app-identity #identity header-trailing variant="label" />
+  <!-- The identity block is display-only here, so a failed logout surfaces in
+       the header's own alert — outside the menu panel, where the failure of its
+       Log out item has to stay readable. -->
+  @if (logout.error(); as error) {
+    <span header-trailing class="logout-error" role="alert" data-testid="local-panel-logout-error">{{ error }}</span>
+  }
   <fleet-kit-menu
     header-trailing
     class="menu"
