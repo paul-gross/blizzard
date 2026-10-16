@@ -71,7 +71,7 @@ export function workSourceRecordVm(source: WorkSourceSummary | undefined): Confi
       { label: 'Web base', value: factText(source.web_base) },
       { label: 'Annotates', value: source.annotate ? 'yes' : 'no' },
       { label: 'Edits items', value: source.edit ? 'yes' : 'no' },
-      { label: 'Created by', value: factText(source.created_by) },
+      { label: 'Created by', value: factText(source.created_by_name ?? source.created_by) },
     ],
     revision: source.revision ?? null,
     note: source.retired ? 'Retired — no new items ingest from it.' : null,

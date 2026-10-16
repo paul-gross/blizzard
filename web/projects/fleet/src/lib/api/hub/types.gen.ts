@@ -6278,6 +6278,10 @@ export type RepositorySummary = {
      */
     created_by: string;
     /**
+     * Created By Name
+     */
+    created_by_name?: string | null;
+    /**
      * Forge Api Url
      */
     forge_api_url: string;
@@ -7921,6 +7925,10 @@ export type SecretView = {
      */
     replaced_by: string;
     /**
+     * Replaced By Name
+     */
+    replaced_by_name?: string | null;
+    /**
      * Retired
      */
     retired?: boolean;
@@ -9445,6 +9453,10 @@ export type WorkSourceSummary = {
      * Created By
      */
     created_by?: string | null;
+    /**
+     * Created By Name
+     */
+    created_by_name?: string | null;
     /**
      * Edit
      */

@@ -24,6 +24,7 @@ from blizzard.hub.api.chunk_views import ingest_conflict_response
 from blizzard.hub.api.deps import Services
 from blizzard.hub.api.door import RequestDoor, change_context
 from blizzard.hub.api.project_params import QueryProject, project_of_call
+from blizzard.hub.api.user_names import user_names
 from blizzard.hub.api.work_source_params import PathSourceKey, PathWorkSource, resolved_work_source
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.composition import TenantServices
@@ -133,7 +134,7 @@ def _view(
     )
 
 
-def _summary(record: ConfiguredWorkSource, services: TenantServices) -> WorkSourceSummary:
+def _summary(record: ConfiguredWorkSource, services: TenantServices, names: Mapping[str, str]) -> WorkSourceSummary:
     fields = record.fields
     return WorkSourceSummary(
         work_source_id=record.work_source_id,
@@ -149,6 +150,7 @@ def _summary(record: ConfiguredWorkSource, services: TenantServices) -> WorkSour
         revision=record.revision,
         created_at=iso_utc(record.created_at),
         created_by=record.created_by,
+        created_by_name=names.get(record.created_by),
         retired=record.retired,
     )
 
@@ -180,7 +182,8 @@ def list_work_sources(services: Services, include_retired: bool = False) -> Work
     `include_retired`. No gate beyond `fleet:view`, since a client needs this to know which
     sources gate their items."""
     records = services.work_source_records.list_all(include_retired=include_retired)
-    return WorkSourcesListView(sources=[_built_in_summary(services), *(_summary(r, services) for r in records)])
+    names = user_names(services, (r.created_by for r in records))
+    return WorkSourcesListView(sources=[_built_in_summary(services), *(_summary(r, services, names) for r in records)])
 
 
 @router.post("/work-sources", response_model=WorkSourceSummary, status_code=status.HTTP_201_CREATED)
@@ -209,7 +212,7 @@ def create_work_source(
         raise _unprocessable(exc) from exc
     except (WorkSourceSlugTaken, WorkSourceLocatorTaken) as exc:
         raise _conflict(exc) from exc
-    return _summary(record, services)
+    return _summary(record, services, user_names(services, [record.created_by]))
 
 
 @router.get(
@@ -220,7 +223,8 @@ def get_work_source(source: str, services: Services) -> WorkSourceSummary:
     `built_in`. 404 on an unknown source."""
     if is_built_in(source):
         return _built_in_summary(services)
-    return _summary(resolved_work_source(source, services), services)
+    resolved = resolved_work_source(source, services)
+    return _summary(resolved, services, user_names(services, [resolved.created_by]))
 
 
 @router.patch("/work-sources/{source}", response_model=WorkSourceSummary)
@@ -247,7 +251,7 @@ def patch_work_source(
         raise _unprocessable(exc) from exc
     except (ConfigRevisionConflict, WorkSourceLocatorTaken, WorkSourceSlugTaken) as exc:
         raise _conflict(exc) from exc
-    return _summary(edited, services)
+    return _summary(edited, services, user_names(services, [edited.created_by]))
 
 
 @router.post("/work-sources/{source}/retire", response_model=WorkSourceSummary)
@@ -266,7 +270,7 @@ def retire_work_source(
         )
     except ConfigRevisionConflict as exc:
         raise _conflict(exc) from exc
-    return _summary(retired, services)
+    return _summary(retired, services, user_names(services, [retired.created_by]))
 
 
 @router.post("/work-sources/{source}/enable", response_model=WorkSourceSummary)
@@ -287,7 +291,7 @@ def enable_work_source(
         raise _unprocessable(exc) from exc
     except ConfigRevisionConflict as exc:
         raise _conflict(exc) from exc
-    return _summary(enabled, services)
+    return _summary(enabled, services, user_names(services, [enabled.created_by]))
 
 
 @router.get(

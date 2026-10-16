@@ -69,6 +69,12 @@ describe('secretRecordVm', () => {
     ]);
   });
 
+  it('shows who replaced it by name, falling back to the id', () => {
+    const replacedBy = (secret: SecretView) => secretRecordVm(secret)!.facts.find((f) => f.label === 'Replaced by')?.value;
+    expect(replacedBy({ ...USED, replaced_by_name: 'Paul Gross' })).toBe('Paul Gross');
+    expect(replacedBy(USED)).toBe('pgross');
+  });
+
   it('shows an unreferenced secret with no links', () => {
     expect(secretRecordVm(UNUSED)?.links?.links).toEqual([]);
   });

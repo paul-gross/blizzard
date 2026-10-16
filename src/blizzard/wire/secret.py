@@ -37,6 +37,7 @@ class SecretView(BaseModel):
     revision: int
     replaced_at: str
     replaced_by: str
+    replaced_by_name: str | None = None
     created_at: str
     retired: bool = False
     references: list[RecordRefView] = []

@@ -9903,6 +9903,17 @@
             "title": "Created By",
             "type": "string"
           },
+          "created_by_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By Name"
+          },
           "forge_api_url": {
             "title": "Forge Api Url",
             "type": "string"
@@ -12457,6 +12468,17 @@
             "title": "Replaced By",
             "type": "string"
           },
+          "replaced_by_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Replaced By Name"
+          },
           "retired": {
             "default": false,
             "title": "Retired",
@@ -15005,6 +15027,17 @@
               }
             ],
             "title": "Created By"
+          },
+          "created_by_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By Name"
           },
           "edit": {
             "title": "Edit",

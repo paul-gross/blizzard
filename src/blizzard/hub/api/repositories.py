@@ -5,6 +5,7 @@ The records are inert: delivery still takes its target from the hub's forge sett
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Header, HTTPException, status
@@ -16,6 +17,7 @@ from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.deps import Services
 from blizzard.hub.api.door import RequestDoor, change_context
 from blizzard.hub.api.repository_params import PathRepository
+from blizzard.hub.api.user_names import user_names
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.domain.config.repositories import (
     ConfiguredRepository,
@@ -37,7 +39,7 @@ router = APIRouter(
 )
 
 
-def _summary(record: ConfiguredRepository) -> RepositorySummary:
+def _summary(record: ConfiguredRepository, names: Mapping[str, str]) -> RepositorySummary:
     fields = record.fields
     return RepositorySummary(
         repository_id=record.repository_id,
@@ -51,6 +53,7 @@ def _summary(record: ConfiguredRepository) -> RepositorySummary:
         revision=record.revision,
         created_at=iso_utc(record.created_at),
         created_by=record.created_by,
+        created_by_name=names.get(record.created_by),
         retired=record.retired,
     )
 
@@ -72,7 +75,8 @@ def _conflict(exc: Exception) -> HTTPException:
 def list_repositories(services: Services, include_retired: bool = False) -> RepositoriesListView:
     """Every stored repository by slug, retired ones hidden unless `include_retired`."""
     records = services.repository_records.list_all(include_retired=include_retired)
-    return RepositoriesListView(repositories=[_summary(r) for r in records])
+    names = user_names(services, (r.created_by for r in records))
+    return RepositoriesListView(repositories=[_summary(r, names) for r in records])
 
 
 @router.post("/repositories", response_model=RepositorySummary, status_code=status.HTTP_201_CREATED)
@@ -100,7 +104,7 @@ def create_repository(
         raise _unprocessable(exc) from exc
     except (RepositorySlugTaken, RepositoryCoordinateTaken) as exc:
         raise _conflict(exc) from exc
-    return _summary(record)
+    return _summary(record, user_names(services, [record.created_by]))
 
 
 @router.get(
@@ -108,9 +112,9 @@ def create_repository(
     response_model=RepositorySummary,
     dependencies=[Depends(require(Permission.FLEET_VIEW))],
 )
-def get_repository(repository: PathRepository) -> RepositorySummary:
+def get_repository(repository: PathRepository, services: Services) -> RepositorySummary:
     """One repository by id or slug — a slug it left included — retired or not. 404 on an unknown repository."""
-    return _summary(repository)
+    return _summary(repository, user_names(services, [repository.created_by]))
 
 
 @router.patch("/repositories/{repository}", response_model=RepositorySummary)
@@ -136,7 +140,7 @@ def patch_repository(
         raise _unprocessable(exc) from exc
     except (ConfigRevisionConflict, RepositoryCoordinateTaken, RepositorySlugTaken) as exc:
         raise _conflict(exc) from exc
-    return _summary(edited)
+    return _summary(edited, user_names(services, [edited.created_by]))
 
 
 @router.post("/repositories/{repository}/retire", response_model=RepositorySummary)
@@ -153,7 +157,7 @@ def retire_repository(
         retired = services.config_authoring.retire_repository(record, change_context(identity, door), if_match=if_match)
     except ConfigRevisionConflict as exc:
         raise _conflict(exc) from exc
-    return _summary(retired)
+    return _summary(retired, user_names(services, [retired.created_by]))
 
 
 @router.post("/repositories/{repository}/enable", response_model=RepositorySummary)
@@ -172,4 +176,4 @@ def enable_repository(
         raise _unprocessable(exc) from exc
     except ConfigRevisionConflict as exc:
         raise _conflict(exc) from exc
-    return _summary(enabled)
+    return _summary(enabled, user_names(services, [enabled.created_by]))
