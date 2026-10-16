@@ -654,7 +654,7 @@ def test_fresh_spawn_succeeds_when_the_process_already_exited_after_flushing_ide
     tmp_path: Path, spawn_executor: Executor
 ) -> None:
     """A worker that flushed its identity record then exited fast is a SUCCESS — the
-    valid record is checked before liveness, not after, so this must not raise even though
+    valid record wins over liveness, so this must not raise even though
     the process is already dead by the time ``await_identity`` looks."""
     workdir = tmp_path / "e1"
     workdir.mkdir()
@@ -682,6 +682,54 @@ def test_fresh_spawn_succeeds_when_the_process_already_exited_after_flushing_ide
     handle = pending.await_identity(0.1)
 
     assert handle.session_id == "ses_flushed"
+
+
+class _ExitsAtTheProbe(FakeProbe):
+    """A worker that flushes its identity record and exits just as its liveness is probed."""
+
+    def __init__(self, stdout_path: Path, record: bytes) -> None:
+        super().__init__()
+        self._stdout_path = stdout_path
+        self._record = record
+
+    def is_alive(self, pid: int, process_start_time: str) -> bool:
+        self._stdout_path.write_bytes(self._record)
+        return False
+
+
+@pytest.mark.component
+def test_fresh_spawn_reads_the_record_a_worker_flushed_as_it_exited(tmp_path: Path) -> None:
+    """A worker that writes its record and dies between a poll's read and its probe still
+    identifies — the read follows the probe, so it sees everything a dead worker wrote."""
+    stdout_path = tmp_path / "lease-1.stdout"
+    stdout_path.write_bytes(b"")
+    record = (
+        json.dumps(
+            {
+                "type": "step_start",
+                "sessionID": "ses_flushed_at_exit",
+                "part": {
+                    "id": "prt_start",
+                    "sessionID": "ses_flushed_at_exit",
+                    "messageID": "msg_1",
+                    "type": "step-start",
+                },
+            }
+        ).encode()
+        + b"\n"
+    )
+    pending = _PendingOpenCodeIdentity(
+        pid=4242,
+        pgid=4242,
+        process_start_time="start-token",
+        stdout_path=str(stdout_path),
+        stderr_path="",
+        process=_ExitsAtTheProbe(stdout_path, record),
+    )
+
+    handle = pending.await_identity(0.1)
+
+    assert handle.session_id == "ses_flushed_at_exit"
 
 
 @pytest.mark.component

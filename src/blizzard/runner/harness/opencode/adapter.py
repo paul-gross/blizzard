@@ -117,6 +117,9 @@ class _PendingOpenCodeIdentity:
     def await_identity(self, timeout: float) -> WorkerHandle:
         deadline = time.monotonic() + timeout
         while True:
+            # Probed before the read: a worker seen dead has written all it ever will, so a record
+            # flushed just before it exited is still read below rather than lost between the two.
+            alive = self.process.is_alive(self.pid, self.process_start_time)
             event = self._first_event()
             if event is not None:
                 if not event.session_id:
@@ -127,7 +130,7 @@ class _PendingOpenCodeIdentity:
                     process_start_time=self.process_start_time,
                     pgid=self.pgid,
                 )
-            if not self.process.is_alive(self.pid, self.process_start_time):
+            if not alive:
                 raise WorkerIdentityError(f"the OpenCode worker exited before its first record{self._stderr_tail()}")
             if time.monotonic() >= deadline:
                 raise WorkerIdentityError(f"no identity within {timeout}s{self._stderr_tail()}")
