@@ -289,6 +289,27 @@ describe('hub App', () => {
         ),
       ).toBe(true);
     });
+
+    it('does not re-request the spend windows when the one-second tick stays within the day', async () => {
+      const nowMs = new Date(2026, 6, 16, 12, 0, 0).getTime();
+      let elapsedMs = 0;
+      TestBed.overrideProvider(FLEET_CLOCK, { useValue: () => nowMs + elapsedMs });
+      vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+      authStub.restore();
+      const capture = stubAuthCapturingSpendUrls();
+      authStub = capture;
+
+      const fixture = TestBed.createComponent(App);
+      await TestBed.inject(Router).navigateByUrl('/');
+      await settle(fixture);
+      const before = capture.spendUrls.length;
+
+      elapsedMs = 30_000;
+      vi.advanceTimersByTime(30_000);
+      await settle(fixture);
+
+      expect(capture.spendUrls.length).toBe(before);
+    });
   });
 
   describe('the mobile shell fork (ViewportService)', () => {
