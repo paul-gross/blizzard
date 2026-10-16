@@ -20,6 +20,7 @@ from blizzard.foundation.harness_telemetry_outcome import HarnessTelemetryOutcom
 from blizzard.foundation.node_steps import SessionMode
 from blizzard.foundation.tokens import TokenHash
 from blizzard.runner.environments.provider import AcquiredEnvironment
+from blizzard.runner.environments.workspaces import WorkspaceEntry, WorkspaceRegistry
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.claude_code.adapter import ClaudeCodeAdapter
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
@@ -80,6 +81,17 @@ def _service(store, *, clock=None, harness=None, probe=None, workspace_root=""):
             {CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=harness or FakeHarness(handle=_HANDLE, verdict=None))}
         ),
     )
+
+
+def _two_workspace_service(store):  # type: ignore[no-untyped-def]
+    service = _service(store)
+    service._workspaces = WorkspaceRegistry(
+        [
+            WorkspaceEntry("ws_a", FakeProvider({}), spawn_root="/root-a"),
+            WorkspaceEntry("ws_b", FakeProvider({}), spawn_root="/root-b"),
+        ]
+    )
+    return service
 
 
 def _seed_lease(
@@ -147,6 +159,16 @@ def _close_scope(store, chunk_id: str = "ch_1") -> TakeoverCloseScope:  # type: 
 
 # The three parked shapes — happy path, no force
 # --------------------------------------------------------------------------- #
+
+
+def test_takeover_resumes_from_the_spawn_root_of_the_workspace_the_chunk_is_bound_in(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    _seed_lease(store)
+    store.record_park(lease_id="lease_1", chunk_id="ch_1", question_id="qn_1", parked_at=_NOW)
+
+    opened = _two_workspace_service(store).open(replace(_open_scope(store), workspace_id="ws_b"), force=False)
+
+    assert opened.command == "cd /root-b && claude --resume sess-a"
 
 
 @pytest.mark.parametrize(("workspace_root", "expected_cwd"), [("/ws", "/ws"), ("", "/ws/e1")])

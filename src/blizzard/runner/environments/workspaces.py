@@ -8,8 +8,8 @@ provider, an empty spawn root and no prompt."""
 from __future__ import annotations
 
 import threading
-from collections.abc import Mapping, Sequence
-from contextlib import AbstractContextManager
+from collections.abc import Iterator, Mapping, Sequence
+from contextlib import AbstractContextManager, contextmanager
 from typing import Protocol
 
 from blizzard.runner.environments.provider import IWorkspaceProvider
@@ -56,8 +56,9 @@ class IWorkspaces(Protocol):
         undeclared one."""
         ...
 
-    def acquisition_lock(self, workspace_id: str) -> AbstractContextManager[object]:
-        """The in-process lock serialising acquisition from the workspace's pool."""
+    def try_acquisition_lock(self, workspace_id: str) -> AbstractContextManager[bool]:
+        """The in-process lock serialising acquisition from the workspace's pool, taken without waiting: the context
+        yields whether it was taken, and releases only a lock it took. Reentrant on the owning thread."""
         ...
 
     def environment_workdirs(self) -> dict[str, dict[str, str]]:
@@ -117,8 +118,15 @@ class WorkspaceRegistry:
         workspace = self._get(workspace_id)
         return workspace.prompt if workspace is not None else ""
 
-    def acquisition_lock(self, workspace_id: str) -> AbstractContextManager[object]:
-        return self._workspaces[workspace_id].lock
+    @contextmanager
+    def try_acquisition_lock(self, workspace_id: str) -> Iterator[bool]:
+        lock = self._workspaces[workspace_id].lock
+        taken = lock.acquire(blocking=False)
+        try:
+            yield taken
+        finally:
+            if taken:
+                lock.release()
 
     def environment_workdirs(self) -> dict[str, dict[str, str]]:
         return {

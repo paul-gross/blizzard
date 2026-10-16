@@ -5,6 +5,7 @@ declare, resolves to no provider, an empty spawn root and no prompt."""
 
 from __future__ import annotations
 
+import threading
 from pathlib import Path
 
 import pytest
@@ -84,11 +85,24 @@ def test_a_held_row_resolves_to_its_declared_workspace_else_the_runners_home(
     assert held_workspace_id(held, bound, ("ws_a", "ws_b")) == expected
 
 
-def test_each_workspace_has_its_own_reentrant_acquisition_lock() -> None:
+def test_the_try_lock_is_reentrant_and_never_waits_on_another_thread() -> None:
     registry = _registry()
+    outcome: list[bool] = []
 
-    with registry.acquisition_lock("ws_a"), registry.acquisition_lock("ws_a"):
-        assert registry.acquisition_lock("ws_a") is not registry.acquisition_lock("ws_b")
+    def other_thread() -> None:
+        with registry.try_acquisition_lock("ws_a") as taken:
+            outcome.append(taken)
+        with registry.try_acquisition_lock("ws_b") as taken:
+            outcome.append(taken)
+
+    with registry.try_acquisition_lock("ws_a") as outer, registry.try_acquisition_lock("ws_a") as inner:
+        assert outer and inner
+        thread = threading.Thread(target=other_thread)
+        thread.start()
+        thread.join(5)
+    assert outcome == [False, True]  # held workspace refused, the other workspace free
+    with registry.try_acquisition_lock("ws_a") as taken:
+        assert taken  # released once the holder leaves
 
 
 def test_a_registry_needs_a_workspace() -> None:

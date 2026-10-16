@@ -10,6 +10,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
+from blizzard.runner.environments.workspaces import WorkspaceEntry, WorkspaceRegistry
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
@@ -652,6 +653,27 @@ def test_a_backfill_import_derives_its_segments_spawn_cwd_from_the_chunks_bindin
 
     imported = ctx.stores.transcript_ledger.transcript_segment(first)
     assert imported is not None and imported.spawn_cwd == "/ws/e1"
+
+
+def test_a_backfill_import_reads_the_spawn_root_of_the_workspace_the_chunk_is_bound_in() -> None:
+    ctx, _ = _ctx(sessions={"sess-a": [_turn(0, "hello")]})
+    ctx = replace(
+        ctx,
+        workspaces=WorkspaceRegistry(
+            [
+                WorkspaceEntry("ws_a", FakeProvider({"e1": "/root-a/e1"}), spawn_root="/root-a"),
+                WorkspaceEntry("ws_b", FakeProvider({"e1": "/root-b/e1"}), spawn_root="/root-b"),
+            ]
+        ),
+    )
+    ctx.stores.environments.record_binding(
+        chunk_id="ch_1", environment_id="e1", workdir="/root-b/e1", bound_at=_NOW, workspace_id="ws_b"
+    )
+
+    first = _import_one(ctx)
+
+    imported = ctx.stores.transcript_ledger.transcript_segment(first)
+    assert imported is not None and imported.spawn_cwd == "/root-b"
 
 
 def test_reship_carries_the_superseded_segments_spawn_cwd_onto_its_new_segment() -> None:

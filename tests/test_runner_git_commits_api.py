@@ -18,6 +18,7 @@ from blizzard.runner.app import build_hosted_app, create_app
 from blizzard.runner.composition import build_runner_process
 from blizzard.runner.config import DEFAULT_WORKSPACE_ID, RunnerConfig
 from blizzard.runner.environments.internal.winter_provider import WinterWorkspaceProvider
+from blizzard.runner.environments.workspaces import WorkspaceEntry, WorkspaceRegistry
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.leases.model import NewLease
@@ -68,6 +69,7 @@ def _seed_lease(store, **overrides: object) -> None:  # type: ignore[no-untyped-
         "created_at": _NOW,
     }
     fields.update(overrides)
+    workspace_id = str(fields.pop("workspace_id", DEFAULT_WORKSPACE_ID))
     store.record_lease(NewLease(**fields))  # type: ignore[arg-type]
     store.record_lease_token(str(fields["lease_id"]), TokenHash(_TOKEN).hex, _NOW)
     # A declaration resolves its environment from the chunk's bindings, so a lease
@@ -77,7 +79,7 @@ def _seed_lease(store, **overrides: object) -> None:  # type: ignore[no-untyped-
         environment_id="e1",
         workdir="/ws/e1",
         bound_at=_NOW,
-        workspace_id=DEFAULT_WORKSPACE_ID,
+        workspace_id=workspace_id,
     )
 
 
@@ -417,3 +419,34 @@ def test_a_declaration_against_a_closed_takeover_lease_says_it_rides_no_completi
     assert resp.status_code == 200, resp.text
     assert resp.json()["note"] == RIDES_NO_COMPLETION_NOTE
     assert ("e1", "toy-api") in store.git_commit_declarations_for_lease("lease_1")
+
+
+@pytest.mark.component
+def test_a_declaration_is_checked_against_the_repos_of_the_workspace_its_environment_is_bound_in(
+    tmp_path: Path,
+) -> None:
+    store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
+    config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}")
+    workspaces = WorkspaceRegistry(
+        [
+            WorkspaceEntry(
+                DEFAULT_WORKSPACE_ID, FakeProvider({"e1": "/a/e1"}, repos={"e1": [("repo-a", "o-a")]}), spawn_root=""
+            ),
+            WorkspaceEntry("ws_b", FakeProvider({"e1": "/b/e1"}, repos={"e1": [("repo-b", "o-b")]}), spawn_root=""),
+        ]
+    )
+    service = GitCommitDeclarationService(store, FixedClock(_NOW), workspaces, environments=store, outbound=store)
+    app = create_app(
+        config, runner_stores=make_stores(store), host_stores=make_host_stores(store), git_commit_declarations=service
+    )
+    _seed_lease(store)
+    _seed_lease(store, lease_id="lease_2", chunk_id="ch_2", workspace_id="ws_b")
+    headers = {"X-Blizzard-Lease-Token": _TOKEN}
+    with runner_client(app) as client:
+        own_a = client.post("/api/leases/lease_1/git-commits", json={**_BODY, "repo": "repo-a"}, headers=headers)
+        other_a = client.post("/api/leases/lease_1/git-commits", json={**_BODY, "repo": "repo-b"}, headers=headers)
+        own_b = client.post("/api/leases/lease_2/git-commits", json={**_BODY, "repo": "repo-b"}, headers=headers)
+        other_b = client.post("/api/leases/lease_2/git-commits", json={**_BODY, "repo": "repo-a"}, headers=headers)
+
+    assert (own_a.status_code, own_b.status_code) == (200, 200)
+    assert other_a.status_code == other_b.status_code != 200

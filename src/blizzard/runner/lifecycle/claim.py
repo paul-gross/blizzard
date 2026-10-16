@@ -156,8 +156,11 @@ class ReadyQueue:
             return False
         chunk_id = entry.chunk_id
         # The workspace's pool is shared host-wide: from the held read to the recorded binding, no other runner may
-        # draw from it. The hub claim runs after, outside the lock.
-        with self.ctx.workspaces.acquisition_lock(self._workspace_id):
+        # draw from it (bzh:pool-acquisition-exclusive). A runner that cannot take the lock claims nothing this tick
+        # rather than stall the leases its Advance step serves. The hub claim runs after, outside the lock.
+        with self.ctx.workspaces.try_acquisition_lock(self._workspace_id) as taken:
+            if not taken:
+                return False
             acquired = self._acquire(entry)
             if acquired is None:
                 return False
@@ -344,7 +347,7 @@ class InterruptedClaims:
         )
         move = interrupted_claim_move(view, runner_id=runner_id, requeued=requeued, braked=braked, takeover=takeover)
         if move is InterruptedClaimMove.HOLD_TAKEN_OVER and takeover is not None:
-            _log.info(
+            _log.debug(
                 "holding interrupted claim — an open takeover holds the workdir",
                 chunk_id=chunk_id,
                 takeover_id=takeover.takeover_id,
