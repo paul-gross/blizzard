@@ -1045,12 +1045,13 @@ class RunnerStoreFiles:
         runner_id: str,
         *,
         workspace_ids: Mapping[str, str] | None = None,
+        bound_workspaces: Sequence[str] = (),
         ingest: HostIngest | None = None,
     ) -> None:
         with _engine(source_url) as source, _engine(destination_url) as destination:
             build_runner_transfer(
                 source, destination, errors=self.errors, runner_id=runner_id, clock=self.clock
-            ).copy_runner(workspace_ids=workspace_ids, ingest=ingest)
+            ).copy_runner(workspace_ids=workspace_ids, bound_workspaces=bound_workspaces, ingest=ingest)
 
     def remove_runner_rows(self, url: str, runner_id: str, *, keep_counters: bool) -> None:
         with _engine(url) as engine:

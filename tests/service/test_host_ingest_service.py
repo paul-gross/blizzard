@@ -40,6 +40,8 @@ _BACKLOG = 3
 #: The keys both stores hold, so the ingest's copy collides on each.
 _ROUTE_CHUNK = "ch_route_shared"
 _GRAPH_ID = "gr_shared"
+_PROMPT_FILE = "standing.md"
+_PROMPT_FILE_TEXT = "the standing prompt\n"
 
 
 def _added(hub: httpx.Client, path: str, body: dict[str, Any]) -> dict[str, Any]:
@@ -68,6 +70,13 @@ def _host_directory(root: Path, runner: JoinedRunner, *, hub_url: str, port: int
         )
     )
     HubTokenFile.of(root, hub_token_variable(runner.runner_name)).write(runner.token)
+
+
+def _relative_prompt_file(root: Path) -> None:
+    """``root``'s workspace standing on a prompt file named relative to ``root``, which this host alone can resolve."""
+    (root / _PROMPT_FILE).write_text(_PROMPT_FILE_TEXT)
+    config = HostConfig.load(root).config_path
+    config.write_text(config.read_text().replace('prompt_file = ""', f'prompt_file = "{_PROMPT_FILE}"', 1))
 
 
 def _seed(root: Path, runner: JoinedRunner, tag: str) -> None:
@@ -182,6 +191,7 @@ def test_a_host_that_ingested_a_colliding_runner_resumes_both_and_delivers_each_
             _deliver_acked(hub, runner, tag)
         _host_directory(here, staying, hub_url=hub_url, port=port)
         _host_directory(there, moving, hub_url=hub_url, port=_free_port())
+        _relative_prompt_file(there)
         HubTokenFile.of(here, HOST_TOKEN_VARIABLE).write(host["token"])
         _seed(here, staying, "a")
         _seed(there, moving, "b")
@@ -204,6 +214,9 @@ def test_a_host_that_ingested_a_colliding_runner_resumes_both_and_delivers_each_
             timeout=120,
         )
         assert ingested.returncode == 0, ingested.stdout + ingested.stderr
+        carried = next(w for w in HostConfig.load(here).workspaces if w.id == _NEW_WORKSPACE)
+        assert carried.prompt_file == str(HostConfig.load(there).root / _PROMPT_FILE)
+        assert carried.resolved_prompt(HostConfig.load(here).root) == _PROMPT_FILE_TEXT
         engine = create_engine_from_url(HostConfig.load(here).db_url)
         try:
             for table in ("outbound_buffer", "transcript_outbound_buffer"):

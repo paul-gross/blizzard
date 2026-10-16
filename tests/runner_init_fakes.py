@@ -119,7 +119,7 @@ class FakeHostHubClient:
     admin: FakeHubRunnerAdmin
     token: str
     #: Scripts the record read's answer for any token.
-    record_answer: HostRefused | None = None
+    record_answer: HostRefused | HubClientError | None = None
 
     def report(self, report: HostReport) -> HostRecord | HostRefused:
         del report
@@ -127,6 +127,8 @@ class FakeHostHubClient:
 
     def record(self) -> HostRecord | HostRefused:
         host = self.admin.host_of(self.token)
+        if isinstance(self.record_answer, HubClientError):
+            raise self.record_answer
         if self.record_answer is not None:
             return self.record_answer
         if host is None:
@@ -186,7 +188,7 @@ class FakeInitHub:
     identity: FakeTokenIdentityReader | None = None
     calls: list[InitHubCall] = field(default_factory=list)
     #: Scripts every host record read's answer.
-    host_record: HostRefused | None = None
+    host_record: HostRefused | HubClientError | None = None
 
     @contextmanager
     def clients(

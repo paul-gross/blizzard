@@ -7,10 +7,10 @@ through :mod:`.base`'s carry seam, and the host rows through the host member com
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from typing import Any
 
-from sqlalchemy import CursorResult, Table
+from sqlalchemy import CursorResult, Table, inspect
 
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.hub.runner_transfer import (
@@ -55,13 +55,19 @@ class RunnerTransferStore:
         self._destination = destination
         self._host = host
 
-    def copy_runner(self, *, workspace_ids: Mapping[str, str] | None = None, ingest: HostIngest | None = None) -> None:
+    def copy_runner(
+        self,
+        *,
+        workspace_ids: Mapping[str, str] | None = None,
+        bound_workspaces: Sequence[str] = (),
+        ingest: HostIngest | None = None,
+    ) -> None:
         renames = dict(workspace_ids or {})
         runner_id = self._source.bound_runner_id()
         counts: dict[str, int] = {}
         with self._source.connect() as source, source.begin(), self._destination.begin() as destination:
             handle = TransferHandle(runner_id=runner_id, source=source, destination=destination)
-            workspaces: dict[str, str] = {}
+            workspaces = {name: renames.get(name, name) for name in bound_workspaces}
             for table in _RUNNER_TABLES:
                 if table in CARRIED_OUTBOX_TABLES:
                     continue
@@ -112,7 +118,8 @@ def _issued_key(result: CursorResult[Any]) -> int:
 
 
 class RunnerRowRemovalStore:
-    """Deletes the bound runner's rows from one store."""
+    """Deletes the bound runner's rows from one store, from the runner-scoped tables that store has: a store behind the
+    schema's head lacks the tables a later revision added."""
 
     def __init__(self, store: RunnerStoreConnections) -> None:
         self._store = store
@@ -122,8 +129,9 @@ class RunnerRowRemovalStore:
         kept = {schema.outbox_counters} if keep_counters else set()
         deleted = 0
         with self._store.begin() as conn:
+            held = set(inspect(conn).get_table_names())
             for table in _RUNNER_TABLES:
-                if table not in kept:
+                if table not in kept and table.name in held:
                     deleted += conn.execute(self._store.delete(table)).rowcount
         _log.info("runner rows removed", runner_id=runner_id, rows=deleted, counters_kept=keep_counters)
 

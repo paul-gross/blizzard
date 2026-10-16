@@ -5,6 +5,7 @@ a pre-host daemon answers on its socket."""
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -115,3 +116,54 @@ def test_reset_of_a_runner_the_host_does_not_name_is_refused(tmp_path: Path, fak
     assert result.exit_code != 0
     assert "declares no runner 'nobody'" in result.output
     assert _archives(root) == []
+
+
+def test_reset_names_a_runner_the_host_file_no_longer_declares_by_its_id(
+    tmp_path: Path, fake_init_hub: FakeInitHub
+) -> None:
+    root = _host(tmp_path, fake_init_hub)
+    config = HostLayout(root).config_path
+    declared = config.read_text()
+    config.write_text(declared[: declared.rindex("[[runner]]")])
+    assert [r.name for r in HostConfig.load(root).runners] == ["runner-local"]
+
+    result = ok(fake_init_hub, "store", "reset", str(root), "--runner", _RESET)
+
+    [archive] = sorted(p for p in HostLayout(root).data_dir.iterdir() if p.name.startswith(f"host.db.{_RESET}."))
+    assert f"archived runner {_RESET} ({_RESET}) to {archive}" in result.output
+    host = create_engine_from_url(HostConfig.load(root).db_url)
+    assert rows(host, "runner_identity", runner_id=_RESET) == []
+    host.dispose()
+
+
+def test_reset_of_a_declared_runner_without_an_id_is_refused(tmp_path: Path, fake_init_hub: FakeInitHub) -> None:
+    root = _host(tmp_path, fake_init_hub)
+    config = HostLayout(root).config_path
+    config.write_text(config.read_text().replace(f'id = "{_RESET}"\n', "", 1))
+    assert [r.id for r in HostConfig.load(root).runners if r.name == "r2"] == [None]
+
+    result = run(fake_init_hub, "store", "reset", str(root), "--runner", "r2")
+
+    assert result.exit_code != 0
+    assert "has no id" in result.output
+    assert _archives(root) == []
+
+
+def test_reset_is_refused_when_the_archive_it_would_write_exists(
+    tmp_path: Path, fake_init_hub: FakeInitHub, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class _Frozen:
+        def now(self) -> datetime:
+            return datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
+
+    monkeypatch.setattr(store_cli, "SystemClock", _Frozen)
+    root = _host(tmp_path, fake_init_hub)
+    ok(fake_init_hub, "store", "reset", str(root), "--runner", "r2")
+    [archive] = _archives(root)
+    before = archive.read_bytes()
+
+    result = run(fake_init_hub, "store", "reset", str(root), "--runner", "r2")
+
+    assert result.exit_code != 0
+    assert f"cannot archive runner r2: {archive} already exists" in result.output
+    assert _archives(root) == [archive] and archive.read_bytes() == before

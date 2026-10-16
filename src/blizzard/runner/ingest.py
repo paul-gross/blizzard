@@ -91,6 +91,10 @@ _CP_AFTER_CONFIG = crashpoint(
 #: The name every source copy's directory in this host's data directory starts with.
 _COPY_PREFIX = "ingest-copy-"
 
+#: The revision from which every runner-owned table carries its runner, so one runner's rows can be removed from a
+#: store that holds others.
+_RUNNER_SCOPE_REVISION = "20261011_1000_runner_scope"
+
 #: The first bytes of every SQLite database file.
 _SQLITE_HEADER = b"SQLite format 3\x00"
 
@@ -277,6 +281,16 @@ class _Source:
 
 @domain_model
 @dataclass(frozen=True)
+class _SourceCopy:
+    """A migrated backup copy of a source store: its URL, and whether the source was at a revision that scopes every
+    runner table by runner, which a runner-by-runner removal needs."""
+
+    url: str
+    runner_scoped: bool
+
+
+@domain_model
+@dataclass(frozen=True)
 class _ConfigPlan:
     """The configuration edits an ingest makes, each skipped when already made."""
 
@@ -387,14 +401,14 @@ class RunnerIngest:
         if not store.exists():
             return _Source(SourceKind.UNGRADUATED, path, store, None, token_env=token_env)
         with self._copy_of(store) as copy:
-            named_runners = self.stores.named_runners(copy)
+            named_runners = self.stores.named_runners(copy.url)
             if len(named_runners) != 1:
                 raise SourceUnsupported(
                     f"the source store {store} records {len(named_runners)} runner identities "
                     f"({', '.join(named_runners) or 'none'}), not the one a runner before hosts holds"
                 )
             [runner_id] = named_runners
-            view = self.stores.runner_view(copy, runner_id)
+            view = self.stores.runner_view(copy.url, runner_id)
         try:
             config = HostConfig.graduated(path, legacy, runner_id=runner_id, served=view.served_projects)
         except ConfigError as exc:
@@ -447,7 +461,7 @@ class RunnerIngest:
                 return IngestOutcome(runner_id, entry.name, resumed=True)
             raise SourceUnsupported(f"the source holds no store at {source.store}")
         with self._copy_of(source.store) as copy:
-            view = self.stores.runner_view(copy, runner_id)
+            view = self.stores.runner_view(copy.url, runner_id)
             if resuming and runner_id not in view.named_runners:
                 # Removed from the source already: only the move-aside of an emptied source is left.
                 return IngestOutcome(runner_id, entry.name, resumed=True, set_aside=self._set_aside_emptied(source))
@@ -462,7 +476,7 @@ class RunnerIngest:
                         f"{entry.name}` on this host, then ingest again"
                     )
             else:
-                self._refuse_fresh(source, entry, runner_id, view)
+                self._refuse_fresh(source, entry, runner_id, view, copy)
             plan = self._plan(source, entry, request.workspace_id)
             if not resuming:
                 self._refuse_conflicts(source, entry, runner_id, view, plan)
@@ -473,7 +487,14 @@ class RunnerIngest:
                     ingested_at=self.clock.now(),
                 )
                 try:
-                    self.stores.copy_runner(copy, here, runner_id, workspace_ids=plan.workspace_ids, ingest=ingest)
+                    self.stores.copy_runner(
+                        copy.url,
+                        here,
+                        runner_id,
+                        workspace_ids=plan.workspace_ids,
+                        bound_workspaces=tuple(dict.fromkeys(binding.workspace for binding in entry.bindings)),
+                        ingest=ingest,
+                    )
                 except WorkspacePromptConflict as exc:
                     raise WorkspaceConflict(f"{exc}; nothing was changed") from exc
                 _log.info("runner rows ingested", runner_id=runner_id, source=str(source.path))
@@ -490,7 +511,7 @@ class RunnerIngest:
         return IngestOutcome(runner_id, entry.name, resumed=resuming, set_aside=moved)
 
     @contextmanager
-    def _copy_of(self, store: Path) -> Iterator[str]:
+    def _copy_of(self, store: Path) -> Iterator[_SourceCopy]:
         """A backup copy of the source ``store`` beside this host's store, migrated to head, removed on leaving."""
         data = self.host.layout.data_dir
         # This run holds the host's lock, so a copy left here is one a killed run never removed.
@@ -507,15 +528,18 @@ class RunnerIngest:
                     f"the source store {store} is at revision {current}, which this build does not know: upgrade "
                     "blizzard here to a release at least as new as the source's"
                 )
+            runner_scoped = migrations.reaches(current, _RUNNER_SCOPE_REVISION)
             try:
                 migrations.upgrade("head")
             except (MigrationConnectionError, MigrationRefused) as exc:
                 raise SourceUnsupported(f"the copy of the source store {store} cannot be migrated: {exc}") from exc
-            yield sqlite_url(copy)
+            yield _SourceCopy(sqlite_url(copy), runner_scoped)
         finally:
             shutil.rmtree(directory, ignore_errors=True)
 
-    def _refuse_fresh(self, source: _Source, entry: RunnerEntry, runner_id: str, view: RunnerStoreView) -> None:
+    def _refuse_fresh(
+        self, source: _Source, entry: RunnerEntry, runner_id: str, view: RunnerStoreView, copy: _SourceCopy
+    ) -> None:
         """Every refusal a first ingest of the runner earns before anything is written."""
         record = self._hub_record()
         identity = self._host_identity(record)
@@ -529,6 +553,11 @@ class RunnerIngest:
             raise HostNotHolding(f"runner {entry.name} ({runner_id}) {reason}, so this host cannot take it in")
         if runner_id not in view.named_runners:
             raise SourceUnsupported(f"the source store {source.store} holds no runner {entry.name} ({runner_id})")
+        if source.kind is not SourceKind.UNGRADUATED and not copy.runner_scoped:
+            raise SourceUnsupported(
+                f"the source store {source.store} predates the revision {_RUNNER_SCOPE_REVISION}, so one runner's rows "
+                "cannot be removed from it by themselves: run a blizzard release that migrates it, then re-run"
+            )
         if view.open_elicitation_lease_ids:
             raise RunnerBusy(
                 f"runner {entry.name} holds an open elicitation on lease(s) "
@@ -654,7 +683,9 @@ class RunnerIngest:
                             f"the source's workspace {name!r} shares root {root} with this host's workspace "
                             f"{other.id!r}, and both name environment(s) {', '.join(sorted(other_envs & envs))}"
                         )
-                appended.append(replace(offered, id=target, root=root))
+                appended.append(
+                    replace(offered, id=target, root=root, prompt_file=_absolute(offered.prompt_file, config.root))
+                )
             if target != name:
                 ids[name] = target
         return tuple(appended), ids
@@ -765,6 +796,15 @@ def _shape(workspace: HostWorkspace, root: Path) -> tuple[str, frozenset[str]]:
     """What makes a workspace the same one on two hosts: its root resolved against its own host, and its
     environments."""
     return workspace.settings(root).effective_workspace_root, frozenset(workspace.envs)
+
+
+def _absolute(prompt_file: str, root: Path) -> str:
+    """``prompt_file`` as a path that means the same on another host: a relative one resolved against ``root``, the host
+    that declared it."""
+    if not prompt_file:
+        return ""
+    located = Path(prompt_file)
+    return str(located if located.is_absolute() else root / located)
 
 
 def _described(workspace: HostWorkspace, root: Path) -> str:

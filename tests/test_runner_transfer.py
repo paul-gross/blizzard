@@ -275,3 +275,36 @@ def test_a_removal_deletes_the_runners_rows_and_nothing_else(stores, keep_counte
     assert {name: _rows(here, name, runner_id=_HERE) for name in _RUNNER_TABLES} == held
     assert {name: _rows(here, name) for name in _HOST_TABLES} == hosts
     assert RunnerInvariants(here, process=_NoProcess()).run() == []  # type: ignore[arg-type]
+
+
+def test_a_copy_carries_the_prompt_of_a_workspace_the_runner_is_bound_to_though_no_row_of_it_names_it(stores) -> None:  # type: ignore[no-untyped-def]
+    here, source = stores
+    with source.begin() as conn:
+        conn.execute(sa.delete(reflect(source).tables["env_bindings"]))
+
+    _transfer(source, here).copy_runner(workspace_ids={_WORKSPACE: "ws-new"}, bound_workspaces=[_WORKSPACE])
+
+    prompts = {r["workspace_id"]: r["prompt"] for r in _rows(here, "workspace_prompt")}
+    assert prompts == {_WORKSPACE: "prompt-1", "ws-new": "prompt-1"}
+
+
+def test_a_copy_of_a_runner_with_no_binding_and_no_row_naming_a_workspace_carries_no_prompt(stores) -> None:  # type: ignore[no-untyped-def]
+    here, source = stores
+    with source.begin() as conn:
+        conn.execute(sa.delete(reflect(source).tables["env_bindings"]))
+    before = _rows(here, "workspace_prompt")
+
+    _transfer(source, here).copy_runner(workspace_ids={_WORKSPACE: "ws-new"})
+
+    assert _rows(here, "workspace_prompt") == before
+
+
+def test_a_removal_deletes_from_the_runner_tables_a_store_has_and_skips_those_it_lacks(stores) -> None:  # type: ignore[no-untyped-def]
+    _, source = stores
+    with source.begin() as conn:
+        conn.execute(sa.text("DROP TABLE external_usage_samples"))
+
+    build_runner_removal(source, errors=_errors(), runner_id=_MOVING).remove_runner_rows(keep_counters=False)
+
+    for name in _RUNNER_TABLES - {"external_usage_samples"}:
+        assert _rows(source, name, runner_id=_MOVING) == [], name
