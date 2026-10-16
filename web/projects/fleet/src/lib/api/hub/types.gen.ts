@@ -952,6 +952,10 @@ export type ChunkChangedPayload = {
      * Status
      */
     status: string;
+    /**
+     * Terminal
+     */
+    terminal: boolean;
 };
 
 /**
@@ -1051,6 +1055,20 @@ export type ChunkDecisionStatusView = {
      */
     transitioned?: boolean;
 };
+
+/**
+ * ChunkDeleteRefusal
+ *
+ * Why a delete of a chunk would be refused — the status refusal outranks the dependents one.
+ */
+export const ChunkDeleteRefusal = { STATUS: 'status', DEPENDENTS: 'dependents' } as const;
+
+/**
+ * ChunkDeleteRefusal
+ *
+ * Why a delete of a chunk would be refused — the status refusal outranks the dependents one.
+ */
+export type ChunkDeleteRefusal = typeof ChunkDeleteRefusal[keyof typeof ChunkDeleteRefusal];
 
 /**
  * ChunkDeleteRequest
@@ -1211,6 +1229,7 @@ export type ChunkDetail = {
      * Deletable
      */
     deletable?: boolean;
+    delete_refusal?: ChunkDeleteRefusal | null;
     escalation?: ChunkEscalationView | null;
     /**
      * Graph Created At
@@ -1272,6 +1291,10 @@ export type ChunkDetail = {
      * Project Slug
      */
     project_slug?: string | null;
+    /**
+     * Promotable
+     */
+    promotable?: boolean;
     /**
      * Questions
      */
@@ -1723,6 +1746,10 @@ export type ChunkSummary = {
      * Project Slug
      */
     project_slug?: string | null;
+    /**
+     * Promotable
+     */
+    promotable?: boolean;
     /**
      * Runner Id
      */

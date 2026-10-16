@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
-import { type ChunkDetail, type ChunkStatus, type PauseView, type WorkRefView, type RouteView, compactRef, runnerDisplayName, runnerTitle, KitButton, KitConfirmDialog, type KitConfirmDialogPrompt, KitMenu, KitMenuPanel, KitMenuItem, KitMenuItemSubtitle, KitTooltip, completeCopy, deleteCopy, detachCopy, pauseCopy, resumeCopy } from 'fleet';
+import { ChunkDeleteRefusal, type ChunkDetail, type ChunkStatus, type PauseView, type WorkRefView, type RouteView, compactRef, runnerDisplayName, runnerTitle, KitButton, KitConfirmDialog, type KitConfirmDialogPrompt, KitMenu, KitMenuPanel, KitMenuItem, KitMenuItemSubtitle, KitTooltip, completeCopy, deleteCopy, detachCopy, pauseCopy, resumeCopy } from 'fleet';
 import { LensLink } from 'fleet/shell';
 
 /**
@@ -26,7 +26,7 @@ export class ChunkDetailHeader {
 
   /** The chunk's status as the status chip renders it (`bzh:frontend-pending-override`).
    * Never consulted by
-   * {@link pausable}/{@link completable}/{@link deletable}: those gate what the *next*
+   * {@link pausable}/{@link completable}/{@link deleteRefusal}: those gate what the *next*
    * click is admissible to fire against the server-read status, which an in-flight
    * mutation's own predicted outcome must not perturb. */
   readonly renderedStatus = input.required<ChunkStatus>();
@@ -125,8 +125,8 @@ export class ChunkDetailHeader {
   /** Whether Complete is offered — `ChunkDetail.completable`. */
   protected readonly completable = computed<boolean>(() => this.detail().completable ?? false);
 
-  /** Whether Delete is offered — `ChunkDetail.deletable`. */
-  protected readonly deletable = computed<boolean>(() => this.detail().deletable ?? false);
+  /** Why the hub would refuse a delete — `ChunkDetail.delete_refusal`, `null` when it would not. */
+  protected readonly deleteRefusal = computed<ChunkDeleteRefusal | null>(() => this.detail().delete_refusal ?? null);
 
   /** Every prerequisite this chunk still waits on — `neighborhood.prerequisites` minus
    * the satisfied ones, which by definition block nothing. Unlike `blocked`, which names
@@ -136,27 +136,22 @@ export class ChunkDetailHeader {
   );
 
   /** Every chunk this one still holds up — `neighborhood.dependents` minus the satisfied
-   * ones. A dependent edge's `satisfied` tracks the *subject* chunk, so a done chunk
-   * correctly reports blocking nothing. */
+   * ones, for display only: the chips and the Delete subtitle name them, while
+   * {@link deleteRefusal} alone decides whether Delete is withheld. */
   protected readonly blocking = computed<readonly string[]>(() =>
     (this.detail().neighborhood?.dependents ?? []).filter((n) => !n.satisfied).map((n) => n.chunk_id),
   );
 
-  /** Whether Delete is withheld — {@link deletable}'s own status gate, plus
-   * {@link blocking}: Delete is only ever offered at `not_ready`/`ready`, never
-   * `done`, so every entry `blocking()` already filters to is provably still
-   * unsatisfied — no fresh read of `neighborhood.dependents` is needed here. */
-  protected readonly deleteDisabled = computed<boolean>(() => !this.deletable() || this.blocking().length > 0);
+  /** Whether Delete is withheld — exactly when the hub reports a {@link deleteRefusal}. */
+  protected readonly deleteDisabled = computed<boolean>(() => this.deleteRefusal() !== null);
 
-  /** Delete's menu subtitle — names the dependents still holding it back when
-   * {@link blocking} is non-empty, falling back to `deleteCopy()`'s own subtitle
-   * otherwise. */
-  protected readonly deleteSubtitle = computed<string>(() => {
-    const blockers = this.blocking();
-    return blockers.length > 0
-      ? `Blocked: ${blockers.map((id) => this.shortId(id)).join(', ')} depend on this`
-      : (deleteCopy().subtitle ?? '');
-  });
+  /** Delete's menu subtitle — names the dependents in {@link blocking} when the hub refuses
+   * for `dependents`, falling back to `deleteCopy()`'s own subtitle otherwise. */
+  protected readonly deleteSubtitle = computed<string>(() =>
+    this.deleteRefusal() === ChunkDeleteRefusal.DEPENDENTS
+      ? `Blocked: ${this.blocking().map((id) => this.shortId(id)).join(', ')} depend on this`
+      : (deleteCopy().subtitle ?? ''),
+  );
 
   /** A neighbor's compact ref — every surface that names an entity compactly resolves
    * through {@link compactRef} (`compact-ref.ts`). */

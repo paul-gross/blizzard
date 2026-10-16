@@ -11,7 +11,7 @@ export { formatCost, formatTokens, hasCostFigure } from '../cost-format';
 export { errorMessage } from '../error-message';
 export { harnessName } from '../harness-name';
 export { nodeStepKey, parseNodeStepKey } from '../node-step';
-export { LANES, STATUS_LANE, STATUS_TONE, laneCounts, type Lane } from '../chunk-lanes';
+export { DONE_LANE, LANES, STATUS_LANE, STATUS_TONE, chunkLane, laneCounts, type Lane } from '../chunk-lanes';
 export {
   formatWhen,
   formatClockTime,

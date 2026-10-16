@@ -6,6 +6,7 @@ event-type names, their payload shapes, and each mutation seam's ``publish_*`` h
 
 from __future__ import annotations
 
+from blizzard.foundation.chunk_status import TERMINAL_STATUSES
 from blizzard.foundation.event_log import EventLogSeverity
 from blizzard.foundation.events.broker import EventBroker as _EventBroker
 from blizzard.foundation.hub_event_types import ChunkChangeCause, HostChangeKind, HubEventType, RunnerChangeKind
@@ -51,10 +52,12 @@ class EventBroker(_EventBroker):
         Optionals are added to the payload only when supplied, never serialized as ``null``. ``key`` is
         the table-qualified natural key of the fact this frame describes, absent when there is no such
         fact. ``by`` rides the ``deleted`` cause; ``runner_name`` is resolved by the publisher, never here.
-        ``project_id`` is the chunk's project, absent only when the chunk is gone."""
+        ``project_id`` is the chunk's project, absent only when the chunk is gone. ``terminal`` is judged
+        here from ``status`` over :data:`TERMINAL_STATUSES` — the set ``ChunkSummary.terminal`` reads."""
         payload = ChunkChangedPayload(
             chunk_id=chunk_id,
             status=status,
+            terminal=status in TERMINAL_STATUSES,
             prev_status=prev_status,
             prev_node=prev_node,
             node=node,

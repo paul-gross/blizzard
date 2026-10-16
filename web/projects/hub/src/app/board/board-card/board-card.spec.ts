@@ -8,6 +8,8 @@ const BASE: BoardCard = {
   chunkId: 'ch_01done0000000000000000000',
   shortId: 'C-0000',
   status: 'done',
+  terminal: true,
+  promotable: false,
   node: 'done',
   nodeId: 'nd_done',
   pointerLabels: [],
@@ -20,7 +22,7 @@ const BASE: BoardCard = {
   blockedOnStatus: null,
 };
 
-async function render(card: BoardCard, gated = false) {
+async function render(card: BoardCard, gated = false, canControl = false) {
   await TestBed.configureTestingModule({
     imports: [BoardCardComponent],
     providers: [provideZonelessChangeDetection()],
@@ -28,6 +30,7 @@ async function render(card: BoardCard, gated = false) {
   const fixture = TestBed.createComponent(BoardCardComponent);
   fixture.componentRef.setInput('card', card);
   fixture.componentRef.setInput('gated', gated);
+  fixture.componentRef.setInput('canControl', canControl);
   await fixture.whenStable();
   return fixture.nativeElement as HTMLElement;
 }
@@ -50,14 +53,14 @@ describe('BoardCardComponent completion stamp (issue #173)', () => {
   });
 
   it('renders no timestamp outside the done lane', async () => {
-    const el = await render({ ...BASE, status: 'running', completedAt: null });
+    const el = await render({ ...BASE, status: 'running', terminal: false, completedAt: null });
 
     expect(el.querySelector('[data-testid="chunk-done-at"]')).toBeNull();
   });
 
   it('renders no timestamp for a non-done-lane card even if it somehow carries a completedAt', async () => {
     // Defensive: the lane gates the render, not completedAt's own null-ness alone.
-    const el = await render({ ...BASE, status: 'running', completedAt: '2026-07-13T00:00:01+00:00' });
+    const el = await render({ ...BASE, status: 'running', terminal: false, completedAt: '2026-07-13T00:00:01+00:00' });
 
     expect(el.querySelector('[data-testid="chunk-done-at"]')).toBeNull();
   });
@@ -79,7 +82,7 @@ describe('BoardCardComponent DONE-column layout (issue #215)', () => {
   });
 
   it('still names the status for a non-done-lane card', async () => {
-    const el = await render({ ...BASE, status: 'running', node: 'build', completedAt: null });
+    const el = await render({ ...BASE, status: 'running', terminal: false, node: 'build', completedAt: null });
 
     expect(el.querySelector('[data-testid="chunk-status"]')?.textContent?.trim()).toBe('running');
     expect(el.querySelector('[data-testid="chunk-node"]')?.textContent?.trim()).toBe('build');
@@ -149,13 +152,13 @@ describe('BoardCardComponent cost figure', () => {
 
 describe('BoardCardComponent blocked marking (issue #461)', () => {
   it('renders nothing when the card carries no blockedOn', async () => {
-    const el = await render({ ...BASE, status: 'ready', blockedOn: null, blockedCount: 0 });
+    const el = await render({ ...BASE, status: 'ready', terminal: false, blockedOn: null, blockedCount: 0 });
 
     expect(el.querySelector('[data-testid="chunk-blocked-by"]')).toBeNull();
   });
 
   it('names the one prerequisite by its compact ref when exactly one is unmet', async () => {
-    const el = await render({ ...BASE, status: 'ready', blockedOn: 'ch_01prereq00000000000000000', blockedCount: 1 });
+    const el = await render({ ...BASE, status: 'ready', terminal: false, blockedOn: 'ch_01prereq00000000000000000', blockedCount: 1 });
 
     const marking = el.querySelector('[data-testid="chunk-blocked-by"]');
     expect(marking?.textContent?.replace(/\s+/g, ' ').trim()).toBe('blocked by C-0000');
@@ -165,6 +168,7 @@ describe('BoardCardComponent blocked marking (issue #461)', () => {
     const el = await render({
       ...BASE,
       status: 'ready',
+      terminal: false,
       blockedOn: 'ch_01prereq00000000000000000',
       blockedCount: 1,
       blockedOnStatus: 'running',
@@ -178,6 +182,7 @@ describe('BoardCardComponent blocked marking (issue #461)', () => {
     const el = await render({
       ...BASE,
       status: 'ready',
+      terminal: false,
       blockedOn: 'ch_01prereq00000000000000000',
       blockedCount: 2,
       blockedOnStatus: 'running',
@@ -190,7 +195,7 @@ describe('BoardCardComponent blocked marking (issue #461)', () => {
   });
 
   it('counts the prerequisites instead of naming the first when more than one is unmet', async () => {
-    const el = await render({ ...BASE, status: 'ready', blockedOn: 'ch_01prereq00000000000000000', blockedCount: 2 });
+    const el = await render({ ...BASE, status: 'ready', terminal: false, blockedOn: 'ch_01prereq00000000000000000', blockedCount: 2 });
 
     const marking = el.querySelector('[data-testid="chunk-blocked-by"]');
     expect(marking?.textContent?.replace(/\s+/g, ' ').trim()).toBe('blocked by 2 chunks');
@@ -198,7 +203,7 @@ describe('BoardCardComponent blocked marking (issue #461)', () => {
   });
 
   it('references the prerequisite rather than reaching it — no link, no nested control', async () => {
-    const el = await render({ ...BASE, status: 'ready', blockedOn: 'ch_01prereq00000000000000000', blockedCount: 1 });
+    const el = await render({ ...BASE, status: 'ready', terminal: false, blockedOn: 'ch_01prereq00000000000000000', blockedCount: 1 });
 
     const marking = el.querySelector('[data-testid="chunk-blocked-by"]')!;
     expect(marking.querySelector('a, button')).toBeNull();
@@ -209,6 +214,7 @@ describe('BoardCardComponent blocked marking (issue #461)', () => {
     const el = await render({
       ...BASE,
       status: 'running',
+      terminal: false,
       node: 'build',
       blockedOn: 'ch_01prereq00000000000000000',
       blockedCount: 1,
@@ -224,7 +230,7 @@ describe('BoardCardComponent delivery block', () => {
   const LANDED = { repo: 'service', commit_hash: 'abc123', url: 'https://forge.example/service/commit/abc123' };
 
   it('shows only the open PR link on a delivering chunk, never a landed hash', async () => {
-    const el = await render({ ...BASE, status: 'delivering', node: 'deliver', openPrs: [PR], landedRepos: [LANDED] });
+    const el = await render({ ...BASE, status: 'delivering', terminal: false, node: 'deliver', openPrs: [PR], landedRepos: [LANDED] });
 
     expect(el.querySelector('[data-testid="card-pr-link"]')?.textContent).toContain('widget PR #42');
     expect(el.querySelector('[data-testid="card-landed-link"]')).toBeNull();
@@ -244,13 +250,13 @@ describe('BoardCardComponent delivery block', () => {
   });
 
   it('shows the open PR link in the needs-human lane', async () => {
-    const needs = await render({ ...BASE, status: 'needs_human', openPrs: [PR] });
+    const needs = await render({ ...BASE, status: 'needs_human', terminal: false, openPrs: [PR] });
     expect(needs.querySelector('[data-testid="card-pr-link"]')).not.toBeNull();
   });
 });
 
 describe('BoardCardComponent gate marker', () => {
-  const WAITING: BoardCard = { ...BASE, status: 'waiting_on_human', node: 'approve-gate', completedAt: null };
+  const WAITING: BoardCard = { ...BASE, status: 'waiting_on_human', terminal: false, node: 'approve-gate', completedAt: null };
 
   it('marks a card `gate` when its chunk has an open decision, beside the unchanged status', async () => {
     const el = await render(WAITING, true);
@@ -272,5 +278,45 @@ describe('BoardCardComponent open control', () => {
 
     const button = el.querySelector('fleet-kit-select-row button');
     expect(button?.getAttribute('aria-label')).toBe('Open chunk C-OPEN');
+  });
+});
+
+describe('BoardCardComponent Promote gate', () => {
+  it('offers Promote on a paused, never-promoted card the hub flags promotable', async () => {
+    const el = await render({ ...BASE, status: 'paused', terminal: false, promotable: true, completedAt: null }, false, true);
+
+    expect(el.querySelector('[data-testid="promote-chunk"]')).not.toBeNull();
+  });
+
+  it('withholds Promote on a not_ready card the hub does not flag promotable', async () => {
+    const el = await render(
+      { ...BASE, status: 'not_ready', terminal: false, promotable: false, completedAt: null },
+      false,
+      true,
+    );
+
+    expect(el.querySelector('[data-testid="promote-chunk"]')).toBeNull();
+  });
+
+  it('withholds Promote from an identity without chunk control even when promotable', async () => {
+    const el = await render({ ...BASE, status: 'not_ready', terminal: false, promotable: true, completedAt: null });
+
+    expect(el.querySelector('[data-testid="promote-chunk"]')).toBeNull();
+  });
+});
+
+describe('BoardCardComponent done-lane membership', () => {
+  it("renders the completion stamp off the hub's terminal flag, not the status value", async () => {
+    const flagged = await render({ ...BASE, status: 'running', terminal: true });
+
+    expect(flagged.querySelector('[data-testid="chunk-done-at"]')).not.toBeNull();
+    expect(flagged.querySelector('[data-testid="chunk-status"]')).toBeNull();
+  });
+
+  it('treats an unflagged done-status card as outside the done lane', async () => {
+    const unflagged = await render({ ...BASE, status: 'done', terminal: false });
+
+    expect(unflagged.querySelector('[data-testid="chunk-done-at"]')).toBeNull();
+    expect(unflagged.querySelector('[data-testid="chunk-status"]')?.textContent?.trim()).toBe('done');
   });
 });

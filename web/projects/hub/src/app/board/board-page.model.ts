@@ -18,7 +18,7 @@ export function orderedChunkIds(entries: readonly { readonly chunk_id: string }[
 
 /**
  * `chunks`, with each pending-promote chunk's status overridden to `'ready'`, each pending-demote `ready` chunk's to
- * `'not_ready'`, and each pending-delete chunk dropped. Only a `ready` chunk predicts a demote: any other status
+ * `'not_ready'` (each predicting the `promotable` that status reads after the verb), and each pending-delete chunk dropped. Only a `ready` chunk predicts a demote: any other status
  * (a paused chunk in particular) stays as read, since the hub's verdict on it is not known from here.
  * Returns `chunks` itself when no override applies.
  */
@@ -34,8 +34,10 @@ export function withPendingBoardChanges(
   const promotingIds = new Set(pendingPromotes.map((vars) => vars.chunkId));
   const demotingIds = new Set(pendingDemotes.map((vars) => vars.chunkId));
   return visible.map((chunk) => {
-    if (promotingIds.has(chunk.chunk_id)) return { ...chunk, status: 'ready' };
-    if (demotingIds.has(chunk.chunk_id) && chunk.status === 'ready') return { ...chunk, status: 'not_ready' };
+    if (promotingIds.has(chunk.chunk_id)) return { ...chunk, status: 'ready', promotable: false };
+    if (demotingIds.has(chunk.chunk_id) && chunk.status === 'ready') {
+      return { ...chunk, status: 'not_ready', promotable: true };
+    }
     return chunk;
   });
 }

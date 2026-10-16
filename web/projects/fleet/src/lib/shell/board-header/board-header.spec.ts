@@ -10,6 +10,7 @@ const chunk = (id: string, status: ChunkSummary['status']): ChunkSummary => ({
   chunk_id: id,
   graph_id: 'gr_1',
   status,
+  terminal: status === 'done' || status === 'stopped',
   current_node_id: 'nd_build',
   work_refs: [],
 });
@@ -31,7 +32,10 @@ const ZERO_COUNTS: ChunkCountsView = {
 /** The hub's counts read for a fleet of exactly these chunks. */
 const tally = (chunks: readonly ChunkSummary[]): ChunkCountsView => {
   const counts = { ...ZERO_COUNTS, total: chunks.length };
-  for (const c of chunks) counts[c.status] += 1;
+  for (const c of chunks) {
+    counts[c.status] += 1;
+    if (c.terminal) counts.terminal += 1;
+  }
   return counts;
 };
 
@@ -53,7 +57,7 @@ describe('BoardHeader', () => {
 
   it('renders the all-time totals from the counts read, not from any chunk list', async () => {
     const fixture = TestBed.createComponent(BoardHeader);
-    fixture.componentRef.setInput('counts', { ...ZERO_COUNTS, total: 500, done: 480, stopped: 3, running: 2 });
+    fixture.componentRef.setInput('counts', { ...ZERO_COUNTS, total: 500, done: 480, stopped: 3, terminal: 483, running: 2 });
     await fixture.whenStable();
     const stat = (key: string) =>
       (fixture.nativeElement as HTMLElement).querySelector(`[data-testid="stat-${key}"]`)?.textContent?.trim();
@@ -95,6 +99,16 @@ describe('BoardHeader', () => {
     expect(stat('waiting')).toBe('1');
     expect(stat('needs')).toBe('1');
     expect(stat('done')).toBe('2');
+  });
+
+  it("counts DONE off the hub's terminal count, not the done and stopped statuses", async () => {
+    const fixture = TestBed.createComponent(BoardHeader);
+    fixture.componentRef.setInput('counts', { ...ZERO_COUNTS, total: 3, done: 1, stopped: 1, terminal: 3 });
+    fixture.componentRef.setInput('connection', 'ok');
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="stat-done"]')?.textContent?.trim()).toBe('3');
   });
 
   it('shows one cell per board lane, in the board\'s order — it cannot list a lane the board lacks', async () => {

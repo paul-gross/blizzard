@@ -42,6 +42,8 @@ class SseFramePayload(BaseModel):
 class ChunkChangedPayload(SseFramePayload):
     chunk_id: str
     status: str
+    #: ``status`` is terminal — the hub's judgment, so a client never decides it from the value.
+    terminal: bool
     prev_status: str | None = None
     prev_node: str | None = None
     node: str | None = None

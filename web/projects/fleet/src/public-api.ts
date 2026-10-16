@@ -185,6 +185,7 @@ export {
   unlinkSourceApiProjectsProjectSourceLinksSourceRetirePost,
 } from './lib/api/hub';
 export {
+  ChunkDeleteRefusal,
   RecordKind,
   RunnerConnection,
   createRepositoryApiRepositoriesPost,

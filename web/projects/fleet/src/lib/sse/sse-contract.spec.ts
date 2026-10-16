@@ -182,7 +182,7 @@ interface HubFrameFieldSpecs {
 
 const HUB_FRAME_FIELD_SPECS: HubFrameFieldSpecs = {
   'chunk-changed': {
-    required: exactRequired<ChunkChangedFrame>()({ chunk_id: true, status: true }),
+    required: exactRequired<ChunkChangedFrame>()({ chunk_id: true, status: true, terminal: true }),
     optional: exactOptional<ChunkChangedFrame>()({
       prev_status: true,
       prev_node: true,

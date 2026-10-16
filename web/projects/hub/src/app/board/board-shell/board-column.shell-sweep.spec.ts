@@ -11,6 +11,8 @@ const CARD: BoardCard = {
   chunkId: 'ch_01grip0000000000000000000',
   shortId: 'C-GRIP',
   status: 'ready',
+  terminal: false,
+  promotable: false,
   node: 'build',
   nodeId: 'nd_build',
   pointerLabels: [],

@@ -10,7 +10,7 @@ from typing import Final, TypedDict
 from fastapi import status
 from fastapi.responses import JSONResponse
 
-from blizzard.foundation.chunk_status import TERMINAL_STATUSES
+from blizzard.foundation.chunk_status import TERMINAL_STATUSES, ChunkDeleteRefusal
 from blizzard.foundation.ids import Id
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api.decisions import to_decision_view
@@ -37,6 +37,7 @@ from blizzard.hub.domain.config.repositories import CommitOrigin, resolve_origin
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
 from blizzard.hub.domain.operations.complete import is_completion_replay
 from blizzard.hub.domain.operations.edit import is_graph_editable
+from blizzard.hub.domain.operations.promote import is_promotable
 from blizzard.hub.domain.projects.model import Project, ProjectId
 from blizzard.hub.domain.runners.route import Route
 from blizzard.hub.forge.web import branch_url as forge_branch_url
@@ -163,6 +164,10 @@ class ChunkView:
     #: The chunk's standing-edge neighborhood — the caller's own
     #: already-derived value, the same shape ``blocked`` takes.
     neighborhood: ChunkNeighborhoodView | None = None
+    #: Why a delete of the chunk would be refused — the caller's own value, derived by
+    #: :func:`~blizzard.hub.domain.operations.delete.delete_refusal` from the same standing edges
+    #: ``neighborhood`` is; only the detail read renders it.
+    delete_refusal: ChunkDeleteRefusal | None = None
     delivery: DeliveryRead | None = None
     #: Runner names by id — the caller's own batched read; ``None`` makes each render read the names it shows.
     runner_names: Mapping[str, str] | None = None
@@ -180,6 +185,7 @@ class ChunkView:
         blocked: BlockedView | None = None,
         facts: ChunkFacts | None = None,
         neighborhood: ChunkNeighborhoodView | None = None,
+        delete_refusal: ChunkDeleteRefusal | None = None,
     ) -> ChunkView:
         """``facts`` lets a caller that already loaded the chunk's own facts for another
         reason hand it in rather than this reloading it a second time; omitted, this
@@ -193,6 +199,7 @@ class ChunkView:
             names=names or GraphNames(services.graphs),
             blocked=blocked,
             neighborhood=neighborhood,
+            delete_refusal=delete_refusal,
         )
 
     @classmethod
@@ -294,6 +301,7 @@ class ChunkView:
             graph_id=self.chunk.graph_id,
             status=status,
             terminal=status in TERMINAL_STATUSES,
+            promotable=is_promotable(self.facts),
             current_node_id=node_id,
             current_node_name=node_name,
             work_refs=self.pointer_views(),
@@ -371,6 +379,8 @@ class ChunkView:
             status_if_paused=self.facts.status_if_paused(),
             completable=not is_completion_replay(self.facts),
             deletable=verb_legal_from(ChunkVerb.DELETE, status),
+            delete_refusal=self.delete_refusal,
+            promotable=is_promotable(self.facts),
             graph_editable=is_graph_editable(self.facts),
             terminal=status in TERMINAL_STATUSES,
             current_node_terminal=node_id == RESERVED_TERMINAL,

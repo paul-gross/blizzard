@@ -32,7 +32,7 @@
            ("done"/"stopped"); repeating it here would be a
            duplicate. Every other lane still names its status, since the
            node label there doesn't stand in for it. -->
-      @if (!isDoneLane(card().status)) {
+      @if (!isDoneLane(card())) {
         <span class="st" data-testid="chunk-status" [title]="card().status">{{ card().status }}</span>
       }
       @if (gated()) {
@@ -53,7 +53,7 @@
       <!-- Pushed to the row's end — pinned by `board-card-cost.shell-sweep.spec.ts`'s
            "sits the meta group flush with its row's end with one child" and "…with two children". -->
       <span class="meta-right">
-        @if (isDoneLane(card().status) && card().completedAt; as completedAt) {
+        @if (isDoneLane(card()) && card().completedAt; as completedAt) {
           <fleet-when class="done-at" data-testid="chunk-done-at" [iso]="completedAt" />
         }
         @if (hasCostFigure(card().costUsd, card().estimatedCostUsd, card().costPartial)) {
@@ -74,11 +74,11 @@
       }
     </div>
   }
-  <!-- The card's control row: Promote (not_ready only) is its one occupant now
+  <!-- The card's control row: Promote (the hub's `promotable`) is its one occupant now
        that Delete moved to the chunk detail dock's header, where it no longer
        eats into the card's own space. -->
   <div class="card-controls">
-    @if (card().status === 'not_ready' && canControl()) {
+    @if (card().promotable && canControl()) {
       <fleet-kit-button
         class="card-promote"
         testid="promote-chunk"

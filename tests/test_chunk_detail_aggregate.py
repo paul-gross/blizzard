@@ -220,7 +220,16 @@ def test_detail_carries_the_pinned_graphs_name_and_created_at(tmp_path: Path) ->
 
 
 def _actions(detail: dict[str, object]) -> dict[str, object]:
-    keys = ("pausable", "completable", "deletable", "graph_editable", "terminal", "current_node_terminal")
+    keys = (
+        "pausable",
+        "completable",
+        "deletable",
+        "delete_refusal",
+        "promotable",
+        "graph_editable",
+        "terminal",
+        "current_node_terminal",
+    )
     return {k: detail[k] for k in keys}
 
 
@@ -235,6 +244,8 @@ def test_detail_classifies_an_unclaimed_chunk_as_deletable_and_live(tmp_path: Pa
         "pausable": True,
         "completable": True,
         "deletable": True,
+        "delete_refusal": None,
+        "promotable": True,
         "graph_editable": True,
         "terminal": False,
         "current_node_terminal": False,
@@ -255,6 +266,8 @@ def test_detail_classifies_a_claimed_chunk_as_no_longer_deletable(tmp_path: Path
     detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
 
     assert detail["deletable"] is False
+    assert detail["delete_refusal"] == "status"
+    assert detail["promotable"] is False
     assert detail["graph_editable"] is False
     assert (detail["pausable"], detail["completable"], detail["terminal"]) == (True, True, False)
 
@@ -313,10 +326,73 @@ def test_detail_classifies_an_operator_completed_chunk_as_terminal(tmp_path: Pat
         "pausable": False,
         "completable": False,
         "deletable": False,
+        "delete_refusal": "status",
+        "promotable": False,
         "graph_editable": False,
         "terminal": True,
         "current_node_terminal": False,
     }
+
+
+def _new_chunk(hub: HubHarness, ref: str) -> str:
+    token = pointer_token({"source": "default", "ref": ref})
+    return hub.client.post("/api/chunks", json={"tokens": [token]}).json()["chunk_id"]
+
+
+def test_detail_promotable_reads_true_for_a_paused_never_promoted_chunk_and_false_once_promoted(
+    tmp_path: Path,
+) -> None:
+    hub = build_hub(tmp_path)
+    hub.client.post("/api/graphs", json={"definition_yaml": _GATE_YAML})
+    chunk_id = _new_chunk(hub, "1")
+    assert hub.client.post(f"/api/chunks/{chunk_id}/pause", json={"by": "operator"}).status_code == 202
+
+    paused = hub.client.get(f"/api/chunks/{chunk_id}").json()
+    assert (paused["status"], paused["promotable"]) == ("paused", True)
+
+    promoted = hub.client.post(f"/api/chunks/{chunk_id}/promote")
+    assert promoted.status_code == 202, promoted.text
+    assert promoted.json()["promotable"] is False
+    assert hub.client.get(f"/api/chunks/{chunk_id}").json()["promotable"] is False
+
+
+def test_detail_delete_refusal_names_dependents_and_agrees_with_the_delete_route(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    hub.client.post("/api/graphs", json={"definition_yaml": _GATE_YAML})
+    prerequisite = _new_chunk(hub, "1")
+    dependent = _new_chunk(hub, "2")
+    declared = hub.client.post(f"/api/chunks/{dependent}/dependencies", json={"prerequisite_chunk_id": prerequisite})
+    assert declared.status_code < 300, declared.text
+
+    detail = hub.client.get(f"/api/chunks/{prerequisite}").json()
+    assert detail["delete_refusal"] == "dependents"
+    assert detail["deletable"] is True
+    assert [n["chunk_id"] for n in detail["neighborhood"]["dependents"]] == [dependent]
+    refused = hub.client.request("DELETE", f"/api/chunks/{prerequisite}", json={})
+    assert refused.status_code == 409
+    assert dependent in refused.json()["detail"]
+
+    assert hub.client.get(f"/api/chunks/{dependent}").json()["delete_refusal"] is None
+    released = hub.client.post(
+        f"/api/chunks/{dependent}/dependencies/release", json={"prerequisite_chunk_id": prerequisite}
+    )
+    assert released.status_code < 300, released.text
+    assert hub.client.get(f"/api/chunks/{prerequisite}").json()["delete_refusal"] is None
+    assert hub.client.request("DELETE", f"/api/chunks/{prerequisite}", json={}).status_code == 202
+
+
+def test_detail_delete_refusal_puts_the_status_before_standing_dependents(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    hub.client.post("/api/graphs", json={"definition_yaml": _GATE_YAML})
+    prerequisite = _new_chunk(hub, "1")
+    dependent = _new_chunk(hub, "2")
+    hub.client.post(f"/api/chunks/{dependent}/dependencies", json={"prerequisite_chunk_id": prerequisite})
+    assert hub.client.post(f"/api/chunks/{prerequisite}/pause", json={"by": "operator"}).status_code == 202
+
+    assert hub.client.get(f"/api/chunks/{prerequisite}").json()["delete_refusal"] == "status"
+    refused = hub.client.request("DELETE", f"/api/chunks/{prerequisite}", json={})
+    assert refused.status_code == 409
+    assert "deletion needs a chunk at" in refused.json()["detail"]
 
 
 _ONE_STEP_YAML = """

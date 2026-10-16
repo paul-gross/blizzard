@@ -1478,11 +1478,16 @@
           "status": {
             "title": "Status",
             "type": "string"
+          },
+          "terminal": {
+            "title": "Terminal",
+            "type": "boolean"
           }
         },
         "required": [
           "chunk_id",
-          "status"
+          "status",
+          "terminal"
         ],
         "title": "ChunkChangedPayload",
         "type": "object"
@@ -1613,6 +1618,15 @@
         ],
         "title": "ChunkDecisionStatusView",
         "type": "object"
+      },
+      "ChunkDeleteRefusal": {
+        "description": "Why a delete of a chunk would be refused \u2014 the status refusal outranks the dependents one.",
+        "enum": [
+          "status",
+          "dependents"
+        ],
+        "title": "ChunkDeleteRefusal",
+        "type": "string"
       },
       "ChunkDeleteRequest": {
         "description": "Delete a chunk \u2014 records who deleted it.",
@@ -1857,6 +1871,16 @@
             "title": "Deletable",
             "type": "boolean"
           },
+          "delete_refusal": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChunkDeleteRefusal"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "escalation": {
             "anyOf": [
               {
@@ -2016,6 +2040,11 @@
               }
             ],
             "title": "Project Slug"
+          },
+          "promotable": {
+            "default": false,
+            "title": "Promotable",
+            "type": "boolean"
           },
           "questions": {
             "default": [],
@@ -2822,6 +2851,11 @@
               }
             ],
             "title": "Project Slug"
+          },
+          "promotable": {
+            "default": false,
+            "title": "Promotable",
+            "type": "boolean"
           },
           "runner_id": {
             "anyOf": [

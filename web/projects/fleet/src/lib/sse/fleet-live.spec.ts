@@ -86,13 +86,14 @@ describe('FleetLiveUpdates', () => {
     expect(keys).toContainEqual(['hub', 'events']);
   });
 
-  it.each(['stopped', 'done'])('invalidates the questions and decisions rails when a chunk-changed frame ends the chunk (%s)', (status) => {
+  it('invalidates the questions and decisions rails when a chunk-changed frame is flagged terminal', () => {
     const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
     TestBed.runInInjectionContext(() => TestBed.inject(FleetLiveUpdates).start());
 
     const source = FakeEventSource.instances[0];
     source.open();
-    source.emitNamed('chunk-changed', JSON.stringify({ chunk_id: 'ch_live', status }), '1');
+    // The status is deliberately live: the rails follow the hub's `terminal` judgment, not the status value.
+    source.emitNamed('chunk-changed', JSON.stringify({ chunk_id: 'ch_live', status: 'running', terminal: true }), '1');
     vi.advanceTimersByTime(INVALIDATION_COALESCE_WINDOW_MS);
 
     const keys = invalidate.mock.calls.map((call) => call[0]?.queryKey);
@@ -100,13 +101,13 @@ describe('FleetLiveUpdates', () => {
     expect(keys).toContainEqual(['hub', 'decisions']);
   });
 
-  it('leaves the questions and decisions rails alone on a chunk-changed frame that does not end the chunk', () => {
+  it.each(['stopped', 'done'])('leaves the questions and decisions rails alone on an unflagged chunk-changed frame (%s)', (status) => {
     const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
     TestBed.runInInjectionContext(() => TestBed.inject(FleetLiveUpdates).start());
 
     const source = FakeEventSource.instances[0];
     source.open();
-    source.emitNamed('chunk-changed', JSON.stringify({ chunk_id: 'ch_live', status: 'running' }), '1');
+    source.emitNamed('chunk-changed', JSON.stringify({ chunk_id: 'ch_live', status, terminal: false }), '1');
     vi.advanceTimersByTime(INVALIDATION_COALESCE_WINDOW_MS);
 
     const keys = invalidate.mock.calls.map((call) => call[0]?.queryKey);

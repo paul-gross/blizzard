@@ -42,7 +42,7 @@ function deferred<T>(): { readonly promise: Promise<T>; readonly resolve: (value
 const CHUNK = (chunkId: string, status: string) => ({
   chunk_id: chunkId,
   graph_id: 'gr_1',
-  status,
+  status, terminal: status === 'done' || status === 'stopped', promotable: status === 'not_ready',
   current_node_id: 'nd_build',
   current_node_name: 'build',
   model: 'claude-opus-5',
@@ -62,7 +62,7 @@ const COUNTS = {
   needs_human: 0,
   paused: 0,
   stopped: 0,
-  done: 40,
+  done: 40, terminal: 40,
 };
 
 const DETAIL = (chunkId: string) => ({

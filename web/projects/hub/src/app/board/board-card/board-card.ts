@@ -7,6 +7,10 @@ export interface BoardCard {
   readonly chunkId: string;
   readonly shortId: string;
   readonly status: ChunkStatus;
+  /** The hub's `ChunkSummary.terminal` — the card sits in the DONE lane exactly when set. */
+  readonly terminal: boolean;
+  /** The hub's `ChunkSummary.promotable` — a promote would write a promotion; gates Promote. */
+  readonly promotable: boolean;
   /** The node's human graph name (`build`, `review`); falls back to the raw id. */
   readonly node: string;
   /** The raw `nd_` ULID, kept reachable as the node label's tooltip. */
@@ -81,15 +85,15 @@ export class BoardCardComponent {
   /** Emitted with the chunk id when the card is activated. */
   readonly selectChunk = output<string>();
 
-  /** Emitted with the chunk id when a not-ready card's Promote is clicked. */
+  /** Emitted with the chunk id when a promotable card's Promote is clicked. */
   readonly promote = output<string>();
 
-  /** Whether `status` belongs to the DONE column — the completion stamp's render
-   * gate. Checked against the lane rather than {@link BoardCard.completedAt}'s own
-   * null-ness alone, so a card outside the done lane never renders a stamp even if
-   * it somehow carried one. */
-  protected isDoneLane(status: ChunkStatus): boolean {
-    return STATUS_LANE[status] === 'done';
+  /** Whether the card belongs to the DONE column — the hub's `terminal` flag, and the
+   * completion stamp's render gate. Checked against the lane rather than
+   * {@link BoardCard.completedAt}'s own null-ness alone, so a card outside the done lane
+   * never renders a stamp even if it somehow carried one. */
+  protected isDoneLane(card: BoardCard): boolean {
+    return card.terminal;
   }
 
   /** Whether the card renders its delivery block: only in the lanes where a chunk's delivery is
@@ -98,6 +102,7 @@ export class BoardCardComponent {
   protected showsDelivery(card: BoardCard): boolean {
     const lane = STATUS_LANE[card.status];
     return (
+      !card.terminal &&
       (lane === 'running' || lane === 'waiting' || lane === 'needs') &&
       !!(card.openPrs?.length || card.awaitingExternalMerge)
     );

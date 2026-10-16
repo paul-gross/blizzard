@@ -14,6 +14,8 @@ const BASE: BoardCard = {
   chunkId: 'ch_01blockedcard0000000000000',
   shortId: 'C-BLKD',
   status: 'ready',
+  terminal: false,
+  promotable: false,
   node: 'build',
   nodeId: 'nd_build',
   pointerLabels: [],

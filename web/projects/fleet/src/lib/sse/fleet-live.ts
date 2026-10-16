@@ -4,7 +4,6 @@ import { QueryClient } from '@tanstack/angular-query-experimental';
 import {
   ActivityChunkChangeCause,
   type ActivityView,
-  ChunkStatus,
   type ChunkChangedPayload,
   type DecisionOpenedPayload,
   type DecisionResolvedPayload,
@@ -183,12 +182,11 @@ function chunkChangedKeys(data: HubEventPayload): readonly (readonly unknown[])[
   ];
 }
 
-/** Whether a chunk-changed frame reports the chunk ended (`stopped`/`done`). The hub lists
- * no open question or decision on an ended chunk, so the fleet-wide rails must re-read
+/** Whether a chunk-changed frame reports the chunk ended — the hub's own `terminal` flag. The
+ * hub lists no open question or decision on an ended chunk, so the fleet-wide rails must re-read
  * at once rather than wait on their poll backstop. Other frames leave both lists alone. */
 function chunkEnded(data: HubEventPayload): boolean {
-  const status = 'status' in data ? data.status : undefined;
-  return status === ChunkStatus.STOPPED || status === ChunkStatus.DONE;
+  return 'terminal' in data && data.terminal === true;
 }
 
 /** Whether a chunk-changed frame reports the chunk deleted. */

@@ -692,6 +692,15 @@
         "title": "ChunkAskView",
         "type": "object"
       },
+      "ChunkDeleteRefusal": {
+        "description": "Why a delete of a chunk would be refused \u2014 the status refusal outranks the dependents one.",
+        "enum": [
+          "status",
+          "dependents"
+        ],
+        "title": "ChunkDeleteRefusal",
+        "type": "string"
+      },
       "ChunkDetail": {
         "description": "The whole chunk aggregate: transition history, inline artifact\nstore, and the open escalation.",
         "properties": {
@@ -814,6 +823,16 @@
             "default": false,
             "title": "Deletable",
             "type": "boolean"
+          },
+          "delete_refusal": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChunkDeleteRefusal"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "escalation": {
             "anyOf": [
@@ -974,6 +993,11 @@
               }
             ],
             "title": "Project Slug"
+          },
+          "promotable": {
+            "default": false,
+            "title": "Promotable",
+            "type": "boolean"
           },
           "questions": {
             "default": [],
@@ -1317,6 +1341,11 @@
               }
             ],
             "title": "Project Slug"
+          },
+          "promotable": {
+            "default": false,
+            "title": "Promotable",
+            "type": "boolean"
           },
           "runner_id": {
             "anyOf": [
