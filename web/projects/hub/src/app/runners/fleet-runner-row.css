@@ -1,0 +1,61 @@
+:host {
+  display: block;
+  min-width: 0;
+}
+.runner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--line);
+  list-style: none;
+  min-width: 0;
+}
+.name {
+  color: var(--text);
+  letter-spacing: 0.08em;
+  overflow-wrap: anywhere;
+}
+.seen {
+  color: var(--label);
+  font-size: var(--fs-xs);
+}
+.dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 6px;
+  background: var(--label-dim);
+}
+.dot.online {
+  background: var(--green);
+}
+.dot.offline {
+  background: var(--red);
+}
+.served {
+  flex: 1 1 240px;
+  min-width: 0;
+}
+.badges {
+  display: inline-flex;
+  gap: 4px;
+}
+.claims {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--fs-xs);
+}
+.claim {
+  display: inline-flex;
+  gap: 6px;
+  align-items: baseline;
+}
+.toggle {
+  margin-left: auto;
+}

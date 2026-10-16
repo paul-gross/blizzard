@@ -1,0 +1,69 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  font-family: var(--mono);
+  font-size: var(--fs-base);
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+.title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--line);
+}
+.name {
+  margin: 0;
+  font-size: inherit;
+  font-weight: normal;
+  letter-spacing: 0.08em;
+  overflow-wrap: anywhere;
+}
+.ref,
+.report {
+  color: var(--label);
+  font-size: var(--fs-xs);
+}
+.verbs {
+  margin-left: auto;
+  --host-verbs-inset: 0;
+}
+.dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  background: var(--label-dim);
+}
+.dot.online {
+  background: var(--green);
+}
+.dot.offline {
+  background: var(--red);
+}
+.ws-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 8px;
+  color: var(--label);
+}
+.env {
+  display: flex;
+  gap: 12px;
+  padding: 2px 8px 2px 20px;
+  font-size: var(--fs-xs);
+}
+.env.free {
+  color: var(--label-dim);
+}
+.none,
+.agents {
+  margin: 0;
+  padding: 4px 8px;
+  color: var(--label);
+  font-size: var(--fs-xs);
+}

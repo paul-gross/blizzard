@@ -360,6 +360,13 @@ describe('mobile Fleet screen host card layout shell sweep (web:shell-sweep)', (
     online: true,
     connection: 'online',
     reportLabel: 'seen 4s ago',
+    url: null,
+    enrolled: true,
+    registeredAt: null,
+    addedAt: '2026-01-01T00:00:00Z',
+    addedBy: null,
+    lastSeenLabel: 'never',
+    heldChunks: new Map(),
     workspaces: [
       { workspaceId: LONG, capacity: 3, inUse: 2, flag: null, environments: [] },
       { workspaceId: 'ws-2', capacity: null, inUse: 0, flag: null, environments: [] },

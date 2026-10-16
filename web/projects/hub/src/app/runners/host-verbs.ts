@@ -4,23 +4,20 @@ import { errorMessage, injectPendingMutationVariables } from 'fleet';
 import { hasPermission, injectMeQuery } from '../core/auth/me.query';
 import {
   hostEnrollMutationKey,
-  hostReleaseMutationKey,
   hostRetireMutationKey,
   hostRevokeTokenMutationKey,
 } from '../core/mutation-keys';
 import type { HostVerbEvent, HostVerbsVm } from './host-verbs.model';
 import {
   HostRetireRefused,
-  type HostReleaseVars,
   type HostRetireVars,
   injectHostEnrollMutation,
-  injectHostReleaseMutation,
   injectHostRetireMutation,
   injectHostRevokeTokenMutation,
 } from './hosts.mutations';
 
 /**
- * The host verbs a runners container owns — release, retire, revoke-token and enroll —
+ * The host verbs a runners container owns — retire, revoke-token and enroll —
  * with their pending state, the hub's refusal of an unforced retire, and the token an
  * enroll returned, folded into the {@link HostVerbsVm} the host cards render. Offered
  * only when the identity holds `runner:retire`, read off `me` as `runner:pause` is.
@@ -34,12 +31,10 @@ export function injectHostVerbs(onError: (message: string | null) => void): {
   readonly run: (event: HostVerbEvent) => void;
 } {
   const meQuery = injectMeQuery();
-  const release = injectHostReleaseMutation();
   const retire = injectHostRetireMutation();
   const revokeToken = injectHostRevokeTokenMutation();
   const enroll = injectHostEnrollMutation();
 
-  const pendingReleases = injectPendingMutationVariables<HostReleaseVars>(hostReleaseMutationKey);
   const pendingRetires = injectPendingMutationVariables<HostRetireVars>(hostRetireMutationKey);
   const pendingRevokes = injectPendingMutationVariables<string>(hostRevokeTokenMutationKey);
   const pendingEnrolls = injectPendingMutationVariables<string>(hostEnrollMutationKey);
@@ -54,7 +49,6 @@ export function injectHostVerbs(onError: (message: string | null) => void): {
       ...pendingRevokes(),
       ...pendingEnrolls(),
     ],
-    pendingRunnerIds: pendingReleases().map((vars) => vars.runnerId),
     refusal: refusal(),
     enrolled: enrolled(),
   }));
@@ -65,12 +59,6 @@ export function injectHostVerbs(onError: (message: string | null) => void): {
     switch (event.kind) {
       case 'dismiss':
         enrolled.set(null);
-        return;
-      case 'release':
-        release.mutate(
-          { hostId: event.hostId, runnerId: event.runnerId },
-          { onError: (error) => onError(errorMessage(error, 'Release failed.')) },
-        );
         return;
       case 'retire':
         retire.mutate(

@@ -1,0 +1,68 @@
+<div
+  class="runner"
+  role="listitem"
+  data-testid="fleet-runner"
+  [class.offline]="row().connection === connection.OFFLINE"
+  [attr.data-runner]="row().runner_id"
+  [attr.data-connection]="row().connection"
+  [attr.data-hub-paused]="row().hub_paused"
+>
+  <span class="name" data-testid="fleet-runner-name">
+    <span
+      class="dot"
+      [class.online]="row().online"
+      [class.offline]="row().connection === connection.OFFLINE"
+      aria-hidden="true"
+    ></span>
+    {{ row().runner_name }}
+  </span>
+  <span class="seen" data-testid="fleet-runner-seen">{{ seenLabel(row()) }}</span>
+  <app-served-project-group
+    class="served"
+    [served]="row().served"
+    [unassigned]="row().unassigned"
+    [unresolved]="row().unresolved"
+    [bindings]="hosted() ? row().bindingLines : null"
+    [subscription]="row().subscriptionName"
+    [subscriptionUnrostered]="row().subscription_unrostered ?? false"
+  />
+  <app-capability-badge-group
+    data-testid="fleet-runner-capabilities"
+    [capabilities]="row().capabilities ?? []"
+  />
+  <app-gate-badge-group data-testid="fleet-runner-gates" [gates]="row().gates ?? []" />
+  <span class="badges">
+    @if (row().connection === connection.NEVER_CONNECTED) {
+      <fleet-kit-badge tone="idle" variant="soft">NEVER CONNECTED</fleet-kit-badge>
+    }
+    @if (row().locally_paused) {
+      <fleet-kit-badge tone="idle" variant="soft" [title]="localPauseHint(row())">LOCALLY PAUSED</fleet-kit-badge>
+    }
+    @if (row().hub_paused) {
+      <fleet-kit-badge data-testid="fleet-runner-hub-paused" tone="waiting" variant="soft">HUB PAUSED</fleet-kit-badge>
+    }
+  </span>
+  @if (row().claims.length > 0) {
+    <ul class="claims" data-testid="fleet-runner-claims">
+      @for (claim of row().claims; track claim.chunkId) {
+        <li class="claim">
+          <span [attr.title]="claim.chunkId">{{ claim.shortId }}</span>
+          <span>{{ claim.node }}</span>
+          <fleet-kit-badge [tone]="toneFor(claim.status)">{{ claim.status }}</fleet-kit-badge>
+        </li>
+      }
+    </ul>
+  }
+  @if (canPause()) {
+    <fleet-kit-button
+      class="toggle"
+      testid="fleet-runner-toggle"
+      [ariaLabel]="(row().hub_paused ? 'Resume ' : 'Pause ') + row().runner_name + ' (' + row().runner_id + ') at the hub'"
+      [title]="toggleHint(row())"
+      [disabled]="pausePending()"
+      (click)="togglePause.emit(row())"
+    >
+      {{ row().hub_paused ? 'Resume' : 'Pause' }}
+    </fleet-kit-button>
+  }
+</div>

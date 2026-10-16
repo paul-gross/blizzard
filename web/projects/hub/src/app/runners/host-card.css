@@ -45,18 +45,3 @@
 fleet-subscription-pace-group {
   padding: 0 8px;
 }
-.verbs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  padding: 0 8px;
-}
-.token-note {
-  color: var(--label);
-  font-size: var(--fs-xs);
-}
-.token {
-  display: block;
-  overflow-wrap: anywhere;
-  user-select: all;
-}

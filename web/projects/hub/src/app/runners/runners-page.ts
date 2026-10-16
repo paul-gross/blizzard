@@ -78,7 +78,7 @@ export class RunnersPage {
    * swallow") — reset at the start of every new attempt. */
   protected readonly actionError = signal<string | null>(null);
 
-  /** The host verbs on each card — release, retire, revoke-token, enroll — behind
+  /** The host verbs on each card — retire, revoke-token, enroll — behind
    * `runner:retire`, their failures reported through {@link actionError}. */
   private readonly hostVerbs = injectHostVerbs((message) => this.actionError.set(message));
   protected readonly hostVerbsVm = this.hostVerbs.vm;

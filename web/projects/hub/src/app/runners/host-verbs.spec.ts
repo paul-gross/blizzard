@@ -51,7 +51,6 @@ function routes(over: Route = () => undefined, me: unknown = RETIRE_ME): Route {
     if (method === 'GET' && path === '/api/runners') return RUNNERS;
     if (method === 'GET' && path === '/api/hosts') return HOSTS;
     if (method === 'GET' && path === '/api/chunks') return { chunks: [], next_cursor: null };
-    if (path === '/api/hosts/h1/releases') return HOST;
     if (path === '/api/hosts/h1/retire') return { host: HOST, released_chunk_ids: [] };
     if (path === '/api/hosts/h1/token-revocations') return { host: HOST };
     if (path === '/api/hosts/h1/enrollments') return { host_id: 'h1', token: TOKEN };
@@ -90,20 +89,11 @@ for (const [name, container, release] of [
       expect(invalidate).toHaveBeenCalledWith({ queryKey: hubRunnersKey });
     }
 
-    it('releases a hosted runner after a danger confirm, then re-reads hosts and runners', async () => {
-      const { fixture, el, invalidate } = await render(routes());
-      expect(el.querySelector(`[data-runner="rC"] [data-testid="${release}"]`)).toBeNull();
+    it('offers no Release button on any row, whatever the identity holds', async () => {
+      const { el } = await render(routes());
 
-      click(el, `[data-runner="rA"] [data-testid="${release}"]`);
-      await settle(fixture);
-      expect(stub.forRoute('/api/hosts/h1/releases', 'POST')).toHaveLength(0);
-      click(el, '[data-testid="host-confirm-confirm"]');
-      await settle(fixture);
-
-      const calls = stub.forRoute('/api/hosts/h1/releases', 'POST');
-      expect(calls).toHaveLength(1);
-      expect(calls[0].body).toEqual({ runner_ids: ['rA'], by: 'operator' });
-      expectRefetch(invalidate);
+      expect(el.querySelector('[data-testid="host-verbs"]')).not.toBeNull();
+      expect(el.querySelector(`[data-testid="${release}"]`)).toBeNull();
     });
 
     it('retires the host after a danger confirm, then re-reads hosts and runners', async () => {

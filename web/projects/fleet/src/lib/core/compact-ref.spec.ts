@@ -31,6 +31,10 @@ describe('compactRef', () => {
     expect(compactRef('proj_01KXKVVF1J3D6H6VYZ3XYN3YJ9')).toBe('PROJ-3YJ9');
   });
 
+  it('reads a host as H', () => {
+    expect(compactRef('hs_01KXKVVF1J3D6H6VYZ3XYN3YJ9')).toBe('H-3YJ9');
+  });
+
   it('keeps a runner and a routine with the same tail apart via the registry', () => {
     // Both would default to `R`; the runner keeps it and the routine reads `RTN`.
     expect(compactRef('rn_01KXKVVF1J3D6H6VYZ3XYN3YJ9')).toBe('R-3YJ9');

@@ -4,6 +4,8 @@ import {
   type RunnerRegistryView,
   type SubscriptionPace,
   type WorkspaceRow,
+  compactRef,
+  formatAbsolute,
   formatSeenAgo,
   hostSubscriptionPaces,
   hostWorkspaceRows,
@@ -27,6 +29,17 @@ export interface BindingLine {
  * in-use numerator, summed per workspace. */
 interface BindingUse extends BindingLine {
   readonly environmentsInUse: number;
+  readonly chunks: readonly ChunkSummary[];
+}
+
+/** A live chunk holding environments in one host workspace — the hub knows the chunk, its
+ * step and its runner, but not which environments it holds. */
+export interface HeldChunk {
+  readonly chunkId: string;
+  readonly shortRef: string;
+  readonly step: string;
+  readonly runnerName: string;
+  readonly environments: number;
 }
 
 /** One host card's own facts, pre-folded for display: its name, its last report, its
@@ -39,6 +52,15 @@ export interface HostCard {
   readonly reportLabel: string;
   readonly workspaces: readonly WorkspaceRow[];
   readonly subscriptionPaces: readonly SubscriptionPace[];
+  /** The host's own wire facts, for the Fleet tab's Connection section. */
+  readonly url: string | null;
+  readonly enrolled: boolean;
+  readonly registeredAt: string | null;
+  readonly addedAt: string;
+  readonly addedBy: string | null;
+  readonly lastSeenLabel: string;
+  /** The live chunks each workspace holds, by workspace id; a workspace holding none is absent. */
+  readonly heldChunks: ReadonlyMap<string, readonly HeldChunk[]>;
 }
 
 /** The runner rows the runners view renders, partitioned: each host card with the rows it
@@ -75,6 +97,7 @@ function bindingUses(runner: RunnerRegistryView, chunks: readonly ChunkSummary[]
       agentsInUse: matched.length,
       unreported: binding.workspace_unreported ?? false,
       environmentsInUse: matched.reduce((sum, chunk) => sum + (chunk.environment_count ?? 0), 0),
+      chunks: matched,
     };
   });
 }
@@ -113,6 +136,30 @@ function workspaceInUse(runners: readonly RunnerRegistryView[], chunks: readonly
   return inUse;
 }
 
+/** The live chunks `runners` hold per workspace, from their bindings. */
+function workspaceHeld(
+  runners: readonly RunnerRegistryView[],
+  chunks: readonly ChunkSummary[],
+): Map<string, readonly HeldChunk[]> {
+  const held = new Map<string, HeldChunk[]>();
+  for (const runner of runners) {
+    for (const use of bindingUses(runner, chunks)) {
+      const lines = held.get(use.workspaceId) ?? [];
+      for (const chunk of use.chunks) {
+        lines.push({
+          chunkId: chunk.chunk_id,
+          shortRef: compactRef(chunk.chunk_id),
+          step: chunk.current_node_name ?? chunk.current_node_id ?? '—',
+          runnerName: runner.runner_name,
+          environments: chunk.environment_count ?? 0,
+        });
+      }
+      held.set(use.workspaceId, lines);
+    }
+  }
+  return held;
+}
+
 /**
  * Each host folded to its card, in the hosts read's order. `runners` is the whole registry,
  * unlensed, so a card's in-use counts and spender names never shrink under the project lens;
@@ -130,24 +177,28 @@ export function foldHostCards(
   const shownHosts = lensed === null ? null : new Set(lensed.map((runner) => runner.host_id));
   return hosts
     .filter((host) => shownHosts === null || shownHosts.has(host.host_id))
-    .map((host) => ({
-      hostId: host.host_id,
-      hostName: host.host_name,
-      online: host.online,
-      connection: host.connection,
-      reportLabel:
-        host.connection === RunnerConnection.NEVER_CONNECTED
-          ? 'never reported'
-          : formatSeenAgo(host.last_seen_at, host.online, nowMs),
-      workspaces: hostWorkspaceRows(
-        host,
-        workspaceInUse(
-          runners.filter((runner) => runner.host_id === host.host_id),
-          chunks,
-        ),
-      ),
-      subscriptionPaces: hostSubscriptionPaces(host, nowMs, (id) => names.get(id) ?? id),
-    }));
+    .map((host) => {
+      const hostRunners = runners.filter((runner) => runner.host_id === host.host_id);
+      return {
+        hostId: host.host_id,
+        hostName: host.host_name,
+        online: host.online,
+        connection: host.connection,
+        reportLabel:
+          host.connection === RunnerConnection.NEVER_CONNECTED
+            ? 'never reported'
+            : formatSeenAgo(host.last_seen_at, host.online, nowMs),
+        workspaces: hostWorkspaceRows(host, workspaceInUse(hostRunners, chunks)),
+        subscriptionPaces: hostSubscriptionPaces(host, nowMs, (id) => names.get(id) ?? id),
+        url: host.url ?? null,
+        enrolled: host.enrolled,
+        registeredAt: host.registered_at ?? null,
+        addedAt: host.added_at,
+        addedBy: host.added_by ?? null,
+        lastSeenLabel: host.last_seen_at ? formatAbsolute(host.last_seen_at) : 'never',
+        heldChunks: workspaceHeld(hostRunners, chunks),
+      };
+    });
 }
 
 /** `rows` partitioned under `cards`: each card with the rows its host holds, in row order,

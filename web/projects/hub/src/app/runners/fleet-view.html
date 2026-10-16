@@ -1,0 +1,77 @@
+<fleet-kit-master-detail class="split" paneId="fleet" backLabel="Fleet" testidPrefix="fleet" data-testid="fleet-split">
+  <fleet-kit-panel kit-master-detail-list class="list-pane" label="Fleet" data-testid="fleet-list">
+    <fleet-kit-async-state
+      [state]="state()"
+      placement="inline"
+      loadingText="LOADING…"
+      loadingTestid="fleet-loading"
+      errorText="FAILED TO LOAD FLEET"
+      errorTestid="fleet-error"
+      emptyText="NO HOSTS OR RUNNERS REGISTERED"
+      emptyTestid="fleet-empty"
+    >
+      @for (card of list().hosts; track card.id) {
+        <ng-container *ngTemplateOutlet="listCard; context: { $implicit: card }" />
+      }
+      @if (list().hostless.length > 0) {
+        <h3 class="hostless" data-testid="fleet-hostless-heading">No host</h3>
+        @for (card of list().hostless; track card.id) {
+          <ng-container *ngTemplateOutlet="listCard; context: { $implicit: card }" />
+        }
+      }
+    </fleet-kit-async-state>
+  </fleet-kit-panel>
+  <fleet-kit-panel kit-master-detail-detail class="detail-pane" data-testid="fleet-detail">
+    @if (actionError(); as err) {
+      <p class="notice" data-testid="fleet-action-error" role="alert">{{ err }}</p>
+    }
+    @if (selection(); as sel) {
+      @switch (sel.kind) {
+        @case ('host') {
+          <app-host-detail
+            [detail]="sel"
+            [verbs]="hostVerbs()"
+            [canPause]="canPause()"
+            [pendingRunnerIds]="pendingRunnerIds()"
+            (hostVerb)="hostVerb.emit($event)"
+            (togglePause)="togglePause.emit($event)"
+          />
+        }
+        @case ('runner') {
+          <div role="list" data-testid="fleet-runner-detail">
+            <app-fleet-runner-row
+              [row]="sel.row"
+              [canPause]="canPause()"
+              [pausePending]="isPausePending(sel.row)"
+              (togglePause)="togglePause.emit($event)"
+            />
+          </div>
+        }
+        @case ('not-found') {
+          <p class="not-found" data-testid="fleet-not-found">No host or runner {{ sel.id }}.</p>
+        }
+      }
+    }
+  </fleet-kit-panel>
+</fleet-kit-master-detail>
+<ng-template #listCard let-card>
+  <fleet-kit-select-row
+    bare
+    class="card"
+    [selected]="card.id === selectedId()"
+    [testid]="'fleet-card-' + card.id"
+    (picked)="pick.emit(card.id)"
+  >
+    <span class="line1">
+      <span
+        class="dot"
+        [class.online]="card.online"
+        [class.offline]="card.connection === connection.OFFLINE"
+        aria-hidden="true"
+      ></span>
+      <span class="name" data-testid="fleet-card-name">{{ card.name }}</span>
+      <span class="agents" data-testid="fleet-card-agents">{{ agentsLabel(card) }}</span>
+    </span>
+    <span class="ref" data-testid="fleet-card-ref">{{ card.ref }}</span>
+  </fleet-kit-select-row>
+</ng-template>

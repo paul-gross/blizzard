@@ -55,6 +55,10 @@
  *     runner registry's rate-limit pace bars (issue #218): the stacked
  *     utilization/elapsed pair per sampled window genuinely stacks, with no
  *     horizontal overflow, at the board right rail's ~390px width.
+ *   - projects/hub/src/app/runners/fleet-page.shell-sweep.spec.ts — the desktop
+ *     Fleet tab: the host list and detail sit side by side at 1280px, the
+ *     title-bar host actions are on screen and hit-testable, and nothing
+ *     overflows horizontally at 1280/1024px.
  *   - projects/hub/src/app/runners/host-card.shell-sweep.spec.ts — the runner
  *     registry's host card: a two-runner card (long workspace id, binding
  *     lines, flagged subscription) above a host-less row stays inside the
@@ -318,6 +322,7 @@ const SWEEPS = [
   { project: 'runner', spec: 'projects/runner/src/app/board/app-panel-mobile.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/runners/runner-view.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/runners/host-card.shell-sweep.spec.ts' },
+  { project: 'hub', spec: 'projects/hub/src/app/runners/fleet-page.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/chunk/chunk-detail/chunk-awaiting-human.shell-sweep.spec.ts' },
   { project: 'runner', spec: 'projects/runner/src/app/machine/app-info-view.shell-sweep.spec.ts' },
   { project: 'runner', spec: 'projects/runner/src/app/core/identity/session-recovery-view.shell-sweep.spec.ts' },

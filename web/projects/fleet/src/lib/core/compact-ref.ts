@@ -54,6 +54,7 @@ export const ENTITY_DISPLAY: Readonly<Partial<Record<IdPrefix, EntityDisplay>>> 
   rn: { sigil: 'R', tailLength: 4 },
   /* `proj` (a project) would default to `P`; the full word reads as a project at a glance. */
   proj: { sigil: 'PROJ', tailLength: 4 },
+  hs: { sigil: 'H', tailLength: 4 },
 };
 
 const DEFAULT_TAIL_LENGTH = 4;
