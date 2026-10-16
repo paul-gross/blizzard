@@ -1530,8 +1530,8 @@ export type ChunkPauseRequest = {
  *
  * Where a chunk lands in the list it enters — the optional body of ``POST /api/chunks/{id}/promote`` and
  * ``POST /api/chunks/{id}/demote``. ``after_chunk_id`` lands it right after that member of the target list;
- * ``to_top`` lands it at the head; neither lands it at the tail. A self-anchor is ``422``, an anchor outside the
- * target list ``409``.
+ * ``to_top`` lands it at the head; neither lands it at the tail. Naming both is ``422``, as is a self-anchor; an
+ * anchor outside the target list is ``409``.
  */
 export type ChunkPlacementRequest = {
     /**

@@ -131,6 +131,16 @@ def test_demote_with_an_anchor_outside_the_backlog_is_409(tmp_path: Path) -> Non
     assert _status(hub, ready) == "ready"
 
 
+@pytest.mark.parametrize("verb", ["demote", "promote"])
+def test_a_body_naming_both_an_anchor_and_the_top_is_422(tmp_path: Path, verb: str) -> None:
+    hub = build_hub(tmp_path)
+    ready, other = _chunk(hub, "1", promote=True), _chunk(hub, "2", promote=True)
+
+    resp = hub.client.post(f"/api/chunks/{ready}/{verb}", json={"after_chunk_id": other, "to_top": True})
+
+    assert resp.status_code == 422
+
+
 def test_demote_anchored_on_itself_is_422(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     ready = _chunk(hub, "1", promote=True)

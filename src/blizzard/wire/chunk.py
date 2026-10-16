@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.chunk_migration import MigrationMode
@@ -438,11 +438,17 @@ class ChunkStopRequest(BaseModel):
 class ChunkPlacementRequest(BaseModel):
     """Where a chunk lands in the list it enters — the optional body of ``POST /api/chunks/{id}/promote`` and
     ``POST /api/chunks/{id}/demote``. ``after_chunk_id`` lands it right after that member of the target list;
-    ``to_top`` lands it at the head; neither lands it at the tail. A self-anchor is ``422``, an anchor outside the
-    target list ``409``."""
+    ``to_top`` lands it at the head; neither lands it at the tail. Naming both is ``422``, as is a self-anchor; an
+    anchor outside the target list is ``409``."""
 
     after_chunk_id: str | None = None
     to_top: bool = False
+
+    @model_validator(mode="after")
+    def _one_placement(self) -> ChunkPlacementRequest:
+        if self.to_top and self.after_chunk_id is not None:
+            raise ValueError("after_chunk_id and to_top name contradictory placements")
+        return self
 
 
 class ChunkCompleteRequest(BaseModel):

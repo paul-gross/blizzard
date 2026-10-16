@@ -2479,7 +2479,7 @@
         "type": "object"
       },
       "ChunkPlacementRequest": {
-        "description": "Where a chunk lands in the list it enters \u2014 the optional body of ``POST /api/chunks/{id}/promote`` and\n``POST /api/chunks/{id}/demote``. ``after_chunk_id`` lands it right after that member of the target list;\n``to_top`` lands it at the head; neither lands it at the tail. A self-anchor is ``422``, an anchor outside the\ntarget list ``409``.",
+        "description": "Where a chunk lands in the list it enters \u2014 the optional body of ``POST /api/chunks/{id}/promote`` and\n``POST /api/chunks/{id}/demote``. ``after_chunk_id`` lands it right after that member of the target list;\n``to_top`` lands it at the head; neither lands it at the tail. Naming both is ``422``, as is a self-anchor; an\nanchor outside the target list is ``409``.",
         "properties": {
           "after_chunk_id": {
             "anyOf": [

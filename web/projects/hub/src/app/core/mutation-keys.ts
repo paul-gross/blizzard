@@ -3,11 +3,6 @@
  * `query-keys.ts`'s own `hub`-namespaced flat-constant shape, with a `mutation` segment
  * so a mutation key is never mistaken for a query key sharing the same namespace.
  */
-/**
- * The one mutation scope every lane placement shares — the two repositions, a demote, and a promote — so a move that
- * anchors on a card still pending another move runs behind it.
- */
-export const laneMoveScopeId = 'hub-lane-move';
 export const promoteChunkMutationKey = ['hub', 'mutation', 'promote-chunk'] as const;
 export const demoteChunkMutationKey = ['hub', 'mutation', 'demote-chunk'] as const;
 export const repositionQueueMutationKey = ['hub', 'mutation', 'reposition-queue'] as const;
@@ -53,3 +48,9 @@ export const hostReleaseMutationKey = ['hub', 'mutation', 'host-release'] as con
 export const hostRetireMutationKey = ['hub', 'mutation', 'host-retire'] as const;
 export const hostRevokeTokenMutationKey = ['hub', 'mutation', 'host-revoke-token'] as const;
 export const hostEnrollMutationKey = ['hub', 'mutation', 'host-enroll'] as const;
+
+/**
+ * The one mutation scope every lane placement shares — the two repositions, a demote, and a promote — so a move that
+ * anchors on a card still pending another move runs behind it.
+ */
+export const laneMoveScopeId = 'hub-lane-move';
