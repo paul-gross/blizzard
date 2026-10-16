@@ -30,7 +30,7 @@ describe('KitLinkTile', () => {
     expect(anchors[0].querySelector('.inner')?.textContent).toBe('facts');
   });
 
-  it('draws a focus ring around the whole tile when focused by keyboard', async () => {
+  it('is a focusable flex tile that stays the one tab stop', async () => {
     const fixture = TestBed.createComponent(TestHost);
     await fixture.whenStable();
     document.body.appendChild(fixture.nativeElement);
@@ -39,6 +39,7 @@ describe('KitLinkTile', () => {
       a.focus();
       expect(document.activeElement).toBe(a);
       expect(getComputedStyle(a).display).toBe('flex');
+      expect(a.tabIndex).toBe(0);
     } finally {
       (fixture.nativeElement as HTMLElement).remove();
     }
