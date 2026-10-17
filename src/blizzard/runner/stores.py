@@ -48,8 +48,8 @@ from blizzard.runner.leases.overload import IReadOverloadRepository, IWriteOverl
 from blizzard.runner.leases.record import IReadLeaseRecordRepository, IWriteLeaseRecordRepository
 from blizzard.runner.leases.resume_intent import IReadLeaseResumeIntentRepository, IWriteLeaseResumeIntentRepository
 from blizzard.runner.leases.session import IReadLeaseSessionRepository, IWriteLeaseSessionRepository
+from blizzard.runner.lifecycle.artifacts import IReadGraphArtifactRepository, IWriteGraphArtifactRepository
 from blizzard.runner.lifecycle.daemon_liveness import IReadDaemonLivenessRepository, IWriteDaemonLivenessRepository
-from blizzard.runner.lifecycle.judgement.artifacts import IReadGraphArtifactRepository, IWriteGraphArtifactRepository
 from blizzard.runner.lifecycle.judgement.checks import IReadCheckRepository, IWriteCheckRepository
 from blizzard.runner.lifecycle.judgement.git_commit_declaration import (
     IReadGitCommitDeclarationRepository,

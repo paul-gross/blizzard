@@ -513,7 +513,18 @@ class IChunkStatusReader(Protocol):
         ...
 
 
-class IHubClient(IChunkStatusReader, Protocol):
+class ITranscriptPusher(Protocol):
+    """The transcript push alone, narrowed from :class:`IHubClient` (``bzh:seam-size-ceiling``)."""
+
+    def push_transcripts(self, records: Sequence[TranscriptPush]) -> TranscriptPushAck:
+        """``POST /api/fleet/transcripts`` — the transcript lane's own store-and-forward
+        push, seq-idempotent against its own high-water mark. Structurally independent
+        of :meth:`push_facts`: a wedged or slow
+        transcript flush never blocks it."""
+        ...
+
+
+class IHubClient(IChunkStatusReader, ITranscriptPusher, Protocol):
     """The runner's client of the hub API. Outbound-only."""
 
     def peek_queue(
@@ -539,13 +550,6 @@ class IHubClient(IChunkStatusReader, Protocol):
 
     def push_facts(self, facts: Sequence[PushedFact]) -> FactPushAck:
         """``POST /api/fleet/events`` — store-and-forward fact push, seq-idempotent."""
-        ...
-
-    def push_transcripts(self, records: Sequence[TranscriptPush]) -> TranscriptPushAck:
-        """``POST /api/fleet/transcripts`` — the transcript lane's own store-and-forward
-        push, seq-idempotent against its own high-water mark. Structurally independent
-        of :meth:`push_facts`: a wedged or slow
-        transcript flush never blocks it."""
         ...
 
     def get_envelope(self, chunk_id: str) -> Envelope:

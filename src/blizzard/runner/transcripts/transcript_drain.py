@@ -13,7 +13,7 @@ from typing import Any, Protocol
 
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.logging import get_logger
-from blizzard.runner.hub.client import HubClientError, IHubClient, TranscriptPush
+from blizzard.runner.hub.client import HubClientError, ITranscriptPusher, TranscriptPush
 from blizzard.runner.hub.outbound import OutboundFacts
 from blizzard.runner.transcripts.ledger import (
     BufferedTranscriptDelta,
@@ -63,7 +63,7 @@ class TranscriptDrainContext(TranscriptPumpContext, Protocol):
     @property
     def config(self) -> TranscriptDrainConfig: ...
     @property
-    def hub(self) -> IHubClient: ...
+    def hub(self) -> ITranscriptPusher: ...
 
 
 @dataclass(frozen=True)

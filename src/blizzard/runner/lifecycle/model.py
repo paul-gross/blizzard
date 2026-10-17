@@ -875,43 +875,96 @@ def advance_move(
     return AdvanceMove.RUNNING if alive else AdvanceMove.EXITED
 
 
-class ExitedMove(StrEnum):
-    """What ADVANCE does about an exited worker, decided in three stages around the reads each needs."""
-
-    AWAIT_ELICITATION = "await-elicitation"
-    COLLECT = "collect"
-    CLASSIFY = "classify"
-    PARK_ON_USAGE_LIMIT = "park-on-usage-limit"
-    RECORD_OVERLOAD = "record-overload"
-    CLOSE_OVERLOAD_STREAK = "close-overload-streak"
-    BACK_OFF = "back-off"
-    PARK_ON_ASK = "park-on-ask"
-    JUDGE = "judge"
+@domain_model
+@dataclass(frozen=True)
+class AwaitElicitation:
+    """First stage: a live elicitation under the staleness bound is awaited."""
 
 
-def exited_worker_elicitation_move(*, in_flight: bool, still_pending: bool) -> ExitedMove:
+@domain_model
+@dataclass(frozen=True)
+class CollectElicitation[E]:
+    """First stage: the launched verdict ``elicitation`` is collected."""
+
+    elicitation: E
+
+
+@domain_model
+@dataclass(frozen=True)
+class Classify:
+    """First stage: no elicitation is in flight, so the exit is classified."""
+
+
+@domain_model
+@dataclass(frozen=True)
+class ParkOnUsageLimit[L]:
+    """Second stage: park the lease on the usage ``limit`` its exit reported."""
+
+    limit: L
+
+
+@domain_model
+@dataclass(frozen=True)
+class RecordOverload[O]:
+    """Second stage: record the provider ``overload`` its exit reported."""
+
+    overload: O
+
+
+@domain_model
+@dataclass(frozen=True)
+class CloseOverloadStreak:
+    """Second stage: a clean exit, which closes any open overload streak."""
+
+
+@domain_model
+@dataclass(frozen=True)
+class BackOff:
+    """Third stage: the lease backs off in place."""
+
+
+@domain_model
+@dataclass(frozen=True)
+class ParkOnAsk[A]:
+    """Third stage: park the lease on the unforwarded ``ask`` its exit holds."""
+
+    ask: A
+
+
+@domain_model
+@dataclass(frozen=True)
+class Judge:
+    """Third stage: nothing else claims the exit, so it is judged."""
+
+
+type ElicitationMove[E] = AwaitElicitation | CollectElicitation[E] | Classify
+type ClassifiedMove[L, O] = ParkOnUsageLimit[L] | RecordOverload[O] | CloseOverloadStreak
+type SettledMove[A] = BackOff | ParkOnAsk[A] | Judge
+
+
+def exited_worker_elicitation_move[E](*, elicitation: E | None, still_pending: bool) -> ElicitationMove[E]:
     """First stage: a launched verdict elicitation is collected, never re-judged, and never pre-empted
     by an ask the worker raised before it exited. A live one under the staleness bound is awaited."""
-    if not in_flight:
-        return ExitedMove.CLASSIFY
-    return ExitedMove.AWAIT_ELICITATION if still_pending else ExitedMove.COLLECT
+    if elicitation is None:
+        return Classify()
+    return AwaitElicitation() if still_pending else CollectElicitation(elicitation)
 
 
-def exited_worker_classified_move(*, usage_limited: bool, overloaded: bool) -> ExitedMove:
+def exited_worker_classified_move[L, O](*, limit: L | None, overload: O | None) -> ClassifiedMove[L, O]:
     """Second stage, over the one exit's classification: a usage limit outranks provider overload (the
     two are mutually exclusive reasons), and a clean exit closes any open overload streak. An overload's
     write decides the third stage, so it is named here, not decided."""
-    if usage_limited:
-        return ExitedMove.PARK_ON_USAGE_LIMIT
-    return ExitedMove.RECORD_OVERLOAD if overloaded else ExitedMove.CLOSE_OVERLOAD_STREAK
+    if limit is not None:
+        return ParkOnUsageLimit(limit)
+    return RecordOverload(overload) if overload is not None else CloseOverloadStreak()
 
 
-def exited_worker_settled_move(*, backing_off: bool, unforwarded_ask: bool) -> ExitedMove:
+def exited_worker_settled_move[A](*, backing_off: bool, ask: A | None) -> SettledMove[A]:
     """Third stage, once the overload write (if any) is known: a lease backing off in place waits, an
     exit holding an unforwarded ask parks on it, and anything else is judged."""
     if backing_off:
-        return ExitedMove.BACK_OFF
-    return ExitedMove.PARK_ON_ASK if unforwarded_ask else ExitedMove.JUDGE
+        return BackOff()
+    return ParkOnAsk(ask) if ask is not None else Judge()
 
 
 @domain_model
