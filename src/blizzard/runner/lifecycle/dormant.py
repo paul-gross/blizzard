@@ -458,8 +458,8 @@ class DormantSession:
         left to "continue" — re-running `Judgement` mints a fresh elicitation instead of
         waking the worker with `_UNPAUSE_MESSAGE`. The stale record is left for the launch to replace, not
         cleared first (pinned by `tests/test_elicitation_launch_collect.py`). The park-resume is recorded only
-        AFTER the fresh elicitation is durably launched: if a crash lands between them, the lease is still pause-parked, so
-        the next pass re-enters this same method rather than the ordinary exited-worker path
+        AFTER the fresh elicitation is durably launched: if a crash lands between them, the lease is still
+        pause-parked, so the next pass re-enters this same method rather than the ordinary exited-worker path
         re-classifying the same stale record and re-engaging the brake it was just cleared
         from."""
         lease = self.lease
