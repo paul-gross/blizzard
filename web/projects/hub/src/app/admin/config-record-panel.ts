@@ -58,7 +58,7 @@ export interface ConfigRecordVm {
 /**
  * A config record's detail — its name and badges, its fields, its revision with who
  * last changed it and through which door, the records it links to, the CLI command
- * that changes it (on a phone), and its Revisions list. Presentational.
+ * that changes it, and its Revisions list. Presentational.
  */
 @Component({
   selector: 'app-config-record-panel',
@@ -78,7 +78,7 @@ export class ConfigRecordPanel {
   /** The rest-state copy while nothing is selected. */
   readonly emptyText = input.required<string>();
   readonly testidPrefix = input.required<string>();
-  /** The write controls, or `null` for none — a phone, a viewer, a built-in record. */
+  /** The write controls, or `null` for none. */
   readonly actions = input<ConfigActionsVm | null>(null);
   /** Whether a write on this record is in flight. */
   readonly busy = input(false);

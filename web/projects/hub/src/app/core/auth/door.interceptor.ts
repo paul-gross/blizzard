@@ -6,10 +6,8 @@ import { hubClient } from 'fleet/shell';
 export const DOOR_HEADER = 'X-Blizzard-Door';
 
 /**
- * The door interceptor: stamps every hub request with `X-Blizzard-Door: board`, so a
- * configured-record write made from the board is recorded in the change log as the board's
- * rather than as a bare API call. Registered once, app-wide (`provideDoorInterceptor()` in
- * `app.config.ts`), beside the 401 interceptor and on the same generated client transport.
+ * The door interceptor: stamps every hub request on the generated client's transport
+ * with `X-Blizzard-Door: board`.
  */
 export function provideDoorInterceptor(): EnvironmentProviders {
   return makeEnvironmentProviders([

@@ -33,8 +33,7 @@ export class LoginButtons {
   /** The last provider name used to sign in, or `null` if none remembered yet. */
   readonly lastUsed = input<string | null>(null);
 
-  /** The same-origin path to return to once the dance completes — appended to each
-   * authorize link as `return_to`, which the hub honors only as a same-origin path. */
+  /** The path to return to once the dance completes — appended to each authorize link as `return_to`. */
   readonly returnTo = input<string>('/');
 
   /** An invitation's token, carried on each authorize link as `invite` so the hub admits the account into the

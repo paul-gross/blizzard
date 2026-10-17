@@ -7,15 +7,10 @@ import { TenantContext, inSelectedTenant } from './tenant-context';
 
 /**
  * `GET /api/me` — the resolved identity + its server-expanded permission set.
- * This is the **one** place the client reads the current user; the
- * role → permission map itself is never re-typed here (`bzh:generated-client`'s
- * spirit applied to authz: the hub computes it, `/api/me` carries it).
+ * This is the **one** place the client reads the current user.
  *
- * A **401** (no/expired session) resolves the query to `null` rather than an error
- * state — "not authenticated" is a legitimate, expected value here, not a fault. Any
- * other failure still surfaces through TanStack's error state. `retry: false` so an
- * expired session settles in one round trip rather than TanStack's default backoff
- * retries (the 401 response itself is handled in `auth.interceptor.ts`).
+ * A **401** resolves the query to `null`; any other failure surfaces through
+ * TanStack's error state. `retry: false` settles an expired session in one round trip.
  *
  * The identity it hands out is the one in the board's tenant: `role` and `permissions` are the selected
  * membership's ({@link inSelectedTenant}), so every permission check reads the tenant the board acts in. The

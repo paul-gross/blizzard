@@ -9,15 +9,9 @@ import { MobileTabBar as FleetMobileTabBar, type MobileTabItem } from 'fleet/she
  * mobile screen rather than being a per-page fixture.
  *
  * A thin wrapper around the shared {@link FleetMobileTabBar}. This layer builds the hub's
- * {@link MobileTabItem}s: Board, Events, and Gardening
- * are wired to a route today
- * (`routerLink`/`routerLinkActive`, same idiom as the desktop {@link AppNav});
- * Asks is the mock's remaining tab with no screen of its own yet (the mock's
- * footnote) — it renders dimmed and inert so it reads as "not yet", not as a
- * broken link, and still carries a live open-count badge off the same
- * {@link injectHubQuestionsQuery} read the glance board's "Needs you" bucket
- * folds in, so the number an operator sees here always agrees with the
- * board's own count. Fleet is routed to `/fleet`.
+ * {@link MobileTabItem}s: Board, Events, Gardening
+ * and Fleet (`/fleet`) are routed (`routerLink`/`routerLinkActive`); Asks renders
+ * dimmed and inert, carrying an open-count badge off {@link injectHubQuestionsQuery}.
  */
 @Component({
   selector: 'app-mobile-tab-bar',

@@ -41,19 +41,10 @@ const SEVERITY_TONE: Readonly<Record<EventView['severity'], Tone>> = {
  * The three filter axes match `GET /api/events`' own query params. Severity is a
  * fixed set ({@link SEVERITY_OPTIONS}); the runner and chunk axes are open, so the
  * container hands their id **universe** in (`runnerIds`/`chunkIds`) and this view
- * renders one chip per id (derived in `events-panel.ts`). An empty id array hides its row.
+ * renders one chip per id. An empty id array hides its row.
  *
- * Default sort is the server's (newest-first by recency, `GET /api/events`), so this
- * renders events as-received rather than re-sorting client-side.
- *
- * Each row is a **time-first grid** — time, chunk, severity, kind, runner, message,
- * lease — following the in-rail Activity feed's leading dim-stamp column
- * (`activity-view.ts`), so a reader scans the feed down its timestamps instead of
- * hunting for one per row.
- *
- * Every test handle here is `events-`prefixed, distinct from the in-rail Activity
- * feed's `activity-*` handles (`activity-view.ts`) — two components on the same board
- * would otherwise make a browser test's locator ambiguous.
+ * Events render as-received. Each row is a **time-first grid** — time, chunk,
+ * severity, kind, runner, message, lease. Every test handle is `events-`prefixed.
  */
 @Component({
   selector: 'app-events-view',

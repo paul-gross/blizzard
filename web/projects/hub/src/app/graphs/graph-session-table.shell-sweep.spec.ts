@@ -12,10 +12,7 @@ import { GraphSessionTable } from './graph-session-table';
  * text land in the right `<td>` but not whether the six columns actually sit side by side
  * without a wide harness or model list pushing a later column past the table's own edge.
  *
- * Mounted at 800×600, `graph-detail.shell-sweep.spec.ts`'s own width — the widest this
- * table is ever framed at in the real graph detail page it lives on. Graph detail is not
- * reachable from the hub's mobile bottom tab bar (`shell/nav/mobile-tab-bar.ts`), so
- * `bzh:narrow-viewport-tier-rule` does not bind here.
+ * Mounted at 800×600.
  *
  * Proven able to fail by widening `table.sessions th`/`td`'s `padding` far enough that the
  * six-column row no longer fits inside the table's own `width: 100%` — the Rotate column's

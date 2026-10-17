@@ -4,8 +4,7 @@ import { type RunnerRegistryView, listRunnersApiRunnersGet, LIVE_COVERED_POLL_BA
 
 /**
  * Hub `GET /api/runners` read — the fleet registry with each runner's derived
- * liveness (`online` vs the 5-min staleness threshold) and `paused` state,
- * through TanStack Query and the generated hub client (bzh:generated-client).
+ * liveness and `paused` state.
  * Freshness: `EVENT_INVALIDATION_REGISTRY` (`web/projects/fleet/src/lib/sse/fleet-live.ts`).
  *
  * Retired runners are excluded unless `includeRetired()` is true. The include-retired read keys

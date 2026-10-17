@@ -15,13 +15,8 @@ const CORNER_RADIUS = 14;
  * `<g>` inside the parent's `<svg>`, one per distinct target graph name the parent
  * loops over.
  *
- * Deliberately not a node box (no executor stripe/badge — this node is not part of
- * *this* graph) and not the `done` circle (a migration does not end the chunk, it
- * re-pins it elsewhere, `bzh:migration-not-transition`): a rounded pill carrying the
- * target graph's name is the third, visually distinct shape the diagram's other two
- * exits (the node box and the `done` circle) leave room for. Purely presentational,
- * same contract as its siblings: the parent supplies already-laid-out geometry, no
- * selection logic lives here.
+ * A rounded pill carrying the target graph's name (`bzh:migration-not-transition`).
+ * Purely presentational: the parent supplies already-laid-out geometry.
  */
 @Component({
   selector: 'g[appGraphDiagramMigration]',

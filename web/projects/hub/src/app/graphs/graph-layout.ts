@@ -14,10 +14,8 @@ export { type EdgeKind, type EdgeTarget };
  * The pure DAG-layout core for the graph diagram (`bzh:generated-client` — this
  * module introduces no API call; it only lays out a `GraphView` already fetched by
  * `graphs.query.ts`). Confines the `@dagrejs/dagre` dependency to one module and stays framework-light/DOM-free so it unit-tests without
- * a browser: `graph-diagram.ts` is the only caller, and it supplies a
- * {@link TextMeasurer} (canvas `measureText` in production, a stub in tests) so node
- * and label boxes size to their rendered text instead of a char-count estimate. A node
- * box therefore has no fixed size: its width follows the wider of its name row and its
+ * a browser. Boxes size to text through the caller's {@link TextMeasurer}. A node
+ * box has no fixed size: its width follows the wider of its name row and its
  * meta line, and its height grows with the meta line's wrap (see {@link nodeBox}).
  *
  * Blizzard graphs are not DAGs: a choice edge may
@@ -34,11 +32,7 @@ export { type EdgeKind, type EdgeTarget };
  * {@link LaidOutGraph.migrations}.
  *
  * `LaidOutEdge` and `LaidOutSelfLoop` carry identity — endpoints and `choiceId` —
- * alongside their geometry: the component's selection feature needs to highlight a
- * node's incident edges and render an edge's source/target, and `resolveEdges`
- * (`graph-edge-target.ts`) already computes exactly that internally. Surfacing it
- * as additive readonly fields keeps this module pair the single owner of edge
- * resolution (`canon:one-owner`) instead of forking the rule into the component.
+ * alongside their geometry, from `resolveEdges` (`graph-edge-target.ts`).
  */
 
 const DONE_RADIUS = 24;
@@ -182,9 +176,7 @@ function dagreTargetId(target: EdgeTarget): string {
 /**
  * Lays out one immutable graph once (no live re-layout, no pan/zoom). Returns `{ ok: false }` — never throws — on a degenerate graph (no nodes, an
  * edge naming an unknown target, more than one self-loop on a node — a stated
- * ≤1-per-node limitation) or if dagre itself throws; `graph-diagram.ts`
- * shows an unobtrusive fallback notice in that case and the structured table view
- * stays the fallback surface.
+ * ≤1-per-node limitation) or if dagre itself throws.
  */
 export function layoutGraph(graph: GraphView, measure: TextMeasurer): LayoutOutcome {
   const nodes = graph.nodes ?? [];

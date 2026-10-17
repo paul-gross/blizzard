@@ -13,21 +13,15 @@ import { listOrDash, producesNames, retriesLabel, sessionLabel } from './graph-n
 
 /**
  * The diagram's detail pane — the selected node's full `GraphNodeView` (including
- * `prompt`/`judgement_prompt` and every inbound edge's `prompt_addendum`,
- * `graph-incoming-addenda.ts`'s own resolver), the selected edge's choice
+ * `prompt`/`judgement_prompt` and every inbound edge's `prompt_addendum`), the selected edge's choice
  * (including its `prompt_addendum`), or a neutral hint when nothing is
  * selected. Presentational only: `graph`/`selection` are plain inputs, resolved
  * against `graph-diagram-selection.ts`'s pure resolvers
- * (`bzh:frontend-container-presentational`). Field rendering (retries, produces,
- * session) goes through `graph-node.ts`'s shared helpers — the same ones
- * `graph-node-table.ts` uses — so the pane and the structured table can't drift on
- * how a field displays. Chrome comes from `fleet/lib/kit/` (`bzh:frontend-kit-floor`):
+ * (`bzh:frontend-container-presentational`). Chrome comes from `fleet/lib/kit/` (`bzh:frontend-kit-floor`):
  * the fact grid is `fleet-kit-fact-list`, and every block of agent-facing prose —
  * a node's prompt, its inbound addenda, a choice's description, an edge's prompt
- * addendum — is `fleet-kit-prose-block`. A choice's description earns that
- * treatment like the rest: the judgement prompt the agent reads lists each choice
- * by name and description, so it
- * is prose a person wrote for an agent, the same `context` side as a node's prompt.
+ * addendum — is `fleet-kit-prose-block`. A choice's description is prose
+ * a person wrote for an agent, like a node's prompt.
  */
 @Component({
   selector: 'app-graph-diagram-detail',

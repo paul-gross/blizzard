@@ -1,11 +1,7 @@
 import type { Router } from '@angular/router';
 
 /** `sessionStorage` key the original route is stashed under before a 401 or an
- * auth-failed SSE stream routes to `/login`; read back by {@link consumeReturnUrl}.
- * `sessionStorage`
- * (not `localStorage`): the return location is this tab's navigation state, not a
- * durable preference — {@link LAST_PROVIDER_KEY} is the one thing meant to survive
- * across tabs/sessions. */
+ * auth-failed SSE stream routes to `/login`; read back by {@link consumeReturnUrl}. */
 const RETURN_URL_KEY = 'fleet.auth.return-to';
 
 /** Whether `url` is one of the pages a person reaches without a session — sign-in (and the refusals it shows) and an
@@ -35,10 +31,7 @@ export function redirectToLogin(router: Router): void {
 }
 
 /** The stashed pre-login route, or `/` when none was recorded (a direct hit on
- * `/login`, or the very first unauthenticated load). Only a same-origin relative
- * path is ever honored server-side (the login route's `return_to` check); this
- * reads back exactly what {@link redirectToLogin} wrote, which is always
- * `router.url` — already such a path. */
+ * `/login`, or the very first unauthenticated load). */
 export function consumeReturnUrl(): string {
   return sessionStorage.getItem(RETURN_URL_KEY) ?? '/';
 }

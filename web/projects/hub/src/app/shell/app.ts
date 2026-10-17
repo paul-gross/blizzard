@@ -51,16 +51,11 @@ import {
  * (`ViewportService.mode`) both are replaced by {@link MobileTitlebar}, and a
  * persistent {@link MobileTabBar} renders below the routed content (mock screen C,
  * `../docs/designs/mobile/core-flows.html`) — the fork happens once, here, at the
- * app root, the same "pick it once" rule the route table already follows for the
- * `board` route itself (`app.routes.ts`). Slot ordering is owned by the shared
+ * app root. Slot ordering is owned by the shared
  * {@link AppShell} (`fleet`).
  *
- * - the {@link FleetLiveUpdates} spine subscribes to `GET /api/events/stream` and
- *   invalidates the reads on every hub fact, so the whole app streams live;
- * - both the SSE subscription and the TanStack `QueryClient` (the app-config
- *   singleton, see `app.config.ts`) are scoped to this root component, never to a
- *   routed page, so navigating between tabs never restarts the stream or drops the
- *   query cache.
+ * The {@link FleetLiveUpdates} spine and the TanStack `QueryClient` are scoped to
+ * this root component, never to a routed page.
  *
  * The public pages — sign-in with its refusals, and an invitation's landing
  * ({@link isPublicUrl}) — render as a bare `<router-outlet>` whatever the session,
@@ -73,7 +68,7 @@ import {
  * ({@link TenantContext}), before any view renders:
  *
  * - **`unauthenticated`** (no/expired session) redirects to `/login` (an effect
- *   below, plus the 401 interceptor on the same underlying response) and renders
+ *   below) and renders
  *   nothing until the router lands there; router navigation is async, so a session
  *   dropping mid-route withholds the outlet for that one tick rather than let it
  *   re-activate the previous, now-ungated route;

@@ -20,8 +20,7 @@ export const GRAPH_LAYOUT = new InjectionToken<(graph: GraphView, measure: TextM
 
 /**
  * The graph diagram — a static SVG DAG rendered from one immutable `GraphView`,
- * mounted above `graph-detail.ts`'s structured table (the ever-present fallback
- * surface). Layout runs once per input graph via `computed()` — no live re-layout, no
+ * Layout runs once per input graph via `computed()` — no live re-layout, no
  * pan/zoom; horizontal overflow scrolls in `.diagram-scroll`;
  * a layout failure or degenerate graph (see {@link layoutGraph}) shows an
  * unobtrusive notice instead of the diagram, never a broken page.
@@ -35,9 +34,7 @@ export const GRAPH_LAYOUT = new InjectionToken<(graph: GraphView, measure: TextM
  * `--amber`, `--red`, `--green`, `--label-dim`), never baked into SVG attributes, so a
  * theme switch re-styles without recomputing layout.
  *
- * Selectable and **fully controlled**: `selection` in, `selectionChange` out. This
- * component never holds its own copy of "what is selected" — `graph-diagram-view.ts`
- * is the sole owner, so the diagram and the detail pane beside it can't drift. Each
+ * Selectable and **fully controlled**: `selection` in, `selectionChange` out. Each
  * edge and self-loop carries an invisible companion `.edge-hit` path (same `d`, a
  * fat transparent stroke, `pointer-events: stroke`) so a click registers near the
  * curve rather than only exactly on its 2px visible stroke; the visible path is

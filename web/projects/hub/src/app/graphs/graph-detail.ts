@@ -21,20 +21,12 @@ import { injectHubGraphQuery } from './graphs.query';
  * construction (`bzh:generated-client`; no hand-written fetch).
  *
  * Mounts `<app-graph-diagram-view>` above the node table — the selectable DAG
- * render of the same `GraphView` plus its detail pane, no re-fetch;
- * the table stays the ever-present fallback surface, unaffected by a diagram-layout
- * failure. Every edge — its choice, its target, its description, and its prompt
- * addendum — is read by selecting it in that pane, which is the single place the
- * graph's prose is rendered; there is no standing edges-and-choices list repeating
- * it below the tables.
+ * render of the same `GraphView` plus its detail pane, no re-fetch.
  *
  * Container only: keeps the injections (`injectHubGraphQuery`,
  * `injectGraphLifecycleMutation`, `injectMeQuery`) and the derived state, and
  * composes `KitPanel` (`bzh:frontend-kit-floor`) around five presentational
- * children — {@link GraphDetailHeader} (the panel's own header supplement,
- * which also carries the retire/re-enable control — right-aligned against
- * its own lifecycle text on the header bar), {@link GraphDetailLifecycle}
- * (the action-error line and entry-node line, below the header bar),
+ * children — {@link GraphDetailHeader}, {@link GraphDetailLifecycle},
  * `app-graph-diagram-view`, `app-graph-node-table`, and
  * `app-graph-session-table` — each of which forwards data down and re-emits
  * outputs up (`bzh:frontend-container-presentational`).
