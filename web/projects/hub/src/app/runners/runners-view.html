@@ -68,14 +68,13 @@
           <span class="dot never" aria-hidden="true"></span>
         } @else {
           <fleet-kit-beacon
-          class="dot"
-          aria-hidden="true"
-          [active]="row.online || row.connection === connection.OFFLINE"
-          [tone]="row.online ? 'green' : 'red'"
-          [blink]="row.online ? 'pulse' : 'step'"
+            class="dot"
+            aria-hidden="true"
+            [active]="row.online || row.connection === connection.OFFLINE"
+            [tone]="row.online ? 'green' : 'red'"
+            [blink]="row.online ? 'pulse' : 'step'"
           />
         }
-        
         <span class="name" data-testid="mobile-fleet-runner-name">{{ row.runner_name }}</span>
         <span class="seen" data-testid="mobile-fleet-runner-seen">{{ seenLabel(row) }}</span>
       </div>
