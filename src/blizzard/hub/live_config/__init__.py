@@ -9,7 +9,7 @@ from __future__ import annotations
 # Guards this process's own cache entries, never a store write.
 # ast-grep-ignore: bzh:store-exclusive-write
 import threading
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Protocol, cast, runtime_checkable
 
@@ -51,7 +51,18 @@ class ConfigObjectCache:
     def get[T](self, kind: RecordKind, key: str, build: Callable[[], T]) -> T | None:
         """The object built for the record's current revisions, building it on a miss;
         ``None`` when no such record exists. ``build`` reads the record itself."""
-        current = self._revisions.revisions(kind, key)
+        return self.get_under(kind, key, self._revisions.revisions(kind, key), build)
+
+    def revisions_for(self, kind: RecordKind, keys: Sequence[str]) -> dict[str, ConfigRevisions]:
+        """The current revisions of each of ``keys`` in one read, for a caller handing out several records' objects
+        through :meth:`get_under`; a key with no record is dropped."""
+        return self._revisions.revisions_for(kind, keys)
+
+    def get_under[T](
+        self, kind: RecordKind, key: str, current: ConfigRevisions | None, build: Callable[[], T]
+    ) -> T | None:
+        """:meth:`get` against ``current``, the record's revisions the caller has just read — ``None`` when it has no
+        record."""
         with self._lock:
             held = self._entries.get((kind, key))
             if current is None:

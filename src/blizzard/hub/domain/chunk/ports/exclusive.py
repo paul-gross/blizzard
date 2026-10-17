@@ -56,8 +56,8 @@ class ILockedWorkRefRead(Protocol):
 
     def source_links(self, sources: Sequence[str]) -> dict[str, list[ProjectId]]:
         """Each of ``sources`` mapped to the projects whose standing link draws from it, ordered by id —
-        :meth:`~blizzard.hub.domain.projects.links.IReadProjectLinks.projects_linking_source`, read under
-        the lock."""
+        :meth:`~blizzard.hub.domain.projects.links.IReadProjectLinks.projects_linking_sources`, read under
+        the lock — a source no project links maps to no projects."""
         ...
 
 

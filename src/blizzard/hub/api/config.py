@@ -316,7 +316,7 @@ def _stored(
     secrets = services.secret_catalog.get_many(list(declaration.secrets))
     declared_slugs = {d.slug for d in declaration.repositories if isinstance(d, RepositoryDeclaration)}
     source_slugs = {d.slug for d in declaration.work_sources if isinstance(d, WorkSourceDeclaration)}
-    retired = services.secret_catalog.retired_names()
+    retired = services.secret_catalog.retired_names(list(secrets))
     scopes: dict[tuple[str, str], DeclarableRecord] = {
         (scope.project_id, scope.slug): scope for scope in services.scopes.list_all()
     }
@@ -345,7 +345,7 @@ def _stored(
         routines=routines,
         references=DeclaredReferences(
             scopes=frozenset(scopes) | {d.key for d in declared_scopes},
-            enabled_graphs=frozenset(n for n in graph_names if services.graphs.get_enabled_by_name(n) is not None),
+            enabled_graphs=frozenset(services.graphs.enabled_names(sorted(graph_names))),
             linked_scopes=linked,
         ),
     )
@@ -457,30 +457,39 @@ def _projects(
     planned = held_repositories.planned()
     planned_sources, former_sources = held_sources.planned()
     source_lookup = PlannedWorkSources(planned_sources, former_sources)
+    # Every standing link may be unlinked, and a listed one in any state relinked: the keys of both are gathered
+    # across the projects first, then read once per seam.
+    source_projects: list[ProjectId] = []
+    repository_projects: list[ProjectId] = []
+    listed_sources: list[tuple[ProjectId, WorkSourceId]] = []
+    listed_repositories: list[tuple[ProjectId, RepositoryId]] = []
     for entry in document.projects:
         project = current.get(entry.slug)
         if project is None:
             continue
         held = project.project_id
-        # Every standing link may be unlinked, and a listed one in any state relinked.
         if "sources" in entry.model_fields_set:
-            listed = [
-                link
+            source_projects.append(held)
+            listed_sources.extend(
+                (held, ref.work_source_id)
                 for reference in entry.sources
                 if (ref := source_lookup.resolve(reference)) is not None
-                and (link := links.source_link(held, ref.work_source_id)) is not None
-            ]
-            source_links.update({(held, link.work_source_id): link for link in [*links.sources_of(held), *listed]})
+            )
         if "repositories" in entry.model_fields_set:
-            named_repos = [
-                link
+            repository_projects.append(held)
+            listed_repositories.extend(
+                (held, ref.repository_id)
                 for reference in entry.repositories
                 if (ref := planned.resolve(reference)) is not None
-                and (link := links.repository_link(held, ref.repository_id)) is not None
-            ]
-            repository_links.update(
-                {(held, link.repository_id): link for link in [*links.repositories_of(held), *named_repos]}
             )
+    for standing in links.sources_of_projects(source_projects).values():
+        source_links.update({(link.project_id, link.work_source_id): link for link in standing})
+    listed = links.source_links_for(listed_sources).values()
+    source_links.update({(link.project_id, link.work_source_id): link for link in listed})
+    for standing_repositories in links.repositories_of_projects(repository_projects).values():
+        repository_links.update({(link.project_id, link.repository_id): link for link in standing_repositories})
+    named = links.repository_links_for(listed_repositories).values()
+    repository_links.update({(link.project_id, link.repository_id): link for link in named})
     stored = StoredProjects(
         projects=tuple(projects),
         former=former,
@@ -630,6 +639,9 @@ def export_config(services: Services) -> ConfigDocument:
     repositories = services.repository_records.list_all(include_retired=False)
     repository_slugs = {r.repository_id: r.slug for r in services.repository_records.list_all(include_retired=True)}
     source_slugs = {r.work_source_id: r.slug for r in services.work_source_records.list_all(include_retired=True)}
+    project_ids = [project.project_id for project in projects]
+    source_links = services.project_links.sources_of_projects(project_ids)
+    repository_links = services.project_links.repositories_of_projects(project_ids)
     return ConfigDocument(
         version=1,
         projects=[
@@ -637,12 +649,9 @@ def export_config(services: Services) -> ConfigDocument:
                 slug=project.slug,
                 name=project.name,
                 description=project.description,
-                sources=sorted(
-                    source_slugs[link.work_source_id] for link in services.project_links.sources_of(project.project_id)
-                ),
+                sources=sorted(source_slugs[link.work_source_id] for link in source_links.get(project.project_id, [])),
                 repositories=sorted(
-                    repository_slugs[link.repository_id]
-                    for link in services.project_links.repositories_of(project.project_id)
+                    repository_slugs[link.repository_id] for link in repository_links.get(project.project_id, [])
                 ),
             )
             for project in projects

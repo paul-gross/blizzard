@@ -33,6 +33,7 @@ from blizzard.hub.store.scoped import ScopedConnections
 from blizzard.hub.tenancy import StoreScope, TenantId
 from tests.hub_event_rows import hub_events_of
 from tests.support import (
+    HubHarness,
     build_hub,
     count_rows_read,
     default_project,
@@ -148,6 +149,7 @@ def _retirement_reads(engine: Engine) -> dict[str, object]:
     store = hub_store_connections(engine)
     return {
         "secret": lambda: SecretStore(store).retired_names(),
+        "secret_bounded": lambda: SecretStore(store).retired_names(["k1", "k2"]),
         "routine": lambda: RoutineStore(store).retired_ids(),
         "scope": lambda: ScopeStore(store).retired_slugs(default_project(engine)),
         "graph": lambda: GraphStore(store).retired_graph_ids(),
@@ -218,6 +220,40 @@ def test_newest_failure_reads_keep_the_old_failure_after_a_recovery(tmp_path: Pa
         count_rows_read(engine, lambda: EgressStore(store, hub_events=events, usage=corpus).newest_egress_failure())
         <= 1
     )
+
+
+def _linked_hub(tmp_path: Path, *, depth: int) -> HubHarness:
+    """Projects ``p0`` and ``p1`` linked to sources ``s0`` and ``s1``, ``p1``'s link to ``s0`` cycled through
+    ``depth`` unlink-and-relink rounds, then unlinked."""
+    tmp_path.mkdir()
+    hub = build_hub(tmp_path, repositories=(), link=False)
+    assert hub.client.post("/api/secrets", json={"name": "gh", "value": "v"}).status_code == 201
+    sources = [{"slug": s, "provider": "github", "locator": f"acme/{s}", "secret": "gh"} for s in ("s0", "s1")]
+    both = [{"slug": p, "name": p, "sources": ["s0", "s1"]} for p in ("p0", "p1")]
+    without = [both[0], {"slug": "p1", "sources": ["s1"]}]
+    for document in [{"work_sources": sources, "projects": both}, *[{"projects": without}, {"projects": both}] * depth]:
+        assert hub.client.post("/api/config/apply", json={"version": 1, **document}).status_code == 200
+    assert hub.client.post("/api/config/apply", json={"version": 1, "projects": without}).status_code == 200
+    return hub
+
+
+def test_the_link_reads_by_source_are_flat_across_history_depth(tmp_path: Path) -> None:
+    answers, rows = [], []
+    for depth in (1, 6):
+        hub = _linked_hub(tmp_path / str(depth), depth=depth)
+        links = hub.services.project_links
+        slug_of: dict[str, str] = {
+            r.work_source_id: r.slug for r in hub.services.work_source_records.list_all(include_retired=False)
+        }
+        project_slug = {p.project_id: p.slug for p in hub.services.projects.list_all()}
+        sources = sorted(slug_of)
+        found = links.projects_linking_sources(sources)
+        answers.append({slug_of[s]: sorted(project_slug[p] for p in projects) for s, projects in found.items()})
+        rows.append(
+            count_rows_read(hub.engine, lambda links=links, sources=sources: links.projects_linking_sources(sources))
+        )
+    assert answers[0] == answers[1] == {"s0": ["p0"], "s1": ["p0", "p1"]}
+    assert rows[0] == rows[1]
 
 
 # --- the newest-fact read is confined to its scope, inner group-by included -----------------------

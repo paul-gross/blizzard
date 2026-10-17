@@ -29,7 +29,7 @@ from blizzard.hub.store.internal.chunk_rows import is_ephemeral_id, lock_chunk_r
 from blizzard.hub.store.internal.chunk_work_refs_store import ChunkWorkRefsStore
 from blizzard.hub.store.internal.project_link_store import (
     PROJECT_SOURCE_LINKS_LOCK_NAMESPACE,
-    projects_linking_source_conn,
+    projects_linking_sources_conn,
 )
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
 from blizzard.hub.store.scoped import ScopedConnections
@@ -85,7 +85,8 @@ class LockedWorkRefTransaction:
         return self._work_refs.live_holders_conn(self.conn, pointers)
 
     def source_links(self, sources: Sequence[str]) -> dict[str, list[ProjectId]]:
-        return {source: projects_linking_source_conn(self.conn, source) for source in dict.fromkeys(sources)}
+        found = projects_linking_sources_conn(self.conn, sources)
+        return {source: found.get(source, []) for source in dict.fromkeys(sources)}
 
 
 _POINTER_LOCK_NAMESPACE = "work_ref"

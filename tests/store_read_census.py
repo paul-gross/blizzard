@@ -2340,6 +2340,7 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     ),
     (IReadGraphRepository, "get"): lambda w: w.hub.services.graphs.get(w.graph.graph_id),
     (IReadGraphRepository, "get_enabled_by_name"): lambda w: w.hub.services.graphs.get_enabled_by_name(_HUB_GRAPH_NAME),
+    (IReadGraphRepository, "enabled_names"): lambda w: w.hub.services.graphs.enabled_names([_HUB_GRAPH_NAME]),
     (IReadGraphRepository, "any_minted"): lambda w: w.hub.services.graphs.any_minted(_HUB_GRAPH_NAME),
     (IReadGraphRepository, "newest_definition_yaml"): lambda w: w.hub.services.graphs.newest_definition_yaml(
         _HUB_GRAPH_NAME
@@ -2409,7 +2410,10 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (ISecretCatalog, "get_many"): lambda w: w.secrets.get_many(["gh-token", "old-token"]),
     (ISecretCatalog, "list_all"): lambda w: w.secrets.list_all(),
     (ISecretCatalog, "is_retired"): lambda w: w.secrets.is_retired("old-token"),
-    (ISecretCatalog, "retired_names"): lambda w: w.secrets.retired_names(),
+    (ISecretCatalog, "retired_names"): lambda w: (
+        w.secrets.retired_names(),
+        w.secrets.retired_names(["gh-token", "old-token"]),
+    ),
     (ISecretCatalog, "key_ids_in_use"): lambda w: w.secrets.key_ids_in_use(),
     (IReadWorkSourceRepository, "get"): lambda w: w.hub.services.work_source_records.get(w.work_source_id),
     (IReadWorkSourceRepository, "get_many"): lambda w: w.hub.services.work_source_records.get_many([w.work_source_id]),
@@ -2438,6 +2442,11 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
         include_retired=True
     ),
     (IReadConfigRevisions, "revisions"): lambda w: w.config_revisions.revisions(RecordKind.REPOSITORY, w.repository_id),
+    (IReadConfigRevisions, "revisions_for"): lambda w: (
+        w.config_revisions.revisions_for(RecordKind.REPOSITORY, [w.repository_id]),
+        w.config_revisions.revisions_for(RecordKind.WORK_SOURCE, [w.work_source_id]),
+        w.config_revisions.revisions_for(RecordKind.SECRET, ["gh-token"]),
+    ),
     (IReadConfigImports, "recorded"): lambda w: w.config_imports.recorded(),
     (IReadProjectRepository, "get"): lambda w: w.hub.services.projects.get(w.project_id),
     (IReadProjectRepository, "get_many"): lambda w: w.hub.services.projects.get_many([w.project_id]),
@@ -2457,6 +2466,21 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadProjectLinks, "repositories_of"): lambda w: w.hub.services.project_links.repositories_of(w.project_id),
     (IReadProjectLinks, "projects_linking_source"): lambda w: w.hub.services.project_links.projects_linking_source(
         w.work_source_id
+    ),
+    (IReadProjectLinks, "source_links_for"): lambda w: w.hub.services.project_links.source_links_for(
+        [(w.project_id, w.work_source_id)]
+    ),
+    (IReadProjectLinks, "repository_links_for"): lambda w: w.hub.services.project_links.repository_links_for(
+        [(w.project_id, w.repository_id)]
+    ),
+    (IReadProjectLinks, "sources_of_projects"): lambda w: w.hub.services.project_links.sources_of_projects(
+        [w.project_id]
+    ),
+    (IReadProjectLinks, "repositories_of_projects"): lambda w: w.hub.services.project_links.repositories_of_projects(
+        [w.project_id]
+    ),
+    (IReadProjectLinks, "projects_linking_sources"): lambda w: w.hub.services.project_links.projects_linking_sources(
+        [w.work_source_id]
     ),
     (IReadProjectLinks, "linked_at"): lambda w: w.hub.services.project_links.linked_at(
         w.project_id, w.work_source_id, w.clock.now()

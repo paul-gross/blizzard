@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 import pytest
 
 from blizzard.hub.domain.config.changes import RecordKind
@@ -17,6 +19,9 @@ class _Revisions:
 
     def revisions(self, kind: RecordKind, key: str) -> ConfigRevisions | None:
         return self.rows.get((kind, key))
+
+    def revisions_for(self, kind: RecordKind, keys: Sequence[str]) -> dict[str, ConfigRevisions]:
+        return {key: self.rows[(kind, key)] for key in keys if (kind, key) in self.rows}
 
 
 class _Obj:

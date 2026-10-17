@@ -20,10 +20,12 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from functools import partial
 from typing import Protocol, cast
 
 from blizzard.hub.domain.chunk.model import WorkRef
 from blizzard.hub.domain.config.changes import RecordKind
+from blizzard.hub.domain.config.revisions import ConfigRevisions
 from blizzard.hub.domain.config.work_sources import ConfiguredWorkSource, IReadWorkSourceRepository, WorkSourceId
 from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.live_config import ConfigObjectCache
@@ -75,8 +77,22 @@ class StoreWorkSourceRegistry:
         no longer reveals: nothing stops that secret being retired once the source is, and the read paths over items
         already ingested must not fail on it. An active source that cannot be built raises. The adapter is cached
         under the id and rebuilt when the record's revision moves, a slug edit among them."""
+        return self._handed(
+            source, lambda: self._objects.get(RecordKind.WORK_SOURCE, source, partial(self._build_current, source))
+        )
+
+    def _built_under(self, source: str, current: ConfigRevisions | None) -> BuiltWorkSource | None:
+        """:meth:`_built` against ``current``, the source's revisions the caller read ahead."""
+        return self._handed(
+            source,
+            lambda: self._objects.get_under(
+                RecordKind.WORK_SOURCE, source, current, partial(self._build_current, source)
+            ),
+        )
+
+    def _handed(self, source: str, hand_out: Callable[[], BuiltWorkSource | None]) -> BuiltWorkSource | None:
         try:
-            return self._objects.get(RecordKind.WORK_SOURCE, source, lambda: self._build_current(source))
+            return hand_out()
         except WorkSourceError:
             record = self._records.get(WorkSourceId(source))
             if record is not None and record.retired:
@@ -156,8 +172,12 @@ class StoreWorkSourceRegistry:
                     return None
                 built = self._built(record.work_source_id)
                 return built.source.parse(f"{record.work_source_id}{sep}{ref}") if built is not None else None
-        for record in self._records.list_all(include_retired=False):
-            built = self._built(record.work_source_id)
+        # Every active source's revisions in one read; each is still compared and built only when its turn comes,
+        # so a source claiming the token spares building those after it.
+        active = self._records.list_all(include_retired=False)
+        current = self._objects.revisions_for(RecordKind.WORK_SOURCE, [record.work_source_id for record in active])
+        for record in active:
+            built = self._built_under(record.work_source_id, current.get(record.work_source_id))
             pointer = built.source.parse(token) if built is not None else None
             if pointer is not None:
                 return pointer

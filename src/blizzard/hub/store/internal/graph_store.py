@@ -347,6 +347,28 @@ class GraphStore:
         row = conn.execute(self._enabled_by_name_select(name)).first()
         return self._reify(conn, row) if row is not None else None
 
+    def enabled_names(self, names: Sequence[str]) -> set[str]:
+        """One select per batch: the names with a graph outside :func:`newest_retired_select`'s retired set."""
+        if not names:
+            return set()
+        found: set[str] = set()
+        with self._store.read("enabled_names") as conn:
+            for batch in id_batches(list(dict.fromkeys(names))):
+                retired = newest_retired_select(
+                    self._store,
+                    graph_lifecycle_facts,
+                    graph_lifecycle_facts.c.graph_id,
+                    self._store.select(graphs, graphs.c.graph_id).where(graphs.c.name.in_(batch)),
+                )
+                found.update(
+                    conn.execute(
+                        self._store.select(graphs, graphs.c.name)
+                        .where(graphs.c.name.in_(batch), graphs.c.graph_id.not_in(retired))
+                        .distinct()
+                    ).scalars()
+                )
+        return found
+
     def graph_id_of_enabled_name(self, name: str) -> str | None:
         """``get_enabled_by_name``'s narrow sibling — the same select, naming only ``graph_id`` and
         never reifying a row."""
