@@ -49,9 +49,7 @@ export interface MobileTabItem {
 
 /**
  * The generic mobile bottom tab bar (mock screen C's `.tabbar`,
- * `../../../docs/designs/mobile/core-flows.html`) — shared by the hub's
- * app-root fork (`hub/src/app/shell/nav/mobile-tab-bar.ts`) and the runner's own
- * (`runner/src/app/shell/nav/mobile-tab-bar.ts`), both thin wrappers around this.
+ * `../../../docs/designs/mobile/core-flows.html`).
  * Presentational only: it renders exactly the {@link MobileTabItem} list it
  * is handed and injects no query of its own — each consumer's own badge
  * counts and route wiring stay theirs.

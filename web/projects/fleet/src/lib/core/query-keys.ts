@@ -34,9 +34,8 @@ export const hubActivityKey = ['hub', 'activity'] as const;
  * cached window at once (TanStack's default prefix match on `invalidateQueries`). */
 export const hubFleetSpendKey = ['hub', 'fleet-spend'] as const;
 export const hubGraphsKey = ['hub', 'graphs'] as const;
-/** The resolved-identity read — `GET /api/me`. Never invalidated by an
- * SSE event (no event names an identity change); the login/logout flows
- * invalidate it explicitly instead. */
+/** The resolved-identity read — `GET /api/me`. No SSE event names an
+ * identity change. */
 export const hubMeKey = ['hub', 'me'] as const;
 /** The configured login-provider list — `GET /api/auth/providers`. */
 export const hubAuthProvidersKey = ['hub', 'auth', 'providers'] as const;
@@ -44,10 +43,7 @@ export const hubAuthProvidersKey = ['hub', 'auth', 'providers'] as const;
  * the membership mutations directly (no SSE event names a membership change). */
 export const hubMembersKey = ['hub', 'members'] as const;
 /** The root every live-configuration read shares — work sources, repositories,
- * secrets, and the change log. A config write changes more than its own record (a
- * source retire also moves a secret's references and appends to the change log), so
- * every config mutation invalidates this one root rather than guessing which reads
- * it touched. No SSE event names a config change, so a write made through another
+ * secrets, and the change log. No SSE event names a config change, so a write made through another
  * door shows only on a config read's next refetch. */
 export const hubConfigKey = ['hub', 'config'] as const;
 /** One config list — `GET /api/work-sources`, `/api/repositories`, or `/api/secrets` —

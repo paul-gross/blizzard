@@ -40,9 +40,7 @@ function refusalMessage(detail: unknown): string | null {
  * off of — 404/409 aren't in every generated error union (only 422 is documented in some),
  * so this reads the same shape defensively rather than trusting the response type. A 422's
  * list-shaped `detail` (`HttpValidationError`) reads as its field-named messages. The one
- * owner of that read: every mutation's `onError` across both apps folds its failure through
- * this rather than typing its own copy (`chunk-detail.ts`'s pause/resume/detach/edit, the
- * runner top bar's local pause toggle). A coded refusal's object `detail` reads as its
+ * owner of that read. A coded refusal's object `detail` reads as its
  * message — a `project_required` one with the projects it asks to choose from. `fallback`
  * names the verb that failed, for the case where no body can be read. */
 export function errorMessage(error: unknown, fallback: string): string {

@@ -92,18 +92,13 @@
    * glance tells "under the cursor" from "actually selected" apart, unlike
    * `--tint-hover`/`--tint-selected` above (close enough together to read as
    * one shade repainted twice). Aliases onto the existing
-   * `--panel`/`--panel-hover`/`--panel-hi` ladder rather than minting new
-   * color-mix percentages — `graph-diagram-node-shape.css` already draws a
-   * node's own resting/hovered/selected fill from that exact ladder, so this
-   * reuses it under names that read as a state, not a panel depth.
+   * `--panel`/`--panel-hover`/`--panel-hi` ladder under names that read as a state,
+   * not a panel depth.
    *
    * The selected state's own left-edge accent is the other half of this
    * scale: `border-left: 2px solid transparent` reserved at rest so
    * recoloring it to `--cyan` on selection never shifts the row/card's own
-   * box (`chunk-artifacts-panel.css`'s `.art-item`/`.art-item.active` is the
-   * pattern this follows — reused directly, not redefined as a token, since
-   * every consumer already resolves selection accents through `--cyan`
-   * itself). Hover carries no border of its own — the background step above
+   * box. Hover carries no border of its own — the background step above
    * is hover's whole signal.
    *
    * A consumer of this scale owns no horizontal padding on its *container* —

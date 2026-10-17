@@ -43,12 +43,7 @@ interface SpendCellView {
  * Collapses in tiers as it narrows, driven by `@container`
  * queries on the header's own inline size rather than the viewport's: it is
  * mounted over different layouts, so it must react to the width it actually
- * has. Below ~1150px the stat strip drops; below ~700px the spend cell
- * and the brand text (wordmark and tagline both) follow, leaving the brand mark.
- * The connection cell is `flex: none` at every width and the trailing cluster
- * shrinks only into content its consumer marked shrinkable, so neither can be
- * pushed past the clipped right edge of an `overflow: hidden` shell; the stat
- * strip is the only region this component shrinks on its own.
+ * has. `board-header.css` owns the tiers and breakpoints.
  *
  * That guarantee only covers what *this* component owns. A consumer projecting
  * more than a menu into `[header-trailing]` owns both collapsing
@@ -102,11 +97,8 @@ export class BoardHeader {
    * The live fleet counts, left → right: the whole fleet, then one cell per board
    * lane in the board's own order.
    *
-   * Every count is folded through {@link laneCounts} rather than by naming statuses
-   * here. The header sits directly above the board and must not be able to disagree
-   * with it: a status this header listed and the board did not (or the reverse) would
-   * be a silent contradiction, whereas a new status added to the wire is a compile
-   * error in `chunk-lanes`, the one place that decides where it belongs.
+   * Every count is folded through {@link laneCounts}; `chunk-lanes` owns where a
+   * status belongs.
    */
   protected readonly chunkStats = computed<readonly StatCell[]>(() => {
     const counts = this.counts();

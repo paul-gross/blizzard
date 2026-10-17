@@ -51,9 +51,8 @@ export const TAKEOVER_CHANGE_CAUSES: readonly TakeoverChangeCause[] = Object.val
 export const ENVIRONMENT_CHANGE_CAUSES: readonly EnvironmentChangeCause[] = Object.values(EnvironmentChangeCause);
 
 /**
- * Each runner frame type's generated payload. `escalation-changed` carries `lease_id`
- * only when the opening/closing lease is known; `fact-changed` carries `chunk_id` and
- * `lease_id` as `null`, not omitted, for a runner-wide fact that names neither.
+ * Each runner frame type's generated payload. The generated payload types own the
+ * field presence rules.
  */
 export interface RunnerEventPayloads {
   [RunnerEventType.LEASE_CHANGED]: LeaseChangedPayload;

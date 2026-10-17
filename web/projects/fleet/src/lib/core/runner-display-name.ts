@@ -1,13 +1,10 @@
 /**
- * Runner display names — how the board and the runner panel name a runner outside
- * the runners list: its compact id, the separator, then its operator-chosen name
+ * Runner display names — how a runner is named outside the runners list: its compact id, the separator, then its operator-chosen name
  * (`rn_01KX…ABF3` named `r-claude` → `R-ABF3.r-claude`). A name is not unique — two
  * runners may share one — so the compact id leads and keeps them apart. A view that
  * carries no name renders the compact id alone.
  *
- * This is the single owner of that rendering (`bzh:frontend-formatters`); the
- * runners list and the runner panel's own identity show the full id beside the name
- * instead.
+ * This is the single owner of that rendering (`bzh:frontend-formatters`).
  */
 
 import { compactRef } from './compact-ref';

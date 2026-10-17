@@ -12,16 +12,12 @@ import { KitMenu } from '../../kit';
  * consumer's own concern; this component owns only the titlebar chrome.
  *
  * The menu's contents arrive as a {@link TemplateRef} rather than as projected
- * content, matching {@link KitMenu}'s contract: a `CdkMenu` panel wrapped around an `<ng-content>` slot cannot
- * see the items projected into it, so the panel is declared in the consumer's
- * own view and passed here.
+ * content, per {@link KitMenu}'s contract.
  *
  * `testid` roots the handles this component renders itself (`${testid}`,
- * `${testid}-livedot`, `${testid}-menu`), so two mounts (hub and runner) never
- * collide on the same `data-testid` (the caption is `${testid}-caption`, the detail `${testid}-detail`) (`bzh:frontend-kit`'s globally-unique
- * handle rule). The panel's own handle belongs to whoever declares the panel.
- * Defaults to `'mobile-titlebar'` — the hub's existing handle — so the hub side
- * needs no input to keep its specs passing.
+ * `${testid}-livedot`, `${testid}-menu`) (`bzh:frontend-kit`'s globally-unique
+ * handle rule), plus the caption (`${testid}-caption`) and detail (`${testid}-detail`).
+ * The panel's own handle belongs to whoever declares the panel.
  */
 @Component({
   selector: 'fleet-mobile-titlebar',

@@ -101,9 +101,7 @@ export * as runnerApi from './lib/api/runner';
 /*
  * The client instances themselves. The generated `index.ts` re-exports the SDK
  * functions and types but not the client, so a consumer outside this library has no
- * handle to configure its transport or stub it in a test. the `runner` app needs the
- * runner one; the `hub` app needs the hub one (e.g. `graphs-page.spec.ts` stubs the
- * hub transport to settle the graph-detail query deterministically).
+ * handle to configure its transport or stub it in a test.
  */
 export { client as runnerClient } from './lib/api/runner/client.gen';
 export { client as hubClient } from './lib/api/hub/client.gen';
