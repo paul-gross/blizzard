@@ -53,7 +53,7 @@ describe('GardeningPage (blizzard#397)', () => {
     expect(count?.classList.contains('hot')).toBe(false);
   });
 
-  it('counts each list on its tab, Proposals counting the waiting ones in amber', async () => {
+  it('counts complete lists and waiting proposals in amber, without a partial Findings badge', async () => {
     const fixture = await render([
       { proposal_id: 'gp_1', routine_name: 'comments', class: 'x', body: 'b', created_at: '2026-01-01T00:00:00Z', findings: [] },
       {
@@ -75,6 +75,7 @@ describe('GardeningPage (blizzard#397)', () => {
     expect(count('scopes')?.textContent).toBe('2');
     expect(count('routines')?.textContent).toBe('1');
     expect(count('runs')?.textContent).toBe('0');
+    expect(count('findings')).toBeNull();
     expect(count('scopes')?.classList.contains('hot')).toBe(false);
   });
 });

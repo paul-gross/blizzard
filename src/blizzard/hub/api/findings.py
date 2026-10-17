@@ -15,7 +15,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from blizzard.auth_core import Permission
-from blizzard.foundation.findings import FindingFactKind
+from blizzard.foundation.findings import FindingFactKind, FindingState
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
@@ -133,7 +133,10 @@ def _page(
     routine: str | None,
     scope: str | None,
     source: str | None,
+    class_: str | None,
+    state: FindingState | None,
     include_gone: bool,
+    descending: bool,
     cursor: str | None,
     limit: int,
 ) -> FindingsPageView:
@@ -143,7 +146,10 @@ def _page(
             routine_name=routine,
             scope_slug=scope,
             source=source,
+            class_=class_,
+            state=state,
             include_gone=include_gone,
+            descending=descending,
             cursor=cursor,
             limit=limit,
         )
@@ -162,24 +168,17 @@ def list_findings(
     routine: Annotated[str | None, Query()] = None,
     scope: Annotated[str | None, Query()] = None,
     source: Annotated[str | None, Query()] = None,
+    class_: Annotated[str | None, Query(alias="class")] = None,
+    state: Annotated[FindingState | None, Query()] = None,
     include_gone: Annotated[bool, Query()] = False,
+    descending: Annotated[bool, Query()] = False,
     cursor: Annotated[str | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=MAX_LIMIT)] = DEFAULT_LIMIT,
 ) -> FindingsPageView:
-    """The findings bucket, widened to every routine and every scope,
-    bounded and keyset-paginated — live only, unless `include_gone`,
-    which also surfaces every exited finding, not just a merely `gone` one.
-    `routine` and `scope` are both optional, independently:
-
-    - both named — one routine's findings under one scope
-    - `routine` named, `scope` absent — one routine's findings across every scope it holds
-    - `routine` absent, `scope` named — every routine's findings under one scope
-    - both absent — every finding across every routine and every scope
-
-    `source` further narrows to `"routine"` or `"review"`; absent reads
-    both. All share `list_page`'s own total `finding_id` order. `?project=` narrows to that project. A named
-    `routine` or `scope` with no `?project=` is read in the call's project (the tenant's only one, else `422
-    project_required`); naming none of the three reads the whole tenant."""
+    """Keyset page across optional routine, scope, source, class and derived state.
+    An explicit state overrides `include_gone`; descending cursors walk older IDs.
+    A named routine/scope without `?project=` resolves the call's project;
+    absent routine, scope and project read the whole tenant."""
     project_id: str | None = project
     if project_id is None and (routine is not None or scope is not None):
         project_id = project_of_call(services).project_id
@@ -189,7 +188,10 @@ def list_findings(
         routine=routine,
         scope=scope,
         source=source,
+        class_=class_,
+        state=state,
         include_gone=include_gone,
+        descending=descending,
         cursor=cursor,
         limit=limit,
     )
@@ -204,22 +206,60 @@ def list_project_findings(
     routine: Annotated[str | None, Query()] = None,
     scope: Annotated[str | None, Query()] = None,
     source: Annotated[str | None, Query()] = None,
+    class_: Annotated[str | None, Query(alias="class")] = None,
+    state: Annotated[FindingState | None, Query()] = None,
     include_gone: Annotated[bool, Query()] = False,
+    descending: Annotated[bool, Query()] = False,
     cursor: Annotated[str | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=MAX_LIMIT)] = DEFAULT_LIMIT,
 ) -> FindingsPageView:
     """The project's findings bucket, bounded and keyset-paginated, narrowed as `GET /api/findings` narrows by
-    `routine`, `scope`, `source` and `include_gone`; 404 on an unknown project."""
+    `routine`, `scope`, `source`, `class`, `state`, `descending` and `include_gone`; 404 on an unknown project."""
     return _page(
         services,
         project.project_id,
         routine=routine,
         scope=scope,
         source=source,
+        class_=class_,
+        state=state,
         include_gone=include_gone,
+        descending=descending,
         cursor=cursor,
         limit=limit,
     )
+
+
+def _classes(services: TenantServices, project_id: str | None, routine: str | None, scope: str | None) -> list[str]:
+    # The list page's ids cannot bound class options: an unloaded page may introduce a new class.
+    return services.findings.distinct_classes(project_id=project_id, routine_name=routine, scope_slug=scope)
+
+
+@router.get("/findings/classes", response_model=list[str], dependencies=[Depends(require(Permission.FLEET_VIEW))])
+def list_finding_classes(
+    services: Services,
+    project: QueryProject,
+    routine: Annotated[str | None, Query()] = None,
+    scope: Annotated[str | None, Query()] = None,
+) -> list[str]:
+    """Distinct class labels for the entire routine/scope bucket, independent of list filters."""
+    project_id: str | None = project
+    if project_id is None and (routine is not None or scope is not None):
+        project_id = project_of_call(services).project_id
+    return _classes(services, project_id, routine, scope)
+
+
+@project_router.get(
+    "/findings/classes", response_model=list[str], dependencies=[Depends(require(Permission.FLEET_VIEW))]
+)
+def list_project_finding_classes(
+    services: Services,
+    project: PathProject,
+    routine: Annotated[str | None, Query()] = None,
+    scope: Annotated[str | None, Query()] = None,
+) -> list[str]:
+    """Distinct class labels in this project's routine/scope bucket."""
+    return _classes(services, project.project_id, routine, scope)
 
 
 @router.get(

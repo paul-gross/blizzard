@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject } from '@angular/core';
 import { Router, RouterOutlet } from '@angular/router';
-import { asyncState, KitSelect, KitMasterDetail, KitPanel, type KitAsyncStateValue, ViewportService } from 'fleet';
+import { asyncState, KitButton, KitSelect, KitMasterDetail, KitPanel, type KitAsyncStateValue, ViewportService } from 'fleet';
 import { FleetFindingList, type FindingListRowVm } from '../core/finding-list';
 
 import { injectChildRouteParam } from '../../core/route-state';
@@ -26,14 +26,14 @@ import { firstRowToOpen } from '../../core/first-row';
  * as `fleet-kit-select` dropdowns, always visible, one labeled row per filter on
  * desktop — `kit-fact-list.css`'s own fixed-label-column shape — and two per row on
  * mobile, each trigger carrying its own label. Each carries a leading "All"
- * option: class and state's come from the fetched bucket's own `class` values (never
- * a hardcoded vocabulary) and the generated `FindingState` vocabulary respectively;
+  * option: class comes from the scoped distinct-classes read and state from the
+  * generated vocabulary; neither depends on the loaded pages.
  * routine and scope's each name every fetched routine/scope.
  */
 @Component({
   selector: 'app-gardening-findings-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FleetFindingList, KitMasterDetail, KitPanel, KitSelect, RouterOutlet],
+  imports: [FleetFindingList, KitButton, KitMasterDetail, KitPanel, KitSelect, RouterOutlet],
   templateUrl: './gardening-findings-page.html',
   styleUrl: './gardening-findings-page.css',
   host: {
@@ -73,33 +73,8 @@ export class GardeningFindingsPage {
   }
 
   /**
-   * A route-named selection is independent of the bucket's own filters — a
-   * routine/scope/class/state pick can shrink the visible rows out from under a
-   * still-valid `findingId`, unlike a param naming nothing the loaded data has
-   * (there a plain computed resolves to nothing selected; here the *set* itself
-   * can shrink after the id was already valid, so clearing it takes a real
-   * navigation to the bare list route, not a computed that just stops rendering
-   * while the URL still names a finding no longer in view). This lives beside the
-   * list rather than in the detail pane because it is the *list's* agreement with
-   * the URL that is at stake: without it the detail, resolved by id independently
-   * of the bucket, would happily keep rendering a finding the current filters
-   * exclude.
-   *
-   * Gated on the bucket read having actually settled — `filters.bucketQuery`'s own
-   * `isPending()`/`isError()` — since {@link findingListRows} reads empty while a
-   * routine/scope change is still in flight, and a bare "id not in rows" check
-   * would fire on every such change and clear a selection that would have survived
-   * the read once it resolved. On an error the safest behavior is to leave the
-   * selection alone: a failed read is not evidence the finding was filtered out.
-   *
-   * Derived entirely from settled query state plus the route param — never from a
-   * filter-change event, which would fire before the new bucket read resolves and
-   * land straight back in the pending trap above — so this can't race an
-   * operator's own click or re-trigger itself: once the navigation lands,
-   * {@link findingId} reads `null` and the effect no-ops. `replaceUrl: true` so a
-   * filter change never pushes a history entry the operator has to click back
-   * through, and the filters themselves are preserved: they are the reason the
-   * navigation is happening.
+   * On desktop the bare route opens the first loaded row. A named finding stays
+   * selected independently of the paginated list; the child fetches it by id.
    */
   constructor() {
     effect(() => {
@@ -113,15 +88,11 @@ export class GardeningFindingsPage {
         queryParamsHandling: 'preserve',
       });
     });
-    effect(() => {
-      const id = this.findingId();
-      if (id === null) return;
-      if (this.filters.bucketQuery.isPending() || this.filters.bucketQuery.isError()) return;
-      if (this.findingListRows().some((row) => row.findingId === id)) return;
-      void this.router.navigate(this.lens.link(['/gardening', 'findings']), {
-        replaceUrl: true,
-        queryParamsHandling: 'preserve',
-      });
-    });
+  }
+
+  protected older(): void {
+    if (this.filters.bucketQuery.hasNextPage() && !this.filters.bucketQuery.isFetchingNextPage()) {
+      void this.filters.bucketQuery.fetchNextPage();
+    }
   }
 }

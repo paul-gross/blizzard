@@ -644,6 +644,13 @@ HUB_ALLOWED_SCANS: list[Allowance] = [
         IReadDerivationCorpus, "derived_segment_ids", ("transcript_event_derivations",), _DERIVATION_SWEEP_REASON
     ),
     IndexWalkAllowance(IReadFindingRepository, "list_page", ("findings",), _PAGED_LISTING_REASON),
+    IndexWalkAllowance(
+        IReadFindingRepository,
+        "distinct_classes",
+        ("findings",),
+        "class options cover the entire tenant or project bucket, including unloaded pages; the distinct read walks "
+        "a covering findings index without reconstituting finding rows.",
+    ),
     IndexWalkAllowance(IReadGardenProposalRepository, "counts_by_class", ("garden_proposals",), _ANALYTICS_REASON),
     IndexWalkAllowance(
         IReadGardenProposalRepository,

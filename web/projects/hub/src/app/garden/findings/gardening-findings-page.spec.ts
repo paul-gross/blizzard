@@ -28,6 +28,7 @@ function findingFixture(overrides: { state: string } & Record<string, unknown>) 
     last_seen_at: '2026-01-05T00:00:00Z',
     introduced: '4ba7ef06d',
     note: null,
+    class: overrides['class'],
     live: overrides.state === 'live',
     exit: null,
     ...overrides,
@@ -129,13 +130,14 @@ describe('GardeningFindingsPage', () => {
   afterEach(() => stub?.restore());
 
   async function mount(
-    opts: { url?: string; routeOverride?: (method: string, path: string) => unknown; mobile?: boolean } = {},
+    opts: { url?: string; routeOverride?: (method: string, path: string, search: string) => unknown; mobile?: boolean } = {},
   ) {
-    stub = stubRequestClient(hubClient, (method, path) => {
-      const overridden = opts.routeOverride?.(method, path);
+    stub = stubRequestClient(hubClient, (method, path, search) => {
+      const overridden = opts.routeOverride?.(method, path, search);
       if (overridden !== undefined) return overridden;
       if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
       if (method === 'GET' && path === '/api/findings') return { findings: [], next_cursor: null };
+      if (method === 'GET' && path === '/api/findings/classes') return [];
       if (method === 'GET' && path === '/api/garden-proposals') return { proposals: [], next_cursor: null };
       if (method === 'GET' && path === '/api/routines') return ROUTINES;
       if (method === 'GET' && path === '/api/scopes') return SCOPES;
@@ -159,8 +161,19 @@ describe('GardeningFindingsPage', () => {
   }
 
   /** Every fixture that needs rows in the bucket answers `/api/findings` with them. */
-  const withBucket = (method: string, path: string) =>
-    method === 'GET' && path === '/api/findings' ? { findings: BUCKET, next_cursor: null } : undefined;
+  const withBucket = (method: string, path: string, search: string) => {
+    if (method !== 'GET') return undefined;
+    if (path === '/api/findings/classes') return ['stale-docstring', 'unused-import'];
+    if (path !== '/api/findings') return undefined;
+    const params = new URLSearchParams(search);
+    const rows = BUCKET.filter((f) =>
+      (!params.has('routine') || f.routine_name === params.get('routine')) &&
+      (!params.has('scope') || f.scope_slug === params.get('scope')) &&
+      (!params.has('class') || f['class'] === params.get('class')) &&
+      (!params.has('state') || f.state === params.get('state')),
+    );
+    return { findings: rows, next_cursor: null };
+  };
 
   /** The filter whose popup carries an option testid — its trigger's testid. */
   function triggerOf(optionTestid: string): string {
@@ -268,23 +281,50 @@ describe('GardeningFindingsPage', () => {
 
   it('keeps every active filter through a row pick, rather than resetting it', async () => {
     const { fixture, router, el } = await mount({
-      url: '/gardening/findings?routine=weekly&scope=web&class=unused-import&state=gone',
+      url: '/gardening/findings?routine=nightly&scope=blizzard&class=unused-import&state=gone',
       routeOverride: withBucket,
     });
-    expect(await pressed(el, 'gardening-findings-routine-item-weekly')).toBe('true');
+    expect(await pressed(el, 'gardening-findings-routine-item-nightly')).toBe('true');
     expect(await pressed(el, 'gardening-finding-class-item-unused-import')).toBe('true');
 
     el.querySelector<HTMLButtonElement>('[data-testid="gardening-finding-row-fnd_11"]')!.click();
     await settle(fixture);
 
-    expect(router.url).toBe('/gardening/findings/fnd_11?routine=weekly&scope=web&class=unused-import&state=gone');
-    expect(await pressed(el, 'gardening-findings-routine-item-weekly')).toBe('true');
-    expect(await pressed(el, 'gardening-findings-scope-item-web')).toBe('true');
+    expect(router.url).toBe('/gardening/findings/fnd_11?routine=nightly&scope=blizzard&class=unused-import&state=gone');
+    expect(await pressed(el, 'gardening-findings-routine-item-nightly')).toBe('true');
+    expect(await pressed(el, 'gardening-findings-scope-item-blizzard')).toBe('true');
     expect(await pressed(el, 'gardening-finding-class-item-unused-import')).toBe('true');
     expect(await pressed(el, 'gardening-finding-state-item-gone')).toBe('true');
   });
 
   describe('the findings triage bucket', () => {
+    it('loads an older page on demand and offers classes beyond the loaded rows', async () => {
+      const { fixture, el } = await mount({ mobile: true, routeOverride: (method, path, search) => {
+        if (method === 'GET' && path === '/api/findings/classes') return ['stale-docstring', 'off-page-class'];
+        if (method === 'GET' && path === '/api/findings') {
+          return new URLSearchParams(search).has('cursor')
+            ? { findings: [FINDING_OTHER_ROUTINE], next_cursor: null }
+            : { findings: [FINDING_LIVE], next_cursor: 'older-cursor' };
+        }
+        return undefined;
+      } });
+      expect(stub.forRoute('/api/findings', 'GET')).toHaveLength(1);
+      expect(el.querySelector('[data-testid="gardening-finding-row-fnd_20"]')).toBeNull();
+      await openFilter(el, 'gardening-findings-class-filter');
+      expect(inOverlay('gardening-finding-class-item-off-page-class')).toBeTruthy();
+      await openFilter(el, 'gardening-findings-class-filter');
+      el.querySelector<HTMLButtonElement>('[data-testid="gardening-findings-older"]')!.click();
+      await settle(fixture);
+      expect(stub.forRoute('/api/findings', 'GET')[1].search).toContain('cursor=older-cursor');
+      expect(el.querySelector('[data-testid="gardening-finding-row-fnd_20"]')).toBeTruthy();
+      expect(el.querySelector('[data-testid="gardening-findings-older"]')).toBeNull();
+    });
+
+    it('keeps an off-page route-named finding through a settled list read', async () => {
+      const { router } = await mount({ url: '/gardening/findings/fnd_99', routeOverride: withBucket });
+      expect(router.url).toBe('/gardening/findings/fnd_99');
+    });
+
     it('rests on every routine and every scope with no query params — both "All" options selected, the bucket read firing with neither named', async () => {
       const { el } = await mount({ routeOverride: withBucket });
 
@@ -297,10 +337,9 @@ describe('GardeningFindingsPage', () => {
       const weekly = el.querySelector('[data-testid="gardening-finding-row-fnd_20"]');
       expect(nightly).toBeTruthy();
       expect(weekly).toBeTruthy();
-      const gone = el.querySelector('[data-testid="gardening-finding-row-fnd_11"]');
-      const resolved = el.querySelector('[data-testid="gardening-finding-row-fnd_12"]');
-      expect(gone?.querySelector('.fl-body--gone')).toBeTruthy();
-      expect(resolved?.querySelector('.fl-body--exited')).toBeTruthy();
+      expect(el.querySelector('[data-testid="gardening-finding-row-fnd_11"]')).toBeNull();
+      expect(el.querySelector('[data-testid="gardening-finding-row-fnd_12"]')).toBeNull();
+      expect(await pressed(el, 'gardening-finding-state-item-live')).toBe('true');
     });
 
     it('reaches a scope literally named "all" through its own option, distinct from the "All scopes" sentinel (review:F1)', async () => {
@@ -328,6 +367,7 @@ describe('GardeningFindingsPage', () => {
         if (method === 'GET' && url.pathname === '/api/me') body = OPERATOR_ME_RESPONSE;
         else if (method === 'GET' && url.pathname === '/api/findings')
           body = { findings: [...BUCKET, FINDING_IN_SCOPE_ALL], next_cursor: null };
+        else if (method === 'GET' && url.pathname === '/api/findings/classes') body = ['stale-docstring', 'unused-import'];
         else if (method === 'GET' && url.pathname === '/api/garden-proposals') body = { proposals: [], next_cursor: null };
         else if (method === 'GET' && url.pathname === '/api/routines') body = ROUTINES;
         else if (method === 'GET' && url.pathname === '/api/scopes') body = [...SCOPES, SCOPE_ALL];
@@ -417,14 +457,13 @@ describe('GardeningFindingsPage', () => {
 
       await pick(el, 'gardening-finding-class-item-unused-import');
 
-      expect(router.url).toBe('/gardening/findings/fnd_11?class=unused-import');
+      expect(router.url).toBe('/gardening/findings/fnd_10?class=unused-import');
       expect(el.querySelector('[data-testid="gardening-finding-row-fnd_10"]')).toBeNull();
-      expect(el.querySelector('[data-testid="gardening-finding-row-fnd_11"]')).toBeTruthy();
-      expect(el.querySelector('[data-testid="gardening-finding-row-fnd_14"]')).toBeTruthy();
+      expect(el.querySelector('[data-testid="gardening-finding-row-fnd_20"]')).toBeTruthy();
 
       await pick(el, 'gardening-finding-state-item-gone');
 
-      expect(router.url).toBe('/gardening/findings/fnd_11?class=unused-import&state=gone');
+      expect(router.url).toBe('/gardening/findings/fnd_10?class=unused-import&state=gone');
       expect(el.querySelector('[data-testid="gardening-finding-row-fnd_11"]')).toBeTruthy();
       expect(el.querySelector('[data-testid="gardening-finding-row-fnd_14"]')).toBeNull();
     });
@@ -440,7 +479,7 @@ describe('GardeningFindingsPage', () => {
       await pick(el, 'gardening-findings-routine-item-weekly');
 
       expect(await pressed(el, 'gardening-finding-class-all')).toBe('true');
-      expect(await pressed(el, 'gardening-finding-state-all')).toBe('true');
+      expect(await pressed(el, 'gardening-finding-state-item-live')).toBe('true');
     });
 
     it('moves a selected finding that a filter change removes to the first row left, keeping the filter itself', async () => {
@@ -456,7 +495,7 @@ describe('GardeningFindingsPage', () => {
       // filtered rows without touching the routine/scope query itself.
       await pick(el, 'gardening-finding-class-item-unused-import');
 
-      expect(router.url).toBe('/gardening/findings/fnd_11?class=unused-import');
+      expect(router.url).toBe('/gardening/findings/fnd_10?class=unused-import');
     });
 
     it('does not clear a selection while the bucket read triggered by a routine/scope pick is still pending', async () => {
@@ -520,9 +559,9 @@ describe('GardeningFindingsPage', () => {
     it("restores the row when the resolve is rejected", async () => {
       const { fixture, el } = await mount({
         url: '/gardening/findings?state=live',
-        routeOverride: (method, path) => {
+        routeOverride: (method, path, search) => {
           if (method === 'POST' && path === '/api/findings/resolve') return stubError(422, { detail: 'blank note' });
-          return withBucket(method, path);
+          return withBucket(method, path, search);
         },
       });
       expect(el.querySelector('[data-testid="gardening-finding-row-fnd_10"]')).toBeTruthy();
@@ -536,7 +575,7 @@ describe('GardeningFindingsPage', () => {
     });
 
     it("does not drop the row under 'All states', where nothing is being predicted away from", async () => {
-      const { fixture, el } = await mount({ routeOverride: withBucket });
+      const { fixture, el } = await mount({ url: '/gardening/findings?state=all', routeOverride: withBucket });
       expect(el.querySelector('[data-testid="gardening-finding-row-fnd_10"]')).toBeTruthy();
 
       fireResolveFrom(['fnd_10']);

@@ -125,20 +125,18 @@ export function hubFindingKey(findingId: string | null): readonly unknown[] {
 
 /** The findings triage bucket read's key prefix — the triage surface's own `GET
  * /api/findings?routine=&scope=` read (as distinct from {@link hubFindingsKey}'s
- * by-id fan-out), appended with the selected routine and scope so a different pair is
- * its own cache entry, `hubFleetSpendKey`'s own reason. A triage exit mutation doesn't
- * know which routine/scope is currently selected, so it invalidates this bare prefix
- * instead (TanStack's default prefix match on `invalidateQueries`) — every cached
- * routine/scope combination closes at once. */
+ * by-id fan-out). A triage exit mutation invalidates this bare prefix, covering
+ * both paged buckets and distinct class options across filters and lenses. */
 export const hubFindingsBucketPrefixKey = ['hub', 'findings-bucket'] as const;
 
-/** The findings triage bucket read, keyed by the selected routine and scope. Both are
- * independently optional on the server — `null` means "every value on
- * that dimension" rather than "not chosen yet" — so the `(null, null)` pair is itself
- * a distinct, meaningful cache entry (the widened "every routine, every scope" read),
- * not a disabled-query rest state the way `hubGraphKey`'s nullable id is. */
-export function hubFindingsBucketKey(routine: string | null, scope: string | null): readonly unknown[] {
-  return [...hubFindingsBucketPrefixKey, routine, scope];
+/** A filtered findings page series. Null routine/scope mean the entire dimension;
+ * null state means the explicit All-states choice, distinct from the default live. */
+export function hubFindingsBucketKey(routine: string | null, scope: string | null, className?: string | null, state?: string | null): readonly unknown[] {
+  return [...hubFindingsBucketPrefixKey, 'pages', routine, scope, className ?? null, state ?? null];
+}
+
+export function hubFindingClassesKey(routine: string | null, scope: string | null): readonly unknown[] {
+  return [...hubFindingsBucketPrefixKey, 'classes', routine, scope];
 }
 
 /** One work item read by its source pointer, keyed by the pair — `GET

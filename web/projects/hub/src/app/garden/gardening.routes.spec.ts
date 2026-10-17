@@ -48,6 +48,7 @@ describe('the /gardening route subtree', () => {
       if (method === 'GET' && path === '/api/runs') return [];
       if (method === 'GET' && path === '/api/scopes') return [];
       if (method === 'GET' && path === '/api/findings') return { findings: [], next_cursor: null };
+      if (method === 'GET' && path === '/api/findings/classes') return [];
       if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
       return {};
     });
@@ -249,26 +250,11 @@ describe('the /gardening route subtree', () => {
       if (method === 'GET' && path === '/api/routines') return [];
       if (method === 'GET' && path === '/api/graphs') return [];
       if (method === 'GET' && path === '/api/runs') return [];
-      // The bucket read has to name fnd_1 too — the findings bucket read fires
-      // unconditionally, and a route-named finding the bucket's own rows don't
-      // include gets navigated away from (`gardening-findings-page.ts`'s own
-      // selection-agreement effect).
+      if (method === 'GET' && path === '/api/findings/classes') return ['stale-docstring'];
+      // The detail by id remains available even if no list page contains it.
       if (method === 'GET' && path === '/api/findings') {
         return {
-          findings: [
-            {
-              finding_id: 'fnd_1',
-              routine_name: 'nightly',
-              scope_slug: 'blizzard',
-              class: 'stale-docstring',
-              locus: 'a.py:1',
-              summary: 'summary a',
-              state: 'live',
-              live: true,
-              observed_count: 1,
-              last_seen_at: '2026-01-05T00:00:00Z',
-            },
-          ],
+          findings: [],
           next_cursor: null,
         };
       }

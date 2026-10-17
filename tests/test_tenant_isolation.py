@@ -265,6 +265,7 @@ _PROBES: dict[tuple[str, str], _Probe] = {
     ("POST", "/api/questions/{question_id}/answers"): _f({"answer": "a"}),
     # -- findings and garden proposals -----------------------------------------------------------------------
     ("GET", "/api/findings"): _LIST,
+    ("GET", "/api/findings/classes"): _LIST,
     ("GET", "/api/findings/{finding_id}"): _f(),
     ("POST", "/api/findings/confirm-gone"): _f(_EXIT),
     ("POST", "/api/findings/not-a-finding"): _f(_EXIT),
@@ -478,6 +479,7 @@ _PROBES: dict[tuple[str, str], _Probe] = {
     ),
     ("GET", "/api/projects/{project}/routines"): _f(),
     ("GET", "/api/projects/{project}/findings"): _f(),
+    ("GET", "/api/projects/{project}/findings/classes"): _f(),
     ("GET", "/api/projects/{project}/garden-proposals"): _f(),
     ("POST", "/api/projects/{project}/garden-proposals"): _f({"class": "c", "title": "t", "body": "b", "findings": []}),
     ("GET", "/api/projects/{project}/runs"): _f(),

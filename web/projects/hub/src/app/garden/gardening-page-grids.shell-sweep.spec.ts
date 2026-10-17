@@ -193,6 +193,7 @@ async function render(url: string, override: (method: string, path: string) => u
     if (method === 'GET' && path === '/api/graphs') return [];
     if (method === 'GET' && path === '/api/runs') return RUNS;
     if (method === 'GET' && path === '/api/findings') return { findings: FINDINGS, next_cursor: null };
+    if (method === 'GET' && path === '/api/findings/classes') return ['stale-docstring'];
     if (method === 'GET' && path === '/api/garden-proposals') return { proposals: [], next_cursor: null };
     return {};
   });
