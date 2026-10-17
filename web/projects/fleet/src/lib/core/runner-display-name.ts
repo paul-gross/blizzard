@@ -1,8 +1,9 @@
 /**
- * Runner display names — how a runner is named outside the runners list: its compact id, the separator, then its operator-chosen name
- * (`rn_01KX…ABF3` named `r-claude` → `R-ABF3.r-claude`). A name is not unique — two
- * runners may share one — so the compact id leads and keeps them apart. A view that
- * carries no name renders the compact id alone.
+ * Runner display names — how a runner is named outside the runners list: its compact
+ * id, the separator, then its operator-chosen name (`rn_01KX…ABF3` named `r-claude` →
+ * `R-ABF3.r-claude`). A name is not unique — two runners may share one — so the compact
+ * id leads and keeps them apart. A view that carries no name renders the compact id
+ * alone.
  *
  * This is the single owner of that rendering (`bzh:frontend-formatters`).
  */

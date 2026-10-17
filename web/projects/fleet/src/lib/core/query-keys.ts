@@ -43,8 +43,8 @@ export const hubAuthProvidersKey = ['hub', 'auth', 'providers'] as const;
  * the membership mutations directly (no SSE event names a membership change). */
 export const hubMembersKey = ['hub', 'members'] as const;
 /** The root every live-configuration read shares — work sources, repositories,
- * secrets, and the change log. No SSE event names a config change, so a write made through another
- * door shows only on a config read's next refetch. */
+ * secrets, and the change log. No SSE event names a config change, so a write made
+ * through another door shows only on a config read's next refetch. */
 export const hubConfigKey = ['hub', 'config'] as const;
 /** One config list — `GET /api/work-sources`, `/api/repositories`, or `/api/secrets` —
  * with whether retired records ride along in the key, so the two reads are separate
