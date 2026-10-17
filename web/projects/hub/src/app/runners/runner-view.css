@@ -8,23 +8,14 @@
   font-variant-numeric: tabular-nums;
   color: var(--text);
 }
+.envs {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--line);
+}
 .runners {
   list-style: none;
   margin: 0;
   padding: 0;
-}
-/* A pause/resume failure reads above the registry list. */
-.notice {
-  margin: 0;
-  padding: 4px 6px;
-  border: 1px solid var(--red-dim);
-  border-left-width: 2px;
-  background: var(--overlay-20);
-  color: var(--red);
-  font-size: var(--fs-xs);
-}
-.action-notice {
-  margin: 0 0 6px;
 }
 .runner {
   display: flex;
@@ -40,32 +31,16 @@
   align-items: baseline;
   gap: 6px;
 }
+.r3 {
+  justify-content: flex-start;
+  flex-wrap: wrap;
+}
 /* A square, per the mockup's status indicators — not a dot. */
 .dot {
   display: inline-block;
   width: 7px;
   height: 7px;
   margin-right: 6px;
-}
-.dot.online {
-  background: var(--green);
-  box-shadow: 0 0 4px var(--green);
-}
-/* An offline runner blinks red: the fleet is missing a machine, which is the
-   one registry fact worth pulling an operator's eye across the room. */
-.dot.offline {
-  background: var(--red);
-  animation: blink 1.2s steps(2, jump-none) infinite;
-}
-@keyframes blink {
-  50% {
-    opacity: 0.15;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .dot.offline {
-    animation: none;
-  }
 }
 .name {
   color: var(--amber);
@@ -81,64 +56,19 @@
 .dot.never {
   border: 1px solid var(--label-dim);
 }
-.rid {
-  color: var(--label-dim);
-  font-size: var(--fs-xs);
-  overflow-wrap: anywhere;
-}
-.wid {
-  color: var(--label);
-  font-size: var(--fs-xs);
-  overflow-wrap: anywhere;
-}
 .seen {
   color: var(--label-dim);
   font-size: var(--fs-label);
   white-space: nowrap;
 }
-/* The runner's claims: chunk short name — node, one line each, dim so the
-   registry row's own identity stays the loudest thing in it. */
-.claims {
-  list-style: none;
-  margin: 0;
-  padding: 0 0 0 13px;
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
-.claim {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-  font-size: var(--fs-xs);
-}
-.claim .c-id {
-  color: var(--amber-hi);
-}
-.claim .c-node {
+.fleet-link {
+  display: block;
+  padding: 6px 8px;
   color: var(--label);
   font-size: var(--fs-label);
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+  text-decoration: none;
 }
-/* The node/status divider — dim, so the two facts read as one line rather
-   than competing for the eye. */
-.claim .c-sep {
-  color: var(--label-dim);
-  font-size: var(--fs-label);
-}
-.badges {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 3px;
-}
-/* The host-less runners' heading, below every host card. */
-.hostless {
-  margin: 4px 0 0;
-  padding: 4px 8px;
-  color: var(--label-dim);
-  font-size: var(--fs-xs);
-  font-weight: normal;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+.fleet-link:hover,
+.fleet-link:focus-visible {
+  color: var(--amber);
 }

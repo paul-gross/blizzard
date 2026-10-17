@@ -209,7 +209,7 @@ to route or claim.
 
 The runner reports its gates on every registration, so they show in two places:
 
-- the board's runner registry, as a "Gates:" badge row beside the harness badges;
+- the Fleet tab's runner rows, as a "Gates:" badge row beside the harness badges;
 - the runner panel's info section.
 
 An open gate decision shows wherever a waiting chunk does, derived from the decision rather than from the registration:

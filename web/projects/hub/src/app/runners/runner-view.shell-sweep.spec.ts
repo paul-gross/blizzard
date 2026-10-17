@@ -1,5 +1,6 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
 import { commands, page } from 'vitest/browser';
 
 import type { RunnerRow } from './runner-rows';
@@ -27,24 +28,26 @@ function tokenColor(token: string): string {
   return color;
 }
 
+
 /**
- * The runner registry's rate-limit pace bars, the tooled half of
+ * The board rail's compact runner panel, the tooled half of
  * `blizzard-context:/verification/blizzard.md`'s `web:shell-sweep` method — a real,
- * headless-Chromium proof that the stacked utilization/elapsed pair genuinely stacks
- * (two distinct rows, not overlapping) and stays within the fleet panel's own width at
- * the board's right-rail viewport, ~390px. jsdom lays out flex children without ever
- * checking whether they actually clip, so this is exactly the class of layout claim
- * `web:unit-test` cannot make good on (`bzh:narrow-viewport-tier-rule`).
+ * headless-Chromium proof that each runner's three lines (light/name/seen, agents, pause
+ * badges) genuinely stack inside the rail at its ~390px width and at a desktop width with no
+ * horizontal overflow, and that the pause badges are the kit's soft pills. jsdom never lays
+ * these lines out, so this is a claim `web:unit-test` cannot make good on
+ * (`bzh:narrow-viewport-tier-rule`).
  *
- * Excluded from the default `ng test fleet` run (`angular.json`'s `test.exclude`)
- * because it needs `--browsers=ChromiumHeadless`, not jsdom — run it via
- * `npm run shell-sweep` (`web/scripts/shell-sweep.js`).
+ * Excluded from the default `ng test hub` run (`angular.json`'s `test.exclude`) because it
+ * needs `--browsers=ChromiumHeadless`, not jsdom — run it via `npm run shell-sweep`
+ * (`web/scripts/shell-sweep.js`).
  */
 const NOW = new Date().toISOString();
+const NAME = 'runner-with-a-genuinely-long-operator-chosen-name';
 
 const ROW: RunnerRow = {
-  runner_id: 'rn_paced',
-  runner_name: 'paced',
+  runner_id: 'rn_01KXKVVF1J3D6H6VYZ3XYNABF3',
+  runner_name: NAME,
   added_at: NOW,
   connection: 'online',
   workspace_id: 'ws_a',
@@ -54,298 +57,42 @@ const ROW: RunnerRow = {
   served: [],
   unassigned: false,
   unresolved: [],
-  bindingLines: [],
-  subscriptionName: null,
-  online: true,
-  hub_paused: false,
-  locally_paused: false,
-  claims: [],
-  used: 0,
-  subscriptionPaces: [
-    {
-      slug: 'anthropic-default',
-      name: 'Anthropic (default)',
-      paceBars: [
-        { window: '5h', utilizationPct: 62, elapsedPct: 38 },
-        { window: '7d', utilizationPct: 81, elapsedPct: 90 },
-      ],
-      condition: null,
-      sampledAt: NOW,
-      refreshedLabel: 'refreshed 0s ago',
-      freshness: 'fresh',
-      missReason: null,
-    },
+  bindingLines: [
+    { project: 'Blizzard', workspaceId: 'ws_a', agents: 6, agentsInUse: 4, unreported: false },
+    { project: 'Celestial Navigation Platform', workspaceId: 'ws_b', agents: 3, agentsInUse: 0, unreported: false },
   ],
-};
-
-// Labels of unequal glyph count, which the fixed label column must absorb. A provider
-// that derives its window labels from the lengths it reports can emit these, so the pair
-// is representative rather than contrived — and unlike "5h"/"7d" it is not equal-width in
-// the panel's monospace face, which is what makes the alignment claim falsifiable.
-const UNEQUAL_LABEL_ROW: RunnerRow = {
-  runner_id: 'rn_unequal',
-  runner_name: 'unequal',
-  added_at: NOW,
-  connection: 'online',
-  workspace_id: 'ws_a',
-  registered_at: NOW,
-  last_seen_at: NOW,
-  nowMs: Date.parse(NOW),
-  served: [],
-  unassigned: false,
-  unresolved: [],
-  bindingLines: [],
   subscriptionName: null,
   online: true,
-  hub_paused: false,
-  locally_paused: false,
-  claims: [],
-  used: 0,
-  subscriptionPaces: [
-    {
-      slug: 'anthropic-default',
-      name: 'Anthropic (default)',
-      paceBars: [
-        { window: '5h', utilizationPct: 62, elapsedPct: 38 },
-        { window: '30d', utilizationPct: 81, elapsedPct: 90 },
-      ],
-      condition: null,
-      sampledAt: NOW,
-      refreshedLabel: 'refreshed 0s ago',
-      freshness: 'fresh',
-      missReason: null,
-    },
-  ],
-};
-
-const SUBSCRIPTION_ROW: RunnerRow = {
-  runner_id: 'rn_subs',
-  runner_name: 'subs',
-  added_at: NOW,
-  connection: 'online',
-  workspace_id: 'ws_a',
-  registered_at: NOW,
-  last_seen_at: NOW,
-  nowMs: Date.parse(NOW),
-  served: [],
-  unassigned: false,
-  unresolved: [],
-  bindingLines: [],
-  subscriptionName: null,
-  online: true,
-  hub_paused: false,
-  locally_paused: false,
-  claims: [],
-  used: 0,
-  // Two declared subscriptions sharing an identical "5h" window label —
-  // the layout claim this sweep exists to prove is that the two groups stay visually
-  // distinct rather than merging into one shared bar list.
-  subscriptionPaces: [
-    {
-      slug: 'anthropic-default',
-      name: 'Anthropic (default)',
-      paceBars: [
-        { window: '5h', utilizationPct: 62, elapsedPct: 38 },
-        { window: '7d', utilizationPct: 81, elapsedPct: 90 },
-      ],
-      condition: null,
-      sampledAt: NOW,
-      refreshedLabel: 'refreshed 0s ago',
-      freshness: 'fresh',
-      missReason: null,
-    },
-    {
-      slug: 'anthropic-secondary',
-      name: 'Anthropic (secondary)',
-      paceBars: [{ window: '5h', utilizationPct: 15, elapsedPct: 5 }],
-      condition: null,
-      sampledAt: NOW,
-      refreshedLabel: 'refreshed 0s ago',
-      freshness: 'fresh',
-      missReason: null,
-    },
-  ],
-};
-
-const MULTI_HARNESS_ROW: RunnerRow = {
-  runner_id: 'rn_multi_harness',
-  runner_name: 'multi-harness',
-  added_at: NOW,
-  connection: 'online',
-  workspace_id: 'ws_a',
-  registered_at: NOW,
-  last_seen_at: NOW,
-  nowMs: Date.parse(NOW),
-  served: [],
-  unassigned: false,
-  unresolved: [],
-  bindingLines: [],
-  subscriptionName: null,
-  online: true,
-  hub_paused: false,
-  locally_paused: false,
-  env_capacity: 4,
-  claims: [{ chunkId: 'ch_01ABCDEF', shortId: 'C-01', node: 'build', status: 'running' }],
-  used: 1,
-  subscriptionPaces: [],
-  capabilities: [
-    { harness_id: 'claude_code', version: '2.1.281 (Claude Code)', tiers: ['sonnet'], default: true, available: true },
-    { harness_id: 'opencode', version: '1.28.32', tiers: ['sonnet'], default: false, available: false },
-  ],
-};
-
-const GATED_ROW: RunnerRow = {
-  runner_id: 'rn_gated',
-  runner_name: 'gated',
-  added_at: NOW,
-  connection: 'online',
-  workspace_id: 'ws_a',
-  registered_at: NOW,
-  last_seen_at: NOW,
-  nowMs: Date.parse(NOW),
-  served: [],
-  unassigned: false,
-  unresolved: [],
-  bindingLines: [],
-  subscriptionName: null,
-  online: true,
-  hub_paused: false,
-  locally_paused: false,
+  hub_paused: true,
+  locally_paused: true,
+  locally_paused_reason: 'spend ceiling $5.00 reached over the trailing 24h (spend $7.00)',
+  host_id: 'hs_1',
   claims: [],
   used: 0,
   subscriptionPaces: [],
-  capabilities: [{ harness_id: 'claude_code', version: null, tiers: [], default: true, available: true }],
-  gates: ['build', 'review', 'deliver-to-master', 'a-node-with-a-rather-long-name-to-force-wrapping'],
 };
 
-const EMPTY_SAMPLE_ROW: RunnerRow = {
-  runner_id: 'rn_empty_sample',
-  runner_name: 'empty-sample',
-  added_at: NOW,
-  connection: 'online',
-  workspace_id: 'ws_a',
-  registered_at: NOW,
-  last_seen_at: NOW,
-  nowMs: Date.parse(NOW),
-  served: [],
-  unassigned: false,
-  unresolved: [],
-  bindingLines: [],
-  subscriptionName: null,
-  online: true,
-  hub_paused: false,
-  locally_paused: false,
-  claims: [],
-  used: 0,
-  subscriptionPaces: [
-    {
-      slug: 'anthropic-default',
-      name: 'Anthropic (default)',
-      paceBars: [],
-      condition: null,
-      sampledAt: NOW,
-      refreshedLabel: 'refreshed 0s ago',
-      freshness: 'fresh',
-      missReason: null,
-    },
-  ],
-};
+const ROWS: readonly RunnerRow[] = [
+  ROW,
+  { ...ROW, runner_id: 'rn_01KXKVVF1J3D6H6VYZ3XYN7Q2M', hub_paused: false, locally_paused: false },
+  {
+    ...ROW,
+    runner_id: 'rn_01KXKVVF1J3D6H6VYZ3XYNNEW1',
+    connection: 'never_connected',
+    online: false,
+    workspace_id: null,
+    registered_at: null,
+    last_seen_at: null,
+    bindingLines: [],
+    hub_paused: false,
+    locally_paused: false,
+  },
+];
 
-const LAPSED_ROW: RunnerRow = {
-  runner_id: 'rn_lapsed',
-  runner_name: 'lapsed',
-  added_at: NOW,
-  connection: 'online',
-  workspace_id: 'ws_a',
-  registered_at: NOW,
-  last_seen_at: NOW,
-  nowMs: Date.parse(NOW),
-  served: [],
-  unassigned: false,
-  unresolved: [],
-  bindingLines: [],
-  subscriptionName: null,
-  online: true,
-  hub_paused: false,
-  locally_paused: false,
-  claims: [],
-  used: 0,
-  // A miss-only row: no windows, and a lapsed credential in place of
-  // the generic no-usage-windows report.
-  subscriptionPaces: [
-    {
-      slug: 'openai',
-      name: 'OpenAI',
-      paceBars: [],
-      condition: 'credential_lapsed',
-      sampledAt: null,
-      refreshedLabel: null,
-      freshness: null,
-      missReason: null,
-    },
-  ],
-};
-
-// A runner declaring three slugs at each age tier plus a never-sampled one with a long
-// miss reason, the shape the aging/stale colour and no-sample-yet claims are
-// falsifiable against.
-const FRESHNESS_ROW: RunnerRow = {
-  runner_id: 'rn_freshness',
-  runner_name: 'freshness',
-  added_at: NOW,
-  connection: 'online',
-  workspace_id: 'ws_a',
-  registered_at: NOW,
-  last_seen_at: NOW,
-  nowMs: Date.parse(NOW),
-  served: [],
-  unassigned: false,
-  unresolved: [],
-  bindingLines: [],
-  subscriptionName: null,
-  online: true,
-  hub_paused: false,
-  locally_paused: false,
-  claims: [],
-  used: 0,
-  subscriptionPaces: [
-    {
-      slug: 'aging',
-      name: 'Aging',
-      paceBars: [{ window: '5h', utilizationPct: 40, elapsedPct: 60 }],
-      condition: null,
-      sampledAt: NOW,
-      refreshedLabel: 'refreshed 30m ago',
-      freshness: 'aging',
-      missReason: null,
-    },
-    {
-      slug: 'stale',
-      name: 'Stale',
-      paceBars: [{ window: '5h', utilizationPct: 40, elapsedPct: 100 }],
-      condition: null,
-      sampledAt: NOW,
-      refreshedLabel: 'refreshed 2h ago',
-      freshness: 'stale',
-      missReason: null,
-    },
-    {
-      slug: 'never',
-      name: 'Never',
-      paceBars: [],
-      condition: null,
-      sampledAt: null,
-      refreshedLabel: null,
-      freshness: null,
-      missReason: 'endpoint_unreachable',
-    },
-  ],
-};
-
-async function render(rows: readonly RunnerRow[] = [ROW]) {
+async function render(rows: readonly RunnerRow[] = ROWS) {
   await TestBed.configureTestingModule({
     imports: [RunnerPanelView],
-    providers: [provideZonelessChangeDetection()],
+    providers: [provideZonelessChangeDetection(), provideRouter([])],
   }).compileComponents();
   const fixture = TestBed.createComponent(RunnerPanelView);
   fixture.componentRef.setInput('state', 'ready');
@@ -354,27 +101,10 @@ async function render(rows: readonly RunnerRow[] = [ROW]) {
   return fixture;
 }
 
-describe('runner registry identity layout shell sweep (web:shell-sweep)', () => {
-  const SHARED_NAME = 'runner-with-a-genuinely-long-operator-chosen-name';
-  const IDENTITY_ROWS: readonly RunnerRow[] = [
-    { ...ROW, runner_id: 'rn_01KXKVVF1J3D6H6VYZ3XYNABF3', runner_name: SHARED_NAME, subscriptionPaces: [] },
-    { ...ROW, runner_id: 'rn_01KXKVVF1J3D6H6VYZ3XYN7Q2M', runner_name: SHARED_NAME, subscriptionPaces: [] },
-    {
-      ...ROW,
-      runner_id: 'rn_01KXKVVF1J3D6H6VYZ3XYNNEW1',
-      runner_name: SHARED_NAME,
-      connection: 'never_connected',
-      online: false,
-      workspace_id: null,
-      registered_at: null,
-      last_seen_at: null,
-      capabilities: [],
-      subscriptionPaces: [],
-    },
-  ];
-
-  it.each([390, 1280])('shows each row its name and full id, never connected included, with no horizontal overflow at %ipx', async (width) => {
-    const fixture = await render(IDENTITY_ROWS);
+describe('compact runner rail layout shell sweep (web:shell-sweep)', () => {
+  it.each([390, 1280])('stacks each row\'s lines inside the rail with no horizontal overflow at %ipx', async (width) => {
+    await loadDesignTokens();
+    const fixture = await render();
     const root = fixture.nativeElement as HTMLElement;
     document.body.appendChild(root);
     await fixture.whenStable();
@@ -383,405 +113,56 @@ describe('runner registry identity layout shell sweep (web:shell-sweep)', () => 
       await page.viewport(width, 800);
       await new Promise((resolve) => requestAnimationFrame(resolve));
 
-      const ids = Array.from(root.querySelectorAll<HTMLElement>('[data-testid="runner-id"]')).map((e) => e.textContent?.trim());
-      expect(ids).toEqual(IDENTITY_ROWS.map((r) => r.runner_id));
-      expect(root.querySelector('[data-runner="rn_01KXKVVF1J3D6H6VYZ3XYNNEW1"] [data-testid="runner-never-connected"]')).not.toBeNull();
       const panel = root.querySelector<HTMLElement>('[data-testid="runner-panel"]')!;
       expect(panel.scrollWidth, `panel overflows horizontally at ${width}px`).toBeLessThanOrEqual(panel.clientWidth);
-      for (const row of Array.from(root.querySelectorAll<HTMLElement>('[data-testid="runner"]'))) {
+
+      const rows = Array.from(root.querySelectorAll<HTMLElement>('[data-testid="runner"]'));
+      expect(rows).toHaveLength(3);
+      for (const row of rows) {
         expect(row.scrollWidth, `runner row overflows horizontally at ${width}px`).toBeLessThanOrEqual(row.clientWidth);
       }
+
+      const first = rows[0];
+      const l1 = first.querySelector<HTMLElement>('.r1')!.getBoundingClientRect();
+      const l2 = first.querySelector<HTMLElement>('[data-testid="runner-agents"]')!.getBoundingClientRect();
+      const l3 = first.querySelector<HTMLElement>('.r3')!.getBoundingClientRect();
+      expect(l2.top, 'agents line sits below the name line').toBeGreaterThanOrEqual(l1.bottom);
+      expect(l3.top, 'badge line sits below the agents line').toBeGreaterThanOrEqual(l2.bottom);
+      expect(l3.right).toBeLessThanOrEqual(panel.getBoundingClientRect().right + 1);
+
+      // The unpaused runner draws no third line, and a runner with no bindings no second.
+      expect(rows[1].querySelector('.r3')).toBeNull();
+      expect(rows[2].querySelector('[data-testid="runner-agents"]')).toBeNull();
     } finally {
       root.remove();
     }
   });
 
-  it('draws the never-connected badge as a bordered kit pill set smaller than the row text, not bare row text', async () => {
+  it.each([390, 1280])('draws both pause badges as soft kit pills in their tone colours at %ipx', async (width) => {
     await loadDesignTokens();
-    const fixture = await render(IDENTITY_ROWS);
-    const root = fixture.nativeElement as HTMLElement;
-    document.body.appendChild(root);
-    await fixture.whenStable();
-
-    try {
-      await page.viewport(1280, 800);
-      await new Promise((resolve) => requestAnimationFrame(resolve));
-
-      const row = root.querySelector<HTMLElement>('[data-runner="rn_01KXKVVF1J3D6H6VYZ3XYNNEW1"]')!;
-      const badge = getComputedStyle(row.querySelector<HTMLElement>('[data-testid="runner-never-connected"] .badge')!);
-      expect(badge.borderTopStyle).toBe('solid');
-      expect(parseFloat(badge.borderTopWidth)).toBeGreaterThan(0);
-      expect(parseFloat(badge.fontSize)).toBeLessThan(parseFloat(getComputedStyle(row).fontSize));
-    } finally {
-      root.remove();
-    }
-  });
-
-  it.each([390, 1280])(
-    'draws both pause badges as soft kit pills in their tone colours, matching never connected, at %ipx',
-    async (width) => {
-      await loadDesignTokens();
-      const pausedRow: RunnerRow = {
-        ...IDENTITY_ROWS[0],
-        runner_id: 'rn_01KXKVVF1J3D6H6VYZ3XYNPAUS',
-        locally_paused: true,
-        hub_paused: true,
-      };
-      const fixture = await render([pausedRow, IDENTITY_ROWS[2]]);
-      const root = fixture.nativeElement as HTMLElement;
-      document.body.appendChild(root);
-      await fixture.whenStable();
-
-      try {
-        await page.viewport(width, 800);
-        await new Promise((resolve) => requestAnimationFrame(resolve));
-
-        const row = root.querySelector<HTMLElement>('[data-runner="rn_01KXKVVF1J3D6H6VYZ3XYNPAUS"]')!;
-        const local = row.querySelector<HTMLElement>('[data-testid="runner-locally-paused"] .badge')!;
-        const hub = row.querySelector<HTMLElement>('[data-testid="runner-hub-paused"] .badge')!;
-        const never = getComputedStyle(root.querySelector<HTMLElement>('[data-testid="runner-never-connected"] .badge')!);
-        expect(local.textContent?.trim()).toBe('LOCALLY PAUSED');
-        expect(hub.textContent?.trim()).toBe('HUB PAUSED');
-        expect(getComputedStyle(local).color).toBe(tokenColor('--label-dim'));
-        expect(getComputedStyle(hub).color).toBe(tokenColor('--amber-hi'));
-        for (const badge of [getComputedStyle(local), getComputedStyle(hub)]) {
-          expect(badge.borderTopStyle).toBe('solid');
-          expect(badge.borderTopLeftRadius).toBe(never.borderTopLeftRadius);
-          expect(parseFloat(badge.borderTopLeftRadius)).toBeGreaterThan(0);
-          expect(badge.fontSize).toBe(never.fontSize);
-        }
-        expect(row.scrollWidth, `paused runner row overflows horizontally at ${width}px`).toBeLessThanOrEqual(row.clientWidth);
-      } finally {
-        root.remove();
-      }
-    },
-  );
-});
-
-describe('runner registry pace bars layout shell sweep (web:shell-sweep, blizzard#218)', () => {
-  it('stacks the utilization and elapsed bars for both windows with no horizontal overflow at ~390px', async () => {
-    const pageErrors: string[] = [];
-    const onError = (e: ErrorEvent) => pageErrors.push(e.message);
-    const onRejection = (e: PromiseRejectionEvent) => pageErrors.push(String(e.reason));
-    window.addEventListener('error', onError);
-    window.addEventListener('unhandledrejection', onRejection);
-
     const fixture = await render();
     const root = fixture.nativeElement as HTMLElement;
     document.body.appendChild(root);
     await fixture.whenStable();
 
     try {
-      await page.viewport(390, 800);
+      await page.viewport(width, 800);
       await new Promise((resolve) => requestAnimationFrame(resolve));
 
-      const panel = root.querySelector<HTMLElement>('[data-testid="runner-panel"]')!;
-      expect(panel).not.toBeNull();
-
-      const bars = root.querySelectorAll<HTMLElement>('[data-runner="rn_paced"] [data-testid="runner-pace-bar"]');
-      expect(bars).toHaveLength(2);
-
-      // The two windows' bars sit on distinct rows, not overlapping — a genuine flex
-      // stack, not a collapsed one.
-      const tops = [...bars].map((b) => b.getBoundingClientRect().top);
-      expect(new Set(tops).size, `pace bars did not stack — tops were ${tops.join(', ')}`).toBe(2);
-
-      // Within each bar, its own utilization/elapsed pair also stacks — the utilization
-      // row above the elapsed row.
-      for (const bar of bars) {
-        const util = bar.querySelector<HTMLElement>('[data-testid="pace-bar-utilization"]')!;
-        const elapsed = bar.querySelector<HTMLElement>('[data-testid="pace-bar-elapsed"]')!;
-        expect(util.getBoundingClientRect().top).toBeLessThan(elapsed.getBoundingClientRect().top);
+      const row = root.querySelector<HTMLElement>(`[data-runner="${ROW.runner_id}"]`)!;
+      const local = row.querySelector<HTMLElement>('[data-testid="runner-locally-paused"] .badge')!;
+      const hub = row.querySelector<HTMLElement>('[data-testid="runner-hub-paused"] .badge')!;
+      expect(local.textContent?.trim()).toBe('LOCALLY PAUSED');
+      expect(hub.textContent?.trim()).toBe('HUB PAUSED');
+      expect(getComputedStyle(local).color).toBe(tokenColor('--label-dim'));
+      expect(getComputedStyle(hub).color).toBe(tokenColor('--amber-hi'));
+      for (const badge of [getComputedStyle(local), getComputedStyle(hub)]) {
+        expect(badge.borderTopStyle).toBe('solid');
+        expect(parseFloat(badge.borderTopLeftRadius)).toBeGreaterThan(0);
+        expect(parseFloat(badge.fontSize)).toBeLessThan(parseFloat(getComputedStyle(row).fontSize));
       }
-
-      // Nothing pushes the panel wider than its own box — the pace bars fit the rail
-      // rather than clipping or forcing horizontal scroll.
-      expect(
-        panel.scrollWidth,
-        `panel overflows horizontally at 390px (${panel.scrollWidth} > ${panel.clientWidth})`,
-      ).toBeLessThanOrEqual(panel.clientWidth);
-    } finally {
-      root.remove();
-      window.removeEventListener('error', onError);
-      window.removeEventListener('unhandledrejection', onRejection);
-    }
-
-    expect(pageErrors, `page errors fired during the sweep: ${pageErrors.join('; ')}`).toEqual([]);
-  });
-
-  it('seats every window label in a fixed left column so unequal labels still share one track edge', async () => {
-    const fixture = await render([UNEQUAL_LABEL_ROW]);
-    const root = fixture.nativeElement as HTMLElement;
-    document.body.appendChild(root);
-    await fixture.whenStable();
-
-    try {
-      await page.viewport(390, 800);
-      await new Promise((resolve) => requestAnimationFrame(resolve));
-
-      const bars = [...root.querySelectorAll<HTMLElement>('[data-runner="rn_unequal"] [data-testid="runner-pace-bar"]')];
-      expect(bars).toHaveLength(2);
-
-      // Measured over the text, not the element: the label box IS the fixed column, so
-      // its own width is 28px for every label and could never show the difference.
-      const glyphWidths = bars.map((bar) => {
-        const label = bar.querySelector<HTMLElement>('[data-testid="pace-bar-label"]')!;
-        const range = document.createRange();
-        range.selectNodeContents(label);
-        return Math.round(range.getBoundingClientRect().width);
-      });
-
-      for (const bar of bars) {
-        const label = bar.querySelector<HTMLElement>('[data-testid="pace-bar-label"]')!;
-        const util = bar.querySelector<HTMLElement>('[data-testid="pace-bar-utilization"]')!;
-        const labelBox = label.getBoundingClientRect();
-        const utilBox = util.getBoundingClientRect();
-
-        // Beside the track, not above it: the label's right edge clears the track's left
-        // edge, and the two share vertical space rather than stacking.
-        expect(labelBox.right).toBeLessThanOrEqual(utilBox.left);
-        expect(labelBox.top).toBeLessThan(utilBox.bottom);
-      }
-
-      // The fixture's whole purpose: the panel renders monospace, so the alignment claim
-      // is only falsifiable with labels whose text genuinely differs in width. If these
-      // two ever measure equal, the assertion below stops proving anything.
-      expect(new Set(glyphWidths).size, `fixture label text rendered equally wide — ${glyphWidths.join(', ')}`).toBe(2);
-
-      // Unequal labels, one track edge. Under a content-sized column the wider label
-      // would push its own track right, and this set would hold two values.
-      const trackLefts = bars.map(
-        (bar) => bar.querySelector<HTMLElement>('[data-testid="pace-bar-utilization"]')!.getBoundingClientRect().left,
-      );
-      expect(new Set(trackLefts).size, `bar tracks did not align — lefts were ${trackLefts.join(', ')}`).toBe(1);
     } finally {
       root.remove();
     }
-  });
-
-  it('keeps two subscriptions with an identical window label visually distinct, with no page errors or horizontal overflow at ~390px (blizzard#478)', async () => {
-    const pageErrors: string[] = [];
-    const onError = (e: ErrorEvent) => pageErrors.push(e.message);
-    const onRejection = (e: PromiseRejectionEvent) => pageErrors.push(String(e.reason));
-    window.addEventListener('error', onError);
-    window.addEventListener('unhandledrejection', onRejection);
-
-    const fixture = await render([SUBSCRIPTION_ROW]);
-    const root = fixture.nativeElement as HTMLElement;
-    document.body.appendChild(root);
-    await fixture.whenStable();
-
-    try {
-      await page.viewport(390, 800);
-      await new Promise((resolve) => requestAnimationFrame(resolve));
-
-      const panel = root.querySelector<HTMLElement>('[data-testid="runner-panel"]')!;
-      expect(panel).not.toBeNull();
-
-      const groups = root.querySelectorAll<HTMLElement>('[data-testid="subscription-pace-group"]');
-      expect(groups).toHaveLength(2);
-
-      const defaultGroup = root.querySelector<HTMLElement>('[data-subscription-slug="anthropic-default"]')!;
-      const secondaryGroup = root.querySelector<HTMLElement>('[data-subscription-slug="anthropic-secondary"]')!;
-
-      // The two groups sit on distinct rows, not overlapping — a genuine stack, not a
-      // collapsed one.
-      expect(defaultGroup.getBoundingClientRect().top).toBeLessThan(secondaryGroup.getBoundingClientRect().top);
-
-      // Each group's own "5h" window stays scoped to it — the identical label never
-      // merges the two subscriptions' bars into one.
-      expect(defaultGroup.querySelectorAll('[data-pace-window="5h"]')).toHaveLength(1);
-      expect(secondaryGroup.querySelectorAll('[data-pace-window="5h"]')).toHaveLength(1);
-
-      // Nothing pushes the panel wider than its own box at the narrow, mobile-reachable
-      // rail width.
-      expect(
-        panel.scrollWidth,
-        `panel overflows horizontally at 390px (${panel.scrollWidth} > ${panel.clientWidth})`,
-      ).toBeLessThanOrEqual(panel.clientWidth);
-    } finally {
-      root.remove();
-      window.removeEventListener('error', onError);
-      window.removeEventListener('unhandledrejection', onRejection);
-    }
-
-    expect(pageErrors, `page errors fired during the sweep: ${pageErrors.join('; ')}`).toEqual([]);
-  });
-
-  it('renders a sampled empty window list as a no-usage-windows report at ~390px', async () => {
-    const fixture = await render([EMPTY_SAMPLE_ROW]);
-    const root = fixture.nativeElement as HTMLElement;
-    document.body.appendChild(root);
-    await fixture.whenStable();
-
-    try {
-      await page.viewport(390, 800);
-      await new Promise((resolve) => requestAnimationFrame(resolve));
-
-      const report = root.querySelector<HTMLElement>('[data-testid="subscription-pace-group-unsampled"]')!;
-      expect(report.textContent?.trim()).toBe('NO USAGE WINDOWS REPORTED');
-      expect(report.getAttribute('aria-label')).toBe('Anthropic (default) sample reported no usage windows');
-    } finally {
-      root.remove();
-    }
-  });
-
-  it('renders a lapsed credential in place of the no-usage-windows report at ~390px (blizzard#504)', async () => {
-    const fixture = await render([LAPSED_ROW]);
-    const root = fixture.nativeElement as HTMLElement;
-    document.body.appendChild(root);
-    await fixture.whenStable();
-
-    try {
-      await page.viewport(390, 800);
-      await new Promise((resolve) => requestAnimationFrame(resolve));
-
-      expect(root.querySelector('[data-testid="subscription-pace-group-unsampled"]')).toBeNull();
-      const lapsed = root.querySelector<HTMLElement>('[data-testid="subscription-pace-group-lapsed"]')!;
-      expect(lapsed.textContent?.trim()).toBe('credential lapsed — log in again on this runner');
-    } finally {
-      root.remove();
-    }
-  });
-
-  it('computes distinguishable aging/stale colours and keeps a long miss reason inside the card at ~390px', async () => {
-    await loadDesignTokens();
-    const fixture = await render([FRESHNESS_ROW]);
-    const root = fixture.nativeElement as HTMLElement;
-    document.body.appendChild(root);
-    await fixture.whenStable();
-
-    try {
-      await page.viewport(390, 800);
-      await new Promise((resolve) => requestAnimationFrame(resolve));
-
-      const panel = root.querySelector<HTMLElement>('[data-testid="runner-panel"]')!;
-
-      const aging = root.querySelector<HTMLElement>('[data-subscription-slug="aging"] [data-testid="subscription-pace-group-refreshed"]')!;
-      const stale = root.querySelector<HTMLElement>('[data-subscription-slug="stale"] [data-testid="subscription-pace-group-refreshed"]')!;
-      expect(aging.textContent?.trim()).toBe('refreshed 30m ago');
-      expect(stale.textContent?.trim()).toBe('refreshed 2h ago');
-
-      // The warning (aging) and error (stale) tier colours are genuinely computed —
-      // distinct from each other and from plain body text, not just class names that
-      // happen to be present.
-      const agingColor = getComputedStyle(aging).color;
-      const staleColor = getComputedStyle(stale).color;
-      const bodyColor = getComputedStyle(root).color;
-      expect(agingColor).not.toBe(staleColor);
-      expect(agingColor).not.toBe(bodyColor);
-      expect(staleColor).not.toBe(bodyColor);
-
-      const never = root.querySelector<HTMLElement>('[data-subscription-slug="never"] [data-testid="subscription-pace-group-no-sample"]')!;
-      expect(never.textContent?.trim()).toBe('NO SAMPLE YET — endpoint_unreachable');
-      expect(never.getBoundingClientRect().right).toBeLessThanOrEqual(panel.getBoundingClientRect().right + 1);
-
-      expect(
-        panel.scrollWidth,
-        `panel overflows horizontally at 390px (${panel.scrollWidth} > ${panel.clientWidth})`,
-      ).toBeLessThanOrEqual(panel.clientWidth);
-    } finally {
-      root.remove();
-    }
-  });
-
-  it('keeps a mixed healthy/unhealthy multi-harness runner distinct with no page errors or horizontal overflow at ~390px, and leaves pause/capacity/claim controls reachable (blizzard#441)', async () => {
-    const pageErrors: string[] = [];
-    const onError = (e: ErrorEvent) => pageErrors.push(e.message);
-    const onRejection = (e: PromiseRejectionEvent) => pageErrors.push(String(e.reason));
-    window.addEventListener('error', onError);
-    window.addEventListener('unhandledrejection', onRejection);
-
-    await TestBed.configureTestingModule({
-      imports: [RunnerPanelView],
-      providers: [provideZonelessChangeDetection()],
-    }).compileComponents();
-    const fixture = TestBed.createComponent(RunnerPanelView);
-    fixture.componentRef.setInput('state', 'ready');
-    fixture.componentRef.setInput('rows', [MULTI_HARNESS_ROW]);
-    fixture.componentRef.setInput('canPause', true);
-    await fixture.whenStable();
-    const root = fixture.nativeElement as HTMLElement;
-    document.body.appendChild(root);
-    await fixture.whenStable();
-
-    try {
-      await page.viewport(390, 800);
-      await new Promise((resolve) => requestAnimationFrame(resolve));
-
-      const panel = root.querySelector<HTMLElement>('[data-testid="runner-panel"]')!;
-      expect(panel).not.toBeNull();
-
-      const host = root.querySelector<HTMLElement>('[data-runner-capabilities="rn_multi_harness"]')!;
-      const badges = [...host.querySelectorAll<HTMLElement>('[data-testid="runner-capability-badge"]')];
-      expect(badges).toHaveLength(2);
-
-      // The two harnesses sit at distinct positions, not overlapping.
-      const lefts = badges.map((b) => b.getBoundingClientRect().left);
-      const tops = badges.map((b) => b.getBoundingClientRect().top);
-      expect(lefts[0] === lefts[1] && tops[0] === tops[1]).toBe(false);
-
-      // Mixed availability reads distinguishably.
-      const available = host.querySelector('[data-harness-id="claude_code"]')!;
-      const unavailable = host.querySelector('[data-harness-id="opencode"]')!;
-      expect(available.textContent?.trim()).toBe('claude code');
-      expect(unavailable.textContent?.trim()).toBe('opencode');
-      expect(available.getAttribute('data-available')).toBe('true');
-      expect(unavailable.getAttribute('data-available')).toBe('false');
-      expect(available.getAttribute('aria-label')).not.toBe(unavailable.getAttribute('aria-label'));
-
-      // The pause, capacity, and claim controls stay reachable alongside the
-      // capability badges.
-      expect(root.querySelector('[data-testid="runner-toggle"]')).not.toBeNull();
-      expect(root.querySelector('[data-runner-slot-bar="rn_multi_harness"]')).not.toBeNull();
-      expect(root.querySelector('[data-runner="rn_multi_harness"] [data-testid="runner-claim"]')).not.toBeNull();
-
-      expect(
-        panel.scrollWidth,
-        `panel overflows horizontally at 390px (${panel.scrollWidth} > ${panel.clientWidth})`,
-      ).toBeLessThanOrEqual(panel.clientWidth);
-    } finally {
-      root.remove();
-      window.removeEventListener('error', onError);
-      window.removeEventListener('unhandledrejection', onRejection);
-    }
-
-    expect(pageErrors, `page errors fired during the sweep: ${pageErrors.join('; ')}`).toEqual([]);
-  });
-
-  it('keeps a runner imposing several gates inside the panel with no page errors or horizontal overflow at ~390px', async () => {
-    const pageErrors: string[] = [];
-    const onError = (e: ErrorEvent) => pageErrors.push(e.message);
-    const onRejection = (e: PromiseRejectionEvent) => pageErrors.push(String(e.reason));
-    window.addEventListener('error', onError);
-    window.addEventListener('unhandledrejection', onRejection);
-
-    const fixture = await render([GATED_ROW]);
-    const root = fixture.nativeElement as HTMLElement;
-    document.body.appendChild(root);
-    await fixture.whenStable();
-
-    try {
-      await page.viewport(390, 800);
-      await new Promise((resolve) => requestAnimationFrame(resolve));
-
-      const panel = root.querySelector<HTMLElement>('[data-testid="runner-panel"]')!;
-      const gates = root.querySelectorAll<HTMLElement>('[data-runner="rn_gated"] [data-testid="runner-gate-badge"]');
-      expect(gates).toHaveLength(4);
-      for (const gate of gates) {
-        expect(gate.getBoundingClientRect().right).toBeLessThanOrEqual(panel.getBoundingClientRect().right + 1);
-      }
-
-      expect(
-        panel.scrollWidth,
-        `panel overflows horizontally at 390px (${panel.scrollWidth} > ${panel.clientWidth})`,
-      ).toBeLessThanOrEqual(panel.clientWidth);
-    } finally {
-      root.remove();
-      window.removeEventListener('error', onError);
-      window.removeEventListener('unhandledrejection', onRejection);
-    }
-
-    expect(pageErrors, `page errors fired during the sweep: ${pageErrors.join('; ')}`).toEqual([]);
   });
 });

@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 
-import { type ChunkStatus, KitBadge, KitButton, RunnerConnection, STATUS_TONE, type Tone } from 'fleet';
+import { type ChunkStatus, KitBadge, KitBeacon, KitButton, KitSlotBar, RunnerConnection, STATUS_TONE, SubscriptionPaceGroup, type Tone } from 'fleet';
 import { CapabilityBadgeGroup } from './capability-badge-group';
 import { GateBadgeGroup } from './gate-badge-group';
 import { localPauseHint, runnerSeenLabel, runnerToggleHint, type RunnerRow } from './runner-rows';
@@ -16,7 +16,7 @@ import { ServedProjectGroup } from './served-project-group';
 @Component({
   selector: 'app-fleet-runner-row',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [CapabilityBadgeGroup, GateBadgeGroup, KitBadge, KitButton, ServedProjectGroup],
+  imports: [CapabilityBadgeGroup, GateBadgeGroup, KitBadge, KitBeacon, KitButton, KitSlotBar, ServedProjectGroup, SubscriptionPaceGroup],
   templateUrl: './fleet-runner-row.html',
   styleUrl: './fleet-runner-row.css',
 })
@@ -39,6 +39,12 @@ export class FleetRunnerRow {
   protected readonly seenLabel = runnerSeenLabel;
   protected readonly localPauseHint = localPauseHint;
   protected readonly toggleHint = runnerToggleHint;
+
+  /** Whether to render the env-slot bar: only when the runner reported a capacity, so one
+   * registered by a client that predates the field gets no misleading zero-slot bar. */
+  protected hasCapacity(row: RunnerRow): boolean {
+    return row.env_capacity !== null && row.env_capacity !== undefined;
+  }
 
   protected toneFor(status: ChunkStatus): Tone {
     return STATUS_TONE[status];

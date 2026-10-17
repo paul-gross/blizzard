@@ -1,16 +1,17 @@
 import { Component, provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 
-import { KitBeacon, type BeaconTone } from './kit-beacon';
+import { KitBeacon, type BeaconBlink, type BeaconTone } from './kit-beacon';
 
 @Component({
   selector: 'fleet-test-host',
   imports: [KitBeacon],
-  template: `<fleet-kit-beacon [active]="active()" [tone]="tone()" />`,
+  template: `<fleet-kit-beacon [active]="active()" [tone]="tone()" [blink]="blink()" />`,
 })
 class TestHost {
   readonly active = signal(false);
   readonly tone = signal<BeaconTone>('amber');
+  readonly blink = signal<BeaconBlink>('pulse');
 }
 
 describe('KitBeacon', () => {
@@ -50,5 +51,27 @@ describe('KitBeacon', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     expect((el.querySelector('.beacon') as HTMLElement).getAttribute('style')).toContain('var(--amber)');
+  });
+
+  it('takes the green tone', async () => {
+    const fixture = TestBed.createComponent(TestHost);
+    fixture.componentInstance.active.set(true);
+    fixture.componentInstance.tone.set('green');
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect((el.querySelector('.beacon') as HTMLElement).getAttribute('style')).toContain('var(--green)');
+  });
+
+  it('pulses by default and steps when asked', async () => {
+    const fixture = TestBed.createComponent(TestHost);
+    fixture.componentInstance.active.set(true);
+    await fixture.whenStable();
+    const beacon = (fixture.nativeElement as HTMLElement).querySelector('.beacon') as HTMLElement;
+    expect(beacon.classList.contains('step')).toBe(false);
+
+    fixture.componentInstance.blink.set('step');
+    await fixture.whenStable();
+    expect(beacon.classList.contains('step')).toBe(true);
   });
 });

@@ -7,12 +7,13 @@
 >
   <div class="head">
     <span class="name" data-testid="host-name">
-      <span
+      <fleet-kit-beacon
         class="dot"
-        [class.online]="card().online"
-        [class.offline]="card().connection === connection.OFFLINE"
         aria-hidden="true"
-      ></span>
+        [active]="card().online || card().connection === connection.OFFLINE"
+        [tone]="card().online ? 'green' : 'red'"
+        [blink]="card().online ? 'pulse' : 'step'"
+      />
       {{ card().hostName }}
     </span>
     <span class="report" data-testid="host-report">{{ card().reportLabel }}</span>

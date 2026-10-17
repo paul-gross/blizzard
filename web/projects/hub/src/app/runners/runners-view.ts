@@ -1,6 +1,6 @@
 import { NgTemplateOutlet } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
-import { KitAsyncState, KitBadge, KitButton, KitChip, KitPanel, KitSlotBar, RunnerConnection, STATUS_TONE, SubscriptionPaceGroup, type ChunkStatus, type KitAsyncStateValue, type Tone } from 'fleet';
+import { type ChunkStatus, KitAsyncState, type KitAsyncStateValue, KitBadge, KitBeacon, KitButton, KitChip, KitPanel, KitSlotBar, RunnerConnection, STATUS_TONE, SubscriptionPaceGroup, type Tone } from 'fleet';
 import { HostCardView } from './host-card';
 import { NO_HOST_VERBS, type HostVerbEvent, type HostVerbsVm } from './host-verbs.model';
 import { groupHostRows, type HostCard, type HostGroups } from './host-rows.model';
@@ -17,7 +17,7 @@ import { localPauseHint, runnerSeenLabel, runnerToggleHint, type RunnerRow } fro
 @Component({
   selector: 'app-runners-view',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [HostCardView, NgTemplateOutlet, KitAsyncState, KitBadge, KitButton, KitChip, KitPanel, KitSlotBar, ServedProjectGroup, SubscriptionPaceGroup],
+  imports: [HostCardView, KitAsyncState, KitBadge, KitBeacon, KitButton, KitChip, KitPanel, KitSlotBar, NgTemplateOutlet, ServedProjectGroup, SubscriptionPaceGroup],
   templateUrl: './runners-view.html',
   styleUrl: './runners-view.css',
 })

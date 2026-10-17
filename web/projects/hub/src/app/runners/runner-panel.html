@@ -1,11 +1,1 @@
-<app-runner-view
-  [rows]="rows()"
-  [cards]="cards()"
-  [state]="state()"
-  [canPause]="canPause()"
-  [pendingRunnerIds]="pendingRunnerIds()"
-  [actionError]="actionError()"
-  [hostVerbs]="hostVerbsVm()"
-  (hostVerb)="runHostVerb($event)"
-  (togglePause)="toggle($event)"
-/>
+<app-runner-view [rows]="rows()" [cards]="cards()" [state]="state()" />

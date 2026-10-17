@@ -1,6 +1,6 @@
 import { type KitFact, type RunnerConnection, compactRef, formatAbsolute } from 'fleet';
 
-import { type HeldChunk, type HostCard, type HostGroups } from './host-rows.model';
+import { busyAgents, declaredAgents, type HeldChunk, type HostCard, type HostGroups } from './host-rows.model';
 import type { RunnerRow } from './runner-rows.model';
 
 /** One card on the Fleet tab's list — a host, or a runner standing under no host. */
@@ -20,17 +20,6 @@ export interface FleetListCard {
 export interface FleetList {
   readonly hosts: readonly FleetListCard[];
   readonly hostless: readonly FleetListCard[];
-}
-
-/** The agents a runner declares — the sum of its bindings'; `null` for none declared. */
-function declaredAgents(rows: readonly RunnerRow[]): number | null {
-  const declared = rows.flatMap((row) => row.bindingLines);
-  return declared.length === 0 ? null : declared.reduce((sum, line) => sum + line.agents, 0);
-}
-
-/** The agents busy across `rows` — the sum of their binding lines' agents in use. */
-function busyAgents(rows: readonly RunnerRow[]): number {
-  return rows.flatMap((row) => row.bindingLines).reduce((sum, line) => sum + line.agentsInUse, 0);
 }
 
 /** The list pane's cards folded from the grouped rows. */

@@ -20,6 +20,9 @@ export class KitSlotBar {
   /** The runner's configured environment-pool size — the total cell count (the denominator). */
   readonly total = input.required<number>();
 
+  /** The noun the label counts, for a bar that gauges something other than slots. */
+  readonly unit = input<string>('slots');
+
   /** One entry per cell, `true` for the first `used` — clamped so an over-count never
    * renders more filled cells than exist, nor a negative used any at all. */
   protected readonly cells = computed<boolean[]>(() => {

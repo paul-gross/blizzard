@@ -1,11 +1,13 @@
 import { type Type, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
+import { provideRouter } from '@angular/router';
+import { RouterTestingHarness } from '@angular/router/testing';
 import { vi } from 'vitest';
 
 import { hubClient, hubHostsKey, hubRunnersKey } from 'fleet';
 import { OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
-import { RunnerPanel } from './runner-panel';
+import { FleetPage } from './fleet-page';
 import { RunnersPage } from './runners-page';
 
 /** The operator's identity with `runner:retire` — the permission the host verbs need. */
@@ -60,9 +62,9 @@ function routes(over: Route = () => undefined, me: unknown = RETIRE_ME): Route {
 
 const click = (el: HTMLElement, selector: string) => el.querySelector<HTMLButtonElement>(selector)?.click();
 
-for (const [name, container, release] of [
-  ['RunnerPanel', RunnerPanel, 'runner-release'],
-  ['RunnersPage', RunnersPage, 'mobile-fleet-runner-release'],
+for (const [name, container, release, hostCard] of [
+  ['FleetPage', FleetPage, 'fleet-runner-release', 'fleet-card-h1'],
+  ['RunnersPage', RunnersPage, 'mobile-fleet-runner-release', 'host-card'],
 ] as const) {
   describe(`${name} host verbs`, () => {
     let stub: RequestClientStub;
@@ -74,9 +76,17 @@ for (const [name, container, release] of [
         providers: [
           provideZonelessChangeDetection(),
           provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
+          provideRouter([{ path: 'fleet', component: FleetPage, children: [{ path: ':id', children: [] }] }]),
         ],
       }).compileComponents();
-      const fixture = TestBed.createComponent(container as Type<unknown>);
+      // The Fleet tab opens its selection from the URL; the mobile screen has none.
+      const fixture =
+        container === FleetPage
+          ? await RouterTestingHarness.create().then(async (harness) => {
+              await harness.navigateByUrl('/fleet/h1');
+              return harness.fixture;
+            })
+          : TestBed.createComponent(container as Type<unknown>);
       await settle(fixture);
       const invalidate = vi.spyOn(TestBed.inject(QueryClient), 'invalidateQueries');
       return { fixture, el: fixture.nativeElement as HTMLElement, invalidate };
@@ -170,7 +180,7 @@ for (const [name, container, release] of [
       expect(OPERATOR_ME_RESPONSE.permissions).not.toContain('runner:retire' as const);
       const { el } = await render(routes(undefined, OPERATOR_ME_RESPONSE));
 
-      expect(el.querySelector('[data-testid="host-card"]')).not.toBeNull();
+      expect(el.querySelector(`[data-testid="${hostCard}"]`)).not.toBeNull();
       expect(el.querySelector('[data-testid="host-verbs"]')).toBeNull();
       expect(el.querySelector(`[data-testid="${release}"]`)).toBeNull();
     });

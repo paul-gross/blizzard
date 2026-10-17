@@ -186,7 +186,7 @@ or unsampled never blanks a sibling's. Both plans meter a 5h and a 7d window tod
 as fixed: `openai` labels each window from the length its own response reports, so a plan metering differently is
 rendered as it comes rather than forced into that pair.
 
-Once a runner has declared its roster, the runner panel shows exactly one row per declared slug, whatever the age of its
+Once a runner has declared its roster, the Fleet tab shows exactly one row per declared slug, whatever the age of its
 sample — the roster, not sample age, now decides what shows. Each row carries its last good sample labelled with its
 age, "refreshed &lt;age&gt; ago": styled normal up to fifteen minutes, amber past fifteen, red past an hour, and updated
 live on the board's own clock tick rather than only on a fresh read. A slug that has never produced a sample reads "no

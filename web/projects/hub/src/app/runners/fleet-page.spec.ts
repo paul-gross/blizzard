@@ -3,14 +3,22 @@ import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
+import { vi } from 'vitest';
 
 import { hubClient } from 'fleet';
-import { OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubRequestClient } from 'fleet/testing';
+import { OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
 import { FleetPage } from './fleet-page';
 
 const ME = {
   ...OPERATOR_ME_RESPONSE,
   permissions: [...OPERATOR_ME_RESPONSE.permissions, 'runner:retire' as const],
+};
+/** A `contributor`'s `/api/me` — every day-to-day operating permission, but not the
+ * admin-tier `runner:pause`. */
+const CONTRIBUTOR_ME = {
+  ...OPERATOR_ME_RESPONSE,
+  role: 'contributor',
+  permissions: OPERATOR_ME_RESPONSE.permissions.filter((p) => p !== 'runner:pause' && p !== 'graph:edit' && p !== 'user:manage'),
 };
 const NOW = new Date().toISOString();
 const runner = (id: string, over: Record<string, unknown> = {}) => ({
@@ -41,10 +49,20 @@ const HOST = {
 describe('FleetPage', () => {
   let stub: RequestClientStub;
 
-  async function open(url: string, me: unknown = ME) {
+  async function open(url: string, me: unknown = ME, over: (method: string, path: string) => unknown = () => undefined) {
     stub = stubRequestClient(hubClient, (method, path) => {
+      const hit = over(method, path);
+      if (hit !== undefined) return hit;
       if (path === '/api/me') return me;
-      if (path === '/api/runners') return { runners: [runner('rn_A', { host_id: 'hs_h1' }), runner('rn_solo')] };
+      if (path === '/api/runners') {
+        return {
+          runners: [
+            runner('rn_A', { host_id: 'hs_h1' }),
+            runner('rn_solo', { env_capacity: 4, hub_paused: false }),
+            runner('rn_stopped', { hub_paused: true }),
+          ],
+        };
+      }
       if (path === '/api/hosts') return { hosts: [HOST] };
       if (path === '/api/chunks') return { chunks: [], next_cursor: null };
       if (path === '/api/hosts/hs_h1/enrollments') return { host_id: 'hs_h1', token: 'tok_secret' };
@@ -131,5 +149,105 @@ describe('FleetPage', () => {
     await settle(harness.fixture);
 
     expect(stub.forRoute('/api/runners/rn_A/pause', 'POST')).toHaveLength(1);
+  });
+
+  it('shows a hostless runner its env slot bar, which no host card carries for it', async () => {
+    const { el } = await open('/fleet/rn_solo');
+
+    expect(el.querySelector('[data-testid="fleet-runner-slot-bar"] [data-testid="slot-bar-label"]')?.textContent).toContain('0/4');
+  });
+
+  it('gives a hosted runner no slot bar of its own — its host card owns the pool', async () => {
+    const { el } = await open('/fleet/hs_h1');
+
+    expect(el.querySelector('[data-testid="fleet-runner-slot-bar"]')).toBeNull();
+    expect(el.querySelector('[data-testid="fleet-runner-subscription-groups"]')).toBeNull();
+  });
+
+  it('marks a never-connected hostless runner with a hollow light and no beacon', async () => {
+    const { el } = await open('/fleet/rn_solo', ME, (_method, path) =>
+      path === '/api/runners'
+        ? { runners: [runner('rn_solo', { online: false, connection: 'never_connected', registered_at: null, last_seen_at: null })] }
+        : undefined,
+    );
+
+    expect(el.querySelector('[data-testid="fleet-runner"] .dot.never')).not.toBeNull();
+    expect(el.querySelector('[data-testid="fleet-runner"] fleet-kit-beacon')).toBeNull();
+  });
+
+  describe('pause and resume', () => {
+    const toggle = (el: HTMLElement, id: string): HTMLButtonElement | null =>
+      el.querySelector<HTMLButtonElement>(`[data-runner="${id}"] [data-testid="fleet-runner-toggle"]`);
+
+    /** Holds the mutation's settling refetch open so the pending state can be read. */
+    function holdInvalidation(): () => void {
+      let resolveInvalidate!: () => void;
+      vi.spyOn(TestBed.inject(QueryClient), 'invalidateQueries').mockReturnValue(
+        new Promise<void>((resolve) => (resolveInvalidate = resolve)),
+      );
+      return () => resolveInvalidate();
+    }
+
+    const rejectPause = (method: string, path: string) =>
+      path === '/api/runners/rn_solo/pause' ? stubError(409, { detail: 'runner already paused' }) : undefined;
+
+    it('resumes a hub-paused runner at the hub', async () => {
+      const { harness, el } = await open('/fleet/rn_stopped');
+
+      toggle(el, 'rn_stopped')?.click();
+      await settle(harness.fixture);
+
+      expect(stub.forRoute('/api/runners/rn_stopped/resume', 'POST')).toHaveLength(1);
+    });
+
+    it("disables only the clicked runner's toggle while its mutation is pending", async () => {
+      const { harness, el } = await open('/fleet/rn_solo');
+      const release = holdInvalidation();
+
+      toggle(el, 'rn_solo')?.click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      harness.fixture.detectChanges();
+
+      expect(toggle(el, 'rn_solo')?.disabled).toBe(true);
+      release();
+      await settle(harness.fixture);
+      expect(toggle(el, 'rn_solo')?.disabled).toBe(false);
+    });
+
+    it('renders the requested hub_paused while the pause is pending', async () => {
+      const { harness, el } = await open('/fleet/rn_solo');
+      const release = holdInvalidation();
+
+      toggle(el, 'rn_solo')?.click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      harness.fixture.detectChanges();
+
+      expect(el.querySelector('[data-runner="rn_solo"] [data-testid="fleet-runner-hub-paused"]')).not.toBeNull();
+      expect(toggle(el, 'rn_solo')?.textContent?.trim()).toBe('Resume');
+      release();
+      await settle(harness.fixture);
+    });
+
+    it('reverts the override and reports the failure when the pause is rejected', async () => {
+      const { harness, el } = await open('/fleet/rn_solo', ME, rejectPause);
+      const release = holdInvalidation();
+
+      toggle(el, 'rn_solo')?.click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      harness.fixture.detectChanges();
+      release();
+      await settle(harness.fixture);
+
+      expect(el.querySelector('[data-runner="rn_solo"] [data-testid="fleet-runner-hub-paused"]')).toBeNull();
+      expect(toggle(el, 'rn_solo')?.textContent?.trim()).toBe('Pause');
+      expect(el.querySelector('[data-testid="fleet-action-error"]')?.textContent).toBe('runner already paused');
+    });
+
+    it('withholds the brake from an identity without runner:pause, the runner still rendering', async () => {
+      const { el } = await open('/fleet/rn_stopped', CONTRIBUTOR_ME);
+
+      expect(el.querySelector('[data-runner="rn_stopped"] [data-testid="fleet-runner-hub-paused"]')).not.toBeNull();
+      expect(el.querySelectorAll('[data-testid="fleet-runner-toggle"]')).toHaveLength(0);
+    });
   });
 });

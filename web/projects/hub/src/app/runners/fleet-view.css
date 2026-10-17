@@ -54,13 +54,6 @@
   display: inline-block;
   width: 7px;
   height: 7px;
-  background: var(--label-dim);
-}
-.dot.online {
-  background: var(--green);
-}
-.dot.offline {
-  background: var(--red);
 }
 .notice {
   margin: 0 0 6px;

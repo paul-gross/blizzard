@@ -49,26 +49,7 @@
   display: inline-block;
   width: 8px;
   height: 8px;
-  border-radius: 50%;
   flex: none;
-}
-.dot.online {
-  background: var(--green);
-  box-shadow: 0 0 4px var(--green);
-}
-.dot.offline {
-  background: var(--red);
-  animation: fleet-runner-blink 1.2s steps(2, jump-none) infinite;
-}
-@keyframes fleet-runner-blink {
-  50% {
-    opacity: 0.15;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .dot.offline {
-    animation: none;
-  }
 }
 .name {
   flex: 1;
