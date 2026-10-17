@@ -326,7 +326,8 @@
       "owner": "src/blizzard/runner/harness/opencode/compatibility/probe.py#<module>",
       "owner_kind": "module",
       "owner_assert": {
-        "quote": ">=1.18.25,<2.0"
+        "anchor": true,
+        "reason": "the bounds live in the ADMITTED_OPENCODE_RANGE_DISPLAY literal, which is code rather than prose"
       },
       "markers": [
         "runner s admitted range currently",

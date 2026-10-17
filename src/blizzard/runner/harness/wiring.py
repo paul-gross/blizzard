@@ -32,7 +32,7 @@ from blizzard.runner.harness.opencode.section import OPENCODE_SECTION
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.process.probe import IProcessProbe
 
-#: The catalog order: Claude Code first, so it is the default harness whenever it is enabled.
+#: The catalog order: Claude Code first.
 HARNESS_SECTION_KINDS: tuple[IHarnessSectionKind, ...] = (CLAUDE_CODE_SECTION, OPENCODE_SECTION)
 
 
