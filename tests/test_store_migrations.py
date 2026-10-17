@@ -24,9 +24,9 @@ pytestmark = [pytest.mark.unit]
 
 _SCHEMA_METADATA = {"hub": hub_schema.metadata, "runner": runner_schema.metadata}
 
-# chunks.model carries a migration-only server_default with no counterpart in the store schema —
-# pre-existing drift this change does not own (bzh:frozen-revisions plan).
-_SERVER_DEFAULT_EXEMPTIONS: dict[str, set[str]] = {"chunks": {"model"}}
+# Server defaults a migration gives a column that the store schema leaves undeclared, keyed by table; empty while
+# the two agree.
+_SERVER_DEFAULT_EXEMPTIONS: dict[str, set[str]] = {}
 
 # Constraint names a hub migration gave that src/blizzard/hub/store/schema.py leaves unnamed, keyed by (table,
 # migrated name); each value is the revision that rebuilds the table and settles the name.

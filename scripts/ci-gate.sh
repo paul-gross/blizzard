@@ -57,6 +57,18 @@ if ! git diff --quiet -- openapi/; then
 fi
 echo "OK: committed OpenAPI specs match the exporter."
 
+# --- Contract document drift --------------------------------------------------
+# Regenerate the committed store schema documents and fail on any difference.
+step "contract drift: blizzard-export-contracts + git diff contracts/"
+uv run blizzard-export-contracts --out-dir contracts >/dev/null
+if ! git diff --quiet -- contracts/; then
+  echo "ERROR: contracts/ differs from what's staged (working tree vs index, not vs the last commit)." >&2
+  echo "        Run 'mise run export-contracts', then 'git add contracts/' to stage the regenerated documents." >&2
+  git --no-pager diff -- contracts/ >&2
+  exit 1
+fi
+echo "OK: committed contract documents match the exporter."
+
 # --- hub↔runner wire compatibility (bzh:fleet-wire-additive) ---------------
 step "wire compatibility: mise run wire-compat"
 mise run wire-compat

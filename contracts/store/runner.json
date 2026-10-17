@@ -1,0 +1,2975 @@
+{
+  "head_revision": "20261015_1000_host_ingests",
+  "store": "runner",
+  "tables": {
+    "asks": {
+      "checks": [],
+      "columns": {
+        "asked_at": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "DateTime"
+        },
+        "chunk_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "harness_id": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "String"
+        },
+        "id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "lease_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "options": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Text"
+        },
+        "question": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Text"
+        },
+        "question_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "runner_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "session_id": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "String"
+        }
+      },
+      "deprecated": null,
+      "foreign_keys": [],
+      "primary_key": [
+        "id"
+      ],
+      "unique": []
+    },
+    "attachments": {
+      "checks": [],
+      "columns": {
+        "attached_at": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "DateTime"
+        },
+        "chunk_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "content": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Text"
+        },
+        "epoch": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "lease_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "name": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "node_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "runner_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        }
+      },
+      "deprecated": null,
+      "foreign_keys": [],
+      "primary_key": [
+        "id"
+      ],
+      "unique": []
+    },
+    "binding_releases": {
+      "checks": [],
+      "columns": {
+        "chunk_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "environment_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "lease_epoch_floor": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "released_at": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "DateTime"
+        },
+        "runner_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        }
+      },
+      "deprecated": null,
+      "foreign_keys": [],
+      "primary_key": [
+        "id"
+      ],
+      "unique": []
+    },
+    "check_results": {
+      "checks": [],
+      "columns": {
+        "chunk_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "command": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Text"
+        },
+        "epoch": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "lease_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "node_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "output_tail": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Text"
+        },
+        "passed": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Boolean"
+        },
+        "ran_at": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "DateTime"
+        },
+        "runner_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        }
+      },
+      "deprecated": null,
+      "foreign_keys": [],
+      "primary_key": [
+        "id"
+      ],
+      "unique": []
+    },
+    "checks_ran": {
+      "checks": [],
+      "columns": {
+        "epoch": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "lease_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "ran_at": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "DateTime"
+        },
+        "runner_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        }
+      },
+      "deprecated": null,
+      "foreign_keys": [],
+      "primary_key": [
+        "id"
+      ],
+      "unique": []
+    },
+    "context_samples": {
+      "checks": [],
+      "columns": {
+        "context_tokens": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "harness_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "lease_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "runner_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "sampled_at": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "DateTime"
+        },
+        "session_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        }
+      },
+      "deprecated": null,
+      "foreign_keys": [],
+      "primary_key": [
+        "id"
+      ],
+      "unique": []
+    },
+    "credential_renewal_claims": {
+      "checks": [],
+      "columns": {
+        "claimed_at": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "DateTime"
+        },
+        "id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "slug": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        }
+      },
+      "deprecated": null,
+      "foreign_keys": [],
+      "primary_key": [
+        "id"
+      ],
+      "unique": []
+    },
+    "credential_renewal_outcomes": {
+      "checks": [
+        "ck_credential_renewal_outcomes_failure_reason",
+        "ck_credential_renewal_outcomes_kind"
+      ],
+      "columns": {
+        "claim_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "failure_reason": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "String"
+        },
+        "id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "kind": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "recorded_at": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "DateTime"
+        }
+      },
+      "deprecated": null,
+      "foreign_keys": [],
+      "primary_key": [
+        "id"
+      ],
+      "unique": [
+        [
+          "claim_id"
+        ]
+      ]
+    },
+    "daemon_liveness": {
+      "checks": [],
+      "columns": {
+        "alive_at": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "DateTime"
+        },
+        "id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        }
+      },
+      "deprecated": null,
+      "foreign_keys": [],
+      "primary_key": [
+        "id"
+      ],
+      "unique": []
+    },
+    "env_bindings": {
+      "checks": [],
+      "columns": {
+        "bound_at": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "DateTime"
+        },
+        "chunk_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "environment_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "project_id": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "String"
+        },
+        "runner_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "workdir": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "workspace_id": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "String"
+        }
+      },
+      "deprecated": null,
+      "foreign_keys": [],
+      "primary_key": [
+        "id"
+      ],
+      "unique": []
+    },
+    "escalation_closures": {
+      "checks": [],
+      "columns": {
+        "chunk_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "closed_at": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "DateTime"
+        },
+        "id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "reason": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "runner_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        }
+      },
+      "deprecated": null,
+      "foreign_keys": [],
+      "primary_key": [
+        "id"
+      ],
+      "unique": []
+    },
+    "external_usage_samples": {
+      "checks": [],
+      "columns": {
+        "id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "miss_reason": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "String"
+        },
+        "payload": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "Text"
+        },
+        "sampled_at": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "DateTime"
+        },
+        "slug": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        }
+      },
+      "deprecated": null,
+      "foreign_keys": [],
+      "primary_key": [
+        "id"
+      ],
+      "unique": []
+    },
+    "git_commit_declarations": {
+      "checks": [],
+      "columns": {
+        "branch": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "chunk_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "commit": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "declared_at": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "DateTime"
+        },
+        "environment_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "epoch": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "lease_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "node_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "repo": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "runner_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        }
+      },
+      "deprecated": null,
+      "foreign_keys": [],
+      "primary_key": [
+        "id"
+      ],
+      "unique": []
+    },
+    "graph_artifacts": {
+      "checks": [],
+      "columns": {
+        "content": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Text"
+        },
+        "graph_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "kind": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "name": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "ordinal": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "recorded_at": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "DateTime"
+        }
+      },
+      "deprecated": null,
+      "foreign_keys": [],
+      "primary_key": [
+        "graph_id",
+        "name"
+      ],
+      "unique": []
+    },
+    "heartbeats": {
+      "checks": [],
+      "columns": {
+        "beat_at": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "DateTime"
+        },
+        "id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "lease_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "runner_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        }
+      },
+      "deprecated": null,
+      "foreign_keys": [],
+      "primary_key": [
+        "id"
+      ],
+      "unique": []
+    },
+    "host_high_water_seen": {
+      "checks": [],
+      "columns": {
+        "id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "seq": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "updated_at": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "DateTime"
+        }
+      },
+      "deprecated": null,
+      "foreign_keys": [],
+      "primary_key": [
+        "id"
+      ],
+      "unique": []
+    },
+    "host_identity": {
+      "checks": [],
+      "columns": {
+        "host_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "registered_at": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "DateTime"
+        },
+        "tenant_id": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "String"
+        }
+      },
+      "deprecated": null,
+      "foreign_keys": [],
+      "primary_key": [
+        "id"
+      ],
+      "unique": []
+    },
+    "host_ingests": {
+      "checks": [],
+      "columns": {
+        "id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "ingested_at": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "DateTime"
+        },
+        "runner_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "source": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "source_alive_at": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "DateTime"
+        }
+      },
+      "deprecated": null,
+      "foreign_keys": [],
+      "primary_key": [
+        "id"
+      ],
+      "unique": []
+    },
+    "host_outbound_buffer": {
+      "checks": [],
+      "columns": {
+        "acked_at": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "DateTime"
+        },
+        "created_at": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "DateTime"
+        },
+        "kind": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "payload": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Text"
+        },
+        "seq": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        }
+      },
+      "deprecated": null,
+      "foreign_keys": [],
+      "primary_key": [
+        "seq"
+      ],
+      "unique": []
+    },
+    "hub_control": {
+      "checks": [],
+      "columns": {
+        "id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "paused": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Boolean"
+        },
+        "runner_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "updated_at": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "DateTime"
+        }
+      },
+      "deprecated": null,
+      "foreign_keys": [],
+      "primary_key": [
+        "id"
+      ],
+      "unique": [
+        [
+          "runner_id"
+        ]
+      ]
+    },
+    "hub_served_projects": {
+      "checks": [],
+      "columns": {
+        "answered_at": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "DateTime"
+        },
+        "entry": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "name": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "String"
+        },
+        "position": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "project_id": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "String"
+        },
+        "runner_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "slug": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "String"
+        }
+      },
+      "deprecated": null,
+      "foreign_keys": [],
+      "primary_key": [
+        "id"
+      ],
+      "unique": [
+        [
+          "runner_id",
+          "position"
+        ]
+      ]
+    },
+    "in_flight_elicitations": {
+      "checks": [],
+      "columns": {
+        "epoch": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "first_launched_at": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "DateTime"
+        },
+        "id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "lease_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "output_path": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "pgid": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "pid": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "process_start_time": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "String"
+        },
+        "relaunch_count": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "runner_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        }
+      },
+      "deprecated": null,
+      "foreign_keys": [],
+      "primary_key": [
+        "id"
+      ],
+      "unique": []
+    },
+    "invocation_boundaries": {
+      "checks": [],
+      "columns": {
+        "chunk_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "closed_at": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "DateTime"
+        },
+        "closed_reason": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "String"
+        },
+        "epoch": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "generation": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "kind": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "lease_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "node_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "opened_at": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "DateTime"
+        },
+        "runner_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "start_position": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "String"
+        },
+        "start_unreadable": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": true,
+          "type": "Boolean"
+        }
+      },
+      "deprecated": null,
+      "foreign_keys": [],
+      "primary_key": [
+        "id"
+      ],
+      "unique": []
+    },
+    "invocation_boundary_advances": {
+      "checks": [],
+      "columns": {
+        "advanced_at": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "DateTime"
+        },
+        "generation": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "kind": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "lease_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "runner_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "start_position": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "String"
+        },
+        "start_unreadable": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": true,
+          "type": "Boolean"
+        },
+        "superseded_invocation": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        }
+      },
+      "deprecated": null,
+      "foreign_keys": [],
+      "primary_key": [
+        "id"
+      ],
+      "unique": []
+    },
+    "jwt_jti_seen": {
+      "checks": [],
+      "columns": {
+        "aud": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "expires_at": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "DateTime"
+        },
+        "jti": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        }
+      },
+      "deprecated": null,
+      "foreign_keys": [],
+      "primary_key": [
+        "jti"
+      ],
+      "unique": []
+    },
+    "lease_closures": {
+      "checks": [],
+      "columns": {
+        "chunk_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "closed_at": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "DateTime"
+        },
+        "escalation_cause": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "String"
+        },
+        "id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "lease_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "node_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "reason": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "runner_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        }
+      },
+      "deprecated": null,
+      "foreign_keys": [],
+      "primary_key": [
+        "id"
+      ],
+      "unique": []
+    },
+    "lease_context": {
+      "checks": [],
+      "columns": {
+        "chunk_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "graph_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "graph_name": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "String"
+        },
+        "lease_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "node_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "node_name": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "recorded_at": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "DateTime"
+        },
+        "resolved_compaction_window": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "String"
+        },
+        "resolved_effort": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "String"
+        },
+        "resolved_model": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "String"
+        },
+        "retries_max": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "runner_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "session_name": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "String"
+        },
+        "work_refs": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "Text"
+        }
+      },
+      "deprecated": null,
+      "foreign_keys": [],
+      "primary_key": [
+        "lease_id"
+      ],
+      "unique": []
+    },
+    "lease_spawns": {
+      "checks": [],
+      "columns": {
+        "harness_id": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "String"
+        },
+        "harness_version": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "String"
+        },
+        "id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "identified_at": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "DateTime"
+        },
+        "identity_failed_at": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "DateTime"
+        },
+        "lease_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "pgid": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "pid": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "process_start_time": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "String"
+        },
+        "runner_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "session_id": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "String"
+        },
+        "spawned_at": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "DateTime"
+        }
+      },
+      "deprecated": null,
+      "foreign_keys": [],
+      "primary_key": [
+        "id"
+      ],
+      "unique": []
+    },
+    "lease_tokens": {
+      "checks": [],
+      "columns": {
+        "lease_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "minted_at": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "DateTime"
+        },
+        "runner_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "token_hash": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Text"
+        }
+      },
+      "deprecated": null,
+      "foreign_keys": [],
+      "primary_key": [
+        "lease_id"
+      ],
+      "unique": []
+    },
+    "leases": {
+      "checks": [],
+      "columns": {
+        "chunk_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "created_at": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "DateTime"
+        },
+        "epoch": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "harness_id": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "String"
+        },
+        "lease_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "pgid": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "pid": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "process_start_time": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "String"
+        },
+        "runner_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "session_id": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "String"
+        }
+      },
+      "deprecated": null,
+      "foreign_keys": [],
+      "primary_key": [
+        "lease_id"
+      ],
+      "unique": []
+    },
+    "local_pause_facts": {
+      "checks": [],
+      "columns": {
+        "id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "paused": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Boolean"
+        },
+        "reason": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "String"
+        },
+        "runner_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "set_at": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "DateTime"
+        },
+        "set_by": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        }
+      },
+      "deprecated": null,
+      "foreign_keys": [],
+      "primary_key": [
+        "id"
+      ],
+      "unique": []
+    },
+    "nudge_facts": {
+      "checks": [],
+      "columns": {
+        "epoch": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "lease_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "nudged_at": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "DateTime"
+        },
+        "runner_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        }
+      },
+      "deprecated": null,
+      "foreign_keys": [],
+      "primary_key": [
+        "id"
+      ],
+      "unique": []
+    },
+    "outbound_buffer": {
+      "checks": [],
+      "columns": {
+        "acked_at": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "DateTime"
+        },
+        "chunk_id": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "String"
+        },
+        "created_at": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "DateTime"
+        },
+        "kind": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "lease_id": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "String"
+        },
+        "payload": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Text"
+        },
+        "runner_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "seq": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        }
+      },
+      "deprecated": null,
+      "foreign_keys": [],
+      "primary_key": [
+        "runner_id",
+        "seq"
+      ],
+      "unique": []
+    },
+    "outbox_counters": {
+      "checks": [],
+      "columns": {
+        "lane": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "last_seq": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "runner_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        }
+      },
+      "deprecated": null,
+      "foreign_keys": [],
+      "primary_key": [
+        "runner_id",
+        "lane"
+      ],
+      "unique": []
+    },
+    "overload_facts": {
+      "checks": [],
+      "columns": {
+        "chunk_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "epoch": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "generation": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "invocation_identity": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "invocation_kind": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "lease_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "observed_at": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "DateTime"
+        },
+        "resume_after": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "DateTime"
+        },
+        "runner_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "streak_ordinal": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        }
+      },
+      "deprecated": null,
+      "foreign_keys": [],
+      "primary_key": [
+        "id"
+      ],
+      "unique": []
+    },
+    "overload_resets": {
+      "checks": [],
+      "columns": {
+        "epoch": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "lease_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "reset_at": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "DateTime"
+        },
+        "runner_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        }
+      },
+      "deprecated": null,
+      "foreign_keys": [],
+      "primary_key": [
+        "id"
+      ],
+      "unique": []
+    },
+    "park_facts": {
+      "checks": [],
+      "columns": {
+        "chunk_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "lease_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "parked_at": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "DateTime"
+        },
+        "question_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "runner_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        }
+      },
+      "deprecated": null,
+      "foreign_keys": [],
+      "primary_key": [
+        "id"
+      ],
+      "unique": []
+    },
+    "park_resumes": {
+      "checks": [],
+      "columns": {
+        "id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "lease_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "question_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "resumed_at": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "DateTime"
+        },
+        "runner_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        }
+      },
+      "deprecated": null,
+      "foreign_keys": [],
+      "primary_key": [
+        "id"
+      ],
+      "unique": []
+    },
+    "pause_park_resumes": {
+      "checks": [],
+      "columns": {
+        "id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "lease_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "resumed_at": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "DateTime"
+        },
+        "runner_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        }
+      },
+      "deprecated": null,
+      "foreign_keys": [],
+      "primary_key": [
+        "id"
+      ],
+      "unique": []
+    },
+    "pause_parks": {
+      "checks": [],
+      "columns": {
+        "chunk_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "interrupted_elicitation_id": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "lease_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "parked_at": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "DateTime"
+        },
+        "runner_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        }
+      },
+      "deprecated": null,
+      "foreign_keys": [],
+      "primary_key": [
+        "id"
+      ],
+      "unique": []
+    },
+    "requeues": {
+      "checks": [],
+      "columns": {
+        "chunk_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "requeued_at": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "DateTime"
+        },
+        "runner_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        }
+      },
+      "deprecated": null,
+      "foreign_keys": [],
+      "primary_key": [
+        "id"
+      ],
+      "unique": []
+    },
+    "resume_clears": {
+      "checks": [],
+      "columns": {
+        "cleared_at": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "DateTime"
+        },
+        "id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "lease_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "runner_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        }
+      },
+      "deprecated": null,
+      "foreign_keys": [],
+      "primary_key": [
+        "id"
+      ],
+      "unique": []
+    },
+    "resume_intents": {
+      "checks": [],
+      "columns": {
+        "id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "lease_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "marked_at": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "DateTime"
+        },
+        "runner_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        }
+      },
+      "deprecated": null,
+      "foreign_keys": [],
+      "primary_key": [
+        "id"
+      ],
+      "unique": []
+    },
+    "route_tokens": {
+      "checks": [],
+      "columns": {
+        "acquired_at": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "DateTime"
+        },
+        "chunk_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "runner_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "token": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Text"
+        }
+      },
+      "deprecated": null,
+      "foreign_keys": [],
+      "primary_key": [
+        "runner_id",
+        "chunk_id"
+      ],
+      "unique": []
+    },
+    "runner_identity": {
+      "checks": [],
+      "columns": {
+        "id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "projects_answered_at": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "DateTime"
+        },
+        "registered_at": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "DateTime"
+        },
+        "runner_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "runner_name": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "tenant_id": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "String"
+        },
+        "tenant_name": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "String"
+        }
+      },
+      "deprecated": null,
+      "foreign_keys": [],
+      "primary_key": [
+        "id"
+      ],
+      "unique": [
+        [
+          "runner_id"
+        ]
+      ]
+    },
+    "selftest_results": {
+      "checks": [],
+      "columns": {
+        "error": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "Text"
+        },
+        "harness_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "recorded_at": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "DateTime"
+        },
+        "runner_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "status": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        }
+      },
+      "deprecated": null,
+      "foreign_keys": [],
+      "primary_key": [
+        "id"
+      ],
+      "unique": []
+    },
+    "session_ends": {
+      "checks": [],
+      "columns": {
+        "ended_at": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "DateTime"
+        },
+        "id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "lease_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "runner_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        }
+      },
+      "deprecated": null,
+      "foreign_keys": [],
+      "primary_key": [
+        "id"
+      ],
+      "unique": []
+    },
+    "session_preamble_facts": {
+      "checks": [],
+      "columns": {
+        "blizzard_digest": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "harness_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "recorded_at": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "DateTime"
+        },
+        "runner_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "session_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "workspace_digest": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        }
+      },
+      "deprecated": null,
+      "foreign_keys": [],
+      "primary_key": [
+        "id"
+      ],
+      "unique": []
+    },
+    "takeover_ends": {
+      "checks": [],
+      "columns": {
+        "ended_at": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "DateTime"
+        },
+        "id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "runner_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "takeover_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        }
+      },
+      "deprecated": null,
+      "foreign_keys": [],
+      "primary_key": [
+        "id"
+      ],
+      "unique": []
+    },
+    "takeovers": {
+      "checks": [],
+      "columns": {
+        "chunk_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "fence_epoch": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "harness_id": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "String"
+        },
+        "hold_epoch": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "lease_id": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "String"
+        },
+        "opened_at": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "DateTime"
+        },
+        "runner_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "session_id": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "String"
+        },
+        "takeover_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "workdir": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        }
+      },
+      "deprecated": null,
+      "foreign_keys": [],
+      "primary_key": [
+        "takeover_id"
+      ],
+      "unique": []
+    },
+    "trace_cursor": {
+      "checks": [],
+      "columns": {
+        "id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "lease_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "position_at": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "DateTime"
+        },
+        "recorded_at": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "DateTime"
+        },
+        "runner_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "span_count": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        }
+      },
+      "deprecated": null,
+      "foreign_keys": [],
+      "primary_key": [
+        "id"
+      ],
+      "unique": []
+    },
+    "trace_export_latch": {
+      "checks": [],
+      "columns": {
+        "id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "kind": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "recorded_at": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "DateTime"
+        },
+        "runner_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        }
+      },
+      "deprecated": null,
+      "foreign_keys": [],
+      "primary_key": [
+        "id"
+      ],
+      "unique": []
+    },
+    "transcript_outbound_buffer": {
+      "checks": [],
+      "columns": {
+        "acked_at": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "DateTime"
+        },
+        "chunk_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "created_at": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "DateTime"
+        },
+        "final": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Boolean"
+        },
+        "payload": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Text"
+        },
+        "runner_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "segment_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "seq": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        }
+      },
+      "deprecated": null,
+      "foreign_keys": [],
+      "primary_key": [
+        "runner_id",
+        "seq"
+      ],
+      "unique": []
+    },
+    "transcript_segments": {
+      "checks": [],
+      "columns": {
+        "agent_tool_use_ids": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "Text"
+        },
+        "chunk_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "cursor": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "String"
+        },
+        "effort": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "String"
+        },
+        "epoch": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "finalized_at": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "DateTime"
+        },
+        "generation": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "harness_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "harness_version": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "String"
+        },
+        "lease_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "model": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "String"
+        },
+        "node_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "normalizer_version": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "runner_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "segment_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "session_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "shipped_bytes": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "shipped_turns": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "shipping_stopped_reason": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "String"
+        },
+        "sidechain_warned_agents": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "Text"
+        },
+        "spawn_cwd": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "String"
+        },
+        "stamped_at": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "DateTime"
+        },
+        "supersedes": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "String"
+        },
+        "truncated_reason": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "String"
+        },
+        "truncated_reason_severity": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "truncated_reasons_warned": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "Text"
+        }
+      },
+      "deprecated": null,
+      "foreign_keys": [],
+      "primary_key": [
+        "segment_id"
+      ],
+      "unique": []
+    },
+    "usage_facts": {
+      "checks": [],
+      "columns": {
+        "cache_create_tokens": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "cache_read_tokens": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "chunk_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "cost_is_share": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": true,
+          "type": "Boolean"
+        },
+        "cost_usd": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "Float"
+        },
+        "epoch": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "estimated_cost_usd": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "Float"
+        },
+        "generation": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "harness_id": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "String"
+        },
+        "harness_version": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "String"
+        },
+        "id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "input_tokens": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "kind": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "lease_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "model": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "node_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "output_tokens": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "recorded_at": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "DateTime"
+        },
+        "reported_cost_usd": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "Float"
+        },
+        "runner_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        }
+      },
+      "deprecated": null,
+      "foreign_keys": [],
+      "primary_key": [
+        "id"
+      ],
+      "unique": []
+    },
+    "workspace_prompt": {
+      "checks": [],
+      "columns": {
+        "prompt": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Text"
+        },
+        "updated_at": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "DateTime"
+        },
+        "workspace_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        }
+      },
+      "deprecated": null,
+      "foreign_keys": [],
+      "primary_key": [
+        "workspace_id"
+      ],
+      "unique": []
+    }
+  }
+}

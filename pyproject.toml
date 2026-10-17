@@ -104,6 +104,7 @@ blizzard-runner = "blizzard.runner.cli:runner"
 # openapi-ts client generation and CI's client-drift check both consume it
 # (bzh:generated-client).
 blizzard-export-openapi = "blizzard.tools.openapi:main"
+blizzard-export-contracts = "blizzard.tools.contracts:main"
 # Fails on a breaking change to the hub↔runner wire surface (bzh:fleet-wire-additive).
 blizzard-wire-compat = "blizzard.tools.wire_compat:main"
 
@@ -195,6 +196,7 @@ also_copy = [
     "contracts/cli",
     "contracts/egress",
     "contracts/sse",
+    "contracts/store",
     "contracts/traces",
     "packaging/docker",
     "packaging/systemd",
@@ -203,6 +205,7 @@ also_copy = [
     "scripts/is-retryable-push-error.sh",
     "scripts/release-notes.sh",
     "scripts/restated-invariants.json",
+    "src/blizzard/wire/window.toml",
     "tests/fixtures/claude_code_telemetry",
     # These test-loaded Python scripts live outside mutmut's src/ and tests/ copies.
     "scripts/prose_spans.py",

@@ -97,6 +97,24 @@ jobs:
           git diff --exit-code -- openapi/ \
             || { echo "::error::OpenAPI specs under openapi/ are stale — run 'mise run export-openapi' and commit."; exit 1; }
 
+  contract-drift:
+    name: contract drift
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          python-version: "3.12"
+      - run: uv sync
+      # Regenerate the committed contract documents under contracts/ and fail on
+      # any uncommitted difference.
+      - name: export contracts and fail on drift
+        run: |
+          uv run blizzard-export-contracts --out-dir contracts
+          git diff --exit-code -- contracts/ \
+            || { echo "::error::Contract documents under contracts/ are stale — run 'mise run export-contracts' and commit."; exit 1; }
+
   wire-compat:
     name: hub↔runner wire compatibility
     # Attributes a break to the change that makes it, before it ever reaches master —
