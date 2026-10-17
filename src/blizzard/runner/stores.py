@@ -33,7 +33,6 @@ from blizzard.runner.harness.workspace_prompts import IReadWorkspacePromptReposi
 from blizzard.runner.hub.host_identity import IReadHostIdentityRepository, IWriteHostIdentityRepository
 from blizzard.runner.hub.identity import IReadRunnerIdentityRepository, IWriteRunnerIdentityRepository
 from blizzard.runner.hub.outbound_buffer import IReadOutboundRepository, IWriteOutboundRepository
-from blizzard.runner.hub.runner_transfer import IReadHostIngestRepository, IWriteHostIngestRepository
 from blizzard.runner.hub.served_projects import IReadServedProjectsRepository, IWriteServedProjectsRepository
 from blizzard.runner.leases.asks import IReadAskRepository, IWriteAskRepository
 from blizzard.runner.leases.elicitation import IReadElicitationRepository, IWriteElicitationRepository
@@ -64,6 +63,7 @@ from blizzard.runner.transcripts.invocation_boundaries import (
     IWriteInvocationBoundaryRepository,
 )
 from blizzard.runner.transcripts.ledger import IReadTranscriptLedgerRepository, IWriteTranscriptLedgerRepository
+from blizzard.runner.transfer.rows import IReadHostIngestRepository, IWriteHostIngestRepository
 from blizzard.runner.usage.repository import (
     IReadExternalUsageRepository,
     IReadHostLaneRepository,

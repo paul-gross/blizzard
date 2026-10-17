@@ -39,7 +39,6 @@ from blizzard.runner.harness.workspace_prompts import IWriteWorkspacePromptRepos
 from blizzard.runner.hub.host_identity import IWriteHostIdentityRepository
 from blizzard.runner.hub.identity import IWriteRetiredRunnerIdentity, IWriteRunnerIdentityRepository, RunnerIdentity
 from blizzard.runner.hub.outbound_buffer import IWriteOutboundRepository
-from blizzard.runner.hub.runner_transfer import IWriteHostIngestRepository
 from blizzard.runner.hub.served_projects import IWriteServedProjectsRepository, ServedProject
 from blizzard.runner.leases.asks import IWriteAskRepository
 from blizzard.runner.leases.elicitation import IWriteElicitationRepository
@@ -63,6 +62,7 @@ from blizzard.runner.tracing.cursor import LeaseCursorKey
 from blizzard.runner.tracing.repository import IWriteLeaseTraces, LeaseTraceCheckpoint
 from blizzard.runner.transcripts.invocation_boundaries import IWriteInvocationBoundaryRepository
 from blizzard.runner.transcripts.ledger import IWriteTranscriptLedgerRepository
+from blizzard.runner.transfer.rows import IWriteHostIngestRepository
 from blizzard.runner.usage.repository import (
     IWriteCredentialRenewalRepository,
     IWriteExternalUsageRepository,

@@ -2078,6 +2078,7 @@ _RUNNER_PACKAGE_LAYERS: dict[str, frozenset[str]] = {
     "harness": frozenset({"config_table", "environments", "node_steps", "process"}),
     "subscriptions": frozenset(),
     "auth": frozenset(),
+    "transfer": frozenset({"environments"}),
     "leases": frozenset({"environments", "events", "harness", "node_steps"}),
     "hub": frozenset({"auth", "events", "harness", "leases", "node_steps"}),
     "transcripts": frozenset({"environments", "harness", "hub", "leases"}),
@@ -2116,6 +2117,7 @@ _RUNNER_PACKAGE_LAYERS: dict[str, frozenset[str]] = {
             "throttle",
             "tracing",
             "transcripts",
+            "transfer",
             "usage",
         }
     ),

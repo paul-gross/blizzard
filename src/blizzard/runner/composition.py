@@ -70,14 +70,13 @@ from blizzard.runner.hub.identity import (
 )
 from blizzard.runner.hub.internal.http_hub import HttpHostHubClient
 from blizzard.runner.hub.internal.token_file import HubTokenFile
-from blizzard.runner.hub.runner_transfer import HostIngest, IRunnerRowRemoval, IRunnerTransfer
 from blizzard.runner.hub.served_projects import ServedProjectsAnswer
-from blizzard.runner.ingest import HeldBinding, IIngestStores, ITokenFiles, RunnerIngest, RunnerStoreView
+from blizzard.runner.ingest import IIngestStores, ITokenFiles, RunnerIngest
 from blizzard.runner.lifecycle.host_lane_drain import HostLaneDrain
 from blizzard.runner.lifecycle.host_tick import HostTick
 from blizzard.runner.listeners import Listeners
 from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
-from blizzard.runner.runtime import IRunnerRowMoves, migration_runner
+from blizzard.runner.runtime import migration_runner
 from blizzard.runner.store.errors import RunnerStoreConnections, RunnerStoreErrorFactory
 from blizzard.runner.store.internal.ask_store import AskStore
 from blizzard.runner.store.internal.attachment_store import AttachmentStore
@@ -140,6 +139,8 @@ from blizzard.runner.tracing.receiver_limits import ReceiverBounds, ReceiverCoun
 from blizzard.runner.tracing.receiving import TelemetryReceiver
 from blizzard.runner.tracing.replay import LeaseTraceReplay
 from blizzard.runner.tracing.sweep import LeaseTraceSweep
+from blizzard.runner.transfer.rows import HostIngest, IRunnerRowRemoval, IRunnerTransfer
+from blizzard.runner.transfer.runner_stores import HeldBinding, IRunnerBoundStores, RunnerStoreView
 from blizzard.runner.usage.credential_renewal import CredentialRenewalPass, RenewableSubscription
 from blizzard.runner.usage.external_usage_sample import ExternalUsageSamplePass, SampledSubscription
 from blizzard.runner.usage.repository import IWriteHostLaneRepository
@@ -1039,40 +1040,8 @@ class RunnerStoreFiles:
     errors: RunnerStoreErrorFactory
     clock: IClock
 
-    def copy_runner(
-        self,
-        source_url: str,
-        destination_url: str,
-        runner_id: str,
-        *,
-        workspace_ids: Mapping[str, str] | None = None,
-        bound_workspaces: Sequence[str] = (),
-        ingest: HostIngest | None = None,
-    ) -> None:
-        with _engine(source_url) as source, _engine(destination_url) as destination:
-            build_runner_transfer(
-                source, destination, errors=self.errors, runner_id=runner_id, clock=self.clock
-            ).copy_runner(workspace_ids=workspace_ids, bound_workspaces=bound_workspaces, ingest=ingest)
-
-    def remove_runner_rows(self, url: str, runner_id: str, *, keep_counters: bool) -> None:
-        with _engine(url) as engine:
-            build_runner_removal(engine, errors=self.errors, runner_id=runner_id).remove_runner_rows(
-                keep_counters=keep_counters
-            )
-
-    def runner_view(self, url: str, runner_id: str) -> RunnerStoreView:
-        with _engine(url) as engine:
-            runner = build_read_stores(engine, errors=self.errors, runner_id=runner_id)
-            host = build_host_stores(engine, errors=self.errors, clock=self.clock)
-            return RunnerStoreView(
-                named_runners=host.runner_audit.named_runners(),
-                identity=runner.identity.runner_identity(),
-                open_elicitation_lease_ids=frozenset(runner.elicitations.in_flight_elicitation_lease_ids()),
-                open_takeover_chunk_ids=frozenset(runner.takeover.open_takeover_chunk_ids()),
-                held_bindings=tuple(runner.environments.held_bindings()),
-                last_alive_at=host.daemon_liveness.last_daemon_liveness(),
-                served_projects=_served_slugs(runner.served_projects.served_projects_answer()),
-            )
+    def for_runner(self, runner_id: str) -> RunnerBoundStoreFiles:
+        return RunnerBoundStoreFiles(self, runner_id)
 
     def named_runners(self, url: str) -> tuple[str, ...]:
         with _engine(url) as engine:
@@ -1093,13 +1062,59 @@ class RunnerStoreFiles:
                 ).environments.held_bindings()
             )
 
-    def latest_host_ingest(self, url: str, runner_id: str) -> HostIngest | None:
-        with _engine(url) as engine:
-            return build_host_read_stores(engine, errors=self.errors).host_ingests.latest_host_ingest(runner_id)
-
     def record_host_identity(self, url: str, identity: HostIdentity) -> None:
         with _engine(url) as engine:
             build_host_stores(engine, errors=self.errors, clock=self.clock).host_identity.record_host_identity(identity)
+
+
+@dataclass(frozen=True)
+class RunnerBoundStoreFiles:
+    """:class:`RunnerStoreFiles` bound to one runner."""
+
+    files: RunnerStoreFiles
+    runner_id: str
+
+    def copy_runner(
+        self,
+        source_url: str,
+        destination_url: str,
+        *,
+        workspace_ids: Mapping[str, str] | None = None,
+        bound_workspaces: Sequence[str] = (),
+        ingest: HostIngest | None = None,
+    ) -> None:
+        with _engine(source_url) as source, _engine(destination_url) as destination:
+            build_runner_transfer(
+                source, destination, errors=self.files.errors, runner_id=self.runner_id, clock=self.files.clock
+            ).copy_runner(workspace_ids=workspace_ids, bound_workspaces=bound_workspaces, ingest=ingest)
+
+    def remove_runner_rows(self, url: str, *, keep_counters: bool) -> None:
+        with _engine(url) as engine:
+            build_runner_removal(engine, errors=self.files.errors, runner_id=self.runner_id).remove_runner_rows(
+                keep_counters=keep_counters
+            )
+
+    def runner_view(self, url: str) -> RunnerStoreView:
+        errors, clock = self.files.errors, self.files.clock
+        with _engine(url) as engine:
+            runner = build_read_stores(engine, errors=errors, runner_id=self.runner_id)
+            host = build_host_stores(engine, errors=errors, clock=clock)
+            identity = runner.identity.runner_identity()
+            return RunnerStoreView(
+                named_runners=host.runner_audit.named_runners(),
+                tenant_id=identity.tenant_id if identity is not None else None,
+                open_elicitation_lease_ids=frozenset(runner.elicitations.in_flight_elicitation_lease_ids()),
+                open_takeover_chunk_ids=frozenset(runner.takeover.open_takeover_chunk_ids()),
+                held_bindings=tuple(runner.environments.held_bindings()),
+                last_alive_at=host.daemon_liveness.last_daemon_liveness(),
+                served_projects=_served_slugs(runner.served_projects.served_projects_answer()),
+            )
+
+    def latest_host_ingest(self, url: str) -> HostIngest | None:
+        with _engine(url) as engine:
+            return build_host_read_stores(engine, errors=self.files.errors).host_ingests.latest_host_ingest(
+                self.runner_id
+            )
 
 
 def _served_slugs(answer: ServedProjectsAnswer | None) -> tuple[str, ...]:
@@ -1122,7 +1137,7 @@ def _engine(url: str) -> Iterator[Engine]:
         engine.dispose()
 
 
-def _conforms_runner_row_moves(x: RunnerStoreFiles) -> IRunnerRowMoves:
+def _conforms_runner_bound_stores(x: RunnerBoundStoreFiles) -> IRunnerBoundStores:
     return x
 
 

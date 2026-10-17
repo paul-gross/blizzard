@@ -13,7 +13,7 @@ from typing import Any, cast
 
 from sqlalchemy import Column, Connection, Select, Table
 
-from blizzard.runner.hub.runner_transfer import DanglingReference, IRunnerTransferHandle
+from blizzard.runner.transfer.rows import DanglingReference, IRunnerTransferHandle
 
 #: The column a row names its workspace by, renamed when a copy moves a workspace to a new id.
 WORKSPACE_COLUMN = "workspace_id"

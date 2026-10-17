@@ -19,9 +19,9 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.utc import UtcDateTime
 from blizzard.runner import runtime as runner_runtime
 from blizzard.runner.composition import build_host_read_stores, build_runner_removal, build_runner_transfer
-from blizzard.runner.hub.runner_transfer import HostIngest, WorkspacePromptConflict
 from blizzard.runner.store import schema
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
+from blizzard.runner.transfer.rows import HostIngest, WorkspacePromptConflict
 from blizzard.tools.invariants import RunnerInvariants
 from tests.runner_scope_seeding import T0, reflect, seed_tables
 

@@ -38,7 +38,8 @@ from blizzard.runner.hub.client import (
     RunnerAddRefused,
 )
 from blizzard.runner.hub.token_file import ENV_FILENAME
-from blizzard.runner.ingest import IngestRefused, IngestRequest
+from blizzard.runner.ingest import IngestRequest
+from blizzard.runner.transfer.refusals import IngestRefused
 
 _DIR_OPTION = click.option(
     "--dir",
