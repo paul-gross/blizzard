@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { Router, RouterOutlet } from '@angular/router';
-import { asyncState, errorMessage, type KitAsyncStateValue, ViewportService, type RepositoryDocument } from 'fleet';
+import { asyncState, errorMessage, type KitAsyncStateValue, ViewportService } from 'fleet';
 
 import { hasPermission, injectMeQuery } from '../../core/auth/me.query';
 import { injectCreateRepositoryMutation } from './repositories.mutations';
@@ -18,7 +18,7 @@ import { ConfigMaster } from '../config-master';
 import { injectLensLinks, withinLens } from '../projects/lens-links';
 import { lensedListState } from '../projects/projects.model';
 import type { ConfigRowVm } from '../config-record-list';
-import { REPOSITORY_FIELDS, repositoryRows } from './repositories.model';
+import { REPOSITORY_FIELDS, repositoryCreate, repositoryRows } from './repositories.model';
 import { injectRepositoriesQuery } from './repositories.query';
 import { ProjectLens } from '../../core/project-lens';
 
@@ -97,7 +97,7 @@ export class RepositoriesPage {
   }
 
   protected onCreate(values: ConfigFormValues): void {
-    const body = createBody(this.fields, values) as unknown as RepositoryDocument;
+    const body = repositoryCreate(createBody(this.fields, values));
     this.createError.set(null);
     this.createMutation.mutate(body, {
       onSuccess: () => {

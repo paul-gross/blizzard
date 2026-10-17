@@ -75,7 +75,17 @@ def list_decisions(services: Services, project: QueryProject) -> OpenDecisionsRe
     )
 
 
-@router.post("/decisions/{decision_id}/resolutions", response_model=DecisionResolutionResponse)
+@router.post(
+    "/decisions/{decision_id}/resolutions",
+    response_model=DecisionResolutionResponse,
+    responses={
+        status.HTTP_409_CONFLICT: {
+            "model": DecisionResolutionConflict,
+            "description": "A lost first-write-wins race, carrying the winning resolution. A decision closed "
+            "without a resolution shares the status and answers a bare `{detail}` instead.",
+        }
+    },
+)
 def resolve_decision(
     decision_id: str,
     request: DecisionResolutionRequest,

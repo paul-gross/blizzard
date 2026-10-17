@@ -15,8 +15,8 @@ import {
 } from '../config-filter.model';
 import { ConfigMaster } from '../config-master';
 import type { ConfigRowVm } from '../config-record-list';
-import { SECRET_CREATE_FIELDS, secretRows } from './secrets.model';
-import { injectCreateSecretMutation, type SecretCreateVars } from './secrets.mutations';
+import { SECRET_CREATE_FIELDS, secretCreate, secretRows } from './secrets.model';
+import { injectCreateSecretMutation } from './secrets.mutations';
 import { injectSecretsQuery } from './secrets.query';
 import { ProjectLens } from '../../core/project-lens';
 import { LensNote } from '../../core/lens-note';
@@ -87,7 +87,7 @@ export class SecretsPage {
   }
 
   protected onCreate(values: ConfigFormValues): void {
-    const body = createBody(this.fields, values) as unknown as SecretCreateVars;
+    const body = secretCreate(createBody(this.fields, values));
     this.createError.set(null);
     this.createMutation.mutate(body, {
       onSuccess: () => {

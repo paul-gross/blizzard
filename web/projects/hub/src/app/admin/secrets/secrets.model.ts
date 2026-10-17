@@ -1,10 +1,15 @@
-import type { SecretView } from 'fleet';
+import type { SecretCreateRequestWritable, SecretReplaceRequest, SecretView } from 'fleet';
 
-import type { ConfigFieldDef } from '../config-edit.model';
+import { type ConfigFieldDef, createText } from '../config-edit.model';
 import { filterByLifecycle, type LifecycleFilter } from '../config-filter.model';
 import { recordLink } from '../config-links.model';
 import type { ConfigBadgeVm, ConfigRowVm } from '../config-record-list';
 import type { ConfigRecordVm } from '../config-record-panel';
+
+/** The create a new secret's form sends — its name and its write-only value. */
+export function secretCreate(body: Readonly<Record<string, string | boolean>>): SecretCreateRequestWritable {
+  return { name: createText(body, 'name'), value: createText(body, 'value') };
+}
 
 /** A secret's badges — retired, or unused when nothing live refers to it. */
 export function secretBadges(secret: SecretView): readonly ConfigBadgeVm[] {
@@ -53,12 +58,12 @@ export function secretRecordVm(secret: SecretView | undefined): ConfigRecordVm |
 }
 
 /** A new secret's form fields — its name and its write-only value. */
-export const SECRET_CREATE_FIELDS: readonly ConfigFieldDef[] = [
+export const SECRET_CREATE_FIELDS: readonly ConfigFieldDef<keyof SecretCreateRequestWritable>[] = [
   { key: 'name', label: 'Name', kind: 'text', required: true },
   { key: 'value', label: 'Value', kind: 'password', required: true },
 ];
 
 /** The replace form's one field. */
-export const SECRET_REPLACE_FIELDS: readonly ConfigFieldDef[] = [
+export const SECRET_REPLACE_FIELDS: readonly ConfigFieldDef<keyof SecretReplaceRequest>[] = [
   { key: 'value', label: 'New value', kind: 'password', required: true },
 ];

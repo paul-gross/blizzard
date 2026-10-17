@@ -2178,6 +2178,34 @@ export type DecisionOpenedPayload = {
 };
 
 /**
+ * DecisionResolutionConflict
+ *
+ * The 409 body: the decision was already resolved (the loser is told who won, with what, and when).
+ */
+export type DecisionResolutionConflict = {
+    /**
+     * Already Resolved By
+     */
+    already_resolved_by: string;
+    /**
+     * Decision Id
+     */
+    decision_id: string;
+    /**
+     * Detail
+     */
+    detail?: string;
+    /**
+     * Resolved At
+     */
+    resolved_at?: string;
+    /**
+     * Resolved Choice
+     */
+    resolved_choice?: string;
+};
+
+/**
  * DecisionResolutionRequest
  *
  * A person's choice for an open decision — first-write-wins CAS.
@@ -12009,6 +12037,10 @@ export type ResolveDecisionApiDecisionsDecisionIdResolutionsPostData = {
 };
 
 export type ResolveDecisionApiDecisionsDecisionIdResolutionsPostErrors = {
+    /**
+     * A lost first-write-wins race, carrying the winning resolution. A decision closed without a resolution shares the status and answers a bare `{detail}` instead.
+     */
+    409: DecisionResolutionConflict;
     /**
      * Validation Error
      */

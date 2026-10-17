@@ -1,7 +1,7 @@
 import type { RepositorySummary } from 'fleet';
 import { describe, expect, it } from 'vitest';
 
-import { repositoryBadges, repositoryRecordVm, repositoryRows } from './repositories.model';
+import { repositoryBadges, repositoryCreate, repositoryRecordVm, repositoryRows } from './repositories.model';
 
 const BLIZZARD: RepositorySummary = {
   repository_id: 'repo_1',
@@ -73,5 +73,26 @@ describe('repositoryRecordVm', () => {
 
   it('notes a retired repository', () => {
     expect(repositoryRecordVm(OLD)?.note).toContain('Retired');
+  });
+
+  it('creates a repository from the form, leaving an empty name out', () => {
+    const body = {
+      slug: 'blizzard',
+      name: '',
+      forge_api_url: 'https://api.github.com',
+      owner: 'paul-gross',
+      repo: 'blizzard',
+      base_branch: 'master',
+      secret_name: 'gh-blizzard',
+    };
+    expect(repositoryCreate(body)).toEqual({
+      slug: 'blizzard',
+      forge_api_url: 'https://api.github.com',
+      owner: 'paul-gross',
+      repo: 'blizzard',
+      base_branch: 'master',
+      secret_name: 'gh-blizzard',
+    });
+    expect(repositoryCreate({ ...body, name: 'Blizzard' }).name).toBe('Blizzard');
   });
 });

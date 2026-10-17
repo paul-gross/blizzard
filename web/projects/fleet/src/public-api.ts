@@ -109,6 +109,8 @@ export { client as hubClient } from './lib/api/hub/client.gen';
 export type { Client } from './lib/api/hub/client';
 export type {
   RepositoryDocument,
+  SecretCreateRequestWritable,
+  SecretReplaceRequest,
   RepositoryPatchRequest,
   WorkSourceDocument,
   WorkSourcePatchRequest,
@@ -126,6 +128,7 @@ export type {
   ChunkCountsView,
   ChunkStatus,
   ChunkSummary,
+  DecisionResolutionConflict,
   DecisionResolutionResponse,
   DecisionView,
   EventView,

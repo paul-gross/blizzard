@@ -1,7 +1,7 @@
 import type { SecretView } from 'fleet';
 import { describe, expect, it } from 'vitest';
 
-import { referenceCount, secretBadges, secretRecordVm, secretRows } from './secrets.model';
+import { referenceCount, secretBadges, secretCreate, secretRecordVm, secretRows } from './secrets.model';
 
 const USED: SecretView = {
   name: 'gh-blizzard',
@@ -77,5 +77,9 @@ describe('secretRecordVm', () => {
 
   it('shows an unreferenced secret with no links', () => {
     expect(secretRecordVm(UNUSED)?.links?.links).toEqual([]);
+  });
+
+  it('creates a secret from the form, naming exactly its name and value', () => {
+    expect(secretCreate({ name: 'gh-blizzard', value: 's3cret' })).toEqual({ name: 'gh-blizzard', value: 's3cret' });
   });
 });
