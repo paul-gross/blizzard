@@ -30,6 +30,8 @@ const LEASE: runnerApi.LeaseView = {
   created_at: '2026-07-16T11:00:00.000Z',
   last_heartbeat_at: '2026-07-16T11:59:26.000Z',
   state: 'closed',
+  display_status: 'closed',
+  closure_healthy: false,
   closed_at: null,
   closure_reason: null,
   stale_after_seconds: 3600,

@@ -1,6 +1,6 @@
 import type { runnerApi } from 'fleet';
 
-import { type MachineChunkFacts, deriveMachineChunkStatus } from './chunk-status';
+import { deriveMachineChunkStatus } from './chunk-status';
 
 function lease(overrides: Partial<runnerApi.LeaseView> = {}): runnerApi.LeaseView {
   return {
@@ -17,6 +17,8 @@ function lease(overrides: Partial<runnerApi.LeaseView> = {}): runnerApi.LeaseVie
     created_at: '2026-07-16T11:00:00.000Z',
     last_heartbeat_at: '2026-07-16T11:59:00.000Z',
     state: 'running',
+    display_status: 'running',
+    closure_healthy: false,
     closed_at: null,
     closure_reason: null,
     stale_after_seconds: 3600,
@@ -24,68 +26,53 @@ function lease(overrides: Partial<runnerApi.LeaseView> = {}): runnerApi.LeaseVie
   };
 }
 
-const NO_FACTS: MachineChunkFacts = {
-  escalatedChunkIds: new Set<string>(),
-  takeoverChunkIds: new Set<string>(),
-  askChunkIds: new Set<string>(),
-};
-
 describe('deriveMachineChunkStatus', () => {
   it('maps the plain lease states', () => {
-    expect(deriveMachineChunkStatus(lease({ state: 'running' }), NO_FACTS)).toEqual({
+    expect(deriveMachineChunkStatus(lease({ state: 'running', display_status: 'running' }))).toEqual({
       label: 'RUNNING',
       tone: 'running',
     });
-    expect(deriveMachineChunkStatus(lease({ state: 'stale' }), NO_FACTS)).toEqual({ label: 'STALE', tone: 'stale' });
-    expect(deriveMachineChunkStatus(lease({ state: 'backing-off' }), NO_FACTS)).toEqual({
+    expect(deriveMachineChunkStatus(lease({ state: 'stale', display_status: 'stale' }))).toEqual({
+      label: 'STALE',
+      tone: 'stale',
+    });
+    expect(deriveMachineChunkStatus(lease({ state: 'backing-off', display_status: 'backing-off' }))).toEqual({
       label: 'BACKING OFF',
       tone: 'waiting',
     });
-    expect(deriveMachineChunkStatus(lease({ state: 'spawning' }), NO_FACTS)).toEqual({
+    expect(deriveMachineChunkStatus(lease({ state: 'spawning', display_status: 'spawning' }))).toEqual({
       label: 'SPAWNING',
       tone: 'spawning',
     });
-    expect(deriveMachineChunkStatus(lease({ state: 'exited' }), NO_FACTS)).toEqual({ label: 'EXITED', tone: 'idle' });
+    expect(deriveMachineChunkStatus(lease({ state: 'exited', display_status: 'exited' }))).toEqual({
+      label: 'EXITED',
+      tone: 'idle',
+    });
   });
 
-  it('reads a transitioned closure as the healthy done tone, other closures dim', () => {
-    expect(deriveMachineChunkStatus(lease({ state: 'closed', closure_reason: 'transitioned' }), NO_FACTS)).toEqual({
-      label: 'TRANSITIONED',
-      tone: 'done',
-    });
-    expect(deriveMachineChunkStatus(lease({ state: 'closed', closure_reason: 'failed' }), NO_FACTS)).toEqual({
+  it('reads a healthy closure as the done tone, other closures dim', () => {
+    const closed = { state: 'closed', display_status: 'closed' } as const;
+    expect(
+      deriveMachineChunkStatus(lease({ ...closed, closure_reason: 'transitioned', closure_healthy: true })),
+    ).toEqual({ label: 'TRANSITIONED', tone: 'done' });
+    expect(deriveMachineChunkStatus(lease({ ...closed, closure_reason: 'failed' }))).toEqual({
       label: 'CLOSED · FAILED',
       tone: 'idle',
     });
   });
 
-  it('an open ask outranks the lease state — the chunk is waiting on a human', () => {
-    const facts = { ...NO_FACTS, askChunkIds: new Set(['ch_1']) };
-    expect(deriveMachineChunkStatus(lease({ state: 'parked' }), facts)).toEqual({
+  it('follows the wire display_status for a chunk-level human fact, whatever the lease state', () => {
+    expect(deriveMachineChunkStatus(lease({ state: 'parked', display_status: 'waiting-ask' }))).toEqual({
       label: 'WAITING · ASK',
       tone: 'waiting',
     });
-  });
-
-  it('an escalation outranks an ask', () => {
-    const facts = { ...NO_FACTS, escalatedChunkIds: new Set(['ch_1']), askChunkIds: new Set(['ch_1']) };
-    expect(deriveMachineChunkStatus(lease({ state: 'closed', closure_reason: 'escalated' }), facts)).toEqual({
+    expect(deriveMachineChunkStatus(lease({ state: 'closed', display_status: 'needs-human' }))).toEqual({
       label: 'NEEDS HUMAN',
       tone: 'needs',
     });
-  });
-
-  it('an open takeover outranks everything — a human is in the session now', () => {
-    const facts: MachineChunkFacts = {
-      escalatedChunkIds: new Set(['ch_1']),
-      takeoverChunkIds: new Set(['ch_1']),
-      askChunkIds: new Set(['ch_1']),
-    };
-    expect(deriveMachineChunkStatus(lease(), facts)).toEqual({ label: 'HUMAN IN SESSION', tone: 'takeover' });
-  });
-
-  it('facts for other chunks never leak onto this one', () => {
-    const facts = { ...NO_FACTS, escalatedChunkIds: new Set(['ch_other']) };
-    expect(deriveMachineChunkStatus(lease(), facts)).toEqual({ label: 'RUNNING', tone: 'running' });
+    expect(deriveMachineChunkStatus(lease({ display_status: 'human-in-session' }))).toEqual({
+      label: 'HUMAN IN SESSION',
+      tone: 'takeover',
+    });
   });
 });

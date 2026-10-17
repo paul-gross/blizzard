@@ -23,3 +23,31 @@ class LeaseClosureReason(StrEnum):
     RELEASED = "released"
     #: An operator restart re-aimed the chunk; its environments and route are kept.
     PREEMPTED = "preempted"
+
+    def healthy(self) -> bool:
+        """Whether the closure is the node-step completing and the chunk moving on."""
+        return self is LeaseClosureReason.TRANSITIONED
+
+    @classmethod
+    def is_healthy(cls, reason: str | None) -> bool:
+        """:attr:`healthy` over a stored reason string; a store-only or absent reason is not."""
+        try:
+            return reason is not None and cls(reason).healthy()
+        except ValueError:
+            return False
+
+
+class LeaseDisplayStatus(StrEnum):
+    """What the panel shows for a lease: a takeover, escalation, or ask open on its chunk
+    outranks the lease's own state, which shows otherwise. Derived at read time, never stored."""
+
+    HUMAN_IN_SESSION = "human-in-session"
+    NEEDS_HUMAN = "needs-human"
+    WAITING_ASK = "waiting-ask"
+    RUNNING = "running"
+    STALE = "stale"
+    PARKED = "parked"
+    BACKING_OFF = "backing-off"
+    SPAWNING = "spawning"
+    EXITED = "exited"
+    CLOSED = "closed"

@@ -13,12 +13,13 @@ from datetime import datetime, timedelta
 from typing import Protocol
 
 from blizzard.foundation.clock import IClock
-from blizzard.foundation.leases import LeaseState
+from blizzard.foundation.leases import LeaseClosureReason, LeaseDisplayStatus, LeaseState
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.store.utc import as_utc
 from blizzard.runner.environments.repository import EnvBinding, IReadEnvironmentRepository, group_bindings_by_chunk
 from blizzard.runner.leases.asks import IReadAskRepository
 from blizzard.runner.leases.elicitation import IReadElicitationRepository
+from blizzard.runner.leases.escalations import ParkedEscalation
 from blizzard.runner.leases.liveness import IReadLeaseLivenessRepository, LeaseLivenessFacts
 from blizzard.runner.leases.model import Lease
 from blizzard.runner.leases.overload import IReadOverloadRepository, backing_off_facts
@@ -57,6 +58,52 @@ class Liveness:
 # --- Derived lease state — the panel's read model ----------------
 
 
+def lease_display_status(state: LeaseState, *, takeover: bool, escalated: bool, asking: bool) -> LeaseDisplayStatus:
+    """What the panel shows for a lease of a chunk with these open human facts.
+
+    An open takeover outranks everything (a human is in the session *now*), then an
+    escalation (blocked on a human), then an open ask (waiting on one), then the lease's
+    own ``state``. Pure — the chunk's facts are read once by the caller."""
+    if takeover:
+        return LeaseDisplayStatus.HUMAN_IN_SESSION
+    if escalated:
+        return LeaseDisplayStatus.NEEDS_HUMAN
+    if asking:
+        return LeaseDisplayStatus.WAITING_ASK
+    return LeaseDisplayStatus(state)
+
+
+@domain_model
+@dataclass(frozen=True)
+class ChunkHumanFacts:
+    """The chunks that currently carry an open takeover, escalation, or ask."""
+
+    takeover: frozenset[str] = frozenset()
+    escalated: frozenset[str] = frozenset()
+    asking: frozenset[str] = frozenset()
+
+    def of_chunk(self, chunk_id: str) -> OpenHumanFacts:
+        return OpenHumanFacts(
+            takeover=chunk_id in self.takeover, escalated=chunk_id in self.escalated, asking=chunk_id in self.asking
+        )
+
+
+@domain_model
+@dataclass(frozen=True)
+class OpenHumanFacts:
+    """Whether one chunk has an open takeover, escalation, or ask."""
+
+    takeover: bool = False
+    escalated: bool = False
+    asking: bool = False
+
+    def display_status(self, state: LeaseState) -> LeaseDisplayStatus:
+        return lease_display_status(state, takeover=self.takeover, escalated=self.escalated, asking=self.asking)
+
+
+NO_HUMAN_FACTS = OpenHumanFacts()
+
+
 @domain_model
 @dataclass(frozen=True)
 class LeaseActivity:
@@ -72,6 +119,7 @@ class LeaseActivity:
     environment_id: str | None = None
     workdir: str | None = None
     last_heartbeat_at: datetime | None = None
+    human: OpenHumanFacts = NO_HUMAN_FACTS
 
     @classmethod
     def of(
@@ -85,6 +133,7 @@ class LeaseActivity:
         alive: bool,
         now: datetime,
         stale_after: timedelta = HEARTBEAT_STALENESS_THRESHOLD,
+        human: OpenHumanFacts = NO_HUMAN_FACTS,
     ) -> LeaseActivity:
         """Assemble ``lease``'s activity from facts already read: its liveness facts (``None``
         when it has none yet), the parked and backing-off lease ids, its chunk's held bindings
@@ -101,12 +150,17 @@ class LeaseActivity:
             environment_id=binding.environment_id if binding else None,
             workdir=binding.workdir if binding else None,
             last_heartbeat_at=heartbeat,
+            human=human,
         )
 
     @property
     def state(self) -> LeaseState:
         """The lease's state, derived from the resolved facts — pure, no store, no I/O."""
         return self._derive_state()
+
+    @property
+    def display_status(self) -> LeaseDisplayStatus:
+        return self.human.display_status(self.state)
 
     def _derive_state(self) -> LeaseState:
         """Apply the state precedence — a plain method, so mutation testing reaches it.
@@ -134,10 +188,20 @@ class ClosedLeaseActivity:
     lease: Lease
     closed_at: datetime
     closure_reason: str
+    human: OpenHumanFacts = NO_HUMAN_FACTS
 
     @property
     def state(self) -> LeaseState:
         return "closed"
+
+    @property
+    def display_status(self) -> LeaseDisplayStatus:
+        return self.human.display_status(self.state)
+
+    @property
+    def closure_healthy(self) -> bool:
+        """Whether the closure was the node-step completing and the chunk moving on."""
+        return LeaseClosureReason.is_healthy(self.closure_reason)
 
 
 class IProcessProbe(Protocol):
@@ -147,6 +211,18 @@ class IProcessProbe(Protocol):
     structurally — no shared base class."""
 
     def is_alive(self, pid: int, process_start_time: str) -> bool: ...
+
+
+class IOpenTakeoverChunks(Protocol):
+    """The one takeover read the lease display needs."""
+
+    def open_takeover_chunk_ids(self) -> set[str]: ...
+
+
+class IOpenEscalations(Protocol):
+    """The one escalation read the lease display needs."""
+
+    def open_escalations(self) -> list[ParkedEscalation]: ...
 
 
 class LocalLeaseService:
@@ -166,6 +242,8 @@ class LocalLeaseService:
         environments: IReadEnvironmentRepository,
         overload: IReadOverloadRepository,
         elicitations: IReadElicitationRepository,
+        takeovers: IOpenTakeoverChunks,
+        escalations: IOpenEscalations,
         stale_after: timedelta = HEARTBEAT_STALENESS_THRESHOLD,
         recent_limit: int = RECENT_LEASE_LIMIT,
     ) -> None:
@@ -175,6 +253,8 @@ class LocalLeaseService:
         self._environments = environments
         self._overload = overload
         self._elicitations = elicitations
+        self._takeovers = takeovers
+        self._escalations = escalations
         self._clock = clock
         self._process = process
         self._stale_after = stale_after
@@ -187,6 +267,7 @@ class LocalLeaseService:
         :meth:`~IReadLeaseLivenessRepository.liveness_facts` read; bindings come from one
         :meth:`~IReadEnvironmentRepository.held_bindings` read — no per-lease reads."""
         now = self._clock.now()
+        human = self._human_facts()
         parked = self._asks.parked_lease_ids()
         backing_off = backing_off_facts(self._overload, self._liveness, self._elicitations)
         leases = self._lease_record.list_active_leases()
@@ -202,6 +283,7 @@ class LocalLeaseService:
                 alive=self._is_alive(lease),
                 now=now,
                 stale_after=self._stale_after,
+                human=human.of_chunk(lease.chunk_id),
             )
             for lease in leases
         ]
@@ -218,14 +300,24 @@ class LocalLeaseService:
 
         A closed lease's pid may have been reused, so a pid read here would be actively
         misleading. Bindings are already released."""
+        human = self._human_facts()
         return [
             ClosedLeaseActivity(
                 lease=record.lease,
                 closed_at=record.closed_at,
                 closure_reason=record.reason,
+                human=human.of_chunk(record.lease.chunk_id),
             )
             for record in self._lease_record.list_closed_leases(self._recent_limit)
         ]
+
+    def _human_facts(self) -> ChunkHumanFacts:
+        """The open takeover, escalation, and ask chunks — one bulk read each, never per lease."""
+        return ChunkHumanFacts(
+            takeover=frozenset(self._takeovers.open_takeover_chunk_ids()),
+            escalated=frozenset(e.chunk_id for e in self._escalations.open_escalations()),
+            asking=frozenset(a.chunk_id for a in self._asks.open_asks()),
+        )
 
     def _is_alive(self, lease: Lease) -> bool:
         if lease.pid is None:

@@ -29,6 +29,7 @@ def _view(activity: LeaseActivity | ClosedLeaseActivity) -> LeaseView:
         "harness_id": lease.harness_id,
         "pid": lease.pid,
         "created_at": iso_utc(lease.created_at),
+        "display_status": activity.display_status,
         "stale_after_seconds": int(HEARTBEAT_STALENESS_THRESHOLD.total_seconds()),
     }
     if isinstance(activity, ClosedLeaseActivity):
@@ -38,6 +39,7 @@ def _view(activity: LeaseActivity | ClosedLeaseActivity) -> LeaseView:
             workdir=None,
             last_heartbeat_at=None,
             state=activity.state,
+            closure_healthy=activity.closure_healthy,
             closed_at=iso_utc(activity.closed_at),
             closure_reason=activity.closure_reason,
         )
@@ -47,6 +49,7 @@ def _view(activity: LeaseActivity | ClosedLeaseActivity) -> LeaseView:
         workdir=activity.workdir,
         last_heartbeat_at=iso_utc(activity.last_heartbeat_at) if activity.last_heartbeat_at is not None else None,
         state=activity.state,
+        closure_healthy=False,
         closed_at=None,
         closure_reason=None,
     )

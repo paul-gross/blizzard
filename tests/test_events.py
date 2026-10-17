@@ -73,7 +73,7 @@ def test_runner_changed_carries_by_and_reason_only_where_they_apply() -> None:
 def test_chunk_changed_carries_optionals_only_where_supplied() -> None:
     """The frame's new fields are present-when-meaningful, the same shape set
     for ``runner-changed`` — a call supplying none of the optionals emits a
-    bare ``{chunk_id, status}`` frame, never placeholder ``null``s."""
+    bare ``{chunk_id, status, terminal}`` frame, never placeholder ``null``s."""
     broker = EventBroker()
     broker.publish_chunk_changed(
         "ch_1",
@@ -91,6 +91,7 @@ def test_chunk_changed_carries_optionals_only_where_supplied() -> None:
         {
             "chunk_id": "ch_1",
             "status": "running",
+            "terminal": False,
             "prev_status": "ready",
             "prev_node": "build",
             "node": "review",
@@ -98,7 +99,7 @@ def test_chunk_changed_carries_optionals_only_where_supplied() -> None:
             "cause": "claimed",
             "graph_id": "gr_1",
         },
-        {"chunk_id": "ch_1", "status": "not_ready"},
+        {"chunk_id": "ch_1", "status": "not_ready", "terminal": False},
     ]
 
 

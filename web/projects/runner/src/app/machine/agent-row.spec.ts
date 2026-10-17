@@ -23,6 +23,8 @@ function lease(overrides: Partial<runnerApi.LeaseView> = {}): runnerApi.LeaseVie
     created_at: '2026-07-16T11:00:00.000Z',
     last_heartbeat_at: '2026-07-16T11:59:26.000Z', // -34s from REF
     state: 'running',
+    display_status: 'running',
+    closure_healthy: false,
     closed_at: null,
     closure_reason: null,
     stale_after_seconds: 3600,

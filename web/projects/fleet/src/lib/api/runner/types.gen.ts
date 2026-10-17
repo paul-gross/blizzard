@@ -2305,6 +2305,33 @@ export const LeaseClosureReason = {
 export type LeaseClosureReason = typeof LeaseClosureReason[keyof typeof LeaseClosureReason];
 
 /**
+ * LeaseDisplayStatus
+ *
+ * What the panel shows for a lease: a takeover, escalation, or ask open on its chunk
+ * outranks the lease's own state, which shows otherwise. Derived at read time, never stored.
+ */
+export const LeaseDisplayStatus = {
+    HUMAN_IN_SESSION: 'human-in-session',
+    NEEDS_HUMAN: 'needs-human',
+    WAITING_ASK: 'waiting-ask',
+    RUNNING: 'running',
+    STALE: 'stale',
+    PARKED: 'parked',
+    BACKING_OFF: 'backing-off',
+    SPAWNING: 'spawning',
+    EXITED: 'exited',
+    CLOSED: 'closed'
+} as const;
+
+/**
+ * LeaseDisplayStatus
+ *
+ * What the panel shows for a lease: a takeover, escalation, or ask open on its chunk
+ * outranks the lease's own state, which shows otherwise. Derived at read time, never stored.
+ */
+export type LeaseDisplayStatus = typeof LeaseDisplayStatus[keyof typeof LeaseDisplayStatus];
+
+/**
  * LeaseListResponse
  *
  * Active leases, then recently-closed ones.
@@ -2332,6 +2359,10 @@ export type LeaseView = {
      */
     closed_at: string | null;
     /**
+     * Closure Healthy
+     */
+    closure_healthy: boolean;
+    /**
      * Closure Reason
      */
     closure_reason: string | null;
@@ -2339,6 +2370,7 @@ export type LeaseView = {
      * Created At
      */
     created_at: string;
+    display_status: LeaseDisplayStatus;
     /**
      * Environment Id
      */
