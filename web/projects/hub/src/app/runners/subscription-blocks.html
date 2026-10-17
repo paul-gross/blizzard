@@ -1,0 +1,36 @@
+<span class="who">
+  <span class="name" data-testid="subscription-blocks-name" [attr.title]="line().name">{{ line().name }}</span>
+  @if (line().age; as age) {
+    <span class="age" data-testid="subscription-blocks-age" title="Last usage reading">{{ age }}</span>
+  }
+</span>
+<div class="windows">
+  @switch (line().state) {
+    @case ('paced') {
+      @for (pace of line().windows; track pace.window) {
+        <div
+          class="window"
+          data-testid="subscription-blocks-window"
+          role="img"
+          [class.ahead]="pace.ahead"
+          [attr.data-window]="pace.window"
+          [attr.title]="pace.hint"
+          [attr.aria-label]="line().name + ' ' + pace.hint"
+        >
+          <span class="wl">{{ pace.window }}</span>
+          <span class="cells">
+            @for (cell of pace.cells; track $index) {
+              <span class="cell" [class.on]="cell.on" [class.clock]="cell.clockBefore" [class.clock-end]="cell.clockAfter"></span>
+            }
+          </span>
+        </div>
+      }
+    }
+    @case ('lapsed') {
+      <span class="miss lapsed" data-testid="subscription-blocks-lapsed" title="Credential lapsed — log in again">✕ lapsed</span>
+    }
+    @default {
+      <span class="miss" data-testid="subscription-blocks-unsampled" title="No usage reading yet">—</span>
+    }
+  }
+</div>

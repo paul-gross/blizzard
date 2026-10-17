@@ -12,11 +12,7 @@
 }
 /* A runner held at the hub reads as stopped at a glance: faint amber hatching. */
 .runner.paused {
-  background: repeating-linear-gradient(
-    135deg,
-    transparent 0 10px,
-    color-mix(in srgb, var(--amber-hi) 3%, transparent) 10px 20px
-  );
+  background: var(--hatch-paused);
 }
 .r1 {
   display: flex;

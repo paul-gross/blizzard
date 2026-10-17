@@ -1,5 +1,5 @@
 import type { HostRegistryView, HostSubscriptionUsageView, SubscriptionUsageView } from '../api/hub';
-import { ageMs, formatRefreshedAgo } from '../core/when';
+import { ageMs, formatRefreshedAgo, formatSeenTag } from '../core/when';
 import { classifySubscriptionFreshness, type SubscriptionPace, toPaceBars } from './subscription-pace.model';
 import type { WorkspaceRow } from './workspace-table';
 
@@ -19,6 +19,7 @@ export function hubSubscriptionPaces(
       condition: s.condition ?? null,
       sampledAt,
       refreshedLabel: delta === null ? null : formatRefreshedAgo(delta),
+      refreshedTag: delta === null ? null : formatSeenTag(sampledAt, nowMs),
       freshness: delta === null ? null : classifySubscriptionFreshness(delta),
       missReason: s.miss_reason ?? null,
     };

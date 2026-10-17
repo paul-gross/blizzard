@@ -12,6 +12,9 @@
 .beacon.active.step {
   animation: beacon-step 1.2s steps(2, jump-none) infinite;
 }
+.beacon.active.hold {
+  animation: none;
+}
 @keyframes beacon-blink {
   50% {
     opacity: 0;

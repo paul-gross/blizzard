@@ -8,6 +8,7 @@ import {
   formatRefreshedAgo,
   formatRelative,
   formatSeenAgo,
+  formatSeenTag,
   formatUtcYmd,
   formatWhen,
   ageMs,
@@ -173,6 +174,21 @@ describe('formatSeenAgo (bzh:utc-instants)', () => {
   it('falls through to online/offline for a stamp beyond skew tolerance, never a confident 0s', () => {
     expect(formatSeenAgo('2026-07-16T17:00:00.000Z', false, REF)).toBe('offline');
     expect(formatSeenAgo('2026-07-16T17:00:00.000Z', true, REF)).toBe('online');
+  });
+});
+
+describe('formatSeenTag (bzh:utc-instants)', () => {
+  const REF = Date.parse('2026-07-16T12:00:00.000Z');
+
+  it('brackets the bare age on the same s/m/h derivation', () => {
+    expect(formatSeenTag('2026-07-16T11:59:30.000Z', REF)).toBe('[30s]');
+    expect(formatSeenTag('2026-07-16T11:30:00.000Z', REF)).toBe('[30m]');
+    expect(formatSeenTag('2026-07-16T09:00:00.000Z', REF)).toBe('[3h]');
+  });
+
+  it('reads an absent or skewed stamp as a dash, never a confident 0s', () => {
+    expect(formatSeenTag(null, REF)).toBe('[—]');
+    expect(formatSeenTag('2026-07-16T17:00:00.000Z', REF)).toBe('[—]');
   });
 });
 

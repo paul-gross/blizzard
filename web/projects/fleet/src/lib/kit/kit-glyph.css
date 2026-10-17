@@ -1,0 +1,12 @@
+:host {
+  display: inline-flex;
+  flex: none;
+}
+.glyph {
+  width: var(--kit-glyph-size, 12px);
+  height: var(--kit-glyph-size, 12px);
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+}

@@ -21,8 +21,17 @@
   min-height: 0;
   min-width: 0;
 }
-/* The rail runs the full height of the workspace: runners and asks size to
-   their content and the activity feed takes the remainder, scrolling its own body. */
+/* The rail runs the full height of the workspace. The runner panel sizes to its content up to 60%
+   of the rail, then scrolls its own body, so the asks, gates and activity feed beneath always keep
+   the rest in view; asks size to their content and the activity feed takes the remainder,
+   scrolling its own body. */
+.rail-runners {
+  display: flex;
+  flex-direction: column;
+  flex: 0 1 auto;
+  min-height: 0;
+  max-height: 60%;
+}
 .rail-activity {
   flex: 1;
   min-height: 0;

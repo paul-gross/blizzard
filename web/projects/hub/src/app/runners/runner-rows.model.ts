@@ -6,6 +6,7 @@ import {
   type SubscriptionPace,
   compactRef,
   formatSeenAgo,
+  formatSeenTag,
   hubSubscriptionPaces,
 } from 'fleet';
 import type { ChunkSummary } from 'fleet/shell';
@@ -32,6 +33,13 @@ export interface ClaimLine {
 export function runnerSeenLabel(row: RunnerRow): string {
   if (row.connection === RunnerConnection.NEVER_CONNECTED) return 'never connected';
   return formatSeenAgo(row.last_seen_at, row.online, row.nowMs);
+}
+
+/** A row's liveness as the board rail's dense tag — "[12s]", or "[never]" for a runner that
+ * never connected; {@link runnerSeenLabel} stays the words, for its tooltip. */
+export function runnerSeenTag(row: RunnerRow): string {
+  if (row.connection === RunnerConnection.NEVER_CONNECTED) return '[never]';
+  return formatSeenTag(row.last_seen_at, row.nowMs);
 }
 
 /** A registry row: the runner plus its claims and subscription pace groups, pre-folded

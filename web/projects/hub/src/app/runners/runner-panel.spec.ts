@@ -151,13 +151,14 @@ describe('RunnerPanel', () => {
     );
   });
 
-  it('draws one env strip for the fleet from the host-less runners that report a pool', async () => {
+  it('draws one env strip per host-less runner that reports a pool, named for its workspace', async () => {
     const fixture = TestBed.createComponent(RunnerPanel);
     await settle(fixture);
     const el = fixture.nativeElement as HTMLElement;
 
     const strip = el.querySelector('[data-testid="runner-env-strip"]');
-    expect(strip?.querySelector('[data-testid="slot-bar-label"]')?.textContent?.trim()).toBe('2/4 envs');
+    expect(strip?.querySelector('[data-testid="slot-bar-name"]')?.textContent?.trim()).toBe('ws_a');
+    expect(strip?.querySelector('[data-testid="slot-bar-gauge"]')?.getAttribute('title')).toBe('2/4 envs');
     expect(el.querySelectorAll('[data-testid="runner-env-strip"]')).toHaveLength(1);
   });
 
@@ -170,7 +171,7 @@ describe('RunnerPanel', () => {
     for (const testid of ['runner-release', 'host-enroll', 'host-revoke-token', 'host-retire', 'runner-toggle', 'host-card']) {
       expect(el.querySelector(`[data-testid="${testid}"]`), testid).toBeNull();
     }
-    expect(el.querySelector('[data-testid="runner-fleet-link"]')?.getAttribute('href')).toBe('/fleet');
+    expect(el.querySelector('[data-testid="runner-fleet-link"]')?.getAttribute('href')).toMatch(/^\/fleet\//);
   });
 });
 
@@ -218,31 +219,36 @@ describe('RunnerPanel seenLabel (bzh:utc-instants)', () => {
     stub.restore();
   });
 
-  it('reads a fresh heartbeat as "seen Ns ago"', async () => {
+  it('reads a fresh heartbeat as "[Ns]", seen Ns ago in its tooltip', async () => {
     const el = await render('2026-07-16T11:59:55.000Z', true); // 5s before REF
-    expect(el.querySelector('[data-testid="runner-seen"]')?.textContent).toBe('seen 5s ago');
+    expect(el.querySelector('[data-testid="runner-seen"]')?.textContent).toBe('[5s]');
+    expect(el.querySelector('[data-testid="runner-seen"]')?.getAttribute('title')).toBe('seen 5s ago');
   });
 
-  it('reads a small browser-vs-hub skew (<=60s in the future) as "seen 0s ago"', async () => {
+  it('reads a small browser-vs-hub skew (<=60s in the future) as "[0s]"', async () => {
     const el = await render('2026-07-16T12:00:30.000Z', true); // 30s after REF
-    expect(el.querySelector('[data-testid="runner-seen"]')?.textContent).toBe('seen 0s ago');
+    expect(el.querySelector('[data-testid="runner-seen"]')?.textContent).toBe('[0s]');
+    expect(el.querySelector('[data-testid="runner-seen"]')?.getAttribute('title')).toBe('seen 0s ago');
   });
 
-  it('still reads "seen 0s ago" at exactly the 60s tolerance boundary', async () => {
+  it('still reads "[0s]" at exactly the 60s tolerance boundary', async () => {
     const el = await render('2026-07-16T12:01:00.000Z', true); // 60s after REF
-    expect(el.querySelector('[data-testid="runner-seen"]')?.textContent).toBe('seen 0s ago');
+    expect(el.querySelector('[data-testid="runner-seen"]')?.textContent).toBe('[0s]');
+    expect(el.querySelector('[data-testid="runner-seen"]')?.getAttribute('title')).toBe('seen 0s ago');
   });
 
-  it('does not render a confident 0s for a stamp hours in the future — falls through to online', async () => {
+  it('does not render a confident 0s for a stamp hours in the future — falls through to a dash, online in its tooltip', async () => {
     // The naive-timestamp bug this guards against: a naive wire stamp on a UTC-5 box
     // reads five hours ahead of the true instant (bzh:utc-instants).
     const el = await render('2026-07-16T17:00:00.000Z', true); // 5h after REF
-    expect(el.querySelector('[data-testid="runner-seen"]')?.textContent).toBe('online');
+    expect(el.querySelector('[data-testid="runner-seen"]')?.textContent).toBe('[—]');
+    expect(el.querySelector('[data-testid="runner-seen"]')?.getAttribute('title')).toBe('online');
   });
 
-  it('falls through to offline (not "0s ago") for a stale runner behind a stamp hours in the future', async () => {
+  it('falls through to a dash, offline in its tooltip (not "0s"), for a stale runner behind a stamp hours in the future', async () => {
     const el = await render('2026-07-16T17:00:00.000Z', false); // 5h after REF
-    expect(el.querySelector('[data-testid="runner-seen"]')?.textContent).toBe('offline');
+    expect(el.querySelector('[data-testid="runner-seen"]')?.textContent).toBe('[—]');
+    expect(el.querySelector('[data-testid="runner-seen"]')?.getAttribute('title')).toBe('offline');
   });
 });
 
@@ -294,17 +300,16 @@ describe('RunnerPanel host cards', () => {
 
   afterEach(() => stub.restore());
 
-  it('folds the hosts, runners and live chunks reads into one strip and one row per runner, no host cards', async () => {
+  it('folds the hosts, runners and live chunks reads into a strip per workspace and one row per runner, no host cards', async () => {
     const fixture = TestBed.createComponent(RunnerPanel);
     await settle(fixture);
     const el = fixture.nativeElement as HTMLElement;
 
     expect(el.querySelector('[data-testid="host-card"]')).toBeNull();
     expect([...el.querySelectorAll('[data-testid="runner"]')].map((li) => li.getAttribute('data-runner'))).toEqual(['rA', 'rB', 'rC']);
-    expect(el.querySelector('[data-testid="runner-env-strip"] [data-testid="slot-bar-label"]')?.textContent?.trim()).toBe('2/3 envs');
-    expect(el.querySelector('[data-runner="rA"] [data-testid="runner-agents"] [data-testid="slot-bar-label"]')?.textContent?.trim()).toBe(
-      '1/3 agents',
-    );
+    const title = (bar: Element) => bar.querySelector('[data-testid="slot-bar-gauge"]')?.getAttribute('title');
+    expect([...el.querySelectorAll('[data-testid="runner-env-strip"]')].map(title)).toEqual(['2/3 envs']);
+    expect([...el.querySelectorAll('[data-runner="rA"] [data-testid="runner-agents"]')].map(title)).toEqual(['1/2 agents', '0/1 agents']);
     expect(el.querySelector('[data-runner="rB"] [data-testid="runner-agents"]')).toBeNull();
   });
 });
