@@ -36,6 +36,8 @@ from blizzard.runner.transfer.rules import (
 )
 from blizzard.runner.transfer.runner_stores import HeldBinding, RunnerStoreView
 
+pytestmark = pytest.mark.unit
+
 _AT = datetime(2026, 1, 1, tzinfo=UTC)
 _LATER = datetime(2026, 1, 2, tzinfo=UTC)
 
