@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass, field
 from urllib.parse import quote, urlsplit
 
@@ -18,13 +17,28 @@ def board_chunk_url(public_url: str | None, chunk_id: str) -> str | None:
 
 @domain_model
 @dataclass(frozen=True)
+class PrMarker:
+    """One well-formed ``delivery-pr/<repo>[/<number>]`` marker: the artifact ``name`` it was written under,
+    its ``epoch``, and the PR its payload names. A marker whose payload is not that shape never becomes one."""
+
+    name: str
+    epoch: int
+    repo: str
+    number: int
+    url: str
+
+
+@domain_model
+@dataclass(frozen=True)
 class DeliverySources:
     """The narrowed, page-keyed delivery read (not the chunk's whole artifact history).
 
-    ``markers`` arrive in durable write order; :meth:`DeliveryRead.of` folds them as
-    given, so a later replacement reference supersedes an earlier one."""
+    ``markers`` (the ``merged/`` and ``awaiting-external-merge`` markers) and ``pr_markers`` each arrive in
+    durable write order; :meth:`DeliveryRead.of` folds them as given, so a later replacement reference
+    supersedes an earlier one."""
 
     markers: list[StoredArtifact] = field(default_factory=list)
+    pr_markers: list[PrMarker] = field(default_factory=list)
     legacy_landed: dict[str, str] = field(default_factory=dict)
 
 
@@ -83,23 +97,12 @@ class DeliveryRead:
         for row in sources.markers:
             if row.name == "awaiting-external-merge":
                 external_epochs.add(row.epoch)
-            elif row.name.startswith("delivery-pr/"):
-                try:
-                    payload = json.loads(row.data)
-                except ValueError:
-                    continue
-                if (
-                    isinstance(payload, dict)
-                    and isinstance(payload.get("repo"), str)
-                    and isinstance(payload.get("number"), int)
-                    and isinstance(payload.get("url"), str)
-                ):
-                    repo, number = payload["repo"], payload["number"]
-                    if row.name not in {f"delivery-pr/{repo}", f"delivery-pr/{repo}/{number}"}:
-                        continue
-                    prs[(repo, number)] = DeliveryPr(repo, number, payload["url"])
-                    script_prs[repo] = (repo, number)
-                    script_epochs[(repo, number)] = row.epoch
+        for pr in sources.pr_markers:
+            if pr.name not in {f"delivery-pr/{pr.repo}", f"delivery-pr/{pr.repo}/{pr.number}"}:
+                continue
+            prs[(pr.repo, pr.number)] = DeliveryPr(pr.repo, pr.number, pr.url)
+            script_prs[pr.repo] = (pr.repo, pr.number)
+            script_epochs[(pr.repo, pr.number)] = pr.epoch
         open_prs = [
             p
             for p in prs.values()
