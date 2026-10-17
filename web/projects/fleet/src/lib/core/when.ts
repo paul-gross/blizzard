@@ -184,6 +184,13 @@ export function formatSeenAgo(lastSeenAt: string | null | undefined, online: boo
   return `seen ${agoUnits(delta)} ago`;
 }
 
+/** "[12s]" — {@link formatSeenAgo}'s age alone, bracketed, for a row too dense for the words;
+ * "[—]" where that label would fall back to online/offline. */
+export function formatSeenTag(lastSeenAt: string | null | undefined, now: number): string {
+  const delta = ageMs(lastSeenAt, now);
+  return delta === null ? '[—]' : `[${agoUnits(delta)}]`;
+}
+
 /** "4s ago" / "12m ago" / "3h ago" — a bare rounded age, for a label that names its own
  * verb ("reported 4s ago", a muted age beside an absolute instant). */
 export function formatAgo(deltaMs: number): string {

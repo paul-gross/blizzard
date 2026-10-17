@@ -21,6 +21,7 @@ export {
   formatAgo,
   formatHeldFor,
   formatSeenAgo,
+  formatSeenTag,
   ageMs,
   formatUtcYmd,
   formatLocalClockWithDay,

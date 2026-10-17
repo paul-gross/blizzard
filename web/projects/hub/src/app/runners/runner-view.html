@@ -15,8 +15,13 @@
     emptyText="NO RUNNERS REGISTERED"
     emptyTestid="runners-empty"
   >
-    @if (rail().envs; as envs) {
-      <fleet-kit-slot-bar class="envs" data-testid="runner-env-strip" unit="envs" [used]="envs.used" [total]="envs.total" />
+    <!-- Most important first: what the fleet can still spend, who is spending it, then the room it has. -->
+    @if (rail().subscriptions.length > 0) {
+      <div class="subs" data-testid="runner-subscriptions">
+        @for (sub of rail().subscriptions; track sub.slug) {
+          <app-subscription-blocks data-testid="runner-subscription" [line]="sub" />
+        }
+      </div>
     }
     <ul class="runners" data-testid="runner-list">
       @for (entry of rail().rows; track entry.row.runner_id) {
@@ -25,6 +30,7 @@
           data-testid="runner"
           [class.offline]="entry.row.connection === connection.OFFLINE"
           [class.never]="entry.row.connection === connection.NEVER_CONNECTED"
+          [class.paused]="entry.row.hub_paused || entry.row.locally_paused"
           [attr.data-runner]="entry.row.runner_id"
           [attr.data-connection]="entry.row.connection"
           [attr.data-online]="entry.row.online"
@@ -33,50 +39,58 @@
         >
           <div class="r1">
             <span class="name" data-testid="runner-name">
-              @if (entry.row.connection === connection.NEVER_CONNECTED) {
-                <span class="dot never" aria-hidden="true"></span>
-              } @else {
-                <fleet-kit-beacon
-                  class="dot"
-                  aria-hidden="true"
-                  [active]="entry.row.online || entry.row.connection === connection.OFFLINE"
-                  [tone]="entry.row.online ? 'green' : 'red'"
-                  [blink]="entry.row.online ? 'pulse' : 'step'"
-                />
+              <!-- A fixed-width light: green online, yellow held by a brake, blinking red offline. -->
+              <span class="light" data-testid="runner-light" [attr.data-tone]="entry.light.kind === 'lit' ? entry.light.tone : 'never'">
+                @if (entry.light.kind === 'lit') {
+                  <fleet-kit-beacon aria-hidden="true" [active]="true" [tone]="entry.light.tone" [blink]="entry.light.blink" />
+                } @else {
+                  <span class="hollow" aria-hidden="true"></span>
+                }
+              </span>
+              <!-- The name opens this runner on the Fleet tab — its host's detail, or its own when it has none. -->
+              <a class="name-link" data-testid="runner-fleet-link" [routerLink]="['/fleet', entry.fleetId] | lensLink">{{
+                entry.row.runner_name
+              }}</a>
+              <!-- Two brakes, two glyphs, outside the link: a runner stopped by both shows both, because
+                   they are cleared by different people in different places. -->
+              @if (entry.row.locally_paused) {
+                <fleet-kit-glyph class="brake" data-testid="runner-locally-paused" glyph="pause" [label]="localPauseHint(entry.row)" />
               }
-              {{ entry.row.runner_name }}
+              @if (entry.row.hub_paused) {
+                <fleet-kit-glyph class="brake" data-testid="runner-hub-paused" glyph="stop" label="Paused by the hub — no new claims" />
+              }
             </span>
-            <span class="seen" data-testid="runner-seen">{{ seenLabel(entry.row) }}</span>
+            <span class="where">
+              @if (entry.hostName) {
+                <span class="host" data-testid="runner-host">{{ entry.hostName }}</span>
+              }
+              <span class="seen" data-testid="runner-seen" [attr.title]="seenLabel(entry.row)">{{ seenTag(entry.row) }}</span>
+            </span>
           </div>
-          @if (entry.agents; as agents) {
+          @for (agents of entry.agents; track $index) {
             <fleet-kit-slot-bar
               data-testid="runner-agents"
               unit="agents"
+              [name]="agents.name"
               [used]="agents.used"
               [total]="agents.total"
             />
           }
-          @if (entry.row.locally_paused || entry.row.hub_paused) {
-            <!-- Two brakes, two badges: a runner stopped by both shows both, because
-                 they are cleared by different people in different places. -->
-            <div class="r3">
-              @if (entry.row.locally_paused) {
-                <fleet-kit-badge
-                  data-testid="runner-locally-paused"
-                  tone="idle"
-                  variant="soft"
-                  [title]="localPauseHint(entry.row)"
-                  >LOCALLY PAUSED</fleet-kit-badge
-                >
-              }
-              @if (entry.row.hub_paused) {
-                <fleet-kit-badge data-testid="runner-hub-paused" tone="waiting" variant="soft">HUB PAUSED</fleet-kit-badge>
-              }
-            </div>
-          }
         </li>
       }
     </ul>
+    @if (rail().envs.length > 0) {
+      <div class="envs">
+        @for (envs of rail().envs; track $index) {
+          <fleet-kit-slot-bar
+            data-testid="runner-env-strip"
+            unit="envs"
+            [name]="envs.name"
+            [used]="envs.used"
+            [total]="envs.total"
+          />
+        }
+      </div>
+    }
   </fleet-kit-async-state>
-  <a class="fleet-link" data-testid="runner-fleet-link" [routerLink]="'/fleet' | lensLink">Open the Fleet tab →</a>
 </fleet-kit-panel>

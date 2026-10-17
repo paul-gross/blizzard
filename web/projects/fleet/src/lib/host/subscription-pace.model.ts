@@ -55,6 +55,8 @@ export interface SubscriptionPace {
   readonly sampledAt: string | null;
   /** "refreshed 5m ago" against {@link sampledAt}, or `null` alongside it. */
   readonly refreshedLabel: string | null;
+  /** The same age bracketed — "[5m]" — for a row too dense for the words; `null`/absent alongside it. */
+  readonly refreshedTag?: string | null;
   /** {@link sampledAt}'s age tier, or `null` alongside it — `null` too for a stamp
    * unparseable or beyond the clock-skew tolerance in the future
    * (`bzh:utc-instants`): never a confident tier for a reading the clock can't trust. */

@@ -74,4 +74,17 @@ describe('KitBeacon', () => {
     await fixture.whenStable();
     expect(beacon.classList.contains('step')).toBe(true);
   });
+
+  it('shows its tone steady, without animating, when held', async () => {
+    const fixture = TestBed.createComponent(TestHost);
+    fixture.componentInstance.active.set(true);
+    fixture.componentInstance.tone.set('green');
+    fixture.componentInstance.blink.set('hold');
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    const beacon = el.querySelector('.beacon') as HTMLElement;
+    expect(beacon.classList.contains('hold')).toBe(true);
+    expect(beacon.getAttribute('style')).toContain('var(--green)');
+  });
 });

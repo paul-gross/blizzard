@@ -1,25 +1,64 @@
 :host {
   display: block;
 }
+/* Named: one line, the name over the first 40% and smaller cells over the rest. */
+:host(.named) {
+  display: grid;
+  grid-template-columns: 2fr 3fr;
+  align-items: center;
+  gap: 6px;
+}
 .gauge {
   display: flex;
   gap: 3px;
   margin-top: 5px;
 }
+:host(.named) .gauge {
+  gap: 2px;
+  margin-top: 0;
+}
+/* An empty cell carries a very dark hint of its bar's fill, so a bar reads as its colour even idle. */
 .cell {
   flex: 1;
   height: 10px;
-  border: 1px solid var(--bezel);
-  background: var(--panel-deep);
+  border: 1px solid color-mix(in srgb, var(--kit-slot-bar-on, var(--amber)) 22%, var(--panel-deep));
+  background: color-mix(in srgb, var(--kit-slot-bar-on, var(--amber)) 10%, var(--panel-deep));
+}
+:host(.named) .cell {
+  height: 7px;
 }
 .cell.on {
-  background: var(--amber);
-  border-color: var(--amber-dim);
+  background: var(--kit-slot-bar-on, var(--amber));
+  border-color: var(--kit-slot-bar-on-border, var(--amber-dim));
+}
+/* Past the total: an overload, cyan and pulsing on the beacon's blink. */
+.cell.over {
+  background: var(--cyan);
+  border-color: var(--cyan-dim);
+  animation: slot-bar-over 2s ease-in-out infinite;
+}
+@keyframes slot-bar-over {
+  50% {
+    opacity: 0.25;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cell.over {
+    animation: none;
+  }
 }
 .gauge-lbl {
   display: flex;
   justify-content: flex-end;
   margin-top: 3px;
+}
+.name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-label);
+  color: var(--label);
 }
 .lbl {
   font-size: var(--fs-label);

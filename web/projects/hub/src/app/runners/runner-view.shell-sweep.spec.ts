@@ -32,9 +32,10 @@ function tokenColor(token: string): string {
 /**
  * The board rail's compact runner panel, the tooled half of
  * `blizzard-context:/verification/blizzard.md`'s `web:shell-sweep` method — a real,
- * headless-Chromium proof that each runner's three lines (light/name/seen, agents, pause
- * badges) genuinely stack inside the rail at its ~390px width and at a desktop width with no
- * horizontal overflow, and that the pause badges are the kit's soft pills. jsdom never lays
+ * headless-Chromium proof that each runner's lines (light/name/pause marks/seen, then one agents
+ * bar per binding, its name and cells on one line) genuinely stack inside the rail at its ~390px
+ * width and at a desktop width with no horizontal overflow, and that the brake glyphs wear their
+ * colours. jsdom never lays
  * these lines out, so this is a claim `web:unit-test` cannot make good on
  * (`bzh:narrow-viewport-tier-rule`).
  *
@@ -124,21 +125,30 @@ describe('compact runner rail layout shell sweep (web:shell-sweep)', () => {
 
       const first = rows[0];
       const l1 = first.querySelector<HTMLElement>('.r1')!.getBoundingClientRect();
-      const l2 = first.querySelector<HTMLElement>('[data-testid="runner-agents"]')!.getBoundingClientRect();
-      const l3 = first.querySelector<HTMLElement>('.r3')!.getBoundingClientRect();
+      const bars = first.querySelectorAll<HTMLElement>('[data-testid="runner-agents"]');
+      expect(bars, 'one agents bar per binding').toHaveLength(2);
+      const l2 = bars[bars.length - 1].getBoundingClientRect();
       expect(l2.top, 'agents line sits below the name line').toBeGreaterThanOrEqual(l1.bottom);
-      expect(l3.top, 'badge line sits below the agents line').toBeGreaterThanOrEqual(l2.bottom);
-      expect(l3.right).toBeLessThanOrEqual(panel.getBoundingClientRect().right + 1);
+      for (const mark of first.querySelectorAll<HTMLElement>('fleet-kit-glyph')) {
+        const box = mark.getBoundingClientRect();
+        expect(box.top, 'pause marks sit on the name line').toBeGreaterThanOrEqual(l1.top - 1);
+        expect(box.bottom, 'pause marks sit on the name line').toBeLessThanOrEqual(l1.bottom + 1);
+      }
+      for (const bar of bars) {
+        const name = bar.querySelector<HTMLElement>('[data-testid="slot-bar-name"]')!.getBoundingClientRect();
+        const gauge = bar.querySelector<HTMLElement>('[data-testid="slot-bar-gauge"]')!.getBoundingClientRect();
+        expect(gauge.left, 'the cells sit right of the name, on one line').toBeGreaterThanOrEqual(name.right);
+        expect(gauge.right).toBeLessThanOrEqual(panel.getBoundingClientRect().right + 1);
+      }
 
-      // The unpaused runner draws no third line, and a runner with no bindings no second.
-      expect(rows[1].querySelector('.r3')).toBeNull();
+      // A runner with no bindings draws no agents line.
       expect(rows[2].querySelector('[data-testid="runner-agents"]')).toBeNull();
     } finally {
       root.remove();
     }
   });
 
-  it.each([390, 1280])('draws both pause badges as soft kit pills in their tone colours at %ipx', async (width) => {
+  it.each([390, 1280])('draws the pause in the paused yellow and the stop in red, each light in a fixed-width slot, at %ipx', async (width) => {
     await loadDesignTokens();
     const fixture = await render();
     const root = fixture.nativeElement as HTMLElement;
@@ -150,16 +160,15 @@ describe('compact runner rail layout shell sweep (web:shell-sweep)', () => {
       await new Promise((resolve) => requestAnimationFrame(resolve));
 
       const row = root.querySelector<HTMLElement>(`[data-runner="${ROW.runner_id}"]`)!;
-      const local = row.querySelector<HTMLElement>('[data-testid="runner-locally-paused"] .badge')!;
-      const hub = row.querySelector<HTMLElement>('[data-testid="runner-hub-paused"] .badge')!;
-      expect(local.textContent?.trim()).toBe('LOCALLY PAUSED');
-      expect(hub.textContent?.trim()).toBe('HUB PAUSED');
-      expect(getComputedStyle(local).color).toBe(tokenColor('--label-dim'));
-      expect(getComputedStyle(hub).color).toBe(tokenColor('--amber-hi'));
-      for (const badge of [getComputedStyle(local), getComputedStyle(hub)]) {
-        expect(badge.borderTopStyle).toBe('solid');
-        expect(parseFloat(badge.borderTopLeftRadius)).toBeGreaterThan(0);
-        expect(parseFloat(badge.fontSize)).toBeLessThan(parseFloat(getComputedStyle(row).fontSize));
+      const local = row.querySelector<SVGElement>('[data-testid="runner-locally-paused"] svg')!;
+      const hub = row.querySelector<SVGElement>('[data-testid="runner-hub-paused"] svg')!;
+      expect(getComputedStyle(local).stroke).toBe(tokenColor('--amber'));
+      expect(getComputedStyle(hub).stroke).toBe(tokenColor('--red'));
+      const lights = [...root.querySelectorAll<HTMLElement>('[data-testid="runner-light"]')].map((l) => l.getBoundingClientRect());
+      expect(new Set(lights.map((l) => l.width)).size, 'every light slot is one width').toBe(1);
+      expect(new Set(lights.map((l) => l.left)).size, 'every light starts at one column').toBe(1);
+      for (const mark of [local, hub]) {
+        expect(mark.getBoundingClientRect().width).toBeGreaterThan(0);
       }
     } finally {
       root.remove();

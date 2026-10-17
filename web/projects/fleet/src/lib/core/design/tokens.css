@@ -31,6 +31,15 @@
   --red-wash-text: #ffd9dd;
   --green: #4fc57e;
   --green-dim: #2b5c40;
+  /* A held runner's faint amber hatching — one stopped at a glance, wherever it is listed. */
+  --hatch-paused: repeating-linear-gradient(
+    135deg,
+    transparent 0 10px,
+    color-mix(in srgb, var(--amber-hi) 3%, transparent) 10px 20px
+  );
+  /* A neutral dark grey, for a gauge that must read apart from every hued one. */
+  --grey: #5c5c5c;
+  --grey-dim: #3d3d3d;
   --label: #98a8bd;
   --label-dim: #7f91a9;
   --text: #b8c6d8;

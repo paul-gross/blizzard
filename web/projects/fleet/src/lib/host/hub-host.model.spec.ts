@@ -34,6 +34,7 @@ describe('hubSubscriptionPaces', () => {
         condition: null,
         sampledAt: '2026-07-16T11:55:00.000Z',
         refreshedLabel: 'refreshed 5m ago',
+        refreshedTag: '[5m]',
         freshness: 'fresh',
         missReason: null,
       },
@@ -45,7 +46,7 @@ describe('hubSubscriptionPaces', () => {
       [{ slug: 'openai', name: 'OpenAI', windows: [], miss_reason: 'endpoint_unreachable' }],
       NOW,
     );
-    expect(pace).toMatchObject({ sampledAt: null, refreshedLabel: null, freshness: null, missReason: 'endpoint_unreachable' });
+    expect(pace).toMatchObject({ sampledAt: null, refreshedLabel: null, refreshedTag: null, freshness: null, missReason: 'endpoint_unreachable' });
   });
 });
 

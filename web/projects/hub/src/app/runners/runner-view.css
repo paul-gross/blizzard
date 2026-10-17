@@ -1,14 +1,27 @@
+/* Shrinks to its container, its panel body scrolling, when the board caps its height. */
 :host {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  flex: none;
+  flex: 0 1 auto;
   font-family: var(--mono);
   font-size: var(--fs-base);
   font-variant-numeric: tabular-nums;
   color: var(--text);
 }
+/* Environments fill in grey, apart from the agents' amber and an overload's cyan. */
 .envs {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 6px 8px;
+  --kit-slot-bar-on: var(--grey);
+  --kit-slot-bar-on-border: var(--grey-dim);
+}
+.subs {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
   padding: 6px 8px;
   border-bottom: 1px solid var(--line);
 }
@@ -17,6 +30,11 @@
   margin: 0;
   padding: 0;
 }
+/* Half a rem between the three sections — subscriptions, runners, environments. */
+.subs,
+.runners:not(:last-child) {
+  margin-bottom: 0.5rem;
+}
 .runner {
   display: flex;
   flex-direction: column;
@@ -24,51 +42,79 @@
   padding: 6px 8px;
   border-bottom: 1px solid var(--line);
 }
-.r1,
-.r3 {
+/* Held by either brake: the Fleet tab's faint amber hatching, as its yellow light says. */
+.runner.paused {
+  background: var(--hatch-paused);
+}
+.r1 {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
   gap: 6px;
 }
-.r3 {
-  justify-content: flex-start;
-  flex-wrap: wrap;
-}
-/* A square, per the mockup's status indicators — not a dot. */
-.dot {
-  display: inline-block;
-  width: 7px;
-  height: 7px;
-  margin-right: 6px;
-}
 .name {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+  min-width: 0;
   color: var(--amber);
   font-size: var(--fs-md);
   overflow-wrap: anywhere;
 }
-.runner.offline .name,
-.runner.never .name {
+.name-link {
+  min-width: 0;
+  color: inherit;
+  text-decoration: none;
+}
+.name-link:hover,
+.name-link:focus-visible {
+  color: var(--amber-hi);
+  text-decoration: underline;
+}
+.runner.offline .name-link,
+.runner.never .name-link {
   color: var(--label);
 }
-/* Added at the hub but never started: no contact yet, so neither the green of a live
-   runner nor the red blink of a missing one — a hollow mark. */
-.dot.never {
+/* The status light's slot is fixed-width, so every name starts at one column. A square, per the
+   mockup's status indicators — not a dot. */
+.light {
+  display: inline-flex;
+  flex: none;
+  justify-content: center;
+  width: 7px;
+}
+/* Added at the hub but never started: no contact yet, so no lit beacon — a hollow mark. */
+.hollow {
+  box-sizing: border-box;
+  width: 7px;
+  height: 7px;
   border: 1px solid var(--label-dim);
+}
+/* The runner's own pause reads in the paused yellow its light wears; the hub's stop sign in red. */
+.brake {
+  color: var(--amber);
+}
+.brake[data-glyph='stop'] {
+  color: var(--red);
+}
+/* The host it runs on, then its last contact — right of the name, both muted. Never narrower than
+   its contact tag: a long name wraps rather than push the tag past the row. */
+.where {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.host {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--label);
+  font-size: var(--fs-label);
 }
 .seen {
   color: var(--label-dim);
   font-size: var(--fs-label);
   white-space: nowrap;
-}
-.fleet-link {
-  display: block;
-  padding: 6px 8px;
-  color: var(--label);
-  font-size: var(--fs-label);
-  text-decoration: none;
-}
-.fleet-link:hover,
-.fleet-link:focus-visible {
-  color: var(--amber);
 }

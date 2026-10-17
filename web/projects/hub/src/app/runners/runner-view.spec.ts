@@ -53,8 +53,8 @@ const CARD: HostCard = {
   subscriptionPaces: [],
 };
 
-const binding = (agents: number, agentsInUse: number) => ({
-  project: 'Blizzard',
+const binding = (agents: number, agentsInUse: number, project = 'Blizzard') => ({
+  project,
   workspaceId: 'ws-1',
   agents,
   agentsInUse,
@@ -78,7 +78,7 @@ describe('RunnerPanelView', () => {
     return fixture.nativeElement as HTMLElement;
   }
 
-  const label = (el: Element | null) => el?.querySelector('[data-testid="slot-bar-label"]')?.textContent?.trim();
+  const label = (el: Element | null) => el?.querySelector('[data-testid="slot-bar-gauge"]')?.getAttribute('title');
 
   it('renders each row with its name, liveness and paused state — off plain inputs alone', async () => {
     const el = await render([row('rn_online'), row('rn_paused', { hub_paused: true }), row('rn_local', { locally_paused: true })]);
@@ -91,14 +91,37 @@ describe('RunnerPanelView', () => {
     expect(el.querySelector('[data-runner="rn_local"] [data-testid="runner-locally-paused"]')).not.toBeNull();
   });
 
-  it('draws a third line only for a paused runner, the badges as soft kit pills', async () => {
+  it('glyphs each brake after the name, outside its link — pause for the runner, stop for the hub', async () => {
     const el = await render([row('rn_free'), row('rn_both', { hub_paused: true, locally_paused: true })]);
 
-    expect(el.querySelector('[data-runner="rn_free"] .r3')).toBeNull();
-    const badge = el.querySelector('[data-runner="rn_both"] .r3 [data-testid="runner-hub-paused"]');
-    expect(badge?.tagName.toLowerCase()).toBe('fleet-kit-badge');
-    expect(badge?.querySelector('.badge')?.classList.contains('soft')).toBe(true);
-    expect(el.querySelector('[data-runner="rn_both"] [data-testid="runner-locally-paused"]')).not.toBeNull();
+    expect(el.querySelector('[data-runner="rn_free"] fleet-kit-glyph')).toBeNull();
+    const name = el.querySelector('[data-runner="rn_both"] [data-testid="runner-name"]')!;
+    const hub = name.querySelector('[data-testid="runner-hub-paused"]');
+    const local = name.querySelector('[data-testid="runner-locally-paused"]');
+    expect(hub?.getAttribute('data-glyph')).toBe('stop');
+    expect(local?.getAttribute('data-glyph')).toBe('pause');
+    expect(hub?.getAttribute('title')).toBe('Paused by the hub — no new claims');
+    expect(name.querySelector('[data-testid="runner-fleet-link"] fleet-kit-glyph')).toBeNull();
+    expect(el.querySelector('fleet-kit-badge')).toBeNull();
+  });
+
+  it('lights each runner — steady green online, steady yellow when either brake holds it, blinking red offline', async () => {
+    const el = await render([
+      row('rn_up'),
+      row('rn_held', { locally_paused: true }),
+      row('rn_stopped', { hub_paused: true }),
+      row('rn_down', { online: false, hub_paused: true }),
+    ]);
+
+    const tone = (id: string) => el.querySelector(`[data-runner="${id}"] [data-testid="runner-light"]`)?.getAttribute('data-tone');
+    expect(['rn_up', 'rn_held', 'rn_stopped', 'rn_down'].map(tone)).toEqual(['green', 'amber', 'amber', 'red']);
+    expect(el.querySelector('[data-runner="rn_up"] .beacon')?.classList.contains('hold')).toBe(true);
+    expect(['rn_up', 'rn_held', 'rn_stopped'].map((id) => el.querySelector(`[data-runner="${id}"]`)?.classList.contains('paused'))).toEqual([
+      false,
+      true,
+      true,
+    ]);
+    expect(el.querySelector('[data-runner="rn_down"] .beacon')?.classList.contains('step')).toBe(true);
   });
 
   it('names a spend-ceiling escalation reason on the locally-paused badge', async () => {
@@ -116,9 +139,10 @@ describe('RunnerPanelView', () => {
     const fresh = el.querySelector('[data-runner="rn_new"]')!;
     expect(fresh.getAttribute('data-connection')).toBe('never_connected');
     expect(fresh.classList.contains('offline')).toBe(false);
-    expect(fresh.querySelector('.dot.never')).not.toBeNull();
+    expect(fresh.querySelector('[data-testid="runner-light"] .hollow')).not.toBeNull();
     expect(fresh.querySelector('fleet-kit-beacon')).toBeNull();
-    expect(fresh.querySelector('[data-testid="runner-seen"]')?.textContent).toBe('never connected');
+    expect(fresh.querySelector('[data-testid="runner-seen"]')?.textContent).toBe('[never]');
+    expect(fresh.querySelector('[data-testid="runner-seen"]')?.getAttribute('title')).toBe('never connected');
     expect(fresh.querySelector('[data-testid="runner-never-connected"]')).toBeNull();
     expect(el.querySelector('[data-runner="rn_gone"]')?.classList.contains('offline')).toBe(true);
   });
@@ -155,14 +179,15 @@ describe('RunnerPanelView', () => {
     expect(el.querySelector('fleet-kit-button')).toBeNull();
   });
 
-  it('draws the fleet env strip from every host workspace and each host-less pool, once', async () => {
+  it('draws one env strip per pool — each host workspace reporting a capacity, then each host-less pool', async () => {
     const el = await render(
       [row('rn_hosted', { host_id: 'h1', bindingLines: [binding(3, 1)] }), row('rn_solo', { env_capacity: 4, used: 1 })],
       [CARD],
     );
 
-    expect(el.querySelectorAll('[data-testid="runner-env-strip"]')).toHaveLength(1);
-    expect(label(el.querySelector('[data-testid="runner-env-strip"]'))).toBe('3/7 envs');
+    const strips = [...el.querySelectorAll('[data-testid="runner-env-strip"]')];
+    expect(strips.map((strip) => strip.querySelector('[data-testid="slot-bar-name"]')?.textContent?.trim())).toEqual(['ws-1', 'ws_a']);
+    expect(strips.map(label)).toEqual(['2/3 envs', '1/4 envs']);
   });
 
   it('omits the env strip when nothing reports a capacity', async () => {
@@ -171,19 +196,64 @@ describe('RunnerPanelView', () => {
     expect(el.querySelector('[data-testid="runner-env-strip"]')).toBeNull();
   });
 
-  it('draws line 2 as agents in use of declared, and omits it for a runner declaring none', async () => {
-    const el = await render([row('rn_bound', { host_id: 'h1', bindingLines: [binding(3, 1), binding(1, 1)] }), row('rn_solo')], [CARD]);
+  it('draws one agents bar per project binding, and none for a runner declaring none', async () => {
+    const el = await render(
+      [row('rn_bound', { host_id: 'h1', bindingLines: [binding(2, 2, 'blizzard'), binding(1, 0, 'winter')] }), row('rn_solo')],
+      [CARD],
+    );
 
-    const bar = el.querySelector('[data-runner="rn_bound"] [data-testid="runner-agents"]');
-    expect(label(bar)).toBe('2/4 agents');
-    expect(bar?.querySelectorAll('.cell.on')).toHaveLength(2);
+    const bars = [...el.querySelectorAll('[data-runner="rn_bound"] [data-testid="runner-agents"]')];
+    expect(bars.map((bar) => bar.querySelector('[data-testid="slot-bar-name"]')?.textContent?.trim())).toEqual(['blizzard', 'winter']);
+    expect(bars.map(label)).toEqual(['2/2 agents', '0/1 agents']);
+    expect(bars.map((bar) => bar.querySelectorAll('.cell.on').length)).toEqual([2, 0]);
     expect(el.querySelector('[data-runner="rn_solo"] [data-testid="runner-agents"]')).toBeNull();
   });
 
-  it('links to the Fleet tab', async () => {
-    const el = await render([row('rn_a')]);
+  it('names the host a hosted runner runs on, and none for a host-less one', async () => {
+    const el = await render([row('rn_hosted', { host_id: 'h1' }), row('rn_solo')], [CARD]);
 
-    expect(el.querySelector('[data-testid="runner-fleet-link"]')?.getAttribute('href')).toBe('/fleet');
+    expect(el.querySelector('[data-runner="rn_hosted"] [data-testid="runner-host"]')?.textContent?.trim()).toBe('build-box');
+    expect(el.querySelector('[data-runner="rn_solo"] [data-testid="runner-host"]')).toBeNull();
+  });
+
+  it('links each name to the Fleet tab — a hosted runner to its host, a host-less one to itself — with no footer link', async () => {
+    const el = await render([row('rn_hosted', { host_id: 'h1' }), row('rn_solo')], [CARD]);
+
+    const href = (id: string) => el.querySelector(`[data-runner="${id}"] [data-testid="runner-fleet-link"]`)?.getAttribute('href');
+    expect(href('rn_hosted')).toBe('/fleet/h1');
+    expect(href('rn_solo')).toBe('/fleet/rn_solo');
+    expect(el.querySelector('[data-runner="rn_solo"] [data-testid="runner-fleet-link"]')?.textContent?.trim()).toBe('rn_solo-name');
+    expect(el.querySelectorAll('[data-testid="runner-fleet-link"]')).toHaveLength(2);
+  });
+
+  it('leads with one pace line per distinct subscription, its reading’s age under its name and its figures in each window’s tooltip, then the runners, then the env strips', async () => {
+    const paces = [
+      {
+        slug: 'claude',
+        name: 'Claude Max',
+        paceBars: [{ window: '5h', utilizationPct: 90, elapsedPct: 40 }],
+        condition: null,
+        sampledAt: NOW,
+        refreshedLabel: 'refreshed 50s ago',
+        refreshedTag: '[50s]',
+        freshness: 'fresh' as const,
+        missReason: null,
+      },
+    ];
+    const el = await render([row('rn_hosted', { host_id: 'h1' })], [{ ...CARD, subscriptionPaces: paces }]);
+
+    const order = [...el.querySelectorAll('[data-testid="runner-subscriptions"], [data-testid="runner-list"], .envs')].map((n) =>
+      n.getAttribute('data-testid') ?? 'envs',
+    );
+    expect(order).toEqual(['runner-subscriptions', 'runner-list', 'envs']);
+    const subs = el.querySelectorAll('[data-testid="runner-subscription"]');
+    expect(subs).toHaveLength(1);
+    expect(subs[0].querySelector('[data-testid="subscription-blocks-name"]')?.textContent?.trim()).toBe('Claude Max');
+    expect(subs[0].querySelector('[data-testid="subscription-blocks-age"]')?.textContent?.trim()).toBe('[50s]');
+    const window = subs[0].querySelector('[data-testid="subscription-blocks-window"]')!;
+    expect(window.getAttribute('title')).toBe('5h · 90% used · 40% of window');
+    expect(window.classList.contains('ahead')).toBe(true);
+    expect(window.querySelectorAll('.cell.on')).toHaveLength(9);
   });
 
   it('shows the empty state for no rows once loaded', async () => {
@@ -212,19 +282,23 @@ describe('RunnerPanelView', () => {
     expect((failed.nativeElement as HTMLElement).querySelector('[data-testid="runners-error"]')).not.toBeNull();
   });
 
-  describe('seenLabel (bzh:utc-instants)', () => {
+  describe('seen tag (bzh:utc-instants)', () => {
     const REF = Date.parse('2026-07-16T12:00:00.000Z');
 
-    it('reads a fresh heartbeat as "seen Ns ago"', async () => {
+    it('reads a fresh heartbeat as a bracketed age, the words in its tooltip', async () => {
       const el = await render([row('r1', { last_seen_at: '2026-07-16T11:59:55.000Z', nowMs: REF })]);
 
-      expect(el.querySelector('[data-testid="runner-seen"]')?.textContent).toBe('seen 5s ago');
+      const seen = el.querySelector('[data-testid="runner-seen"]');
+      expect(seen?.textContent).toBe('[5s]');
+      expect(seen?.getAttribute('title')).toBe('seen 5s ago');
     });
 
-    it('does not render a confident 0s for a stamp hours in the future — falls through to online/offline', async () => {
+    it('does not render a confident 0s for a stamp hours in the future — a dash, offline in its tooltip', async () => {
       const el = await render([row('r1', { last_seen_at: '2026-07-16T17:00:00.000Z', online: false, nowMs: REF })]);
 
-      expect(el.querySelector('[data-testid="runner-seen"]')?.textContent).toBe('offline');
+      const seen = el.querySelector('[data-testid="runner-seen"]');
+      expect(seen?.textContent).toBe('[—]');
+      expect(seen?.getAttribute('title')).toBe('offline');
     });
   });
 });
