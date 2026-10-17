@@ -4,8 +4,7 @@ import { hubApi, type GraphView } from 'fleet';
  * What one choice's `to:` names — the wire edge's `target_kind` (a node in this
  * graph, the reserved `done` terminal, or a migration to another graph) resolved
  * into a laid-out target, and the structural kind that follows from which one it
- * is. `graph-layout.ts` re-exports {@link EdgeKind} and {@link EdgeTarget} so
- * consumers use one type entrypoint.
+ * is.
  */
 
 const TargetKind = hubApi.ChoiceTargetKind;
@@ -38,14 +37,9 @@ export interface ResolvedEdge {
 /** Resolves every edge's target — from the wire edge's `target_kind`, a node in
  * this graph, the reserved `done` terminal, or a migration to `target_graph` — and
  * its structural kind. Returns `null` if an edge names a target it cannot place (an
- * unknown node name, or a graph migration carrying no target graph) — a degenerate
- * graph the caller falls back on rather than mis-render.
+ * unknown node name, or a graph migration carrying no target graph).
  *
- * Only edges actually present in `graph.edges` are laid out here — the runtime's
- * machinery-default edges (e.g. a `deliver` node's implicit `landed→done` /
- * `conflict→entry`) are never part of the wire `GraphView` and are intentionally
- * *not* synthesized for the diagram, so the `done` sink (and any edge into it)
- * only renders when a real authored edge targets `done`. */
+ * Only edges present in `graph.edges` are resolved. */
 export function resolveEdges(graph: GraphView, nameToId: ReadonlyMap<string, string>): ResolvedEdge[] | null {
   const indexById = new Map(graph.nodes?.map((n, i) => [n.node_id, i]) ?? []);
   const nodeById = new Map(graph.nodes?.map((n) => [n.node_id, n]) ?? []);

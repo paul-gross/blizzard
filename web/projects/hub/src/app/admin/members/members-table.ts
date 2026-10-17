@@ -5,8 +5,7 @@ import { canChangeRole, canRevoke, roleChoices } from './members-page.model';
 
 /**
  * The members page's table — presentational: one row per member of the board's tenant, with a role selector and a
- * revoke button gated by what the hub says the signed-in actor may do to that row (`assignable_roles`, `revocable`), so
- * a control is never offered for a change the hub would refuse:
+ * revoke button gated by the row's `assignable_roles` and `revocable`:
  *
  * - the actor's own row (`currentUserId()`) shows its role as plain text and no revoke button;
  * - a row whose role the actor may not change (no other role offered) shows its role as plain text;

@@ -7,10 +7,8 @@ const HISTORY_PAGE = 100;
 
 /**
  * One record's change history — `GET /api/config/changes` filtered to `recordKind` +
- * `recordKey()`, drained page by page through `next_before`, newest first. The
- * newest row is who last changed the record and through which door; the rows are
- * its Revisions list. At rest while `recordKey()` is `null` (nothing selected, or a
- * built-in record).
+ * `recordKey()`, drained page by page through `next_before`, newest first. At rest
+ * while `recordKey()` is `null`.
  */
 export function injectConfigHistoryQuery(recordKind: RecordKind, recordKey: () => string | null) {
   return injectQuery(() => {

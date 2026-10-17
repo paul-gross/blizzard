@@ -36,15 +36,9 @@ export function boardChunksQueryOptions(project: string | null) {
 
 /**
  * Hub `GET /api/chunks?board_window=true` read — the board's chunk list (derived
- * status + current node): every chunk but a `done` one finished more than 48 hours ago that is not among the 10 newest finished,
- * through TanStack Query and the generated hub client. Under a project lens it reads only the lensed project's chunks,
- * in the same order — the lens filters, it never re-ranks.
- * Like the health read this is real plumbing: the request is the
- * openapi-ts SDK call (never hand-written fetch, bzh:generated-client) and it hits
- * the daemon the app is served from. The read is keyset-paginated on the hub;
- * {@link drainPages} follows `next_cursor` to exhaustion so this
- * query still resolves the typed `ChunkSummary[]` whole. An empty fleet is an empty
- * array, not an error.
+ * status + current node). Under a project lens it reads only the lensed project's chunks,
+ * in the same order. {@link drainPages} follows `next_cursor` to exhaustion so this
+ * query resolves the typed `ChunkSummary[]` whole.
  */
 export function injectHubBoardChunksQuery() {
   const projectFilter = injectProjectFilter();

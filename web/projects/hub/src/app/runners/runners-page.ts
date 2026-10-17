@@ -11,9 +11,7 @@ import { runnerPauseMutationKey } from '../core/mutation-keys';
 import { RunnersView } from './runners-view';
 
 /**
- * The `/fleet` route — the hub's mobile Fleet tab. Mounted only at mobile
- * widths (`app.routes.ts`'s `canMatch` guard); a desktop-width hit on this
- * path redirects to `/board`.
+ * The `/fleet` route — the hub's mobile Fleet tab.
  *
  * A container (`bzh:frontend-container-presentational`): it folds the
  * registry + chunks reads via {@link injectRunnerRows}, owns the pause

@@ -19,13 +19,7 @@ import { LensNote } from '../../core/lens-note';
  * {@link MembersTable} (`bzh:frontend-container-presentational`) from `GET /api/members`, `/api/me` (the actor's own
  * id, so their row stays read-only) and the selected tenant's name, which labels the page.
  *
- * Every rule about who may change whom is the hub's: each row carries the roles the actor may give it and whether it
- * may be revoked, and the table offers only those. A change the hub still refuses (a stale listing, the tenant's last
- * admin) is this page's own error line — without it a refused change would read as a success that only a reload
- * reveals never happened. A revocation asks first.
- *
- * Routed behind the `user:manage` nav gate (`app.ts`'s `canManageUsers`); the hub refuses the listing (`403`) below
- * that permission whatever the nav shows, so a direct navigation renders that as the error state.
+ * A change the hub refuses is this page's own error line (`members-page.spec.ts`). A revocation asks first.
  */
 @Component({
   selector: 'app-members-page',

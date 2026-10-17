@@ -6,17 +6,9 @@ import { redirectToLogin } from './auth-redirect';
 
 /**
  * The 401 interceptor: registers a response interceptor on the generated
- * hub client's own transport — the app has no `HttpClient`/`HttpInterceptorFn` seam to
- * hang off (`bzh:generated-client`'s fetch-based client is the one transport every
- * request rides), so this is that seam's counterpart. Any hub response answering
- * `401` (an unresolved or expired session; a `403` is left alone) routes the app
- * to `/login`, stashing the
- * current route for a post-login return (`redirectToLogin`).
- *
- * Registered once, app-wide (`provideAuthInterceptor()` in `app.config.ts`) via an
- * `ENVIRONMENT_INITIALIZER` — the standard Angular seam for a factory that needs
- * `inject()` (here, `Router`) but produces no injectable of its own, only a
- * side-effecting registration run once at bootstrap.
+ * hub client's transport. Any hub response answering `401` (a `403` is left alone)
+ * routes the app to `/login`, stashing the current route for a post-login return
+ * (`redirectToLogin`).
  */
 export function provideAuthInterceptor(): EnvironmentProviders {
   return makeEnvironmentProviders([

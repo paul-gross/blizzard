@@ -20,9 +20,7 @@ export type ConfigFormMode = 'create' | 'edit' | 'replace';
  * The form dialog every config write shares — fields from {@link ConfigFieldDef}s, a
  * "Will change" diff in edit mode, and the submit error from the write that failed,
  * shown inline with the dialog left open. Presentational: it owns the field values as
- * a local signal and emits them; the container owns the mutation. Mounted with `@if`
- * around its open state, so a fresh instance — and an emptied password field — exists
- * for every open.
+ * a local signal and emits them; the container owns the mutation.
  */
 @Component({
   selector: 'app-config-form-dialog',

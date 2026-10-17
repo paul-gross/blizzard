@@ -22,12 +22,8 @@ interface ExpansionOverride {
   readonly selectionAtToggle: string | null;
 }
 
-/** A version's wire `lifecycle` → badge tone — borrows the shared `Tone` ladder for
- * its color rather than inventing a graph-lifecycle-specific one. `effective` and
- * `retired` are the hub's enabled/retired lifecycle, read from its one owner
- * ({@link lifecycleTone}); `superseded` reuses `idle`'s dim — chosen for colour,
- * a reasonable double meaning, since a superseded version really is this
- * lineage's spent, inert entry. */
+/** A version's wire `lifecycle` → badge tone, chosen for color. `effective` and
+ * `retired` come from {@link lifecycleTone}; `superseded` reuses `idle`'s dim. */
 const LIFECYCLE_TONE: Readonly<Record<GraphLifecycle, Tone>> = {
   effective: lifecycleTone(false),
   superseded: 'idle',
@@ -40,22 +36,14 @@ const LIFECYCLE_TONE: Readonly<Record<GraphLifecycle, Tone>> = {
  * version count and the effective version's summary; expanding a group selects that
  * effective version (the detail opens on the first click) and reveals the
  * full lineage newest-first, each row carrying its `graph_id`, `created_at`, and an
- * **effective** / **superseded** / **retired** badge — the `graphs` row itself is
- * never mutated (still insert-only), the marker is the `effective`/`retired` facts
- * `GET /api/graphs` derives (a reversible lifecycle brake, layered on top
- * of the `effective` derivation). Any version, effective, superseded, or
+ * **effective** / **superseded** / **retired** badge. Any version, effective, superseded, or
  * retired, is selectable and opens identically (`selectGraph`); retiring/re-enabling
  * itself is driven from the detail view (`graph-detail.ts`), not this list.
  *
- * Built on `fleet-kit-select-row` at both levels, `run-list.ts`'s own shape: a
- * group's header row is itself a selectable row (selected when its effective
- * version is the one currently open — the id that header already displays and the
- * version a header click opens), and each lineage row underneath is a second,
- * stepped-down `fleet-kit-select-row`. Every row is two lines — a headline and a
- * meta line with a right-aligned trailing element (`margin-left: auto`,
- * `finding-list.css`'s own `.fl-ref` shape) — the same three-tier text scale
- * `run-list.css`'s own doc comment spells out, stepped down one tier for the
- * lineage rows since they sit a level below the group headline.
+ * Built on `fleet-kit-select-row` at both levels: a group's header row is
+ * selected when its effective version is the one open, and each lineage row
+ * underneath is a stepped-down row. Every row is two lines — a headline and a
+ * meta line with a right-aligned trailing element.
  *
  * Retired versions are **filtered out by default** ({@link showRetired}), toggled by a
  * chip above the list that names how many it holds back — pinned by

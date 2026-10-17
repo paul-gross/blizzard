@@ -4,9 +4,8 @@ import type { FieldChangeView } from 'fleet';
 import { fieldDiffRows } from './config-field-diff.model';
 
 /**
- * A field diff — one `field  old → new` row per generated `FieldChangeView`. The one
- * rendering of a config change's fields, shared by a change log entry and an edit's
- * "Will change" preview. Presentational.
+ * A field diff — one `field  old → new` row per generated `FieldChangeView`.
+ * Presentational.
  */
 @Component({
   selector: 'app-config-field-diff',
