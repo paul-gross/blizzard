@@ -1,4 +1,4 @@
-"""The credential-renewal facts against a real runner store (component tier): a claim and its
+"""The credential-renewal facts against a real runner store (unit tier): a claim and its
 outcome round-trip as typed fields — an outcome-less claim as unrecorded — the newest claim
 per slug wins, and retention keeps each slug's newest claim."""
 
@@ -14,7 +14,7 @@ from blizzard.runner.subscriptions.credential_renewer import RenewalOutcome, Ren
 from blizzard.runner.usage.repository import CredentialRenewalSummary
 from tests.runner_fakes import SqlAlchemyRunnerStore, make_store
 
-pytestmark = pytest.mark.component
+pytestmark = pytest.mark.unit
 
 _NOW = datetime(2026, 10, 5, 12, 0, 0, tzinfo=UTC)
 
@@ -83,3 +83,62 @@ def test_retention_never_prunes_a_same_instant_tied_newest_pair(tmp_path: Path) 
     _renew(store, "codex", old, None)
 
     assert store.prune_credential_renewals(now=_NOW) == 0
+
+
+def test_the_newest_claimed_at_wins_over_a_later_inserted_older_claim(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    _renew(store, "codex", _NOW, RenewalOutcome(RenewalOutcomeKind.RENEWED))
+    _renew(
+        store,
+        "codex",
+        _NOW - timedelta(hours=1),
+        RenewalOutcome(RenewalOutcomeKind.FAILED, RenewalFailureReason.TIMED_OUT),
+    )
+
+    assert store.latest_credential_renewals_by_slug(["codex"]) == {
+        "codex": CredentialRenewalSummary("codex", _NOW, RenewalResult.RENEWED, None)
+    }
+
+
+def test_a_same_instant_tie_picks_the_later_claim_per_slug_independently(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    _renew(store, "codex", _NOW, RenewalOutcome(RenewalOutcomeKind.FAILED, RenewalFailureReason.TIMED_OUT))
+    _renew(store, "claude", _NOW, RenewalOutcome(RenewalOutcomeKind.FAILED, RenewalFailureReason.VENDOR_REFUSED))
+    _renew(store, "codex", _NOW, None)
+    _renew(store, "claude", _NOW, RenewalOutcome(RenewalOutcomeKind.RENEWED))
+
+    assert store.latest_credential_renewals_by_slug(["codex", "claude"]) == {
+        "codex": CredentialRenewalSummary("codex", _NOW, RenewalResult.UNRECORDED, None),
+        "claude": CredentialRenewalSummary("claude", _NOW, RenewalResult.RENEWED, None),
+    }
+
+
+def test_retention_keeps_a_superseded_claim_still_inside_the_window(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    cutoff = _NOW - timedelta(days=1)
+    _renew(store, "codex", cutoff - timedelta(seconds=1), RenewalOutcome(RenewalOutcomeKind.RENEWED))
+    _renew(store, "codex", cutoff, RenewalOutcome(RenewalOutcomeKind.RENEWED))
+    _renew(store, "codex", _NOW, RenewalOutcome(RenewalOutcomeKind.RENEWED))
+
+    assert store.prune_credential_renewals(now=_NOW) == 1
+    with store._engine.connect() as conn:
+        claimed = conn.exec_driver_sql("SELECT claimed_at FROM credential_renewal_claims ORDER BY id").scalars().all()
+        outcomes = conn.exec_driver_sql("SELECT count(*) FROM credential_renewal_outcomes").scalar_one()
+    assert len(claimed) == 2
+    assert outcomes == 2
+
+
+def test_retention_judges_each_slug_against_its_own_newest_claim(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    old = _NOW - timedelta(days=3)
+    _renew(store, "codex", old, RenewalOutcome(RenewalOutcomeKind.RENEWED))
+    _renew(store, "claude", old - timedelta(hours=1), RenewalOutcome(RenewalOutcomeKind.RENEWED))
+    _renew(store, "claude", _NOW, RenewalOutcome(RenewalOutcomeKind.RENEWED))
+
+    assert store.prune_credential_renewals(now=_NOW) == 1
+    assert store.last_credential_renewal_claim_at("codex") == old
+    with store._engine.connect() as conn:
+        assert (
+            conn.exec_driver_sql("SELECT count(*) FROM credential_renewal_claims WHERE slug = 'claude'").scalar_one()
+            == 1
+        )

@@ -260,23 +260,23 @@ class UniqueEnvBinding(QueryCheck):
         return violations
 
     def _held_bindings(self) -> list[tuple[str, str, str | None]]:
-        releases = {
-            (row[0], row[1])
-            for row in self.conn.execute(
-                select(runner.binding_releases.c.chunk_id, runner.binding_releases.c.environment_id)
+        bindings, releases = runner.env_bindings, runner.binding_releases
+        released = (
+            select(releases.c.id)
+            .where(
+                releases.c.chunk_id == bindings.c.chunk_id,
+                releases.c.environment_id == bindings.c.environment_id,
+                releases.c.runner_id == bindings.c.runner_id,
+                releases.c.released_at >= bindings.c.bound_at,
             )
-        }
-        held: list[tuple[str, str, str | None]] = []
-        for chunk_id, env_id, workspace_id in self.conn.execute(
-            select(
-                runner.env_bindings.c.chunk_id,
-                runner.env_bindings.c.environment_id,
-                runner.env_bindings.c.workspace_id,
+            .exists()
+        )
+        return [
+            (chunk_id, env_id, workspace_id)
+            for chunk_id, env_id, workspace_id in self.conn.execute(
+                select(bindings.c.chunk_id, bindings.c.environment_id, bindings.c.workspace_id).where(~released)
             )
-        ):
-            if (chunk_id, env_id) not in releases:
-                held.append((chunk_id, env_id, workspace_id))
-        return held
+        ]
 
 
 class RowsNameRegisteredRunner(QueryCheck):

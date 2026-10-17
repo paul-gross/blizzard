@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import shlex
+import threading
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -90,7 +91,7 @@ def test_basic_provider_wired_with_shared_absolute_root_and_capacity(tmp_path: P
             provider="basic", root="scratch", repos=(WorkspaceRepo("toy", "file:///tmp/toy.git"),), max_environments=3
         ),
     )
-    hosted = build_hosted_app(config).app
+    build_hosted_app(config)
     with loop_context(config) as loop:
         provider = loop.workspaces.provider(DEFAULT_WORKSPACE_ID)
         assert isinstance(provider, BasicWorkspaceProvider)
@@ -101,7 +102,6 @@ def test_basic_provider_wired_with_shared_absolute_root_and_capacity(tmp_path: P
         assert SpawnCwd.of_session(
             loop.workspaces.spawn_root(DEFAULT_WORKSPACE_ID), str(tmp_path / "scratch" / "chunk")
         ) == str(tmp_path / "scratch" / "chunk")
-        assert runner_seams(hosted).runner_status.environments() == []
 
 
 @pytest.mark.unit
@@ -553,6 +553,34 @@ def test_tick_once_over_a_supplied_graph_traces_through_it_and_leaves_it_open(
             assert type(client) is httpx.Client
             assert client.base_url == httpx.URL(config.hub_url)
         assert graph.executor.submit(lambda: "open").result() == "open"
+    finally:
+        graph.close()
+
+
+@pytest.mark.unit
+def test_periodic_driver_instruments_its_own_hub_client_before_ticking(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The loop thread's hub client is handed to the graph's platform tracing before the first tick."""
+    config = RunnerConfig(
+        runner_id=FIXTURE_RUNNER_ID,
+        root=tmp_path,
+        db_url=HostLayout(tmp_path).default_db_url,
+        hub_url="http://hub.test:8421",
+    )
+    graph = build_runner_process(config, runner_id=FIXTURE_RUNNER_ID)
+    ticked = threading.Event()
+    instrumented: list[httpx.Client | httpx.AsyncClient] = []
+    monkeypatch.setattr(loop_wiring, "tick", lambda ctx: ticked.set())
+    monkeypatch.setattr(graph.platform_tracing, "instrument_client", instrumented.append)
+    try:
+        driver = PeriodicDriver(config, interval_seconds=30.0, process_graph=graph)
+        driver.start()
+        assert ticked.wait(10)
+        driver.stop()
+        assert len(instrumented) == 1
+        assert type(instrumented[0]) is httpx.Client
+        assert instrumented[0].base_url == httpx.URL(config.hub_url)
     finally:
         graph.close()
 

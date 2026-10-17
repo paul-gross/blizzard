@@ -1,6 +1,6 @@
 """The runner's machine-local status view (``bzh:domain-core``).
 
-This runner's own capacities, environment pool, open asks, and parked escalations, all
+This runner's own capacities, open asks, and parked escalations, all
 derived from store facts at read time (``bzh:facts-not-status``). Hub *reachability* has
 no fact of its own, so it is derived from how stale ``hub_contact_at`` reads against
 ``now``. Escalation resume commands are **recomputed**, never read off the outbound tail."""
@@ -42,7 +42,6 @@ __all__ = [
     "HUB_CONTACT_STALENESS_THRESHOLD",
     "BindingCapacity",
     "Capacities",
-    "EnvironmentSlot",
     "EscalationView",
     "HubConnectivity",
     "OpenTakeoverView",
@@ -195,64 +194,6 @@ class RunnerStatusSummary:
 
 @domain_model
 @dataclass(frozen=True)
-class EnvironmentSlot:
-    """One environment in the runner's configured pool. Every pool
-    environment surfaces, held or not: ``chunk_id``/``held_since`` are set only while the
-    environment is bound, ``None`` otherwise — never an invented ref for an idle slot."""
-
-    environment_id: str
-    chunk_id: str | None
-    held_since: datetime | None
-    #: The workspace whose pool the environment is in; ``None`` for a held binding that names none.
-    workspace_id: str | None = None
-
-    def is_held(self) -> bool:
-        """Whether a chunk holds this environment now — the one reading of "held" every
-        surface shows, rather than each re-deriving it from ``chunk_id``."""
-        return self.chunk_id is not None
-
-    @classmethod
-    def pool_view(
-        cls, env_pool: Sequence[str], held_bindings: Sequence[EnvBinding], *, workspace_id: str | None = None
-    ) -> list[EnvironmentSlot]:
-        """The full configured pool of ``workspace_id``, joined against the held bindings, in pool order.
-
-        A bound environment never silently vanishes: each extra binding on a pool id (``environment_id``
-        is not unique) gets its own row after the slot, and a binding off the pool is appended at the end."""
-        held_by_env: dict[str, list[EnvBinding]] = {}
-        for binding in held_bindings:
-            held_by_env.setdefault(binding.environment_id, []).append(binding)
-        slots: list[EnvironmentSlot] = []
-        for env_id in env_pool:
-            bindings = held_by_env.get(env_id, [])
-            primary = bindings[0] if bindings else None
-            slots.append(
-                cls(
-                    environment_id=env_id,
-                    chunk_id=primary.chunk_id if primary else None,
-                    held_since=primary.bound_at if primary else None,
-                    workspace_id=workspace_id,
-                )
-            )
-            slots.extend(cls._held(extra) for extra in bindings[1:])
-        pool = set(env_pool)
-        for env_id, bindings in held_by_env.items():
-            if env_id not in pool:
-                slots.extend(cls._held(binding) for binding in bindings)
-        return slots
-
-    @classmethod
-    def _held(cls, binding: EnvBinding) -> EnvironmentSlot:
-        return cls(
-            environment_id=binding.environment_id,
-            chunk_id=binding.chunk_id,
-            held_since=binding.bound_at,
-            workspace_id=binding.workspace_id,
-        )
-
-
-@domain_model
-@dataclass(frozen=True)
 class EscalationView:
     """One parked escalation with its literal, ready-to-paste resume command. The
     session's own configuration rides beside it — its declared pool and the model/effort
@@ -369,24 +310,6 @@ class RunnerStatusService:
             unmatched_bindings=tuple(b for b in self._environments.held_bindings() if b.workspace_id is None),
             routing_conflicts=routing.conflicts,
         )
-
-    def environments(self) -> list[EnvironmentSlot]:
-        """The pool of every workspace the runner binds, in binding order, each joined against this runner's held
-        binding facts (``EnvironmentSlot.pool_view``), then the pool of any other workspace a held row of this runner
-        names and the host declares. A held row naming no declared workspace joins the runner's home
-        (``IWorkspaces.held``)."""
-        held = self._environments.held_bindings()
-        bound = tuple(dict.fromkeys(binding.workspace_id for binding in self._bindings))
-        declared = self._workspaces.ids()
-        listed = tuple(w for w in bound if w in declared) or (self._workspaces.home(bound),)
-        workspace_ids = tuple(dict.fromkeys((*listed, *(self._workspaces.held(b.workspace_id, bound) for b in held))))
-        slots: list[EnvironmentSlot] = []
-        for workspace_id in workspace_ids:
-            provider = self._workspaces.provider(workspace_id)
-            pool = provider.pool() if provider is not None else ()
-            own = [b for b in held if self._workspaces.held(b.workspace_id, bound) == workspace_id]
-            slots.extend(EnvironmentSlot.pool_view(pool, own, workspace_id=workspace_id))
-        return slots
 
     def open_asks(self) -> list[OpenAsk]:
         return self._asks.open_asks()

@@ -138,7 +138,11 @@ def bundle_layouts() -> tuple[HarnessLayout, ...]:
 
 
 def declared_telemetry_names() -> tuple[HarnessTelemetryNames, ...]:
-    """The names every binding's own telemetry arrives under, in catalog order — enabled or not."""
+    """The names every binding's own telemetry arrives under, in catalog order — enabled or not.
+
+    Catalog-wide on purpose: the telemetry receiver admitting these names is one host-level singleton,
+    built before any runner and serving every runner's leases, so it cannot narrow to one runner's
+    enabled bindings. :func:`combined_telemetry_plan` is the per-runner, enabled-only status read."""
     return tuple(names for declaration in harness_catalog() if (names := declaration.telemetry_names) is not None)
 
 
@@ -149,7 +153,11 @@ def combined_telemetry_plan(
     harness_telemetry_enabled: bool = False,
     runner_environ: Mapping[str, str] | None = None,
 ) -> HarnessTelemetryPlan:
-    """What the enabled bindings together do with each telemetry signal, the most engaged outcome per signal."""
+    """What the enabled bindings together do with each telemetry signal, the most engaged outcome per signal.
+
+    Per runner and enabled bindings only, so it reads off for a runner with no enabled binding that ships
+    telemetry — even though the host's receiver still admits that binding's names
+    (:func:`declared_telemetry_names`, catalog-wide). The two answer different questions; neither is wrong."""
     shared = shared_inputs(
         settings,
         bundle=bundle,

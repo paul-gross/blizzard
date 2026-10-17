@@ -5,17 +5,25 @@ is passed in."""
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping, Sequence
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
 import pytest
 
 from blizzard.foundation.cli_spans import SCOPE_NAME
 from blizzard.foundation.platform_tracing.handle import DisabledPlatformTracing
-from blizzard.foundation.platform_tracing.received import ReceivedDataPoint, ReceivedMetrics, ReceivedSpan
+from blizzard.foundation.platform_tracing.received import (
+    ReceivedDataPoint,
+    ReceivedLogRecord,
+    ReceivedMetrics,
+    ReceivedSpan,
+)
 from blizzard.foundation.trace_export.cursor import CursorJump, JumpReason
 from blizzard.foundation.trace_export.settings import TracingSettings
 from blizzard.foundation.trace_ids import chunk_trace_id
 from blizzard.runner.harness.claude_code.telemetry_plan import (
+    CLAUDE_CODE_LOGS_SCOPE,
     CLAUDE_CODE_METRICS_SCOPE,
     CLAUDE_CODE_SERVICE_NAME,
     CLAUDE_CODE_TELEMETRY_NAMES,
@@ -25,7 +33,7 @@ from blizzard.runner.harness.harness_telemetry_plan import HarnessTelemetryNames
 from blizzard.runner.hub.identity import RunnerIdentity, RunnerIdentityHolder
 from blizzard.runner.leases.model import Lease
 from blizzard.runner.tracing.cursor import LeaseCursorKey
-from blizzard.runner.tracing.received_export import DisabledReceivedTelemetryExport
+from blizzard.runner.tracing.received_export import DisabledReceivedTelemetryExport, IReceivedTelemetryExport
 from blizzard.runner.tracing.receiver import (
     PROGRAM_SERVICE_NAME,
     route_spans,
@@ -228,7 +236,15 @@ class _FixedClock:
         return self._now
 
 
-def _receiver(*, enabled: bool, harness: bool = True, capacity: int = 1000) -> TelemetryReceiver:
+def _receiver(
+    *,
+    enabled: bool,
+    harness: bool = True,
+    capacity: int = 1000,
+    received: IReceivedTelemetryExport | None = None,
+    names: tuple[HarnessTelemetryNames, ...] = _NAMES,
+    mapped: Mapping[str, str] | None = None,
+) -> TelemetryReceiver:
     clock = _FixedClock(_T0)
 
     class _Tracing(DisabledPlatformTracing):
@@ -238,7 +254,7 @@ def _receiver(*, enabled: bool, harness: bool = True, capacity: int = 1000) -> T
 
     return TelemetryReceiver(
         platform_tracing=_Tracing(),
-        received_telemetry=DisabledReceivedTelemetryExport(),
+        received_telemetry=received or DisabledReceivedTelemetryExport(),
         span_limiter=SpanRateLimiter(clock, capacity=capacity),
         span_counter=ReceiverCounter(),
         harness_span_counter=ReceiverCounter(),
@@ -247,7 +263,8 @@ def _receiver(*, enabled: bool, harness: bool = True, capacity: int = 1000) -> T
         clock=clock,
         identity=RunnerIdentityHolder(_RUNNER),
         harness_telemetry=harness,
-        telemetry_names=_NAMES,
+        telemetry_names=names,
+        mapped_services=mapped or {},
     )
 
 
@@ -293,3 +310,82 @@ def test_metrics_within_rate_name_the_summary_points_refused() -> None:
     receiver = _receiver(enabled=True)
     assert receiver.receive_metrics(_lease(), ReceivedMetrics(points=[_point()], unsupported=2)) == 2
     assert (receiver.metric_bounds.counter.count().accepted, receiver.metric_bounds.counter.count().dropped) == (1, 2)
+
+
+class _RecordingExport:
+    """Records every forwarded batch with the service name it was forwarded under."""
+
+    def __init__(self) -> None:
+        self.metrics: list[tuple[list[ReceivedDataPoint], str]] = []
+        self.logs: list[tuple[list[ReceivedLogRecord], str]] = []
+
+    def forward_metrics(self, points: Sequence[ReceivedDataPoint], resource_service_name: str) -> None:
+        self.metrics.append((list(points), resource_service_name))
+
+    def forward_logs(self, records: Sequence[ReceivedLogRecord], resource_service_name: str) -> None:
+        self.logs.append((list(records), resource_service_name))
+
+    def shutdown(self, timeout: float) -> None:
+        return None
+
+
+def _scoped_point(scope: str, metric_name: str) -> ReceivedDataPoint:
+    return replace(_point(), scope_name=scope, metric_name=metric_name)
+
+
+def _log(scope: str, body: str) -> ReceivedLogRecord:
+    return ReceivedLogRecord(
+        time_ns=2_000,
+        observed_time_ns=2_000,
+        severity_number=9,
+        severity_text="INFO",
+        body=body,
+        trace_id=None,
+        span_id=None,
+        trace_flags=0,
+        scope_name=scope,
+        scope_version="1",
+    )
+
+
+def test_metrics_forward_one_batch_per_service_with_a_mapped_scope_renamed() -> None:
+    export = _RecordingExport()
+    receiver = _receiver(
+        enabled=True, received=export, names=(*_NAMES, _OTHER_NAMES), mapped={_OTHER_NAMES.metrics_scope: "mine"}
+    )
+    points = [
+        _scoped_point(CLAUDE_CODE_METRICS_SCOPE, "a"),
+        _scoped_point(_OTHER_NAMES.metrics_scope, "b"),
+        _scoped_point(CLAUDE_CODE_METRICS_SCOPE, "c"),
+    ]
+
+    assert receiver.receive_metrics(_lease(), ReceivedMetrics(points=points, unsupported=0)) == 0
+
+    assert [(service, [p.metric_name for p in batch]) for batch, service in export.metrics] == [
+        (CLAUDE_CODE_SERVICE_NAME, ["a", "c"]),
+        ("mine", ["b"]),
+    ]
+    assert export.logs == []
+    assert receiver.metric_bounds.counter.count() == ReceiverCount(accepted=3, dropped=0)
+
+
+def test_logs_forward_one_batch_per_service_with_a_mapped_scope_renamed() -> None:
+    export = _RecordingExport()
+    receiver = _receiver(
+        enabled=True, received=export, names=(*_NAMES, _OTHER_NAMES), mapped={CLAUDE_CODE_LOGS_SCOPE: "mine"}
+    )
+    records = [
+        _log(_OTHER_NAMES.logs_scope, "x"),
+        _log(CLAUDE_CODE_LOGS_SCOPE, "y"),
+        _log("unknown.scope", "z"),
+        _log(_OTHER_NAMES.logs_scope, "w"),
+    ]
+
+    assert receiver.receive_logs(_lease(), records) == 1
+
+    assert [(service, [r.body for r in batch]) for batch, service in export.logs] == [
+        (_OTHER_NAMES.service_name, ["x", "w"]),
+        ("mine", ["y"]),
+    ]
+    assert export.metrics == []
+    assert receiver.log_bounds.counter.count() == ReceiverCount(accepted=3, dropped=1)

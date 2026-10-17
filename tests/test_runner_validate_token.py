@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import httpx
 import jwt
@@ -14,9 +15,14 @@ import pytest
 from cryptography.hazmat.primitives.asymmetric import rsa
 from jwt.algorithms import RSAAlgorithm
 
-from blizzard.foundation.clock import SystemClock
+from blizzard.foundation.clock import FixedClock, SystemClock
+from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.auth.internal.http_jwks_cache import JwksCache
 from blizzard.runner.auth.validate import CLOCK_SKEW_LEEWAY_SECONDS, FederationToken, FederationTokenError
+from blizzard.runner.store.internal.host_jti_cache_store import JtiCacheRepository
+from blizzard.runner.store.schema import metadata
+from blizzard.runner.store.scoped import RunnerStoreConnections
+from tests.runner_fakes import runner_store_errors
 
 pytestmark = pytest.mark.unit
 
@@ -34,6 +40,13 @@ class _FakeJtiCache:
             return False
         self.seen.add(jti)
         return True
+
+
+def _jti_repository(tmp_path: Path, clock: FixedClock) -> JtiCacheRepository:
+    """The real store-backed jti cache, so a replay case fails if its retention or pruning regresses."""
+    engine = create_engine_from_url(f"sqlite:///{tmp_path / 'runner.db'}")
+    metadata.create_all(engine)
+    return JtiCacheRepository(RunnerStoreConnections(engine, runner_store_errors()), clock)
 
 
 def _keypair() -> tuple[object, dict[str, str]]:
@@ -114,17 +127,14 @@ def test_an_expired_token_past_the_leeway_is_rejected() -> None:
         ).identity()
 
 
-def test_a_replayed_jti_is_rejected() -> None:
+def test_a_replayed_jti_is_rejected(tmp_path: Path) -> None:
     private_key, jwk = _keypair()
     token = _sign(private_key, claims=_claims())
-    jti_cache = _FakeJtiCache()
-    FederationToken(
-        token, runner_id=_RUNNER_ID, jwks=_jwks_cache(jwk), jti_cache=jti_cache, clock=SystemClock()
-    ).identity()
-    with pytest.raises(FederationTokenError):
-        FederationToken(
-            token, runner_id=_RUNNER_ID, jwks=_jwks_cache(jwk), jti_cache=jti_cache, clock=SystemClock()
-        ).identity()
+    clock = FixedClock(datetime.now(UTC))
+    jti_cache = _jti_repository(tmp_path, clock)
+    FederationToken(token, runner_id=_RUNNER_ID, jwks=_jwks_cache(jwk), jti_cache=jti_cache, clock=clock).identity()
+    with pytest.raises(FederationTokenError, match="replay"):
+        FederationToken(token, runner_id=_RUNNER_ID, jwks=_jwks_cache(jwk), jti_cache=jti_cache, clock=clock).identity()
 
 
 def test_an_unknown_kid_is_rejected() -> None:
@@ -138,27 +148,13 @@ def test_an_unknown_kid_is_rejected() -> None:
         ).identity()
 
 
-class _FixedClock:
-    def __init__(self, now: datetime) -> None:
-        self._now = now
-
-    def now(self) -> datetime:
-        return self._now
-
-
-def test_a_jti_is_still_refused_inside_the_leeway_after_exp() -> None:
+def test_a_jti_is_still_refused_inside_the_leeway_after_exp(tmp_path: Path) -> None:
     private_key, jwk = _keypair()
     exp = datetime.now(UTC).replace(microsecond=0)
     token = _sign(private_key, claims=_claims(exp=int(exp.timestamp())))
-    jti_cache = _FakeJtiCache()
-    FederationToken(
-        token, runner_id=_RUNNER_ID, jwks=_jwks_cache(jwk), jti_cache=jti_cache, clock=_FixedClock(exp)
-    ).identity()
+    clock = FixedClock(exp)
+    jti_cache = _jti_repository(tmp_path, clock)
+    FederationToken(token, runner_id=_RUNNER_ID, jwks=_jwks_cache(jwk), jti_cache=jti_cache, clock=clock).identity()
+    clock.advance(timedelta(seconds=CLOCK_SKEW_LEEWAY_SECONDS - 1))
     with pytest.raises(FederationTokenError, match="replay"):
-        FederationToken(
-            token,
-            runner_id=_RUNNER_ID,
-            jwks=_jwks_cache(jwk),
-            jti_cache=jti_cache,
-            clock=_FixedClock(exp + timedelta(seconds=CLOCK_SKEW_LEEWAY_SECONDS - 1)),
-        ).identity()
+        FederationToken(token, runner_id=_RUNNER_ID, jwks=_jwks_cache(jwk), jti_cache=jti_cache, clock=clock).identity()
