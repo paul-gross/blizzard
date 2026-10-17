@@ -6,11 +6,12 @@ import { KitSlotBar } from './kit-slot-bar';
 @Component({
   selector: 'fleet-test-host',
   imports: [KitSlotBar],
-  template: `<fleet-kit-slot-bar [used]="used()" [total]="total()" />`,
+  template: `<fleet-kit-slot-bar [used]="used()" [total]="total()" [unit]="unit()" />`,
 })
 class TestHost {
   readonly used = signal(2);
   readonly total = signal(4);
+  readonly unit = signal('slots');
 }
 
 async function render(used: number, total: number): Promise<HTMLElement> {
@@ -62,5 +63,14 @@ describe('KitSlotBar', () => {
     const cells = el.querySelectorAll('.cell');
     expect(cells).toHaveLength(4);
     expect([...cells].every((c) => c.classList.contains('on'))).toBe(true);
+  });
+
+  it('counts the unit it is given in the label, slots by default', async () => {
+    const fixture = TestBed.createComponent(TestHost);
+    fixture.componentInstance.unit.set('envs');
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="slot-bar-label"]')?.textContent?.trim()).toBe('2/4 envs');
   });
 });

@@ -250,13 +250,30 @@ def test_board_browser_live_group_reorder_answer_and_pause(tmp_path: Path, chrom
 
         with _runner_api(config), sync_playwright() as pw:
             browser = pw.chromium.launch(headless=True)
-            page = browser.new_page()
+            context = browser.new_context()
+            page = context.new_page()
             expect.set_options(timeout=20_000)
             try:
                 # Load the board ONCE; never reloaded. Same-instant chunk ids share a
                 # 12-char prefix, so cards are located by column + full id, not short id.
                 page.goto(f"http://127.0.0.1:{hub_port}/", wait_until="load")
                 expect(page.get_by_test_id("board-shell")).to_be_visible()
+
+                # The runner brake lives on the Fleet tab; the board rail only shows its effect. A second
+                # page of the same context drives it, so the board page is never reloaded or navigated.
+                fleet_page = context.new_page()
+
+                def fleet_brake() -> None:
+                    """Flips the hub brake on the runner's row in the Fleet tab, opened by its host's card."""
+                    runner_id = page.get_by_test_id("runner").get_attribute("data-runner")
+                    fleet_page.goto(f"http://127.0.0.1:{hub_port}/fleet", wait_until="load")
+                    # The host's card is the one that settles the list: until the hosts read lands, every runner
+                    # reads as standing under no host.
+                    host_card = fleet_page.locator('[data-testid^="fleet-card-hs_"]').first
+                    host_card.click()
+                    fleet_page.locator(f'[data-testid="fleet-runner"][data-runner="{runner_id}"]').get_by_test_id(
+                        "fleet-runner-toggle"
+                    ).click()
 
                 def col(key: str):
                     return page.locator(f'[data-col="{key}"]')
@@ -364,7 +381,7 @@ def test_board_browser_live_group_reorder_answer_and_pause(tmp_path: Path, chrom
                 assert hub.get("/api/questions").json() == [], "the board answer did not close the open question"
 
                 # B's landing frees the runner's only agent slot in the same tick.
-                page.get_by_test_id("runner-toggle").click()  # Pause — the *hub's* brake, not the runner's own
+                fleet_brake()  # Pause — the *hub's* brake, not the runner's own
                 expect(page.get_by_test_id("runner")).to_have_attribute("data-hub-paused", "true")
                 expect(page.get_by_test_id("runner-hub-paused")).to_be_visible()
                 expect(page.get_by_test_id("runner-locally-paused")).to_have_count(0)
@@ -437,7 +454,7 @@ def test_board_browser_live_group_reorder_answer_and_pause(tmp_path: Path, chrom
                 expect(ready_card(chunk_a)).to_have_count(1)
 
                 # --- Resume from the board: the claim resumes -------------------------
-                page.get_by_test_id("runner-toggle").click()  # Resume
+                fleet_brake()  # Resume
                 expect(page.get_by_test_id("runner")).to_have_attribute("data-hub-paused", "false")
                 status = _tick_until(config, hub, chunk_a, fenced, {"running"}, 30.0)
                 assert status == "running", f"resumed runner did not claim A as running (status {status!r})"
