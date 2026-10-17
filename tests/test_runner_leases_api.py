@@ -38,6 +38,8 @@ def _app_with_leases(tmp_path: Path, *, clock: FixedClock | None = None, probe: 
         environments=store,
         overload=store,
         elicitations=store,
+        takeovers=store,
+        escalations=store,
     )
     return create_app(
         config, runner_stores=make_stores(store), host_stores=make_host_stores(store), leases=service
@@ -116,6 +118,8 @@ def test_running_lease_shape_and_binding_join(tmp_path: Path) -> None:
         "created_at": _NOW.isoformat(),
         "last_heartbeat_at": beat_at.isoformat(),
         "state": "running",
+        "display_status": "running",
+        "closure_healthy": False,
         "closed_at": None,
         "closure_reason": None,
         "stale_after_seconds": 3600,
@@ -199,6 +203,8 @@ def test_closed_lease_appears_after_active_with_state_and_reason(tmp_path: Path)
     assert closed["state"] == "closed"
     assert closed["closed_at"] == closed_at.isoformat()
     assert closed["closure_reason"] == "failed"
+    assert closed["closure_healthy"] is False
+    assert closed["display_status"] == "closed"
     assert closed["stale_after_seconds"] == 3600
     assert_all_timestamps_utc({"items": items})
 
@@ -276,3 +282,49 @@ def test_every_lease_state_serializes_the_same_ordered_keys(tmp_path: Path, seed
     (item,) = resp.json()["items"]
     assert item["state"] == state
     assert list(item) == list(LeaseView.model_fields)
+
+
+@pytest.mark.component
+def test_a_transitioned_closure_is_healthy_and_a_failed_one_is_not(tmp_path: Path) -> None:
+    app, store = _app_with_leases(tmp_path)
+    for n, reason in enumerate(["transitioned", "failed"], start=1):
+        _seed_lease(store, lease_id=f"lease_{n}", chunk_id=f"ch_{n}")
+        store.record_closure(
+            lease_id=f"lease_{n}", chunk_id=f"ch_{n}", node_id="nd_build", reason=reason, closed_at=_NOW
+        )
+
+    with runner_client(app) as client:
+        items = {item["closure_reason"]: item for item in client.get("/api/leases").json()["items"]}
+
+    assert items["transitioned"]["closure_healthy"] is True
+    assert items["failed"]["closure_healthy"] is False
+
+
+@pytest.mark.component
+def test_an_open_ask_on_one_chunk_changes_only_that_chunk_s_display_status(tmp_path: Path) -> None:
+    app, store = _app_with_leases(tmp_path, probe=FakeProbe(alive={(100, "start-100"), (200, "start-200")}))
+    for n, pid in ((1, 100), (2, 200)):
+        _seed_lease(store, lease_id=f"lease_{n}", chunk_id=f"ch_{n}")
+        store.record_spawn(
+            f"lease_{n}",
+            pid=pid,
+            process_start_time=f"start-{pid}",
+            session=SessionReference(CLAUDE_CODE_HARNESS_ID, f"sess-{n}"),
+            spawned_at=_NOW,
+        )
+    store.record_ask(
+        lease_id="lease_1",
+        chunk_id="ch_1",
+        question_id="q_1",
+        question="which way?",
+        options=[],
+        asked_at=_NOW,
+    )
+
+    with runner_client(app) as client:
+        items = {item["chunk_id"]: item for item in client.get("/api/leases").json()["items"]}
+
+    assert items["ch_1"]["display_status"] == "waiting-ask"
+    assert items["ch_2"]["display_status"] == "running"
+    # The lease's own state is untouched: the human fact outranks it only in the display.
+    assert items["ch_1"]["state"] == "running"

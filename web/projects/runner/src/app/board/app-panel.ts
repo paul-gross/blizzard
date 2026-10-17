@@ -107,7 +107,7 @@ export class LocalPanel {
    * `lease` (the summary/status subject) is that list's own newest entry.
    */
   protected readonly machineChunks = computed<MachineChunkRow[]>(() =>
-    machineChunkRows(this.leases(), this.dashboardQuery.data()),
+    machineChunkRows(this.leases()),
   );
 
   /** The chunks list's "show all" filter state — plain UI state,

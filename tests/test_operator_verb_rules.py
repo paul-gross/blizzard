@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 import pytest
 
 from blizzard.foundation.chunk_migration import MigrationMode
-from blizzard.foundation.chunk_status import PRE_CLAIM_STATUSES, TERMINAL_STATUSES, ChunkStatus
+from blizzard.foundation.chunk_status import PRE_CLAIM_STATUSES, TERMINAL_STATUSES, ChunkDeleteRefusal, ChunkStatus
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
 from blizzard.hub.domain.chunk.model import (
     CHUNK_VERB_LEGALITY,
@@ -34,8 +34,9 @@ from blizzard.hub.domain.operations.complete import is_completion_replay
 from blizzard.hub.domain.operations.delete import (
     ChunkHasDependents,
     ChunkNotDeletable,
+    delete_refusal,
+    dependent_chunk_ids,
     require_deletable,
-    require_no_dependents,
 )
 from blizzard.hub.domain.operations.demote import ChunkNotDemotable, demotion_writes
 from blizzard.hub.domain.operations.edit import (
@@ -48,7 +49,12 @@ from blizzard.hub.domain.operations.edit import (
     plan_edit,
 )
 from blizzard.hub.domain.operations.pause import ChunkNotPausable, require_pausable
-from blizzard.hub.domain.operations.promote import ChunkNotPromotable, promotion_writes, withheld_by_pause
+from blizzard.hub.domain.operations.promote import (
+    ChunkNotPromotable,
+    is_promotable,
+    promotion_writes,
+    withheld_by_pause,
+)
 from blizzard.hub.domain.operations.restart import (
     SUPERSEDED_ANSWER,
     ChunkNotRestartable,
@@ -198,6 +204,25 @@ def test_promote_replays_on_an_already_promoted_chunk_even_once_terminal() -> No
     assert promotion_writes("chk_1", _AT[ChunkStatus.RUNNING]) is False
 
 
+def test_promotable_is_promotion_writes_without_its_replay() -> None:
+    paused = ChunkFacts(minted=True, pauses=[PauseFact(paused=True, set_at=_T0, set_by="op")])
+    assert is_promotable(paused) is True
+    assert is_promotable(_AT[ChunkStatus.NOT_READY]) is True
+    assert is_promotable(_AT[ChunkStatus.READY]) is False
+    assert is_promotable(replace(_AT[ChunkStatus.STOPPED], promoted=False)) is False
+    assert is_promotable(replace(_AT[ChunkStatus.DONE], promoted=False)) is False
+
+
+@pytest.mark.parametrize("status", sorted(ChunkStatus))
+def test_promotable_agrees_with_promotion_writes_at_every_status(status: ChunkStatus) -> None:
+    for facts in (_AT[status], replace(_AT[status], promoted=False)):
+        try:
+            writes = promotion_writes("chk_1", facts)
+        except ChunkNotPromotable:
+            writes = False
+        assert is_promotable(facts) is writes
+
+
 # --- demote -------------------------------------------------------------------
 
 
@@ -301,7 +326,7 @@ def test_completion_replays_only_at_done_and_writes_from_stopped() -> None:
 @pytest.mark.parametrize("status", sorted(frozenset(ChunkStatus) - PRE_CLAIM_STATUSES))
 def test_delete_refuses_outside_the_pre_claim_window(status: ChunkStatus) -> None:
     with pytest.raises(ChunkNotDeletable):
-        require_deletable("chk_1", _AT[status])
+        require_deletable("chk_1", _AT[status], [])
 
 
 def _edge(dependent: str, prerequisite: str, *, released: bool = False) -> DependencyEdge:
@@ -317,12 +342,29 @@ def _edge(dependent: str, prerequisite: str, *, released: bool = False) -> Depen
 
 def test_delete_refuses_a_standing_prerequisite_naming_its_dependents_sorted() -> None:
     with pytest.raises(ChunkHasDependents) as excinfo:
-        require_no_dependents("chk_1", [_edge("chk_c", "chk_1"), _edge("chk_a", "chk_1"), _edge("chk_1", "chk_z")])
+        require_deletable(
+            "chk_1",
+            _AT[ChunkStatus.NOT_READY],
+            [_edge("chk_c", "chk_1"), _edge("chk_a", "chk_1"), _edge("chk_1", "chk_z")],
+        )
     assert excinfo.value.dependent_chunk_ids == ["chk_a", "chk_c"]
 
 
 def test_delete_is_free_of_edges_where_the_chunk_is_only_a_dependent() -> None:
-    require_no_dependents("chk_1", [_edge("chk_1", "chk_z")])
+    require_deletable("chk_1", _AT[ChunkStatus.NOT_READY], [_edge("chk_1", "chk_z")])
+    assert dependent_chunk_ids("chk_1", [_edge("chk_1", "chk_z")]) == []
+
+
+def test_delete_refusal_puts_the_status_before_the_dependents() -> None:
+    assert delete_refusal(_AT[ChunkStatus.RUNNING], ["chk_a"]) is ChunkDeleteRefusal.STATUS
+    assert delete_refusal(_AT[ChunkStatus.RUNNING], []) is ChunkDeleteRefusal.STATUS
+    assert delete_refusal(_AT[ChunkStatus.NOT_READY], ["chk_a"]) is ChunkDeleteRefusal.DEPENDENTS
+    assert delete_refusal(_AT[ChunkStatus.READY], []) is None
+
+
+def test_a_status_refusal_outranks_standing_dependents_in_the_guard_too() -> None:
+    with pytest.raises(ChunkNotDeletable):
+        require_deletable("chk_1", _AT[ChunkStatus.RUNNING], [_edge("chk_a", "chk_1")])
 
 
 # --- restart ------------------------------------------------------------------

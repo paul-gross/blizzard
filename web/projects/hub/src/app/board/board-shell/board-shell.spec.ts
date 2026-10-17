@@ -18,6 +18,7 @@ const BACKLOG = (suffix: string): ChunkSummary => ({
   chunk_id: `ch_01backlog${suffix}`,
   graph_id: 'gr_1',
   status: 'not_ready',
+  promotable: true,
   current_node_id: 'nd_build',
   work_refs: [],
 });
@@ -158,7 +159,7 @@ describe('BoardShell', () => {
 
   it('renders a not-ready chunk in the backlog column with a Promote action that emits its id', async () => {
     const chunks: ChunkSummary[] = [
-      { chunk_id: 'ch_01notready00000000000000000', graph_id: 'gr_1', status: 'not_ready', current_node_id: 'nd_build', work_refs: [] },
+      { chunk_id: 'ch_01notready00000000000000000', graph_id: 'gr_1', status: 'not_ready', promotable: true, current_node_id: 'nd_build', work_refs: [] },
       { chunk_id: 'ch_01running000000000000000000', graph_id: 'gr_1', status: 'running', current_node_id: 'nd_build', work_refs: [] },
     ];
     const fixture = TestBed.createComponent(BoardShell);
@@ -183,7 +184,7 @@ describe('BoardShell', () => {
 
   it('withholds Promote without chunk:control', async () => {
     const chunks: ChunkSummary[] = [
-      { chunk_id: 'ch_01notready00000000000000000', graph_id: 'gr_1', status: 'not_ready', current_node_id: 'nd_build', work_refs: [] },
+      { chunk_id: 'ch_01notready00000000000000000', graph_id: 'gr_1', status: 'not_ready', promotable: true, current_node_id: 'nd_build', work_refs: [] },
     ];
     const fixture = TestBed.createComponent(BoardShell);
     fixture.componentRef.setInput('chunks', chunks);
@@ -218,6 +219,16 @@ describe('BoardShell', () => {
     expect(el.querySelectorAll('[data-col="running"] [data-testid="chunk-card"]')).toHaveLength(1);
     expect(el.querySelectorAll('[data-col="done"] [data-testid="chunk-card"]')).toHaveLength(1);
     expect(el.querySelectorAll('[data-chunk="ch_01ready0000000000000000000"]')).toHaveLength(1);
+  });
+
+  it("places a card in DONE off the hub's terminal flag", async () => {
+    const chunks: ChunkSummary[] = [
+      { chunk_id: 'ch_01flagged000000000000000000', graph_id: 'gr_1', status: 'running', terminal: true, current_node_id: 'nd_build', work_refs: [] },
+    ];
+    const el = (await render(chunks)).nativeElement as HTMLElement;
+
+    expect(laneIds(el, 'done')).toEqual(['ch_01flagged000000000000000000']);
+    expect(laneIds(el, 'running')).toEqual([]);
   });
 
   it('renders a paused chunk in the WAIT/HUMAN column (issue #46)', async () => {

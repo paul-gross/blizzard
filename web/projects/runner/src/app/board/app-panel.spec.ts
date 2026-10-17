@@ -187,7 +187,7 @@ describe('LocalPanel', () => {
       chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYNDDDD',
       state: 'closed',
       closed_at: '2026-07-16T11:30:00.000Z',
-      closure_reason: 'transitioned',
+      closure_reason: 'transitioned', closure_healthy: true,
     });
     stub = stubRequestClient(runnerClient, routes([LEASE(), closed]));
     const fixture = await render();
@@ -204,7 +204,7 @@ describe('LocalPanel', () => {
       lease_id: 'lease_01KXKVVF1J3D6H6VYZ3XYNCCCC',
       chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYNDDDD',
       state: 'closed',
-      closure_reason: 'transitioned',
+      closure_reason: 'transitioned', closure_healthy: true,
     });
     stub = stubRequestClient(runnerClient, routes([LEASE(), otherChunk]));
     const fixture = await render();
@@ -227,7 +227,7 @@ describe('LocalPanel', () => {
       lease_id: 'lease_01KXKVVF1J3D6H6VYZ3XYNCCCC',
       chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYNDDDD',
       state: 'closed',
-      closure_reason: 'transitioned',
+      closure_reason: 'transitioned', closure_healthy: true,
     });
     stub = stubRequestClient(runnerClient, routes([LEASE(), otherChunk, older]));
     const fixture = await render();
@@ -245,7 +245,7 @@ describe('LocalPanel', () => {
   });
 
   it('shows a distinct filtered-empty state naming the hidden count when the filter hides every chunk, not a blank pane (issue #134)', async () => {
-    stub = stubRequestClient(runnerClient, routes([LEASE({ state: 'closed', closure_reason: 'transitioned' })]));
+    stub = stubRequestClient(runnerClient, routes([LEASE({ state: 'closed', closure_reason: 'transitioned', closure_healthy: true })]));
     const fixture = await render();
     const el = fixture.nativeElement as HTMLElement;
 
@@ -257,7 +257,7 @@ describe('LocalPanel', () => {
 
   it('derives NEEDS HUMAN from an open escalation, outranking the lease state — visible without checking show-all', async () => {
     stub = stubRequestClient(runnerClient,
-      routes([LEASE({ state: 'closed', closure_reason: 'escalated' })], {
+      routes([LEASE({ state: 'closed', closure_reason: 'escalated', display_status: 'needs-human' })], {
         escalations: {
           items: [
             {
@@ -339,7 +339,7 @@ describe('LocalPanel', () => {
 
     it('shows the escalation resume command in the dock for an escalated selected chunk', async () => {
       stub = stubRequestClient(runnerClient,
-        routes([LEASE({ state: 'closed', closure_reason: 'escalated' })], {
+        routes([LEASE({ state: 'closed', closure_reason: 'escalated', display_status: 'needs-human' })], {
           escalations: {
             items: [
               {

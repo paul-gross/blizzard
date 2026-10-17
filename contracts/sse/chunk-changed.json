@@ -1,11 +1,13 @@
 {
   "minimal": {
     "chunk_id": "ch_1",
-    "status": "ready"
+    "status": "ready",
+    "terminal": false
   },
   "full": {
     "chunk_id": "ch_1",
     "status": "running",
+    "terminal": false,
     "prev_status": "ready",
     "prev_node": "plan",
     "node": "build",
@@ -18,6 +20,7 @@
   "deleted": {
     "chunk_id": "ch_1",
     "status": "not_ready",
+    "terminal": false,
     "cause": "deleted",
     "by": "operator",
     "key": "chunk_deleted:1"
@@ -25,6 +28,7 @@
   "named-runner": {
     "chunk_id": "ch_1",
     "status": "running",
+    "terminal": false,
     "prev_status": "ready",
     "node": "build",
     "runner_id": "rn_01J9Z3QK7M4X8V2N5R6T1W0YAB",
@@ -32,5 +36,14 @@
     "cause": "claimed",
     "graph_id": "adv-dwf",
     "key": "route_created:rt_1"
+  },
+  "stopped": {
+    "chunk_id": "ch_1",
+    "status": "stopped",
+    "terminal": true,
+    "prev_status": "running",
+    "cause": "stopped",
+    "key": "chunk_stopped:1",
+    "project_id": "proj_1"
   }
 }

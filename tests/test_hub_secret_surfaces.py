@@ -93,6 +93,7 @@ def test_create_replace_list_show_retire_enable_over_the_api(client: TestClient)
         "replaced_by_name",
         "created_at",
         "retired",
+        "retirable",
         "references",
     }
     assert client.get("/api/secrets/missing").status_code == 404
@@ -165,6 +166,8 @@ def test_an_active_repository_refuses_its_secret_s_retire_and_shows_under_used_b
     )
     assert created.status_code == 201, created.text
 
+    assert client.get("/api/secrets/gh-test").json()["retirable"] is False
+    assert client.post("/api/secrets/gh-test/retire").status_code == 409
     refused = _cli(["retire", "gh-test"])
     assert refused.exit_code != 0
     assert "repository blizzard" in refused.output
@@ -172,7 +175,9 @@ def test_an_active_repository_refuses_its_secret_s_retire_and_shows_under_used_b
 
     assert client.post("/api/repositories/blizzard/retire").status_code == 200
     assert "repository blizzard" not in _cli(["show", "gh-test"]).output
+    assert client.get("/api/secrets/gh-test").json()["retirable"] is True
     assert _cli(["retire", "gh-test"]).exit_code == 0
+    assert client.get("/api/secrets/gh-test").json()["retirable"] is True
 
 
 def test_a_planted_value_appears_on_no_surface(

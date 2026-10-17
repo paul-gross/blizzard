@@ -671,6 +671,8 @@ def _wire_runner(
         environments=read_stores.environments,
         overload=read_stores.overload,
         elicitations=read_stores.elicitations,
+        takeovers=read_stores.takeover,
+        escalations=read_stores.escalations,
     )
     # The archived-transcript seam needs its own authenticated client:
     # `hub_http_client` below carries no auth headers (JWKS/hub-auth-mode reads only).

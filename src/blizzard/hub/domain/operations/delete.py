@@ -10,9 +10,9 @@ from __future__ import annotations
 # The residual dependency-graph lock — recorded debt, blizzard-context:/architecture/system-shape/exclusive-writes.md
 # ast-grep-ignore: bzh:store-exclusive-write
 import threading
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 
-from blizzard.foundation.chunk_status import PRE_CLAIM_STATUSES, ChunkStatus
+from blizzard.foundation.chunk_status import PRE_CLAIM_STATUSES, ChunkDeleteRefusal, ChunkStatus
 from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.chunk.errors import ChunkNotFound
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, ChunkVerb, DependencyEdge, IWriteWorkItemRepository
@@ -45,17 +45,31 @@ class ChunkHasDependents(Exception):
         self.dependent_chunk_ids = dependent_chunk_ids
 
 
-def require_deletable(chunk_id: str, facts: ChunkFacts) -> None:
-    """Refuse a delete outside :attr:`ChunkVerb.DELETE`'s window with :class:`ChunkNotDeletable`."""
+def dependent_chunk_ids(chunk_id: str, standing: Iterable[DependencyEdge]) -> list[str]:
+    """The chunks a standing edge in ``standing`` names ``chunk_id`` as prerequisite for, sorted."""
+    return sorted(e.dependent_chunk_id for e in standing if e.prerequisite_chunk_id == chunk_id)
+
+
+def delete_refusal(facts: ChunkFacts, dependents: Sequence[str]) -> ChunkDeleteRefusal | None:
+    """Why a delete would be refused, ``None`` when it would not: outside :attr:`ChunkVerb.DELETE`'s
+    window first, then standing ``dependents`` (:func:`dependent_chunk_ids`) — the guard order
+    :func:`require_deletable` raises in."""
     if not facts.admits(ChunkVerb.DELETE):
+        return ChunkDeleteRefusal.STATUS
+    if dependents:
+        return ChunkDeleteRefusal.DEPENDENTS
+    return None
+
+
+def require_deletable(chunk_id: str, facts: ChunkFacts, standing: Iterable[DependencyEdge]) -> None:
+    """Refuse a delete :func:`delete_refusal` refuses — :class:`ChunkNotDeletable` for the status,
+    :class:`ChunkHasDependents` naming the dependents sorted for a standing prerequisite."""
+    dependents = dependent_chunk_ids(chunk_id, standing)
+    refusal = delete_refusal(facts, dependents)
+    if refusal is ChunkDeleteRefusal.STATUS:
         raise ChunkNotDeletable(chunk_id, facts.status())
-
-
-def require_no_dependents(chunk_id: str, standing: Iterable[DependencyEdge]) -> None:
-    """Refuse deleting a standing prerequisite, naming its dependents sorted (:class:`ChunkHasDependents`)."""
-    dependent_chunk_ids = sorted(e.dependent_chunk_id for e in standing if e.prerequisite_chunk_id == chunk_id)
-    if dependent_chunk_ids:
-        raise ChunkHasDependents(chunk_id, dependent_chunk_ids)
+    if refusal is ChunkDeleteRefusal.DEPENDENTS:
+        raise ChunkHasDependents(chunk_id, dependents)
 
 
 class DeleteService:
@@ -92,8 +106,7 @@ class DeleteService:
             facts = handle.facts(chunk.chunk_id)
             if facts is None:
                 raise ChunkNotFound(chunk.chunk_id)
-            require_deletable(chunk.chunk_id, facts)
-            require_no_dependents(chunk.chunk_id, handle.standing_edges())
+            require_deletable(chunk.chunk_id, facts, handle.standing_edges())
             # Re-read fresh under the lock: a fold that landed a work ref onto this chunk
             # between the caller's own load and this lock must not have that ref survive
             # withdrawal because the write below still carries the caller's stale list.

@@ -10,6 +10,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
+from blizzard.foundation.graph_lifecycle import GraphLifecycle
 from blizzard.foundation.node_steps import SessionMode
 from blizzard.hub.domain.graph.model import Mint, Mints, SessionRef
 from tests.support import make_graph
@@ -159,3 +160,21 @@ def test_a_mint_is_not_newer_than_itself() -> None:
     not a migration onto the graph the chunk is already pinned to."""
     graph = make_graph("gr_a", "wf", created_at=_T0)
     assert Mint.of(graph).newer_than(Mint.of(graph)) is False
+
+
+def test_mints_lifecycle_names_effective_superseded_and_retired() -> None:
+    t0 = datetime(2026, 1, 1, tzinfo=UTC)
+    graphs = [
+        make_graph("gr_v1", "tiny", created_at=t0),
+        make_graph("gr_v2", "tiny", created_at=t0 + timedelta(days=1)),
+        make_graph("gr_v3", "tiny", created_at=t0 + timedelta(days=2)),
+    ]
+
+    mints = Mints.of(graphs, retired_ids={"gr_v3"})
+
+    assert mints.lifecycle == {
+        "gr_v1": GraphLifecycle.SUPERSEDED,
+        "gr_v2": GraphLifecycle.EFFECTIVE,
+        "gr_v3": GraphLifecycle.RETIRED,
+    }
+    assert {i: v is GraphLifecycle.EFFECTIVE for i, v in mints.lifecycle.items()} == mints.effective

@@ -16,6 +16,8 @@ export interface ConfigActionsVm {
 export interface ConfigActionRecord {
   readonly built_in?: boolean;
   readonly retired?: boolean;
+  /** The hub's `SecretView.retirable` — a secret's alone; absent for other records. */
+  readonly retirable?: boolean;
 }
 
 /** The note a secret's Retire carries while something live refers to it. */
@@ -24,7 +26,7 @@ export const SECRET_IN_USE_NOTE = 'In use — retire or repoint what refers to i
 /**
  * The write controls for a record — `null` for none. A phone is read-only, so no
  * control is built there; a desktop needs `config:edit`; a built-in record has none.
- * `referenceCount` is the active referrers a secret has, which hold its Retire back.
+ * A secret whose `retirable` reads false has Retire held back.
  */
 export function configActions(
   mode: ViewportMode,
@@ -32,7 +34,6 @@ export function configActions(
   record: ConfigActionRecord | null | undefined,
   options: {
     readonly replace?: boolean;
-    readonly referenceCount?: number;
   } = {},
 ): ConfigActionsVm | null {
   if (mode === 'mobile' || !canEdit || !record || record.built_in) return null;
@@ -41,7 +42,7 @@ export function configActions(
     edit: !(options.replace ?? false),
     replace: options.replace ?? false,
     lifecycle: retired ? 'enable' : 'retire',
-    retireBlocked: !retired && (options.referenceCount ?? 0) > 0 ? SECRET_IN_USE_NOTE : null,
+    retireBlocked: !retired && record.retirable === false ? SECRET_IN_USE_NOTE : null,
   };
 }
 

@@ -17,7 +17,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from blizzard.auth_core import Permission
-from blizzard.foundation.chunk_status import TERMINAL_STATUSES, ChunkStatus
+from blizzard.foundation.chunk_status import TERMINAL_STATUSES, ChunkDeleteRefusal, ChunkStatus
 from blizzard.foundation.store.utc import as_utc, iso_utc
 from blizzard.foundation.work_items import WorkItemPriority
 from blizzard.hub.api import chunk_events
@@ -58,7 +58,12 @@ from blizzard.hub.domain.graph.authoring import DefaultGraphRetired
 from blizzard.hub.domain.graph.model import TargetGraphRetired
 from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.domain.kernel.pagination import DEFAULT_LIMIT, MAX_LIMIT, MalformedCursor
-from blizzard.hub.domain.operations.delete import ChunkHasDependents, ChunkNotDeletable
+from blizzard.hub.domain.operations.delete import (
+    ChunkHasDependents,
+    ChunkNotDeletable,
+    delete_refusal,
+    dependent_chunk_ids,
+)
 from blizzard.hub.domain.operations.demote import ChunkNotDemotable
 from blizzard.hub.domain.operations.edit import (
     ChunkAlreadyMoved,
@@ -348,28 +353,33 @@ def _neighbor_view(neighbor: ChunkNeighbor) -> ChunkNeighborView:
 
 
 def _dependency_views_for_chunk(
-    services: TenantServices, chunk_id: str, *, status: ChunkStatus
-) -> tuple[BlockedView | None, ChunkNeighborhoodView]:
-    """``GET /api/chunks/{chunk_id}``'s blocked marking and neighborhood — both derived
+    services: TenantServices, chunk_id: str, *, facts: ChunkFacts
+) -> tuple[BlockedView | None, ChunkNeighborhoodView, ChunkDeleteRefusal | None]:
+    """``GET /api/chunks/{chunk_id}``'s blocked marking, neighborhood and delete refusal — all derived
     from the one standing-edges read and one statuses map, since a chunk's dependent edges are a subset of its own
     neighborhood edges and reading them separately would risk a release or completion landing between the two reads.
-    ``status`` is the caller's own already-derived value for ``chunk_id``, so this need not reload its facts a second
+    ``facts`` is the caller's own already-loaded value for ``chunk_id``, so this need not reload them a second
     time."""
     edges = services.chunks.dependencies.standing_edges_for(chunk_id)
+    refusal = delete_refusal(facts, dependent_chunk_ids(chunk_id, edges))
     if not edges:
-        return None, ChunkNeighborhoodView(prerequisites=[], dependents=[])
-    statuses: dict[str, ChunkStatus] = {chunk_id: status}
+        return None, ChunkNeighborhoodView(prerequisites=[], dependents=[]), refusal
+    statuses: dict[str, ChunkStatus] = {chunk_id: facts.status()}
     neighbor_ids = {
         edge.prerequisite_chunk_id if edge.dependent_chunk_id == chunk_id else edge.dependent_chunk_id for edge in edges
     }
     neighbor_facts_by_id = services.chunks.facts.load_facts_for(list(neighbor_ids))
-    statuses.update((neighbor_id, facts.status()) for neighbor_id, facts in neighbor_facts_by_id.items())
+    statuses.update((neighbor_id, nf.status()) for neighbor_id, nf in neighbor_facts_by_id.items())
     dependent_edges = [e for e in edges if e.dependent_chunk_id == chunk_id]
     blocked = blocked_view(derive_blocked_prerequisites(dependent_edges, statuses).get(chunk_id))
     neighborhood = derive_chunk_neighborhood(chunk_id, edges, statuses)
-    return blocked, ChunkNeighborhoodView(
-        prerequisites=[_neighbor_view(n) for n in neighborhood.prerequisites],
-        dependents=[_neighbor_view(n) for n in neighborhood.dependents],
+    return (
+        blocked,
+        ChunkNeighborhoodView(
+            prerequisites=[_neighbor_view(n) for n in neighborhood.prerequisites],
+            dependents=[_neighbor_view(n) for n in neighborhood.dependents],
+        ),
+        refusal,
     )
 
 
@@ -401,12 +411,13 @@ def get_chunk(chunk_id: str, services: Services) -> ChunkDetail:
     if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
     facts = services.chunks.facts.load_facts(chunk_id) or ChunkFacts(minted=True)
-    chunk_status = facts.status()
-    blocked, neighborhood = _dependency_views_for_chunk(services, chunk_id, status=chunk_status)
+    blocked, neighborhood, refusal = _dependency_views_for_chunk(services, chunk_id, facts=facts)
     # Primed with every graph id this chunk's history ever names.
     names = GraphNames(services.graphs)
     names.prime(_detail_graph_ids(chunk, facts))
-    return ChunkView.of(services, chunk, names=names, blocked=blocked, facts=facts, neighborhood=neighborhood).detail()
+    return ChunkView.of(
+        services, chunk, names=names, blocked=blocked, facts=facts, neighborhood=neighborhood, delete_refusal=refusal
+    ).detail()
 
 
 def _detail_graph_ids(chunk: Chunk, facts: ChunkFacts) -> set[str]:

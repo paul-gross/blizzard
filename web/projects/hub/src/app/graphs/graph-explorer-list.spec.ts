@@ -4,9 +4,9 @@ import { TestBed } from '@angular/core/testing';
 import { GraphExplorerList } from './graph-explorer-list';
 
 const GRAPHS = [
-  { graph_id: 'gr_build_v2', name: 'build', created_at: '2026-07-18T00:00:00Z', effective: true, entry_node_id: 'n1' },
-  { graph_id: 'gr_build_v1', name: 'build', created_at: '2026-07-01T00:00:00Z', effective: false, entry_node_id: 'n1' },
-  { graph_id: 'gr_review_v1', name: 'review', created_at: '2026-07-10T00:00:00Z', effective: true, entry_node_id: 'n2' },
+  { graph_id: 'gr_build_v2', name: 'build', created_at: '2026-07-18T00:00:00Z', effective: true, lifecycle: 'effective', entry_node_id: 'n1' },
+  { graph_id: 'gr_build_v1', name: 'build', created_at: '2026-07-01T00:00:00Z', effective: false, lifecycle: 'superseded', entry_node_id: 'n1' },
+  { graph_id: 'gr_review_v1', name: 'review', created_at: '2026-07-10T00:00:00Z', effective: true, lifecycle: 'effective', entry_node_id: 'n2' },
 ];
 
 describe('GraphExplorerList', () => {
@@ -110,8 +110,8 @@ describe('GraphExplorerList', () => {
 
   it('falls back to the newest version when no version of a group is marked effective', async () => {
     const fixture = await mount([
-      { ...GRAPHS[0], effective: false },
-      { ...GRAPHS[1], effective: false },
+      { ...GRAPHS[0], effective: false, lifecycle: 'superseded' },
+      { ...GRAPHS[1], effective: false, lifecycle: 'superseded' },
     ]);
     const el = fixture.nativeElement as HTMLElement;
 
@@ -205,12 +205,12 @@ describe('GraphExplorerList', () => {
 
   it('shows a retired badge for a retired, non-effective version (issue #101)', async () => {
     const graphs = [
-      { ...GRAPHS[0], effective: false },
-      { ...GRAPHS[1], effective: true, retired: false },
+      { ...GRAPHS[0], effective: false, lifecycle: 'superseded' },
+      { ...GRAPHS[1], effective: true, retired: false, lifecycle: 'effective' },
       GRAPHS[2],
     ];
     // gr_build_v2 (newest) is retired; gr_build_v1 (older) is now effective.
-    const fixture = await mount([{ ...graphs[0], retired: true }, graphs[1], graphs[2]]);
+    const fixture = await mount([{ ...graphs[0], retired: true, lifecycle: 'retired' }, graphs[1], graphs[2]]);
     const el = fixture.nativeElement as HTMLElement;
 
     // Retired versions are filtered out by default, so the badge is only reachable
@@ -228,8 +228,8 @@ describe('GraphExplorerList', () => {
 
   it('filters retired versions out of a lineage by default, and brings them back with the filter', async () => {
     const graphs = [
-      { ...GRAPHS[0], effective: false, retired: true },
-      { ...GRAPHS[1], effective: true },
+      { ...GRAPHS[0], effective: false, retired: true, lifecycle: 'retired' },
+      { ...GRAPHS[1], effective: true, lifecycle: 'effective' },
       GRAPHS[2],
     ];
     const fixture = await mount(graphs);
@@ -250,7 +250,7 @@ describe('GraphExplorerList', () => {
   });
 
   it('names how many versions the filter is holding back, and stops saying so once they are shown', async () => {
-    const fixture = await mount([{ ...GRAPHS[0], effective: false, retired: true }, GRAPHS[1], GRAPHS[2]]);
+    const fixture = await mount([{ ...GRAPHS[0], effective: false, retired: true, lifecycle: 'retired' }, GRAPHS[1], GRAPHS[2]]);
     const el = fixture.nativeElement as HTMLElement;
 
     const chip = el.querySelector('[data-testid="graph-explorer-show-retired"]');
@@ -264,8 +264,8 @@ describe('GraphExplorerList', () => {
 
   it('drops a group entirely when every one of its versions is retired', async () => {
     const fixture = await mount([
-      { ...GRAPHS[0], effective: false, retired: true },
-      { ...GRAPHS[1], effective: false, retired: true },
+      { ...GRAPHS[0], effective: false, retired: true, lifecycle: 'retired' },
+      { ...GRAPHS[1], effective: false, retired: true, lifecycle: 'retired' },
       GRAPHS[2],
     ]);
     const el = fixture.nativeElement as HTMLElement;
@@ -276,7 +276,7 @@ describe('GraphExplorerList', () => {
 
   it('keeps a retired version visible while it is the open selection, so a deep link still finds its row', async () => {
     const fixture = await mount(
-      [{ ...GRAPHS[0], effective: false, retired: true }, GRAPHS[1], GRAPHS[2]],
+      [{ ...GRAPHS[0], effective: false, retired: true, lifecycle: 'retired' }, GRAPHS[1], GRAPHS[2]],
       'gr_build_v2',
     );
     const el = fixture.nativeElement as HTMLElement;

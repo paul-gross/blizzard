@@ -82,6 +82,8 @@ const CARD: BoardCard = {
   chunkId: 'ch_01hover0000000000000000000',
   shortId: 'C-HOVR',
   status: 'running',
+  terminal: false,
+  promotable: false,
   node: 'build',
   nodeId: 'nd_build',
   pointerLabels: [],

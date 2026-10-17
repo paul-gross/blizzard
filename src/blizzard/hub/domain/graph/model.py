@@ -17,6 +17,7 @@ from typing import Protocol
 
 from blizzard import __version__ as HUB_VERSION
 from blizzard.foundation.artifacts import ArtifactKind
+from blizzard.foundation.graph_lifecycle import GraphLifecycle
 from blizzard.foundation.graph_targets import ChoiceTargetKind
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
 from blizzard.foundation.roles import domain_model
@@ -849,6 +850,22 @@ class Mints:
         tests/test_graph_domain.py::test_mints_effective_requires_retired_ids_explicitly"""
         effective_ids = {m.graph.graph_id for m in self.newest_by_name.values()}
         return {m.graph.graph_id: m.graph.graph_id in effective_ids for m in self.mints}
+
+    @property
+    def lifecycle(self) -> dict[str, GraphLifecycle]:  # ast-grep-ignore: bzh:property-delegates
+        """Each ``graph_id``'s standing in its name's lineage — the one fold the listing's
+        ``lifecycle`` and :attr:`effective` agree on."""
+        effective = self.effective
+        return {
+            graph_id: (
+                GraphLifecycle.RETIRED
+                if graph_id in self.retired_ids
+                else GraphLifecycle.EFFECTIVE
+                if is_effective
+                else GraphLifecycle.SUPERSEDED
+            )
+            for graph_id, is_effective in effective.items()
+        }
 
 
 @domain_model

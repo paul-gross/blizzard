@@ -13,6 +13,7 @@ import pytest
 from sqlalchemy import Engine
 
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.leases import LeaseClosureReason, LeaseDisplayStatus
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.leases.activity import (
@@ -22,6 +23,8 @@ from blizzard.runner.leases.activity import (
     LeaseActivity,
     Liveness,
     LocalLeaseService,
+    OpenHumanFacts,
+    lease_display_status,
 )
 from blizzard.runner.leases.model import Lease, NewLease
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
@@ -308,6 +311,8 @@ def _lease_service(
         environments=store,
         overload=store,
         elicitations=store,
+        takeovers=store,
+        escalations=store,
         stale_after=stale_after,
         recent_limit=recent_limit,
     )
@@ -620,3 +625,34 @@ def test_liveness_uses_a_supplied_heartbeat_without_re_reading_it(tmp_path) -> N
     # A supplied None means "never beat" and must not be re-read into the real value —
     # the baseline falls back to the spawn, not to the heartbeat sitting in the store.
     assert Liveness.of(lease, heartbeat=None, spawn=_NOW).last_activity == _NOW
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("facts", "expected"),
+    [
+        (OpenHumanFacts(takeover=True, escalated=True, asking=True), LeaseDisplayStatus.HUMAN_IN_SESSION),
+        (OpenHumanFacts(escalated=True, asking=True), LeaseDisplayStatus.NEEDS_HUMAN),
+        (OpenHumanFacts(asking=True), LeaseDisplayStatus.WAITING_ASK),
+        (OpenHumanFacts(), LeaseDisplayStatus.RUNNING),
+    ],
+)
+def test_display_status_precedence_is_takeover_then_escalation_then_ask_then_state(
+    facts: OpenHumanFacts, expected: LeaseDisplayStatus
+) -> None:
+    assert lease_display_status("running", **vars(facts)) is expected
+
+
+@pytest.mark.unit
+def test_display_status_falls_through_to_every_lease_state() -> None:
+    states = ["running", "stale", "parked", "backing-off", "spawning", "exited", "closed"]
+    assert [lease_display_status(s, takeover=False, escalated=False, asking=False).value for s in states] == states  # type: ignore[arg-type]
+
+
+@pytest.mark.unit
+def test_only_a_transitioned_closure_is_healthy() -> None:
+    assert [r for r in LeaseClosureReason if r.healthy()] == [LeaseClosureReason.TRANSITIONED]
+    assert LeaseClosureReason.is_healthy("transitioned") is True
+    assert LeaseClosureReason.is_healthy("failed") is False
+    assert LeaseClosureReason.is_healthy("a-store-only-reason") is False
+    assert LeaseClosureReason.is_healthy(None) is False

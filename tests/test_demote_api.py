@@ -80,8 +80,10 @@ def test_demote_keeps_the_chunks_identity(tmp_path: Path) -> None:
     assert hub.client.post(f"/api/chunks/{ready}/demote").status_code == 202
 
     after = hub.client.get(f"/api/chunks/{ready}").json()
-    assert {**after, "status": None} == {**before, "status": None}
+    moved = {"status": None, "promotable": None}
+    assert {**after, **moved} == {**before, **moved}
     assert before["status"] == "ready" and after["status"] == "not_ready"
+    assert before["promotable"] is False and after["promotable"] is True
 
 
 def test_demote_is_a_no_op_on_a_chunk_not_promoted(tmp_path: Path) -> None:

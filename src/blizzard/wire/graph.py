@@ -10,6 +10,7 @@ from __future__ import annotations
 from pydantic import BaseModel, ConfigDict
 
 from blizzard.foundation.artifacts import ArtifactKind
+from blizzard.foundation.graph_lifecycle import GraphLifecycle
 from blizzard.foundation.graph_targets import ChoiceTargetKind
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
 
@@ -173,7 +174,8 @@ class GraphSummaryView(BaseModel):
     """One graph's summary row — a name-lineage entry as served by ``GET /graphs``.
 
     ``effective`` marks the newest **non-retired** graph of this ``name``, while
-    ``retired`` is this graph's own state: a non-retired non-effective graph is superseded."""
+    ``retired`` is this graph's own state: a non-retired non-effective graph is superseded.
+    ``lifecycle`` names that three-way standing, so a client never re-derives it."""
 
     graph_id: str
     name: str
@@ -181,3 +183,4 @@ class GraphSummaryView(BaseModel):
     created_at: str
     effective: bool
     retired: bool = False
+    lifecycle: GraphLifecycle = GraphLifecycle.EFFECTIVE

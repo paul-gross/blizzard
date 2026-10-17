@@ -22,6 +22,7 @@ from blizzard.hub.domain.config.secrets import (
     listed,
     require_revealable,
     require_unreferenced,
+    retirable,
     stale_seals,
     uncovered_key_ids,
 )
@@ -83,3 +84,14 @@ def test_a_rotation_reseals_only_rows_under_another_generation() -> None:
     rows = [_sealed("a", "k1"), _sealed("b", "k2"), _sealed("c", "k1")]
     assert [r.name for r in stale_seals(rows, "k2")] == ["a", "c"]
     assert stale_seals(rows, "k3") == rows
+
+
+def test_retirable_is_the_predicate_require_unreferenced_refuses_on() -> None:
+    ref = RecordRef(kind=RecordKind.REPOSITORY, key="blizzard", label="blizzard")
+    assert retirable([], retired=False) is True
+    assert retirable([ref], retired=False) is False
+    # Retiring a retired secret is a no-op, so it is never refused.
+    assert retirable([ref], retired=True) is True
+    with pytest.raises(SecretReferenced):
+        require_unreferenced("gh-test", [ref])
+    require_unreferenced("gh-test", [])

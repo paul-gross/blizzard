@@ -327,7 +327,7 @@ describe('ChunkDetailHeader overflow menu', () => {
       'done',
     ] as const) {
       const fixture = TestBed.createComponent(ChunkDetailHeader);
-      fixture.componentRef.setInput('detail', { ...ISSUE_DETAIL, status });
+      fixture.componentRef.setInput('detail', { ...ISSUE_DETAIL, status, delete_refusal: 'status' });
       fixture.componentRef.setInput('renderedStatus', status);
       fixture.componentRef.setInput('canControl', true);
       const el = fixture.nativeElement as HTMLElement;
@@ -417,6 +417,7 @@ describe('ChunkDetailHeader overflow menu', () => {
       ...ISSUE_DETAIL,
       status: 'ready',
       deletable: true,
+      delete_refusal: 'dependents',
       neighborhood: {
         prerequisites: [],
         dependents: [{ chunk_id: 'ch_01dependent0000000000ccc', status: 'not_ready', satisfied: false }],
@@ -453,5 +454,51 @@ describe('ChunkDetailHeader overflow menu', () => {
     const item = inOverlay('[data-testid="delete-chunk"]');
     expect(item?.getAttribute('aria-disabled')).not.toBe('true');
     expect(item?.textContent).toContain('Remove from the hub permanently');
+  });
+
+  // --- Delete follows the hub's delete_refusal ------------------------------
+
+  it("enables Delete whenever the hub reports no delete_refusal, whatever the status or dependents", async () => {
+    const fixture = TestBed.createComponent(ChunkDetailHeader);
+    fixture.componentRef.setInput('detail', {
+      ...ISSUE_DETAIL,
+      status: 'running',
+      delete_refusal: null,
+      neighborhood: {
+        prerequisites: [],
+        dependents: [{ chunk_id: 'ch_01dependent0000000000ccc', status: 'not_ready', satisfied: false }],
+      },
+    });
+    fixture.componentRef.setInput('renderedStatus', 'running');
+    fixture.componentRef.setInput('canControl', true);
+    const el = fixture.nativeElement as HTMLElement;
+    await fixture.whenStable();
+    await openMenu(fixture, el);
+
+    const item = inOverlay('[data-testid="delete-chunk"]');
+    expect(item?.getAttribute('aria-disabled')).not.toBe('true');
+    expect(item?.textContent).toContain('Remove from the hub permanently');
+  });
+
+  it('disables Delete with the plain subtitle on a status refusal, even with standing dependents', async () => {
+    const fixture = TestBed.createComponent(ChunkDetailHeader);
+    fixture.componentRef.setInput('detail', {
+      ...ISSUE_DETAIL,
+      status: 'ready',
+      delete_refusal: 'status',
+      neighborhood: {
+        prerequisites: [],
+        dependents: [{ chunk_id: 'ch_01dependent0000000000ccc', status: 'not_ready', satisfied: false }],
+      },
+    });
+    fixture.componentRef.setInput('renderedStatus', 'ready');
+    fixture.componentRef.setInput('canControl', true);
+    const el = fixture.nativeElement as HTMLElement;
+    await fixture.whenStable();
+    await openMenu(fixture, el);
+
+    const item = inOverlay('[data-testid="delete-chunk"]');
+    expect(item?.getAttribute('aria-disabled')).toBe('true');
+    expect(item?.textContent).not.toContain('depend on this');
   });
 });

@@ -89,12 +89,19 @@ _CASES = _cases()
 _CASE_IDS = [f"{scope.name}:{kind}:{case_name}" for scope, kind, case_name, _ in _CASES]
 
 
+#: The payload fields a broker judges itself rather than taking from its caller — the golden
+#: carries them, the ``publish_*`` call does not.
+_BROKER_JUDGED: dict[str, frozenset[str]] = {"chunk-changed": frozenset({"terminal"})}
+
+
 def _publish(broker: _HubEventBroker | _RunnerEventBroker, kind: str, payload: dict[str, Any]) -> None:
     """Drive the real ``publish_*`` helper for ``kind`` with the case's own payload as
     its keyword arguments — every ``publish_*`` builds its payload from exactly the
-    kwargs the case names, so the golden doubles as the call."""
+    kwargs the case names, less the fields the broker judges (:data:`_BROKER_JUDGED`),
+    so the golden doubles as the call."""
     method = getattr(broker, "publish_" + kind.replace("-", "_"))
-    method(**payload)
+    judged = _BROKER_JUDGED.get(kind, frozenset())
+    method(**{name: value for name, value in payload.items() if name not in judged})
 
 
 class TestCorpusClosure:

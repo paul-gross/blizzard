@@ -50,16 +50,22 @@ ActivityChunkChangeCause = Literal[
 #: its own cause statically. ``edited`` is the one cause with no durable fact behind it.
 ChunkChangeCause = Literal[ActivityChunkChangeCause, "edited"]
 
-#: What a ``runner-changed`` frame reports — see
-#: the hub event broker's ``publish_runner_changed``.
-RunnerChangeKind = Literal[
-    "added",
-    "registered",
-    "heartbeat",
+#: The runner kinds the activity read backfills from a durable pause fact — the only
+#: ``runner-changed`` frames the feed lists, live or reconstructed.
+ActivityRunnerChangeKind = Literal[
     "paused",
     "resumed",
     "locally-paused",
     "locally-resumed",
+]
+
+#: What a ``runner-changed`` frame reports — see
+#: the hub event broker's ``publish_runner_changed``.
+RunnerChangeKind = Literal[
+    ActivityRunnerChangeKind,
+    "added",
+    "registered",
+    "heartbeat",
     "external-usage",
     "retired",
     "reinstated",

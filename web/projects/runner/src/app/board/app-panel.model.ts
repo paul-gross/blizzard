@@ -35,15 +35,7 @@ export function chunksEmptyText(total: number, visible: number): string {
  * chunk and the derived status. Each row's `leases` is ordered oldest → newest,
  * so `lease` (the summary/status subject) is that list's own newest entry.
  */
-export function machineChunkRows(
-  leases: readonly runnerApi.LeaseView[],
-  dashboard: runnerApi.DashboardView | undefined,
-): MachineChunkRow[] {
-  const facts = {
-    escalatedChunkIds: new Set((dashboard?.escalations?.items ?? []).map((esc) => esc.chunk_id)),
-    takeoverChunkIds: new Set((dashboard?.takeovers?.items ?? []).map((tko) => tko.chunk_id)),
-    askChunkIds: new Set((dashboard?.asks?.items ?? []).map((ask) => ask.chunk_id)),
-  };
+export function machineChunkRows(leases: readonly runnerApi.LeaseView[]): MachineChunkRow[] {
   // Group by chunk in server order (newest attempt first); the Map preserves
   // first-seen insertion order, so the rows keep the newest-lease-first order.
   const grouped = new Map<string, runnerApi.LeaseView[]>();
@@ -58,7 +50,7 @@ export function machineChunkRows(
     rows.push({
       lease: newest,
       leases: [...group].reverse(), // oldest → newest
-      status: deriveMachineChunkStatus(newest, facts),
+      status: deriveMachineChunkStatus(newest),
     });
   }
   return rows;

@@ -19,24 +19,21 @@ export interface MachineChunkStatus {
   readonly tone: Tone;
 }
 
-/** The facts the fold reads beyond the lease itself. */
-export interface MachineChunkFacts {
-  readonly escalatedChunkIds: ReadonlySet<string>;
-  readonly takeoverChunkIds: ReadonlySet<string>;
-  readonly askChunkIds: ReadonlySet<string>;
-}
-
 /**
- * Precedence mirrors the runner's own lease-state fold (`derive_lease_state`)
- * extended with the chunk-level human facts: an open takeover outranks
- * everything (a human is in the session *now*), then an escalation (blocked on
- * a human), then an open ask (waiting on one), then the lease's own state
- * ({@link deriveLeaseStatus}, the kernel's lease fold).
+ * The wire's `display_status` → label/tone map. The runner folds an open takeover
+ * (a human is in the session *now*), then an escalation (blocked on a human), then an
+ * open ask (waiting on one) over the lease's own state; a lease-state status falls
+ * through to {@link deriveLeaseStatus}.
  */
-export function deriveMachineChunkStatus(lease: runnerApi.LeaseView, facts: MachineChunkFacts): MachineChunkStatus {
-  const chunkId = lease.chunk_id;
-  if (facts.takeoverChunkIds.has(chunkId)) return { label: 'HUMAN IN SESSION', tone: 'takeover' };
-  if (facts.escalatedChunkIds.has(chunkId)) return { label: 'NEEDS HUMAN', tone: 'needs' };
-  if (facts.askChunkIds.has(chunkId)) return { label: 'WAITING · ASK', tone: 'waiting' };
-  return deriveLeaseStatus(lease);
+export function deriveMachineChunkStatus(lease: runnerApi.LeaseView): MachineChunkStatus {
+  switch (lease.display_status) {
+    case 'human-in-session':
+      return { label: 'HUMAN IN SESSION', tone: 'takeover' };
+    case 'needs-human':
+      return { label: 'NEEDS HUMAN', tone: 'needs' };
+    case 'waiting-ask':
+      return { label: 'WAITING · ASK', tone: 'waiting' };
+    default:
+      return deriveLeaseStatus(lease);
+  }
 }

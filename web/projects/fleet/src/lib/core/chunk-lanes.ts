@@ -1,4 +1,4 @@
-import type { ChunkCountsView, ChunkStatus } from '../api/hub';
+import type { ChunkCountsView, ChunkStatus, ChunkSummary } from '../api/hub';
 import type { Tone } from '../kit/tone';
 
 /** The board's lanes, left → right: the backlog, the ready queue, then dispatch → done. */
@@ -19,12 +19,16 @@ export const LANES: readonly Lane[] = [
   { key: 'done', label: 'DONE', headerLabel: 'Done' },
 ];
 
+/** The DONE lane's key — where every chunk the hub flags `terminal` sits. */
+export const DONE_LANE = 'done';
+
 /**
  * Every chunk status folded onto its board lane — the single owner of that
  * fold, because the board and the titlebar both render it and must not disagree.
+ * It places the live statuses only: DONE membership is the hub's `terminal` flag,
+ * read by {@link chunkLane} and {@link laneCounts}, never decided from a status here.
  *
- * The transient `delivering` shows under RUNNING and the terminal `stopped` under
- * DONE. `paused` shares WAIT/HUMAN with `waiting_on_human`: that is the lane for work
+ * The transient `delivering` shows under RUNNING. `paused` shares WAIT/HUMAN with `waiting_on_human`: that is the lane for work
  * stopped pending a human, which is what an operator's pause is. `ready` has its own
  * READY lane, so every status maps to a lane and a chunk shows in exactly one place.
  * The BACKLOG lane's key is `notready`: the key is a selector consumed by styles,
@@ -42,21 +46,30 @@ export const STATUS_LANE: Record<ChunkStatus, string> = {
   waiting_on_human: 'waiting',
   needs_human: 'needs',
   paused: 'waiting',
-  stopped: 'done',
-  done: 'done',
+  stopped: DONE_LANE,
+  done: DONE_LANE,
 };
 
+/** The board lane a chunk sits in: DONE when the hub flags it `terminal`, else its
+ * status's {@link STATUS_LANE} placement. */
+export function chunkLane(chunk: Pick<ChunkSummary, 'status' | 'terminal'>): string {
+  return chunk.terminal === true ? DONE_LANE : STATUS_LANE[chunk.status];
+}
+
 /**
- * The all-time per-lane counts — the hub's per-status counts folded through
- * {@link STATUS_LANE}, the one fold the titlebar and the board columns both render from
- * so they cannot disagree. Every lane is keyed, zero when empty.
+ * The all-time per-lane counts — the one fold the titlebar and the board columns both
+ * render from so they cannot disagree. DONE is the hub's own `terminal` count; every
+ * other lane sums the per-status counts {@link STATUS_LANE} places there. Every lane is
+ * keyed, zero when empty.
  */
 export function laneCounts(counts: ChunkCountsView): ReadonlyMap<string, number> {
   const perLane = new Map<string, number>(LANES.map((lane) => [lane.key, 0]));
   for (const status of Object.keys(STATUS_LANE) as ChunkStatus[]) {
     const lane = STATUS_LANE[status];
+    if (lane === DONE_LANE) continue;
     perLane.set(lane, (perLane.get(lane) ?? 0) + counts[status]);
   }
+  perLane.set(DONE_LANE, counts.terminal);
   return perLane;
 }
 

@@ -18,6 +18,7 @@ from sqlalchemy import update
 from blizzard.foundation.chunk_status import TERMINAL_STATUSES, ChunkStatus
 from blizzard.hub.api import chunks as chunks_api
 from blizzard.hub.api.chunks import BOARD_DONE_FLOOR, BOARD_DONE_WINDOW
+from blizzard.hub.domain.operations.promote import is_promotable
 from blizzard.hub.store import schema as s
 from tests.support import HubHarness, count_queries, default_tenant, seed_project
 from tests.support_chunk_world import (
@@ -165,6 +166,25 @@ def test_chunk_counts_count_all_time_and_exclude_ephemeral_chunks(tmp_path: Path
     assert body["done"] > len(
         [c for c in hub.client.get("/api/chunks?board_window=true").json()["chunks"] if c["status"] == "done"]
     )
+
+
+def test_list_rows_carry_promotable_from_the_shared_promote_predicate(tmp_path: Path) -> None:
+    hub = hub_with_graph(tmp_path)
+    every_branch(hub)
+    mint(hub, "ch_never_promoted", ago=timedelta(hours=1), promote=False)
+    mint(hub, "ch_paused_never_promoted", ago=timedelta(hours=1), promote=False)
+    assert hub.client.post("/api/chunks/ch_paused_never_promoted/pause", json={"by": "op"}).status_code == 202
+
+    rows = {c["chunk_id"]: c for c in hub.client.get("/api/chunks").json()["chunks"]}
+    all_facts = hub.services.chunks.facts.load_all_facts()
+
+    assert (rows["ch_paused_never_promoted"]["status"], rows["ch_paused_never_promoted"]["promotable"]) == (
+        "paused",
+        True,
+    )
+    assert rows["ch_never_promoted"]["promotable"] is True
+    assert not any(rows[chunk_id]["promotable"] for chunk_id in rows if all_facts[chunk_id].promoted)
+    assert all(rows[chunk_id]["promotable"] is is_promotable(all_facts[chunk_id]) for chunk_id in rows)
 
 
 def _hub_with_old_terminal(tmp_path: Path, *, old_terminal: int) -> HubHarness:

@@ -7,11 +7,12 @@ are exercised at the component tier (``tests/test_activity_feed_store.py``).
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from typing import get_args
 
 import pytest
 
 from blizzard.foundation.event_log import EventLogSeverity
-from blizzard.foundation.hub_event_types import ActivityChunkChangeCause
+from blizzard.foundation.hub_event_types import ActivityChunkChangeCause, ActivityRunnerChangeKind, RunnerChangeKind
 from blizzard.hub.domain.chunk.model import ActivityEntry, ActivityFeed, OperationalEvent
 from blizzard.hub.domain.runners.registration import RecordedPause
 
@@ -130,3 +131,21 @@ def test_pause_fact_reshapes_into_a_runner_changed_activity_row(local: bool, pau
             reason="spend cap hit",
         )
     ]
+
+
+def test_the_backfill_emits_exactly_the_activity_runner_change_kinds() -> None:
+    facts = [
+        RecordedPause(
+            key=f"runner_local_pause_facts:{n}",
+            at=_at(n),
+            runner_id="runner-a",
+            local=local,
+            paused=paused,
+            by="o",
+            reason=None,
+        )
+        for n, (local, paused) in enumerate([(False, True), (False, False), (True, True), (True, False)], start=1)
+    ]
+    kinds = {row.kind for row in ActivityFeed.of([], [], facts, limit=200).rows}
+    assert kinds == set(get_args(ActivityRunnerChangeKind))
+    assert set(get_args(ActivityRunnerChangeKind)) <= set(get_args(RunnerChangeKind))

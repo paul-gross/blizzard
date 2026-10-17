@@ -30,13 +30,19 @@ class ChunkNotPromotable(Exception):
         self.status = status
 
 
+def is_promotable(facts: ChunkFacts) -> bool:
+    """Whether a promote would write a promotion: the chunk is not currently promoted and
+    :attr:`ChunkVerb.PROMOTE` is legal from its status."""
+    return not facts.promoted and facts.admits(ChunkVerb.PROMOTE)
+
+
 def promotion_writes(chunk_id: str, facts: ChunkFacts) -> bool:
-    """Whether a promote writes: ``False`` replays one already standing — an already-promoted
-    chunk writes nothing, at any status — and a never-promoted chunk outside
-    :attr:`ChunkVerb.PROMOTE`'s window is refused with :class:`ChunkNotPromotable`."""
+    """Whether a promote writes, as :func:`is_promotable` decides: ``False`` replays one already
+    standing — an already-promoted chunk writes nothing, at any status — and a never-promoted chunk
+    outside :attr:`ChunkVerb.PROMOTE`'s window is refused with :class:`ChunkNotPromotable`."""
     if facts.promoted:
         return False
-    if not facts.admits(ChunkVerb.PROMOTE):
+    if not is_promotable(facts):
         raise ChunkNotPromotable(chunk_id, facts.status())
     return True
 

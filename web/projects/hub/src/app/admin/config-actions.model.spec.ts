@@ -20,11 +20,8 @@ describe('configActions', () => {
     expect(configActions('desktop', true, { retired: true })?.lifecycle).toBe('enable');
   });
 
-  it('offers replace instead of edit for a secret, and holds Retire back while referenced', () => {
-    const actions = configActions('desktop', true, live, {
-      replace: true,
-      referenceCount: 2,
-    });
+  it('offers replace instead of edit for a secret, and holds Retire back while the hub reports it not retirable', () => {
+    const actions = configActions('desktop', true, { ...live, retirable: false }, { replace: true });
     expect(actions).toMatchObject({
       edit: false,
       replace: true,
@@ -34,7 +31,7 @@ describe('configActions', () => {
 
   it('does not hold Enable back for a retired secret', () => {
     expect(
-      configActions('desktop', true, { retired: true }, { replace: true, referenceCount: 1 })?.retireBlocked,
+      configActions('desktop', true, { retired: true, retirable: true }, { replace: true })?.retireBlocked,
     ).toBeNull();
   });
 });

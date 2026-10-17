@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
-from blizzard.foundation.leases import LeaseState
+from blizzard.foundation.leases import LeaseDisplayStatus, LeaseState
 
 
 class LeaseView(BaseModel):
@@ -31,6 +31,10 @@ class LeaseView(BaseModel):
     created_at: str
     last_heartbeat_at: str | None
     state: LeaseState
+    #: What the panel shows: the chunk's open takeover, escalation, or ask when one outranks ``state``.
+    display_status: LeaseDisplayStatus
+    #: Whether a closed lease ended healthily (``transitioned``); ``False`` for an active one.
+    closure_healthy: bool
     closed_at: str | None
     closure_reason: str | None
     #: How long a running lease may go without a heartbeat before it reads ``stale``.

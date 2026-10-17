@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 
-import { type ChunkCountsView, type ChunkSummary, compactRef, LANES, STATUS_LANE, laneCounts, KitAsyncState, type KitAsyncStateValue, KitPanel, KitPanelHeader, KitSkeleton } from 'fleet';
+import { type ChunkCountsView, type ChunkSummary, chunkLane, compactRef, DONE_LANE, LANES, laneCounts, KitAsyncState, type KitAsyncStateValue, KitPanel, KitPanelHeader, KitSkeleton } from 'fleet';
 import type { BoardCard } from '../board-card/board-card';
 import { BoardColumn, type BoardLaneMove, type BoardReposition } from './board-column';
 
@@ -90,10 +90,12 @@ export class BoardShell {
     // a second read — the blocker is itself a chunk on this board.
     const statusById = new Map(this.chunks().map((c) => [c.chunk_id, c.status]));
     for (const chunk of this.chunks()) {
-      grouped.get(STATUS_LANE[chunk.status])?.push({
+      grouped.get(chunkLane(chunk))?.push({
         chunkId: chunk.chunk_id,
         shortId: compactRef(chunk.chunk_id),
         status: chunk.status,
+        terminal: chunk.terminal ?? false,
+        promotable: chunk.promotable ?? false,
         node: chunk.current_node_name ?? chunk.current_node_id ?? '—',
         nodeId: chunk.current_node_id ?? '',
         // Only labeled pointers show — a pointer naming no configured source has a
@@ -146,7 +148,7 @@ export class BoardShell {
       const ms = card.completedAt === null ? null : Date.parse(card.completedAt);
       return ms === null || Number.isNaN(ms) ? Number.NEGATIVE_INFINITY : ms;
     };
-    grouped.get('done')?.sort((a, b) => {
+    grouped.get(DONE_LANE)?.sort((a, b) => {
       const [left, right] = [completedRank(a), completedRank(b)];
       if (left === right) return 0;
       return left > right ? -1 : 1;

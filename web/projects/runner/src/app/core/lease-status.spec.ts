@@ -17,6 +17,8 @@ function lease(overrides: Partial<runnerApi.LeaseView> = {}): runnerApi.LeaseVie
     created_at: '2026-07-16T11:00:00.000Z',
     last_heartbeat_at: '2026-07-16T11:59:00.000Z',
     state: 'running',
+    display_status: 'running',
+    closure_healthy: false,
     closed_at: null,
     closure_reason: null,
     stale_after_seconds: 3600,
@@ -34,8 +36,8 @@ describe('deriveLeaseStatus', () => {
     expect(deriveLeaseStatus(lease({ state: 'exited' }))).toEqual({ label: 'EXITED', tone: 'idle' });
   });
 
-  it('reads a transitioned closure as done and any other closure dim, naming its reason', () => {
-    expect(deriveLeaseStatus(lease({ state: 'closed', closure_reason: 'transitioned' }))).toEqual({
+  it('reads a healthy closure as done and any other closure dim, naming its reason', () => {
+    expect(deriveLeaseStatus(lease({ state: 'closed', closure_reason: 'transitioned', closure_healthy: true }))).toEqual({
       label: 'TRANSITIONED',
       tone: 'done',
     });

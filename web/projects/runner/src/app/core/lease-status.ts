@@ -9,11 +9,11 @@ export interface LeaseStatus {
 }
 
 /**
- * The lease-state → label/tone fold, read off the server-derived `state` alone.
- * The machine panel's lease row renders it directly; `deriveMachineChunkStatus`
- * (`board/chunk-list/chunk-status.ts`) falls through to it once no chunk-level
- * human fact outranks the lease. It lives in the kernel because both the
- * `machine` and `board` units read it and `machine` may not import `board`.
+ * The lease-state → label/tone map over the wire's server-derived `state` and
+ * `closure_healthy`. The machine panel's lease row renders it directly;
+ * `deriveMachineChunkStatus` (`board/chunk-list/chunk-status.ts`) falls through to it
+ * once no chunk-level human fact outranks the lease. It lives in the kernel because
+ * both the `machine` and `board` units read it and `machine` may not import `board`.
  */
 export function deriveLeaseStatus(lease: runnerApi.LeaseView): LeaseStatus {
   switch (lease.state) {
@@ -30,9 +30,9 @@ export function deriveLeaseStatus(lease: runnerApi.LeaseView): LeaseStatus {
     case 'exited':
       return { label: 'EXITED', tone: 'idle' };
     case 'closed':
-      // `transitioned` is the one healthy closure (the node step completed and
-      // the chunk moved on) — the rest (`failed`/`reaped`/`released`/…) read dim.
-      return lease.closure_reason === runnerApi.LeaseClosureReason.TRANSITIONED
+      // A healthy closure (the node step completed and the chunk moved on) reads done;
+      // the rest (`failed`/`reaped`/`released`/…) read dim.
+      return lease.closure_healthy
         ? { label: 'TRANSITIONED', tone: 'done' }
         : { label: `CLOSED · ${(lease.closure_reason ?? 'unknown').toUpperCase()}`, tone: 'idle' };
   }

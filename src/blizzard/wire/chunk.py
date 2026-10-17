@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field, model_validator
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.chunk_migration import MigrationMode
-from blizzard.foundation.chunk_status import ChunkStatus
+from blizzard.foundation.chunk_status import ChunkDeleteRefusal, ChunkStatus
 from blizzard.foundation.migration_source import MigrationSource
 from blizzard.foundation.work_items import WorkItemPriority
 from blizzard.wire.decision import DecisionView
@@ -168,6 +168,8 @@ class ChunkSummary(BaseModel):
     status: ChunkStatus
     # The chunk's status is terminal.
     terminal: bool = False
+    # A promote would write a promotion: not currently promoted, and the verb is legal from its status.
+    promotable: bool = False
     current_node_id: str | None
     current_node_name: str | None = None
     work_refs: list[WorkRefView] = []
@@ -575,6 +577,10 @@ class ChunkDetail(BaseModel):
     completable: bool = False
     #: The chunk's status admits deletion (it has never been claimed).
     deletable: bool = False
+    #: Why a delete would be refused — its status first, then a standing dependent; ``None`` when it would not.
+    delete_refusal: ChunkDeleteRefusal | None = None
+    #: A promote would write a promotion: not currently promoted, and the verb is legal from its status.
+    promotable: bool = False
     #: The chunk's graph may be re-pinned: unclaimed and never moved off its graph's start.
     graph_editable: bool = False
     #: The chunk's status is terminal.

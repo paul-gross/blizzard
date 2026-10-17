@@ -26,6 +26,8 @@ function lease(overrides: Partial<runnerApi.LeaseView> = {}): runnerApi.LeaseVie
     created_at: '2026-07-16T11:00:00.000Z',
     last_heartbeat_at: '2026-07-16T11:59:00.000Z',
     state: 'running',
+    display_status: 'running',
+    closure_healthy: false,
     closed_at: null,
     closure_reason: null,
     stale_after_seconds: 3600,
@@ -113,20 +115,21 @@ describe('chunksEmptyText', () => {
 describe('machineChunkRows', () => {
   it('groups leases by chunk, newest lease first, attempts oldest → newest', () => {
     const a2 = lease({ lease_id: 'a2', chunk_id: 'ch_a', epoch: 2 });
-    const b1 = lease({ lease_id: 'b1', chunk_id: 'ch_b', state: 'stale' });
-    const a1 = lease({ lease_id: 'a1', chunk_id: 'ch_a', state: 'closed' });
-    const rows = machineChunkRows([a2, b1, a1], undefined);
+    const b1 = lease({ lease_id: 'b1', chunk_id: 'ch_b', state: 'stale', display_status: 'stale' });
+    const a1 = lease({ lease_id: 'a1', chunk_id: 'ch_a', state: 'closed', display_status: 'closed' });
+    const rows = machineChunkRows([a2, b1, a1]);
     expect(rows).toEqual([
       { lease: a2, leases: [a1, a2], status: { label: 'RUNNING', tone: 'running' } },
       { lease: b1, leases: [b1], status: { label: 'STALE', tone: 'stale' } },
     ]);
   });
 
-  it('folds the dashboard escalations, takeovers, and asks into each status', () => {
-    const rows = machineChunkRows(
-      [lease({ chunk_id: 'ch_esc' }), lease({ chunk_id: 'ch_tko' }), lease({ chunk_id: 'ch_ask' })],
-      dashboard({ escalations: [escalation('ch_esc')], takeoverChunkIds: ['ch_tko'], askChunkIds: ['ch_ask'] }),
-    );
+  it("reads each lease's wire display_status into its status", () => {
+    const rows = machineChunkRows([
+      lease({ chunk_id: 'ch_esc', display_status: 'needs-human' }),
+      lease({ chunk_id: 'ch_tko', display_status: 'human-in-session' }),
+      lease({ chunk_id: 'ch_ask', display_status: 'waiting-ask' }),
+    ]);
     expect(rows.map((r) => r.status)).toEqual([
       { label: 'NEEDS HUMAN', tone: 'needs' },
       { label: 'HUMAN IN SESSION', tone: 'takeover' },
@@ -135,14 +138,18 @@ describe('machineChunkRows', () => {
   });
 
   it('maps no leases to no rows', () => {
-    expect(machineChunkRows([], dashboard({}))).toEqual([]);
+    expect(machineChunkRows([])).toEqual([]);
   });
 
   it('reads a closed lease whose chunk transitioned as done', () => {
-    const [only] = machineChunkRows(
-      [lease({ state: 'closed', closure_reason: runnerApi.LeaseClosureReason.TRANSITIONED })],
-      undefined,
-    );
+    const [only] = machineChunkRows([
+      lease({
+        state: 'closed',
+        display_status: 'closed',
+        closure_reason: runnerApi.LeaseClosureReason.TRANSITIONED,
+        closure_healthy: true,
+      }),
+    ]);
     expect(only.status.tone).toBe('done');
   });
 });

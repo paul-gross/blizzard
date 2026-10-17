@@ -146,6 +146,9 @@ def test_list_graphs_over_retired_and_superseded_mints_renders_todays_shape(tmp_
     assert by_id[superseded_id]["effective"] is False
     assert by_id[newest_id]["retired"] is False
     assert by_id[newest_id]["effective"] is True
+    assert by_id[old_id]["lifecycle"] == "retired"
+    assert by_id[superseded_id]["lifecycle"] == "superseded"
+    assert by_id[newest_id]["lifecycle"] == "effective"
 
 
 def test_list_graphs_query_count_is_independent_of_graph_count(tmp_path: Path) -> None:
