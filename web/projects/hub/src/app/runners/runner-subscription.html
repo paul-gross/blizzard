@@ -1,0 +1,10 @@
+<span class="name" data-testid="runner-subscription-name">{{ name() }}</span>
+@if (unrostered()) {
+  <fleet-kit-badge
+    data-testid="runner-subscription-unrostered"
+    variant="soft"
+    tone="needs"
+    [title]="'The host roster carries no subscription ' + name() + '.'"
+    >UNROSTERED</fleet-kit-badge
+  >
+}

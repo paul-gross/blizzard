@@ -1,10 +1,10 @@
 import { NgTemplateOutlet } from '@angular/common';
-import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 
 import { KitAsyncState, type KitAsyncStateValue, KitBeacon, KitMasterDetail, KitPanel, KitSelectRow, RunnerConnection } from 'fleet';
-import type { FleetList, FleetListCard, FleetSelection } from './fleet-page.model';
-import { FleetRunnerRow } from './fleet-runner-row';
+import type { FleetList, FleetSelection } from './fleet-page.model';
 import { HostDetail } from './host-detail';
+import { HostlessRunnerDetail } from './hostless-runner-detail';
 import type { HostVerbEvent, HostVerbsVm } from './host-verbs.model';
 import { NO_HOST_VERBS } from './host-verbs.model';
 import type { RunnerRow } from './runner-rows';
@@ -17,7 +17,7 @@ import type { RunnerRow } from './runner-rows';
 @Component({
   selector: 'app-fleet-view',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FleetRunnerRow, HostDetail, KitAsyncState, KitBeacon, KitMasterDetail, KitPanel, KitSelectRow, NgTemplateOutlet],
+  imports: [HostDetail, HostlessRunnerDetail, KitAsyncState, KitBeacon, KitMasterDetail, KitPanel, KitSelectRow, NgTemplateOutlet],
   templateUrl: './fleet-view.html',
   styleUrl: './fleet-view.css',
 })
@@ -37,9 +37,18 @@ export class FleetView {
 
   protected readonly connection = RunnerConnection;
 
-  protected agentsLabel(card: FleetListCard): string {
-    return card.agents === null ? '' : `${card.agents} ${card.agents === 1 ? 'agent' : 'agents'}`;
-  }
+  /** The detail panel's header: what kind of thing is open. */
+  protected readonly detailLabel = computed(() => {
+    const sel = this.selection();
+    if (sel === null) return null;
+    return sel.kind === 'host' ? 'Host' : sel.kind === 'runner' ? 'Runner · no host' : 'Fleet';
+  });
+
+  /** The detail panel's trailing header value: the open card's short ref. */
+  protected readonly detailRef = computed(() => {
+    const sel = this.selection();
+    return sel === null || sel.kind === 'not-found' ? null : sel.ref;
+  });
 
   protected isPausePending(row: RunnerRow): boolean {
     return this.pendingRunnerIds().includes(row.runner_id);

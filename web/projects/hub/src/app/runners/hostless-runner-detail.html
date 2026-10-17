@@ -1,0 +1,60 @@
+<div class="hd" data-testid="fleet-detail-title">
+  @if (detail().row.connection === connection.NEVER_CONNECTED) {
+    <span class="dot never" aria-hidden="true"></span>
+  } @else {
+    <fleet-kit-beacon
+      class="dot"
+      aria-hidden="true"
+      [active]="detail().row.online || detail().row.connection === connection.OFFLINE"
+      [tone]="detail().row.online ? 'green' : 'red'"
+      [blink]="detail().row.online ? 'pulse' : 'step'"
+    />
+  }
+  <h2 class="name" data-testid="fleet-detail-name">{{ detail().row.runner_name }}</h2>
+  <span class="ref" data-testid="fleet-detail-ref" [title]="detail().row.runner_id">{{ detail().ref }}</span>
+  <fleet-kit-badge class="state" data-testid="fleet-detail-state" variant="text" [tone]="state().tone">{{
+    state().label
+  }}</fleet-kit-badge>
+  <span class="report" data-testid="fleet-detail-report">{{
+    detail().row.connection === connection.NEVER_CONNECTED ? 'stands alone' : seenLabel(detail().row) + ' · stands alone'
+  }}</span>
+</div>
+<fleet-kit-panel class="sec" label="Workspace" [count]="slotsLabel()" [bodyScroll]="false" data-testid="fleet-runner-workspace">
+  <div class="sec-bd">
+    <fleet-kit-fact-list [rows]="detail().facts" />
+    @if (slotsLabel() !== null) {
+      <fleet-kit-slot-bar
+        class="slot-bar"
+        data-testid="fleet-runner-slot-bar"
+        [used]="detail().row.used"
+        [total]="detail().row.env_capacity ?? 0"
+      />
+    }
+  </div>
+</fleet-kit-panel>
+<fleet-kit-panel class="sec" label="Subscription usage" [bodyScroll]="false" data-testid="fleet-subscriptions">
+  <fleet-kit-async-state
+    [state]="detail().row.subscriptionPaces.length > 0 ? 'ready' : 'empty'"
+    placement="inline"
+    emptyText="NO SUBSCRIPTIONS REPORTED"
+    emptyTestid="fleet-subscriptions-empty"
+  >
+    <div class="sec-bd">
+      <fleet-subscription-pace-group
+        class="subs"
+        data-testid="fleet-runner-subscription-groups"
+        [subscriptionPaces]="detail().row.subscriptionPaces"
+      />
+    </div>
+  </fleet-kit-async-state>
+</fleet-kit-panel>
+<fleet-kit-panel class="sec" label="Runner" [bodyScroll]="false" data-testid="fleet-runner-detail">
+  <div role="list">
+    <app-fleet-runner-row
+      [row]="detail().row"
+      [canPause]="canPause()"
+      [pausePending]="pausePending()"
+      (togglePause)="togglePause.emit($event)"
+    />
+  </div>
+</fleet-kit-panel>

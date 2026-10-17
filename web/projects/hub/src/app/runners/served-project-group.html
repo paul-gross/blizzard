@@ -1,6 +1,8 @@
 @if (bindings(); as lines) {
   <div class="served" data-testid="runner-bindings">
-    <span class="served-label">Binds:</span>
+    @if (labelled()) {
+      <span class="served-label">Binds:</span>
+    }
     <ul class="bindings">
       @if (unassigned()) {
         <li>
@@ -48,21 +50,14 @@
   @if (subscription(); as name) {
     <div class="served" data-testid="runner-subscription">
       <span class="served-label">Spends:</span>
-      <span class="b-sub" data-testid="runner-subscription-name">{{ name }}</span>
-      @if (subscriptionUnrostered()) {
-        <fleet-kit-badge
-          data-testid="runner-subscription-unrostered"
-          variant="soft"
-          tone="needs"
-          [title]="'The host roster carries no subscription ' + name + '.'"
-          >UNROSTERED</fleet-kit-badge
-        >
-      }
+      <app-runner-subscription [name]="name" [unrostered]="subscriptionUnrostered()" />
     </div>
   }
 } @else {
   <div class="served" data-testid="runner-served">
-    <span class="served-label">Serves:</span>
+    @if (labelled()) {
+      <span class="served-label">Serves:</span>
+    }
     <ul class="served-list">
       @if (unassigned()) {
         <li>

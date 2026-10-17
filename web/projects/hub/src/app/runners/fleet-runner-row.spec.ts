@@ -81,48 +81,49 @@ describe('FleetRunnerRow', () => {
     expect(offline.el.querySelector('fleet-kit-beacon .beacon')?.classList.contains('step')).toBe(true);
   });
 
-  it('renders a slot bar for a host-less runner’s reported capacity, with used filled of total', async () => {
+  it('leaves the host-less runner’s slot bar and pace bars to its detail pane', async () => {
     const { el } = await render(row('rn_cap', { env_capacity: 4, used: 2 }));
 
-    const bar = el.querySelector('[data-testid="fleet-runner-slot-bar"]');
-    expect(bar?.querySelectorAll('.cell')).toHaveLength(4);
-    expect(bar?.querySelectorAll('.cell.on')).toHaveLength(2);
-    expect(bar?.querySelector('[data-testid="slot-bar-label"]')?.textContent?.trim()).toBe('2/4 slots');
+    expect(el.querySelector('[data-testid="fleet-runner-slot-bar"]')).toBeNull();
+    expect(el.querySelector('[data-testid="fleet-runner-subscription-groups"]')).toBeNull();
   });
 
-  it('omits the slot bar for a null capacity and for a hosted runner', async () => {
-    const nullCap = await render(row('rn_nocap', { env_capacity: null }));
-    expect(nullCap.el.querySelector('[data-testid="fleet-runner-slot-bar"]')).toBeNull();
-
-    const hosted = await render(row('rn_hosted', { env_capacity: 4 }), { hosted: true });
-    expect(hosted.el.querySelector('[data-testid="fleet-runner-slot-bar"]')).toBeNull();
-  });
-
-  it('renders per-subscription pace bars for a host-less runner, none when it has no subscription', async () => {
-    const paced = await render(
-      row('rn_paced', {
-        subscriptionPaces: [
-          {
-            slug: 'anthropic-default',
-            name: 'Anthropic (default)',
-            paceBars: [
-              { window: '5h', utilizationPct: 40, elapsedPct: 20 },
-              { window: '7d', utilizationPct: 70, elapsedPct: 55 },
-            ],
-            condition: null,
-            sampledAt: NOW,
-            refreshedLabel: 'refreshed 0s ago',
-            freshness: 'fresh',
-            missReason: null,
-          },
-        ],
+  it('heads the row with its harnesses and agents, and says none for an empty binds line', async () => {
+    const { el } = await render(
+      row('rn_sum', {
+        capabilities: [{ harness_id: 'claude-code', available: true }],
+        bindingLines: [{ project: 'Blizzard', workspaceId: 'ws_a', agents: 3, agentsInUse: 1, unreported: false }],
       }),
+      { hosted: true },
     );
-    const bars = paced.el.querySelectorAll('[data-testid="fleet-runner-subscription-groups"] [data-testid="runner-pace-bar"]');
-    expect([...bars].map((b) => b.getAttribute('data-pace-window'))).toEqual(['5h', '7d']);
+    expect(el.querySelector('[data-testid="fleet-runner-summary"]')?.textContent).toMatch(/3 agents · 1 busy$/);
 
-    const bare = await render(row('rn_bare'));
-    expect(bare.el.querySelector('[data-testid="fleet-runner-subscription-groups"]')).toBeNull();
+    const empty = await render(row('rn_empty'), { hosted: true });
+    expect(empty.el.querySelector('.none-inline')?.textContent).toBe('none');
+  });
+
+  it('names a hosted runner’s subscription, flagged when its host’s roster lacks it, and none for a runner with no host', async () => {
+    const { el } = await render(row('rn_spend', { subscriptionName: 'Claude Max', subscription_unrostered: true }), { hosted: true });
+    const spends = el.querySelector('[data-testid="runner-subscription"]');
+    expect(spends?.querySelector('[data-testid="runner-subscription-name"]')?.textContent?.trim()).toBe('Claude Max');
+    expect(spends?.querySelector('[data-testid="runner-subscription-unrostered"]')?.textContent?.trim()).toBe('UNROSTERED');
+
+    const hostless = await render(row('rn_alone', { subscriptionName: 'Claude Max' }));
+    expect(hostless.el.querySelector('[data-testid="runner-subscription"]')).toBeNull();
+  });
+
+  it('states a live runner as working or idle by its claims, an offline one as such, and says when it holds no chunk', async () => {
+    const claim = { chunkId: 'ch_1', shortId: 'C-0001', node: 'build', status: 'running' };
+    const working = await render(row('rn_busy', { claims: [claim] } as unknown as Partial<RunnerRow>));
+    expect(working.el.querySelector('[data-testid="fleet-runner-claims"]')?.textContent).toContain('C-0001');
+    expect(working.el.querySelector('.badges')?.textContent?.trim()).toBe('WORKING');
+
+    const idle = await render(row('rn_idle'));
+    expect(idle.el.querySelector('.badges')?.textContent?.trim()).toBe('IDLE');
+    expect(idle.el.querySelector('[data-testid="fleet-runner-no-claims"]')?.textContent?.trim()).toBe('HOLDS NO CHUNKS');
+
+    const offline = await render(row('rn_gone', { online: false, connection: 'offline' }));
+    expect(offline.el.querySelector('.badges')?.textContent?.trim()).toBe('OFFLINE');
   });
 
   it('renders a hosted runner’s binding lines', async () => {

@@ -3,9 +3,12 @@ import {
   RunnerConnection,
   type RunnerRegistryView,
   type SubscriptionPace,
+  type Tone,
   type WorkspaceRow,
+  ageMs,
   compactRef,
   formatAbsolute,
+  formatAgo,
   formatSeenAgo,
   hostSubscriptionPaces,
   hostWorkspaceRows,
@@ -75,6 +78,9 @@ export interface HostCard {
   readonly addedAt: string;
   readonly addedBy: string | null;
   readonly lastSeenLabel: string;
+  /** The bare age of the host's last report ("4s ago"); `null` when no age can be read — it
+   * never reported, or its instant is unreadable or ahead of this clock. */
+  readonly reportedAgo: string | null;
   /** The live chunks each workspace holds, by workspace id; a workspace holding none is absent. */
   readonly heldChunks: ReadonlyMap<string, readonly HeldChunk[]>;
 }
@@ -176,6 +182,19 @@ function workspaceHeld(
   return held;
 }
 
+/** A host's or runner's connection as a detail title bar states it, in its tone. */
+export function connectionState(online: boolean, connection: RunnerConnection): { readonly label: string; readonly tone: Tone } {
+  if (online) return { label: 'ONLINE', tone: 'done' };
+  return connection === RunnerConnection.NEVER_CONNECTED
+    ? { label: 'NEVER CONNECTED', tone: 'idle' }
+    : { label: 'OFFLINE', tone: 'stale' };
+}
+
+function reportedAgo(lastSeenAt: string | null | undefined, nowMs: number): string | null {
+  const delta = ageMs(lastSeenAt, nowMs);
+  return delta === null ? null : formatAgo(delta);
+}
+
 /**
  * Each host folded to its card, in the hosts read's order. `runners` is the whole registry,
  * unlensed, so a card's in-use counts and spender names never shrink under the project lens;
@@ -212,6 +231,7 @@ export function foldHostCards(
         addedAt: host.added_at,
         addedBy: host.added_by ?? null,
         lastSeenLabel: host.last_seen_at ? formatAbsolute(host.last_seen_at) : 'never',
+        reportedAgo: reportedAgo(host.last_seen_at, nowMs),
         heldChunks: workspaceHeld(hostRunners, chunks),
       };
     });

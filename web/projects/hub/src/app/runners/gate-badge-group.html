@@ -1,6 +1,8 @@
 @if (gates().length > 0) {
   <div class="gates" data-testid="runner-gates">
-    <span class="gates-label">Gates:</span>
+    @if (labelled()) {
+      <span class="gates-label">Gates:</span>
+    }
     <ul class="gate-list">
       @for (gate of gates(); track gate) {
         <li>

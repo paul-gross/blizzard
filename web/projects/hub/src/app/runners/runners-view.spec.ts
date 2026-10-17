@@ -448,6 +448,7 @@ describe('RunnersView host cards', () => {
     addedAt: '2026-01-01T00:00:00Z',
     addedBy: null,
     lastSeenLabel: 'never',
+    reportedAgo: null,
     heldChunks: new Map(),
     workspaces: [
       { workspaceId: 'ws-1', capacity: 3, inUse: 2, flag: null, environments: [] },
