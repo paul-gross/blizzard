@@ -50,6 +50,12 @@ class ScopeDeclaration:
     def create(self, ctx: ChangeContext, *, at: datetime) -> tuple[Scope, ConfigChange]:
         return Scope.new(ScopeSlug.parse(self.name), self.description, ctx, project_id=self.project_id, at=at)
 
+    def edit_record(
+        self, record: DeclarableRecord, ctx: ChangeContext, *, at: datetime
+    ) -> tuple[Scope, ConfigChange] | None:
+        assert isinstance(record, Scope)
+        return record.edit(self.edit, ctx, if_match=None, at=at)
+
     def settle(self, record: DeclarableRecord, refs: DeclaredReferences, ctx: ChangeContext, *, at: datetime) -> None:
         return None
 
@@ -108,6 +114,12 @@ class RoutineDeclaration:
             ctx=ctx,
             at=at,
         )
+
+    def edit_record(
+        self, record: DeclarableRecord, ctx: ChangeContext, *, at: datetime
+    ) -> tuple[Routine, ConfigChange] | None:
+        assert isinstance(record, Routine)
+        return record.edit(self.edit, ctx, if_match=None, at=at)
 
     def settle(
         self, record: DeclarableRecord, refs: DeclaredReferences, ctx: ChangeContext, *, at: datetime
