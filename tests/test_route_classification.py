@@ -121,6 +121,7 @@ _HUMAN: dict[tuple[str, str], Permission] = {
     ("GET", "/api/runs/{chunk_id}"): Permission.FLEET_VIEW,
     # Findings and garden proposals — read-only routes, both Permission.FLEET_VIEW.
     ("GET", "/api/findings"): Permission.FLEET_VIEW,
+    ("GET", "/api/findings/classes"): Permission.FLEET_VIEW,
     ("GET", "/api/findings/{finding_id}"): Permission.FLEET_VIEW,
     ("GET", "/api/garden-proposals"): Permission.FLEET_VIEW,
     ("GET", "/api/garden-proposals/{proposal_id}"): Permission.FLEET_VIEW,
@@ -287,6 +288,7 @@ _HUMAN: dict[tuple[str, str], Permission] = {
     ("POST", "/api/projects/{project}/routines"): Permission.GRAPH_EDIT,
     ("GET", "/api/projects/{project}/routines"): Permission.FLEET_VIEW,
     ("GET", "/api/projects/{project}/findings"): Permission.FLEET_VIEW,
+    ("GET", "/api/projects/{project}/findings/classes"): Permission.FLEET_VIEW,
     ("GET", "/api/projects/{project}/garden-proposals"): Permission.FLEET_VIEW,
     ("POST", "/api/projects/{project}/garden-proposals"): Permission.CHUNK_CONTROL,
     ("GET", "/api/projects/{project}/runs"): Permission.FLEET_VIEW,

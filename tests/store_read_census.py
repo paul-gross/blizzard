@@ -2371,6 +2371,12 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadFindingRepository, "list_page"): lambda w: w.hub.services.findings.list_page(
         project_id=None, routine_name=None, scope_slug=None, limit=50
     ),
+    (IReadFindingRepository, "distinct_classes"): lambda w: (
+        w.hub.services.findings.distinct_classes(project_id=None, routine_name=None, scope_slug=None),
+        w.hub.services.findings.distinct_classes(
+            project_id=w.project_id, routine_name="gardening", scope_slug="blizzard"
+        ),
+    ),
     (IReadFindingRepository, "count_by_class"): lambda w: w.hub.services.findings.count_by_class(
         w.project_id, "gardening", "stale-docstring"
     ),
