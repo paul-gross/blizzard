@@ -17,7 +17,7 @@ from pathlib import Path
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import domain_model
-from blizzard.hub.documents.codec import YAML_CODEC, ConfigDecodeError
+from blizzard.hub.documents.codec import ConfigDecodeError, IConfigCodec
 from blizzard.hub.domain.graph.authoring import GraphMintService
 from blizzard.hub.domain.graph.model import GraphDoc, GraphParseError, IReadGraphRepository, IWriteGraphRepository
 from blizzard.hub.domain.graph.validation import GraphValidationError
@@ -55,6 +55,8 @@ class GraphReconciliation:
 
     mint_service: GraphMintService
     graphs: IReadGraphRepository
+    #: The YAML binding a definition is stored and re-read through.
+    yaml: IConfigCodec
     #: Overrides the packaged set, defaulting to :attr:`~blizzard.hub.graphs.PackagedGraphs.paths`.
     paths: list[Path] | None = None
 
@@ -72,7 +74,7 @@ class GraphReconciliation:
         try:
             packaged = GraphFile(path)
             doc = packaged.doc
-            definition_yaml = packaged.inlined_yaml
+            definition_yaml = packaged.inlined_yaml(self.yaml)
         except (OSError, ValueError) as exc:
             # ValueError covers GraphParseError (its base) and the loader's "not a mapping".
             _log.warning("packaged graph failed to load", path=str(path), error=str(exc))
@@ -102,7 +104,7 @@ class GraphReconciliation:
         if stored is None:
             return None
         try:
-            return GraphDoc.of(YAML_CODEC.decode(stored.encode("utf-8")))
+            return GraphDoc.of(self.yaml.decode(stored.encode("utf-8")))
         except (ConfigDecodeError, GraphParseError):
             _log.warning("stored graph definition no longer parses; treating it as changed", graph=name)
             return None
@@ -136,10 +138,10 @@ def reconcile_open_tenants(
     return reports
 
 
-def packaged_minter(clock: IClock) -> Callable[[IWriteGraphRepository], list[GraphSyncOutcome]]:
+def packaged_minter(clock: IClock, yaml: IConfigCodec) -> Callable[[IWriteGraphRepository], list[GraphSyncOutcome]]:
     """Reconciles the packaged set into the graphs it is handed — a new tenant's, on its creation's transaction."""
 
     def mint(graphs: IWriteGraphRepository) -> list[GraphSyncOutcome]:
-        return GraphReconciliation(GraphMintService(graphs=graphs, clock=clock), graphs).outcomes()
+        return GraphReconciliation(GraphMintService(graphs=graphs, clock=clock), graphs, yaml).outcomes()
 
     return mint

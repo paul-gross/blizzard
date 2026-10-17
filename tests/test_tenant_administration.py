@@ -17,6 +17,7 @@ from blizzard.auth_core import Permission, Role
 from blizzard.foundation.store.utc import as_utc
 from blizzard.hub.auth.errors import RepoErrorFactory
 from blizzard.hub.auth.internal.identity_transaction import IdentityTransactions
+from blizzard.hub.documents import YAML_CODEC
 from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.domain.graph.model import IWriteGraphRepository
 from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
@@ -196,7 +197,7 @@ def test_an_unknown_admin_creates_nothing_though_the_graphs_were_already_minted(
 
 
 def test_a_creation_interrupted_after_its_mints_leaves_no_partial_tenant(hub: HubHarness) -> None:
-    mint = packaged_minter(hub.clock)
+    mint = packaged_minter(hub.clock, YAML_CODEC)
     minted: list[int] = []
 
     def mint_then_fail(graphs: IWriteGraphRepository) -> None:

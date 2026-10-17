@@ -61,6 +61,8 @@ from blizzard.hub.delivery.internal.hub_command_runner import SubprocessHubComma
 from blizzard.hub.delivery.internal.hub_workdir import FilesystemHubWorkdir
 from blizzard.hub.delivery.marker_auth import MarkerAuthority
 from blizzard.hub.delivery.workdir import IHubWorkdir
+from blizzard.hub.documents import YAML_CODEC
+from blizzard.hub.documents.codec import IConfigCodec
 from blizzard.hub.domain.chunk.dependencies import DependencyService
 from blizzard.hub.domain.chunk.event_log import EventLogService
 from blizzard.hub.domain.chunk.ingest import IngestService
@@ -265,6 +267,8 @@ class TenantServices:
     #: above is the same store's read Protocol.
     transcript_ingest: TranscriptIngestService
     graph_mint: GraphMintService
+    #: The YAML binding of the config codec a graph definition is decoded and stored through.
+    graph_yaml: IConfigCodec
     graph_lifecycle: GraphLifecycleService
     questions: QuestionService
     queue: QueueService
@@ -837,6 +841,7 @@ class TenantServiceParts:
     hub_scoped_reads: HubScopedReads
     users: IReadUserRepository
     secret_cipher: ISecretCipher
+    graph_yaml: IConfigCodec
     work_sources: WorkSourceRegistryFactory
     marker_authority: MarkerAuthority
     system_artifacts: PackagedSystemArtifacts
@@ -1055,6 +1060,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
             store=transcript_store, retired=retired, clock=clock, caps=transcript_caps
         ),
         graph_mint=graph_mint,
+        graph_yaml=parts.graph_yaml,
         graph_lifecycle=GraphLifecycleService(graphs=graph_store, clock=clock),
         questions=QuestionService(questions=chunk_questions, clock=clock),
         queue=QueueService(queue=chunk_queue, record=chunk_record, clock=clock),
@@ -1234,6 +1240,7 @@ def build_services(
         hub_scoped_reads=core.hub_scoped_reads,
         users=core.users,
         secret_cipher=secret_cipher(secret_keys),
+        graph_yaml=YAML_CODEC,
         work_sources=work_sources,
         marker_authority=marker_authority,
         system_artifacts=system_artifacts,
@@ -1402,7 +1409,7 @@ def build_services(
     )
     tenant_admin = TenantAdministration(
         tenants=TenantAdministrationStore(store_connections, identity_transactions),
-        mint_packaged=packaged_minter(clock),
+        mint_packaged=packaged_minter(clock, YAML_CODEC),
         changed=open_tenants.refresh,
         clock=clock,
     )

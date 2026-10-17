@@ -13,6 +13,7 @@ from pathlib import Path
 
 import pytest
 
+from blizzard.hub.documents import YAML_CODEC
 from blizzard.hub.graphs import GraphFile
 from tests.fleet_launchers import run_hub
 from tests.support import free_port
@@ -340,7 +341,9 @@ def _seed_graph_yamls() -> dict[str, str]:
     the day it lands — inlined because ``POST /graphs`` resolves no file reference of its
     own, and a shipped graph may carry one."""
     seed_dir = Path(__file__).resolve().parents[2] / "src" / "blizzard" / "hub" / "graphs"
-    yamls = {path.parent.name: GraphFile(path).inlined_yaml for path in sorted(seed_dir.glob("*/graph.yaml"))}
+    yamls = {
+        path.parent.name: GraphFile(path).inlined_yaml(YAML_CODEC) for path in sorted(seed_dir.glob("*/graph.yaml"))
+    }
     assert yamls, f"no shipped seed graphs found under {seed_dir}"
     return yamls
 

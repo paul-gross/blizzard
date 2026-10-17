@@ -17,6 +17,7 @@ import pytest
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.hub.delivery.command_runner import CommandResult
+from blizzard.hub.documents import YAML_CODEC
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.ports.artifacts import IWriteChunkArtifactsRepository
 from blizzard.hub.domain.chunk.ports.escalations import IWriteChunkEscalationsRepository
@@ -56,7 +57,7 @@ def _mint_and_claim(hub: HubHarness) -> tuple[str, dict[str, str]]:
     ``PATCH /chunks/{id}`` (legal while the chunk is still ``not_ready``) before claiming
     a route, so every node id resolved off the mint response is the one the claimed
     chunk's pin actually recognizes."""
-    definition_yaml = PACKAGED.named("advanced-development-workflow").inlined_yaml
+    definition_yaml = PACKAGED.named("advanced-development-workflow").inlined_yaml(YAML_CODEC)
     minted = hub.client.post("/api/graphs", json={"definition_yaml": definition_yaml})
     assert minted.status_code == 201, minted.text
     graph_id = minted.json()["graph_id"]

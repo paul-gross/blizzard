@@ -12,6 +12,7 @@ from pathlib import Path
 import httpx
 import pytest
 
+from blizzard.hub.documents import YAML_CODEC
 from blizzard.hub.graph_sync import GraphReconciliation, GraphSyncStatus
 from tests.support import build_hub, pointer_token, report_lease
 
@@ -21,7 +22,7 @@ pytestmark = pytest.mark.component
 def _reconciled_hub(tmp_path: Path):  # type: ignore[no-untyped-def]
     """A hub with the whole packaged set minted, the way a deploy's reconcile does."""
     hub = build_hub(tmp_path)
-    outcomes = GraphReconciliation(hub.services.graph_mint, hub.services.graphs).outcomes()
+    outcomes = GraphReconciliation(hub.services.graph_mint, hub.services.graphs, YAML_CODEC).outcomes()
     assert {o.name for o in outcomes} >= {"default-delivery", "bas-dwf", "adv-dwf", "bas-hwf"}
     assert all(o.status is GraphSyncStatus.MINTED for o in outcomes), outcomes
     return hub
@@ -57,7 +58,7 @@ def _route(hub, chunk_id: str, node_id: str, choice: str) -> httpx.Response:  # 
 
 def test_reconciling_the_packaged_set_twice_is_idempotent(tmp_path: Path) -> None:
     hub = _reconciled_hub(tmp_path)
-    again = GraphReconciliation(hub.services.graph_mint, hub.services.graphs).outcomes()
+    again = GraphReconciliation(hub.services.graph_mint, hub.services.graphs, YAML_CODEC).outcomes()
     assert all(o.status is GraphSyncStatus.UP_TO_DATE for o in again), again
 
 

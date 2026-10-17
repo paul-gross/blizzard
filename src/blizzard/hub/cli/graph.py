@@ -14,6 +14,7 @@ from blizzard.foundation.roles import dto
 from blizzard.hub.cli.command import AdminCommand, FleetCommand
 from blizzard.hub.cli.context import CliContext
 from blizzard.hub.cli.views import Listing
+from blizzard.hub.documents import YAML_CODEC
 from blizzard.hub.graphs import GraphFile
 
 
@@ -117,7 +118,7 @@ def graph_mint(cli: CliContext, path: str) -> None:
         definition_yaml = click.get_text_stream("stdin").read()
     else:
         try:
-            definition_yaml = GraphFile(Path(path)).inlined_yaml
+            definition_yaml = GraphFile(Path(path)).inlined_yaml(YAML_CODEC)
         except (OSError, ValueError) as exc:
             raise click.ClickException(f"failed to load {path}: {exc}") from exc
 

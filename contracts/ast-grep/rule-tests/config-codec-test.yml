@@ -2,7 +2,7 @@ id: bzh:config-codec
 valid:
   # Decoding through the seam.
   - |
-    from blizzard.hub.documents.codec import YAML_CODEC
+    from blizzard.hub.documents import YAML_CODEC
 
     mapping = YAML_CODEC.decode(data)
   # A module merely named like the library.

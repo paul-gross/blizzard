@@ -25,7 +25,7 @@ from blizzard.hub.api.project_params import PROJECT_REQUIRED, QueryProject
 from blizzard.hub.api.user_names import user_names
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.composition import TenantServices
-from blizzard.hub.documents.codec import ConfigDecodeError, codec_for_media_type
+from blizzard.hub.documents import ConfigDecodeError, codec_for_media_type
 from blizzard.hub.domain.config.apply import (
     ROUTINES_SECTION,
     SCOPES_SECTION,
