@@ -1,7 +1,7 @@
-import type { HostRegistryView, RunnerRegistryView } from 'fleet';
+import { type HostRegistryView, RunnerConnection, type RunnerRegistryView } from 'fleet';
 import type { ChunkSummary } from 'fleet/shell';
 
-import { bindingLines, foldHostCards, groupHostRows, subscriptionName } from './host-rows.model';
+import { bindingLines, connectionState, foldHostCards, groupHostRows, subscriptionName } from './host-rows.model';
 
 const NOW = Date.parse('2026-07-16T12:00:00.000Z');
 const SEEN = '2026-07-16T11:59:48.000Z';
@@ -100,6 +100,7 @@ describe('foldHostCards', () => {
     expect(card.hostId).toBe('h1');
     expect(card.hostName).toBe('h1-name');
     expect(card.reportLabel).toBe('seen 12s ago');
+    expect(card.reportedAgo).toBe('12s ago');
     expect(card.workspaces.map((ws) => [ws.workspaceId, ws.inUse, ws.capacity])).toEqual([
       ['ws-1', 3, 3],
       ['ws-2', 0, null],
@@ -113,6 +114,14 @@ describe('foldHostCards', () => {
   it('reads a never-reported host as such', () => {
     const [card] = foldHostCards([host('h2', { connection: 'never_connected', online: false, last_seen_at: null })], [], null, [], NOW);
     expect(card.reportLabel).toBe('never reported');
+    expect(card.reportedAgo).toBeNull();
+  });
+
+  it('gives no age for a report stamped ahead of this clock or unreadable, rather than a confident 0s', () => {
+    const hosts = [host('h3', { last_seen_at: '2026-07-16T17:00:00.000Z' }), host('h4', { last_seen_at: 'not-a-time' })];
+    const [skewed, garbled] = foldHostCards(hosts, [], null, [], NOW);
+    expect(skewed.reportedAgo).toBeNull();
+    expect(garbled.reportedAgo).toBeNull();
   });
 
   it('shows every host on All, one with no runners included, and under a lens only hosts holding a lensed runner', () => {
@@ -120,6 +129,14 @@ describe('foldHostCards', () => {
     expect(foldHostCards([H1, empty], RUNNERS, null, CHUNKS, NOW).map((card) => card.hostId)).toEqual(['h1', 'h_empty']);
     expect(foldHostCards([H1, empty], RUNNERS, [RUNNERS[0]], CHUNKS, NOW).map((card) => card.hostId)).toEqual(['h1']);
     expect(foldHostCards([H1, empty], RUNNERS, [RUNNERS[2]], CHUNKS, NOW)).toEqual([]);
+  });
+});
+
+describe('connectionState', () => {
+  it('reads online, offline and never connected, each in its tone', () => {
+    expect(connectionState(true, RunnerConnection.ONLINE)).toEqual({ label: 'ONLINE', tone: 'done' });
+    expect(connectionState(false, RunnerConnection.OFFLINE)).toEqual({ label: 'OFFLINE', tone: 'stale' });
+    expect(connectionState(false, RunnerConnection.NEVER_CONNECTED)).toEqual({ label: 'NEVER CONNECTED', tone: 'idle' });
   });
 });
 

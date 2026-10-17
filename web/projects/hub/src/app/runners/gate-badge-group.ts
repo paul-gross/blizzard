@@ -19,4 +19,8 @@ import { KitBadge } from 'fleet';
 export class GateBadgeGroup {
   /** The node names this runner gates, in the order it declared them. */
   readonly gates = input.required<readonly string[]>();
+
+  /** Whether the list carries its own "Gates:" label — off where a surrounding fact grid
+   * already labels it. */
+  readonly labelled = input(true);
 }

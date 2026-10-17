@@ -1,0 +1,68 @@
+/* The Fleet tab's detail column, shared by the host and the hostless-runner details: a
+   title bar over one scrolling column of inset, bordered sections. */
+:host {
+  display: block;
+  min-width: 0;
+  padding-bottom: 24px;
+  font-family: var(--mono);
+  font-size: var(--fs-base);
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+.hd {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  padding: 14px 16px 12px;
+  border-bottom: 1px solid var(--bezel);
+  background: linear-gradient(180deg, var(--header-hi), transparent);
+}
+.hd .dot {
+  display: inline-block;
+  flex: none;
+  width: 10px;
+  height: 10px;
+}
+.hd .dot.never {
+  border: 1px solid var(--label-dim);
+}
+.hd .name {
+  margin: 0;
+  color: var(--amber-hi);
+  font-size: var(--fs-lg);
+  font-weight: normal;
+  letter-spacing: 0.12em;
+  overflow-wrap: anywhere;
+}
+.hd .ref {
+  color: var(--label-dim);
+  font-size: var(--fs-xs);
+  letter-spacing: 0.06em;
+}
+.hd .report {
+  color: var(--label);
+  font-size: var(--fs-xs);
+}
+.hd .verbs {
+  margin-left: auto;
+  --host-verbs-inset: 0;
+}
+.sec {
+  margin: 14px 16px 0;
+  border-color: var(--line);
+  --kit-panel-bg: transparent;
+}
+.sec-bd {
+  padding: 10px;
+}
+.subs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 28px;
+  margin: 0;
+}
+.mut {
+  color: var(--label-dim);
+  font-size: var(--fs-xs);
+}

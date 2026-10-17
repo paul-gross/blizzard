@@ -18,6 +18,7 @@ export {
   formatRefreshedAgo,
   formatAbsolute,
   formatAge,
+  formatAgo,
   formatHeldFor,
   formatSeenAgo,
   ageMs,

@@ -1,6 +1,7 @@
 import {
   formatAbsolute,
   formatAge,
+  formatAgo,
   formatClockTime,
   formatHeldFor,
   formatLocalClockWithDay,
@@ -172,6 +173,14 @@ describe('formatSeenAgo (bzh:utc-instants)', () => {
   it('falls through to online/offline for a stamp beyond skew tolerance, never a confident 0s', () => {
     expect(formatSeenAgo('2026-07-16T17:00:00.000Z', false, REF)).toBe('offline');
     expect(formatSeenAgo('2026-07-16T17:00:00.000Z', true, REF)).toBe('online');
+  });
+});
+
+describe('formatAgo', () => {
+  it('reads a bare delta on the same s/m/h derivation', () => {
+    expect(formatAgo(5_000)).toBe('5s ago');
+    expect(formatAgo(30 * 60_000)).toBe('30m ago');
+    expect(formatAgo(3 * 60 * 60_000)).toBe('3h ago');
   });
 });
 

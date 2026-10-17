@@ -64,6 +64,7 @@ const card = (id: string, name: string, over: Partial<HostCard> = {}): HostCard 
   addedAt: NOW,
   addedBy: 'paul',
   lastSeenLabel: 'now',
+  reportedAgo: '4s ago',
   heldChunks: new Map([
     [LONG, [{ chunkId: 'ch_1', shortRef: 'C-0001', step: 'build', runnerName: 'runner-alpha', environments: 1 }]],
   ]),

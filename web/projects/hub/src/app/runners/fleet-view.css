@@ -10,53 +10,90 @@
 .split {
   flex: 1;
   min-height: 0;
+  padding: 8px;
+  --kit-master-detail-gap: 8px;
+  --kit-master-detail-divider: none;
 }
 .list-pane,
 .detail-pane {
+  flex: 1;
+  min-width: 0;
   min-height: 0;
 }
 .hostless {
-  margin: 8px 8px 4px;
-  color: var(--label);
+  margin: 10px 0 0;
+  padding: 4px 10px;
+  border-bottom: 1px solid var(--line);
+  color: var(--label-dim);
   font-size: var(--fs-xs);
   font-weight: normal;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
+/* The kit row is bare, so the card draws the select-row chrome itself: a reserved
+   left edge that turns cyan on selection, over the --surface-* interaction scale. */
 .card {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  padding: 6px 8px;
+  gap: 3px;
+  padding: 7px 10px 6px;
   border-bottom: 1px solid var(--line);
+  border-left: 2px solid transparent;
+}
+.card:hover {
+  background: var(--surface-hover);
+}
+.card:has(:focus-visible) {
+  outline: 1px solid var(--cyan);
+  outline-offset: -2px;
+}
+.card.selected,
+.card.selected:hover {
+  border-left-color: var(--cyan);
+  background: var(--surface-selected);
 }
 .line1 {
   display: flex;
-  align-items: baseline;
-  gap: 6px;
+  align-items: center;
+  gap: 8px;
   min-width: 0;
 }
 .name {
   flex: 1;
   min-width: 0;
-  overflow-wrap: anywhere;
-  letter-spacing: 0.08em;
+  overflow: hidden;
+  color: var(--amber);
+  font-size: var(--fs-md);
+  letter-spacing: 0.04em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.agents,
-.ref {
+.card.dim .name {
+  color: var(--label);
+}
+.agents {
   color: var(--label);
   font-size: var(--fs-xs);
+  white-space: nowrap;
+}
+.agents b {
+  color: var(--snow);
+  font-weight: normal;
 }
 .ref {
   align-self: flex-end;
+  color: var(--label-dim);
+  font-size: var(--fs-xs);
+  letter-spacing: 0.06em;
 }
 .dot {
   display: inline-block;
+  flex: none;
   width: 7px;
   height: 7px;
 }
 .notice {
-  margin: 0 0 6px;
+  margin: 8px 16px 0;
   padding: 4px 6px;
   border: 1px solid var(--red-dim);
   border-left-width: 2px;
@@ -64,6 +101,6 @@
   font-size: var(--fs-xs);
 }
 .not-found {
-  padding: 12px 8px;
+  padding: 14px 16px;
   color: var(--label);
 }

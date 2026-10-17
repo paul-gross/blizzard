@@ -3,60 +3,114 @@
   min-width: 0;
 }
 .runner {
+  padding: 10px;
+  border-bottom: 1px solid var(--line);
+  min-width: 0;
+}
+:host(:last-child) .runner {
+  border-bottom: none;
+}
+/* A runner held at the hub reads as stopped at a glance: faint amber hatching. */
+.runner.paused {
+  background: repeating-linear-gradient(
+    135deg,
+    transparent 0 10px,
+    color-mix(in srgb, var(--amber-hi) 3%, transparent) 10px 20px
+  );
+}
+.r1 {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 4px 12px;
-  padding: 6px 8px;
-  border-bottom: 1px solid var(--line);
-  list-style: none;
+  gap: 4px 10px;
   min-width: 0;
-}
-.name {
-  color: var(--text);
-  letter-spacing: 0.08em;
-  overflow-wrap: anywhere;
-}
-.seen {
-  color: var(--label);
-  font-size: var(--fs-xs);
 }
 .dot {
   display: inline-block;
+  flex: none;
   width: 7px;
   height: 7px;
-  margin-right: 6px;
 }
 .dot.never {
   border: 1px solid var(--label-dim);
 }
-.slot-bar,
-.paces {
-  flex: 1 1 240px;
-  min-width: 0;
+.name {
+  color: var(--amber);
+  font-size: var(--fs-md);
+  overflow-wrap: anywhere;
 }
-.served {
-  flex: 1 1 240px;
-  min-width: 0;
+.runner.offline .name {
+  color: var(--label);
+}
+.ref,
+.summary {
+  color: var(--label-dim);
+  font-size: var(--fs-xs);
+  letter-spacing: 0.06em;
+}
+.grow {
+  flex: 1;
+}
+.seen {
+  color: var(--label-dim);
+  font-size: var(--fs-label);
+  white-space: nowrap;
+}
+.rgrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  gap: 16px;
+  margin-top: 8px;
+  padding-left: 17px;
+}
+.facts {
+  --kv-label-col: 100px;
 }
 .badges {
   display: inline-flex;
+  flex-wrap: wrap;
   gap: 4px;
+}
+.none-inline {
+  color: var(--label-dim);
+  font-size: var(--fs-xs);
+  letter-spacing: 0.08em;
+}
+.held-hd {
+  margin-bottom: 4px;
+  color: var(--label);
+  font-size: var(--fs-label);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
 }
 .claims {
   display: flex;
-  flex-wrap: wrap;
-  gap: 4px 12px;
+  flex-direction: column;
   margin: 0;
   padding: 0;
   list-style: none;
-  font-size: var(--fs-xs);
 }
 .claim {
-  display: inline-flex;
-  gap: 6px;
+  display: flex;
   align-items: baseline;
+  gap: 8px;
+  padding: 3px 0;
+  border-bottom: 1px dashed var(--line);
+  font-size: var(--fs-xs);
 }
-.toggle {
-  margin-left: auto;
+.claim:last-child {
+  border-bottom: none;
+}
+.c-id {
+  color: var(--amber-hi);
+}
+.node {
+  color: var(--label);
+  font-size: var(--fs-label);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.sep {
+  color: var(--label-dim);
+  font-size: var(--fs-label);
 }

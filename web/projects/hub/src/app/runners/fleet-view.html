@@ -1,5 +1,11 @@
 <fleet-kit-master-detail class="split" paneId="fleet" backLabel="Fleet" testidPrefix="fleet" data-testid="fleet-split">
-  <fleet-kit-panel kit-master-detail-list class="list-pane" label="Fleet" data-testid="fleet-list">
+  <fleet-kit-panel
+    kit-master-detail-list
+    class="list-pane"
+    label="Fleet"
+    [count]="list().hosts.length + list().hostless.length"
+    data-testid="fleet-list"
+  >
     <fleet-kit-async-state
       [state]="state()"
       placement="inline"
@@ -21,7 +27,13 @@
       }
     </fleet-kit-async-state>
   </fleet-kit-panel>
-  <fleet-kit-panel kit-master-detail-detail class="detail-pane" data-testid="fleet-detail">
+  <fleet-kit-panel
+    kit-master-detail-detail
+    class="detail-pane"
+    [label]="detailLabel()"
+    [count]="detailRef()"
+    data-testid="fleet-detail"
+  >
     @if (actionError(); as err) {
       <p class="notice" data-testid="fleet-action-error" role="alert">{{ err }}</p>
     }
@@ -38,14 +50,12 @@
           />
         }
         @case ('runner') {
-          <div role="list" data-testid="fleet-runner-detail">
-            <app-fleet-runner-row
-              [row]="sel.row"
-              [canPause]="canPause()"
-              [pausePending]="isPausePending(sel.row)"
-              (togglePause)="togglePause.emit($event)"
-            />
-          </div>
+          <app-hostless-runner-detail
+            [detail]="sel"
+            [canPause]="canPause()"
+            [pausePending]="isPausePending(sel.row)"
+            (togglePause)="togglePause.emit($event)"
+          />
         }
         @case ('not-found') {
           <p class="not-found" data-testid="fleet-not-found">No host or runner {{ sel.id }}.</p>
@@ -58,6 +68,8 @@
   <fleet-kit-select-row
     bare
     class="card"
+    [class.selected]="card.id === selectedId()"
+    [class.dim]="!card.online"
     [selected]="card.id === selectedId()"
     [testid]="'fleet-card-' + card.id"
     (picked)="pick.emit(card.id)"
@@ -71,7 +83,11 @@
         [blink]="card.online ? 'pulse' : 'step'"
       />
       <span class="name" data-testid="fleet-card-name">{{ card.name }}</span>
-      <span class="agents" data-testid="fleet-card-agents">{{ agentsLabel(card) }}</span>
+      <span class="agents" data-testid="fleet-card-agents">
+        @if (card.agents !== null) {
+          <b>{{ card.agents }}</b> {{ card.agents === 1 ? 'agent' : 'agents' }}
+        }
+      </span>
     </span>
     <span class="ref" data-testid="fleet-card-ref">{{ card.ref }}</span>
   </fleet-kit-select-row>

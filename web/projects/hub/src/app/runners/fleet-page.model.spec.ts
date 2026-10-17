@@ -19,6 +19,7 @@ function card(id: string, over: Partial<HostCard> = {}): HostCard {
     addedAt: '2026-01-01T00:00:00Z',
     addedBy: 'paul',
     lastSeenLabel: 'now',
+    reportedAgo: '4s ago',
     heldChunks: new Map(),
     ...over,
   };
@@ -64,12 +65,32 @@ describe('resolveSelection', () => {
 
     expect(sel).toMatchObject({ kind: 'host', ref: 'H-1111', agentsDeclared: 5, agentsBusy: 3 });
     if (sel?.kind !== 'host') throw new Error('expected a host');
-    expect(sel.facts.map((f) => f.label)).toEqual(['URL', 'Enrolled', 'Registered', 'Added', 'Last seen']);
-    expect(sel.facts.find((f) => f.label === 'Enrolled')).toMatchObject({ value: 'yes' });
+    expect(sel.facts.map((f) => f.label)).toEqual(['Registered', 'Added']);
   });
 
-  it('resolves a hostless runner and an unknown id', () => {
-    expect(resolveSelection(GROUPS, 'rn_SOLO0001')).toMatchObject({ kind: 'runner', ref: 'R-0001' });
+  it('totals the host’s environments in use over capacity, none while a workspace reports no capacity', () => {
+    const ws = (workspaceId: string, capacity: number | null, inUse: number): WorkspaceRow => ({
+      workspaceId,
+      capacity,
+      inUse,
+      flag: null,
+      environments: [],
+    });
+    const resolve = (workspaces: WorkspaceRow[]) => {
+      const sel = resolveSelection({ cards: [{ card: card('hs_AAAA1111', { workspaces }), rows: [] }], hostless: [] }, 'hs_AAAA1111');
+      if (sel?.kind !== 'host') throw new Error('expected a host');
+      return [sel.envsInUse, sel.envsCapacity];
+    };
+
+    expect(resolve([ws('ws_a', 3, 1), ws('ws_b', 2, 1)])).toEqual([2, 5]);
+    expect(resolve([ws('ws_a', 3, 1), ws('ws_b', null, 1)])).toEqual([2, null]);
+  });
+
+  it('resolves a hostless runner with its workspace facts, and an unknown id', () => {
+    const sel = resolveSelection(GROUPS, 'rn_SOLO0001');
+    expect(sel).toMatchObject({ kind: 'runner', ref: 'R-0001' });
+    if (sel?.kind !== 'runner') throw new Error('expected a runner');
+    expect(sel.facts.map((f) => f.label)).toEqual(['Workspace', 'Registered', 'Added']);
     expect(resolveSelection(GROUPS, 'hs_nope')).toEqual({ kind: 'not-found', id: 'hs_nope' });
   });
 

@@ -184,6 +184,12 @@ export function formatSeenAgo(lastSeenAt: string | null | undefined, online: boo
   return `seen ${agoUnits(delta)} ago`;
 }
 
+/** "4s ago" / "12m ago" / "3h ago" — a bare rounded age, for a label that names its own
+ * verb ("reported 4s ago", a muted age beside an absolute instant). */
+export function formatAgo(deltaMs: number): string {
+  return `${agoUnits(deltaMs)} ago`;
+}
+
 /**
  * "refreshed 30s ago" / "refreshed 10m ago" / "refreshed 2h ago" — a declared
  * subscription's last-good-sample age label, sharing {@link formatSeenAgo}'s s/m/h

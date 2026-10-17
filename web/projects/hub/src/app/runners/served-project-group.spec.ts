@@ -32,6 +32,19 @@ describe('ServedProjectGroup', () => {
     expect(el.querySelector('[data-testid="runner-unresolved"]')).toBeNull();
   });
 
+  it('drops its Serves: label where a surrounding grid labels it', async () => {
+    const fixture = TestBed.createComponent(ServedProjectGroup);
+    fixture.componentRef.setInput('served', ['Default']);
+    fixture.componentRef.setInput('unassigned', false);
+    fixture.componentRef.setInput('unresolved', []);
+    fixture.componentRef.setInput('labelled', false);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('.served-label')).toBeNull();
+    expect(texts(el, 'runner-served-project')).toEqual(['Default']);
+  });
+
   it('marks a runner that declares no project as unassigned', async () => {
     const el = await render([], true, []);
 

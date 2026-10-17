@@ -1,44 +1,102 @@
-<div
+<article
   class="runner"
   role="listitem"
   data-testid="fleet-runner"
-  [class.offline]="row().connection === connection.OFFLINE"
+  [class.offline]="!row().online"
+  [class.paused]="row().hub_paused"
   [attr.data-runner]="row().runner_id"
   [attr.data-connection]="row().connection"
   [attr.data-hub-paused]="row().hub_paused"
 >
-  <span class="name" data-testid="fleet-runner-name">
+  <div class="r1">
     @if (row().connection === connection.NEVER_CONNECTED) {
       <span class="dot never" aria-hidden="true"></span>
     } @else {
       <fleet-kit-beacon
-          class="dot"
-          aria-hidden="true"
-          [active]="row().online || row().connection === connection.OFFLINE"
-          [tone]="row().online ? 'green' : 'red'"
-          [blink]="row().online ? 'pulse' : 'step'"
+        class="dot"
+        aria-hidden="true"
+        [active]="row().online || row().connection === connection.OFFLINE"
+        [tone]="row().online ? 'green' : 'red'"
+        [blink]="row().online ? 'pulse' : 'step'"
       />
     }
-    {{ row().runner_name }}
-  </span>
-  <span class="seen" data-testid="fleet-runner-seen">{{ seenLabel(row()) }}</span>
-  <app-served-project-group
-    class="served"
-    [served]="row().served"
-    [unassigned]="row().unassigned"
-    [unresolved]="row().unresolved"
-    [bindings]="hosted() ? row().bindingLines : null"
-    [subscription]="row().subscriptionName"
-    [subscriptionUnrostered]="row().subscription_unrostered ?? false"
-  />
-  <app-capability-badge-group
-    data-testid="fleet-runner-capabilities"
-    [capabilities]="row().capabilities ?? []"
-  />
-  <app-gate-badge-group data-testid="fleet-runner-gates" [gates]="row().gates ?? []" />
+    <span class="name" data-testid="fleet-runner-name">{{ row().runner_name }}</span>
+    <span class="ref" [title]="row().runner_id">{{ ref() }}</span>
+    @if (summary(); as text) {
+      <span class="summary" data-testid="fleet-runner-summary">{{ text }}</span>
+    }
+    <span class="grow"></span>
+    <span class="seen" data-testid="fleet-runner-seen">{{ seenLabel(row()) }}</span>
+    @if (canPause()) {
+      <fleet-kit-button
+        class="toggle"
+        testid="fleet-runner-toggle"
+        [variant]="row().hub_paused ? 'primary' : 'default'"
+        [ariaLabel]="(row().hub_paused ? 'Resume ' : 'Pause ') + row().runner_name + ' (' + row().runner_id + ') at the hub'"
+        [title]="toggleHint(row())"
+        [disabled]="pausePending()"
+        (click)="togglePause.emit(row())"
+      >
+        {{ row().hub_paused ? 'Resume' : 'Pause' }}
+      </fleet-kit-button>
+    }
+  </div>
+  <div class="rgrid">
+    <fleet-kit-fact-list class="facts" [rows]="facts()" />
+    <div class="held">
+      <div class="held-hd">Held chunks · {{ row().claims.length }}</div>
+      <fleet-kit-async-state
+        [state]="row().claims.length > 0 ? 'ready' : 'empty'"
+        placement="inline"
+        emptyText="HOLDS NO CHUNKS"
+        emptyTestid="fleet-runner-no-claims"
+      >
+        <ul class="claims" data-testid="fleet-runner-claims">
+          @for (claim of row().claims; track claim.chunkId) {
+            <li class="claim">
+              <span class="c-id" [attr.title]="claim.chunkId">{{ claim.shortId }}</span>
+              <span class="node">{{ claim.node }}</span>
+              <span class="sep">·</span>
+              <fleet-kit-badge variant="soft" [tone]="toneFor(claim.status)">{{ claim.status }}</fleet-kit-badge>
+            </li>
+          }
+        </ul>
+      </fleet-kit-async-state>
+    </div>
+  </div>
+</article>
+<ng-template #serves>
+  @if (bindsNothing()) {
+    <span class="none-inline">none</span>
+  } @else {
+    <app-served-project-group
+      [labelled]="false"
+      [served]="row().served"
+      [unassigned]="row().unassigned"
+      [unresolved]="row().unresolved"
+      [bindings]="hosted() ? row().bindingLines : null"
+    />
+  }
+</ng-template>
+<ng-template #spends>
+  <app-runner-subscription [name]="row().subscriptionName ?? ''" [unrostered]="row().subscription_unrostered ?? false" />
+</ng-template>
+<ng-template #harness>
+  <app-capability-badge-group data-testid="fleet-runner-capabilities" [capabilities]="row().capabilities ?? []" />
+</ng-template>
+<ng-template #gates>
+  @if ((row().gates ?? []).length > 0) {
+    <app-gate-badge-group data-testid="fleet-runner-gates" [labelled]="false" [gates]="row().gates ?? []" />
+  } @else {
+    <span class="none-inline">none</span>
+  }
+</ng-template>
+<ng-template #state>
   <span class="badges">
     @if (row().connection === connection.NEVER_CONNECTED) {
       <fleet-kit-badge tone="idle" variant="soft">NEVER CONNECTED</fleet-kit-badge>
+    } @else if (!row().online) {
+      <fleet-kit-badge tone="stale" variant="soft">OFFLINE</fleet-kit-badge>
     }
     @if (row().locally_paused) {
       <fleet-kit-badge tone="idle" variant="soft" [title]="localPauseHint(row())">LOCALLY PAUSED</fleet-kit-badge>
@@ -46,44 +104,10 @@
     @if (row().hub_paused) {
       <fleet-kit-badge data-testid="fleet-runner-hub-paused" tone="waiting" variant="soft">HUB PAUSED</fleet-kit-badge>
     }
+    @if (row().online && !row().hub_paused && !row().locally_paused) {
+      <fleet-kit-badge [tone]="row().claims.length > 0 ? 'running' : 'idle'" variant="soft">{{
+        row().claims.length > 0 ? 'WORKING' : 'IDLE'
+      }}</fleet-kit-badge>
+    }
   </span>
-  @if (row().claims.length > 0) {
-    <ul class="claims" data-testid="fleet-runner-claims">
-      @for (claim of row().claims; track claim.chunkId) {
-        <li class="claim">
-          <span [attr.title]="claim.chunkId">{{ claim.shortId }}</span>
-          <span>{{ claim.node }}</span>
-          <fleet-kit-badge [tone]="toneFor(claim.status)">{{ claim.status }}</fleet-kit-badge>
-        </li>
-      }
-    </ul>
-  }
-  <!-- A host-less runner has no host card to carry its pool and spend, so its row shows them. -->
-  @if (!hosted() && hasCapacity(row())) {
-    <fleet-kit-slot-bar
-      class="slot-bar"
-      data-testid="fleet-runner-slot-bar"
-      [used]="row().used"
-      [total]="row().env_capacity ?? 0"
-    />
-  }
-  @if (!hosted() && row().subscriptionPaces.length > 0) {
-    <fleet-subscription-pace-group
-      class="paces"
-      data-testid="fleet-runner-subscription-groups"
-      [subscriptionPaces]="row().subscriptionPaces"
-    />
-  }
-  @if (canPause()) {
-    <fleet-kit-button
-      class="toggle"
-      testid="fleet-runner-toggle"
-      [ariaLabel]="(row().hub_paused ? 'Resume ' : 'Pause ') + row().runner_name + ' (' + row().runner_id + ') at the hub'"
-      [title]="toggleHint(row())"
-      [disabled]="pausePending()"
-      (click)="togglePause.emit(row())"
-    >
-      {{ row().hub_paused ? 'Resume' : 'Pause' }}
-    </fleet-kit-button>
-  }
-</div>
+</ng-template>

@@ -1,0 +1,11 @@
+:host {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.name {
+  color: var(--text);
+  overflow-wrap: anywhere;
+}

@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 
 import { KitBadge } from 'fleet';
 import type { BindingLine } from './host-rows.model';
+import { RunnerSubscription } from './runner-subscription';
 
 /**
  * The runner registry's served-projects render — "Serves:" followed by one badge per project the runner serves. A
@@ -19,7 +20,7 @@ import type { BindingLine } from './host-rows.model';
 @Component({
   selector: 'app-served-project-group',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitBadge],
+  imports: [KitBadge, RunnerSubscription],
   templateUrl: './served-project-group.html',
   styleUrl: './served-project-group.css',
 })
@@ -42,4 +43,8 @@ export class ServedProjectGroup {
 
   /** Whether the runner's subscription is missing from its host's roster. */
   readonly subscriptionUnrostered = input(false);
+
+  /** Whether the "Serves:"/"Binds:" line carries its own label — off where a surrounding
+   * fact grid already labels it. */
+  readonly labelled = input(true);
 }

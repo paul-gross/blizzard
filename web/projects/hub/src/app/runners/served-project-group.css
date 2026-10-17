@@ -39,8 +39,7 @@
   gap: 6px;
   min-width: 0;
 }
-.b-ws,
-.b-sub {
+.b-ws {
   color: var(--text);
   overflow-wrap: anywhere;
 }
