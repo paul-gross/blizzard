@@ -79,6 +79,10 @@ run = "uv run pyright"
 description = "Export the hub and runner OpenAPI specs to ./openapi (frontend codegen + CI drift baseline)"
 run = "uv run blizzard-export-openapi --out-dir openapi"
 
+[tasks.export-contracts]
+description = "Export the store schema documents to ./contracts (CI drift baseline and reflection-test input)"
+run = "uv run blizzard-export-contracts --out-dir contracts"
+
 [tasks."process-ref-lint"]
 description = "blizzard:process-ref-lint — Vale prose gate for process references and change-history narration"
 run = "vale --output=line ."

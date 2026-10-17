@@ -691,7 +691,7 @@ chunks = Table(
     Column("graph_id", String, ForeignKey("graphs.graph_id"), nullable=False),  # pinned at mint
     Column("minted_at", UtcDateTime, nullable=False),
     # Retained, unread legacy column; inserts use the migration's server default.
-    Column("model", String, nullable=False),
+    Column("model", String, nullable=False, server_default="claude-opus-4-8"),
     # Nullable JSON model preferences and effort; empty means express none.
     Column("default_model", Text, nullable=True),
     Column("default_effort", String, nullable=True),
