@@ -173,7 +173,7 @@ class GraphMintService:
         graphs' names — a different aggregate — so they never run under a name lock."""
         result = Validator.of(doc).require_valid()
         graph = Reification.of(doc, self._clock).graph
-        enabled = {t for t in graph.cross_graph_targets() if self._graphs.get_enabled_by_name(t) is not None}
+        enabled = self._graphs.enabled_names(graph.cross_graph_targets())
         return graph, [*result.warnings, *cross_graph_warnings(graph, enabled_names=enabled)]
 
     def mint_if_changed(self, doc: GraphDoc, *, definition_yaml: str, minted: GraphDoc | None) -> Graph | None:

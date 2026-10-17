@@ -135,39 +135,81 @@ def _newest_linked(
     return bool(conn.execute(query).scalar())
 
 
-def _standing(
-    stmts: ScopedStatements, conn: Connection, kind: _Kind, project_ids: Sequence[str], name: str | None = None
-) -> set[tuple[str, str]]:
-    """The ``(project_id, name)`` links of ``project_ids`` — narrowed to ``name`` when given — whose newest fact
-    reads linked: one group-by-max join per batch (``bzh:newest-per-key-read``)."""
+def _newest(
+    stmts: ScopedStatements,
+    conn: Connection,
+    kind: _Kind,
+    project_ids: Sequence[str],
+    names: Sequence[str] | None = None,
+    *,
+    standing_only: bool,
+) -> dict[tuple[str, str], bool]:
+    """Whether the newest fact of each ``(project_id, name)`` link of ``project_ids`` — narrowed to ``names`` when
+    given — reads linked; with ``standing_only``, only the links that do. One group-by-max join per batch
+    (``bzh:newest-per-key-read``)."""
     facts = kind.facts
-    standing: set[tuple[str, str]] = set()
-    for batch in id_batches(list(project_ids)):
-        group = stmts.select(facts, facts.c.project_id, kind.name(facts), func.max(facts.c.id).label("id")).where(
-            facts.c.project_id.in_(batch)
-        )
-        if name is not None:
-            group = group.where(kind.name(facts) == name)
-        newest = group.group_by(facts.c.project_id, kind.name(facts)).subquery()
-        rows = conn.execute(
-            stmts.select(facts, facts.c.project_id, kind.name(facts))
-            .join(newest, facts.c.id == newest.c.id)
-            .where(facts.c.linked.is_(True))
-        ).all()
-        standing.update((row[0], row[1]) for row in rows)
-    return standing
+    found: dict[tuple[str, str], bool] = {}
+    for project_batch in id_batches(list(project_ids)):
+        for name_batch in id_batches(list(names)) if names is not None else [None]:
+            group = stmts.select(facts, facts.c.project_id, kind.name(facts), func.max(facts.c.id).label("id")).where(
+                facts.c.project_id.in_(project_batch)
+            )
+            if name_batch is not None:
+                group = group.where(kind.name(facts).in_(name_batch))
+            newest = group.group_by(facts.c.project_id, kind.name(facts)).subquery()
+            query = stmts.select(facts, facts.c.project_id, kind.name(facts), facts.c.linked).join(
+                newest, facts.c.id == newest.c.id
+            )
+            if standing_only:
+                query = query.where(facts.c.linked.is_(True))
+            found.update(((row[0], row[1]), bool(row[2])) for row in conn.execute(query).all())
+    return found
 
 
-def projects_linking_source_conn(conn: Connection, work_source_id: str) -> list[ProjectId]:
-    """The projects whose standing link draws from ``work_source_id``, ordered by id, read on the caller's ``conn`` —
-    the locked ingest's read, and :meth:`ProjectLinkStore.projects_linking_source`'s body."""
+def _standing(
+    stmts: ScopedStatements,
+    conn: Connection,
+    kind: _Kind,
+    project_ids: Sequence[str],
+    names: Sequence[str] | None = None,
+) -> set[tuple[str, str]]:
+    """The ``(project_id, name)`` links of ``project_ids`` — narrowed to ``names`` when given — whose newest fact
+    reads linked."""
+    return set(_newest(stmts, conn, kind, project_ids, names, standing_only=True))
+
+
+def _revisions(
+    stmts: ScopedStatements, conn: Connection, kind: _Kind, pairs: set[tuple[str, str]]
+) -> dict[tuple[str, str], int]:
+    """The stored revision of each link of ``pairs``; a pair never linked is dropped. Each batch reads the links of
+    its projects by names, kept to the pairs asked for."""
+    links = kind.links
+    found: dict[tuple[str, str], int] = {}
+    for project_batch in id_batches(sorted({project_id for project_id, _ in pairs})):
+        for name_batch in id_batches(sorted({name for _, name in pairs})):
+            rows = conn.execute(
+                stmts.select(links, links.c.project_id, kind.name(links), links.c.revision).where(
+                    links.c.project_id.in_(project_batch), kind.name(links).in_(name_batch)
+                )
+            ).all()
+            found.update(((row[0], row[1]), row[2]) for row in rows if (row[0], row[1]) in pairs)
+    return found
+
+
+def projects_linking_sources_conn(conn: Connection, work_source_ids: Sequence[str]) -> dict[str, list[ProjectId]]:
+    """Each of ``work_source_ids`` mapped to the projects whose standing link draws from it, ordered by id — a source
+    no project links dropped — read on the caller's ``conn``: the locked ingest's read, and
+    :meth:`ProjectLinkStore.projects_linking_sources`' body."""
     stmts = statements_of(conn)
     links = _SOURCES.links
-    linking = conn.execute(
-        stmts.select(links, links.c.project_id).where(links.c.work_source_id == work_source_id)
-    ).scalars()
-    standing = _standing(stmts, conn, _SOURCES, list(linking), work_source_id)
-    return sorted(ProjectId(project_id) for project_id, _ in standing)
+    found: dict[str, list[ProjectId]] = {}
+    for batch in id_batches(list(dict.fromkeys(work_source_ids))):
+        linking = conn.execute(
+            stmts.select(links, links.c.project_id).where(links.c.work_source_id.in_(batch)).distinct()
+        ).scalars()
+        for project_id, source in sorted(_standing(stmts, conn, _SOURCES, list(linking), batch)):
+            found.setdefault(source, []).append(ProjectId(project_id))
+    return found
 
 
 class ProjectLinkStore:
@@ -247,34 +289,67 @@ class ProjectLinkStore:
     # --- reads ---
 
     def source_link(self, project_id: ProjectId, work_source_id: WorkSourceId) -> SourceLink | None:
-        found = self._stored("source_link", _SOURCES, project_id, work_source_id)
-        if found is None:
-            return None
-        revision, linked = found
-        return SourceLink(project_id=project_id, work_source_id=work_source_id, revision=revision, linked=linked)
+        return self.source_links_for([(project_id, work_source_id)]).get((project_id, work_source_id))
 
     def repository_link(self, project_id: ProjectId, repository_id: RepositoryId) -> RepositoryLink | None:
-        found = self._stored("repository_link", _REPOSITORIES, project_id, repository_id)
-        if found is None:
-            return None
-        revision, linked = found
-        return RepositoryLink(project_id=project_id, repository_id=repository_id, revision=revision, linked=linked)
+        return self.repository_links_for([(project_id, repository_id)]).get((project_id, repository_id))
 
     def sources_of(self, project_id: ProjectId) -> list[SourceLink]:
-        return [
-            SourceLink(project_id=project_id, work_source_id=WorkSourceId(name), revision=revision)
-            for name, revision in self._standing_of("sources_of", _SOURCES, project_id)
-        ]
+        return self.sources_of_projects([project_id]).get(project_id, [])
 
     def repositories_of(self, project_id: ProjectId) -> list[RepositoryLink]:
-        return [
-            RepositoryLink(project_id=project_id, repository_id=RepositoryId(name), revision=revision)
-            for name, revision in self._standing_of("repositories_of", _REPOSITORIES, project_id)
-        ]
+        return self.repositories_of_projects([project_id]).get(project_id, [])
 
     def projects_linking_source(self, work_source_id: str) -> list[ProjectId]:
-        with self._store.read("projects_linking_source") as conn:
-            return projects_linking_source_conn(conn, work_source_id)
+        return self.projects_linking_sources([work_source_id]).get(work_source_id, [])
+
+    def source_links_for(
+        self, pairs: Sequence[tuple[ProjectId, WorkSourceId]]
+    ) -> dict[tuple[ProjectId, WorkSourceId], SourceLink]:
+        return {
+            (ProjectId(project_id), WorkSourceId(name)): SourceLink(
+                project_id=ProjectId(project_id), work_source_id=WorkSourceId(name), revision=revision, linked=linked
+            )
+            for (project_id, name), (revision, linked) in self._stored("source_links_for", _SOURCES, pairs).items()
+        }
+
+    def repository_links_for(
+        self, pairs: Sequence[tuple[ProjectId, RepositoryId]]
+    ) -> dict[tuple[ProjectId, RepositoryId], RepositoryLink]:
+        return {
+            (ProjectId(project_id), RepositoryId(name)): RepositoryLink(
+                project_id=ProjectId(project_id), repository_id=RepositoryId(name), revision=revision, linked=linked
+            )
+            for (project_id, name), (revision, linked) in self._stored(
+                "repository_links_for", _REPOSITORIES, pairs
+            ).items()
+        }
+
+    def sources_of_projects(self, project_ids: Sequence[ProjectId]) -> dict[ProjectId, list[SourceLink]]:
+        return {
+            ProjectId(project_id): [
+                SourceLink(project_id=ProjectId(project_id), work_source_id=WorkSourceId(name), revision=revision)
+                for name, revision in standing
+            ]
+            for project_id, standing in self._standing_of("sources_of_projects", _SOURCES, project_ids).items()
+        }
+
+    def repositories_of_projects(self, project_ids: Sequence[ProjectId]) -> dict[ProjectId, list[RepositoryLink]]:
+        return {
+            ProjectId(project_id): [
+                RepositoryLink(project_id=ProjectId(project_id), repository_id=RepositoryId(name), revision=revision)
+                for name, revision in standing
+            ]
+            for project_id, standing in self._standing_of(
+                "repositories_of_projects", _REPOSITORIES, project_ids
+            ).items()
+        }
+
+    def projects_linking_sources(self, work_source_ids: Sequence[str]) -> dict[str, list[ProjectId]]:
+        if not work_source_ids:
+            return {}
+        with self._store.read("projects_linking_sources") as conn:
+            return projects_linking_sources_conn(conn, work_source_ids)
 
     def linked_at(self, project_id: ProjectId, source: str, at: datetime) -> bool:
         if is_built_in(source):
@@ -282,34 +357,37 @@ class ProjectLinkStore:
         with self._store.read("linked_at") as conn:
             return _newest_linked(self._store, conn, _SOURCES, project_id, source, at=at)
 
-    def _stored(self, operation: str, kind: _Kind, project_id: str, name: str) -> tuple[int, bool] | None:
-        """The stored link's revision and whether it stands, or ``None`` when the project never linked ``name``."""
-        links = kind.links
+    def _stored(
+        self, operation: str, kind: _Kind, pairs: Sequence[tuple[str, str]]
+    ) -> dict[tuple[str, str], tuple[int, bool]]:
+        """Each stored link of ``pairs`` as its revision and whether it stands; a pair never linked is dropped."""
+        if not pairs:
+            return {}
         with self._store.read(operation) as conn:
-            revision = conn.execute(
-                self._store.select(links, links.c.revision).where(
-                    links.c.project_id == project_id, kind.name(links) == name
-                )
-            ).scalar()
-            if revision is None:
-                return None
-            return revision, _newest_linked(self._store, conn, kind, project_id, name)
+            revisions = _revisions(self._store, conn, kind, set(pairs))
+            if not revisions:
+                return {}
+            linked = _newest(
+                self._store,
+                conn,
+                kind,
+                sorted({project_id for project_id, _ in revisions}),
+                sorted({name for _, name in revisions}),
+                standing_only=False,
+            )
+        return {pair: (revision, linked.get(pair, False)) for pair, revision in revisions.items()}
 
-    def _standing_of(self, operation: str, kind: _Kind, project_id: str) -> list[tuple[str, int]]:
-        """The standing links of one project as ``(name, revision)``, ordered by name: the names its newest facts
-        read linked, then those links' revisions by name."""
-        links = kind.links
-        found: dict[str, int] = {}
+    def _standing_of(self, operation: str, kind: _Kind, project_ids: Sequence[str]) -> dict[str, list[tuple[str, int]]]:
+        """Each project's standing links as ``(name, revision)``, ordered by name — a project with none dropped: the
+        links its newest facts read linked, then those links' revisions."""
+        if not project_ids:
+            return {}
+        found: dict[str, list[tuple[str, int]]] = {}
         with self._store.read(operation) as conn:
-            names = sorted(name for _, name in _standing(self._store, conn, kind, [project_id]))
-            for batch in id_batches(names):
-                rows = conn.execute(
-                    self._store.select(links, kind.name(links), links.c.revision).where(
-                        links.c.project_id == project_id, kind.name(links).in_(batch)
-                    )
-                ).all()
-                found.update({row[0]: row[1] for row in rows})
-        return [(name, found[name]) for name in names if name in found]
+            standing = _standing(self._store, conn, kind, list(dict.fromkeys(project_ids)))
+            for (project_id, name), revision in _revisions(self._store, conn, kind, standing).items():
+                found.setdefault(project_id, []).append((name, revision))
+        return {project_id: sorted(held) for project_id, held in found.items()}
 
 
 def _conforms_link_store(x: ProjectLinkStore) -> IWriteProjectLinks:

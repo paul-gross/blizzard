@@ -13,6 +13,7 @@ import pytest
 from sqlalchemy import Boolean, Column, Engine, Integer, MetaData, String, Table, create_engine, insert
 from structlog import get_logger
 
+from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.domain.config.repositories import RepositoryId
 from blizzard.hub.domain.config.work_sources import WorkSourceId
 from blizzard.hub.store import schema as s
@@ -31,8 +32,13 @@ from blizzard.hub.store.internal.trace_store import TraceStore
 from blizzard.hub.store.internal.work_source_record_store import _retired_ids
 from blizzard.hub.store.scoped import ScopedConnections
 from blizzard.hub.tenancy import StoreScope, TenantId
+from blizzard.runner import runtime as runner_runtime
+from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
+from blizzard.runner.leases.model import NewLease
 from tests.hub_event_rows import hub_events_of
+from tests.runner_fakes import SqlAlchemyRunnerStore, runner_store_errors
 from tests.support import (
+    HubHarness,
     build_hub,
     count_rows_read,
     default_project,
@@ -148,6 +154,7 @@ def _retirement_reads(engine: Engine) -> dict[str, object]:
     store = hub_store_connections(engine)
     return {
         "secret": lambda: SecretStore(store).retired_names(),
+        "secret_bounded": lambda: SecretStore(store).retired_names(["k1", "k2"]),
         "routine": lambda: RoutineStore(store).retired_ids(),
         "scope": lambda: ScopeStore(store).retired_slugs(default_project(engine)),
         "graph": lambda: GraphStore(store).retired_graph_ids(),
@@ -220,6 +227,40 @@ def test_newest_failure_reads_keep_the_old_failure_after_a_recovery(tmp_path: Pa
     )
 
 
+def _linked_hub(tmp_path: Path, *, depth: int) -> HubHarness:
+    """Projects ``p0`` and ``p1`` linked to sources ``s0`` and ``s1``, ``p1``'s link to ``s0`` cycled through
+    ``depth`` unlink-and-relink rounds, then unlinked."""
+    tmp_path.mkdir()
+    hub = build_hub(tmp_path, repositories=(), link=False)
+    assert hub.client.post("/api/secrets", json={"name": "gh", "value": "v"}).status_code == 201
+    sources = [{"slug": s, "provider": "github", "locator": f"acme/{s}", "secret": "gh"} for s in ("s0", "s1")]
+    both = [{"slug": p, "name": p, "sources": ["s0", "s1"]} for p in ("p0", "p1")]
+    without = [both[0], {"slug": "p1", "sources": ["s1"]}]
+    for document in [{"work_sources": sources, "projects": both}, *[{"projects": without}, {"projects": both}] * depth]:
+        assert hub.client.post("/api/config/apply", json={"version": 1, **document}).status_code == 200
+    assert hub.client.post("/api/config/apply", json={"version": 1, "projects": without}).status_code == 200
+    return hub
+
+
+def test_the_link_reads_by_source_are_flat_across_history_depth(tmp_path: Path) -> None:
+    answers, rows = [], []
+    for depth in (1, 6):
+        hub = _linked_hub(tmp_path / str(depth), depth=depth)
+        links = hub.services.project_links
+        slug_of: dict[str, str] = {
+            r.work_source_id: r.slug for r in hub.services.work_source_records.list_all(include_retired=False)
+        }
+        project_slug = {p.project_id: p.slug for p in hub.services.projects.list_all()}
+        sources = sorted(slug_of)
+        found = links.projects_linking_sources(sources)
+        answers.append({slug_of[s]: sorted(project_slug[p] for p in projects) for s, projects in found.items()})
+        rows.append(
+            count_rows_read(hub.engine, lambda links=links, sources=sources: links.projects_linking_sources(sources))
+        )
+    assert answers[0] == answers[1] == {"s0": ["p0"], "s1": ["p0", "p1"]}
+    assert rows[0] == rows[1]
+
+
 # --- the newest-fact read is confined to its scope, inner group-by included -----------------------
 
 _TEN_A = TenantId("ten_A")
@@ -260,3 +301,52 @@ def test_the_newest_fact_read_answers_only_from_its_scope_facts(tmp_path: Path, 
         assert set(conn.execute(newest_retired_select(a, _facts, _facts.c.name, keys)).scalars()) == set()
     with b.read("test") as conn:
         assert set(conn.execute(newest_retired_select(b, _facts, _facts.c.name, keys)).scalars()) == {"k", "b_only"}
+
+
+# --- the runner's open takeover and open escalation per chunk, bounded by a chunk set ---------------
+
+
+def _runner_history(tmp_path: Path, *, depth: int) -> tuple[SqlAlchemyRunnerStore, Engine]:
+    """Chunks ``k1``..``k3``, each with ``depth`` open takeovers and ``depth`` escalated leases, epoch by epoch."""
+    engine = create_engine_from_url(runner_runtime.init_environment(tmp_path).db_url)
+    store = SqlAlchemyRunnerStore(engine, runner_store_errors())
+    for key in _KEYS:
+        for n in range(depth):
+            at = _T0.replace(minute=n)
+            store.record_takeover(
+                takeover_id=f"tko_{key}_{n}",
+                chunk_id=key,
+                lease_id=None,
+                workdir=f"/ws/{key}",
+                fence_epoch=None,
+                opened_at=at,
+                session=SessionReference(CLAUDE_CODE_HARNESS_ID, f"sess-{key}-{n}"),
+            )
+            lease_id = f"lease_{key}_{n}"
+            store.record_lease(
+                NewLease(
+                    lease_id=lease_id,
+                    chunk_id=key,
+                    graph_id="gr_1",
+                    node_id="nd_build",
+                    node_name="build",
+                    epoch=n + 1,
+                    retries_max=2,
+                    created_at=at,
+                )
+            )
+            store.record_closure(lease_id=lease_id, chunk_id=key, node_id="nd_build", reason="escalated", closed_at=at)
+    return store, engine
+
+
+def test_the_runner_open_takeover_and_escalation_plurals_are_flat_across_history_depth(tmp_path: Path) -> None:
+    shallow, _ = _runner_history(tmp_path / "shallow", depth=1)
+    deep, deep_engine = _runner_history(tmp_path / "deep", depth=6)
+    bounded = _KEYS[:2]
+    for name in ("open_takeovers_for", "open_escalations_for"):
+        answer = getattr(deep, name)(bounded)
+        assert set(answer) == set(bounded), name
+        assert len(getattr(shallow, name)(bounded)) == len(bounded), name
+        assert count_rows_read(deep_engine, lambda name=name: getattr(deep, name)(bounded)) == len(bounded), name
+    assert {k: t.takeover_id for k, t in deep.open_takeovers_for(bounded).items()} == {k: f"tko_{k}_5" for k in bounded}
+    assert {k: e.epoch for k, e in deep.open_escalations_for(bounded).items()} == dict.fromkeys(bounded, 6)

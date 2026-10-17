@@ -671,7 +671,7 @@ HUB_ALLOWED_SCANS: list[Allowance] = [
     IndexWalkAllowance(
         IReadTranscriptEvents,
         "candidacy",
-        ("chunks", "transcript_event_derivations", "transcript_segments"),
+        ("chunks", "transcript_segments"),
         _DERIVATION_SWEEP_REASON,
     ),
     IndexWalkAllowance(

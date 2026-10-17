@@ -8,6 +8,7 @@ through :meth:`SecretStore.get_sealed`. Retired derives from the append-only
 from __future__ import annotations
 
 import base64
+from collections.abc import Sequence
 from datetime import datetime
 
 from sqlalchemy.engine import Connection
@@ -150,22 +151,17 @@ class SecretStore:
         return [self._of(row) for row in rows]
 
     def is_retired(self, name: str) -> bool:
-        with self._store.read("is_retired") as conn:
-            row = conn.execute(
-                self._store.select(secret_lifecycle_facts, secret_lifecycle_facts.c.retired)
-                .where(secret_lifecycle_facts.c.name == name)
-                .order_by(secret_lifecycle_facts.c.id.desc())
-                .limit(1)
-            ).first()
-        return bool(row.retired) if row is not None else False
+        return name in self.retired_names([name])
 
-    def retired_names(self) -> set[str]:
+    def retired_names(self, names: Sequence[str] | None = None) -> set[str]:
+        if names is not None and not names:
+            return set()
+        facts = secret_lifecycle_facts
+        found: set[str] = set()
         with self._store.read("retired_names") as conn:
-            return set(
-                conn.execute(
-                    newest_retired_select(self._store, secret_lifecycle_facts, secret_lifecycle_facts.c.name)
-                ).scalars()
-            )
+            for batch in id_batches(list(dict.fromkeys(names))) if names is not None else [None]:
+                found.update(conn.execute(newest_retired_select(self._store, facts, facts.c.name, batch)).scalars())
+        return found
 
     def key_ids_in_use(self) -> set[str]:
         with self._store.read("key_ids_in_use") as conn:

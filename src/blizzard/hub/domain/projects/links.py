@@ -7,7 +7,7 @@ linked or unlinked."""
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import ClassVar, Protocol, Self
@@ -149,6 +149,35 @@ class IReadProjectLinks(Protocol):
     def projects_linking_source(self, work_source_id: str) -> list[ProjectId]:
         """The projects a standing link draws from the configured source ``work_source_id`` — a pointer's ``source``,
         so a :data:`WorkSourceId` held as a plain key — ordered by id."""
+        ...
+
+    def source_links_for(
+        self, pairs: Sequence[tuple[ProjectId, WorkSourceId]]
+    ) -> dict[tuple[ProjectId, WorkSourceId], SourceLink]:
+        """:meth:`source_link`'s batched sibling (``bzh:bulk-reconstitution``): each stored link of ``pairs``, linked
+        or not, keyed by its pair; a pair the project never linked is dropped."""
+        ...
+
+    def repository_links_for(
+        self, pairs: Sequence[tuple[ProjectId, RepositoryId]]
+    ) -> dict[tuple[ProjectId, RepositoryId], RepositoryLink]:
+        """:meth:`repository_link`'s batched sibling: each stored link of ``pairs``, linked or not, keyed by its pair;
+        a pair the project never linked is dropped."""
+        ...
+
+    def sources_of_projects(self, project_ids: Sequence[ProjectId]) -> dict[ProjectId, list[SourceLink]]:
+        """:meth:`sources_of`'s batched sibling: each project's standing source links, ordered by source id; a project
+        with none is dropped."""
+        ...
+
+    def repositories_of_projects(self, project_ids: Sequence[ProjectId]) -> dict[ProjectId, list[RepositoryLink]]:
+        """:meth:`repositories_of`'s batched sibling: each project's standing repository links, ordered by repository
+        id; a project with none is dropped."""
+        ...
+
+    def projects_linking_sources(self, work_source_ids: Sequence[str]) -> dict[str, list[ProjectId]]:
+        """:meth:`projects_linking_source`'s batched sibling: each source's linking projects, ordered by id; a source
+        no project links is dropped."""
         ...
 
     def linked_at(self, project_id: ProjectId, source: str, at: datetime) -> bool:

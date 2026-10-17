@@ -228,7 +228,8 @@ class IngestService:
         :class:`EmptyIngest`."""
         work_refs = ingest_work_refs(pointers)
         configured = configured_sources(work_refs)
-        links = {source: self._links.projects_linking_source(source) for source in configured}
+        linking = self._links.projects_linking_sources(configured)
+        links = {source: linking.get(source, []) for source in configured}
         try:
             return choose_ingest_project(
                 project, work_refs, links, self._recorded_projects(project, configured, work_refs)

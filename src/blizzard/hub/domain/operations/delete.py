@@ -106,7 +106,7 @@ class DeleteService:
             facts = handle.facts(chunk.chunk_id)
             if facts is None:
                 raise ChunkNotFound(chunk.chunk_id)
-            require_deletable(chunk.chunk_id, facts, handle.standing_edges())
+            require_deletable(chunk.chunk_id, facts, handle.standing_edges_touching(chunk.chunk_id))
             # Re-read fresh under the lock: a fold that landed a work ref onto this chunk
             # between the caller's own load and this lock must not have that ref survive
             # withdrawal because the write below still carries the caller's stale list.

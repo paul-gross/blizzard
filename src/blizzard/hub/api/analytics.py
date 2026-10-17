@@ -14,7 +14,7 @@ from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 
 from blizzard.auth_core import Permission
 from blizzard.foundation.roles import dto
@@ -240,13 +240,21 @@ class EventFilters:
         )
 
 
+def _event_json(record: QueriedEvent) -> str:
+    """One event serialized as :class:`AnalyticsEventView`, its ``payload`` spliced in as the stored JSON text
+    verbatim — never decoded, so the wire carries the stored bytes. JSON-equal to dumping the decoded form."""
+    head = _event_view(record).model_dump_json(exclude={"payload"})
+    return f'{head[:-1]},"payload":{record.payload}}}'
+
+
 def _event_view(record: QueriedEvent) -> AnalyticsEventView:
+    """Every field but ``payload``, which :func:`_event_json` splices in undecoded."""
     return AnalyticsEventView(
         id=record.id,
         kind=record.kind,
         subject=record.subject,
         tool=record.tool,
-        payload=json.loads(record.payload),
+        payload={},
         chunk_id=record.chunk_id,
         node_id=record.node_id,
         epoch=record.epoch,
@@ -273,14 +281,18 @@ def ndjson_lines(
     while True:
         page = queries.events(criteria, cursor=cursor, limit=batch_size)
         for record in page.events:
-            yield (_event_view(record).model_dump_json() + "\n").encode()
+            yield (_event_json(record) + "\n").encode()
         if page.next_cursor is None:
             return
         cursor = page.next_cursor
 
 
-def _events_response(page: EventPage) -> AnalyticsEventsResponse:
-    return AnalyticsEventsResponse(events=[_event_view(e) for e in page.events], next_cursor=page.next_cursor)
+def _events_response(page: EventPage) -> Response:
+    """An :class:`AnalyticsEventsResponse` body built as text, so each payload passes through undecoded."""
+    events = ",".join(_event_json(e) for e in page.events)
+    return Response(
+        content=f'{{"events":[{events}],"next_cursor":{json.dumps(page.next_cursor)}}}', media_type="application/json"
+    )
 
 
 def counts_response(rows: list[KeyedCount]) -> AnalyticsCountsResponse:
@@ -302,7 +314,7 @@ def list_events(
     filters: Annotated[EventFilters, Depends(EventFilters.of)],
     cursor: Annotated[str | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=1000)] = 200,
-) -> AnalyticsEventsResponse:
+) -> Response:
     """A bounded, keyset-paginated page of events, every filter combinable, defaulting
     to the current extractor version — a caller wanting an older one names it, since
     mixing versions would double-count the same occurrence."""

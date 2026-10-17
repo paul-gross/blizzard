@@ -7,7 +7,7 @@ adjudicating three independent caps."""
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import StrEnum
@@ -194,6 +194,11 @@ class IWriteTranscriptSegments(IReadTranscriptSegments, Protocol):
         """The owner recorded for the record's lease epoch, or ``None`` while none is recorded."""
         ...
 
+    def epoch_owners(self, leases: Sequence[tuple[str, int]]) -> dict[tuple[str, int], EpochOwner]:
+        """`epoch_owner`'s batched sibling (`bzh:bulk-reconstitution`), keyed by ``(chunk_id, epoch)``
+        — an epoch with no recorded owner is dropped."""
+        ...
+
     def chunk_stored_bytes(self, chunk_id: str) -> int: ...
 
     def runner_window_bytes(self, runner_id: str, *, since: datetime) -> int: ...
@@ -342,13 +347,10 @@ class TranscriptIngestService:
         capped: list[int] = []
         refused: list[int] = []
         now = self._clock.now()
-        owners: dict[tuple[str, int], EpochOwner | None] = {}
+        owners = self._store.epoch_owners([(record.chunk_id, record.epoch) for _, record in records])
 
         for seq, record in sorted(records, key=lambda pair: pair[0]):
-            lease = (record.chunk_id, record.epoch)
-            if lease not in owners:
-                owners[lease] = self._store.epoch_owner(*lease)
-            if not ships_from_lease_holder(owners[lease], runner_id):
+            if not ships_from_lease_holder(owners.get((record.chunk_id, record.epoch)), runner_id):
                 refused.append(seq)
                 mark = max(mark, seq)
                 continue

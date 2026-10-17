@@ -214,3 +214,34 @@ def test_a_tenant_admin_never_reaches_another_tenants_invitations(tmp_path: Path
     assert revoke.status_code == 404, revoke.text
     named = hub.client.get("/api/invitations", headers={**admin, TENANT_HEADER: other.tenant})
     assert named.status_code == 404, named.text
+
+
+def _clock_reads_listing(hub: HubHarness, headers: dict[str, str], monkeypatch: pytest.MonkeyPatch) -> int:
+    reads = 0
+    read = hub.clock.now
+
+    def counted() -> datetime:
+        nonlocal reads
+        reads += 1
+        return read()
+
+    monkeypatch.setattr(hub.clock, "now", counted)
+    try:
+        resp = hub.client.get("/api/invitations", headers=headers)
+    finally:
+        monkeypatch.undo()
+    assert resp.status_code == 200, resp.text
+    return reads
+
+
+def test_the_list_reads_the_clock_once_however_many_invitations_it_holds(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    hub = build_hub(tmp_path, auth_mode="oauth")
+    admin = _admin(hub)
+    _invite(hub, admin, email="a@example.com")
+    one = _clock_reads_listing(hub, admin, monkeypatch)
+    for email in ("b@example.com", "c@example.com", "d@example.com"):
+        _invite(hub, admin, email=email)
+
+    assert _clock_reads_listing(hub, admin, monkeypatch) == one

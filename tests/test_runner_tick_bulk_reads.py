@@ -5,8 +5,9 @@ the id set the caller already holds (`bzh:bulk-reconstitution`).
 Two shapes per new plural: it matches its singular sibling and drops an unknown id, and its
 own statement count is flat across a lowered ``BATCH_SIZE`` boundary. The tick tests drive a
 full ``tick(ctx)`` at N=1 and N=10 steady-state leases and pin the statement count equal —
-the test the work item calls out as mattering more than any single fix. The last section does
-the same for ``RunnerStatusService.escalations()`` (runner-API read path)."""
+the test the work item calls out as mattering more than any single fix. Later sections do the
+same for ``RunnerStatusService.escalations()`` (runner-API read path), the interrupted-claim
+sweep's takeover and escalation reads, and the active-lease chunk-id projection."""
 
 from __future__ import annotations
 
@@ -17,6 +18,7 @@ from pathlib import Path
 import pytest
 from sqlalchemy import Engine
 
+from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store import batching as batching_module
 from blizzard.foundation.store.engine import create_engine_from_url
@@ -29,8 +31,10 @@ from blizzard.runner.harness.internal.process_launcher import ProcessLauncher
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.leases.overload import backing_off_facts
+from blizzard.runner.lifecycle.claim import InterruptedClaims
 from blizzard.runner.loop.context import LoopConfig
 from blizzard.runner.loop.tick import tick
+from blizzard.runner.node_steps.chunk_state import ChunkState
 from blizzard.runner.status.view import RunnerStatusService
 from tests import support
 from tests.runner_fakes import (
@@ -444,3 +448,155 @@ def test_escalations_statement_count_is_flat_across_1_and_10_open_escalations(
 
     assert one == ten
     assert len(_status_service(spawn_executor, store2).escalations()) == 10
+
+
+# --- open_takeovers_for / open_escalations_for ---------------------------------------------
+
+
+def _open_takeover(store: SqlAlchemyRunnerStore, takeover_id: str, chunk_id: str, *, at: datetime) -> None:
+    store.record_takeover(
+        takeover_id=takeover_id,
+        chunk_id=chunk_id,
+        lease_id=None,
+        workdir=f"/ws/{chunk_id}",
+        fence_epoch=None,
+        opened_at=at,
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, f"sess-{takeover_id}"),
+        hold_epoch=0,  # held below the chunk's epoch 1, so an adopt is not held off by it
+    )
+
+
+def test_open_takeovers_for_matches_the_singular_and_drops_an_unknown_id(tmp_path: Path) -> None:
+    store, _ = _store(tmp_path)
+    _open_takeover(store, "tko_old", "ch_1", at=_NOW)
+    _open_takeover(store, "tko_new", "ch_1", at=_NOW + timedelta(minutes=1))
+    _open_takeover(store, "tko_2", "ch_2", at=_NOW)
+    _open_takeover(store, "tko_ended", "ch_3", at=_NOW)
+    store.record_takeover_end(takeover_id="tko_ended", ended_at=_NOW)
+
+    result = store.open_takeovers_for(["ch_1", "ch_2", "ch_3", "ch_never"])
+
+    assert set(result) == {"ch_1", "ch_2"}
+    assert result["ch_1"].takeover_id == "tko_new"
+    for chunk_id in ("ch_1", "ch_2"):
+        assert result[chunk_id] == store.open_takeover_for_chunk(chunk_id)
+    assert store.open_takeover_for_chunk("ch_3") is None
+
+
+def test_open_takeovers_for_falls_back_to_the_older_takeover_once_the_newer_ends(tmp_path: Path) -> None:
+    store, _ = _store(tmp_path)
+    _open_takeover(store, "tko_old", "ch_1", at=_NOW)
+    _open_takeover(store, "tko_new", "ch_1", at=_NOW + timedelta(minutes=1))
+    store.record_takeover_end(takeover_id="tko_new", ended_at=_NOW)
+
+    assert store.open_takeovers_for(["ch_1"])["ch_1"].takeover_id == "tko_old"
+
+
+def test_open_escalations_for_matches_the_singular_and_drops_an_unknown_id(tmp_path: Path) -> None:
+    store, _ = _store(tmp_path)
+    _seed_escalated_lease(store, 1, at=_NOW)
+    _seed_escalated_lease(store, 2, at=_NOW)
+    _mint(store, "lease_active", "ch_active")
+
+    result = store.open_escalations_for(["ch_1", "ch_2", "ch_active", "ch_never"])
+
+    assert set(result) == {"ch_1", "ch_2"}
+    for chunk_id in ("ch_1", "ch_2"):
+        assert result[chunk_id] == store.open_escalation_for_chunk(chunk_id)
+
+
+def test_the_takeover_and_escalation_plurals_match_across_a_batch_boundary(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(batching_module, "BATCH_SIZE", 3)
+    store, _ = _store(tmp_path)
+    for i in range(7):
+        _seed_escalated_lease(store, i, at=_NOW)
+        _open_takeover(store, f"tko_{i}", f"ch_{i}", at=_NOW)
+    ids = [f"ch_{i}" for i in range(7)]
+
+    takeovers = store.open_takeovers_for(ids)
+    escalations = store.open_escalations_for(ids)
+
+    assert set(takeovers) == set(escalations) == set(ids)
+    for chunk_id in ids:
+        assert takeovers[chunk_id] == store.open_takeover_for_chunk(chunk_id)
+        assert escalations[chunk_id] == store.open_escalation_for_chunk(chunk_id)
+
+
+def test_the_takeover_and_escalation_plurals_issue_no_statement_for_no_ids(tmp_path: Path) -> None:
+    store, engine = _store(tmp_path)
+
+    assert support.count_queries(engine, lambda: (store.open_takeovers_for([]), store.open_escalations_for([]))) == 0
+
+
+def test_the_takeover_and_escalation_plurals_statement_count_is_flat_across_id_set_sizes(tmp_path: Path) -> None:
+    store, engine = _store(tmp_path)
+    ids = [f"ch_{i}" for i in range(4)]
+    for i in range(4):
+        _seed_escalated_lease(store, i, at=_NOW)
+        _open_takeover(store, f"tko_{i}", f"ch_{i}", at=_NOW)
+
+    for plural in (store.open_takeovers_for, store.open_escalations_for):
+        one = support.count_queries(engine, lambda plural=plural: plural(ids[:1]))
+        four = support.count_queries(engine, lambda plural=plural: plural(ids))
+        assert one == four, plural
+
+
+# --- InterruptedClaims.reconcile ------------------------------------------------------------
+
+
+def _reconcile_statements(tmp_path: Path, n: int) -> list[str]:
+    """The statements one reconcile issues over ``n`` held, lease-less chunks the hub reports RUNNING and routed
+    here — each with an open takeover from an earlier epoch, so the adopt arm is reached, and an open escalation
+    at the hub's epoch, so the adopt arm weighs it and leaves the entry to ADVANCE."""
+    store, engine = _store(tmp_path)
+    hub = FakeHub()
+    for i in range(n):
+        _seed_escalated_lease(store, i, at=_NOW)
+        _open_takeover(store, f"tko_{i}", f"ch_{i}", at=_NOW)
+        hub.chunks[f"ch_{i}"] = ChunkState(
+            chunk_id=f"ch_{i}", status=ChunkStatus.RUNNING, route_runner_id="r1", latest_epoch=1
+        )
+    ctx = make_context(
+        store,
+        hub=hub,
+        provider=FakeProvider({f"e{i}": f"/ws/e{i}" for i in range(n)}),
+        harness=FakeHarness(
+            handle=WorkerHandle(session_id="unused", pid=1, process_start_time="unused", pgid=1), verdict="pass"
+        ),
+        probe=FakeProbe(),
+        clock=FixedClock(_NOW),
+    )
+    with support.capture_statements(engine) as statements:
+        InterruptedClaims(ctx).reconcile()
+    assert hub.claims == []  # nothing adopted, reclaimed or released
+    return [statement for statement, _ in statements]
+
+
+def test_reconcile_reads_takeovers_and_escalations_once_across_1_and_4_held_chunks(tmp_path: Path) -> None:
+    """The takeover and escalation reads are one each, however many held chunks the sweep reaches."""
+    for marker in ("takeover_ends", "escalation_closures"):
+        one = [s for s in _reconcile_statements(tmp_path / f"{marker}1", 1) if marker in s]
+        four = [s for s in _reconcile_statements(tmp_path / f"{marker}4", 4) if marker in s]
+        assert len(one) == len(four) == 1, marker
+
+
+# --- active_lease_chunk_ids -------------------------------------------------------------------
+
+
+def test_active_lease_chunk_ids_names_every_open_lease_chunk(tmp_path: Path) -> None:
+    store, engine = _store(tmp_path)
+    _mint(store, "lease_1", "ch_1")
+    _mint(store, "lease_2", "ch_2")
+    _seed_escalated_lease(store, 3, at=_NOW)  # closed
+
+    assert (
+        store.active_lease_chunk_ids()
+        == {lease.chunk_id for lease in store.list_active_leases()}
+        == {
+            "ch_1",
+            "ch_2",
+        }
+    )
+    assert support.count_queries(engine, store.active_lease_chunk_ids) == 1

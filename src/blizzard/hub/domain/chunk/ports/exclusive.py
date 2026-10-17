@@ -41,6 +41,10 @@ class ILockedChunkRead(Protocol):
         """Every currently-unreleased dependency edge across the fleet."""
         ...
 
+    def standing_edges_touching(self, chunk_id: str) -> list[DependencyEdge]:
+        """The unreleased edges naming ``chunk_id`` in either role — dependent or prerequisite."""
+        ...
+
     def runner_registration(self, runner_id: str) -> RunnerRegistration | None: ...
 
 
@@ -56,8 +60,8 @@ class ILockedWorkRefRead(Protocol):
 
     def source_links(self, sources: Sequence[str]) -> dict[str, list[ProjectId]]:
         """Each of ``sources`` mapped to the projects whose standing link draws from it, ordered by id —
-        :meth:`~blizzard.hub.domain.projects.links.IReadProjectLinks.projects_linking_source`, read under
-        the lock."""
+        :meth:`~blizzard.hub.domain.projects.links.IReadProjectLinks.projects_linking_sources`, read under
+        the lock — a source no project links maps to no projects."""
         ...
 
 

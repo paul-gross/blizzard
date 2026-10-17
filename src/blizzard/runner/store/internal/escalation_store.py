@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from datetime import datetime
 from typing import Any
 
@@ -9,6 +10,7 @@ import sqlalchemy as sa
 from sqlalchemy import Select
 
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.store.batching import id_batches
 from blizzard.runner.leases.closure import ESCALATION_REASONS, cause_of
 from blizzard.runner.leases.escalations import IWriteEscalationRepository, ParkedEscalation
 from blizzard.runner.store.internal.base import LIVE_ESCALATION, UNRESOLVED_ESCALATION
@@ -34,16 +36,26 @@ class EscalationStore:
         return [self._row_to_escalation(r) for r in self._store.all(stmt)]
 
     def open_escalation_for_chunk(self, chunk_id: str) -> ParkedEscalation | None:
-        stmt = (
-            self._escalation_select()
-            .where(lease_closures.c.chunk_id == chunk_id)
-            .where(LIVE_ESCALATION.clause(self._store))
-            .where(UNRESOLVED_ESCALATION.clause(self._store))
-            .order_by(lease_closures.c.closed_at.desc())
-            .limit(1)
-        )
-        rows = self._store.all(stmt)
-        return self._row_to_escalation(rows[0]) if rows else None
+        return self.open_escalations_for([chunk_id]).get(chunk_id)
+
+    def open_escalations_for(self, chunk_ids: Iterable[str]) -> dict[str, ParkedEscalation]:
+        keys = sorted(set(chunk_ids))
+        if not keys:
+            return {}
+        result: dict[str, ParkedEscalation] = {}
+        with self._store.connect() as conn:
+            for batch in id_batches(keys):
+                # `LIVE_ESCALATION` keeps only the chunk's highest-epoch lease, and a lease closes
+                # once, so each chunk's newest bound is already in SQL (`bzh:newest-per-key-read`).
+                stmt = (
+                    self._escalation_select()
+                    .where(lease_closures.c.chunk_id.in_(batch))
+                    .where(LIVE_ESCALATION.clause(self._store))
+                    .where(UNRESOLVED_ESCALATION.clause(self._store))
+                )
+                for r in conn.execute(stmt):
+                    result[str(r.chunk_id)] = self._row_to_escalation(r)
+        return result
 
     def record_escalation_closure(self, *, chunk_id: str, reason: str, at: datetime) -> None:
         with self._store.begin() as conn:

@@ -5,6 +5,7 @@ under (``bzh:config-read-on-use``)."""
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -27,4 +28,9 @@ class ConfigRevisions:
 class IReadConfigRevisions(Protocol):
     def revisions(self, kind: RecordKind, key: str) -> ConfigRevisions | None:
         """One indexed read, retired records included; ``None`` when no such record exists."""
+        ...
+
+    def revisions_for(self, kind: RecordKind, keys: Sequence[str]) -> dict[str, ConfigRevisions]:
+        """:meth:`revisions`' batched sibling (``bzh:bulk-reconstitution``): each key's revisions, retired records
+        included; a key with no record is dropped."""
         ...

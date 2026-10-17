@@ -728,7 +728,7 @@ RUNNER_CENSUS: dict[tuple[type, str], RunnerRecipe] = {
         w.read.lease_record.has_lease_in_binding_tenure(w.chunk_1, _t(0))
     ),
     (IReadLeaseRecordRepository, "lease_ids_for_chunk"): lambda w: w.read.lease_record.lease_ids_for_chunk(w.chunk_1),
-    (IReadLeaseRecordRepository, "count_active_leases"): lambda w: w.read.lease_record.count_active_leases(),
+    (IReadLeaseRecordRepository, "active_lease_chunk_ids"): lambda w: w.read.lease_record.active_lease_chunk_ids(),
     (IReadLeaseSessionRepository, "latest_session"): lambda w: w.read.session.latest_session(w.chunk_1, None),
     (IReadLeaseSessionRepository, "pool_head"): lambda w: w.read.session.pool_head(w.chunk_1, "pool-a"),
     (IReadLeaseSessionRepository, "session_invocation_count"): lambda w: w.read.session.session_invocation_count(
@@ -819,12 +819,18 @@ RUNNER_CENSUS: dict[tuple[type, str], RunnerRecipe] = {
     (IReadPauseRepository, "open_pause_parks"): lambda w: w.read.pause.open_pause_parks(),
     (IReadTakeoverRepository, "lease_for_open_takeover"): lambda w: w.read.takeover.lease_for_open_takeover(w.lease_5),
     (IReadTakeoverRepository, "open_takeover_for_chunk"): lambda w: w.read.takeover.open_takeover_for_chunk(w.chunk_4),
+    (IReadTakeoverRepository, "open_takeovers_for"): lambda w: w.read.takeover.open_takeovers_for(
+        [w.chunk_3, w.chunk_4]
+    ),
     (IReadTakeoverRepository, "open_takeover_chunk_ids"): lambda w: w.read.takeover.open_takeover_chunk_ids(),
     (IReadTakeoverRepository, "open_takeovers"): lambda w: w.read.takeover.open_takeovers(),
     (IReadRequeueRepository, "pending_requeue_chunk_ids"): lambda w: w.read.requeue.pending_requeue_chunk_ids(),
     (IReadEscalationRepository, "open_escalations"): lambda w: w.read.escalations.open_escalations(),
     (IReadEscalationRepository, "open_escalation_for_chunk"): lambda w: w.read.escalations.open_escalation_for_chunk(
         w.chunk_3
+    ),
+    (IReadEscalationRepository, "open_escalations_for"): lambda w: w.read.escalations.open_escalations_for(
+        [w.chunk_3, w.chunk_4]
     ),
     (IReadUsageRepository, "session_cost_basis"): lambda w: w.read.usage.session_cost_basis(w.lease_1),
     (IReadUsageRepository, "usage_since"): lambda w: w.read.usage.usage_since(_BASE),
@@ -2340,6 +2346,7 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     ),
     (IReadGraphRepository, "get"): lambda w: w.hub.services.graphs.get(w.graph.graph_id),
     (IReadGraphRepository, "get_enabled_by_name"): lambda w: w.hub.services.graphs.get_enabled_by_name(_HUB_GRAPH_NAME),
+    (IReadGraphRepository, "enabled_names"): lambda w: w.hub.services.graphs.enabled_names([_HUB_GRAPH_NAME]),
     (IReadGraphRepository, "any_minted"): lambda w: w.hub.services.graphs.any_minted(_HUB_GRAPH_NAME),
     (IReadGraphRepository, "newest_definition_yaml"): lambda w: w.hub.services.graphs.newest_definition_yaml(
         _HUB_GRAPH_NAME
@@ -2409,7 +2416,10 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (ISecretCatalog, "get_many"): lambda w: w.secrets.get_many(["gh-token", "old-token"]),
     (ISecretCatalog, "list_all"): lambda w: w.secrets.list_all(),
     (ISecretCatalog, "is_retired"): lambda w: w.secrets.is_retired("old-token"),
-    (ISecretCatalog, "retired_names"): lambda w: w.secrets.retired_names(),
+    (ISecretCatalog, "retired_names"): lambda w: (
+        w.secrets.retired_names(),
+        w.secrets.retired_names(["gh-token", "old-token"]),
+    ),
     (ISecretCatalog, "key_ids_in_use"): lambda w: w.secrets.key_ids_in_use(),
     (IReadWorkSourceRepository, "get"): lambda w: w.hub.services.work_source_records.get(w.work_source_id),
     (IReadWorkSourceRepository, "get_many"): lambda w: w.hub.services.work_source_records.get_many([w.work_source_id]),
@@ -2438,6 +2448,11 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
         include_retired=True
     ),
     (IReadConfigRevisions, "revisions"): lambda w: w.config_revisions.revisions(RecordKind.REPOSITORY, w.repository_id),
+    (IReadConfigRevisions, "revisions_for"): lambda w: (
+        w.config_revisions.revisions_for(RecordKind.REPOSITORY, [w.repository_id]),
+        w.config_revisions.revisions_for(RecordKind.WORK_SOURCE, [w.work_source_id]),
+        w.config_revisions.revisions_for(RecordKind.SECRET, ["gh-token"]),
+    ),
     (IReadConfigImports, "recorded"): lambda w: w.config_imports.recorded(),
     (IReadProjectRepository, "get"): lambda w: w.hub.services.projects.get(w.project_id),
     (IReadProjectRepository, "get_many"): lambda w: w.hub.services.projects.get_many([w.project_id]),
@@ -2457,6 +2472,21 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadProjectLinks, "repositories_of"): lambda w: w.hub.services.project_links.repositories_of(w.project_id),
     (IReadProjectLinks, "projects_linking_source"): lambda w: w.hub.services.project_links.projects_linking_source(
         w.work_source_id
+    ),
+    (IReadProjectLinks, "source_links_for"): lambda w: w.hub.services.project_links.source_links_for(
+        [(w.project_id, w.work_source_id)]
+    ),
+    (IReadProjectLinks, "repository_links_for"): lambda w: w.hub.services.project_links.repository_links_for(
+        [(w.project_id, w.repository_id)]
+    ),
+    (IReadProjectLinks, "sources_of_projects"): lambda w: w.hub.services.project_links.sources_of_projects(
+        [w.project_id]
+    ),
+    (IReadProjectLinks, "repositories_of_projects"): lambda w: w.hub.services.project_links.repositories_of_projects(
+        [w.project_id]
+    ),
+    (IReadProjectLinks, "projects_linking_sources"): lambda w: w.hub.services.project_links.projects_linking_sources(
+        [w.work_source_id]
     ),
     (IReadProjectLinks, "linked_at"): lambda w: w.hub.services.project_links.linked_at(
         w.project_id, w.work_source_id, w.clock.now()

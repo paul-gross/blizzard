@@ -537,7 +537,7 @@ class Advance(Step):
 
         # Read AFTER the loop above, not the same set it started with (`bzh:bulk-reconstitution`):
         # that loop can close a lease whose chunk this one must now drive in the same pass.
-        active_chunk_ids = {lease.chunk_id for lease in ctx.stores.lease_record.list_active_leases()}
+        active_chunk_ids = ctx.stores.lease_record.active_lease_chunk_ids()
         for chunk_id in ctx.stores.environments.live_tenure_chunk_ids():
             if chunk_id not in active_chunk_ids:
                 HeldChunk(ctx, chunk_id).drive(takeovers)

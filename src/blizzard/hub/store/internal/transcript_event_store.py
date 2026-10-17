@@ -109,12 +109,17 @@ def _derivation_signature_stmt(stmts: ScopedStatements) -> Select[Any]:
     )
 
 
-def _current_markers_stmt(stmts: ScopedStatements, extractor_version: str) -> Select[Any]:
+def _current_markers_stmt(stmts: ScopedStatements, extractor_version: str, chunk_id: str | None = None) -> Select[Any]:
+    """The markers at ``extractor_version``, bounded by the same visible-segment set the digest
+    read walks — so a one-chunk candidacy reads only that chunk's markers."""
     return stmts.select(
         s.transcript_event_derivations,
         s.transcript_event_derivations.c.segment_id,
         s.transcript_event_derivations.c.content_fingerprint,
-    ).where(s.transcript_event_derivations.c.extractor_version == extractor_version)
+    ).where(
+        (s.transcript_event_derivations.c.extractor_version == extractor_version)
+        & s.transcript_event_derivations.c.segment_id.in_(_visible_segment_ids_stmt(stmts, chunk_id))
+    )
 
 
 def _segment_records_stmt(stmts: ScopedStatements, segment_id: str) -> Select[Any]:
@@ -342,7 +347,7 @@ class TranscriptEventStore:
             digest_rows = conn.execute(_candidacy_digests_stmt(self._store, chunk_id)).all()
             markers = {
                 row.segment_id: row.content_fingerprint
-                for row in conn.execute(_current_markers_stmt(self._store, extractor_version))
+                for row in conn.execute(_current_markers_stmt(self._store, extractor_version, chunk_id))
             }
         visible_segment_ids: set[str] = set()
         candidates: list[str] = []

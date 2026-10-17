@@ -915,6 +915,11 @@ class IReadGraphRepository(IReadManyGraphs, Protocol):
         retired resolves to ``None``."""
         ...
 
+    def enabled_names(self, names: Sequence[str]) -> set[str]:
+        """Those of ``names`` with an enabled mint — the names :meth:`get_enabled_by_name` resolves, answered
+        without reifying a graph (``bzh:bulk-reconstitution``)."""
+        ...
+
     def any_minted(self, name: str) -> bool:
         """Whether any graph of ``name`` has ever been minted, retired or not
         — a cheap existence probe, in place of a full listing, to check membership by

@@ -5,6 +5,7 @@ A different lease is displaced; a lease-less write falls back to runner identity
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any, cast
 
@@ -93,7 +94,9 @@ class _RecordingClient:
         self.outcomes: list[Any] = []
 
     def post(self, path: str, **kwargs: Any) -> httpx.Response:
-        self.posts.append((path, kwargs.get("json")))
+        # A fact batch rides as raw JSON content, not a `json=` body.
+        raw = kwargs.get("content")
+        self.posts.append((path, json.loads(raw) if raw is not None else kwargs.get("json")))
         resp = self._client.post(path, **kwargs)
         if path.endswith("/completions"):
             self.outcomes.append(resp.json())

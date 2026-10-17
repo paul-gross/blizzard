@@ -323,7 +323,7 @@ class ClaimService:
         facts = handle.facts(chunk.chunk_id)
         # Every guard input is re-read under the lock — a stop, an edge, a completion, or a
         # capability change can land after the pre-lock peek.
-        edges = handle.standing_edges()
+        edges = handle.standing_edges_touching(chunk.chunk_id)
         prerequisites = [e.prerequisite_chunk_id for e in edges if e.dependent_chunk_id == chunk.chunk_id]
         ClaimAdmission(chunk, graph, facts).node(
             runner_id=runner_id,

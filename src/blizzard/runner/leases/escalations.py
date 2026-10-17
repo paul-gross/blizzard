@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
@@ -114,6 +114,11 @@ class IReadEscalationRepository(Protocol):
 
         The single-chunk narrowing of :meth:`open_escalations`. Unaffected by a takeover
         in between — a takeover writes neither a closure nor a lease mint."""
+        ...
+
+    def open_escalations_for(self, chunk_ids: Iterable[str]) -> dict[str, ParkedEscalation]:
+        """:meth:`open_escalation_for_chunk` for every chunk in ``chunk_ids`` in one batched read,
+        keyed by chunk id; a chunk with no open escalation is absent (`bzh:bulk-reconstitution`)."""
         ...
 
 

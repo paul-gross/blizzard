@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import domain_model
+from blizzard.hub.domain.chunk.model import Chunk
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.hub.domain.chunk.ports.route import IReadChunkRouteRepository
@@ -197,7 +198,9 @@ class FleetService:
         if fact is not None:
             fact_id = self._registry.record_lifecycle(runner_id, retired=fact.retired, at=fact.at, by=fact.by)
         revocation_id = self._registry.revoke_token(runner_id, at=now, by=by)
-        released = tuple(self._release(route) for route in self._routes.live_routes_of_runner(runner_id))
+        routes = self._routes.live_routes_of_runner(runner_id)
+        records = self._records.get_many([route.chunk_id for route in routes])
+        released = tuple(self._release(route, records.get(route.chunk_id)) for route in routes)
         outcome = RetireOutcome(
             fact_id=fact_id, revocation_id=revocation_id, released=tuple(r for r in released if r is not None)
         )
@@ -217,8 +220,7 @@ class FleetService:
         facts = self._facts.status_facts_for([route.chunk_id for route in routes])
         return held_routes(routes, {chunk_id: f.status() for chunk_id, f in facts.items()})
 
-    def _release(self, route: Route) -> ReleasedRoute | None:
-        chunk = self._records.get(route.chunk_id)
+    def _release(self, route: Route, chunk: Chunk | None) -> ReleasedRoute | None:
         if chunk is None:  # pragma: no cover - a routed chunk always has its record
             return None
         released_id = self._detach.release_held(chunk, runner_id=route.runner_id)
@@ -302,10 +304,14 @@ class FleetService:
         registration.refuse_if_retired(action="runner read")
         return self._liveness(registration)
 
-    def list_with_liveness(self, *, include_retired: bool = False) -> list[RunnerLiveness]:
+    def list_with_liveness(self, *, now: datetime, include_retired: bool = False) -> list[RunnerLiveness]:
         """Every added runner, oldest first and never-connected ones included, with its derived
-        liveness — the ``GET /runners`` view; retired runners only when ``include_retired``."""
-        return [self._liveness(r) for r in self._registry.list_runners(include_retired=include_retired)]
+        liveness as of the caller's ``now`` — the ``GET /runners`` view; retired runners only when
+        ``include_retired``."""
+        return [
+            RunnerLiveness.of(r, now=now, threshold=self._stale_after)
+            for r in self._registry.list_runners(include_retired=include_retired)
+        ]
 
     def _liveness(self, registration: RunnerRegistration) -> RunnerLiveness:
         return RunnerLiveness.of(registration, now=self._clock.now(), threshold=self._stale_after)

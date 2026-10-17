@@ -398,11 +398,11 @@ class RouteClaimOutcome:
 @dataclass(frozen=True)
 class PushedFact:
     """One buffered runner fact as it is pushed: its per-runner ``seq``, its ``noun.verb`` kind,
-    and its kind-specific payload."""
+    and its kind-specific payload as the stored JSON object text, sent undecoded."""
 
     seq: int
     kind: str
-    payload: dict[str, Any]
+    payload_text: str
 
 
 @domain_model

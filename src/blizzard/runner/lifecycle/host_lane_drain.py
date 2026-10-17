@@ -9,7 +9,6 @@ ride a runner's lane. A failed pass is retried on the next, with no backoff and 
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 
 from blizzard.foundation.clock import IClock
@@ -51,7 +50,7 @@ class HostLaneDrain:
         facts = self.lane.pending_host_facts(limit=HOST_LANE_DRAIN_LIMIT)
         if not facts:
             return
-        pushed = [PushedFact(seq=fact.seq, kind=fact.kind, payload=json.loads(fact.payload)) for fact in facts]
+        pushed = [PushedFact(seq=fact.seq, kind=fact.kind, payload_text=fact.payload) for fact in facts]
         try:
             ack = self.client.push_facts(pushed)
         except HubClientError:

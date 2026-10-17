@@ -112,7 +112,7 @@ def _primed_chunk_ids(ctx: LoopContext) -> set[str]:
     """The chunk ids this tick's reconcile sweeps and held-chunk poll are about to read
     anyway — primed in one batch call so their own first ``get()`` each is a cache hit."""
     return (
-        {lease.chunk_id for lease in ctx.stores.lease_record.list_active_leases()}
+        ctx.stores.lease_record.active_lease_chunk_ids()
         | {escalation.chunk_id for escalation in ctx.stores.escalations.open_escalations()}
         | ctx.stores.takeover.open_takeover_chunk_ids()
         | set(ctx.stores.environments.live_tenure_chunk_ids())

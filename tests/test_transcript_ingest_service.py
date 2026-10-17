@@ -3,6 +3,7 @@ ordering, the three independent caps, and truncation recording."""
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import cast
@@ -408,6 +409,9 @@ class _FakeTranscriptStore:
 
     def epoch_owner(self, chunk_id: str, epoch: int) -> EpochOwner | None:
         return None
+
+    def epoch_owners(self, leases: Sequence[tuple[str, int]]) -> dict[tuple[str, int], EpochOwner]:
+        return {}
 
     def chunk_stored_bytes(self, chunk_id: str) -> int:
         return self.chunk_bytes

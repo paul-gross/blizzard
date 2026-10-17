@@ -6,6 +6,7 @@ Proves three ``IHubClient`` endpoints are wire-compatible, plus one behavioral c
 
 from __future__ import annotations
 
+import json
 import os
 import time
 import uuid
@@ -77,12 +78,14 @@ def test_report_escalation_buffered_via_push_facts_lands_on_the_chunk_detail() -
                 PushedFact(
                     seq=1,
                     kind=ESCALATION_RECORDED,
-                    payload={
-                        "chunk_id": chunk_id,
-                        "epoch": 4,
-                        "takeover_command": "cd /ws/e1 && claude --resume sess-1",
-                        "wrapped_takeover_command": f"blizzard runner takeover {chunk_id} --dir /tmp/runner",
-                    },
+                    payload_text=json.dumps(
+                        {
+                            "chunk_id": chunk_id,
+                            "epoch": 4,
+                            "takeover_command": "cd /ws/e1 && claude --resume sess-1",
+                            "wrapped_takeover_command": f"blizzard runner takeover {chunk_id} --dir /tmp/runner",
+                        }
+                    ),
                 )
             ],
         )
@@ -112,15 +115,17 @@ def test_question_ask_answer_round_trips_through_the_mock_hub() -> None:
                 PushedFact(
                     seq=1,
                     kind=QUESTION_ASKED,
-                    payload={
-                        "question_id": question_id,
-                        "chunk_id": chunk_id,
-                        "runner_id": "runner-parity",
-                        "epoch": 1,
-                        "question": "which way?",
-                        "options": ["a", "b"],
-                        "asked_at": "2026-07-21T00:00:00+00:00",
-                    },
+                    payload_text=json.dumps(
+                        {
+                            "question_id": question_id,
+                            "chunk_id": chunk_id,
+                            "runner_id": "runner-parity",
+                            "epoch": 1,
+                            "question": "which way?",
+                            "options": ["a", "b"],
+                            "asked_at": "2026-07-21T00:00:00+00:00",
+                        }
+                    ),
                 )
             ],
         )

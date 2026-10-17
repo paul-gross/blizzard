@@ -217,7 +217,10 @@ class ISecretCatalog(Protocol):
         """Whether ``name``'s newest lifecycle fact reads retired; ``False`` with none."""
         ...
 
-    def retired_names(self) -> set[str]: ...
+    def retired_names(self, names: Sequence[str] | None = None) -> set[str]:
+        """Every name whose newest lifecycle fact reads retired — of ``names`` alone when given, a name with no
+        fact dropped (``bzh:bulk-reconstitution``)."""
+        ...
 
     def key_ids_in_use(self) -> set[str]:
         """Every distinct ``key_id`` any row is sealed under, retired rows included."""

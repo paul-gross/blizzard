@@ -53,11 +53,9 @@ class LeaseRecordStore:
         stmt = lease_select(self._store).where(_OPEN_LEASE.clause(self._store))
         return [row_to_lease(r) for r in self._store.all(stmt)]
 
-    def count_active_leases(self) -> int:
-        st = self._store
-        stmt = st.select(leases, func.count()).where(_OPEN_LEASE.clause(st))
-        with self._store.connect() as conn:
-            return int(conn.execute(stmt).scalar_one())
+    def active_lease_chunk_ids(self) -> set[str]:
+        stmt = self._store.select(leases, leases.c.chunk_id).where(_OPEN_LEASE.clause(self._store)).distinct()
+        return {str(r.chunk_id) for r in self._store.all(stmt)}
 
     def active_lease_for_chunk(self, chunk_id: str) -> Lease | None:
         stmt = (

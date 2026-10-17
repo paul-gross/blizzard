@@ -43,7 +43,7 @@ _CHUNK = Chunk(chunk_id="chk_1", graph_id="gr_1", work_refs=[], minted_at=_T0)
 
 @dataclass
 class _FakeLockedChunkRead:
-    """Only ``facts``/``record``/``standing_edges`` are live — see module docstring."""
+    """Only ``facts``/``record``/``standing_edges_touching`` are live — see module docstring."""
 
     chunk_facts: ChunkFacts | None
     edges: list[DependencyEdge]
@@ -57,8 +57,8 @@ class _FakeLockedChunkRead:
     def record(self, chunk_id: str) -> Chunk | None:
         return self.current
 
-    def standing_edges(self) -> list[DependencyEdge]:
-        return self.edges
+    def standing_edges_touching(self, chunk_id: str) -> list[DependencyEdge]:
+        return [e for e in self.edges if chunk_id in (e.dependent_chunk_id, e.prerequisite_chunk_id)]
 
     def __getattr__(self, name: str) -> Any:
         raise NotImplementedError(f"DeleteService should not touch handle.{name!r}")

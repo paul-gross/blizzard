@@ -29,6 +29,7 @@ from blizzard.runner.hub.client import (
     SubscriptionDeclaration,
 )
 from blizzard.runner.hub.internal.http_hub import HttpHostHubClient, HttpHubRunnerAdmin
+from blizzard.wire.facts import RunnerFact, RunnerFactBatch
 
 pytestmark = pytest.mark.unit
 
@@ -91,10 +92,25 @@ def test_push_facts_posts_the_host_lane_and_answers_its_ack() -> None:
     seen: list[httpx.Request] = []
     ack = {"host_id": "hs_1", "high_water": 2, "applied": [2], "already_applied": [1], "rejected": []}
     answer = _host_client(_answering("POST", "/api/fleet/host/events", 200, ack, seen)).push_facts(
-        [PushedFact(seq=1, kind="k", payload={}), PushedFact(seq=2, kind="k", payload={"a": 1})]
+        [PushedFact(seq=1, kind="k", payload_text="{}"), PushedFact(seq=2, kind="k", payload_text='{"a": 1}')]
     )
     assert answer == HostFactPushAck(high_water=2, applied=[2], already_applied=[1], rejected=[])
     assert [f["seq"] for f in json.loads(seen[0].content)["facts"]] == [1, 2]
+
+
+def test_push_facts_sends_the_stored_payload_text_spliced_into_a_body_equal_to_the_decoded_batch() -> None:
+    stored = ['{"slug": "s0", "note": "caf\\u00e9"}', '{"nested": {"a": [1, 2]}, "s": "\\"quoted\\""}', "{}"]
+    seen: list[httpx.Request] = []
+    ack = {"host_id": "hs_1", "high_water": 3, "applied": [1, 2, 3], "already_applied": [], "rejected": []}
+    _host_client(_answering("POST", "/api/fleet/host/events", 200, ack, seen)).push_facts(
+        [PushedFact(seq=i, kind="k.v", payload_text=text) for i, text in enumerate(stored, start=1)]
+    )
+    decoded = RunnerFactBatch(
+        facts=[RunnerFact(seq=i, kind="k.v", payload=json.loads(text)) for i, text in enumerate(stored, start=1)]
+    )
+    assert json.loads(seen[0].content) == decoded.model_dump(mode="json")
+    assert RunnerFactBatch.model_validate_json(seen[0].content) == decoded
+    assert stored[1].encode() in seen[0].content  # the stored bytes, not a re-dump
 
 
 def test_add_runner_adds_under_the_host_and_answers_the_minted_identity() -> None:
@@ -131,7 +147,7 @@ def test_retire_runner_answers_the_retired_runner_and_its_released_chunks() -> N
 _CALLS: list[Callable[[HttpHostHubClient], object]] = [
     lambda c: c.report(HostReport()),
     lambda c: c.record(),
-    lambda c: c.push_facts([PushedFact(seq=1, kind="k", payload={})]),
+    lambda c: c.push_facts([PushedFact(seq=1, kind="k", payload_text="{}")]),
     lambda c: c.add_runner("r2"),
     lambda c: c.retire_runner("rn_2"),
 ]
