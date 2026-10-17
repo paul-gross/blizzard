@@ -376,7 +376,7 @@ def list_runners(
     """The fleet registry — every added runner, oldest first, with its connection condition and
     paused state; a retired runner excluded by default, included and marked when ``include_retired``."""
     now = services.clock.now()
-    listed = services.fleet.list_with_liveness(include_retired=include_retired)
+    listed = services.fleet.list_with_liveness(now=now, include_retired=include_retired)
     projects = served_projects(services, (e for item in listed for e in item.registration.served))
     hosts = hosts_of(services, [item.registration for item in listed])
     return RunnerRegistryListResponse(

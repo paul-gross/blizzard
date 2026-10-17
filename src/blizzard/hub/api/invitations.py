@@ -7,6 +7,7 @@ never learns whether that address already has an account: no answer here depends
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -46,7 +47,7 @@ _INVITATION_MANAGER = require_either(Permission.USER_MANAGE, Permission.MEMBERSH
 Manager = Annotated[ResolvedIdentity, Depends(_INVITATION_MANAGER)]
 
 
-def invitation_view(record: InvitationRecord, services: Services) -> InvitationView:
+def invitation_view(record: InvitationRecord, *, now: datetime) -> InvitationView:
     invitation = record.invitation
     outcome = record.outcome
     return InvitationView(
@@ -56,7 +57,7 @@ def invitation_view(record: InvitationRecord, services: Services) -> InvitationV
         created_by=invitation.created_by,
         created_at=iso_utc(invitation.created_at),
         expires_at=iso_utc(invitation.expires_at),
-        state=record.state(services.clock.now()),
+        state=record.state(now),
         accepted_by=(
             outcome.actor_user_id if outcome is not None and outcome.kind is InvitationOutcomeKind.ACCEPTED else None
         ),
@@ -74,13 +75,16 @@ def create_invitation(
         )
     except MembershipRoleRefused as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
-    return InvitationCreateResponse(invitation=invitation_view(issued.record, services), token=issued.token.plaintext)
+    return InvitationCreateResponse(
+        invitation=invitation_view(issued.record, now=services.clock.now()), token=issued.token.plaintext
+    )
 
 
 @router.get("/invitations", response_model=InvitationListResponse, dependencies=[Depends(_INVITATION_MANAGER)])
 def list_invitations(services: Services) -> InvitationListResponse:
     """Every invitation of the tenant with its state — never a link."""
-    return InvitationListResponse(invitations=[invitation_view(r, services) for r in services.invitations.list()])
+    now = services.clock.now()
+    return InvitationListResponse(invitations=[invitation_view(r, now=now) for r in services.invitations.list()])
 
 
 @router.post(
@@ -97,4 +101,4 @@ def revoke_invitation(invitation_id: str, services: Services, identity: Manager)
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except InvitationAlreadyResolved as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
-    return invitation_view(record, services)
+    return invitation_view(record, now=services.clock.now())

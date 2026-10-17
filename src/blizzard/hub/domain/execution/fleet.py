@@ -304,10 +304,14 @@ class FleetService:
         registration.refuse_if_retired(action="runner read")
         return self._liveness(registration)
 
-    def list_with_liveness(self, *, include_retired: bool = False) -> list[RunnerLiveness]:
+    def list_with_liveness(self, *, now: datetime, include_retired: bool = False) -> list[RunnerLiveness]:
         """Every added runner, oldest first and never-connected ones included, with its derived
-        liveness — the ``GET /runners`` view; retired runners only when ``include_retired``."""
-        return [self._liveness(r) for r in self._registry.list_runners(include_retired=include_retired)]
+        liveness as of the caller's ``now`` — the ``GET /runners`` view; retired runners only when
+        ``include_retired``."""
+        return [
+            RunnerLiveness.of(r, now=now, threshold=self._stale_after)
+            for r in self._registry.list_runners(include_retired=include_retired)
+        ]
 
     def _liveness(self, registration: RunnerRegistration) -> RunnerLiveness:
         return RunnerLiveness.of(registration, now=self._clock.now(), threshold=self._stale_after)

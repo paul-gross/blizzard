@@ -8,7 +8,7 @@ Every verb takes the hub-minted id, 404s on an unknown one, and rejects a runner
 from __future__ import annotations
 
 import json
-from datetime import timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -410,3 +410,33 @@ def test_a_served_project_keeps_serving_under_a_new_slug_and_its_former_slug_sti
     assert (kept["entry"], kept["project_id"], kept["slug"]) == ("beta", beta, "gamma")
     [redeclared] = _register_serving(hub, ["beta"])
     assert (redeclared["project_id"], redeclared["slug"]) == (beta, "gamma")
+
+
+def _clock_reads_listing(hub: HubHarness, monkeypatch: pytest.MonkeyPatch) -> int:
+    reads = 0
+    read = hub.clock.now
+
+    def counted() -> datetime:
+        nonlocal reads
+        reads += 1
+        return read()
+
+    monkeypatch.setattr(hub.clock, "now", counted)
+    try:
+        resp = hub.client.get("/api/runners")
+    finally:
+        monkeypatch.undo()
+    assert resp.status_code == 200, resp.text
+    return reads
+
+
+def test_the_list_reads_the_clock_once_however_many_runners_it_holds(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    hub = build_hub(tmp_path)
+    _add(hub, "r-a")
+    one = _clock_reads_listing(hub, monkeypatch)
+    for name in ("r-b", "r-c", "r-d"):
+        _add(hub, name)
+
+    assert _clock_reads_listing(hub, monkeypatch) == one

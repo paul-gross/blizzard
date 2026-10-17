@@ -330,6 +330,40 @@ def test_the_ndjson_stream_carries_its_cursor_across_batches(tmp_path: Path) -> 
     assert len(lines) == 3
 
 
+# --- the payload passes through as the stored text, undecoded ------------------------
+
+
+def test_both_encodings_carry_each_stored_payload_verbatim_including_non_ascii(tmp_path: Path) -> None:
+    """The stored text is spliced in, not decoded and re-dumped: its bytes — ASCII-escaped by the
+    writer — appear in each body as-is, and each body still parses to the decoded payload."""
+    hub = build_hub(tmp_path, auth_mode="oauth")
+    token = seed_session(hub, seed_user(hub, username="ada", role=Role.CONTRIBUTOR))
+    chunk_id = _ingest_chunk(hub, headers=_cookie(token))
+    turns = [
+        _tool_turn(0, "Read", {"file_path": "src/café/ünï.py"}),
+        _tool_turn(1, "Skill", {"skill": "wf-日本"}),
+    ]
+    push = hub.client.post(
+        "/api/fleet/transcripts", json={"runner_id": "r1", "records": [_record(chunk_id, turns=turns)]}
+    )
+    assert push.status_code == 200, push.text
+    hub.hub_services.event_derivation.sweep()
+    criteria = EventScopeFilters(ScopeFilters(None, None, None, None), None, None, None, None, None).criteria
+    stored = [e.payload for e in hub.services.analytics_events.events(criteria, cursor=None, limit=100).events]
+    assert any("\\u" in text for text in stored)
+
+    json_resp = hub.client.get("/api/analytics/events", headers=_cookie(token))
+    ndjson_resp = hub.client.get("/api/analytics/events/ndjson", headers=_cookie(token))
+
+    assert json_resp.status_code == 200, json_resp.text
+    for text in stored:
+        assert text in json_resp.text
+        assert text in ndjson_resp.text
+    decoded = [json.loads(text) for text in stored]
+    assert [e["payload"] for e in json_resp.json()["events"]] == decoded
+    assert [json.loads(line)["payload"] for line in ndjson_resp.text.splitlines()] == decoded
+
+
 # --- the four canned counts, honoring filters ----------------------------------------
 
 

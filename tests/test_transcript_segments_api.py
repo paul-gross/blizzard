@@ -3,13 +3,22 @@ route's runner-ownership confinement, and the operator-plane read routes' auth t
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
 
 from blizzard.auth_core import Role
-from blizzard.hub.domain.observability.transcripts import TranscriptCaps
+from blizzard.hub.api.transcripts import _content_view
+from blizzard.hub.domain.observability.transcripts import (
+    SegmentRecordContent,
+    TranscriptCaps,
+    records_final,
+    records_truncated,
+    stored_turns,
+)
+from blizzard.wire.transcript_segment import TranscriptSegmentContentView, TurnSegmentView
 from tests.support import build_hub, seed_runner, seed_session, seed_user
 from tests.test_fleet_auth import _enroll, _register
 
@@ -621,3 +630,66 @@ def test_a_turn_stored_before_the_late_link_fields_still_validates_on_read_back(
     [turn] = content.json()["turns"]
     assert turn["sidechain"] is None
     assert turn["tool"] is None
+
+
+# --- the content read validates the stored text straight into views ----------------
+
+
+def _decoded_view(segment_id: str, records: list[SegmentRecordContent]) -> TranscriptSegmentContentView:
+    """The content view built the decode-first way — each record's text parsed to dicts, then each dict validated."""
+    turns = [TurnSegmentView.model_validate(turn) for text in stored_turns(records) for turn in json.loads(text)]
+    return TranscriptSegmentContentView(
+        segment_id=segment_id, final=records_final(records), truncated=records_truncated(records), turns=turns
+    )
+
+
+@pytest.mark.parametrize(
+    "tool",
+    [
+        pytest.param(
+            {
+                "name": "Read",
+                "input": {"file_path": "src/é.py"},
+                "input_unparsed": None,
+                "input_shape": "object",
+                "tool_use_id": "toolu_1",
+                "output": "ok",
+                "output_truncated": False,
+                "input_truncated": False,
+                "output_patch": False,
+            },
+            id="current-row",
+        ),
+        pytest.param(
+            {
+                "name": "Read",
+                "input": {"file_path": "src/é.py"},
+                "input_unparsed": None,
+                "input_shape": "object",
+                "tool_use_id": "toolu_1",
+                "output": "ok",
+                "output_truncated": False,
+            },
+            id="pre-default-row",
+        ),
+    ],
+)
+def test_the_content_view_serializes_byte_equal_to_the_decode_first_path(tool: dict[str, object]) -> None:
+    """Validating each record's text in one step must keep both the bytes and the defaults a row
+    stored before a defaulted field existed relies on."""
+    turns = [_turn(0), {**_turn(1), "kind": "tool", "tool": tool}]
+    records = [
+        SegmentRecordContent(
+            turn_range_start=0,
+            turn_range_end=1,
+            final=True,
+            rejected=False,
+            record_truncated=False,
+            turns_json=json.dumps(turns),
+        ),
+        SegmentRecordContent(
+            turn_range_start=2, turn_range_end=2, final=False, rejected=True, record_truncated=False, turns_json="[]"
+        ),
+    ]
+
+    assert _content_view("sg_1", records).model_dump_json() == _decoded_view("sg_1", records).model_dump_json()

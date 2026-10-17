@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import TypeAdapter
 
 from blizzard.auth_core import Permission
 from blizzard.foundation.store.utc import iso_utc
@@ -97,13 +98,16 @@ def _index_entry(row: SegmentSummary) -> TranscriptSegmentIndexEntry:
     )
 
 
+#: Validates a stored record's text straight into views — no intermediate dicts — while still filling the defaults
+#: a row stored before a field existed relies on.
+_TURNS_ADAPTER: TypeAdapter[list[TurnSegmentView]] = TypeAdapter(list[TurnSegmentView])
+
+
 def _rendered_turns(records: list[SegmentRecordContent]) -> tuple[list[TurnSegmentView], bool, bool]:
     """Turns concatenated across stored records, in record order, plus the fold both
     :func:`_content_view` and :func:`lease_content_view` share: ``final`` true iff any
     record closed its segment out, ``truncated`` true iff any record lost turns."""
-    turns = [
-        TurnSegmentView.model_validate(turn) for turns_json in stored_turns(records) for turn in json.loads(turns_json)
-    ]
+    turns = [turn for turns_json in stored_turns(records) for turn in _TURNS_ADAPTER.validate_json(turns_json)]
     return turns, records_final(records), records_truncated(records)
 
 
