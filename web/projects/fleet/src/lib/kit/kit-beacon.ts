@@ -1,13 +1,18 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 
 /** The beacon's active-state color ladder — amber for work in flight or a held
- * resource, red for an escalation. A narrower vocabulary than {@link Tone} (used
+ * resource, red for an escalation, green for a live connection. A narrower vocabulary than {@link Tone} (used
  * as a CSS custom-property key, not the derived-status ladder itself). */
-export type BeaconTone = 'amber' | 'red';
+export type BeaconTone = 'amber' | 'red' | 'green';
+
+/** How an active beacon animates — `pulse` fades smoothly, `step` is the hard
+ * on/off blink that marks a missing machine. */
+export type BeaconBlink = 'pulse' | 'step';
 
 const BEACON_COLOR: Record<BeaconTone, string> = {
   amber: 'var(--amber)',
   red: 'var(--red)',
+  green: 'var(--green)',
 };
 
 /**
@@ -29,6 +34,9 @@ export class KitBeacon {
   /** The color it throbs while {@link active} — ignored (always the static grey)
    * otherwise. */
   readonly tone = input<BeaconTone>('amber');
+
+  /** The animation an active beacon uses — ignored while inactive. */
+  readonly blink = input<BeaconBlink>('pulse');
 
   protected readonly color = computed(() => (this.active() ? BEACON_COLOR[this.tone()] : 'var(--label-dim)'));
 }

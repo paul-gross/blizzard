@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 
-import { KitBadge, KitFactList, KitPanel, RunnerConnection, SubscriptionPaceGroup } from 'fleet';
+import { KitBadge, KitFactList, KitPanel, RunnerConnection, SubscriptionPaceGroup, KitBeacon } from 'fleet';
 import { FleetRunnerRow } from './fleet-runner-row';
 import type { HostDetailVm } from './fleet-page.model';
 import { HostVerbBar } from './host-verb-bar';
@@ -18,7 +18,7 @@ import type { RunnerRow } from './runner-rows';
 @Component({
   selector: 'app-host-detail',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FleetRunnerRow, HostVerbBar, KitBadge, KitFactList, KitPanel, SubscriptionPaceGroup],
+  imports: [KitBeacon, FleetRunnerRow, HostVerbBar, KitBadge, KitFactList, KitPanel, SubscriptionPaceGroup],
   templateUrl: './host-detail.html',
   styleUrl: './host-detail.css',
 })

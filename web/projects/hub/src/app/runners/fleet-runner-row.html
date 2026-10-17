@@ -8,12 +8,7 @@
   [attr.data-hub-paused]="row().hub_paused"
 >
   <span class="name" data-testid="fleet-runner-name">
-    <span
-      class="dot"
-      [class.online]="row().online"
-      [class.offline]="row().connection === connection.OFFLINE"
-      aria-hidden="true"
-    ></span>
+    <fleet-kit-beacon class="dot" [active]="row().online || row().connection === connection.OFFLINE" [tone]="row().online ? 'green' : 'red'" [blink]="row().online ? 'pulse' : 'step'" aria-hidden="true" />
     {{ row().runner_name }}
   </span>
   <span class="seen" data-testid="fleet-runner-seen">{{ seenLabel(row()) }}</span>

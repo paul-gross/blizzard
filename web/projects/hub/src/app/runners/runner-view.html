@@ -55,13 +55,11 @@
     >
       <div class="r1">
         <span class="name" data-testid="runner-name">
-          <span
-            class="dot"
-            [class.online]="row.online"
-            [class.offline]="row.connection === connection.OFFLINE"
-            [class.never]="row.connection === connection.NEVER_CONNECTED"
-            aria-hidden="true"
-          ></span>
+          @if (row.connection === connection.NEVER_CONNECTED) {
+<span class="dot never" aria-hidden="true"></span>
+} @else {
+<fleet-kit-beacon class="dot" [active]="row.online || row.connection === connection.OFFLINE" [tone]="row.online ? 'green' : 'red'" [blink]="row.online ? 'pulse' : 'step'" aria-hidden="true" />
+}
           {{ row.runner_name }}
         </span>
         <span class="seen" data-testid="runner-seen">{{ seenLabel(row) }}</span>

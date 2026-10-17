@@ -467,4 +467,28 @@ describe('mobile Fleet screen host card layout shell sweep (web:shell-sweep)', (
       root.remove();
     }
   });
+
+  it('animates an online light with the beacon fade and an offline light with the red step blink at 390px', async () => {
+    await loadDesignTokens();
+    await page.viewport(390, 800);
+    const fixture = await render();
+    const root = fixture.nativeElement as HTMLElement;
+    document.body.appendChild(root);
+    try {
+      const beaconOf = (id: string) =>
+        root.querySelector<HTMLElement>(`[data-testid="mobile-fleet-runner"][data-runner="${id}"] fleet-kit-beacon .beacon`)!;
+      const online = getComputedStyle(beaconOf('rn_online'));
+      expect(online.animationName).toMatch(/beacon-blink$/);
+      const offline = getComputedStyle(beaconOf('rn_paused'));
+      expect(offline.animationName).toMatch(/beacon-step$/);
+      expect(offline.animationDuration).toBe('1.2s');
+      expect(online.backgroundColor, 'online is green, offline red').not.toBe(offline.backgroundColor);
+      expect(
+        root.querySelector('[data-runner="rn_01KXKVVF1J3D6H6VYZ3XYNNEW1"] fleet-kit-beacon'),
+        'a never-connected runner keeps its hollow mark, not a beacon',
+      ).toBeNull();
+    } finally {
+      root.remove();
+    }
+  });
 });

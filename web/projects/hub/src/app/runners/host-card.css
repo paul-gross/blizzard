@@ -34,13 +34,6 @@
   width: 7px;
   height: 7px;
   margin-right: 6px;
-  background: var(--label-dim);
-}
-.dot.online {
-  background: var(--green);
-}
-.dot.offline {
-  background: var(--red);
 }
 fleet-subscription-pace-group {
   padding: 0 8px;

@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 
-import { RunnerConnection, SubscriptionPaceGroup, WorkspaceTable } from 'fleet';
+import { RunnerConnection, SubscriptionPaceGroup, WorkspaceTable, KitBeacon } from 'fleet';
 import type { HostCard } from './host-rows.model';
 import { HostVerbBar } from './host-verb-bar';
 import { type HostVerbEvent, type HostVerbsVm, NO_HOST_VERBS } from './host-verbs.model';
@@ -20,7 +20,7 @@ import { type HostVerbEvent, type HostVerbsVm, NO_HOST_VERBS } from './host-verb
 @Component({
   selector: 'app-host-card',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [HostVerbBar, SubscriptionPaceGroup, WorkspaceTable],
+  imports: [KitBeacon, HostVerbBar, SubscriptionPaceGroup, WorkspaceTable],
   templateUrl: './host-card.html',
   styleUrl: './host-card.css',
 })

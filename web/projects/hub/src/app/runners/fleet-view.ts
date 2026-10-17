@@ -1,7 +1,7 @@
 import { NgTemplateOutlet } from '@angular/common';
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 
-import { KitAsyncState, type KitAsyncStateValue, KitMasterDetail, KitPanel, KitSelectRow, RunnerConnection } from 'fleet';
+import { KitAsyncState, type KitAsyncStateValue, KitMasterDetail, KitPanel, KitSelectRow, RunnerConnection, KitBeacon } from 'fleet';
 import type { FleetList, FleetListCard, FleetSelection } from './fleet-page.model';
 import { FleetRunnerRow } from './fleet-runner-row';
 import { HostDetail } from './host-detail';
@@ -17,7 +17,7 @@ import type { RunnerRow } from './runner-rows';
 @Component({
   selector: 'app-fleet-view',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [NgTemplateOutlet, FleetRunnerRow, HostDetail, KitAsyncState, KitMasterDetail, KitPanel, KitSelectRow],
+  imports: [KitBeacon, NgTemplateOutlet, FleetRunnerRow, HostDetail, KitAsyncState, KitMasterDetail, KitPanel, KitSelectRow],
   templateUrl: './fleet-view.html',
   styleUrl: './fleet-view.css',
 })

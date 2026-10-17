@@ -47,26 +47,6 @@
   height: 7px;
   margin-right: 6px;
 }
-.dot.online {
-  background: var(--green);
-  box-shadow: 0 0 4px var(--green);
-}
-/* An offline runner blinks red: the fleet is missing a machine, which is the
-   one registry fact worth pulling an operator's eye across the room. */
-.dot.offline {
-  background: var(--red);
-  animation: blink 1.2s steps(2, jump-none) infinite;
-}
-@keyframes blink {
-  50% {
-    opacity: 0.15;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .dot.offline {
-    animation: none;
-  }
-}
 .name {
   color: var(--amber);
   font-size: var(--fs-md);
