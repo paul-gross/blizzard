@@ -332,6 +332,38 @@ def test_status_names_the_served_projects_unresolved_and_not_yet_answered_with_t
 
 
 @pytest.mark.component
+def test_status_names_two_bindings_resolving_to_one_project_as_not_claiming(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _init_runner(tmp_path)
+    _edit_host_file(
+        root,
+        'projects = [{ project = "default", workspace = "workspace-local", agents = 1 }]',
+        'projects = [{ project = "blizzard", workspace = "workspace-local", agents = 1 }, '
+        '{ project = "old-slug", workspace = "workspace-local", agents = 1 }]',
+    )
+    _no_hub(monkeypatch)
+    _configure_runner_id(root, "rn_1")
+    store = _store(root)
+    store.record_runner_identity(RunnerIdentity(runner_id="rn_1", runner_name="r-one", registered_at=_NOW))
+    store.record_served_projects(
+        (
+            ServedProject("blizzard", "prj_1", "blizzard", "Blizzard"),
+            ServedProject("old-slug", "prj_1", "blizzard", "Blizzard"),
+        ),
+        at=_NOW,
+    )
+    with _serve_local_api(root):
+        result = CliRunner().invoke(runner_group, ["status", "--dir", str(root)])
+
+    assert result.exit_code == 0, result.output
+    assert (
+        "  NOT CLAIMING: blizzard, old-slug all resolve to project prj_1 — bind each project once"
+        in result.output.splitlines()
+    )
+
+
+@pytest.mark.component
 def test_status_marks_a_fresh_runners_default_not_yet_answered(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     root = _init_runner(tmp_path)
     _no_hub(monkeypatch)

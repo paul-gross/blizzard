@@ -84,3 +84,13 @@ def test_a_lifespan_scope_passes_through(monkeypatch: pytest.MonkeyPatch) -> Non
     seen = _run(gate, {"type": "lifespan"}, monkeypatch)
     assert seen == {"type": "lifespan"}
     assert gate.asked == []
+
+
+def test_the_resolver_sees_the_scope_with_the_gate_as_its_app(monkeypatch: pytest.MonkeyPatch) -> None:
+    gate = _Gate(resolves=True)
+    scope: Scope = {"type": "http", "headers": _OTHER + _TRACE}
+
+    _run(gate, scope, monkeypatch)
+
+    assert gate.asked == [scope]
+    assert gate.asked[0]["app"] is gate

@@ -656,3 +656,53 @@ def test_only_a_transitioned_closure_is_healthy() -> None:
     assert LeaseClosureReason.is_healthy("failed") is False
     assert LeaseClosureReason.is_healthy("a-store-only-reason") is False
     assert LeaseClosureReason.is_healthy(None) is False
+
+
+@pytest.mark.unit
+def test_every_injected_dependency_is_read_through_the_service(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """Each constructor argument shapes the panel: the clock and ``stale_after`` judge
+    staleness, the probe aliveness, the stores the lease, beat, binding and open ask, and
+    ``recent_limit`` the closed tail."""
+    store = _store(tmp_path)
+    _seed_lease(store, chunk="ch_1", lease="lease_1")
+    store.record_spawn(
+        "lease_1",
+        pid=100,
+        process_start_time="start-100",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
+    beat_at = _NOW + timedelta(minutes=1)
+    store.record_heartbeat(lease_id="lease_1", beat_at=beat_at)
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    store.record_ask(lease_id="lease_1", chunk_id="ch_1", question_id="q1", question="?", options=[], asked_at=_NOW)
+    _seed_lease(store, chunk="ch_2", lease="lease_2")
+    store.record_spawn(
+        "lease_2",
+        pid=200,
+        process_start_time="start-200",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-b"),
+        spawned_at=_NOW,
+    )
+    for n, lease in enumerate(("lease_c1", "lease_c2")):
+        _seed_lease(store, chunk=f"ch_c{n}", lease=lease)
+        store.record_closure(
+            lease_id=lease,
+            chunk_id=f"ch_c{n}",
+            node_id="nd_build",
+            reason="failed",
+            closed_at=_NOW + timedelta(minutes=n),
+        )
+    probe = FakeProbe(alive={(100, "start-100")})
+    clock = FixedClock(beat_at + timedelta(minutes=9))
+    service = _lease_service(store, clock, probe, stale_after=timedelta(minutes=10), recent_limit=1)
+
+    first, second, closed = service.list_recent()
+
+    assert isinstance(first, LeaseActivity) and isinstance(second, LeaseActivity)
+    assert (first.lease.lease_id, first.state, first.last_heartbeat_at) == ("lease_1", "running", beat_at)
+    assert (first.environment_id, first.workdir, first.human) == ("e1", "/ws/e1", OpenHumanFacts(asking=True))
+    assert (second.lease.lease_id, second.state) == ("lease_2", "exited")
+    assert closed.lease.lease_id == "lease_c2"
+    clock.advance(timedelta(minutes=2))
+    assert service.list_active()[0].state == "stale"

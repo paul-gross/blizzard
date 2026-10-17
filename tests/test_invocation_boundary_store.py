@@ -352,3 +352,86 @@ def test_open_after_close_keeps_the_closed_marker() -> None:
     boundary = store.boundary("lease_1", 1, "judge")
     assert boundary is not None
     assert (boundary.start_position, boundary.closed_reason) == ("pos-original", "completed")
+
+
+def _open(store, lease_id: str, generation: int, kind: str) -> None:  # type: ignore[no-untyped-def]
+    store.record_boundary_open(
+        lease_id=lease_id,
+        chunk_id="ch_1",
+        node_id="nd_build",
+        epoch=1,
+        generation=generation,
+        kind=kind,
+        start_position=f"open-{lease_id}-{generation}-{kind}",
+        opened_at=_T0,
+    )
+
+
+def _advance(store, lease_id: str, generation: int, kind: str, superseded: str, at: datetime) -> None:  # type: ignore[no-untyped-def]
+    store.record_boundary_advance(
+        lease_id=lease_id,
+        generation=generation,
+        kind=kind,
+        superseded_invocation=superseded,
+        start_position=f"adv-{lease_id}-{generation}-{kind}-{superseded}",
+        advanced_at=at,
+    )
+
+
+def test_advances_are_independent_across_lease_generation_and_kind() -> None:
+    """The same superseded invocation advances each ``(lease, generation, kind)`` on its own —
+    neither the replay check nor ``current_start`` reads a sibling's advance."""
+    store = make_store("sqlite://")
+    markers = [("lease_1", 1, "judge"), ("lease_2", 1, "judge"), ("lease_1", 2, "judge"), ("lease_1", 1, "nudge")]
+    for lease_id, generation, kind in markers:
+        _open(store, lease_id, generation, kind)
+    at = _T0.replace(hour=1)
+
+    for lease_id, generation, kind in markers:
+        _advance(store, lease_id, generation, kind, "el-1", at)
+
+    for lease_id, generation, kind in markers:
+        current = store.current_start(lease_id, generation, kind)  # type: ignore[arg-type]
+        assert current is not None
+        assert (current.start_position, current.at) == (f"adv-{lease_id}-{generation}-{kind}-el-1", at)
+
+
+def test_a_sibling_advance_leaves_a_marker_without_its_own_advance_at_its_open_start() -> None:
+    store = make_store("sqlite://")
+    _open(store, "lease_1", 1, "judge")
+    _open(store, "lease_2", 1, "judge")
+    _open(store, "lease_1", 2, "judge")
+    _open(store, "lease_1", 1, "nudge")
+
+    _advance(store, "lease_1", 1, "judge", "el-1", _T0.replace(hour=1))
+
+    for lease_id, generation, kind in [("lease_2", 1, "judge"), ("lease_1", 2, "judge"), ("lease_1", 1, "nudge")]:
+        current = store.current_start(lease_id, generation, kind)  # type: ignore[arg-type]
+        assert current is not None
+        assert (current.start_position, current.at) == (f"open-{lease_id}-{generation}-{kind}", _T0)
+
+
+def test_current_start_answers_the_latest_advanced_at_not_the_latest_recorded() -> None:
+    store = make_store("sqlite://")
+    _open(store, "lease_1", 1, "judge")
+    later, earlier = _T0.replace(hour=2), _T0.replace(hour=1)
+
+    _advance(store, "lease_1", 1, "judge", "el-2", later)
+    _advance(store, "lease_1", 1, "judge", "el-1", earlier)
+
+    current = store.current_start("lease_1", 1, "judge")
+    assert current is not None
+    assert (current.start_position, current.at) == ("adv-lease_1-1-judge-el-2", later)
+
+
+def test_a_same_instant_advance_tie_answers_the_later_recorded() -> None:
+    store = make_store("sqlite://")
+    _open(store, "lease_1", 1, "judge")
+    at = _T0.replace(hour=1)
+
+    _advance(store, "lease_1", 1, "judge", "el-1", at)
+    _advance(store, "lease_1", 1, "judge", "el-2", at)
+
+    current = store.current_start("lease_1", 1, "judge")
+    assert current is not None
+    assert current.start_position == "adv-lease_1-1-judge-el-2"

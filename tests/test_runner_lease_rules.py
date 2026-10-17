@@ -128,6 +128,21 @@ def test_no_liveness_facts_measures_from_the_mint_and_reports_no_heartbeat() -> 
     assert activity.stale is False
 
 
+def test_the_reported_heartbeat_is_the_heartbeat_fact_not_the_spawn() -> None:
+    beat, spawn = _MINT + timedelta(seconds=10), _MINT + timedelta(seconds=20)
+    activity = _activity(facts=LeaseLivenessFacts(latest_heartbeat=beat, latest_spawn=spawn))
+    assert activity.last_heartbeat_at == beat
+
+
+def test_each_liveness_fact_alone_reaches_the_staleness_baseline() -> None:
+    fresh = _MINT + HEARTBEAT_STALENESS_THRESHOLD
+    now = fresh + timedelta(seconds=1)
+    by_beat = _activity(facts=LeaseLivenessFacts(latest_heartbeat=fresh, latest_spawn=None), now=now)
+    by_spawn = _activity(facts=LeaseLivenessFacts(latest_heartbeat=None, latest_spawn=fresh), now=now)
+    assert (by_beat.stale, by_spawn.stale) == (False, False)
+    assert by_spawn.last_heartbeat_at is None
+
+
 def test_the_first_binding_is_the_one_shown() -> None:
     activity = _activity(bindings=[_binding("e2"), _binding("e3")])
     assert (activity.environment_id, activity.workdir) == ("e2", "/ws/e2")

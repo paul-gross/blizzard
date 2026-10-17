@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from blizzard.runner.hub.internal.token_file import HubTokenFile
-from blizzard.runner.hub.token_file import assigned_token, without_token
+from blizzard.runner.hub.token_file import assigned_token, with_token, without_token
 
 pytestmark = pytest.mark.unit
 
@@ -21,6 +21,14 @@ def test_a_removed_token_takes_every_assignment_of_it_and_keeps_every_other_line
     assert removed == "# kept\nBZ_HOST_TOKEN=host\nBZ_HUB_TOKEN_R3=three\n"
     assert assigned_token(removed, "BZ_HUB_TOKEN_R2") == ""
     assert without_token("BZ_HUB_TOKEN_R2=one\n", "BZ_HUB_TOKEN_R2") == ""
+
+
+def test_a_written_token_replaces_the_first_assignment_in_place_and_collapses_repeats() -> None:
+    text = "# kept\nBZ_HUB_TOKEN_R2=one\nBZ_HOST_TOKEN=host\nBZ_HUB_TOKEN_R2='two'\n"
+
+    assert with_token(text, "BZ_HUB_TOKEN_R2", "new") == "# kept\nBZ_HUB_TOKEN_R2=new\nBZ_HOST_TOKEN=host\n"
+    assert with_token("BZ_HOST_TOKEN=host", "BZ_HUB_TOKEN_R2", "new") == "BZ_HOST_TOKEN=host\nBZ_HUB_TOKEN_R2=new\n"
+    assert with_token("", "BZ_HUB_TOKEN_R2", "new") == "BZ_HUB_TOKEN_R2=new\n"
 
 
 def test_the_drivers_removal_rewrites_only_a_file_holding_the_assignment(tmp_path: Path) -> None:

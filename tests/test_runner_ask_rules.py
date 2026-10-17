@@ -164,4 +164,4 @@ def test_unforwarded_ask_reads_a_flat_number_of_rows_whatever_the_ask_history(tm
     deep_rows, deep = at_depth(9, tmp_path / "deep")
 
     assert shallow == "q1" and deep == "q8"
-    assert shallow_rows == deep_rows <= 2
+    assert shallow_rows == deep_rows == 1
