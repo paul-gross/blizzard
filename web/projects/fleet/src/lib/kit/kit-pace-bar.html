@@ -21,3 +21,5 @@
 >
   <div class="fill" [style.width.%]="clampedElapsed()"></div>
 </div>
+<!-- The utilization's reading in figures; the progressbar above already announces it. -->
+<div class="pace-val" data-testid="pace-bar-value" aria-hidden="true">{{ utilizationLabel() }}</div>

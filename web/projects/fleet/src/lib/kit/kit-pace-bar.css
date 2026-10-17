@@ -1,9 +1,11 @@
 /* The label sits in a fixed-width first column rather than above the bars, so every
    pace bar's track starts at the same x — sibling instances each style themselves, so
-   only a static width aligns them. The label spans both rows; the bars stack beside it. */
+   only a static width aligns them. The label spans both rows; the bars stack beside it,
+   and the utilization figure closes the row in a fixed-width last column for the same
+   reason. */
 :host {
   display: grid;
-  grid-template-columns: 28px minmax(0, 1fr);
+  grid-template-columns: 28px minmax(0, 1fr) 36px;
   column-gap: 6px;
   row-gap: 2px;
   align-items: center;
@@ -31,4 +33,13 @@
 }
 .bar.elapsed .fill {
   background: var(--cyan);
+}
+.pace-val {
+  grid-row: 1 / span 2;
+  grid-column: 3;
+  align-self: center;
+  font-size: var(--fs-label);
+  color: var(--label);
+  text-align: right;
+  white-space: nowrap;
 }

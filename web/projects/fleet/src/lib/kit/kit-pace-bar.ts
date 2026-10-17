@@ -16,7 +16,7 @@ function clampPct(pct: number): number {
  *
  * The reading: **top bar ahead of bottom bar = on pace to exhaust this window before it
  * resets.** Top behind bottom is the comfortable case — usage is lagging the window's
- * own clock.
+ * own clock. The utilization also reads as a whole-percent figure closing the row.
  */
 @Component({
   selector: 'fleet-kit-pace-bar',
@@ -39,4 +39,5 @@ export class KitPaceBar {
 
   protected readonly clampedUtilization = computed(() => clampPct(this.utilizationPct()));
   protected readonly clampedElapsed = computed(() => clampPct(this.elapsedPct()));
+  protected readonly utilizationLabel = computed(() => `${Math.round(this.clampedUtilization())}%`);
 }

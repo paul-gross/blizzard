@@ -43,6 +43,11 @@ describe('KitPaceBar', () => {
     expect(elapsed?.querySelector<HTMLElement>('.fill')?.style.width).toBe('20%');
   });
 
+  it('closes the row with the utilization as a whole, clamped percent', async () => {
+    expect((await render('5h', 61.6, 20)).querySelector('[data-testid="pace-bar-value"]')?.textContent?.trim()).toBe('62%');
+    expect((await render('7d', 140, 20)).querySelector('[data-testid="pace-bar-value"]')?.textContent?.trim()).toBe('100%');
+  });
+
   it('clamps a negative percentage to 0 rather than rendering it raw', async () => {
     const el = await render('7d', -15, -1);
 
