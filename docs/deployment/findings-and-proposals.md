@@ -45,7 +45,8 @@ whichever exit or `gone` fact was newest, restoring the finding to `live`. Every
 **The hub board's Gardening tab reaches the same verbs from its own Findings sub-tab: a newest-first triage list over one
 routine/scope bucket, further filterable by class and by state on the hub, beside the selected finding's own panel. It
 starts with live findings; All states includes gone and exited findings. Older loads another page, while the Class
-choices cover the entire routine/scope bucket, including classes not yet loaded. A finding linked directly by id opens
+choices cover the entire routine/scope bucket, including classes not yet loaded. The Findings sub-tab has no count badge:
+the loaded pages are not a total for the project. A finding linked directly by id opens
 its detail even when its row is outside the loaded pages. Every one of
 those four filters, and the selection itself, rides the URL, so a filtered bucket is a link and a row click never
 discards a filter. `GET /api/findings` and the project route accept `state`, `class`, `descending`, `cursor`, and `limit`;

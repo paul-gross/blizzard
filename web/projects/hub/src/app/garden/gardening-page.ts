@@ -36,9 +36,8 @@ import { injectHubRunsQuery } from './runs/garden-runs.query';
  * doorway, and the project crumb switches the lens and keeps the surface, each choice showing that project's proposals
  * waiting.
  *
- * Each tab counts its own list, from the read the list itself makes, so the two never disagree. Proposals counts the
- * ones waiting on a person and is the one count drawn in amber: scopes, routines, runs and findings accumulate, they do
- * not wait.
+ * Scopes, routines and runs count their lists; Proposals counts the ones waiting on a person and draws that count in
+ * amber. Findings has no total badge: its list reads only the requested pages, so a loaded-row count is not a total.
  */
 @Component({
   selector: 'app-gardening-page',
@@ -78,14 +77,13 @@ export class GardeningPage {
   /** The doorway's address, for the `Gardening` crumb's link target. */
   protected readonly doorwayUrl = GARDENING_DOORWAY_URL;
 
-  /** The strip's five tabs, each with its list's count. */
+  /** The strip's five tabs, with counts for the surfaces whose reads supply a total. */
   protected readonly tabs = computed(() =>
     gardenSurfaceTabs(
       gardenSurfaceCounts({
         scopes: this.scopesQuery.data(),
         routines: this.routinesQuery.data(),
         runs: this.runsQuery.data(),
-        findings: undefined,
         proposals: this.proposalsQuery.data(),
       }),
     ),

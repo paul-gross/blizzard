@@ -44,7 +44,7 @@ export function surfaceLabel(tab: string | null): string | null {
   return surface === null ? null : SURFACE_LABELS[surface];
 }
 
-/** One tab of the strip: its route segment, label and record count (`null` until its read answers). */
+/** One tab of the strip: its route segment, label and count (`null` while unread or without a total). */
 export interface GardenSurfaceTab {
   readonly surface: GardenSurface;
   readonly label: string;
@@ -52,26 +52,25 @@ export interface GardenSurfaceTab {
 }
 
 /**
- * The tabs' counts from the lists' reads, each `null` until its read answers: the scopes, routines, runs and findings
- * listed, and the proposals waiting on a person.
+ * Counts from the lists' reads: scopes, routines and runs listed, and proposals waiting on a person. Findings has no
+ * total count: the list is paged and its loaded length is not the number of findings in the project.
  */
 export function gardenSurfaceCounts(reads: {
   readonly scopes: readonly unknown[] | undefined;
   readonly routines: readonly unknown[] | undefined;
   readonly runs: readonly unknown[] | undefined;
-  readonly findings: readonly unknown[] | undefined;
   readonly proposals: readonly GardenProposalView[] | undefined;
 }): Readonly<Record<GardenSurface, number | null>> {
   return {
     scopes: reads.scopes?.length ?? null,
     routines: reads.routines?.length ?? null,
     runs: reads.runs?.length ?? null,
-    findings: reads.findings?.length ?? null,
+    findings: null,
     proposals: reads.proposals === undefined ? null : waitingProposalCount(reads.proposals),
   };
 }
 
-/** The strip's five tabs with their counts: the lists' own lengths, and for Proposals the ones waiting on a person. */
+/** The strip's five tabs with available counts; Findings has no total badge. */
 export function gardenSurfaceTabs(counts: Readonly<Record<GardenSurface, number | null>>): readonly GardenSurfaceTab[] {
   return GARDEN_SURFACES.map((surface) => ({ surface, label: SURFACE_LABELS[surface], count: counts[surface] }));
 }
