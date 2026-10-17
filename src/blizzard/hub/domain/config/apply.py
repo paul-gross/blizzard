@@ -13,7 +13,7 @@ from __future__ import annotations
 from collections.abc import Hashable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Protocol
+from typing import Protocol, Self
 
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.config.changes import (
@@ -306,27 +306,59 @@ class _Section[K: Hashable, D, R: _Revised](Protocol):
         ...
 
 
-class _WorkSourceSection:
-    section = WORK_SOURCES_SECTION
-    kind = RecordKind.WORK_SOURCE
+class _SlugRecord(Protocol):
+    """A configured record handled by its slug."""
+
+    @property
+    def slug(self) -> str: ...
+
+    @property
+    def revision(self) -> int: ...
+
+    @property
+    def retired(self) -> bool: ...
+
+    def set_retired(
+        self, retired: bool, ctx: ChangeContext, *, if_match: int | None, at: datetime
+    ) -> tuple[Self, ConfigChange] | None: ...
+
+
+class _SlugEntry(Protocol):
+    @property
+    def slug(self) -> str: ...
+
+
+class _SlugSection[D: _SlugEntry, R: _SlugRecord]:
+    """What a kind keyed by slug and declared by this package shares: the entry's slug is its key, its label and
+    its record's handle, a retired record is re-enabled, and nothing settles after a create or edit."""
+
     handle_field = "slug"
 
-    def __init__(
-        self, declared: Sequence[WorkSourceDeclaration], stored: StoredConfig, ctx: ChangeContext, at: datetime
-    ):
+    def __init__(self, declared: Sequence[D], stored: StoredConfig, ctx: ChangeContext, at: datetime) -> None:
         self.declared = declared
         self._stored = stored
         self._ctx = ctx
         self._at = at
 
-    def key(self, entry: WorkSourceDeclaration) -> str:
+    def key(self, entry: D) -> str:
         return entry.slug
 
-    def label(self, entry: WorkSourceDeclaration) -> str:
+    def label(self, entry: D) -> str:
         return entry.slug
 
-    def handle(self, record: ConfiguredWorkSource) -> str:
+    def handle(self, record: R) -> str:
         return record.slug
+
+    def enable(self, record: R) -> tuple[R, ConfigChange] | None:
+        return record.set_retired(False, self._ctx, if_match=None, at=self._at) if record.retired else None
+
+    def settle(self, entry: D, record: R) -> tuple[R, ConfigChange] | None:
+        return None
+
+
+class _WorkSourceSection(_SlugSection[WorkSourceDeclaration, ConfiguredWorkSource]):
+    section = WORK_SOURCES_SECTION
+    kind = RecordKind.WORK_SOURCE
 
     def guard(self, entry: WorkSourceDeclaration, record: ConfiguredWorkSource | None) -> None:
         _require_unclaimed("work source", entry.slug, record, self._stored.former_work_sources.get(entry.slug))
@@ -336,41 +368,15 @@ class _WorkSourceSection:
             entry.slug, entry.name, entry.fields, self._ctx, at=self._at, work_source_id=entry.work_source_id
         )
 
-    def enable(self, record: ConfiguredWorkSource) -> tuple[ConfiguredWorkSource, ConfigChange] | None:
-        return record.set_retired(False, self._ctx, if_match=None, at=self._at) if record.retired else None
-
     def edit(
         self, entry: WorkSourceDeclaration, record: ConfiguredWorkSource
     ) -> tuple[ConfiguredWorkSource, ConfigChange] | None:
         return record.edit(entry.edit, self._ctx, if_match=None, at=self._at)
 
-    def settle(
-        self, entry: WorkSourceDeclaration, record: ConfiguredWorkSource
-    ) -> tuple[ConfiguredWorkSource, ConfigChange] | None:
-        return None
 
-
-class _RepositorySection:
+class _RepositorySection(_SlugSection[RepositoryDeclaration, ConfiguredRepository]):
     section = REPOSITORIES_SECTION
     kind = RecordKind.REPOSITORY
-    handle_field = "slug"
-
-    def __init__(
-        self, declared: Sequence[RepositoryDeclaration], stored: StoredConfig, ctx: ChangeContext, at: datetime
-    ):
-        self.declared = declared
-        self._stored = stored
-        self._ctx = ctx
-        self._at = at
-
-    def key(self, entry: RepositoryDeclaration) -> str:
-        return entry.slug
-
-    def label(self, entry: RepositoryDeclaration) -> str:
-        return entry.slug
-
-    def handle(self, record: ConfiguredRepository) -> str:
-        return record.slug
 
     def guard(self, entry: RepositoryDeclaration, record: ConfiguredRepository | None) -> None:
         _require_unclaimed("repository", entry.slug, record, self._stored.former_repositories.get(entry.slug))
@@ -380,18 +386,10 @@ class _RepositorySection:
             entry.slug, entry.name, entry.fields, self._ctx, at=self._at, repository_id=entry.repository_id
         )
 
-    def enable(self, record: ConfiguredRepository) -> tuple[ConfiguredRepository, ConfigChange] | None:
-        return record.set_retired(False, self._ctx, if_match=None, at=self._at) if record.retired else None
-
     def edit(
         self, entry: RepositoryDeclaration, record: ConfiguredRepository
     ) -> tuple[ConfiguredRepository, ConfigChange] | None:
         return record.edit(entry.edit, self._ctx, if_match=None, at=self._at)
-
-    def settle(
-        self, entry: RepositoryDeclaration, record: ConfiguredRepository
-    ) -> tuple[ConfiguredRepository, ConfigChange] | None:
-        return None
 
 
 class _DeclaredRecordSection:

@@ -747,8 +747,10 @@ class HubNodeExecutor:
             self._marker_authority.revoke(chunk.chunk_id, node_id=node.node_id, epoch=epoch)
 
     def _delivery_sources(self, chunk: Chunk) -> DeliverySources:
-        """The chunk's narrowed delivery markers, the PR references already parsed by the store."""
-        return self._artifacts.delivery_sources_for([chunk.chunk_id]).get(chunk.chunk_id, DeliverySources())
+        """The chunk's delivery markers, the PR references already parsed by the store. The historical landing
+        facts are left out: a bounce reads only what the markers say landed."""
+        read = self._artifacts.delivery_sources_for([chunk.chunk_id]).get(chunk.chunk_id, DeliverySources())
+        return DeliverySources(markers=read.markers, pr_markers=read.pr_markers)
 
     def _landing_project(self, chunk: Chunk) -> LandingProject:
         """The chunk's project and the repository records it links, read now."""
