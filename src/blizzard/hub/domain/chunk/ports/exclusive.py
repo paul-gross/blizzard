@@ -41,6 +41,10 @@ class ILockedChunkRead(Protocol):
         """Every currently-unreleased dependency edge across the fleet."""
         ...
 
+    def standing_edges_touching(self, chunk_id: str) -> list[DependencyEdge]:
+        """The unreleased edges naming ``chunk_id`` in either role — dependent or prerequisite."""
+        ...
+
     def runner_registration(self, runner_id: str) -> RunnerRegistration | None: ...
 
 

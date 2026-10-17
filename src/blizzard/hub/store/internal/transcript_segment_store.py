@@ -9,11 +9,13 @@ from __future__ import annotations
 import hashlib
 import itertools
 import zlib
+from collections.abc import Sequence
 from datetime import datetime
 from typing import Any
 
 from sqlalchemy import Insert, Select, Update, func
 
+from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.chunk.ports.fence import EpochOwner
 from blizzard.hub.domain.observability.transcripts import (
     IWriteTranscriptSegments,
@@ -24,7 +26,6 @@ from blizzard.hub.domain.observability.transcripts import (
     lost_turns,
 )
 from blizzard.hub.store import schema as s
-from blizzard.hub.store.internal import chunk_rows
 from blizzard.hub.store.scoped import ScopedConnections, ScopedStatements
 
 # --- statements: nothing below executes a statement built elsewhere, so the unit tier
@@ -175,6 +176,14 @@ def _natural_key_state_stmt(stmts: ScopedStatements, segment_id: str, turn_range
         s.transcript_segments.c.segment_id == segment_id,
         s.transcript_segments.c.turn_range_start == turn_range_start,
     )
+
+
+def _epoch_owners_stmt(stmts: ScopedStatements, chunk_ids: Sequence[str], epochs: Sequence[int]) -> Select[Any]:
+    """The owners of ``chunk_ids`` at any of ``epochs`` — a superset of the pairs asked for,
+    since a row-value ``IN`` is not portable (`bzh:sql-portable`)."""
+    return stmts.select(
+        s.epoch_owners, s.epoch_owners.c.chunk_id, s.epoch_owners.c.epoch, s.epoch_owners.c.runner_id
+    ).where(s.epoch_owners.c.chunk_id.in_(chunk_ids), s.epoch_owners.c.epoch.in_(epochs))
 
 
 def _chunk_stored_bytes_stmt(stmts: ScopedStatements, chunk_id: str) -> Select[Any]:
@@ -351,8 +360,27 @@ class TranscriptSegmentStore:
         return "rejected" if row.rejected else "accepted"
 
     def epoch_owner(self, chunk_id: str, epoch: int) -> EpochOwner | None:
-        with self._store.read("epoch_owner") as conn:
-            return chunk_rows.epoch_owner(conn, chunk_id, epoch)
+        return self.epoch_owners([(chunk_id, epoch)]).get((chunk_id, epoch))
+
+    def epoch_owners(self, leases: Sequence[tuple[str, int]]) -> dict[tuple[str, int], EpochOwner]:
+        wanted = set(leases)
+        if not wanted:
+            return {}
+        epochs_by_chunk: dict[str, set[int]] = {}
+        for chunk_id, epoch in wanted:
+            epochs_by_chunk.setdefault(chunk_id, set()).add(epoch)
+        owners: dict[tuple[str, int], EpochOwner] = {}
+        with self._store.read("epoch_owners") as conn:
+            # Batched by chunk id, each batch narrowed by its epochs; a pair outside
+            # ``wanted`` is filtered out below.
+            for batch in id_batches(sorted(epochs_by_chunk)):
+                epochs = sorted(set().union(*(epochs_by_chunk[c] for c in batch)))
+                rows = conn.execute(_epoch_owners_stmt(self._store, batch, epochs)).all()
+                for row in rows:
+                    if (row.chunk_id, row.epoch) in wanted:
+                        owner = EpochOwner.hub() if row.runner_id is None else EpochOwner.runner(row.runner_id)
+                        owners[(row.chunk_id, row.epoch)] = owner
+        return owners
 
     def chunk_stored_bytes(self, chunk_id: str) -> int:
         with self._store.read("chunk_stored_bytes") as conn:

@@ -69,6 +69,9 @@ class LockedChunkTransaction:
     def standing_edges(self) -> list[DependencyEdge]:
         return self._dependencies.list_standing_edges_conn(self.conn)
 
+    def standing_edges_touching(self, chunk_id: str) -> list[DependencyEdge]:
+        return self._dependencies.standing_edges_for_conn(self.conn, chunk_id)
+
     def runner_registration(self, runner_id: str) -> RunnerRegistration | None:
         return self._registry.get_runner_conn(self.conn, runner_id)
 

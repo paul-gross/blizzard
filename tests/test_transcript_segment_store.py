@@ -74,6 +74,7 @@ def _executed_statements() -> dict[str, ClauseElement]:
         "_high_water_stmt": m._high_water_stmt(_STMTS, "r1"),
         "_high_water_owner_stmt": m._high_water_owner_stmt(_STMTS, "r1"),
         "_natural_key_state_stmt": m._natural_key_state_stmt(_STMTS, "sg_1", 0),
+        "_epoch_owners_stmt": m._epoch_owners_stmt(_STMTS, ["ch_1"], [1]),
         "_chunk_stored_bytes_stmt": m._chunk_stored_bytes_stmt(_STMTS, "ch_1"),
         "_runner_window_bytes_stmt": m._runner_window_bytes_stmt(_STMTS, "r1", _NOW),
         "_insert_high_water_stmt": m._insert_high_water_stmt(_STMTS, "r1", seq=7, at=_NOW),
@@ -141,7 +142,8 @@ def test_index_projection_accepts_an_opencode_harness_id_and_a_missing_one_alike
 def test_every_statement_the_store_executes_compiles_under_both_dialects() -> None:
     for name, stmt in _executed_statements().items():
         for dialect in (postgresql.dialect(), sqlite.dialect()):
-            assert "transcript_" in str(stmt.compile(dialect=dialect)), name
+            sql = str(stmt.compile(dialect=dialect))
+            assert "transcript_" in sql or "epoch_owners" in sql, name
 
 
 def test_no_statement_the_store_executes_leaves_the_portable_surface() -> None:

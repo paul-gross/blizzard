@@ -67,18 +67,23 @@ class ChunkDependenciesStore:
 
     def standing_edges_for(self, chunk_id: str) -> list[DependencyEdge]:
         with self._store.read("standing_edges_for") as conn:
-            rows = conn.execute(
-                self._store.select(s.chunk_dependencies)
-                .where(
-                    s.chunk_dependencies.c.released_at.is_(None)
-                    & (
-                        (s.chunk_dependencies.c.dependent_chunk_id == chunk_id)
-                        | (s.chunk_dependencies.c.prerequisite_chunk_id == chunk_id)
-                    )
+            return self.standing_edges_for_conn(conn, chunk_id)
+
+    def standing_edges_for_conn(self, conn: Connection, chunk_id: str) -> list[DependencyEdge]:
+        """`standing_edges_for`'s already-open-connection sibling — the locked handle's read of
+        one chunk's unreleased edges in either role (``bzh:store-exclusive-write``)."""
+        rows = conn.execute(
+            self._store.select(s.chunk_dependencies)
+            .where(
+                s.chunk_dependencies.c.released_at.is_(None)
+                & (
+                    (s.chunk_dependencies.c.dependent_chunk_id == chunk_id)
+                    | (s.chunk_dependencies.c.prerequisite_chunk_id == chunk_id)
                 )
-                # (declared_at, dependency_id) — an explicit total order (`bzh:sql-portable`).
-                .order_by(s.chunk_dependencies.c.declared_at, s.chunk_dependencies.c.dependency_id)
-            ).all()
+            )
+            # (declared_at, dependency_id) — an explicit total order (`bzh:sql-portable`).
+            .order_by(s.chunk_dependencies.c.declared_at, s.chunk_dependencies.c.dependency_id)
+        ).all()
         return [_edge(row) for row in rows]
 
     def declare_locked(
