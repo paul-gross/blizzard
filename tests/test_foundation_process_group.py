@@ -1,4 +1,4 @@
-"""Process-group signalling in ``foundation/process.py``, against real process groups: the primitive swallows a
+"""Process-group signalling in ``src/blizzard/foundation/process.py``, against real process groups: the primitive swallows a
 vanished group, and the TERM, grace, KILL sequence reaches a member that ignores TERM."""
 
 from __future__ import annotations
