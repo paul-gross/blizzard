@@ -138,9 +138,8 @@ def bound_workspace_ids(bindings: tuple[BindingDeclaration, ...] | None) -> tupl
 @domain_model
 @dataclass(frozen=True)
 class ResolvedSubscription:
-    """One declared subscription as the loop reads it. Sampling and credential renewal are not the tick's: the host
-    runs them on its own driver. ``provider`` rides along because the registration push reads it, though no view
-    reaches it yet."""
+    """One declared subscription as the loop reads it. ``provider`` rides along because the registration push
+    reads it, though no view reaches it yet."""
 
     slug: str
     name: str

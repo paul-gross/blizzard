@@ -7,8 +7,7 @@ from datetime import datetime, timedelta
 
 from blizzard.foundation.roles import domain_model
 
-#: 1/24 of the shortest retention window (a day, for heartbeats and external-usage samples), so
-#: an aged row outlives its window by at most one floor.
+#: How often the retention pass may run.
 RETENTION_FLOOR = timedelta(hours=1)
 
 
@@ -17,10 +16,7 @@ RETENTION_FLOOR = timedelta(hours=1)
 class RetentionPasses:
     """When the last retention pass ran, held **across ticks** in memory — composition-root-owned
     and as long-lived as the loop itself, like
-    :class:`~blizzard.runner.harness.capability_snapshot.HarnessVersionCache`.
-
-    A restart forgets it, so the first tick after one runs a full pass: harmless for an age-based
-    prune, and it adds no store write or crash window."""
+    :class:`~blizzard.runner.harness.capability_snapshot.HarnessVersionCache`."""
 
     floor: timedelta = RETENTION_FLOOR
     _last_pass: datetime | None = None

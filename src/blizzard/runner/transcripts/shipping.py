@@ -1,7 +1,6 @@
 """The transcript pump's per-window decisions — pure, over a loaded segment and plain counts.
 
-The pump reads the source, resolves the harness, and carries a plan out; these decide what
-that plan is: whether a segment is read at all this window, what a window's read turns into,
+Whether a segment is read at all this window, what a window's read turns into,
 and whether a drain keeps reading."""
 
 from __future__ import annotations

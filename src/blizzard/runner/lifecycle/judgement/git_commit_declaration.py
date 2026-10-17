@@ -143,8 +143,7 @@ class GitCommitDeclaration:
         """The row ``worker``'s lease appends for this declaration at ``at``.
 
         Refuses a repo the environment does not list, a lease whose standing does not accept a git-commit,
-        and a declaration once the lease's outcome is buffered (it would never be submitted). An open
-        takeover's closed reference lease accepts one, recorded as riding no completion."""
+        and a declaration once the lease's outcome is buffered (it would never be submitted)."""
         require_listed_repo(self.environment_id, self.repo, known_repos)
         lease = worker.lease
         if not worker.accepts(WorkerVerb.GIT_COMMIT):
