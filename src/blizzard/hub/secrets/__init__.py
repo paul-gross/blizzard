@@ -13,6 +13,7 @@ from blizzard.foundation.roles import domain_model
 from blizzard.hub.config import ConfigError
 from blizzard.hub.domain.config.secrets import (
     IHubKeyProvider,
+    IRotatableHubKeyProvider,
     ISealedSecretRepository,
     ISecretCatalog,
     ISecretCipher,
@@ -32,7 +33,7 @@ def secret_keys_dir(data_dir: Path) -> Path:
     return data_dir / "auth" / "secret-keys"
 
 
-def hub_key_provider(environ: Mapping[str, str], *, data_dir: Path) -> IHubKeyProvider:
+def hub_key_provider(environ: Mapping[str, str], *, data_dir: Path) -> IRotatableHubKeyProvider:
     """The env source when ``BZ_HUB_SECRET_KEY`` is set, else the directory source —
     which mints its first generation when none exists."""
     if environ.get(ENV_SECRET_KEY):

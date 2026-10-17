@@ -290,6 +290,24 @@ class IHubKeyProvider(Protocol):
     def available_ids(self) -> frozenset[str]: ...
 
 
+class IRotatableHubKeyProvider(IHubKeyProvider, Protocol):
+    """A key source an offline rotation can move to a new current generation. A source whose generations are
+    set outside the hub (the environment) answers :meth:`mint` with its current generation and treats
+    :meth:`promote` and :meth:`prune` as no-ops."""
+
+    def mint(self) -> KeyGeneration:
+        """The generation rotation seals into: a freshly minted one, not yet current."""
+        ...
+
+    def promote(self, key_id: str) -> None:
+        """Make ``key_id`` the current generation."""
+        ...
+
+    def prune(self, referenced: frozenset[str]) -> None:
+        """Drop every generation no stored row references."""
+        ...
+
+
 class ISecretCipher(Protocol):
     """Authenticated sealing bound to ``(name, revision)``."""
 

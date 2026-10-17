@@ -7,7 +7,7 @@ import binascii
 from collections.abc import Mapping
 
 from blizzard.hub.config import ConfigError
-from blizzard.hub.domain.config.secrets import IHubKeyProvider, KeyGeneration
+from blizzard.hub.domain.config.secrets import IRotatableHubKeyProvider, KeyGeneration
 from blizzard.hub.secrets.internal.key_material import KEY_BYTES, generation_of
 
 ENV_SECRET_KEY = "BZ_HUB_SECRET_KEY"
@@ -31,6 +31,15 @@ class EnvKeyProvider:
     def available_ids(self) -> frozenset[str]:
         return frozenset(self._by_id)
 
+    def mint(self) -> KeyGeneration:
+        return self._current
+
+    def promote(self, key_id: str) -> None:
+        """The generations are the environment's, so there is nothing to move."""
+
+    def prune(self, referenced: frozenset[str]) -> None:
+        """The generations are the environment's, so there is nothing to drop."""
+
 
 def _parse(environ: Mapping[str, str], variable: str) -> KeyGeneration:
     """Never echoes the variable's content — only its name and the expected shape."""
@@ -43,5 +52,5 @@ def _parse(environ: Mapping[str, str], variable: str) -> KeyGeneration:
     return generation_of(material)
 
 
-def _conforms_env_key_provider(x: EnvKeyProvider) -> IHubKeyProvider:
+def _conforms_env_key_provider(x: EnvKeyProvider) -> IRotatableHubKeyProvider:
     return x

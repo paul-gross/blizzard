@@ -22,7 +22,9 @@ from blizzard.hub.domain.observability.analytics.events import (
     TranscriptEvent,
 )
 from blizzard.hub.domain.observability.egress.assembly import runner_step
+from blizzard.hub.domain.observability.egress.config import EgressConfig
 from blizzard.hub.domain.observability.egress.rows import trace_id_text
+from blizzard.hub.domain.observability.egress.schema import EVENTS_SCHEMA
 from blizzard.hub.domain.observability.tracing.facts import StepFacts
 from blizzard.hub.domain.observability.tracing.steps import identify_steps
 from blizzard.hub.egress.writer import rfc3339_utc
@@ -32,12 +34,15 @@ __all__ = [
     "RECORD_DROPPED",
     "RECORD_EVENT",
     "EventDerivation",
+    "ExportPaths",
     "ExportedEventsEntry",
     "FilePathMode",
     "FilePathPolicy",
+    "MissingPathKey",
     "derivation_id",
     "derivation_rows",
     "dropped_row",
+    "export_paths",
     "missing_key_reason",
 ]
 
@@ -51,6 +56,14 @@ _FILE_READ = "file_read"
 type FilePathMode = Literal["relative", "hashed", "absolute", "omit"]
 
 
+class MissingPathKey(ValueError):
+    """A file path policy that hashes paths was asked for without a hash key."""
+
+    def __init__(self, mode: FilePathMode) -> None:
+        super().__init__(f"file_paths mode {mode!r} requires a non-empty hash key")
+        self.mode = mode
+
+
 @domain_model
 @dataclass(frozen=True)
 class FilePathPolicy:
@@ -62,7 +75,7 @@ class FilePathPolicy:
 
     def __post_init__(self) -> None:
         if self.mode in ("relative", "hashed") and not self.key:
-            raise ValueError(f"file_paths mode {self.mode!r} requires a non-empty hash key")
+            raise MissingPathKey(self.mode)
 
     def subject(self, path: str, working_directory: str | None) -> str | None:
         """``path`` as it leaves under this policy; ``working_directory`` is the segment's, never itself exported."""
@@ -79,6 +92,29 @@ class FilePathPolicy:
     def _hash(self, path: str) -> str:
         assert self.key is not None
         return hmac.new(self.key, path.encode(), hashlib.sha256).hexdigest()
+
+
+@domain_model
+@dataclass(frozen=True)
+class ExportPaths:
+    """What an export carries given its path hash key: the ``config`` narrowed to the datasets it can write, the
+    file path ``policy`` (``None`` when the config's needs a key it lacks), and the unset ``path_key_env`` variable
+    that dropped a configured ``events`` dataset, else ``None``."""
+
+    config: EgressConfig
+    policy: FilePathPolicy | None
+    missing_key_env: str | None
+
+
+def export_paths(config: EgressConfig, key: bytes | None) -> ExportPaths:
+    """The export's file path policy, or none and no ``events`` dataset when the policy needs a key it lacks."""
+    try:
+        return ExportPaths(config, FilePathPolicy(config.file_paths, key), None)
+    except MissingPathKey:
+        if EVENTS_SCHEMA.name not in config.datasets:
+            return ExportPaths(config, None, None)
+        kept = replace(config, datasets=tuple(name for name in config.datasets if name != EVENTS_SCHEMA.name))
+        return ExportPaths(kept, None, config.path_key_env)
 
 
 def missing_key_reason(variable: str) -> str:

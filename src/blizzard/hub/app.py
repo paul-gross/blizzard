@@ -116,7 +116,7 @@ from blizzard.hub.domain.projects.model import ProjectRequired
 from blizzard.hub.domain.runners.host import HostRetired
 from blizzard.hub.domain.runners.registration import RunnerRetired
 from blizzard.hub.runtime import migration_runner
-from blizzard.hub.secrets import KeyCoverage, hub_key_provider, require_hub_key
+from blizzard.hub.secrets import KeyCoverage, hub_key_provider, require_hub_key, secret_cipher
 from blizzard.hub.secrets.rotation import RotationResult, rotate_keys
 from blizzard.hub.store.tenant_guard import install_tenant_guard
 from blizzard.hub.tenancy import StoreScope, TenantClosed, TenantId, UnknownTenant
@@ -292,7 +292,8 @@ def rotate_secret_keys(config: HubConfig, environ: Mapping[str, str]) -> Rotatio
     engine = open_hub_engine(config.db_url)
     try:
         tenants = build_process_core(engine).every_open()
-        return rotate_keys([stores.secrets for stores in tenants], environ, data_dir=config.data_dir)
+        keys = hub_key_provider(environ, data_dir=config.data_dir)
+        return rotate_keys([stores.secrets for stores in tenants], keys, secret_cipher)
     finally:
         engine.dispose()
 
@@ -310,7 +311,9 @@ def import_legacy_config(
         core = build_process_core(engine)
         target = _legacy_import_tenant(core.open_tenants(), named=tenant)
         stores = core.open(StoreScope(target))
-        authoring = build_config_authoring(stores, secret_keys=hub_key_provider(environ, data_dir=config.data_dir))
+        authoring = build_config_authoring(
+            stores, cipher=secret_cipher(hub_key_provider(environ, data_dir=config.data_dir))
+        )
         existing = ExistingConfig(
             secrets=frozenset(secret.name for secret in stores.secrets.list_all()),
             work_sources=tuple(stores.work_source_records.list_all(include_retired=True)),
