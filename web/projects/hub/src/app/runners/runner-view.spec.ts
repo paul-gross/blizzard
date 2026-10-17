@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 
 import type { HostCard } from './host-rows.model';
-import type { RunnerRow } from './runner-rows';
+import type { RunnerRow } from './runner-rows.model';
 import { RunnerPanelView } from './runner-view';
 
 const NOW = new Date().toISOString();

@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { commands, page } from 'vitest/browser';
 
-import type { RunnerRow } from './runner-rows';
+import type { RunnerRow } from './runner-rows.model';
 import { RunnerPanelView } from './runner-view';
 
 /** The design tokens are a global stylesheet loaded via each app's build `styles`,

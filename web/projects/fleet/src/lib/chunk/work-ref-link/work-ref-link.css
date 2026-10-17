@@ -1,0 +1,29 @@
+:host {
+  display: contents;
+}
+a,
+span {
+  color: var(--cyan);
+}
+a {
+  text-decoration: none;
+}
+a:hover,
+a:focus-visible {
+  text-decoration: underline;
+  outline: none;
+}
+.inline {
+  font-size: var(--fs-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wrapping {
+  font-size: var(--fs-sm);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.chip {
+  margin-right: 6px;
+}

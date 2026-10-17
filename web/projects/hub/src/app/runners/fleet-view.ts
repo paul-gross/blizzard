@@ -7,7 +7,7 @@ import { HostDetail } from './host-detail';
 import { HostlessRunnerDetail } from './hostless-runner-detail';
 import type { HostVerbEvent, HostVerbsVm } from './host-verbs.model';
 import { NO_HOST_VERBS } from './host-verbs.model';
-import type { RunnerRow } from './runner-rows';
+import type { RunnerRow } from './runner-rows.model';
 
 /**
  * The desktop Fleet tab's presentational half: host cards (then a "No host" group) beside

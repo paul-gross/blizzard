@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, InjectionToken, computed, inject, input, output } from '@angular/core';
 
-import type { GraphView } from 'fleet';
+import { hubApi, type GraphView } from 'fleet';
 import { type DiagramSelection, endpointNodeIds, incidentEdgeIds } from './graph-diagram-selection';
 import { GraphDiagramMigration } from './graph-diagram-migration';
 import { GraphDiagramNodeShape } from './graph-diagram-node-shape';
@@ -121,7 +121,7 @@ export class GraphDiagram {
       kind: 'edge',
       edgeId: loop.id,
       fromNodeId: loop.nodeId,
-      target: { kind: 'node', nodeId: loop.nodeId },
+      target: { kind: hubApi.ChoiceTargetKind.NODE, nodeId: loop.nodeId },
       choiceId: loop.choiceId,
       edgeKind: 'retry',
     });

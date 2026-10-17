@@ -2,7 +2,7 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { commands, page } from 'vitest/browser';
 import type { HostCard } from './host-rows.model';
-import type { RunnerRow } from './runner-rows';
+import type { RunnerRow } from './runner-rows.model';
 
 import { RunnersView } from './runners-view';
 

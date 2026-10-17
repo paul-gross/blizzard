@@ -7,7 +7,7 @@ import { firstFleetId, fleetList, resolveSelection } from './fleet-page.model';
 import { FleetView } from './fleet-view';
 import { type HostCard, groupHostRows } from './host-rows.model';
 import { NO_HOST_VERBS } from './host-verbs.model';
-import type { RunnerRow } from './runner-rows';
+import type { RunnerRow } from './runner-rows.model';
 
 /**
  * The desktop Fleet tab (the tooled half of `blizzard-context:/verification/blizzard.md`'s

@@ -45,20 +45,10 @@
   gap: 8px;
   min-width: 0;
 }
-.d-sub .iss {
-  color: var(--cyan);
-  font-size: var(--fs-sm);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-a.iss {
-  text-decoration: none;
-}
-a.iss:hover,
-a.iss:focus-visible {
-  text-decoration: underline;
-  outline: none;
+.d-sub .sep {
+  flex: none;
+  color: var(--label-dim);
+  font-size: var(--fs-label);
 }
 .st {
   font-size: var(--fs-label);

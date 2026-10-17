@@ -4,7 +4,7 @@ import { KitAsyncState, KitBadge, KitBeacon, KitFactList, KitPanel, KitSlotBar, 
 import type { RunnerDetailVm } from './fleet-page.model';
 import { FleetRunnerRow } from './fleet-runner-row';
 import { connectionState } from './host-rows.model';
-import { runnerSeenLabel, type RunnerRow } from './runner-rows';
+import { runnerSeenLabel, type RunnerRow } from './runner-rows.model';
 
 /**
  * The Fleet tab's right pane for a runner standing under no host — the host detail's shape

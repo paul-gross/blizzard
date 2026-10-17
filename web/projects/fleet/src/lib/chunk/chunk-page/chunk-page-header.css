@@ -28,20 +28,6 @@
   gap: 6px;
   min-width: 0;
 }
-.cp-sub .iss {
-  color: var(--cyan);
-  font-size: var(--fs-sm);
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-a.iss {
-  text-decoration: none;
-}
-a.iss:hover,
-a.iss:focus-visible {
-  text-decoration: underline;
-  outline: none;
-}
 .cp-sub .st {
   font-size: var(--fs-label);
   letter-spacing: 0.14em;

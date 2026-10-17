@@ -7,8 +7,6 @@ import { hubApi, type GraphView } from 'fleet';
  * is.
  */
 
-const TargetKind = hubApi.ChoiceTargetKind;
-
 /** An edge's derived semantic kind — purely structural, since the wire model
  * carries no `kind` field: an edge to the reserved `done` terminal, a migration to
  * another graph, or any forward-pointing edge, is `advance`; a self-loop or a back
@@ -21,9 +19,9 @@ export type EdgeKind = 'advance' | 'retry';
  * {@link hubApi.ChoiceTargetKind}: a node in this graph, the reserved `done`
  * terminal, or a migration to another graph entirely. */
 export type EdgeTarget =
-  | { readonly kind: typeof TargetKind.NODE; readonly nodeId: string }
-  | { readonly kind: typeof TargetKind.DONE }
-  | { readonly kind: typeof TargetKind.GRAPH; readonly targetGraph: string };
+  | { readonly kind: typeof hubApi.ChoiceTargetKind.NODE; readonly nodeId: string }
+  | { readonly kind: typeof hubApi.ChoiceTargetKind.DONE }
+  | { readonly kind: typeof hubApi.ChoiceTargetKind.GRAPH; readonly targetGraph: string };
 
 export interface ResolvedEdge {
   readonly id: string;
@@ -49,18 +47,18 @@ export function resolveEdges(graph: GraphView, nameToId: ReadonlyMap<string, str
     // edge only carries `choice_id` (mirrors `graph-detail.ts`'s `resolvedEdges`).
     const choice = nodeById.get(edge.from_node_id)?.choices?.find((c) => c.choice_id === edge.choice_id);
     const label = choice?.name ?? edge.choice_id;
-    const targetKind = edge.target_kind ?? TargetKind.NODE;
-    if (targetKind === TargetKind.DONE) {
-      resolved.push({ id: `e${i}`, fromId: edge.from_node_id, target: { kind: TargetKind.DONE }, kind: 'advance', label, choiceId: edge.choice_id });
+    const targetKind = edge.target_kind ?? hubApi.ChoiceTargetKind.NODE;
+    if (targetKind === hubApi.ChoiceTargetKind.DONE) {
+      resolved.push({ id: `e${i}`, fromId: edge.from_node_id, target: { kind: hubApi.ChoiceTargetKind.DONE }, kind: 'advance', label, choiceId: edge.choice_id });
       continue;
     }
-    if (targetKind === TargetKind.GRAPH) {
+    if (targetKind === hubApi.ChoiceTargetKind.GRAPH) {
       const targetGraph = edge.target_graph;
       if (!targetGraph) return null;
       resolved.push({
         id: `e${i}`,
         fromId: edge.from_node_id,
-        target: { kind: TargetKind.GRAPH, targetGraph },
+        target: { kind: hubApi.ChoiceTargetKind.GRAPH, targetGraph },
         kind: 'advance',
         label,
         choiceId: edge.choice_id,
@@ -75,7 +73,7 @@ export function resolveEdges(graph: GraphView, nameToId: ReadonlyMap<string, str
     const isSelfLoop = toId === edge.from_node_id;
     const isBackEdge = !isSelfLoop && toIndex <= fromIndex;
     const kind: EdgeKind = isSelfLoop || isBackEdge ? 'retry' : 'advance';
-    resolved.push({ id: `e${i}`, fromId: edge.from_node_id, target: { kind: TargetKind.NODE, nodeId: toId }, kind, label, choiceId: edge.choice_id });
+    resolved.push({ id: `e${i}`, fromId: edge.from_node_id, target: { kind: hubApi.ChoiceTargetKind.NODE, nodeId: toId }, kind, label, choiceId: edge.choice_id });
   }
   return resolved;
 }

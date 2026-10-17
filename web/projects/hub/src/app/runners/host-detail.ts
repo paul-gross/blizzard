@@ -6,7 +6,7 @@ import type { HostDetailVm } from './fleet-page.model';
 import { connectionState } from './host-rows.model';
 import { HostVerbBar } from './host-verb-bar';
 import { type HostVerbEvent, type HostVerbsVm, NO_HOST_VERBS } from './host-verbs.model';
-import type { RunnerRow } from './runner-rows';
+import type { RunnerRow } from './runner-rows.model';
 
 /**
  * The Fleet tab's right pane for one host: the title bar (light, name, short ref, state,

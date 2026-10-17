@@ -10,6 +10,7 @@ import {
   resumeCopy,
   type runnerApi,
   type Tone,
+  WorkRefLink,
 } from 'fleet';
 
 /**
@@ -24,7 +25,7 @@ import {
 @Component({
   selector: 'app-machine-detail-header',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitBadge, KitButton, KitConfirmDialog, KitTooltip, RouterLink],
+  imports: [WorkRefLink, KitBadge, KitButton, KitConfirmDialog, KitTooltip, RouterLink],
   templateUrl: './machine-detail-header.html',
   styleUrl: './machine-detail-header.css',
 })

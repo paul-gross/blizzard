@@ -6,7 +6,7 @@ import { LensLink } from 'fleet/shell';
 import { groupHostRows, type HostCard } from './host-rows.model';
 import { railVm } from './runner-rail.model';
 import { SubscriptionBlocks } from './subscription-blocks';
-import { localPauseHint, runnerSeenLabel, runnerSeenTag, type RunnerRow } from './runner-rows';
+import { localPauseHint, runnerSeenLabel, runnerSeenTag, type RunnerRow } from './runner-rows.model';
 
 /**
  * The board rail's runner panel — the presentational half, most important first: a pace line per

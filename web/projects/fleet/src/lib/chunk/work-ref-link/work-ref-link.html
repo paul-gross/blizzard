@@ -1,0 +1,16 @@
+@if (workRef().web_url; as url) {
+  <a
+    [class]="appearance()"
+    [attr.data-testid]="testid()"
+    [href]="url"
+    target="_blank"
+    rel="noreferrer"
+    [attr.title]="url"
+    (click)="$event.stopPropagation()"
+    >{{ workRef().label ?? workRef().source + '#' + workRef().ref }}</a
+  >
+} @else {
+  <span [class]="appearance()" [attr.data-testid]="testid()">{{
+    workRef().label ?? workRef().source + '#' + workRef().ref
+  }}</span>
+}

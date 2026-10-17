@@ -63,14 +63,6 @@
   text-overflow: ellipsis;
   min-width: 0;
 }
-.chip {
-  color: var(--cyan);
-  text-decoration: none;
-  margin-right: 6px;
-}
-a.chip:hover {
-  text-decoration: underline;
-}
 .st-row {
   display: flex;
   justify-content: flex-end;
