@@ -159,7 +159,8 @@ async function render(findings: readonly unknown[] = FINDINGS) {
     if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
     if (method === 'GET' && path === '/api/scopes') return SCOPES;
     if (method === 'GET' && path === '/api/routines') return ROUTINES;
-    if (method === 'GET' && path === '/api/findings') return { findings, next_cursor: null };
+    if (method === 'GET' && path === '/api/findings') return { findings, next_cursor: 'older' };
+    if (method === 'GET' && path === '/api/findings/classes') return [...new Set(findings.map((f) => (f as { class: string }).class))].sort();
     if (method === 'GET' && path === '/api/garden-proposals') return { proposals: [], next_cursor: null };
     return {};
   });
@@ -178,6 +179,23 @@ async function render(findings: readonly unknown[] = FINDINGS) {
 }
 
 describe('gardening findings filter row and row disambiguation shell sweep (web:shell-sweep, blizzard#486)', () => {
+  it.each([1280, 390])('renders the Older control within the list at %ipx', async (width) => {
+    const { fixture, stub } = await render();
+    const root = fixture.nativeElement as HTMLElement;
+    document.body.appendChild(root);
+    try {
+      await page.viewport(width, 800);
+      await settle(fixture);
+      const older = root.querySelector<HTMLElement>('[data-testid="gardening-findings-older"]')!;
+      expect(older).not.toBeNull();
+      expect(older.getBoundingClientRect().right).toBeLessThanOrEqual(width);
+    } finally {
+      root.remove();
+      stub.restore();
+      await page.viewport(1280, 800);
+    }
+  });
+
   it.each([390, 320])('renders all four filter dropdowns and a disambiguated row with no horizontal overflow at %ipx', async (width) => {
     const { fixture, stub } = await render();
     const root = fixture.nativeElement as HTMLElement;

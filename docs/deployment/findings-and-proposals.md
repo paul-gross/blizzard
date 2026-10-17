@@ -42,19 +42,42 @@ one or many ids and exits them together, in one call. `blizzard hub finding reop
 whichever exit or `gone` fact was newest, restoring the finding to `live`. Every verb 404s on an unknown finding id and
 422s on a blank note; a hand `resolve` from this verb records no garden proposal of its own.
 
-**The hub board's Gardening tab reaches the same verbs from its own Findings sub-tab: a triage list over one
-routine/scope bucket, further filterable by class and by state, beside the selected finding's own panel. Every one of
+**The hub board's Gardening tab reaches the same verbs from its own Findings sub-tab: a newest-first triage list over one
+routine/scope bucket, further filterable by class and by state on the hub, beside the selected finding's own panel. It
+starts with live findings; All states includes gone and exited findings. Older loads another page, while the Class
+choices cover the entire routine/scope bucket, including classes not yet loaded. The Findings sub-tab has no count badge:
+the loaded pages are not a total for the project. A finding linked directly by id opens
+its detail even when its row is outside the loaded pages. Every one of
 those four filters, and the selection itself, rides the URL, so a filtered bucket is a link and a row click never
-discards a filter. `resolve`, `confirm-gone`, `wont-fix` and `not-a-finding` — or, on a finding that has already exited,
+discards a filter. `GET /api/findings` and the project route accept `state`, `class`, `descending`, `cursor`, and `limit`;
+`GET /api/findings/classes` and its project route return distinct class labels for the bucket. `resolve`, `confirm-gone`, `wont-fix` and `not-a-finding` — or, on a finding that has already exited,
 `reopen` — are dispatched one finding at a time from that panel, with a note. `supersede` is not among them: it needs
 the absorbing finding's id, which the panel collects nowhere, so it stays a CLI and API verb. A `gone`-flagged finding
-renders tinted but stays a normal, live, selectable row; an exited finding stays visible too, rendered dimmed rather
-than removed. A finding named by an accepted-and-minted proposal shows that proposal's linked work item beside it.
+renders tinted but stays selectable under All states or Gone; an exited finding is dimmed under All states or its own
+state. A finding named by an accepted-and-minted proposal shows that proposal's linked work item beside it.
 Neither the triage actions nor their dialog is offered without `chunk:control`.**
 
 On mobile, the Findings sub-tab opens on its filters and list alone. Selecting a finding replaces both with the
 full-width finding panel; its Back row restores the same filtered list because the filter query parameters remain in the
 URL throughout the drill-down.
+
+### Local findings-read latency
+
+On one migrated synthetic SQLite hub store with 5,000 findings under one routine/scope (half with a newer `gone` fact),
+the historical and paged `FindingStore.list_page` implementations were run against the **same unchanged store**. Each
+reading is the mean of seven calls after one warm-up, in milliseconds; the historical implementation was loaded from the
+feature branch's base revision while the paged implementation came from the feature branch. These are adapter read-path
+timings, not HTTP or hosted-fleet latencies.
+
+| Read | Historical | Paged implementation |
+| --- | ---: | ---: |
+| First 50 live findings, ascending | 10.96 | 10.47 |
+| First 1,000 findings, all states, ascending | 31.22 | 29.06 |
+| First 50 live findings, descending | — | 16.39 |
+
+The board's previous all-states drain paid for every page; its initial read now requests only 50 live findings. The
+descending page costs more than the old ascending first page on this synthetic store, but bounds first-load response size
+independently of the finding count. This local ratio does not predict absolute latency on a hosted volume.
 
 ### Review-sourced findings
 

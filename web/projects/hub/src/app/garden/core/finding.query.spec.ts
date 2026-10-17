@@ -42,9 +42,13 @@ function stubFetchCapturingUrl(body: unknown): { urls: string[]; restore: () => 
 class TestFindingsBucketQueryHost {
   readonly routine = signal<string | null>(null);
   readonly scope = signal<string | null>(null);
+  readonly className = signal<string | null>(null);
+  readonly state = signal<string | null>('live');
   readonly query = injectHubFindingsBucketQuery(
     () => this.routine(),
     () => this.scope(),
+    () => this.className(),
+    () => this.state(),
   );
 }
 
@@ -207,6 +211,9 @@ describe('injectHubFindingsBucketQuery', () => {
     expect(url.searchParams.has('routine')).toBe(false);
     expect(url.searchParams.has('scope')).toBe(false);
     expect(url.searchParams.get('include_gone')).toBe('true');
+    expect(url.searchParams.get('state')).toBe('live');
+    expect(url.searchParams.get('descending')).toBe('true');
+    expect(url.searchParams.get('limit')).toBe('50');
   });
 
   it('reads the bucket off GET /api/findings?routine=&scope=&include_gone=true', async () => {
@@ -236,13 +243,45 @@ describe('injectHubFindingsBucketQuery', () => {
     fixture.componentInstance.scope.set('blizzard');
     await settle(fixture);
 
-    expect(fixture.componentInstance.query.data()?.map((f) => f.finding_id)).toEqual(['fin_1']);
+    expect(fixture.componentInstance.query.data()?.pages.flatMap((p) => p.findings ?? []).map((f) => f.finding_id)).toEqual(['fin_1']);
     expect(stub.urls).toHaveLength(1);
     const url = new URL(stub.urls[0]);
     expect(url.pathname).toBe('/api/findings');
     expect(url.searchParams.get('routine')).toBe('comments');
     expect(url.searchParams.get('scope')).toBe('blizzard');
     expect(url.searchParams.get('include_gone')).toBe('true');
+  });
+
+  it('loads only the next page on demand and keys class and state independently', async () => {
+    const urls: string[] = [];
+    const previousFetch = globalThis.fetch;
+    hubClient.setConfig({ baseUrl: 'http://localhost', fetch: (async (input: Request) => {
+      urls.push(input.url);
+      const cursor = new URL(input.url).searchParams.get('cursor');
+      return new Response(JSON.stringify({ findings: [{ finding_id: cursor ?? 'new' }], next_cursor: cursor ? null : 'older-key' }), {
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }) as typeof fetch });
+    try {
+      TestBed.configureTestingModule({ imports: [TestFindingsBucketQueryHost], providers: [provideZonelessChangeDetection(), provideTanStackQuery(new QueryClient())] });
+      const fixture = TestBed.createComponent(TestFindingsBucketQueryHost);
+      await settle(fixture);
+      expect(urls).toHaveLength(1);
+      expect(fixture.componentInstance.query.hasNextPage()).toBe(true);
+      await fixture.componentInstance.query.fetchNextPage();
+      await settle(fixture);
+      expect(urls).toHaveLength(2);
+      expect(new URL(urls[1]).searchParams.get('cursor')).toBe('older-key');
+      expect(fixture.componentInstance.query.data()?.pages).toHaveLength(2);
+      fixture.componentInstance.className.set('other');
+      fixture.componentInstance.state.set(null);
+      await settle(fixture);
+      expect(urls).toHaveLength(3);
+      expect(new URL(urls[2]).searchParams.get('class')).toBe('other');
+      expect(new URL(urls[2]).searchParams.has('state')).toBe(false);
+    } finally {
+      hubClient.setConfig({ baseUrl: '', fetch: previousFetch });
+    }
   });
 
   it('omits scope alone when only routine is named — every scope under that one routine', async () => {

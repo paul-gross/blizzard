@@ -1,8 +1,9 @@
-import { injectQuery } from '@tanstack/angular-query-experimental';
+import { injectInfiniteQuery, injectQuery } from '@tanstack/angular-query-experimental';
 
-import { getFindingApiFindingsFindingIdGet, listFindingsApiFindingsGet, listProjectFindingsApiProjectsProjectFindingsGet, type FindingDetailView, type FindingView, hubFindingKey, hubFindingsBucketKey, hubFindingsKey } from 'fleet';
+import { getFindingApiFindingsFindingIdGet, listFindingClassesApiFindingsClassesGet, listFindingsApiFindingsGet, listProjectFindingClassesApiProjectsProjectFindingsClassesGet, listProjectFindingsApiProjectsProjectFindingsGet, type FindingDetailView, type FindingView, type FindingsPageView, hubApi, hubFindingKey, hubFindingClassesKey, hubFindingsBucketKey, hubFindingsKey } from 'fleet';
 import { injectProjectFilter, lensedKey } from 'fleet/shell';
-import { DRAIN_LIMIT, drainPages } from '../../core/paginated-read';
+
+const FINDINGS_PAGE = 50;
 
 /**
  * Every id in `findingIds()`, read live through its own `GET
@@ -80,47 +81,62 @@ export function injectHubFindingQuery(findingId: () => string | null) {
 }
 
 /**
- * The findings triage bucket read — every finding matching `routine`/`scope`, live, through the lensed project's
- * `GET /api/projects/{project}/findings` — a routine's name and a scope's slug are unique only inside a project — or
- * `GET /api/findings` on All (the triage surface, as distinct from
- * {@link injectHubFindingsQuery}'s by-id fan-out the docket detail's evidence table
- * reads). `routine` and `scope` are each independently optional: a `null` means every
- * value on that dimension, unfiltered, so the read is always enabled. A `null` half is
- * simply omitted from the request's query params (never sent through as the literal
- * string `"null"`); a named half rides as-is. Always reads with `include_gone: true` — a gone
- * finding still belongs on the triage surface until a person confirms it (that's what
- * `confirm-gone` records), so the bucket can't afford to have the server drop it
- * before a person has weighed in. The read is keyset-paginated on the hub;
- * {@link drainPages} follows `next_cursor` to exhaustion so the
- * bucket still resolves whole.
+ * The triage bucket: one descending, hub-filtered page per request. The key carries
+ * every filter and the project lens, while `next_cursor` advances only on demand.
+ * `include_gone` lets an explicit state or All states reach exited rows; an absent
+ * state is interpreted by the caller as live, not as an unfiltered request.
  */
-export function injectHubFindingsBucketQuery(routine: () => string | null, scope: () => string | null) {
+export function injectHubFindingsBucketQuery(routine: () => string | null, scope: () => string | null, className: () => string | null, state: () => string | null) {
+  const project = injectProjectFilter();
+  return injectInfiniteQuery(() => {
+    const r = routine();
+    const s = scope();
+    const lens = project();
+    const cls = className();
+    const st = state();
+    const query = (cursor: string | undefined) => ({
+      ...(r !== null ? { routine: r } : {}),
+      ...(s !== null ? { scope: s } : {}),
+      include_gone: true,
+      descending: true,
+      ...(cls !== null ? { class: cls } : {}),
+      ...(st !== null ? { state: st as hubApi.FindingState } : {}),
+      cursor,
+      limit: FINDINGS_PAGE,
+    });
+    return {
+      queryKey: lensedKey(hubFindingsBucketKey(r, s, cls, st), lens),
+      initialPageParam: undefined as string | undefined,
+      queryFn: async ({ pageParam }: { pageParam: string | undefined }): Promise<FindingsPageView> => {
+        const { data, error } = lens === null
+          ? await listFindingsApiFindingsGet({ query: query(pageParam), throwOnError: false })
+          : await listProjectFindingsApiProjectsProjectFindingsGet({
+              path: { project: lens }, query: query(pageParam), throwOnError: false,
+            });
+        if (error) throw error;
+        return data!;
+      },
+      getNextPageParam: (last: FindingsPageView) => last.next_cursor ?? undefined,
+    };
+  });
+}
+
+export function injectHubFindingClassesQuery(routine: () => string | null, scope: () => string | null) {
   const project = injectProjectFilter();
   return injectQuery(() => {
     const r = routine();
     const s = scope();
     const lens = project();
-    const query = (cursor: string | undefined) => ({
-      ...(r !== null ? { routine: r } : {}),
-      ...(s !== null ? { scope: s } : {}),
-      include_gone: true,
-      cursor,
-      limit: DRAIN_LIMIT,
-    });
+    const query = { ...(r !== null ? { routine: r } : {}), ...(s !== null ? { scope: s } : {}) };
     return {
-      queryKey: lensedKey(hubFindingsBucketKey(r, s), lens),
-      queryFn: (): Promise<FindingView[]> =>
-        drainPages(
-          (cursor) =>
-            lens === null
-              ? listFindingsApiFindingsGet({ query: query(cursor), throwOnError: false })
-              : listProjectFindingsApiProjectsProjectFindingsGet({
-                  path: { project: lens },
-                  query: query(cursor),
-                  throwOnError: false,
-                }),
-          (page) => page.findings,
-        ),
+      queryKey: lensedKey(hubFindingClassesKey(r, s), lens),
+      queryFn: async (): Promise<string[]> => {
+        const { data, error } = lens === null
+          ? await listFindingClassesApiFindingsClassesGet({ query, throwOnError: false })
+          : await listProjectFindingClassesApiProjectsProjectFindingsClassesGet({ path: { project: lens }, query, throwOnError: false });
+        if (error) throw error;
+        return data!;
+      },
     };
   });
 }

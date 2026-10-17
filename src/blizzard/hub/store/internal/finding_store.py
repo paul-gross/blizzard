@@ -13,6 +13,7 @@ from datetime import datetime
 
 from sqlalchemy import ColumnElement, Connection, and_, case, desc, func, or_
 
+from blizzard.foundation.findings import FindingState
 from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.garden.findings.model import (
     EXIT_KINDS,
@@ -401,18 +402,23 @@ class FindingStore:
         routine_name: str | None,
         scope_slug: str | None,
         source: str | None = None,
+        class_: str | None = None,
+        state: FindingState | None = None,
         include_gone: bool = False,
+        descending: bool = False,
         cursor: str | None = None,
         limit: int,
     ) -> FindingPage:
-        """`list_for`/`list_for_routine`/`list_across_routines` unified into one bounded,
-        keyset-paginated read. With `include_gone=False` the query itself drops every finding
-        whose newest fact is not live, so `LIMIT limit+1` bounds the page: one page query plus
-        one `fact_summaries` read over the page's own ids. The only per-skipped-finding cost
-        is the indexed newest-fact probe."""
+        """Keyset page whose filters precede `LIMIT limit+1` and fact reconstitution.
+        The state predicate shares the fold's newest-fact order, including factless live
+        rows; the skipped-finding cost is an indexed newest-fact probe."""
         if limit < 1:
             raise ValueError(f"limit must be at least 1, got {limit}")
-        stmt = self._store.select(findings).order_by(findings.c.finding_id).limit(limit + 1)
+        stmt = (
+            self._store.select(findings)
+            .order_by(desc(findings.c.finding_id) if descending else findings.c.finding_id)
+            .limit(limit + 1)
+        )
         if project_id is not None:
             stmt = stmt.where(findings.c.project_id == project_id)
         if routine_name is not None:
@@ -421,16 +427,35 @@ class FindingStore:
             stmt = stmt.where(findings.c.scope_slug == scope_slug)
         if source is not None:
             stmt = stmt.where(findings.c.source == source)
+        if class_ is not None:
+            stmt = stmt.where(findings.c.class_ == class_)
         if cursor is not None:
-            stmt = stmt.where(findings.c.finding_id > _decode_finding_cursor(cursor))
-        if not include_gone:
+            key = _decode_finding_cursor(cursor)
+            stmt = stmt.where(findings.c.finding_id < key if descending else findings.c.finding_id > key)
+        if state == FindingState.LIVE or (state is None and not include_gone):
             stmt = stmt.where(_newest_fact_is_live(self._store))
+        elif state is not None:
+            stmt = stmt.where(~_no_newest_fact_in(self._store, lambda kind: kind == state.value))
         with self._store.read("list_page") as conn:
             rows = conn.execute(stmt).all()
             summaries = fact_summaries(conn, [row.finding_id for row in rows[:limit]])
         page = [self._of(row, summaries[row.finding_id]) for row in rows[:limit]]
         next_cursor = _encode_finding_cursor(page[-1]) if len(rows) > limit else None
         return FindingPage(findings=page, next_cursor=next_cursor)
+
+    def distinct_classes(
+        self, *, project_id: str | None, routine_name: str | None, scope_slug: str | None
+    ) -> list[str]:
+        """All distinct class labels: the page's ids cannot supply options for unloaded classes."""
+        stmt = self._store.select(findings, findings.c.class_).distinct().order_by(findings.c.class_)
+        if project_id is not None:
+            stmt = stmt.where(findings.c.project_id == project_id)
+        if routine_name is not None:
+            stmt = stmt.where(findings.c.routine_name == routine_name)
+        if scope_slug is not None:
+            stmt = stmt.where(findings.c.scope_slug == scope_slug)
+        with self._store.read("distinct_classes") as conn:
+            return list(conn.execute(stmt).scalars())
 
     def count_by_class(self, project_id: str, routine_name: str, class_: str) -> int:
         """How often `class_` recurs for `routine_name` — filtered on

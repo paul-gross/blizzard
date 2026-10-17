@@ -52,12 +52,12 @@ describe('surfaceOf and surfaceLabel', () => {
 });
 
 describe('gardenSurfaceTabs', () => {
-  it('orders the five tabs scopes, routines, runs, findings, proposals, each with its count', () => {
-    expect(gardenSurfaceTabs({ scopes: 4, routines: 2, runs: null, findings: 7, proposals: 3 })).toEqual([
+  it('orders the five tabs, omitting a total badge for paged findings', () => {
+    expect(gardenSurfaceTabs({ scopes: 4, routines: 2, runs: null, findings: null, proposals: 3 })).toEqual([
       { surface: 'scopes', label: 'Scopes', count: 4 },
       { surface: 'routines', label: 'Routines', count: 2 },
       { surface: 'runs', label: 'Runs', count: null },
-      { surface: 'findings', label: 'Findings', count: 7 },
+      { surface: 'findings', label: 'Findings', count: null },
       { surface: 'proposals', label: 'Proposals', count: 3 },
     ]);
   });
@@ -96,20 +96,19 @@ describe('waitingLabel', () => {
 });
 
 describe('gardenSurfaceCounts', () => {
-  it('counts each list, and for proposals only the waiting ones', () => {
+  it('counts complete lists and waiting proposals, but not paged findings', () => {
     expect(
       gardenSurfaceCounts({
         scopes: [{}, {}],
         routines: [{}],
         runs: [],
-        findings: [{}, {}, {}],
         proposals: [proposal('gp_1', false), proposal('gp_2', true)],
       }),
-    ).toEqual({ scopes: 2, routines: 1, runs: 0, findings: 3, proposals: 1 });
+    ).toEqual({ scopes: 2, routines: 1, runs: 0, findings: null, proposals: 1 });
   });
 
   it('leaves a count out until its read answers', () => {
-    expect(gardenSurfaceCounts({ scopes: undefined, routines: undefined, runs: undefined, findings: undefined, proposals: undefined })).toEqual({
+    expect(gardenSurfaceCounts({ scopes: undefined, routines: undefined, runs: undefined, proposals: undefined })).toEqual({
       scopes: null,
       routines: null,
       runs: null,

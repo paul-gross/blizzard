@@ -1,9 +1,9 @@
 import { computed, type Signal } from '@angular/core';
 import { confirmGoneFindingsMutationKey, notAFindingFindingsMutationKey, reopenFindingsMutationKey, resolveFindingsMutationKey, supersedeFindingsMutationKey, wontFixFindingsMutationKey } from '../../core/mutation-keys';
-import { injectHubFindingsBucketQuery } from '../core/finding.query';
+import { injectHubFindingClassesQuery, injectHubFindingsBucketQuery } from '../core/finding.query';
 import { injectHubRoutinesQuery } from '../core/routines.query';
 import { injectHubScopesQuery } from '../core/scopes.query';
-import { hubApi, injectPendingMutationVariables, type AsyncStateQuery, type FindingView, type KitChipOption, type RoutineView, type ScopeView } from 'fleet';
+import { hubApi, injectPendingMutationVariables, type FindingView, type KitChipOption, type RoutineView, type ScopeView } from 'fleet';
 import { type FindingExitVars } from '../core/finding.mutations';
 
 import { injectQueryFilters } from '../../core/route-state';
@@ -40,9 +40,9 @@ export interface FindingsBucketFilters {
   readonly classChipValue: Signal<string>;
   onClassChoose(value: string): void;
   readonly stateChips: readonly KitChipOption[];
-  readonly stateFilter: Signal<string | null>;
+  readonly stateFilter: Signal<string>;
   onStateChoose(value: string): void;
-  readonly bucketQuery: AsyncStateQuery;
+  readonly bucketQuery: ReturnType<typeof injectHubFindingsBucketQuery>;
   readonly bucketRows: Signal<readonly FindingView[]>;
   readonly filteredBucket: Signal<readonly FindingView[]>;
 }
@@ -116,11 +116,11 @@ export function injectFindingsBucketFilters(): FindingsBucketFilters {
     });
   }
 
-  const bucketQuery = injectHubFindingsBucketQuery(selectedRoutine, selectedScope);
-  const bucketRows = computed<readonly FindingView[]>(() => bucketQuery.data() ?? []);
-
   const classFilter = computed<string | null>(() => url.read('class'));
-  const stateFilter = computed<string | null>(() => url.read('state'));
+  const stateFilter = computed<string>(() => url.read('state') ?? 'live');
+  const bucketQuery = injectHubFindingsBucketQuery(selectedRoutine, selectedScope, classFilter, () => stateFilter() === ALL_STATES ? null : stateFilter());
+  const classesQuery = injectHubFindingClassesQuery(selectedRoutine, selectedScope);
+  const bucketRows = computed<readonly FindingView[]>(() => bucketQuery.data()?.pages.flatMap((page) => page.findings ?? []) ?? []);
 
   /** Every finding id any of the six human-driven triage verbs is currently pending
    * for (`bzh:frontend-pending-override`), paired with that verb's own known
@@ -158,7 +158,7 @@ export function injectFindingsBucketFilters(): FindingsBucketFilters {
   );
 
   const classChips = computed<readonly KitChipOption[]>(() => {
-    const classes = Array.from(new Set(bucketRows().map((f) => f.class))).sort((a, b) => a.localeCompare(b));
+    const classes = classesQuery.data() ?? [];
     return [
       { value: ALL_CLASSES, label: 'All classes', testid: 'gardening-finding-class-all' },
       ...classes.map((c) => ({ value: CLASS_VALUE_PREFIX + c, label: c, testid: `gardening-finding-class-item-${c}` })),
@@ -179,31 +179,25 @@ export function injectFindingsBucketFilters(): FindingsBucketFilters {
     ...Object.values(hubApi.FindingState).map((s) => ({ value: s, label: s, testid: `gardening-finding-state-item-${s}` })),
   ];
   function onStateChoose(value: string): void {
-    url.patch({ state: value === ALL_STATES ? null : value });
+    url.patch({ state: value });
   }
 
-  /** Narrowed by class and state (client-side), and under a concrete state chip by
-   * the pending rows whose verb resolves to a state other than that chip
+  /** Under a concrete state chip, hide pending rows whose verb resolves to another state
    * (`bzh:frontend-pending-override`). No cache write backs this — a rejected call
    * reverts the dropped row the instant its mutation's `isPending()` clears. Pinned by
    * `gardening-findings-page.spec.ts`'s "keeps the row visible on a same-state
    * re-dispatch — …" and "does not drop the row under 'All states'…". */
   const filteredBucket = computed<readonly FindingView[]>(() => {
-    const cls = classFilter();
     const st = stateFilter();
     const hideable =
-      st === null
+      st === ALL_STATES
         ? new Set<string>()
         : new Set(
             pendingByResultingState()
               .filter((entry) => entry.resultingState !== st)
               .flatMap((entry) => entry.findingIds),
           );
-    return bucketRows().filter((f) => {
-      if (cls !== null && f.class !== cls) return false;
-      if (st === null) return true;
-      return f.state === st && !hideable.has(f.finding_id);
-    });
+    return bucketRows().filter((f) => !hideable.has(f.finding_id));
   });
 
   return {
