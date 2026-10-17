@@ -48,10 +48,7 @@ class ChunkFrameState:
 
 def load_frame_states(services: TenantServices, chunk_ids: Sequence[str]) -> dict[str, ChunkFrameState]:
     """`ChunkFrameState.load`'s batched sibling (`bzh:bulk-reconstitution`) — one snapshot per distinct
-    requested id, through the four plurals. Reads every distinct chunk's facts and
-    record once, then the union of pinned and cross-graph newest-transition graph ids
-    once, then every chunk's route once, then the routed runners' names once — a bounded
-    number of statements regardless of how many ids or facts the batch names."""
+    requested id, with a bounded number of reads regardless of batch size."""
     ids = list(dict.fromkeys(chunk_ids))
     facts_by_id = services.chunks.facts.load_facts_for(ids)
     chunks_by_id = services.chunks.record.get_many(ids)

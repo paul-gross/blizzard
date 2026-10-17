@@ -58,8 +58,7 @@ class WorkSourceEntry:
         secrets: ISecretReader,
         instrument: Callable[[httpx.Client], None] | None = None,
     ) -> BuiltWorkSource:
-        """The record's adapter over a client carrying its secret, revealed now; a secret
-        that cannot be revealed is a :class:`WorkSourceError`, never an absent source."""
+        """Build the record's adapter over a client carrying its revealed secret."""
         secret: SecretValue | None = None
         if record.fields.secret is not None:
             try:
@@ -84,10 +83,8 @@ class WorkSourceEntry:
         close_forge_writes_enabled: bool = True,
         instrument_client: Callable[[httpx.Client], None] | None = None,
     ) -> StoreWorkSourceRegistry:
-        """The store-backed registry with the built-in ``hub`` source — always seated, both an
-        editor and a closer, neither opt-in. ``close_forge_writes_enabled=False`` seats no
-        closer for a *configured* source — see ``docs/deployment/work-sources.md``.
-        ``instrument_client`` is applied to each configured source's client."""
+        """Construct a store-backed registry; ``instrument_client`` applies to each
+        configured source's client."""
         return StoreWorkSourceRegistry(
             records=records,
             objects=objects,

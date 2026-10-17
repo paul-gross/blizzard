@@ -71,9 +71,7 @@ def resolved_runner(request: Request) -> RunnerPrincipal | None:
 
 @dataclass(frozen=True)
 class RunnerAuth:
-    """One request's runner-bearer decision — resolution stays separate from what each
-    router does with it: the fleet router demands a principal, the operator routers refuse one,
-    and the identity route answers the verdict itself."""
+    """One request's runner-bearer resolution and decisions."""
 
     request: Request
     services: HubServices

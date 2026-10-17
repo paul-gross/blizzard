@@ -1,7 +1,7 @@
 """Repository routes — the configured-record verbs (create, list, show, patch, retire,
 enable), human-plane throughout (``reject_runner_principal``). Writes go only through
 ``ConfigAuthoring``; the actor and door come from the request's :class:`ChangeContext`.
-The records are inert: delivery still takes its target from the hub's forge settings."""
+The records are inert."""
 
 from __future__ import annotations
 

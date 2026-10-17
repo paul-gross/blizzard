@@ -41,9 +41,7 @@ _PROPOSALS_ADAPTER: TypeAdapter[list[GardenProposalCandidate]] = TypeAdapter(lis
 @collaborator
 @dataclass(frozen=True)
 class GardenFormats:
-    """Validates each garden artifact against its published shape. A JSON syntax failure and a
-    shape mismatch alike become the domain's one rejection, naming the artifact rather than
-    dumping pydantic's own error."""
+    """Maps validated garden artifact shapes to domain models."""
 
     def finding_delta(self, artifact_name: str, raw: str) -> DeliveredDelta:
         try:

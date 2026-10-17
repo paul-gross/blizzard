@@ -1,8 +1,5 @@
-"""The built-in ``hub`` work source — always seated, no
-configured record, no credential. Unlike every other binding, this one's own
-store is the item's system of record rather than a cache of an external one: nothing
-here is fetched from a forge.
-"""
+"""The built-in ``hub`` work source — reads items from the hub's own store,
+with no configured record or credential."""
 
 from __future__ import annotations
 
@@ -76,10 +73,8 @@ class HubWorkSource:
     # -- IWorkCloser -----------------------------------------------------------
 
     def close(self, pointer: WorkRef, *, trace: DeliveryTrace | None) -> None:
-        """Mark the item ``delivered`` via ``edits.deliver`` — a no-op on an item already closed,
-        withdrawn included; raises only :class:`WorkItemGoneError`, for a ref with no item row. Then
-        resolves whichever garden-proposal findings `pointer` answers, safe to repeat:
-        :meth:`GardenProposalDeliveryResolution.resolve_for_item` gates on its own durable marker."""
+        """Deliver the item and resolve its garden-proposal findings; raise
+        :class:`WorkItemGoneError` when the item does not exist."""
         item = self._items.get(pointer.source, pointer.ref)
         if item is None:
             raise WorkItemGoneError(f"no {RESERVED_HUB_SOURCE_NAME}:{pointer.ref} work item exists")

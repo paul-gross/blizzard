@@ -1,5 +1,5 @@
-"""The JSON binding of the config codec. Decoding is ``json``'s own, so every valid JSON document reads — tab
-whitespace and surrogate-pair escapes included — with a duplicate key refused as the YAML binding refuses it."""
+"""The JSON binding of the config codec. Decoding accepts JSON tab whitespace and
+surrogate-pair escapes; duplicate keys are refused."""
 
 from __future__ import annotations
 

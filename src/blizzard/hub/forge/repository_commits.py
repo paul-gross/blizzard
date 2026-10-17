@@ -3,7 +3,7 @@
 Each call resolves the cited repository to its record, reveals the record's secret, and asks
 the forge — nothing about a forge is held between calls, so a record edit or a secret replace
 reaches the next one (``bzh:config-read-on-use``). A repository no record names, or whose secret
-cannot be revealed, answers ``None``: today's "no forge configured". A resolver is bound to one
+cannot be revealed, answers ``None``. A resolver is bound to one
 project, and only the repositories that project links are candidates, read on each call too, so a
 repository it does not link answers ``None`` the same way."""
 

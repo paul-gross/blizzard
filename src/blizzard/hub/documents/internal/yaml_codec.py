@@ -73,8 +73,6 @@ _StrictLoader.add_constructor("tag:yaml.org,2002:float", _StrictLoader.construct
 
 
 class YamlCodec:
-    """Strict YAML: decode and encode round-trip each other."""
-
     media_types = ("application/yaml", "application/x-yaml", "text/yaml", "text/x-yaml")
     extensions = (".yaml", ".yml")
 

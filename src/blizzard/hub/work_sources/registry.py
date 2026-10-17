@@ -10,10 +10,8 @@ Every source past the edge is named by its key: ``hub``, or a configured source'
 ``resolve`` reads a slug — the prefix of an ingest token — and the labels render each source's
 current slug, so a rename reaches every displayed work ref with no stored ref rewritten.
 
-``resolve``, ``names`` and ``annotating_ids`` read the active set, so ingest naming a
-retired source is refused and the annotation sweep lets go of its labels; ``get``,
-``annotator``, ``closer``, ``label_clearer`` and the labels reach retired records too, so items
-already ingested from one still label, close and annotate.
+``resolve``, ``names`` and ``annotating_ids`` read active records; ``get``,
+``annotator``, ``closer``, ``label_clearer`` and labels can read retired records.
 """
 
 from __future__ import annotations
@@ -52,10 +50,10 @@ class BuiltWorkSource:
 
 
 class StoreWorkSourceRegistry:
-    """``build`` turns a record into its adapter, revealing the record's secret; it raises
-    :class:`~blizzard.hub.work_sources.source.WorkSourceError` when it cannot, so a source
-    that exists never reads as unconfigured. ``close_forge_writes_enabled=False`` seats no
-    closer for a configured source (never the built-in one)."""
+    """``build`` turns a record into its adapter, revealing its secret; failure raises
+    :class:`~blizzard.hub.work_sources.source.WorkSourceError` for an active source.
+    ``close_forge_writes_enabled=False`` seats no closer for a configured source;
+    the built-in source remains a closer."""
 
     def __init__(
         self,

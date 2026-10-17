@@ -132,9 +132,7 @@ class FailedStep:
 @domain_model
 @dataclass(frozen=True)
 class BounceEnvelope:
-    """A hub node's kick-back envelope: why delivery did not complete.
-
-    ``cause`` and ``detail`` keep their original meaning for consumers that read only them."""
+    """A hub node's kick-back envelope: why delivery did not complete."""
 
     cause: str
     detail: str
@@ -352,7 +350,7 @@ class HubEnv:
     resolution: RepositoryResolution = field(
         default_factory=lambda: RepositoryResolution(RepositoryOutcome.NOTHING_TO_RESOLVE)
     )
-    #: Each record's revealed secret by record name, placed in the step's env — the one place a value leaves the hub.
+    #: Each record's revealed secret by record name, placed in the step's env.
     forge_tokens: Mapping[str, str] = field(default_factory=dict)
     feature_title: str | None = None
     expects_git_commits: bool = True
@@ -578,7 +576,7 @@ class HubNodeExecutor:
         """Release every live hub-execution slot of this executor's tenant — a boot step, not a
         per-request one: a live row when the hub starts belongs to a run the previous process died
         in, so the chunk resumes on its next request rather than after ``slot_stale_after``. Sound
-        while one hub process serves the store; only the daemon's startup calls it."""
+        while one hub process serves the store."""
         return self._hub_exec.release_live_hub_exec_slots(at=self._clock.now())
 
     def _run_acquired(
@@ -591,7 +589,6 @@ class HubNodeExecutor:
         poll_history: list[HubNodePollFact],
         slot_id: str,
     ) -> HubRunResult:
-        # The same inputs the sweep derives its `hub exec` span from, so `run:` steps nest under it.
         hub_exec = DerivedContext.of(StepKey.attempt(chunk.chunk_id, epoch + 1), SpanRole.HUB_EXEC, slot_id)
         self._tracer.link(hub_exec)
         return self._run_locked(chunk, graph, node, epoch=epoch, poll_history=poll_history, hub_exec=hub_exec)
