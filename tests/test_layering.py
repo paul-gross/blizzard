@@ -571,6 +571,11 @@ def _runner_seam_breaches(src_root: Path) -> list[str]:
     return breaches
 
 
+@pytest.mark.skipif(
+    "MUTANT_UNDER_TEST" in os.environ,
+    reason="sweeps the source tree, where mutmut's copy of a host adapter also carries every generated mutant body, "
+    "renamed away from the cross-kind write this sweep exempts by method name",
+)
 def test_host_tables_are_reached_only_through_the_host_stores() -> None:
     """``bzh:host-stores-confined``: a runner adapter names no host-scoped table and a host adapter no runner-scoped
     one, bar the single cross-kind write (``record_external_usage_attempt``'s outbound report); the exemption from the
@@ -1844,6 +1849,10 @@ def test_hub_domain_package_inits_re_export_nothing() -> None:
     assert _domain_init_reexports(_HUB_DOMAIN_DIR) == []
 
 
+@pytest.mark.skipif(
+    "MUTANT_UNDER_TEST" in os.environ,
+    reason="sweeps package inits, which mutmut rewrites to import its generated trampoline names",
+)
 def test_runner_node_package_inits_re_export_nothing() -> None:
     nodes = [node for node in _RUNNER_PACKAGE_LAYERS if "/" not in node and (_RUNNER_DIR / node).is_dir()]
     assert [f"{node}/{init}" for node in nodes for init in _domain_init_reexports(_RUNNER_DIR / node)] == []
