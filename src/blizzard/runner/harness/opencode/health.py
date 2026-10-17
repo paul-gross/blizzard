@@ -1,9 +1,4 @@
-"""The OpenCode health-probe binding.
-
-Standalone, like :class:`~blizzard.runner.harness.opencode.compatibility.probe.
-OpenCodeCompatibilityProbe`: the health-probe seam is a narrow, separately-injected
-collaborator rather than a slice folded onto
-:class:`~blizzard.runner.harness.opencode.adapter.OpenCodeAdapter` itself."""
+"""The OpenCode health-probe binding."""
 
 from __future__ import annotations
 
@@ -36,9 +31,7 @@ _HARNESS_ID = "opencode"
 def _degradations_from_manifest(corpus: ICompatibilityCorpus, version: str) -> tuple[DeclaredDegradation, ...]:
     """This ``version``'s own declared degradations, read from its committed corpus manifest —
     never a hardcoded Python literal describing only one version. A
-    missing or malformed manifest reads as "no declared degradations", the same fail-soft
-    posture :func:`~blizzard.runner.harness.offline_compatibility.classify_offline`
-    already takes for a manifest it cannot read."""
+    missing or malformed manifest reads as "no declared degradations"."""
     manifest = corpus.manifest(_HARNESS_ID, version)
     if manifest is None:
         return ()
@@ -67,8 +60,7 @@ class OpenCodeHealthProbe:
 
     def __init__(self, binary: str = "opencode", *, auth_path: Path | None, corpus: ICompatibilityCorpus) -> None:
         self._binary = binary
-        # Resolved by the composition root from the env a spawned worker would read
-        # (`bzh:dependency-injection`); `None` reads as no credential.
+        # `None` reads as no credential.
         self._auth_path = auth_path
         self._corpus = corpus
         # The admitted range owes at least one committed corpus manifest inside it —

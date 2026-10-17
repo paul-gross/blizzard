@@ -32,9 +32,9 @@ class OpenCodeSection:
     model_aliases: tuple[tuple[str, str], ...] = ()
     #: OpenCode's effort -> `--variant` mapping; unmapped drops to `None` and logs once.
     effort_aliases: tuple[tuple[str, str], ...] = ()
-    #: The runner-owned OpenCode permission/plugin document's path; `None` predates the binding.
+    #: The runner-owned OpenCode permission/plugin document's path; `None` when none is scaffolded.
     worker_config_path: str | None = None
-    #: Override for the health probe's own auth file; `None` is its own default.
+    #: Override for the OpenCode auth file's path; `None` takes the default.
     auth_path: str | None = None
 
     @property

@@ -1,7 +1,6 @@
 """The harness package's public entry point for ambient-settings conflict detection.
 
-The Claude Code declaration's probe and ``harness status`` diagnostics take the check through
-this surface, which delegates to ``src/blizzard/runner/harness/claude_code/ambient.py``."""
+Delegates to ``src/blizzard/runner/harness/claude_code/ambient.py``."""
 
 from __future__ import annotations
 

@@ -1,7 +1,6 @@
 """The runner's harness-health cache and the read-only seam its consumers depend on.
 
-Composition-root-owned and as long-lived as the runner process: the loop refreshes it, the
-local API and :class:`~blizzard.runner.lifecycle.session.HarnessSelector` only read it through
+Composition-root-owned and as long-lived as the runner process; readers go through
 :class:`IReadHarnessHealth`."""
 
 from __future__ import annotations
@@ -38,8 +37,7 @@ _UNSET = object()
 
 
 class IReadHarnessHealth(Protocol):
-    """The read side of :class:`HarnessHealthCache` — what the local API and the harness
-    selector need (``bzh:seam-size-ceiling``); neither may trigger a probe."""
+    """The read side of :class:`HarnessHealthCache` (``bzh:seam-size-ceiling``); a read never triggers a probe."""
 
     def get(self, harness_id: str) -> HarnessHealthResult | None: ...
 
@@ -132,8 +130,7 @@ class HarnessHealthCache:
 
     def get(self, harness_id: str) -> HarnessHealthResult | None:
         """The last-computed result, or ``None`` when :meth:`refresh` has never run for
-        this harness — :class:`~blizzard.runner.lifecycle.session.HarnessSelector`'s own read,
-        which must never itself trigger a probe mid-selection."""
+        this harness."""
         return self._results.get(harness_id)
 
     def observed_version(self, harness_id: str) -> str | None:

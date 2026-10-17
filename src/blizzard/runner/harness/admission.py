@@ -3,7 +3,7 @@
 Whether an observed version is a member of a binding's admitted range, the tri-state verdict the
 health evaluator reads, which committed reference corpus stands in for an observed version, and
 which classification a corpus manifest records. No filesystem, subprocess, or clock read happens
-here: :mod:`.offline_compatibility` reads them and hands the values in."""
+here."""
 
 from __future__ import annotations
 

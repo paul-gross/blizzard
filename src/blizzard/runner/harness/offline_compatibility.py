@@ -40,8 +40,7 @@ def admitted_corpus_versions(
     """Every committed ``harness_id`` corpus version that lies inside ``admitted_range``, oldest
     first — the corpus fixtures a reference-corpus lookup or a binding's own declared-degradations
     union may ever resolve to. Membership is checked through
-    :func:`~blizzard.runner.harness.admission.version_admitted`,
-    the one rule a corpus name and an observed version are both judged by."""
+    :func:`~blizzard.runner.harness.admission.version_admitted`."""
 
     admitted = [(Version(name), name) for name in corpus.versions(harness_id) if version_admitted(name, admitted_range)]
     admitted.sort(key=lambda entry: entry[0])

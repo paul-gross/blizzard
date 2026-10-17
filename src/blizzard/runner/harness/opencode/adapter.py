@@ -90,8 +90,7 @@ _RESET_DURATION_RE = re.compile(
     r"reset\w*\s+in\s+(?:(\d+)\s*day[s]?\s*)?(?:(\d+)\s*hour[s]?\s*)?(?:(\d+)\s*minute[s]?\s*)?", re.IGNORECASE
 )
 
-# `_PROVIDER_REFUSAL_STATUSES` (src/blizzard/runner/harness/opencode/compatibility/facts.py) excludes 529, so it never
-# collides with the usage-limit/refusal statuses above. The name match is a secondary
+# The name match is a secondary
 # guard only — the status check above is the one known-shape signal.
 _OVERLOAD_STATUS_CODE = 529
 _OVERLOAD_NAME_RE = re.compile(r"overloaded", re.IGNORECASE)
@@ -481,8 +480,7 @@ class OpenCodeAdapter:
         env = self.identity_env(preamble, chunk_id, session_id) if preamble is not None else self._config_env()
         self._check_plugins(session_cwd, env)
         env = self._deny_unanswerable_asks(session_cwd, env)
-        # Deferred: a resume gets spawn/judge's ownership — `src/blizzard/runner/lifecycle/dormant.py::_wake`
-        # calls `confirm_durable()` right after its own durable `record_spawn` lands.
+        # Deferred: a resume gets spawn/judge's ownership.
         with harness_shared.stdout_target(stdout_path) as stdout_file:
             launched = self._launcher.launch(
                 cmd, cwd=session_cwd, env=env, stdout=stdout_file, stderr=None, defer_disarm=True
@@ -527,7 +525,6 @@ class OpenCodeAdapter:
     def _config_env(self) -> dict[str, str]:
         env = dict(self._worker_env.variables)
         if self._worker_config_path:
-            # Supplied both as a path and as its serialized content.
             env["OPENCODE_CONFIG"] = self._worker_config_path
             with open(self._worker_config_path, encoding="utf-8") as f:
                 content = f.read()
@@ -548,7 +545,7 @@ class OpenCodeAdapter:
         """``Normal``'s guarantee: no permission rule of an unattended launch can resolve to ``ask``.
 
         Every reachable ask is composed to ``deny`` in ``OPENCODE_CONFIG_CONTENT``, then OpenCode re-resolves the
-        result; a launch it cannot prove clean fails here, before any process starts. Takeover never comes through."""
+        result; a launch it cannot prove clean fails here, before any process starts."""
         if self._autonomy is not Autonomy.Normal:
             return env
         if not cwd:
@@ -585,8 +582,7 @@ class OpenCodeAdapter:
         """Every event this invocation's own captured stdout carries, in emission order,
         skipping any line that fails to parse rather than discarding the whole capture over
         it — OpenCode has no transcript fallback to re-derive a lost verdict from (unlike
-        Claude Code's ``ResultEnvelope``). Parses line by line, unlike
-        :func:`~.opencode.shapes.parse_run_jsonl`, which raises on the first bad line."""
+        Claude Code's ``ResultEnvelope``)."""
         events: list[OpenCodeRunEvent] = []
         for line in output.splitlines():
             stripped = line.strip()
@@ -908,8 +904,7 @@ class OpenCodeAdapter:
         task_parts: dict[str, OpenCodePart] = {}
         derived: tuple[str, str] | None = None
         # One pass over `lines`: the observed (provider, model) is picked up off the
-        # same decode that yields each line's finish-parts, rather than a second full pass
-        # through `observed_model`; a caller's own observation of these lines wins over it.
+        # same decode that yields each line's finish-parts; a caller's own observation wins over it.
         for line in lines:
             decoded = self._decode_line(line)
             if decoded is None:

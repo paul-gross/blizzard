@@ -1,7 +1,7 @@
 """The OpenCode permission-resolution subprocess seam.
 
 Asks OpenCode itself what an unattended launch's effective permissions are — built-in defaults, user and
-project config, ``.opencode/`` agents, and env layers included — rather than re-implementing its layering.
+project config, ``.opencode/`` agents, and env layers included.
 A bare, Landlock-free ``subprocess.run`` like :mod:`opencode.transcript.export`: it reads resolved configuration, it
 does not run agent code."""
 

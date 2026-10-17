@@ -1,6 +1,4 @@
-"""OpenCode's own ``--version`` normalizer — the one both the live compatibility probe and
-``OpenCodeHealthProbe.normalize_version`` route a membership check through, so the two can never
-disagree about what "the observed version" means. Each binding owns its raw shape and normalizer."""
+"""OpenCode's own ``--version`` normalizer. Each binding owns its raw shape and normalizer."""
 
 from __future__ import annotations
 
@@ -17,9 +15,7 @@ OPENCODE_VERSION_PATTERN = re.compile(
 
 def normalize_opencode_version(raw: str | None) -> str | None:
     """The bare semantic version in one raw OpenCode ``--version`` output, or ``None`` when it
-    isn't exactly one matching line — the normalizer both the live OpenCode probe and
-    ``OpenCodeHealthProbe.normalize_version`` route a membership check through. Scoped to
-    OpenCode alone."""
+    isn't exactly one matching line. Scoped to OpenCode alone."""
     if raw is None:
         return None
     lines = [line for line in raw.splitlines() if line.strip()]
