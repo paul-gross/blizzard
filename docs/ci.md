@@ -9,8 +9,9 @@ file is the in-repo operator reference for running it.
 
 [`.github/workflows/gate.yml`](../.github/workflows/gate.yml) is the reusable (`workflow_call`) merge gate, called by
 every trigger workflow: ruff format+check, pyright, the `blizzard:structural-gate` ast-grep scan
-(`contracts/ast-grep/`), pytest (unit + component), OpenAPI spec drift, contract document drift (`gate / contract drift`), hub↔runner wire compatibility against the PR's
-merge-base (`gate / hub↔runner wire compatibility`, PR-only — see below), the `web/` frontend checks (eslint, vitest,
+(`contracts/ast-grep/`), pytest (unit + component), OpenAPI spec drift, contract document drift
+(`gate / contract drift`), hub↔runner wire compatibility against the PR's merge-base
+(`gate / hub↔runner wire compatibility`, PR-only — see below), the `web/` frontend checks (eslint, vitest,
 structural gate, generated-client drift), and the Vale prose lint (`gate / process-reference and change-history lint`,
 `styles/Blizzard/ProcessReference.yml`, `styles/Blizzard/ChangeHistory.yml`, `styles/Blizzard/VariantHolder.yml` and
 `styles/Blizzard/ShortFormPointer.yml` against `.vale.ini`). The
