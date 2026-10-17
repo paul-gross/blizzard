@@ -28,7 +28,7 @@ from blizzard.hub.domain.config.work_sources import (
 from blizzard.hub.store.internal.config_change_store import append_change
 from blizzard.hub.store.internal.former_slugs import SlugTables
 from blizzard.hub.store.internal.newest_fact import newest_retired_select
-from blizzard.hub.store.internal.secret_store import secret_unavailable
+from blizzard.hub.store.internal.secret_store import lock_secret_row, secret_unavailable
 from blizzard.hub.store.schema import work_source_former_slugs, work_source_lifecycle_facts, work_sources
 from blizzard.hub.store.scoped import ScopedConnections, statements_of
 
@@ -48,6 +48,7 @@ def _retired_ids(conn: Connection, ids: list[WorkSourceId] | None = None) -> set
 def _check_secret(conn: Connection, secret: str | None) -> None:
     if secret is None:
         return
+    lock_secret_row(conn, secret)
     retired = secret_unavailable(conn, secret)
     if retired is not None:
         raise WorkSourceSecretUnavailable(secret, retired=retired)
@@ -175,11 +176,12 @@ class WorkSourceRecordStore:
     def create(self, record: ConfiguredWorkSource, *, change: ConfigChange) -> ConfiguredWorkSource:
         try:
             with self._store.write(
-                "create", expect=(WorkSourceSecretUnavailable, WorkSourceSlugTaken, WorkSourceLocatorTaken)
+                "create",
+                expect=(WorkSourceSecretUnavailable, WorkSourceSlugTaken, WorkSourceLocatorTaken, IntegrityError),
             ) as conn:
                 insert_record(conn, record, change)
-        except IntegrityError as exc:  # a concurrent create won the race
-            raise WorkSourceSlugTaken(record.slug) from exc
+        except IntegrityError as exc:
+            raise self._lost_race(record) from exc
         return record
 
     def update(
@@ -193,12 +195,21 @@ class WorkSourceRecordStore:
                     WorkSourceLocatorTaken,
                     WorkSourceSlugTaken,
                     ConfigRevisionConflict,
+                    IntegrityError,
                 ),
             ) as conn:
                 update_record(conn, record, from_revision, left_slug, change)
-        except IntegrityError as exc:  # a concurrent write took the slug first
-            raise WorkSourceSlugTaken(record.slug) from exc
+        except IntegrityError as exc:
+            raise self._lost_race(record) from exc
         return record
+
+    def _lost_race(self, record: ConfiguredWorkSource) -> WorkSourceLocatorTaken | WorkSourceSlugTaken:
+        """The refusal for a concurrent write that took the locator or the slug first, decided by a fresh read."""
+        with self._store.read("lost_race") as conn:
+            holder = _locator_holder(conn, record)
+        if holder is not None:
+            return WorkSourceLocatorTaken(record.fields.provider, record.fields.locator, holder=holder)
+        return WorkSourceSlugTaken(record.slug)
 
     def record_lifecycle(
         self,

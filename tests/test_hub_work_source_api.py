@@ -16,9 +16,11 @@ import pytest
 from blizzard.auth_core import Role
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.hub_event_types import HubEventType
+from blizzard.foundation.work_items import WorkItemClosure
 from blizzard.hub.domain.chunk.model import ChunkFacts, WorkRef
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from blizzard.hub.store.internal.chunk_work_refs_store import ChunkWorkRefsStore
+from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from blizzard.hub.store.scoped import ScopedConnections
 from tests.support import (
     FakeWorkSource,
@@ -436,6 +438,35 @@ def test_delete_deletes_an_unacquired_holder_and_returns_200(tmp_path: Path) -> 
     assert frame["status"] == "not_ready"
     assert frame["by"] == "operator"  # AUTH_MODE_NONE's implicit identity
     assert frame["key"].startswith("chunk_deleted:")
+
+
+def test_a_withdrawal_lost_to_a_delivery_is_409_and_still_publishes_the_holder_deletion(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A delivery closes the item after the withdrawal read it open: the unacquired holder's deletion has
+    committed, so its frames go out even though the withdrawal itself is refused."""
+    hub = build_hub(tmp_path)
+    created = hub.client.post("/api/work-sources/hub/items", json={"title": "t", "body": "b"}).json()
+    ref, chunk_id = created["ref"], created["chunk_id"]
+    items = WorkItemStore(hub_store_connections(hub.engine))
+    real = ChunkWorkRefsStore.find_live_holder
+
+    def delivered_meanwhile(self: ChunkWorkRefsStore, pointer: WorkRef) -> str | None:
+        items.close("hub", ref, closure=WorkItemClosure.DELIVERED, at=hub.clock.now())
+        return real(self, pointer)
+
+    monkeypatch.setattr(ChunkWorkRefsStore, "find_live_holder", delivered_meanwhile)
+    since = hub.events.latest_id()
+
+    refused = hub.client.delete(f"/api/work-sources/hub/items/{ref}")
+
+    assert refused.status_code == 409, refused.text
+    assert hub.client.get(f"/api/chunks/{chunk_id}").status_code == 404
+    events = emitted_events(hub, since=since)
+    assert HubEventType.QUEUE_CHANGED in [e["event"] for e in events]
+    frames = [json.loads(e["data"]) for e in events if e["event"] == HubEventType.CHUNK_CHANGED]
+    assert [(f["chunk_id"], f["cause"], f["status"]) for f in frames] == [(chunk_id, "deleted", "not_ready")]
+    assert frames[0]["key"].startswith("chunk_deleted:")
 
 
 def test_delete_is_409_while_an_acquired_chunk_holds_the_item_and_200_once_it_is_stopped(tmp_path: Path) -> None:

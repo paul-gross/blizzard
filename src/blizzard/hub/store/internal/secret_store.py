@@ -43,6 +43,14 @@ _METADATA = (
 )
 
 
+def lock_secret_row(conn: Connection, name: str) -> None:
+    """Take the named secret row's write lock, as the first statement after the scoped write's
+    tenant-row lock and before any guard read (``bzh:store-exclusive-write``). Secret retire and
+    every referrer write take it, so one waits for the other's commit. A missing secret matches
+    no row, and the caller's unknown-secret refusal still fires."""
+    conn.execute(statements_of(conn).update(secrets).where(secrets.c.name == name).values(name=name))
+
+
 def secret_unavailable(conn: Connection, name: str) -> bool | None:
     """Why a configured record may not reference ``name``: ``False`` when no such secret
     exists, ``True`` when it is retired, ``None`` when it is usable."""
@@ -73,6 +81,20 @@ def insert_secret(
             replaced_by=by,
             created_at=at,
         )
+    )
+    append_change(conn, change)
+
+
+def record_lifecycle_fact(
+    conn: Connection, name: str, *, retired: bool, at: datetime, by: str, change: ConfigChange
+) -> None:
+    """The retire/enable body, inside the caller's transaction. Retiring locks the secret row,
+    then refuses while an active record references it."""
+    if retired:
+        lock_secret_row(conn, name)
+        require_unreferenced(name, active_referrers(conn, [name])[name])
+    conn.execute(
+        statements_of(conn).insert(secret_lifecycle_facts).values(name=name, retired=retired, set_at=at, set_by=by)
     )
     append_change(conn, change)
 
@@ -196,12 +218,7 @@ class SecretStore:
 
     def record_lifecycle(self, name: str, *, retired: bool, at: datetime, by: str, change: ConfigChange) -> None:
         with self._store.write("record_lifecycle") as conn:
-            if retired:
-                require_unreferenced(name, active_referrers(conn, [name])[name])
-            conn.execute(
-                self._store.insert(secret_lifecycle_facts).values(name=name, retired=retired, set_at=at, set_by=by)
-            )
-            append_change(conn, change)
+            record_lifecycle_fact(conn, name, retired=retired, at=at, by=by, change=change)
 
     @staticmethod
     def _of(row) -> SecretMetadata:  # type: ignore[no-untyped-def]

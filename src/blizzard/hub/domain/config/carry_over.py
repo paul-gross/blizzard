@@ -236,32 +236,15 @@ def _work_sources(
     return tuple(planned)
 
 
-def _coordinates(commits: Sequence[CommitCoordinate], values: Mapping[str, str]) -> list[RepositoryFields]:
-    """One field set per distinct ``(forge_api_url, owner, repo)``, in first-seen order."""
-    forge_api_url = values.get(ENV_FORGE_URL, "").strip()
-    if not forge_api_url:
-        raise LegacyImportRefused(
-            f"{ENV_FORGE_URL} is unset — the hub has delivered commits, and their repositories need its forge URL"
-        )
+def _owner_repos(commits: Sequence[CommitCoordinate], values: Mapping[str, str]) -> list[tuple[str, str]]:
+    """Each distinct ``(owner, repo)`` the commits name, in first-seen order."""
     owner_default = values.get(ENV_FORGE_OWNER, "").strip() or DEFAULT_OWNER
-    base_branch = values.get(ENV_FORGE_BASE_BRANCH, "").strip() or DEFAULT_BASE_BRANCH
-    derived: dict[tuple[str, str], RepositoryFields] = {}
+    derived: dict[tuple[str, str], None] = {}
     for commit in commits:
         origin = CommitOrigin.of(commit.forge, commit.repo)
-        if not origin.name:
-            continue
-        owner = origin.owner or owner_default
-        derived.setdefault(
-            (owner, origin.name),
-            RepositoryFields(
-                forge_api_url=forge_api_url,
-                owner=owner,
-                repo=origin.name,
-                base_branch=base_branch,
-                secret_name=secret_name_of(ENV_FORGE_TOKEN),
-            ),
-        )
-    return list(derived.values())
+        if origin.name:
+            derived.setdefault((origin.owner or owner_default, origin.name), None)
+    return list(derived)
 
 
 def _repositories(
@@ -272,9 +255,31 @@ def _repositories(
     at: datetime,
     outcomes: list[ImportOutcome],
 ) -> tuple[tuple[ConfiguredRepository, ConfigChange], ...]:
+    """A repository for each ``(owner, repo)`` the commits name that the store does not hold. Without
+    ``BZ_FORGE_URL``, a pair is held when any repository records it; only an unheld pair needs the URL."""
     if not commits:
         return ()
-    derived = _coordinates(commits, values)
+    pairs = _owner_repos(commits, values)
+    forge_api_url = values.get(ENV_FORGE_URL, "").strip()
+    if not forge_api_url:
+        held_pairs = {(r.fields.owner, r.fields.repo): r.slug for r in existing.repositories}
+        if any(pair not in held_pairs for pair in pairs):
+            raise LegacyImportRefused(
+                f"{ENV_FORGE_URL} is unset — the hub has delivered commits, and their repositories need its forge URL"
+            )
+        outcomes.extend(ImportOutcome(RecordKind.REPOSITORY, held_pairs[pair], created=False) for pair in pairs)
+        return ()
+    base_branch = values.get(ENV_FORGE_BASE_BRANCH, "").strip() or DEFAULT_BASE_BRANCH
+    derived = [
+        RepositoryFields(
+            forge_api_url=forge_api_url,
+            owner=owner,
+            repo=repo,
+            base_branch=base_branch,
+            secret_name=secret_name_of(ENV_FORGE_TOKEN),
+        )
+        for owner, repo in pairs
+    ]
     held = {(r.fields.forge_api_url, r.fields.owner, r.fields.repo): r.slug for r in existing.repositories}
     taken = {record.slug for record in existing.repositories}
     bare_counts: dict[str, int] = {}

@@ -3,13 +3,19 @@ a real hub app driven through ``TestClient``."""
 
 from __future__ import annotations
 
+import threading
 from pathlib import Path
 
 import pytest
 
 from blizzard.auth_core import Role
 from blizzard.hub.api.user_names import user_names
-from tests.support import HubHarness, build_hub, seed_session, seed_user
+from blizzard.hub.domain.config import secret_lifecycle
+from blizzard.hub.domain.config.changes import ChangeContext, Door
+from blizzard.hub.store.internal import repository_record_store, work_source_record_store
+from blizzard.hub.store.internal.former_slugs import SlugTables
+from blizzard.hub.store.internal.secret_store import SecretStore, record_lifecycle_fact
+from tests.support import HubHarness, build_hub, hub_store_connections, seed_session, seed_user
 
 pytestmark = pytest.mark.component
 
@@ -110,6 +116,52 @@ def test_a_taken_name_or_locator_is_a_409_naming_the_holder(hub: HubHarness) -> 
     assert "work source demo" in held.json()["detail"]
 
 
+def _bypass_in_write_checks(monkeypatch: pytest.MonkeyPatch, module: object, holder_reader: str) -> None:
+    """Skip the store's in-write slug and holder checks, so a collision reaches the unique constraint the way a
+    concurrent writer that committed first would; the holder read after the lost race still runs for real."""
+    monkeypatch.undo()
+    real = getattr(module, holder_reader)
+    calls: list[object] = []
+
+    def first_blind(conn, record):  # type: ignore[no-untyped-def]
+        calls.append(record)
+        return None if len(calls) == 1 else real(conn, record)
+
+    monkeypatch.setattr(SlugTables, "refuse_held", lambda self, conn, record_id, slug: None)
+    monkeypatch.setattr(module, holder_reader, first_blind)
+
+
+def test_a_lost_unique_race_on_create_names_the_constraint_that_fired(
+    hub: HubHarness, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    assert _create(hub).status_code == 201
+    _bypass_in_write_checks(monkeypatch, work_source_record_store, "_locator_holder")
+    locator = _create(hub, slug="demo2")
+    assert locator.status_code == 409, locator.text
+    assert locator.json()["detail"] == "github locator acme/demo already belongs to work source demo; enable it instead"
+
+    _bypass_in_write_checks(monkeypatch, work_source_record_store, "_locator_holder")
+    slug = _create(hub, locator="acme/other")
+    assert slug.status_code == 409, slug.text
+    assert slug.json()["detail"] == "work source demo already exists"
+
+
+def test_a_lost_unique_race_on_update_names_the_constraint_that_fired(
+    hub: HubHarness, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    assert _create(hub).status_code == 201
+    assert _create(hub, slug="other", locator="acme/other").status_code == 201
+    _bypass_in_write_checks(monkeypatch, work_source_record_store, "_locator_holder")
+    locator = hub.client.patch("/api/work-sources/other", json={"locator": "acme/demo"})
+    assert locator.status_code == 409, locator.text
+    assert locator.json()["detail"] == "github locator acme/demo already belongs to work source demo; enable it instead"
+
+    _bypass_in_write_checks(monkeypatch, work_source_record_store, "_locator_holder")
+    slug = hub.client.patch("/api/work-sources/other", json={"slug": "demo"})
+    assert slug.status_code == 409, slug.text
+    assert slug.json()["detail"] == "work source demo already exists"
+
+
 def test_patch_is_sparse_and_tells_absent_from_null(hub: HubHarness) -> None:
     _create(hub, api_base="https://ghe.example/api/v3", web_base="https://ghe.example")
 
@@ -192,6 +244,44 @@ def test_a_referenced_secret_cannot_be_retired_and_shows_its_references(hub: Hub
     hub.client.post("/api/work-sources/demo/retire")
     assert hub.client.get("/api/secrets/gh").json()["references"] == []
     assert hub.client.post("/api/secrets/gh/retire").status_code == 200
+
+
+def test_a_secret_retire_held_open_blocks_an_enable_which_then_refuses(hub: HubHarness) -> None:
+    assert _create(hub).status_code == 201
+    assert hub.client.post("/api/work-sources/demo/retire").status_code == 200
+    connections = hub_store_connections(hub.engine)
+    metadata = SecretStore(connections).get("gh")
+    assert metadata is not None
+    change = secret_lifecycle.lifecycle_change(
+        metadata, ChangeContext(actor="op", door=Door.API), retired_now=False, retired=True, at=hub.clock.now()
+    )
+    assert change is not None
+    retire_open, release = threading.Event(), threading.Event()
+    enabled: list[int] = []
+
+    def retire() -> None:
+        with connections.write("retire") as conn:
+            record_lifecycle_fact(conn, "gh", retired=True, at=hub.clock.now(), by="op", change=change)
+            retire_open.set()
+            release.wait(timeout=5)
+
+    def enable() -> None:
+        enabled.append(hub.client.post("/api/work-sources/demo/enable").status_code)
+
+    retiring = threading.Thread(target=retire)
+    retiring.start()
+    assert retire_open.wait(timeout=5)
+    enabling = threading.Thread(target=enable)
+    enabling.start()
+    enabling.join(timeout=0.5)
+    assert enabled == []  # the enable waits on the open retire
+    release.set()
+    retiring.join(timeout=5)
+    enabling.join(timeout=5)
+
+    assert enabled == [422]
+    assert hub.client.get("/api/secrets/gh").json()["retired"] is True
+    assert hub.client.get("/api/work-sources/demo").json()["retired"] is True
 
 
 def test_the_door_is_recorded_per_header_value(hub: HubHarness) -> None:
@@ -359,6 +449,30 @@ def test_a_taken_repository_slug_or_coordinate_is_a_409(hub: HubHarness) -> None
     assert held.status_code == 409
     assert "repository blizzard" in held.json()["detail"]
     assert _create_repo(hub, slug="other", forge_api_url="https://ghe.example/api/v3").status_code == 201
+
+
+def test_a_lost_unique_race_on_a_repository_write_names_the_constraint_that_fired(
+    hub: HubHarness, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    assert _create_repo(hub).status_code == 201
+    assert _create_repo(hub, slug="other", repo="other").status_code == 201
+    coordinate_detail = "https://api.github.com acme/blizzard already belongs to repository blizzard; enable it instead"
+    for write in (
+        lambda: _create_repo(hub, slug="third"),
+        lambda: hub.client.patch("/api/repositories/other", json={"repo": "blizzard"}),
+    ):
+        _bypass_in_write_checks(monkeypatch, repository_record_store, "_coordinate_holder")
+        coordinate = write()
+        assert coordinate.status_code == 409, coordinate.text
+        assert coordinate.json()["detail"] == coordinate_detail
+    for write in (
+        lambda: _create_repo(hub, repo="third"),
+        lambda: hub.client.patch("/api/repositories/other", json={"slug": "blizzard"}),
+    ):
+        _bypass_in_write_checks(monkeypatch, repository_record_store, "_coordinate_holder")
+        slug = write()
+        assert slug.status_code == 409, slug.text
+        assert slug.json()["detail"] == "repository blizzard already exists"
 
 
 def test_a_repository_patch_is_sparse_and_refuses_every_null(hub: HubHarness) -> None:

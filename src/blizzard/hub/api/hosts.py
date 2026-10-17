@@ -21,6 +21,7 @@ from blizzard.hub.api.deps import Services
 from blizzard.hub.api.runners import publish_retirement, usage_views
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.composition import TenantServices
+from blizzard.hub.domain.execution.host_retirement import HostRetirementInterrupted, HostRetireOutcome
 from blizzard.hub.domain.runners.host import (
     Host,
     HostHoldsRoutes,
@@ -120,6 +121,25 @@ def _reread(services: TenantServices, host_id: str) -> HostRegistryView:
 
 def _conflict(exc: Exception) -> HTTPException:
     return HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+
+
+def _publish_host_retirement(
+    services: TenantServices,
+    host: Host,
+    under: list[RunnerRegistration],
+    outcome: HostRetireOutcome,
+    *,
+    by: str,
+    changes: dict[str, chunk_events.ChunkChanged],
+) -> None:
+    """The frames for what a host retire committed — each runner it retired, and the host's own fact."""
+    for registration in under:
+        if registration.runner_id in outcome.runners:
+            publish_retirement(services, registration, outcome.runners[registration.runner_id], by=by, changes=changes)
+    if outcome.fact_id is not None:
+        services.events.publish_host_changed(
+            host.host_id, kind="retired", host_name=host.name, by=by, key=f"host_lifecycle_facts:{outcome.fact_id}"
+        )
 
 
 def _unknown_runner(exc: UnknownRunner | RunnerNotUnderHost) -> HTTPException:
@@ -256,17 +276,9 @@ def retire_host(host_id: str, request: HostRetireRequest, services: Services) ->
         outcome = services.host_retirement.retire(host, by=request.by, force=request.force)
     except HostHoldsRoutes as exc:
         raise _conflict(exc) from exc
-    for registration in under:
-        publish_retirement(
-            services, registration, outcome.runners[registration.runner_id], by=request.by, changes=changes
-        )
-    if outcome.fact_id is not None:
-        services.events.publish_host_changed(
-            host_id,
-            kind="retired",
-            host_name=host.name,
-            by=request.by,
-            key=f"host_lifecycle_facts:{outcome.fact_id}",
-        )
+    except HostRetirementInterrupted as exc:
+        _publish_host_retirement(services, host, under, exc.committed, by=request.by, changes=changes)
+        raise _conflict(exc) from exc
+    _publish_host_retirement(services, host, under, outcome, by=request.by, changes=changes)
     released = [r.chunk_id for result in outcome.runners.values() for r in result.released]
     return HostRetireResponse(host=_reread(services, host_id), released_chunk_ids=released)
