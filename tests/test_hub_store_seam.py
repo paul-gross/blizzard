@@ -64,7 +64,7 @@ from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from blizzard.hub.tenancy import TenantId
 from tests.support import migrated_hub_at, scoped_connections
 
-pytestmark = pytest.mark.component
+pytestmark = pytest.mark.unit
 
 _NOW = datetime(2026, 1, 1, tzinfo=UTC)
 _MARKER = DerivationMarker("sg_x", "v", "fp", _NOW, 0, True)

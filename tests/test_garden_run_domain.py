@@ -348,6 +348,39 @@ def test_an_escalation_reports_the_node_it_opened_on_not_a_later_migration() -> 
     assert row.escalation.node_id == "nd_build"
 
 
+def test_an_escalation_with_no_movement_before_it_names_the_chunks_graph_and_no_node() -> None:
+    identity = _identity("ch_1")
+    repo = _FakeRepo(records=[RunDeliveries(identity=identity, delivered=[])])
+    chunk_records = _FakeChunkRecords(chunks={"ch_1": _chunk("ch_1", graph_id="gr_own")})
+    facts = ChunkFacts(
+        minted=True,
+        promoted=True,
+        escalations=[
+            EscalationFact(epoch=1, recorded_at=_T0, takeover_command="resume", wrapped_takeover_command="wrapped")
+        ],
+        migrations=[
+            MigrationFact(
+                from_node_id="nd_build",
+                from_graph_id="gr_old",
+                to_graph_id="gr_new",
+                landed_node_id="nd_entry",
+                choice_name=None,
+                model=None,
+                epoch=2,
+                recorded_at=_T0.replace(year=_T0.year + 1),
+            )
+        ],
+    )
+    chunk_facts = _FakeChunkFacts(facts={"ch_1": facts})
+
+    (row,) = _service(repo, chunk_records, chunk_facts).list_runs(since=_SINCE, until=_UNTIL)
+
+    assert row.outcome == ChunkStatus.NEEDS_HUMAN
+    assert row.escalation is not None
+    assert (row.escalation.graph_id, row.escalation.node_id) == ("gr_own", None)
+    assert (row.escalation.takeover_command, row.escalation.wrapped_takeover_command) == ("resume", "wrapped")
+
+
 def test_a_run_that_delivered_nothing_still_lists_with_an_empty_delivered_list() -> None:
     """A run that delivered an empty finding list still leaves a `finding_sets` row —
     it is reported, not confused with an escalated run that left none at all."""

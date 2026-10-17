@@ -102,3 +102,59 @@ def test_a_transition_without_a_graph_carries_none() -> None:
     movement = facts.latest_movement()
 
     assert movement is not None and movement.graph_id is None
+
+
+def test_the_newest_migration_is_chosen_by_recorded_at_before_epoch_then_by_epoch() -> None:
+    older_at_higher_epoch = _migration("nd_old", minute=1, epoch=5)
+    newer_at_lower_epoch = MigrationFact(
+        from_node_id=None,
+        from_graph_id="gr_a",
+        to_graph_id="gr_hub",
+        landed_node_id="nd_new",
+        choice_name=None,
+        model=None,
+        epoch=2,
+        recorded_at=_at(3),
+        landed_node_executor=Executor.HUB,
+    )
+    by_time = ChunkFacts(minted=True, migrations=[older_at_higher_epoch, newer_at_lower_epoch])
+    lower_epoch_tie = _migration("nd_low", minute=3, epoch=1)
+    higher_epoch_tie = MigrationFact(
+        from_node_id=None,
+        from_graph_id="gr_a",
+        to_graph_id="gr_hub",
+        landed_node_id="nd_high",
+        choice_name=None,
+        model=None,
+        epoch=2,
+        recorded_at=_at(3),
+        landed_node_executor=Executor.HUB,
+    )
+    by_epoch = ChunkFacts(minted=True, migrations=[lower_epoch_tie, higher_epoch_tie])
+
+    assert by_time.latest_movement() == Movement(MovementKind.MIGRATION, "nd_new", Executor.HUB, "gr_hub")
+    assert by_epoch.latest_movement() == Movement(MovementKind.MIGRATION, "nd_high", Executor.HUB, "gr_hub")
+
+
+def test_the_newest_restart_is_chosen_by_recorded_at_before_epoch_then_by_epoch() -> None:
+    newer_at_lower_epoch = RestartFact(
+        to_node_id="nd_new",
+        from_node_id=None,
+        graph_id="gr_hub",
+        epoch=2,
+        recorded_at=_at(3),
+        to_node_executor=Executor.HUB,
+    )
+    by_time = ChunkFacts(minted=True, restarts=[_restart("nd_old", minute=1, epoch=5), newer_at_lower_epoch])
+    higher_epoch_tie = RestartFact(
+        to_node_id="nd_high",
+        from_node_id=None,
+        graph_id="gr_hub",
+        epoch=2,
+        recorded_at=_at(3),
+        to_node_executor=Executor.HUB,
+    )
+    by_epoch = ChunkFacts(minted=True, restarts=[_restart("nd_low", minute=3, epoch=1), higher_epoch_tie])
+
+    assert by_time.latest_movement() == Movement(MovementKind.RESTART, "nd_new", Executor.HUB, "gr_hub")
+    assert by_epoch.latest_movement() == Movement(MovementKind.RESTART, "nd_high", Executor.HUB, "gr_hub")

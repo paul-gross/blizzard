@@ -389,3 +389,44 @@ def test_a_retired_runner_is_refused_before_the_claim_lock_is_entered() -> None:
         service.claim(_CHUNK, _GRAPH, runner_id="runner-a", workspace_id="ws-a", environment_ids=["e1"])
     assert refused.value.runner_id == "runner-a"
     assert str(refused.value) == "runner runner-a is retired — claim refused; `reinstate` it first"
+
+
+# --- What each refusal carries -------------------------------------------------
+
+
+def _admit_as_caller(facts: ChunkFacts | None, *, unmet: str | None = None, registration: RunnerRegistration) -> Node:
+    """Admit with a caller runner id distinct from the registration's, so a refusal shows which it carries."""
+    return ClaimAdmission(_CHUNK, _GRAPH, facts).node(
+        runner_id="runner-caller", existing_route=None, unmet_prerequisite=unmet, registration=registration
+    )
+
+
+def test_the_terminal_not_ready_and_dependency_refusals_carry_the_claimed_chunk() -> None:
+    ended = replace(_READY, stopped=True, stopped_at=_T0)
+    with pytest.raises(ClaimDeniedTerminal) as terminal:
+        _admit_as_caller(ended, registration=_REGISTERED)
+    with pytest.raises(ClaimDeniedNotReady) as not_ready:
+        _admit_as_caller(ChunkFacts(minted=True), registration=_REGISTERED)
+    with pytest.raises(ClaimDeniedDependency) as dependency:
+        _admit_as_caller(_READY, unmet="chk_pre", registration=_REGISTERED)
+
+    assert (terminal.value.chunk_id, not_ready.value.chunk_id, dependency.value.chunk_id) == ("chk_1",) * 3
+
+
+def test_an_unserved_project_refusal_carries_the_claimed_chunk_and_the_registered_runner() -> None:
+    elsewhere = replace(_REGISTERED, served=(ServedEntry("beta", ProjectId("proj_beta")),))
+    with pytest.raises(ClaimDeniedIncompatible) as refused:
+        _admit_as_caller(_READY, registration=elsewhere)
+
+    assert (refused.value.chunk_id, refused.value.runner_id) == ("chk_1", "runner-a")
+
+
+def test_unregistered_and_capability_refusals_carry_the_calling_runner() -> None:
+    withdrawn = replace(_REGISTERED, capabilities=(RunnerCapability(harness_id="claude_code", available=False),))
+    with pytest.raises(ClaimDeniedIncompatible) as incapable:
+        _admit_as_caller(_READY, registration=withdrawn)
+    with pytest.raises(ClaimDeniedUnregistered) as unregistered:
+        _admit_as_caller(_READY, registration=replace(_REGISTERED, registered_at=None))
+
+    assert (incapable.value.chunk_id, incapable.value.runner_id) == ("chk_1", "runner-caller")
+    assert unregistered.value.runner_id == "runner-caller"

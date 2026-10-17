@@ -14,7 +14,7 @@ from sqlalchemy.dialects import postgresql, sqlite
 from sqlalchemy.sql import ClauseElement, visitors
 from sqlalchemy.sql.elements import TextClause
 
-from blizzard.hub.domain.kernel.pagination import encode_cursor
+from blizzard.hub.domain.kernel.pagination import MalformedCursor, encode_cursor
 from blizzard.hub.domain.observability.analytics.queries import EventQueryCriteria
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal import analytics_event_query_store as store_module
@@ -90,3 +90,12 @@ def test_the_compile_sweep_reaches_every_statement_the_store_can_execute() -> No
     for arg in executed:
         built_by_a_builder = isinstance(arg, ast.Call) and isinstance(arg.func, ast.Name) and arg.func.id in builders
         assert built_by_a_builder, ast.unparse(arg)
+
+
+def test_a_zero_events_cursor_decodes_to_offset_zero() -> None:
+    assert store_module._decode_cursor(encode_cursor(0)) == 0  # type: ignore[attr-defined]
+
+
+def test_a_negative_events_cursor_is_malformed() -> None:
+    with pytest.raises(MalformedCursor):
+        store_module._decode_cursor(encode_cursor(-1))  # type: ignore[attr-defined]

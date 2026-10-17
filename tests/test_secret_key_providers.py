@@ -78,6 +78,25 @@ def test_a_reader_at_the_moment_meta_is_replaced_sees_the_previous_whole_file(
     assert seen == [{"current": first.key_id, "previous": None}]
 
 
+def test_the_meta_temp_file_is_created_in_the_keys_dir_so_the_rename_stays_on_one_filesystem(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    keys_dir = tmp_path / "secret-keys"
+    provider = DirectoryKeyProvider(keys_dir)
+    second = provider.mint()
+    sources: list[Path] = []
+    replace = os.replace
+
+    def spying_replace(src: object, dst: object) -> None:
+        sources.append(Path(str(src)))
+        replace(src, dst)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(os, "replace", spying_replace)
+    provider.promote(second.key_id)
+
+    assert [source.parent for source in sources] == [keys_dir]
+
+
 @pytest.mark.parametrize("failing", ["fsync", "replace"])
 def test_a_failed_meta_write_keeps_the_previous_meta_and_leaves_no_temp_file(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, failing: str

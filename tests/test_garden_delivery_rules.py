@@ -262,6 +262,22 @@ def test_an_introduced_instant_is_looked_up_only_for_a_single_repo_delta() -> No
     assert [d.new_findings[0].introduced_at for d in plan.deltas] == [introduced, None]
 
 
+def test_the_plan_carries_a_copy_of_the_validated_expected_finding_states() -> None:
+    observed, gone = (Id.mint_at(IdPrefix.FINDING, _AT).value for _ in range(2))
+    expect = {observed: "open", gone: "open"}
+    validated = ValidatedDelivery(
+        run=_RUN,
+        deltas=[_delta([{"op": "observed", "id": observed}, {"op": "gone", "id": gone, "note": "fixed"}])],
+        proposals=[],
+        expect=expect,
+    )
+
+    plan = build_delivery_plan(validated, chunk=_CHUNK, node=_NODE, epoch=1, delta_artifact_ids=["art_d"], at=_AT)
+
+    assert plan.expect == {observed: "open", gone: "open"}
+    assert plan.expect is not validated.expect
+
+
 # -- the replay verb -------------------------------------------------------------------
 
 

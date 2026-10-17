@@ -287,17 +287,24 @@ class _Materialize:
     def __init__(self, outcomes: list[DeliveryOutcome]) -> None:
         self.outcomes = outcomes
         self.calls = 0
+        self.delivered: list[tuple[ValidatedDelivery, dict[str, object]]] = []
 
     def already_delivered(self, *, chunk: Chunk, node: Node, epoch: int) -> bool:
         return False
 
-    def deliver(self, validated: ValidatedDelivery, **_: object) -> DeliveryOutcome:
+    def deliver(self, validated: ValidatedDelivery, **kwargs: object) -> DeliveryOutcome:
         self.calls += 1
+        self.delivered.append((validated, kwargs))
         return self.outcomes.pop(0)
 
 
 def _recorder(
-    outcomes: list[DeliveryOutcome], resolved: list[tuple[str, str]], events: list[str] | None = None
+    outcomes: list[DeliveryOutcome],
+    resolved: list[tuple[str, str]],
+    events: list[str] | None = None,
+    *,
+    projects: list[str] | None = None,
+    with_resolver: bool = True,
 ) -> tuple[GardenDeliveryRecorder, Any, Any]:
     from blizzard.hub.domain.garden.delivery.validation import CommitResolution
 
@@ -307,6 +314,11 @@ def _recorder(
             events.append("resolve")
         return CommitResolution(exists=True)
 
+    def resolver_for(project_id: str) -> Any:
+        if projects is not None:
+            projects.append(project_id)
+        return resolve
+
     buckets, materialize = _Buckets(), _Materialize(outcomes)
     buckets.events = events
     recorder = GardenDeliveryRecorder(
@@ -314,7 +326,7 @@ def _recorder(
         buckets=cast(Any, buckets),
         materialize=cast(GardenDelivery, materialize),
         formats=cast(Any, _Formats()),
-        resolve_commit_for=lambda _project: resolve,
+        resolve_commit_for=resolver_for if with_resolver else None,
     )
     return recorder, buckets, materialize
 
@@ -355,8 +367,44 @@ def test_recorder_resolves_every_commit_before_validation_starts() -> None:
 def test_recorder_refuses_once_the_guard_attempts_run_out() -> None:
     recorder, buckets, materialize = _recorder([DeliveryOutcome.GUARD_LOST] * GUARD_ATTEMPTS, [])
 
-    with pytest.raises(GardenDeliveryRejected):
+    with pytest.raises(GardenDeliveryRejected) as exc:
         _record(recorder)
 
     assert materialize.calls == GUARD_ATTEMPTS
     assert buckets.reads == GUARD_ATTEMPTS
+    assert str(exc.value) == (
+        "findings this delivery names kept changing while it was being recorded — nothing was written; "
+        "re-run the delivery"
+    )
+
+
+@pytest.mark.unit
+def test_recorder_asks_the_resolver_factory_for_the_runs_project() -> None:
+    projects: list[str] = []
+    recorder, _, _ = _recorder([DeliveryOutcome.RECORDED], [], projects=projects)
+
+    _record(recorder)
+
+    assert projects == [_PROJECT]
+
+
+@pytest.mark.unit
+def test_recorder_with_no_resolver_factory_resolves_nothing_and_still_delivers() -> None:
+    resolved: list[tuple[str, str]] = []
+    recorder, _, materialize = _recorder([DeliveryOutcome.RECORDED], resolved, with_resolver=False)
+
+    assert _record(recorder) is DeliveryOutcome.RECORDED
+    assert resolved == []
+    assert materialize.calls == 1
+
+
+@pytest.mark.unit
+def test_recorder_hands_the_node_step_and_the_delta_artifact_ids_to_the_write() -> None:
+    recorder, _, materialize = _recorder([DeliveryOutcome.RECORDED], [])
+
+    _record(recorder)
+
+    [(validated, kwargs)] = materialize.delivered
+    assert validated.run == _RUN
+    assert (kwargs["epoch"], kwargs["delta_artifact_ids"], kwargs["proposal_artifact_ids"]) == (1, ["art_d"], [])
+    assert (cast(Any, kwargs["chunk"]).chunk_id, cast(Any, kwargs["node"]).node_id) == ("ch_1", "nd_1")
