@@ -2,10 +2,18 @@
 
 The OS reuses pids, so a recorded pid may later name a different process; pairing it
 with the process **start time** pins the identity. Linux ``/proc`` is the reference
-source; the value is an opaque stable token compared for equality, never interpreted."""
+source; the value is an opaque stable token compared for equality, never interpreted.
+
+Process groups are signalled and probed here too: :func:`signal_group` and :func:`group_exists` are the one home of
+``os.killpg``, and :func:`terminate_group` is the TERM, grace, KILL sequence built on them."""
 
 from __future__ import annotations
 
+import contextlib
+import os
+import signal
+import subprocess
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from blizzard.foundation.roles import domain_model
@@ -45,3 +53,33 @@ class ProcStat:
         Such a process keeps its ``/proc`` entry and start time, so a bare start-time
         match reads it as alive forever."""
         return len(self.fields) >= 1 and self.fields[0] == "Z"
+
+
+def signal_group(pgid: int, sig: signal.Signals) -> None:
+    """Send ``sig`` to the process group ``pgid``; a group that already exited is not an error."""
+    with contextlib.suppress(ProcessLookupError):
+        os.killpg(pgid, sig)
+
+
+def group_exists(pgid: int) -> bool:
+    """Whether any process is left in the group ``pgid``; a group signal 0 cannot reach still exists."""
+    try:
+        os.killpg(pgid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+def terminate_group[T](pgid: int, *, grace: float, wait: Callable[[float], T]) -> T | None:
+    """SIGTERM the group, let ``wait`` bound the ``grace`` the leader gets to exit, then SIGKILL the group — a
+    member may ignore SIGTERM while the leader exits on it. Returns what ``wait`` returned, or ``None`` when
+    ``grace`` ran out (``wait`` raising :class:`subprocess.TimeoutExpired`)."""
+    signal_group(pgid, signal.SIGTERM)
+    try:
+        return wait(grace)
+    except subprocess.TimeoutExpired:
+        return None
+    finally:
+        signal_group(pgid, signal.SIGKILL)

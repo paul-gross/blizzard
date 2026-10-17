@@ -6,7 +6,7 @@ import contextlib
 import os
 import signal
 
-from blizzard.foundation.process import ProcStat
+from blizzard.foundation.process import ProcStat, group_exists, signal_group
 from blizzard.runner.process.probe import IProcessProbe
 
 
@@ -29,13 +29,7 @@ class LinuxProcessProbe:
         # leader is a zombie `killpg`'s probe below still reaches as "alive".
         with contextlib.suppress(ChildProcessError):
             os.waitpid(pgid, os.WNOHANG)
-        try:
-            os.killpg(pgid, 0)
-        except ProcessLookupError:
-            return False  # no process in this group at all
-        except PermissionError:
-            return True  # the group exists — signal 0 just couldn't reach it
-        return True
+        return group_exists(pgid)
 
     def kill(self, pid: int) -> None:
         try:
@@ -44,16 +38,12 @@ class LinuxProcessProbe:
             return
 
     def kill_group(self, pgid: int) -> None:
-        try:
-            os.killpg(pgid, signal.SIGKILL)
-        except (ProcessLookupError, PermissionError):
-            return
+        with contextlib.suppress(PermissionError):
+            signal_group(pgid, signal.SIGKILL)
 
     def interrupt_group(self, pgid: int) -> None:
-        try:
-            os.killpg(pgid, signal.SIGINT)
-        except (ProcessLookupError, PermissionError):
-            return
+        with contextlib.suppress(PermissionError):
+            signal_group(pgid, signal.SIGINT)
 
 
 def _conforms_process_probe(x: LinuxProcessProbe) -> IProcessProbe:

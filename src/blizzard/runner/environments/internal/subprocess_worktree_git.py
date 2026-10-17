@@ -1,15 +1,14 @@
 """Subprocess-git adapter for the worker-artifact seam (package-private).
 
 A read-only confirmation, via the real ``git`` CLI, of an already-pushed git-commit
-declaration. All ``subprocess`` usage is confined here, and a git failure is
-wrapped once into :class:`WorktreeGitError` and logged (``bzh:structlog-logging``).
+declaration. The git run is the shared one in :mod:`~blizzard.runner.environments.internal.git`, which logs a
+failure once; it is wrapped here into :class:`WorktreeGitError`.
 """
 
 from __future__ import annotations
 
-import subprocess
-
 from blizzard.foundation.logging import get_logger
+from blizzard.runner.environments.internal.git import EnvGitError, SubprocessEnvGit
 from blizzard.runner.environments.worktree import IWorktreeGit, WorktreeGitError
 
 _log = get_logger("blizzard.runner.worktree")
@@ -21,6 +20,9 @@ WORKTREE_GIT_TIMEOUT = 60
 
 class SubprocessWorktreeGit:
     """Read-only confirmation of a declared git commit, via the real ``git`` CLI."""
+
+    def __init__(self) -> None:
+        self._runner = SubprocessEnvGit(WORKTREE_GIT_TIMEOUT)
 
     def verify(self, origin_url: str, branch: str, commit: str) -> bool:
         ref = f"refs/heads/{branch}"
@@ -47,23 +49,10 @@ class SubprocessWorktreeGit:
     # --- plumbing -----------------------------------------------------------
 
     def _git(self, *args: str) -> str:
-        # No `-C`: `ls-remote <url>` is answered by the remote, so this runs without a
-        # local repository at all.
         try:
-            result = subprocess.run(
-                ["git", *args],
-                capture_output=True,
-                text=True,
-                timeout=WORKTREE_GIT_TIMEOUT,
-            )
-        except subprocess.TimeoutExpired as exc:
-            _log.error("git timed out", args=list(args), timeout=WORKTREE_GIT_TIMEOUT)
-            raise WorktreeGitError(f"git {' '.join(args)} timed out after {WORKTREE_GIT_TIMEOUT}s") from exc
-        if result.returncode != 0:
-            detail = (result.stderr or result.stdout).strip()
-            _log.error("git failed", args=list(args), detail=detail)
-            raise WorktreeGitError(f"git {' '.join(args)} failed: {detail}")
-        return result.stdout
+            return self._runner.capture(None, *args)
+        except EnvGitError as exc:
+            raise WorktreeGitError(str(exc)) from exc
 
 
 def _conforms_worktree_git(x: SubprocessWorktreeGit) -> IWorktreeGit:
