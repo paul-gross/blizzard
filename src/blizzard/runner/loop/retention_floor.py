@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 
 from blizzard.foundation.roles import domain_model
 
-#: How often the retention pass may run.
+#: How often the retention pass may run — 1/24 of the shortest retention window.
 RETENTION_FLOOR = timedelta(hours=1)
 
 

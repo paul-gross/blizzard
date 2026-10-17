@@ -116,7 +116,8 @@ class SegmentOpening:
 
     @classmethod
     def superseding(cls, target: TranscriptSegmentState) -> SegmentOpening:
-        """A re-ship's segment: ``target``'s own lease coordinates, pointed at what it replaces."""
+        """A re-ship's segment: ``target``'s own lease coordinates, pointed at what it replaces
+        (pinned by `test_reship_points_its_new_segment_at_the_one_it_supersedes`)."""
         return cls(
             chunk_id=target.chunk_id,
             node_id=target.node_id,
