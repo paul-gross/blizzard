@@ -153,6 +153,61 @@ def test_main_with_since_hands_the_changed_function_globs_to_the_run(
     assert handed == [("blizzard.cli.x.x_run__mutmut_*",)]
 
 
+PAUSE_STORE = "src/blizzard/runner/store/internal/pause_store.py"
+
+
+def test_main_with_function_hands_that_functions_globs_to_the_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _stub_the_run(monkeypatch, tmp_path, completed=True)
+    (tmp_path / "mutants").mkdir()
+    handed: list[tuple[str, ...]] = []
+
+    def run_scope(
+        scope: object, *, test_selection: list[str], budget_seconds: float | None, mutant_names: tuple[str, ...]
+    ) -> bool:
+        handed.append(mutant_names)
+        return True
+
+    monkeypatch.setattr(m, "run_scope", run_scope)
+    assert m.main(["runner-daemon", "--function", f"{PAUSE_STORE}::PauseStore.open_pause_parks"]) == 0
+    assert handed == [tuple(m.mutant_name_globs(PAUSE_STORE, [("PauseStore", "open_pause_parks")]))]
+
+
+@pytest.mark.parametrize(
+    "spec",
+    [
+        "src/blizzard/cli/main.py::main",  # a file another scope owns
+        f"{PAUSE_STORE}::PauseStore.no_such_method",
+        f"{PAUSE_STORE}::open_pause_parks",  # a method named as a module-level function
+        PAUSE_STORE,  # no function named
+    ],
+)
+def test_main_with_a_function_outside_the_scope_exits_non_zero_and_touches_no_tree(
+    spec: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    selections = _stub_the_run(monkeypatch, tmp_path, completed=True)
+    assert m.main(["runner-daemon", "--function", spec]) == 1
+    assert spec in capsys.readouterr().err
+    assert selections == []
+    assert not (tmp_path / "mutants").exists()
+
+
+def test_main_refuses_function_combined_with_since(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    selections = _stub_the_run(monkeypatch, tmp_path, completed=True)
+    argv = ["runner-daemon", "--since", "abc", "--function", f"{PAUSE_STORE}::PauseStore.open_pause_parks"]
+    assert m.main(argv) == 1
+    assert "--since" in capsys.readouterr().err
+    assert selections == []
+
+
+def test_main_refuses_function_without_a_scope(capsys: pytest.CaptureFixture[str]) -> None:
+    assert m.main(["--since", "abc", "--function", f"{PAUSE_STORE}::PauseStore.open_pause_parks"]) == 1
+    assert "--function" in capsys.readouterr().err
+
+
 # --- scope table: disjointness + coverage against the real tree ----------------------------
 
 

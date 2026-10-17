@@ -501,6 +501,34 @@ def mutant_name_globs(rel_path: str, functions: Iterable[tuple[str | None, str]]
     ]
 
 
+class UnknownFunctionError(ValueError):
+    def __init__(self, spec: str, reason: str) -> None:
+        super().__init__(f"mutation: --function {spec!r} {reason}")
+
+
+def named_mutant_globs(scope: Scope, specs: Sequence[str], repo_root: Path = REPO_ROOT) -> list[str]:
+    """Mutant-name globs for the `<path>::<[Class.]name>` functions `specs` name, each inside `scope`'s ground.
+
+    Raises `UnknownFunctionError` for a spec that is malformed, names a file outside the scope's
+    ground, or names a function mutmut does not mutate there; it never falls back to the whole scope.
+    """
+    ground = {path.as_posix() for path in files_for_scope(scope, mutable_source_paths(repo_root))}
+    globs: list[str] = []
+    for spec in specs:
+        path, separator, qualified = spec.partition("::")
+        if not separator or not qualified:
+            raise UnknownFunctionError(spec, "is not <path>::<[Class.]name>")
+        if path not in ground:
+            raise UnknownFunctionError(spec, f"names a file outside the {scope.slug!r} scope's ground")
+        class_name, _, name = qualified.rpartition(".")
+        function = (class_name or None, name)
+        source = (repo_root / path).read_text(encoding="utf-8")
+        if function not in functions_touching(source, [(1, len(source.splitlines()) + 1)]):
+            raise UnknownFunctionError(spec, f"names no function mutmut mutates in {path}")
+        globs.extend(mutant_name_globs(path, [function]))
+    return globs
+
+
 class UnknownRevisionError(ValueError):
     def __init__(self, revision: str) -> None:
         self.revision = revision
@@ -931,6 +959,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "No changed function gives an empty, complete report; a REV that names no commit exits 2 without running.",
     )
     parser.add_argument(
+        "--function",
+        metavar="PATH::[CLASS.]NAME",
+        action="append",
+        default=None,
+        help="Mutate and report only this function of the scope (repeatable), as src/blizzard/...py::name or "
+        "::Class.name. A function outside the scope's ground exits 1 without running; it cannot combine with --since.",
+    )
+    parser.add_argument(
         "--delta-budget",
         type=float,
         default=None,
@@ -947,6 +983,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 
 def main_delta(args: argparse.Namespace) -> int:
+    if args.function:
+        print("mutation: --function narrows a named scope's run; name a scope", file=sys.stderr)
+        return 1
     if args.since is None:
         print(f"mutation: name a scope ({', '.join(sorted(SCOPES))}) or pass --since REV", file=sys.stderr)
         return 1
@@ -970,6 +1009,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.delta_budget is not None:
         print("mutation: --delta-budget bounds a delta run; a named scope takes --budget", file=sys.stderr)
         return 1
+    if args.function and args.since is not None:
+        print("mutation: --function names the functions to run; it cannot combine with --since", file=sys.stderr)
+        return 1
     try:
         scope = resolve_scope(args.scope)
     except UnknownScopeError as exc:
@@ -978,6 +1020,12 @@ def main(argv: list[str] | None = None) -> int:
 
     os.chdir(REPO_ROOT)
     name_globs: list[str] | None = None
+    if args.function:
+        try:
+            name_globs = named_mutant_globs(scope, args.function)
+        except UnknownFunctionError as exc:
+            print(exc, file=sys.stderr)
+            return 1
     if args.since is not None:
         try:
             name_globs = changed_mutant_globs(scope, args.since)

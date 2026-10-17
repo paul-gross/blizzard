@@ -481,9 +481,10 @@ class InterruptedClaims:
                 chunk_id, "interrupted claim denied — the hub refused this runner", **claim_denial_fields(outcome)
             )
             return
-        if verdict is ClaimVerdict.LOST or outcome.claimed is None:
+        if verdict is ClaimVerdict.LOST:
             self._release(chunk_id, "interrupted claim not won — releasing binding", **claim_denial_fields(outcome))
             return
+        assert outcome.claimed is not None  # a won claim carries its route
         _log.info("re-claimed interrupted chunk — spawning current node", chunk_id=chunk_id)
         # A reclaim is a fresh claim, so its token overwrites whatever this chunk's row held
         # before — a fresh claim always wins.

@@ -482,14 +482,12 @@ def test_a_judge_boundary_with_an_unreadable_start_skips_the_worker_sample_entir
     assert _usage_payloads_by_lease(store) == {}
 
 
-def test_advance_boundary_moves_the_judge_transcript_range_past_a_stale_signal(  # type: ignore[no-untyped-def]
+def test_a_recorded_boundary_advance_moves_the_judge_range_start_and_leaves_the_marker(  # type: ignore[no-untyped-def]
     tmp_path,
 ) -> None:
-    """A judge-usage-limit park's resume reuses the SAME ``(lease, generation,
-    "judge")`` boundary for its fresh elicitation — ``record_boundary_open``'s check-then-
-    insert never mints a second row for one generation's judge phase. Without an advance past
-    that standing marker, the fresh elicitation's own classification would re-read the
-    limited elicitation's own rate-limit signal off the transcript forever."""
+    """A recorded advance of a generation's judge boundary moves where its judge transcript
+    range starts, while the standing ``(lease, generation, "judge")`` marker keeps its own
+    first start position — a fresh elicitation never re-reads a limited one's turn."""
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     _seed_lease(store)
     store.record_spawn(

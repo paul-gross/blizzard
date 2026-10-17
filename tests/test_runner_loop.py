@@ -24,7 +24,7 @@ from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.escalation_causes import EscalationCause
-from blizzard.foundation.fact_kinds import ESCALATION_RECORDED, EVENT_RECORDED, LEASE_MINTED
+from blizzard.foundation.fact_kinds import ESCALATION_RECORDED, EVENT_RECORDED, LEASE_MINTED, RUNNER_LOCALLY_PAUSED
 from blizzard.foundation.leases import LeaseClosureReason
 from blizzard.foundation.node_steps import ApplyOutcome, SessionMode
 from blizzard.foundation.store.engine import create_engine_from_url
@@ -767,6 +767,66 @@ def test_fresh_mint_selects_the_acceptable_harness_and_a_retry_stays_under_it(tm
     assert retried is not None and retried.lease_id != lease.lease_id and retried.harness_id == "chosen"
     assert len(chosen.spawns) == 2
     assert default.spawns == []
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("harnesses", "head_model", "resumed"),
+    [
+        # An authored harness set over a tier resolves strictly: the strict mapping is what the head is held to.
+        ([CLAUDE_CODE_HARNESS_ID], "strict-model", True),
+        ([CLAUDE_CODE_HARNESS_ID], "loose-model", False),
+        # With no authored set the same tier resolves leniently, never through the strict mapping.
+        (None, "loose-model", True),
+        (None, "strict-model", False),
+    ],
+)
+def test_a_pool_heads_model_drift_is_judged_by_the_strictness_of_its_harness_set(  # type: ignore[no-untyped-def]
+    tmp_path, harnesses, head_model, resumed
+):
+    store = _store(tmp_path)
+    store.record_lease(
+        NewLease(
+            lease_id="lease_head",
+            chunk_id="ch_1",
+            graph_id="gr_1",
+            node_id="nd_build",
+            node_name="build",
+            epoch=1,
+            retries_max=2,
+            session_name="code",
+            resolved_model=head_model,
+            created_at=_NOW,
+        )
+    )
+    store.record_spawn(
+        "lease_head",
+        pid=1,
+        process_start_time="t",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-head"),
+        spawned_at=_NOW,
+    )
+    harness = FakeHarness(handle=_HANDLE, verdict=None)
+    harness.resolved_model = "loose-model"
+    harness.resolved_model_strict = "strict-model"
+    ctx = make_context(
+        store, hub=FakeHub(), provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=FakeProbe()
+    )
+    envelope = make_envelope(
+        "ch_1",
+        "verify",
+        node_id="nd_verify",
+        choices=_CHOICES,
+        session=SessionMode.RESUME,
+        session_source="code",
+        session_name="code",
+        session_model=["blizzard:basic"],
+        session_harnesses=harnesses,
+    )
+
+    target = ctx.sessions.resolve_resume("ch_1", envelope.node, "/ws/e1")
+
+    assert target.session == (SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-head") if resumed else None)
 
 
 @pytest.mark.unit
@@ -1523,6 +1583,28 @@ def test_fill_refuses_a_held_environment_and_the_tick_still_advances(tmp_path, m
     assert [(b.chunk_id, b.environment_id) for b in store.held_bindings()] == [("ch_holder", "e1")]
     assert provider.released == ["e2"]  # the holder keeps e1
     assert advanced == [True]
+
+
+@pytest.mark.unit
+def test_a_refused_bind_gives_back_the_refusing_chunks_own_binding(tmp_path, monkeypatch):  # type: ignore[no-untyped-def]
+    """The giveback is judged and released as the refusing chunk: an environment it already
+    holds itself is no other chunk's, so it goes back to the provider and its binding is released."""
+    store = _store(tmp_path)
+    store.record_binding(chunk_id="ch_holder", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
+    store.record_binding(chunk_id="ch_1", environment_id="e2", workdir="/ws/e2", bound_at=_NOW, workspace_id="ws1")
+    hub = FakeHub()
+    hub.queue = [QueueEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
+    provider = _HeldIgnoringProvider({"e1": "/ws/e1", "e2": "/ws/e2"})
+    monkeypatch.setattr(ReadyQueue, "_environments_wanted", lambda self, entry: 2)
+    ctx = make_context(
+        store, hub=hub, provider=provider, harness=FakeHarness(handle=_HANDLE, verdict="pass"), probe=FakeProbe()
+    )
+
+    Fill(ctx).run()
+
+    assert hub.claims == []
+    assert [(b.chunk_id, b.environment_id) for b in store.held_bindings()] == [("ch_holder", "e1")]
+    assert provider.released == ["e2"]
 
 
 @pytest.mark.unit
@@ -3311,6 +3393,107 @@ def test_retries_exhausted_escalates_and_holds_envs(tmp_path, workspace_root, ex
     # shlex.quote round-trips: splitting the composed command back out yields the
     # original whitespace-bearing runner_dir verbatim, not a truncated/mangled token.
     assert shlex.split(wrapped)[-1] == runner_dir
+
+
+@pytest.mark.unit
+def test_escalation_resumes_under_the_lease_stamps_and_carries_no_wrap_without_a_runner_dir(tmp_path):  # type: ignore[no-untyped-def]
+    """The raw command resumes in the configuration the lease was minted with, and an unknown
+    runner dir leaves the wrapped command empty rather than absent."""
+    store = _store(tmp_path)
+    store.record_lease(
+        NewLease(
+            lease_id="lease_1",
+            chunk_id="ch_1",
+            graph_id="gr_1",
+            node_id="nd_build",
+            node_name="build",
+            epoch=1,
+            retries_max=2,
+            created_at=_NOW,
+            resolved_model="stamped-model",
+            resolved_effort="high",
+        )
+    )
+    store.record_spawn(
+        "lease_1",
+        pid=100,
+        process_start_time="start-100",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
+    lease = store.active_lease_for_chunk("ch_1")
+    assert lease is not None
+    config = LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID, bindings=serving(1), runner_dir="")
+    ctx = make_context(
+        store,
+        hub=FakeHub(),
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=FakeHarness(handle=_HANDLE, verdict="pass"),
+        probe=FakeProbe(),
+        config=config,
+    )
+
+    Attempt(ctx, lease).escalate(cause=EscalationCause.RETRIES_EXHAUSTED, detail="retries 2 of 2 used")
+
+    escalations = [b for b in store.pending_outbound() if b.kind == ESCALATION_RECORDED]
+    assert len(escalations) == 1
+    payload = json.loads(escalations[0].payload)
+    assert payload["takeover_command"].endswith("--resume sess-a --model stamped-model --effort high")
+    assert payload["wrapped_takeover_command"] == ""
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("passed", "locally_paused", "escalated"),
+    [(True, False, False), (False, True, True), (None, True, False), (None, False, True)],
+)
+def test_an_exhausted_failure_defers_on_the_brake_it_was_handed_over_the_stores(  # type: ignore[no-untyped-def]
+    tmp_path, passed, locally_paused, escalated
+):
+    """A brake handed to the attempt decides alone; only without one does the store's fresh
+    local brake decide whether the exhausted escalation waits."""
+    store = _store(tmp_path)
+    store.record_lease(
+        NewLease(
+            lease_id="lease_1",
+            chunk_id="ch_1",
+            graph_id="gr_1",
+            node_id="nd_build",
+            node_name="build",
+            epoch=1,
+            retries_max=0,
+            created_at=_NOW,
+        )
+    )
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
+    if locally_paused:
+        store.record_local_pause(
+            paused=True,
+            at=_NOW,
+            by="operator",
+            report_kind=RUNNER_LOCALLY_PAUSED,
+            report_payload=json.dumps({"runner_id": FIXTURE_RUNNER_ID, "by": "operator"}),
+        )
+    hub = FakeHub()
+    hub.chunks["ch_1"] = ChunkState(
+        chunk_id="ch_1", status=ChunkStatus.RUNNING, latest_epoch=1, route_runner_id=FIXTURE_RUNNER_ID
+    )
+    ctx = make_context(
+        store,
+        hub=hub,
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=FakeHarness(handle=_HANDLE, verdict=None),
+        probe=FakeProbe(),
+    )
+    lease = store.active_lease("lease_1")
+    assert lease is not None
+
+    Attempt(ctx, lease, braked=passed).fail(reason=LeaseClosureReason.REAPED, via="test")
+
+    escalations = [b for b in store.pending_outbound() if b.kind == ESCALATION_RECORDED]
+    assert len(escalations) == (1 if escalated else 0)
+    assert (store.active_lease("lease_1") is None) is escalated  # a deferral leaves the lease open
 
 
 @pytest.mark.unit

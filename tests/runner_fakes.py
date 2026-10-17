@@ -1027,6 +1027,9 @@ class FakeHarness:
         self.needs_usage_transcript_calls: list[tuple[str, str | None]] = []
         # Each `parse_usage` call's `transcript_lines`, in call order.
         self.parse_transcript_lines: list[tuple[str, ...]] = []
+        # Each `parse_usage` / `sum_transcript_usage` call's invocation window, in call order.
+        self.parse_windows: list[tuple[datetime | None, datetime | None]] = []
+        self.sum_windows: list[tuple[datetime | None, datetime | None]] = []
         self.spawns: list[tuple[Envelope, WorkerPreamble]] = []
         self.resume_froms: list[str | None] = []  # `resume_from` as seen by each spawn
         self.judged: list[tuple[str, str, str]] = []
@@ -1261,7 +1264,7 @@ class FakeHarness:
         invocation_start: datetime | None = None,
         invocation_end: datetime | None = None,
     ) -> UsageSample | None:
-        del invocation_start, invocation_end
+        self.parse_windows.append((invocation_start, invocation_end))
         self.usage_models.append(model)
         self.parse_transcript_lines.append(tuple(transcript_lines))
         if self.usage_by_kind is not None and kind in self.usage_by_kind:
@@ -1282,7 +1285,7 @@ class FakeHarness:
         invocation_start: datetime | None = None,
         invocation_end: datetime | None = None,
     ) -> UsageSample:
-        del invocation_start, invocation_end
+        self.sum_windows.append((invocation_start, invocation_end))
         self.usage_models.append(model)
         self.sum_observed.append(observed)
         return self.transcript_usage or UsageSample(
