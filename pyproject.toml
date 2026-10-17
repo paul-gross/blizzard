@@ -183,6 +183,8 @@ do_not_mutate = [
 pytest_add_cli_args = ["-m", "unit"]
 also_copy = [
     "pyproject.toml",
+    # Registers the suite plugin, whose fixtures isolate tests from the host; without it the copied suite runs bare.
+    "conftest.py",
     "openapi",
     ".github/workflows/gate.yml",
     ".github/workflows/pr.yml",

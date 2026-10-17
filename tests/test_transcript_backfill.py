@@ -460,6 +460,20 @@ def test_a_hub_capped_import_is_reported_apart_from_a_whole_one() -> None:
     assert (report.imported, report.capped) == (1, 1)
 
 
+def test_a_hub_refused_import_is_counted_capped() -> None:
+    """A refused record is stored nowhere — the hub will never hold it, same as a capped one."""
+    ctx, _ = _ctx(sessions={"sess-a": [_turn(0, "hello")]})
+    _historical_lease(ctx, lease_id="lease_1", session_id="sess-a", epoch=1)
+    strip_transcript_segments(ctx.stores.transcript_ledger)
+    hub = ctx.hub
+    assert isinstance(hub, FakeHub)
+    hub.refuse_transcript_seqs = {1, 2}
+
+    report = TranscriptBackfill(ctx).run()
+
+    assert (report.imported, report.capped) == (1, 1)
+
+
 def test_the_ship_switch_is_held_in_the_domain_not_only_at_the_cli() -> None:
     """`LoopWiring.backfill_transcripts` is a public entry; the CLI refusal is the operator's
     message, never the enforcement — the same gate the pump holds."""

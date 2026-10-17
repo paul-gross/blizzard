@@ -104,6 +104,9 @@ from tests.runner_fakes import (
 
 pytestmark = pytest.mark.component
 
+#: The one refusal a missing, unknown or closed lease token meets — it never says whether a lease exists.
+_REFUSED_DETAIL = "presented token does not authorize a lease"
+
 _ENDPOINT = {"OTEL_EXPORTER_OTLP_ENDPOINT": "http://127.0.0.1:4318"}
 _NOW = datetime(2026, 7, 21, 12, 0, 0, tzinfo=UTC)
 _LEASE_TOKEN = "lease-secret-1"
@@ -507,7 +510,8 @@ def test_a_request_without_a_valid_lease_token_is_refused_403(tmp_path: Path, he
     exporter = InMemorySpanExporter()
     handle = _handle(exporter)
     with runner_client(_app(tmp_path, handle, [])) as client:
-        assert _post_json(client, _export(_own_trace()), headers).status_code == 403
+        refused = _post_json(client, _export(_own_trace()), headers)
+        assert (refused.status_code, refused.json()["detail"]) == (403, _REFUSED_DETAIL)
     assert _worker_spans(_finished(handle, exporter)) == []
 
 
@@ -542,7 +546,8 @@ def test_a_closed_leases_token_is_refused_403(tmp_path: Path) -> None:
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="done", closed_at=_NOW)
     with runner_client(app) as client:
-        assert _post_json(client, _export(_own_trace())).status_code == 403
+        refused = _post_json(client, _export(_own_trace()))
+        assert (refused.status_code, refused.json()["detail"]) == (403, _REFUSED_DETAIL)
 
 
 def test_another_chunks_span_is_dropped_reported_and_counted(tmp_path: Path) -> None:
@@ -1128,7 +1133,7 @@ def test_the_new_receivers_refuse_a_missing_or_unknown_token_403(
         response = client.post(
             path, content=_body_for(path), headers={"Content-Type": "application/x-protobuf", **headers}
         )
-        assert response.status_code == 403
+        assert (response.status_code, response.json()["detail"]) == (403, _REFUSED_DETAIL)
     assert telemetry.metric_points() == [] and not telemetry.log_records()
 
 
@@ -1139,7 +1144,8 @@ def test_the_new_receivers_refuse_a_closed_leases_token_403(tmp_path: Path, path
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="done", closed_at=_NOW)
     with runner_client(app) as client:
-        assert _post(client, path, _body_for(path)).status_code == 403
+        refused = _post(client, path, _body_for(path))
+        assert (refused.status_code, refused.json()["detail"]) == (403, _REFUSED_DETAIL)
 
 
 @pytest.mark.parametrize("path", _NEW_PATHS)

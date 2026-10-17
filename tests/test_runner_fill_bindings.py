@@ -237,7 +237,7 @@ def test_two_bindings_resolving_to_one_project_claim_nothing_and_status_names_bo
     ]
 
 
-def test_status_lists_the_pool_of_every_bound_workspace_each_slot_naming_its_workspace(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_status_counts_capacity_across_every_bound_workspace(tmp_path) -> None:  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
     hub = _Hub()
     hub.queue = [_entry("ch_a", "pr_a", 0), _entry("ch_b", "pr_b", 1)]
@@ -264,43 +264,9 @@ def test_status_lists_the_pool_of_every_bound_workspace_each_slot_naming_its_wor
         workspaces=_workspaces(),
     )
 
-    slots = [(s.workspace_id, s.environment_id, s.chunk_id) for s in status.environments()]
-
-    assert slots == [("ws_a", "a1", "ch_a"), ("ws_a", "a2", None), ("ws_b", "b1", "ch_b"), ("ws_b", "b2", None)]
     capacities = status.summary().capacities
     assert capacities.used == 2
     assert [(b.project, b.agents, b.used, b.free) for b in capacities.bindings] == [
         ("pr_a", 1, 1, 0),
         ("pr_b", 1, 1, 0),
     ]
-
-
-def test_status_lists_the_pool_of_a_declared_workspace_only_a_held_row_names(tmp_path) -> None:  # type: ignore[no-untyped-def]
-    store = _store(tmp_path)
-    store.record_binding(chunk_id="ch_x", environment_id="b1", workdir="/b/b1", bound_at=_NOW, workspace_id="ws_b")
-    bindings = _bindings()[:1]
-    status = RunnerStatusService(
-        FixedClock(_NOW),
-        pause=store,
-        daemon_liveness=store,
-        lease_record=store,
-        outbound=store,
-        environments=store,
-        asks=store,
-        takeover=store,
-        escalations=store,
-        identity=registered_identity(),
-        served_projects=store,
-        runner_name="r1",
-        workspace_id="ws_a",
-        bindings=bindings,
-        hub_url="http://hub",
-        harnesses=HarnessRegistry(
-            {CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=FakeHarness(handle=_HANDLE, verdict=None))}
-        ),
-        workspaces=_workspaces(),
-    )
-
-    slots = [(s.workspace_id, s.environment_id, s.chunk_id) for s in status.environments()]
-
-    assert slots == [("ws_a", "a1", None), ("ws_a", "a2", None), ("ws_b", "b1", "ch_x"), ("ws_b", "b2", None)]

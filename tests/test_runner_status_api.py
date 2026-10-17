@@ -22,6 +22,7 @@ from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.internal.process_launcher import ProcessLauncher
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
+from blizzard.runner.hub.client import BindingDeclaration
 from blizzard.runner.hub.identity import (
     ICurrentIdentityVerdict,
     ICurrentRunnerIdentity,
@@ -29,6 +30,7 @@ from blizzard.runner.hub.identity import (
     RunnerIdentity,
     RunnerIdentityHolder,
 )
+from blizzard.runner.hub.served_projects import ServedProject
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.status.view import RunnerStatusService
 from tests.runner_client import runner_client
@@ -61,6 +63,7 @@ def _app_with_status(
     runner_dir: str = "",
     identity: ICurrentRunnerIdentity | None = None,
     identity_verdict: ICurrentIdentityVerdict | None = None,
+    bindings: tuple[BindingDeclaration, ...] | None = None,
 ):  # type: ignore[no-untyped-def]
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}")
@@ -79,11 +82,12 @@ def _app_with_status(
         asks=store,
         takeover=store,
         escalations=store,
+        served_projects=store,
         identity=identity or registered_identity("rn_status", config.name),
         identity_verdict=identity_verdict,
         runner_name=config.name,
         workspace_id=TEST_WORKSPACE_ID,
-        bindings=serving(agents),
+        bindings=serving(agents) if bindings is None else bindings,
         hub_url=config.hub_url,
         workspaces=single_workspace(FakeProvider({env: f"/ws/{env}" for env in pool})),
         gates=gates,
@@ -149,6 +153,30 @@ def test_summary_defaults_on_an_empty_store(tmp_path: Path) -> None:
     assert body["identity"] is None
     assert (body["tenant_id"], body["tenant_name"]) == (None, None)
     assert_all_timestamps_utc(body)
+
+
+@pytest.mark.component
+def test_summary_names_each_project_two_bindings_resolve_to(tmp_path: Path) -> None:
+    bindings = (
+        BindingDeclaration("pr_a", TEST_WORKSPACE_ID, 1),
+        BindingDeclaration("alpha", TEST_WORKSPACE_ID, 1),
+    )
+    app, store = _app_with_status(tmp_path, bindings=bindings)
+    store.record_runner_identity(
+        RunnerIdentity(runner_id=store.connections.runner_id or "", runner_name="r", registered_at=_NOW)
+    )
+    store.record_served_projects(
+        [
+            ServedProject("pr_a", project_id="pr_a", slug="alpha"),
+            ServedProject("alpha", project_id="pr_a", slug="alpha"),
+        ],
+        at=_NOW,
+    )
+    with runner_client(app) as client:
+        resp = client.get("/api/runner")
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["routing_conflicts"] == [{"project_id": "pr_a", "entries": ["pr_a", "alpha"]}]
 
 
 @pytest.mark.component

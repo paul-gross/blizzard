@@ -14,11 +14,12 @@ from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.adapter import AcquiredEnvironment, WorkerPreamble
 from blizzard.runner.harness.claude_code.adapter import ClaudeCodeAdapter
 from blizzard.runner.harness.claude_code.section import WORKER_SETTINGS_FILENAME, ClaudeCodeSection
+from blizzard.runner.harness.claude_code.telemetry_plan import CLAUDE_CODE_TELEMETRY_NAMES
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.harness_telemetry_plan import HarnessTelemetryPlan
 from blizzard.runner.harness.process_launch import LaunchedProcess
 from blizzard.runner.harness.telemetry_signals import TelemetrySignal
-from blizzard.runner.harness.wiring import combined_telemetry_plan, publish_harness_bundle
+from blizzard.runner.harness.wiring import combined_telemetry_plan, declared_telemetry_names, publish_harness_bundle
 from blizzard.runner.runtime import Runtime
 from tests.harness_sections import sections
 from tests.runner_fakes import NO_TRACING, FakeProbe, make_envelope
@@ -74,6 +75,18 @@ def test_every_signal_is_captured_when_nothing_is_configured(tmp_path: Path) -> 
 def test_every_signal_is_off_without_an_enabled_claude_code_binding(tmp_path: Path) -> None:
     config = _config(tmp_path, harness_sections=sections(ClaudeCodeSection(enabled=False)))
     assert _plan(config) == _all(OFF)
+
+
+def test_the_receivers_admitted_names_are_exactly_claude_codes() -> None:
+    assert declared_telemetry_names() == (CLAUDE_CODE_TELEMETRY_NAMES,)
+
+
+def test_the_plan_reads_off_while_the_receiver_still_admits_claude_codes_names(tmp_path: Path) -> None:
+    """Admission is catalog-wide, the status plan per runner and enabled-only — they diverge by design."""
+    disabled = _config(tmp_path, harness_sections=sections(ClaudeCodeSection(enabled=False)))
+    assert _plan(disabled) == _all(OFF)
+    assert _plan(_config(tmp_path), enabled=False) == _all(OFF)
+    assert declared_telemetry_names() == (CLAUDE_CODE_TELEMETRY_NAMES,)
 
 
 def test_a_missing_settings_document_configures_nothing(tmp_path: Path) -> None:

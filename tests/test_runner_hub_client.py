@@ -12,6 +12,8 @@ import httpx
 import pytest
 from structlog.testing import capture_logs
 
+from blizzard.foundation.artifacts import ArtifactKind
+from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
 from blizzard.foundation.runner_tokens import RunnerTokenRefusalReason
 from blizzard.runner.harness.capability_snapshot import HarnessCapability
 from blizzard.runner.hub.client import (
@@ -26,7 +28,11 @@ from blizzard.runner.hub.client import (
 )
 from blizzard.runner.hub.internal import http_hub as http_hub_module
 from blizzard.runner.hub.internal.http_hub import HttpHubClient
+from blizzard.runner.hub.node_steps import envelope_of
+from blizzard.runner.node_steps.envelope import Choice, EnvelopeNode, ProducesSpec, RotateBounds
 from blizzard.runner.node_steps.submissions import Completion
+from blizzard.wire.envelope import EnvelopeChoice, NodeConfig, NodeEnvelope
+from blizzard.wire.graph import ProducesEntry, RotatePolicyView
 from blizzard.wire.queue import QueuePeekRequest
 from blizzard.wire.runner import RunnerCapability
 from blizzard.wire.transcript_segment import TranscriptSegmentBatch, TranscriptSegmentRecord
@@ -35,6 +41,52 @@ from blizzard.wire.transcript_segment import TranscriptSegmentBatch, TranscriptS
 def _client(handler) -> HttpHubClient:  # type: ignore[no-untyped-def]
     transport = httpx.MockTransport(handler)
     return HttpHubClient(httpx.Client(base_url="http://hub.test", transport=transport))
+
+
+@pytest.mark.unit
+def test_envelope_of_carries_every_node_field() -> None:
+    node = NodeConfig(
+        node_id="nd_build",
+        node_name="build",
+        executor=Executor.HUB,
+        session=SessionMode.FRESH,
+        session_source="plan",
+        session_name="builders",
+        session_model=["opus", "sonnet"],
+        session_effort="high",
+        session_harnesses=["claude-code", "opencode"],
+        session_rotate=RotatePolicyView(max_context_tokens=100, max_transcript_bytes=200, max_invocations=3),
+        session_compaction_window="long",
+        judged_by=JudgedBy.HUMAN,
+        checks=["make test"],
+        checks_cwd="sub",
+        checks_timeout=42,
+        produces=[ProducesEntry(name="diff", kind=ArtifactKind.GIT_COMMIT)],
+        retries_max=5,
+        choices=[EnvelopeChoice(name="ship", description="ship it", requires_checks=True)],
+    )
+    wire = NodeEnvelope(chunk_id="ch_1", graph_id="gr_1", epoch=2, node=node, prompt="p", judgement_prompt="j")
+
+    assert envelope_of(wire).node == EnvelopeNode(
+        node_id="nd_build",
+        node_name="build",
+        executor=Executor.HUB,
+        session=SessionMode.FRESH,
+        judged_by=JudgedBy.HUMAN,
+        session_source="plan",
+        session_name="builders",
+        session_model=["opus", "sonnet"],
+        session_effort="high",
+        session_harnesses=["claude-code", "opencode"],
+        session_rotate=RotateBounds(max_context_tokens=100, max_transcript_bytes=200, max_invocations=3),
+        session_compaction_window="long",
+        checks=["make test"],
+        checks_cwd="sub",
+        checks_timeout=42,
+        produces=[ProducesSpec(name="diff", kind=ArtifactKind.GIT_COMMIT)],
+        retries_max=5,
+        choices=[Choice(name="ship", description="ship it", requires_checks=True)],
+    )
 
 
 @pytest.mark.unit

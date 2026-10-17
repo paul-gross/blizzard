@@ -134,6 +134,15 @@ def test_lost_to_cap() -> None:
     assert _segment(truncated_reason=TruncationReason.HUB_CAPPED).lost_to_cap is True
     assert _segment(shipping_stopped_reason=CHUNK_BUDGET_EXCEEDED).lost_to_cap is True
     assert _segment(truncated_reason=TruncationReason.RECORD_CAP_EXCEEDED).lost_to_cap is False
+    assert _segment(truncated_reason=TruncationReason.HUB_REFUSED).lost_to_cap is True
+    assert _segment().lost_to_cap is False
+
+
+def test_capped_segment_later_refused_stays_lost_to_cap() -> None:
+    capped = TruncationMark(TruncationReason.HUB_CAPPED, 4, (TruncationReason.HUB_CAPPED,))
+    escalated = capped.apply(TruncationReason.HUB_REFUSED, TruncationReason.HUB_REFUSED.severity)
+    assert escalated.truncated_reason == TruncationReason.HUB_REFUSED
+    assert _segment(truncated_reason=escalated.truncated_reason).lost_to_cap is True
 
 
 # --- truncation ---------------------------------------------------------------------

@@ -432,3 +432,39 @@ def test_a_nonzero_random_id_is_kept(monkeypatch: pytest.MonkeyPatch) -> None:
     root = cli_spans.CliSpan.root("hub chunk list", clock=Clock())
 
     assert (root.trace_id, root.span_id) == ((1 << 128) - 1, (1 << 64) - 1)
+
+
+def test_blank_chunk_and_lease_ids_carry_no_chunk_or_lease_attribute() -> None:
+    parent = parse_traceparent(_PARENT)
+    assert parent is not None
+
+    for span in (
+        cli_spans.CliSpan.open(parent, "runner ask", clock=Clock()),
+        cli_spans.CliSpan.root("hub chunk list", clock=Clock()),
+    ):
+        payload = span.payload()["resourceSpans"][0]["scopeSpans"][0]["spans"][0]
+        assert (span.chunk_id, span.lease_id) == ("", "")
+        assert {a["key"] for a in payload["attributes"]} == {"blizzard.cli.command", "process.exit.code"}
+
+
+def test_a_child_inherits_its_parents_non_default_flags() -> None:
+    parent = parse_traceparent(f"00-{_TRACE}-{_PARENT_SPAN}-03")
+    assert parent is not None
+
+    span = cli_spans.CliSpan.open(parent, "runner ask", clock=Clock(), new_span_id=lambda: 0xABC)
+
+    assert span.flags == 3
+    assert span.traceparent == f"00-{_TRACE}-0000000000000abc-03"
+    assert span.payload()["resourceSpans"][0]["scopeSpans"][0]["spans"][0]["flags"] == 3
+    assert span.service_name == cli_spans.SERVICE_NAME
+
+
+def test_a_root_is_sampled_under_its_own_service_and_fresh_ids() -> None:
+    root = cli_spans.CliSpan.root(
+        "hub chunk list", clock=Clock(), service_name="blizzard-op", new_id=lambda: 0x77, new_span_id=lambda: 0x9
+    )
+
+    assert (root.trace_id, root.parent_span_id, root.span_id) == (0x77, None, 0x9)
+    assert root.flags == 1
+    assert root.service_name == "blizzard-op"
+    assert root.command == "hub chunk list"

@@ -69,6 +69,11 @@ _TRUNCATION_SEVERITY: dict[TruncationReason, int] = {
     TruncationReason.HUB_REFUSED: 5,
 }
 
+#: The marks whose content the hub will never hold: it capped the record, or refused it outright.
+_LOST_TO_CAP_REASONS: frozenset[TruncationReason] = frozenset(
+    {TruncationReason.HUB_CAPPED, TruncationReason.HUB_REFUSED}
+)
+
 #: Where one segment stands: still taking content, or sealed by its final marker.
 SegmentState = Literal["open", "finalized"]
 
@@ -155,12 +160,12 @@ class TranscriptSegmentState:
 
     @property
     def lost_to_cap(self) -> bool:
-        """Content the hub will never hold, by a cap on either side — the hub capped a record,
-        or this runner stopped shipping past the chunk budget."""
+        """Content the hub will never hold, by a cap on either side — the hub capped or refused a
+        record, or this runner stopped shipping past the chunk budget."""
         return self._lost_to_cap()
 
     def _lost_to_cap(self) -> bool:
-        return self.truncated_reason == TruncationReason.HUB_CAPPED or self.shipping_stopped
+        return self.truncated_reason in _LOST_TO_CAP_REASONS or self.shipping_stopped
 
     @property
     def accepts_content(self) -> bool:

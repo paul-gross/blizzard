@@ -7,13 +7,22 @@ status the gate produces; an unclassified route or a stale lane entry fails the 
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from types import SimpleNamespace
 
 import httpx
 import pytest
+from fastapi import HTTPException, Request
 from fastapi.testclient import TestClient
+from starlette.datastructures import State
 
+from blizzard.auth_core import Role
+from blizzard.foundation.clock import FixedClock
+from blizzard.runner.api.federation import HumanLane
+from blizzard.runner.api.wiring import RunnerWiring
 from blizzard.runner.app import create_app
+from blizzard.runner.auth.session import CookieNames, RunnerSession, SessionCookie
 from blizzard.runner.config import RunnerConfig
 from tests.runner_client import live_api_routes
 from tests.runner_fakes import registered_identity
@@ -195,3 +204,73 @@ def test_a_store_free_apps_auth_callback_is_503_naming_the_jti_cache() -> None:
     refused = client.post("/api/auth/callback", content="token=t&state=s")
     assert refused.status_code == 503
     assert "JTI cache" in refused.json()["detail"]
+
+
+# --- The session cookie a gated human lane reads, and the seams it resolves --------------
+
+_SECRET = b"session-secret"
+_GATE_NOW = datetime(2026, 7, 1, 12, 0, tzinfo=UTC)
+_COOKIES = CookieNames("runner-guard")
+
+
+def _lane(cookie: str | None) -> HumanLane:
+    """A TCP request against a gated hub, presenting ``cookie`` under the runner's session name."""
+    state = State()
+    state.hub_auth_mode = SimpleNamespace(enabled=lambda: True)
+    state.federation = SimpleNamespace(cookie_names=lambda: _COOKIES)
+    state.session_secret = _SECRET
+    state.clock = FixedClock(_GATE_NOW)
+    headers = [] if cookie is None else [(b"cookie", f"{_COOKIES.session}={cookie}".encode())]
+    scope = {"type": "http", "app": SimpleNamespace(state=state), "headers": headers, "client": ("10.0.0.1", 1)}
+    return HumanLane(Request(scope))
+
+
+def _minted(*, expires_at: datetime, secret: bytes = _SECRET) -> str:
+    session = RunnerSession(username="alice", role=Role.CONTRIBUTOR, issued_at=_GATE_NOW, expires_at=expires_at)
+    return SessionCookie(secret).mint(session)
+
+
+def test_a_validly_signed_unexpired_session_cookie_passes_the_gate() -> None:
+    session = _lane(_minted(expires_at=_GATE_NOW + timedelta(hours=1))).demand_api()
+    assert (session.username, session.role) == ("alice", Role.CONTRIBUTOR)
+
+
+@pytest.mark.parametrize(
+    "cookie",
+    [None, _minted(expires_at=_GATE_NOW), _minted(expires_at=_GATE_NOW + timedelta(hours=1), secret=b"other")],
+    ids=["absent", "expired", "foreign-signature"],
+)
+def test_an_absent_expired_or_foreign_session_cookie_is_refused_401(cookie: str | None) -> None:
+    with pytest.raises(HTTPException) as refused:
+        _lane(cookie).demand_api()
+    assert refused.value.status_code == 401
+
+
+@pytest.mark.parametrize(
+    ("accessor", "seam", "named"),
+    [
+        (RunnerWiring.jwks_cache, "jwks_cache", "JWKS cache"),
+        (RunnerWiring.jti_cache, "jti_cache", "JTI cache"),
+        (RunnerWiring.hub_auth_mode, "hub_auth_mode", "hub auth-mode cache"),
+        (RunnerWiring.trusted_proxies, "trusted_proxies", "trusted proxies"),
+    ],
+)
+def test_each_auth_seam_resolves_when_wired_and_refuses_503_naming_itself_when_not(
+    accessor: object, seam: str, named: str
+) -> None:
+    wired = State()
+    setattr(wired, seam, sentinel := object())
+    assert accessor(RunnerWiring(wired)) is sentinel  # type: ignore[operator]
+    with pytest.raises(HTTPException) as refused:
+        accessor(RunnerWiring(State()))  # type: ignore[operator]
+    assert (refused.value.status_code, refused.value.detail) == (
+        503,
+        f"{named} not wired — start via `blizzard runner host`",
+    )
+
+
+def test_an_unwired_readiness_service_degrades_to_none_rather_than_refusing() -> None:
+    assert RunnerWiring(State()).maybe_readiness() is None
+    wired = State()
+    wired.readiness = sentinel = object()
+    assert RunnerWiring(wired).maybe_readiness() is sentinel

@@ -222,7 +222,8 @@ class ExternalUsageStore:
 
     def latest_credential_renewals_by_slug(self, slugs: Sequence[str]) -> dict[str, CredentialRenewalSummary]:
         """Each slug's newest claim by ``(claimed_at, id)`` — joined back to its slug's
-        ``max(claimed_at)`` for portability, a same-instant tie broken on ``id`` here."""
+        ``max(claimed_at)`` for portability, a same-instant tie broken on ``id`` in the statement's
+        own order."""
         if not slugs:
             return {}
         claims, outcomes = credential_renewal_claims, credential_renewal_outcomes
@@ -240,11 +241,11 @@ class ExternalUsageStore:
                     .join(latest, and_(claims.c.slug == latest.c.slug, claims.c.claimed_at == latest.c.claimed_at))
                     .outerjoin(outcomes, outcomes.c.claim_id == claims.c.id)
                     .where(claims.c.slug.in_(batch))
+                    .order_by(claims.c.id.desc())
                 )
                 for row in conn.execute(stmt):
-                    held = newest.get(str(row.slug))
-                    if held is None or row.id > held.id:
-                        newest[str(row.slug)] = row
+                    # Highest id first, so a slug's first row is its same-instant tie's winner.
+                    newest.setdefault(str(row.slug), row)
         return {slug: _renewal_summary(row) for slug, row in newest.items()}
 
     def claim_credential_renewal(self, *, slug: str, claimed_at: datetime) -> int:

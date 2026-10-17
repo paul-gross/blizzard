@@ -15,7 +15,8 @@ def install_head_replay_guard() -> None:
     tests = repo_root() / "tests"
 
     def upgrade(self: MigrationRunner, revision: str = "head") -> None:
-        caller = Path(sys._getframe(1).f_code.co_filename).resolve()
+        # The module's own ``__file__``, not the code object's: a ``.pyc`` copied into mutants/ keeps the path it was compiled at.
+        caller = Path(sys._getframe(1).f_globals.get("__file__") or "").resolve()
         if (
             revision == "head"
             and caller.parent == tests
