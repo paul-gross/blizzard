@@ -257,7 +257,6 @@ def _routine_entry(scopes: tuple[str, ...] | None = None, **fields: object) -> R
     declared: dict[str, object] = {"graph_name": "alpha", "default_scope_slug": "core", **fields}
     return RoutineDeclaration(
         name="nightly",
-        routine_id="rtn_1",
         default_model=(),
         default_effort=None,
         default_harnesses=(),

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from blizzard.hub.documents.codec import (
+from blizzard.hub.documents import (
     CONFIG_CODECS,
     YAML_CODEC,
     ConfigDecodeError,

@@ -72,6 +72,17 @@ class PrerequisiteIsEphemeral(Exception):
 
 @domain_model
 @dataclass(frozen=True)
+class PrerequisiteScope:
+    """The prerequisite fact :meth:`DependencyService.declare` reads, resolved at the edge
+    (``bzh:domain-takes-objects``): only its ``chunk_id``. A prerequisite minted but since gone
+    ephemeral (grouped-away or deleted) has no chunk to load, so a loaded chunk and such an id
+    both reach the rule as this scope; whether it is ephemeral stays the rule's to decide, under the lock."""
+
+    chunk_id: str
+
+
+@domain_model
+@dataclass(frozen=True)
 class EdgeToDeclare:
     """:func:`decide_declare`'s admission: the ordered pair to mint a fresh standing edge for."""
 
@@ -135,13 +146,12 @@ class DependencyService:
         # names, so the cycle check itself still needs one lock over the whole graph.
         self._cycle_lock = cycle_lock
 
-    def declare(self, dependent: Chunk, prerequisite: Chunk | str, *, by: str) -> DependencyEdge:
-        """Declare that ``dependent`` depends on ``prerequisite`` — its loaded chunk, or the id of
-        one minted but since gone ephemeral, which has no loaded chunk to pass.
+    def declare(self, dependent: Chunk, prerequisite: PrerequisiteScope, *, by: str) -> DependencyEdge:
+        """Declare that ``dependent`` depends on ``prerequisite``.
 
         Reads the standing edges, the dependent's facts, and the prerequisite's ephemerality under
         the lock, and writes whatever :func:`decide_declare` decides."""
-        prerequisite_id = prerequisite if isinstance(prerequisite, str) else prerequisite.chunk_id
+        prerequisite_id = prerequisite.chunk_id
         with self._cycle_lock, self._exclusive.locked([dependent.chunk_id, prerequisite_id]) as handle:
             decision = decide_declare(
                 handle.standing_edges(),

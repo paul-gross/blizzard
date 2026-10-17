@@ -5,7 +5,7 @@ language: Python
 severity: error
 message: >-
   PyYAML is imported only by the strict YAML binding of the config codec. Decode and encode a document
-  through blizzard.hub.documents.codec instead.
+  through blizzard.hub.documents instead.
 files:
   - src/blizzard/**
 ignores:

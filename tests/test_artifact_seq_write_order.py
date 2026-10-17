@@ -28,14 +28,24 @@ def test_same_millisecond_marker_writes_read_back_in_write_order(
 ) -> None:
     hub = build_hub(tmp_path)
     chunk_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=True)
+    at = hub.clock.now()
+    writer = cast(IWriteChunkArtifactsRepository, hub.services.chunks.artifacts)
+    assert writer.record_hub_artifact(
+        chunk_id,
+        node_id="nd_deliver",
+        node_name="deliver",
+        epoch=1,
+        name="delivery-pr/acme/one/2",
+        content="not json",
+        at=at,
+        admission=EpochAdmission.AT_OR_ABOVE,
+    )
     minted: Iterator[str] = iter(_INVERTED_IDS)
 
     def inverted_mint(cls: type[Id], prefix: str, clock: IClock) -> Id:
         return cls(prefix, next(minted))
 
     monkeypatch.setattr(Id, "mint", classmethod(inverted_mint))
-    at = hub.clock.now()
-    writer = cast(IWriteChunkArtifactsRepository, hub.services.chunks.artifacts)
     for number in (3, 4):
         assert writer.record_hub_artifact(
             chunk_id,
@@ -52,13 +62,13 @@ def test_same_millisecond_marker_writes_read_back_in_write_order(
         chunk_id
     ]
 
-    assert [m.name for m in sources.markers] == ["delivery-pr/acme/one/3", "delivery-pr/acme/one/4"]
-    assert sources.markers[0].artifact_id > sources.markers[1].artifact_id  # ids alone would invert it
+    assert [m.name for m in sources.pr_markers] == ["delivery-pr/acme/one/3", "delivery-pr/acme/one/4"]
     view = DeliveryRead.of(ChunkFacts(minted=True), sources)
     assert [p.number for p in view.open_prs] == [4]
     assert [p.number for p in view.closed_prs] == [3]
     loaded = hub.services.chunks.artifacts.load_artifacts(chunk_id)
     assert [m.name for m in loaded if m.name.startswith("delivery-pr/")] == [
+        "delivery-pr/acme/one/2",
         "delivery-pr/acme/one/3",
         "delivery-pr/acme/one/4",
     ]

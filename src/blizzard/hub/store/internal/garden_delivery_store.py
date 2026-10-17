@@ -15,6 +15,7 @@ from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.garden.delivery.materialize import (
     DeliveryOutcome,
     DeliveryPlan,
+    IReadGardenDeliveryRepository,
     IWriteGardenDeliveryRepository,
 )
 from blizzard.hub.domain.garden.delivery.validation import GardenDeliveryRejected
@@ -280,4 +281,8 @@ class GardenDeliveryStore:
 
 
 def _conforms_garden_delivery_store(x: GardenDeliveryStore) -> IWriteGardenDeliveryRepository:
+    return x
+
+
+def _conforms_garden_delivery_store_read(x: GardenDeliveryStore) -> IReadGardenDeliveryRepository:
     return x

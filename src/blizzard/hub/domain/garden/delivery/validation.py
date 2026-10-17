@@ -6,9 +6,8 @@ objects (`bzh:domain-takes-objects`), no I/O. Materializing a passing result is
 
 from __future__ import annotations
 
-import functools
 import re
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Protocol
@@ -59,6 +58,23 @@ class CommitResolution:
 # Resolves `(repo, commit_sha)`: a :class:`CommitResolution` when `repo` is addressable,
 # `None` when it is not, degrading that commit to a well-formedness check.
 CommitResolver = Callable[[str, str], CommitResolution | None]
+
+# What resolving the commits a delivery cites produced, keyed `(repo, sha)`: a key absent was never asked,
+# a `None` value is a repository the resolver found unaddressable.
+CommitResolutions = Mapping[tuple[str, str], CommitResolution | None]
+
+
+@domain_model
+@dataclass(frozen=True)
+class ParsedArtifacts:
+    """A delivery's named artifacts after `IGardenFormats` parsed them: the deltas, the proposal candidates
+    of every proposal artifact flattened, each candidate's own artifact name positionally, and the
+    candidates grouped per artifact for the per-artifact ref check."""
+
+    deltas: list[DeliveredDelta]
+    proposals: list[ProposalCandidate]
+    proposal_sources: list[str]
+    candidates_by_artifact: dict[str, list[ProposalCandidate]]
 
 
 @domain_model
@@ -148,7 +164,7 @@ def check_delta(
     run: RunContext,
     live_findings: LiveFindings,
     exited_ids: frozenset[str] = frozenset(),
-    resolve_commit: CommitResolver | None = None,
+    resolutions: CommitResolutions | None = None,
 ) -> dict[tuple[str, str], datetime | None]:
     """Validate one already-parsed delta against `run` and `live_findings`, raising
     :class:`GardenDeliveryRejected` on the first failure: `delta.scope`, every commit sha,
@@ -160,7 +176,7 @@ def check_delta(
             f"delta declares scope {delta.scope!r}, this run's declared scope is {run.scope_slug!r}"
         )
     for repo, sha in delta.revisions.items():
-        _resolve_commit(repo, sha, resolve_commit)
+        _resolved(repo, sha, resolutions)
 
     introduced_at: dict[tuple[str, str], datetime | None] = {}
     single_repo = single_repo_of(delta)
@@ -177,7 +193,7 @@ def check_delta(
                 # `introduced` names no repository of its own, so it resolves only against
                 # a sole declared one; zero or several leave which one ambiguous.
                 if single_repo is not None:
-                    resolution = _resolve_commit(single_repo, op.introduced, resolve_commit)
+                    resolution = _resolved(single_repo, op.introduced, resolutions)
                     introduced_at[(single_repo, op.introduced)] = resolution.authored_at if resolution else None
                 else:
                     _check_commit_wellformed(op.introduced, context="a finding addition's introduced commit")
@@ -254,48 +270,81 @@ def check_proposal_refs(artifact_name: str, proposals: Sequence[ProposalCandidat
         seen.add(proposal.ref)
 
 
-def validate_delivery(
-    *,
-    run: RunContext,
-    delta_artifacts: Mapping[str, str],
-    proposal_artifacts: Mapping[str, str],
-    bucket: FindingBucket,
-    formats: IGardenFormats,
-    resolve_commit: CommitResolver | None = None,
-    resolve_exited: ExitedResolver = lambda _ids: frozenset(),
-) -> ValidatedDelivery:
-    """The delivery node's whole check: `delta_artifacts`/`proposal_artifacts` map each
-    artifact name to its unparsed raw JSON text; `formats` parses each.
-    `bucket` is the run's :class:`FindingBucket`: what it may cite; `resolve_exited` is asked once about the
-    cited ids the bucket lacks, only to tell an exited id from an unknown one in the message. Raises
-    :class:`GardenDeliveryRejected` on the first failure; on success returns a :class:`ValidatedDelivery`,
-    nothing durable."""
-    live_findings: LiveFindings = {f.finding_id: f.scope_slug for f in bucket.citable}
-    gone_settlements = {f.finding_id: f.run_gone() for f in bucket.citable}
+def parse_artifacts(
+    *, delta_artifacts: Mapping[str, str], proposal_artifacts: Mapping[str, str], formats: IGardenFormats
+) -> ParsedArtifacts:
+    """`delta_artifacts`/`proposal_artifacts` map each artifact name to its unparsed raw JSON text; `formats`
+    parses each, raising :class:`GardenDeliveryRejected` for one it cannot."""
     deltas = [formats.finding_delta(name, raw) for name, raw in delta_artifacts.items()]
     proposals: list[ProposalCandidate] = []
     proposal_sources: list[str] = []
+    by_artifact: dict[str, list[ProposalCandidate]] = {}
     for name, raw in proposal_artifacts.items():
         candidates = formats.proposal_candidates(name, raw)
-        check_proposal_refs(name, candidates)
+        by_artifact[name] = list(candidates)
         proposals.extend(candidates)
         proposal_sources.extend(name for _ in candidates)
+    return ParsedArtifacts(
+        deltas=deltas, proposals=proposals, proposal_sources=proposal_sources, candidates_by_artifact=by_artifact
+    )
+
+
+def commits_to_resolve(deltas: Sequence[DeliveredDelta], *, run: RunContext) -> frozenset[tuple[str, str]]:
+    """Every `(repo, sha)` :func:`check_delta` would ask a resolver about across `deltas`: each declared
+    revision and each `add` op's `introduced` commit under a sole declared repository. A malformed sha is
+    skipped (the check rejects it by shape) and so is a delta outside the run's scope (it is rejected before
+    any commit is asked about)."""
+    asked: set[tuple[str, str]] = set()
+    for delta in deltas:
+        if delta.scope != run.scope_slug:
+            continue
+        asked.update((repo, sha) for repo, sha in delta.revisions.items() if _COMMIT_RE.fullmatch(sha))
+        single_repo = single_repo_of(delta)
+        if single_repo is None:
+            continue
+        for op in delta.findings:
+            if isinstance(op, FindingAddOp) and op.introduced is not None and _COMMIT_RE.fullmatch(op.introduced):
+                asked.add((single_repo, op.introduced))
+    return frozenset(asked)
+
+
+def resolve_commits(commits: Iterable[tuple[str, str]], resolver: CommitResolver | None) -> CommitResolutions:
+    """Ask `resolver` once about each of `commits`; with no resolver nothing is asked."""
+    if resolver is None:
+        return {}
+    return {(repo, sha): resolver(repo, sha) for repo, sha in sorted(commits)}
+
+
+def validate_delivery(
+    *,
+    run: RunContext,
+    parsed: ParsedArtifacts,
+    bucket: FindingBucket,
+    resolutions: CommitResolutions | None = None,
+    resolve_exited: ExitedResolver = lambda _ids: frozenset(),
+) -> ValidatedDelivery:
+    """The delivery node's whole check over `parsed` artifacts and the `resolutions` of the commits they cite
+    (:func:`commits_to_resolve`). `bucket` is the run's :class:`FindingBucket`: what it may cite;
+    `resolve_exited` is asked once about the cited ids the bucket lacks, only to tell an exited id from an
+    unknown one in the message. Raises :class:`GardenDeliveryRejected` on the first failure; on success
+    returns a :class:`ValidatedDelivery`, nothing durable."""
+    live_findings: LiveFindings = {f.finding_id: f.scope_slug for f in bucket.citable}
+    gone_settlements = {f.finding_id: f.run_gone() for f in bucket.citable}
+    deltas = parsed.deltas
+    proposals = parsed.proposals
+    for name, candidates in parsed.candidates_by_artifact.items():
+        check_proposal_refs(name, candidates)
 
     cited = {op.id for delta in deltas for op in delta.findings if not isinstance(op, FindingAddOp)}
     cited.update(entry for proposal in proposals for entry in proposal.findings)
     absent = frozenset(i for i in cited if is_finding_id_shaped(i) and i not in live_findings)
     exited_ids = resolve_exited(absent) if absent else frozenset()
 
-    if resolve_commit is not None:
-        # Memoize per delivery: many findings sharing one `introduced` commit must not
-        # spend the fleet-wide hub-exec slot twice. Built fresh here, so never stale.
-        resolve_commit = functools.lru_cache(maxsize=None)(resolve_commit)
-
     introduced_at: dict[tuple[str, str], datetime | None] = {}
     for delta in deltas:
         introduced_at.update(
             check_delta(
-                delta, run=run, live_findings=live_findings, exited_ids=exited_ids, resolve_commit=resolve_commit
+                delta, run=run, live_findings=live_findings, exited_ids=exited_ids, resolutions=resolutions or {}
             )
         )
     known_refs = check_add_refs(deltas)
@@ -309,7 +358,7 @@ def validate_delivery(
         run=run,
         deltas=deltas,
         proposals=proposals,
-        proposal_sources=proposal_sources,
+        proposal_sources=parsed.proposal_sources,
         introduced_at=introduced_at,
         gone_settlements=gone_settlements,
         expect=expect,
@@ -345,11 +394,9 @@ def _check_commit_wellformed(sha: str, *, context: str) -> None:
         raise GardenDeliveryRejected(f"commit {sha!r} ({context}) is not a well-formed commit sha")
 
 
-def _resolve_commit(repo: str, sha: str, resolver: CommitResolver | None) -> CommitResolution | None:
+def _resolved(repo: str, sha: str, resolutions: CommitResolutions | None) -> CommitResolution | None:
     _check_commit_wellformed(sha, context=f"repository {repo!r}")
-    if resolver is None:
-        return None
-    resolution = resolver(repo, sha)
+    resolution = (resolutions or {}).get((repo, sha))
     if resolution is not None and not resolution.exists:
         raise GardenDeliveryRejected(f"commit {sha!r} for repository {repo!r} does not resolve")
     return resolution

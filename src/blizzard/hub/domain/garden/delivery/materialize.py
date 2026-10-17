@@ -136,11 +136,21 @@ class DeliveryPlan:
     expect: dict[str, str] = field(default_factory=dict)
 
 
-# --- Repository seam (I-prefix — bzh:repository-split; write-only, this phase mints
-# nothing to read back) -------------------------------------------------------------
+# --- Repository seam (I-prefix — bzh:repository-split) ---------------------------
 
 
-class IWriteGardenDeliveryRepository(Protocol):
+class IReadGardenDeliveryRepository(Protocol):
+    """Read-only garden-delivery access — the replay probe a caller makes before writing."""
+
+    def already_delivered(self, *, chunk_id: str, node_id: str, epoch: int) -> bool:
+        """Whether the ``(chunk_id, node_id, epoch)`` marker already exists — the same
+        check :meth:`IWriteGardenDeliveryRepository.deliver` makes internally, exposed so a
+        caller can short-circuit before re-validating a retry's content against state that
+        may have drifted since the original, successful attempt."""
+        ...
+
+
+class IWriteGardenDeliveryRepository(IReadGardenDeliveryRepository, Protocol):
     """Materialize one :class:`DeliveryPlan`, atomically and idempotently, keyed on the
     ``(chunk_id, node_id, epoch)`` marker the plan carries. The findings in ``plan.expect`` are
     re-checked under their row locks before any fact lands; one that moved yields
@@ -148,13 +158,6 @@ class IWriteGardenDeliveryRepository(Protocol):
     project other than ``plan.run``'s raises ``GardenDeliveryRejected`` naming it, with nothing written."""
 
     def deliver(self, plan: DeliveryPlan, *, admission: EpochAdmission) -> DeliveryOutcome: ...
-
-    def already_delivered(self, *, chunk_id: str, node_id: str, epoch: int) -> bool:
-        """Whether the ``(chunk_id, node_id, epoch)`` marker already exists — the same
-        check :meth:`deliver` makes internally, exposed so a caller can short-circuit
-        before re-validating a retry's content against state that may have drifted since
-        the original, successful attempt."""
-        ...
 
 
 def build_delivery_plan(
@@ -281,8 +284,8 @@ class GardenDelivery:
         self._delivery = delivery
         self._clock = clock
 
-    def already_delivered(self, *, chunk_id: str, node_id: str, epoch: int) -> bool:
-        return self._delivery.already_delivered(chunk_id=chunk_id, node_id=node_id, epoch=epoch)
+    def already_delivered(self, *, chunk: Chunk, node: Node, epoch: int) -> bool:
+        return self._delivery.already_delivered(chunk_id=chunk.chunk_id, node_id=node.node_id, epoch=epoch)
 
     def deliver(
         self,

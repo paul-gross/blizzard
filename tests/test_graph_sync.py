@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from blizzard.hub.documents.codec import YAML_CODEC
+from blizzard.hub.documents import YAML_CODEC
 from blizzard.hub.domain.graph.model import GraphArtifact, GraphDoc
 from blizzard.hub.graph_sync import GraphReconciliation, GraphSyncStatus
 from blizzard.hub.graphs import PACKAGED
@@ -51,7 +51,7 @@ def _packaged(tmp_path: Path, name: str, *, prompt: str = "do the work", body: s
 
 
 def _sync(hub: HubHarness, paths: list[Path]):  # type: ignore[no-untyped-def]
-    return GraphReconciliation(hub.services.graph_mint, hub.services.graphs, paths).outcomes()
+    return GraphReconciliation(hub.services.graph_mint, hub.services.graphs, YAML_CODEC, paths).outcomes()
 
 
 def _statuses(outcomes) -> list[tuple[str, str]]:  # type: ignore[no-untyped-def]
@@ -257,8 +257,8 @@ def test_the_shipped_packaged_set_reconciles_and_then_reports_up_to_date(tmp_pat
     paths = PACKAGED.paths
     assert paths, "the wheel ships at least one packaged graph"
 
-    first = GraphReconciliation(hub.services.graph_mint, hub.services.graphs, paths).outcomes()
-    second = GraphReconciliation(hub.services.graph_mint, hub.services.graphs, paths).outcomes()
+    first = GraphReconciliation(hub.services.graph_mint, hub.services.graphs, YAML_CODEC, paths).outcomes()
+    second = GraphReconciliation(hub.services.graph_mint, hub.services.graphs, YAML_CODEC, paths).outcomes()
 
     assert {o.status for o in first} == {GraphSyncStatus.MINTED}
     assert {o.status for o in second} == {GraphSyncStatus.UP_TO_DATE}
@@ -291,7 +291,7 @@ def test_sync_is_not_swallowed_by_the_graph_id_route(tmp_path: Path) -> None:
 def test_strict_decode_equals_pyyaml_for_every_packaged_graph() -> None:
     for graph in PACKAGED.files:
         assert YAML_CODEC.decode(graph.path.read_bytes()) == yaml.safe_load(graph.text), graph.path
-        assert GraphDoc.of(YAML_CODEC.decode(graph.inlined_yaml.encode())) == graph.doc, graph.path
+        assert GraphDoc.of(YAML_CODEC.decode(graph.inlined_yaml(YAML_CODEC).encode())) == graph.doc, graph.path
 
 
 def test_a_store_seeded_by_the_previous_encoder_reconciles_up_to_date(tmp_path: Path) -> None:
@@ -299,7 +299,7 @@ def test_a_store_seeded_by_the_previous_encoder_reconciles_up_to_date(tmp_path: 
     for graph in PACKAGED.files:
         hub.services.graph_mint.mint(graph.doc, definition_yaml=yaml.safe_dump(graph.body, sort_keys=False))
 
-    outcomes = GraphReconciliation(hub.services.graph_mint, hub.services.graphs, PACKAGED.paths).outcomes()
+    outcomes = GraphReconciliation(hub.services.graph_mint, hub.services.graphs, YAML_CODEC, PACKAGED.paths).outcomes()
 
     assert {o.status for o in outcomes} == {GraphSyncStatus.UP_TO_DATE}
 

@@ -212,7 +212,11 @@ def _served(core: HubCore, tmp_path: Path, brokers: TenantBrokers) -> HubService
         return WorkSourceRegistry({})
 
     return build_services(
-        core, work_sources=work_sources, secret_keys=hub_key_provider({}, data_dir=tmp_path), brokers=brokers
+        core,
+        work_sources=work_sources,
+        secret_keys=hub_key_provider({}, data_dir=tmp_path),
+        brokers=brokers,
+        annotation_interval_seconds=120,
     )
 
 

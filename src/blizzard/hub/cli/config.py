@@ -14,7 +14,7 @@ from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext, RawBody
 from blizzard.hub.cli.project_option import project_option, project_query
 from blizzard.hub.cli.views import Listing
-from blizzard.hub.documents.codec import accepted_extensions, codec_for_path
+from blizzard.hub.documents import accepted_extensions, codec_for_path
 
 _KINDS = click.Choice(["work_source", "repository", "secret", "scope", "routine", "project"])
 

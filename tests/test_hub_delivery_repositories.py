@@ -15,6 +15,7 @@ from blizzard.foundation.hub_event_types import HubEventType
 from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.hub.delivery.command_runner import CommandResult
 from blizzard.hub.delivery.marker_auth import AmbiguousMarkerRepository
+from blizzard.hub.documents import YAML_CODEC
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
 from blizzard.hub.domain.config.secrets import SecretName, SecretRetired
@@ -50,7 +51,8 @@ _ENV_NAMES = {
 
 def _mint_and_claim(hub: HubHarness, ref: str = "1", *, project: str | None = None) -> tuple[str, dict[str, str]]:
     minted = hub.client.post(
-        "/api/graphs", json={"definition_yaml": PACKAGED.named("advanced-development-workflow").inlined_yaml}
+        "/api/graphs",
+        json={"definition_yaml": PACKAGED.named("advanced-development-workflow").inlined_yaml(YAML_CODEC)},
     )
     assert minted.status_code == 201, minted.text
     nodes = {n["name"]: n["node_id"] for n in minted.json()["nodes"]}

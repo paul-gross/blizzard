@@ -15,7 +15,7 @@ from blizzard import __version__ as HUB_VERSION
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.artifact.model import is_valid_graph_artifact_name
-from blizzard.hub.domain.graph.harnesses import InvalidHarnesses, validated_harnesses
+from blizzard.hub.domain.graph.harnesses import harness_problems
 from blizzard.hub.domain.graph.model import (
     HUB_DEFAULT_FAILURE_CHOICE,
     RESERVED_TERMINAL,
@@ -145,19 +145,17 @@ class Validator:
 
     def _check_harnesses(self, name: str, harnesses: list[str]) -> None:
         """An authored empty list is rejected earlier, at parse. Each entry is judged by the
-        shared per-entry rules so every blank and duplicate is reported, not just the first."""
-        seen: set[str] = set()
-        for position, entry in enumerate(harnesses, start=1):
-            try:
-                (stripped,) = validated_harnesses([entry])
-            except InvalidHarnesses:
+        shared rule so every blank and duplicate is reported, not just the first."""
+        for problem in harness_problems(harnesses):
+            if problem.reason == "blank":
                 self.errors.append(
-                    f"session `{name}`: `harnesses` entries must be non-empty strings — entry {position} is blank"
+                    f"session `{name}`: `harnesses` entries must be non-empty strings "
+                    f"— entry {problem.position} is blank"
                 )
-                continue
-            if stripped in seen:
-                self.errors.append(f"session `{name}`: `harnesses` entries must be unique — duplicate `{stripped}`")
-            seen.add(stripped)
+            else:
+                self.errors.append(
+                    f"session `{name}`: `harnesses` entries must be unique — duplicate `{problem.entry}`"
+                )
 
     def _check_artifacts(self) -> None:
         """Every graph-scoped `artifacts:` name is legal, collides with no node's `produces:`

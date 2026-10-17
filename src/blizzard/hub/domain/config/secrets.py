@@ -128,13 +128,15 @@ class SecretValue:
 @domain_model
 @dataclass(frozen=True)
 class SecretMetadata:
-    """A secret's metadata — never its value or ciphertext."""
+    """A secret's metadata — never its value or ciphertext. ``retired`` is whether its newest
+    lifecycle fact reads retired, as of the load."""
 
     name: str
     revision: int
     replaced_at: datetime
     replaced_by: str
     created_at: datetime
+    retired: bool
 
 
 def require_revealable(name: str, *, retired: bool) -> None:
@@ -286,6 +288,24 @@ class IHubKeyProvider(Protocol):
     def generation(self, key_id: str) -> KeyGeneration | None: ...
 
     def available_ids(self) -> frozenset[str]: ...
+
+
+class IRotatableHubKeyProvider(IHubKeyProvider, Protocol):
+    """A key source an offline rotation can move to a new current generation. A source whose generations are
+    set outside the hub (the environment) answers :meth:`mint` with its current generation and treats
+    :meth:`promote` and :meth:`prune` as no-ops."""
+
+    def mint(self) -> KeyGeneration:
+        """The generation rotation seals into: a freshly minted one, not yet current."""
+        ...
+
+    def promote(self, key_id: str) -> None:
+        """Make ``key_id`` the current generation."""
+        ...
+
+    def prune(self, referenced: frozenset[str]) -> None:
+        """Drop every generation no stored row references."""
+        ...
 
 
 class ISecretCipher(Protocol):

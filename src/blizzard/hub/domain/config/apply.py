@@ -10,10 +10,10 @@ and handed in already planned; its writes commit after the repositories and befo
 
 from __future__ import annotations
 
-from collections.abc import Callable, Hashable, Mapping, Sequence
+from collections.abc import Hashable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Protocol
+from typing import Protocol, Self
 
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.config.changes import (
@@ -113,10 +113,6 @@ class DeclarableRecord(Protocol):
     @property
     def retired(self) -> bool: ...
 
-    def edit(
-        self, edit: Any, ctx: ChangeContext, *, if_match: int | None, at: datetime
-    ) -> tuple[DeclarableRecord, ConfigChange] | None: ...
-
     def set_retired(
         self, retired: bool, ctx: ChangeContext, *, if_match: int | None, at: datetime
     ) -> tuple[DeclarableRecord, ConfigChange] | None: ...
@@ -135,9 +131,9 @@ class DeclaredReferences:
 
 
 class RecordDeclaration(Protocol):
-    """An entry of a kind owned outside this package: the ``key`` its stored record is found by, the sparse
-    ``edit`` of the fields it states, its reference ``check``, the record it ``create``s, and any write that
-    ``settle``s the record afterwards."""
+    """An entry of a kind owned outside this package: the ``key`` its stored record is found by, its reference
+    ``check``, the record it ``create``s, the sparse edit of the fields it states (``edit_record``), and any write
+    that ``settle``s the record afterwards."""
 
     @property
     def name(self) -> str: ...
@@ -147,14 +143,17 @@ class RecordDeclaration(Protocol):
         """The ``(project id, name)`` that tells the entry's record apart from every other of its kind."""
         ...
 
-    @property
-    def edit(self) -> object: ...
-
     def check(self, refs: DeclaredReferences, stored: DeclarableRecord | None) -> None:
         """:class:`ConfigFieldError` naming the field whose reference does not resolve."""
         ...
 
     def create(self, ctx: ChangeContext, *, at: datetime) -> tuple[DeclarableRecord, ConfigChange]: ...
+
+    def edit_record(
+        self, record: DeclarableRecord, ctx: ChangeContext, *, at: datetime
+    ) -> tuple[DeclarableRecord, ConfigChange] | None:
+        """Apply the entry's sparse edit to the stored ``record``."""
+        ...
 
     def settle(
         self, record: DeclarableRecord, refs: DeclaredReferences, ctx: ChangeContext, *, at: datetime
@@ -241,112 +240,241 @@ def reconcile(declaration: ConfigDeclaration, stored: StoredConfig, ctx: ChangeC
         state = stored.secrets.get(name)
         if state is not RecordState.ACTIVE:
             raise ApplyEntryRefused(SECRETS_SECTION, index, SecretNotActive(name, retired=state is not None))
-    writes: list[PlannedWrite] = []
-    outcomes: list[EntryOutcome] = []
-    _reconcile_section(
-        WORK_SOURCES_SECTION,
-        RecordKind.WORK_SOURCE,
-        declaration.work_sources,
-        stored.work_sources,
-        ctx,
-        at,
-        writes,
-        outcomes,
-        guard=lambda d, record: _require_unclaimed(
-            "work source", d.slug, record, stored.former_work_sources.get(d.slug)
-        ),
-        create=lambda d: ConfiguredWorkSource.new(
-            d.slug, d.name, d.fields, ctx, at=at, work_source_id=d.work_source_id
-        ),
-        label=lambda d: d.slug,
-        handle_field="slug",
-    )
-    _reconcile_section(
-        REPOSITORIES_SECTION,
-        RecordKind.REPOSITORY,
-        declaration.repositories,
-        stored.repositories,
-        ctx,
-        at,
-        writes,
-        outcomes,
-        guard=lambda d, record: _require_unclaimed(
-            "repository", d.slug, record, stored.former_repositories.get(d.slug)
-        ),
-        create=lambda d: ConfiguredRepository.new(d.slug, d.name, d.fields, ctx, at=at, repository_id=d.repository_id),
-        label=lambda d: d.slug,
-        handle_field="slug",
-    )
-    writes.extend(declaration.projects.writes)
-    outcomes.extend(declaration.projects.outcomes)
+    plan = _Accumulator()
+    _reconcile_section(_WorkSourceSection(declaration.work_sources, stored, ctx, at), stored.work_sources, plan)
+    _reconcile_section(_RepositorySection(declaration.repositories, stored, ctx, at), stored.repositories, plan)
+    plan.writes.extend(declaration.projects.writes)
+    plan.outcomes.extend(declaration.projects.outcomes)
     # Scopes reconcile first, so a routine may name a scope the same document declares.
     for section, kind, declared, stored_records in (
         (SCOPES_SECTION, RecordKind.SCOPE, declaration.scopes, stored.scopes),
         (ROUTINES_SECTION, RecordKind.ROUTINE, declaration.routines, stored.routines),
     ):
-        _reconcile_section(
-            section,
-            kind,
-            declared,
-            stored_records,
-            ctx,
-            at,
-            writes,
-            outcomes,
-            guard=lambda d, record: d.check(stored.references, record),
-            create=lambda d: d.create(ctx, at=at),
-            settle=lambda d, record: d.settle(record, stored.references, ctx, at=at),
+        _reconcile_section(_DeclaredRecordSection(section, kind, declared, stored, ctx, at), stored_records, plan)
+    return ApplyPlan(writes=tuple(plan.writes), outcomes=tuple(plan.outcomes))
+
+
+class _Accumulator:
+    """The writes and outcome rows a reconcile has planned so far, in order."""
+
+    def __init__(self) -> None:
+        self.writes: list[PlannedWrite] = []
+        self.outcomes: list[EntryOutcome] = []
+
+
+class _Revised(Protocol):
+    @property
+    def revision(self) -> int: ...
+
+
+class _Section[K: Hashable, D, R: _Revised](Protocol):
+    """One kind's part of the reconcile loop: the entries the document declares for it and the verbs that decide
+    each. Every verb returns the record to write with its change, or ``None`` when it changes nothing."""
+
+    section: str
+    kind: RecordKind
+    #: The document field a repeated entry is reported against.
+    handle_field: str
+
+    @property
+    def declared(self) -> Sequence[D]: ...
+
+    def key(self, entry: D) -> K: ...
+
+    def label(self, entry: D) -> str:
+        """What names the entry in a refusal and in a no-change outcome row."""
+        ...
+
+    def handle(self, record: R) -> str:
+        """What names the record in its outcome row."""
+        ...
+
+    def guard(self, entry: D, record: R | None) -> None:
+        """:class:`ConfigFieldError` when the entry cannot be applied to ``record`` (``None`` when it creates)."""
+        ...
+
+    def create(self, entry: D) -> tuple[R, ConfigChange]: ...
+
+    def enable(self, record: R) -> tuple[R, ConfigChange] | None:
+        """Re-enable a retired ``record``; ``None`` when it is not retired."""
+        ...
+
+    def edit(self, entry: D, record: R) -> tuple[R, ConfigChange] | None: ...
+
+    def settle(self, entry: D, record: R) -> tuple[R, ConfigChange] | None:
+        """Any write that settles ``record`` after its create or edit."""
+        ...
+
+
+class _SlugRecord(Protocol):
+    """A configured record handled by its slug."""
+
+    @property
+    def slug(self) -> str: ...
+
+    @property
+    def revision(self) -> int: ...
+
+    @property
+    def retired(self) -> bool: ...
+
+    def set_retired(
+        self, retired: bool, ctx: ChangeContext, *, if_match: int | None, at: datetime
+    ) -> tuple[Self, ConfigChange] | None: ...
+
+
+class _SlugEntry(Protocol):
+    @property
+    def slug(self) -> str: ...
+
+
+class _SlugSection[D: _SlugEntry, R: _SlugRecord]:
+    """What a kind keyed by slug and declared by this package shares: the entry's slug is its key, its label and
+    its record's handle, a retired record is re-enabled, and nothing settles after a create or edit."""
+
+    handle_field = "slug"
+
+    def __init__(self, declared: Sequence[D], stored: StoredConfig, ctx: ChangeContext, at: datetime) -> None:
+        self.declared = declared
+        self._stored = stored
+        self._ctx = ctx
+        self._at = at
+
+    def key(self, entry: D) -> str:
+        return entry.slug
+
+    def label(self, entry: D) -> str:
+        return entry.slug
+
+    def handle(self, record: R) -> str:
+        return record.slug
+
+    def enable(self, record: R) -> tuple[R, ConfigChange] | None:
+        return record.set_retired(False, self._ctx, if_match=None, at=self._at) if record.retired else None
+
+    def settle(self, entry: D, record: R) -> tuple[R, ConfigChange] | None:
+        return None
+
+
+class _WorkSourceSection(_SlugSection[WorkSourceDeclaration, ConfiguredWorkSource]):
+    section = WORK_SOURCES_SECTION
+    kind = RecordKind.WORK_SOURCE
+
+    def guard(self, entry: WorkSourceDeclaration, record: ConfiguredWorkSource | None) -> None:
+        _require_unclaimed("work source", entry.slug, record, self._stored.former_work_sources.get(entry.slug))
+
+    def create(self, entry: WorkSourceDeclaration) -> tuple[ConfiguredWorkSource, ConfigChange]:
+        return ConfiguredWorkSource.new(
+            entry.slug, entry.name, entry.fields, self._ctx, at=self._at, work_source_id=entry.work_source_id
         )
-    return ApplyPlan(writes=tuple(writes), outcomes=tuple(outcomes))
+
+    def edit(
+        self, entry: WorkSourceDeclaration, record: ConfiguredWorkSource
+    ) -> tuple[ConfiguredWorkSource, ConfigChange] | None:
+        return record.edit(entry.edit, self._ctx, if_match=None, at=self._at)
 
 
-def _reconcile_section(
-    section: str,
-    kind: RecordKind,
-    declared: Sequence[Any],
-    stored: Mapping[Any, Any],
-    ctx: ChangeContext,
-    at: datetime,
-    writes: list[PlannedWrite],
-    outcomes: list[EntryOutcome],
-    *,
-    guard: Callable[[Any, Any], None],
-    create: Callable[[Any], tuple[Any, ConfigChange]],
-    settle: Callable[[Any, Any], tuple[Any, ConfigChange] | None] = lambda d, record: None,
-    label: Callable[[Any], str] = lambda d: d.name,
-    handle_field: str = "name",
+class _RepositorySection(_SlugSection[RepositoryDeclaration, ConfiguredRepository]):
+    section = REPOSITORIES_SECTION
+    kind = RecordKind.REPOSITORY
+
+    def guard(self, entry: RepositoryDeclaration, record: ConfiguredRepository | None) -> None:
+        _require_unclaimed("repository", entry.slug, record, self._stored.former_repositories.get(entry.slug))
+
+    def create(self, entry: RepositoryDeclaration) -> tuple[ConfiguredRepository, ConfigChange]:
+        return ConfiguredRepository.new(
+            entry.slug, entry.name, entry.fields, self._ctx, at=self._at, repository_id=entry.repository_id
+        )
+
+    def edit(
+        self, entry: RepositoryDeclaration, record: ConfiguredRepository
+    ) -> tuple[ConfiguredRepository, ConfigChange] | None:
+        return record.edit(entry.edit, self._ctx, if_match=None, at=self._at)
+
+
+class _DeclaredRecordSection:
+    """A kind owned outside this package — the garden's scopes and routines — whose entries bring their own
+    reference checks, create and settle."""
+
+    handle_field = "name"
+
+    def __init__(
+        self,
+        section: str,
+        kind: RecordKind,
+        declared: Sequence[RecordDeclaration],
+        stored: StoredConfig,
+        ctx: ChangeContext,
+        at: datetime,
+    ) -> None:
+        self.section = section
+        self.kind = kind
+        self.declared = declared
+        self._stored = stored
+        self._ctx = ctx
+        self._at = at
+
+    def key(self, entry: RecordDeclaration) -> tuple[str, str]:
+        return entry.key
+
+    def label(self, entry: RecordDeclaration) -> str:
+        return entry.name
+
+    def handle(self, record: DeclarableRecord) -> str:
+        return record.name
+
+    def guard(self, entry: RecordDeclaration, record: DeclarableRecord | None) -> None:
+        entry.check(self._stored.references, record)
+
+    def create(self, entry: RecordDeclaration) -> tuple[DeclarableRecord, ConfigChange]:
+        return entry.create(self._ctx, at=self._at)
+
+    def enable(self, record: DeclarableRecord) -> tuple[DeclarableRecord, ConfigChange] | None:
+        return record.set_retired(False, self._ctx, if_match=None, at=self._at) if record.retired else None
+
+    def edit(self, entry: RecordDeclaration, record: DeclarableRecord) -> tuple[DeclarableRecord, ConfigChange] | None:
+        return entry.edit_record(record, self._ctx, at=self._at)
+
+    def settle(
+        self, entry: RecordDeclaration, record: DeclarableRecord
+    ) -> tuple[DeclarableRecord, ConfigChange] | None:
+        return entry.settle(record, self._stored.references, self._ctx, at=self._at)
+
+
+def _reconcile_section[K: Hashable, D, R: _Revised](
+    kind: _Section[K, D, R], stored: Mapping[K, R], plan: _Accumulator
 ) -> None:
-    seen: set[Hashable] = set()
-    for index, entry in enumerate(declared):
+    seen: set[K] = set()
+    for index, entry in enumerate(kind.declared):
         try:
-            if entry.key in seen:
-                raise ConfigFieldError(handle_field, f"{label(entry)!r} is named twice in this document")
-            seen.add(entry.key)
-            record = stored.get(entry.key)
-            guard(entry, record)
+            key = kind.key(entry)
+            if key in seen:
+                raise ConfigFieldError(kind.handle_field, f"{kind.label(entry)!r} is named twice in this document")
+            seen.add(key)
+            record = stored.get(key)
+            kind.guard(entry, record)
             if record is None:
-                record, change = create(entry)
-                _write(section, index, kind, record, None, change, writes, outcomes)
-                _settle(section, index, kind, settle(entry, record), writes, outcomes)
+                record, change = kind.create(entry)
+                _write(kind, index, record, None, change, plan)
+                _settle(kind, index, entry, record, plan)
                 continue
             written = False
-            if record.retired:
-                decided = record.set_retired(False, ctx, if_match=None, at=at)
-                if decided is not None:
-                    record, change = decided
-                    _write(section, index, kind, record, change.revision - 1, change, writes, outcomes)
-                    written = True
-            decided = record.edit(entry.edit, ctx, if_match=None, at=at)  # type: ignore[arg-type]
-            if decided is not None:
-                edited, change = decided
-                _write(section, index, kind, edited, record.revision, change, writes, outcomes)
-                record = edited
+            enabled = kind.enable(record)
+            if enabled is not None:
+                record, change = enabled
+                _write(kind, index, record, change.revision - 1, change, plan)
                 written = True
-            written = _settle(section, index, kind, settle(entry, record), writes, outcomes) or written
+            edited = kind.edit(entry, record)
+            if edited is not None:
+                after, change = edited
+                _write(kind, index, after, record.revision, change, plan)
+                record = after
+                written = True
+            written = _settle(kind, index, entry, record, plan) or written
             if not written:
-                outcomes.append(EntryOutcome(kind, label(entry), None))
+                plan.outcomes.append(EntryOutcome(kind.kind, kind.label(entry), None))
         except (ConfigFieldError, BuiltInWorkSource) as exc:
-            raise ApplyEntryRefused(section, index, exc) from exc
+            raise ApplyEntryRefused(kind.section, index, exc) from exc
 
 
 def _require_unclaimed(
@@ -366,32 +494,20 @@ def _require_unclaimed(
         )
 
 
-def _settle(
-    section: str,
-    index: int,
-    kind: RecordKind,
-    decided: tuple[Any, ConfigChange] | None,
-    writes: list[PlannedWrite],
-    outcomes: list[EntryOutcome],
+def _settle[K: Hashable, D, R: _Revised](
+    kind: _Section[K, D, R], index: int, entry: D, record: R, plan: _Accumulator
 ) -> bool:
     """Plan the write that settles a record after its create or edit; ``False`` when it needs none."""
+    decided = kind.settle(entry, record)
     if decided is None:
         return False
     settled, change = decided
-    _write(section, index, kind, settled, change.revision - 1, change, writes, outcomes)
+    _write(kind, index, settled, change.revision - 1, change, plan)
     return True
 
 
-def _write(
-    section: str,
-    index: int,
-    kind: RecordKind,
-    record: ConfiguredWorkSource | ConfiguredRepository | DeclarableRecord,
-    from_revision: int | None,
-    change: ConfigChange,
-    writes: list[PlannedWrite],
-    outcomes: list[EntryOutcome],
+def _write[K: Hashable, D, R: _Revised](
+    kind: _Section[K, D, R], index: int, record: R, from_revision: int | None, change: ConfigChange, plan: _Accumulator
 ) -> None:
-    writes.append(PlannedWrite(section, index, record, from_revision, change))
-    handle = record.slug if isinstance(record, ConfiguredRepository | ConfiguredWorkSource) else record.name
-    outcomes.append(EntryOutcome(kind, handle, change.op, change.diff))
+    plan.writes.append(PlannedWrite(kind.section, index, record, from_revision, change))
+    plan.outcomes.append(EntryOutcome(kind.kind, kind.handle(record), change.op, change.diff))

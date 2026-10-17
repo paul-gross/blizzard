@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 import yaml
 
+from blizzard.hub.documents import YAML_CODEC
 from blizzard.hub.documents.codec import ConfigDecodeError
 from blizzard.hub.domain.graph.model import GraphDoc
 from blizzard.hub.domain.graph.validation import Validator
@@ -67,7 +68,7 @@ def test_doc_carries_the_baked_content(tmp_path: Path) -> None:
 def test_inlined_yaml_carries_the_baked_content_and_no_file_path(tmp_path: Path) -> None:
     graph_path = _write_graph(tmp_path)
 
-    inlined = GraphFile(graph_path).inlined_yaml
+    inlined = GraphFile(graph_path).inlined_yaml(YAML_CODEC)
 
     assert _DOCKET_TEXT in inlined
     assert f"./{_DOCKET_FILENAME}" not in inlined
@@ -78,7 +79,7 @@ def test_the_inlined_yaml_reparses_to_the_same_baked_content(tmp_path: Path) -> 
     re-serialization — the parse half of the round trip a raw ``POST /api/graphs`` body relies
     on, whose whole edge is pinned at the component tier."""
     graph_path = _write_graph(tmp_path)
-    inlined = GraphFile(graph_path).inlined_yaml
+    inlined = GraphFile(graph_path).inlined_yaml(YAML_CODEC)
 
     reparsed = yaml.safe_load(inlined)
 

@@ -19,7 +19,7 @@ from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.deps import Services
 from blizzard.hub.auth.models import ResolvedIdentity
-from blizzard.hub.documents.codec import YAML_CODEC, ConfigDecodeError
+from blizzard.hub.documents.codec import ConfigDecodeError
 from blizzard.hub.domain.graph.model import ChoiceTarget, Graph, GraphDoc, GraphParseError, Mints, Node
 from blizzard.hub.domain.graph.validation import GraphValidationError
 from blizzard.hub.graph_sync import GraphReconciliation, GraphSyncStatus
@@ -123,7 +123,7 @@ def _graph_view(
 def mint_graph(request: GraphMintRequest, services: Services) -> object:
     """Validate and mint an immutable graph; 422 on validation errors."""
     try:
-        doc = GraphDoc.of(YAML_CODEC.decode(request.definition_yaml.encode("utf-8")))
+        doc = GraphDoc.of(services.graph_yaml.decode(request.definition_yaml.encode("utf-8")))
     except (GraphParseError, ConfigDecodeError) as exc:
         report = GraphValidationReport(ok=False, errors=[str(exc)], warnings=[])
         return JSONResponse(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, content=report.model_dump())
@@ -151,7 +151,7 @@ def sync_graphs(services: Services) -> GraphSyncResponse:
     Idempotent, so it is safe to run unconditionally. Registered above
     ``/graphs/{graph_id}`` so ``sync`` is not matched as a graph id. Always ``200``: a
     graph that fails to load is a ``failed`` report row, and ``ok`` carries the verdict."""
-    outcomes = GraphReconciliation(services.graph_mint, services.graphs).outcomes()
+    outcomes = GraphReconciliation(services.graph_mint, services.graphs, services.graph_yaml).outcomes()
     return GraphSyncResponse(
         ok=all(o.status is not GraphSyncStatus.FAILED for o in outcomes),
         entries=[

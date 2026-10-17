@@ -38,6 +38,7 @@ def _chunk(chunk_id: str, *, minted_at: datetime = _T0) -> Chunk:
 
 
 _A, _B, _C = _chunk("chk_a"), _chunk("chk_b"), _chunk("chk_c")
+_N, _R = _chunk("chk_n"), _chunk("chk_r")
 _STATUSES = {
     "chk_a": ChunkStatus.READY,
     "chk_b": ChunkStatus.READY,
@@ -100,44 +101,44 @@ def test_a_page_refuses_a_non_positive_limit() -> None:
 
 
 def test_a_replacement_puts_the_named_first_then_the_rest_in_current_order() -> None:
-    ordered = replacement_order(QueueList.READY, [_A, _B, _C], ["chk_c", "chk_a"], _STATUSES)
+    ordered = replacement_order(QueueList.READY, [_A, _B, _C], [_C, _A], _STATUSES)
     assert [c.chunk_id for c in ordered] == ["chk_c", "chk_a", "chk_b"]
 
 
-def test_a_replacement_refuses_a_repeated_id_before_an_outsider() -> None:
+def test_a_replacement_refuses_a_repeated_chunk_before_an_outsider() -> None:
     with pytest.raises(DuplicateReorderIds, match=r"^chunk_ids must not repeat$"):
-        replacement_order(QueueList.READY, [_A], ["chk_n", "chk_n"], _STATUSES)
+        replacement_order(QueueList.READY, [_A], [_N, _N], _STATUSES)
 
 
 def test_a_reorder_naming_a_chunk_from_the_other_list_says_where_it_is() -> None:
     with pytest.raises(NotInList) as excinfo:
-        replacement_order(QueueList.READY, [_A, _B], ["chk_n"], _STATUSES)
+        replacement_order(QueueList.READY, [_A, _B], [_N], _STATUSES)
     assert str(excinfo.value) == "chunk chk_n is not in the ready list (it is not_ready)"
     with pytest.raises(NotInList) as excinfo:
-        replacement_order(QueueList.NOT_READY, [], ["chk_a"], _STATUSES)
+        replacement_order(QueueList.NOT_READY, [], [_A], _STATUSES)
     assert str(excinfo.value) == "chunk chk_a is not in the not_ready list (it is ready)"
 
 
 def test_a_reorder_naming_a_chunk_in_neither_list_names_only_the_expected_one() -> None:
     with pytest.raises(NotInList) as excinfo:
-        replacement_order(QueueList.READY, [_A], ["chk_r"], _STATUSES)
+        replacement_order(QueueList.READY, [_A], [_R], _STATUSES)
     assert str(excinfo.value) == "chunk chk_r is not in the ready list"
     assert excinfo.value.actual is None
 
 
-def test_a_move_resolves_both_ids_against_the_list() -> None:
-    assert resolve_move(QueueList.READY, [_A, _B], "chk_b", "chk_a", _STATUSES) == (_B, _A)
-    assert resolve_move(QueueList.READY, [_A, _B], "chk_b", None, _STATUSES) == (_B, None)
+def test_a_move_resolves_both_chunks_against_the_list() -> None:
+    assert resolve_move(QueueList.READY, [_A, _B], _B, _A, _STATUSES) == (_B, _A)
+    assert resolve_move(QueueList.READY, [_A, _B], _B, None, _STATUSES) == (_B, None)
 
 
 def test_a_move_refuses_a_self_anchor_before_membership() -> None:
     with pytest.raises(SelfAnchoredMove, match=r"^after_chunk_id must not equal chunk_id$"):
-        resolve_move(QueueList.READY, [], "chk_n", "chk_n", _STATUSES)
+        resolve_move(QueueList.READY, [], _N, _N, _STATUSES)
 
 
 def test_a_move_refuses_an_anchor_outside_the_list() -> None:
     with pytest.raises(NotInList) as excinfo:
-        resolve_move(QueueList.READY, [_A, _B], "chk_a", "chk_n", _STATUSES)
+        resolve_move(QueueList.READY, [_A, _B], _A, _N, _STATUSES)
     assert excinfo.value.chunk_id == "chk_n"
     assert excinfo.value.actual is QueueList.NOT_READY
 

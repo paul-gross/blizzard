@@ -14,7 +14,7 @@ import tempfile
 # ast-grep-ignore: bzh:store-exclusive-write
 import threading
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from datetime import timedelta
 from pathlib import Path
 from typing import Protocol
@@ -61,6 +61,8 @@ from blizzard.hub.delivery.internal.hub_command_runner import SubprocessHubComma
 from blizzard.hub.delivery.internal.hub_workdir import FilesystemHubWorkdir
 from blizzard.hub.delivery.marker_auth import MarkerAuthority
 from blizzard.hub.delivery.workdir import IHubWorkdir
+from blizzard.hub.documents import YAML_CODEC
+from blizzard.hub.documents.codec import IConfigCodec
 from blizzard.hub.domain.chunk.dependencies import DependencyService
 from blizzard.hub.domain.chunk.event_log import EventLogService
 from blizzard.hub.domain.chunk.ingest import IngestService
@@ -69,7 +71,7 @@ from blizzard.hub.domain.chunk.ports.stores import ChunkReadStores, ChunkStores
 from blizzard.hub.domain.config.authoring import ConfigAuthoring
 from blizzard.hub.domain.config.changes import IReadConfigChanges, ISecretReferences
 from blizzard.hub.domain.config.repositories import IReadRepositoryRecordRepository
-from blizzard.hub.domain.config.secrets import IHubKeyProvider, ISecretCatalog, ISecretReader
+from blizzard.hub.domain.config.secrets import IHubKeyProvider, ISecretCatalog, ISecretCipher, ISecretReader
 from blizzard.hub.domain.config.work_sources import IReadWorkSourceRepository
 from blizzard.hub.domain.execution.apply import ApplyService
 from blizzard.hub.domain.execution.claim import ClaimService
@@ -127,7 +129,7 @@ from blizzard.hub.domain.observability.analytics.operational import IReadOperati
 from blizzard.hub.domain.observability.analytics.queries import IReadAnalyticsEventQueries
 from blizzard.hub.domain.observability.egress.backfill import EgressBackfill
 from blizzard.hub.domain.observability.egress.config import EgressConfig
-from blizzard.hub.domain.observability.egress.event_rows import FilePathPolicy
+from blizzard.hub.domain.observability.egress.event_rows import export_paths
 from blizzard.hub.domain.observability.egress.reset import EgressReset
 from blizzard.hub.domain.observability.egress.status import EgressStatusReader
 from blizzard.hub.domain.observability.egress.sweep import EgressSweep
@@ -265,6 +267,8 @@ class TenantServices:
     #: above is the same store's read Protocol.
     transcript_ingest: TranscriptIngestService
     graph_mint: GraphMintService
+    #: The YAML binding of the config codec a graph definition is decoded and stored through.
+    graph_yaml: IConfigCodec
     graph_lifecycle: GraphLifecycleService
     questions: QuestionService
     queue: QueueService
@@ -753,21 +757,21 @@ class LiveConfig:
     secrets: ISecretReader
 
 
-def build_live_config(stores: TenantStores, *, secret_keys: IHubKeyProvider) -> LiveConfig:
+def build_live_config(stores: TenantStores, *, cipher: ISecretCipher) -> LiveConfig:
     """The :class:`LiveConfig` of the tenant ``stores`` serve."""
     return LiveConfig(
         objects=ConfigObjectCache(ConfigRevisionsStore(stores.connections)),
-        secrets=StoreSecretReader(catalog=stores.secrets, sealed=stores.secrets, cipher=secret_cipher(secret_keys)),
+        secrets=StoreSecretReader(catalog=stores.secrets, sealed=stores.secrets, cipher=cipher),
     )
 
 
-def build_config_authoring(stores: TenantStores, *, secret_keys: IHubKeyProvider) -> ConfigAuthoring:
-    """The one configured-record writer of the tenant ``stores`` serve, sealing under ``secret_keys``."""
+def build_config_authoring(stores: TenantStores, *, cipher: ISecretCipher) -> ConfigAuthoring:
+    """The one configured-record writer of the tenant ``stores`` serve, sealing with ``cipher``."""
     return ConfigAuthoring(
         work_sources=stores.work_source_records,
         repositories=stores.repository_records,
         secrets=stores.secrets,
-        cipher=secret_cipher(secret_keys),
+        cipher=cipher,
         apply_writer=stores.config_apply,
         import_writer=stores.config_import,
         clock=stores.clock,
@@ -824,18 +828,6 @@ def _backfill_writers(config: EgressConfig, settings: EgressWriterSettings) -> C
     return writer
 
 
-def _egress_paths(config: EgressConfig, key: bytes | None) -> tuple[EgressConfig, FilePathPolicy | None, str | None]:
-    """The export's file path policy, or none and no ``events`` dataset when the policy needs a key it lacks. The
-    third value names the unset key variable when a configured ``events`` dataset was dropped for it."""
-    try:
-        return config, FilePathPolicy(config.file_paths, key), None
-    except ValueError:
-        if "events" not in config.datasets:
-            return config, None, None
-        kept = replace(config, datasets=tuple(name for name in config.datasets if name != "events"))
-        return kept, None, config.path_key_env
-
-
 #: Builds a tenant's work-source registry over its stores and its live configuration.
 type WorkSourceRegistryFactory = Callable[[TenantStores, LiveConfig], IWorkSourceRegistry]
 
@@ -848,7 +840,8 @@ class TenantServiceParts:
     clock: IClock
     hub_scoped_reads: HubScopedReads
     users: IReadUserRepository
-    secret_keys: IHubKeyProvider
+    secret_cipher: ISecretCipher
+    graph_yaml: IConfigCodec
     work_sources: WorkSourceRegistryFactory
     marker_authority: MarkerAuthority
     system_artifacts: PackagedSystemArtifacts
@@ -889,7 +882,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
     chunk_hub_exec = chunk_stores.hub_exec
     chunk_dependencies = chunk_stores.dependencies
     chunk_exclusive = chunk_stores.exclusive
-    live = build_live_config(stores, secret_keys=parts.secret_keys)
+    live = build_live_config(stores, cipher=parts.secret_cipher)
     work_sources = parts.work_sources(stores, live)
     transcript_caps = parts.transcript_caps
     graph_store = GraphStore(tenant_connections)
@@ -1067,6 +1060,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
             store=transcript_store, retired=retired, clock=clock, caps=transcript_caps
         ),
         graph_mint=graph_mint,
+        graph_yaml=parts.graph_yaml,
         graph_lifecycle=GraphLifecycleService(graphs=graph_store, clock=clock),
         questions=QuestionService(questions=chunk_questions, clock=clock),
         queue=QueueService(queue=chunk_queue, record=chunk_record, clock=clock),
@@ -1103,7 +1097,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         scope_lifecycle=ScopeLifecycle(scopes=scope_store, clock=clock),
         secret_catalog=stores.secrets,
         secret_references=stores.secret_referrers,
-        config_authoring=build_config_authoring(stores, secret_keys=parts.secret_keys),
+        config_authoring=build_config_authoring(stores, cipher=parts.secret_cipher),
         work_source_records=stores.work_source_records,
         repository_records=stores.repository_records,
         config_changes=stores.config_changes,
@@ -1227,7 +1221,7 @@ def build_services(
     platform_tracer: IPlatformTracer | None = None,
     egress: EgressConfig | None = None,
     egress_path_key: bytes | None = None,
-    annotation_interval_seconds: int = 120,
+    annotation_interval_seconds: int,
 ) -> HubServices:
     """Construct and wire the hub-level services over the shared :class:`HubCore`, and have its
     tenant cache serve each tenant's services (:func:`build_tenant_services`). The sweeps and exports
@@ -1245,7 +1239,8 @@ def build_services(
         clock=clock,
         hub_scoped_reads=core.hub_scoped_reads,
         users=core.users,
-        secret_keys=secret_keys,
+        secret_cipher=secret_cipher(secret_keys),
+        graph_yaml=YAML_CODEC,
         work_sources=work_sources,
         marker_authority=marker_authority,
         system_artifacts=system_artifacts,
@@ -1311,7 +1306,8 @@ def build_services(
         clock=clock,
         replay_max_window=trace_config.replay_max_window,
     )
-    egress_config, egress_paths, egress_missing_key = _egress_paths(egress or EgressConfig(), egress_path_key)
+    exported = export_paths(egress or EgressConfig(), egress_path_key)
+    egress_config, egress_paths, egress_missing_key = exported.config, exported.policy, exported.missing_key_env
     egress_writer_settings = EgressWriterSettings(egress_config.max_rows_per_file, egress_config.min_free_bytes)
     egress_writer = (
         build_egress_writer(
@@ -1413,7 +1409,7 @@ def build_services(
     )
     tenant_admin = TenantAdministration(
         tenants=TenantAdministrationStore(store_connections, identity_transactions),
-        mint_packaged=packaged_minter(clock),
+        mint_packaged=packaged_minter(clock, YAML_CODEC),
         changed=open_tenants.refresh,
         clock=clock,
     )

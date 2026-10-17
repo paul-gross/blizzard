@@ -17,7 +17,7 @@ from blizzard.hub.composition import LiveConfig, build_hub_core, build_live_conf
 from blizzard.hub.domain.config.changes import RecordKind
 from blizzard.hub.domain.config.secrets import SecretName
 from blizzard.hub.domain.config.work_sources import WorkSourceEdit, WorkSourceFields
-from blizzard.hub.secrets import hub_key_provider
+from blizzard.hub.secrets import hub_key_provider, secret_cipher
 from blizzard.hub.tenancy import StoreScope
 from tests.support import OP, config_authoring, default_tenant, migrated_hub_at
 
@@ -56,7 +56,7 @@ class _World:
         self.builds = 0
 
     def second_process(self) -> LiveConfig:
-        return build_live_config(self.stores, secret_keys=self.keys)
+        return build_live_config(self.stores, cipher=secret_cipher(self.keys))
 
     def client(self, live: LiveConfig | None = None) -> _Client | None:
         live = live or self.live

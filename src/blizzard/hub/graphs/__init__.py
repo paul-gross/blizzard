@@ -11,7 +11,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from blizzard.foundation.roles import collaborator, domain_model
-from blizzard.hub.documents.codec import YAML_CODEC, accepted_extensions, codec_for_path
+from blizzard.hub.documents import accepted_extensions, codec_for_path
+from blizzard.hub.documents.codec import IConfigCodec
 from blizzard.hub.domain.graph.model import GraphDoc
 
 # The prompt-carrying fields whose file references are inlined at load.
@@ -118,10 +119,9 @@ class GraphFile:
     def doc(self) -> GraphDoc:
         return GraphDoc.of(self.body)
 
-    @property
-    def inlined_yaml(self) -> str:
-        """:attr:`body` re-serialized as YAML, every file reference already inlined."""
-        return YAML_CODEC.encode(self.body).decode("utf-8")
+    def inlined_yaml(self, yaml: IConfigCodec) -> str:
+        """:attr:`body` re-serialized through the ``yaml`` binding, every file reference already inlined."""
+        return yaml.encode(self.body).decode("utf-8")
 
 
 @domain_model

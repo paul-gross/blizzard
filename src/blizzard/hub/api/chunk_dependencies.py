@@ -19,6 +19,7 @@ from blizzard.hub.domain.chunk.dependencies import (
     DependentNotEditable,
     NoStandingDependencyToRelease,
     PrerequisiteIsEphemeral,
+    PrerequisiteScope,
 )
 from blizzard.hub.domain.chunk.errors import ChunkNotFound
 from blizzard.hub.domain.chunk.model import Chunk, DependencyEdge
@@ -44,16 +45,16 @@ def _resolve_dependent(services: TenantServices, chunk_id: str) -> Chunk:
     return chunk
 
 
-def _resolve_prerequisite(services: TenantServices, chunk_id: str) -> Chunk | str:
-    """Resolve the named prerequisite to its chunk, or — for an id minted but since gone ephemeral
-    (grouped-away or deleted), which has no chunk to load — to the id itself; 404 for an id never
-    minted. Whether an ephemeral prerequisite is refused is ``DependencyService``'s to decide, under
-    the lock."""
+def _resolve_prerequisite(services: TenantServices, chunk_id: str) -> PrerequisiteScope:
+    """Resolve the named prerequisite to its scope — from its chunk, or, for an id minted but since
+    gone ephemeral (grouped-away or deleted), which has no chunk to load, from the id; 404 for an id
+    never minted. Whether an ephemeral prerequisite is refused is ``DependencyService``'s to decide,
+    under the lock."""
     chunk = services.chunks.record.get(chunk_id)
     if chunk is not None:
-        return chunk
+        return PrerequisiteScope(chunk_id=chunk.chunk_id)
     if services.chunks.lifecycle.is_ephemeral(chunk_id):
-        return chunk_id
+        return PrerequisiteScope(chunk_id=chunk_id)
     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
 
 

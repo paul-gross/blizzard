@@ -14,7 +14,7 @@ from typing import cast
 
 import pytest
 
-from blizzard.hub.domain.chunk.dependencies import DependencyWouldCloseCycle, PrerequisiteIsEphemeral
+from blizzard.hub.domain.chunk.dependencies import DependencyWouldCloseCycle, PrerequisiteIsEphemeral, PrerequisiteScope
 from blizzard.hub.domain.chunk.ports.dependencies import IWriteChunkDependenciesRepository
 from tests.support import HubHarness, build_hub, ingest
 
@@ -56,7 +56,7 @@ def test_two_opposing_declarations_racing_resolve_to_exactly_one_commit(tmp_path
     first_result: dict[str, object] = {}
 
     def _declare_a_depends_on_b() -> None:
-        first_result["edge"] = hub.services.dependencies.declare(a, b, by="user:alice")
+        first_result["edge"] = hub.services.dependencies.declare(a, PrerequisiteScope(b.chunk_id), by="user:alice")
 
     first_thread = threading.Thread(target=_declare_a_depends_on_b)
     first_thread.start()
@@ -66,7 +66,7 @@ def test_two_opposing_declarations_racing_resolve_to_exactly_one_commit(tmp_path
 
     def _declare_b_depends_on_a() -> None:
         try:
-            second_result["edge"] = hub.services.dependencies.declare(b, a, by="user:bob")
+            second_result["edge"] = hub.services.dependencies.declare(b, PrerequisiteScope(a.chunk_id), by="user:bob")
         except DependencyWouldCloseCycle as exc:
             second_result["refused"] = exc
 
@@ -120,8 +120,12 @@ def test_a_disjoint_cycle_across_four_chunks_is_closed_by_the_shared_lock_not_th
     assert b is not None
     assert c is not None
     assert d is not None
-    hub.services.dependencies.declare(b, c, by="user:alice")  # b depends on c, already standing
-    hub.services.dependencies.declare(d, a, by="user:alice")  # d depends on a, already standing
+    hub.services.dependencies.declare(
+        b, PrerequisiteScope(c.chunk_id), by="user:alice"
+    )  # b depends on c, already standing
+    hub.services.dependencies.declare(
+        d, PrerequisiteScope(a.chunk_id), by="user:alice"
+    )  # d depends on a, already standing
 
     entered_write = threading.Event()
     release_write = threading.Event()
@@ -140,7 +144,7 @@ def test_a_disjoint_cycle_across_four_chunks_is_closed_by_the_shared_lock_not_th
     first_result: dict[str, object] = {}
 
     def _declare_a_depends_on_b() -> None:
-        first_result["edge"] = hub.services.dependencies.declare(a, b, by="user:alice")
+        first_result["edge"] = hub.services.dependencies.declare(a, PrerequisiteScope(b.chunk_id), by="user:alice")
 
     first_thread = threading.Thread(target=_declare_a_depends_on_b)
     first_thread.start()
@@ -150,7 +154,7 @@ def test_a_disjoint_cycle_across_four_chunks_is_closed_by_the_shared_lock_not_th
 
     def _declare_c_depends_on_d() -> None:
         try:
-            second_result["edge"] = hub.services.dependencies.declare(c, d, by="user:bob")
+            second_result["edge"] = hub.services.dependencies.declare(c, PrerequisiteScope(d.chunk_id), by="user:bob")
         except DependencyWouldCloseCycle as exc:
             second_result["refused"] = exc
 
@@ -193,14 +197,18 @@ def test_repeated_opposing_declaration_races_never_yield_two_standing_edges(tmp_
         def _x_depends_on_y(dep=x, prereq=y, barrier=start, sink=results) -> None:  # type: ignore[no-untyped-def]
             barrier.wait()
             try:
-                sink["x_on_y"] = hub.services.dependencies.declare(dep, prereq, by="user:alice")
+                sink["x_on_y"] = hub.services.dependencies.declare(
+                    dep, PrerequisiteScope(prereq.chunk_id), by="user:alice"
+                )
             except DependencyWouldCloseCycle:
                 sink["x_on_y"] = "refused"
 
         def _y_depends_on_x(dep=y, prereq=x, barrier=start, sink=results) -> None:  # type: ignore[no-untyped-def]
             barrier.wait()
             try:
-                sink["y_on_x"] = hub.services.dependencies.declare(dep, prereq, by="user:bob")
+                sink["y_on_x"] = hub.services.dependencies.declare(
+                    dep, PrerequisiteScope(prereq.chunk_id), by="user:bob"
+                )
             except DependencyWouldCloseCycle:
                 sink["y_on_x"] = "refused"
 
@@ -257,7 +265,9 @@ def test_a_fold_and_a_racing_declare_naming_its_target_are_serialized_by_the_sha
 
     def _declare_dependent_on_target() -> None:
         try:
-            declare_result["edge"] = hub.services.dependencies.declare(dependent, target, by="user:alice")
+            declare_result["edge"] = hub.services.dependencies.declare(
+                dependent, PrerequisiteScope(target.chunk_id), by="user:alice"
+            )
         except PrerequisiteIsEphemeral as exc:
             declare_result["refused"] = exc
 

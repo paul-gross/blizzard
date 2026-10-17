@@ -134,7 +134,9 @@ def test_each_secret_verb_appends_exactly_one_row(world: _World) -> None:
     assert record is not None
     replaced = world.authoring.replace_secret(record, "v2", _CLI)
     world.authoring.retire_secret(replaced, _CLI)
-    world.authoring.enable_secret(replaced, _CLI)
+    retired = world.secrets.get("gh")
+    assert retired is not None
+    world.authoring.enable_secret(retired, _CLI)
 
     ops = [(c.op, c.revision, c.door) for c in world.changes()[1:]]
     assert ops == [
@@ -150,7 +152,9 @@ def test_a_secret_retire_or_enable_that_changes_nothing_appends_nothing(world: _
     assert record is not None
     assert world.authoring.enable_secret(record, OP) is False
     assert world.authoring.retire_secret(record, OP) is True
-    assert world.authoring.retire_secret(record, OP) is False
+    retired = world.secrets.get("gh")
+    assert retired is not None
+    assert world.authoring.retire_secret(retired, OP) is False
     assert world.count() == 2
 
 

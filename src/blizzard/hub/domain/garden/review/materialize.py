@@ -96,21 +96,24 @@ class ReviewFindingsPlan:
         return list(seen)
 
 
-# --- Repository seam (I-prefix — bzh:repository-split; write-only, this phase mints
-# nothing to read back) -------------------------------------------------------------
+# --- Repository seam (I-prefix — bzh:repository-split) ---------------------------
 
 
-class IWriteReviewFindingsRepository(Protocol):
+class IReadReviewFindingsRepository(Protocol):
+    """Read-only review-findings-delivery access — the replay probe a caller makes before writing."""
+
+    def already_delivered(self, *, chunk_id: str) -> bool:
+        """Whether ``chunk_id`` already carries a review-findings-delivered marker — the
+        same check :meth:`IWriteReviewFindingsRepository.deliver` makes internally, exposed
+        so a caller can short-circuit before re-parsing a replay's artifact."""
+        ...
+
+
+class IWriteReviewFindingsRepository(IReadReviewFindingsRepository, Protocol):
     """Materialize one :class:`ReviewFindingsPlan`, atomically and idempotently, keyed
     on ``chunk_id`` alone: a second plan for an already-delivered chunk is dropped."""
 
     def deliver(self, plan: ReviewFindingsPlan, *, admission: EpochAdmission) -> ReviewFindingsOutcome: ...
-
-    def already_delivered(self, *, chunk_id: str) -> bool:
-        """Whether ``chunk_id`` already carries a review-findings-delivered marker — the
-        same check :meth:`deliver` makes internally, exposed so a caller can
-        short-circuit before re-parsing a replay's artifact."""
-        ...
 
 
 def review_scope_description(chunk: Chunk) -> str:
@@ -170,8 +173,8 @@ class ReviewFindingsMaterialize:
         self._delivery = delivery
         self._clock = clock
 
-    def already_delivered(self, *, chunk_id: str) -> bool:
-        return self._delivery.already_delivered(chunk_id=chunk_id)
+    def already_delivered(self, *, chunk: Chunk) -> bool:
+        return self._delivery.already_delivered(chunk_id=chunk.chunk_id)
 
     def deliver(
         self,

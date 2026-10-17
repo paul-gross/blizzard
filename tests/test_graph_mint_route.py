@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from blizzard.foundation.artifacts import ArtifactKind
+from blizzard.hub.documents import YAML_CODEC
 from blizzard.hub.domain.graph.model import GraphArtifact, ProducesSpec
 from blizzard.hub.graphs import PACKAGED, GraphFile
 from tests.support import build_hub
@@ -300,7 +301,7 @@ def test_a_file_declared_artifact_reminted_from_inlined_yaml_bakes_the_files_own
     graph_path.write_text(_FILE_ARTIFACTS_GRAPH)
     hub = build_hub(tmp_path)
 
-    minted = hub.client.post("/api/graphs", json={"definition_yaml": GraphFile(graph_path).inlined_yaml})
+    minted = hub.client.post("/api/graphs", json={"definition_yaml": GraphFile(graph_path).inlined_yaml(YAML_CODEC)})
 
     assert minted.status_code == 201, minted.text
     reloaded = hub.services.graphs.get(minted.json()["graph_id"])

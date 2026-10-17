@@ -148,11 +148,11 @@ class BounceEnvelope:
         cause: str,
         summary: str,
         commits: list[dict[str, str]],
-        artifacts: list[StoredArtifact],
+        sources: DeliverySources,
         step: FailedStep | None,
     ) -> BounceEnvelope:
-        landed = LandedRepos.of(artifacts).names
-        read = DeliveryRead.of(ChunkFacts(minted=True), DeliverySources(markers=artifacts))
+        landed = LandedRepos.of(sources.markers).names
+        read = DeliveryRead.of(ChunkFacts(minted=True), sources)
         prs = {p.repo: p for p in sorted([*read.closed_prs, *read.open_prs], key=lambda p: p.number)}
         unlanded: list[dict[str, object]] = []
         for commit in commits:
@@ -746,6 +746,12 @@ class HubNodeExecutor:
         finally:
             self._marker_authority.revoke(chunk.chunk_id, node_id=node.node_id, epoch=epoch)
 
+    def _delivery_sources(self, chunk: Chunk) -> DeliverySources:
+        """The chunk's delivery markers, the PR references already parsed by the store. The historical landing
+        facts are left out: a bounce reads only what the markers say landed."""
+        read = self._artifacts.delivery_sources_for([chunk.chunk_id]).get(chunk.chunk_id, DeliverySources())
+        return DeliverySources(markers=read.markers, pr_markers=read.pr_markers)
+
     def _landing_project(self, chunk: Chunk) -> LandingProject:
         """The chunk's project and the repository records it links, read now."""
         if chunk.project_id is None:
@@ -843,7 +849,7 @@ class HubNodeExecutor:
             cause=cause,
             summary=f"hub node `{node.name}` exceeded its poll_timeout awaiting `{HUB_PENDING_CHOICE}`",
             commits=[{k: v or "" for k, v in c.items()} for c in rows.payload(resolution.qualified)],
-            artifacts=loaded,
+            sources=self._delivery_sources(chunk),
             step=None,
         ).serialize()
         self._escalations.record_bounce(chunk.chunk_id, epoch=hub_epoch, cause=cause, envelope=envelope_payload, at=now)
@@ -963,7 +969,7 @@ class HubNodeExecutor:
                     cause=choice,
                     summary=f"hub node `{node.name}` routed `{choice}` to `{edge.to_node_name}` — delivery incomplete",
                     commits=commits,
-                    artifacts=loaded,
+                    sources=self._delivery_sources(chunk),
                     step=step,
                 ).serialize()
                 self._escalations.record_bounce(

@@ -227,8 +227,7 @@ class ConfigAuthoring:
         """Seal under the next revision and compare-and-set from ``record.revision``.
         ``if_match`` is the revision the caller last saw, checked before any write."""
         now = self._clock.now()
-        retired = self._secrets.is_retired(record.name)
-        change = secret_lifecycle.replacement(record, ctx, retired=retired, if_match=if_match, at=now)
+        change = secret_lifecycle.replacement(record, ctx, retired=record.retired, if_match=if_match, at=now)
         sealed = self._cipher.seal(SecretValue.entered(value), name=record.name, revision=change.revision)
         return self._secrets.replace(
             record.name, from_revision=record.revision, sealed=sealed, at=now, by=ctx.actor, change=change
@@ -245,8 +244,7 @@ class ConfigAuthoring:
 
     def _set_secret_retired(self, record: SecretMetadata, retired: bool, ctx: ChangeContext) -> bool:
         now = self._clock.now()
-        retired_now = self._secrets.is_retired(record.name)
-        change = secret_lifecycle.lifecycle_change(record, ctx, retired_now=retired_now, retired=retired, at=now)
+        change = secret_lifecycle.lifecycle_change(record, ctx, retired_now=record.retired, retired=retired, at=now)
         if change is None:
             return False
         self._secrets.record_lifecycle(record.name, retired=retired, at=now, by=ctx.actor, change=change)

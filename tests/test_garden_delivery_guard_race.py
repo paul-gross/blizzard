@@ -17,6 +17,7 @@ from sqlalchemy import Engine
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store.engine import create_engine_from_url
+from blizzard.hub.domain.chunk.model import Chunk
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.garden.delivery.materialize import (
     DeliveryOutcome,
@@ -35,6 +36,7 @@ from blizzard.hub.domain.garden.findings.model import (
     FindingExitService,
 )
 from blizzard.hub.domain.garden.run_context import RunContext
+from blizzard.hub.domain.graph.model import Node
 from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.garden_delivery_store import GardenDeliveryStore
 from blizzard.hub.store.schema import artifacts, finding_facts
@@ -262,9 +264,12 @@ class _Artifacts:
 class _Buckets:
     def __init__(self) -> None:
         self.reads = 0
+        self.events: list[str] | None = None
 
     def for_run(self, run: RunContext) -> FindingBucket:
         self.reads += 1
+        if self.events is not None:
+            self.events.append("validate")
         return FindingBucket(citable=[])
 
 
@@ -283,7 +288,7 @@ class _Materialize:
         self.outcomes = outcomes
         self.calls = 0
 
-    def already_delivered(self, *, chunk_id: str, node_id: str, epoch: int) -> bool:
+    def already_delivered(self, *, chunk: Chunk, node: Node, epoch: int) -> bool:
         return False
 
     def deliver(self, validated: ValidatedDelivery, **_: object) -> DeliveryOutcome:
@@ -292,15 +297,18 @@ class _Materialize:
 
 
 def _recorder(
-    outcomes: list[DeliveryOutcome], resolved: list[tuple[str, str]]
+    outcomes: list[DeliveryOutcome], resolved: list[tuple[str, str]], events: list[str] | None = None
 ) -> tuple[GardenDeliveryRecorder, Any, Any]:
     from blizzard.hub.domain.garden.delivery.validation import CommitResolution
 
     def resolve(repo: str, sha: str) -> CommitResolution:
         resolved.append((repo, sha))
+        if events is not None:
+            events.append("resolve")
         return CommitResolution(exists=True)
 
     buckets, materialize = _Buckets(), _Materialize(outcomes)
+    buckets.events = events
     recorder = GardenDeliveryRecorder(
         artifacts=cast(Any, _Artifacts()),
         buckets=cast(Any, buckets),
@@ -331,6 +339,16 @@ def test_recorder_retries_a_lost_guard_against_a_fresh_bucket_and_resolves_each_
     assert buckets.reads == 2
     assert materialize.calls == 2
     assert resolved == [("blizzard", "a" * 40)]
+
+
+@pytest.mark.unit
+def test_recorder_resolves_every_commit_before_validation_starts() -> None:
+    events: list[str] = []
+    recorder, _, _ = _recorder([DeliveryOutcome.GUARD_LOST, DeliveryOutcome.RECORDED], [], events)
+
+    _record(recorder)
+
+    assert events == ["resolve", "validate", "validate"]
 
 
 @pytest.mark.unit

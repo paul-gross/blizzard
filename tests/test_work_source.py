@@ -21,7 +21,7 @@ from blizzard.hub.domain.chunk.model import WorkRef
 from blizzard.hub.domain.config.authoring import ConfigAuthoring
 from blizzard.hub.domain.config.secrets import SecretName
 from blizzard.hub.domain.config.work_sources import WorkSourceFields, WorkSourceId
-from blizzard.hub.secrets import hub_key_provider
+from blizzard.hub.secrets import hub_key_provider, secret_cipher
 from blizzard.hub.tenancy import StoreScope
 from blizzard.hub.work_sources.annotator import WorkAnnotateError, WorkStatusMarker
 from blizzard.hub.work_sources.closer import WorkCloseError, WorkItemGoneError
@@ -67,7 +67,7 @@ def _registry_world(
     for secret, value in (tokens or {"gh": "token"}).items():
         authoring.create_secret(SecretName.parse(secret), value, OP)
     ids = {slug: authoring.create_work_source(slug, None, fields, OP).work_source_id for slug, fields in sources}
-    live = build_live_config(stores, secret_keys=keys)
+    live = build_live_config(stores, cipher=secret_cipher(keys))
     registry = WorkSourceEntry.registry(
         records=stores.work_source_records,
         objects=live.objects,

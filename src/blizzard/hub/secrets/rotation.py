@@ -6,15 +6,16 @@ a tenant's: one rotation covers every open tenant."""
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from pathlib import Path
 
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.config import ConfigError
 from blizzard.hub.domain.config.secrets import (
     IHubKeyProvider,
     IResealSecretRepository,
+    IRotatableHubKeyProvider,
+    ISecretCipher,
     KeyGeneration,
     Reseal,
     SealedSecret,
@@ -23,10 +24,7 @@ from blizzard.hub.domain.config.secrets import (
     stale_seals,
     uncovered_key_ids,
 )
-from blizzard.hub.secrets import ENV_SECRET_KEY, ENV_SECRET_KEY_PREVIOUS, secret_keys_dir
-from blizzard.hub.secrets.internal.aes_gcm import AesGcmSecretCipher
-from blizzard.hub.secrets.internal.directory_keys import DirectoryKeyProvider
-from blizzard.hub.secrets.internal.env_keys import EnvKeyProvider
+from blizzard.hub.secrets import ENV_SECRET_KEY_PREVIOUS
 
 
 @domain_model
@@ -55,27 +53,19 @@ class _Target:
 
 
 def rotate_keys(
-    repos: Sequence[IResealSecretRepository], environ: Mapping[str, str], *, data_dir: Path
+    repos: Sequence[IResealSecretRepository],
+    keys: IRotatableHubKeyProvider,
+    cipher_for: Callable[[IHubKeyProvider], ISecretCipher],
 ) -> RotationResult:
     """Re-seal every row not under the target generation — one transaction per tenant, one
     ``repos`` member per open tenant.
 
-    Env mode (``BZ_HUB_SECRET_KEY`` set) mints nothing; older rows open through
-    ``BZ_HUB_SECRET_KEY_PREVIOUS``. Directory mode mints a generation and re-seals every tenant
-    into it; only once every tenant has does it promote that generation and prune any generation
-    file no row references. A tenant that fails leaves the old generation current: the tenants
-    before it open through the minted file, and a re-run moves every tenant again."""
-    if environ.get(ENV_SECRET_KEY):
-        return _rotate(repos, EnvKeyProvider(environ), directory=None)
-    if environ.get(ENV_SECRET_KEY_PREVIOUS):
-        raise ConfigError(f"{ENV_SECRET_KEY_PREVIOUS} is set without {ENV_SECRET_KEY}")
-    directory = DirectoryKeyProvider(secret_keys_dir(data_dir))
-    return _rotate(repos, directory, directory=directory)
-
-
-def _rotate(
-    repos: Sequence[IResealSecretRepository], keys: IHubKeyProvider, *, directory: DirectoryKeyProvider | None
-) -> RotationResult:
+    ``keys`` mints the target generation (the environment source's is its current one, so it mints
+    nothing, and older rows open through ``BZ_HUB_SECRET_KEY_PREVIOUS``). Only once every tenant has
+    been re-sealed does it promote that generation and prune any generation no row references. A
+    tenant that fails leaves the old generation current: the tenants before it open through the
+    minted generation, and a re-run moves every tenant again. ``cipher_for`` builds the cipher over
+    the key view rotation seals and opens through."""
     rows = [repo.list_sealed() for repo in repos]
     missing = uncovered_key_ids(_key_ids(rows), keys.available_ids())
     if missing:
@@ -83,16 +73,15 @@ def _rotate(
             f"stored secrets are sealed under key generation(s) {sorted(missing)} the key source does not hold — "
             f"restore them (set {ENV_SECRET_KEY_PREVIOUS} in env mode) before rotating"
         )
-    target = directory.mint() if directory is not None else keys.current()
-    cipher = AesGcmSecretCipher(_Target(keys, target))
+    target = keys.mint()
+    cipher = cipher_for(_Target(keys, target))
     resealed = 0
     for repo, tenant_rows in zip(repos, rows, strict=True):
         changes = [_reseal(cipher, row) for row in stale_seals(tenant_rows, target.key_id)]
         repo.reseal(changes)
         resealed += len(changes)
-    if directory is not None:
-        directory.promote(target.key_id)
-        directory.prune(_key_ids([repo.list_sealed() for repo in repos]))
+    keys.promote(target.key_id)
+    keys.prune(_key_ids([repo.list_sealed() for repo in repos]))
     return RotationResult(key_id=target.key_id, resealed=resealed)
 
 
@@ -100,7 +89,7 @@ def _key_ids(rows: Sequence[Sequence[SealedSecret]]) -> frozenset[str]:
     return frozenset(row.sealed.key_id for tenant_rows in rows for row in tenant_rows)
 
 
-def _reseal(cipher: AesGcmSecretCipher, row: SealedSecret) -> Reseal:
+def _reseal(cipher: ISecretCipher, row: SealedSecret) -> Reseal:
     try:
         value = cipher.open(row)
     except SecretUnreadable as exc:

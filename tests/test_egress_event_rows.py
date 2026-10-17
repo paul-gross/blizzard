@@ -14,13 +14,16 @@ from blizzard.hub.domain.observability.analytics.events import (
     SegmentProvenance,
     TranscriptEvent,
 )
+from blizzard.hub.domain.observability.egress.config import EgressConfig
 from blizzard.hub.domain.observability.egress.event_rows import (
     EventDerivation,
     ExportedEventsEntry,
     FilePathPolicy,
+    MissingPathKey,
     derivation_id,
     derivation_rows,
     dropped_row,
+    export_paths,
 )
 from blizzard.hub.domain.observability.egress.rows import step_row
 from blizzard.hub.domain.observability.tracing.facts import StepFacts
@@ -397,3 +400,38 @@ def test_planted_content_never_reaches_a_row(paths: FilePathPolicy) -> None:
             assert PLANTED not in str(value)
             if row.record_type == "event" and row.kind == "file_read":
                 assert CWD not in str(value)
+
+
+def test_a_hashing_policy_without_a_key_raises_the_typed_refusal() -> None:
+    with pytest.raises(MissingPathKey):
+        FilePathPolicy("hashed", None)
+
+
+def test_export_paths_keeps_every_dataset_when_the_key_is_present() -> None:
+    config = EgressConfig(file_paths="hashed")
+
+    exported = export_paths(config, KEY)
+
+    assert exported == type(exported)(config, FilePathPolicy("hashed", KEY), None)
+
+
+def test_export_paths_drops_events_and_names_the_unset_variable_when_the_key_is_missing() -> None:
+    exported = export_paths(EgressConfig(file_paths="hashed", path_key_env="MY_KEY"), None)
+
+    assert exported.policy is None
+    assert exported.config.datasets == ("steps", "invocations")
+    assert exported.missing_key_env == "MY_KEY"
+
+
+def test_export_paths_without_the_events_dataset_needs_no_key() -> None:
+    config = EgressConfig(file_paths="hashed", datasets=("steps",))
+
+    exported = export_paths(config, None)
+
+    assert (exported.config, exported.policy, exported.missing_key_env) == (config, None, None)
+
+
+def test_export_paths_for_an_omit_policy_needs_no_key() -> None:
+    exported = export_paths(EgressConfig(file_paths="omit"), None)
+
+    assert exported.policy == FilePathPolicy("omit") and exported.missing_key_env is None

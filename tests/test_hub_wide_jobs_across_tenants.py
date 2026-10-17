@@ -89,7 +89,7 @@ class _Hub:
 
     def authoring(self, tenant: TenantId) -> ConfigAuthoring:
         keys = hub_key_provider({}, data_dir=self.config.data_dir)
-        return build_config_authoring(self.stores(tenant), secret_keys=keys)
+        return build_config_authoring(self.stores(tenant), cipher=secret_cipher(keys))
 
     def reveal(self, tenant: TenantId, name: str) -> str:
         """``name``'s value in ``tenant``, opened as a running hub opens it."""
@@ -227,13 +227,13 @@ def test_a_tenant_that_fails_to_reseal_leaves_the_old_key_current_and_a_rerun_mo
     first, second = hub.stores(hub.first).secrets, hub.stores(hub.second).secrets
 
     with pytest.raises(SecretRotationConflict):
-        rotate_keys([first, _Racing(second)], {}, data_dir=hub.config.data_dir)
+        rotate_keys([first, _Racing(second)], hub_key_provider({}, data_dir=hub.config.data_dir), secret_cipher)
 
     assert hub.meta() == before
     assert hub.key_ids(hub.second) == {old}
     assert hub.reveal(hub.first, "gh") == "tok-first"  # re-sealed into the minted, not yet current, generation
 
-    result = rotate_keys([first, second], {}, data_dir=hub.config.data_dir)
+    result = rotate_keys([first, second], hub_key_provider({}, data_dir=hub.config.data_dir), secret_cipher)
 
     assert hub.key_ids(hub.first) == hub.key_ids(hub.second) == {result.key_id}
     assert (hub.reveal(hub.first, "gh"), hub.reveal(hub.second, "gh")) == ("tok-first", "tok-second")

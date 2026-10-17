@@ -41,7 +41,7 @@ class ReviewFindingsRecorder:
         """Deliver `chunk`'s newest review-finding delta from `(node, epoch)`. The replay
         check comes first, so a recorded chunk answers ``ALREADY_RECORDED`` without
         re-reading its artifact."""
-        replay = review_replay_outcome(recorded=self._materialize.already_delivered(chunk_id=chunk.chunk_id))
+        replay = review_replay_outcome(recorded=self._materialize.already_delivered(chunk=chunk))
         if replay is not None:
             return replay
         artifact = require_review_delta(

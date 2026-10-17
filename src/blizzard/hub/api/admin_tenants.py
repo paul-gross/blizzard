@@ -123,7 +123,7 @@ def sync_every_tenant(services: Hub) -> AdminGraphSyncResponse:
 
     def reconciliation_of(tenant: TenantId) -> GraphReconciliation:
         opened = services.tenants.open_services(StoreScope(tenant))
-        return GraphReconciliation(opened.graph_mint, opened.graphs)
+        return GraphReconciliation(opened.graph_mint, opened.graphs, opened.graph_yaml)
 
     reports = reconcile_open_tenants(services.tenants.open_tenants.refresh(), reconciliation_of)
     tenants = [

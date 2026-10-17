@@ -112,7 +112,7 @@ class SecretStore:
                 insert_secret(conn, name, sealed=sealed, at=at, by=by, change=change)
         except IntegrityError as exc:
             raise SecretAlreadyExists(name) from exc
-        return SecretMetadata(name=name, revision=1, replaced_at=at, replaced_by=by, created_at=at)
+        return SecretMetadata(name=name, revision=1, replaced_at=at, replaced_by=by, created_at=at, retired=False)
 
     def replace(
         self, name: str, *, from_revision: int, sealed: SealedValue, at: datetime, by: str, change: ConfigChange
@@ -126,14 +126,16 @@ class SecretStore:
             row = conn.execute(self._store.select(secrets, *_METADATA).where(secrets.c.name == name)).one()
             if moved == 1:
                 append_change(conn, change)
+            retired = name in self._retired_among(conn, [name])
         if moved != 1:
             raise SecretRevisionConflict(name, current=row.revision)
-        return self._of(row)
+        return self._of(row, retired=retired)
 
     def get(self, name: str) -> SecretMetadata | None:
         with self._store.read("get") as conn:
             row = conn.execute(self._store.select(secrets, *_METADATA).where(secrets.c.name == name)).one_or_none()
-        return self._of(row) if row is not None else None
+            retired = row is not None and name in self._retired_among(conn, [name])
+        return self._of(row, retired=retired) if row is not None else None
 
     def get_many(self, names: list[str]) -> dict[str, SecretMetadata]:
         if not names:
@@ -142,13 +144,15 @@ class SecretStore:
         with self._store.read("get_many") as conn:
             for batch in id_batches(names):
                 rows = conn.execute(self._store.select(secrets, *_METADATA).where(secrets.c.name.in_(batch))).all()
-                found.update({row.name: self._of(row) for row in rows})
+                retired = self._retired_among(conn, batch)
+                found.update({row.name: self._of(row, retired=row.name in retired) for row in rows})
         return found
 
     def list_all(self) -> list[SecretMetadata]:
         with self._store.read("list_all") as conn:
             rows = conn.execute(self._store.select(secrets, *_METADATA).order_by(secrets.c.name)).all()
-        return [self._of(row) for row in rows]
+            retired = self._retired_among(conn, None)
+        return [self._of(row, retired=row.name in retired) for row in rows]
 
     def is_retired(self, name: str) -> bool:
         return name in self.retired_names([name])
@@ -156,11 +160,16 @@ class SecretStore:
     def retired_names(self, names: Sequence[str] | None = None) -> set[str]:
         if names is not None and not names:
             return set()
+        with self._store.read("retired_names") as conn:
+            return self._retired_among(conn, names)
+
+    def _retired_among(self, conn, names: Sequence[str] | None) -> set[str]:  # type: ignore[no-untyped-def]
+        """Every name of ``names`` (all when ``None``) whose newest lifecycle fact reads retired —
+        the one derivation :meth:`retired_names` and every metadata load share."""
         facts = secret_lifecycle_facts
         found: set[str] = set()
-        with self._store.read("retired_names") as conn:
-            for batch in id_batches(list(dict.fromkeys(names))) if names is not None else [None]:
-                found.update(conn.execute(newest_retired_select(self._store, facts, facts.c.name, batch)).scalars())
+        for batch in id_batches(list(dict.fromkeys(names))) if names is not None else [None]:
+            found.update(conn.execute(newest_retired_select(self._store, facts, facts.c.name, batch)).scalars())
         return found
 
     def key_ids_in_use(self) -> set[str]:
@@ -217,13 +226,14 @@ class SecretStore:
             record_lifecycle_fact(conn, name, retired=retired, at=at, by=by, change=change)
 
     @staticmethod
-    def _of(row) -> SecretMetadata:  # type: ignore[no-untyped-def]
+    def _of(row, *, retired: bool) -> SecretMetadata:  # type: ignore[no-untyped-def]
         return SecretMetadata(
             name=row.name,
             revision=row.revision,
             replaced_at=row.replaced_at,
             replaced_by=row.replaced_by,
             created_at=row.created_at,
+            retired=retired,
         )
 
 

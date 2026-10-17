@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 
+from blizzard.hub.documents import YAML_CODEC
 from blizzard.hub.graphs import PACKAGED
 from tests.support import build_hub
 
@@ -17,7 +18,7 @@ pytestmark = pytest.mark.component
 
 def test_garden_routine_mints_clean_and_no_strategy_resolves_to_reconcile(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
-    definition_yaml = PACKAGED.named("garden-routine").inlined_yaml
+    definition_yaml = PACKAGED.named("garden-routine").inlined_yaml(YAML_CODEC)
     minted = hub.client.post("/api/graphs", json={"definition_yaml": definition_yaml})
     assert minted.status_code == 201, minted.text
     body = minted.json()

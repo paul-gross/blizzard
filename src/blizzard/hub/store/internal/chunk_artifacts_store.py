@@ -6,6 +6,7 @@ Timestamps arrive already stamped (``bzh:injected-clock``)."""
 
 from __future__ import annotations
 
+import json
 from collections import defaultdict
 from collections.abc import Sequence
 from datetime import datetime
@@ -17,7 +18,7 @@ from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.artifact.model import StoredArtifact
-from blizzard.hub.domain.chunk.delivery_read import DeliverySources
+from blizzard.hub.domain.chunk.delivery_read import DeliverySources, PrMarker
 from blizzard.hub.domain.chunk.ports.artifacts import IWriteChunkArtifactsRepository
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.store import schema as s
@@ -32,6 +33,22 @@ from blizzard.hub.store.internal.newest_fact import newer_row_exists
 from blizzard.hub.store.scoped import ScopedConnections
 
 
+def _pr_marker(name: str, epoch: int, data: str) -> PrMarker | None:
+    """The PR a ``delivery-pr/`` marker's JSON payload names, or ``None`` when it is not that shape."""
+    try:
+        payload = json.loads(data)
+    except ValueError:
+        return None
+    if not (
+        isinstance(payload, dict)
+        and isinstance(payload.get("repo"), str)
+        and isinstance(payload.get("number"), int)
+        and isinstance(payload.get("url"), str)
+    ):
+        return None
+    return PrMarker(name=name, epoch=epoch, repo=payload["repo"], number=payload["number"], url=payload["url"])
+
+
 class ChunkArtifactsStore:
     """The chunk's node/step artifacts, including the generic hub command node's own."""
 
@@ -43,6 +60,7 @@ class ChunkArtifactsStore:
         """Only the requested chunks and delivery families; no fleet artifact scan. Each
         chunk's markers arrive in durable write order (``artifacts.seq``)."""
         markers: dict[str, list[StoredArtifact]] = defaultdict(list)
+        pr_markers: dict[str, list[PrMarker]] = defaultdict(list)
         landed: dict[str, dict[str, str]] = defaultdict(dict)
         with self._store.read("delivery_sources_for") as conn:
             for batch in id_batches(chunk_ids):
@@ -61,6 +79,13 @@ class ChunkArtifactsStore:
                     # order total without backend-dependent row order (`bzh:sql-portable`).
                     .order_by(s.artifacts.c.chunk_id, s.artifacts.c.seq, s.artifacts.c.artifact_id)
                 ):
+                    if a.name.startswith("delivery-pr/"):
+                        # A payload that is not a PR reference is skipped here, so the domain only ever
+                        # folds well-formed markers.
+                        pr = _pr_marker(a.name, a.epoch, a.data)
+                        if pr is not None:
+                            pr_markers[a.chunk_id].append(pr)
+                        continue
                     markers[a.chunk_id].append(
                         StoredArtifact(
                             kind=ArtifactKind.ASSET,
@@ -93,7 +118,10 @@ class ChunkArtifactsStore:
                     )
                 ):
                     landed[row.chunk_id][row.repo] = row.commit_hash
-        return {chunk_id: DeliverySources(markers[chunk_id], landed[chunk_id]) for chunk_id in chunk_ids}
+        return {
+            chunk_id: DeliverySources(markers[chunk_id], pr_markers[chunk_id], landed[chunk_id])
+            for chunk_id in chunk_ids
+        }
 
     def load_artifacts(self, chunk_id: str) -> list[StoredArtifact]:
         with self._store.read("load_artifacts") as conn:

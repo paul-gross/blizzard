@@ -17,6 +17,7 @@ from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.hub.delivery.hub_node import UnconvergedDeliveryError
 from blizzard.hub.delivery.marker_auth import MarkerAuthority
+from blizzard.hub.documents import YAML_CODEC
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
@@ -140,7 +141,7 @@ def _writable(hub: HubHarness) -> IWriteChunkMovementRepository:
 def _mint_and_claim(hub: HubHarness) -> tuple[str, dict[str, str]]:
     """Mint the packaged adv-dwf graph, ingest a chunk, repin it onto adv-dwf, and claim a
     route — the same sequence ``tests/test_delivery_conflict_routing.py`` uses."""
-    definition_yaml = PACKAGED.named("advanced-development-workflow").inlined_yaml
+    definition_yaml = PACKAGED.named("advanced-development-workflow").inlined_yaml(YAML_CODEC)
     minted = hub.client.post("/api/graphs", json={"definition_yaml": definition_yaml})
     assert minted.status_code == 201, minted.text
     graph_id = minted.json()["graph_id"]
