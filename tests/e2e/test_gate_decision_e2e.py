@@ -20,20 +20,9 @@ import pytest
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.loop_wiring import LoopWiring
 from tests.e2e.fleet_traces import FleetCollector, StepExpect, assert_skeleton, unix_ns
-from tests.e2e.test_acceptance_loop import (
-    _PUSH_AND_DECLARE_SCRIPT,
-    FIXTURE_ENV,
-    REPO,
-    REPO_NAME,
-    _forge,
-    _free_port,
-    _git_bare,
-    _hub,
-    _mock_bin_dir,
-    _runner_api,
-    _runner_config,
-)
-from tests.fleet_world import mint_world, scripted_build_prompt
+from tests.fleet_launchers import REPO, git_bare, mock_bin_dir, run_forge, run_hub, runner_api, runner_config
+from tests.fleet_world import FIXTURE_ENV, PUSH_AND_DECLARE_SCRIPT, REPO_NAME, mint_world, scripted_build_prompt
+from tests.support import free_port
 
 pytestmark = [
     pytest.mark.e2e,
@@ -55,7 +44,7 @@ _BUILD_SCRIPT = scripted_build_prompt(
     '     "-c", "user.email=mock@blizzard.local", "-c", "user.name=Mock Harness",\n'
     '     "commit", "-m", "feat: land a change awaiting sign-off"],\n'
     "    check=True,\n"
-    ")\n" + _PUSH_AND_DECLARE_SCRIPT
+    ")\n" + PUSH_AND_DECLARE_SCRIPT
 )
 # build judgement: pass into the gate. The gate itself is human-judged, so no worker script.
 _JUDGEMENT_SCRIPT = "verdict('pass', 'built and committed; awaiting human sign-off to ship')\n"
@@ -113,13 +102,13 @@ def _tick_until(
 ) -> str:
     """Drive synchronous ticks until the chunk reaches one of ``targets``; return its status.
 
-    Wrapped in :func:`_runner_api` so the build node's scripted push+declare has a live
+    Wrapped in :func:`runner_api` so the build node's scripted push+declare has a live
     local API to POST to.
     """
     prior = dict(os.environ)
     os.environ.update(fenced)  # the runner spawns the fenced mock harness in-process
     try:
-        with _runner_api(config):
+        with runner_api(config):
             deadline = time.monotonic() + timeout
             status = "ready"
             while time.monotonic() < deadline:
@@ -143,7 +132,7 @@ def test_graph_gate_parks_a_decision_then_decide_delivers(
     tmp_path: Path, fleet_traces: FleetCollector, subtests: pytest.Subtests
 ) -> None:
     """A human gate ahead of deliver parks a decision; `hub decision resolve` approves and it lands."""
-    bin_dir = _mock_bin_dir()
+    bin_dir = mock_bin_dir()
     if bin_dir is None:
         pytest.skip("no provisioned sibling blizzard-mock worktree (run `winter provision <env>`)")
 
@@ -154,11 +143,11 @@ def test_graph_gate_parks_a_decision_then_decide_delivers(
     origins = fixture_root / "origins"
     origin_bare = origins / f"{REPO_NAME}.git"
 
-    forge_port, hub_port = _free_port(), _free_port()
+    forge_port, hub_port = free_port(), free_port()
     hub_url = f"http://127.0.0.1:{hub_port}"
     with (
-        _forge(bin_dir, origins, forge_port) as forge,
-        _hub(tmp_path / "hub", forge_port, hub_port, collector=fleet_traces) as hub,
+        run_forge(bin_dir, origins, forge_port) as forge,
+        run_hub(tmp_path / "hub", forge_port, hub_port, collector=fleet_traces) as hub,
     ):
         assert hub.post("/api/graphs", json={"definition_yaml": _graph_yaml()}).status_code == 201
         issue = forge.post(f"/repos/{REPO}/issues", json={"title": "gate", "body": "the chunk"})
@@ -172,7 +161,7 @@ def test_graph_gate_parks_a_decision_then_decide_delivers(
         chunk_id = ingested.json()["chunk_id"]
         assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202  # ready for the runner
 
-        config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+        config = runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
         fenced = dict(os.environ)
         fenced["BLIZZARD_MOCK_HARNESS_FENCE"] = "1"
 
@@ -229,5 +218,5 @@ def test_graph_gate_parks_a_decision_then_decide_delivers(
             assert traces[1].root.end_ns == unix_ns(resolved_at), "the gate span ends when the person decided"
 
     # Git truth: the build commit the gate approved is on the bare origin's main.
-    tree = _git_bare(origin_bare, "ls-tree", "-r", "--name-only", "main")
+    tree = git_bare(origin_bare, "ls-tree", "-r", "--name-only", "main")
     assert "LANDED.md" in tree.split(), f"landed file not reachable from bare main:\n{tree}"

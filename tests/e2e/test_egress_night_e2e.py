@@ -31,21 +31,11 @@ from blizzard.runner.config import RunnerConfig
 from tests.e2e import egress_proof as proof
 from tests.e2e.fleet_traces import PLANT_DIR_VAR, PLANT_LEASE_TOKEN_SCRIPT, planted_lease_tokens
 from tests.e2e.harness_variants import CLAUDE_CODE
-from tests.e2e.test_acceptance_loop import (
-    _PUSH_AND_DECLARE_SCRIPT,
-    FIXTURE_ENV,
-    REPO,
-    REPO_NAME,
-    _forge,
-    _free_port,
-    _hub,
-    _mock_bin_dir,
-    _runner_api,
-    _runner_config,
-)
 from tests.e2e.test_ask_answer_e2e import _tick_until
-from tests.fleet_world import mint_world, scripted_build
+from tests.fleet_launchers import REPO, mock_bin_dir, run_forge, run_hub, runner_api, runner_config
+from tests.fleet_world import FIXTURE_ENV, PUSH_AND_DECLARE_SCRIPT, REPO_NAME, mint_world, scripted_build
 from tests.runner_join import held_token, token_identity
+from tests.support import free_port
 
 pytestmark = [
     pytest.mark.e2e,
@@ -93,7 +83,7 @@ def _commit_script(filename: str, message: str, *, before: str = "", after: str 
         + f'     "commit", "-m", "{message}"],\n'
         + "    check=True, capture_output=True,\n"
         + ")\n"
-        + _PUSH_AND_DECLARE_SCRIPT
+        + PUSH_AND_DECLARE_SCRIPT
         + after
     )
 
@@ -434,7 +424,7 @@ def _forward_late_usage(night: Night, ndjson_dir: Path) -> tuple[str, dict[str, 
 def exported(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Exported]:
     """Run the night once — live NDJSON, the late usage, the Parquet re-host and reset, the backfill of its window —
     and keep the re-hosted hub up while the module's proofs read it."""
-    bin_dir = _mock_bin_dir()
+    bin_dir = mock_bin_dir()
     if bin_dir is None:
         pytest.skip("no provisioned sibling blizzard-mock worktree (run `winter provision <env>`)")
 
@@ -452,7 +442,7 @@ def exported(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Exported]:
         return EgressConfig(directory=directory, format=fmt, sweep_seconds=1, settle_seconds=0, min_free_bytes=0)  # type: ignore[arg-type]
 
     hub_dir = tmp_path / "hub"
-    forge_port, hub_port = _free_port(), _free_port()
+    forge_port, hub_port = free_port(), free_port()
     planted: dict[str, list[str]] = {}
     plants = tmp_path / "planted"
     plants.mkdir()
@@ -462,12 +452,12 @@ def exported(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Exported]:
     since = datetime.now(UTC).replace(microsecond=0) - timedelta(seconds=5)
     hub_url = f"http://127.0.0.1:{hub_port}"
 
-    with _forge(bin_dir, origins, forge_port) as forge:
+    with run_forge(bin_dir, origins, forge_port) as forge:
         # -- the night, exported live as NDJSON ---------------------------------------------------------------
-        with _hub(hub_dir, forge_port, hub_port, egress=egress(ndjson_dir, "ndjson")) as hub:
-            config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+        with run_hub(hub_dir, forge_port, hub_port, egress=egress(ndjson_dir, "ndjson")) as hub:
+            config = runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
             night = Night(hub, forge, hub_url, config, fenced)
-            with _runner_api(config):
+            with runner_api(config):
                 _run_the_night(night, planted)
             planted["work item title"], planted["work item body"] = night.titles, night.bodies
             planted["worker transcript output"] = [_TRANSCRIPT_TOKEN]
@@ -475,7 +465,7 @@ def exported(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Exported]:
             step_key, ndjson_rows = _forward_late_usage(night, ndjson_dir)
 
         # -- the same record, exported live again as Parquet --------------------------------------------------
-        with _hub(hub_dir, forge_port, hub_port, egress=egress(parquet_dir, "parquet"), rehost=True) as hub:
+        with run_hub(hub_dir, forge_port, hub_port, egress=egress(parquet_dir, "parquet"), rehost=True) as hub:
             night.hub = hub
             reset_to = since.astimezone().replace(tzinfo=None).strftime(_LOCAL_FORMAT)
             for dataset in proof.DATASETS:

@@ -20,9 +20,9 @@ import pytest
 from blizzard.auth_core import Role
 from blizzard.foundation.events.stream import DEFAULT_KEEPALIVE_SECONDS
 from blizzard.hub.config import OAuthProviderConfig
-from tests.e2e.test_acceptance_loop import _free_port
 from tests.service.support import require_stub_idp, service_gate, stub_idp
 from tests.service.test_auth_login_service import _SECRET_ENV, _oauth_hub, invite
+from tests.support import free_port
 
 pytestmark = [pytest.mark.service, service_gate]
 
@@ -126,7 +126,7 @@ def _sign_in(idp: httpx.Client, base_url: str, hub_dir: Path, *, subject: str, h
 
 def test_revoking_a_members_membership_ends_their_open_stream_and_no_other(tmp_path: Path) -> None:
     bin_dir = require_stub_idp()
-    idp_port, hub_port = _free_port(), _free_port()
+    idp_port, hub_port = free_port(), free_port()
     base_url = f"http://127.0.0.1:{hub_port}"
     hub_dir = tmp_path / "hub"
 

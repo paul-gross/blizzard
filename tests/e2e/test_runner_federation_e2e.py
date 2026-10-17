@@ -27,7 +27,7 @@ from blizzard.runner.auth.session import CookieNames
 from blizzard.runner.host_config import HOST_TOKEN_VARIABLE, RunnerEntry
 from blizzard.runner.host_layout import HostLayout
 from blizzard.runner.hub.internal.token_file import HubTokenFile
-from tests.e2e.test_acceptance_loop import _await_http, _free_port, _terminate
+from tests.fleet_launchers import await_http, terminate
 from tests.host_files import (
     host_config_of,
     init_runner_environment,
@@ -37,7 +37,7 @@ from tests.host_files import (
 )
 from tests.runner_join import add_runner, adopt_runner, runner_spawn_env
 from tests.service.support import poll_until, require_stub_idp, stub_idp
-from tests.support import daemon_log_sink
+from tests.support import daemon_log_sink, free_port
 
 pytestmark = [
     pytest.mark.e2e,
@@ -114,11 +114,11 @@ def _oauth_hub(hub_dir: Path, idp_port: int, port: int) -> Iterator[httpx.Client
     )
     client = httpx.Client(base_url=f"http://127.0.0.1:{port}", timeout=30.0)
     try:
-        _await_http(proc, client, "/api/health", log=log)
+        await_http(proc, client, "/api/health", log=log)
         yield client
     finally:
         client.close()
-        _terminate(proc)
+        terminate(proc)
 
 
 def _spawn_runner(runner_dir: Path, *, port: int) -> subprocess.Popen[str]:
@@ -135,7 +135,7 @@ def _spawn_runner(runner_dir: Path, *, port: int) -> subprocess.Popen[str]:
     )
     client = httpx.Client(base_url=f"http://127.0.0.1:{port}", timeout=15.0)
     try:
-        _await_http(proc, client, "/api/health", log=log)
+        await_http(proc, client, "/api/health", log=log)
         # Sign-in names the runner's hub-minted id as the authorize client, so it waits for the
         # daemon's registration — the one that declares this federation identity.
         assert poll_until(lambda: client.get("/api/auth/login", follow_redirects=False).status_code != 503), (
@@ -178,17 +178,17 @@ def _federated_runner(runner_dir: Path, *, hub_port: int, port: int, name: str) 
             )
         yield _FederatedRunner(proc, CookieNames(runner_id))
     finally:
-        _terminate(proc)
+        terminate(proc)
 
 
 def test_multi_daemon_sso_bounce(tmp_path: Path) -> None:
     from playwright.sync_api import expect, sync_playwright
 
     bin_dir = require_stub_idp()
-    idp_port = _free_port()
-    hub_port = _free_port()
-    runner_a_port = _free_port()
-    runner_b_port = _free_port()
+    idp_port = free_port()
+    hub_port = free_port()
+    runner_a_port = free_port()
+    runner_b_port = free_port()
     runner_a_url = f"http://127.0.0.1:{runner_a_port}"
     runner_b_url = f"http://127.0.0.1:{runner_b_port}"
 
@@ -309,9 +309,9 @@ def test_runner_session_reacquisition_e2e(tmp_path: Path) -> None:
     from playwright.sync_api import expect, sync_playwright
 
     bin_dir = require_stub_idp()
-    idp_port = _free_port()
-    hub_port = _free_port()
-    runner_port = _free_port()
+    idp_port = free_port()
+    hub_port = free_port()
+    runner_port = free_port()
     runner_url = f"http://127.0.0.1:{runner_port}"
     runner_dir = tmp_path / "runner"
 
@@ -342,7 +342,7 @@ def test_runner_session_reacquisition_e2e(tmp_path: Path) -> None:
                 )
 
                 # 2. Restart in place (same dir/port, no re-`init`) — a redeploy.
-                _terminate(proc)
+                terminate(proc)
                 new_proc = _spawn_runner(runner_dir, port=runner_port)
 
                 # 3. No goto/reload here: wait for the seam's own bounce request, triggered by
@@ -359,7 +359,7 @@ def test_runner_session_reacquisition_e2e(tmp_path: Path) -> None:
             finally:
                 browser.close()
                 if new_proc is not None:
-                    _terminate(new_proc)
+                    terminate(new_proc)
 
 
 @contextlib.contextmanager
@@ -411,7 +411,7 @@ def _registered_host(root: Path, *, hub_port: int, port: int) -> Iterator[tuple[
     )
     client = httpx.Client(base_url=f"http://127.0.0.1:{port}", timeout=15.0)
     try:
-        _await_http(proc, client, "/api/health", log=log)
+        await_http(proc, client, "/api/health", log=log)
         # The host signs in as itself only once the hub has answered its report.
         assert poll_until(lambda: client.get("/api/auth/login", follow_redirects=False).status_code != 503), (
             "the host was never answered by its hub"
@@ -419,16 +419,16 @@ def _registered_host(root: Path, *, hub_port: int, port: int) -> Iterator[tuple[
         yield host_id, (runners[0][1], runners[1][1])
     finally:
         client.close()
-        _terminate(proc)
+        terminate(proc)
 
 
 def test_one_sign_in_at_a_registered_host_reaches_both_runners_pages(tmp_path: Path) -> None:
     from playwright.sync_api import expect, sync_playwright
 
     bin_dir = require_stub_idp()
-    idp_port = _free_port()
-    hub_port = _free_port()
-    host_port = _free_port()
+    idp_port = free_port()
+    hub_port = free_port()
+    host_port = free_port()
     host_url = f"http://127.0.0.1:{host_port}"
 
     with sync_playwright() as pw, stub_idp(bin_dir, idp_port) as idp:

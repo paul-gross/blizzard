@@ -20,21 +20,12 @@ from blizzard.foundation.hub_event_types import HubEventType
 if TYPE_CHECKING:
     from playwright.sync_api import Page, ViewportSize
 
-from tests.e2e.test_acceptance_loop import (
-    FIXTURE_ENV,
-    REPO,
-    REPO_NAME,
-    _drive_until_done,
-    _forge,
-    _free_port,
-    _hub,
-    _mock_bin_dir,
-    _runner_config,
-)
-from tests.fleet_world import mint_world
+from tests.fleet_launchers import REPO, drive_until_done, mock_bin_dir, run_forge, run_hub, runner_config
+from tests.fleet_world import FIXTURE_ENV, REPO_NAME, mint_world
 from tests.runner_join import add_runner, fleet_headers
 from tests.service.support import mock_runner
 from tests.service.test_hub_service import _graph_yaml as _activity_graph_yaml
+from tests.support import free_port
 
 # The built Angular bundle `blizzard hub host` mounts at `/`, needed for the browser
 # scenarios; absent it, they skip rather than fail against a placeholder.
@@ -103,7 +94,7 @@ def _sse_event_types(hub: httpx.Client) -> list[str]:
 
 
 def test_a_verdict_less_exit_surfaces_a_critical_worker_lost_event(tmp_path: Path) -> None:
-    bin_dir = _mock_bin_dir()
+    bin_dir = mock_bin_dir()
     if bin_dir is None:
         pytest.skip("no provisioned sibling blizzard-mock worktree (run `winter provision <env>`)")
 
@@ -113,8 +104,8 @@ def test_a_verdict_less_exit_surfaces_a_critical_worker_lost_event(tmp_path: Pat
     workspace = fixture_root / "workspace"
     origins = fixture_root / "origins"
 
-    forge_port, hub_port = _free_port(), _free_port()
-    with _forge(bin_dir, origins, forge_port) as forge, _hub(tmp_path / "hub", forge_port, hub_port) as hub:
+    forge_port, hub_port = free_port(), free_port()
+    with run_forge(bin_dir, origins, forge_port) as forge, run_hub(tmp_path / "hub", forge_port, hub_port) as hub:
         assert hub.post("/api/graphs", json={"definition_yaml": _graph_yaml()}).status_code == 201
         issue = forge.post(f"/repos/{REPO}/issues", json={"title": "event-log", "body": "the chunk"})
         assert issue.status_code == 201, issue.text
@@ -123,10 +114,10 @@ def test_a_verdict_less_exit_surfaces_a_critical_worker_lost_event(tmp_path: Pat
         chunk_id = ingested.json()["chunk_id"]
         assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
 
-        config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+        config = runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
         fenced = dict(os.environ)
         fenced["BLIZZARD_MOCK_HARNESS_FENCE"] = "1"
-        status = _drive_until_done(config, hub, chunk_id, fenced)
+        status = drive_until_done(config, hub, chunk_id, fenced)
         assert status == "needs_human", f"chunk did not derive needs_human (last status {status!r})"
 
         # (a) The critical worker-lost event reads back off the live GET /api/events.
@@ -180,15 +171,15 @@ def test_the_events_tab_renders_filters_and_updates_live_in_the_browser(
         pytest.skip("no Playwright Chromium installed (run `uv run playwright install chromium`)")
     if not _HUB_BUNDLE.is_file():
         pytest.skip("no built hub bundle (run the web build — release tier drives `mise run e2e`)")
-    bin_dir = _mock_bin_dir()
+    bin_dir = mock_bin_dir()
     if bin_dir is None:
         pytest.skip("no provisioned sibling blizzard-mock worktree (run `winter provision <env>`)")
 
     from playwright.sync_api import expect, sync_playwright
 
     _workspace, origins = _reset_fixture(bin_dir, tmp_path / "scratch")
-    forge_port, hub_port = _free_port(), _free_port()
-    with _forge(bin_dir, origins, forge_port) as forge, _hub(tmp_path / "hub", forge_port, hub_port) as hub:
+    forge_port, hub_port = free_port(), free_port()
+    with run_forge(bin_dir, origins, forge_port) as forge, run_hub(tmp_path / "hub", forge_port, hub_port) as hub:
         # A chunk the events name (the event_log.chunk_id FK) — its own state is immaterial.
         issue = forge.post(f"/repos/{REPO}/issues", json={"title": "ui events", "body": "the chunk"})
         chunk_id = hub.post("/api/chunks", json={"tokens": [f"{REPO_NAME}:{issue.json()['number']}"]}).json()[
@@ -270,15 +261,15 @@ def test_the_events_grid_does_not_collapse_at_a_narrow_viewport(
         pytest.skip("no Playwright Chromium installed (run `uv run playwright install chromium`)")
     if not _HUB_BUNDLE.is_file():
         pytest.skip("no built hub bundle (run the web build — release tier drives `mise run e2e`)")
-    bin_dir = _mock_bin_dir()
+    bin_dir = mock_bin_dir()
     if bin_dir is None:
         pytest.skip("no provisioned sibling blizzard-mock worktree (run `winter provision <env>`)")
 
     from playwright.sync_api import expect, sync_playwright
 
     _workspace, origins = _reset_fixture(bin_dir, tmp_path / "scratch")
-    forge_port, hub_port = _free_port(), _free_port()
-    with _forge(bin_dir, origins, forge_port) as forge, _hub(tmp_path / "hub", forge_port, hub_port) as hub:
+    forge_port, hub_port = free_port(), free_port()
+    with run_forge(bin_dir, origins, forge_port) as forge, run_hub(tmp_path / "hub", forge_port, hub_port) as hub:
         issue = forge.post(f"/repos/{REPO}/issues", json={"title": "narrow events", "body": "the chunk"})
         chunk_id = hub.post("/api/chunks", json={"tokens": [f"{REPO_NAME}:{issue.json()['number']}"]}).json()[
             "chunk_id"
@@ -332,15 +323,15 @@ def test_activity_rail_tracks_claim_transition_and_fact_burst_across_reload(
         pytest.skip("no Playwright Chromium installed")
     if not _HUB_BUNDLE.is_file():
         pytest.skip("no built hub bundle")
-    bin_dir = _mock_bin_dir()
+    bin_dir = mock_bin_dir()
     if bin_dir is None:
         pytest.skip("no provisioned mock worktree")
 
     from playwright.sync_api import expect, sync_playwright
 
     _workspace, origins = _reset_fixture(bin_dir, tmp_path / "scratch")
-    forge_port, hub_port = _free_port(), _free_port()
-    with _forge(bin_dir, origins, forge_port) as forge, _hub(tmp_path / "hub", forge_port, hub_port) as hub:
+    forge_port, hub_port = free_port(), free_port()
+    with run_forge(bin_dir, origins, forge_port) as forge, run_hub(tmp_path / "hub", forge_port, hub_port) as hub:
         assert hub.post("/api/graphs", json={"definition_yaml": _activity_graph_yaml()}).status_code == 201
         issue = forge.post(f"/repos/{REPO}/issues", json={"title": "activity burst", "body": "chunk"})
         chunk_id = hub.post("/api/chunks", json={"tokens": [f"{REPO_NAME}:{issue.json()['number']}"]}).json()[
@@ -352,7 +343,7 @@ def test_activity_rail_tracks_claim_transition_and_fact_burst_across_reload(
         pusher = {"Authorization": f"Bearer {pusher_token}"}
 
         with (
-            mock_runner(bin_dir, _free_port(), hub_port, name="activity-pusher", token=pusher_token) as runner,
+            mock_runner(bin_dir, free_port(), hub_port, name="activity-pusher", token=pusher_token) as runner,
             sync_playwright() as pw,
         ):
             assert runner.post("/_drive/register").status_code == 200
@@ -453,21 +444,21 @@ def test_the_rail_survives_a_reload_with_no_duplicate_or_missing_rows(tmp_path: 
         pytest.skip("no Playwright Chromium installed (run `uv run playwright install chromium`)")
     if not _HUB_BUNDLE.is_file():
         pytest.skip("no built hub bundle (run the web build — release tier drives `mise run e2e`)")
-    bin_dir = _mock_bin_dir()
+    bin_dir = mock_bin_dir()
     if bin_dir is None:
         pytest.skip("no provisioned sibling blizzard-mock worktree (run `winter provision <env>`)")
 
     from playwright.sync_api import expect, sync_playwright
 
     _workspace, origins = _reset_fixture(bin_dir, tmp_path / "scratch")
-    forge_port, hub_port = _free_port(), _free_port()
+    forge_port, hub_port = free_port(), free_port()
     hub_dir = tmp_path / "hub"  # reused verbatim across the restart — the durable store lives here
 
-    with _forge(bin_dir, origins, forge_port) as forge, sync_playwright() as pw:
+    with run_forge(bin_dir, origins, forge_port) as forge, sync_playwright() as pw:
         browser = pw.chromium.launch(headless=True)
         page = browser.new_page()
         try:
-            with _hub(hub_dir, forge_port, hub_port) as hub:
+            with run_hub(hub_dir, forge_port, hub_port) as hub:
                 issue_a = forge.post(f"/repos/{REPO}/issues", json={"title": "reload seam A", "body": "chunk a"})
                 chunk_a = hub.post("/api/chunks", json={"tokens": [f"{REPO_NAME}:{issue_a.json()['number']}"]}).json()[
                     "chunk_id"
@@ -498,8 +489,8 @@ def test_the_rail_survives_a_reload_with_no_duplicate_or_missing_rows(tmp_path: 
                 assert len(first_load_messages) == 3, first_load_messages
 
             # The hub exits here; facts are durable (sqlite) but `EventBroker`'s replay
-            # ring is not — the next `_hub()` call starts a fresh, empty one over the same store.
-            with _hub(hub_dir, forge_port, hub_port, rehost=True):
+            # ring is not — the next `run_hub()` call starts a fresh, empty one over the same store.
+            with run_hub(hub_dir, forge_port, hub_port, rehost=True):
                 page.reload(wait_until="load")
                 expect(page.get_by_test_id("activity-panel")).to_be_visible()
                 # The fresh broker's replay tail is empty — only `GET /api/activity` backfill can repopulate

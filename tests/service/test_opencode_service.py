@@ -19,8 +19,8 @@ from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.wiring import publish_harness_bundle
 from blizzard.runner.loop_wiring import LoopWiring
 from blizzard.runner.store.schema import leases, usage_facts
-from tests.e2e.test_acceptance_loop import REPO_NAME, _free_port, _git_bare, _runner_api, _runner_config
-from tests.fleet_world import BUILD_BRANCH, mint_world
+from tests.fleet_launchers import git_bare, runner_api, runner_config
+from tests.fleet_world import BUILD_BRANCH, REPO_NAME, mint_world
 from tests.runner_fakes import daemon_store
 from tests.runner_join import fleet_headers
 from tests.service.support import (
@@ -31,6 +31,7 @@ from tests.service.support import (
     require_mock_fleet,
     service_gate,
 )
+from tests.support import free_port
 
 pytestmark = [pytest.mark.service, service_gate]
 
@@ -84,10 +85,10 @@ def test_opencode_build_and_review_resume_the_same_session_to_done(tmp_path: Pat
     workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
     fenced = _tick_env()
 
-    hub_port = _free_port()
+    hub_port = free_port()
     with mock_hub(bin_dir, hub_port) as hub:
         chunk_id = _seed_opencode(hub)
-        config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+        config = runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
 
         landed = poll_until(lambda: _run_and_check(config, fenced, hub, chunk_id, "done"), timeout=90.0)
         assert landed, f"chunk did not land under OpenCode (status {_status(hub, chunk_id)!r})"
@@ -113,16 +114,16 @@ def test_runner_serves_a_mock_opencode_lease_with_a_published_bundle(tmp_path: P
     (bundle / "opencode.json").write_text('{"permission":{"bash":"deny"}}')
     fenced = _tick_env()
 
-    hub_port = _free_port()
+    hub_port = free_port()
     with mock_hub(bin_dir, hub_port) as hub:
         chunk_id = _seed_opencode(hub)
-        config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
-        config = dataclasses.replace(config, host="127.0.0.1", port=_free_port(), harness_config_dir=bundle.parent)
+        config = runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+        config = dataclasses.replace(config, host="127.0.0.1", port=free_port(), harness_config_dir=bundle.parent)
         snapshot = publish_harness_bundle(bundle.parent, config.root)
         composed = json.loads((snapshot.path / "opencode" / "opencode.json").read_text())
         assert composed["permission"] == {"bash": "deny", "question": "deny"}
 
-        with _runner_api(config):
+        with runner_api(config):
             client = httpx.Client(base_url=config.local_api_url, timeout=10.0)
             try:
                 assert httpx.get(f"http://{config.host}:{config.port}/api/health", timeout=10.0).status_code == 200
@@ -231,7 +232,7 @@ def test_opencode_transcript_is_read_back_through_the_runner_http_api(tmp_path: 
     fenced = _tick_env()
     fenced["BZ_TRANSCRIPTS_ROOT"] = str(transcripts_root)
 
-    hub_port = _free_port()
+    hub_port = free_port()
     # Unlike real `opencode export` (a global daemon store), the MOCK's `export` re-derives its root from
     # `BZ_TRANSCRIPTS_ROOT` every call, so this must stay live in the real env for the runner's later read too.
     prior_transcripts_root = os.environ.get("BZ_TRANSCRIPTS_ROOT")
@@ -242,12 +243,12 @@ def test_opencode_transcript_is_read_back_through_the_runner_http_api(tmp_path: 
             assert seeded.status_code == 201, seeded.text
             chunk_id = seeded.json()["chunk_id"]
 
-            config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+            config = runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
             config = dataclasses.replace(
-                config, host="127.0.0.1", port=_free_port(), transcripts_root=str(transcripts_root)
+                config, host="127.0.0.1", port=free_port(), transcripts_root=str(transcripts_root)
             )
 
-            with _runner_api(config):
+            with runner_api(config):
                 landed = poll_until(lambda: _run_and_check(config, fenced, hub, chunk_id, "done"), timeout=90.0)
                 assert landed, f"chunk did not land under OpenCode (status {_status(hub, chunk_id)!r})"
 
@@ -286,7 +287,7 @@ def test_opencode_transcript_is_read_back_through_the_runner_http_api(tmp_path: 
     assert bash_tool["output"], "the Bash turn's tool output was never filled in"
     assert isinstance(bash_tool["input"], dict), f"tool input is not structured: {bash_tool!r}"
 
-    real_sha = _git_bare(origin_bare, "log", "--all", "--format=%H", "-1", "--", "transcript-proof.txt").strip()
+    real_sha = git_bare(origin_bare, "log", "--all", "--format=%H", "-1", "--", "transcript-proof.txt").strip()
     assert real_sha, "the mock harness's commit never reached the bare origin"
     assert real_sha[:7] in bash_tool["output"], (
         f"transcript tool output does not carry the real commit sha ({real_sha[:7]!r} not in {bash_tool['output']!r})"
@@ -312,7 +313,7 @@ def test_opencode_transcript_segment_carries_opencode_provenance_through_the_run
     fenced = _tick_env()
     fenced["BZ_TRANSCRIPTS_ROOT"] = str(transcripts_root)
 
-    hub_port = _free_port()
+    hub_port = free_port()
     prior_transcripts_root = os.environ.get("BZ_TRANSCRIPTS_ROOT")
     os.environ["BZ_TRANSCRIPTS_ROOT"] = str(transcripts_root)
     try:
@@ -321,12 +322,12 @@ def test_opencode_transcript_segment_carries_opencode_provenance_through_the_run
             assert seeded.status_code == 201, seeded.text
             chunk_id = seeded.json()["chunk_id"]
 
-            config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+            config = runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
             config = dataclasses.replace(
-                config, host="127.0.0.1", port=_free_port(), transcripts_root=str(transcripts_root)
+                config, host="127.0.0.1", port=free_port(), transcripts_root=str(transcripts_root)
             )
 
-            with _runner_api(config):
+            with runner_api(config):
                 landed = poll_until(lambda: _run_and_check(config, fenced, hub, chunk_id, "done"), timeout=90.0)
                 assert landed, f"chunk did not land under OpenCode (status {_status(hub, chunk_id)!r})"
 
@@ -461,19 +462,19 @@ def test_opencode_crash_mid_turn_recovers_with_usage_recorded_exactly_once(tmp_p
     fenced = _tick_env()
     fenced["BZ_TRANSCRIPTS_ROOT"] = str(transcripts_root)
 
-    hub_port = _free_port()
+    hub_port = free_port()
     with mock_hub(bin_dir, hub_port) as hub:
         seeded = hub.post("/_seed/chunk", json=_opencode_crash_chunk_spec(_WORK_REF_URL))
         assert seeded.status_code == 201, seeded.text
         chunk_id = seeded.json()["chunk_id"]
 
-        config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+        config = runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
         config = dataclasses.replace(config, transcripts_root=str(transcripts_root))
 
         landed = poll_until(lambda: _run_and_check(config, fenced, hub, chunk_id, "done"), timeout=90.0)
         assert landed, f"chunk did not land after the crash (status {_status(hub, chunk_id)!r})"
 
-    real_sha = _git_bare(origin_bare, "log", "--all", "--format=%H", "-1", "--", "transcript-proof.txt").strip()
+    real_sha = git_bare(origin_bare, "log", "--all", "--format=%H", "-1", "--", "transcript-proof.txt").strip()
     assert real_sha, "the retried build's commit never reached the bare origin"
 
     lease_rows = sorted(_leases_for_chunk(config, chunk_id), key=lambda row: row["epoch"])
@@ -511,7 +512,7 @@ def test_opencode_crash_mid_task_records_child_without_a_stdout_tool_use(tmp_pat
     fenced["BZ_TRANSCRIPTS_ROOT"] = str(transcripts_root)
     old_root = os.environ.get("BZ_TRANSCRIPTS_ROOT")
     os.environ["BZ_TRANSCRIPTS_ROOT"] = str(transcripts_root)
-    hub_port = _free_port()
+    hub_port = free_port()
     try:
         with mock_hub(bin_dir, hub_port) as hub:
             spec = _opencode_crash_chunk_spec(_WORK_REF_URL)
@@ -531,7 +532,7 @@ def test_opencode_crash_mid_task_records_child_without_a_stdout_tool_use(tmp_pat
             assert seeded.status_code == 201, seeded.text
             chunk_id = seeded.json()["chunk_id"]
             config = dataclasses.replace(
-                _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port),
+                runner_config(tmp_path / "runner", workspace, bin_dir, hub_port),
                 transcripts_root=str(transcripts_root),
             )
             landed = poll_until(lambda: _run_and_check(config, fenced, hub, chunk_id, "done"), timeout=90.0)
@@ -578,7 +579,7 @@ def test_opencode_spawn_usage_includes_the_task_childs_steps(tmp_path: Path) -> 
     fenced = _tick_env()
     fenced["BZ_TRANSCRIPTS_ROOT"] = str(transcripts_root)
 
-    hub_port = _free_port()
+    hub_port = free_port()
     prior_transcripts_root = os.environ.get("BZ_TRANSCRIPTS_ROOT")
     os.environ["BZ_TRANSCRIPTS_ROOT"] = str(transcripts_root)
     try:
@@ -591,7 +592,7 @@ def test_opencode_spawn_usage_includes_the_task_childs_steps(tmp_path: Path) -> 
             assert seeded.status_code == 201, seeded.text
             chunk_id = seeded.json()["chunk_id"]
 
-            config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+            config = runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
             config = dataclasses.replace(config, transcripts_root=str(transcripts_root))
             landed = poll_until(lambda: _run_and_check(config, fenced, hub, chunk_id, "done"), timeout=90.0)
             assert landed, f"chunk did not land (status {_status(hub, chunk_id)!r})"

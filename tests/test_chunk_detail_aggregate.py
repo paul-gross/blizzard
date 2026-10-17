@@ -7,11 +7,14 @@ build->gate scenario and asserts every piece is present."""
 from __future__ import annotations
 
 from pathlib import Path
+from typing import cast
 
 import pytest
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.hub.domain.chunk.model import ChunkVerb, verb_legal_from
+from blizzard.hub.domain.chunk.ports.artifacts import IWriteChunkArtifactsRepository
+from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.config.repositories import RepositoryFields
 from tests.support import (
     FakeWorkSource,
@@ -19,6 +22,7 @@ from tests.support import (
     build_hub,
     create_repositories,
     fixture_repository,
+    ingest,
     make_ready,
     pointer_token,
     report_lease,
@@ -356,3 +360,29 @@ def test_detail_marks_a_chunk_routed_to_the_reserved_terminal(tmp_path: Path) ->
 
     assert detail["current_node_terminal"] is True
     assert detail["terminal"] is True
+
+
+def test_detail_lists_every_epoch_of_a_series_that_spans_node_ids(tmp_path: Path) -> None:
+    """A republication re-mints a node under a new node id but the same name, so its artifact series continues by
+    node name — and the superseded entries are history, not dropped: the detail lists every one, in epoch order."""
+    hub = build_hub(tmp_path)
+    chunk_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=True)
+    writer = cast(IWriteChunkArtifactsRepository, hub.services.chunks.artifacts)
+    for node_id, epoch in (("nd_build_a", 1), ("nd_build_c", 3), ("nd_build_b", 2)):
+        writer.record_hub_artifact(
+            chunk_id,
+            node_id=node_id,
+            node_name="build",
+            epoch=epoch,
+            name="findings",
+            content=f"v{epoch}",
+            at=hub.clock.now(),
+            admission=EpochAdmission.AT_OR_ABOVE,
+        )
+
+    detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
+    assert [(a["key"], a["node_id"]) for a in detail["artifacts"]] == [
+        ("build.findings.1", "nd_build_a"),
+        ("build.findings.2", "nd_build_b"),
+        ("build.findings.3", "nd_build_c"),
+    ]

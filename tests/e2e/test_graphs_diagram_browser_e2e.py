@@ -14,7 +14,8 @@ from pathlib import Path
 import pytest
 
 from blizzard.hub.graphs import GraphFile
-from tests.e2e.test_acceptance_loop import _free_port, _hub
+from tests.fleet_launchers import run_hub
+from tests.support import free_port
 
 pytestmark = [
     pytest.mark.e2e,
@@ -100,10 +101,10 @@ def test_graphs_diagram_renders_in_the_browser(tmp_path: Path, chromium_availabl
         pytest.skip("no Playwright Chromium installed (run `uv run playwright install chromium`)")
     from playwright.sync_api import expect, sync_playwright
 
-    forge_port, hub_port = _free_port(), _free_port()
+    forge_port, hub_port = free_port(), free_port()
     # No forge is started: a diagram is a pure read of an immutable graph, so the hub's
     # work-source api_base (pointed at this unused port) is never contacted here.
-    with _hub(tmp_path / "hub", forge_port, hub_port) as hub:
+    with run_hub(tmp_path / "hub", forge_port, hub_port) as hub:
         created = hub.post("/api/graphs", json={"definition_yaml": _graph_yaml()})
         assert created.status_code == 201, created.text
         graph_id = created.json()["graph_id"]
@@ -187,8 +188,8 @@ def test_graphs_diagram_selection_in_the_browser(tmp_path: Path, chromium_availa
         pytest.skip("no Playwright Chromium installed (run `uv run playwright install chromium`)")
     from playwright.sync_api import expect, sync_playwright
 
-    forge_port, hub_port = _free_port(), _free_port()
-    with _hub(tmp_path / "hub", forge_port, hub_port) as hub:
+    forge_port, hub_port = free_port(), free_port()
+    with run_hub(tmp_path / "hub", forge_port, hub_port) as hub:
         created = hub.post("/api/graphs", json={"definition_yaml": _graph_yaml()})
         assert created.status_code == 201, created.text
         graph_id = created.json()["graph_id"]
@@ -390,8 +391,8 @@ def test_diagram_geometry_matches_the_rendered_text(tmp_path: Path, chromium_ava
     from playwright.sync_api import expect, sync_playwright
 
     graphs = {**_seed_graph_yamls(), "name-row-bound": _name_bound_graph_yaml()}
-    forge_port, hub_port = _free_port(), _free_port()
-    with _hub(tmp_path / "hub", forge_port, hub_port) as hub:
+    forge_port, hub_port = free_port(), free_port()
+    with run_hub(tmp_path / "hub", forge_port, hub_port) as hub:
         graph_ids: dict[str, str] = {}
         for seed_name, definition_yaml in graphs.items():
             created = hub.post("/api/graphs", json={"definition_yaml": definition_yaml})

@@ -12,8 +12,8 @@ import re
 import pytest
 
 from blizzard.runner.hub.client import IHostHubClient, IHubClient, IHubRunnerAdmin, ITokenIdentityReader
-from tests.e2e.test_acceptance_loop import _free_port
 from tests.service.support import mock_hub, mock_runner, require_mock_fleet, service_gate
+from tests.support import free_port
 
 pytestmark = [pytest.mark.service, service_gate]
 
@@ -129,7 +129,7 @@ def test_mock_hub_openapi_serves_every_ihubclient_endpoint() -> None:
     """The mock hub's ``GET /openapi.json`` serves every ``IHubClient`` endpoint and every
     setup-port endpoint, verb-and-path-exact (path params normalized); one-sided, mock ⊇ real."""
     bin_dir = require_mock_fleet()
-    port = _free_port()
+    port = free_port()
     with mock_hub(bin_dir, port) as hub:
         resp = hub.get("/openapi.json")
         assert resp.status_code == 200, resp.text
@@ -199,8 +199,8 @@ def test_mock_runner_drive_plane_matches_the_expected_verb_set() -> None:
     """The mock runner's ``GET /openapi.json`` must serve exactly the declared
     ``/_drive/*`` verb set."""
     bin_dir = require_mock_fleet()
-    hub_port = _free_port()
-    runner_port = _free_port()
+    hub_port = free_port()
+    runner_port = free_port()
     # A held token keeps the driver from adding itself at start, at a hub this read never starts.
     with mock_runner(bin_dir, runner_port, hub_port, token="drive-plane-read") as runner:
         resp = runner.get("/openapi.json")

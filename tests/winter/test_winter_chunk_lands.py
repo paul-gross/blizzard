@@ -12,21 +12,19 @@ from pathlib import Path
 
 import pytest
 
-from tests.e2e.test_acceptance_loop import (
+from tests.fleet_launchers import (
     MOCK_HARNESS_FENCE_VAR,
     REPO,
-    REPO_NAME,
-    _drive_until_done,
-    _forge,
-    _free_port,
-    _git_bare,
-    _graph_yaml,
-    _hub,
-    _mock_bin_dir,
-    _runner_config,
+    drive_until_done,
+    git_bare,
+    mock_bin_dir,
+    run_forge,
+    run_hub,
+    runner_config,
 )
-from tests.fleet_world import FIXTURE_ENV
+from tests.fleet_world import FIXTURE_ENV, REPO_NAME, graph_yaml
 from tests.host_files import with_workspace, write_host_file
+from tests.support import free_port
 from tests.winter.support import require_winter_source, winter_binding_gate
 
 pytestmark = [pytest.mark.winter_binding, winter_binding_gate]
@@ -35,7 +33,7 @@ _ENV = "e1"
 
 
 def test_winter_workspace_chunk_lands_through_the_winter_provider(tmp_path: Path) -> None:
-    bin_dir = _mock_bin_dir()
+    bin_dir = mock_bin_dir()
     if bin_dir is None:
         pytest.skip("no provisioned sibling blizzard-mock worktree (run `winter provision <env>`)")
     source = require_winter_source()
@@ -62,9 +60,9 @@ def test_winter_workspace_chunk_lands_through_the_winter_provider(tmp_path: Path
     assert (workspace / ".winter" / "config.toml").is_file(), "the fixture was not minted as a winter workspace"
     (workspace / ".blizzard-mock-harness-fence").write_text("winter binding fence marker\n")
 
-    forge_port, hub_port = _free_port(), _free_port()
-    with _forge(bin_dir, origins, forge_port) as forge, _hub(tmp_path / "hub", forge_port, hub_port) as hub:
-        graph = hub.post("/api/graphs", json={"definition_yaml": _graph_yaml()})
+    forge_port, hub_port = free_port(), free_port()
+    with run_forge(bin_dir, origins, forge_port) as forge, run_hub(tmp_path / "hub", forge_port, hub_port) as hub:
+        graph = hub.post("/api/graphs", json={"definition_yaml": graph_yaml()})
         assert graph.status_code == 201, graph.text
         issue = forge.post(f"/repos/{REPO}/issues", json={"title": "winter landing", "body": "land a change"})
         assert issue.status_code == 201, issue.text
@@ -74,11 +72,11 @@ def test_winter_workspace_chunk_lands_through_the_winter_provider(tmp_path: Path
         assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
 
         config = with_workspace(
-            _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port), provider="winter", envs=(_ENV,), repos=()
+            runner_config(tmp_path / "runner", workspace, bin_dir, hub_port), provider="winter", envs=(_ENV,), repos=()
         )
         write_host_file(config)
         fenced = {**os.environ, MOCK_HARNESS_FENCE_VAR: "1"}
-        assert _drive_until_done(config, hub, chunk_id, fenced) == "done"
+        assert drive_until_done(config, hub, chunk_id, fenced) == "done"
         assert (workspace / _ENV / REPO_NAME / "LANDED.md").exists()
 
-    assert "LANDED.md" in _git_bare(bare, "ls-tree", "-r", "--name-only", "main").split()
+    assert "LANDED.md" in git_bare(bare, "ls-tree", "-r", "--name-only", "main").split()

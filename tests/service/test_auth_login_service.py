@@ -24,9 +24,9 @@ import pytest
 from blizzard.auth_core import Role
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import AuthConfig, HubConfig, OAuthProviderConfig
-from tests.e2e.test_acceptance_loop import _await_http, _free_port, _terminate
+from tests.fleet_launchers import await_http, terminate
 from tests.service.support import require_stub_idp, service_gate, stub_idp
-from tests.support import daemon_log_sink, default_tenant, seed_invitation
+from tests.support import daemon_log_sink, default_tenant, free_port, seed_invitation
 
 pytestmark = [pytest.mark.service, service_gate]
 
@@ -39,7 +39,7 @@ def _oauth_hub(
     hub_dir: Path, port: int, *, providers: tuple[OAuthProviderConfig, ...], superuser: str | None = None
 ) -> Iterator[httpx.Client]:
     """A real ``blizzard hub host`` subprocess, ``auth.mode = "oauth"`` with one or more
-    configured providers — mirrors ``tests/e2e/test_acceptance_loop.py``'s own ``_hub``,
+    configured providers — mirrors ``tests/fleet_launchers.py``'s own ``run_hub``,
     minus the work-source wiring this scenario does not need (login/`` /api/me`` alone).
     ``superuser`` sets ``auth.superuser`` so the bootstrap lifecycle runs at
     this real boot, same as any other deployment."""
@@ -59,11 +59,11 @@ def _oauth_hub(
     )
     client = httpx.Client(base_url=f"http://127.0.0.1:{port}", timeout=30.0)
     try:
-        _await_http(proc, client, "/api/health", log=log)
+        await_http(proc, client, "/api/health", log=log)
         yield client
     finally:
         client.close()
-        _terminate(proc)
+        terminate(proc)
 
 
 def invite(hub_dir: Path, email: str, *, role: Role = Role.CONTRIBUTOR) -> str:
@@ -79,8 +79,8 @@ def invite(hub_dir: Path, email: str, *, role: Role = Role.CONTRIBUTOR) -> str:
 
 def test_oidc_login_dance_against_the_stub_idp_ends_authenticated(tmp_path: Path) -> None:
     bin_dir = require_stub_idp()
-    idp_port = _free_port()
-    hub_port = _free_port()
+    idp_port = free_port()
+    hub_port = free_port()
 
     with stub_idp(bin_dir, idp_port) as idp:
         idp.put(
@@ -114,8 +114,8 @@ def test_oidc_login_dance_against_the_stub_idp_ends_authenticated(tmp_path: Path
 
 def test_github_login_dance_against_the_stub_idp_ends_authenticated(tmp_path: Path) -> None:
     bin_dir = require_stub_idp()
-    idp_port = _free_port()
-    hub_port = _free_port()
+    idp_port = free_port()
+    hub_port = free_port()
 
     with stub_idp(bin_dir, idp_port) as idp:
         idp.put(
@@ -142,8 +142,8 @@ def test_github_login_dance_against_the_stub_idp_ends_authenticated(tmp_path: Pa
 
 def test_login_then_logout_round_trips_over_the_wire(tmp_path: Path) -> None:
     bin_dir = require_stub_idp()
-    idp_port = _free_port()
-    hub_port = _free_port()
+    idp_port = free_port()
+    hub_port = free_port()
 
     with stub_idp(bin_dir, idp_port) as idp:
         idp.put(
@@ -175,8 +175,8 @@ def test_providers_endpoint_lists_both_configured_providers_over_the_wire(tmp_pa
     lists both from ``GET /api/auth/providers``, and a full dance against one still ends
     authenticated."""
     bin_dir = require_stub_idp()
-    idp_port = _free_port()
-    hub_port = _free_port()
+    idp_port = free_port()
+    hub_port = free_port()
 
     with stub_idp(bin_dir, idp_port) as idp:
         idp.put(
@@ -215,8 +215,8 @@ def test_providers_endpoint_lists_both_configured_providers_over_the_wire(tmp_pa
 
 def test_refused_callback_lever_surfaces_as_a_login_failure(tmp_path: Path) -> None:
     bin_dir = require_stub_idp()
-    idp_port = _free_port()
-    hub_port = _free_port()
+    idp_port = free_port()
+    hub_port = free_port()
 
     with stub_idp(bin_dir, idp_port) as idp:
         idp.put("/_levers/refuse_callback", json={"refuse": True})
@@ -240,8 +240,8 @@ def test_refused_callback_lever_surfaces_as_a_login_failure(tmp_path: Path) -> N
 
 def test_an_uninvited_first_sign_in_lands_on_the_invite_only_refusal_with_no_session(tmp_path: Path) -> None:
     bin_dir = require_stub_idp()
-    idp_port = _free_port()
-    hub_port = _free_port()
+    idp_port = free_port()
+    hub_port = free_port()
 
     with stub_idp(bin_dir, idp_port) as idp:
         idp.put(
@@ -274,8 +274,8 @@ def test_named_superuser_email_lands_superuser_on_first_verified_login(tmp_path:
     provider is authoritative for its addresses. Through one that is not, the same login is
     refused as invite-only, with no session."""
     bin_dir = require_stub_idp()
-    idp_port = _free_port()
-    hub_port = _free_port()
+    idp_port = free_port()
+    hub_port = free_port()
 
     with stub_idp(bin_dir, idp_port) as idp:
         idp.put(

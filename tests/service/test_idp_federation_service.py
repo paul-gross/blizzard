@@ -24,12 +24,12 @@ import pytest
 from blizzard.hub.config import AuthConfig, HubConfig, OAuthProviderConfig
 from blizzard.runner.auth.session import CookieNames
 from blizzard.runner.hub.internal.token_file import HubTokenFile
-from tests.e2e.test_acceptance_loop import _await_http, _free_port, _terminate
+from tests.fleet_launchers import await_http, terminate
 from tests.host_files import load_runner_config, sampler_without_credentials, write_host_file
 from tests.runner_join import RUNNER_BIN, adopt_runner, runner_spawn_env
 from tests.service.support import add_runner, poll_until, require_stub_idp, service_gate, stub_idp
 from tests.service.test_auth_login_service import invite
-from tests.support import daemon_log_sink
+from tests.support import daemon_log_sink, free_port
 
 pytestmark = [pytest.mark.service, service_gate]
 
@@ -75,11 +75,11 @@ def _oauth_hub(
     )
     client = httpx.Client(base_url=f"http://127.0.0.1:{port}", timeout=30.0)
     try:
-        _await_http(proc, client, "/api/health", log=log)
+        await_http(proc, client, "/api/health", log=log)
         yield client
     finally:
         client.close()
-        _terminate(proc)
+        terminate(proc)
 
 
 @contextlib.contextmanager
@@ -118,7 +118,7 @@ def _federated_runner(
     )
     client = httpx.Client(base_url=public_url, timeout=15.0)
     try:
-        _await_http(proc, client, "/api/health", log=log)
+        await_http(proc, client, "/api/health", log=log)
         # Sign-in names the runner's hub-minted id as the authorize client, so it waits for the
         # daemon's first registration — the one that declares this federation identity.
         with httpx.Client(base_url=hub_url, timeout=15.0) as operator:
@@ -129,7 +129,7 @@ def _federated_runner(
         yield _FederatedRunner(client, CookieNames(runner_id))
     finally:
         client.close()
-        _terminate(proc)
+        terminate(proc)
 
 
 def _bounce_once(hub: httpx.Client, runner: _FederatedRunner) -> None:
@@ -162,9 +162,9 @@ def _bounce_once(hub: httpx.Client, runner: _FederatedRunner) -> None:
 
 def test_the_wire_leg_ends_in_an_unlocked_runner_route(tmp_path: Path) -> None:
     bin_dir = require_stub_idp()
-    idp_port = _free_port()
-    hub_port = _free_port()
-    runner_port = _free_port()
+    idp_port = free_port()
+    hub_port = free_port()
+    runner_port = free_port()
 
     with stub_idp(bin_dir, idp_port) as idp:
         idp.put(
@@ -199,9 +199,9 @@ def test_the_wire_leg_ends_in_an_unlocked_runner_route(tmp_path: Path) -> None:
 
 def test_key_rotation_is_picked_up_by_a_live_runner_with_no_restart(tmp_path: Path) -> None:
     bin_dir = require_stub_idp()
-    idp_port = _free_port()
-    hub_port = _free_port()
-    runner_port = _free_port()
+    idp_port = free_port()
+    hub_port = free_port()
+    runner_port = free_port()
 
     with stub_idp(bin_dir, idp_port) as idp:
         idp.put(
@@ -239,10 +239,10 @@ def test_a_two_provider_bounce_resumes_through_the_login_chooser(tmp_path: Path)
     to the ``/login`` chooser; completing either provider's dance resumes the pending
     authorize request and ends in a runner-domain session."""
     bin_dir = require_stub_idp()
-    idp_a_port = _free_port()
-    idp_b_port = _free_port()
-    hub_port = _free_port()
-    runner_port = _free_port()
+    idp_a_port = free_port()
+    idp_b_port = free_port()
+    hub_port = free_port()
+    runner_port = free_port()
 
     with stub_idp(bin_dir, idp_a_port) as idp_a, stub_idp(bin_dir, idp_b_port) as idp_b:
         idp_a.put(

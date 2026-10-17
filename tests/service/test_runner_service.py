@@ -35,17 +35,8 @@ from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.leases.lease_auth import LeaseToken
 from blizzard.runner.loop_wiring import LoopWiring
 from blizzard.runner.store.schema import escalation_closures, outbound_buffer
-from tests.e2e.test_acceptance_loop import (
-    REPO,
-    REPO_NAME,
-    _await_http,
-    _free_port,
-    _git_bare,
-    _runner_api,
-    _runner_config,
-    _terminate,
-)
-from tests.fleet_world import BUILD_BRANCH, mint_world
+from tests.fleet_launchers import REPO, await_http, git_bare, runner_api, runner_config, terminate
+from tests.fleet_world import BUILD_BRANCH, REPO_NAME, mint_world
 from tests.host_files import init_runner_environment, write_host_file
 from tests.runner_fakes import daemon_store
 from tests.runner_join import fleet_headers, pin_runner, runner_spawn_env, seed_pinned_runner
@@ -64,7 +55,7 @@ from tests.service.support import (
     transcript_segment_record,
     transcript_segment_turn,
 )
-from tests.support import daemon_log_sink, parse_sse_frames, read_daemon_log
+from tests.support import daemon_log_sink, free_port, parse_sse_frames, read_daemon_log
 
 pytestmark = [pytest.mark.service, service_gate]
 
@@ -115,10 +106,10 @@ def test_unreachable_hub_buffers_the_completion_then_lands_on_recovery(tmp_path:
     workspace, _origins, origin_bare = mint_world(bin_dir, tmp_path / "scratch")
     fenced = _tick_env()
 
-    hub_port = _free_port()
+    hub_port = free_port()
     with mock_hub(bin_dir, hub_port) as hub:
         chunk_id = _seed(hub)
-        config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+        config = runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
 
         # Drive (hub up) until the mock worker has committed, exited, and ADVANCE has
         # *buffered* the completion — the tick boundary just before PULL would flush it.
@@ -140,7 +131,7 @@ def test_unreachable_hub_buffers_the_completion_then_lands_on_recovery(tmp_path:
 
     # The runner pushed the mock harness's commit to the bare origin, on the work branch —
     # the mock hub fakes deliver, so it is reachable across the origin's refs, not merged.
-    reachable = _git_bare(origin_bare, "log", "--all", "--name-only", "--format=")
+    reachable = git_bare(origin_bare, "log", "--all", "--name-only", "--format=")
     assert "LANDED.md" in reachable.split(), "the mock harness's commit never reached the bare origin"
 
 
@@ -149,10 +140,10 @@ def test_dropped_ack_reapplies_idempotently_through_to_done(tmp_path: Path) -> N
     workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
     fenced = _tick_env()
 
-    hub_port = _free_port()
+    hub_port = free_port()
     with mock_hub(bin_dir, hub_port) as hub:
         chunk_id = _seed(hub)
-        config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+        config = runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
 
         # Drop the very first completion ack: the hub advances build -> deliver but answers
         # 503, so the runner re-flushes; the hub's epoch-idempotent apply advances it once.
@@ -182,12 +173,12 @@ def test_usage_limit_engages_the_local_brake_and_reports_the_reason_without_fail
     workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
     fenced = _tick_env()
 
-    hub_port = _free_port()
+    hub_port = free_port()
     with mock_hub(bin_dir, hub_port) as hub:
         resp = hub.post("/_seed/chunk", json=mock_hub_usage_limited_chunk_spec(_WORK_REF_URL))
         assert resp.status_code == 201, resp.text
         chunk_id = resp.json()["chunk_id"]
-        config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+        config = runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
         # Points the transcript read at where the mock harness writes.
         config = dataclasses.replace(config, transcripts_root=str(workspace / ".blizzard-mock-harness" / "transcripts"))
 
@@ -225,10 +216,10 @@ def test_fill_absorbs_a_dependency_denial_then_claims_once_it_clears(tmp_path: P
     workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
     fenced = _tick_env()
 
-    hub_port = _free_port()
+    hub_port = free_port()
     with mock_hub(bin_dir, hub_port) as hub:
         chunk_id = _seed(hub)
-        config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+        config = runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
 
         assert (
             hub.post(
@@ -253,11 +244,11 @@ def test_fill_reaches_past_a_marked_head_by_default_against_a_real_mock_hub(tmp_
     workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
     fenced = _tick_env()
 
-    hub_port = _free_port()
+    hub_port = free_port()
     with mock_hub(bin_dir, hub_port) as hub:
         blocked_id = _seed(hub)  # seeded first — the peek's marked head
         open_id = _seed(hub)
-        config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+        config = runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
 
         assert (
             hub.post(
@@ -279,12 +270,12 @@ def test_fill_strict_holds_at_a_marked_head_against_a_real_mock_hub(tmp_path: Pa
     workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
     fenced = _tick_env()
 
-    hub_port = _free_port()
+    hub_port = free_port()
     with mock_hub(bin_dir, hub_port) as hub:
         blocked_id = _seed(hub)  # seeded first — the peek's marked head
         open_id = _seed(hub)
         config = dataclasses.replace(
-            _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port), queue_strict=True
+            runner_config(tmp_path / "runner", workspace, bin_dir, hub_port), queue_strict=True
         )
 
         assert (
@@ -317,10 +308,10 @@ def test_transcript_route_failure_never_blocks_the_fact_lane(tmp_path: Path) -> 
     fenced = _tick_env()
     fenced["BZ_TRANSCRIPTS_ROOT"] = str(transcripts_root)
 
-    hub_port = _free_port()
+    hub_port = free_port()
     with mock_hub(bin_dir, hub_port) as hub:
         chunk_id = _seed(hub)
-        config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+        config = runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
         config = dataclasses.replace(config, transcripts_root=str(transcripts_root), transcripts_ship=True)
 
         assert hub.post("/_levers/unreachable_transcripts", json={"remaining": 10_000}).status_code == 200
@@ -351,10 +342,10 @@ def test_transcript_route_slow_never_blocks_the_fact_lane(tmp_path: Path) -> Non
     fenced = _tick_env()
     fenced["BZ_TRANSCRIPTS_ROOT"] = str(transcripts_root)
 
-    hub_port = _free_port()
+    hub_port = free_port()
     with mock_hub(bin_dir, hub_port) as hub:
         chunk_id = _seed(hub)
-        config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+        config = runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
         config = dataclasses.replace(config, transcripts_root=str(transcripts_root), transcripts_ship=True)
 
         # Global, not chunk-scoped: the transcripts route's path carries no chunk id of its
@@ -376,10 +367,10 @@ def test_stale_envelope_is_tolerated_and_the_chunk_still_lands(tmp_path: Path) -
     workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
     fenced = _tick_env()
 
-    hub_port = _free_port()
+    hub_port = free_port()
     with mock_hub(bin_dir, hub_port) as hub:
         chunk_id = _seed(hub)
-        config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+        config = runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
 
         # Serve a stale-epoch envelope on the re-read: the runner fences its completion on
         # its own lease epoch, not the envelope's, so a stale envelope is benign.
@@ -447,10 +438,10 @@ def test_a_real_runners_registration_carries_every_declared_subscription(tmp_pat
     root = tmp_path / "runner"
     standalone = pin_runner(root, runner_id="rn_01JX0000000000000000000ROST", name="runner-local")
 
-    hub_port = _free_port()
+    hub_port = free_port()
     with mock_hub(bin_dir, hub_port) as hub:
         seed_pinned_runner(hub, standalone)
-        config = _runner_config(root, workspace, bin_dir, hub_port, join=False)
+        config = runner_config(root, workspace, bin_dir, hub_port, join=False)
         config = dataclasses.replace(
             config, subscriptions=(SubscriptionDeclaration(slug="probe", name="Probe", provider="none-such"),)
         )
@@ -467,10 +458,10 @@ def test_a_real_runners_registration_carries_the_gates_it_imposes(tmp_path: Path
     workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
     fenced = _tick_env()
 
-    hub_port = _free_port()
+    hub_port = free_port()
     with mock_hub(bin_dir, hub_port) as hub:
         config = dataclasses.replace(
-            _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port), gates=("build", "review")
+            runner_config(tmp_path / "runner", workspace, bin_dir, hub_port), gates=("build", "review")
         )
 
         _drive(config, fenced, ticks=1)
@@ -484,10 +475,10 @@ def test_pull_abandons_the_active_lease_when_the_hub_reports_the_chunk_stopped(t
     workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
     fenced = _tick_env()
 
-    hub_port = _free_port()
+    hub_port = free_port()
     with mock_hub(bin_dir, hub_port) as hub:
         chunk_id = _seed(hub)
-        config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+        config = runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
 
         _drive(config, fenced, ticks=1)
         lease_id = _lease_id_for_chunk(config, chunk_id)
@@ -511,12 +502,12 @@ def test_pull_closes_the_local_escalation_when_the_hub_reports_the_chunk_stopped
     workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
     fenced = _tick_env()
 
-    hub_port = _free_port()
+    hub_port = free_port()
     with mock_hub(bin_dir, hub_port) as hub:
         resp = hub.post("/_seed/chunk", json=mock_hub_escalating_chunk_spec(_WORK_REF_URL))
         assert resp.status_code == 201, resp.text
         chunk_id = resp.json()["chunk_id"]
-        config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+        config = runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
 
         escalated = poll_until(
             lambda: _tick_then(config, fenced, lambda: chunk_id in _open_escalation_chunk_ids(config)),
@@ -624,18 +615,16 @@ def test_transcript_is_read_back_through_the_runner_http_api(tmp_path: Path) -> 
     fenced = _tick_env()
     fenced["BZ_TRANSCRIPTS_ROOT"] = str(transcripts_root)
 
-    hub_port = _free_port()
+    hub_port = free_port()
     with mock_hub(bin_dir, hub_port) as hub:
         seeded = hub.post("/_seed/chunk", json=_transcript_chunk_spec(_WORK_REF_URL))
         assert seeded.status_code == 201, seeded.text
         chunk_id = seeded.json()["chunk_id"]
 
-        config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
-        config = dataclasses.replace(
-            config, host="127.0.0.1", port=_free_port(), transcripts_root=str(transcripts_root)
-        )
+        config = runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+        config = dataclasses.replace(config, host="127.0.0.1", port=free_port(), transcripts_root=str(transcripts_root))
 
-        with _runner_api(config):
+        with runner_api(config):
             landed = poll_until(lambda: _run_and_check(config, fenced, hub, chunk_id, "done"), timeout=90.0)
             assert landed, f"chunk did not land (status {_status(hub, chunk_id)!r})"
 
@@ -686,7 +675,7 @@ def test_transcript_is_read_back_through_the_runner_http_api(tmp_path: Path) -> 
 
     # Provenance: the real commit sha, independently read off the bare origin, must
     # appear in the transcript's tool output — content only the real commit created.
-    real_sha = _git_bare(origin_bare, "log", "--all", "--format=%H", "-1", "--", "transcript-proof.txt").strip()
+    real_sha = git_bare(origin_bare, "log", "--all", "--format=%H", "-1", "--", "transcript-proof.txt").strip()
     assert real_sha, "the mock harness's commit never reached the bare origin"
     assert real_sha[:7] in bash_tool["output"], (
         f"transcript tool output does not carry the real commit sha ({real_sha[:7]!r} not in {bash_tool['output']!r})"
@@ -729,16 +718,16 @@ def test_graph_scoped_artifact_reads_from_the_runners_own_pin_with_the_hub_unrea
     workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
     fenced = _tick_env()
 
-    hub_port = _free_port()
+    hub_port = free_port()
     with mock_hub(bin_dir, hub_port) as hub:
         seeded = hub.post("/_seed/chunk", json=_graph_artifact_chunk_spec(_WORK_REF_URL))
         assert seeded.status_code == 201, seeded.text
         chunk_id = seeded.json()["chunk_id"]
 
-        config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
-        config = dataclasses.replace(config, host="127.0.0.1", port=_free_port())
+        config = runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+        config = dataclasses.replace(config, host="127.0.0.1", port=free_port())
 
-        with _runner_api(config):
+        with runner_api(config):
             # 40s, not 10s: the node-scope read below now rides HubProxy's bounded-backoff
             # retry before its 503 surfaces, so the client must outwait the
             # retry ceiling rather than the old single-attempt latency.
@@ -798,15 +787,15 @@ def test_a_closed_leases_transcript_resolves_to_the_hub_through_the_runner_api(t
     fenced = _tick_env()
     fenced["BZ_TRANSCRIPTS_ROOT"] = str(transcripts_root)
 
-    hub_port = _free_port()
+    hub_port = free_port()
     # The hub comes up only after the runner daemon, so the runner's id and token are pinned up front.
     runner = pin_runner(tmp_path / "runner", runner_id="rn_transcript_test", name="runner-transcript")
-    config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port, join=False)
-    config = dataclasses.replace(config, host="127.0.0.1", port=_free_port(), transcripts_root=str(transcripts_root))
+    config = runner_config(tmp_path / "runner", workspace, bin_dir, hub_port, join=False)
+    config = dataclasses.replace(config, host="127.0.0.1", port=free_port(), transcripts_root=str(transcripts_root))
 
     # The runner daemon deliberately outlives the mock hub: the last leg reads the panel
     # route with the hub process already terminated.
-    with _runner_api(config):
+    with runner_api(config):
         panel = httpx.Client(base_url=config.local_api_url, timeout=15.0)
         try:
             with mock_hub(bin_dir, hub_port) as hub:
@@ -923,7 +912,7 @@ def _bare_runner_config(tmp_path: Path) -> RunnerConfig:
     """A migrated, otherwise-empty runner runtime — no workspace, no hub, no harness —
     enough to serve the local API and its stream route without ever ticking."""
     config = init_runner_environment(tmp_path / "runner")
-    return dataclasses.replace(config, host="127.0.0.1", port=_free_port())
+    return dataclasses.replace(config, host="127.0.0.1", port=free_port())
 
 
 def test_runner_stream_delivers_live_and_replays_from_last_event_id(tmp_path: Path) -> None:
@@ -933,7 +922,7 @@ def test_runner_stream_delivers_live_and_replays_from_last_event_id(tmp_path: Pa
     broker = EventBroker()
     config = _bare_runner_config(tmp_path)
 
-    with _runner_api(config, events=broker):
+    with runner_api(config, events=broker):
         with sse_tap(config.port) as tap:
             first_id = broker.publish_lease_changed("ls_1", "ch_1", cause="created", runner_id="rn_1")
             second_id = broker.publish_lease_changed(
@@ -971,13 +960,13 @@ def test_runner_stream_resumes_live_after_a_restart_reset_the_broker_ids(tmp_pat
     config = _bare_runner_config(tmp_path)
 
     first = EventBroker()
-    with _runner_api(config, events=first), sse_tap(config.port) as tap:
+    with runner_api(config, events=first), sse_tap(config.port) as tap:
         for cause in ("created", LeaseClosureReason.TRANSITIONED, LeaseClosureReason.RELEASED):
             stale_cursor = first.publish_lease_changed("ls_1", "ch_1", cause=cause, runner_id="rn_1")
         assert tap.collect(window=3.0).count("lease-changed") == 3
 
     second = EventBroker()  # the restart: a fresh instance, its ids starting over
-    with _runner_api(config, events=second), sse_tap(config.port, last_event_id=stale_cursor) as tap:
+    with runner_api(config, events=second), sse_tap(config.port, last_event_id=stale_cursor) as tap:
         live_id = second.publish_lease_changed("ls_2", "ch_2", cause="created", runner_id="rn_1")
         assert live_id < stale_cursor, "the fresh broker must mint an id below the stale cursor"
         assert tap.collect(window=5.0).count("lease-changed") == 1
@@ -998,7 +987,7 @@ def test_runner_stream_replays_a_restarted_brokers_buffered_tail_past_a_stale_cu
     second.publish_lease_changed("ls_2", "ch_2", cause=LeaseClosureReason.TRANSITIONED, runner_id="rn_1")
     assert second.latest_id() < stale_cursor, "the fresh broker's buffered ids must stay below the stale cursor"
 
-    with _runner_api(config, events=second):
+    with runner_api(config, events=second):
         tap = SseTap(f"http://127.0.0.1:{config.port}", last_event_id=stale_cursor)
         tap.start()
         try:
@@ -1019,7 +1008,7 @@ def test_events_stream_401s_without_a_session_over_tcp_under_oauth(tmp_path: Pat
     def _jwks() -> dict[str, list[object]]:
         return {"keys": []}
 
-    jwks_port = _free_port()
+    jwks_port = free_port()
     jwks_server = uvicorn.Server(uvicorn.Config(jwks_app, host="127.0.0.1", port=jwks_port, log_level="warning"))
     jwks_thread = threading.Thread(target=jwks_server.run, daemon=True)
     jwks_thread.start()
@@ -1036,7 +1025,7 @@ def test_events_stream_401s_without_a_session_over_tcp_under_oauth(tmp_path: Pat
 
         app_config = dataclasses.replace(config, hub_url=f"http://127.0.0.1:{jwks_port}")
         with (
-            _runner_api(app_config),
+            runner_api(app_config),
             httpx.Client(base_url=f"http://{config.host}:{config.port}", timeout=10.0) as client,
         ):
             resp = client.get("/api/events/stream")
@@ -1051,11 +1040,11 @@ def test_runner_sigterm_returns_promptly_with_a_client_parked_on_the_stream(tmp_
     """SIGTERM exits the process within 2s — inside uvicorn's 5s graceful-drain bound —
     with a client still connected to the event stream."""
     runner_dir = tmp_path / "runner"
-    runner_port = _free_port()
+    runner_port = free_port()
     runner_bin = str(Path(sys.executable).parent / "blizzard-runner")
     # Scaffolded offline and never joined: shutdown is the subject, so the hub its config names
     # (`runner host` reads it from there) is an address nothing listens on.
-    unreachable_hub = f"http://127.0.0.1:{_free_port()}"
+    unreachable_hub = f"http://127.0.0.1:{free_port()}"
     init_runner_environment(runner_dir, hub_url=unreachable_hub)
     log = runner_dir / "daemon.log"
     proc = subprocess.Popen(
@@ -1068,7 +1057,7 @@ def test_runner_sigterm_returns_promptly_with_a_client_parked_on_the_stream(tmp_
     client = httpx.Client(base_url=f"http://127.0.0.1:{runner_port}", timeout=30.0)
     exit_code: int | None = None
     try:
-        _await_http(proc, client, "/api/health", log=log)
+        await_http(proc, client, "/api/health", log=log)
         # The server dies mid-stream by design; closing our own end of a now-dead
         # connection is expected to raise, not a failure of what this test asserts.
         with contextlib.suppress(httpx.HTTPError), client.stream("GET", "/api/events/stream") as resp:
@@ -1092,7 +1081,7 @@ def test_runner_sigterm_returns_promptly_with_a_client_parked_on_the_stream(tmp_
         assert exit_code is not None
     finally:
         client.close()
-        _terminate(proc)
+        terminate(proc)
 
 
 # --- The lease trace sweep's own thread in `runner host` ---
@@ -1148,9 +1137,9 @@ def test_a_hung_trace_export_never_delays_a_tick_or_holds_shutdown(tmp_path: Pat
     ticks continue on schedule and SIGTERM still exits within the sweep's bounded stop."""
     bin_dir = require_mock_fleet()
     workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
-    hub_port = _free_port()
+    hub_port = free_port()
     with mock_hub(bin_dir, hub_port) as hub, _hung_otlp_sink() as (endpoint, accepted):
-        config = _traced(_runner_config(tmp_path / "runner", workspace, bin_dir, hub_port))
+        config = _traced(runner_config(tmp_path / "runner", workspace, bin_dir, hub_port))
         env = {
             **_tick_env(),
             "BZ_RUNNER_TICK_SECONDS": "0.5",
@@ -1161,7 +1150,7 @@ def test_a_hung_trace_export_never_delays_a_tick_or_holds_shutdown(tmp_path: Pat
         proc = _host(config, env)
         client = httpx.Client(base_url=f"http://127.0.0.1:{config.port}", timeout=10.0)
         try:
-            _await_http(proc, client, "/api/health", log=log)
+            await_http(proc, client, "/api/health", log=log)
             # A closed lease is what the sweep tells: run one chunk to done.
             chunk_id = _seed(hub)
             assert poll_until(lambda: _status(hub, chunk_id) == "done", timeout=120.0), read_daemon_log(log)
@@ -1179,7 +1168,7 @@ def test_a_hung_trace_export_never_delays_a_tick_or_holds_shutdown(tmp_path: Pat
             assert "lease trace sweep still running at shutdown" in read_daemon_log(log)
         finally:
             client.close()
-            _terminate(proc)
+            terminate(proc)
 
 
 def _trace_config_rejections(config: RunnerConfig, *, pending: bool) -> int:
@@ -1203,9 +1192,9 @@ def _trace_config_rejections(config: RunnerConfig, *, pending: bool) -> int:
 def test_a_grpc_protocol_serves_with_tracing_off_and_one_rejection_reaches_the_hub(tmp_path: Path) -> None:
     bin_dir = require_mock_fleet()
     workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
-    hub_port = _free_port()
+    hub_port = free_port()
     with mock_hub(bin_dir, hub_port) as hub:
-        config = _traced(_runner_config(tmp_path / "runner", workspace, bin_dir, hub_port))
+        config = _traced(runner_config(tmp_path / "runner", workspace, bin_dir, hub_port))
         env = {
             **_tick_env(),
             "BZ_RUNNER_TICK_SECONDS": "0.5",
@@ -1218,7 +1207,7 @@ def test_a_grpc_protocol_serves_with_tracing_off_and_one_rejection_reaches_the_h
         proc = _host(config, env)
         client = httpx.Client(base_url=f"http://127.0.0.1:{config.port}", timeout=10.0)
         try:
-            _await_http(proc, client, "/api/health", log=log)
+            await_http(proc, client, "/api/health", log=log)
             assert poll_until(lambda: _trace_config_rejections(config, pending=True) == 1)
             assert _trace_config_rejections(config, pending=False) == 0
 
@@ -1235,4 +1224,4 @@ def test_a_grpc_protocol_serves_with_tracing_off_and_one_rejection_reaches_the_h
             assert client.get("/api/health").status_code == 200
         finally:
             client.close()
-            _terminate(proc)
+            terminate(proc)

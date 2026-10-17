@@ -14,9 +14,11 @@ from blizzard.runner.environments.factory import build_workspace_provider
 from blizzard.tools.invariants import Invariants
 from tests.crash.support import start_runner, terminate, wait_death, wait_status
 from tests.crash.test_kill9_sweep import _abandon_graph_yaml, _await_marker, _leases_for_chunk, _wait_for_closure
-from tests.e2e.test_acceptance_loop import REPO, REPO_NAME, _forge, _free_port, _git_bare, _hub, _mock_bin_dir
 from tests.e2e.test_basic_workspace import bare_origin, basic_config, basic_graph_yaml, trap_winter
+from tests.fleet_launchers import REPO, git_bare, mock_bin_dir, run_forge, run_hub
+from tests.fleet_world import REPO_NAME
 from tests.runner_fakes import daemon_store
+from tests.support import free_port
 
 pytestmark = pytest.mark.crash_sweep
 
@@ -25,7 +27,7 @@ pytestmark = pytest.mark.crash_sweep
 def test_basic_runner_recovers_from_fill_kill9(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, point: str) -> None:
     if os.environ.get("BLIZZARD_CRASH_SWEEP") != "1":
         pytest.skip("set BLIZZARD_CRASH_SWEEP=1 to drive real daemon subprocesses")
-    bin_dir = _mock_bin_dir()
+    bin_dir = mock_bin_dir()
     if bin_dir is None:
         pytest.skip("provision the sibling blizzard-mock worktree")
 
@@ -34,8 +36,8 @@ def test_basic_runner_recovers_from_fill_kill9(tmp_path: Path, monkeypatch: pyte
     workspace = tmp_path / "ordinary-workspace"
     workspace.mkdir()
     (workspace / ".blizzard-mock-harness-fence").write_text("basic crash sweep\n")
-    forge_port, hub_port = _free_port(), _free_port()
-    with _forge(bin_dir, bare.parent, forge_port) as forge, _hub(tmp_path / "hub", forge_port, hub_port) as hub:
+    forge_port, hub_port = free_port(), free_port()
+    with run_forge(bin_dir, bare.parent, forge_port) as forge, run_hub(tmp_path / "hub", forge_port, hub_port) as hub:
         minted = hub.post("/api/graphs", json={"definition_yaml": basic_graph_yaml()})
         assert minted.status_code == 201, minted.text
         issue = forge.post(f"/repos/{REPO}/issues", json={"title": point, "body": "recover and deliver"})
@@ -67,7 +69,7 @@ def test_basic_runner_recovers_from_fill_kill9(tmp_path: Path, monkeypatch: pyte
         finally:
             terminate(runner_proc)
 
-    commits = _git_bare(bare, "log", "--oneline", "main", "--", "LANDED.md").splitlines()
+    commits = git_bare(bare, "log", "--oneline", "main", "--", "LANDED.md").splitlines()
     assert len(commits) == 1, f"landed {len(commits)} times after {point}: {commits}"
     assert not (workspace / ".winter").exists()
     assert not winter_invoked.exists(), "the basic runner invoked winter"
@@ -79,7 +81,7 @@ def test_basic_runner_releases_and_reclaims_after_abandon_kill9(
     """A real release precedes the kill; restart sees no old manifest and reuses a clean folder."""
     if os.environ.get("BLIZZARD_CRASH_SWEEP") != "1":
         pytest.skip("set BLIZZARD_CRASH_SWEEP=1 to drive real daemon subprocesses")
-    bin_dir = _mock_bin_dir()
+    bin_dir = mock_bin_dir()
     if bin_dir is None:
         pytest.skip("provision the sibling blizzard-mock worktree")
 
@@ -91,8 +93,8 @@ def test_basic_runner_releases_and_reclaims_after_abandon_kill9(
     marker = tmp_path / "hang-once.marker"
     landed_file = "LANDED.md"
     graph = yaml.safe_load(_abandon_graph_yaml(landed_file, marker))
-    forge_port, hub_port = _free_port(), _free_port()
-    with _forge(bin_dir, bare.parent, forge_port) as forge, _hub(tmp_path / "hub", forge_port, hub_port) as hub:
+    forge_port, hub_port = free_port(), free_port()
+    with run_forge(bin_dir, bare.parent, forge_port) as forge, run_hub(tmp_path / "hub", forge_port, hub_port) as hub:
         minted = hub.post("/api/graphs", json={"definition_yaml": yaml.safe_dump(graph, sort_keys=False)})
         assert minted.status_code == 201, minted.text
         issue = forge.post(f"/repos/{REPO}/issues", json={"title": "basic release", "body": "recover and deliver"})
@@ -138,6 +140,6 @@ def test_basic_runner_releases_and_reclaims_after_abandon_kill9(
         finally:
             terminate(runner_proc)
 
-    commits = _git_bare(bare, "log", "--oneline", "main", "--", landed_file).splitlines()
+    commits = git_bare(bare, "log", "--oneline", "main", "--", landed_file).splitlines()
     assert len(commits) == 1, f"landed {len(commits)} times after release: {commits}"
     assert not winter_invoked.exists(), "the basic runner invoked winter"

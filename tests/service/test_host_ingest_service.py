@@ -22,13 +22,13 @@ from blizzard.foundation.runner_token_names import hub_token_variable
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.host_config import HOST_TOKEN_VARIABLE, HostConfig
 from blizzard.runner.hub.internal.token_file import HubTokenFile
-from tests.e2e.test_acceptance_loop import _await_http, _free_port, _terminate
+from tests.fleet_launchers import await_http, terminate
 from tests.host_files import init_runner_environment, write_host_file
 from tests.runner_ingest_support import invariant_violations, rows
 from tests.runner_join import RUNNER_BIN, JoinedRunner, runner_spawn_env
 from tests.runner_scope_seeding import reflect
 from tests.service.support import mock_hub, poll_until, require_mock_fleet, service_gate
-from tests.support import daemon_log_sink, read_daemon_log
+from tests.support import daemon_log_sink, free_port, read_daemon_log
 
 pytestmark = [pytest.mark.service, service_gate]
 
@@ -180,7 +180,7 @@ def test_a_host_that_ingested_a_colliding_runner_resumes_both_and_delivers_each_
     tmp_path: Path,
 ) -> None:
     bin_dir = require_mock_fleet()
-    hub_port, port = _free_port(), _free_port()
+    hub_port, port = free_port(), free_port()
     hub_url = f"http://127.0.0.1:{hub_port}"
     here, there = tmp_path / "here", tmp_path / "there"
     with mock_hub(bin_dir, hub_port) as hub:
@@ -190,7 +190,7 @@ def test_a_host_that_ingested_a_colliding_runner_resumes_both_and_delivers_each_
         for runner, tag in ((staying, "a"), (moving, "b")):
             _deliver_acked(hub, runner, tag)
         _host_directory(here, staying, hub_url=hub_url, port=port)
-        _host_directory(there, moving, hub_url=hub_url, port=_free_port())
+        _host_directory(there, moving, hub_url=hub_url, port=free_port())
         _relative_prompt_file(there)
         HubTokenFile.of(here, HOST_TOKEN_VARIABLE).write(host["token"])
         _seed(here, staying, "a")
@@ -241,7 +241,7 @@ def test_a_host_that_ingested_a_colliding_runner_resumes_both_and_delivers_each_
         )
         local = httpx.Client(base_url=f"http://127.0.0.1:{port}", timeout=10.0)
         try:
-            _await_http(proc, local, "/api/health", log=log)
+            await_http(proc, local, "/api/health", log=log)
             for runner, tag in ((staying, "a"), (moving, "b")):
                 assert poll_until(lambda r=runner: _hub_mark(hub, r) >= _ACKED + _BACKLOG, timeout=30.0), (
                     runner.runner_name,
@@ -260,4 +260,4 @@ def test_a_host_that_ingested_a_colliding_runner_resumes_both_and_delivers_each_
                 assert poll_until(lambda t=tag: _logged(log, "park resumed", f"lease_parked_{t}")), read_daemon_log(log)
         finally:
             local.close()
-            _terminate(proc)
+            terminate(proc)

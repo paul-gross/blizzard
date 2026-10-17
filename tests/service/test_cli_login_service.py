@@ -21,10 +21,10 @@ import pytest
 
 from blizzard.hub.auth.pkce import Pkce
 from blizzard.hub.config import AuthConfig, HubConfig, OAuthProviderConfig
-from tests.e2e.test_acceptance_loop import _await_http, _free_port, _terminate
+from tests.fleet_launchers import await_http, terminate
 from tests.service.support import require_stub_idp, service_gate, stub_idp
 from tests.service.test_auth_login_service import invite
-from tests.support import daemon_log_sink
+from tests.support import daemon_log_sink, free_port
 
 pytestmark = [pytest.mark.service, service_gate]
 
@@ -55,11 +55,11 @@ def _oauth_hub(hub_dir: Path, port: int, *, providers: tuple[OAuthProviderConfig
     )
     client = httpx.Client(base_url=f"http://127.0.0.1:{port}", timeout=30.0)
     try:
-        _await_http(proc, client, "/api/health", log=log)
+        await_http(proc, client, "/api/health", log=log)
         yield client
     finally:
         client.close()
-        _terminate(proc)
+        terminate(proc)
 
 
 def _establish_hub_session(hub: httpx.Client, hub_dir: Path, email: str) -> None:
@@ -97,8 +97,8 @@ def _mint_cli_code(hub: httpx.Client, *, redirect_uri: str) -> tuple[str, str]:
 
 def test_the_loopback_form_ends_in_a_working_bearer_session(tmp_path: Path) -> None:
     bin_dir = require_stub_idp()
-    idp_port = _free_port()
-    hub_port = _free_port()
+    idp_port = free_port()
+    hub_port = free_port()
 
     with stub_idp(bin_dir, idp_port) as idp:
         idp.put(
@@ -144,8 +144,8 @@ def test_logout_revokes_the_bearer_session_server_side(tmp_path: Path) -> None:
     resolving at the hub — a bearer-only `GET /api/me` succeeds, then 401s once logged
     out."""
     bin_dir = require_stub_idp()
-    idp_port = _free_port()
-    hub_port = _free_port()
+    idp_port = free_port()
+    hub_port = free_port()
 
     with stub_idp(bin_dir, idp_port) as idp:
         idp.put(
@@ -194,8 +194,8 @@ def test_logout_revokes_the_bearer_session_server_side(tmp_path: Path) -> None:
 
 def test_the_paste_code_form_completes_the_same_login_with_no_loopback_listener(tmp_path: Path) -> None:
     bin_dir = require_stub_idp()
-    idp_port = _free_port()
-    hub_port = _free_port()
+    idp_port = free_port()
+    hub_port = free_port()
 
     with stub_idp(bin_dir, idp_port) as idp:
         idp.put(

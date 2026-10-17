@@ -15,20 +15,9 @@ import httpx
 import pytest
 
 from blizzard.runner.loop_wiring import LoopWiring
-from tests.e2e.test_acceptance_loop import (
-    FIXTURE_ENV,
-    REPO,
-    REPO_NAME,
-    _forge,
-    _free_port,
-    _graph_yaml,
-    _hub,
-    _mock_bin_dir,
-    _runner_api,
-    _runner_config,
-)
-from tests.fleet_world import mint_world
-from tests.support import read_daemon_log
+from tests.fleet_launchers import REPO, mock_bin_dir, run_forge, run_hub, runner_api, runner_config
+from tests.fleet_world import FIXTURE_ENV, REPO_NAME, graph_yaml, mint_world
+from tests.support import free_port, read_daemon_log
 
 pytestmark = [
     pytest.mark.e2e,
@@ -68,7 +57,7 @@ def _ingest_and_promote(hub: httpx.Client, forge: httpx.Client, title: str) -> t
 def _drive_recording_labels(
     config, hub: httpx.Client, forge: httpx.Client, chunk_id: str, number: int, fenced_env: dict[str, str]
 ) -> tuple[str, list[set[str]]]:
-    """:func:`~tests.e2e.test_acceptance_loop._drive_until_done`'s loop, plus a label
+    """:func:`~tests.fleet_launchers.drive_until_done`'s loop, plus a label
     snapshot per tick — the projection updates asynchronously (the hub's own background
     sweep, on its own 1s interval), so recording history across the whole drive is more
     robust than trying to catch ``blizzard:in-progress`` at one precisely-timed instant.
@@ -77,7 +66,7 @@ def _drive_recording_labels(
     os.environ.update(fenced_env)
     history: list[set[str]] = []
     try:
-        with _runner_api(config):
+        with runner_api(config):
             deadline = time.monotonic() + 120.0
             status = "ready"
             while time.monotonic() < deadline:
@@ -96,7 +85,7 @@ def _drive_recording_labels(
 
 
 def test_forge_status_projection_e2e(tmp_path: Path) -> None:
-    bin_dir = _mock_bin_dir()
+    bin_dir = mock_bin_dir()
     if bin_dir is None:
         pytest.skip("no provisioned sibling blizzard-mock worktree (run `winter provision <env>`)")
 
@@ -107,12 +96,12 @@ def test_forge_status_projection_e2e(tmp_path: Path) -> None:
     origins = fixture_root / "origins"
 
     hub_dir = tmp_path / "hub"
-    forge_port, hub_port = _free_port(), _free_port()
+    forge_port, hub_port = free_port(), free_port()
     with (
-        _forge(bin_dir, origins, forge_port) as forge,
-        _hub(hub_dir, forge_port, hub_port, annotate=True, annotation_interval_seconds=1) as hub,
+        run_forge(bin_dir, origins, forge_port) as forge,
+        run_hub(hub_dir, forge_port, hub_port, annotate=True, annotation_interval_seconds=1) as hub,
     ):
-        assert hub.post("/api/graphs", json={"definition_yaml": _graph_yaml()}).status_code == 201
+        assert hub.post("/api/graphs", json={"definition_yaml": graph_yaml()}).status_code == 201
 
         # -- the happy path: ingested -> in-progress (at some point) -> cleared on done --
         chunk_a, number_a = _ingest_and_promote(hub, forge, "sweep me end to end")
@@ -120,7 +109,7 @@ def test_forge_status_projection_e2e(tmp_path: Path) -> None:
             forge, number_a
         )
 
-        config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+        config = runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
         fenced = {**os.environ, "BLIZZARD_MOCK_HARNESS_FENCE": "1"}
         status, history = _drive_recording_labels(config, hub, forge, chunk_a, number_a, fenced)
 

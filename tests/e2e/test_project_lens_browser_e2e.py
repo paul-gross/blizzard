@@ -13,7 +13,8 @@ from pathlib import Path
 
 import pytest
 
-from tests.e2e.test_acceptance_loop import _free_port, _hub
+from tests.fleet_launchers import run_hub
+from tests.support import free_port
 
 pytestmark = [
     pytest.mark.e2e,
@@ -30,8 +31,8 @@ def test_project_lens_deep_links_resolve_in_the_browser(tmp_path: Path, chromium
         pytest.skip("no Playwright Chromium installed (run `uv run playwright install chromium`)")
     from playwright.sync_api import expect, sync_playwright
 
-    forge_port, hub_port = _free_port(), _free_port()
-    with _hub(tmp_path / "hub", forge_port, hub_port) as hub:
+    forge_port, hub_port = free_port(), free_port()
+    with run_hub(tmp_path / "hub", forge_port, hub_port) as hub:
         created = hub.post("/api/projects", json={"slug": "glacier", "name": "Glacier", "description": ""})
         assert created.status_code == 201, created.text
         project = created.json()

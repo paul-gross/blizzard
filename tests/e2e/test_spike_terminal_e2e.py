@@ -12,19 +12,9 @@ from pathlib import Path
 
 import pytest
 
-from tests.e2e.test_acceptance_loop import (
-    FIXTURE_ENV,
-    REPO,
-    REPO_NAME,
-    _drive_until_done,
-    _forge,
-    _free_port,
-    _git_bare,
-    _hub,
-    _mock_bin_dir,
-    _runner_config,
-)
-from tests.fleet_world import mint_world
+from tests.fleet_launchers import REPO, drive_until_done, git_bare, mock_bin_dir, run_forge, run_hub, runner_config
+from tests.fleet_world import FIXTURE_ENV, REPO_NAME, mint_world
+from tests.support import free_port
 
 pytestmark = [
     pytest.mark.e2e,
@@ -88,7 +78,7 @@ def _graph_yaml() -> str:
 
 def test_spike_chunk_terminates_with_only_asset_artifacts(tmp_path: Path) -> None:
     """A non-code chunk reaches ``done`` carrying only its asset — no code lands (criterion 10)."""
-    bin_dir = _mock_bin_dir()
+    bin_dir = mock_bin_dir()
     if bin_dir is None:
         pytest.skip("no provisioned sibling blizzard-mock worktree (run `winter provision <env>`)")
 
@@ -100,10 +90,10 @@ def test_spike_chunk_terminates_with_only_asset_artifacts(tmp_path: Path) -> Non
     origin_bare = origins / f"{REPO_NAME}.git"
 
     # The bare origin's pre-run tip: git truth that a non-code chunk moves nothing.
-    main_before = _git_bare(origin_bare, "rev-parse", "main").strip()
+    main_before = git_bare(origin_bare, "rev-parse", "main").strip()
 
-    forge_port, hub_port = _free_port(), _free_port()
-    with _forge(bin_dir, origins, forge_port) as forge, _hub(tmp_path / "hub", forge_port, hub_port) as hub:
+    forge_port, hub_port = free_port(), free_port()
+    with run_forge(bin_dir, origins, forge_port) as forge, run_hub(tmp_path / "hub", forge_port, hub_port) as hub:
         assert hub.post("/api/graphs", json={"definition_yaml": _graph_yaml()}).status_code == 201
 
         issue = forge.post(f"/repos/{REPO}/issues", json={"title": "spike toy-api", "body": "investigate only"})
@@ -117,10 +107,10 @@ def test_spike_chunk_terminates_with_only_asset_artifacts(tmp_path: Path) -> Non
         chunk_id = ingested.json()["chunk_id"]
         assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202  # ready for the runner
 
-        config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+        config = runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
         fenced = dict(os.environ)
         fenced["BLIZZARD_MOCK_HARNESS_FENCE"] = "1"
-        status = _drive_until_done(config, hub, chunk_id, fenced)
+        status = drive_until_done(config, hub, chunk_id, fenced)
 
         # Fleet truth: the chunk reached the terminal (the empty deliver still lands).
         assert status == "done", f"spike chunk did not reach done (last status {status!r})"
@@ -138,5 +128,5 @@ def test_spike_chunk_terminates_with_only_asset_artifacts(tmp_path: Path) -> Non
         assert pulls == [], f"a non-code chunk opened a PR at the forge: {pulls}"
 
     # Git truth: bare main is exactly where it started — a non-code chunk lands no code.
-    main_after = _git_bare(origin_bare, "rev-parse", "main").strip()
+    main_after = git_bare(origin_bare, "rev-parse", "main").strip()
     assert main_after == main_before, f"bare main moved for a non-code chunk: {main_before} -> {main_after}"

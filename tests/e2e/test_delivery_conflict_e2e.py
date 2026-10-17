@@ -30,20 +30,9 @@ from tests.e2e.fleet_traces import (
     stashed_route_tokens,
     told_until,
 )
-from tests.e2e.test_acceptance_loop import (
-    _PUSH_AND_DECLARE_SCRIPT,
-    FIXTURE_ENV,
-    REPO,
-    REPO_NAME,
-    _forge,
-    _free_port,
-    _git_bare,
-    _hub,
-    _mock_bin_dir,
-    _runner_api,
-    _runner_config,
-)
-from tests.fleet_world import mint_world, scripted_build_prompt
+from tests.fleet_launchers import REPO, git_bare, mock_bin_dir, run_forge, run_hub, runner_api, runner_config
+from tests.fleet_world import FIXTURE_ENV, PUSH_AND_DECLARE_SCRIPT, REPO_NAME, mint_world, scripted_build_prompt
+from tests.support import free_port
 
 pytestmark = [
     pytest.mark.e2e,
@@ -65,7 +54,7 @@ _BUILD_SCRIPT = scripted_build_prompt(
     '     "-c", "user.email=mock@blizzard.local", "-c", "user.name=Mock Harness",\n'
     '     "commit", "-m", "feat: a change the armed conflict lever will reject"],\n'
     "    check=True,\n"
-    ")\n" + _PUSH_AND_DECLARE_SCRIPT
+    ")\n" + PUSH_AND_DECLARE_SCRIPT
 )
 _BUILD_JUDGEMENT = "verdict('pass', 'committed the change; checks are green')\n"
 
@@ -117,7 +106,7 @@ def _drive_one_bounce(
     prior = dict(os.environ)
     os.environ.update(fenced_env)
     try:
-        with _runner_api(config, process=process):
+        with runner_api(config, process=process):
             deadline = time.monotonic() + 60.0
             status = "ready"
             while time.monotonic() < deadline:
@@ -148,7 +137,7 @@ def _drive_until_rebuilt(
     prior = dict(os.environ)
     os.environ.update(fenced_env)
     try:
-        with _runner_api(config, process=process):
+        with runner_api(config, process=process):
             deadline = time.monotonic() + 60.0
             while time.monotonic() < deadline:
                 LoopWiring.of(config).tick_once(process=process)
@@ -165,7 +154,7 @@ def _drive_until_rebuilt(
 def test_conflict_lands_zero_repos_and_routes_the_bounce_envelope_back_to_build(
     tmp_path: Path, fleet_traces: FleetCollector, subtests: pytest.Subtests
 ) -> None:
-    bin_dir = _mock_bin_dir()
+    bin_dir = mock_bin_dir()
     if bin_dir is None:
         pytest.skip("no provisioned sibling blizzard-mock worktree (run `winter provision <env>`)")
 
@@ -176,12 +165,12 @@ def test_conflict_lands_zero_repos_and_routes_the_bounce_envelope_back_to_build(
     origins = fixture_root / "origins"
     origin_bare = origins / f"{REPO_NAME}.git"
 
-    main_before = _git_bare(origin_bare, "rev-parse", "main").strip()
+    main_before = git_bare(origin_bare, "rev-parse", "main").strip()
 
-    forge_port, hub_port = _free_port(), _free_port()
+    forge_port, hub_port = free_port(), free_port()
     with (
-        _forge(bin_dir, origins, forge_port) as forge,
-        _hub(tmp_path / "hub", forge_port, hub_port, collector=fleet_traces, platform_spans=True) as hub,
+        run_forge(bin_dir, origins, forge_port) as forge,
+        run_hub(tmp_path / "hub", forge_port, hub_port, collector=fleet_traces, platform_spans=True) as hub,
         contextlib.ExitStack() as stack,
     ):
         # Arm the mock forge's merge_conflict lever for the fixture repo — repo-scoped
@@ -198,7 +187,7 @@ def test_conflict_lands_zero_repos_and_routes_the_bounce_envelope_back_to_build(
         chunk_id = ingested.json()["chunk_id"]
         assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
 
-        config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+        config = runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
         planted = tmp_path / "planted"
         planted.mkdir()
         fenced = dict(os.environ)
@@ -277,5 +266,5 @@ def test_conflict_lands_zero_repos_and_routes_the_bounce_envelope_back_to_build(
             )
 
     # Bare main is exactly where it started — the conflicted change never landed.
-    main_after = _git_bare(origin_bare, "rev-parse", "main").strip()
+    main_after = git_bare(origin_bare, "rev-parse", "main").strip()
     assert main_after == main_before, "bare main moved despite the armed conflict"

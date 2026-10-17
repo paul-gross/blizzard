@@ -12,20 +12,9 @@ from pathlib import Path
 
 import pytest
 
-from tests.e2e.test_acceptance_loop import (
-    _PUSH_AND_DECLARE_SCRIPT,
-    FIXTURE_ENV,
-    REPO,
-    REPO_NAME,
-    _drive_until_done,
-    _forge,
-    _free_port,
-    _git_bare,
-    _hub,
-    _mock_bin_dir,
-    _runner_config,
-)
-from tests.fleet_world import mint_world, scripted_build_prompt
+from tests.fleet_launchers import REPO, drive_until_done, git_bare, mock_bin_dir, run_forge, run_hub, runner_config
+from tests.fleet_world import FIXTURE_ENV, PUSH_AND_DECLARE_SCRIPT, REPO_NAME, mint_world, scripted_build_prompt
+from tests.support import free_port
 
 pytestmark = [
     pytest.mark.e2e,
@@ -55,7 +44,7 @@ _BUILD_SCRIPT = scripted_build_prompt(
     '     "-c", "user.email=mock@blizzard.local", "-c", "user.name=Mock Harness",\n'
     '     "commit", "-m", "feat: a build pass"],\n'
     "    check=True,\n"
-    ")\n" + _PUSH_AND_DECLARE_SCRIPT
+    ")\n" + PUSH_AND_DECLARE_SCRIPT
 )
 
 # Always-pass judgement: the gate — not the worker — is what bounces the red attempt.
@@ -111,7 +100,7 @@ def _graph_yaml(*, build_judgement: str) -> str:
 def _drive(tmp_path: Path, graph_yaml: str, title: str):
     """Mint the fixture, stand up forge+hub, ingest+drive one chunk to done. Returns the
     chunk detail and the bare origin path for git-truth assertions."""
-    bin_dir = _mock_bin_dir()
+    bin_dir = mock_bin_dir()
     if bin_dir is None:
         pytest.skip("no provisioned sibling blizzard-mock worktree (run `winter provision <env>`)")
 
@@ -121,10 +110,10 @@ def _drive(tmp_path: Path, graph_yaml: str, title: str):
     workspace = fixture_root / "workspace"
     origin_bare = fixture_root / "origins" / f"{REPO_NAME}.git"
 
-    forge_port, hub_port = _free_port(), _free_port()
+    forge_port, hub_port = free_port(), free_port()
     with (
-        _forge(bin_dir, fixture_root / "origins", forge_port) as forge,
-        _hub(tmp_path / "hub", forge_port, hub_port) as hub,
+        run_forge(bin_dir, fixture_root / "origins", forge_port) as forge,
+        run_hub(tmp_path / "hub", forge_port, hub_port) as hub,
     ):
         assert hub.post("/api/graphs", json={"definition_yaml": graph_yaml}).status_code == 201
         issue = forge.post(f"/repos/{REPO}/issues", json={"title": title, "body": "the chunk"})
@@ -134,10 +123,10 @@ def _drive(tmp_path: Path, graph_yaml: str, title: str):
         ]
         assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
 
-        config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+        config = runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
         fenced = dict(os.environ)
         fenced["BLIZZARD_MOCK_HARNESS_FENCE"] = "1"
-        status = _drive_until_done(config, hub, chunk_id, fenced)
+        status = drive_until_done(config, hub, chunk_id, fenced)
 
         assert status == "done", f"chunk did not reach done (last status {status!r})"
         pulls = forge.get(f"/repos/{REPO}/pulls", params={"state": "all"}).json()
@@ -153,7 +142,7 @@ def test_checks_gate_bounces_a_red_pass_then_lands_when_green(tmp_path: Path) ->
 
     # Build ran twice: the git-truth proof the first (red) `pass` was bounced and re-run
     # (a gate bounce leaves no history transition row).
-    checks_md = _git_bare(origin_bare, "show", "main:CHECKS.md")
+    checks_md = git_bare(origin_bare, "show", "main:CHECKS.md")
     assert checks_md.count("build ") == 2, f"expected two build passes on main (a bounce + a land), got:\n{checks_md}"
 
 
@@ -167,5 +156,5 @@ def test_a_red_check_through_a_non_gated_fail_routes_normally(tmp_path: Path) ->
     history = detail["history"]
     assert any(h["choice_name"] == "fail" for h in history), f"no non-gated fail step in the history: {history}"
     assert any(h["choice_name"] == "pass" for h in history), f"no landing pass step in the history: {history}"
-    checks_md = _git_bare(origin_bare, "show", "main:CHECKS.md")
+    checks_md = git_bare(origin_bare, "show", "main:CHECKS.md")
     assert checks_md.count("build ") == 2, f"expected two build passes on main, got:\n{checks_md}"

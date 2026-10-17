@@ -8,9 +8,10 @@ from pathlib import Path
 
 import pytest
 
-from tests.e2e.test_acceptance_loop import _forge, _free_port, _hub, _mock_bin_dir
 from tests.e2e.test_transcript_tab_browser_e2e import _ingest, _mint
+from tests.fleet_launchers import mock_bin_dir, run_forge, run_hub
 from tests.runner_join import fleet_headers
+from tests.support import free_port
 
 pytestmark = [
     pytest.mark.e2e,
@@ -23,13 +24,13 @@ def test_triage_migration_selects_transcript_and_artifact(tmp_path: Path, chromi
         pytest.skip("no Playwright Chromium installed")
     from playwright.sync_api import expect, sync_playwright
 
-    bin_dir = _mock_bin_dir()
+    bin_dir = mock_bin_dir()
     if bin_dir is None:
         pytest.skip("requires provisioned mock worktree")
     origins = _mint(bin_dir, tmp_path / "scratch")
-    forge_port, hub_port = _free_port(), _free_port()
+    forge_port, hub_port = free_port(), free_port()
 
-    with _forge(bin_dir, origins, forge_port) as forge, _hub(tmp_path / "hub", forge_port, hub_port) as hub:
+    with run_forge(bin_dir, origins, forge_port) as forge, run_hub(tmp_path / "hub", forge_port, hub_port) as hub:
         sync = hub.post("/api/graphs/sync")
         assert sync.status_code == 200 and sync.json()["ok"], sync.text
         chunk_id = _ingest(forge, hub, "triage migration history")

@@ -6,8 +6,16 @@ valid:
     rows = conn.execute(stmt, execution_options={"stream_results": True})
   - |
     stmt = select(t).execution_options(populate_existing=True)
+  - |
+    stmt = select(t).execution_options(**{_SCOPE_OPTION: scope})
 invalid:
   - |
     rows = bind.execution_options(yield_per=1000).execute(stmt)
   - |
     stmt = select(t).execution_options(stream_results=True)
+  - |
+    stmt = select(t).execution_options(**{"yield_per": 1000})
+  - |
+    stmt = select(t).execution_options(**{"stream_results": True})
+  - |
+    stmt = select(t).execution_options(**opts)

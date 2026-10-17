@@ -16,10 +16,12 @@ import pytest
 
 from blizzard.runner.cli.runtime import read_stores
 from blizzard.runner.host_layout import HostLayout
-from tests.e2e.test_acceptance_loop import REPO, REPO_NAME, _forge, _free_port, _hub, _mock_bin_dir
 from tests.e2e.test_basic_workspace import bare_origin
+from tests.fleet_launchers import REPO, mock_bin_dir, run_forge, run_hub
+from tests.fleet_world import REPO_NAME
 from tests.host_files import load_runner_config
 from tests.runner_join import RUNNER_BIN, join_runner, runner_spawn_env
+from tests.support import free_port
 
 pytestmark = [
     pytest.mark.e2e,
@@ -34,14 +36,14 @@ _DEFAULT_CAPABILITY = [{"harness_id": "claude", "default": True}]
 
 
 def test_a_freshly_initialized_runner_is_offered_a_default_chunk_on_first_registration(tmp_path: Path) -> None:
-    bin_dir = _mock_bin_dir()
+    bin_dir = mock_bin_dir()
     if bin_dir is None:
         pytest.skip("provision the sibling blizzard-mock worktree")
 
     bare = bare_origin(tmp_path)
-    forge_port, hub_port = _free_port(), _free_port()
+    forge_port, hub_port = free_port(), free_port()
     hub_url = f"http://127.0.0.1:{hub_port}"
-    with _forge(bin_dir, bare.parent, forge_port) as forge, _hub(tmp_path / "hub", forge_port, hub_port) as hub:
+    with run_forge(bin_dir, bare.parent, forge_port) as forge, run_hub(tmp_path / "hub", forge_port, hub_port) as hub:
         (default,) = hub.get("/api/projects").json()["projects"]
         assert default["slug"] == "default"
         issue = forge.post(f"/repos/{REPO}/issues", json={"title": "first contact", "body": "offered on arrival"})

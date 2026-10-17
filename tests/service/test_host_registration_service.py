@@ -20,11 +20,11 @@ import sqlalchemy as sa
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.config import ProjectBinding, RunnerConfig
 from blizzard.runner.hub.internal.token_file import HubTokenFile
-from tests.e2e.test_acceptance_loop import _await_http, _free_port, _terminate
+from tests.fleet_launchers import await_http, terminate
 from tests.host_files import init_runner_environment, sampler_without_credentials, write_host_file
 from tests.runner_join import RUNNER_BIN, JoinedRunner, runner_spawn_env, seed_pinned_runner
 from tests.service.support import mock_hub, poll_until, require_mock_fleet, service_gate
-from tests.support import daemon_log_sink, read_daemon_log
+from tests.support import daemon_log_sink, free_port, read_daemon_log
 
 pytestmark = [pytest.mark.service, service_gate]
 
@@ -37,7 +37,7 @@ def _host(root: Path, hub: httpx.Client, hub_url: str, *, subscribed: bool) -> I
     ``anthropic`` subscription when ``subscribed``; yields its config and a reader of the hub's own-runner view once
     the runner has registered."""
     config = init_runner_environment(root)
-    port = _free_port()
+    port = free_port()
     configured = dataclasses.replace(
         config,
         host="127.0.0.1",
@@ -70,12 +70,12 @@ def _host(root: Path, hub: httpx.Client, hub_url: str, *, subscribed: bool) -> I
         return hub.get(f"/api/fleet/runners/{_RUNNER.runner_id}", headers=_RUNNER.bearer)
 
     try:
-        _await_http(proc, local, "/api/health", log=log)
+        await_http(proc, local, "/api/health", log=log)
         assert poll_until(lambda: view().status_code == 200, timeout=30.0), read_daemon_log(log)
         yield configured, (view, local)
     finally:
         local.close()
-        _terminate(proc)
+        terminate(proc)
 
 
 def _sampled_slugs(config: RunnerConfig) -> list[str]:
@@ -95,7 +95,7 @@ def _seed_world(hub: httpx.Client) -> None:
 
 def test_the_hub_reads_back_a_runners_bindings_and_subscription_beside_its_registration(tmp_path: Path) -> None:
     bin_dir = require_mock_fleet()
-    hub_port = _free_port()
+    hub_port = free_port()
     with mock_hub(bin_dir, hub_port) as hub:
         _seed_world(hub)
         with _host(tmp_path / "host", hub, f"http://127.0.0.1:{hub_port}", subscribed=True) as (config, (view, _)):
@@ -116,7 +116,7 @@ def test_the_hub_reads_back_a_runners_bindings_and_subscription_beside_its_regis
 
 def test_a_runner_naming_no_subscription_registers_an_empty_roster_and_samples_nothing(tmp_path: Path) -> None:
     bin_dir = require_mock_fleet()
-    hub_port = _free_port()
+    hub_port = free_port()
     with mock_hub(bin_dir, hub_port) as hub:
         _seed_world(hub)
         with _host(tmp_path / "host", hub, f"http://127.0.0.1:{hub_port}", subscribed=False) as (

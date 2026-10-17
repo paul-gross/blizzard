@@ -18,7 +18,7 @@ import pytest
 
 from blizzard.runner.harness.wiring import publish_harness_bundle
 from blizzard.runner.loop_wiring import LoopWiring
-from tests.e2e.test_acceptance_loop import _free_port, _runner_config
+from tests.fleet_launchers import runner_config
 from tests.fleet_world import mint_world
 from tests.service.support import (
     mock_hub,
@@ -28,6 +28,7 @@ from tests.service.support import (
     service_gate,
 )
 from tests.service.test_runner_service import _WORK_REF_URL, _status, _tick_env
+from tests.support import free_port
 
 pytestmark = [pytest.mark.service, service_gate]
 
@@ -51,7 +52,7 @@ def test_a_bundled_runners_mock_worker_runs_the_operators_and_the_runners_hooks(
     (bundle / "claude-code" / "settings.json").write_text(json.dumps({"hooks": {"PostToolUse": [operator_hook]}}))
     (bundle / "claude-code" / "mcp.json").write_text("{}")
 
-    hub_port = _free_port()
+    hub_port = free_port()
     with mock_hub(bin_dir, hub_port) as hub:
         spec = mock_hub_chunk_spec(_WORK_REF_URL)
         # The scripted build makes no tool call of its own, and only a tool call fires the PostToolUse hooks.
@@ -60,7 +61,7 @@ def test_a_bundled_runners_mock_worker_runs_the_operators_and_the_runners_hooks(
         assert resp.status_code == 201, resp.text
         chunk_id = resp.json()["chunk_id"]
         config = dataclasses.replace(
-            _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port), worker_path_prepend=(str(stubs),)
+            runner_config(tmp_path / "runner", workspace, bin_dir, hub_port), worker_path_prepend=(str(stubs),)
         )
         # What a bundled `tick` builds: the published snapshot reaches the adapter through the wiring.
         wiring = LoopWiring.of(config, bundle=publish_harness_bundle(bundle, config.root))

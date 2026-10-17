@@ -16,7 +16,7 @@ import pytest
 
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.hub.internal.token_file import HubTokenFile
-from tests.e2e.test_acceptance_loop import _forge, _free_port, _hub, _runner_api, _runner_config
+from tests.fleet_launchers import run_forge, run_hub, runner_api, runner_config
 from tests.fleet_world import mint_world
 from tests.runner_fakes import make_store
 from tests.service.support import (
@@ -28,6 +28,7 @@ from tests.service.support import (
 )
 from tests.service.test_hub_service import _stack
 from tests.service.test_runner_service import _WORK_REF_URL, _drive, _seed, _tick_env
+from tests.support import free_port
 
 pytestmark = [pytest.mark.service, service_gate]
 
@@ -54,12 +55,12 @@ def test_runner_presents_the_bearer_token_on_every_hub_call(tmp_path: Path) -> N
     workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
     fenced = _tick_env()
 
-    hub_port = _free_port()
+    hub_port = free_port()
     with mock_hub(bin_dir, hub_port) as hub:
         chunk_id = _seed(hub)
         # Pinned at the mock hub, so the assertion names the token rather than reading one back.
         config = dataclasses.replace(
-            _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port, join=False), hub_token=_TOKEN
+            runner_config(tmp_path / "runner", workspace, bin_dir, hub_port, join=False), hub_token=_TOKEN
         )
         HubTokenFile.of(config.root, config.token_env).write(_TOKEN)
         seeded = hub.post("/_seed/runners", json={"name": config.name, "runner_id": config.runner_id, "token": _TOKEN})
@@ -82,8 +83,8 @@ def test_runner_presents_the_bearer_token_on_every_hub_call(tmp_path: Path) -> N
 
         # The work-items proxy path — a separately-constructed httpx call in
         # `src/blizzard/runner/api/work_items.py` — carries the same credential, not a patched one.
-        api_config = dataclasses.replace(config, host="127.0.0.1", port=_free_port())
-        with _runner_api(api_config):
+        api_config = dataclasses.replace(config, host="127.0.0.1", port=free_port())
+        with runner_api(api_config):
             runner_client = httpx.Client(base_url=api_config.local_api_url, timeout=10.0)
             try:
                 proxied = runner_client.get(f"/api/chunks/{chunk_id}/work-items")
@@ -112,10 +113,10 @@ def test_a_runner_no_hub_added_sends_no_authorization_header_and_never_registers
     workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
     fenced = _tick_env()
 
-    hub_port = _free_port()
+    hub_port = free_port()
     with mock_hub(bin_dir, hub_port) as hub:
         config = dataclasses.replace(
-            _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port, join=False), hub_token=""
+            runner_config(tmp_path / "runner", workspace, bin_dir, hub_port, join=False), hub_token=""
         )
         HubTokenFile.of(config.root, config.token_env).write("")
         assert not HubTokenFile.of(config.root, config.token_env).held(), "this scenario holds no token"
@@ -141,7 +142,7 @@ def test_a_running_hub_refuses_a_revoked_token_and_a_tokenless_call(tmp_path: Pa
     """Revocation is keyed on the revoked hash: the same token that peeked fine before its
     revocation is refused after, and a call carrying no token is refused throughout."""
     bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
-    with _forge(bin_dir, origins, forge_port), _hub(tmp_path / "hub", forge_port, hub_port) as hub:
+    with run_forge(bin_dir, origins, forge_port), run_hub(tmp_path / "hub", forge_port, hub_port) as hub:
         runner_id, token = add_runner(hub, "r1")
         auth = {"Authorization": f"Bearer {token}"}
         registered = hub.post(

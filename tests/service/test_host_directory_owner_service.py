@@ -27,11 +27,11 @@ from blizzard.foundation.store.migrations import MigrationRunner
 from blizzard.runner.host_config import HostConfig
 from blizzard.runner.host_layout import HostLayout
 from blizzard.runner.runtime import migration_runner
-from tests.e2e.test_acceptance_loop import _await_http, _free_port, _terminate
+from tests.fleet_launchers import await_http, terminate
 from tests.host_files import init_runner_environment, write_host_file
 from tests.runner_join import RUNNER_BIN, run_runner_init, runner_spawn_env
 from tests.service.support import mock_hub, poll_until, require_mock_fleet, service_gate
-from tests.support import daemon_log_sink, read_daemon_log
+from tests.support import daemon_log_sink, free_port, read_daemon_log
 
 pytestmark = [pytest.mark.service, service_gate]
 
@@ -123,7 +123,7 @@ def _lock_holder(root: Path) -> Iterator[int]:
         assert poll_until(lambda: "held" in read_daemon_log(log)), "the lock holder never took the lock"
         yield proc.pid
     finally:
-        _terminate(proc)
+        terminate(proc)
 
 
 @contextlib.contextmanager
@@ -157,7 +157,7 @@ def _pre_host_daemon(root: Path) -> Iterator[Path]:
 def _running_host(root: Path, hub_url: str) -> Iterator[subprocess.Popen[str]]:
     """``blizzard-runner host`` over ``root``, yielded once its local API answers."""
     config = init_runner_environment(root)
-    port = _free_port()
+    port = free_port()
     write_host_file(dataclasses.replace(config, host="127.0.0.1", port=port, hub_url=hub_url))
     log = root / "daemon.log"
     proc = subprocess.Popen(
@@ -169,11 +169,11 @@ def _running_host(root: Path, hub_url: str) -> Iterator[subprocess.Popen[str]]:
     )
     client = httpx.Client(base_url=f"http://127.0.0.1:{port}", timeout=10.0)
     try:
-        _await_http(proc, client, "/api/health", log=log)
+        await_http(proc, client, "/api/health", log=log)
         yield proc
     finally:
         client.close()
-        _terminate(proc)
+        terminate(proc)
 
 
 def test_host_and_migrate_refuse_an_ungraduated_directory_naming_the_procedure_and_change_nothing(
@@ -204,7 +204,7 @@ def test_a_running_host_holds_its_directory_against_every_verb_that_moves_its_st
     tmp_path: Path,
 ) -> None:
     bin_dir = require_mock_fleet()
-    hub_port = _free_port()
+    hub_port = free_port()
     hub_url = f"http://127.0.0.1:{hub_port}"
     root = tmp_path / "host"
     with mock_hub(bin_dir, hub_port), _running_host(root, hub_url) as host:

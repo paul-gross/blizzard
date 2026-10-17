@@ -13,7 +13,7 @@ from pathlib import Path
 import httpx
 import pytest
 
-from tests.e2e.test_acceptance_loop import _free_port, _runner_api, _runner_config
+from tests.fleet_launchers import runner_api, runner_config
 from tests.fleet_world import mint_world
 from tests.service.support import (
     mock_hub,
@@ -23,6 +23,7 @@ from tests.service.support import (
 )
 from tests.service.test_runner_garden_findings_service import _mint_lease
 from tests.service.test_runner_service import _tick_env, _worker_credential
+from tests.support import free_port
 
 pytestmark = [pytest.mark.service, service_gate]
 
@@ -48,16 +49,16 @@ def test_a_workers_garden_proposals_read_proxies_through_to_the_mock_hubs_bucket
     workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
     fenced = _tick_env()
 
-    hub_port = _free_port()
+    hub_port = free_port()
     with mock_hub(bin_dir, hub_port) as hub:
         seeded = hub.post("/_seed/chunk", json=_garden_proposals_chunk_spec(_WORK_REF_URL))
         assert seeded.status_code == 201, seeded.text
         chunk_id = seeded.json()["chunk_id"]
 
-        config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
-        config = dataclasses.replace(config, host="127.0.0.1", port=_free_port())
+        config = runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+        config = dataclasses.replace(config, host="127.0.0.1", port=free_port())
 
-        with _runner_api(config):
+        with runner_api(config):
             runner_client = httpx.Client(base_url=config.local_api_url, timeout=10.0)
             try:
                 lease_id = _mint_lease(config, fenced, runner_client, chunk_id)
@@ -83,7 +84,7 @@ def test_a_workers_state_flag_reaches_the_mock_hubs_closed_bucket(tmp_path: Path
     workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
     fenced = _tick_env()
 
-    hub_port = _free_port()
+    hub_port = free_port()
     with mock_hub(bin_dir, hub_port) as hub:
         spec = _garden_proposals_chunk_spec(_WORK_REF_URL)
         spec["garden_proposals"].append(
@@ -100,10 +101,10 @@ def test_a_workers_state_flag_reaches_the_mock_hubs_closed_bucket(tmp_path: Path
         assert seeded.status_code == 201, seeded.text
         chunk_id = seeded.json()["chunk_id"]
 
-        config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
-        config = dataclasses.replace(config, host="127.0.0.1", port=_free_port())
+        config = runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+        config = dataclasses.replace(config, host="127.0.0.1", port=free_port())
 
-        with _runner_api(config):
+        with runner_api(config):
             runner_client = httpx.Client(base_url=config.local_api_url, timeout=10.0)
             try:
                 lease_id = _mint_lease(config, fenced, runner_client, chunk_id)
@@ -127,16 +128,16 @@ def test_a_leases_chunk_with_no_run_context_is_a_legible_refusal_not_an_empty_li
     workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
     fenced = _tick_env()
 
-    hub_port = _free_port()
+    hub_port = free_port()
     with mock_hub(bin_dir, hub_port) as hub:
         seeded = hub.post("/_seed/chunk", json=mock_hub_chunk_spec(_WORK_REF_URL))  # no garden_run at all
         assert seeded.status_code == 201, seeded.text
         chunk_id = seeded.json()["chunk_id"]
 
-        config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
-        config = dataclasses.replace(config, host="127.0.0.1", port=_free_port())
+        config = runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+        config = dataclasses.replace(config, host="127.0.0.1", port=free_port())
 
-        with _runner_api(config):
+        with runner_api(config):
             runner_client = httpx.Client(base_url=config.local_api_url, timeout=10.0)
             try:
                 lease_id = _mint_lease(config, fenced, runner_client, chunk_id)

@@ -22,20 +22,9 @@ from tests.e2e.fleet_traces import (
     runner_sweep,
 )
 from tests.e2e.harness_variants import MockHarness, both_mock_harnesses
-from tests.e2e.test_acceptance_loop import (
-    _PUSH_AND_DECLARE_SCRIPT,
-    FIXTURE_ENV,
-    REPO,
-    REPO_NAME,
-    _drive_until_done,
-    _forge,
-    _free_port,
-    _git_bare,
-    _hub,
-    _mock_bin_dir,
-    _runner_config,
-)
-from tests.fleet_world import mint_world, scripted_build_prompt
+from tests.fleet_launchers import REPO, drive_until_done, git_bare, mock_bin_dir, run_forge, run_hub, runner_config
+from tests.fleet_world import FIXTURE_ENV, PUSH_AND_DECLARE_SCRIPT, REPO_NAME, mint_world, scripted_build_prompt
+from tests.support import free_port
 
 pytestmark = [
     pytest.mark.e2e,
@@ -58,7 +47,7 @@ _BUILD_SCRIPT = scripted_build_prompt(
     '     "-c", "user.email=mock@blizzard.local", "-c", "user.name=Mock Harness",\n'
     '     "commit", "-m", "feat: a build pass"],\n'
     "    check=True, capture_output=True,\n"
-    ")\n" + _PUSH_AND_DECLARE_SCRIPT
+    ")\n" + PUSH_AND_DECLARE_SCRIPT
 )
 _BUILD_JUDGEMENT = "verdict('pass', 'checks are green')\n"
 
@@ -73,7 +62,7 @@ _REVIEW_ADDENDUM = (
     '     "-c", "user.email=mock@blizzard.local", "-c", "user.name=Mock Harness",\n'
     '     "commit", "-m", "fix: address review findings"],\n'
     "    check=True, capture_output=True,\n"
-    ")\n" + _PUSH_AND_DECLARE_SCRIPT
+    ")\n" + PUSH_AND_DECLARE_SCRIPT
 )
 
 # review base prompt: a no-op turn — the verdict is elicited on the judgement resume.
@@ -152,7 +141,7 @@ def test_review_cycle_fails_once_then_delivers(
     tmp_path: Path, fleet_traces: FleetCollector, subtests: pytest.Subtests, harness: MockHarness
 ) -> None:
     """A scripted review fails once, the work re-builds, review passes, delivery lands."""
-    bin_dir = _mock_bin_dir()
+    bin_dir = mock_bin_dir()
     if bin_dir is None:
         pytest.skip("no provisioned sibling blizzard-mock worktree (run `winter provision <env>`)")
 
@@ -163,10 +152,10 @@ def test_review_cycle_fails_once_then_delivers(
     origins = fixture_root / "origins"
     origin_bare = origins / f"{REPO_NAME}.git"
 
-    forge_port, hub_port = _free_port(), _free_port()
+    forge_port, hub_port = free_port(), free_port()
     with (
-        _forge(bin_dir, origins, forge_port) as forge,
-        _hub(tmp_path / "hub", forge_port, hub_port, collector=fleet_traces) as hub,
+        run_forge(bin_dir, origins, forge_port) as forge,
+        run_hub(tmp_path / "hub", forge_port, hub_port, collector=fleet_traces) as hub,
     ):
         assert hub.post("/api/graphs", json={"definition_yaml": _graph_yaml(harness)}).status_code == 201
 
@@ -181,12 +170,12 @@ def test_review_cycle_fails_once_then_delivers(
         chunk_id = ingested.json()["chunk_id"]
         assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202  # ready for the runner
 
-        config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+        config = runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
         fenced = dict(os.environ)
         fenced["BLIZZARD_MOCK_HARNESS_FENCE"] = "1"
         with runner_sweep(config, fleet_traces) as sweep:
             sweep.plant()
-            status = _drive_until_done(config, hub, chunk_id, fenced)
+            status = drive_until_done(config, hub, chunk_id, fenced)
             sweep.drain(workers=4)
 
         assert status == "done", f"chunk did not reach done (last status {status!r})"
@@ -243,10 +232,10 @@ def test_review_cycle_fails_once_then_delivers(
             assert_invocations(runner, {"build": expect, "review": expect})
 
     # The review-fail cycle ran build TWICE — two 'build pass' lines land on main.
-    build_md = _git_bare(origin_bare, "show", "main:BUILD.md")
+    build_md = git_bare(origin_bare, "show", "main:BUILD.md")
     assert build_md.count("build pass") == 2, f"expected two build passes on main, got:\n{build_md}"
 
     # The addendum's committed marker is reachable from main only if it arrived as code
     # the re-entry build ran.
-    tree = _git_bare(origin_bare, "ls-tree", "-r", "--name-only", "main")
+    tree = git_bare(origin_bare, "ls-tree", "-r", "--name-only", "main")
     assert "REVIEW_ADDRESSED.md" in tree.split(), f"re-entry addendum did not land on main:\n{tree}"

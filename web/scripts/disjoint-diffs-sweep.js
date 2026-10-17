@@ -37,8 +37,8 @@ const ROOT_BARREL = `${FLEET_SRC}/public-api.ts`;
  * - `core/query-keys` is the query-key registry; it has no single feature owner.
  */
 const ROOT_DIRECT_EXPORT_ALLOWED = [
-  { prefix: 'api/', reason: 'the generated client surface has no feature owner' },
-  { prefix: 'core/query-keys', reason: 'the query-key registry has no single feature owner' },
+  { path: 'api', reason: 'the generated client surface has no feature owner' },
+  { path: 'core/query-keys.ts', reason: 'the query-key registry has no single feature owner' },
 ];
 
 /**
@@ -180,7 +180,7 @@ function sweepDisjointDiffs({ root, memory = null }) {
     const moduleSymbol = checker.getSymbolAtLocation(stmt.moduleSpecifier);
     const target = moduleSymbol?.declarations?.[0]?.getSourceFile().fileName;
     const inLib = target && isUnder(toPosix(target), fleetLib) ? toPosix(target).slice(fleetLib.length + 1) : null;
-    if (inLib !== null && (isSubBarrel(toPosix(target ?? ''), fleetLib) || ROOT_DIRECT_EXPORT_ALLOWED.some((a) => inLib.startsWith(a.prefix)))) {
+    if (inLib !== null && (isSubBarrel(toPosix(target ?? ''), fleetLib) || ROOT_DIRECT_EXPORT_ALLOWED.some((a) => inLib === a.path || inLib.startsWith(`${a.path}/`)))) {
       continue;
     }
     const line = /** @type {ts.SourceFile} */ (rootSf).getLineAndCharacterOfPosition(stmt.getStart()).line + 1;
@@ -209,9 +209,11 @@ function assertDisjointDiffsDetectorWorks() {
     ...baseFiles(
       "export * from './lib/feat-a';\nexport * from './lib/feat-b';\n" +
         "export { loose } from './lib/loose';\nexport { someKey } from './lib/core/query-keys';\n" +
-        "export * as hubApi from './lib/api/hub';\n",
+        "export * as hubApi from './lib/api/hub';\n" +
+        "export { extraKey } from './lib/core/query-keys-extra';\n",
     ),
     [`${lib}/loose.ts`, 'export const loose = 1;\n'],
+    [`${lib}/core/query-keys-extra.ts`, 'export const extraKey = 1;\n'],
     [`${lib}/feat-a/index.ts`, "export { usedByApp, unusedAnywhere, usedInsideOnly } from './a';\n"],
     [
       `${lib}/feat-a/a.ts`,
@@ -240,9 +242,9 @@ function assertDisjointDiffsDetectorWorks() {
       `disjoint-diffs self-test: expected exactly the unconsumed and inside-only exports to be caught, saw [${names}]`,
     );
   }
-  if (found.rootDirect.map((r) => r.source).join(',') !== './lib/loose') {
+  if (found.rootDirect.map((r) => r.source).join(',') !== './lib/loose,./lib/core/query-keys-extra') {
     throw new Error(
-      'disjoint-diffs self-test: expected only the direct root re-export to be caught — sub-barrel, query-keys, and api lines pass',
+      'disjoint-diffs self-test: expected only the direct root re-exports to be caught — a path sharing the query-keys prefix is one; sub-barrel, query-keys, and api lines pass',
     );
   }
 
