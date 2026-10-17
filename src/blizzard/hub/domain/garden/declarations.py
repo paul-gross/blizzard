@@ -58,10 +58,9 @@ class ScopeDeclaration:
 @dataclass(frozen=True)
 class RoutineDeclaration:
     """A routine the document names within ``project_id``: its create fields, the sparse edit of what it states,
-    and the linked scope set it states (``None`` leaves the stored set). ``routine_id`` is used only by a create."""
+    and the linked scope set it states (``None`` leaves the stored set)."""
 
     name: str
-    routine_id: str
     graph_name: str
     default_scope_slug: str
     default_model: Sequence[str]
@@ -99,7 +98,6 @@ class RoutineDeclaration:
 
     def create(self, ctx: ChangeContext, *, at: datetime) -> tuple[Routine, ConfigChange]:
         return Routine.new(
-            routine_id=self.routine_id,
             project_id=self.project_id,
             name=self.name,
             graph_name=self.graph_name,

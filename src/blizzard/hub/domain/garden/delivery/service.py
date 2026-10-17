@@ -5,7 +5,6 @@ replay, validate, and materialize (blizzard-product:/delivered/garden/machinery.
 
 from __future__ import annotations
 
-import functools
 from collections.abc import Callable, Sequence
 
 from blizzard.hub.domain.chunk.model import Chunk
@@ -14,6 +13,9 @@ from blizzard.hub.domain.garden.delivery.materialize import DeliveryOutcome, Gar
 from blizzard.hub.domain.garden.delivery.validation import (
     CommitResolver,
     GardenDeliveryRejected,
+    commits_to_resolve,
+    parse_artifacts,
+    resolve_commits,
     select_delta_artifacts,
     select_proposal_artifacts,
     validate_delivery,
@@ -70,22 +72,22 @@ class GardenDeliveryRecorder:
         )
         if replay is not None:
             return replay
-        # One memo across every attempt: a retry never re-resolves a commit, so the delivery spends the
-        # fleet-wide hub-exec slot at most once per commit. A cited commit resolves only in a repository
-        # the run's project links.
-        resolve_commit = (
-            functools.lru_cache(maxsize=None)(self._resolve_commit_for(ProjectId(run.project_id)))
-            if self._resolve_commit_for
-            else None
+        parsed = parse_artifacts(
+            delta_artifacts=deltas.contents, proposal_artifacts=proposals.contents, formats=self._formats
+        )
+        # Every commit is resolved here, once, before any rule runs: a retry never re-resolves one, so the
+        # delivery spends the fleet-wide hub-exec slot at most once per commit. A cited commit resolves
+        # only in a repository the run's project links.
+        resolutions = resolve_commits(
+            commits_to_resolve(parsed.deltas, run=run),
+            self._resolve_commit_for(ProjectId(run.project_id)) if self._resolve_commit_for else None,
         )
         for _ in range(GUARD_ATTEMPTS):
             validated = validate_delivery(
                 run=run,
-                delta_artifacts=deltas.contents,
-                proposal_artifacts=proposals.contents,
+                parsed=parsed,
                 bucket=self._buckets.for_run(run),
-                formats=self._formats,
-                resolve_commit=resolve_commit,
+                resolutions=resolutions,
                 resolve_exited=lambda ids: self._buckets.exited_among(run, ids),
             )
             outcome = self._materialize.deliver(

@@ -153,7 +153,6 @@ def test_an_unresolved_graph_refuses_naming_it() -> None:
 def test_new_points_at_the_default_scope_and_stamps_the_instant() -> None:
     model = ["opus"]
     minted, change = Routine.new(
-        routine_id="rtn_9",
         name="nightly",
         graph_name="default",
         default_scope_slug=_SCOPE.slug,
@@ -164,8 +163,9 @@ def test_new_points_at_the_default_scope_and_stamps_the_instant() -> None:
         at=_T0,
         project_id=_PROJECT,
     )
+    assert minted.routine_id.startswith("rtn_")
     assert minted == Routine(
-        routine_id="rtn_9",
+        routine_id=minted.routine_id,
         name="nightly",
         graph_name="default",
         default_scope_slug="blizzard",

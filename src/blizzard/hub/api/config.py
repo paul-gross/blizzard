@@ -15,7 +15,6 @@ from pydantic import ValidationError
 from starlette.concurrency import run_in_threadpool
 
 from blizzard.auth_core import Permission
-from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.roles import dto
 from blizzard.foundation.store.utc import iso_utc
@@ -218,7 +217,7 @@ def _key_of(kind: RecordKind | None, key: str | None, services: TenantServices) 
 
 
 def _declaration(
-    document: ConfigDocument, clock: IClock, projects: ProjectsPlan, held: _Repositories, sources_held: _WorkSources
+    document: ConfigDocument, projects: ProjectsPlan, held: _Repositories, sources_held: _WorkSources
 ) -> ConfigDeclaration:
     """The domain's declarations from a validated document: each entry's create fields, and a sparse edit
     of only the fields the entry states (``model_fields_set``); the planned ``projects`` section, and each
@@ -260,7 +259,7 @@ def _declaration(
                 edit=RepositoryEdit(**stated),
             )
         )
-    scopes, routines = _garden_declarations(document, clock, projects)
+    scopes, routines = _garden_declarations(document, projects)
     return ConfigDeclaration(
         secrets=tuple(document.secrets),
         work_sources=tuple(sources),
@@ -272,7 +271,7 @@ def _declaration(
 
 
 def _garden_declarations(
-    document: ConfigDocument, clock: IClock, projects: ProjectsPlan
+    document: ConfigDocument, projects: ProjectsPlan
 ) -> tuple[tuple[ScopeDeclaration, ...], tuple[RoutineDeclaration, ...]]:
     """The document's scope and routine declarations, each within the project its entry names — the tenant's
     only one, as the apply leaves it, for an entry naming none."""
@@ -296,7 +295,6 @@ def _garden_declarations(
         routines.append(
             RoutineDeclaration(
                 name=routine.name,
-                routine_id=Id.mint(IdPrefix.ROUTINE, clock).value,
                 graph_name=routine.graph_name,
                 default_scope_slug=routine.default_scope_slug,
                 default_model=routine.default_model,
@@ -589,7 +587,7 @@ def _apply(
         held = _Repositories.of(document, services)
         sources = _WorkSources.of(document, services)
         projects = _projects(document, services, ctx, held, sources)
-        declaration = _declaration(document, services.clock, projects, held, sources)
+        declaration = _declaration(document, projects, held, sources)
         outcomes = services.config_authoring.apply(
             declaration, _stored(declaration, services, held, sources), ctx, dry_run=dry_run
         )

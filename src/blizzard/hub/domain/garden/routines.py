@@ -180,7 +180,6 @@ class Routine:
     def new(
         cls,
         *,
-        routine_id: str,
         project_id: str,
         name: str,
         graph_name: str,
@@ -192,9 +191,9 @@ class Routine:
         at: datetime,
     ) -> tuple[Routine, ConfigChange]:
         """A new routine of ``project_id`` at revision 1 pointing at ``default_scope_slug``, a scope of the same
-        project, with its ``create`` change."""
+        project, with its ``create`` change. The routine's id is minted here, from ``at``."""
         record = cls(
-            routine_id=routine_id,
+            routine_id=Id.mint_at(IdPrefix.ROUTINE, at).value,
             name=name,
             graph_name=graph_name,
             default_scope_slug=default_scope_slug,
@@ -441,7 +440,6 @@ class RoutineAuthoring:
         require_graph_change_resolves(None, graph_name, self._resolves)
         scope, scope_mint = self._scope_registry.resolve(project_id, default_scope_slug, ctx)
         routine, change = Routine.new(
-            routine_id=Id.mint(IdPrefix.ROUTINE, self._clock).value,
             project_id=project_id,
             name=name,
             graph_name=graph_name,
