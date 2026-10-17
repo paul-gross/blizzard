@@ -6,6 +6,8 @@ from __future__ import annotations
 import signal
 import subprocess
 import sys
+import time
+from pathlib import Path
 
 import pytest
 
@@ -14,15 +16,16 @@ from blizzard.foundation.process import group_exists, signal_group, terminate_gr
 pytestmark = pytest.mark.unit
 
 _IGNORES_TERM = (
-    "import signal, sys, time; signal.signal(signal.SIGTERM, signal.SIG_IGN); print(1, flush=True); time.sleep(60)"
+    "import signal, sys, time; signal.signal(signal.SIGTERM, signal.SIG_IGN); open(sys.argv[1], 'w'); time.sleep(60)"
 )
 
 
-def _spawn(code: str) -> subprocess.Popen[bytes]:
-    process = subprocess.Popen([sys.executable, "-c", code], start_new_session=True, stdout=subprocess.PIPE)
-    if "print(1" in code:
-        assert process.stdout is not None
-        process.stdout.readline()
+def _spawn(code: str, ready: Path | None = None) -> subprocess.Popen[bytes]:
+    """A new-session child running ``code``; given ``ready``, it returns once the child has created that file."""
+    argv = [sys.executable, "-c", code, *([str(ready)] if ready is not None else [])]
+    process = subprocess.Popen(argv, start_new_session=True)
+    while ready is not None and not ready.exists():
+        time.sleep(0.01)
     return process
 
 
@@ -43,8 +46,8 @@ def test_signalling_a_live_group_reaches_it() -> None:
         process.kill()
 
 
-def test_the_sequence_kills_a_leader_that_ignores_term_once_the_grace_runs_out() -> None:
-    process = _spawn(_IGNORES_TERM)
+def test_the_sequence_kills_a_leader_that_ignores_term_once_the_grace_runs_out(tmp_path: Path) -> None:
+    process = _spawn(_IGNORES_TERM, tmp_path / "ready")
     try:
         assert terminate_group(process.pid, grace=0.3, wait=lambda grace: process.wait(timeout=grace)) is None
         assert process.wait(timeout=10) == -signal.SIGKILL
