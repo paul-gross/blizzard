@@ -11,6 +11,7 @@ from typing import Any
 from urllib.parse import unquote, urlsplit
 
 from blizzard.runner.harness.bundle import EntryPoint, HarnessBundleError, HarnessComposition, HarnessLayout
+from blizzard.runner.harness.opencode.paths import resolve_opencode_config_dir
 from blizzard.runner.harness.opencode.shapes import OpenCodeShapeError, parse_worker_config
 
 _FILE_SUBSTITUTION = re.compile(r"\{file:([^}]+)\}")
@@ -109,9 +110,8 @@ def _merge_plugins(found: dict[str, Path], incoming: Mapping[str, Path]) -> None
 
 
 def ambient_plugin_sources(cwd: Path, env: Mapping[str, str]) -> dict[str, Path]:
-    home = Path(env.get("HOME", str(Path.home())))
-    user = Path(env.get("XDG_CONFIG_HOME", str(home / ".config"))) / "opencode"
-    scopes = [(user, True)]
+    user = resolve_opencode_config_dir(env)
+    scopes = [] if user is None else [(user, True)]
     for parent in reversed((cwd, *cwd.parents)):
         for config in (parent / "opencode.json", parent / "opencode.jsonc"):
             if config.is_file():

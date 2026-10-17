@@ -21,7 +21,7 @@ from blizzard.runner.harness.telemetry_signals import TelemetrySignal
 from blizzard.runner.harness.wiring import combined_telemetry_plan, publish_harness_bundle
 from blizzard.runner.runtime import Runtime
 from tests.harness_sections import sections
-from tests.runner_fakes import FakeProbe, make_envelope
+from tests.runner_fakes import NO_TRACING, FakeProbe, make_envelope
 
 pytestmark = pytest.mark.unit
 
@@ -52,7 +52,10 @@ def _plan(
     config: RunnerConfig, *, runner_environ: Mapping[str, str] = RUNNER_ENV, enabled: bool = True, bundle=None
 ) -> HarnessTelemetryPlan:  # type: ignore[no-untyped-def]
     return combined_telemetry_plan(
-        config.harness_settings, bundle=bundle, harness_telemetry_enabled=enabled, runner_environ=runner_environ
+        config.harness_settings(NO_TRACING),
+        bundle=bundle,
+        harness_telemetry_enabled=enabled,
+        runner_environ=runner_environ,
     )
 
 
@@ -335,5 +338,5 @@ def shared_inputs_for_tests():  # type: ignore[no-untyped-def]
     from blizzard.runner.harness.wiring import shared_inputs
 
     return shared_inputs(
-        _config(Path("/tmp")).harness_settings, harness_telemetry_enabled=True, runner_environ=RUNNER_ENV
+        _config(Path("/tmp")).harness_settings(NO_TRACING), harness_telemetry_enabled=True, runner_environ=RUNNER_ENV
     )

@@ -858,15 +858,17 @@ def _build_runner(
         if registered is not None:
             identity.hold(registered)
         runner_environ = os.environ if environ is None else environ
+        tracing = TracingSettings.of(runner_environ)
+        harness_settings = config.harness_settings(tracing)
         telemetry_enabled = config.tracing.harness_telemetry and platform_tracing.enabled
         plan = combined_telemetry_plan(
-            config.harness_settings,
+            harness_settings,
             bundle=bundle,
             harness_telemetry_enabled=telemetry_enabled,
             runner_environ=runner_environ,
         )
         harnesses = build_production_harness_registry(
-            config.harness_settings,
+            harness_settings,
             executor=executor,
             process=host.process,
             bundle=bundle,
@@ -879,13 +881,12 @@ def _build_runner(
         health = HarnessHealthCache(
             clock=clock,
             probes=build_production_harness_health_probes(
-                config.harness_settings, spawn_roots=bound_spawn_roots(config, host.workspaces)
+                harness_settings, spawn_roots=bound_spawn_roots(config, host.workspaces)
             ),
             corpus=CommittedCorpus(),
             selftest_results=stores.selftest_results,
             configured_tiers=configured_tiers(config.harness_sections),
         )
-        tracing = TracingSettings.of(runner_environ)
         exporter = (trace_exporter or _otlp_exporter(environ)) if tracing.enabled() else None
         trace_sweep = (
             LeaseTraceSweep(

@@ -26,6 +26,7 @@ from blizzard.foundation.node_steps import ApplyOutcome, SessionMode
 from blizzard.foundation.runner_identity_state import IdentityState
 from blizzard.foundation.runner_tokens import RunnerTokenRefusalReason
 from blizzard.foundation.store.engine import create_engine_from_url
+from blizzard.foundation.trace_export.settings import TracingSettings
 from blizzard.runner.composition import RunnerProcess, build_runner_process
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.environments.provider import (
@@ -154,6 +155,9 @@ from blizzard.wire.transcript_segment import TranscriptSegmentRecord
 #: The runner every test store is bound to unless a test names another — the id :class:`FakeHub` mints by default, so
 #: a fixture's registration adopts the binding it already holds.
 FIXTURE_RUNNER_ID = "r1"
+
+#: Tracing off: the settings a runner resolves from an environ that enables none.
+NO_TRACING = TracingSettings.of({})
 
 
 class SqlAlchemyRunnerStore(

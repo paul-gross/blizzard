@@ -87,6 +87,7 @@ from tests import claude_code_telemetry
 from tests.harness_sections import sections
 from tests.runner_client import runner_client
 from tests.runner_fakes import (
+    NO_TRACING,
     REGISTERED_AT,
     FakeHarness,
     FakeHub,
@@ -1324,7 +1325,9 @@ def test_claude_code_spans_are_kept_and_counted_while_traces_are_operator_config
         db_url="sqlite://",
         harness_sections=sections(ClaudeCodeSection(worker_settings_path=str(settings))),
     )
-    plan = combined_telemetry_plan(config.harness_settings, harness_telemetry_enabled=True, runner_environ=_ENDPOINT)
+    plan = combined_telemetry_plan(
+        config.harness_settings(NO_TRACING), harness_telemetry_enabled=True, runner_environ=_ENDPOINT
+    )
     assert plan.traces is HarnessTelemetryOutcome.OPERATOR_CONFIGURED
 
     exporter = InMemorySpanExporter()

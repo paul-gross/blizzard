@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from blizzard.foundation.trace_export.settings import TracingSettings
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.adapter import AcquiredEnvironment, WorkerPreamble
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
@@ -53,23 +54,28 @@ def _config(tmp_path: Path) -> RunnerConfig:
     )
 
 
+_TRACING_ON = TracingSettings.of({"OTEL_EXPORTER_OTLP_ENDPOINT": "http://collector:4318"})
+_TRACING_OFF = TracingSettings.of({})
+
+
 def test_otel_names_are_dropped_from_the_passthrough_while_tracing_is_on(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://collector:4318")
+    # The decision follows the injected settings, never the process environment.
+    monkeypatch.delenv("OTEL_EXPORTER_OTLP_ENDPOINT", raising=False)
+    monkeypatch.delenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", raising=False)
     config = _config(tmp_path)
-    assert config.dropped_otel_passthrough == ("OTEL_SERVICE_NAME", "OTEL_EXPORTER_OTLP_HEADERS")
-    assert config.worker_env.passthrough == ("MY_QUIRK",)
+    assert config.dropped_otel_passthrough(_TRACING_ON) == ("OTEL_SERVICE_NAME", "OTEL_EXPORTER_OTLP_HEADERS")
+    assert config.worker_env(_TRACING_ON).passthrough == ("MY_QUIRK",)
 
 
 def test_otel_names_pass_through_untouched_while_tracing_is_off(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.delenv("OTEL_EXPORTER_OTLP_ENDPOINT", raising=False)
-    monkeypatch.delenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", raising=False)
+    monkeypatch.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://collector:4318")
     config = _config(tmp_path)
-    assert config.dropped_otel_passthrough == ()
-    assert config.worker_env.passthrough == config.worker_env_passthrough
+    assert config.dropped_otel_passthrough(_TRACING_OFF) == ()
+    assert config.worker_env(_TRACING_OFF).passthrough == config.worker_env_passthrough
 
 
 def _programs_preamble(*, worker_programs: bool, traceparent: str = _TRACEPARENT) -> WorkerPreamble:
@@ -101,10 +107,7 @@ def test_identity_env_carries_no_exporter_variable_without_both_switches(
     assert not [name for name in env if name.startswith(("OTEL_EXPORTER_", "WINTER_OTEL_"))]
 
 
-def test_winter_otel_names_never_pass_through(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("OTEL_EXPORTER_OTLP_ENDPOINT", raising=False)
-    monkeypatch.delenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", raising=False)
+def test_winter_otel_names_never_pass_through(tmp_path: Path) -> None:
     config = replace(_config(tmp_path), worker_env_passthrough=("MY_QUIRK", "WINTER_OTEL_EXPORTER_OTLP_ENDPOINT"))
-    assert config.worker_env.passthrough == ("MY_QUIRK",)
-    monkeypatch.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://collector:4318")
-    assert config.dropped_otel_passthrough == ("WINTER_OTEL_EXPORTER_OTLP_ENDPOINT",)
+    assert config.worker_env(_TRACING_OFF).passthrough == ("MY_QUIRK",)
+    assert config.dropped_otel_passthrough(_TRACING_ON) == ("WINTER_OTEL_EXPORTER_OTLP_ENDPOINT",)

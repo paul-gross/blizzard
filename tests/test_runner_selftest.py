@@ -49,6 +49,7 @@ from blizzard.runner.selftest.service import SelfTestService
 from tests.harness_sections import sections
 from tests.host_files import load_runner_config
 from tests.runner_client import runner_client
+from tests.runner_fakes import NO_TRACING
 from tests.runner_init_fakes import init_runner
 
 # A fake harness binary mimicking `mock-claude-code`'s CLI surface, extended to actually
@@ -801,7 +802,7 @@ def test_both_production_bindings_pass_every_selftest_check(tmp_path: Path, spaw
         ),
     )
     harnesses = build_production_harness_registry(
-        config.harness_settings, process=LinuxProcessProbe(), executor=spawn_executor
+        config.harness_settings(NO_TRACING), process=LinuxProcessProbe(), executor=spawn_executor
     )
     client = runner_client(create_app(config, harnesses=harnesses))
 
