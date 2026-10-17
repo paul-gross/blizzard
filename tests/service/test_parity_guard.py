@@ -42,7 +42,6 @@ _IHUBCLIENT_ENDPOINTS: dict[str, tuple[str, str]] = {
 _SETUP_PORT_ENDPOINTS: dict[type, dict[str, tuple[str, str]]] = {
     ITokenIdentityReader: {"identity": ("GET", "/api/fleet/identity")},
     IHubRunnerAdmin: {
-        "add_runner": ("POST", "/api/runners"),
         "tenants": ("GET", "/api/me"),
         "add_host": ("POST", "/api/hosts"),
     },

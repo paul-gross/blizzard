@@ -5,12 +5,10 @@ only when adding cannot undo an operator's act: a **revoked** or **retired** tok
 **unknown** one — also what a runner pointed at the wrong hub sees, where adding would overwrite the
 only token it holds for its own — adds it again only when the operator says the hub's data was reset.
 
-A runner serves the tenant it was added in for life. A held token whose runner belongs to another
-tenant than the one the operator names stops, since keeping it would serve the wrong tenant and
-adding would leave a store to a runner it does not belong to. An add names the operator's tenant
-by id, or, naming none, takes the one the hub resolves for the operator; when the hub leaves a
-choice, or the named tenant is none the operator may enter, joining stops listing the tenants the
-operator may enter.
+A runner serves the tenant it was added in for life — its host's. A held token whose runner belongs
+to another tenant than the one the operator names stops, since keeping it would serve the wrong
+tenant and adding would leave a store to a runner it does not belong to. An add is made under the
+host's own credential, so it never leaves the tenant unsettled.
 
 A runner's store belongs to the runner that wrote it, so a runner added again never inherits the old
 one's: the store is set aside before the add, never after it. A crash between the two leaves the same
@@ -26,13 +24,8 @@ from typing import Protocol
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.runner_tokens import RunnerTokenRefusalReason
 from blizzard.runner.hub.client import (
-    HubClientError,
-    IHubRunnerAdmin,
-    IssuedIdentity,
+    IRunnerAdder,
     ITokenIdentityReader,
-    OperatorTenant,
-    RunnerAddRefusalReason,
-    RunnerAddRefused,
     TokenIdentity,
     TokenRefusal,
 )
@@ -55,24 +48,12 @@ class BootstrapStop(StrEnum):
     STORE_NAMES_A_RUNNER = "store_names_a_runner"
     #: The held token's runner, ``held``, belongs to another tenant than the one named.
     ANOTHER_TENANT = "another_tenant"
-    #: No tenant was named, and the operator may enter several; ``tenants`` lists them.
-    TENANT_REQUIRED = "tenant_required"
-    #: The named tenant is none the operator may enter; ``tenants`` lists the ones they may.
-    NO_SUCH_TENANT = "no_such_tenant"
-
-
-#: The add refusals that leave the tenant unsettled, and the stop each becomes.
-_TENANT_STOPS = {
-    RunnerAddRefusalReason.TENANT_REQUIRED: BootstrapStop.TENANT_REQUIRED,
-    RunnerAddRefusalReason.NO_SUCH_TENANT: BootstrapStop.NO_SUCH_TENANT,
-}
 
 
 class BootstrapStopped(Exception):
     """Joining stopped with nothing added; ``stop`` says why. ``runner_id`` names the runner a
     revoked token, a retired runner, or a store belongs to; ``held`` is the held token's runner
-    when it belongs to another tenant; ``tenants`` lists the tenants the operator may enter when
-    the tenant is unsettled — empty when the hub would not list them."""
+    when it belongs to another tenant."""
 
     def __init__(
         self,
@@ -80,13 +61,11 @@ class BootstrapStopped(Exception):
         *,
         runner_id: str | None = None,
         held: TokenIdentity | None = None,
-        tenants: tuple[OperatorTenant, ...] = (),
     ) -> None:
         super().__init__(stop.value)
         self.stop = stop
         self.runner_id = runner_id
         self.held = held
-        self.tenants = tenants
 
 
 class TokenNotWritten(Exception):
@@ -167,11 +146,11 @@ class IRunnerStoreAside(Protocol):
 
 class RunnerBootstrap:
     """Joins one runner to its hub: the identity read under the runner's own token, the store set
-    aside when a runner is added in place of the one it belonged to, the add under the operator's
+    aside when a runner is added in place of the one it belonged to, the add under the host's
     credential, and the new token written straight after the add."""
 
     def __init__(
-        self, identity: ITokenIdentityReader, admin: IHubRunnerAdmin, tokens: ITokenWriter, store: IRunnerStoreAside
+        self, identity: ITokenIdentityReader, admin: IRunnerAdder, tokens: ITokenWriter, store: IRunnerStoreAside
     ) -> None:
         self._identity = identity
         self._admin = admin
@@ -187,11 +166,10 @@ class RunnerBootstrap:
         tenant_id: str | None = None,
         projects: tuple[str, ...] | None = None,
     ) -> JoinedRunner:
-        """Keep the runner ``held`` names, or add one under ``name`` — in the tenant ``tenant_id``
-        names, else the one the hub resolves for the operator, serving the projects ``projects``
-        names, else the tenant's only one — and write its token. A kept runner keeps the
-        declaration the hub holds for it. An unreachable
-        hub, a server error, or a refused add raises
+        """Keep the runner ``held`` names, or add one under ``name`` in its host's tenant, serving
+        the projects ``projects`` names, else the tenant's only one — and write its token. A kept
+        runner whose tenant is not ``tenant_id`` stops; a kept runner keeps the declaration the hub
+        holds for it. An unreachable hub, a server error, or a refused add raises
         :class:`~blizzard.runner.hub.client.HubClientError` with nothing added."""
         if held is not None:
             answer = self._identity.identity()
@@ -209,28 +187,9 @@ class RunnerBootstrap:
             if not allow_readd:
                 raise BootstrapStopped(BootstrapStop.STORE_NAMES_A_RUNNER, runner_id=stored)
             self._store.set_aside()
-        issued = self._add(name, tenant_id, projects)
+        issued = self._admin.add_runner(name, projects=projects)
         try:
             self._tokens.write(issued.token)
         except OSError as exc:
             raise TokenNotWritten(issued.runner_id, exc) from exc
         return JoinedRunner(runner_id=issued.runner_id, runner_name=issued.runner_name, added=True, tenant_id=tenant_id)
-
-    def _add(self, name: str, tenant_id: str | None, projects: tuple[str, ...] | None) -> IssuedIdentity:
-        """The add under the operator's credential; a refusal that leaves the tenant unsettled stops,
-        listing the tenants the operator may enter."""
-        try:
-            return self._admin.add_runner(name, tenant_id=tenant_id, projects=projects)
-        except RunnerAddRefused as exc:
-            stop = _TENANT_STOPS.get(exc.reason)
-            if stop is None:
-                raise
-            raise BootstrapStopped(stop, tenants=self._enterable()) from exc
-
-    def _enterable(self) -> tuple[OperatorTenant, ...]:
-        """The tenants the operator may enter, or none when the hub will not list them — the stop
-        still stands, it only names no alternatives."""
-        try:
-            return tuple(self._admin.tenants())
-        except HubClientError:
-            return ()
