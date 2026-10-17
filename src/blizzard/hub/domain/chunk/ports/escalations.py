@@ -4,11 +4,23 @@
 from __future__ import annotations
 
 from datetime import datetime
+from enum import StrEnum
 from typing import Protocol
 
 from blizzard.hub.domain.chunk.model import EscalationOpen
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, FenceRefusal
 from blizzard.hub.domain.projects.model import ProjectId
+
+
+class BounceEscalationOutcome(StrEnum):
+    """The result of one bounce-cap escalation attempt.
+
+    ``ALREADY_RECORDED`` means an earlier attempt escalated at this epoch, so the chunk is
+    escalated all the same; only ``REFUSED`` (the fence turned it away) leaves it unescalated."""
+
+    RECORDED = "recorded"
+    ALREADY_RECORDED = "already_recorded"
+    REFUSED = "refused"
 
 
 class IReadChunkEscalationsRepository(Protocol):
@@ -64,10 +76,10 @@ class IWriteChunkEscalationsRepository(IReadChunkEscalationsRepository, Protocol
         at: datetime,
         cause: str,
         detail: str,
-    ) -> bool:
+    ) -> BounceEscalationOutcome:
         """Escalate a chunk whose bounce count crossed its node's cap (#64), atomically and
         idempotently. The hub lease and the escalation fact land in one transaction, guarded
         by the escalation's existence at this epoch. No transition is recorded: the chunk's
         held route and stuck node are untouched. Behind the write fence (``bzh:epoch-fencing``):
-        a terminal chunk or a stale ``epoch`` writes nothing. Returns True iff it wrote."""
+        a terminal chunk or a stale ``epoch`` writes nothing and is ``REFUSED``."""
         ...

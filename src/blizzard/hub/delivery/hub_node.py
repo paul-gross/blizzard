@@ -39,7 +39,7 @@ from blizzard.hub.domain.chunk.model import (
 )
 from blizzard.hub.domain.chunk.ports.artifacts import IWriteChunkArtifactsRepository
 from blizzard.hub.domain.chunk.ports.delivery import IWriteChunkDeliveryRepository
-from blizzard.hub.domain.chunk.ports.escalations import IWriteChunkEscalationsRepository
+from blizzard.hub.domain.chunk.ports.escalations import BounceEscalationOutcome, IWriteChunkEscalationsRepository
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.hub_exec import IWriteChunkHubExecRepository
@@ -112,7 +112,8 @@ BOUNCE_OUTPUT_TAIL_CHARS = 2000
 @domain_model
 @dataclass(frozen=True)
 class FailedStep:
-    """The ``run:`` step a delivery bounce is attributed to: what ran, how it exited, and where its full log lives."""
+    """The ``run:`` step a delivery bounce is attributed to — only ever one that exited non-zero:
+    what ran, how it exited, and where its full log lives."""
 
     name: str
     exit_code: int
@@ -187,6 +188,17 @@ class BounceEnvelope:
             },
             ensure_ascii=False,
         )
+
+
+def _escalation_detail(crossed: str, outcome: BounceEscalationOutcome) -> str:
+    """A bounce-cap crossing's run detail: an escalation already recorded at this epoch reads as escalated."""
+    match outcome:
+        case BounceEscalationOutcome.RECORDED:
+            return f"{crossed}, escalated"
+        case BounceEscalationOutcome.ALREADY_RECORDED:
+            return f"{crossed}, already escalated"
+        case BounceEscalationOutcome.REFUSED:
+            return f"{crossed}, escalation not recorded (chunk moved on)"
 
 
 @domain_model
@@ -431,9 +443,9 @@ class PrintedChoice:
     def of(cls, stdout: str, known_names: frozenset[str]) -> PrintedChoice:
         """The last non-blank stdout line, iff it names one of the node's authored choices
         (#65's outcome-mapping vocabulary) or the machinery-reserved ``pending`` outcome
-        (#66), recognized regardless of whether the node authors a matching choice — like
-        ``success``/``failure``, it is never an authored edge (``success``/``failure`` are
-        reserved names whose edges a node authors)."""
+        (#66), recognized regardless of whether the node authors a matching choice. Only
+        ``pending`` is never an authored edge; ``success``/``failure`` are reserved names
+        whose edges a node authors."""
         lines = [line.strip() for line in stdout.splitlines() if line.strip()]
         if not lines:
             return cls(None)
@@ -670,7 +682,7 @@ class HubNodeExecutor:
 
             choice_names = frozenset(c.name for c in node.choices)
             chosen: str | None = None
-            last_step: FailedStep | None = None
+            failed_step: FailedStep | None = None
             for index, step in enumerate(node.run or [_NoopStep()], start=1):
                 if step.produces and self._artifacts.has_hub_artifact(
                     chunk.chunk_id, node_id=node.node_id, epoch=epoch, name=step.produces
@@ -688,13 +700,13 @@ class HubNodeExecutor:
                     content=f"$ {step.command}\n[exit {result.exit_code}]\n{result.stdout}{result.stderr}",
                     at=self._clock.now(),
                 )
-                last_step = FailedStep(
-                    name=step.name or step.produces or str(index),
-                    exit_code=result.exit_code,
-                    output=f"{result.stdout}{result.stderr}",
-                    log_key=self._log_name(index, step.name, step.produces),
-                )
                 if result.exit_code != 0:
+                    failed_step = FailedStep(
+                        name=step.name or step.produces or str(index),
+                        exit_code=result.exit_code,
+                        output=f"{result.stdout}{result.stderr}",
+                        log_key=self._log_name(index, step.name, step.produces),
+                    )
                     chosen = PrintedChoice.of(result.stdout, choice_names).name or HUB_DEFAULT_FAILURE_CHOICE
                     break
                 printed = PrintedChoice.of(result.stdout, choice_names).name
@@ -730,7 +742,7 @@ class HubNodeExecutor:
                 )
 
             commits: list[dict[str, str]] = json.loads(env[ENV_GIT_COMMITS])
-            return self._route(chunk, graph, node, epoch=epoch, choice=chosen, commits=commits, step=last_step)
+            return self._route(chunk, graph, node, epoch=epoch, choice=chosen, commits=commits, step=failed_step)
         finally:
             self._marker_authority.revoke(chunk.chunk_id, node_id=node.node_id, epoch=epoch)
 
@@ -856,11 +868,7 @@ class HubNodeExecutor:
                 outcome_choice=HUB_DEFAULT_FAILURE_CHOICE,
                 to_node_name="",
                 wrote_transition=False,
-                detail=(
-                    f"poll_timeout exceeded — {crossed}, escalated"
-                    if escalated
-                    else f"poll_timeout exceeded — {crossed}, escalation not recorded (chunk moved on)"
-                ),
+                detail=f"poll_timeout exceeded — {_escalation_detail(crossed, escalated)}",
             )
         artifact = StoredArtifact(
             kind=ArtifactKind.ASSET,
@@ -981,11 +989,7 @@ class HubNodeExecutor:
                         outcome_choice=choice,
                         to_node_name="",
                         wrote_transition=False,
-                        detail=(
-                            f"{crossed}, escalated"
-                            if escalated
-                            else f"{crossed}, escalation not recorded (chunk moved on)"
-                        ),
+                        detail=_escalation_detail(crossed, escalated),
                     )
                 envelope_artifact = StoredArtifact(
                     kind=ArtifactKind.ASSET,

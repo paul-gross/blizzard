@@ -1723,6 +1723,29 @@ def test_poll_timeout_routes_the_failure_edge_via_the_kickback_path(tmp_path: Pa
 
 
 @pytest.mark.component
+@pytest.mark.parametrize("landed", [False, True], ids=["unlanded", "landed"])
+def test_a_poll_timeout_envelope_lists_a_seeded_commit_until_its_repo_lands(tmp_path: Path, landed: bool) -> None:
+    runner = FakeHubCommandRunner()
+    runner.arm("check-ci", CommandResult(exit_code=0, stdout="pending", stderr=""))
+    hub = build_hub(tmp_path, hub_command_runner=runner, hub_workdir=FakeHubWorkdir())
+    chunk_id, build_node_id, graph = _to_poll_merge_node(hub, {"source": "default", "ref": "poll-commit"})
+    _submit_build_pass_with_commit(hub, chunk_id, build_node_id, 1, repo="acme/widget")
+    merge_node = graph.node_by_name("merge")
+    assert merge_node is not None
+    if landed:
+        assert hub.services.hub_node.record_marker(
+            chunk_id, node_id=merge_node.node_id, node_name="merge", epoch=1, name="merged/acme/widget", content="sha"
+        )
+
+    hub.clock.advance(timedelta(seconds=91))
+    hub.client.post(f"/api/fleet/chunks/{chunk_id}/hub-advance")
+
+    (bounce,) = hub.client.get(f"/api/chunks/{chunk_id}").json()["bounces"]
+    unlanded = [u["repo"] for u in json.loads(bounce["envelope"])["unlanded"]]
+    assert unlanded == ([] if landed else ["acme/widget"])
+
+
+@pytest.mark.component
 def test_poll_timeout_escalates_once_the_bounce_cap_is_crossed(tmp_path: Path) -> None:
     """Repeated poll-timeouts are bounces (#64): crossing ``bounce_cap`` escalates
     ``needs_human`` instead of routing back, exactly as a repeated conflict would."""

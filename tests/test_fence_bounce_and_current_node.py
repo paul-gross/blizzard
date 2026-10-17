@@ -19,6 +19,7 @@ from sqlalchemy import func
 
 from blizzard.hub.delivery.command_runner import CommandResult
 from blizzard.hub.domain.chunk.model import DecisionChoice
+from blizzard.hub.domain.chunk.ports.escalations import BounceEscalationOutcome
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_escalations_store import ChunkEscalationsStore
@@ -116,6 +117,29 @@ def test_a_bounce_cap_escalation_is_refused_behind_a_restart_or_stop(
     assert "escalation not recorded" in advanced["detail"], advanced
     assert _count(hub, s.escalations, chunk_id) == 0
     assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] != "needs_human"
+
+
+def test_a_rerun_over_an_already_recorded_bounce_escalation_reports_escalated(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An earlier attempt recorded the escalation at this epoch; the re-run's own attempt finds it."""
+    hub, chunk_id = _bounce_capped_chunk(tmp_path)
+    real = ChunkEscalationsStore.record_bounce_escalation
+    outcomes: list[BounceEscalationOutcome] = []
+
+    def _twice(self, *args, **kwargs):  # type: ignore[no-untyped-def]
+        outcomes.append(real(self, *args, **kwargs))
+        outcomes.append(real(self, *args, **kwargs))
+        return outcomes[-1]
+
+    monkeypatch.setattr(ChunkEscalationsStore, "record_bounce_escalation", _twice)
+
+    advanced = hub.client.post(f"/api/fleet/chunks/{chunk_id}/hub-advance").json()
+
+    assert outcomes == [BounceEscalationOutcome.RECORDED, BounceEscalationOutcome.ALREADY_RECORDED]
+    assert advanced["detail"].endswith(", already escalated"), advanced
+    assert "not recorded" not in advanced["detail"]
+    assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "needs_human"
 
 
 def test_a_racing_duplicate_completion_answers_as_a_replay_and_writes_nothing_twice(tmp_path: Path) -> None:
