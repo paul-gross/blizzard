@@ -6,9 +6,9 @@ from datetime import UTC, datetime
 
 import pytest
 
-from blizzard.runner.store.errors import RunnerStoreConnections
 from blizzard.runner.store.internal.ask_store import AskStore
 from blizzard.runner.store.schema import lease_closures
+from blizzard.runner.store.scoped import RunnerStoreConnections
 from tests.runner_fakes import (
     FIXTURE_RUNNER_ID,
     _create_all,

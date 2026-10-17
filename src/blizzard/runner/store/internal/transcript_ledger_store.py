@@ -13,7 +13,6 @@ from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.batching import id_batches
 from blizzard.runner.harness.identity import SessionReference
-from blizzard.runner.store.errors import RunnerStoreConnections
 from blizzard.runner.store.internal.base import (
     NO_NORMALIZER_VERSION,
     enqueue_transcript_final,
@@ -21,6 +20,7 @@ from blizzard.runner.store.internal.base import (
     lease_select,
 )
 from blizzard.runner.store.schema import leases, transcript_outbound_buffer, transcript_segments
+from blizzard.runner.store.scoped import RunnerStoreConnections
 from blizzard.runner.transcripts.ledger import (
     BufferedTranscriptDelta,
     IWriteTranscriptLedgerRepository,

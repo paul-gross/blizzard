@@ -9,8 +9,8 @@ from sqlalchemy import func
 
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.leases.operator_requests import IWriteAttachmentRepository
-from blizzard.runner.store.errors import RunnerStoreConnections
 from blizzard.runner.store.schema import attachments
+from blizzard.runner.store.scoped import RunnerStoreConnections
 
 _log = get_logger("blizzard.runner.store")
 

@@ -469,7 +469,7 @@ def test_hub_scoped_seam_check_refuses_a_member_taken_apart(tmp_path: Path, text
     assert bool(_hub_scoped_member_imports(src)) is taken_apart
 
 
-_RUNNER_SCOPED_NAMES = frozenset({"RUNNER_SCOPED_OPTION", "blizzard_runner_unscoped"})
+_RUNNER_SCOPED_NAMES = frozenset({"RUNNER_UNSCOPED_OPTION", "blizzard_runner_unscoped"})
 #: ``HostStores``' guard-exempt member, in its own module: the invariant audit.
 _HOST_EXEMPT_MEMBER_MODULES = frozenset({"host_runner_audit.py"})
 #: The single cross-kind write: a host-scoped sample and its runner-scoped outbound report in one transaction —
@@ -554,10 +554,10 @@ def _host_store_breaches(src_root: Path) -> list[str]:
 
 def _runner_seam_breaches(src_root: Path) -> list[str]:
     """Each place under ``src_root`` that names the runner-scoped exemption outside its own holders: the seam that
-    declares it (``src/blizzard/runner/store/errors.py``), the guard (``src/blizzard/runner/store/runner_guard.py``), ``HostStores``' exempt
+    declares it (``src/blizzard/runner/store/scoped.py``), the guard (``src/blizzard/runner/store/runner_guard.py``), ``HostStores``' exempt
     members' modules, and runner migrations — mirroring :func:`_tenant_seam_breaches`."""
     store = src_root / "runner" / "store"
-    holders = {store / "errors.py", store / "runner_guard.py"} | {
+    holders = {store / "scoped.py", store / "runner_guard.py"} | {
         store / "internal" / name for name in _HOST_EXEMPT_MEMBER_MODULES
     }
     breaches: list[str] = []
@@ -607,7 +607,7 @@ def _plant_host_store(tmp_path: Path, rel: str, text: str) -> list[str]:
             "runner/store/internal/host_external_usage_store.py",
             "def prune_external_usage_samples(self):\n    return outbound_buffer.delete()\n",
         ),
-        ("tools/invariants.py", "from blizzard.runner.store.errors import RUNNER_SCOPED_OPTION\n"),
+        ("tools/invariants.py", "from blizzard.runner.store.scoped import RUNNER_UNSCOPED_OPTION\n"),
         ("runner/store/internal/pause_store.py", 'OPTIONS = {"blizzard_runner_unscoped": True}\n'),
         (
             "runner/store/internal/identity_store.py",
@@ -615,9 +615,9 @@ def _plant_host_store(tmp_path: Path, rel: str, text: str) -> list[str]:
         ),
         (
             "runner/store/internal/host_daemon_liveness_store.py",
-            "conn.execution_options(**{RUNNER_SCOPED_OPTION: 1})\n",
+            "conn.execution_options(**{RUNNER_UNSCOPED_OPTION: 1})\n",
         ),
-        ("runner/composition.py", "from blizzard.runner.store.errors import RUNNER_SCOPED_OPTION\n"),
+        ("runner/composition.py", "from blizzard.runner.store.scoped import RUNNER_UNSCOPED_OPTION\n"),
     ],
 )
 def test_host_store_check_catches_every_breach(tmp_path: Path, rel: str, text: str) -> None:
@@ -634,14 +634,14 @@ def test_host_store_check_catches_every_breach(tmp_path: Path, rel: str, text: s
             "from blizzard.runner.store.schema import outbound_buffer\n"
             "def record_external_usage_attempt(self):\n    return outbound_buffer.insert()\n",
         ),
-        ("runner/store/internal/host_runner_audit.py", "OPTIONS = {RUNNER_SCOPED_OPTION: True}\nleases\n"),
+        ("runner/store/internal/host_runner_audit.py", "OPTIONS = {RUNNER_UNSCOPED_OPTION: True}\nleases\n"),
         (
             "runner/store/internal/host_runner_audit.py",
-            "from blizzard.runner.store.errors import RUNNER_SCOPED_OPTION\n",
+            "from blizzard.runner.store.scoped import RUNNER_UNSCOPED_OPTION\n",
         ),
-        ("runner/store/runner_guard.py", "from blizzard.runner.store.errors import RUNNER_SCOPED_OPTION\n"),
-        ("runner/store/errors.py", 'RUNNER_SCOPED_OPTION = "blizzard_runner_unscoped"\n'),
-        ("runner/store/migrations/versions/x.py", "from blizzard.runner.store.errors import RUNNER_SCOPED_OPTION\n"),
+        ("runner/store/runner_guard.py", "from blizzard.runner.store.scoped import RUNNER_UNSCOPED_OPTION\n"),
+        ("runner/store/scoped.py", 'RUNNER_UNSCOPED_OPTION = "blizzard_runner_unscoped"\n'),
+        ("runner/store/migrations/versions/x.py", "from blizzard.runner.store.scoped import RUNNER_UNSCOPED_OPTION\n"),
     ],
 )
 def test_host_store_check_admits_its_own_doors(tmp_path: Path, rel: str, text: str) -> None:
@@ -796,7 +796,7 @@ def test_record_event_is_called_only_through_event_log_service() -> None:
     assert not violations, f"M — record_event must be called only from EventLogService: {violations}"
 
 
-_RUNNER_STORE_CONNECTIONS_FILE = _RUNNER_STORE_DIR / "errors.py"
+_RUNNER_STORE_CONNECTIONS_FILE = _RUNNER_STORE_DIR / "scoped.py"
 
 
 def test_runner_acquires_no_connection_outside_the_store_seam() -> None:
@@ -838,7 +838,7 @@ def test_no_protocol_is_declared_under_runner_store() -> None:
 
 _RUNNER_STORE_INTERNAL_DIR = _RUNNER_STORE_DIR / "internal"
 _RUNNER_STORE_SCHEMA_FILE = _RUNNER_STORE_DIR / "schema.py"
-_RUNNER_STORE_ERRORS_FILE = _RUNNER_STORE_DIR / "errors.py"
+_RUNNER_STORE_SCOPED_FILE = _RUNNER_STORE_DIR / "scoped.py"
 _RUNNER_STORE_GUARD_FILE = _RUNNER_STORE_DIR / "runner_guard.py"
 _RUNNER_STORE_MIGRATIONS_DIR = _RUNNER_STORE_DIR / "migrations"
 _RUNNER_COMPOSITION_FILE = _RUNNER_DIR / "composition.py"
@@ -885,7 +885,7 @@ def test_sqlalchemy_is_imported_only_from_the_store_seam() -> None:
     for path in _production_files(_RUNNER_DIR):
         if (
             path.is_relative_to(_RUNNER_STORE_INTERNAL_DIR)
-            or path in (_RUNNER_STORE_SCHEMA_FILE, _RUNNER_STORE_ERRORS_FILE, _RUNNER_STORE_GUARD_FILE)
+            or path in (_RUNNER_STORE_SCHEMA_FILE, _RUNNER_STORE_SCOPED_FILE, _RUNNER_STORE_GUARD_FILE)
             or path.is_relative_to(_RUNNER_STORE_MIGRATIONS_DIR)
         ):
             continue

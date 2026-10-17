@@ -3,10 +3,10 @@ without naming its runner.
 
 It is the key-scoping core's walker (:class:`~blizzard.foundation.store.statement_guard.KeyedStatementGuard`) over
 ``src/blizzard/runner/store/schema.py``'s metadata, configured for ``runner_id``
-(:data:`~blizzard.runner.store.errors.RUNNER_SCOPING`): every compiled ``Select``, ``Update`` and ``Delete``, nested
+(:data:`~blizzard.runner.store.scoped.RUNNER_SCOPING`): every compiled ``Select``, ``Update`` and ``Delete``, nested
 ones included, must scope each runner-scoped table it renders by a ``runner_id`` equality, and every ``Insert`` into
 one must name ``runner_id``. Host-scoped tables carry no ``runner_id`` and pass. A statement carrying
-:data:`~blizzard.runner.store.errors.RUNNER_SCOPED_OPTION`, on itself or on its connection or engine, is deliberately
+:data:`~blizzard.runner.store.scoped.RUNNER_UNSCOPED_OPTION`, on itself or on its connection or engine, is deliberately
 unscoped and passes unwalked. Raw SQL is not walked, and a migration's frozen ``sa.table()`` constructs are other
 objects, so they pass.
 
@@ -25,7 +25,7 @@ from sqlalchemy.engine import Connection
 from blizzard.foundation.store.key_scoping import UnscopedKeyedStatement
 from blizzard.foundation.store.statement_guard import KeyedStatementGuard
 from blizzard.runner.store import schema
-from blizzard.runner.store.errors import RUNNER_SCOPED_OPTION, RUNNER_SCOPING
+from blizzard.runner.store.scoped import RUNNER_SCOPING, RUNNER_UNSCOPED_OPTION
 
 #: The environment variable that switches the runner's guard on, set to ``1``. A subprocess inherits it.
 GUARD_ENVIRONMENT_VARIABLE = "BLIZZARD_RUNNER_GUARD"
@@ -37,7 +37,7 @@ class UnscopedRunnerStatement(UnscopedKeyedStatement):
 
 #: The runner store's guard over ``schema.metadata``.
 RUNNER_GUARD = KeyedStatementGuard(
-    schema.metadata, RUNNER_SCOPING, exempt_option=RUNNER_SCOPED_OPTION, unscoped=UnscopedRunnerStatement
+    schema.metadata, RUNNER_SCOPING, exempt_option=RUNNER_UNSCOPED_OPTION, unscoped=UnscopedRunnerStatement
 )
 
 

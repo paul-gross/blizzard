@@ -9,8 +9,8 @@ from sqlalchemy import Connection, select
 
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.hub.host_identity import HostIdentity, HostIdentityAlreadyRecorded, IWriteHostIdentityRepository
-from blizzard.runner.store.errors import RunnerStoreConnections
 from blizzard.runner.store.schema import host_identity
+from blizzard.runner.store.scoped import RunnerStoreConnections
 
 _log = get_logger("blizzard.runner.store")
 

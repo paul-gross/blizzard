@@ -6,8 +6,8 @@ from datetime import datetime
 
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.auth.tokens import IWriteTokenRepository
-from blizzard.runner.store.errors import RunnerStoreConnections
 from blizzard.runner.store.schema import lease_tokens, route_tokens
+from blizzard.runner.store.scoped import RunnerStoreConnections
 
 _log = get_logger("blizzard.runner.store")
 

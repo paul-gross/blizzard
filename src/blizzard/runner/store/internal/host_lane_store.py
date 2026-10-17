@@ -12,8 +12,8 @@ from datetime import datetime
 from sqlalchemy import delete, func, select, update
 
 from blizzard.foundation.logging import get_logger
-from blizzard.runner.store.errors import RunnerStoreConnections
 from blizzard.runner.store.schema import external_usage_samples, host_high_water_seen, host_outbound_buffer
+from blizzard.runner.store.scoped import RunnerStoreConnections
 from blizzard.runner.usage.repository import HostBufferedFact, IWriteHostLaneRepository
 
 _log = get_logger("blizzard.runner.store")

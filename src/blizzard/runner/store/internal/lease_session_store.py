@@ -16,7 +16,6 @@ from blizzard.runner.harness.fingerprint import PreambleFingerprint
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.leases.model import Lease, PoolHead
 from blizzard.runner.leases.session import IWriteLeaseSessionRepository
-from blizzard.runner.store.errors import RunnerStoreConnections
 from blizzard.runner.store.internal.base import lease_select, row_to_lease
 from blizzard.runner.store.schema import (
     lease_closures,
@@ -27,6 +26,7 @@ from blizzard.runner.store.schema import (
     session_preamble_facts,
     usage_facts,
 )
+from blizzard.runner.store.scoped import RunnerStoreConnections
 
 _log = get_logger("blizzard.runner.store")
 

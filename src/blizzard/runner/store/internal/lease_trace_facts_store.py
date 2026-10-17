@@ -19,7 +19,6 @@ from sqlalchemy import Connection, Row, and_, func, or_
 from blizzard.foundation.event_log import EventLogKind
 from blizzard.foundation.roles import adapter_model
 from blizzard.foundation.store.batching import id_batches
-from blizzard.runner.store.errors import RunnerStoreConnections
 from blizzard.runner.store.internal.base import decode_work_refs, insert_outbox_row
 from blizzard.runner.store.schema import (
     check_results,
@@ -45,6 +44,7 @@ from blizzard.runner.store.schema import (
     trace_export_latch,
     usage_facts,
 )
+from blizzard.runner.store.scoped import RunnerStoreConnections
 from blizzard.runner.tracing.cursor import LeaseCursorKey
 from blizzard.runner.tracing.facts import (
     BoundaryFact,

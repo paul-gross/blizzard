@@ -77,7 +77,7 @@ from blizzard.runner.lifecycle.host_tick import HostTick
 from blizzard.runner.listeners import Listeners
 from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
 from blizzard.runner.runtime import migration_runner
-from blizzard.runner.store.errors import RunnerStoreConnections, RunnerStoreErrorFactory
+from blizzard.runner.store.errors import RunnerStoreErrorFactory
 from blizzard.runner.store.internal.ask_store import AskStore
 from blizzard.runner.store.internal.attachment_store import AttachmentStore
 from blizzard.runner.store.internal.check_store import CheckStore
@@ -113,6 +113,7 @@ from blizzard.runner.store.internal.token_store import TokenStore
 from blizzard.runner.store.internal.transcript_ledger_store import TranscriptLedgerStore
 from blizzard.runner.store.internal.usage_store import UsageStore
 from blizzard.runner.store.runner_guard import install_runner_guard
+from blizzard.runner.store.scoped import RunnerStoreConnections
 from blizzard.runner.stores import HostReadStores, HostStores, IRunnerAudit, RunnerReadStores, RunnerStores
 from blizzard.runner.subscriptions.internal.credential_renewer_factory import select_renewer
 from blizzard.runner.subscriptions.internal.subprocess_one_shot_process import SubprocessOneShotProcess

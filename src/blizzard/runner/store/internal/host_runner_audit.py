@@ -12,8 +12,8 @@ import sqlalchemy as sa
 from sqlalchemy import Connection
 
 from blizzard.runner.environments.repository import EnvBinding
-from blizzard.runner.store.errors import RUNNER_COLUMN, RUNNER_SCOPED_OPTION, RunnerStoreConnections
 from blizzard.runner.store.schema import binding_releases, env_bindings, runner_identity
+from blizzard.runner.store.scoped import RUNNER_COLUMN, RUNNER_UNSCOPED_OPTION, RunnerStoreConnections
 
 
 class RunnerAudit:
@@ -24,7 +24,7 @@ class RunnerAudit:
 
     def connect(self) -> Connection:
         """A connection every statement on which is exempt from the runner guard; close it (``with``) when done."""
-        return self._store.connect().execution_options(**{RUNNER_SCOPED_OPTION: True})
+        return self._store.connect().execution_options(**{RUNNER_UNSCOPED_OPTION: True})
 
     def named_runners(self) -> tuple[str, ...]:
         """The ids of the runners the store's identity rows name, oldest first."""

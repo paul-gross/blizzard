@@ -6,9 +6,9 @@ from datetime import datetime
 
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.leases.operator_requests import IWriteRequeueRepository
-from blizzard.runner.store.errors import RunnerStoreConnections
 from blizzard.runner.store.internal.base import Unsuperseded
 from blizzard.runner.store.schema import leases, requeues
+from blizzard.runner.store.scoped import RunnerStoreConnections
 
 _log = get_logger("blizzard.runner.store")
 

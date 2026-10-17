@@ -12,9 +12,9 @@ from blizzard.runner.hub.outbound_buffer import (
     IWriteOutboundRepository,
     OutboundFactEntry,
 )
-from blizzard.runner.store.errors import RunnerStoreConnections
 from blizzard.runner.store.internal.base import insert_outbox_row
 from blizzard.runner.store.schema import outbound_buffer
+from blizzard.runner.store.scoped import RunnerStoreConnections
 
 # See IWriteOutboundRepository.prune_outbound's own docstring for the retention contract.
 _OUTBOUND_RETENTION_WINDOW = timedelta(days=7)

@@ -7,8 +7,8 @@ from datetime import datetime
 
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.hub.served_projects import IWriteServedProjectsRepository, ServedProject, ServedProjectsAnswer
-from blizzard.runner.store.errors import RunnerStoreConnections
 from blizzard.runner.store.schema import hub_served_projects, runner_identity
+from blizzard.runner.store.scoped import RunnerStoreConnections
 
 _log = get_logger("blizzard.runner.store")
 

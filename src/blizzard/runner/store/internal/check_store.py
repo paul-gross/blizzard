@@ -8,8 +8,8 @@ from sqlalchemy import and_
 
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.lifecycle.judgement.checks import ExecutedCheck, IWriteCheckRepository
-from blizzard.runner.store.errors import RunnerStoreConnections
 from blizzard.runner.store.schema import check_results, checks_ran, nudge_facts
+from blizzard.runner.store.scoped import RunnerStoreConnections
 
 _log = get_logger("blizzard.runner.store")
 

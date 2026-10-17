@@ -56,7 +56,8 @@ from blizzard.runner.lifecycle.judgement.checks import ExecutedCheck, IWriteChec
 from blizzard.runner.lifecycle.judgement.git_commit_declaration import IWriteGitCommitDeclarationRepository
 from blizzard.runner.lifecycle.takeover import IWriteTakeoverRepository
 from blizzard.runner.store import schema
-from blizzard.runner.store.errors import RUNNER_SCOPED_OPTION, RUNNER_SCOPING, RunnerStoreErrorFactory
+from blizzard.runner.store.errors import RunnerStoreErrorFactory
+from blizzard.runner.store.scoped import RUNNER_SCOPING, RUNNER_UNSCOPED_OPTION
 from blizzard.runner.throttle.pause import IWritePauseRepository
 from blizzard.runner.tracing.cursor import LeaseCursorKey
 from blizzard.runner.tracing.repository import IWriteLeaseTraces, LeaseTraceCheckpoint
@@ -80,7 +81,7 @@ RUNNER_B = "rn_b"
 #: Columns a runner-scoped table holds unique (or that name such a key), renamed in B's copy so it can sit beside A's.
 _RENAMED_KEYS = frozenset({"lease_id", "segment_id", "takeover_id", "supersedes"})
 _RUNNER_TABLES = [table for table in schema.metadata.sorted_tables if RUNNER_SCOPING.is_keyed(table)]
-_UNSCOPED = {RUNNER_SCOPED_OPTION: True}
+_UNSCOPED = {RUNNER_UNSCOPED_OPTION: True}
 
 
 def _b_row(table: sa.Table, row: dict[str, Any]) -> dict[str, Any]:

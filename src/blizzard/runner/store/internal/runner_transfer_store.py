@@ -14,7 +14,6 @@ from sqlalchemy import CursorResult, Table, inspect
 
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.store import schema
-from blizzard.runner.store.errors import RUNNER_COLUMN, RUNNER_SCOPING, RunnerStoreConnections
 from blizzard.runner.store.internal.base import CARRIED_OUTBOX_TABLES, carry_outbox_rows
 from blizzard.runner.store.internal.row_transfer import (
     WORKSPACE_COLUMN,
@@ -25,6 +24,7 @@ from blizzard.runner.store.internal.row_transfer import (
     source_rows,
     surrogate_key,
 )
+from blizzard.runner.store.scoped import RUNNER_COLUMN, RUNNER_SCOPING, RunnerStoreConnections
 from blizzard.runner.transfer.rows import (
     HostIngest,
     IRunnerRowRemoval,

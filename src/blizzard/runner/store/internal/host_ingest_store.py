@@ -14,7 +14,6 @@ from sqlalchemy import Connection, Table, and_, select
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import UtcDateTime
 from blizzard.runner.store import schema
-from blizzard.runner.store.errors import RunnerStoreConnections
 from blizzard.runner.store.internal.row_transfer import (
     WORKSPACE_COLUMN,
     TransferHandle,
@@ -25,6 +24,7 @@ from blizzard.runner.store.internal.row_transfer import (
     surrogate_key,
 )
 from blizzard.runner.store.schema import host_ingests
+from blizzard.runner.store.scoped import RunnerStoreConnections
 from blizzard.runner.transfer.rows import (
     HostIngest,
     IRunnerTransferHandle,

@@ -7,8 +7,8 @@ from datetime import datetime
 from sqlalchemy import and_
 
 from blizzard.foundation.logging import get_logger
-from blizzard.runner.store.errors import RunnerStoreConnections
 from blizzard.runner.store.schema import invocation_boundaries, invocation_boundary_advances
+from blizzard.runner.store.scoped import RunnerStoreConnections
 from blizzard.runner.transcripts.invocation_boundaries import (
     InvocationBoundary,
     InvocationBoundaryKind,

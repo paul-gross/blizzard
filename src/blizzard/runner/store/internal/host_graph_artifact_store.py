@@ -9,8 +9,8 @@ from sqlalchemy import select
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.lifecycle.judgement.artifacts import IWriteGraphArtifactRepository, PinnedGraphArtifact
-from blizzard.runner.store.errors import RunnerStoreConnections
 from blizzard.runner.store.schema import graph_artifacts
+from blizzard.runner.store.scoped import RunnerStoreConnections
 
 _log = get_logger("blizzard.runner.store")
 

@@ -12,7 +12,6 @@ import sqlalchemy as sa
 from sqlalchemy import Connection, func
 
 from blizzard.foundation.logging import get_logger
-from blizzard.runner.store.errors import RunnerStoreConnections
 from blizzard.runner.store.internal.base import insert_outbox_row, open_pause_park, pause_parked_lease_ids
 from blizzard.runner.store.schema import (
     hub_control,
@@ -22,6 +21,7 @@ from blizzard.runner.store.schema import (
     pause_parks,
     runner_identity,
 )
+from blizzard.runner.store.scoped import RunnerStoreConnections
 from blizzard.runner.throttle.pause import ILockedBrakes, IWritePauseRepository, LocalBrake, PausePark
 
 _log = get_logger("blizzard.runner.store")

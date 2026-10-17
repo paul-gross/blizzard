@@ -11,9 +11,9 @@ from sqlalchemy import Select
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.leases.closure import ESCALATION_REASONS, cause_of
 from blizzard.runner.leases.escalations import IWriteEscalationRepository, ParkedEscalation
-from blizzard.runner.store.errors import RunnerStoreConnections
 from blizzard.runner.store.internal.base import LIVE_ESCALATION, UNRESOLVED_ESCALATION
 from blizzard.runner.store.schema import escalation_closures, lease_closures, lease_context, lease_spawns, leases
+from blizzard.runner.store.scoped import RunnerStoreConnections
 
 _log = get_logger("blizzard.runner.store")
 
