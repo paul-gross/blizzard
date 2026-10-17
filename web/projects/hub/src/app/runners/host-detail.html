@@ -1,5 +1,11 @@
 <div class="title" data-testid="fleet-detail-title">
-  <fleet-kit-beacon class="dot" [active]="detail().card.online || detail().card.connection === connection.OFFLINE" [tone]="detail().card.online ? 'green' : 'red'" [blink]="detail().card.online ? 'pulse' : 'step'" aria-hidden="true" />
+  <fleet-kit-beacon
+    class="dot"
+    aria-hidden="true"
+    [active]="detail().card.online || detail().card.connection === connection.OFFLINE"
+    [tone]="detail().card.online ? 'green' : 'red'"
+    [blink]="detail().card.online ? 'pulse' : 'step'"
+  />
   <h2 class="name" data-testid="fleet-detail-name">{{ detail().card.hostName }}</h2>
   <span class="ref" data-testid="fleet-detail-ref">{{ detail().ref }}</span>
   <fleet-kit-badge data-testid="fleet-detail-state" [tone]="detail().card.online ? 'running' : 'idle'" variant="soft">{{

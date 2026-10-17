@@ -445,7 +445,7 @@ def test_board_browser_live_group_reorder_answer_and_pause(tmp_path: Path, chrom
                     "deselecting resized or shifted the board — the dock did not return to its track"
                 )
 
-                # --- Pause brake from the board: A stays ready while paused ------------
+                # --- Pause brake (set from the Fleet tab): A stays ready while paused ------------
                 expect(col_cards("ready")).to_have_count(1)  # A alone remains ready — the brake held
                 expect(page.get_by_test_id("runner")).to_have_attribute("data-hub-paused", "true")
 
@@ -453,7 +453,7 @@ def test_board_browser_live_group_reorder_answer_and_pause(tmp_path: Path, chrom
                 assert hub.get(f"/api/chunks/{chunk_a}").json()["status"] == "ready", "paused runner still claimed A"
                 expect(ready_card(chunk_a)).to_have_count(1)
 
-                # --- Resume from the board: the claim resumes -------------------------
+                # --- Resume from the Fleet tab: the claim resumes -------------------------
                 fleet_brake()  # Resume
                 expect(page.get_by_test_id("runner")).to_have_attribute("data-hub-paused", "false")
                 status = _tick_until(config, hub, chunk_a, fenced, {"running"}, 30.0)

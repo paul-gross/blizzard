@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 
-import { type ChunkStatus, KitBadge, KitButton, KitSlotBar, RunnerConnection, STATUS_TONE, SubscriptionPaceGroup, type Tone, KitBeacon } from 'fleet';
+import { type ChunkStatus, KitBadge, KitBeacon, KitButton, KitSlotBar, RunnerConnection, STATUS_TONE, SubscriptionPaceGroup, type Tone } from 'fleet';
 import { CapabilityBadgeGroup } from './capability-badge-group';
 import { GateBadgeGroup } from './gate-badge-group';
 import { localPauseHint, runnerSeenLabel, runnerToggleHint, type RunnerRow } from './runner-rows';
@@ -16,7 +16,7 @@ import { ServedProjectGroup } from './served-project-group';
 @Component({
   selector: 'app-fleet-runner-row',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitBeacon, CapabilityBadgeGroup, GateBadgeGroup, KitBadge, KitButton, KitSlotBar, ServedProjectGroup, SubscriptionPaceGroup],
+  imports: [CapabilityBadgeGroup, GateBadgeGroup, KitBadge, KitBeacon, KitButton, KitSlotBar, ServedProjectGroup, SubscriptionPaceGroup],
   templateUrl: './fleet-runner-row.html',
   styleUrl: './fleet-runner-row.css',
 })

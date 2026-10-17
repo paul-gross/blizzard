@@ -182,9 +182,9 @@ The writes require the `runner:retire` permission and the reads `fleet:view`.
 
 The board's runner panel is a glance: one fleet-wide environment strip, then one compact row per runner, with a link to
 the Fleet tab. It carries no host cards and no actions. The host cards, and the verbs below, live on the Fleet tab and
-the mobile Fleet screen. To an identity holding `runner:retire`, a host's card carries retire, revoke-token and enroll. Retire and revoke-token each ask for confirmation first. A retire the hub refuses
-shows the refusal and asks again before forcing it. Enroll shows the new token once. Releasing a runner back to standing
-alone is a CLI and API verb (`blizzard hub runner-host release`, `POST /api/hosts/{host_id}/releases`), not a button.
+the mobile Fleet screen. To an identity holding `runner:retire`, a host's card carries retire, revoke-token and
+enroll. Retire and revoke-token each ask for confirmation first. A retire the hub refuses shows the refusal and asks
+again before forcing it. Enroll shows the new token once. Releasing a runner back to standing alone is a CLI and API verb (`blizzard hub runner-host release`, `POST /api/hosts/{host_id}/releases`), not a button.
 
 On a desktop-width screen the Fleet tab lists the hosts, then the runners under no host, and shows the selected one
 beside the list. A host's detail carries the same retire, revoke-token and enroll in its title bar, with the same

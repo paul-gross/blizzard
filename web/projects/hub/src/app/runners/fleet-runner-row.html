@@ -11,7 +11,13 @@
     @if (row().connection === connection.NEVER_CONNECTED) {
       <span class="dot never" aria-hidden="true"></span>
     } @else {
-      <fleet-kit-beacon class="dot" [active]="row().online || row().connection === connection.OFFLINE" [tone]="row().online ? 'green' : 'red'" [blink]="row().online ? 'pulse' : 'step'" aria-hidden="true" />
+      <fleet-kit-beacon
+        class="dot"
+        aria-hidden="true"
+        [active]="row().online || row().connection === connection.OFFLINE"
+        [tone]="row().online ? 'green' : 'red'"
+        [blink]="row().online ? 'pulse' : 'step'"
+      />
     }
     {{ row().runner_name }}
   </span>
