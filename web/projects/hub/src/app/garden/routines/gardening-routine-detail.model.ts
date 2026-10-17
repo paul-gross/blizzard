@@ -164,6 +164,7 @@ export interface RoutinePanelParts {
   readonly overrideRetired: boolean | null;
   readonly recentRuns: readonly RecentRunVm[] | null;
   readonly recentRunsState: KitAsyncStateValue;
+  readonly measurementsState: KitAsyncStateValue;
 }
 
 /** The routine panel's view model — `null` with no routine selected. `renderedRetired`
@@ -188,6 +189,7 @@ export function routinePanelVm(routine: RoutineView | null, parts: RoutinePanelP
     renderedRetired: parts.overrideRetired ?? (routine.retired ?? false),
     recentRuns: parts.recentRuns,
     recentRunsState: parts.recentRunsState,
+    measurementsState: parts.measurementsState,
     runsLabel: routineRunsLabel(parts.recentRuns, parts.windowLabel),
   };
 }

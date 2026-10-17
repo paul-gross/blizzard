@@ -183,12 +183,19 @@ export class GardeningRoutineDetail {
     asyncState(this.runsQuery, (this.recentRuns()?.length ?? 0) === 0),
   );
 
+  /** The Activity panel's measurement section, gated on the sweeps read (`bzh:frontend-empty-state-gated`) — an
+   * unread read is loading, never "no measurement". */
+  private readonly measurementsState = computed<KitAsyncStateValue>(() =>
+    asyncState(this.sweepsQuery, this.measurements().length === 0),
+  );
+
   protected readonly panelVm = computed<RoutinePanelVm | null>(() =>
     routinePanelVm(this.selectedRoutine(), {
       blocked: this.blocked(),
       strategy: this.strategy(),
       trend: this.trendQuery.data(),
       measurements: this.measurements(),
+      measurementsState: this.measurementsState(),
       lastSwept: this.lastSwept(),
       windowLabel: this.window.label,
       relatedScopes: this.relatedScopes(),
@@ -253,7 +260,7 @@ export class GardeningRoutineDetail {
   }
 
   protected onRetireRoutine(name: string): void {
-    const routineId = this.routines().find((r) => r.name === name)?.routine_id;
+    const routineId = routineByName(name, this.routines())?.routine_id;
     if (routineId === undefined) return;
     this.lifecycleActionError.set(null);
     this.routineLifecycleMutation.mutate(
@@ -263,7 +270,7 @@ export class GardeningRoutineDetail {
   }
 
   protected onEnableRoutine(name: string): void {
-    const routineId = this.routines().find((r) => r.name === name)?.routine_id;
+    const routineId = routineByName(name, this.routines())?.routine_id;
     if (routineId === undefined) return;
     this.lifecycleActionError.set(null);
     this.routineLifecycleMutation.mutate(

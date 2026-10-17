@@ -29,7 +29,7 @@ export class ChunkRowView {
   /** The chunk's linked work items — empty when none are known. */
   readonly linkedItems = input<readonly runnerApi.WorkItemEntry[]>([]);
 
-  /** Emits this row's `chunk_id` on click/Enter/Space — same convention as `selectLease`. */
+  /** Emits this row's `chunk_id` on click/Enter/Space — same convention as the agent row's `selectChunk`. */
   readonly selectChunk = output<string>();
 
   protected onSelect(event?: Event): void {

@@ -27,7 +27,7 @@ import type { MachineChunkRow } from './app-panel.model';
  *   host's subscriptions are the host page's.
  *
  * Presentational only: it renders exactly the leases/chunks/selection it is
- * handed and emits `selectLease`/`selectChunk`; the derived-status fold and
+ * handed and emits `selectChunk`; the derived-status fold and
  * the selection state live in the container ({@link LocalPanel}). Color
  * resolves through the shared design tokens (`fleet` library,
  * design/tokens.css), never hard-coded hex.
@@ -90,11 +90,8 @@ export class LocalPanelLayout {
   /** The open escalation for the selected chunk, when one exists. */
   readonly selectedEscalation = input.required<runnerApi.EscalationView | null>();
 
-  /** Emitted with a lease id when the operator selects a lease row — the
+  /** Emitted with a chunk id when the operator selects a lease row or a chunk row — the
    * lease rail and the chunks list share one selection, so this drives both. */
-  readonly selectLease = output<string>();
-
-  /** Emitted with a chunk id when the operator selects a chunk row. */
   readonly selectChunk = output<string>();
 
   /** Emitted with the checkbox's new checked state when the operator toggles

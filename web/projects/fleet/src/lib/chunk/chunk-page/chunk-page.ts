@@ -17,7 +17,7 @@ import { type ChunkDetailTab, injectChunkDetailSelection } from './chunk-detail-
 import { ChunkGeneralTab } from './chunk-general-tab';
 import { ChunkNodeHistoryContainer } from './chunk-node-history-container';
 import { CHUNK_PAGE_DAEMON } from './chunk-page-daemon';
-import { chunkTabOptions, openEdgeIds, preDetailState } from './chunk-page.model';
+import { chunkTabOptions, type FocusRequest, nextFocus, openEdgeIds, preDetailState } from './chunk-page.model';
 import { ChunkPageHeader } from './chunk-page-header';
 import { ChunkPageShell } from './chunk-page-shell';
 import { LensLink } from '../../core/lens-link';
@@ -88,11 +88,7 @@ export class ChunkPage {
   /** The row to restore after its mobile-only detail view removes the focused
    * control. This is focus continuity, not selection state: the URL remains the
    * sole owner of the selected node, artifact, or transcript segment. */
-  private focusRequest:
-    | { kind: 'detail'; testid: string }
-    | { kind: 'list'; attribute: string; value: string }
-    | { kind: 'tab' }
-    | null = null;
+  private focusRequest: FocusRequest | null = null;
   private stepOrigin: string | null = null;
   private artifactOrigin: string | null = null;
   private transcriptOrigin: string | null = null;
@@ -145,14 +141,9 @@ export class ChunkPage {
    * never their own selection state. */
   protected onSelectStep(stepKey: string | null): void {
     if (this.mobile()) {
-      if (stepKey === null) {
-        this.focusRequest = this.stepOrigin === null
-          ? { kind: 'tab' }
-          : { kind: 'list', attribute: 'data-step-key', value: this.stepOrigin };
-      } else {
-        this.stepOrigin = stepKey;
-        this.focusRequest = { kind: 'detail', testid: 'node-history-back' };
-      }
+      const next = nextFocus(stepKey, this.stepOrigin, 'data-step-key', 'node-history-back');
+      this.focusRequest = next.request;
+      this.stepOrigin = next.origin;
     }
     this.selection.selectStep(stepKey);
   }
@@ -162,14 +153,9 @@ export class ChunkPage {
    * its own selection state. */
   protected onSelectArtifact(key: string | null): void {
     if (this.mobile()) {
-      if (key === null) {
-        this.focusRequest = this.artifactOrigin === null
-          ? { kind: 'tab' }
-          : { kind: 'list', attribute: 'data-artifact-key', value: this.artifactOrigin };
-      } else {
-        this.artifactOrigin = key;
-        this.focusRequest = { kind: 'detail', testid: 'artifacts-tab-back' };
-      }
+      const next = nextFocus(key, this.artifactOrigin, 'data-artifact-key', 'artifacts-tab-back');
+      this.focusRequest = next.request;
+      this.artifactOrigin = next.origin;
     }
     this.selection.selectArtifact(key);
   }
@@ -178,14 +164,9 @@ export class ChunkPage {
    * the selection's only home. */
   protected onSelectTranscriptSegment(segmentId: string | null): void {
     if (this.mobile()) {
-      if (segmentId === null) {
-        this.focusRequest = this.transcriptOrigin === null
-          ? { kind: 'tab' }
-          : { kind: 'list', attribute: 'data-segment-id', value: this.transcriptOrigin };
-      } else {
-        this.transcriptOrigin = segmentId;
-        this.focusRequest = { kind: 'detail', testid: 'transcript-segment-back' };
-      }
+      const next = nextFocus(segmentId, this.transcriptOrigin, 'data-segment-id', 'transcript-segment-back');
+      this.focusRequest = next.request;
+      this.transcriptOrigin = next.origin;
     }
     this.selection.selectTranscriptSegment(segmentId);
   }

@@ -84,13 +84,9 @@ export class LocalPanelMobile {
   /** The selected chunk's open escalation, when there is one. */
   readonly selectedEscalation = input<runnerApi.EscalationView | null>(null);
 
-  /** A chunk card tap — the container writes it to the URL, which opens the
-   * detail screen on the next render. */
+  /** A chunk card or agent row tap — the container writes the chunk to the URL, which opens the
+   * detail screen on the next render, the same shared selection the desktop rails have. */
   readonly selectChunk = output<string>();
-
-  /** An agent row tap — selects that lease's chunk, the same shared selection
-   * the desktop rails have. */
-  readonly selectLease = output<string>();
 
   /** The back affordance — the container clears the selection. */
   readonly closeDetail = output<void>();

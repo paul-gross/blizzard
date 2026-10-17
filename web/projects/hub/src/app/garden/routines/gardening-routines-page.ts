@@ -71,7 +71,7 @@ export class GardeningRoutinesPage {
   }
 
   protected readonly listRows = computed<readonly RoutineListRowVm[]>(() =>
-    routineListRows(this.routines(), this.graphs(), this.graphsQuery.isPending()),
+    routineListRows(this.routines(), this.graphs(), this.graphsQuery),
   );
 
   protected readonly listState = computed<KitAsyncStateValue>(() =>

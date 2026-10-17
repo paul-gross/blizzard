@@ -36,6 +36,7 @@ const VM: RoutinePanelVm = {
     { chunkId: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9', scopeSlug: 'blizzard', mode: 'delta', findings: 3, mintedAt: '2026-01-10T00:00:00Z' },
   ],
   recentRunsState: 'ready',
+  measurementsState: 'ready',
   runsLabel: '1 in the last 28 days',
 };
 
@@ -127,6 +128,24 @@ describe('FleetRoutinePanel', () => {
     await fixture.whenStable();
     expect(el.querySelector('[data-testid="gardening-routine-recent-runs-empty"]')?.textContent).toContain(
       'No runs in the last 28 days.',
+    );
+  });
+
+  it('reads loading, not "no measurement", until the sweeps read answers', async () => {
+    const fixture = await mount({});
+    const el = fixture.nativeElement as HTMLElement;
+
+    fixture.componentRef.setInput('vm', { ...VM, measurements: [], measurementsState: 'loading' });
+    await fixture.whenStable();
+    expect(el.querySelector('[data-testid="gardening-routine-measurements-loading"]')).toBeTruthy();
+    expect(el.querySelector('[data-testid="gardening-routine-measurements"]')?.textContent).not.toContain(
+      'No measurement recorded',
+    );
+
+    fixture.componentRef.setInput('vm', { ...VM, measurements: [], measurementsState: 'empty' });
+    await fixture.whenStable();
+    expect(el.querySelector('[data-testid="gardening-routine-measurements-empty"]')?.textContent).toContain(
+      'No measurement recorded in this window.',
     );
   });
 

@@ -21,7 +21,7 @@
               <app-agent-row
                 [agent]="lease"
                 [selected]="lease.chunk_id === selectedChunkId()"
-                (selectLease)="selectLease.emit($event)"
+                (selectChunk)="selectChunk.emit($event)"
               />
             }
           </div>

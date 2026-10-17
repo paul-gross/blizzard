@@ -114,6 +114,7 @@ const PARTS: RoutinePanelParts = {
   overrideRetired: null,
   recentRuns: null,
   recentRunsState: 'loading',
+  measurementsState: 'loading',
 };
 
 describe('routineByName', () => {
@@ -281,6 +282,7 @@ describe('routinePanelVm', () => {
       renderedRetired: false,
       recentRuns: null,
       recentRunsState: 'loading',
+      measurementsState: 'loading',
       runsLabel: null,
     });
   });

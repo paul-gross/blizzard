@@ -16,6 +16,7 @@ import {
   proposalClassChips,
   proposalListRows,
   proposalRoutineChips,
+  proposalSelectionTarget,
   waitingChipValue,
 } from './gardening-proposals-page.model';
 
@@ -179,27 +180,22 @@ export class GardeningProposalsPage {
    * filtered out.
    *
    * Converges in one step: the row it navigates to is by construction in the
-   * filtered set, so the next pass returns at the guard above. `replaceUrl: true`
+   * filtered set, so the next pass stays. `replaceUrl: true`
    * so a filter change never pushes a history entry the operator has to click back
    * through, and the filters ride along — they are why the navigation happened.
    */
   private reconcileSelection(): void {
-    if (this.proposalsQuery.isPending() || this.proposalsQuery.isError()) return;
-    const routed = this.proposalId();
-    const rows = this.filteredProposals();
-    if (routed !== null && rows.some((p) => p.proposal_id === routed)) return;
-    if (this.mobile()) {
-      if (routed === null) return;
-      void this.router.navigate(this.lens.link(['/gardening', 'proposals']), {
-        replaceUrl: true,
-        queryParamsHandling: 'preserve',
-      });
-      return;
-    }
-    const first = rows[0]?.proposal_id ?? null;
-    if (routed === null && first === null) return;
+    const target = proposalSelectionTarget(
+      !this.proposalsQuery.isPending() && !this.proposalsQuery.isError(),
+      this.proposalId(),
+      this.filteredProposals().map((p) => p.proposal_id),
+      this.mobile(),
+    );
+    if (target === null) return;
     void this.router.navigate(
-      this.lens.link(first === null ? ['/gardening', 'proposals'] : ['/gardening', 'proposals', first]),
+      this.lens.link(
+        target.proposalId === null ? ['/gardening', 'proposals'] : ['/gardening', 'proposals', target.proposalId],
+      ),
       { replaceUrl: true, queryParamsHandling: 'preserve' },
     );
   }

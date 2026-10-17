@@ -1,5 +1,5 @@
 import type { ChunkNeighborView } from '../../api/hub';
-import { chunkTabOptions, openEdgeIds, preDetailState } from './chunk-page.model';
+import { chunkTabOptions, nextFocus, openEdgeIds, preDetailState } from './chunk-page.model';
 
 describe('chunkTabOptions', () => {
   it('offers the Transcripts tab last when the identity may read transcripts', () => {
@@ -30,5 +30,28 @@ describe('openEdgeIds', () => {
 
   it('is empty for no edges', () => {
     expect(openEdgeIds([])).toEqual([]);
+  });
+});
+
+describe('nextFocus', () => {
+  it('focuses the detail back control and remembers the opened row', () => {
+    expect(nextFocus('s2', null, 'data-step-key', 'node-history-back')).toEqual({
+      request: { kind: 'detail', testid: 'node-history-back' },
+      origin: 's2',
+    });
+  });
+
+  it('returns to the row the detail was opened from', () => {
+    expect(nextFocus(null, 's2', 'data-step-key', 'node-history-back')).toEqual({
+      request: { kind: 'list', attribute: 'data-step-key', value: 's2' },
+      origin: 's2',
+    });
+  });
+
+  it('falls back to the tab when closing a detail that was deep-linked', () => {
+    expect(nextFocus(null, null, 'data-step-key', 'node-history-back')).toEqual({
+      request: { kind: 'tab' },
+      origin: null,
+    });
   });
 });
