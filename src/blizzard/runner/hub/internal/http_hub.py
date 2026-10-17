@@ -126,8 +126,6 @@ _TRANSCRIPT_PUSH_TIMEOUT_SECONDS = 5.0
 #: Caps a single ``chunk-statuses`` GET's ``chunk_id`` query-param count, bounding its URL length.
 _CHUNK_STATUSES_BATCH_LIMIT = 500
 
-#: The operator route adding a runner — the one call this module makes outside the fleet API.
-
 #: The hub-level route naming the tenants the operator may enter.
 _ME_API = "/api/me"
 
@@ -140,7 +138,6 @@ _HOST_API = f"{_FLEET_API}/host"
 #: The header an operator call names its tenant in, by id.
 TENANT_HEADER = "X-Blizzard-Tenant"
 
-#: The statuses an add is refused with, each a reason the caller acts on rather than retries.
 #: The statuses a host add is refused with, each a reason the caller acts on rather than retries.
 _HOST_ADD_REFUSALS: dict[int, HostAddRefusalReason] = {
     httpx.codes.UNAUTHORIZED: HostAddRefusalReason.SIGN_IN_REQUIRED,

@@ -707,6 +707,8 @@ def _stop_process_group(process: _ProcessHandle, grace_seconds: float = 0.5) -> 
     pid = process.pid
 
     def wait(grace: float) -> None:
+        # An interrupted caller still gets the group killed; only the grace running out is left to
+        # `terminate_group`, which reads it as "force the group".
         try:
             process.wait(timeout=grace)
         except subprocess.TimeoutExpired:

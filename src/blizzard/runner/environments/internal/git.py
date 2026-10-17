@@ -50,14 +50,15 @@ class SubprocessEnvGit:
         """Run ``git args`` and return its stdout; ``cwd`` is passed as ``-C``, or ``None`` for a call a remote
         answers without any local repository (``ls-remote <url>``)."""
         where = f" in {cwd}" if cwd is not None else ""
+        logged_cwd = str(cwd) if cwd is not None else None
         command = ["git", *(["-C", str(cwd)] if cwd is not None else []), *args]
         try:
             result = subprocess.run(command, capture_output=True, text=True, timeout=self._timeout)
         except subprocess.TimeoutExpired as exc:
-            _log.error("git command timed out", args=list(args), cwd=str(cwd), timeout=self._timeout)
+            _log.error("git command timed out", args=list(args), cwd=logged_cwd, timeout=self._timeout)
             raise EnvGitError(f"git {' '.join(args)} timed out{where} after {self._timeout}s") from exc
         if result.returncode != 0:
             detail = (result.stderr or result.stdout).strip()
-            _log.error("git command failed", args=list(args), cwd=str(cwd), detail=detail)
+            _log.error("git command failed", args=list(args), cwd=logged_cwd, detail=detail)
             raise EnvGitError(f"git {' '.join(args)} failed{where}: {detail}")
         return result.stdout
