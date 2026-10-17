@@ -33,7 +33,7 @@ _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 
 
 def _metadata(name: str) -> SecretMetadata:
-    return SecretMetadata(name=name, revision=1, replaced_at=_T0, replaced_by="op", created_at=_T0)
+    return SecretMetadata(name=name, revision=1, replaced_at=_T0, replaced_by="op", created_at=_T0, retired=False)
 
 
 def _sealed(name: str, key_id: str) -> SealedSecret:

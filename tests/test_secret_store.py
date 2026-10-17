@@ -127,14 +127,43 @@ def test_a_retired_secret_refuses_replace_and_reveal_until_enabled(world: _World
     world.authoring.retire_secret(record, OP)
     assert world.store.is_retired("gh")
     assert world.store.retired_names() == {"gh"}
+    retired = world.store.get("gh")
+    assert retired is not None
     with pytest.raises(SecretRetired):
-        world.authoring.replace_secret(record, "v2", OP)
+        world.authoring.replace_secret(retired, "v2", OP)
     with pytest.raises(SecretRetired):
         world.reader.reveal(SecretName.parse("gh"))
 
-    world.authoring.enable_secret(record, OP)
+    world.authoring.enable_secret(retired, OP)
     assert world.store.retired_names() == set()
     assert world.reader.reveal(SecretName.parse("gh")).expose() == "v1"
+
+
+def test_every_metadata_load_carries_the_retired_state(world: _World) -> None:
+    world.create("gh", "a")
+    world.create("npm", "b")
+    gh = world.store.get("gh")
+    assert gh is not None
+    assert gh.retired is False
+
+    world.authoring.retire_secret(gh, OP)
+
+    assert [r.retired for r in (world.store.get("gh"), world.store.get("npm")) if r is not None] == [True, False]
+    many = world.store.get_many(["gh", "npm"])
+    assert (many["gh"].retired, many["npm"].retired) == (True, False)
+    assert {r.name: r.retired for r in world.store.list_all()} == {"gh": True, "npm": False}
+
+
+def test_a_retire_then_enable_through_the_same_loaded_record_is_a_no_op_the_second_time(world: _World) -> None:
+    world.create("gh", "v1")
+    record = world.store.get("gh")
+    assert record is not None
+
+    assert world.authoring.retire_secret(record, OP) is True
+    reloaded = world.store.get("gh")
+    assert reloaded is not None
+    assert world.authoring.retire_secret(reloaded, OP) is False
+    assert world.authoring.enable_secret(reloaded, OP) is True
 
 
 def test_reveal_refuses_an_unknown_name(world: _World) -> None:

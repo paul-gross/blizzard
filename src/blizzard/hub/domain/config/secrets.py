@@ -128,13 +128,15 @@ class SecretValue:
 @domain_model
 @dataclass(frozen=True)
 class SecretMetadata:
-    """A secret's metadata — never its value or ciphertext."""
+    """A secret's metadata — never its value or ciphertext. ``retired`` is whether its newest
+    lifecycle fact reads retired, as of the load."""
 
     name: str
     revision: int
     replaced_at: datetime
     replaced_by: str
     created_at: datetime
+    retired: bool
 
 
 def require_revealable(name: str, *, retired: bool) -> None:

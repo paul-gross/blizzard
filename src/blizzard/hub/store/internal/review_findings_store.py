@@ -13,6 +13,7 @@ from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.garden.review.materialize import (
+    IReadReviewFindingsRepository,
     IWriteReviewFindingsRepository,
     ReviewFindingsOutcome,
     ReviewFindingsPlan,
@@ -138,4 +139,8 @@ class ReviewFindingsStore:
 
 
 def _conforms_review_findings_store(x: ReviewFindingsStore) -> IWriteReviewFindingsRepository:
+    return x
+
+
+def _conforms_review_findings_store_read(x: ReviewFindingsStore) -> IReadReviewFindingsRepository:
     return x

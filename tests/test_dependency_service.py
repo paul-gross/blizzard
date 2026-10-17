@@ -24,6 +24,7 @@ from blizzard.hub.domain.chunk.dependencies import (
     DependentNotEditable,
     NoStandingDependencyToRelease,
     PrerequisiteIsEphemeral,
+    PrerequisiteScope,
 )
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, DependencyEdge, RouteCreatedFact
 from blizzard.hub.domain.chunk.ports.dependencies import IWriteChunkDependenciesRepository
@@ -39,7 +40,7 @@ def _chunk(chunk_id: str) -> Chunk:
 
 
 _DEPENDENT = _chunk("chk_dependent")
-_PREREQUISITE = _chunk("chk_prereq")
+_PREREQUISITE = PrerequisiteScope("chk_prereq")
 
 
 @dataclass
@@ -265,12 +266,12 @@ def test_declare_is_refused_when_it_would_close_a_cycle_and_writes_nothing() -> 
     # Standing: A depends on B, B depends on C. Declaring "C depends on A" closes the cycle.
     repo = _FakeDependenciesRepo()
     service, _ = _service(repo)
-    service.declare(_chunk("chk_a"), _chunk("chk_b"), by="user:alice")
-    service.declare(_chunk("chk_b"), _chunk("chk_c"), by="user:alice")
+    service.declare(_chunk("chk_a"), PrerequisiteScope("chk_b"), by="user:alice")
+    service.declare(_chunk("chk_b"), PrerequisiteScope("chk_c"), by="user:alice")
     before = list(repo.standing)
 
     with pytest.raises(DependencyWouldCloseCycle) as exc_info:
-        service.declare(_chunk("chk_c"), _chunk("chk_a"), by="user:alice")
+        service.declare(_chunk("chk_c"), PrerequisiteScope("chk_a"), by="user:alice")
 
     assert exc_info.value.dependent_chunk_id == "chk_c"
     assert exc_info.value.prerequisite_chunk_id == "chk_a"
@@ -282,7 +283,7 @@ def test_declare_of_a_self_edge_is_refused_as_the_trivial_cycle_and_writes_nothi
     service, _ = _service(repo)
 
     with pytest.raises(DependencyWouldCloseCycle) as exc_info:
-        service.declare(_DEPENDENT, _DEPENDENT, by="user:alice")
+        service.declare(_DEPENDENT, PrerequisiteScope("chk_dependent"), by="user:alice")
 
     assert exc_info.value.dependent_chunk_id == "chk_dependent"
     assert exc_info.value.prerequisite_chunk_id == "chk_dependent"
@@ -318,7 +319,7 @@ def test_declare_onto_a_done_prerequisite_is_accepted_with_no_satisfaction_state
     repo = _FakeDependenciesRepo()
     service, facts_repo = _service(repo)
 
-    edge = service.declare(_DEPENDENT, _chunk("chk_prereq_done"), by="user:alice")
+    edge = service.declare(_DEPENDENT, PrerequisiteScope("chk_prereq_done"), by="user:alice")
 
     assert edge.dependent_chunk_id == "chk_dependent"
     assert edge.prerequisite_chunk_id == "chk_prereq_done"

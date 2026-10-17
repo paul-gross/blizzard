@@ -66,7 +66,7 @@ class GardenDeliveryRecorder:
             proposal_names, self._artifacts.latest_artifacts(chunk.chunk_id, proposal_names)
         )
         replay = delivery_replay_outcome(
-            recorded=self._materialize.already_delivered(chunk_id=chunk.chunk_id, node_id=node.node_id, epoch=epoch)
+            recorded=self._materialize.already_delivered(chunk=chunk, node=node, epoch=epoch)
         )
         if replay is not None:
             return replay

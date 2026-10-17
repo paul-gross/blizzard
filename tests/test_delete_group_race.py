@@ -21,6 +21,7 @@ from typing import cast
 
 import pytest
 
+from blizzard.hub.domain.chunk.dependencies import PrerequisiteScope
 from blizzard.hub.domain.chunk.ports.dependencies import IWriteChunkDependenciesRepository
 from tests.support import HubHarness, build_hub, ingest
 
@@ -46,7 +47,7 @@ def test_a_delete_blocks_while_a_fold_holds_the_shared_lock_mid_rewrite(tmp_path
     prerequisite = hub.services.chunks.record.get(prerequisite_id)
     assert dependent is not None
     assert prerequisite is not None
-    hub.services.dependencies.declare(dependent, prerequisite, by="user:alice")
+    hub.services.dependencies.declare(dependent, PrerequisiteScope(prerequisite.chunk_id), by="user:alice")
 
     entered_write = threading.Event()
     release_write = threading.Event()

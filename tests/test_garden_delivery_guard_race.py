@@ -17,6 +17,7 @@ from sqlalchemy import Engine
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store.engine import create_engine_from_url
+from blizzard.hub.domain.chunk.model import Chunk
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.garden.delivery.materialize import (
     DeliveryOutcome,
@@ -35,6 +36,7 @@ from blizzard.hub.domain.garden.findings.model import (
     FindingExitService,
 )
 from blizzard.hub.domain.garden.run_context import RunContext
+from blizzard.hub.domain.graph.model import Node
 from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.garden_delivery_store import GardenDeliveryStore
 from blizzard.hub.store.schema import artifacts, finding_facts
@@ -283,7 +285,7 @@ class _Materialize:
         self.outcomes = outcomes
         self.calls = 0
 
-    def already_delivered(self, *, chunk_id: str, node_id: str, epoch: int) -> bool:
+    def already_delivered(self, *, chunk: Chunk, node: Node, epoch: int) -> bool:
         return False
 
     def deliver(self, validated: ValidatedDelivery, **_: object) -> DeliveryOutcome:

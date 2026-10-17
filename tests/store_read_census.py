@@ -86,13 +86,25 @@ from blizzard.hub.domain.config.work_sources import (
     WorkSourceId,
     WorkSourceSlug,
 )
+from blizzard.hub.domain.garden.delivery.materialize import (
+    DeliveryPlan,
+    DeltaMaterialization,
+    IReadGardenDeliveryRepository,
+    NewFindingSet,
+)
 from blizzard.hub.domain.garden.findings.model import IReadFindingRepository, IReadFindingSetRepository
 from blizzard.hub.domain.garden.findings.trend import IReadGardenTrendRepository
 from blizzard.hub.domain.garden.proposals.closure import IReadGardenProposalClosureRepository
 from blizzard.hub.domain.garden.proposals.model import IReadGardenProposalRepository
 from blizzard.hub.domain.garden.proposals.resolution import resolve_proposal_findings
+from blizzard.hub.domain.garden.review.materialize import (
+    IReadReviewFindingsRepository,
+    NewReviewFinding,
+    NewReviewFindingFact,
+    ReviewFindingsPlan,
+)
 from blizzard.hub.domain.garden.routines import IReadRoutineRepository, IReadRoutineScopeRepository
-from blizzard.hub.domain.garden.run_context import IReadRunContextRepository
+from blizzard.hub.domain.garden.run_context import IReadRunContextRepository, RunContext
 from blizzard.hub.domain.garden.runs.history import IReadGardenRunRepository
 from blizzard.hub.domain.garden.runs.sweeps import IReadGardenSweepsRepository
 from blizzard.hub.domain.garden.scopes import IReadScopeRepository, ScopeSlug
@@ -140,6 +152,7 @@ from blizzard.hub.store.internal.config_revisions_store import ConfigRevisionsSt
 from blizzard.hub.store.internal.egress_store import EgressStore
 from blizzard.hub.store.internal.finding_store import FindingSetStore, FindingStore
 from blizzard.hub.store.internal.forge_annotation_store import ForgeAnnotationStore
+from blizzard.hub.store.internal.garden_delivery_store import GardenDeliveryStore
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
 from blizzard.hub.store.internal.garden_run_store import GardenRunStore
 from blizzard.hub.store.internal.garden_sweeps_store import GardenSweepsStore
@@ -149,6 +162,7 @@ from blizzard.hub.store.internal.hub_scoped_credentials import CredentialReads
 from blizzard.hub.store.internal.hub_scoped_invitations import InvitationReads
 from blizzard.hub.store.internal.invitation_store import InvitationStore
 from blizzard.hub.store.internal.repository_record_store import RepositoryRecordStore
+from blizzard.hub.store.internal.review_findings_store import ReviewFindingsStore
 from blizzard.hub.store.internal.secret_store import SecretStore
 from blizzard.hub.store.internal.tenant_teardown_store import TenantTeardownStore
 from blizzard.hub.store.internal.trace_store import ProjectLabels, TraceStore
@@ -1081,6 +1095,8 @@ class HubWorld:
     garden_run: IReadGardenRunRepository
     garden_sweeps: IReadGardenSweepsRepository
     garden_trend: IReadGardenTrendRepository
+    garden_delivery: IReadGardenDeliveryRepository
+    review_findings: IReadReviewFindingsRepository
     work_items: IReadWorkItemRepository
     secrets: ISecretCatalog
     invitations: IReadInvitationRepository
@@ -1119,6 +1135,8 @@ class HubWorld:
     chunk_ready_2: str
     chunk_transition: str
     chunk_migration: str
+    delivery_chunk: str
+    delivery_epoch: int
     chunk_decision_1: str
     chunk_decision_2: str
     question_1: str
@@ -1163,6 +1181,8 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
     garden_run_store = GardenRunStore(store_connections)
     garden_sweeps_store = GardenSweepsStore(store_connections)
     garden_trend_store = GardenTrendStore(store_connections)
+    garden_delivery_store = GardenDeliveryStore(store_connections)
+    review_findings_store = ReviewFindingsStore(store_connections)
     work_items = WorkItemStore(store_connections)
     finding_store = FindingStore(store_connections)
     finding_set_store = FindingSetStore(store_connections)
@@ -1546,6 +1566,59 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         runner_id=HUB_RUNNER_ID,
         at=_ht(37),
         artifacts=[],
+        admission=EpochAdmission.AT_OR_ABOVE,
+    )
+
+    # --- garden / review delivery markers: each store's own replay probe reads these ---------------
+    delivery_chunk = "ch_hub_delivery"
+    delivery_epoch = 1
+    _mint(delivery_chunk, "1006", at=_ht(38))
+    delivery_run = RunContext(
+        project_id=garden_project, routine_name="gardening", scope_slug=scope_a.slug, mode="dry_run"
+    )
+    garden_delivery_store.deliver(
+        DeliveryPlan(
+            chunk_id=delivery_chunk,
+            node_id=deliver_node.node_id,
+            node_name=deliver_node.name,
+            epoch=delivery_epoch,
+            at=_ht(38),
+            run=delivery_run,
+            deltas=[
+                DeltaMaterialization(
+                    finding_set=NewFindingSet(
+                        finding_set_id="fins_hub_delivery",
+                        artifact_id="art_hub_delivery",
+                        scope_slug=scope_a.slug,
+                        revisions={},
+                        measurement=None,
+                    )
+                )
+            ],
+            proposals=[],
+        ),
+        admission=EpochAdmission.AT_OR_ABOVE,
+    )
+    review_findings_store.deliver(
+        ReviewFindingsPlan(
+            chunk_id=delivery_chunk,
+            node_id=deliver_node.node_id,
+            node_name=deliver_node.name,
+            epoch=delivery_epoch,
+            at=_ht(39),
+            new_findings=[
+                NewReviewFinding(
+                    finding_id="fin_hub_review",
+                    scope_slug=scope_a.slug,
+                    class_="correctness",
+                    locus="a.py:1",
+                    summary="s",
+                    severity="should-fix",
+                    raised_by_chunk_id=delivery_chunk,
+                )
+            ],
+            facts=[NewReviewFindingFact(finding_id="fin_hub_review", ref="F1")],
+        ),
         admission=EpochAdmission.AT_OR_ABOVE,
     )
 
@@ -1966,6 +2039,8 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         garden_run=garden_run_store,
         garden_sweeps=garden_sweeps_store,
         garden_trend=garden_trend_store,
+        garden_delivery=garden_delivery_store,
+        review_findings=review_findings_store,
         work_items=work_items,
         secrets=secret_store,
         invitations=invitation_store,
@@ -2004,6 +2079,8 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         chunk_ready_2=chunk_ready_2,
         chunk_transition=chunk_transition,
         chunk_migration=chunk_migration,
+        delivery_chunk=delivery_chunk,
+        delivery_epoch=delivery_epoch,
         chunk_decision_1=chunk_decision_1,
         chunk_decision_2=chunk_decision_2,
         question_1=question_1,
@@ -2343,6 +2420,12 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     ),
     (IReadGardenTrendRepository, "facts_for_trend"): lambda w: w.garden_trend.facts_for_trend(
         w.project_id, "gardening", since=_HUB_BASE, until=_HUB_UNTIL
+    ),
+    (IReadGardenDeliveryRepository, "already_delivered"): lambda w: w.garden_delivery.already_delivered(
+        chunk_id=w.delivery_chunk, node_id=w.deliver_node_id, epoch=w.delivery_epoch
+    ),
+    (IReadReviewFindingsRepository, "already_delivered"): lambda w: w.review_findings.already_delivered(
+        chunk_id=w.delivery_chunk
     ),
     (IReadGraphRepository, "get"): lambda w: w.hub.services.graphs.get(w.graph.graph_id),
     (IReadGraphRepository, "get_enabled_by_name"): lambda w: w.hub.services.graphs.get_enabled_by_name(_HUB_GRAPH_NAME),

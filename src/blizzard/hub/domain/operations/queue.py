@@ -251,42 +251,43 @@ class NotInList(Exception):
 
 
 def replacement_order(
-    list_: QueueList, current: Sequence[Chunk], chunk_ids: Sequence[str], statuses: Mapping[str, ChunkStatus]
+    list_: QueueList, current: Sequence[Chunk], named: Sequence[Chunk], statuses: Mapping[str, ChunkStatus]
 ) -> list[Chunk]:
-    """The whole order a replacement of ``list_`` writes: the named chunks first, in the order
-    named, then every unnamed member in its ``current`` order. Refuses a repeated id
-    (:class:`DuplicateReorderIds`) before any id outside the list (:class:`NotInList`)."""
-    if len(set(chunk_ids)) != len(chunk_ids):
+    """The whole order a replacement of ``list_`` writes: the ``named`` chunks first, in the order
+    named, then every unnamed member in its ``current`` order. Refuses a repeated chunk
+    (:class:`DuplicateReorderIds`) before any chunk outside the list (:class:`NotInList`)."""
+    named_ids = [chunk.chunk_id for chunk in named]
+    if len(set(named_ids)) != len(named_ids):
         raise DuplicateReorderIds()
     by_id = {chunk.chunk_id: chunk for chunk in current}
-    for chunk_id in chunk_ids:
-        if chunk_id not in by_id:
-            raise NotInList.of(chunk_id, list_, statuses)
-    named = set(chunk_ids)
-    return [by_id[chunk_id] for chunk_id in chunk_ids] + [c for c in current if c.chunk_id not in named]
+    for chunk in named:
+        if chunk.chunk_id not in by_id:
+            raise NotInList.of(chunk.chunk_id, list_, statuses)
+    named_set = set(named_ids)
+    return [by_id[chunk_id] for chunk_id in named_ids] + [c for c in current if c.chunk_id not in named_set]
 
 
 def resolve_move(
     list_: QueueList,
     current: Sequence[Chunk],
-    chunk_id: str,
-    after_chunk_id: str | None,
+    chunk: Chunk,
+    after: Chunk | None,
     statuses: Mapping[str, ChunkStatus],
 ) -> tuple[Chunk, Chunk | None]:
-    """The chunk a single-chunk reorder moves and the member it lands after (``None``: the top).
-    Refuses a self-anchor (:class:`SelfAnchoredMove`) before either id outside the list."""
-    if after_chunk_id == chunk_id:
+    """The member of ``current`` a single-chunk reorder moves and the member it lands after (``None``:
+    the top). Refuses a self-anchor (:class:`SelfAnchoredMove`) before either chunk outside the list."""
+    if after is not None and after.chunk_id == chunk.chunk_id:
         raise SelfAnchoredMove()
-    by_id = {chunk.chunk_id: chunk for chunk in current}
-    chunk = by_id.get(chunk_id)
-    if chunk is None:
-        raise NotInList.of(chunk_id, list_, statuses)
-    if after_chunk_id is None:
-        return chunk, None
-    after = by_id.get(after_chunk_id)
+    by_id = {member.chunk_id: member for member in current}
+    moving = by_id.get(chunk.chunk_id)
+    if moving is None:
+        raise NotInList.of(chunk.chunk_id, list_, statuses)
     if after is None:
-        raise NotInList.of(after_chunk_id, list_, statuses)
-    return chunk, after
+        return moving, None
+    anchor = by_id.get(after.chunk_id)
+    if anchor is None:
+        raise NotInList.of(after.chunk_id, list_, statuses)
+    return moving, anchor
 
 
 def require_anchor_among(
@@ -449,22 +450,18 @@ class QueueService:
         """``not_ready`` chunks in backlog order — ascending by effective position."""
         return self.ordered(QueueList.NOT_READY, statuses=statuses)
 
-    def reorder(
-        self, list_: QueueList, chunk_ids: Sequence[str], *, statuses: Mapping[str, ChunkStatus]
-    ) -> list[Chunk]:
-        """Replace ``list_``'s whole order with the named chunks first (:func:`replacement_order`
-        decides it, resolving each id against the list itself) and return the order written."""
-        ordered = replacement_order(list_, self.ordered(list_, statuses=statuses), chunk_ids, statuses)
+    def reorder(self, list_: QueueList, chunks: Sequence[Chunk], *, statuses: Mapping[str, ChunkStatus]) -> list[Chunk]:
+        """Replace ``list_``'s whole order with the named ``chunks`` first (:func:`replacement_order`
+        decides it, checking each against the list itself) and return the order written."""
+        ordered = replacement_order(list_, self.ordered(list_, statuses=statuses), chunks, statuses)
         self.replace_order(list_, ordered)
         return ordered
 
-    def move(
-        self, list_: QueueList, chunk_id: str, after_chunk_id: str | None, *, statuses: Mapping[str, ChunkStatus]
-    ) -> None:
-        """Move ``chunk_id`` right after ``after_chunk_id`` (top when ``None``) within ``list_``,
-        each id resolved against the list itself (:func:`resolve_move`)."""
-        chunk, after = resolve_move(list_, self.ordered(list_, statuses=statuses), chunk_id, after_chunk_id, statuses)
-        self.reposition(list_, chunk, after, statuses=statuses)
+    def move(self, list_: QueueList, chunk: Chunk, after: Chunk | None, *, statuses: Mapping[str, ChunkStatus]) -> None:
+        """Move ``chunk`` right after ``after`` (top when ``None``) within ``list_``, each
+        checked against the list itself (:func:`resolve_move`)."""
+        moving, anchor = resolve_move(list_, self.ordered(list_, statuses=statuses), chunk, after, statuses)
+        self.reposition(list_, moving, anchor, statuses=statuses)
 
     def replace_order(self, list_: QueueList, ordered: list[Chunk]) -> None:
         """Idempotent whole-order replacement: one ascending explicit position fact per

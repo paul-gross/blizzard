@@ -83,6 +83,32 @@ def _blocked_markings(
     return derive_blocked_prerequisites(edges, {**statuses, **resolved})
 
 
+def _resolved(
+    list_: QueueList, chunk_ids: Sequence[str], services: TenantServices, statuses: Mapping[str, ChunkStatus]
+) -> list[Chunk]:
+    """The chunks ``chunk_ids`` name, in the order named — one batched read. An id naming no chunk
+    is refused as outside ``list_`` (:class:`NotInList`), the same ``409`` as one that exists
+    elsewhere. A repeated id resolves to the same chunk each time, so the domain still sees the repeat."""
+    found = services.chunks.record.get_many(chunk_ids)
+    for chunk_id in chunk_ids:
+        if chunk_id not in found:
+            raise NotInList.of(chunk_id, list_, statuses)
+    return [found[chunk_id] for chunk_id in chunk_ids]
+
+
+def _resolved_move(
+    list_: QueueList,
+    chunk_id: str,
+    after_chunk_id: str | None,
+    services: TenantServices,
+    statuses: Mapping[str, ChunkStatus],
+) -> tuple[Chunk, Chunk | None]:
+    """The chunk a move names and its anchor (``None``: the top), resolved as :func:`_resolved` does."""
+    named = [chunk_id] if after_chunk_id is None else [chunk_id, after_chunk_id]
+    chunk, *anchors = _resolved(list_, named, services, statuses)
+    return chunk, anchors[0] if anchors else None
+
+
 def _replace(
     list_: QueueList, chunk_ids: list[str], services: TenantServices, statuses: Mapping[str, ChunkStatus]
 ) -> list[Chunk]:
@@ -90,7 +116,7 @@ def _replace(
     differing only in which list they rank (``bzh:ranking-is-per-list``). ``statuses`` is the
     caller's one-per-request derivation, threaded through."""
     try:
-        ordered = services.queue.reorder(list_, chunk_ids, statuses=statuses)
+        ordered = services.queue.reorder(list_, _resolved(list_, chunk_ids, services, statuses), statuses=statuses)
     except DuplicateReorderIds as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
     except NotInList as exc:
@@ -111,7 +137,8 @@ def _reposition(
     (``bzh:ranking-is-per-list``). ``statuses`` is the caller's one-per-request derivation,
     threaded through."""
     try:
-        services.queue.move(list_, chunk_id, after_chunk_id, statuses=statuses)
+        chunk, after = _resolved_move(list_, chunk_id, after_chunk_id, services, statuses)
+        services.queue.move(list_, chunk, after, statuses=statuses)
     except SelfAnchoredMove as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
     except NotInList as exc:

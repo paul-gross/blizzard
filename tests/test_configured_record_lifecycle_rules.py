@@ -79,7 +79,9 @@ def _repo(*, revision: int = 3, retired: bool = False) -> ConfiguredRepository:
 
 
 def _secret(*, revision: int = 2) -> SecretMetadata:
-    return SecretMetadata(name="gh", revision=revision, replaced_at=_AT, replaced_by="ops", created_at=_AT)
+    return SecretMetadata(
+        name="gh", revision=revision, replaced_at=_AT, replaced_by="ops", created_at=_AT, retired=False
+    )
 
 
 def _change(kind: RecordKind, key: str, revision: int, op: ChangeOp, diff: tuple[FieldChange, ...]) -> ConfigChange:
