@@ -268,7 +268,7 @@ def test_the_lane_drains_only_once_registered_and_clears_what_the_hub_answered(t
     world.step.run()
     world.drain.run()
     assert [[fact.seq for fact in push] for push in world.hub.pushes] == [[1, 2, 3]]
-    assert world.hub.pushes[0][0].payload == {"slug": "s0"}
+    assert json.loads(world.hub.pushes[0][0].payload_text) == {"slug": "s0"}
     lane = world.stores.host_lane  # type: ignore[attr-defined]
     assert lane.host_buffered_count() == 0
     assert lane.host_high_water_seen() == 3

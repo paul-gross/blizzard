@@ -728,7 +728,7 @@ RUNNER_CENSUS: dict[tuple[type, str], RunnerRecipe] = {
         w.read.lease_record.has_lease_in_binding_tenure(w.chunk_1, _t(0))
     ),
     (IReadLeaseRecordRepository, "lease_ids_for_chunk"): lambda w: w.read.lease_record.lease_ids_for_chunk(w.chunk_1),
-    (IReadLeaseRecordRepository, "count_active_leases"): lambda w: w.read.lease_record.count_active_leases(),
+    (IReadLeaseRecordRepository, "active_lease_chunk_ids"): lambda w: w.read.lease_record.active_lease_chunk_ids(),
     (IReadLeaseSessionRepository, "latest_session"): lambda w: w.read.session.latest_session(w.chunk_1, None),
     (IReadLeaseSessionRepository, "pool_head"): lambda w: w.read.session.pool_head(w.chunk_1, "pool-a"),
     (IReadLeaseSessionRepository, "session_invocation_count"): lambda w: w.read.session.session_invocation_count(
@@ -819,12 +819,18 @@ RUNNER_CENSUS: dict[tuple[type, str], RunnerRecipe] = {
     (IReadPauseRepository, "open_pause_parks"): lambda w: w.read.pause.open_pause_parks(),
     (IReadTakeoverRepository, "lease_for_open_takeover"): lambda w: w.read.takeover.lease_for_open_takeover(w.lease_5),
     (IReadTakeoverRepository, "open_takeover_for_chunk"): lambda w: w.read.takeover.open_takeover_for_chunk(w.chunk_4),
+    (IReadTakeoverRepository, "open_takeovers_for"): lambda w: w.read.takeover.open_takeovers_for(
+        [w.chunk_3, w.chunk_4]
+    ),
     (IReadTakeoverRepository, "open_takeover_chunk_ids"): lambda w: w.read.takeover.open_takeover_chunk_ids(),
     (IReadTakeoverRepository, "open_takeovers"): lambda w: w.read.takeover.open_takeovers(),
     (IReadRequeueRepository, "pending_requeue_chunk_ids"): lambda w: w.read.requeue.pending_requeue_chunk_ids(),
     (IReadEscalationRepository, "open_escalations"): lambda w: w.read.escalations.open_escalations(),
     (IReadEscalationRepository, "open_escalation_for_chunk"): lambda w: w.read.escalations.open_escalation_for_chunk(
         w.chunk_3
+    ),
+    (IReadEscalationRepository, "open_escalations_for"): lambda w: w.read.escalations.open_escalations_for(
+        [w.chunk_3, w.chunk_4]
     ),
     (IReadUsageRepository, "session_cost_basis"): lambda w: w.read.usage.session_cost_basis(w.lease_1),
     (IReadUsageRepository, "usage_since"): lambda w: w.read.usage.usage_since(_BASE),

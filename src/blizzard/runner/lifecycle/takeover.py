@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 import shlex
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
@@ -206,6 +206,11 @@ class IReadTakeoverRepository(Protocol):
         ``takeover_ends`` row for the same ``takeover_id``.
 
         At most one open takeover exists per chunk at a time."""
+        ...
+
+    def open_takeovers_for(self, chunk_ids: Iterable[str]) -> dict[str, OpenTakeover]:
+        """:meth:`open_takeover_for_chunk` for every chunk in ``chunk_ids`` in one batched read,
+        keyed by chunk id; a chunk with no open takeover is absent (`bzh:bulk-reconstitution`)."""
         ...
 
     def open_takeover_chunk_ids(self) -> set[str]:

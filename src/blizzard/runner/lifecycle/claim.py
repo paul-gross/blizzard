@@ -26,6 +26,7 @@ from blizzard.runner.environments.repository import (
 from blizzard.runner.harness.capability_snapshot import HarnessCapability
 from blizzard.runner.hub.client import ChunkEndedError, ChunkNotFoundError, ClaimRequest, HubClientError, QueueEntry
 from blizzard.runner.hub.outbound import OutboundFacts
+from blizzard.runner.leases.escalations import ParkedEscalation
 from blizzard.runner.leases.operator_requests import IReadRequeueRepository
 from blizzard.runner.lifecycle.model import (
     ClaimVerdict,
@@ -50,7 +51,7 @@ from blizzard.runner.lifecycle.spawn import (
     SpawnHostStores,
     SpawnStores,
 )
-from blizzard.runner.lifecycle.takeover import IReadTakeoverRepository
+from blizzard.runner.lifecycle.takeover import IReadTakeoverRepository, OpenTakeover
 from blizzard.runner.node_steps.chunk_state import ChunkState
 from blizzard.runner.node_steps.envelope import Envelope
 
@@ -320,18 +321,36 @@ class InterruptedClaims:
         requeue_pending = self.ctx.stores.requeue.pending_requeue_chunk_ids()  # one read per FILL, not per chunk
         # One read before the loop, not one `active_lease_for_chunk` per chunk
         # (`bzh:bulk-reconstitution`) — safe because each iteration only mutates its own chunk.
-        active_chunk_ids = {lease.chunk_id for lease in self.ctx.stores.lease_record.list_active_leases()}
+        active_chunk_ids = self.ctx.stores.lease_record.active_lease_chunk_ids()
         # Likewise one read for every held binding, grouped by chunk, not one per held chunk.
         bindings_by_chunk = group_bindings_by_chunk(self.ctx.stores.environments.held_bindings())
-        for chunk_id, bindings in bindings_by_chunk.items():
-            if chunk_id not in active_chunk_ids:
-                self._reconcile_one(
-                    chunk_id, bindings, runner_id=runner_id, requeued=chunk_id in requeue_pending, braked=braked
-                )
-            # else a live worker holds it — REAP/ADVANCE own it
+        # A chunk a live worker holds is REAP/ADVANCE's, not this sweep's.
+        interrupted = {c: b for c, b in bindings_by_chunk.items() if c not in active_chunk_ids}
+        # Read once over every interrupted chunk rather than per chunk the adopt arm reaches —
+        # the over-read costs no statement.
+        takeovers = self.ctx.stores.takeover.open_takeovers_for(interrupted)
+        escalations = self.ctx.stores.escalations.open_escalations_for(interrupted)
+        for chunk_id, bindings in interrupted.items():
+            self._reconcile_one(
+                chunk_id,
+                bindings,
+                runner_id=runner_id,
+                requeued=chunk_id in requeue_pending,
+                braked=braked,
+                takeover=takeovers.get(chunk_id),
+                open_escalation=escalations.get(chunk_id),
+            )
 
     def _reconcile_one(
-        self, chunk_id: str, bindings: list[EnvBinding], *, runner_id: str, requeued: bool, braked: bool
+        self,
+        chunk_id: str,
+        bindings: list[EnvBinding],
+        *,
+        runner_id: str,
+        requeued: bool,
+        braked: bool,
+        takeover: OpenTakeover | None,
+        open_escalation: ParkedEscalation | None,
     ) -> None:
         try:
             view = self.ctx.chunk_views.get(chunk_id)
@@ -341,10 +360,9 @@ class InterruptedClaims:
             return
         except HubClientError:
             return  # hub unreachable — the binding is durable; retry next tick
-        # Read only where the adopt arm can be reached.
-        takeover = (
-            self.ctx.stores.takeover.open_takeover_for_chunk(chunk_id) if view.status == ChunkStatus.RUNNING else None
-        )
+        # Only the adopt arm weighs a takeover.
+        if view.status != ChunkStatus.RUNNING:
+            takeover = None
         move = interrupted_claim_move(view, runner_id=runner_id, requeued=requeued, braked=braked, takeover=takeover)
         if move is InterruptedClaimMove.HOLD_TAKEN_OVER and takeover is not None:
             _log.debug(
@@ -356,7 +374,7 @@ class InterruptedClaims:
         if move is InterruptedClaimMove.RESUME_REQUEUED:
             self._resume_requeued(chunk_id, view.latest_epoch)
         elif move is InterruptedClaimMove.ADOPT:
-            if self._owns_node_entry(chunk_id, view, bindings):
+            if self._owns_node_entry(chunk_id, view, bindings, open_escalation):
                 self._adopt(chunk_id, view)
         elif move is InterruptedClaimMove.RECLAIM:
             self._reclaim(chunk_id, bindings)  # claim never landed — claim now, reuse the binding
@@ -371,9 +389,10 @@ class InterruptedClaims:
                 hub_status=str(view.status),
             )
 
-    def _owns_node_entry(self, chunk_id: str, view: ChunkState, bindings: list[EnvBinding]) -> bool:
+    def _owns_node_entry(
+        self, chunk_id: str, view: ChunkState, bindings: list[EnvBinding], open_escalation: ParkedEscalation | None
+    ) -> bool:
         """``src/blizzard/runner/lifecycle/model.py``'s ``owns_node_entry``, over this chunk's stores."""
-        open_escalation = self.ctx.stores.escalations.open_escalation_for_chunk(chunk_id)
         bound_at = min(binding.bound_at for binding in bindings)
         return owns_node_entry(
             view,

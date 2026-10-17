@@ -11,12 +11,16 @@ transport failure or unexpected status is wrapped once into
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable, Generator, Iterable, Sequence
+from dataclasses import dataclass
+from typing import Any
 
 import httpx
 from pydantic import BaseModel, TypeAdapter
 
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.roles import adapter_model
 from blizzard.runner.harness.capability_snapshot import HarnessCapability
 from blizzard.runner.hub.client import (
     BindingDeclaration,
@@ -77,7 +81,7 @@ from blizzard.runner.node_steps.envelope import Envelope
 from blizzard.runner.node_steps.submissions import ApplyReply, Completion, GateSubmission
 from blizzard.wire.chunk import ChunkStatusView, HubAdvanceResponse
 from blizzard.wire.envelope import ApplyResponse, NodeEnvelope
-from blizzard.wire.facts import HostFactAck, HostFactBatch, RunnerFact, RunnerFactAck, RunnerFactBatch
+from blizzard.wire.facts import HostFactAck, RunnerFactAck
 from blizzard.wire.host import (
     HostAddRequest,
     HostAddResponse,
@@ -246,8 +250,7 @@ class HttpHubClient:
         return apply_reply_of(ApplyResponse.model_validate(resp.json()))
 
     def push_facts(self, facts: Sequence[PushedFact]) -> FactPushAck:
-        batch = RunnerFactBatch(facts=[RunnerFact(seq=f.seq, kind=f.kind, payload=f.payload) for f in facts])
-        resp = self._post(f"{_FLEET_API}/events", batch.model_dump(mode="json"))
+        resp = self._post(f"{_FLEET_API}/events", _FactBatchBody.of(facts))
         ack = RunnerFactAck.model_validate(resp.json())
         return FactPushAck(
             high_water=ack.high_water,
@@ -416,9 +419,9 @@ class HttpHubClient:
     ) -> httpx.Response:
         try:
             if timeout is not None:
-                resp = self._client.post(path, json=body, timeout=timeout)
+                resp = self._client.post(path, **_body_kwargs(body), timeout=timeout)
             else:
-                resp = self._client.post(path, json=body)
+                resp = self._client.post(path, **_body_kwargs(body))
         except httpx.HTTPError as exc:
             raise self._wrap(exc, f"POST {path}") from exc
         self._raise_for_status(
@@ -554,8 +557,7 @@ class HttpHostHubClient:
 
     def push_facts(self, facts: Sequence[PushedFact]) -> HostFactPushAck | HostRefused:
         path = f"{_HOST_API}/events"
-        batch = HostFactBatch(facts=[RunnerFact(seq=f.seq, kind=f.kind, payload=f.payload) for f in facts])
-        resp = self._send("POST", path, batch.model_dump(mode="json"))
+        resp = self._send("POST", path, _FactBatchBody.of(facts))
         if isinstance(resp, HostRefused):
             return resp
         ack = _validated(HostFactAck, resp, path)
@@ -588,7 +590,9 @@ class HttpHostHubClient:
         """The hub's answer, or its typed refusal; an answer ``refused`` types as a call's own refusal raises it."""
         operation = f"{method} {path}"
         try:
-            resp = self._client.request(method, path, json=body, headers=self._headers)
+            kwargs = _body_kwargs(body)
+            headers = {**self._headers, **kwargs.pop("headers", {})}
+            resp = self._client.request(method, path, **kwargs, headers=headers)
         except httpx.HTTPError as exc:
             _log.error("hub unreachable", operation=operation, detail=str(exc))
             raise HubClientError(f"{operation} failed: {exc}") from exc
@@ -603,6 +607,29 @@ class HttpHostHubClient:
             raise error
         _log.error("hub call failed", operation=operation, status=resp.status_code, body=resp.text[:500])
         raise HubClientError(f"{operation} -> {resp.status_code}: {resp.text[:200]}")
+
+
+@adapter_model
+@dataclass(frozen=True)
+class _FactBatchBody:
+    """A :class:`~blizzard.wire.facts.RunnerFactBatch` (or ``HostFactBatch``, the same item shape) built as
+    text, each fact's stored payload JSON spliced in verbatim rather than decoded and re-dumped — JSON-equal
+    to dumping the decoded batch, so the hub validates it against the same schema."""
+
+    content: bytes
+
+    @classmethod
+    def of(cls, facts: Sequence[PushedFact]) -> _FactBatchBody:
+        items = ",".join(f'{{"seq":{f.seq},"kind":{json.dumps(f.kind)},"payload":{f.payload_text}}}' for f in facts)
+        return cls(f'{{"facts":[{items}]}}'.encode())
+
+
+def _body_kwargs(body: object) -> dict[str, Any]:
+    """The httpx request arguments sending ``body``: a pre-built fact batch as raw JSON content, anything else
+    through httpx's own JSON encoding."""
+    if isinstance(body, _FactBatchBody):
+        return {"content": body.content, "headers": {"Content-Type": "application/json"}}
+    return {"json": body}
 
 
 def _validated[T: BaseModel](model: type[T], resp: httpx.Response, path: str) -> T:

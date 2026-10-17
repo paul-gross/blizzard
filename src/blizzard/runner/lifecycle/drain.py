@@ -4,7 +4,6 @@ order, until one will not deliver."""
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -99,7 +98,7 @@ class OutboundDrain:
     def _flush_run(self, run: list[BufferedFact]) -> bool:
         """Push one contiguous run of generic-kind facts to POST /events in a single
         request, then ack every seq the run carried."""
-        pushed = [PushedFact(seq=fact.seq, kind=fact.kind, payload=json.loads(fact.payload)) for fact in run]
+        pushed = [PushedFact(seq=fact.seq, kind=fact.kind, payload_text=fact.payload) for fact in run]
         try:
             ack = self.ctx.hub.push_facts(pushed)
         except HubClientError:
