@@ -113,12 +113,9 @@
 }
 /*
  * The trailing cluster shrinks rather than overflowing, but only into
- * whatever its consumer marked shrinkable — a consumer projecting content of
- * *content-dependent* width has to be able to truncate it, and a flex: none
- * wrapper is sized to its max-content, so long projected content would push
- * the whole cluster past the clipped right edge. A zero min-width removes that
- * floor; each projected control then decides for itself whether it gives way
- * (see app-panel-layout.ts).
+ * whatever its consumer marked shrinkable. A zero min-width removes the
+ * floor; each projected control decides for itself whether it gives way
+ * (pinned in board-header.spec.ts).
  */
 .trailing {
   display: flex;
@@ -129,17 +126,9 @@
 
 /*
  * Tiered collapse. Below the wide breakpoint the per-lane
- * count cells go — the board's own lane columns still carry those headings,
- * so nothing is lost — and below the narrow one the spend cell and the whole
- * brand *text* block follow, leaving the brand mark, the connection cell,
- * and the projected menu. Those three survive every tier: on a phone forced
- * into desktop mode that menu is the only way back to mobile, so it must
- * never be the thing that gets pushed off.
- *
- * The wordmark goes with the tagline rather than after it. Together they are
- * ~190px of a 390px phone, which is the difference between a fuller trailing
- * cluster fitting and running off the edge — and the mark alone still
- * identifies the app.
+ * count cells go, and below the narrow one the spend cell and the whole brand
+ * *text* block follow, leaving the brand mark, the connection cell, and the
+ * projected menu. Those three survive every tier.
  */
 @container board-header (max-width: 1149px) {
   .stats {

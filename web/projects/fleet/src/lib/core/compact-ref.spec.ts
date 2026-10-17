@@ -14,7 +14,6 @@ describe('compactRef', () => {
   });
 
   it('passes a non-prefixed name through unchanged', () => {
-    // Env pool names are already human-scale, not prefixed ULIDs.
     expect(compactRef('e1')).toBe('e1');
   });
 

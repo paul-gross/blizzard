@@ -7,12 +7,7 @@ import { ChangeDetectionStrategy, Component, booleanAttribute, input, output } f
  * pair, leaving form-handling — trimming, per-row draft state, submit wiring —
  * to the consumer.
  *
- * One component rather than a split `KitTextInput`/`KitTextarea`: single- and
- * multi-line controls share the same chrome rules, and the only real difference —
- * which native element renders,
- * and whether it takes `rows` — is a single `multiline` input away rather than a
- * second component this kit would have to keep visually identical to the first by
- * hand.
+ * The `multiline` input picks which native element renders.
  */
 @Component({
   selector: 'fleet-kit-text-input',

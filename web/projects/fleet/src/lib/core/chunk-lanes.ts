@@ -23,20 +23,14 @@ export const LANES: readonly Lane[] = [
 export const DONE_LANE = 'done';
 
 /**
- * Every chunk status folded onto its board lane — the single owner of that
- * fold, because the board and the titlebar both render it and must not disagree.
- * It places the live statuses only: DONE membership is the hub's `terminal` flag,
- * read by {@link chunkLane} and {@link laneCounts}, never decided from a status here.
+ * Every chunk status folded onto its board lane. It places the live statuses only:
+ * DONE membership is the hub's `terminal` flag, read by {@link chunkLane} and
+ * {@link laneCounts}, never decided from a status here.
  *
- * The transient `delivering` shows under RUNNING. `paused` shares WAIT/HUMAN with `waiting_on_human`: that is the lane for work
- * stopped pending a human, which is what an operator's pause is. `ready` has its own
- * READY lane, so every status maps to a lane and a chunk shows in exactly one place.
- * The BACKLOG lane's key is `notready`: the key is a selector consumed by styles,
- * specs, and e2e locators, independent of its rendered labels.
- *
- * Typed `Record<ChunkStatus, …>` deliberately: a new status added to the wire is then
- * a compile error here — the one place that has to decide where it belongs — instead
- * of silently vanishing from a surface that forgot to list it.
+ * The transient `delivering` shows under RUNNING. `paused` shares WAIT/HUMAN with
+ * `waiting_on_human`: that is the lane for work stopped pending a human, which is what
+ * an operator's pause is. The BACKLOG lane's key is `notready`, independent of its
+ * rendered labels.
  */
 export const STATUS_LANE: Record<ChunkStatus, string> = {
   not_ready: 'notready',
@@ -57,9 +51,8 @@ export function chunkLane(chunk: Pick<ChunkSummary, 'status' | 'terminal'>): str
 }
 
 /**
- * The all-time per-lane counts — the one fold the titlebar and the board columns both
- * render from so they cannot disagree. DONE is the hub's own `terminal` count; every
- * other lane sums the per-status counts {@link STATUS_LANE} places there. Every lane is
+ * The all-time per-lane counts. DONE is the hub's own `terminal` count; every other
+ * lane sums the per-status counts {@link STATUS_LANE} places there. Every lane is
  * keyed, zero when empty.
  */
 export function laneCounts(counts: ChunkCountsView): ReadonlyMap<string, number> {
@@ -74,14 +67,8 @@ export function laneCounts(counts: ChunkCountsView): ReadonlyMap<string, number>
 }
 
 /**
- * Every chunk status folded onto the shared {@link Tone} vocabulary —
- * the fleet-side half of the status-to-tone mapping (the other half is
- * `deriveMachineChunkStatus`). Grouped by the same lane intent as {@link STATUS_LANE}:
- * live work reads `running`, human-waiting reads `waiting`, a blocking escalation
- * reads `needs`, and a landed/backlog status reads `done`/`idle`.
- *
- * Typed `Record<ChunkStatus, Tone>` for the same reason as `STATUS_LANE`: a new wire
- * status is then a compile error here instead of silently missing a color.
+ * Every chunk status folded onto the shared {@link Tone} vocabulary — the fleet-side
+ * half of the status-to-tone mapping (the other half is `deriveMachineChunkStatus`).
  */
 export const STATUS_TONE: Record<ChunkStatus, Tone> = {
   not_ready: 'idle',

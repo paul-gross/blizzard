@@ -15,14 +15,9 @@ const OPERATOR_PERMISSIONS: MeResponse['permissions'] = [
 ];
 
 /**
- * The operator identity `GET /api/me` resolves to under `auth.mode = "none"`
- * (the default-preserving fallback, which needs no login): an `admin` member of the
- * hub's one tenant. Every spec that mounts
- * the app root (or otherwise depends on its session gate settling to `'ready'`)
- * stubs `/api/me` with this, so chrome/route assertions written before auth existed
- * keep exercising the "everything visible, no login" behavior without asserting
- * anything about auth itself — a spec that *does* want to assert gating stubs its
- * own narrower `MeResponse`/provider list instead.
+ * The operator identity `GET /api/me` resolves to without a login: an `admin`
+ * member of the hub's one tenant. A spec that does assert gating stubs its own
+ * narrower `MeResponse`/provider list instead.
  */
 export const OPERATOR_ME_RESPONSE: MeResponse = {
   user_id: 'operator',

@@ -19,13 +19,8 @@ import { segmentFinal } from './transcript-selection.model';
  * this component guessing or branching on it.
  *
  * `:host { display: contents }` — this component
- * contributes no box of its own, so its single child (`fleet-chunk-transcripts-tab`)
- * is a direct flex item of whatever flex body mounts it. Without it, the tab's
- * `:host { flex: 1; min-height: 0 }` has no flex ancestor to apply against — this
- * component's box, laid out in normal block flow — and resolves to `height: auto`, which breaks
- * the tab's internal `height: 100%` chain all the way down to `.tx-view`'s scroll
- * container, so a long segment becomes unreachable, clipped by the page's own
- * `overflow: hidden` with nothing to scroll.
+ * contributes no box of its own, so its single child is a direct flex item of
+ * whatever mounts it.
  */
 @Component({
   selector: 'fleet-chunk-transcripts-container',
@@ -63,10 +58,7 @@ export class ChunkTranscriptsContainer {
     () => this.chunkId(),
   );
 
-  /** The selected segment's own `final`, resolved from the already-fetched index
-   * — `null` until the index names it, so the read below is never issued
-   * against a placement that is only a guess. A segment the resolved index does not list
-   * falls to `false`, the still-live placement, which is the safe way to be wrong. */
+  /** The selected segment's own `final` ({@link segmentFinal}). */
   protected readonly selectedSegmentFinal = computed<boolean | null>(() =>
     segmentFinal(this.indexQuery.isPending(), this.indexQuery.data()?.segments ?? [], this.segmentId()),
   );

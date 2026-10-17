@@ -9,9 +9,7 @@
  * discriminate ids minted close together where a leading slice would show the
  * same timestamp on every row.
  *
- * This is the single owner of that rendering. Every surface that names an
- * entity compactly — board cards, the detail dock, the rail's ask list, the
- * runner's local panel — resolves through {@link compactRef} so they all agree.
+ * This is the single owner of that rendering, through {@link compactRef}.
  */
 
 import { IdPrefix } from '../api/hub';

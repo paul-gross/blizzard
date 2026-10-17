@@ -17,10 +17,8 @@ export interface RequestClientStub {
   restore(): void;
 }
 
-/** A `route` return value naming a non-200 status — e.g. the hub's 404/409
- * `{"detail": "..."}` error bodies, or the runner's 503 volatile-route fault —
- * instead of the default 200 + JSON body. The one error convention both
- * generated clients' specs answer with through {@link stubRequestClient}. */
+/** A `route` return value naming a non-200 status instead of the
+ * default 200 + JSON body. */
 export interface StubHttpError {
   readonly status: number;
   readonly body: unknown;

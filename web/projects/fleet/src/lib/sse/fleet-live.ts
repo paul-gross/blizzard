@@ -59,11 +59,8 @@ export const HUB_EVENT_TYPES: readonly HubEventType[] = Object.values(HubEventTy
 
 /**
  * Each hub frame type's generated payload. Optional fields are present-when-meaningful
- * (a chunk that has never transitioned carries no `prev_node`); `key` is the
- * fact-identity stamp — the merge/dedup key a backfilled row and the live frame
- * reporting the same fact share — omitted on a frame with no durable fact behind it
- * (`queue-changed`, a `registered`/`heartbeat` `runner-changed`, an idempotent no-op)
- * or from a hub that predates the stamp.
+ * (a chunk that has never transitioned carries no `prev_node`); the hub's event
+ * broker owns `key`.
  */
 export interface HubEventPayloads {
   [HubEventType.CHUNK_CHANGED]: ChunkChangedPayload;
@@ -169,9 +166,7 @@ function chunkChangedKeys(data: HubEventPayload): readonly (readonly unknown[])[
   ];
 }
 
-/** Whether a chunk-changed frame reports the chunk ended — the hub's own `terminal` flag. The
- * hub lists no open question or decision on an ended chunk, so the fleet-wide rails must re-read
- * at once rather than wait on their poll backstop. Other frames leave both lists alone. */
+/** Whether a chunk-changed frame reports the chunk ended — the hub's own `terminal` flag. */
 function chunkEnded(data: HubEventPayload): boolean {
   return 'terminal' in data && data.terminal === true;
 }
@@ -227,8 +222,7 @@ const EVENT_INVALIDATION_REGISTRY: Record<HubEventType, (data: HubEventPayload) 
  * One event recorded for the Activity feed: its stream arrival order
  * (`seq` — a stable, monotonic client key), its board vocabulary `type`, the parsed
  * `data`, and the client-side arrival time `at` (ms epoch; the hub frames carry no
- * timestamp of their own). `type` stays a plain string: a backfilled row from a newer
- * hub may name a type this client does not know, and the feed renders it raw.
+ * timestamp of their own). `type` is a plain string, so a type this client does not know still fits.
  *
  * `key` is `data.key` ({@link KeyedEvent}), lifted to the top level. Absent on a frame
  * from a hub that predates this stamp.

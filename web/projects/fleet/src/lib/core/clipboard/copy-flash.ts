@@ -11,8 +11,7 @@ export interface CopyFlash {
   copy(text: string): void;
 }
 
-/** One copy button's clipboard behaviour — the single implementation every copy
- * control in the board and the runner panel shares. */
+/** One copy button's clipboard behaviour. */
 export function createCopyFlash(): CopyFlash {
   const copied = signal(false);
   return {
