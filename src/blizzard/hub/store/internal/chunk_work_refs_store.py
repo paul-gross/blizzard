@@ -10,7 +10,7 @@ from collections import defaultdict
 from collections.abc import Iterable, Mapping
 from datetime import datetime
 
-from sqlalchemy import func, select
+from sqlalchemy import Connection, func, select
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import IClock
@@ -95,7 +95,7 @@ class ChunkWorkRefsStore:
         facts_by_id = self._facts.status_facts_for(sorted(maybe_live_ids))
         return self._resolve(pairs, maybe_live_ids, facts_by_id)
 
-    def live_holders_conn(self, conn, pointers: Iterable[WorkRef]) -> dict[WorkRef, str]:  # type: ignore[no-untyped-def]
+    def live_holders_conn(self, conn: Connection, pointers: Iterable[WorkRef]) -> dict[WorkRef, str]:
         """`live_holders`, resolved wholly on the caller's connection — the locked-transaction
         seam's own read (``bzh:store-exclusive-write``)."""
         pointers = list(pointers)
@@ -106,7 +106,7 @@ class ChunkWorkRefsStore:
         return self._resolve(pairs, maybe_live_ids, facts_by_id)
 
     @staticmethod
-    def _maybe_live_holders(conn, pointers: list[WorkRef]) -> tuple[list[tuple[WorkRef, str]], set[str]]:  # type: ignore[no-untyped-def]
+    def _maybe_live_holders(conn: Connection, pointers: list[WorkRef]) -> tuple[list[tuple[WorkRef, str]], set[str]]:
         """Every ``(pointer, chunk_id)`` pair naming one of ``pointers``, and the subset of
         those chunk ids that are neither ephemeral nor settled terminal. ``chunk_work_refs``
         carries no cross-source uniqueness on ``ref`` alone, so pointers are grouped by

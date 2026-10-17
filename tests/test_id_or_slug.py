@@ -57,7 +57,7 @@ class _Things:
         return self.former.get(slug.value)
 
 
-@pytest.mark.parametrize("raw", ["", "Winter", "a_b", "-a", "a-", "a--b", " a", "a" * 65])
+@pytest.mark.parametrize("raw", ["", "Winter", "a_b", "-a", "a-", "a--b", " a", "a" * 65, "a\n"])
 def test_a_malformed_slug_is_none(raw: str) -> None:
     assert Slug.of(raw) is None
 

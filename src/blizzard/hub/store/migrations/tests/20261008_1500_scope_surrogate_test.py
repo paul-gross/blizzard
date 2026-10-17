@@ -565,6 +565,26 @@ def test_with_one_tenant_the_downgrade_restores_the_store_exactly(tmp_path: Path
         engine.dispose()
 
 
+def test_reattaching_a_table_missing_only_its_slug_foreign_key_restores_it_on_sqlite(tmp_path: Path) -> None:
+    """Nothing but the missing key calls for a copy, so restoring it must still copy the table on SQLite."""
+    _, engine = _seeded_at_the_tighten(tmp_path)
+    module = _revision_module()
+    table, slug = "scope_lifecycle_facts", "slug"
+    try:
+        with engine.begin() as conn, Operations.context(MigrationContext.configure(conn)):
+            reflected = module._reflected(conn, table)
+            module._discard_foreign_key(reflected, slug)
+            with module.op.batch_alter_table(table, recreate="always", copy_from=reflected):
+                pass
+            assert module._scope_foreign_keys(conn, table, slug, "slug") == []
+
+            module._reattach(conn, next(link for link in module._LINKS if link[0] == table))
+
+            assert module._scope_foreign_keys(conn, table, slug, "slug") == [None]
+    finally:
+        engine.dispose()
+
+
 def test_a_carried_over_store_keeps_every_link_through_the_rescoped_keys(tmp_path: Path) -> None:
     runner, engine = _carried_over_with_links(tmp_path, _BEFORE)
     try:

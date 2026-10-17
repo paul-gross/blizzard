@@ -51,13 +51,16 @@ def flag_bindings(
 def offered_projects(
     registration: RunnerRegistration, host: Host | None, *, project: str | None = None
 ) -> frozenset[str]:
-    """The ids of the projects the matched peek may offer ``registration`` work from. A runner without bindings is
-    offered every project it serves. With them, a project reached only through withheld bindings is not offered, and
-    none is under an unrostered subscription. ``project`` keeps only the declaration entry it names, by the entry as
-    declared or the id it resolved to; no such entry, or an unresolved one, leaves nothing."""
+    """The ids of the projects the matched peek may offer ``registration`` work from. None is offered under an
+    unrostered subscription, with bindings or without. Otherwise a runner without bindings is offered every project it
+    serves, and one with them is not offered a project reached only through withheld bindings. ``project`` keeps only
+    the declaration entry it names, by the entry as declared or the id it resolved to; no such entry, or an unresolved
+    one, leaves nothing."""
+    flags = flag_bindings(registration.bindings, registration.subscription, host)
+    if flags.subscription_unrostered:
+        return frozenset()
     reached = {entry.project_id for entry in registration.served if entry.project_id}
     if registration.bindings is not None:
-        flags = flag_bindings(registration.bindings, registration.subscription, host)
         reachable = {b.project for b in registration.bindings if not flags.withholds(b)}
         reached = {entry.project_id for entry in registration.served if entry.project_id and entry.entry in reachable}
     if project is None:

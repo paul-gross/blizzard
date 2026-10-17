@@ -75,14 +75,14 @@ class ChunkQueueStore:
     ) -> int:
         # One transaction: a crash between the two writes would otherwise let a stale
         # backlog position outrank the stamp on restart.
-        return insert_promote_rows(conn_of(handle), chunk_id, position=position, at=at) or 0
+        return insert_promote_rows(conn_of(handle), chunk_id, position=position, at=at)
 
     def record_demote_with_position_locked(
         self, handle: ILockedChunkRead, chunk_id: str, *, position: float, at: datetime
     ) -> int:
         # One transaction: a crash between the two writes would otherwise rank the demoted chunk
         # by its stale ready-queue position, which the shared newest-wins positions would keep.
-        return insert_demote_rows(conn_of(handle), chunk_id, position=position, at=at) or 0
+        return insert_demote_rows(conn_of(handle), chunk_id, position=position, at=at)
 
     def record_queue_positions(self, positions: Sequence[tuple[str, float]], *, at: datetime) -> None:
         """Append every ``(chunk_id, position)`` pair in one multi-row insert — a

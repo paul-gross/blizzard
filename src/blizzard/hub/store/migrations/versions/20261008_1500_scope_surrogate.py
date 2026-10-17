@@ -510,14 +510,17 @@ def _reattach(bind: sa.Connection, link: _Link) -> None:
         return
     _clear_stale_copy(bind, table)
     reflected = _reflected(bind, table)
-    if restore_foreign_key:
+    # SQLite adds a key only by copying, and a copy adds an unnamed key only from the structure it copies; elsewhere
+    # the batch adds it in place.
+    copy = rekey or (restore_foreign_key and bind.dialect.name == "sqlite")
+    if restore_foreign_key and copy:
         reflected.append_constraint(sa.ForeignKeyConstraint([slug], [f"{_SCOPES}.slug"]))
     if rekey:
         _rekey(reflected, old_key)
         reflected.constraints.discard(reflected.primary_key)
-    # Only a copy creates an unnamed key, so restoring one copies the table; a table other tables' foreign keys
-    # reference is never copied where a copy cannot replace it, and takes the foreign key in place below instead.
-    with op.batch_alter_table(table, recreate="always" if rekey else "auto", copy_from=reflected) as batch:
+    with op.batch_alter_table(table, recreate="always" if copy else "auto", copy_from=reflected) as batch:
+        if restore_foreign_key and not copy:
+            batch.create_foreign_key(None, _SCOPES, [slug], ["slug"])
         if drop_index and index is not None:
             batch.drop_index(index[1])
         if drop_id:
@@ -526,8 +529,6 @@ def _reattach(bind: sa.Connection, link: _Link) -> None:
             batch.alter_column(slug, existing_type=sa.String(), nullable=False)
         if create_index and index is not None:
             batch.create_index(index[0], [_TENANT_COLUMN, slug])
-    if not _scope_foreign_keys(bind, table, slug, "slug"):
-        op.create_foreign_key(None, table, _SCOPES, [slug], ["slug"])
 
 
 def downgrade() -> None:
