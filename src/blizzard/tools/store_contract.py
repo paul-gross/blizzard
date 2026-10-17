@@ -1,6 +1,6 @@
 """Build one store's schema document (``contracts/store/<store>.json``).
 
-Two producers share one normalization: ``document_from_metadata`` reads a ``schema.py``
+Two producers share one normalization: ``document_from_metadata`` reads a declared
 ``MetaData`` plus the tree's head revision, and ``document_from_engine`` reflects a live
 engine plus its applied revision. The committed document is the first; the reflection
 test holds it to the second. Every rule below is one a SQLite reflection, and a later
@@ -32,7 +32,7 @@ type Document = dict[str, Any]
 
 
 def document_from_metadata(store: str, metadata: MetaData, head_revision: str | None) -> Document:
-    """The document a ``schema.py`` ``MetaData`` declares."""
+    """The document a store's declared ``MetaData`` holds."""
     tables = {table.name: _declared_table(table) for table in metadata.tables.values()}
     return _document(store, head_revision, tables)
 

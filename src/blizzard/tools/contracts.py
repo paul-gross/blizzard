@@ -1,7 +1,7 @@
 """Export the committed contract documents to a stable path.
 
 Today that is each store's schema document (``contracts/store/<store>.json``), built from
-its ``schema.py`` and its migration tree's head revision alone — no store is opened — and
+its declared store schema and its migration tree's head revision alone — no store is opened — and
 dumped as deterministic, sorted JSON, so a drift check over the committed output is stable."""
 
 from __future__ import annotations

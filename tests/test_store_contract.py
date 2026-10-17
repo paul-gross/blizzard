@@ -1,8 +1,8 @@
 """The committed store documents against what a migrated store actually is.
 
-``contracts/store/<store>.json`` is built from ``schema.py``; here a head-migrated store is
+``contracts/store/<store>.json`` is built from the store's declared schema; here a head-migrated store is
 reflected through the second producer and held to it, so a revision that disagrees with
-``schema.py`` (or a ``schema.py`` change with no revision) turns this red. SQLite only —
+the declared schema (or a schema change with no revision) turns this red. SQLite only —
 the Postgres comparison is a declared gap."""
 
 from __future__ import annotations

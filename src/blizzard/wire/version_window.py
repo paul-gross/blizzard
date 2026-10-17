@@ -29,7 +29,7 @@ class VersionWindowError(ValueError):
 @dto
 @dataclass(frozen=True)
 class VersionWindow:
-    """The parsed window: the ``MAJOR.MINOR`` floor and, while a major is opening, its number."""
+    """The parsed window: the floor (a major and minor number) and, while a major is opening, its number."""
 
     floor: str
     opening: str | None = None
