@@ -1,0 +1,3 @@
+# The hub↔runner compatibility window: the oldest MAJOR.MINOR a peer may still speak.
+# Values are quoted strings — an unquoted 0.10 would read as the float 0.1.
+floor = "0.2"

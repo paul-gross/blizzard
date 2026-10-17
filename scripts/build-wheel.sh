@@ -113,6 +113,7 @@ names = zipfile.ZipFile(wheel).namelist()
 required = [
     "blizzard/static/hub/index.html",
     "blizzard/static/runner/index.html",
+    "blizzard/wire/window.toml",
 ]
 missing = [r for r in required if r not in names]
 if missing:
