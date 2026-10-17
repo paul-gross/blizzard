@@ -25,6 +25,22 @@ export interface BindingLine {
   readonly unreported: boolean;
 }
 
+/** A row carrying binding lines — a runner row, or anything shaped like one. */
+interface BoundRow {
+  readonly bindingLines: readonly BindingLine[];
+}
+
+/** The agents `rows` declare — the sum of their binding lines'; `null` for none declared. */
+export function declaredAgents(rows: readonly BoundRow[]): number | null {
+  const declared = rows.flatMap((row) => row.bindingLines);
+  return declared.length === 0 ? null : declared.reduce((sum, line) => sum + line.agents, 0);
+}
+
+/** The agents busy across `rows` — the sum of their binding lines' agents in use. */
+export function busyAgents(rows: readonly BoundRow[]): number {
+  return rows.flatMap((row) => row.bindingLines).reduce((sum, line) => sum + line.agentsInUse, 0);
+}
+
 /** A binding line plus the environments its live chunks hold — the host workspace table's
  * in-use numerator, summed per workspace. */
 interface BindingUse extends BindingLine {

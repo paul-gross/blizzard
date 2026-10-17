@@ -27,6 +27,14 @@
   height: 7px;
   margin-right: 6px;
 }
+.dot.never {
+  border: 1px solid var(--label-dim);
+}
+.slot-bar,
+.paces {
+  flex: 1 1 240px;
+  min-width: 0;
+}
 .served {
   flex: 1 1 240px;
   min-width: 0;

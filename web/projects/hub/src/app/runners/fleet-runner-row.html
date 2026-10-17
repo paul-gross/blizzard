@@ -8,7 +8,11 @@
   [attr.data-hub-paused]="row().hub_paused"
 >
   <span class="name" data-testid="fleet-runner-name">
-    <fleet-kit-beacon class="dot" [active]="row().online || row().connection === connection.OFFLINE" [tone]="row().online ? 'green' : 'red'" [blink]="row().online ? 'pulse' : 'step'" aria-hidden="true" />
+    @if (row().connection === connection.NEVER_CONNECTED) {
+      <span class="dot never" aria-hidden="true"></span>
+    } @else {
+      <fleet-kit-beacon class="dot" [active]="row().online || row().connection === connection.OFFLINE" [tone]="row().online ? 'green' : 'red'" [blink]="row().online ? 'pulse' : 'step'" aria-hidden="true" />
+    }
     {{ row().runner_name }}
   </span>
   <span class="seen" data-testid="fleet-runner-seen">{{ seenLabel(row()) }}</span>
@@ -47,6 +51,22 @@
         </li>
       }
     </ul>
+  }
+  <!-- A host-less runner has no host card to carry its pool and spend, so its row shows them. -->
+  @if (!hosted() && hasCapacity(row())) {
+    <fleet-kit-slot-bar
+      class="slot-bar"
+      data-testid="fleet-runner-slot-bar"
+      [used]="row().used"
+      [total]="row().env_capacity ?? 0"
+    />
+  }
+  @if (!hosted() && row().subscriptionPaces.length > 0) {
+    <fleet-subscription-pace-group
+      class="paces"
+      data-testid="fleet-runner-subscription-groups"
+      [subscriptionPaces]="row().subscriptionPaces"
+    />
   }
   @if (canPause()) {
     <fleet-kit-button

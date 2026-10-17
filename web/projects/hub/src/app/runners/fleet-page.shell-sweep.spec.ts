@@ -136,4 +136,64 @@ describe('desktop Fleet tab layout shell sweep (web:shell-sweep)', () => {
       root.remove();
     }
   });
+
+  it.each([1280, 1024])('seats a selected host-less runner\'s slot bar and pace bars inside the detail at %ipx', async (width) => {
+    await loadDesignTokens();
+    await TestBed.configureTestingModule({
+      imports: [FleetView],
+      providers: [provideZonelessChangeDetection(), provideRouter([])],
+    }).compileComponents();
+    const pace = (slug: string, freshness: 'aging' | 'stale', label: string) => ({
+      slug,
+      name: `${slug} — a genuinely long subscription display name`,
+      condition: null,
+      paceBars: [
+        { window: '5h', utilizationPct: 40, elapsedPct: 20 },
+        { window: '7d', utilizationPct: 70, elapsedPct: 55 },
+      ],
+      sampledAt: NOW,
+      refreshedLabel: label,
+      freshness,
+      missReason: null,
+    });
+    const solo: RunnerRow = {
+      ...row('rn_01KXKVVF1J3D6H6VYZ3XYNSOLO', 'solo', null),
+      subscriptionPaces: [pace('aging', 'aging', 'refreshed 30m ago'), pace('stale', 'stale', 'refreshed 2h ago')],
+    };
+    const groups = groupHostRows([solo], []);
+    const list = fleetList(groups);
+    const fixture = TestBed.createComponent(FleetView);
+    fixture.componentRef.setInput('state', 'ready');
+    fixture.componentRef.setInput('list', list);
+    fixture.componentRef.setInput('selectedId', solo.runner_id);
+    fixture.componentRef.setInput('selection', resolveSelection(groups, solo.runner_id));
+    fixture.componentRef.setInput('canPause', true);
+    const root = fixture.nativeElement as HTMLElement;
+    root.style.display = 'block';
+    root.style.height = '700px';
+    document.body.appendChild(root);
+    await fixture.whenStable();
+
+    try {
+      await page.viewport(width, 900);
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+
+      const detail = root.querySelector<HTMLElement>('[data-testid="fleet-detail"]')!;
+      const bar = root.querySelector<HTMLElement>('[data-testid="fleet-runner-slot-bar"]')!;
+      expect(bar.getBoundingClientRect().right, 'slot bar is past the detail').toBeLessThanOrEqual(detail.getBoundingClientRect().right + 1);
+      const bars = root.querySelectorAll<HTMLElement>('[data-testid="fleet-runner-subscription-groups"] [data-testid="runner-pace-bar"]');
+      expect(bars).toHaveLength(4);
+      for (const b of bars) {
+        expect(b.getBoundingClientRect().right, 'a pace bar is past the detail').toBeLessThanOrEqual(detail.getBoundingClientRect().right + 1);
+      }
+      expect(detail.scrollWidth, `detail overflows horizontally at ${width}px`).toBeLessThanOrEqual(detail.clientWidth);
+
+      const aging = root.querySelector<HTMLElement>('[data-subscription-slug="aging"] [data-testid="subscription-pace-group-refreshed"]')!;
+      const stale = root.querySelector<HTMLElement>('[data-subscription-slug="stale"] [data-testid="subscription-pace-group-refreshed"]')!;
+      expect(getComputedStyle(aging).color).not.toBe(getComputedStyle(stale).color);
+      expect(getComputedStyle(aging).color).not.toBe(getComputedStyle(root).color);
+    } finally {
+      root.remove();
+    }
+  });
 });
