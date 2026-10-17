@@ -4,7 +4,7 @@ them, so the adapter derives its own."""
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -72,7 +72,7 @@ def _lease(store: SqlAlchemyRunnerStore, *, resolved_model: str | None) -> Lease
 
 
 def _recorder(
-    tmp_path: Path, store: SqlAlchemyRunnerStore, *, stdout: str
+    tmp_path: Path, store: SqlAlchemyRunnerStore, *, stdout: str, now: datetime = _NOW
 ) -> tuple[UsageRecorder, FakeHarness, FakeTranscriptSource]:
     stdout_dir = tmp_path / "stdout"
     stdout_dir.mkdir()
@@ -86,7 +86,7 @@ def _recorder(
     recorder = UsageRecorder(
         leases=store,
         usage=store,
-        clock=FixedClock(_NOW),
+        clock=FixedClock(now),
         worker_files=WorkerStdoutFiles(str(stdout_dir), store),
         workspaces=single_workspace(FakeProvider({})),
         harnesses=registry,
@@ -141,3 +141,51 @@ def test_a_fallback_over_freshly_read_lines_hands_over_no_observation(tmp_path: 
     assert harness.observed_model_calls == []
     assert harness.usage_models == [None]
     assert source.read_raw_lines_cwds == ["/wd/e1"]
+
+
+def test_each_generation_is_windowed_from_its_own_boundary_and_capped_at_an_open_judgement(tmp_path: Path) -> None:
+    store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
+    lease = _lease(store, resolved_model=None)
+    recorder, harness, _ = _recorder(tmp_path, store, stdout="<envelope>", now=_NOW + timedelta(hours=1))
+    judged_at = _NOW + timedelta(minutes=10)
+    store.record_boundary_open(
+        lease_id="lease_1",
+        chunk_id="ch_1",
+        node_id="nd_build",
+        epoch=1,
+        generation=1,
+        kind="judge",
+        start_position=None,
+        opened_at=judged_at,
+    )
+
+    recorder.record_worker(lease, bindings=_BINDINGS)
+
+    resumed_at = _NOW + timedelta(minutes=20)
+    store.record_spawn(
+        "lease_1",
+        pid=101,
+        process_start_time="start-101",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, _SESSION_ID),
+        spawned_at=resumed_at,
+    )
+    store.record_boundary_open(
+        lease_id="lease_1",
+        chunk_id="ch_1",
+        node_id="nd_build",
+        epoch=1,
+        generation=2,
+        kind="resume",
+        start_position=None,
+        opened_at=resumed_at,
+    )
+    (tmp_path / "stdout" / "lease_1.2.stdout").write_text("<envelope>")
+    resumed = store.active_lease("lease_1")
+    assert resumed is not None
+
+    recorder.record_worker(resumed, bindings=_BINDINGS)
+
+    # Generation 1 ends where its judgement opened; generation 2, unjudged, runs to now.
+    expected = [(_NOW, judged_at), (resumed_at, _NOW + timedelta(hours=1))]
+    assert harness.parse_windows == expected
+    assert harness.sum_windows == expected

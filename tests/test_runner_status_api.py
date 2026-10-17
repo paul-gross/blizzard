@@ -712,6 +712,61 @@ def test_the_escalation_paste_string_carries_no_permission_mode_even_when_config
     assert "--permission-mode" not in escalation.resume_command
 
 
+@pytest.mark.unit
+@pytest.mark.parametrize("harness_id", [CLAUDE_CODE_HARNESS_ID, "unregistered"])
+def test_an_escalation_composes_its_commands_only_under_a_registered_owner(tmp_path: Path, harness_id: str) -> None:
+    """A registered owner composes the raw resume under the escalation's own stamps and its
+    wrapped form; an owner this runner cannot resolve still lists the escalation, with neither."""
+    store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
+    service = RunnerStatusService(
+        FixedClock(_NOW),
+        pause=store,
+        daemon_liveness=store,
+        lease_record=store,
+        outbound=store,
+        environments=store,
+        asks=store,
+        takeover=store,
+        escalations=store,
+        identity=registered_identity("rn_status"),
+        runner_name="runner-local",
+        workspace_id="workspace-local",
+        hub_url="http://hub",
+        workspaces=single_workspace(FakeProvider({})),
+        runner_dir="/tmp/runner-dir",
+        harnesses=HarnessRegistry(
+            {
+                CLAUDE_CODE_HARNESS_ID: HarnessBinding(
+                    adapter=FakeHarness(
+                        handle=WorkerHandle(session_id="sess-x", pid=1, process_start_time="start-1", pgid=1),
+                        verdict=None,
+                    )
+                )
+            }
+        ),
+    )
+    _seed_lease(store, resolved_model="stamped-model", resolved_effort="high")
+    store.record_spawn(
+        "lease_1",
+        pid=100,
+        process_start_time="start-100",
+        session=SessionReference(harness_id, "sess-a"),
+        spawned_at=_NOW,
+    )
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
+    store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="escalated", closed_at=_NOW)
+
+    (escalation,) = service.escalations()
+
+    assert escalation.harness_id == harness_id
+    if harness_id == CLAUDE_CODE_HARNESS_ID:
+        assert escalation.resume_command == "cd /ws/e1 && claude --resume sess-a --model stamped-model --effort high"
+        assert escalation.wrapped_takeover_command == "blizzard runner takeover ch_1 --dir /tmp/runner-dir"
+    else:
+        assert escalation.resume_command == ""
+        assert escalation.wrapped_takeover_command is None
+
+
 @pytest.mark.component
 def test_a_superseded_escalation_does_not_appear(tmp_path: Path) -> None:
     """A later lease mint for the same chunk closes the escalation by supersession."""

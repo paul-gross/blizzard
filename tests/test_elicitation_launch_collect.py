@@ -8,6 +8,7 @@ abandons past its staleness bound, and every lease-closing path kills what it le
 from __future__ import annotations
 
 import os
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -24,7 +25,7 @@ from blizzard.runner.leases.elicitation import (
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.lifecycle.attempt import Attempt
 from blizzard.runner.lifecycle.dormant import DormantSession
-from blizzard.runner.lifecycle.judgement.judgement import Judgement
+from blizzard.runner.lifecycle.judgement.judgement import Judgement, KnownElicitation
 from blizzard.runner.lifecycle.spawn import Spawner
 from blizzard.runner.loop.steps import Advance
 from tests.runner_fakes import (
@@ -442,3 +443,110 @@ def test_a_judge_resume_launches_over_the_standing_record_and_sweeps_its_files(t
     assert not os.path.exists(second)
     assert harness.judge_output_paths == [first]  # relaunched fresh into attempt 0
     assert not record.stale(clock.now())
+
+
+def test_a_judge_launch_uses_the_callers_generation_and_elicitation_reads_over_the_stores(tmp_path):  # type: ignore[no-untyped-def]
+    """The reads the caller hands `Judgement.of` stand in for the store's: the judge boundary
+    opens under the passed generation, and a passed "no record" sweeps none of the files the
+    store's own standing record still owns."""
+    store = _store(tmp_path)
+    _seed_running_lease(store)  # one spawn — the store's generation is 1
+    harness = FakeHarness(handle=_HANDLE, verdict="pass")
+    ctx = _ctx(store, harness=harness, probe=FakeProbe())
+    files = ctx.elicitation_files
+    first, second = files.output_path("lease_1", 1, attempt=0), files.output_path("lease_1", 1, attempt=1)
+    store.record_elicitation_launch("lease_1", 1, output_path=first, at=_NOW)
+    store.record_elicitation_relaunch("lease_1", 1, output_path=second)
+    with open(second, "w", encoding="utf-8") as f:
+        f.write("usage limit reached")
+
+    lease = store.active_lease("lease_1")
+    assert lease is not None
+    judgement = Judgement.of(ctx, lease, generation=5, known_elicitation=KnownElicitation(standing=None))
+    assert judgement is not None
+    judgement.resume()
+
+    boundaries = ctx.stores.invocation_boundaries.open_boundaries_for_lease("lease_1")
+    assert [b.generation for b in boundaries] == [5]
+    assert os.path.exists(second)  # the store's record was never consulted, so never swept
+
+
+def _usage_limit_judge_park(tmp_path):  # type: ignore[no-untyped-def]
+    """A lease parked on its judge elicitation's usage limit, with that record left standing."""
+    store = _store(tmp_path)
+    _seed_running_lease(store)
+    limit = UsageLimit(resets_at=None, detail="You've hit your session limit")
+    harness = FakeHarness(handle=_HANDLE, verdict="pass", usage_limit=limit, usage_limit_from_call=2)
+    probe = FakeProbe()
+    ctx = _ctx(store, harness=harness, probe=probe)
+    Advance(ctx).run()  # launch
+    Advance(ctx).run()  # collect — the judge hit its limit: pause-parked, record standing
+    elicitation = store.in_flight_elicitation("lease_1", 1)
+    assert elicitation is not None
+    lease = store.active_lease("lease_1")
+    assert lease is not None
+    ctx.stores.pause.record_local_pause(  # the operator lifts the runner's own brake
+        paused=False, at=_NOW, by="operator", report_kind="runner.locally_resumed", report_payload="{}"
+    )
+    return store, harness, probe, ctx, lease, elicitation
+
+
+def _unpause(ctx, store, lease, elicitation):  # type: ignore[no-untyped-def]
+    DormantSession(ctx, lease).on_unpause(
+        store.open_pause_parks()["lease_1"],
+        elicitation,
+        bindings=store.bindings_for_chunk("ch_1"),
+        ask_parked=False,
+        brakes=Spawner(ctx).brakes(),
+    )
+
+
+def test_unpausing_a_judge_usage_limit_park_relaunches_the_judge_not_the_worker(tmp_path):  # type: ignore[no-untyped-def]
+    store, harness, _, ctx, lease, elicitation = _usage_limit_judge_park(tmp_path)
+
+    _unpause(ctx, store, lease, elicitation)
+
+    assert len(harness.judged) == 2  # a fresh elicitation over the standing record
+    assert harness.resumed == []
+    assert store.pause_parked_lease_ids() == set()
+
+
+def test_unpausing_over_another_epochs_elicitation_wakes_the_worker_instead(tmp_path):  # type: ignore[no-untyped-def]
+    """A record from another epoch is not this lease's judge park, so it stands for nothing."""
+    store, harness, _, ctx, lease, elicitation = _usage_limit_judge_park(tmp_path)
+
+    _unpause(ctx, store, lease, replace(elicitation, epoch=lease.epoch + 1))
+
+    assert len(harness.judged) == 1  # no judge relaunch
+    assert len(harness.resumed) == 1
+
+
+def test_unpausing_while_the_worker_is_still_alive_leaves_the_park_untouched(tmp_path):  # type: ignore[no-untyped-def]
+    store, harness, probe, ctx, lease, _ = _usage_limit_judge_park(tmp_path)
+    probe.alive = {(100, "start-100")}  # the interrupted worker has not exited yet
+
+    _unpause(ctx, store, lease, None)
+
+    assert (len(harness.judged), harness.resumed) == (1, [])
+    assert store.pause_parked_lease_ids() == {"lease_1"}
+
+
+def test_unpausing_while_the_named_elicitation_is_still_alive_leaves_it_standing(tmp_path):  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    _seed_running_lease(store)
+    harness = FakeHarness(handle=_HANDLE, verdict="pass")
+    probe = FakeProbe()
+    ctx = _ctx(store, harness=harness, probe=probe)
+    Advance(ctx).run()  # launch
+    elicitation = store.in_flight_elicitation("lease_1", 1)
+    assert elicitation is not None and elicitation.pid is not None
+    probe.alive = {(elicitation.pid, elicitation.process_start_time)}
+    lease = store.active_lease("lease_1")
+    assert lease is not None
+    Attempt(ctx, lease).park_paused(via="test")  # names the elicitation, which ignores its SIGINT
+
+    _unpause(ctx, store, lease, elicitation)
+
+    assert (len(harness.judged), harness.resumed) == (1, [])
+    assert store.in_flight_elicitation("lease_1", 1) is not None
+    assert store.pause_parked_lease_ids() == {"lease_1"}

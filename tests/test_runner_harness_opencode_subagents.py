@@ -498,6 +498,58 @@ def test_running_task_after_stdout_is_recovered_only_in_its_invocation(spawn_exe
     assert exporter.calls == ["root", "child", "root", "child"]
 
 
+def _at(ms: int) -> datetime:
+    return datetime.fromtimestamp(ms / 1000, UTC)
+
+
+def test_out_of_window_tasks_listed_first_do_not_hide_later_in_window_ones(spawn_executor: Executor) -> None:
+    # The root export is unordered: a task past the window and one before it precede the in-window one.
+    root = _session(
+        "root",
+        None,
+        [
+            ("m2", 3_000, "m", [_task("late", "root", "m2", "late-child", 3_000, 3_100)]),
+            ("m0", 100, "m", [_task("early", "root", "m0", "early-child", 100, 200)]),
+            ("m1", 1_100, "m", [_task("inside", "root", "m1", "child", 1_200, 1_400)]),
+        ],
+    )
+    exporter = FakeExporter(
+        {
+            "root": root,
+            "child": _session("child", "root", [("c1", 1_300, "m", [_step("cs1", "child", "c1", 20)])]),
+        }
+    )
+    sample = _adapter(spawn_executor, exporter).parse_usage(
+        _events([_step("rs1", "root", "r0", 3)], stamp=1_000),
+        "spawn",
+        invocation_start=_at(900),
+        invocation_end=_at(1_500),
+    )
+    assert sample is not None
+    assert sample.input_tokens == 3 + 20
+
+
+def test_a_completed_task_ending_past_the_invocation_is_cut_at_its_end(spawn_executor: Executor) -> None:
+    exporter = FakeExporter(
+        {
+            "child": _session(
+                "child",
+                "root",
+                [
+                    ("c1", 1_300, "m", [_step("cs1", "child", "c1", 20)]),
+                    ("c2", 1_700, "m", [_step("cs2", "child", "c2", 700)]),  # after the invocation ended
+                ],
+            )
+        }
+    )
+    output = _events([_task("t1", "root", "m0", "child", 1_200, 2_000), _step("rs1", "root", "m0", 3)], stamp=1_000)
+    sample = _adapter(spawn_executor, exporter).parse_usage(
+        output, "spawn", invocation_start=_at(900), invocation_end=_at(1_500)
+    )
+    assert sample is not None
+    assert sample.input_tokens == 3 + 20
+
+
 def test_recovered_child_estimate_uses_its_model_and_is_all_or_nothing(spawn_executor: Executor) -> None:
     root = _session("root", None, [("m0", 1_100, "root-model", [_task("t1", "root", "m0", "child", 1_200, None)])])
     child = _session("child", "root", [("c1", 1_300, "child-model", [_step("cs1", "child", "c1", 20)])])
@@ -627,6 +679,34 @@ def test_transcript_fallback_caps_running_task_at_invocation_end(spawn_executor:
         "spawn",
         invocation_start=datetime.fromtimestamp(0.9, UTC),
         invocation_end=datetime.fromtimestamp(1.5, UTC),
+    )
+    assert sample.input_tokens == 20
+
+
+def test_transcript_fallback_skips_a_continued_childs_earlier_generation_window(spawn_executor: Executor) -> None:
+    exporter = FakeExporter(
+        {
+            "child": _session(
+                "child",
+                "root",
+                [
+                    ("c0", 150, "m", [_step("cs0", "child", "c0", 900)]),  # the earlier generation's turn
+                    ("c1", 1_700, "m", [_step("cs1", "child", "c1", 20)]),
+                ],
+            )
+        }
+    )
+    line = _session(
+        "root",
+        None,
+        [
+            ("m0", 90, "m", [_task("t1", "root", "m0", "child", 100, 200)]),
+            ("m1", 1_600, "m", [_task("t2", "root", "m1", "child", 1_600, 2_000)]),
+        ],
+    )
+    messages = [json.dumps(message) for message in json.loads(line)["messages"]]
+    sample = _adapter(spawn_executor, exporter).sum_transcript_usage(
+        messages, "resume", invocation_start=_at(1_550), invocation_end=_at(2_050)
     )
     assert sample.input_tokens == 20
 
