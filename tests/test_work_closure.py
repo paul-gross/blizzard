@@ -21,7 +21,7 @@ from blizzard.foundation.event_log import EVENT_LOG_SEVERITY, EventLogKind
 from blizzard.foundation.hub_event_types import HubEventType
 from blizzard.foundation.work_items import WorkItemClosure
 from blizzard.hub.domain.artifact.model import StoredArtifact
-from blizzard.hub.domain.chunk.delivery_read import DeliverySources, DeliveryTrace, board_chunk_url
+from blizzard.hub.domain.chunk.delivery_read import DeliverySources, DeliveryTrace, PrMarker, board_chunk_url
 from blizzard.hub.domain.chunk.event_log import EventLogService
 from blizzard.hub.domain.chunk.model import PendingCloseIntent, WorkItemCloseOutcome, WorkRef
 from blizzard.hub.domain.chunk.ports.artifacts import IReadChunkArtifactsRepository, IWriteChunkArtifactsRepository
@@ -578,12 +578,8 @@ def test_sweep_hands_each_closer_the_trace_of_its_chunks_landing_from_one_batche
     chunks = _FakeCloseChunks([landed, also_landed, by_hand])
     pr_url = "https://forge.example/acme/widget/pull/9"
     chunks.sources["ch_1"] = DeliverySources(
-        markers=[
-            _marker(
-                "ch_1", "delivery-pr/acme/widget/9", json.dumps({"repo": "acme/widget", "number": 9, "url": pr_url})
-            ),
-            _marker("ch_1", "merged/acme/widget", "abc123def456789"),
-        ]
+        markers=[_marker("ch_1", "merged/acme/widget", "abc123def456789")],
+        pr_markers=[PrMarker("delivery-pr/acme/widget/9", 1, "acme/widget", 9, pr_url)],
     )
     closer = FakeCloser()
 
