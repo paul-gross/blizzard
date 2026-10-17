@@ -415,9 +415,7 @@ class DormantSession:
 
     def _resume_judge_overload_backoff(self, now: datetime, *, superseded_invocation: str) -> None:
         """The judge half of :meth:`on_overload_backoff` — clear-then-relaunch, shaped like
-        :meth:`_resume_judge_usage_limit_park`: `Judgement._launch`'s `record_elicitation_launch`
-        deletes-then-inserts over the stale record, so one always exists. The resume goes straight to a
-        fresh launch (`Judgement.resume`): the gate and the produces nudge already ran on this exit."""
+        :meth:`_resume_judge_usage_limit_park`."""
         lease = self.lease
         # Deferred: `judgement` imports `DormantSession` at module scope, so importing
         # `Judgement` back at module scope here would cycle.
@@ -458,13 +456,10 @@ class DormantSession:
         """Unpause a judge-usage-limit park: the worker's own turn already
         finished normally before its verdict elicitation hit the limit, so there is nothing
         left to "continue" — re-running `Judgement` mints a fresh elicitation instead of
-        waking the worker with `_UNPAUSE_MESSAGE`, straight to a launch (`Judgement.resume`) since
-        the gate and the produces nudge already ran on this exit. The stale record from the
-        limited elicitation is left for `Judgement._launch`'s own `record_elicitation_launch`
-        to delete-then-insert over, rather than cleared here first — no window where neither
-        record exists. The park-resume is recorded only AFTER the fresh elicitation is
-        durably launched: if a crash lands between them, the lease is still pause-parked, so
-        the next pass re-enters this same method rather than the ordinary exited-worker path
+        waking the worker with `_UNPAUSE_MESSAGE`. The stale record is left for the launch to replace, not
+        cleared first (pinned by `tests/test_elicitation_launch_collect.py`). The park-resume is recorded only
+        AFTER the fresh elicitation is durably launched: if a crash lands between them, the lease is still
+        pause-parked, so the next pass re-enters this same method rather than the ordinary exited-worker path
         re-classifying the same stale record and re-engaging the brake it was just cleared
         from."""
         lease = self.lease

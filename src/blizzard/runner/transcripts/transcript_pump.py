@@ -223,7 +223,7 @@ class TranscriptPump:
             if segment is None:
                 return False  # the segment vanished from under us — nothing left to drain
             if not segment.accepts_content:
-                return False  # sealed by its final marker — nothing more ever ships for it
+                return False
             outcome = self._pump_one_safe(segment, budget=budget, shipped=shipped, bindings_by_chunk=bindings_by_chunk)
             deadline_passed = outcome == "incomplete" and deadline is not None and self.ctx.clock.now() >= deadline
             match after_window(outcome, deadline_passed=deadline_passed):

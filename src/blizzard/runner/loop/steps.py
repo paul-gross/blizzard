@@ -183,8 +183,7 @@ class Reap(Step):
         parked = ctx.stores.asks.parked_lease_ids()
         takeovers = TakeoverHolds.of(ctx.stores.takeover.open_takeovers())
         active_leases = ctx.stores.lease_record.list_active_leases()
-        # One bulk read for every candidate's heartbeat/spawn (`bzh:bulk-reconstitution`),
-        # rather than two reads per lease.
+        # One bulk read for every candidate's heartbeat/spawn (`bzh:bulk-reconstitution`).
         liveness_facts = ctx.stores.liveness.liveness_facts([lease.lease_id for lease in active_leases])
         deferred = 0
         for lease in active_leases:
@@ -617,8 +616,7 @@ class Retention(Step):
     """Prune every append-only observation/report lane once per floor, so none grows without
     bound — each lane's own retention contract lives at its own method (the
     store's `IWriteOutboundRepository.prune_outbound` and its siblings, or the filesystem
-    sweep of `WorkerStdoutFiles.sweep`), each its own isolated prune. The shortest window is a
-    day, so the pass runs when none has yet or `RETENTION_FLOOR` has elapsed since the last —
+    sweep of `WorkerStdoutFiles.sweep`), each its own isolated prune. Gated by `RetentionPasses.due` —
     `bzh:probe-gated-pass`'s floor-only form."""
 
     def run(self) -> None:

@@ -59,8 +59,8 @@ class ResolvedTranscript:
     @classmethod
     def local_fallback(cls, local: Transcript, archived: ArchivedTranscript) -> ResolvedTranscript:
         """The file's read after the archive did not answer. Only a *not_found* local read
-        becomes the hub-unreachable state: ``unreadable`` has its own panel row, and masking
-        that fault behind "we couldn't ask" hides it."""
+        becomes the hub-unreachable state
+        (pinned by `test_local_fallback_marks_hub_unreachable`)."""
         hub_unreachable = archived.status == "unreachable" and local.reason == "not_found"
         return cls(transcript=local, provenance="local", hub_unreachable=hub_unreachable)
 

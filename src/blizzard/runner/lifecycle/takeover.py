@@ -438,8 +438,7 @@ class OpenedTakeover:
 
 @dataclass(frozen=True)
 class TakeoverCloser:
-    """Ends a takeover through :func:`takeover_closing` — the one close path, shared by the
-    operator's end request and the loop's hub-ended sweep."""
+    """Ends a takeover through :func:`takeover_closing` — the one close path."""
 
     takeover: IWriteTakeoverRepository
     clock: IClock

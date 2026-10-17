@@ -104,8 +104,7 @@ def spawned(lease: Lease) -> bool:
 
 
 def routed_away(view: ChunkState, runner_id: str) -> bool:
-    """The hub no longer routes the chunk to this runner. A 404 reads as routed away at the call;
-    an unreachable hub never does."""
+    """The hub no longer routes the chunk to this runner."""
     return view.route_runner_id != runner_id
 
 

@@ -116,8 +116,7 @@ class HeldChunk:
         # Every other shape keeps its binding and is polled again next tick.
 
     def _chunk_paused(self) -> bool:
-        """A per-chunk pause stands at the hub. Unreadable reads as not paused — the last-known
-        directive holds, and PULL parks the lease next tick if the pause is real."""
+        """A per-chunk pause stands at the hub. Unreadable reads as not paused."""
         try:
             return chunk_paused(self.ctx.chunk_views.get(self.chunk_id))
         except HubClientError:

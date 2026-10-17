@@ -1,8 +1,7 @@
 """The backfill's and the re-ship's decisions — pure, over loaded segments and plain values.
 
-:mod:`~blizzard.runner.transcripts.transcript_backfill` reads the ledger, probes the harness,
-and carries these out: which lease a pass imports, which segments are left unfinished, and
-whether — and over which segment — a re-ship opens a new one."""
+Which lease a pass imports, which segments are left unfinished, and whether — and over which
+segment — a re-ship opens a new one."""
 
 from __future__ import annotations
 
@@ -27,8 +26,7 @@ __all__ = [
     "unfinished",
 ]
 
-#: A merged import claims the lease's first spawn: pre-epic sessions recorded no resume
-#: offsets, so an in-place-resumed session has no seam to split a later generation at.
+#: A merged import claims the lease's first spawn.
 MERGED_GENERATION = 1
 
 
@@ -118,9 +116,8 @@ class SegmentOpening:
 
     @classmethod
     def superseding(cls, target: TranscriptSegmentState) -> SegmentOpening:
-        """A re-ship's segment: ``target``'s own lease coordinates, pointed at what it replaces.
-        Without that pointer the hub's lease read — keyed on the lease, not the segment —
-        concatenates both and renders the conversation twice."""
+        """A re-ship's segment: ``target``'s own lease coordinates, pointed at what it replaces
+        (pinned by `test_reship_points_its_new_segment_at_the_one_it_supersedes`)."""
         return cls(
             chunk_id=target.chunk_id,
             node_id=target.node_id,

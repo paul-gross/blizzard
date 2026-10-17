@@ -163,8 +163,7 @@ class TranscriptDrain:
         refused = set(ack.refused)
         for delta in deltas:
             if delta.seq in refused:
-                # The hub owns this record's (chunk, epoch) elsewhere — it stores none of it and moves its
-                # high-water past it. Acked so the drain never wedges, but never silently.
+                # Acked so the drain never wedges, but never silently.
                 _log.warning(
                     "hub refused buffered transcript record — its epoch is not this runner's",
                     seq=delta.seq,

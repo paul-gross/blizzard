@@ -60,7 +60,6 @@ class TranscriptService:
         assert session is not None
         self._transcripts.transcript_repository(session.harness_id)
 
-        # The unshipped-content probe runs only for a closed lease, as the short-circuit reads it.
         lease_active = self._leases.active_lease(lease_id) is not None
         if home_is_local(
             lease_active=lease_active,

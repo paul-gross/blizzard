@@ -68,8 +68,7 @@ def route_exit(
 ) -> ExitRoute:
     """The route for ``entry``: a judge-resume elicits and a gated exit buffers its decision; any other
     exit reconciles produces while ``produces_unmet`` is ``None`` (not loaded), nudges while produces are
-    unmet and the nudge unspent, and elicits otherwise. The local spawn brake sits between the gate and
-    the nudge, outside this rule."""
+    unmet and the nudge unspent, and elicits otherwise."""
     if entry is ExitEntry.JUDGE_RESUME:
         return ExitRoute.ELICIT
     if gated:

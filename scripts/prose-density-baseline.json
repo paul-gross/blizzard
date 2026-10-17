@@ -1492,12 +1492,6 @@
    "over_cap": 0,
    "total": 47
   },
-  "blizzard/runner/tracing/exclusion.py": {
-   "comments": 0,
-   "docstrings": 3,
-   "over_cap": 0,
-   "total": 18
-  },
   "blizzard/foundation/platform_tracing/handle.py": {
    "comments": 0,
    "docstrings": 12,
@@ -1552,23 +1546,11 @@
    "over_cap": 0,
    "total": 178
   },
-  "blizzard/runner/tracing/received_export.py": {
-   "comments": 0,
-   "docstrings": 11,
-   "over_cap": 0,
-   "total": 68
-  },
   "blizzard/foundation/platform_tracing/semconv.py": {
    "comments": 0,
    "docstrings": 2,
    "over_cap": 0,
    "total": 7
-  },
-  "blizzard/runner/harness/telemetry_signals.py": {
-   "comments": 0,
-   "docstrings": 6,
-   "over_cap": 0,
-   "total": 48
   },
   "blizzard/foundation/platform_tracing/span_context.py": {
    "comments": 0,
@@ -5524,6 +5506,12 @@
    "over_cap": 0,
    "total": 33
   },
+  "blizzard/runner/harness/telemetry_signals.py": {
+   "comments": 0,
+   "docstrings": 6,
+   "over_cap": 0,
+   "total": 48
+  },
   "blizzard/runner/harness/transcript.py": {
    "comments": 15,
    "docstrings": 71,
@@ -5704,6 +5692,12 @@
    "over_cap": 0,
    "total": 1
   },
+  "blizzard/runner/lifecycle/artifacts.py": {
+   "comments": 3,
+   "docstrings": 31,
+   "over_cap": 0,
+   "total": 160
+  },
   "blizzard/runner/lifecycle/attempt.py": {
    "comments": 61,
    "docstrings": 94,
@@ -5718,7 +5712,7 @@
   },
   "blizzard/runner/lifecycle/dormant.py": {
    "comments": 70,
-   "docstrings": 89,
+   "docstrings": 85,
    "over_cap": 12,
    "total": 634
   },
@@ -5736,7 +5730,7 @@
   },
   "blizzard/runner/lifecycle/held_chunk.py": {
    "comments": 17,
-   "docstrings": 20,
+   "docstrings": 15,
    "over_cap": 0,
    "total": 176
   },
@@ -5745,12 +5739,6 @@
    "docstrings": 1,
    "over_cap": 0,
    "total": 1
-  },
-  "blizzard/runner/lifecycle/artifacts.py": {
-   "comments": 3,
-   "docstrings": 31,
-   "over_cap": 0,
-   "total": 160
   },
   "blizzard/runner/lifecycle/judgement/check_runner.py": {
    "comments": 2,
@@ -5778,9 +5766,9 @@
   },
   "blizzard/runner/lifecycle/judgement/exit_route.py": {
    "comments": 0,
-   "docstrings": 20,
+   "docstrings": 19,
    "over_cap": 0,
-   "total": 81
+   "total": 80
   },
   "blizzard/runner/lifecycle/judgement/git_commit_declaration.py": {
    "comments": 3,
@@ -5886,21 +5874,21 @@
   },
   "blizzard/runner/loop/context.py": {
    "comments": 60,
-   "docstrings": 29,
-   "over_cap": 20,
+   "docstrings": 23,
+   "over_cap": 18,
    "total": 305
   },
   "blizzard/runner/loop/retention_floor.py": {
-   "comments": 2,
-   "docstrings": 8,
-   "over_cap": 2,
-   "total": 33
+   "comments": 1,
+   "docstrings": 5,
+   "over_cap": 0,
+   "total": 29
   },
   "blizzard/runner/loop/steps.py": {
-   "comments": 70,
-   "docstrings": 136,
-   "over_cap": 12,
-   "total": 836
+   "comments": 58,
+   "docstrings": 102,
+   "over_cap": 9,
+   "total": 761
   },
   "blizzard/runner/loop/tick.py": {
    "comments": 23,
@@ -6688,6 +6676,12 @@
    "over_cap": 0,
    "total": 25
   },
+  "blizzard/runner/tracing/exclusion.py": {
+   "comments": 0,
+   "docstrings": 3,
+   "over_cap": 0,
+   "total": 18
+  },
   "blizzard/runner/tracing/facts.py": {
    "comments": 1,
    "docstrings": 18,
@@ -6699,6 +6693,12 @@
    "docstrings": 4,
    "over_cap": 0,
    "total": 11
+  },
+  "blizzard/runner/tracing/received_export.py": {
+   "comments": 0,
+   "docstrings": 11,
+   "over_cap": 0,
+   "total": 68
   },
   "blizzard/runner/tracing/receiver.py": {
    "comments": 5,
@@ -6761,10 +6761,10 @@
    "total": 38
   },
   "blizzard/runner/transcripts/backfill.py": {
-   "comments": 3,
-   "docstrings": 28,
-   "over_cap": 1,
-   "total": 174
+   "comments": 2,
+   "docstrings": 25,
+   "over_cap": 0,
+   "total": 170
   },
   "blizzard/runner/transcripts/caps.py": {
    "comments": 4,
@@ -6774,9 +6774,9 @@
   },
   "blizzard/runner/transcripts/home.py": {
    "comments": 0,
-   "docstrings": 28,
+   "docstrings": 25,
    "over_cap": 0,
-   "total": 109
+   "total": 106
   },
   "blizzard/runner/transcripts/internal/__init__.py": {
    "comments": 0,
@@ -6827,16 +6827,16 @@
    "total": 133
   },
   "blizzard/runner/transcripts/service.py": {
-   "comments": 8,
-   "docstrings": 19,
+   "comments": 5,
+   "docstrings": 17,
    "over_cap": 0,
-   "total": 124
+   "total": 118
   },
   "blizzard/runner/transcripts/shipping.py": {
    "comments": 1,
-   "docstrings": 20,
+   "docstrings": 19,
    "over_cap": 0,
-   "total": 107
+   "total": 106
   },
   "blizzard/runner/transcripts/transcript_backfill.py": {
    "comments": 13,
@@ -6846,15 +6846,15 @@
   },
   "blizzard/runner/transcripts/transcript_drain.py": {
    "comments": 29,
-   "docstrings": 30,
+   "docstrings": 29,
    "over_cap": 7,
    "total": 240
   },
   "blizzard/runner/transcripts/transcript_pump.py": {
-   "comments": 67,
-   "docstrings": 93,
-   "over_cap": 8,
-   "total": 825
+   "comments": 66,
+   "docstrings": 86,
+   "over_cap": 7,
+   "total": 824
   },
   "blizzard/runner/usage/__init__.py": {
    "comments": 0,
