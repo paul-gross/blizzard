@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any, Protocol, cast
 
-from sqlalchemy import Column, Connection, Select, Table, func, literal, select
+from sqlalchemy import Column, Connection, CursorResult, Select, Table, func, literal, select
 from sqlalchemy.exc import IntegrityError
 
 from blizzard.foundation.chunk_migration import MigrationMode
@@ -39,6 +39,7 @@ from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, Epoc
 from blizzard.hub.domain.runners.route import Route
 from blizzard.hub.domain.work_items.closure import TERMINAL_CLOSE_OUTCOMES
 from blizzard.hub.store import schema as s
+from blizzard.hub.store.errors import HubStoreError
 from blizzard.hub.store.internal.chunk_terminal_predicates import chunk_is_terminal
 from blizzard.hub.store.internal.newest_fact import newer_row_exists
 from blizzard.hub.store.scoped import ScopedStatements, statements_of
@@ -219,7 +220,16 @@ def after_newest(conn: Connection, column: Column[Any], chunk_id: str, at: datet
     return max(at, newest + timedelta(microseconds=1)) if newest is not None else at
 
 
-def insert_promote_rows(conn: Connection, chunk_id: str, *, position: float, at: datetime) -> int | None:
+def inserted_id(result: CursorResult[Any]) -> int:
+    """The row id one insert minted; a driver that reports none raises rather than letting a caller
+    record a fabricated id."""
+    key = result.inserted_primary_key
+    if key is None or key[0] is None:
+        raise HubStoreError("insert reported no inserted key", operation="inserted_id")
+    return int(key[0])
+
+
+def insert_promote_rows(conn: Connection, chunk_id: str, *, position: float, at: datetime) -> int:
     """Insert one chunk's ``chunk_promoted`` and ``queue_positions`` rows on a
     caller-supplied ``conn`` — mirrors :func:`insert_chunk_rows`'s shared-connection
     shape. No idempotency check; the caller owns it. Returns the freshly-inserted
@@ -228,11 +238,10 @@ def insert_promote_rows(conn: Connection, chunk_id: str, *, position: float, at:
     at = after_newest(conn, s.chunk_demoted.c.demoted_at, chunk_id, at)
     result = conn.execute(stmts.insert(s.chunk_promoted).values(chunk_id=chunk_id, promoted_at=at))
     conn.execute(stmts.insert(s.queue_positions).values(chunk_id=chunk_id, position=position, set_at=at))
-    key = result.inserted_primary_key
-    return int(key[0]) if key is not None else None
+    return inserted_id(result)
 
 
-def insert_demote_rows(conn: Connection, chunk_id: str, *, position: float, at: datetime) -> int | None:
+def insert_demote_rows(conn: Connection, chunk_id: str, *, position: float, at: datetime) -> int:
     """Insert one chunk's ``chunk_demoted`` and ``queue_positions`` rows on a caller-supplied
     ``conn`` — the demote twin of :func:`insert_promote_rows`. No idempotency check; the caller
     owns it. Returns the freshly-inserted ``chunk_demoted.id``."""
@@ -240,8 +249,7 @@ def insert_demote_rows(conn: Connection, chunk_id: str, *, position: float, at: 
     at = after_newest(conn, s.chunk_promoted.c.promoted_at, chunk_id, at)
     result = conn.execute(stmts.insert(s.chunk_demoted).values(chunk_id=chunk_id, demoted_at=at))
     conn.execute(stmts.insert(s.queue_positions).values(chunk_id=chunk_id, position=position, set_at=at))
-    key = result.inserted_primary_key
-    return int(key[0]) if key is not None else None
+    return inserted_id(result)
 
 
 def record_deleted_row(conn: Connection, chunk_id: str, *, by: str, at: datetime) -> int:
@@ -252,8 +260,7 @@ def record_deleted_row(conn: Connection, chunk_id: str, *, by: str, at: datetime
     result = conn.execute(
         statements_of(conn).insert(s.chunk_deleted).values(chunk_id=chunk_id, deleted_at=at, deleted_by=by)
     )
-    key = result.inserted_primary_key
-    return int(key[0]) if key is not None else 0
+    return inserted_id(result)
 
 
 def record_grouped_row_conn(conn: Connection, chunk_id: str, *, grouped_into: str, at: datetime) -> int:
@@ -264,8 +271,7 @@ def record_grouped_row_conn(conn: Connection, chunk_id: str, *, grouped_into: st
     result = conn.execute(
         statements_of(conn).insert(s.chunk_grouped).values(chunk_id=chunk_id, grouped_into=grouped_into, grouped_at=at)
     )
-    key = result.inserted_primary_key
-    return int(key[0]) if key is not None else 0
+    return inserted_id(result)
 
 
 _EPHEMERAL_TABLES = (s.chunk_grouped, s.chunk_deleted)

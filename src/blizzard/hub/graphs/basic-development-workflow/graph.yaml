@@ -57,8 +57,9 @@ entry: build
 #          `rotate:` block either. The pool pins the tier every entry.
 #
 # `--resume <sid>` reuses the session id in place, so a pool's members share one
-# session; the pool adds the bound and the tier pin. Declared here rather than inherited — a graph referencing a pool it does
-# not declare is rejected at mint, and `graph_sync` would go red on first boot.
+# session; the pool adds the bound and the tier pin. Declared here rather than
+# inherited — a graph referencing a pool it does not declare is rejected at mint,
+# and `graph_sync` would go red on first boot.
 sessions:
   code:
     model: ["blizzard:basic"]

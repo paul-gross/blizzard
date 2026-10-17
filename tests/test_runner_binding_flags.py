@@ -102,6 +102,10 @@ def test_an_unrostered_subscription_offers_nothing() -> None:
     assert offered_projects(_runner((_A,), "other", _SERVED), _host("ws-a")) == frozenset()
 
 
+def test_an_unrostered_subscription_without_bindings_offers_nothing() -> None:
+    assert offered_projects(_runner(None, "other", _SERVED), _host()) == frozenset()
+
+
 def test_project_keeps_the_entry_it_names_by_entry_or_by_resolved_id() -> None:
     runner = _runner((_A, _X), None, _SERVED)
     host = _host("ws-a", "ws-x")

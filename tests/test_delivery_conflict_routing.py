@@ -238,3 +238,40 @@ def test_an_envelope_lists_only_the_unlanded_repo_with_its_pr_and_keeps_non_asci
     assert "émoji ✗" in envelope["step"]["output_tail"]
     (bounce,) = hub.client.get(f"/api/chunks/{chunk_id}").json()["bounces"]
     assert "\\u" not in bounce["envelope"]
+
+
+def test_a_conflict_printed_by_a_step_that_exited_0_names_no_step_in_its_envelope(tmp_path: Path) -> None:
+    runner = FakeHubCommandRunner()
+    runner.arm(_LAND_COMMAND, CommandResult(exit_code=0, stdout=f"{land_pr_ci._CONFLICT}\n", stderr=""))
+    hub = build_hub(tmp_path, hub_command_runner=runner, hub_workdir=FakeHubWorkdir())
+    chunk_id, nodes = _mint_and_claim(hub)
+    _seed_at_deliver_with_an_unlanded_commit(hub, chunk_id, nodes)
+    report_lease(hub, chunk_id, epoch=1, seq=1)
+    hub.client.post(f"/api/fleet/chunks/{chunk_id}/hub-advance")
+
+    envelope = _envelope(hub, chunk_id)
+    assert envelope["step"] is None
+    assert "conflict" in envelope["detail"] and "acme/widget" in envelope["detail"]
+    assert "exited" not in envelope["detail"]
+
+
+def test_a_blank_landing_marker_leaves_its_repo_unlanded_in_the_envelope(tmp_path: Path) -> None:
+    runner = FakeHubCommandRunner()
+    runner.arm(_LAND_COMMAND, CommandResult(exit_code=0, stdout=f"{land_pr_ci._CONFLICT}\n", stderr=""))
+    hub = build_hub(tmp_path, hub_command_runner=runner, hub_workdir=FakeHubWorkdir())
+    chunk_id, nodes = _mint_and_claim(hub)
+    _seed_at_deliver_with_an_unlanded_commit(hub, chunk_id, nodes)
+    cast(IWriteChunkArtifactsRepository, hub.services.chunks.artifacts).record_hub_artifact(
+        chunk_id,
+        node_id=nodes["deliver"],
+        node_name="deliver",
+        epoch=1,
+        admission=EpochAdmission.AT_OR_ABOVE,
+        name="merged/acme/widget",
+        content="  ",
+        at=hub.clock.now(),
+    )
+    report_lease(hub, chunk_id, epoch=1, seq=1)
+    hub.client.post(f"/api/fleet/chunks/{chunk_id}/hub-advance")
+
+    assert [u["repo"] for u in _envelope(hub, chunk_id)["unlanded"]] == ["acme/widget"]

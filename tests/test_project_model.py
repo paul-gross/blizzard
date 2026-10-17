@@ -34,7 +34,7 @@ def _project(slug: str = "winter", name: str = "Winter") -> Project:
     return Project.new(slug, name, _CTX, at=_AT)[0]
 
 
-@pytest.mark.parametrize("raw", ["", "a-", "-a", "a--b", "A", "a_b", "a b", "é", "a" * 65])
+@pytest.mark.parametrize("raw", ["", "a-", "-a", "a--b", "A", "a_b", "a b", "é", "a" * 65, "a\n"])
 def test_a_malformed_slug_is_refused_naming_the_field(raw: str) -> None:
     with pytest.raises(ConfigFieldError) as caught:
         ProjectSlug.parse(raw)

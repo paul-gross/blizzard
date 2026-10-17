@@ -176,6 +176,40 @@ def test_delivered_commits_without_a_forge_url_are_refused_naming_it() -> None:
         _plan(_legacy(), {"BZ_FORGE_TOKEN": "t"}, (CommitCoordinate(None, "widget"),))
 
 
+def _held(owner: str, repo: str, slug: str) -> ConfiguredRepository:
+    return ConfiguredRepository(
+        repository_id=RepositoryId(f"repo_{slug}"),
+        slug=slug,
+        name=slug,
+        fields=RepositoryFields("https://forge.example/api", owner, repo, "main", "x"),
+        revision=1,
+        created_at=_AT,
+        created_by="op",
+    )
+
+
+def test_without_a_forge_url_commits_whose_repositories_are_all_held_are_skipped() -> None:
+    existing = ExistingConfig(
+        secrets=frozenset(),
+        work_sources=(),
+        repositories=(_held("acme", "widget", "w"), _held("blizzard", "gadget", "g")),
+    )
+    commits = (CommitCoordinate("https://github.com/acme/widget.git", "widget"), CommitCoordinate(None, "gadget"))
+    plan = _plan(_legacy(), {}, commits, existing)
+    assert plan.repositories == plan.secrets == ()
+    assert plan.outcomes == (
+        ImportOutcome(RecordKind.REPOSITORY, "w", created=False),
+        ImportOutcome(RecordKind.REPOSITORY, "g", created=False),
+    )
+
+
+def test_without_a_forge_url_an_unheld_repository_is_still_refused() -> None:
+    existing = ExistingConfig(secrets=frozenset(), work_sources=(), repositories=(_held("acme", "widget", "w"),))
+    commits = (CommitCoordinate("https://github.com/acme/widget.git", "widget"), CommitCoordinate(None, "gadget"))
+    with pytest.raises(LegacyImportRefused, match="BZ_FORGE_URL"):
+        _plan(_legacy(), {"BZ_FORGE_TOKEN": "t"}, commits, existing)
+
+
 def test_repositories_to_write_without_a_forge_token_are_refused_naming_it() -> None:
     with pytest.raises(LegacyImportRefused, match="BZ_FORGE_TOKEN"):
         _plan(_legacy(), {"BZ_FORGE_URL": "https://api.github.com"}, (CommitCoordinate(None, "widget"),))
@@ -194,16 +228,22 @@ def test_the_fact_records_names_never_values() -> None:
 
 
 def test_legacy_start_refuses_before_an_import_naming_the_command() -> None:
-    with pytest.raises(LegacyStartRefused, match=r"blizzard hub config import-legacy --dir /hub"):
+    with pytest.raises(LegacyStartRefused) as refused:
         LegacyStart(recorded=False, keys=_legacy(variables=("BZ_FORGE_URL",))).check()
+    assert str(refused.value) == (
+        "this hub is still configured by legacy keys — run "
+        "`blizzard hub config import-legacy --dir /hub`, then remove them and restart"
+    )
 
 
 def test_legacy_start_refuses_after_an_import_naming_each_key_and_where() -> None:
     keys = _legacy(_source("a", "acme/a"), variables=("BZ_FORGE_URL",))
     with pytest.raises(LegacyStartRefused) as refused:
         LegacyStart(recorded=True, keys=keys).check()
-    assert 'blizzard-hub.toml [[work_source]] "a"' in str(refused.value)
-    assert "environment BZ_FORGE_URL" in str(refused.value)
+    assert str(refused.value) == (
+        "the legacy configuration was imported, but these keys remain — remove each, then restart: "
+        'blizzard-hub.toml [[work_source]] "a"; environment BZ_FORGE_URL'
+    )
 
 
 @pytest.mark.parametrize("recorded", [True, False])

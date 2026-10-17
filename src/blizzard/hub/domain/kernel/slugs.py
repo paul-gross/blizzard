@@ -36,7 +36,7 @@ class Slug:
     @classmethod
     def of(cls, raw: str) -> Self | None:
         """The slug ``raw`` spells, or ``None`` when it is outside the slug alphabet or length."""
-        if len(raw) > SLUG_MAX or not _SLUG_PATTERN.match(raw):
+        if len(raw) > SLUG_MAX or not _SLUG_PATTERN.fullmatch(raw):
             return None
         return cls(raw)
 

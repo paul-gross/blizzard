@@ -28,7 +28,7 @@ from blizzard.hub.domain.config.work_sources import ConfigRevisionConflict
 from blizzard.hub.store.internal.config_change_store import append_change
 from blizzard.hub.store.internal.former_slugs import SlugTables
 from blizzard.hub.store.internal.newest_fact import newest_retired_select
-from blizzard.hub.store.internal.secret_store import secret_unavailable
+from blizzard.hub.store.internal.secret_store import lock_secret_row, secret_unavailable
 from blizzard.hub.store.schema import repositories, repository_former_slugs, repository_lifecycle_facts
 from blizzard.hub.store.scoped import ScopedConnections, statements_of
 
@@ -48,6 +48,7 @@ def _retirements(conn: Connection, ids: list[RepositoryId] | None = None) -> dic
 
 
 def _check_secret(conn: Connection, secret: str) -> None:
+    lock_secret_row(conn, secret)
     retired = secret_unavailable(conn, secret)
     if retired is not None:
         raise RepositorySecretUnavailable(secret, retired=retired)
@@ -177,11 +178,12 @@ class RepositoryRecordStore:
     def create(self, record: ConfiguredRepository, *, change: ConfigChange) -> ConfiguredRepository:
         try:
             with self._store.write(
-                "create", expect=(RepositorySecretUnavailable, RepositorySlugTaken, RepositoryCoordinateTaken)
+                "create",
+                expect=(RepositorySecretUnavailable, RepositorySlugTaken, RepositoryCoordinateTaken, IntegrityError),
             ) as conn:
                 insert_record(conn, record, change)
-        except IntegrityError as exc:  # a concurrent create won the race
-            raise RepositorySlugTaken(record.slug) from exc
+        except IntegrityError as exc:
+            raise self._lost_race(record) from exc
         return record
 
     def update(
@@ -195,12 +197,19 @@ class RepositoryRecordStore:
                     RepositoryCoordinateTaken,
                     RepositorySlugTaken,
                     ConfigRevisionConflict,
+                    IntegrityError,
                 ),
             ) as conn:
                 update_record(conn, record, from_revision, left_slug, change)
-        except IntegrityError as exc:  # a concurrent write took the slug first
-            raise RepositorySlugTaken(record.slug) from exc
+        except IntegrityError as exc:
+            raise self._lost_race(record) from exc
         return record
+
+    def _lost_race(self, record: ConfiguredRepository) -> RepositoryCoordinateTaken | RepositorySlugTaken:
+        """The refusal for a concurrent write that took the coordinate or the slug first, decided by a fresh read."""
+        with self._store.read("lost_race") as conn:
+            holder = _coordinate_holder(conn, record)
+        return _coordinate_taken(record, holder) if holder is not None else RepositorySlugTaken(record.slug)
 
     def record_lifecycle(
         self,

@@ -488,6 +488,55 @@ def test_a_rerun_over_a_retired_host_retires_the_runners_a_crash_left_unretired(
     assert hub.client.get("/api/runners/rn_a").json()["retired"] is True
 
 
+def test_a_runner_gaining_a_route_after_the_check_is_a_409_and_the_committed_host_retirement_is_published(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    hub = build_hub(tmp_path)
+    added = _add_host(hub)
+    host_id = added["host_id"]
+    seed_runner(hub, "rn_a")
+    hub.client.post(f"/api/hosts/{host_id}/adoptions", json={"runner_ids": ["rn_a"]})
+    chunk_id = _held_chunk(hub, "rn_a")
+    fleet = hub.services.fleet
+    real = fleet.holdings
+    reads: list[str] = []
+
+    def stale_first(runner_id: str):  # type: ignore[no-untyped-def]
+        reads.append(runner_id)
+        return [] if len(reads) == 1 else real(runner_id)
+
+    monkeypatch.setattr(fleet, "holdings", stale_first)
+    since = _last_event_id(hub)
+
+    refused = hub.client.post(f"/api/hosts/{host_id}/retire", json={"by": "op"})
+
+    assert refused.status_code == 409, refused.text
+    assert chunk_id in refused.json()["detail"]
+    assert "rn_a" in refused.json()["detail"]
+    assert hub.client.get(f"/api/hosts/{host_id}").json()["retired"] is True
+    assert hub.client.get("/api/runners/rn_a").json()["retired"] is False
+    assert len([f for f in _host_frames(hub, since) if "retired" in f["data"]]) == 1
+
+
+def test_a_rerun_over_a_crash_left_runner_holding_a_chunk_is_a_409(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    added = _add_host(hub)
+    host_id = added["host_id"]
+    seed_runner(hub, "rn_a")
+    hub.client.post(f"/api/hosts/{host_id}/adoptions", json={"runner_ids": ["rn_a"]})
+    chunk_id = _held_chunk(hub, "rn_a")
+    host = hub.services.hosts.get_host(host_id)
+    assert host is not None
+    fact = host.retire({}, force=True, by="op", at=hub.clock.now())
+    hub.services.hosts.record_retirement(host_id, fact=fact, at=hub.clock.now(), by="op")  # type: ignore[attr-defined]
+
+    rerun = hub.client.post(f"/api/hosts/{host_id}/retire", json={"by": "op"})
+
+    assert rerun.status_code == 409, rerun.text
+    assert chunk_id in rerun.json()["detail"]
+    assert hub.client.get("/api/runners/rn_a").json()["retired"] is False
+
+
 def test_a_host_retires_a_runner_under_itself_and_no_other(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     added = _add_host(hub)

@@ -45,7 +45,7 @@ _FOREIGN_FINDINGS_NAME = f"{_FINDINGS_NAME}/foreign-head"
 # The re-run signature marker's name prefix: one per (repo, check name, head sha) a
 # base-inherited failure was re-requested under, so a re-entry to `deliver` can tell
 # "already re-run once at this head" from "seeing this for the first time" without any
-# state but the marker names (``bzh:hub-node-env-contract``).
+# state but the marker names, read from ``BZ_HUB_ARTIFACT_NAMES`` (``bzh:hub-node-env-contract``).
 _RERUN_MARKER_PREFIX = "ci-rerun/"
 
 # Pure routing decisions (what to do with one repo after reading its live PR).

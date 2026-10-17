@@ -10,7 +10,7 @@ from datetime import datetime
 
 from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.chunk.model import EscalationOpen
-from blizzard.hub.domain.chunk.ports.escalations import IWriteChunkEscalationsRepository
+from blizzard.hub.domain.chunk.ports.escalations import BounceEscalationOutcome, IWriteChunkEscalationsRepository
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, FenceRefusal
 from blizzard.hub.domain.projects.model import ProjectId
@@ -120,12 +120,12 @@ class ChunkEscalationsStore:
         at: datetime,
         cause: str,
         detail: str,
-    ) -> bool:
+    ) -> BounceEscalationOutcome:
         """Escalate a bounce-capped chunk **atomically and idempotently** (#64).
 
         The hub lease and the escalation fact land in one transaction, guarded by the
         escalation's existence at this epoch. No transition: the chunk's held route and
-        stuck node are untouched. Returns True iff it wrote."""
+        stuck node are untouched."""
         with self._store.write("record_bounce_escalation") as conn:
             lock_chunk_row(conn, chunk_id)
             already = conn.execute(
@@ -134,9 +134,9 @@ class ChunkEscalationsStore:
                 )
             ).first()
             if already is not None:
-                return False
+                return BounceEscalationOutcome.ALREADY_RECORDED
             if fence(conn, chunk_id, epoch=epoch, admission=admission) is not None:
-                return False
+                return BounceEscalationOutcome.REFUSED
             record_hub_lease(conn, chunk_id, epoch=epoch, runner_id=runner_id, at=at)
             conn.execute(
                 self._store.insert(s.escalations).values(
@@ -148,7 +148,7 @@ class ChunkEscalationsStore:
                     recorded_at=at,
                 )
             )
-            return True
+            return BounceEscalationOutcome.RECORDED
 
     def _newest_escalation_per_chunk(self, project: ProjectId | None = None, chunk_id: str | None = None):  # type: ignore[no-untyped-def]
         """The newest ``escalations`` row per chunk, over the chunks whose newest escalation *might*
