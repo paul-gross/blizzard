@@ -18,7 +18,7 @@ from blizzard.foundation.roles import collaborator
 from blizzard.runner.api.hub_proxy import HubProxy
 from blizzard.runner.api.lease_scope import authorized_lease
 from blizzard.runner.api.wiring import RunnerWiring
-from blizzard.runner.lifecycle.judgement.artifacts import (
+from blizzard.runner.lifecycle.artifacts import (
     ArtifactAmbiguous,
     ArtifactNotFound,
     ArtifactRead,

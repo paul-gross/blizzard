@@ -35,20 +35,28 @@ from blizzard.runner.lifecycle.model import (
     LEASE_MOVES,
     AdvanceMove,
     ApplyMove,
+    AwaitElicitation,
+    BackOff,
     ClaimVerdict,
+    Classify,
+    CloseOverloadStreak,
+    CollectElicitation,
     CompletionClosure,
     CompletionMove,
     DecisionMove,
-    ExitedMove,
     FailureMove,
     Fenced,
     HeldChunkMove,
     InterruptedClaimMove,
+    Judge,
     LeaseMove,
     LeaseReconcileMove,
     MintOwnerSource,
     OwnerUnresolvableMove,
+    ParkOnAsk,
+    ParkOnUsageLimit,
     ReapMove,
+    RecordOverload,
     RestartDisposition,
     TakeoverHolds,
     UnpauseMove,
@@ -847,39 +855,46 @@ def test_rotation_breach_order() -> None:
     assert model_breach_reason("opus", "opus", strict=True) is None
 
 
-@pytest.mark.parametrize(
-    ("in_flight", "still_pending", "expected"),
-    [
-        (False, False, ExitedMove.CLASSIFY),
-        (True, True, ExitedMove.AWAIT_ELICITATION),
-        (True, False, ExitedMove.COLLECT),
-    ],
-)
-def test_exited_worker_elicitation_move(in_flight: bool, still_pending: bool, expected: ExitedMove) -> None:
-    assert exited_worker_elicitation_move(in_flight=in_flight, still_pending=still_pending) is expected
+_ELICITATION = object()
+_LIMIT = object()
+_OVERLOAD = object()
+_ASK = object()
 
 
 @pytest.mark.parametrize(
-    ("usage_limited", "overloaded", "expected"),
+    ("elicitation", "still_pending", "expected"),
     [
-        (True, False, ExitedMove.PARK_ON_USAGE_LIMIT),
-        (True, True, ExitedMove.PARK_ON_USAGE_LIMIT),
-        (False, True, ExitedMove.RECORD_OVERLOAD),
-        (False, False, ExitedMove.CLOSE_OVERLOAD_STREAK),
+        (None, False, Classify()),
+        (None, True, Classify()),
+        (_ELICITATION, True, AwaitElicitation()),
+        (_ELICITATION, False, CollectElicitation(_ELICITATION)),
     ],
 )
-def test_exited_worker_classified_move(usage_limited: bool, overloaded: bool, expected: ExitedMove) -> None:
-    assert exited_worker_classified_move(usage_limited=usage_limited, overloaded=overloaded) is expected
+def test_exited_worker_elicitation_move(elicitation: object | None, still_pending: bool, expected: object) -> None:
+    assert exited_worker_elicitation_move(elicitation=elicitation, still_pending=still_pending) == expected
 
 
 @pytest.mark.parametrize(
-    ("backing_off", "unforwarded_ask", "expected"),
+    ("limit", "overload", "expected"),
     [
-        (True, False, ExitedMove.BACK_OFF),
-        (True, True, ExitedMove.BACK_OFF),
-        (False, True, ExitedMove.PARK_ON_ASK),
-        (False, False, ExitedMove.JUDGE),
+        (_LIMIT, None, ParkOnUsageLimit(_LIMIT)),
+        (_LIMIT, _OVERLOAD, ParkOnUsageLimit(_LIMIT)),
+        (None, _OVERLOAD, RecordOverload(_OVERLOAD)),
+        (None, None, CloseOverloadStreak()),
     ],
 )
-def test_exited_worker_settled_move(backing_off: bool, unforwarded_ask: bool, expected: ExitedMove) -> None:
-    assert exited_worker_settled_move(backing_off=backing_off, unforwarded_ask=unforwarded_ask) is expected
+def test_exited_worker_classified_move(limit: object | None, overload: object | None, expected: object) -> None:
+    assert exited_worker_classified_move(limit=limit, overload=overload) == expected
+
+
+@pytest.mark.parametrize(
+    ("backing_off", "ask", "expected"),
+    [
+        (True, None, BackOff()),
+        (True, _ASK, BackOff()),
+        (False, _ASK, ParkOnAsk(_ASK)),
+        (False, None, Judge()),
+    ],
+)
+def test_exited_worker_settled_move(backing_off: bool, ask: object | None, expected: object) -> None:
+    assert exited_worker_settled_move(backing_off=backing_off, ask=ask) == expected

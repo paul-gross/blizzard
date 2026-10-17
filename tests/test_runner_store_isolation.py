@@ -39,7 +39,6 @@ from blizzard.runner.harness.workspace_prompts import IWriteWorkspacePromptRepos
 from blizzard.runner.hub.host_identity import IWriteHostIdentityRepository
 from blizzard.runner.hub.identity import IWriteRetiredRunnerIdentity, IWriteRunnerIdentityRepository, RunnerIdentity
 from blizzard.runner.hub.outbound_buffer import IWriteOutboundRepository
-from blizzard.runner.hub.runner_transfer import IWriteHostIngestRepository
 from blizzard.runner.hub.served_projects import IWriteServedProjectsRepository, ServedProject
 from blizzard.runner.leases.asks import IWriteAskRepository
 from blizzard.runner.leases.elicitation import IWriteElicitationRepository
@@ -51,18 +50,20 @@ from blizzard.runner.leases.overload import IWriteOverloadRepository
 from blizzard.runner.leases.record import IWriteLeaseRecordRepository
 from blizzard.runner.leases.resume_intent import IWriteLeaseResumeIntentRepository
 from blizzard.runner.leases.session import IWriteLeaseSessionRepository
+from blizzard.runner.lifecycle.artifacts import IWriteGraphArtifactRepository
 from blizzard.runner.lifecycle.daemon_liveness import IWriteDaemonLivenessRepository
-from blizzard.runner.lifecycle.judgement.artifacts import IWriteGraphArtifactRepository
 from blizzard.runner.lifecycle.judgement.checks import ExecutedCheck, IWriteCheckRepository
 from blizzard.runner.lifecycle.judgement.git_commit_declaration import IWriteGitCommitDeclarationRepository
 from blizzard.runner.lifecycle.takeover import IWriteTakeoverRepository
 from blizzard.runner.store import schema
-from blizzard.runner.store.errors import RUNNER_SCOPED_OPTION, RUNNER_SCOPING, RunnerStoreErrorFactory
+from blizzard.runner.store.errors import RunnerStoreErrorFactory
+from blizzard.runner.store.scoped import RUNNER_SCOPING, RUNNER_UNSCOPED_OPTION
 from blizzard.runner.throttle.pause import IWritePauseRepository
 from blizzard.runner.tracing.cursor import LeaseCursorKey
 from blizzard.runner.tracing.repository import IWriteLeaseTraces, LeaseTraceCheckpoint
 from blizzard.runner.transcripts.invocation_boundaries import IWriteInvocationBoundaryRepository
 from blizzard.runner.transcripts.ledger import IWriteTranscriptLedgerRepository
+from blizzard.runner.transfer.rows import IWriteHostIngestRepository
 from blizzard.runner.usage.repository import (
     IWriteCredentialRenewalRepository,
     IWriteExternalUsageRepository,
@@ -80,7 +81,7 @@ RUNNER_B = "rn_b"
 #: Columns a runner-scoped table holds unique (or that name such a key), renamed in B's copy so it can sit beside A's.
 _RENAMED_KEYS = frozenset({"lease_id", "segment_id", "takeover_id", "supersedes"})
 _RUNNER_TABLES = [table for table in schema.metadata.sorted_tables if RUNNER_SCOPING.is_keyed(table)]
-_UNSCOPED = {RUNNER_SCOPED_OPTION: True}
+_UNSCOPED = {RUNNER_UNSCOPED_OPTION: True}
 
 
 def _b_row(table: sa.Table, row: dict[str, Any]) -> dict[str, Any]:

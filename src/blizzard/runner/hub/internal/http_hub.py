@@ -99,7 +99,6 @@ from blizzard.wire.route import (
     RouteTokenRekeyResponse,
 )
 from blizzard.wire.runner import (
-    RunnerAddRequest,
     RunnerAddResponse,
     RunnerBinding,
     RunnerCapability,
@@ -127,9 +126,6 @@ _TRANSCRIPT_PUSH_TIMEOUT_SECONDS = 5.0
 #: Caps a single ``chunk-statuses`` GET's ``chunk_id`` query-param count, bounding its URL length.
 _CHUNK_STATUSES_BATCH_LIMIT = 500
 
-#: The operator route adding a runner — the one call this module makes outside the fleet API.
-_RUNNERS_API = "/api/runners"
-
 #: The hub-level route naming the tenants the operator may enter.
 _ME_API = "/api/me"
 
@@ -141,14 +137,6 @@ _HOST_API = f"{_FLEET_API}/host"
 
 #: The header an operator call names its tenant in, by id.
 TENANT_HEADER = "X-Blizzard-Tenant"
-
-#: The statuses an add is refused with, each a reason the caller acts on rather than retries.
-_ADD_REFUSALS: dict[int, RunnerAddRefusalReason] = {
-    httpx.codes.UNAUTHORIZED: RunnerAddRefusalReason.SIGN_IN_REQUIRED,
-    httpx.codes.FORBIDDEN: RunnerAddRefusalReason.FORBIDDEN,
-    httpx.codes.NOT_FOUND: RunnerAddRefusalReason.UNSUPPORTED,
-    httpx.codes.METHOD_NOT_ALLOWED: RunnerAddRefusalReason.UNSUPPORTED,
-}
 
 #: The statuses a host add is refused with, each a reason the caller acts on rather than retries.
 _HOST_ADD_REFUSALS: dict[int, HostAddRefusalReason] = {
@@ -471,40 +459,12 @@ class HttpHubClient:
 
 
 class HttpHubRunnerAdmin:
-    """Runner add and the operator's tenants over an injected ``httpx.Client``, sending
+    """Host add and the operator's tenants over an injected ``httpx.Client``, sending
     ``operator_token`` as a Bearer credential when set and no credential otherwise."""
 
     def __init__(self, client: httpx.Client, *, operator_token: str | None) -> None:
         self._client = client
         self._operator_token = operator_token
-
-    def add_runner(
-        self, name: str, *, tenant_id: str | None = None, projects: tuple[str, ...] | None = None
-    ) -> IssuedIdentity:
-        operation = f"POST {_RUNNERS_API}"
-        headers = self._headers()
-        if tenant_id is not None:
-            headers[TENANT_HEADER] = tenant_id
-        request = RunnerAddRequest(name=name, projects=list(projects) if projects is not None else None)
-        try:
-            resp = self._client.post(
-                _RUNNERS_API, json=request.model_dump(mode="json", exclude={"host_id"}), headers=headers
-            )
-        except httpx.HTTPError as exc:
-            _log.error("hub unreachable", operation=operation, detail=str(exc))
-            raise HubClientError(f"{operation} failed: {exc}") from exc
-        reason = _add_refusal(resp)
-        if reason is not None:
-            _log.info("hub call refused", operation=operation, status=resp.status_code, reason=reason)
-            raise RunnerAddRefused(f"{operation} -> {resp.status_code}", reason=reason, detail=_detail(resp))
-        if not resp.is_success:
-            _log.error("hub call failed", operation=operation, status=resp.status_code, body=resp.text[:500])
-            raise HubClientError(f"{operation} -> {resp.status_code}: {resp.text[:200]}")
-        try:
-            added = RunnerAddResponse.model_validate(resp.json())
-        except ValueError as exc:
-            raise _malformed(operation, exc) from exc
-        return IssuedIdentity(runner_id=added.runner_id, runner_name=added.runner_name, token=added.token)
 
     def tenants(self) -> list[OperatorTenant]:
         operation = f"GET {_ME_API}"
@@ -659,21 +619,6 @@ def _host_record(wire: HostRecordResponse) -> HostRecord:
         host_name=wire.host_name,
         runners=tuple(HostHeldRunner(runner_id=r.runner_id, runner_name=r.runner_name) for r in wire.runners),
     )
-
-
-def _add_refusal(resp: httpx.Response) -> RunnerAddRefusalReason | None:
-    """The reason an add's answer refuses it, or ``None`` when it is no refusal the caller acts on.
-    A ``404`` is the tenant refusal only when it carries the hub's tenant text — a hub that predates
-    adding runners answers its own; a ``409`` is a refusal only when it is the tenant one; a ``422``
-    is the project refusal only when its detail is the hub's text — a malformed request's carries a
-    list of field errors instead."""
-    if resp.status_code == httpx.codes.NOT_FOUND and _detail(resp) == _NO_SUCH_TENANT:
-        return RunnerAddRefusalReason.NO_SUCH_TENANT
-    if resp.status_code == httpx.codes.UNPROCESSABLE_ENTITY:
-        return RunnerAddRefusalReason.NO_SUCH_PROJECT if _text_detail(resp) else None
-    if resp.status_code == httpx.codes.CONFLICT:
-        return RunnerAddRefusalReason.TENANT_REQUIRED if _refusal_code(resp) == _TENANT_REQUIRED else None
-    return _ADD_REFUSALS.get(resp.status_code)
 
 
 def _refusal_code(resp: httpx.Response) -> str | None:

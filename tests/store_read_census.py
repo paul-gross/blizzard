@@ -169,7 +169,6 @@ from blizzard.runner.harness.workspace_prompts import IReadWorkspacePromptReposi
 from blizzard.runner.hub.host_identity import HostIdentity, IReadHostIdentityRepository
 from blizzard.runner.hub.identity import IReadRunnerIdentityRepository, RunnerIdentity
 from blizzard.runner.hub.outbound_buffer import IReadOutboundRepository
-from blizzard.runner.hub.runner_transfer import IReadHostIngestRepository
 from blizzard.runner.hub.served_projects import IReadServedProjectsRepository, ServedProject
 from blizzard.runner.leases.asks import IReadAskRepository
 from blizzard.runner.leases.elicitation import IReadElicitationRepository
@@ -181,8 +180,8 @@ from blizzard.runner.leases.overload import IReadOverloadRepository
 from blizzard.runner.leases.record import IReadLeaseRecordRepository
 from blizzard.runner.leases.resume_intent import IReadLeaseResumeIntentRepository
 from blizzard.runner.leases.session import IReadLeaseSessionRepository
+from blizzard.runner.lifecycle.artifacts import IReadGraphArtifactRepository, PinnedGraphArtifact
 from blizzard.runner.lifecycle.daemon_liveness import IReadDaemonLivenessRepository
-from blizzard.runner.lifecycle.judgement.artifacts import IReadGraphArtifactRepository, PinnedGraphArtifact
 from blizzard.runner.lifecycle.judgement.checks import ExecutedCheck, IReadCheckRepository
 from blizzard.runner.lifecycle.judgement.git_commit_declaration import IReadGitCommitDeclarationRepository
 from blizzard.runner.lifecycle.takeover import IReadTakeoverRepository
@@ -195,6 +194,7 @@ from blizzard.runner.transcripts.archived_repository import IReadArchivedTranscr
 from blizzard.runner.transcripts.invocation_boundaries import IReadInvocationBoundaryRepository
 from blizzard.runner.transcripts.ledger import IReadTranscriptLedgerRepository
 from blizzard.runner.transcripts.repository import IReadTranscriptRepository
+from blizzard.runner.transfer.rows import IReadHostIngestRepository
 from blizzard.runner.usage.repository import (
     IReadCredentialRenewalRepository,
     IReadExternalUsageRepository,

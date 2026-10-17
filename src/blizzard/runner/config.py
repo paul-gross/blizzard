@@ -580,29 +580,25 @@ class RunnerConfig:
     #: Lease-trace sweep knobs; every field at its default when ``[tracing]`` is absent.
     tracing: TracingConfig = field(default_factory=TracingConfig)
 
-    @property
-    def worker_env(self) -> AllowlistedEnv:
+    def worker_env(self, tracing: TracingSettings) -> AllowlistedEnv:
         """The one allowlisted env every runner-spawned child is built from
         (``bzh:worker-env-allowlist``) — the sole accessor a composition root reads instead
-        of constructing an :class:`AllowlistedEnv` from the raw fields itself."""
-        return self._build_worker_env()
-
-    def _build_worker_env(self) -> AllowlistedEnv:
+        of constructing an :class:`AllowlistedEnv` from the raw fields itself. ``tracing`` is the runner's own
+        tracing decision, which decides whether the exporter-configuration names are withheld."""
         # `WINTER_OTEL_*` is withheld unconditionally: the runner alone hands winter its exporter, and only under
         # `worker_programs`, so a passed-through value would skip the receiver's lease check and redaction.
         dropped = {
-            *self.dropped_otel_passthrough,
+            *self.dropped_otel_passthrough(tracing),
             *(n for n in self.worker_env_passthrough if n.startswith(_WINTER_OTEL_PREFIX)),
         }
         passthrough = tuple(name for name in self.worker_env_passthrough if name not in dropped)
         return AllowlistedEnv.of(passthrough, path_prepend=self.worker_path_prepend)
 
-    @property
-    def dropped_otel_passthrough(self) -> tuple[str, ...]:  # ast-grep-ignore: bzh:property-delegates
+    def dropped_otel_passthrough(self, tracing: TracingSettings) -> tuple[str, ...]:
         """The ``OTEL_*`` and ``WINTER_OTEL_*`` names in ``[worker] env_passthrough`` that are withheld from every
-        worker while tracing is on — a worker must never inherit the runner's exporter configuration or
+        worker while ``tracing`` is on — a worker must never inherit the runner's exporter configuration or
         credentials."""
-        if not TracingSettings.of(os.environ).enabled():
+        if not tracing.enabled():
             return ()
         return tuple(name for name in self.worker_env_passthrough if name.startswith(("OTEL_", _WINTER_OTEL_PREFIX)))
 
@@ -644,14 +640,13 @@ class RunnerConfig:
     def data_dir(self) -> Path:
         return HostLayout(self.root).data_dir
 
-    @property
-    def harness_settings(self) -> HarnessSettings:
-        """The runner-wide values every harness binding is built from."""
+    def harness_settings(self, tracing: TracingSettings) -> HarnessSettings:
+        """The runner-wide values every harness binding is built from, its worker env under ``tracing``."""
         return HarnessSettings(
             root=self.root,
             autonomy=self.autonomy,
             config_dir=self.harness_config_dir,
-            worker_env=self.worker_env,
+            worker_env=self.worker_env(tracing),
             transcripts_root=self.transcripts_root,
             sections=self.harness_sections,
         )

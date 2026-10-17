@@ -19,6 +19,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import IO, Protocol
 
+from blizzard.foundation.process import group_exists, signal_group, terminate_group
 from blizzard.foundation.roles import collaborator, domain_model
 from blizzard.runner.harness.opencode.compatibility.landlock import (
     LandlockPolicy,
@@ -348,7 +349,7 @@ class _SubprocessStartedProcess:
             self._pump(0.05)
             returncode = self.process.poll()
             if returncode is not None:
-                if _process_group_exists(self.process.pid):
+                if group_exists(self.process.pid):
                     group_reaped = _stop_process_group(self.process)
                     if returncode == 0:
                         returncode = -1
@@ -380,7 +381,7 @@ class _SubprocessStartedProcess:
     def _finalize_group(self, result: OpenCodeProcessResult) -> OpenCodeProcessResult:
         """Reject a direct-child success until every member of its process group is gone."""
 
-        if not _process_group_exists(self.process.pid):
+        if not group_exists(self.process.pid):
             return result
         group_reaped = _stop_process_group(self.process)
         return OpenCodeProcessResult(
@@ -395,10 +396,10 @@ class _SubprocessStartedProcess:
     def group_alive(self) -> bool:
         """Expose the process-group boundary to interruption probes."""
 
-        return _process_group_exists(self.process.pid)
+        return group_exists(self.process.pid)
 
     def _signal(self, signum: signal.Signals) -> None:
-        _signal_process_group(self.process.pid, signum)
+        signal_group(self.process.pid, signum)
 
     def close_streams(self) -> None:
         self._close_pipe_streams()
@@ -700,48 +701,34 @@ class SubprocessOpenCodeProcess:
         )
 
 
-def _signal_process_group(pid: int, signum: signal.Signals) -> None:
-    try:
-        os.killpg(pid, signum)
-    except ProcessLookupError:
-        return
-
-
 def _stop_process_group(process: _ProcessHandle, grace_seconds: float = 0.5) -> bool:
     """Terminate, force, and reap a bounded command's complete process group."""
 
     pid = process.pid
-    _signal_process_group(pid, signal.SIGTERM)
-    try:
-        process.wait(timeout=grace_seconds)
-    except subprocess.TimeoutExpired:
-        _signal_process_group(pid, signal.SIGKILL)
-        with contextlib.suppress(BaseException):
-            process.wait()
-    except BaseException:
-        _signal_process_group(pid, signal.SIGKILL)
-        with contextlib.suppress(BaseException):
-            process.wait()
-    if _process_group_exists(pid):
-        _signal_process_group(pid, signal.SIGKILL)
+
+    def wait(grace: float) -> None:
+        # An interrupted caller still gets the group killed; only the grace running out is left to
+        # `terminate_group`, which reads it as "force the group".
+        try:
+            process.wait(timeout=grace)
+        except subprocess.TimeoutExpired:
+            raise
+        except BaseException:
+            return
+
+    terminate_group(pid, grace=grace_seconds, wait=wait)
+    with contextlib.suppress(BaseException):
+        process.wait()
+    if group_exists(pid):
+        signal_group(pid, signal.SIGKILL)
         _wait_for_group_exit(pid, grace_seconds)
-    return not _process_group_exists(pid)
-
-
-def _process_group_exists(pgid: int) -> bool:
-    try:
-        os.killpg(pgid, 0)
-    except ProcessLookupError:
-        return False
-    except PermissionError:
-        return True
-    return True
+    return not group_exists(pid)
 
 
 def _wait_for_group_exit(pgid: int, timeout: float) -> None:
     deadline = time.monotonic() + timeout
     try:
-        while _process_group_exists(pgid) and time.monotonic() < deadline:
+        while group_exists(pgid) and time.monotonic() < deadline:
             time.sleep(0.01)
     except BaseException:
         return

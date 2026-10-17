@@ -44,8 +44,8 @@ from blizzard.runner.leases.record import IWriteLeaseRecordRepository
 from blizzard.runner.leases.resume_intent import IWriteLeaseResumeIntentRepository
 from blizzard.runner.leases.session import IWriteLeaseSessionRepository
 from blizzard.runner.leases.worker_stdout import IWorkerStdoutFiles
+from blizzard.runner.lifecycle.artifacts import IWriteGraphArtifactRepository, PinnedGraphArtifact
 from blizzard.runner.lifecycle.env_release import EnvironmentRelease
-from blizzard.runner.lifecycle.judgement.artifacts import IWriteGraphArtifactRepository, PinnedGraphArtifact
 from blizzard.runner.lifecycle.judgement.elicitation_files import IElicitationFiles
 from blizzard.runner.lifecycle.model import (
     MintOwnerSource,

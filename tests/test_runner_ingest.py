@@ -18,7 +18,12 @@ from blizzard.foundation.crash import CrashPoint
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.cli import runners as runners_cli
-from blizzard.runner.composition import DotenvTokenFiles, RunnerStoreFiles, build_host_stores, build_identity_writer
+from blizzard.runner.composition import (
+    DotenvTokenFiles,
+    RunnerBoundStoreFiles,
+    build_host_stores,
+    build_identity_writer,
+)
 from blizzard.runner.host_config import HOST_TOKEN_VARIABLE, BuiltRunner, HostConfig
 from blizzard.runner.host_layout import HostFileEditor, HostLayout, HostLock, append_workspace
 from blizzard.runner.hub.client import HostRefusalReason, HostRefused, HubClientError
@@ -132,16 +137,16 @@ def test_ingest_moves_a_colliding_runner_under_a_new_workspace_id_and_reads_the_
     assert rows(here, "route_tokens")[0]["chunk_id"] == rows(source, "route_tokens")[0]["chunk_id"]
     assert rows(here, "graph_artifacts") == rows(source, "graph_artifacts")
     untouched = _source_store_bytes(hosts)
-    removing = RunnerStoreFiles.remove_runner_rows
+    removing = RunnerBoundStoreFiles.remove_runner_rows
     seen: list[str] = []
 
-    def remove(self: RunnerStoreFiles, url: str, runner_id: str, *, keep_counters: bool) -> None:
+    def remove(self: RunnerBoundStoreFiles, url: str, *, keep_counters: bool) -> None:
         if url.endswith("there/data/host.db"):
             assert _source_store_bytes(hosts) == untouched, "the source was written before its removal"
-            seen.append(runner_id)
-        removing(self, url, runner_id, keep_counters=keep_counters)
+            seen.append(self.runner_id)
+        removing(self, url, keep_counters=keep_counters)
 
-    monkeypatch.setattr(RunnerStoreFiles, "remove_runner_rows", remove)
+    monkeypatch.setattr(RunnerBoundStoreFiles, "remove_runner_rows", remove)
 
     refused = _ingest(fake_init_hub, hosts)
     assert refused.exit_code != 0 and "--workspace-id" in refused.output

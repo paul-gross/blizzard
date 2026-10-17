@@ -15,7 +15,6 @@ from blizzard.foundation.logging import get_logger
 from blizzard.runner.leases import closure
 from blizzard.runner.leases.model import ClosedLease, Lease, NewLease
 from blizzard.runner.leases.record import IWriteLeaseRecordRepository
-from blizzard.runner.store.errors import RunnerStoreConnections
 from blizzard.runner.store.internal.base import (
     Unclosed,
     encode_work_refs,
@@ -33,6 +32,7 @@ from blizzard.runner.store.schema import (
     takeovers,
     transcript_segments,
 )
+from blizzard.runner.store.scoped import RunnerStoreConnections
 
 _log = get_logger("blizzard.runner.store")
 

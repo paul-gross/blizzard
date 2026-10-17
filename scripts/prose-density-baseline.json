@@ -5746,7 +5746,7 @@
    "over_cap": 0,
    "total": 1
   },
-  "blizzard/runner/lifecycle/judgement/artifacts.py": {
+  "blizzard/runner/lifecycle/artifacts.py": {
    "comments": 3,
    "docstrings": 31,
    "over_cap": 0,

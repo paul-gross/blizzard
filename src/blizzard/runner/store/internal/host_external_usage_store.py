@@ -17,7 +17,6 @@ from blizzard.foundation.credential_renewal import RenewalFailureReason, Renewal
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.batching import id_batches
 from blizzard.foundation.store.utc import as_utc
-from blizzard.runner.store.errors import RunnerStoreConnections
 from blizzard.runner.store.internal.base import insert_outbox_row
 from blizzard.runner.store.schema import (
     credential_renewal_claims,
@@ -25,6 +24,7 @@ from blizzard.runner.store.schema import (
     external_usage_samples,
     outbound_buffer,
 )
+from blizzard.runner.store.scoped import RunnerStoreConnections
 from blizzard.runner.subscriptions.credential_renewer import RenewalOutcome
 from blizzard.runner.subscriptions.subscription_sampler import ExternalSubscriptionUsageWindow
 from blizzard.runner.usage.repository import (

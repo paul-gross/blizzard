@@ -27,6 +27,7 @@ from blizzard.runner.hub.client import (
     HubClientError,
     IHostHubClient,
     IHubRunnerAdmin,
+    IRunnerAdder,
     IssuedHost,
     IssuedIdentity,
     OperatorTenant,
@@ -183,19 +184,14 @@ class HostBootstrap:
 
 
 class HostRunnerAdmin:
-    """The operator admin with its runner add taken under the host's own credential instead: a runner
-    added through it stands under the host, in the host's tenant. Listing tenants and adding hosts stay
-    the operator's."""
+    """The runner add taken under the host's own credential: a runner added through it stands under the
+    host, in the host's tenant."""
 
-    def __init__(self, host: IHostHubClient, operator: IHubRunnerAdmin) -> None:
+    def __init__(self, host: IHostHubClient) -> None:
         self._host = host
-        self._operator = operator
 
-    def add_runner(
-        self, name: str, *, tenant_id: str | None = None, projects: tuple[str, ...] | None = None
-    ) -> IssuedIdentity:
-        """Add the runner under the host; ``tenant_id`` is the host's own, so it is not sent."""
-        del tenant_id
+    def add_runner(self, name: str, *, projects: tuple[str, ...] | None = None) -> IssuedIdentity:
+        """Add the runner under the host."""
         answer = self._host.add_runner(name, projects=projects)
         if isinstance(answer, IssuedIdentity):
             return answer
@@ -207,12 +203,6 @@ class HostRunnerAdmin:
             )
         raise HubClientError(f"the hub refused the host's credential adding runner {name}: {answer.detail}")
 
-    def tenants(self) -> list[OperatorTenant]:
-        return self._operator.tenants()
 
-    def add_host(self, name: str, *, tenant_id: str | None = None, adopt: tuple[str, ...] = ()) -> IssuedHost:
-        return self._operator.add_host(name, tenant_id=tenant_id, adopt=adopt)
-
-
-def _conforms_hub_runner_admin(x: HostRunnerAdmin) -> IHubRunnerAdmin:
+def _conforms_runner_adder(x: HostRunnerAdmin) -> IRunnerAdder:
     return x

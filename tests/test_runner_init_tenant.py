@@ -30,8 +30,6 @@ from blizzard.runner.hub.client import (
     HubClientError,
     IssuedIdentity,
     OperatorTenant,
-    RunnerAddRefusalReason,
-    RunnerAddRefused,
     TokenIdentity,
     TokenRefusal,
 )
@@ -53,9 +51,6 @@ _FROM_FILE = HeldToken("t", from_process_env=False)
 _ALPHA = OperatorTenant(tenant_id="ten_alpha", name="alpha")
 _BRAVO = OperatorTenant(tenant_id="ten_bravo", name="bravo")
 _IN_ALPHA = TokenIdentity(runner_id="rn_1", runner_name="r", tenant_id="ten_alpha", tenant_name="alpha")
-_TENANT_REQUIRED = RunnerAddRefused(
-    "POST /api/runners -> 409", reason=RunnerAddRefusalReason.TENANT_REQUIRED, detail="name the tenant"
-)
 _HOST_TENANT_REQUIRED = HostAddRefused(
     "POST /api/hosts -> 409", reason=HostAddRefusalReason.TENANT_REQUIRED, detail="name the tenant"
 )
@@ -138,53 +133,14 @@ def test_a_held_token_in_the_named_tenant_or_from_a_hub_naming_none_is_kept(answ
 
 
 @pytest.mark.unit
-def test_an_unknown_token_is_asked_about_first_then_the_runner_is_added_in_the_named_tenant() -> None:
+def test_an_unknown_token_is_asked_about_first_then_the_runner_is_added_in_its_hosts_tenant() -> None:
     log = _Log(stored="rn_old")
     admin = _LoggedAdmin(log=log)
     joined = _bootstrap(log, TokenRefusal(reason=RunnerTokenRefusalReason.UNKNOWN), admin).join(
         "r", held=_FROM_FILE, allow_readd=True, tenant_id="ten_bravo"
     )
     assert log.calls == ["identity", "set_aside", "add"]
-    assert admin.named == ["ten_bravo"]
     assert (joined.added, joined.tenant_id) == (True, "ten_bravo")
-
-
-@pytest.mark.unit
-def test_no_tenant_named_adds_in_the_one_the_hub_resolves() -> None:
-    log = _Log()
-    admin = _LoggedAdmin(log=log)
-    _bootstrap(log, TokenRefusal(reason=RunnerTokenRefusalReason.UNKNOWN), admin).join(
-        "r", held=None, allow_readd=False
-    )
-    assert admin.named == [None]
-
-
-@pytest.mark.unit
-@pytest.mark.parametrize(
-    ("listing", "listed"),
-    [([_ALPHA, _BRAVO], (_ALPHA, _BRAVO)), (HubClientError("GET /api/me -> 500"), ())],
-    ids=["listed", "unlisted"],
-)
-def test_a_choice_the_hub_leaves_stops_listing_the_tenants_the_operator_may_enter(
-    listing: list[OperatorTenant] | HubClientError, listed: tuple[OperatorTenant, ...]
-) -> None:
-    log = _Log()
-    admin = _LoggedAdmin(log=log, refusal=_TENANT_REQUIRED, tenants_answer=listing)
-    with pytest.raises(BootstrapStopped) as stopped:
-        _bootstrap(log, TokenRefusal(reason=RunnerTokenRefusalReason.UNKNOWN), admin).join(
-            "r", held=None, allow_readd=False
-        )
-    assert (stopped.value.stop, stopped.value.tenants) == (BootstrapStop.TENANT_REQUIRED, listed)
-
-
-@pytest.mark.unit
-def test_an_add_refused_for_another_reason_is_not_a_tenant_stop() -> None:
-    log = _Log()
-    refusal = RunnerAddRefused("POST /api/runners -> 403", reason=RunnerAddRefusalReason.FORBIDDEN, detail="no")
-    with pytest.raises(RunnerAddRefused):
-        _bootstrap(log, TokenRefusal(reason=RunnerTokenRefusalReason.UNKNOWN), _LoggedAdmin(refusal=refusal)).join(
-            "r", held=None, allow_readd=False
-        )
 
 
 # --- the wire ---------------------------------------------------------------------------------------
@@ -213,42 +169,6 @@ def test_the_runner_reads_its_tenants_from_the_answer_the_hub_gives_me() -> None
     )
     read = CallerTenantsView.model_validate(me.model_dump(mode="json"))
     assert read.tenants == [CallerTenantView(tenant_id="ten_alpha", name="alpha")]
-
-
-@pytest.mark.unit
-@pytest.mark.parametrize("tenant_id", ["ten_bravo", None])
-def test_an_add_names_its_tenant_in_the_header_only_when_given(tenant_id: str | None) -> None:
-    def handler(request: httpx.Request) -> httpx.Response:
-        assert request.headers.get(TENANT_HEADER) == tenant_id
-        return httpx.Response(201, json={"runner_id": "rn_1", "runner_name": "r", "token": "tok"})
-
-    assert _admin(httpx.MockTransport(handler)).add_runner("r", tenant_id=tenant_id).runner_id == "rn_1"
-
-
-@pytest.mark.unit
-@pytest.mark.parametrize(
-    ("status_code", "body", "reason"),
-    [
-        (409, {"detail": {"code": "tenant_required", "message": "name it"}}, RunnerAddRefusalReason.TENANT_REQUIRED),
-        (404, {"detail": "no such tenant"}, RunnerAddRefusalReason.NO_SUCH_TENANT),
-        (404, {"detail": "Not Found"}, RunnerAddRefusalReason.UNSUPPORTED),
-    ],
-)
-def test_the_tenant_refusals_are_told_apart_from_a_hub_without_the_add(
-    status_code: int, body: dict[str, object], reason: RunnerAddRefusalReason
-) -> None:
-    transport = httpx.MockTransport(lambda _request: httpx.Response(status_code, json=body))
-    with pytest.raises(RunnerAddRefused) as refused:
-        _admin(transport).add_runner("r", tenant_id="ten_bravo")
-    assert refused.value.reason is reason
-
-
-@pytest.mark.unit
-def test_a_conflict_that_is_not_the_tenant_refusal_is_a_plain_hub_client_error() -> None:
-    transport = httpx.MockTransport(lambda _request: httpx.Response(409, json={"detail": "something else"}))
-    with pytest.raises(HubClientError) as raised:
-        _admin(transport).add_runner("r")
-    assert type(raised.value) is HubClientError
 
 
 @pytest.mark.unit

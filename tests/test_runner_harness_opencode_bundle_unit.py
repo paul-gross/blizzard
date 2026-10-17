@@ -32,7 +32,7 @@ from blizzard.runner.harness.opencode.section import OpenCodeSection
 from blizzard.runner.harness.wiring import HarnessSections, publish_harness_bundle, shared_inputs
 from blizzard.runner.runtime import init_environment
 from tests.harness_sections import opencode, sections, with_claude_code
-from tests.runner_fakes import FakeProbe
+from tests.runner_fakes import NO_TRACING, FakeProbe
 
 pytestmark = pytest.mark.unit
 
@@ -97,7 +97,7 @@ def test_registry_binds_published_config_and_generated_config_without_bundle(
     launcher = ProcessLauncher(probe, executor=spawn_executor)
     bundled = replace(config, harness_config_dir=bundle)
     binding = OPENCODE_DECLARATION.binding(
-        opencode(bundled), shared_inputs(bundled.harness_settings), process=probe, launcher=launcher
+        opencode(bundled), shared_inputs(bundled.harness_settings(NO_TRACING)), process=probe, launcher=launcher
     )
     assert isinstance(binding.adapter, OpenCodeAdapter)
     env = binding.adapter._config_env()
@@ -108,7 +108,7 @@ def test_registry_binds_published_config_and_generated_config_without_bundle(
     assert composed["plugin"] == ["extra@1", *json.loads(worker.read_text())["plugin"]]
     assert published_snapshot(config.root) == snapshot.path.resolve()
     plain = OPENCODE_DECLARATION.binding(
-        opencode(config), shared_inputs(config.harness_settings), process=probe, launcher=launcher
+        opencode(config), shared_inputs(config.harness_settings(NO_TRACING)), process=probe, launcher=launcher
     )
     assert isinstance(plain.adapter, OpenCodeAdapter)
     plain_env = plain.adapter._config_env()
@@ -228,6 +228,16 @@ def test_ambient_sources_honor_xdg_config_home(tmp_path: Path) -> None:
     assert ambient_plugin_sources(tmp_path / "cwd", {"HOME": str(tmp_path), "XDG_CONFIG_HOME": str(xdg)}) == {
         "p": config
     }
+
+
+def test_ambient_sources_read_no_user_scope_without_a_home_in_the_env(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    daemon_home = tmp_path / "daemon-home"
+    (daemon_home / ".config" / "opencode" / "plugins").mkdir(parents=True)
+    (daemon_home / ".config" / "opencode" / "plugins" / "mine.ts").write_text("")
+    monkeypatch.setenv("HOME", str(daemon_home))
+    assert ambient_plugin_sources(tmp_path / "cwd", {}) == {}
 
 
 def test_ambient_sources_report_unreadable_and_non_object_configs(tmp_path: Path) -> None:

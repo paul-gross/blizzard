@@ -111,15 +111,17 @@ class IStandingRunner(Protocol):
     def identity_verdict(self) -> IHostStandingSink: ...
 
 
-def standing_of(runner: IStandingRunner, record: HostRecord, identity: HostIdentity) -> tuple[HostStanding, str | None]:
-    """``runner``'s standing under the host ``record`` answers for, and why it halts the runner when it does."""
-    if runner.runner_id not in {held.runner_id for held in record.runners}:
+def standing_of(
+    runner_id: str, tenant_id: str | None, record: HostRecord, identity: HostIdentity
+) -> tuple[HostStanding, str | None]:
+    """The standing of runner ``runner_id`` — whose recorded identity stands in ``tenant_id``, ``None`` when it
+    recorded none — under the host ``record`` answers for, and why it halts the runner when it does."""
+    if runner_id not in {held.runner_id for held in record.runners}:
         return HostStanding.NOT_HELD, f"not held under this host ({identity.host_id}) at its hub"
-    own = runner.identity.current()
-    if own is not None and own.tenant_id is not None and own.tenant_id != identity.tenant_id:
+    if tenant_id is not None and tenant_id != identity.tenant_id:
         return (
             HostStanding.TENANT_DIFFERS,
-            f"stands in tenant {own.tenant_id}, not the host's tenant {identity.tenant_id}",
+            f"stands in tenant {tenant_id}, not the host's tenant {identity.tenant_id}",
         )
     return HostStanding.HELD, None
 
@@ -199,7 +201,8 @@ class HostRegistration:
             )
         )
         for runner in self.runners():
-            standing, reason = standing_of(runner, answer, identity)
+            own = runner.identity.current()
+            standing, reason = standing_of(runner.runner_id, own.tenant_id if own else None, answer, identity)
             runner.identity_verdict.stand(standing, reason=reason)
 
     def _identity_for(self, answer: HostRecord, now: datetime) -> tuple[HostIdentity | None, HostIdentity | None]:

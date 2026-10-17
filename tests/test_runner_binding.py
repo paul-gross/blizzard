@@ -22,7 +22,7 @@ from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.loop.tick import tick
 from blizzard.runner.loop_wiring import LoopWiring
 from blizzard.runner.store import schema
-from blizzard.runner.store.errors import RUNNER_SCOPED_OPTION, RunnerAlreadyBound, RunnerUnbound
+from blizzard.runner.store.scoped import RUNNER_UNSCOPED_OPTION, RunnerAlreadyBound, RunnerUnbound
 from tests.host_files import load_runner_config, with_workspace
 from tests.runner_client import runner_client
 from tests.runner_fakes import FakeHarness, FakeHub, SqlAlchemyRunnerStore, loop_graph, make_store
@@ -44,7 +44,7 @@ def _unbound_store(tmp_path: Path) -> SqlAlchemyRunnerStore:
 def _write_rows(store: SqlAlchemyRunnerStore, runner_id: str, *chunk_ids: str) -> None:
     """Pause-park rows as the named runner wrote them."""
     with store._engine.begin() as conn:
-        conn.execution_options(**{RUNNER_SCOPED_OPTION: True}).execute(
+        conn.execution_options(**{RUNNER_UNSCOPED_OPTION: True}).execute(
             sa.insert(schema.pause_parks),
             [{"lease_id": f"lease_{c}", "chunk_id": c, "parked_at": _NOW, "runner_id": runner_id} for c in chunk_ids],
         )
@@ -99,7 +99,7 @@ def _owners(engine: sa.Engine) -> dict[str, set[str]]:
     """The runners each non-empty runner-scoped table's rows name, per table."""
     scoped = [t for t in schema.metadata.sorted_tables if t.info["scope"] == "runner"]
     with engine.connect() as conn:
-        conn = conn.execution_options(**{RUNNER_SCOPED_OPTION: True})
+        conn = conn.execution_options(**{RUNNER_UNSCOPED_OPTION: True})
         owners = {t.name: set(conn.execute(sa.select(t.c.runner_id).distinct()).scalars()) for t in scoped}
     return {name: ids for name, ids in owners.items() if ids}
 

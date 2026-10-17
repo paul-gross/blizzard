@@ -53,18 +53,10 @@ class IdentityRouteMissing(HubClientError):
 
 
 class RunnerAddRefusalReason(StrEnum):
-    """Why the hub refused to add a runner: ``SIGN_IN_REQUIRED``, the hub requires an operator
-    session and none was presented, or it was not accepted (401); ``FORBIDDEN``, the operator
-    lacks ``runner:add`` (403); ``UNSUPPORTED``, the hub predates adding runners (404 or 405);
-    ``TENANT_REQUIRED``, the operator may enter several tenants and named none (409);
-    ``NO_SUCH_TENANT``, the named tenant is none the operator may enter (404); ``NO_SUCH_PROJECT``,
-    a named project is none the tenant holds (422)."""
+    """Why the hub refused to add a runner: ``UNSUPPORTED``, the hub predates adding runners under a
+    host (404); ``NO_SUCH_PROJECT``, a named project is none the tenant holds (422)."""
 
-    SIGN_IN_REQUIRED = "sign_in_required"
-    FORBIDDEN = "forbidden"
     UNSUPPORTED = "unsupported"
-    TENANT_REQUIRED = "tenant_required"
-    NO_SUCH_TENANT = "no_such_tenant"
     NO_SUCH_PROJECT = "no_such_project"
 
 
@@ -521,7 +513,18 @@ class IChunkStatusReader(Protocol):
         ...
 
 
-class IHubClient(IChunkStatusReader, Protocol):
+class ITranscriptPusher(Protocol):
+    """The transcript push alone, narrowed from :class:`IHubClient` (``bzh:seam-size-ceiling``)."""
+
+    def push_transcripts(self, records: Sequence[TranscriptPush]) -> TranscriptPushAck:
+        """``POST /api/fleet/transcripts`` — the transcript lane's own store-and-forward
+        push, seq-idempotent against its own high-water mark. Structurally independent
+        of :meth:`push_facts`: a wedged or slow
+        transcript flush never blocks it."""
+        ...
+
+
+class IHubClient(IChunkStatusReader, ITranscriptPusher, Protocol):
     """The runner's client of the hub API. Outbound-only."""
 
     def peek_queue(
@@ -547,13 +550,6 @@ class IHubClient(IChunkStatusReader, Protocol):
 
     def push_facts(self, facts: Sequence[PushedFact]) -> FactPushAck:
         """``POST /api/fleet/events`` — store-and-forward fact push, seq-idempotent."""
-        ...
-
-    def push_transcripts(self, records: Sequence[TranscriptPush]) -> TranscriptPushAck:
-        """``POST /api/fleet/transcripts`` — the transcript lane's own store-and-forward
-        push, seq-idempotent against its own high-water mark. Structurally independent
-        of :meth:`push_facts`: a wedged or slow
-        transcript flush never blocks it."""
         ...
 
     def get_envelope(self, chunk_id: str) -> Envelope:
@@ -624,21 +620,22 @@ class ITokenIdentityReader(Protocol):
         ...
 
 
+class IRunnerAdder(Protocol):
+    """Add a runner under the credential that stands behind the caller (``bzh:seam-size-ceiling``)."""
+
+    def add_runner(self, name: str, *, projects: tuple[str, ...] | None = None) -> IssuedIdentity:
+        """Add a runner under the initial ``name``, serving the projects ``projects`` names — or, with
+        ``None``, the tenant's only project; the hub mints its id and bearer token together. A refusal
+        raises :class:`RunnerAddRefused`; an unreachable hub or a 5xx raises :class:`HubClientError`,
+        and the hub has added nothing the caller can use."""
+        ...
+
+
 class IHubRunnerAdmin(Protocol):
     """The runner-side calls made under an operator's credential rather than a runner token: adding
-    a runner or a host, and listing the tenants the operator may add one in. Its credential is the operator's
+    a host, and listing the tenants the operator may add one in. Its credential is the operator's
     signed-in session for the hub when one is held, and none otherwise — never a runner token. A hub
     without sign-in admits no credential; any other answers 401."""
-
-    def add_runner(
-        self, name: str, *, tenant_id: str | None = None, projects: tuple[str, ...] | None = None
-    ) -> IssuedIdentity:
-        """``POST /api/runners`` — add a runner under the initial ``name`` in the tenant ``tenant_id``
-        names, or, with none named, the one the hub resolves for the operator, serving the projects
-        ``projects`` names by id or slug — or, with ``None``, the tenant's only project; the hub mints
-        its id and bearer token together. A refusal raises :class:`RunnerAddRefused`; an unreachable
-        hub or a 5xx raises :class:`HubClientError`, and the hub has added nothing the caller can use."""
-        ...
 
     def tenants(self) -> list[OperatorTenant]:
         """``GET /api/me`` — every tenant the operator may enter, ordered by id; empty from a hub

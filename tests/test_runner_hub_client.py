@@ -19,16 +19,13 @@ from blizzard.runner.hub.client import (
     ChunkNotFoundError,
     ClaimRequest,
     HubClientError,
-    IssuedIdentity,
     RegistrationReply,
-    RunnerAddRefusalReason,
-    RunnerAddRefused,
     TokenIdentity,
     TokenRefusal,
     TranscriptPush,
 )
 from blizzard.runner.hub.internal import http_hub as http_hub_module
-from blizzard.runner.hub.internal.http_hub import HttpHubClient, HttpHubRunnerAdmin
+from blizzard.runner.hub.internal.http_hub import HttpHubClient
 from blizzard.runner.node_steps.submissions import Completion
 from blizzard.wire.queue import QueuePeekRequest
 from blizzard.wire.runner import RunnerCapability
@@ -611,49 +608,6 @@ def test_identity_raises_when_the_hub_is_unreachable() -> None:
 
     with pytest.raises(HubClientError):
         _client(handler).identity()
-
-
-@pytest.mark.unit
-@pytest.mark.parametrize(("operator_token", "authorization"), [("op-session", "Bearer op-session"), (None, None)])
-def test_add_runner_posts_the_name_under_the_operators_session_when_one_is_held(
-    operator_token: str | None, authorization: str | None
-) -> None:
-    def handler(request: httpx.Request) -> httpx.Response:
-        assert (request.method, request.url.path) == ("POST", "/api/runners")
-        assert json.loads(request.content) == {"name": "r-claude", "projects": None}
-        assert request.headers.get("Authorization") == authorization
-        return httpx.Response(201, json={"runner_id": "rn_1", "runner_name": "r-claude", "token": "tok"})
-
-    client = httpx.Client(base_url="http://hub.test", transport=httpx.MockTransport(handler))
-    issued = HttpHubRunnerAdmin(client, operator_token=operator_token).add_runner("r-claude")
-    assert issued == IssuedIdentity(runner_id="rn_1", runner_name="r-claude", token="tok")
-
-
-@pytest.mark.unit
-@pytest.mark.parametrize(
-    ("status_code", "reason"),
-    [
-        (401, RunnerAddRefusalReason.SIGN_IN_REQUIRED),
-        (403, RunnerAddRefusalReason.FORBIDDEN),
-        (404, RunnerAddRefusalReason.UNSUPPORTED),
-        (405, RunnerAddRefusalReason.UNSUPPORTED),
-    ],
-)
-def test_add_runner_refusals_carry_their_reason(status_code: int, reason: RunnerAddRefusalReason) -> None:
-    client = httpx.Client(
-        base_url="http://hub.test", transport=httpx.MockTransport(_refusing(status_code, json={"detail": "no"}))
-    )
-    with pytest.raises(RunnerAddRefused) as refused:
-        HttpHubRunnerAdmin(client, operator_token=None).add_runner("r-claude")
-    assert (refused.value.reason, refused.value.detail) == (reason, "no")
-
-
-@pytest.mark.unit
-def test_add_runner_server_error_is_a_plain_hub_client_error() -> None:
-    client = httpx.Client(base_url="http://hub.test", transport=httpx.MockTransport(_refusing(503, text="down")))
-    with pytest.raises(HubClientError) as raised:
-        HttpHubRunnerAdmin(client, operator_token=None).add_runner("r-claude")
-    assert type(raised.value) is HubClientError
 
 
 def _pushes(batch: TranscriptSegmentBatch) -> list[TranscriptPush]:

@@ -26,6 +26,7 @@ from blizzard.runner.host_config import (
 )
 from tests.harness_sections import claude_code, opencode
 from tests.host_files import write_minimal_host
+from tests.runner_fakes import NO_TRACING
 
 pytestmark = pytest.mark.unit
 
@@ -154,7 +155,7 @@ def test_a_worker_path_prepend_expands_a_leading_tilde(tmp_path: Path, monkeypat
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
     config = _config(tmp_path / "host", runner='[runner.worker]\npath_prepend = ["~/bin"]\n')
     assert config.worker_path_prepend == (str(tmp_path / "home" / "bin"),)
-    assert config.worker_env.path_prepend == config.worker_path_prepend
+    assert config.worker_env(NO_TRACING).path_prepend == config.worker_path_prepend
 
 
 def test_the_missing_path_prepend_entries_name_only_what_is_absent(tmp_path: Path) -> None:

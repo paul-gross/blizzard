@@ -26,6 +26,7 @@ from blizzard.foundation.node_steps import ApplyOutcome, SessionMode
 from blizzard.foundation.runner_identity_state import IdentityState
 from blizzard.foundation.runner_tokens import RunnerTokenRefusalReason
 from blizzard.foundation.store.engine import create_engine_from_url
+from blizzard.foundation.trace_export.settings import TracingSettings
 from blizzard.runner.composition import RunnerProcess, build_runner_process
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.environments.provider import (
@@ -92,7 +93,7 @@ from blizzard.runner.node_steps.submissions import ApplyReply, Completion, GateS
 from blizzard.runner.process.internal.worker_scratch_dirs import WorkerScratchDirs
 from blizzard.runner.process.probe import IProcessProbe
 from blizzard.runner.runtime import migration_runner
-from blizzard.runner.store.errors import RunnerStoreConnections, RunnerStoreErrorFactory
+from blizzard.runner.store.errors import RunnerStoreErrorFactory
 from blizzard.runner.store.internal.ask_store import AskStore
 from blizzard.runner.store.internal.attachment_store import AttachmentStore
 from blizzard.runner.store.internal.check_store import CheckStore
@@ -128,6 +129,7 @@ from blizzard.runner.store.internal.transcript_ledger_store import TranscriptLed
 from blizzard.runner.store.internal.usage_store import UsageStore
 from blizzard.runner.store.schema import metadata as runner_metadata
 from blizzard.runner.store.schema import transcript_outbound_buffer, transcript_segments
+from blizzard.runner.store.scoped import RunnerStoreConnections
 from blizzard.runner.stores import (
     HostStores,
     IReadRunnerStore,
@@ -153,6 +155,9 @@ from blizzard.wire.transcript_segment import TranscriptSegmentRecord
 #: The runner every test store is bound to unless a test names another — the id :class:`FakeHub` mints by default, so
 #: a fixture's registration adopts the binding it already holds.
 FIXTURE_RUNNER_ID = "r1"
+
+#: Tracing off: the settings a runner resolves from an environ that enables none.
+NO_TRACING = TracingSettings.of({})
 
 
 class SqlAlchemyRunnerStore(

@@ -18,7 +18,6 @@ from blizzard.foundation.store.batching import id_batches
 from blizzard.foundation.store.utc import as_utc
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.usage import SessionCostBasis, UsageSample
-from blizzard.runner.store.errors import RunnerStoreConnections
 from blizzard.runner.store.internal.base import insert_outbox_row
 from blizzard.runner.store.schema import (
     context_samples,
@@ -26,6 +25,7 @@ from blizzard.runner.store.schema import (
     outbound_buffer,
     usage_facts,
 )
+from blizzard.runner.store.scoped import RunnerStoreConnections
 from blizzard.runner.usage.repository import (
     ContextSampleState,
     InvocationCost,

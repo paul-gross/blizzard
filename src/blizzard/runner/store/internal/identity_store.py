@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.hub.identity import IWriteRetiredRunnerIdentity, IWriteRunnerIdentityRepository, RunnerIdentity
-from blizzard.runner.store.errors import RunnerAlreadyBound, RunnerStoreConnections, RunnerUnbound
 from blizzard.runner.store.schema import runner_identity
+from blizzard.runner.store.scoped import RunnerAlreadyBound, RunnerStoreConnections, RunnerUnbound
 
 _log = get_logger("blizzard.runner.store")
 

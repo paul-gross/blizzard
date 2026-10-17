@@ -9,7 +9,7 @@ from __future__ import annotations
 import pytest
 
 from blizzard.foundation.artifacts import ArtifactKind, ArtifactScope
-from blizzard.runner.lifecycle.judgement.artifacts import (
+from blizzard.runner.lifecycle.artifacts import (
     ArtifactAmbiguous,
     ArtifactNotFound,
     ArtifactRead,

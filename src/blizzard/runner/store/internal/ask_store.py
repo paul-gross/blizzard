@@ -10,9 +10,9 @@ from datetime import datetime
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.leases.asks import IWriteAskRepository, OpenAsk, QuestionPark, newest_unforwarded, open_asks_of
-from blizzard.runner.store.errors import RunnerStoreConnections
 from blizzard.runner.store.internal.base import pause_parked_lease_ids
 from blizzard.runner.store.schema import asks, lease_closures, park_facts, park_resumes
+from blizzard.runner.store.scoped import RunnerStoreConnections
 
 _log = get_logger("blizzard.runner.store")
 

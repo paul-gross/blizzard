@@ -11,8 +11,8 @@ from blizzard.runner.harness.selftest_result import (
     LatestSelfTestResult,
     SelfTestTerminalStatus,
 )
-from blizzard.runner.store.errors import RunnerStoreConnections
 from blizzard.runner.store.schema import selftest_results
+from blizzard.runner.store.scoped import RunnerStoreConnections
 
 _log = get_logger("blizzard.runner.store")
 

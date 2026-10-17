@@ -20,19 +20,19 @@ import sqlalchemy as sa
 from sqlalchemy import Engine, event
 
 from blizzard.runner.store import schema
-from blizzard.runner.store.errors import (
-    RUNNER_SCOPED_OPTION,
-    RunnerAlreadyBound,
-    RunnerKeySupplied,
-    RunnerStoreConnections,
-    RunnerUnbound,
-)
 from blizzard.runner.store.runner_guard import (
     GUARD_ENVIRONMENT_VARIABLE,
     RUNNER_GUARD,
     UnscopedRunnerStatement,
     guard_runner_statement,
     install_runner_guard,
+)
+from blizzard.runner.store.scoped import (
+    RUNNER_UNSCOPED_OPTION,
+    RunnerAlreadyBound,
+    RunnerKeySupplied,
+    RunnerStoreConnections,
+    RunnerUnbound,
 )
 from tests.runner_fakes import runner_store_errors
 
@@ -119,7 +119,7 @@ def _scoped(store: RunnerStoreConnections) -> dict[str, Any]:
         ),
         "the identity row, scoped": store.select(runner_identity),
         "a host-scoped table, untouched": sa.select(workspace_prompt),
-        "an exempt statement": sa.select(leases).execution_options(**{RUNNER_SCOPED_OPTION: True}),
+        "an exempt statement": sa.select(leases).execution_options(**{RUNNER_UNSCOPED_OPTION: True}),
     }
 
 

@@ -36,7 +36,8 @@ from blizzard.runner.composition import build_host_stores
 from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
 from blizzard.runner.process.probe import IProcessProbe
 from blizzard.runner.store import schema as runner
-from blizzard.runner.store.errors import RUNNER_COLUMN, RUNNER_SCOPING, RunnerStoreErrorFactory
+from blizzard.runner.store.errors import RunnerStoreErrorFactory
+from blizzard.runner.store.scoped import RUNNER_COLUMN, RUNNER_SCOPING
 from blizzard.runner.transcripts.invocation_boundaries import WORKER_STARTING_KINDS
 
 # The ``lease_facts.runner_id`` a hub mint records — its own lease row, never a runner's.

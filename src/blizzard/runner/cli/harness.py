@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import os
+
 import click
 
+from blizzard.foundation.trace_export.settings import TracingSettings
 from blizzard.runner.cli.daemon import runner_option
 from blizzard.runner.cli.directory import load_runner
 from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
@@ -41,7 +44,7 @@ def harness_status(directory: str, runner: str | None) -> None:
     config = load_runner(directory, runner=runner)
     try:
         click.echo(f"autonomy: {config.autonomy} (from {config.autonomy_source})")
-        shared = shared_inputs(config.harness_settings)
+        shared = shared_inputs(config.harness_settings(TracingSettings.of(os.environ)))
         spawn_roots = dict.fromkeys(
             build_workspace_provider(workspace.settings(config.root)).spawn_root()
             for workspace in config.bound_workspaces

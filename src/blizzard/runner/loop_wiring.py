@@ -186,7 +186,7 @@ class LoopWiring:
             process=graph.process,
             worktree_git=SubprocessWorktreeGit(),
             # The check-runner seam — see `src/blizzard/runner/lifecycle/judgement/check_runner.py`.
-            check_runner=SubprocessCheckRunner(worker_env=config.worker_env),
+            check_runner=SubprocessCheckRunner(worker_env=config.worker_env(graph.trace_settings)),
             config=loop_config,
             worker_files=_worker_files,
             elicitation_files=_elicitation_files,

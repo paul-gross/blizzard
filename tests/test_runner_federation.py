@@ -29,9 +29,9 @@ from blizzard.runner.hub.host_identity import HostIdentity, HostIdentityHolder
 from blizzard.runner.hub.host_registration import HostRegistrationHolder, HostRegistrationStatus
 from blizzard.runner.hub.identity import RunnerIdentityHolder
 from blizzard.runner.status.view import RunnerStatusService
-from blizzard.runner.store.errors import RunnerStoreConnections
 from blizzard.runner.store.internal.host_jti_cache_store import JtiCacheRepository
 from blizzard.runner.store.schema import metadata
+from blizzard.runner.store.scoped import RunnerStoreConnections
 from tests.runner_client import runner_base_url
 from tests.runner_fakes import (
     FakeProvider,

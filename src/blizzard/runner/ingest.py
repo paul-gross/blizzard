@@ -22,12 +22,11 @@ from typing import Protocol
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.logging import get_logger
-from blizzard.foundation.roles import collaborator, domain_model
+from blizzard.foundation.roles import domain_model
 from blizzard.foundation.runner_token_names import hub_token_variable
 from blizzard.foundation.store.migrations import MigrationConnectionError, MigrationRefused, MigrationRunner
 from blizzard.runner.config import HostWorkspace, ProjectBinding, SubscriptionDeclaration
 from blizzard.runner.config_table import ConfigError
-from blizzard.runner.environments.repository import EnvBinding
 from blizzard.runner.host_config import (
     GRADUATION_PROCEDURE,
     RUNNER_PATH_KEYS,
@@ -50,10 +49,8 @@ from blizzard.runner.host_layout import (
 from blizzard.runner.hub.client import HostRecord, HostRefused, HubClientError, IHostHubClient
 from blizzard.runner.hub.host_identity import HostIdentity
 from blizzard.runner.hub.host_registration import standing_of
-from blizzard.runner.hub.identity import HostStanding, RunnerIdentity, RunnerIdentityHolder
-from blizzard.runner.hub.runner_transfer import HostIngest, WorkspacePromptConflict
+from blizzard.runner.hub.identity import HostStanding
 from blizzard.runner.runtime import (
-    IRunnerRowMoves,
     StoreResetRefused,
     backup_sqlite,
     set_aside_sqlite,
@@ -61,18 +58,35 @@ from blizzard.runner.runtime import (
     sqlite_url,
 )
 from blizzard.runner.store import MIGRATIONS_DIR
+from blizzard.runner.transfer.refusals import (
+    HostNotHolding,
+    SourceRunning,
+    SourceUnsupported,
+    WorkspaceConflict,
+)
+from blizzard.runner.transfer.rows import HostIngest, WorkspacePromptConflict
+from blizzard.runner.transfer.rules import (
+    DeclaredRunner,
+    WorkspaceShape,
+    place_workspaces,
+    refuse_archive_rename,
+    refuse_binding_conflict,
+    refuse_busy,
+    refuse_declared_here,
+    refuse_source_moved,
+    refuse_token_conflict,
+    resumes,
+)
+from blizzard.runner.transfer.runner_stores import HeldBinding, IRunnerBoundStoresFactory, RunnerStoreView
 
 __all__ = [
     "INGEST_COMMAND",
-    "HeldBinding",
     "IHostFileEditor",
     "IIngestStores",
     "ITokenFiles",
     "IngestOutcome",
-    "IngestRefused",
     "IngestRequest",
     "RunnerIngest",
-    "RunnerStoreView",
     "SourceKind",
     "source_kind",
 ]
@@ -99,46 +113,6 @@ _RUNNER_SCOPE_REVISION = "20261011_1000_runner_scope"
 _SQLITE_HEADER = b"SQLite format 3\x00"
 
 _log = get_logger("blizzard.runner.ingest")
-
-
-class IngestRefused(Exception):
-    """The ingest cannot go ahead; the message names why and what clears it. Nothing was changed unless it says so."""
-
-
-class SourceRunning(IngestRefused):
-    """The source, or this host, is held by a running process."""
-
-
-class SourceUnsupported(IngestRefused):
-    """The source is not a store ingest reads."""
-
-
-class HostNotHolding(IngestRefused):
-    """This host is not registered, or its hub does not hold the runner under it, or holds it in another tenant."""
-
-
-class RunnerBusy(IngestRefused):
-    """The runner holds an open elicitation or takeover in the source."""
-
-
-class RunnerAlreadyHere(IngestRefused):
-    """This host already holds a runner of that name or id, not from an ingest of this source."""
-
-
-class WorkspaceConflict(IngestRefused):
-    """The runner's workspace cannot stand beside this host's under the id it would take."""
-
-
-class BindingConflict(IngestRefused):
-    """A held binding of the runner names an environment a runner of this host holds."""
-
-
-class TokenConflict(IngestRefused):
-    """The runner's token cannot move: the source holds none, or this host's ``.env`` holds a different one."""
-
-
-class SourceMoved(IngestRefused):
-    """The source has run since the copy this host took of it."""
 
 
 class SourceKind(StrEnum):
@@ -189,37 +163,9 @@ class IngestOutcome:
     set_aside: tuple[Path, ...] = ()
 
 
-@domain_model
-@dataclass(frozen=True)
-class HeldBinding:
-    """A held binding, beside the runner holding it."""
-
-    runner_id: str
-    binding: EnvBinding
-
-
-@domain_model
-@dataclass(frozen=True)
-class RunnerStoreView:
-    """What an ingest reads of one store about one runner: the runners its identity rows name, the runner's identity,
-    its open elicitations and takeovers, its held bindings, and the store's last liveness stamp."""
-
-    named_runners: tuple[str, ...]
-    identity: RunnerIdentity | None
-    open_elicitation_lease_ids: frozenset[str]
-    open_takeover_chunk_ids: frozenset[str]
-    held_bindings: tuple[EnvBinding, ...]
-    last_alive_at: datetime | None
-    #: The projects the hub last answered the runner serves, by slug — each one a project answered to.
-    served_projects: tuple[str, ...] = ()
-
-
-class IIngestStores(IRunnerRowMoves, Protocol):
-    """The stores an ingest reads and writes, each named by its URL."""
-
-    def runner_view(self, url: str, runner_id: str) -> RunnerStoreView:
-        """What the store at ``url`` holds about ``runner_id``."""
-        ...
+class IIngestStores(IRunnerBoundStoresFactory, Protocol):
+    """The stores an ingest reads and writes, each named by its URL: the store-wide reads here, and one runner's
+    through the stores :meth:`for_runner` binds."""
 
     def named_runners(self, url: str) -> tuple[str, ...]:
         """The runners the identity rows of the store at ``url`` name."""
@@ -231,10 +177,6 @@ class IIngestStores(IRunnerRowMoves, Protocol):
 
     def held_bindings(self, url: str) -> tuple[HeldBinding, ...]:
         """Every held binding of every runner the store at ``url`` names."""
-        ...
-
-    def latest_host_ingest(self, url: str, runner_id: str) -> HostIngest | None:
-        """The newest ingest of ``runner_id`` the store at ``url`` recorded."""
         ...
 
     def record_host_identity(self, url: str, identity: HostIdentity) -> None:
@@ -300,24 +242,6 @@ class _ConfigPlan:
     runner_table: str | None = None
     files: tuple[tuple[Path, Path], ...] = ()
     token: str = ""
-
-
-@collaborator
-@dataclass(frozen=True)
-class _SourceRunner:
-    """The moving runner as :func:`standing_of` judges it: its id and the identity the source recorded."""
-
-    runner_id: str
-    identity: RunnerIdentityHolder
-
-    @property
-    def identity_verdict(self) -> _NoVerdict:
-        return _NoVerdict()
-
-
-class _NoVerdict:
-    def stand(self, standing: HostStanding, *, reason: str | None = None) -> None:
-        del standing, reason
 
 
 @dataclass(frozen=True)
@@ -408,7 +332,7 @@ class RunnerIngest:
                     f"({', '.join(named_runners) or 'none'}), not the one a runner before hosts holds"
                 )
             [runner_id] = named_runners
-            view = self.stores.runner_view(copy.url, runner_id)
+            view = self.stores.for_runner(runner_id).runner_view(copy.url)
         try:
             config = HostConfig.graduated(path, legacy, runner_id=runner_id, served=view.served_projects)
         except ConfigError as exc:
@@ -448,33 +372,29 @@ class RunnerIngest:
             sqlite_store_file(here)
         except StoreResetRefused as exc:
             raise SourceUnsupported(f"this host's store cannot take an ingest: {exc}") from exc
-        present = runner_id in self.stores.named_runners(here)
-        record = self.stores.latest_host_ingest(here, runner_id)
-        resuming = present and record is not None and record.source == str(source.path)
-        if present and not resuming:
-            raise RunnerAlreadyHere(
-                f"this host's store already holds runner {entry.name} ({runner_id}), not from an ingest of "
-                f"{source.path}; nothing was changed"
-            )
+        runner = self.stores.for_runner(runner_id)
+        record = runner.latest_host_ingest(here)
+        resuming = resumes(
+            runner_id in self.stores.named_runners(here),
+            record,
+            source=str(source.path),
+            runner_name=entry.name,
+            runner_id=runner_id,
+        )
         if not source.store.exists():
             if resuming:
                 return IngestOutcome(runner_id, entry.name, resumed=True)
             raise SourceUnsupported(f"the source holds no store at {source.store}")
         with self._copy_of(source.store) as copy:
-            view = self.stores.runner_view(copy.url, runner_id)
+            view = runner.runner_view(copy.url)
             if resuming and runner_id not in view.named_runners:
                 # Removed from the source already: only the move-aside of an emptied source is left.
                 return IngestOutcome(runner_id, entry.name, resumed=True, set_aside=self._set_aside_emptied(source))
             if resuming:
                 assert record is not None
-                if record.source_alive_at != view.last_alive_at:
-                    raise SourceMoved(
-                        f"the source {source.store} has run since this host {self.host.db_url} copied runner "
-                        f"{entry.name} from it (its liveness stamp moved from {record.source_alive_at} to "
-                        f"{view.last_alive_at}), so the copy may be stale; nothing was changed. To start over, run "
-                        f"`blizzard runner store reset --runner "
-                        f"{entry.name}` on this host, then ingest again"
-                    )
+                refuse_source_moved(
+                    record, view.last_alive_at, runner_name=entry.name, source_store=str(source.store), here=here
+                )
             else:
                 self._refuse_fresh(source, entry, runner_id, view, copy)
             plan = self._plan(source, entry, request.workspace_id)
@@ -487,10 +407,9 @@ class RunnerIngest:
                     ingested_at=self.clock.now(),
                 )
                 try:
-                    self.stores.copy_runner(
+                    runner.copy_runner(
                         copy.url,
                         here,
-                        runner_id,
                         workspace_ids=plan.workspace_ids,
                         bound_workspaces=tuple(dict.fromkeys(binding.workspace for binding in entry.bindings)),
                         ingest=ingest,
@@ -505,7 +424,7 @@ class RunnerIngest:
             # Its one runner is the whole store, which stays at the schema it ran: it is moved aside, not edited.
             moved = set_aside_sqlite(source.store, now=self.clock.now()).moved
         else:
-            self.stores.remove_runner_rows(sqlite_url(source.store), runner_id, keep_counters=False)
+            runner.remove_runner_rows(sqlite_url(source.store), keep_counters=False)
             moved = self._set_aside_emptied(source)
         _log.info("runner ingested", runner_id=runner_id, source=str(source.path), resumed=resuming)
         return IngestOutcome(runner_id, entry.name, resumed=resuming, set_aside=moved)
@@ -543,7 +462,7 @@ class RunnerIngest:
         """Every refusal a first ingest of the runner earns before anything is written."""
         record = self._hub_record()
         identity = self._host_identity(record)
-        standing, reason = standing_of(_SourceRunner(runner_id, RunnerIdentityHolder(view.identity)), record, identity)
+        standing, reason = standing_of(runner_id, view.tenant_id, record, identity)
         if standing is HostStanding.NOT_HELD:
             raise HostNotHolding(
                 f"the hub holds runner {entry.name} ({runner_id}) {reason}: take it under this host first with "
@@ -558,23 +477,14 @@ class RunnerIngest:
                 f"the source store {source.store} predates the revision {_RUNNER_SCOPE_REVISION}, so one runner's rows "
                 "cannot be removed from it by themselves: run a blizzard release that migrates it, then re-run"
             )
-        if view.open_elicitation_lease_ids:
-            raise RunnerBusy(
-                f"runner {entry.name} holds an open elicitation on lease(s) "
-                f"{', '.join(sorted(view.open_elicitation_lease_ids))}; let it finish in the source, then re-run"
-            )
-        if view.open_takeover_chunk_ids:
-            raise RunnerBusy(
-                f"runner {entry.name} holds an open takeover of chunk(s) "
-                f"{', '.join(sorted(view.open_takeover_chunk_ids))}; end it in the source, then re-run"
-            )
+        refuse_busy(view, runner_name=entry.name)
         if source.config is not None:
-            for held in self.host.runners:
-                if entry.name == held.name or (held.id is not None and held.id == runner_id):
-                    raise RunnerAlreadyHere(
-                        f"{self.host.config_path} already declares runner {held.name} ({held.id or 'no id'}), so it "
-                        f"cannot take in runner {entry.name} ({runner_id}); nothing was changed"
-                    )
+            refuse_declared_here(
+                tuple(DeclaredRunner(held.name, held.id) for held in self.host.runners),
+                runner_name=entry.name,
+                runner_id=runner_id,
+                config_path=str(self.host.config_path),
+            )
 
     def _hub_record(self) -> HostRecord:
         hub = self.host.hub_url
@@ -596,25 +506,15 @@ class RunnerIngest:
         """This host's recorded identity — recorded from ``record`` when it holds none yet — refused when it names
         another host or tenant than the hub answered."""
         held = self.stores.host_identity(self.host.db_url)
+        identity = _identity_against(held, record, now=self.clock.now())
         if held is None:
-            held = HostIdentity(host_id=record.host_id, tenant_id=record.tenant_id, registered_at=self.clock.now())
-            self.stores.record_host_identity(self.host.db_url, held)
-            return held
-        if not held.same_host(record.host_id, record.tenant_id):
-            raise HostNotHolding(
-                f"this host is recorded as {held.host_id} in {held.tenant_id}, but its hub answers as "
-                f"{record.host_id} in {record.tenant_id}"
-            )
-        return held
+            self.stores.record_host_identity(self.host.db_url, identity)
+        return identity
 
     def _plan(self, source: _Source, entry: RunnerEntry, workspace_id: str | None) -> _ConfigPlan:
         """The configuration edits the runner brings; an archive's are all made already."""
         if source.config is None:
-            if workspace_id is not None:
-                raise WorkspaceConflict(
-                    "--workspace-id renames the workspace a host directory's runner brings; an archive's runner "
-                    "already runs in this host's workspace"
-                )
+            refuse_archive_rename(workspace_id)
             return _ConfigPlan()
         config = source.config
         workspaces, ids = self._workspace_plan(config, entry, workspace_id)
@@ -639,55 +539,27 @@ class RunnerIngest:
         self, config: HostConfig, entry: RunnerEntry, workspace_id: str | None
     ) -> tuple[tuple[HostWorkspace, ...], dict[str, str]]:
         """The workspaces to append and the ids the runner's workspaces take here."""
-        names = list(dict.fromkeys(binding.workspace for binding in entry.bindings))
-        if workspace_id is not None and len(names) != 1:
-            raise WorkspaceConflict(
-                f"--workspace-id names one new id, but runner {entry.name} is bound to {len(names)} workspaces "
-                f"({', '.join(names) or 'none'})"
-            )
         theirs = {workspace.id: workspace for workspace in config.workspaces}
-        ours = {workspace.id: workspace for workspace in self.host.workspaces}
+        placements = place_workspaces(
+            tuple(dict.fromkeys(binding.workspace for binding in entry.bindings)),
+            runner_name=entry.name,
+            workspace_id=workspace_id,
+            offered={held_id: _shape(workspace, config.root) for held_id, workspace in theirs.items()},
+            held={workspace.id: _shape(workspace, self.host.root) for workspace in self.host.workspaces},
+        )
         appended: list[HostWorkspace] = []
-        ids: dict[str, str] = {}
-        for name in names:
-            offered = theirs.get(name)
-            if offered is None:
-                raise WorkspaceConflict(
-                    f"runner {entry.name} binds workspace {name!r}, which the source does not declare"
-                )
-            shape = _shape(offered, config.root)
-            target = workspace_id or name
-            held = ours.get(target)
-            if held is not None and _shape(held, self.host.root) != shape:
-                if workspace_id is None:
-                    raise WorkspaceConflict(
-                        f"this host gives workspace id {target!r} to {_described(held, self.host.root)}, and the "
-                        f"source's is {_described(offered, config.root)}: re-run with --workspace-id <new id>"
-                    )
-                raise WorkspaceConflict(
-                    f"--workspace-id {target!r} is this host's workspace on {_described(held, self.host.root)}, not "
-                    f"the source's {_described(offered, config.root)}; pick another id"
-                )
-            if held is None:
-                twin = next((w for w in self.host.workspaces if _shape(w, self.host.root) == shape), None)
-                if twin is not None:
-                    raise WorkspaceConflict(
-                        f"the source's workspace {name!r} is this host's workspace {twin.id!r} "
-                        f"({_described(twin, self.host.root)}): re-run with --workspace-id {twin.id}"
-                    )
-                root, envs = shape
-                for other in self.host.workspaces:
-                    other_root, other_envs = _shape(other, self.host.root)
-                    if other_root == root and other_envs & envs:
-                        raise WorkspaceConflict(
-                            f"the source's workspace {name!r} shares root {root} with this host's workspace "
-                            f"{other.id!r}, and both name environment(s) {', '.join(sorted(other_envs & envs))}"
-                        )
+        for placement in placements:
+            if placement.appended:
+                offered = theirs[placement.name]
                 appended.append(
-                    replace(offered, id=target, root=root, prompt_file=_absolute(offered.prompt_file, config.root))
+                    replace(
+                        offered,
+                        id=placement.target,
+                        root=_shape(offered, config.root).root,
+                        prompt_file=_absolute(offered.prompt_file, config.root),
+                    )
                 )
-            if target != name:
-                ids[name] = target
+        ids = {placement.name: placement.target for placement in placements if placement.target != placement.name}
         return tuple(appended), ids
 
     def _runner_plan(
@@ -731,35 +603,22 @@ class RunnerIngest:
     ) -> None:
         """The refusals that need the configuration plan: a held environment two runners would hold, and a token that
         cannot move."""
-        renamed = plan.workspace_ids or {}
-        ours = self.stores.held_bindings(self.host.db_url)
-        for binding in view.held_bindings:
-            workspace = renamed.get(binding.workspace_id, binding.workspace_id) if binding.workspace_id else None
-            for held in ours:
-                other = held.binding
-                if other.environment_id != binding.environment_id or other.chunk_id == binding.chunk_id:
-                    continue
-                if workspace is None or other.workspace_id is None or other.workspace_id == workspace:
-                    raise BindingConflict(
-                        f"runner {entry.name} holds environment {binding.environment_id} of workspace "
-                        f"{workspace or '(unknown)'} for chunk {binding.chunk_id}, and this host's runner "
-                        f"{held.runner_id} holds it for chunk {other.chunk_id}; release one, then re-run"
-                    )
+        refuse_binding_conflict(
+            view.held_bindings,
+            self.stores.held_bindings(self.host.db_url),
+            renamed=plan.workspace_ids or {},
+            runner_name=entry.name,
+        )
         variable = hub_token_variable(entry.name)
-        held_here = self.tokens.held(self.host.root, variable)
-        if plan.runner_table is not None and not plan.token:
-            raise TokenConflict(
-                f"the source's .env holds no {source.token_variable(entry.name)} for runner {entry.name}, so there is "
-                "none to move"
-            )
-        if plan.runner_table is None and not held_here:
-            raise TokenConflict(
-                f"an archive store carries no token, and this host's .env holds no {variable} for runner {entry.name}"
-            )
-        if plan.token and held_here and held_here != plan.token:
-            raise TokenConflict(
-                f"this host's .env already holds a different {variable}; remove it, then re-run (runner {runner_id})"
-            )
+        refuse_token_conflict(
+            carries_runner=plan.runner_table is not None,
+            offered=plan.token,
+            held_here=self.tokens.held(self.host.root, variable),
+            source_variable=source.token_variable(entry.name),
+            variable=variable,
+            runner_name=entry.name,
+            runner_id=runner_id,
+        )
 
     def _configure(self, source: _Source, entry: RunnerEntry, plan: _ConfigPlan) -> None:
         """Make each configuration edit not yet made, in the order a crash between any two leaves resumable."""
@@ -792,10 +651,22 @@ class RunnerIngest:
         return set_aside_sqlite(source.store, now=self.clock.now()).moved
 
 
-def _shape(workspace: HostWorkspace, root: Path) -> tuple[str, frozenset[str]]:
-    """What makes a workspace the same one on two hosts: its root resolved against its own host, and its
-    environments."""
-    return workspace.settings(root).effective_workspace_root, frozenset(workspace.envs)
+def _shape(workspace: HostWorkspace, root: Path) -> WorkspaceShape:
+    """``workspace``'s shape, its root resolved against ``root``, the host that declared it."""
+    return WorkspaceShape(workspace.settings(root).effective_workspace_root, frozenset(workspace.envs))
+
+
+def _identity_against(held: HostIdentity | None, record: HostRecord, *, now: datetime) -> HostIdentity:
+    """This host's identity against the hub's ``record``: the ``held`` one, or the one ``record`` names when none is
+    held. Raises :class:`HostNotHolding` when ``held`` names another host or tenant than the hub answered."""
+    if held is None:
+        return HostIdentity(host_id=record.host_id, tenant_id=record.tenant_id, registered_at=now)
+    if not held.same_host(record.host_id, record.tenant_id):
+        raise HostNotHolding(
+            f"this host is recorded as {held.host_id} in {held.tenant_id}, but its hub answers as "
+            f"{record.host_id} in {record.tenant_id}"
+        )
+    return held
 
 
 def _absolute(prompt_file: str, root: Path) -> str:
@@ -805,11 +676,6 @@ def _absolute(prompt_file: str, root: Path) -> str:
         return ""
     located = Path(prompt_file)
     return str(located if located.is_absolute() else root / located)
-
-
-def _described(workspace: HostWorkspace, root: Path) -> str:
-    resolved, envs = _shape(workspace, root)
-    return f"root {resolved} with environments {', '.join(sorted(envs)) or 'none'}"
 
 
 def _declared(layout: HostLayout, table: str, key: str) -> set[str]:

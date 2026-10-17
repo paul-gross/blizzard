@@ -11,8 +11,8 @@ from blizzard.runner.lifecycle.judgement.git_commit_declaration import (
     GitCommitDeclaration,
     IWriteGitCommitDeclarationRepository,
 )
-from blizzard.runner.store.errors import RunnerStoreConnections
 from blizzard.runner.store.schema import git_commit_declarations
+from blizzard.runner.store.scoped import RunnerStoreConnections
 
 _log = get_logger("blizzard.runner.store")
 

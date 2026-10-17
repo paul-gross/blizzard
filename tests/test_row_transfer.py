@@ -6,8 +6,8 @@ from __future__ import annotations
 import pytest
 import sqlalchemy as sa
 
-from blizzard.runner.hub.runner_transfer import DanglingReference
 from blizzard.runner.store.internal.row_transfer import TransferHandle, in_reference_order, remapped
+from blizzard.runner.transfer.rows import DanglingReference
 
 pytestmark = pytest.mark.unit
 

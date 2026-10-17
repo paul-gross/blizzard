@@ -15,9 +15,9 @@ from blizzard.runner.environments.repository import (
     IWriteEnvironmentRepository,
     OpenLeaseHold,
 )
-from blizzard.runner.store.errors import RunnerStoreConnections
 from blizzard.runner.store.internal.base import HELD_BINDING, Unclosed
 from blizzard.runner.store.schema import binding_releases, env_bindings, lease_closures, leases
+from blizzard.runner.store.scoped import RunnerStoreConnections
 
 _log = get_logger("blizzard.runner.store")
 

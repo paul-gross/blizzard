@@ -15,7 +15,7 @@ from __future__ import annotations
 import contextlib
 import os
 import sqlite3
-from collections.abc import Callable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -39,8 +39,8 @@ from blizzard.runner.host_layout import (
     migrate_remedy,
     write_scaffold,
 )
-from blizzard.runner.hub.runner_transfer import HostIngest
 from blizzard.runner.store import MIGRATIONS_DIR, STORE_NAME
+from blizzard.runner.transfer.runner_stores import IRunnerBoundStoresFactory
 
 STORE_RESET_COMMAND = "blizzard runner store reset"
 
@@ -172,29 +172,6 @@ def backup_sqlite(database: Path, copy: Path) -> None:
         source.backup(destination)
 
 
-class IRunnerRowMoves(Protocol):
-    """One runner's rows moved between two stores, each named by its URL — the transfer's two seams over store files."""
-
-    def copy_runner(
-        self,
-        source_url: str,
-        destination_url: str,
-        runner_id: str,
-        *,
-        workspace_ids: Mapping[str, str] | None = None,
-        bound_workspaces: Sequence[str] = (),
-        ingest: HostIngest | None = None,
-    ) -> None:
-        """Copy ``runner_id``'s rows from the store at ``source_url`` into the one at ``destination_url``, in one
-        destination transaction; the source is only read. ``bound_workspaces`` are the workspaces the runner binds
-        (:meth:`IRunnerTransfer.copy_runner`)."""
-        ...
-
-    def remove_runner_rows(self, url: str, runner_id: str, *, keep_counters: bool) -> None:
-        """Delete ``runner_id``'s rows from the store at ``url``, its outbox counters too unless ``keep_counters``."""
-        ...
-
-
 @domain_model
 @dataclass(frozen=True)
 class RunnerArchive:
@@ -289,7 +266,7 @@ class Runtime:
         _log.info("runner store set aside", root=str(self.root), moved=[str(p) for p in moved.moved])
         return moved
 
-    def reset_runner(self, runner: str, *, now: datetime, rows: IRunnerRowMoves) -> RunnerArchive:
+    def reset_runner(self, runner: str, *, now: datetime, rows: IRunnerBoundStoresFactory) -> RunnerArchive:
         """Extract the runner ``runner`` names — by name or id, or a runner the host file no longer configures by its
         id — into an archive store beside the host's, named by the runner and a ``now`` stamp, then delete its rows
         from the host store, keeping its outbox counters. The archive is migrated to head and written whole under a
@@ -310,12 +287,13 @@ class Runtime:
                 MigrationRunner(script_location=MIGRATIONS_DIR, url=sqlite_url(pending)).upgrade("head")
             except (MigrationConnectionError, MigrationRefused) as exc:
                 raise ConfigError(f"cannot create the archive store at {pending}: {exc}") from exc
-            rows.copy_runner(
-                config.db_url, sqlite_url(pending), runner_id, bound_workspaces=_bound_workspaces(config, runner_id)
+            moving = rows.for_runner(runner_id)
+            moving.copy_runner(
+                config.db_url, sqlite_url(pending), bound_workspaces=_bound_workspaces(config, runner_id)
             )
             single_file(pending)
             os.replace(pending, archive)
-            rows.remove_runner_rows(config.db_url, runner_id, keep_counters=True)
+            moving.remove_runner_rows(config.db_url, keep_counters=True)
         _log.info("runner reset", root=str(self.root), runner_id=runner_id, archive=str(archive))
         return RunnerArchive(runner_id=runner_id, archive=archive)
 
@@ -475,7 +453,6 @@ def ensure_current_revision(location: IStoreLocation) -> None:
 __all__ = [
     "MIGRATE_COMMAND",
     "STORE_RESET_COMMAND",
-    "IRunnerRowMoves",
     "Migrations",
     "RunnerArchive",
     "Runtime",

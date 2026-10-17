@@ -24,6 +24,7 @@ from blizzard.foundation.roles import collaborator, dto
 from blizzard.foundation.runner_token_names import hub_token_variable
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.migrations import MigrationConnectionError, RevisionMismatchError
+from blizzard.foundation.trace_export.settings import TracingSettings
 from blizzard.runner.app import HostedApp, build_hosted_app
 from blizzard.runner.cli.daemon import daemon_holding, runner_option
 from blizzard.runner.cli.directory import load_host
@@ -71,6 +72,7 @@ from blizzard.runner.hub.client import (
     HubClientError,
     IHostHubClient,
     IHubRunnerAdmin,
+    IRunnerAdder,
     ITokenIdentityReader,
     OperatorTenant,
     RunnerAddRefusalReason,
@@ -413,12 +415,10 @@ def _join_runner(
     """Join ``entry``'s runner to the hub under the host, then write its id into the host file and its identity
     row into the store."""
     token = config.token_for(entry)
-    with collaborators.join_with(config.hub_url, token.value) as (identity, admin):
+    with collaborators.join_with(config.hub_url, token.value) as (identity, _admin):
         if entry.id is not None and token.value and not rerun.allow_readd:
             _refuse_other_runner(entry, identity)
-        joined = _join_hub(
-            config, entry, token, identity, HostRunnerAdmin(host.client, admin), store.for_runner(entry), rerun
-        )
+        joined = _join_hub(config, entry, token, identity, HostRunnerAdmin(host.client), store.for_runner(entry), rerun)
     if not joined.added and not host.joined.holds(joined.runner_id):
         raise click.ClickException(_stands_elsewhere(config, entry, joined, host.joined, rerun))
     # The token is written before the id, and the id before the identity row: a crash between any two is completed
@@ -655,7 +655,7 @@ def _join_hub(
     entry: RunnerEntry,
     token: ResolvedToken,
     identity: ITokenIdentityReader,
-    admin: IHubRunnerAdmin,
+    admin: IRunnerAdder,
     store: IRunnerStoreAside,
     rerun: _Rerun,
 ) -> JoinedRunner:
@@ -779,17 +779,6 @@ def _stopped(exc: BootstrapStopped, joining: _Joining, token_file: HubTokenFile,
             )
         case BootstrapStop.ANOTHER_TENANT:
             return _another_tenant(exc.held, joining, token_file, rerun)
-        case BootstrapStop.TENANT_REQUIRED:
-            return (
-                f"you may enter several tenants at {hub}, so nothing was added: name the one to add this runner "
-                f"in by its id with `{rerun.naming_a_tenant()}`{_tenant_listing(exc.tenants)}"
-            )
-        case BootstrapStop.NO_SUCH_TENANT:
-            return (
-                f"the hub at {hub} has no tenant {rerun.tenant_id} you may enter, so nothing was added: name one "
-                f"you may enter by its id with `{rerun.naming_a_tenant()}` — a tenant is named by "
-                f"its id, never its name{_tenant_listing(exc.tenants)}"
-            )
 
 
 def _another_tenant(held: TokenIdentity | None, joining: _Joining, token_file: HubTokenFile, rerun: _Rerun) -> str:
@@ -811,17 +800,8 @@ def _another_tenant(held: TokenIdentity | None, joining: _Joining, token_file: H
 
 def _add_refused(exc: RunnerAddRefused, hub: str, rerun: _Rerun) -> str:
     match exc.reason:
-        case RunnerAddRefusalReason.SIGN_IN_REQUIRED:
-            return (
-                f"the hub at {hub} requires sign-in to add a runner: run `blizzard hub login --hub-url {hub}` "
-                f"as an operator holding runner:add, then re-run `{rerun.again()}`"
-            )
-        case RunnerAddRefusalReason.FORBIDDEN:
-            return f"your session at {hub} may not add runners — that takes runner:add: {exc.detail}"
         case RunnerAddRefusalReason.UNSUPPORTED:
             return f"the hub at {hub} predates `hub runner add`; upgrade it, then re-run `{rerun.again()}`"
-        case RunnerAddRefusalReason.TENANT_REQUIRED | RunnerAddRefusalReason.NO_SUCH_TENANT:
-            return f"the hub at {hub} could not settle the tenant to add this runner in: {exc.detail}"
         case RunnerAddRefusalReason.NO_SUCH_PROJECT:
             return (
                 f"the hub at {hub} holds no project answering to every --project named, so nothing was added: "
@@ -917,11 +897,12 @@ def _start(config: HostConfig, runners: Sequence[BuiltRunner], halted: Sequence[
     for runner in halted:
         click.echo(f"warning: {runner.describe()}")
     bundles = {built.id: _publish_harness_bundle(built.config) for built in runners}
+    tracing = TracingSettings.of(os.environ)
     for built in runners:
         for missing in built.config.missing_worker_path_prepend_entries:
             click.echo(f"warning: runner {built.config.name}: [worker] path_prepend entry does not exist: {missing}")
-        if built.config.dropped_otel_passthrough:
-            names = ", ".join(built.config.dropped_otel_passthrough)
+        if dropped := built.config.dropped_otel_passthrough(tracing):
+            names = ", ".join(dropped)
             click.echo(
                 f"warning: runner {built.config.name}: [worker] env_passthrough OTEL_* names are dropped while "
                 f"tracing is on: {names}"

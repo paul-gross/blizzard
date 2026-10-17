@@ -12,7 +12,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.hub.client import QueueEntry
-from blizzard.runner.lifecycle.judgement.artifacts import PinnedGraphArtifact
+from blizzard.runner.lifecycle.artifacts import PinnedGraphArtifact
 from blizzard.runner.loop.steps import Fill
 from blizzard.runner.node_steps.envelope import GraphArtifact
 from tests.runner_fakes import (

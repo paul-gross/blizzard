@@ -14,11 +14,7 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner import runtime as runner_runtime
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.leases.model import NewLease
-from blizzard.runner.store.errors import (
-    RUNNER_SCOPED_OPTION,
-    RunnerStoreError,
-    RunnerStoreErrorFactory,
-)
+from blizzard.runner.store.errors import RunnerStoreError, RunnerStoreErrorFactory
 from blizzard.runner.store.schema import (
     OUTBOX_LANE_OUTBOUND,
     OUTBOX_LANE_TRANSCRIPT,
@@ -27,6 +23,7 @@ from blizzard.runner.store.schema import (
     park_facts,
     pause_parks,
 )
+from blizzard.runner.store.scoped import RUNNER_UNSCOPED_OPTION
 from tests.runner_fakes import FIXTURE_RUNNER_ID, SqlAlchemyRunnerStore, make_store, runner_store_errors
 
 _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
@@ -55,7 +52,7 @@ def _counter(engine: sa.Engine, lane: str) -> int:
         return conn.execute(
             sa.select(counters.c.last_seq)
             .where(counters.c.runner_id == FIXTURE_RUNNER_ID, counters.c.lane == lane)
-            .execution_options(**{RUNNER_SCOPED_OPTION: True})
+            .execution_options(**{RUNNER_UNSCOPED_OPTION: True})
         ).scalar_one()
 
 

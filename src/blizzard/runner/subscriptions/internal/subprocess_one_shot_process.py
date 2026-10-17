@@ -3,14 +3,12 @@
 
 from __future__ import annotations
 
-import contextlib
-import os
-import signal
 import subprocess
 import time
 from collections.abc import Mapping, Sequence
 
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.process import terminate_group
 from blizzard.runner.subscriptions.one_shot_process import IOneShotProcess, OneShotResult
 
 _log = get_logger("blizzard.runner.subscriptions")
@@ -66,19 +64,10 @@ class SubprocessOneShotProcess:
         """SIGTERM the child's whole process group (it leads its own session), then SIGKILL the
         group after a grace period — reaching an npm-shim's real app-server, and sparing a
         credential file a hard kill mid-write."""
-        _signal_group(process, signal.SIGTERM)
-        try:
-            output = process.communicate(timeout=_TERMINATE_GRACE_SECONDS)
-        except subprocess.TimeoutExpired:
-            output = None
-        # The leader may exit on SIGTERM while a group member ignores it — always finish with SIGKILL.
-        _signal_group(process, signal.SIGKILL)
+        output = terminate_group(
+            process.pid, grace=_TERMINATE_GRACE_SECONDS, wait=lambda grace: process.communicate(timeout=grace)
+        )
         return output if output is not None else process.communicate()
-
-
-def _signal_group(process: subprocess.Popen[str], sig: signal.Signals) -> None:
-    with contextlib.suppress(ProcessLookupError):  # the group already exited
-        os.killpg(process.pid, sig)
 
 
 def _conforms_one_shot_process(x: SubprocessOneShotProcess) -> IOneShotProcess:

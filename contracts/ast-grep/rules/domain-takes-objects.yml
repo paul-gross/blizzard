@@ -28,6 +28,7 @@ files:
   - src/blizzard/runner/throttle/**
   - src/blizzard/runner/tracing/**
   - src/blizzard/runner/transcripts/**
+  - src/blizzard/runner/transfer/**
   - src/blizzard/runner/usage/**
 ignores:
   - src/blizzard/runner/**/internal/**

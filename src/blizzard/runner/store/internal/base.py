@@ -18,7 +18,6 @@ from sqlalchemy.exc import IntegrityError
 
 from blizzard.foundation.roles import domain_model
 from blizzard.runner.leases.model import Lease, WorkRefStamp
-from blizzard.runner.store.errors import RUNNER_COLUMN, RunnerStoreConnections
 from blizzard.runner.store.schema import (
     OUTBOX_LANE_OUTBOUND,
     OUTBOX_LANE_TRANSCRIPT,
@@ -36,6 +35,7 @@ from blizzard.runner.store.schema import (
     resume_intents,
     transcript_outbound_buffer,
 )
+from blizzard.runner.store.scoped import RUNNER_COLUMN, RunnerStoreConnections
 
 #: A fresh segment's placeholder, before its first pump read — restated rather than
 #: imported (the store never depends on the harness seam). Shared by the leases and transcripts adapters.

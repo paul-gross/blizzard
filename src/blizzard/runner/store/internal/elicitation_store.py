@@ -15,8 +15,8 @@ from blizzard.runner.leases.elicitation import (
     IWriteElicitationRepository,
     PendingElicitation,
 )
-from blizzard.runner.store.errors import RunnerStoreConnections
 from blizzard.runner.store.schema import in_flight_elicitations
+from blizzard.runner.store.scoped import RunnerStoreConnections
 
 _log = get_logger("blizzard.runner.store")
 

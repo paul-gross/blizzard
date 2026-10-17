@@ -20,9 +20,9 @@ from click.testing import Result
 from blizzard.cli.main import blizzard
 from blizzard.foundation.claim_denials import ClaimDenialReason
 from blizzard.runner.host_config import HostConfig
-from blizzard.runner.hub.client import ClaimRequest, HubClientError, RunnerAddRefusalReason, RunnerAddRefused
+from blizzard.runner.hub.client import ClaimRequest, RunnerAddRefusalReason, RunnerAddRefused
 from blizzard.runner.hub.identity import RunnerIdentity, RunnerIdentityHolder
-from blizzard.runner.hub.internal.http_hub import HttpHubClient, HttpHubRunnerAdmin
+from blizzard.runner.hub.internal.http_hub import HttpHubClient
 from blizzard.runner.hub.served_projects import (
     ServedProject,
     ServedProjectsAnswer,
@@ -245,42 +245,6 @@ def test_an_incompatible_claim_denial_with_or_without_a_reason_is_never_a_lost_r
     assert outcome.denied_incompatible is not None and outcome.denied_incompatible.reason is reason
     assert claim_verdict(outcome) is ClaimVerdict.INCOMPATIBLE
     assert claim_denial_fields(outcome) == {"reason": reason, "detail": "runner does not serve blizzard"}
-
-
-def _admin(handler) -> HttpHubRunnerAdmin:  # type: ignore[no-untyped-def]
-    return HttpHubRunnerAdmin(
-        httpx.Client(base_url="http://hub.test", transport=httpx.MockTransport(handler)), operator_token=None
-    )
-
-
-@pytest.mark.unit
-@pytest.mark.parametrize("projects", [None, ("blizzard", "blizzard-context")])
-def test_an_add_sends_the_projects_it_names_and_null_for_none(projects: tuple[str, ...] | None) -> None:
-    seen: dict[str, object] = {}
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        seen.update(json.loads(request.content))
-        return httpx.Response(201, json={"runner_id": "rn_1", "runner_name": "r", "token": "tok"})
-
-    _admin(handler).add_runner("r", projects=projects)
-    assert seen["projects"] == (list(projects) if projects is not None else None)
-
-
-@pytest.mark.unit
-def test_an_add_naming_an_unknown_project_is_the_project_refusal() -> None:
-    transport = lambda _request: httpx.Response(422, json={"detail": "no project answers to: nope"})  # noqa: E731
-    with pytest.raises(RunnerAddRefused) as refused:
-        _admin(transport).add_runner("r", projects=("nope",))
-    assert refused.value.reason is RunnerAddRefusalReason.NO_SUCH_PROJECT
-    assert refused.value.detail == "no project answers to: nope"
-
-
-@pytest.mark.unit
-def test_a_malformed_add_is_a_plain_hub_client_error() -> None:
-    body = {"detail": [{"loc": ["body", "projects"], "msg": "bad", "type": "list_type"}]}
-    with pytest.raises(HubClientError) as failed:
-        _admin(lambda _request: httpx.Response(422, json=body)).add_runner("r", projects=("x",))
-    assert not isinstance(failed.value, RunnerAddRefused)
 
 
 # --- runner init --project --------------------------------------------------------------------------
