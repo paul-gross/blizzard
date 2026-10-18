@@ -16,3 +16,35 @@ export {
 } from './stub-request-client';
 export { OPERATOR_ME_RESPONSE } from './auth-fixtures';
 export { FIXTURE_NOW } from './builders/clock';
+export {
+  chunkDetail,
+  workRefView,
+  transitionView,
+  chunkEscalationView,
+  chunkNeighborView,
+  routeView,
+  prView,
+  landedRepoView,
+  chunkUsageTotalView,
+} from './builders/chunk';
+export {
+  assetArtifactView,
+  commitArtifactView,
+  findingSurvey,
+  findingCandidate,
+  findingDelta,
+  addFindingOp,
+  observedFindingOp,
+  goneFindingOp,
+  surveyArtifactView,
+  deltaArtifactView,
+  bounceArtifactView,
+} from './builders/artifact';
+export {
+  turnSegmentView,
+  toolCallSegmentView,
+  sidechainSegmentView,
+  transcriptSegmentIndexEntry,
+  transcriptSegmentContentView,
+} from './builders/transcript';
+export { chunkCountsView, fleetSpendView } from './builders/board';

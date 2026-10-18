@@ -3,6 +3,8 @@ import { TestBed } from '@angular/core/testing';
 
 import type { ArtifactView } from '../../api/hub';
 import { formatAbsolute } from '../../core/when';
+import { bounceArtifactView, deltaArtifactView, surveyArtifactView } from 'fleet/testing';
+
 import { ChunkArtifactBody } from './chunk-artifact-body';
 
 const ASSET: ArtifactView = {
@@ -91,7 +93,14 @@ describe('ChunkArtifactBody', () => {
       key: 'reconcile.delta.2',
       content: JSON.stringify({
         scope: 'runner-daemon',
-        findings: [{ op: 'add', class: 'wide-seam', locus: 'a.py:1', summary: 'seam too wide' }],
+        findings: [
+          {
+            op: 'add',
+            class: 'wide-seam',
+            locus: 'a.py:1',
+            summary: 'seam too wide',
+          },
+        ],
       }),
     };
     const fixture = TestBed.createComponent(ChunkArtifactBody);
@@ -112,7 +121,14 @@ describe('ChunkArtifactBody', () => {
         scope: 'runner-daemon',
         revisions: { blizzard: 'abc123' },
         measurement: '225 Python files swept',
-        candidates: [{ ref: 'F1', class: 'wide-seam', locus: 'a.py:1', summary: 'seam too wide' }],
+        candidates: [
+          {
+            ref: 'F1',
+            class: 'wide-seam',
+            locus: 'a.py:1',
+            summary: 'seam too wide',
+          },
+        ],
       }),
     };
     const fixture = TestBed.createComponent(ChunkArtifactBody);
@@ -131,7 +147,10 @@ describe('ChunkArtifactBody', () => {
     const config: ArtifactView = {
       ...ASSET,
       key: 'settings',
-      content: JSON.stringify({ scope: 'runner-daemon', revisions: { blizzard: 'abc123' } }),
+      content: JSON.stringify({
+        scope: 'runner-daemon',
+        revisions: { blizzard: 'abc123' },
+      }),
     };
     const fixture = TestBed.createComponent(ChunkArtifactBody);
     fixture.componentRef.setInput('artifact', config);
@@ -176,7 +195,12 @@ describe('ChunkArtifactBody', () => {
   it('renders a bounce-envelope as labelled fields with the raw JSON behind the disclosure', async () => {
     const raw = '{"cause":"poll-timeout","detail":"no verdict","waited_s":600}';
     const fixture = TestBed.createComponent(ChunkArtifactBody);
-    fixture.componentRef.setInput('artifact', { ...ASSET, key: 'bounce-envelope', name: 'bounce-envelope', content: raw });
+    fixture.componentRef.setInput('artifact', {
+      ...ASSET,
+      key: 'bounce-envelope',
+      name: 'bounce-envelope',
+      content: raw,
+    });
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
     expect(el.querySelector('[data-testid="artifact-bounce-cause"]')?.textContent).toContain('poll-timeout');
@@ -189,8 +213,26 @@ describe('ChunkArtifactBody', () => {
 
   it('renders an unparseable bounce-envelope verbatim', async () => {
     const fixture = TestBed.createComponent(ChunkArtifactBody);
-    fixture.componentRef.setInput('artifact', { ...ASSET, key: 'bounce-envelope', name: 'bounce-envelope', content: 'not json {' });
+    fixture.componentRef.setInput('artifact', {
+      ...ASSET,
+      key: 'bounce-envelope',
+      name: 'bounce-envelope',
+      content: 'not json {',
+    });
     await fixture.whenStable();
     expect(fixture.nativeElement.querySelector('[data-testid="artifact-content"]')?.textContent).toBe('not json {');
+  });
+
+  it.each([
+    ['surveyArtifactView', surveyArtifactView(), 'artifact-survey'],
+    ['deltaArtifactView', deltaArtifactView(), 'artifact-delta'],
+    ['bounceArtifactView', bounceArtifactView(), 'artifact-bounce-facts'],
+  ])('reaches its structured view from %s defaults', async (_name, artifact, handle) => {
+    const fixture = TestBed.createComponent(ChunkArtifactBody);
+    fixture.componentRef.setInput('artifact', artifact);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector(`[data-testid="${handle}"]`)).not.toBeNull();
+    expect(el.querySelector('[data-testid="artifact-content"]')).toBeNull();
   });
 });
