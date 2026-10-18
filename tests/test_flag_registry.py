@@ -233,9 +233,22 @@ def _misnamed_flag_stores(sources: Mapping[str, str]) -> list[str]:
     ]
 
 
+#: The calls whose first string argument names a flag: a read, a guard declaration, a field marker.
+_READ_CALLS = frozenset({"on", "require_on", "flag_guard", "FlagGuarded"})
+
+
+def _call_name(node: ast.Call) -> str | None:
+    if isinstance(node.func, ast.Attribute):
+        return node.func.attr
+    if isinstance(node.func, ast.Name):
+        return node.func.id
+    return None
+
+
 def _flag_reads(sources: Mapping[str, str]) -> set[str]:
-    """Every flag name the code reads: a string literal passed to a Python ``.on(...)`` call, and — in a ``.ts`` or
-    ``.html`` source — one passed to ``flags.on(...)`` or ``flagGuard(...)``."""
+    """Every flag name the code reads: a string literal passed to a flag read or a guard in Python — a ``.on(...)``
+    call or a guard form, never a bare ``on(...)`` — and, in a ``.ts`` or ``.html`` source, one passed to
+    ``flags.on(...)`` or ``flagGuard(...)``."""
     names: set[str] = set()
     for path, text in sources.items():
         if path.endswith((".ts", ".html")):
@@ -244,8 +257,8 @@ def _flag_reads(sources: Mapping[str, str]) -> set[str]:
         for node in ast.walk(ast.parse(text)):
             if (
                 isinstance(node, ast.Call)
-                and isinstance(node.func, ast.Attribute)
-                and node.func.attr == "on"
+                and (name := _call_name(node)) in _READ_CALLS
+                and (name != "on" or isinstance(node.func, ast.Attribute))
                 and node.args
                 and isinstance(node.args[0], ast.Constant)
                 and isinstance(node.args[0].value, str)
@@ -490,3 +503,15 @@ def test_the_runner_openapi_declares_an_open_map_that_no_flag_in_play_changes() 
     flags = resolve_flags(_fixture(), "runner", {"runner-thing": False}).flags
     app = create_runner_app(RunnerConfig(root=Path("."), db_url="sqlite://"), flags=flags)
     assert app.openapi() == document
+
+
+@pytest.mark.unit
+def test_the_lint_counts_a_guard_and_a_field_marker_as_a_read_of_their_name() -> None:
+    sources = {
+        "a.py": 'x = flag_guard("hub-thing")\ny: Annotated[int, FlagGuarded("runner-thing")]\nflags.require_on("fleet-thing")\n'
+    }
+    assert _flag_reads(sources) == {"hub-thing", "runner-thing", "fleet-thing"}
+    assert _lint(_fixture(), sources) == []
+    assert _lint(FlagRegistry(), sources) == [
+        f"source reads undeclared flag {name!r}" for name in ("fleet-thing", "hub-thing", "runner-thing")
+    ]

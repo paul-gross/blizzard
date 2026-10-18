@@ -29,6 +29,14 @@ class FlagNotReadable(LookupError):
     """A live flag of the other side's scope — the hub's flag asked of a runner, or a runner's of the hub."""
 
 
+class FlagOffError(LookupError):
+    """A guarded behavior was reached while its flag is off. ``flag`` names the flag."""
+
+    def __init__(self, flag: str) -> None:
+        super().__init__(f"{flag!r} is off")
+        self.flag = flag
+
+
 @domain_model
 @dataclass(frozen=True)
 class IgnoredOverride:
@@ -67,6 +75,11 @@ class Flags:
         if name not in self.values:
             raise FlagNotReadable(f"{name!r} is not a flag this process answers")
         return self.values[name]
+
+    def require_on(self, name: str) -> None:
+        """Raise :class:`FlagOffError` unless ``name`` is on; the name is checked as ``on`` checks it."""
+        if not self.on(name):
+            raise FlagOffError(name)
 
     def answer(self) -> dict[str, bool]:
         """The live flags this process publishes, each to whether it is on."""

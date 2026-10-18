@@ -24,7 +24,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import Engine
 
 from blizzard import __version__
-from blizzard.foundation.flags import FlagRegistry, Flags, resolve_flags
+from blizzard.foundation.flags import FlagOffError, FlagRegistry, Flags, resolve_flags
 from blizzard.foundation.forwarded import TrustedProxies
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.platform_tracing.attributes import annotate
@@ -55,6 +55,7 @@ from blizzard.hub.api.egress import router as egress_router
 from blizzard.hub.api.events import router as events_router
 from blizzard.hub.api.findings import project_router as project_findings_router
 from blizzard.hub.api.findings import router as findings_router
+from blizzard.hub.api.flag_guard import refuse_flag_off
 from blizzard.hub.api.flags import router as flags_router
 from blizzard.hub.api.fleet import claim_router as fleet_claim_router
 from blizzard.hub.api.fleet import router as fleet_router
@@ -414,6 +415,7 @@ def create_app(
     app.add_exception_handler(TenantClosed, refuse_closed_tenant)
     app.add_exception_handler(UnknownTenant, refuse_closed_tenant)
     app.add_exception_handler(ProjectRequired, refuse_project_required)
+    app.add_exception_handler(FlagOffError, refuse_flag_off)
 
     # API routers first, so /api/* always wins over the web mount at /.
     app.include_router(health_router)
