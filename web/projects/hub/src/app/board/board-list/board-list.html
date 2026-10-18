@@ -1,0 +1,40 @@
+<div class="list" data-testid="board-list">
+  <div class="cols" aria-hidden="true">
+    <span>Work</span>
+    <span>Project</span>
+    <span>Step</span>
+    <span>Runner</span>
+    <span>PRs</span>
+    <span class="r">Cost</span>
+    <span class="r">Chunk</span>
+  </div>
+  @for (section of sections(); track section.key) {
+    <fleet-kit-accordion-section
+      class="section"
+      data-testid="list-section"
+      [attr.data-lane]="section.key"
+      [sectionId]="'board-list-' + section.key"
+      [expanded]="!isCollapsed(section.key)"
+      (expandedChange)="toggle(section.key)"
+    >
+      <span accordionHeader class="section-head">
+        <span class="section-label">{{ section.label }}</span>
+        <span class="section-count">{{ section.count ?? section.cards.length }}</span>
+      </span>
+      @for (card of section.cards; track card.chunkId) {
+        <app-board-list-row
+          [card]="card"
+          [selected]="card.chunkId === selectedChunkId()"
+          [gated]="gatedChunkIds().has(card.chunkId)"
+          (selectChunk)="selectChunk.emit($event)"
+        />
+      } @empty {
+        <!-- Only a read that has answered can say a lane is empty; while it loads or after
+             it fails, the board's own async state speaks instead. -->
+        @if (loaded()) {
+          <p class="empty" data-testid="list-section-empty">Nothing here</p>
+        }
+      }
+    </fleet-kit-accordion-section>
+  }
+</div>

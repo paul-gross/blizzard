@@ -1,6 +1,7 @@
-import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
 
-import { type ChunkStatus, type LandedRepoView, type PrView, STATUS_LANE, compactRef, formatCost, hasCostFigure, FleetWhen, KitBadge, KitButton, KitSelectRow } from 'fleet';
+import { type ChunkStatus, type LandedRepoView, type PrView, STATUS_LANE, formatCost, hasCostFigure, FleetWhen, KitBadge, KitButton, KitSelectRow } from 'fleet';
+import { blockedLabel, foldTitles, stepLabel, titledCardShowsStatus } from './board-card.model';
 
 /** One rendered board card — the derived-status view of a chunk. */
 export interface BoardCard {
@@ -42,6 +43,15 @@ export interface BoardCard {
   readonly openPrs?: readonly PrView[];
   readonly landedRepos?: readonly LandedRepoView[];
   readonly awaitingExternalMerge?: boolean;
+  /** The chunk's project's display name, from `ChunkSummary.project_name`. */
+  readonly projectName?: string | null;
+  /** The runner holding the chunk, from `ChunkSummary.runner_name` — null when none does. */
+  readonly runnerName?: string | null;
+  /** The chunk's work items' titles, in pointer order — absent or `null` until they are
+   * read, and empty for a chunk carrying none; the card leads with them once present. */
+  readonly titles?: readonly string[] | null;
+  /** One line of a single-item chunk's description, or `null`. */
+  readonly description?: string | null;
 }
 
 /**
@@ -88,6 +98,22 @@ export class BoardCardComponent {
   /** Emitted with the chunk id when a promotable card's Promote is clicked. */
   readonly promote = output<string>();
 
+  /** The card's work item titles; empty while unread or when the chunk carries none. */
+  protected readonly titles = computed(() => this.card().titles ?? []);
+
+  /** The first title, or `null` when the card renders untitled. */
+  protected readonly title = computed(() => this.titles()[0] ?? null);
+
+  /** Whether a folded group has been opened to show every title. */
+  protected readonly expanded = signal(false);
+
+  /** The titles the card shows, and how many its fold hides. */
+  protected readonly fold = computed(() => foldTitles(this.titles(), this.expanded()));
+
+  protected toggleFold(): void {
+    this.expanded.update((open) => !open);
+  }
+
   /** Whether the card belongs to the DONE column — the hub's `terminal` flag, and the
    * completion stamp's render gate. Checked against the lane rather than
    * {@link BoardCard.completedAt}'s own null-ness alone, so a card outside the done lane
@@ -108,12 +134,19 @@ export class BoardCardComponent {
     );
   }
 
+  /** Whether the status word renders: never in the DONE lane (the node slot already says
+   * it), and on a titled card only where it says more than the lane's own heading. */
+  protected showsStatus(card: BoardCard): boolean {
+    if (this.isDoneLane(card)) return false;
+    return this.title() === null || titledCardShowsStatus(card.status);
+  }
+
   /** The upper-right node slot's label — {@link BoardCard.node} for every status
    * except `stopped`, which shows the status word instead: a stopped chunk's
    * last-active node name (e.g. "deliver") is unhelpful noise once the chunk
    * has stopped, so it's replaced rather than shown alongside. */
   protected nodeLabel(card: BoardCard): string {
-    return card.status === 'stopped' ? 'stopped' : card.node;
+    return stepLabel(card.status, card.node);
   }
 
   /** The node slot's hover text: the full label the card clips, with the raw node id
@@ -127,7 +160,7 @@ export class BoardCardComponent {
    * ref, or a count once there is more than one — pinned by `board-card.spec.ts`'s "counts the
    * prerequisites instead of naming the first…" case. */
   protected blockedLabel(card: BoardCard): string {
-    return card.blockedCount > 1 ? `${card.blockedCount} chunks` : compactRef(card.blockedOn ?? '');
+    return blockedLabel(card.blockedOn, card.blockedCount);
   }
 
   /** The blocker's own status, parenthesised beside its ref — only when exactly one

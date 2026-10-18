@@ -1,10 +1,24 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 
-import { type ChunkCountsView, type ChunkSummary, chunkLane, compactRef, DONE_LANE, LANES, laneCounts, KitAsyncState, type KitAsyncStateValue, KitPanel, KitPanelHeader, KitSkeleton } from 'fleet';
+import { type ChunkCountsView, type ChunkSummary, type WorkItemsView, chunkLane, compactRef, DONE_LANE, LANES, laneCounts, KitAsyncState, type KitAsyncStateValue, KitPanel, KitPanelHeader, KitSkeleton, KitTabs, type KitTabOption } from 'fleet';
 import type { BoardCard } from '../board-card/board-card';
+import { workItemDescription, workItemTitles } from '../board-card/board-card.model';
 import { BoardColumn, type BoardLaneMove, type BoardReposition } from './board-column';
+import { BoardList, type BoardListSection } from '../board-list/board-list';
 
 export type { BoardCard, BoardLaneMove, BoardReposition };
+
+/** How the board lays out its chunks: the lane grid, or the lanes as a list of sections. */
+export type BoardLayout = 'board' | 'list';
+
+const LAYOUT_TABS: readonly KitTabOption[] = [
+  { value: 'board', label: 'Board', testid: 'board-layout-board' },
+  { value: 'list', label: 'List', testid: 'board-layout-list' },
+];
+
+/** The list's section order — what wants a person first, then the pipeline back to front,
+ * DONE last. The grid keeps the pipeline's own left-to-right order. */
+const LIST_ORDER: readonly string[] = ['needs', 'waiting', 'running', 'ready', 'notready', DONE_LANE];
 
 /**
  * The mission-control chunk board — the six status columns and their
@@ -20,7 +34,7 @@ export type { BoardCard, BoardLaneMove, BoardReposition };
 @Component({
   selector: 'app-board-shell',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [BoardColumn, KitPanel, KitPanelHeader, KitAsyncState, KitSkeleton],
+  imports: [BoardColumn, BoardList, KitPanel, KitPanelHeader, KitAsyncState, KitSkeleton, KitTabs],
   templateUrl: './board-shell.html',
   styleUrl: './board-shell.css',
 })
@@ -81,7 +95,31 @@ export class BoardShell {
    * (`queue:reorder`), forwarded to the ranked {@link BoardColumn}s. */
   readonly canReorder = input(false);
 
+  /** Every chunk's work items read so far, by chunk id — a card leads with their titles
+   * once its chunk's arrive, and keeps its untitled layout until then. */
+  readonly workItems = input<ReadonlyMap<string, WorkItemsView>>(new Map());
+
+  /** Which layout renders — the lane grid or the list. */
+  readonly layout = input<BoardLayout>('board');
+
+  /** Emitted with the layout the switch was set to. */
+  readonly layoutChange = output<BoardLayout>();
+
   protected readonly columns = LANES;
+  protected readonly layoutTabs = LAYOUT_TABS;
+
+  /** Every lane as a list section, in {@link LIST_ORDER}, each holding the same cards in the
+   * same order its grid column does. */
+  protected readonly sections = computed<readonly BoardListSection[]>(() =>
+    LIST_ORDER.flatMap((key) => {
+      const lane = LANES.find((l) => l.key === key);
+      return lane ? [{ key, label: lane.headerLabel, count: this.countFor(key), cards: this.cardsFor(key) }] : [];
+    }),
+  );
+
+  protected chooseLayout(value: string): void {
+    this.layoutChange.emit(value === 'list' ? 'list' : 'board');
+  }
 
   /** Every chunk rendered as a board card, grouped into its status column. */
   private readonly cards = computed<Map<string, BoardCard[]>>(() => {
@@ -90,6 +128,7 @@ export class BoardShell {
     // a second read — the blocker is itself a chunk on this board.
     const statusById = new Map(this.chunks().map((c) => [c.chunk_id, c.status]));
     for (const chunk of this.chunks()) {
+      const workItems = this.workItems().get(chunk.chunk_id);
       grouped.get(chunkLane(chunk))?.push({
         chunkId: chunk.chunk_id,
         shortId: compactRef(chunk.chunk_id),
@@ -116,6 +155,10 @@ export class BoardShell {
         openPrs: chunk.open_prs ?? [],
         landedRepos: chunk.landed_repos ?? [],
         awaitingExternalMerge: chunk.awaiting_external_merge ?? false,
+        projectName: chunk.project_name ?? null,
+        runnerName: chunk.runner_name ?? null,
+        titles: workItemTitles(workItems),
+        description: workItemDescription(workItems),
       });
     }
     // READY is ordered rather than listed: it is a queue, so its rank comes

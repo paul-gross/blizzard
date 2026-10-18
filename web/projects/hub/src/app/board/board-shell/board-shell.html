@@ -1,24 +1,38 @@
 <div class="mc" data-testid="board-shell">
   <fleet-kit-panel class="board-panel" aria-label="Chunk board" label="Chunk board" [bodyScroll]="false">
-    <span fleetKitPanelHeader class="col-lbl">all workflows</span>
-    <div class="board" data-testid="board">
-      @for (col of columns; track col.key) {
-        <app-board-column
-          [column]="col"
-          [cards]="cardsFor(col.key)"
-          [count]="countFor(col.key)"
-          [selectedChunkId]="selectedChunkId()"
-          [gatedChunkIds]="gatedChunkIds()"
-          [reorderControls]="col.key === 'ready' || col.key === 'notready'"
-          [canControl]="canControl()"
-          [canReorder]="canReorder()"
-          (selectChunk)="selectChunk.emit($event)"
-          (promote)="promote.emit($event)"
-          (reposition)="reposition.emit($event)"
-          (laneMove)="laneMove.emit($event)"
-        />
-      }
+    <div fleetKitPanelHeader class="hdr">
+      <fleet-kit-tabs variant="sub" [options]="layoutTabs" [activeValue]="layout()" (choose)="chooseLayout($event)" />
+      <span class="col-lbl">all workflows</span>
     </div>
+    @if (layout() === 'list') {
+      <app-board-list
+        class="list"
+        [sections]="sections()"
+        [selectedChunkId]="selectedChunkId()"
+        [gatedChunkIds]="gatedChunkIds()"
+        [loaded]="state() === 'ready'"
+        (selectChunk)="selectChunk.emit($event)"
+      />
+    } @else {
+      <div class="board" data-testid="board">
+        @for (col of columns; track col.key) {
+          <app-board-column
+            [column]="col"
+            [cards]="cardsFor(col.key)"
+            [count]="countFor(col.key)"
+            [selectedChunkId]="selectedChunkId()"
+            [gatedChunkIds]="gatedChunkIds()"
+            [reorderControls]="col.key === 'ready' || col.key === 'notready'"
+            [canControl]="canControl()"
+            [canReorder]="canReorder()"
+            (selectChunk)="selectChunk.emit($event)"
+            (promote)="promote.emit($event)"
+            (reposition)="reposition.emit($event)"
+            (laneMove)="laneMove.emit($event)"
+          />
+        }
+      </div>
+    }
     <fleet-kit-async-state
       [state]="state()"
       loadingMode="content"

@@ -94,10 +94,10 @@ replacement for it.
 ## On the board
 
 The blocked marking renders beside a chunk's unchanged status everywhere the board lists one: the desktop board card,
-the chunk detail dock's header, and the routed chunk page header the hub's mobile board and the runner app share.
-Clicking it selects the named prerequisite into the dock on the board and in the dock header; from the routed page,
-which has no dock to select into, it links there instead. `blizzard-context:/domain/work/statuses.md` owns what the
-marking means and which chunks can carry one.
+the chunk detail dock's header, the routed chunk page header the hub's mobile board and the runner app share, and a row
+of the board's list layout, where it is plain text that selects nothing. Clicking it selects the named prerequisite into
+the dock on the board and in the dock header; from the routed page, which has no dock to select into, it links there
+instead. `blizzard-context:/domain/work/statuses.md` owns what the marking means and which chunks can carry one.
 
 The board carries no declare or release control — an operator reaches those two verbs only through
 `blizzard hub chunk depend`/`release-dependency` or the API routes above, never the dock.

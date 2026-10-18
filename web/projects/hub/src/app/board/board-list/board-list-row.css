@@ -1,0 +1,147 @@
+:host {
+  display: block;
+}
+/* The columns line up across every row of the list: the work takes the slack, every
+   other column a fixed track. `board-list.css`'s column header uses the same tracks. */
+.row {
+  position: relative;
+  display: grid;
+  grid-template-columns: var(--list-columns);
+  align-items: start;
+  gap: 12px;
+  padding: 7px 10px 7px 8px;
+  border-left: 3px solid var(--amber);
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-resting);
+  cursor: pointer;
+  font-family: var(--mono);
+}
+.row:hover {
+  background: var(--surface-hover);
+}
+/* The open control fills the row beneath its cells; the cells pass a click down to it, but for
+   the controls among them. */
+.row-open {
+  position: absolute;
+  inset: 0;
+  display: flex;
+}
+.row > :not(.row-open) {
+  position: relative;
+  pointer-events: none;
+}
+.row a,
+.row .fold {
+  pointer-events: auto;
+}
+.row:has(.row-open:focus-within) {
+  outline: 1px solid var(--cyan);
+  outline-offset: -1px;
+}
+.row.selected[data-status] {
+  border-left-color: var(--cyan);
+  background: var(--surface-selected);
+}
+.row[data-status='done'],
+.row[data-status='stopped'] {
+  border-left-color: var(--green);
+}
+.row[data-status='needs_human'] {
+  border-left-color: var(--red);
+}
+.row[data-status='not_ready'] {
+  border-left-color: var(--label-dim);
+}
+
+.work {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.title {
+  color: var(--text);
+  font-size: var(--fs-sm);
+  line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* One dim line of the work item's description under its title — context, not content. */
+.desc {
+  color: var(--label-dim);
+  font-size: var(--fs-xs);
+  line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.title.untitled {
+  color: var(--label);
+}
+.fold {
+  align-self: flex-start;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--cyan);
+  font-family: var(--mono);
+  font-size: var(--fs-xs);
+  cursor: pointer;
+}
+.fold:hover {
+  text-decoration: underline;
+}
+
+.cell {
+  min-width: 0;
+  font-size: var(--fs-xs);
+  color: var(--label);
+  line-height: 1.6;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.project,
+.step-name {
+  font-size: var(--fs-label);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.step {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 6px;
+  white-space: normal;
+}
+.blocked {
+  color: var(--amber);
+  white-space: nowrap;
+}
+.prs {
+  display: flex;
+  gap: 6px;
+}
+.prs a {
+  color: var(--cyan);
+}
+.merge-wait {
+  color: var(--amber-hi);
+}
+.cost {
+  text-align: right;
+  color: var(--amber-hi);
+}
+.done-at {
+  color: var(--label-dim);
+}
+.id {
+  text-align: right;
+  color: var(--amber);
+  font-size: var(--fs-sm);
+  letter-spacing: 0.04em;
+}
+.row[data-status='needs_human'] .id {
+  color: var(--red);
+}
