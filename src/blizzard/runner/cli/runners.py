@@ -15,6 +15,7 @@ import click
 
 from blizzard.cli.operator_trace import OperatorTrace
 from blizzard.foundation.runner_token_names import hub_token_variable
+from blizzard.foundation.store.migrations import StoreBelowFloorError
 from blizzard.runner.cli.daemon import daemon_holding
 from blizzard.runner.cli.directory import load_host
 from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
@@ -221,7 +222,7 @@ def ingest(ctx: click.Context, source: Path, directory: str, runner: str, worksp
         )
         try:
             outcome = service.run(IngestRequest(source=source, runner=runner, workspace_id=workspace_id))
-        except IngestRefused as exc:
+        except (IngestRefused, StoreBelowFloorError) as exc:
             raise click.ClickException(str(exc)) from exc
         except ConfigError as exc:
             raise click.ClickException(f"cannot ingest runner {runner}: {exc}") from exc

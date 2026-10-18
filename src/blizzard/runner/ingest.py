@@ -442,6 +442,7 @@ class RunnerIngest:
             backup_sqlite(store, copy)
             migrations = MigrationRunner(script_location=MIGRATIONS_DIR, url=sqlite_url(copy))
             current = migrations.current_revision()
+            migrations.refuse_below_floor(store=str(store), current=current)
             if current is not None and not migrations.knows_revision(current):
                 raise SourceUnsupported(
                     f"the source store {store} is at revision {current}, which this build does not know: upgrade "

@@ -6,6 +6,11 @@ reference compose deployment ([`docs/install.md`](./install.md)).
 
 ## Before you pull
 
+If `init`, `migrate`, `host`, or `runner ingest` says a store is below this build's migration baseline, install the floor
+release named in the error and migrate that store with that release first. Then reinstall the target release and rerun
+the command. The refusal leaves the store's revision untouched; a normal pending-revision mismatch instead names the
+current build's migrate command.
+
 Read the release's **Upgrade notes** and act on whatever it asks:
 
 ```bash

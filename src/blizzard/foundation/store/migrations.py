@@ -61,6 +61,19 @@ class RevisionMismatchError(RuntimeError):
         )
 
 
+class StoreBelowFloorError(RuntimeError):
+    """An absorbed store revision requires migration by an older release first."""
+
+    def __init__(self, *, store: str, current: str, floor: str) -> None:
+        self.store = store
+        self.current = current
+        self.floor = floor
+        super().__init__(
+            f"{store} store is at revision {current}, below this build's migration baseline. "
+            f"Install {floor} and migrate this store through it first."
+        )
+
+
 @dataclass(frozen=True)
 class MigrationRunner:
     """Drives one Alembic tree against one store URL. ``clock`` is what a revision that stamps a
@@ -92,6 +105,7 @@ class MigrationRunner:
     def upgrade(self, revision: str = "head") -> None:
         """Apply pending revisions up to ``revision`` (idempotent — a no-op when current)."""
         try:
+            self.refuse_below_floor(store=self.url)
             self._ensure_wide_version_table()
             command.upgrade(self._config(), revision)
         except OperationalError as exc:
@@ -104,6 +118,33 @@ class MigrationRunner:
     def script_head(self) -> str | None:
         """The head revision the code carries (the tree's latest script)."""
         return ScriptDirectory.from_config(self._config()).get_current_head()
+
+    def _base_metadata(self) -> tuple[str | None, frozenset[str]]:
+        script = ScriptDirectory.from_config(self._config())
+        base = script.get_base()
+        if base is None:
+            return None, frozenset()
+        module = script.get_revision(base).module
+        return getattr(module, "BASELINE_FLOOR", None), getattr(module, "ABSORBED", frozenset())
+
+    @property
+    def baseline_floor(self) -> str | None:
+        """Release carrying the baseline, if this tree declares one."""
+        return self._base_metadata()[0]
+
+    @property
+    def absorbed(self) -> frozenset[str]:
+        """Revision ids folded into the baseline, empty for an unfurled tree."""
+        return self._base_metadata()[1]
+
+    def refuse_below_floor(self, *, store: str, current: str | None = None) -> None:
+        """Refuse only revisions the baseline absorbed, before any store write."""
+        current = current if current is not None else self.current_revision()
+        if current is None or self.knows_revision(current):
+            return
+        floor, absorbed = self._base_metadata()
+        if current in absorbed and floor is not None:
+            raise StoreBelowFloorError(store=store, current=current, floor=floor)
 
     def knows_revision(self, revision: str) -> bool:
         """Whether the code's tree holds ``revision`` — ``False`` for a store a newer build migrated."""
@@ -137,6 +178,7 @@ class MigrationRunner:
         current = self.current_revision()
         expected = self.script_head()
         if current != expected:
+            self.refuse_below_floor(store=f"{store} ({self.url})", current=current)
             raise RevisionMismatchError(store=store, current=current, expected=expected, remedy=remedy)
 
 

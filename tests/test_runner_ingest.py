@@ -52,6 +52,7 @@ from tests.runner_ingest_support import (
 )
 from tests.runner_init_fakes import FakeInitHub
 from tests.runner_scope_seeding import T0, reflect, seed_tables
+from tests.test_baseline_floor import make_tree
 
 pytestmark = pytest.mark.component
 
@@ -379,6 +380,28 @@ def test_ingest_is_refused_for_a_source_store_ahead_of_this_build(tmp_path: Path
         conn.execute(sa.text("UPDATE alembic_version SET version_num = '29991231_0000_from_the_future'"))
     engine.dispose()
     _refuse(fake_init_hub, hosts, "which this build does not know", "--workspace-id", _NEW_WORKSPACE)
+
+
+def test_ingest_refuses_absorbed_source_before_any_write(
+    tmp_path: Path, fake_init_hub: FakeInitHub, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    hosts = two_hosts(tmp_path, fake_init_hub)
+    store = HostLayout(hosts.there).store_path
+    engine = _engine(hosts.there)
+    with engine.begin() as conn:
+        conn.execute(sa.text("UPDATE alembic_version SET version_num = 'old_rev'"))
+    engine.dispose()
+    import blizzard.runner.ingest as ingest_module
+
+    monkeypatch.setattr(ingest_module, "MIGRATIONS_DIR", make_tree(tmp_path))
+    unchanged = _unchanged(hosts)
+    result = _ingest(fake_init_hub, hosts, "--workspace-id", _NEW_WORKSPACE)
+    assert result.exit_code != 0
+    assert str(store) in result.output
+    assert "old_rev" in result.output
+    assert "v0.2.0" in result.output
+    assert "Traceback" not in result.output
+    unchanged()
 
 
 def test_ingest_is_refused_for_a_file_that_is_not_a_store(tmp_path: Path, fake_init_hub: FakeInitHub) -> None:

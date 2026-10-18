@@ -15,7 +15,7 @@ import click
 import uvicorn
 
 from blizzard.foundation.events.server import EarlyShutdownServer as _EarlyShutdownServer
-from blizzard.foundation.store.migrations import MigrationRunner
+from blizzard.foundation.store.migrations import MigrationRunner, StoreBelowFloorError
 
 # Bounds uvicorn's own connection-drain wait — defense-in-depth; the actual fix is
 # ``EarlyShutdownServer``, the shared foundation wrapper, imported above.
@@ -40,7 +40,7 @@ def run_init(
     config_error: type[BaseException],
 ) -> None:
     """The shared ``init`` body: scaffold via INIT_ENVIRONMENT, echo DAEMON_NAME's readiness."""
-    with click_exception_on(config_error):
+    with click_exception_on(config_error, StoreBelowFloorError):
         config = init_environment(directory)
     revision = migration_runner(config).current_revision()
     click.echo(f"{daemon_name} runtime ready at {config.root} (store revision {revision})")
@@ -69,7 +69,7 @@ def run_migrate(
         elif knows is not None and not tree.knows_revision(knows):
             raise SystemExit(1)
         return
-    with click_exception_on(config_error):
+    with click_exception_on(config_error, StoreBelowFloorError):
         migrate(directory, down=down)
     click.echo("migrated" if down is None else f"reversed to {down}")
 

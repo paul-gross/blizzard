@@ -11,7 +11,7 @@ import click
 
 from blizzard.cli.host_directory import HostDirectory
 from blizzard.cli.runtime import build_early_shutdown_server, click_exception_on, run_init, run_migrate
-from blizzard.foundation.store.migrations import RevisionMismatchError
+from blizzard.foundation.store.migrations import RevisionMismatchError, StoreBelowFloorError
 from blizzard.hub.app import PLATFORM_TRACING_SHUTDOWN_SECONDS, build_hosted_app
 from blizzard.hub.config import ConfigError, HubConfig
 from blizzard.hub.runtime import ensure_current_revision, init_environment, migrate, migration_runner
@@ -82,7 +82,7 @@ def host(directory: str | None, dir_option: str, host_: str | None, port: int | 
     directory = HostDirectory(directory, dir_option).path
     with click_exception_on(ConfigError):
         config = HubConfig.load(Path(directory), host=host_, port=port, allow_external_db=allow_external_db)
-    with click_exception_on(RevisionMismatchError):
+    with click_exception_on(RevisionMismatchError, StoreBelowFloorError):
         ensure_current_revision(config)
     # Composition can still reject the config at boot; surface it as a clean CLI error,
     # and build before announcing so we never claim to serve and then die.

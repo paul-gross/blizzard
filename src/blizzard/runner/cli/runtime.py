@@ -23,7 +23,7 @@ from blizzard.foundation.operator_sessions.internal.session_file import SessionF
 from blizzard.foundation.roles import collaborator, dto
 from blizzard.foundation.runner_token_names import hub_token_variable
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.foundation.store.migrations import MigrationConnectionError, RevisionMismatchError
+from blizzard.foundation.store.migrations import MigrationConnectionError, RevisionMismatchError, StoreBelowFloorError
 from blizzard.foundation.trace_export.settings import TracingSettings
 from blizzard.runner.app import HostedApp, build_hosted_app
 from blizzard.runner.cli.daemon import daemon_holding, runner_option
@@ -885,7 +885,7 @@ def host(
         holding = daemon_holding(layout.legacy_socket_path, OperatorTrace.source(ctx))
         if holding is not None:
             raise click.ClickException(f"{holding}, so this host cannot start — stop it first")
-        with click_exception_on(RevisionMismatchError, MigrationConnectionError):
+        with click_exception_on(RevisionMismatchError, MigrationConnectionError, StoreBelowFloorError):
             ensure_current_revision(config)
         named = named_runners(config)
         ours = tuple(entry.id for entry in config.runners if entry.id is not None)
@@ -949,7 +949,7 @@ def _check(ctx: click.Context, root: Path, *, host: str | None, port: int | None
         ensure_current_revision(config)
         click.echo(f"store: {config.db_url} is at the revision this build expects")
         named = named_runners(config)
-    except (RevisionMismatchError, MigrationConnectionError) as exc:
+    except (RevisionMismatchError, MigrationConnectionError, StoreBelowFloorError) as exc:
         problems.append(f"store: {exc}")
         named = ()
     collaborators = InitCollaborators.of(ctx)
@@ -1163,7 +1163,7 @@ def tick_cmd(ctx: click.Context, directory: str, runner: str | None) -> None:
         holding = daemon_holding(config.layout.legacy_socket_path, OperatorTrace.source(ctx))
         if holding is not None:
             raise click.ClickException(f"{holding}, so this tick cannot run — stop it first")
-        with click_exception_on(RevisionMismatchError, MigrationConnectionError):
+        with click_exception_on(RevisionMismatchError, MigrationConnectionError, StoreBelowFloorError):
             ensure_current_revision(config)
         if (
             reason := foreign_store_reason(

@@ -6,7 +6,7 @@ from contextlib import contextmanager
 import click
 
 from blizzard.cli.operator_trace import ITraceHeaders, OperatorTrace
-from blizzard.foundation.store.migrations import RevisionMismatchError
+from blizzard.foundation.store.migrations import RevisionMismatchError, StoreBelowFloorError
 from blizzard.runner.cli.daemon import daemon_holding, runner_option
 from blizzard.runner.cli.directory import load_runner
 from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
@@ -49,7 +49,7 @@ def _transcript_config(
             raise click.ClickException(f"{holding} — stop it first: this verb writes the store, which is single-owner")
         try:
             ensure_current_revision(config)
-        except RevisionMismatchError as exc:
+        except (RevisionMismatchError, StoreBelowFloorError) as exc:
             raise click.ClickException(str(exc)) from exc
         if (
             reason := foreign_store_reason(
