@@ -14,6 +14,7 @@ from click.testing import Result
 from blizzard.cli.main import blizzard
 from blizzard.runner.host_layout import HostLayout, migrate_remedy
 from tests.runner_init_fakes import FakeInitHub, init_runner
+from tests.test_baseline_floor import make_tree
 
 pytestmark = pytest.mark.component
 
@@ -31,6 +32,27 @@ def _graduated_unadopted(tmp_path: Path, hub: FakeInitHub) -> Path:
 
 def _run(hub: FakeInitHub, *args: str) -> Result:
     return init_runner(hub).invoke(blizzard, list(args))
+
+
+def test_absorbed_pre_host_store_is_refused_before_adoption(
+    tmp_path: Path, fake_init_hub: FakeInitHub, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _graduated_unadopted(tmp_path, fake_init_hub)
+    layout = HostLayout(root)
+    with closing(sqlite3.connect(layout.legacy_store_path)) as conn:
+        conn.execute("UPDATE alembic_version SET version_num = 'old_rev'")
+        conn.commit()
+    before = layout.legacy_store_path.read_bytes()
+    import blizzard.runner.runtime as runtime
+
+    monkeypatch.setattr(runtime, "MIGRATIONS_DIR", make_tree(tmp_path))
+    result = _run(fake_init_hub, "runner", "migrate", "--dir", str(root))
+    assert result.exit_code != 0
+    assert "old_rev" in result.output and "v0.2.0" in result.output
+    assert str(layout.legacy_store_path) in result.output
+    assert "Traceback" not in result.output
+    assert layout.legacy_store_path.read_bytes() == before
+    assert not layout.store_path.exists()
 
 
 @pytest.mark.parametrize(

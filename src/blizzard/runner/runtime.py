@@ -366,6 +366,8 @@ class Runtime:
             return
         with self._exclusive(layout, f"adopt {layout.legacy_store_path} as the host store"):
             if not layout.store_path.exists():
+                legacy = MigrationRunner(script_location=MIGRATIONS_DIR, url=sqlite_url(layout.legacy_store_path))
+                legacy.refuse_below_floor(store=str(layout.legacy_store_path))
                 move_sqlite(layout.legacy_store_path, layout.store_path)
                 _log.info("pre-host store adopted", store=str(layout.store_path))
             self._migrate_to_head(config)
