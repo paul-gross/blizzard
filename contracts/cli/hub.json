@@ -5104,7 +5104,7 @@
       "short_help": "A tenant's members, named by user id: list, grant, revoke."
     },
     "migrate": {
-      "help": "Apply pending store migrations, or reverse with --down <rev>.",
+      "help": "Apply or reverse migrations, or inspect this build's migration tree.",
       "params": [
         {
           "help": "Hub runtime directory (overrides $BZ_HUB_DIR).",
@@ -5131,6 +5131,30 @@
           "type": "text"
         },
         {
+          "help": "Print this build's hub migration head without opening a store.",
+          "hidden": false,
+          "kind": "option",
+          "name": "head",
+          "opts": [
+            "--head"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "type": "boolean"
+        },
+        {
+          "help": "Exit successfully if this build holds REV; print nothing.",
+          "hidden": false,
+          "kind": "option",
+          "name": "knows",
+          "opts": [
+            "--knows"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "type": "text"
+        },
+        {
           "help": "Proceed even if the config's db_url names a database outside this directory.",
           "hidden": false,
           "kind": "option",
@@ -5144,7 +5168,7 @@
         }
       ],
       "path": "hub migrate",
-      "short_help": "Apply pending store migrations, or reverse with --down <rev>."
+      "short_help": "Apply or reverse migrations, or inspect this build's migration tree."
     },
     "project": {
       "commands": {

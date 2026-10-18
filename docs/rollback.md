@@ -25,10 +25,19 @@ The revision the target tag expects at its head comes straight out of that image
 store:
 
 ```bash
-docker run --rm --entrypoint python3 ghcr.io/paul-gross/blizzard-hub:v0.1.0 -c "from blizzard.foundation.store.migrations import MigrationRunner; from blizzard.hub.store import MIGRATIONS_DIR; print(MigrationRunner(script_location=MIGRATIONS_DIR, url='sqlite:////dev/null').script_head())"
+docker run --rm --entrypoint blizzard-hub ghcr.io/paul-gross/blizzard-hub:v0.2.0 migrate --head
 ```
 
 It prints a revision id such as `20260713_1218_hub_walking_skeleton`.
+
+For a runner host rollback, read the older wheel's runner-store head without opening its directory or store:
+
+```bash
+blizzard runner migrate --head
+```
+
+Run this command with the older wheel installed in a separate environment; the runner migration tree is independent of
+the hub's.
 
 ## 3. Downgrade, on the new image
 

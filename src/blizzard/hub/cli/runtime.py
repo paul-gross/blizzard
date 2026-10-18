@@ -15,6 +15,7 @@ from blizzard.foundation.store.migrations import RevisionMismatchError
 from blizzard.hub.app import PLATFORM_TRACING_SHUTDOWN_SECONDS, build_hosted_app
 from blizzard.hub.config import ConfigError, HubConfig
 from blizzard.hub.runtime import ensure_current_revision, init_environment, migrate, migration_runner
+from blizzard.hub.store import MIGRATIONS_DIR
 
 # The runtime root the dir-taking verbs resolve, highest to lowest: explicit ``--dir``,
 # then ``BZ_HUB_DIR``, then the cwd. Selectable, not shareable: the store is single-writer.
@@ -45,12 +46,17 @@ def init(directory: str, allow_external_db: bool) -> None:
     "--dir", "directory", default=DEFAULT_DIR, envvar=ENV_HUB_DIR, help="Hub runtime directory (overrides $BZ_HUB_DIR)."
 )
 @click.option("--down", default=None, help="Reverse migrations down to this revision (e.g. base).")
+@click.option("--head", is_flag=True, help="Print this build's hub migration head without opening a store.")
+@click.option("--knows", metavar="REV", help="Exit successfully if this build holds REV; print nothing.")
 @click.option("--allow-external-db", "allow_external_db", is_flag=True, default=False, help=_ALLOW_EXTERNAL_DB_HELP)
-def migrate_cmd(directory: str, down: str | None, allow_external_db: bool) -> None:
-    """Apply pending store migrations, or reverse with --down <rev>."""
+def migrate_cmd(directory: str, down: str | None, head: bool, knows: str | None, allow_external_db: bool) -> None:
+    """Apply or reverse migrations, or inspect this build's migration tree."""
     run_migrate(
         Path(directory),
         down,
+        head=head,
+        knows=knows,
+        script_location=MIGRATIONS_DIR,
         migrate=partial(migrate, allow_external_db=allow_external_db),
         config_error=ConfigError,
     )

@@ -15,6 +15,7 @@ import click
 import uvicorn
 
 from blizzard.foundation.events.server import EarlyShutdownServer as _EarlyShutdownServer
+from blizzard.foundation.store.migrations import MigrationRunner
 
 # Bounds uvicorn's own connection-drain wait — defense-in-depth; the actual fix is
 # ``EarlyShutdownServer``, the shared foundation wrapper, imported above.
@@ -49,10 +50,25 @@ def run_migrate(
     directory: Path,
     down: str | None,
     *,
+    head: bool = False,
+    knows: str | None = None,
+    script_location: Path,
     migrate: Callable[..., None],
     config_error: type[BaseException],
 ) -> None:
     """The shared ``migrate`` body: apply or reverse via MIGRATE, echo the outcome."""
+    selected = [
+        flag for flag, used in (("--head", head), ("--knows", knows is not None), ("--down", down is not None)) if used
+    ]
+    if len(selected) > 1:
+        raise click.UsageError(f"{', '.join(selected)} are mutually exclusive")
+    if head or knows is not None:
+        tree = MigrationRunner(script_location=script_location, url="sqlite:////dev/null")
+        if head:
+            click.echo(tree.script_head())
+        elif knows is not None and not tree.knows_revision(knows):
+            raise SystemExit(1)
+        return
     with click_exception_on(config_error):
         migrate(directory, down=down)
     click.echo("migrated" if down is None else f"reversed to {down}")

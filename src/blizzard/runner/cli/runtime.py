@@ -102,6 +102,7 @@ from blizzard.runner.runtime import (
     named_store_socket,
     reset_command,
 )
+from blizzard.runner.store import MIGRATIONS_DIR
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
 from blizzard.runner.stores import HostReadStores, RunnerReadStores
 from blizzard.runner.tracing.sweep import announce_rejected_tracing
@@ -818,9 +819,11 @@ def _add_refused(exc: RunnerAddRefused, hub: str, rerun: _Rerun) -> str:
     help="Host directory (overrides $BZ_RUNNER_DIR).",
 )
 @click.option("--down", default=None, help="Reverse migrations down to this revision (e.g. base).")
+@click.option("--head", is_flag=True, help="Print this build's runner migration head without opening a store.")
+@click.option("--knows", metavar="REV", help="Exit successfully if this build holds REV; print nothing.")
 @click.pass_context
-def migrate_cmd(ctx: click.Context, directory: str, down: str | None) -> None:
-    """Apply pending store migrations, or reverse with --down <rev>.
+def migrate_cmd(ctx: click.Context, directory: str, down: str | None, head: bool, knows: str | None) -> None:
+    """Apply or reverse migrations, or inspect this build's migration tree.
 
     A directory that has not graduated to a host is refused and left as it is. A graduated one holding a pre-host
     `data/runner.db` and no `data/host.db` adopts that store first. Adoption and --down hold the directory and are
@@ -829,6 +832,9 @@ def migrate_cmd(ctx: click.Context, directory: str, down: str | None) -> None:
     run_migrate(
         Path(directory),
         down,
+        head=head,
+        knows=knows,
+        script_location=MIGRATIONS_DIR,
         migrate=lambda root, down: runtime_of(root, trace).migrate(down=down),
         config_error=ConfigError,
     )

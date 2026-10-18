@@ -15,19 +15,63 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
+from alembic.script import ScriptDirectory
+from click.testing import CliRunner
 from sqlalchemy import insert
 
 from blizzard.cli.main import blizzard
 from blizzard.cli.operator_trace import UNTRACED
 from blizzard.foundation.store.engine import create_engine_from_url
+from blizzard.foundation.store.migrations import MigrationRunner
+from blizzard.hub.store import MIGRATIONS_DIR as HUB_MIGRATIONS_DIR
 from blizzard.runner.cli.daemon import LOCAL_CLIENT_TIMEOUT, daemon_holding
 from blizzard.runner.host_layout import HostLayout
+from blizzard.runner.store import MIGRATIONS_DIR as RUNNER_MIGRATIONS_DIR
 from blizzard.runner.store import schema as runner_schema
 from tests.host_files import load_runner_config
 from tests.runner_fakes import FIXTURE_RUNNER_ID
 from tests.runner_init_fakes import init_runner
 
 pytestmark = pytest.mark.unit
+
+
+@pytest.mark.parametrize(("daemon", "tree"), [("hub", HUB_MIGRATIONS_DIR), ("runner", RUNNER_MIGRATIONS_DIR)])
+def test_migrate_revision_queries_need_no_runtime_directory(daemon: str, tree: Path, tmp_path: Path) -> None:
+    missing = tmp_path / "absent"
+    cli = CliRunner()
+    expected = MigrationRunner(tree, "sqlite:////dev/null").script_head()
+    assert expected is not None
+    parent = ScriptDirectory(str(tree)).get_revision(expected)
+    assert parent is not None and isinstance(parent.down_revision, str)
+    prefix = [daemon, "migrate", "--dir", str(missing)]
+
+    head = cli.invoke(blizzard, [*prefix, "--head"])
+    assert head.exit_code == 0, head.output
+    assert head.stdout == f"{expected}\n"
+    for revision in (expected, parent.down_revision):
+        known = cli.invoke(blizzard, [*prefix, "--knows", revision])
+        assert known.exit_code == 0, known.output
+        assert known.stdout == ""
+    unknown = cli.invoke(blizzard, [*prefix, "--knows", "unknown_revision"])
+    assert unknown.exit_code == 1
+    assert unknown.stdout == ""
+    assert not missing.exists()
+
+
+@pytest.mark.parametrize("daemon", ["hub", "runner"])
+@pytest.mark.parametrize(
+    ("first", "second"),
+    [("--head", "--knows"), ("--head", "--down"), ("--knows", "--down")],
+)
+def test_migrate_revision_flags_are_exclusive(daemon: str, first: str, second: str, tmp_path: Path) -> None:
+    missing = tmp_path / "absent"
+    args = [daemon, "migrate", "--dir", str(missing)]
+    for flag in (first, second):
+        args.extend([flag] if flag == "--head" else [flag, "base"])
+    result = CliRunner().invoke(blizzard, args)
+    assert result.exit_code == 2
+    assert first in result.output and second in result.output
+    assert not missing.exists()
 
 
 def test_root_lists_hub_and_runner() -> None:
