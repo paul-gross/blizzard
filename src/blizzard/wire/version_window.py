@@ -39,17 +39,20 @@ class VersionWindow:
         """Parse ``source``, or the packaged ``window.toml`` when none is given."""
         if source is None:
             source = Path(str(files("blizzard.wire").joinpath(_PACKAGED)))
-        try:
-            text = source.read_text()
-        except OSError as error:
-            raise VersionWindowError(f"{source}: cannot read the window file: {error}") from error
-        return cls.parse(text, str(source))
+        return cls.parse(_read(source), str(source))
 
     @classmethod
     def parse(cls, text: str, source: str) -> Self:
         """Parse window ``text`` read from ``source``, which labels every refusal — the same rule as ``load``."""
         floor, opening = _parse(text, source)
         return cls(floor=floor, opening=opening)
+
+
+def _read(source: Path) -> str:
+    try:
+        return source.read_text()
+    except OSError as error:
+        raise VersionWindowError(f"{source}: cannot read the window file: {error}") from error
 
 
 def _parse(text: str, source: str) -> tuple[str, str | None]:

@@ -5,14 +5,11 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-from blizzard.foundation.roles import collaborator
-
 
 class GitError(RuntimeError):
     """A git call failed for a reason other than an absent path."""
 
 
-@collaborator
 class Repository:
     """A git repository the tool reads through ``git``, never importing or running code from it."""
 
