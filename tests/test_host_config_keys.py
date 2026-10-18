@@ -311,7 +311,9 @@ _SAMPLE_BY_PATH: dict[str, object] = {
 }
 
 
-def _document_carrying_every_key(registry: ConfigRegistry) -> dict[str, Any]:
+def _document_carrying_every_key(
+    registry: ConfigRegistry, overrides: dict[str, object] | None = None
+) -> dict[str, Any]:
     """A host document holding every declared key that is not deprecated, nested as the file nests it."""
     document: dict[str, Any] = {}
     for key in registry.keys:
@@ -331,7 +333,7 @@ def _document_carrying_every_key(registry: ConfigRegistry) -> dict[str, Any]:
         elif key.type == ARRAY_OF_TABLES:
             table.setdefault(leaf.removesuffix("[]"), [{}])
         else:
-            table[leaf] = _SAMPLE_BY_PATH.get(key.path, _SAMPLE_BY_TYPE.get(key.type, "x"))
+            table[leaf] = {**_SAMPLE_BY_PATH, **(overrides or {})}.get(key.path, _SAMPLE_BY_TYPE.get(key.type, "x"))
     document["flags"] = {"probe": True}
     return document
 

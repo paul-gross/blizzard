@@ -12052,7 +12052,7 @@
    "comments": 4,
    "docstrings": 6,
    "over_cap": 0,
-   "total": 373
+   "total": 375
   },
   "test_host_config_runner_entry.py": {
    "comments": 0,
@@ -12329,6 +12329,12 @@
    "docstrings": 4,
    "over_cap": 0,
    "total": 968
+  },
+  "test_hub_config_keys.py": {
+   "comments": 4,
+   "docstrings": 2,
+   "over_cap": 0,
+   "total": 85
   },
   "test_hub_core_sharing.py": {
    "comments": 3,
