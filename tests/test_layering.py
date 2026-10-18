@@ -1845,6 +1845,10 @@ def _domain_init_reexports(domain_dir: Path) -> list[str]:
     return offenders
 
 
+@pytest.mark.skipif(
+    "MUTANT_UNDER_TEST" in os.environ,
+    reason="sweeps package inits, which mutmut rewrites to import its generated trampoline names",
+)
 def test_hub_domain_package_inits_re_export_nothing() -> None:
     assert _domain_init_reexports(_HUB_DOMAIN_DIR) == []
 
@@ -2503,6 +2507,11 @@ def _blizzard_constructions(path: Path) -> list[tuple[str, int]]:
     ]
 
 
+@pytest.mark.skipif(
+    "MUTANT_UNDER_TEST" in os.environ,
+    reason="sweeps the composition roots, where mutmut's copy carries every generated mutant body, each repeating "
+    "the constructions it mutates",
+)
 def test_each_blizzard_class_is_constructed_once_across_the_hub_composition_roots() -> None:
     """bzh:dependency-injection: a process-scoped collaborator is built once and shared, so
     no class is constructed twice across the hub's composition-root files."""
@@ -3489,6 +3498,11 @@ def test_a_collaborator_does_work_and_every_clock_is_one() -> None:
     assert not violations, f"data roles — {len(violations)} collaborator(s) misdeclared: {violations}"
 
 
+@pytest.mark.skipif(
+    "MUTANT_UNDER_TEST" in os.environ,
+    reason="sweeps the source tree, where mutmut rewrites each dto method's body into a trampoline call that reads "
+    "as behavior",
+)
 def test_a_dto_has_only_constructors_projections_and_properties() -> None:
     """A ``@dto`` is the app's contract with the outside, not a home for rules: its methods are
     constructors, projections, and properties only (``bzh:data-roles``)."""
