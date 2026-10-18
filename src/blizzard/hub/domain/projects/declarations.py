@@ -11,7 +11,7 @@ project that left it."""
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import TypeVar
@@ -32,6 +32,7 @@ from blizzard.hub.domain.config.work_sources import (
 from blizzard.hub.domain.kernel import id_or_slug
 from blizzard.hub.domain.kernel.slugs import Slug
 from blizzard.hub.domain.kernel.unset import UNSET
+from blizzard.hub.domain.projects.color import ColorPick, decide_color
 from blizzard.hub.domain.projects.links import RepositoryLink, SourceLink
 from blizzard.hub.domain.projects.model import (
     IReadProjectRepository,
@@ -63,8 +64,9 @@ class EntryProjectRequired(ConfigFieldError):
 @domain_model
 @dataclass(frozen=True)
 class ProjectDeclaration:
-    """A project the document names by slug: the sparse edit of the name and description it states, and the sources
-    and repositories it links — each an id, a slug or a slug the record left (``None`` leaves the stored links)."""
+    """A project the document names by slug: the sparse edit of the name, description and color it states, and the
+    sources and repositories it links — each an id, a slug or a slug the record left (``None`` leaves the stored
+    links)."""
 
     slug: str
     edit: ProjectEdit
@@ -179,10 +181,16 @@ class _PlannedLookup:
 
 
 def plan_projects(
-    declared: Sequence[ProjectDeclaration], stored: StoredProjects, ctx: ChangeContext, *, at: datetime
+    declared: Sequence[ProjectDeclaration],
+    stored: StoredProjects,
+    ctx: ChangeContext,
+    *,
+    pick: ColorPick,
+    at: datetime,
 ) -> ProjectsPlan:
     """The writes and outcome rows that bring the stored projects and their links to ``declared``, and the projects
-    the tenant then holds. :class:`ApplyEntryRefused` at the first entry that cannot be applied."""
+    the tenant then holds. A project created with no color takes the one least used among the projects as the earlier
+    entries left them. :class:`ApplyEntryRefused` at the first entry that cannot be applied."""
     current = {project.slug: project for project in stored.projects}
     repositories = PlannedRepositories(stored.repositories, stored.former_repositories)
     sources = PlannedWorkSources(stored.sources, stored.former_sources)
@@ -195,7 +203,9 @@ def plan_projects(
                 raise ConfigFieldError("slug", f"{entry.slug!r} is named twice in this document")
             seen.add(entry.slug)
             planned = _Entry(index, writes, outcomes)
-            record = planned.project(entry, current.get(ProjectSlug.parse(entry.slug).value), stored, ctx, at)
+            record = planned.project(
+                entry, current.get(ProjectSlug.parse(entry.slug).value), stored, current.values(), pick, ctx, at
+            )
             current[record.slug] = record
             planned.links(
                 record,
@@ -241,6 +251,8 @@ class _Entry:
         entry: ProjectDeclaration,
         record: Project | None,
         stored: StoredProjects,
+        siblings: Iterable[Project],
+        pick: ColorPick,
         ctx: ChangeContext,
         at: datetime,
     ) -> Project:
@@ -256,7 +268,9 @@ class _Entry:
             if entry.edit.name is UNSET:
                 raise ConfigFieldError("name", "a project this document creates needs a name")
             description = "" if entry.edit.description is UNSET else entry.edit.description
-            created, change = Project.new(entry.slug, entry.edit.name, ctx, at=at, description=description)
+            stated = None if entry.edit.color is UNSET else entry.edit.color
+            color = decide_color(stated, lambda: (sibling.color for sibling in siblings), pick)
+            created, change = Project.new(entry.slug, entry.edit.name, color, ctx, at=at, description=description)
             self._write(RecordKind.PROJECT, created.slug, created, None, change)
             return created
         decided = record.edit(entry.edit, ctx, if_match=None, at=at)

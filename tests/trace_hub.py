@@ -172,6 +172,7 @@ def seed_open_tenant_chunk(hub: HubHarness, tenant: str, chunk_id: str, at: date
                     slug="default",
                     name="Default",
                     description="",
+                    color="red",
                     revision=1,
                     created_at=at,
                 )

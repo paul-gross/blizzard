@@ -499,7 +499,7 @@ def _projects(
         former_repositories=dict(planned.former),
     )
     declared = [_project_declaration(entry) for entry in document.projects]
-    return plan_projects(declared, stored, ctx, at=services.clock.now())
+    return plan_projects(declared, stored, ctx, pick=services.color_pick, at=services.clock.now())
 
 
 def _project_declaration(entry: ProjectDocument) -> ProjectDeclaration:

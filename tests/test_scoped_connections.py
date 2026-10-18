@@ -523,6 +523,7 @@ def projected(tmp_path: Path) -> Iterator[HubStoreConnections]:
                     "slug": slug,
                     "name": slug,
                     "description": "",
+                    "color": "red",
                     "revision": 1,
                     "created_at": CREATED_AT,
                 }

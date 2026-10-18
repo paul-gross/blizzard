@@ -3,12 +3,13 @@ reference resolution (unit tier)."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 
 import pytest
 
 from blizzard.foundation.ids import Id
+from blizzard.foundation.project_colors import ProjectColor
 from blizzard.hub.domain.config.changes import ChangeContext, ChangeOp, Door, FieldChange, RecordKind
 from blizzard.hub.domain.config.work_sources import ConfigFieldError, ConfigRevisionConflict
 from blizzard.hub.domain.kernel.id_or_slug import MatchedBy
@@ -31,7 +32,7 @@ _CTX = ChangeContext(actor="usr_alice", door=Door.API)
 
 
 def _project(slug: str = "winter", name: str = "Winter") -> Project:
-    return Project.new(slug, name, _CTX, at=_AT)[0]
+    return Project.new(slug, name, ProjectColor.TEAL, _CTX, at=_AT)[0]
 
 
 @pytest.mark.parametrize("raw", ["", "a-", "-a", "a--b", "A", "a_b", "a b", "é", "a" * 65, "a\n"])
@@ -60,10 +61,16 @@ def test_a_name_of_free_text_parses(raw: str) -> None:
 
 
 def test_new_mints_a_project_id_and_a_create_change_keyed_by_it() -> None:
-    record, change = Project.new("winter", "Winter", _CTX, at=_AT, description="the framework")
+    record, change = Project.new("winter", "Winter", ProjectColor.TEAL, _CTX, at=_AT, description="the framework")
     assert Id.parse(record.project_id) is not None
     assert record.project_id.startswith("proj_")
-    assert (record.slug, record.name, record.description, record.revision) == ("winter", "Winter", "the framework", 1)
+    assert (record.slug, record.name, record.description, record.color, record.revision) == (
+        "winter",
+        "Winter",
+        "the framework",
+        ProjectColor.TEAL,
+        1,
+    )
     assert change.record_kind is RecordKind.PROJECT
     assert change.record_key == record.project_id
     assert change.project_id == record.project_id
@@ -72,14 +79,15 @@ def test_new_mints_a_project_id_and_a_create_change_keyed_by_it() -> None:
         FieldChange("slug", None, "winter"),
         FieldChange("name", None, "Winter"),
         FieldChange("description", None, "the framework"),
+        FieldChange("color", None, ProjectColor.TEAL),
     )
 
 
 def test_new_refuses_a_malformed_slug_or_name() -> None:
     with pytest.raises(ConfigFieldError):
-        Project.new("Winter", "Winter", _CTX, at=_AT)
+        Project.new("Winter", "Winter", ProjectColor.TEAL, _CTX, at=_AT)
     with pytest.raises(ConfigFieldError):
-        Project.new("winter", " Winter", _CTX, at=_AT)
+        Project.new("winter", " Winter", ProjectColor.TEAL, _CTX, at=_AT)
 
 
 def test_two_projects_never_share_an_id() -> None:
@@ -163,7 +171,7 @@ class _Projects:
 
     def move(self, project: Project, to: str) -> Project:
         """``project`` takes ``to``; the slug it leaves becomes former, and ``to`` is no longer former."""
-        moved = Project(project.project_id, to, project.name, project.description, project.revision + 1, _AT)
+        moved = replace(project, slug=to, revision=project.revision + 1, created_at=_AT)
         del self.current[project.slug]
         self.former.pop(to, None)
         self.former[project.slug] = moved

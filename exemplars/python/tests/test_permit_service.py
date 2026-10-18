@@ -12,6 +12,7 @@ from datetime import UTC, datetime
 import pytest
 
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.project_colors import ProjectColor
 from blizzard.hub.domain.projects.model import Project, ProjectId
 from exemplar.foundation.permits import PermitState
 from exemplar.hub.domain.permits.model import (
@@ -34,7 +35,13 @@ _AT = datetime(2026, 2, 1, tzinfo=UTC)
 
 def _project(slug: str) -> Project:
     return Project(
-        project_id=ProjectId(f"proj_{slug}"), slug=slug, name=slug.title(), description="", revision=1, created_at=_T0
+        project_id=ProjectId(f"proj_{slug}"),
+        slug=slug,
+        name=slug.title(),
+        description="",
+        color=ProjectColor.TEAL,
+        revision=1,
+        created_at=_T0,
     )
 
 

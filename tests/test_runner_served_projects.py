@@ -9,6 +9,7 @@ from datetime import UTC, datetime
 import pytest
 
 from blizzard.foundation.ids import Id, IdPrefix
+from blizzard.foundation.project_colors import ProjectColor
 from blizzard.hub.domain.projects.bulk_resolve import BulkProjectResolver
 from blizzard.hub.domain.projects.model import Project, ProjectId, ProjectSlug
 from blizzard.hub.domain.runners.registration import RunnerRegistration, ServedEntry
@@ -26,7 +27,15 @@ _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 
 def _project(slug: str) -> Project:
     project_id = ProjectId(Id.mint_at(IdPrefix.PROJECT, _T0).value)
-    return Project(project_id=project_id, slug=slug, name=slug.title(), description="", revision=1, created_at=_T0)
+    return Project(
+        project_id=project_id,
+        slug=slug,
+        name=slug.title(),
+        description="",
+        color=ProjectColor.TEAL,
+        revision=1,
+        created_at=_T0,
+    )
 
 
 @dataclass
@@ -112,7 +121,13 @@ def test_registering_with_no_list_leaves_a_resolved_declaration_untouched_and_re
 
 def test_a_resolved_entry_stays_on_its_project_when_the_slug_changes_hands() -> None:
     renamed = Project(
-        project_id=_ALPHA.project_id, slug="alpha-two", name="Alpha", description="", revision=2, created_at=_T0
+        project_id=_ALPHA.project_id,
+        slug="alpha-two",
+        name="Alpha",
+        description="",
+        color=ProjectColor.TEAL,
+        revision=2,
+        created_at=_T0,
     )
     reclaimed = _project("alpha")
     stored = (ServedEntry("alpha", _ALPHA.project_id), ServedEntry("pending", None))

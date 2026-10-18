@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 
 import pytest
 
+from blizzard.foundation.project_colors import ProjectColor
 from blizzard.hub.domain.config.changes import ChangeContext, ChangeOp, Door, FieldChange, RecordKind
 from blizzard.hub.domain.config.repositories import RepositoryId
 from blizzard.hub.domain.config.work_sources import BuiltInWorkSource, ConfigRevisionConflict, WorkSourceId
@@ -17,7 +18,7 @@ pytestmark = pytest.mark.unit
 
 _AT = datetime(2026, 10, 9, 12, 0, tzinfo=UTC)
 _CTX = ChangeContext(actor="usr_alice", door=Door.CLI)
-_PROJECT = Project.new("winter", "Winter", _CTX, at=_AT)[0]
+_PROJECT = Project.new("winter", "Winter", ProjectColor.TEAL, _CTX, at=_AT)[0]
 _SOURCE = WorkSourceId("wsrc_gh_winter")
 _REPOSITORY = RepositoryId("repo_blizzard")
 
@@ -97,7 +98,7 @@ def test_a_stale_revision_is_refused_even_for_a_no_op() -> None:
 
 
 def test_links_of_one_record_from_two_projects_are_separate_records() -> None:
-    other = Project.new("frost", "Frost", _CTX, at=_AT)[0]
+    other = Project.new("frost", "Frost", ProjectColor.TEAL, _CTX, at=_AT)[0]
     first = SourceLink.new(_PROJECT, _SOURCE, _CTX, at=_AT)[0]
     second = SourceLink.new(other, _SOURCE, _CTX, at=_AT)[0]
     assert first != second

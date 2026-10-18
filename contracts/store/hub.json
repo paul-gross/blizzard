@@ -1,5 +1,5 @@
 {
-  "head_revision": "20261018_0900_decision_check_results",
+  "head_revision": "20261018_1200_project_color",
   "store": "hub",
   "tables": {
     "answer_deliveries": {
@@ -5093,6 +5093,12 @@
     "projects": {
       "checks": [],
       "columns": {
+        "color": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
         "created_at": {
           "deprecated": null,
           "nullable": false,

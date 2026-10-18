@@ -9,20 +9,28 @@ from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.config.changes import ChangeContext
 from blizzard.hub.domain.config.repositories import ConfiguredRepository
 from blizzard.hub.domain.config.work_sources import ConfiguredWorkSource
+from blizzard.hub.domain.projects.color import ColorPick, decide_color
 from blizzard.hub.domain.projects.links import IWriteProjectLinks, RepositoryLink, SourceLink
 from blizzard.hub.domain.projects.model import IWriteProjectRepository, Project, ProjectEdit
 
 
 class ProjectAuthoring:
-    def __init__(self, *, projects: IWriteProjectRepository, links: IWriteProjectLinks, clock: IClock) -> None:
+    def __init__(
+        self, *, projects: IWriteProjectRepository, links: IWriteProjectLinks, pick: ColorPick, clock: IClock
+    ) -> None:
         self._projects = projects
+        self._pick = pick
         self._links = links
         self._clock = clock
 
     # --- Projects ----------------------------------------------------------------
 
-    def create(self, slug: str, name: str, ctx: ChangeContext, *, description: str = "") -> Project:
-        record, change = Project.new(slug, name, ctx, at=self._clock.now(), description=description)
+    def create(
+        self, slug: str, name: str, ctx: ChangeContext, *, description: str = "", color: str | None = None
+    ) -> Project:
+        """With no ``color`` stated, the project takes the tenant's least-used one."""
+        decided = decide_color(color, lambda: (project.color for project in self._projects.list_all()), self._pick)
+        record, change = Project.new(slug, name, decided, ctx, at=self._clock.now(), description=description)
         return self._projects.create(record, change=change)
 
     def edit(self, record: Project, edit: ProjectEdit, ctx: ChangeContext, *, if_match: int | None = None) -> Project:

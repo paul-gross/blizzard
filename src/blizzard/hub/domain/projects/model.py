@@ -11,16 +11,18 @@ from datetime import datetime
 from typing import NewType, Protocol
 
 from blizzard.foundation.ids import Id, IdPrefix
+from blizzard.foundation.project_colors import ProjectColor
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.config.changes import ChangeContext, ChangeOp, ConfigChange, FieldChange, RecordKind
 from blizzard.hub.domain.config.work_sources import ConfigFieldError, ConfigRevisionConflict
 from blizzard.hub.domain.kernel.slugs import NAME_MAX, SLUG_MAX, DisplayName, Slug
 from blizzard.hub.domain.kernel.unset import UNSET, UnsetType
+from blizzard.hub.domain.projects.color import parse_color
 
 ProjectId = NewType("ProjectId", str)
 
 #: The mutable fields, in the order a diff lists them.
-_FIELDS = ("slug", "name", "description")
+_FIELDS = ("slug", "name", "description", "color")
 
 
 class ProjectSlugTaken(Exception):
@@ -81,6 +83,7 @@ class ProjectEdit:
     slug: str | UnsetType = UNSET
     name: str | UnsetType = UNSET
     description: str | UnsetType = UNSET
+    color: str | UnsetType = UNSET
 
 
 @domain_model
@@ -96,18 +99,21 @@ class Project:
     slug: str
     name: str
     description: str
+    color: ProjectColor
     revision: int
     created_at: datetime
 
     @classmethod
     def new(
-        cls, slug: str, name: str, ctx: ChangeContext, *, at: datetime, description: str = ""
+        cls, slug: str, name: str, color: ProjectColor, ctx: ChangeContext, *, at: datetime, description: str = ""
     ) -> tuple[Project, ConfigChange]:
+        """A new project in ``color``, the color its creator decided."""
         record = cls(
             project_id=ProjectId(Id.mint_at(IdPrefix.PROJECT, at).value),
             slug=ProjectSlug.parse(slug).value,
             name=ProjectName.parse(name).value,
             description=description,
+            color=color,
             revision=1,
             created_at=at,
         )
@@ -129,6 +135,7 @@ class Project:
             slug=self.slug if edit.slug is UNSET else ProjectSlug.parse(edit.slug).value,
             name=self.name if edit.name is UNSET else ProjectName.parse(edit.name).value,
             description=self.description if edit.description is UNSET else edit.description,
+            color=self.color if edit.color is UNSET else parse_color(edit.color),
         )
         changes = _diff(self, edited)
         if not changes:

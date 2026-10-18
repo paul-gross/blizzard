@@ -14,6 +14,7 @@ import sqlalchemy as sa
 import structlog
 
 from blizzard.auth_core import Permission, Role
+from blizzard.foundation.project_colors import ProjectColor
 from blizzard.foundation.store.utc import as_utc
 from blizzard.hub.auth.errors import RepoErrorFactory
 from blizzard.hub.auth.internal.identity_transaction import IdentityTransactions
@@ -33,7 +34,15 @@ from blizzard.hub.graphs import PACKAGED, GraphFile
 from blizzard.hub.store import schema
 from blizzard.hub.store.internal.tenant_admin_store import TenantAdministrationStore
 from blizzard.hub.tenancy import HUB_SCOPED_OPTION, StoreScope, TenantId, UnknownTenant
-from tests.support import HubHarness, build_hub, close_tenant, default_tenant, hub_level_connections, seed_user
+from tests.support import (
+    HubHarness,
+    build_hub,
+    close_tenant,
+    default_tenant,
+    first_color,
+    hub_level_connections,
+    seed_user,
+)
 
 pytestmark = pytest.mark.component
 
@@ -113,6 +122,12 @@ def test_a_created_tenant_holds_its_default_project_created_by_its_creator_throu
     assert project_id.startswith("proj_")
     assert project[1:] == ("default", "Default", "", 1)
     assert changes == [("project", project_id, project_id, "usr_creator", door.value, "create", 1)]
+
+
+def test_a_created_tenants_default_project_is_stored_with_a_palette_color(hub: HubHarness) -> None:
+    created = hub.hub_services.tenant_admin.create("acme", admin_user_id=None, by="usr_creator")
+
+    assert _default_project(hub, created.tenant_id).color in set(ProjectColor)
 
 
 def _default_project(hub: HubHarness, tenant: TenantId) -> Project:
@@ -212,6 +227,7 @@ def test_a_creation_interrupted_after_its_mints_leaves_no_partial_tenant(hub: Hu
         ),
         mint_packaged=mint_then_fail,
         changed=hub.hub_services.tenants.open_tenants.refresh,
+        pick=first_color,
         clock=hub.clock,
     )
     before = _row_counts(hub)

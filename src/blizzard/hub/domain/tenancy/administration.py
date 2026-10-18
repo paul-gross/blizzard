@@ -23,6 +23,7 @@ from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.domain.graph.model import IWriteGraphRepository
+from blizzard.hub.domain.projects.color import ColorPick, least_used
 from blizzard.hub.domain.projects.model import IWriteProjectRepository, Project
 from blizzard.hub.tenancy import TenantId, UnknownTenant
 
@@ -144,8 +145,10 @@ class TenantAdministration:
         tenants: IWriteTenantDirectory,
         mint_packaged: Callable[[IWriteGraphRepository], object],
         changed: Callable[[], object],
+        pick: ColorPick,
         clock: IClock,
     ) -> None:
+        self._pick = pick
         self._tenants = tenants
         self._mint_packaged = mint_packaged
         self._changed = changed
@@ -163,7 +166,11 @@ class TenantAdministration:
             self._mint_packaged(creation.graphs)
             creation.seed_hub_sequence()
             project, change = Project.new(
-                DEFAULT_PROJECT_SLUG, DEFAULT_PROJECT_NAME, ChangeContext(actor=by, door=door), at=at
+                DEFAULT_PROJECT_SLUG,
+                DEFAULT_PROJECT_NAME,
+                least_used((), self._pick),
+                ChangeContext(actor=by, door=door),
+                at=at,
             )
             creation.projects.create(project, change=change)
             if admin_user_id is not None:
