@@ -509,6 +509,7 @@ def _project_declaration(entry: ProjectDocument) -> ProjectDeclaration:
         edit=ProjectEdit(
             **({"name": entry.name} if "name" in stated and entry.name is not None else {}),
             **({"description": entry.description} if "description" in stated else {}),
+            **({"color": entry.color} if "color" in stated and entry.color is not None else {}),
         ),
         sources=tuple(entry.sources) if "sources" in stated else None,
         repositories=tuple(entry.repositories) if "repositories" in stated else None,
@@ -647,6 +648,7 @@ def export_config(services: Services) -> ConfigDocument:
                 slug=project.slug,
                 name=project.name,
                 description=project.description,
+                color=project.color,
                 sources=sorted(source_slugs[link.work_source_id] for link in source_links.get(project.project_id, [])),
                 repositories=sorted(
                     repository_slugs[link.repository_id] for link in repository_links.get(project.project_id, [])

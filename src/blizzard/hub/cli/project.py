@@ -19,6 +19,14 @@ _IF_MATCH = click.option(
     help="Refuse the change unless it is still at this revision.",
 )
 
+_COLOR = click.option(
+    "--color",
+    "color",
+    default=None,
+    metavar="NAME",
+    help="The project's color on the board, by palette name; the hub picks the least-used one when omitted.",
+)
+
 _SOURCE = click.option("--source", "source", default=None, metavar="SOURCE", help="A work source, by id or slug.")
 _REPOSITORY = click.option(
     "--repository", "repository", default=None, metavar="REPOSITORY", help="A repository, by name."
@@ -29,7 +37,7 @@ class ProjectListing(Listing):
     empty = "no projects"
 
     def line(self, row: Any) -> str:
-        return f"{row['slug']}  {row['name']}  {row['project_id']}  r{row['revision']}"
+        return f"{row['slug']}  {row['name']}  {row['color']}  {row['project_id']}  r{row['revision']}"
 
 
 def _refusals(project: str) -> dict[int, str]:
@@ -64,10 +72,13 @@ def project_group() -> None:
 @click.argument("slug")
 @click.option("--name", default=None, help="The project's display name (default: SLUG).")
 @click.option("--description", default="", help="What the project is for.")
-def project_create(cli: CliContext, slug: str, name: str | None, description: str) -> None:
+@_COLOR
+def project_create(cli: CliContext, slug: str, name: str | None, description: str, color: str | None) -> None:
     """Create project SLUG at revision 1, named NAME (default: SLUG). It draws work only from the built-in hub
     source until a work source or repository is linked to it. Refused when SLUG is another project's current slug."""
-    body = {"slug": slug, "name": name if name is not None else slug, "description": description}
+    body: dict[str, Any] = {"slug": slug, "name": name if name is not None else slug, "description": description}
+    if color is not None:
+        body["color"] = color
     resp = cli.post("/api/projects", "POST /projects", json_body=body, on_status=_refusals(slug), door=True)
     out = resp.json()
     cli.show_lines(out, f"project {out['slug']} created at revision 1 — id {out['project_id']}")
@@ -75,7 +86,7 @@ def project_create(cli: CliContext, slug: str, name: str | None, description: st
 
 @project_group.command("list", cls=FleetCommand)
 def project_list(cli: CliContext) -> None:
-    """List the tenant's projects — slug, name, id, revision."""
+    """List the tenant's projects — slug, name, color, id, revision."""
     rows = cli.get("/api/projects", "GET /projects").json()["projects"]
     cli.show(rows, ProjectListing(rows))
 
@@ -97,6 +108,7 @@ def project_show(cli: CliContext, project: str) -> None:
         {**body, "source_links": sources, "repository_links": repositories},
         f"{body['slug']}  {body['name']}  revision {body['revision']}",
         f"id {body['project_id']}  created {body['created_at']}",
+        f"color {body['color']}",
         f"description {body['description'] or '-'}",
         *_linked(sources, repositories),
     )
@@ -107,6 +119,7 @@ def project_show(cli: CliContext, project: str) -> None:
 @click.option("--slug", default=None, help="The new slug; the one it leaves keeps naming the project.")
 @click.option("--name", default=None, help="The new display name.")
 @click.option("--description", default=None, help="The new description.")
+@_COLOR
 @_IF_MATCH
 def project_edit(
     cli: CliContext,
@@ -114,12 +127,13 @@ def project_edit(
     slug: str | None,
     name: str | None,
     description: str | None,
+    color: str | None,
     if_match: int | None,
 ) -> None:
     """Change only the fields given on PROJECT; every other field keeps its value. A slug the project leaves keeps
     naming it until another project takes it. A change that leaves every field as it is writes nothing and keeps the
     revision. Refused when the new slug is another project's, or --if-match names a stale revision."""
-    given = {"slug": slug, "name": name, "description": description}
+    given = {"slug": slug, "name": name, "description": description, "color": color}
     body = {k: v for k, v in given.items() if v is not None}
     if not body:
         raise click.UsageError("nothing to change — give a field to set")

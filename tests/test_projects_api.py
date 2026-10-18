@@ -378,3 +378,49 @@ def test_reads_take_fleet_view_and_writes_config_edit(tmp_path: Path, role: Role
         status = hub.client.request(method, path, json=body, headers=cookie).status_code
         assert (status != 403) is may_edit, f"{role} {method} {path}: {status}"
     assert may_edit is (role is Role.ADMIN)
+
+
+# --- Color -------------------------------------------------------------------------------------------------------
+
+
+def test_a_create_without_a_color_takes_the_least_used_one_and_a_stated_color_is_stored(hub: HubHarness) -> None:
+    default = _ok(hub.client.get("/api/projects/default"))
+    first = _create(hub.client, "first")
+    stated = _create(hub.client, "stated", color="slate")
+
+    assert first["color"] != default["color"]
+    assert stated["color"] == "slate"
+    assert _ok(hub.client.get("/api/projects/stated"))["color"] == "slate"
+
+
+def test_a_patch_sets_the_color_bumps_the_revision_and_logs_the_field(hub: HubHarness) -> None:
+    created = _create(hub.client, "widgets", color="red")
+
+    edited = _ok(hub.client.patch("/api/projects/widgets", json={"color": "teal"}, headers={"If-Match": "1"}))
+
+    assert (edited["color"], edited["revision"]) == ("teal", 2)
+    diffs = [field for change in _changes(hub.client, project=created["project_id"]) for field in change["diff"]]
+    assert any(field["field"] == "color" and (field["old"], field["new"]) == ("red", "teal") for field in diffs)
+
+
+@pytest.mark.parametrize("method", ["post", "patch"])
+def test_a_color_outside_the_palette_answers_422_on_color_listing_the_palette(hub: HubHarness, method: str) -> None:
+    _create(hub.client, "widgets")
+    if method == "post":
+        response = hub.client.post("/api/projects", json={"slug": "other", "name": "Other", "color": "mauve"})
+    else:
+        response = hub.client.patch("/api/projects/widgets", json={"color": "mauve"})
+
+    assert response.status_code == 422, response.text
+    detail = response.json()["detail"][0]
+    assert detail["loc"] == ["body", "color"]
+    assert all(name in detail["msg"] for name in ("red", "orange", "amber", "lime", "green", "teal", "slate"))
+
+
+def test_an_explicit_null_color_answers_422(hub: HubHarness) -> None:
+    _create(hub.client, "widgets")
+
+    response = hub.client.patch("/api/projects/widgets", json={"color": None})
+
+    assert response.status_code == 422
+    assert response.json()["detail"][0]["loc"] == ["body", "color"]

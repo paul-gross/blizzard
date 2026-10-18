@@ -107,13 +107,14 @@ def test_create_names_the_project_by_its_slug_unless_given_a_name_and_list_and_s
     assert (widgets["slug"], widgets["name"], widgets["description"]) == ("widgets", "widgets", "the widget line")
     assert (named["slug"], named["name"]) == ("gears", "Gear works")
     listed = _said(_cli("list"))
-    assert f"gears  Gear works  {named['project_id']}  r1" in listed
-    assert f"widgets  widgets  {widgets['project_id']}  r1" in listed
+    assert f"gears  Gear works  {named['color']}  {named['project_id']}  r1" in listed
+    assert f"widgets  widgets  {widgets['color']}  {widgets['project_id']}  r1" in listed
     assert {row["slug"] for row in _json(_cli("list", "--json"))} == {"default", "gears", "widgets"}
     by_id = _said(_cli("show", named["project_id"]))
-    assert by_id[:3] == [
+    assert by_id[:4] == [
         "gears  Gear works  revision 1",
         f"id {named['project_id']}  created {named['created_at']}",
+        f"color {named['color']}",
         "description -",
     ]
     assert [change["door"] for change in _changes(hub, "project") if change["record_key"] == named["project_id"]] == [
@@ -265,3 +266,14 @@ def test_project_option_is_optional_on_the_command_line_and_says_what_it_does(re
     assert json.loads(named.stdout) == {"project": "gears"}
     assert json.loads(unnamed.stdout) == {}
     assert says in " ".join(shown.output.split())
+
+
+@pytest.mark.usefixtures("sent")
+def test_color_is_stated_on_create_and_edit_and_the_hub_refuses_a_name_outside_the_palette() -> None:
+    created = _json(_cli("create", "widgets", "--color", "teal", "--json"))
+    edited = _json(_cli("edit", "widgets", "--color", "pink", "--json"))
+    refused = _cli("edit", "widgets", "--color", "mauve")
+
+    assert (created["color"], edited["color"], edited["revision"]) == ("teal", "pink", 2)
+    assert refused.exit_code != 0
+    assert "mauve" in refused.output
