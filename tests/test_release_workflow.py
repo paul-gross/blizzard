@@ -179,6 +179,39 @@ def test_the_image_is_signed_then_attested_by_the_push_digest_before_the_invento
     assert steps[file_attest_idx]["with"]["subject-path"] == "inventory/*"
 
 
+def test_the_bills_of_materials_are_made_and_attested_after_the_push_before_the_inventory() -> None:
+    steps = _build_job()["steps"]
+    push_idx = _step_index(steps, lambda s: "build-push-action" in str(s.get("uses", "")))
+    inventory_idx = _step_index(steps, lambda s: "release-inventory.sh" in str(s.get("run", "")))
+    scans = [i for i, s in enumerate(steps) if _uses(s, "anchore/sbom-action")]
+    attests = [i for i, s in enumerate(steps) if _uses(s, "actions/attest-sbom")]
+    assert len(scans) == 3 and len(attests) == 3, "one bill of materials per image platform, plus the wheel's"
+    assert all(push_idx < i < inventory_idx for i in scans + attests)
+    for i in scans:
+        with_ = steps[i]["with"]
+        assert with_["format"] == "spdx-json"
+        assert with_["output-file"].startswith("inventory/")
+        assert with_["upload-release-assets"] is False, "only `publish` writes the Release"
+    for arch in ("amd64", "arm64"):
+        digest = f"${{{{ steps.platform_digests.outputs.{arch} }}}}"
+        scan = next(steps[i] for i in scans if str(steps[i]["with"].get("image", "")).endswith(f"@{digest}"))
+        assert scan["with"]["image"].startswith("registry:ghcr.io/paul-gross/blizzard-hub@")
+        attest = next(steps[i]["with"] for i in attests if steps[i]["with"].get("subject-digest") == digest)
+        assert attest["push-to-registry"] is True
+        assert attest["sbom-path"] == scan["with"]["output-file"]
+    wheel_scan = next(steps[i] for i in scans if steps[i]["with"].get("path") == "sbom-wheel")
+    wheel_attest = next(steps[i]["with"] for i in attests if "subject-path" in steps[i]["with"])
+    assert wheel_attest["subject-path"] == "dist/blizzard-*.whl"
+    assert wheel_attest["sbom-path"] == wheel_scan["with"]["output-file"]
+
+
+def test_the_wheel_bill_of_materials_scans_a_hashed_venv_and_the_board_lockfile() -> None:
+    steps = _build_job()["steps"]
+    stage = str(steps[_step_index(steps, lambda s: "sbom-wheel/venv" in str(s.get("run", "")))]["run"])
+    assert "--require-hashes" in stage
+    assert "web/package-lock.json" in stage
+
+
 def test_the_compat_breaks_path_is_always_passed_to_the_inventory_script() -> None:
     steps = _build_job()["steps"]
     run = str(steps[_step_index(steps, lambda s: "release-inventory.sh" in str(s.get("run", "")))]["run"])
@@ -213,6 +246,8 @@ def test_publish_attaches_the_inventory_in_one_call_with_the_notes_file() -> Non
     [
         "sigstore/cosign-installer",
         "actions/attest-build-provenance",
+        "actions/attest-sbom",
+        "anchore/sbom-action",
         "actions/upload-artifact",
         "actions/download-artifact",
     ],
