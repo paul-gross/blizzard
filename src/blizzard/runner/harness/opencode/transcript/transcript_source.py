@@ -1,6 +1,4 @@
-"""The OpenCode ``IHarnessTranscriptSource`` adapter, the OpenCode analogue of
-``src/blizzard/runner/harness/claude_code/transcript.py`` — named apart from
-``src/blizzard/runner/harness/opencode/compatibility/transcript.py`` (the proof's own module). Every call re-exports the
+"""The OpenCode ``IHarnessTranscriptSource`` adapter. Every call re-exports the
 whole root session; :class:`~.opencode.transcript.cursor.MessagePartCursor` turns that into an incremental
 read, and its token is this module's own opaque :class:`TranscriptPosition`."""
 

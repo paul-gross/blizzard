@@ -1,8 +1,7 @@
 """The one harness module naming both adapter packages, :mod:`.claude_code` and :mod:`.opencode`
-(``bzh:pluggable-seams``). :data:`HARNESS_SECTION_KINDS` declares the harness order once, Claude Code
-first (the first enabled binding is the default), and :func:`harness_catalog` pairs each section kind
-with its binding's declaration by id. Importing it loads only each adapter's ``section`` module; a
-declaration's own graph loads on first use."""
+(``bzh:pluggable-seams``). :data:`HARNESS_SECTION_KINDS` declares the harness order once, and
+:func:`harness_catalog` pairs each section kind with its binding's declaration by id. Importing it loads only each
+adapter's ``section`` module; a declaration's own graph loads on first use."""
 
 from __future__ import annotations
 
@@ -33,7 +32,7 @@ from blizzard.runner.harness.opencode.section import OPENCODE_SECTION
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.process.probe import IProcessProbe
 
-#: The catalog order: Claude Code first, so it is the default harness whenever it is enabled.
+#: The catalog order: Claude Code first.
 HARNESS_SECTION_KINDS: tuple[IHarnessSectionKind, ...] = (CLAUDE_CODE_SECTION, OPENCODE_SECTION)
 
 
@@ -202,7 +201,7 @@ def build_production_harness_registry(
     launcher pair. The process graph owns the injected executor and probe for the
     lifetime of every child launch. ``bundle`` is the snapshot this process published at startup;
     ``harness_telemetry_enabled`` and ``runner_environ`` are what each binding derives its own telemetry plan from.
-    Insertion follows the catalog order: the first binding is the runner's default harness."""
+    Insertion follows the catalog order."""
     launcher = ProcessLauncher(process, executor=executor)
     shared = shared_inputs(
         settings,

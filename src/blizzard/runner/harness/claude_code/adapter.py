@@ -422,7 +422,7 @@ class ClaudeCodeAdapter:
         # the token plaintext is never persisted, so the caller re-mints it.
         env = self.identity_env(preamble, chunk_id, session_id) if preamble is not None else self._worker_env.variables
         # Injected per-lease file (epic #57); unset (``None``) inherits the runner's own.
-        # Deferred like spawn/judge — `src/blizzard/runner/lifecycle/dormant.py::_wake` confirms after `record_spawn`.
+        # Deferred like spawn/judge.
         with harness_shared.stdout_target(stdout_path) as stdout_file:
             launched = self._launcher.launch(
                 cmd, cwd=session_cwd, env=env, stdout=stdout_file, stderr=None, defer_disarm=True
@@ -439,8 +439,7 @@ class ClaudeCodeAdapter:
     def _settings_args(self) -> list[str]:
         """The one owner of the settings argv shared by spawn, judge, and resume: the bundle's
         composed ``--settings`` plus the companion flags present, else the runner's own hook
-        file. ``--mcp-config`` rides in its ``=`` form because the option is variadic and would
-        otherwise consume the trailing positional prompt."""
+        file."""
         if self._bundle is not None:
             return self._bundle.argv()
         return ["--settings", self._settings_path] if self._settings_path else []

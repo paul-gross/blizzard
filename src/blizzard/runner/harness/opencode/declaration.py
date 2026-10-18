@@ -73,9 +73,7 @@ class OpenCodeDeclaration:
         launcher: IProcessLauncher,
     ) -> HarnessBinding:
         """Build the adapter over the one runner-owned ``process``/``launcher`` pair every binding
-        receives. One :class:`OpenCodeTranscriptSource` backs both the adapter and the binding, and
-        a price catalog is resolved from the same worker env — never a constant path. One exporter
-        backs both readers."""
+        receives."""
         worker_env = shared.worker_env
         exporter = SubprocessOpenCodeExporter(binary=section.binary, worker_env=worker_env)
         transcript_source = OpenCodeTranscriptSource(

@@ -1,8 +1,4 @@
-"""The Claude Code health-probe binding.
-
-Standalone, mirroring :class:`~blizzard.runner.harness.opencode.health.
-OpenCodeHealthProbe`: a narrow, separately-injected collaborator rather than a slice folded
-onto :class:`~blizzard.runner.harness.claude_code.adapter.ClaudeCodeAdapter` itself."""
+"""The Claude Code health-probe binding."""
 
 from __future__ import annotations
 

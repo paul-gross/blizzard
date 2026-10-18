@@ -93,8 +93,7 @@ class HarnessHealthResult:
 
 def reported_health(harness_id: str, result: HarnessHealthResult | None) -> HarnessHealthResult:
     """The health every reader reports for ``harness_id``: its last evaluation when one ran,
-    else :meth:`HarnessHealthResult.unprobed`. The one owner of the fail-open reading — the
-    diagnostics route, the registration push, and session-harness selection all defer here."""
+    else :meth:`HarnessHealthResult.unprobed`. The one owner of the fail-open reading."""
     return result if result is not None else HarnessHealthResult.unprobed(harness_id)
 
 

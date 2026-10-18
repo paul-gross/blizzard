@@ -43,8 +43,8 @@ class LatestSelfTestResult:
 
 
 def selftest_failed(latest: LatestSelfTestResult | None) -> bool | None:
-    """The health evaluator's selftest evidence: ``None`` when the harness never completed a
-    run on this runner (unresolved, never itself a failure), else :meth:`LatestSelfTestResult.failed`."""
+    """The health evaluator's selftest evidence: ``None`` when there is no result,
+    else :meth:`LatestSelfTestResult.failed`."""
     return latest.failed() if latest is not None else None
 
 

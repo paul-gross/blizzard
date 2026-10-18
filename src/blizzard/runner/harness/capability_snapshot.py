@@ -51,8 +51,7 @@ class HarnessVersionCache:
 def default_harness_id(harnesses: IHarnessRegistry) -> str | None:
     """The runner's own default harness — the registry's own binding order
     decides which one that is, with no separate config key. ``None`` only for the legacy
-    no-bindings registry some tests construct. The one place this is decided; both
-    ``capability_snapshot`` and ``src/blizzard/runner/lifecycle/spawn.py``'s fallback defer here."""
+    no-bindings registry some tests construct. The one place this is decided."""
     known = harnesses.known_harnesses
     return known[0] if known else None
 

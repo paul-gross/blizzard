@@ -150,15 +150,15 @@ class IHarnessDeclaration(Protocol[SectionT_contra]):
         ...
 
     def diagnostics(self, section: SectionT_contra, shared: SharedHarnessInputs, *, spawn_root: str) -> tuple[str, ...]:
-        """``harness status`` lines naming each ambient setting that defeats the runner's wiring."""
+        """Lines naming each ambient setting that defeats the runner's wiring."""
         ...
 
     def unbundled_status(self, section: SectionT_contra) -> tuple[str, ...]:
-        """``harness status`` lines naming the runner-owned files in effect with no bundle."""
+        """Lines naming the runner-owned files in effect with no bundle."""
         ...
 
     def snapshot_status(self, snapshot: Path, sources: tuple[HarnessSource, ...]) -> tuple[str, ...]:
-        """``harness status`` lines naming what a worker is delivered from the published ``snapshot``."""
+        """Lines naming what a worker is delivered from the published ``snapshot``."""
         ...
 
 
