@@ -1,6 +1,8 @@
 import { ApplicationConfig, provideBrowserGlobalErrorListeners, provideZonelessChangeDetection } from '@angular/core';
 import { provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
+import { provideFlags } from 'fleet';
+import { runnerFlagsRead } from '../core/flags.query';
 import { provideSessionRecovery } from '../core/identity/session-recovery.provider';
 
 import { routes } from './app.routes';
@@ -18,5 +20,7 @@ export const appConfig: ApplicationConfig = {
     // Session reacquisition on a 401 — the runner client's own
     // interceptor, mirroring the hub app's `provideAuthInterceptor()`.
     provideSessionRecovery(),
+    // Features read the host's flags through the shared store: one read at start.
+    provideFlags(runnerFlagsRead),
   ],
 };

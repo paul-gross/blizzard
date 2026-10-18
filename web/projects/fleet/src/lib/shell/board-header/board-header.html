@@ -31,7 +31,12 @@
   }
   <div class="cell conn" data-testid="conn">
     <span class="stat-lbl">{{ connectionLabel() }}</span>
-    <span class="v">{{ connection() }}</span>
+    <span class="v"
+      >{{ connection() }}
+      @if (overridden().length > 0) {
+        <span class="overridden" [attr.title]="overriddenTitle()" data-testid="flags-overridden">flags</span>
+      }</span
+    >
   </div>
   <!-- The trailing cluster is wrapped rather than projected straight into the
        flex row so this component can size it as one unit — view encapsulation

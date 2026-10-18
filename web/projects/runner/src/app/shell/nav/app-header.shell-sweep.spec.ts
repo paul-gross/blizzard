@@ -10,6 +10,8 @@ import { page } from 'vitest/browser';
 
 import { AppHeader } from './app-header';
 import { provideActiveRunner } from '../../core/active-runner';
+import { provideFlags } from 'fleet';
+import { runnerFlagsRead } from '../../core/flags.query';
 
 /**
  * The runner app root's desktop header's half of `web:shell-sweep`
@@ -38,6 +40,7 @@ async function render(degradedConnection = false) {
       provideZonelessChangeDetection(),
       provideActiveRunner('rn_1'),
       provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
+      provideFlags(runnerFlagsRead),
       // The chunk name in the header is a `routerLink`.
       provideRouter([]),
       // `degraded` is the connection cell's longest string — a real
@@ -185,6 +188,43 @@ describe('runner AppHeader shell sweep (web:shell-sweep, issue #163/#171/#325)',
     }
 
     expect(pageErrors, `page errors fired during the sweep: ${pageErrors.join('; ')}`).toEqual([]);
+  });
+
+  it('shows the overridden-flags marker in the connection cell, overflow-free, at every width', async () => {
+    const stub = stubRequestClient(runnerClient, (method, path) => {
+      if (method === 'GET' && path === '/api/auth/session') return { auth_enabled: true, username: usernameOfLength(20) };
+      if (path === '/api/flags') return { flags: { alpha: true, beta: false }, overridden: ['alpha', 'beta'] };
+      return { items: [] };
+    });
+    const fixture = await render();
+    const root = fixture.nativeElement as HTMLElement;
+    document.body.appendChild(root);
+    await fixture.whenStable();
+
+    try {
+      for (const width of WIDTHS) {
+        await page.viewport(width, 800);
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+
+        const label = `overridden flags, width=${width}`;
+        const conn = root.querySelector<HTMLElement>('[data-testid="conn"]')!;
+        const marker = conn.querySelector<HTMLElement>('[data-testid="flags-overridden"]');
+        expect(marker, `${label}: no marker in the connection cell`).not.toBeNull();
+        const rect = marker!.getBoundingClientRect();
+        expect(rect.width, `${label}: marker has zero width`).toBeGreaterThan(0);
+        expect(rect.right, `${label}: marker is past the viewport`).toBeLessThanOrEqual(window.innerWidth);
+        expect(marker!.getAttribute('title'), `${label}: tooltip names the flags`).toContain('alpha, beta');
+
+        const header = root.querySelector<HTMLElement>('[data-testid="board-header"]')!;
+        expect(
+          header.scrollWidth,
+          `${label}: the header overflows horizontally (${header.scrollWidth} > ${window.innerWidth})`,
+        ).toBeLessThanOrEqual(window.innerWidth);
+      }
+    } finally {
+      root.remove();
+      stub.restore();
+    }
   });
 
   it('shows a failed logout in the header without pushing the profile menu off-viewport or overflowing it', async () => {

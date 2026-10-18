@@ -234,6 +234,8 @@ also_copy = [
     "docs/deployment/opencode-compatibility.md",
     "docs/deployment/worker-spawn.md",
     "docs/deployment/findings-and-proposals.md",
+    # The flag-registry lint scans every web source for a flag read.
+    "web/projects",
     "web/projects/fleet/src/lib/sse/fleet-live.ts",
     "web/projects/fleet/src/lib/core/query-keys.ts",
     "web/projects/fleet/src/lib/chunk/chunk-detail/chunk-escalation.ts",

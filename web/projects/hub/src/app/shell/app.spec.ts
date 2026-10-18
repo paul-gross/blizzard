@@ -25,6 +25,8 @@ import { App } from './app';
 import { routes } from './app.routes';
 import { BoardPage } from '../board/board-page';
 import { startOfLocalDayIso, startOfPreviousLocalDayIso } from '../core/local-day';
+import { type FlagsView, provideFlags } from 'fleet/shell';
+import { hubFlagsRead } from '../core/flags.query';
 
 /** A do-nothing EventSource so the live-update spine can open without a real stream. */
 class FakeEventSource {
@@ -44,10 +46,15 @@ class FakeEventSource {
  * (health/chunks/fleet-spend/queue/etc, all default to `{}` via `stubRequestClient`).
  * `me` defaults to the full-permission operator identity (`auth.mode = "none"`'s
  * shape); a spec that cares about auth overrides one or both. */
-function stubAuth(me: MeResponse | null = OPERATOR_ME_RESPONSE, providers: readonly ProviderSummary[] = []): RequestClientStub {
+function stubAuth(
+  me: MeResponse | null = OPERATOR_ME_RESPONSE,
+  providers: readonly ProviderSummary[] = [],
+  flags: FlagsView = { flags: {}, overridden: [] },
+): RequestClientStub {
   return stubRequestClient(hubClient, (method, path) => {
     if (path === '/api/me') return me === null ? stubError(401, { detail: 'not authenticated' }) : me;
     if (path === '/api/auth/providers') return providers;
+    if (path === '/api/flags') return flags;
     // The board/rail/graphs reads unwrap their response as a raw array
     // (`data ?? []`) — `{}` would resolve truthy-but-not-iterable and crash the
     // header/board/explorer's own `for…of`, so these need their real empty shape.
@@ -133,6 +140,7 @@ describe('hub App', () => {
       providers: [
         provideZonelessChangeDetection(),
         provideTanStackQuery(queryClient),
+        provideFlags(hubFlagsRead),
         provideRouter(routes),
         provideAuthInterceptor(),
         provideTenantInterceptor(),
@@ -319,6 +327,33 @@ describe('hub App', () => {
       await settle(fixture);
 
       expect(capture.spendUrls.length).toBe(before);
+    });
+  });
+
+  describe('the overridden-flags marker', () => {
+    const marker = (el: HTMLElement) => el.querySelector('[data-testid="conn"] [data-testid="flags-overridden"]');
+
+    it('shows in the Hub cell, naming the flags, when the hub’s answer overrides any', async () => {
+      authStub.restore();
+      authStub = stubAuth(OPERATOR_ME_RESPONSE, [], { flags: { alpha: true }, overridden: ['alpha'] });
+      TestBed.inject(ViewportService).setOverride('desktop');
+      const fixture = TestBed.createComponent(App);
+      await TestBed.inject(Router).navigateByUrl('/');
+      await settle(fixture);
+      const el = fixture.nativeElement as HTMLElement;
+
+      expect(marker(el)).not.toBeNull();
+      expect(marker(el)?.getAttribute('title')).toContain('alpha');
+      expect(authStub.forRoute('/api/flags')).toHaveLength(1);
+    });
+
+    it('is absent when the hub’s answer overrides none', async () => {
+      TestBed.inject(ViewportService).setOverride('desktop');
+      const fixture = TestBed.createComponent(App);
+      await TestBed.inject(Router).navigateByUrl('/');
+      await settle(fixture);
+
+      expect(marker(fixture.nativeElement as HTMLElement)).toBeNull();
     });
   });
 
@@ -564,7 +599,7 @@ describe('hub App', () => {
     });
 
     /** The hub-level routes — the only ones the board may call before it has entered a tenant. */
-    const HUB_LEVEL = new Set(['/api/me', '/api/auth/providers', '/api/health']);
+    const HUB_LEVEL = new Set(['/api/me', '/api/auth/providers', '/api/health', '/api/flags']);
     const tenantScoped = () => authStub.requests.filter((r) => !HUB_LEVEL.has(r.path));
 
     it('sends nothing tenant-scoped while the picker shows, and forgets a remembered tenant that is gone', async () => {

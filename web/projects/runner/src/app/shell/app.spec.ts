@@ -8,6 +8,8 @@ import { settle } from 'fleet/testing';
 import { App } from './app';
 import { routes } from './app.routes';
 import { ACTIVE_RUNNER } from '../core/active-runner';
+import { provideFlags } from 'fleet';
+import { runnerFlagsRead } from '../core/flags.query';
 
 /** A do-nothing EventSource so `RunnerLiveUpdates` can open
  * without a real stream — mirrors the hub app-root's own `FakeEventSource`. */
@@ -41,6 +43,7 @@ describe('runner App', () => {
       providers: [
         provideZonelessChangeDetection(),
         provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
+        provideFlags(runnerFlagsRead),
         // `LocalPanel` binds its selection to the URL's query params,
         // so it needs the router — the shell test wires the real route table.
         provideRouter(routes),

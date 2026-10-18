@@ -4,7 +4,8 @@ import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-exper
 import { provideAuthInterceptor } from '../core/auth/auth.interceptor';
 import { provideDoorInterceptor } from '../core/auth/door.interceptor';
 import { provideTenantInterceptor } from '../core/auth/tenant.interceptor';
-import { provideViewportRenavigation } from 'fleet/shell';
+import { provideFlags, provideViewportRenavigation } from 'fleet/shell';
+import { hubFlagsRead } from '../core/flags.query';
 import { provideProjectLens } from '../core/project-lens';
 
 import { routes } from './app.routes';
@@ -30,5 +31,7 @@ export const appConfig: ApplicationConfig = {
     provideTenantInterceptor(),
     // The project lens narrows the reads and keeps the links under it, both read off the URL.
     provideProjectLens(),
+    // Features read the hub's flags through the shared store: one read at start.
+    provideFlags(hubFlagsRead),
   ],
 };

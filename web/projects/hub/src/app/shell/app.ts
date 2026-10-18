@@ -11,7 +11,15 @@ import {
 import { toSignal } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router, RouterOutlet } from '@angular/router';
 import { filter, map } from 'rxjs';
-import { AppShell, BoardHeader, FleetLiveUpdates, KitButton, ViewportService, injectNowSignal } from 'fleet/shell';
+import {
+  AppShell,
+  BoardHeader,
+  FleetLiveUpdates,
+  FlagStore,
+  KitButton,
+  ViewportService,
+  injectNowSignal,
+} from 'fleet/shell';
 import { ProjectLens } from '../core/project-lens';
 import { NoAccess } from '../core/auth/no-access';
 import { TenantContext } from '../core/auth/tenant-context';
@@ -119,6 +127,9 @@ export class App {
   private readonly injector = inject(Injector);
   private readonly tenant = inject(TenantContext);
   private readonly lens = inject(ProjectLens);
+
+  /** The hub's flags — injected here so the one read fires at start; the header shows what the operator overrode. */
+  protected readonly flags = inject(FlagStore);
 
   /**
    * Demo mode's config, latched **here** and now — at app construction, off the
