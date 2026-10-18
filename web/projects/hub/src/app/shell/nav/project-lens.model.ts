@@ -7,9 +7,7 @@ export interface LensChoice {
 }
 
 /** The lens's choices: All, then `projects` by name. */
-export function lensChoices(
-  projects: readonly ProjectView[],
-): readonly LensChoice[] {
+export function lensChoices(projects: readonly ProjectView[]): readonly LensChoice[] {
   return [
     { slug: null, label: 'All' },
     ...[...projects]

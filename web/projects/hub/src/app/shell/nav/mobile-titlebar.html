@@ -1,32 +1,15 @@
-<fleet-mobile-titlebar
-  [live]="live()"
-  [caption]="tenants.current()?.name ?? ''"
-  [detail]="lensed()?.name ?? ''"
-  [menu]="shellMenu"
-/>
+<fleet-mobile-titlebar [live]="live()" [caption]="tenants.current()?.name ?? ''" [detail]="lensed()?.name ?? ''" [menu]="shellMenu" />
 <ng-template #shellMenu>
   <fleet-kit-menu-panel testid="mobile-titlebar-menu-panel">
     @if (tenants.switchable()) {
-    <fleet-kit-menu-item
-      testid="mobile-titlebar-tenant"
-      submenu
-      [cdkMenuTriggerFor]="tenantMenu"
-    >
-      Switch tenant
-    </fleet-kit-menu-item>
+      <fleet-kit-menu-item testid="mobile-titlebar-tenant" submenu [cdkMenuTriggerFor]="tenantMenu">
+        Switch tenant
+      </fleet-kit-menu-item>
     }
-    <fleet-kit-menu-item
-      testid="mobile-titlebar-project"
-      submenu
-      [cdkMenuTriggerFor]="projectMenu"
-    >
+    <fleet-kit-menu-item testid="mobile-titlebar-project" submenu [cdkMenuTriggerFor]="projectMenu">
       Project lens
     </fleet-kit-menu-item>
-    <fleet-kit-menu-item
-      testid="mobile-titlebar-appearance"
-      submenu
-      [cdkMenuTriggerFor]="appearanceMenu"
-    >
+    <fleet-kit-menu-item testid="mobile-titlebar-appearance" submenu [cdkMenuTriggerFor]="appearanceMenu">
       Appearance
     </fleet-kit-menu-item>
   </fleet-kit-menu-panel>
@@ -40,11 +23,7 @@
   />
 </ng-template>
 <ng-template #projectMenu>
-  <app-project-menu
-    [choices]="lensChoices()"
-    [current]="lensCurrent()"
-    (choose)="lensChoose.emit($event)"
-  />
+  <app-project-menu [choices]="lensChoices()" [current]="lensCurrent()" (choose)="lensChoose.emit($event)" />
 </ng-template>
 <ng-template #appearanceMenu>
   <fleet-viewport-menu testid="mobile-titlebar-appearance-panel" />

@@ -13,9 +13,7 @@ const project = (slug: string, name: string): ProjectView => ({
 
 describe('lensChoices', () => {
   it('offers All, then every project by name', () => {
-    expect(
-      lensChoices([project('zeta', 'Zeta'), project('blizzard', 'Blizzard')]),
-    ).toEqual([
+    expect(lensChoices([project('zeta', 'Zeta'), project('blizzard', 'Blizzard')])).toEqual([
       { slug: null, label: 'All' },
       { slug: 'blizzard', label: 'Blizzard' },
       { slug: 'zeta', label: 'Zeta' },

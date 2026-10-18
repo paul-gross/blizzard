@@ -1,9 +1,4 @@
-import {
-  ChangeDetectionStrategy,
-  Component,
-  input,
-  output,
-} from '@angular/core';
+import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 import { RouterLink, RouterLinkActive } from '@angular/router';
 
 import { KitTab, KitTabStrip, LensLink } from 'fleet/shell';
@@ -31,14 +26,7 @@ import type { LensChoice } from './project-lens.model';
 @Component({
   selector: 'app-nav',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [
-    KitTab,
-    KitTabStrip,
-    ProjectLensControl,
-    RouterLink,
-    RouterLinkActive,
-    LensLink,
-  ],
+  imports: [KitTab, KitTabStrip, ProjectLensControl, RouterLink, RouterLinkActive, LensLink],
   templateUrl: './app-nav.html',
   styleUrl: './app-nav.css',
 })

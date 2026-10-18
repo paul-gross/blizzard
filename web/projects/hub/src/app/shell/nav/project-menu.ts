@@ -1,9 +1,4 @@
-import {
-  ChangeDetectionStrategy,
-  Component,
-  input,
-  output,
-} from '@angular/core';
+import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 import { KitMenuItemRadio, KitMenuPanel } from 'fleet';
 
 import type { LensChoice } from './project-lens.model';

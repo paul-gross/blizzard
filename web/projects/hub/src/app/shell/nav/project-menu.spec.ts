@@ -24,10 +24,7 @@ describe('ProjectMenu', () => {
     fixture.componentRef.setInput('current', current);
     await settle(fixture);
     const el = fixture.nativeElement as HTMLElement;
-    const item = (slug: string) =>
-      el.querySelector<HTMLElement>(
-        `[data-testid="mobile-titlebar-project-${slug}"]`,
-      );
+    const item = (slug: string) => el.querySelector<HTMLElement>(`[data-testid="mobile-titlebar-project-${slug}"]`);
     const chosen: (string | null)[] = [];
     fixture.componentInstance.choose.subscribe((slug) => chosen.push(slug));
     return { item, chosen };

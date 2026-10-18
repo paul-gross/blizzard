@@ -25,8 +25,7 @@ describe('ProjectLensControl', () => {
     fixture.componentRef.setInput('current', current);
     await settle(fixture);
     const el = fixture.nativeElement as HTMLElement;
-    const chip = (slug: string) =>
-      el.querySelector<HTMLElement>(`[data-testid="project-lens-${slug}"]`);
+    const chip = (slug: string) => el.querySelector<HTMLElement>(`[data-testid="project-lens-${slug}"]`);
     const chosen: (string | null)[] = [];
     fixture.componentInstance.choose.subscribe((slug) => chosen.push(slug));
     return { fixture, chip, chosen };

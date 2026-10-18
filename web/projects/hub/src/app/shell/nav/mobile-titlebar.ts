@@ -1,16 +1,6 @@
-import {
-  ChangeDetectionStrategy,
-  Component,
-  input,
-  output,
-} from '@angular/core';
+import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 import { CdkMenuTrigger } from '@angular/cdk/menu';
-import {
-  KitMenuItem,
-  KitMenuPanel,
-  MobileTitlebar as FleetMobileTitlebar,
-  ViewportMenu,
-} from 'fleet';
+import { KitMenuItem, KitMenuPanel, MobileTitlebar as FleetMobileTitlebar, ViewportMenu } from 'fleet';
 
 import { injectLensedProject } from '../../core/lensed-project';
 import type { LensChoice } from './project-lens.model';
@@ -41,15 +31,7 @@ import { injectTenantSwitch } from './tenant-switch';
 @Component({
   selector: 'app-mobile-titlebar',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [
-    CdkMenuTrigger,
-    FleetMobileTitlebar,
-    KitMenuItem,
-    KitMenuPanel,
-    ProjectMenu,
-    TenantMenu,
-    ViewportMenu,
-  ],
+  imports: [CdkMenuTrigger, FleetMobileTitlebar, KitMenuItem, KitMenuPanel, ProjectMenu, TenantMenu, ViewportMenu],
   templateUrl: './mobile-titlebar.html',
 })
 export class MobileTitlebar {

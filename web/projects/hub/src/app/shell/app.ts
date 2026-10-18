@@ -11,14 +11,7 @@ import {
 import { toSignal } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router, RouterOutlet } from '@angular/router';
 import { filter, map } from 'rxjs';
-import {
-  AppShell,
-  BoardHeader,
-  FleetLiveUpdates,
-  KitButton,
-  ViewportService,
-  injectNowSignal,
-} from 'fleet/shell';
+import { AppShell, BoardHeader, FleetLiveUpdates, KitButton, ViewportService, injectNowSignal } from 'fleet/shell';
 import { ProjectLens } from '../core/project-lens';
 import { NoAccess } from '../core/auth/no-access';
 import { TenantContext } from '../core/auth/tenant-context';
@@ -32,10 +25,7 @@ import { injectLogoutMutation } from '../core/auth/logout.mutations';
 import { isPublicUrl, redirectToLogin } from '../core/auth/auth-redirect';
 
 import { readDemoConfig } from '../demo/demo-config';
-import {
-  startOfLocalDayIso,
-  startOfPreviousLocalDayIso,
-} from '../core/local-day';
+import { startOfLocalDayIso, startOfPreviousLocalDayIso } from '../core/local-day';
 import { injectProjectsQuery } from '../core/projects.query';
 import { AppNav } from './nav/app-nav';
 import { AppNavMenu } from './nav/app-nav-menu';
@@ -138,9 +128,7 @@ export class App {
    * late to read it for itself. Disabled for every ordinary session, which is
    * every session that did not ask for `?demo`.
    */
-  private readonly demoConfig = readDemoConfig(
-    globalThis.location?.search ?? '',
-  );
+  private readonly demoConfig = readDemoConfig(globalThis.location?.search ?? '');
 
   /** The app-root-level shell fork (`../docs/designs/mobile/README.md`'s
    * "adaptive shells over shared guts") — picked once here, mirroring the
@@ -151,23 +139,16 @@ export class App {
   protected readonly me = computed(() => this.meQuery.data() ?? null);
 
   /** The tenant settled from the identity's memberships, `null` without an identity. */
-  protected readonly tenancy = computed(() =>
-    tenancyOf(this.me(), this.tenant.resolver()),
-  );
+  protected readonly tenancy = computed(() => tenancyOf(this.me(), this.tenant.resolver()));
 
   /** The top-level session gate — see the class docstring. */
-  protected readonly authState = computed<AuthState>(() =>
-    authState(this.meQuery.isPending(), this.tenancy()),
-  );
+  protected readonly authState = computed<AuthState>(() => authState(this.meQuery.isPending(), this.tenancy()));
 
   /** Whether the board has entered the tenant it settled on — every call names it from here. The header's
    * tenant-scoped reads below wait on it: before it, a read would name no tenant or a stale one. */
   protected readonly ready = computed(() => {
     const tenancy = this.tenancy();
-    return (
-      tenancy?.kind === 'selected' &&
-      this.tenant.current() === tenancy.tenant.tenant_id
-    );
+    return tenancy?.kind === 'selected' && this.tenant.current() === tenancy.tenant.tenant_id;
   });
 
   /** The fleet's chunk counts for the header, in the selected tenant. */
@@ -179,9 +160,7 @@ export class App {
   /** The day boundaries, derived so string equality stops the tick: the query keys
    * change only when the local day does, so a tick within the day refetches nothing. */
   private readonly dayStart = computed(() => startOfLocalDayIso(this.now()));
-  private readonly previousDayStart = computed(() =>
-    startOfPreviousLocalDayIso(this.now()),
-  );
+  private readonly previousDayStart = computed(() => startOfPreviousLocalDayIso(this.now()));
 
   /** The fleet's spend-today read — `since` is local start-of-day off {@link dayStart},
    * so the window rolls forward at local midnight without a reload. */
@@ -207,9 +186,7 @@ export class App {
   protected readonly memberships = computed(() => this.me()?.tenants ?? []);
 
   /** The selected tenant's name, for the header; empty outside `ready`. */
-  protected readonly tenantName = computed(() =>
-    selectedTenantName(this.tenancy()),
-  );
+  protected readonly tenantName = computed(() => selectedTenantName(this.tenancy()));
 
   /** The router's current URL as a signal — read only to decide whether a public
    * page's bare `<router-outlet>` is safe to render yet (see the template). Router
@@ -224,33 +201,26 @@ export class App {
   );
 
   /** Whether the router has landed on a public page — see the class docstring. */
-  protected readonly onPublicRoute = computed(() =>
-    isPublicUrl(this.routerUrl()),
-  );
+  protected readonly onPublicRoute = computed(() => isPublicUrl(this.routerUrl()));
 
   /** Whether a login mechanism is even configured — `GET /api/auth/providers`
    * answers `[]` outright under `auth.mode = "none"` (the hub's own answer, never
    * re-derived here; `/api/me`'s shape carries no `mode` field to read instead). */
-  private readonly authEnabled = computed(
-    () => (this.providersQuery.data()?.length ?? 0) > 0,
-  );
+  private readonly authEnabled = computed(() => (this.providersQuery.data()?.length ?? 0) > 0);
 
   /** Gates the `Admin` nav entry — `user:manage` in the selected tenant, held by an
    * `admin` member (never `contributor`). Also requires {@link authEnabled}: under `auth.mode = "none"`
    * the implicit operator carries every permission including this one, but there
    * are no real users for an admin page to administer — the nav stays hidden
    * exactly as it always has. */
-  protected readonly canManageUsers = computed(
-    () => hasPermission(this.me(), 'user:manage') && this.authEnabled(),
-  );
+  protected readonly canManageUsers = computed(() => hasPermission(this.me(), 'user:manage') && this.authEnabled());
 
   constructor() {
     // Enter the tenant the memberships settle on — the only one, or the one this tab
     // or browser remembered — so every call names it and the choice is remembered.
     effect(() => {
       const tenancy = this.tenancy();
-      if (tenancy?.kind === 'selected')
-        untracked(() => this.tenant.enter(tenancy.tenant.tenant_id));
+      if (tenancy?.kind === 'selected') untracked(() => this.tenant.enter(tenancy.tenant.tenant_id));
       // Settled on none — no membership, or a choice to make — so whatever this tab or browser remembered is no
       // membership any more: forget it rather than keep naming it.
       else if (tenancy !== null) untracked(() => this.tenant.forgetSelection());
@@ -292,8 +262,7 @@ export class App {
     // 401 interceptor also fires on the same underlying `/api/me` 401, but this is
     // the primary, always-correct trigger regardless of which read surfaced it.
     effect(() => {
-      if (this.authState() === 'unauthenticated' && !this.onPublicRoute())
-        redirectToLogin(this.router);
+      if (this.authState() === 'unauthenticated' && !this.onPublicRoute()) redirectToLogin(this.router);
     });
 
     // The SSE spine's explicit auth-failure channel — a session that
@@ -305,14 +274,10 @@ export class App {
   }
 
   /** Whether a logout is in flight, handed to every Log out trigger so each disables. */
-  protected readonly logoutPending = computed(() =>
-    this.logoutMutation.isPending(),
-  );
+  protected readonly logoutPending = computed(() => this.logoutMutation.isPending());
 
   /** The failed logout's message, `null` while none; rendered outside any menu, which closes on trigger. */
-  protected readonly logoutError = computed(() =>
-    logoutErrorText(this.logoutMutation.error()),
-  );
+  protected readonly logoutError = computed(() => logoutErrorText(this.logoutMutation.error()));
 
   /** Enters the tenant the picker chose; the shell renders in it. */
   protected onChooseTenant(tenant: string): void {
@@ -327,9 +292,7 @@ export class App {
   private readonly projectsQuery = injectProjectsQuery(() => this.ready());
 
   /** The lens selectors' choices — All, then the tenant's projects by name. */
-  protected readonly lensChoices = computed(() =>
-    lensChoices(this.projectsQuery.data() ?? []),
-  );
+  protected readonly lensChoices = computed(() => lensChoices(this.projectsQuery.data() ?? []));
 
   /** The slug the lens is on, `null` for All. */
   protected readonly lensCurrent = this.lens.slug;
@@ -348,12 +311,7 @@ export class App {
 
   /** Header status: the live stream's connection state, falling back to the health read. */
   protected readonly connection = computed(() =>
-    connectionLabel(
-      this.live.status(),
-      this.health.isPending(),
-      this.health.isError(),
-      this.health.data()?.['status'],
-    ),
+    connectionLabel(this.live.status(), this.health.isPending(), this.health.isError(), this.health.data()?.['status']),
   );
 
   /** The live fleet chunk list; empty until the first read resolves. */
