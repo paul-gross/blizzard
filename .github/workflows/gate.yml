@@ -219,7 +219,8 @@ jobs:
         name: generated-client drift
         run: |
           cd web && npm run generate:client
-          cd "$GITHUB_WORKSPACE" && git diff --exit-code -- web/ \
+          cd "$GITHUB_WORKSPACE"
+          git diff --exit-code -- web/ \
             || { echo "::error::generated API client is stale — regenerate and commit."; exit 1; }
 
   # The web exemplars (blizzard:exemplar-check). The Python exemplars ride the ruff, pyright, and pytest jobs above;
