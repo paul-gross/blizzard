@@ -96,8 +96,7 @@ ASK_TRANSITIONS: Mapping[AskState, frozenset[AskState]] = MappingProxyType(
 
 
 class AskOnClosedLease(Exception):
-    """The ask names the closed reference lease an open takeover holds — the API edge maps
-    this to ``409``."""
+    """The ask names the closed reference lease an open takeover holds."""
 
 
 def check_askable(worker: WorkerLease) -> None:

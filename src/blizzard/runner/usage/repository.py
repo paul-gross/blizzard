@@ -157,9 +157,8 @@ class ChargeRange:
 def charge_range(start: _RangeStart | None, end: _RangeStart | None) -> ChargeRange | None:
     """The range an invocation is charged for, or ``None`` to charge nothing. No recorded start
     charges nothing, so a whole session is never charged to one generation; an unreadable start
-    charges nothing rather than re-reading earlier generations' lines from zero. A later
-    invocation's recorded start caps the range; an unreadable one charges nothing rather than
-    risk its turns bleeding in, and none at all reads to the tail."""
+    charges nothing. A later invocation's recorded start caps the range; an unreadable
+    one charges nothing, and none at all reads to the tail. ``tests/test_runner_usage_rules.py`` pins both."""
     if start is None or start.start_unreadable:
         return None
     if end is not None and end.start_unreadable:

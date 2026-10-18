@@ -23,7 +23,7 @@ TICK_STEP = "blizzard.tick.step"
 def identity_stamp(identity: ICurrentRunnerIdentity) -> SpanStamp:
     """What each of the runner's platform spans carries: the id and name of its latest registration and the
     tenant its hub answered with, read as the span starts — so a rename by restart shows from that
-    registration on — and nothing before the first, so no span is exported until then. The tenant rides
+    registration on. The tenant rides
     only once a hub that names it has answered."""
 
     def stamp() -> Mapping[str, str] | None:

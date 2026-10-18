@@ -20,7 +20,7 @@ router = APIRouter(prefix="/api", tags=["runner"])
 @router.get("/leases/{lease_id}/asks", response_model=list[ChunkAskView])
 def get_chunk_asks(lease_id: str, request: Request) -> list[ChunkAskView]:
     """Every question asked on the worker's own chunk, oldest-first — open, answered, and
-    restart-superseded alike. An answer a person gave binds every later session on the chunk."""
+    restart-superseded alike."""
     lease = authorized_lease(lease_id, request)
     upstream = HubProxy.of(request, "asks").get(f"/api/fleet/chunks/{lease.chunk_id}", chunk_id=lease.chunk_id)
     return _rows(ChunkAsksSource.model_validate(upstream.json()))

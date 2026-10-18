@@ -34,7 +34,7 @@ class RenewalOutcomeKind(StrEnum):
     FAILED = "failed"
 
 
-# Operator-facing text per closed-set failure reason — what went wrong, not the machine word.
+# Operator-facing text per closed-set failure reason — what the failure was, not the machine word.
 RENEWAL_FAILURE_TEXT: dict[RenewalFailureReason, str] = {
     RenewalFailureReason.RENEWER_UNAVAILABLE: "vendor CLI unavailable",
     RenewalFailureReason.TIMED_OUT: "timed out",

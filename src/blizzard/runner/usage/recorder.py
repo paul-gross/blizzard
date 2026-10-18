@@ -115,8 +115,7 @@ class UsageRecorder:
         # `None` on an exact-replay idempotent no-op (`record_usage`'s own docstring) — nothing
         # was enqueued, so nothing to announce, and no rejected reading to warn of a second time.
         if seq is not None and cost.billed_reading_rejected:
-            # Absent cost here is a rejected reading, not a worker that died before its
-            # envelope — the two are indistinguishable on the board, so say so once here.
+            # Absent cost here is a rejected reading, not a worker that died before its envelope.
             _log.warning(
                 "harness cost figure reads below what its session already banked",
                 lease_id=lease.lease_id,

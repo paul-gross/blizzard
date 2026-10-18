@@ -146,7 +146,6 @@ class LeaseTraceSweep:
         facts = self._leases.lease_trace_facts_for([k.lease_id for k in keys])
         spans = tuple(span for k in keys if k.lease_id in facts for span in assemble_lease(facts[k.lease_id]))
         if not spans:
-            # A window of leases never minted to completion tells nothing, so there is nothing to export.
             self._leases.append_trace_cursor(cursor_after(keys, 0, now))
             return
         if not self._export(spans):

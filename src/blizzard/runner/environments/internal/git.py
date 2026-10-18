@@ -1,7 +1,7 @@
 """Git plumbing shared by the workspace bindings (package-private).
 
-Removes the previous tenant's **untracked** files. Ignored files stay: the dependency trees
-they hold cost more to rebuild than the tick allows.
+Removes the previous tenant's **untracked** files. Ignored files stay
+(``tests/test_pin_runner_misc.py`` pins it).
 """
 
 from __future__ import annotations

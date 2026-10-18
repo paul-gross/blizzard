@@ -69,8 +69,7 @@ class BootstrapStopped(Exception):
 
 
 class TokenNotWritten(Exception):
-    """The hub added runner ``runner_id``, but its token could not be written — the hub holds the
-    runner as never connected until an operator retires it."""
+    """The hub added runner ``runner_id``, but its token could not be written."""
 
     def __init__(self, runner_id: str, cause: OSError) -> None:
         super().__init__(f"runner {runner_id} was added, but its token was not written: {cause}")

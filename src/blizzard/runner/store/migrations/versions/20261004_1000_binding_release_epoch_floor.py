@@ -1,4 +1,8 @@
-"""Remember the lease epoch floor when releasing an environment binding."""
+"""Remember the lease epoch floor when releasing an environment binding (runner store tree).
+
+Revision ID: 20261004_1000_binding_release_epoch_floor
+Revises: 20261003_1000_runner_transcript_segment_spawn_cwd
+"""
 
 import sqlalchemy as sa
 from alembic import op

@@ -255,7 +255,7 @@ _FACT_READS = (
 
 
 def _work_ref_tokens(raw: str | None) -> tuple[str, ...]:
-    """Each ref's hub-rendered source-native token; a ref no source rendered carries none, as on the hub."""
+    """Each ref's hub-rendered source-native token; a ref no source rendered carries none."""
     return tuple(stamp.label for stamp in decode_work_refs(raw) or () if stamp.label is not None)
 
 

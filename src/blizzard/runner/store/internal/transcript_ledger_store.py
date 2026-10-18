@@ -401,7 +401,7 @@ class TranscriptLedgerStore:
 
     def _accepts_content(self, conn: Connection, segment_id: str) -> bool:
         """Whether the segment, read in the caller's transaction, takes a content write — a
-        finalized one takes none. An unknown id is left to the write itself, as before."""
+        finalized one takes none. An unknown id is left to the write itself."""
         row = conn.execute(
             self._store.select(transcript_segments, transcript_segments.c.finalized_at).where(
                 transcript_segments.c.segment_id == segment_id

@@ -73,7 +73,7 @@ class ExternalSubscriptionUsageSnapshot:
     windows: tuple[ExternalSubscriptionUsageWindow, ...]
 
 
-# Operator-facing text per closed-set miss reason — what to do about it, not the machine word.
+# Operator-facing text per closed-set miss reason — what the miss was, not the machine word.
 MISS_REASON_TEXT: dict[SampleMissReason, str] = {
     SampleMissReason.CREDENTIAL_LAPSED: "credential lapsed: log in again",
     SampleMissReason.CREDENTIAL_UNREADABLE: "credential unreadable",

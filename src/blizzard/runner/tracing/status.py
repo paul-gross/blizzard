@@ -35,8 +35,7 @@ class HarnessTelemetryStatus:
 @dataclass(frozen=True)
 class LeaseTraceStatus:
     """``endpoint`` is the redacted origin; ``lag_seconds`` is the age of the oldest closed lease the cursor
-    has not passed, ``None`` when nothing waits. ``last_error_at`` is when the newest failure began — the
-    sweep records only the first failure after a success — and ``last_error_ongoing`` whether no export has
+    has not passed, ``None`` when nothing waits. ``last_error_at`` is when the newest failure began and ``last_error_ongoing`` whether no export has
     succeeded since. ``receiver`` tallies worker spans since start, ``None`` where none is wired."""
 
     state: TracingState
