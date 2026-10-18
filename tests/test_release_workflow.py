@@ -6,6 +6,7 @@ Docker/GHCR credentials.
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 
 import pytest
@@ -19,11 +20,22 @@ _REPO_ROOT = repo_root()
 _WORKFLOW_PATH = _REPO_ROOT / ".github" / "workflows" / "release.yml"
 
 
-def _release_job() -> dict:
+def _job(name: str) -> dict:
     # YAML parses the bare `on:` key as the boolean `True` under PyYAML's default
     # (YAML 1.1) resolver — irrelevant here since only `jobs` is read.
-    workflow = yaml.safe_load(_WORKFLOW_PATH.read_text())
-    return workflow["jobs"]["release"]
+    return yaml.safe_load(_WORKFLOW_PATH.read_text())["jobs"][name]
+
+
+def _build_job() -> dict:
+    return _job("build")
+
+
+def _publish_job() -> dict:
+    return _job("publish")
+
+
+def _uses(step: dict, action: str) -> bool:
+    return step.get("uses", "").startswith(f"{action}@")
 
 
 def _step_index(steps: list[dict], predicate) -> int:
@@ -37,19 +49,16 @@ def test_release_workflow_exists() -> None:
     assert _WORKFLOW_PATH.is_file()
 
 
-def test_image_build_push_step_precedes_the_release_publish_step() -> None:
-    steps = _release_job()["steps"]
-    build_push_idx = _step_index(steps, lambda s: "build-push-action" in str(s.get("uses", "")))
-    publish_idx = _step_index(steps, lambda s: "gh release create" in str(s.get("run", "")))
-    assert build_push_idx < publish_idx, (
-        "the image build-push step must run before `gh release create` — "
-        "a failed image build must never leave a published Release advertising an "
-        "image that does not exist"
-    )
+def test_publish_waits_for_build_which_pushes_the_image() -> None:
+    """The release page comes last: a failed image build must never leave a
+    published Release advertising an image that does not exist."""
+    assert _publish_job()["needs"] == ["build"]
+    assert any("build-push-action" in str(s.get("uses", "")) for s in _build_job()["steps"])
+    assert not any("build-push-action" in str(s.get("uses", "")) for s in _publish_job()["steps"])
 
 
 def test_image_build_push_step_pushes_and_targets_both_platforms() -> None:
-    steps = _release_job()["steps"]
+    steps = _build_job()["steps"]
     build_push = steps[_step_index(steps, lambda s: "build-push-action" in str(s.get("uses", "")))]
     with_ = build_push.get("with", {})
     assert with_.get("push") is True
@@ -58,23 +67,21 @@ def test_image_build_push_step_pushes_and_targets_both_platforms() -> None:
     assert "linux/arm64" in platforms
 
 
-def test_job_permissions_declare_both_contents_and_packages_write() -> None:
-    """The regression this pins: adding `packages: write` alone would silently
-    strip the `contents: write` the same job's `gh release create`
-    step depends on, since a job-level block replaces rather than merges."""
-    permissions = _release_job().get("permissions")
-    assert permissions, (
-        "the release job must declare its own job-level `permissions:` block "
-        "(it writes GHCR packages and the Release) — the workflow level grants only read"
-    )
-    assert permissions.get("contents") == "write"
-    assert permissions.get("packages") == "write"
+def test_each_job_holds_exactly_its_own_scopes() -> None:
+    """A job-level block replaces the workflow-level one, so each is pinned whole."""
+    assert _build_job()["permissions"] == {
+        "contents": "read",
+        "packages": "write",
+        "id-token": "write",
+        "attestations": "write",
+    }
+    assert _publish_job()["permissions"] == {"contents": "write"}
 
 
 def test_version_tag_check_runs_before_anything_is_built() -> None:
     """The version/tag agreement check must fail fast, before the
     wheel or image build spends any CI time on a release that can't publish."""
-    steps = _release_job()["steps"]
+    steps = _build_job()["steps"]
     check_idx = _step_index(steps, lambda s: "check-version-tag.sh" in str(s.get("run", "")))
     wheel_build_idx = _step_index(steps, lambda s: "build-wheel.sh" in str(s.get("run", "")))
     assert check_idx < wheel_build_idx
@@ -82,7 +89,7 @@ def test_version_tag_check_runs_before_anything_is_built() -> None:
 
 @pytest.mark.parametrize("tag", ["v0.2.0-rc.1", "v0.2.0"])
 def test_release_wheel_stamps_the_full_tag_version(tmp_path, tag: str) -> None:
-    steps = _release_job()["steps"]
+    steps = _build_job()["steps"]
     derive = steps[_step_index(steps, lambda s: s.get("id") == "ver")]
     wheel = steps[_step_index(steps, lambda s: str(s.get("run", "")).strip() == "./scripts/build-wheel.sh")]
     assert wheel["env"]["BLIZZARD_VERSION"] == "${{ steps.ver.outputs.version }}"
@@ -99,22 +106,23 @@ def test_release_wheel_stamps_the_full_tag_version(tmp_path, tag: str) -> None:
 
 def test_release_notes_are_generated_not_auto_generated() -> None:
     """The published notes come from the tag-tree renderer, including its flag summaries."""
-    steps = _release_job()["steps"]
-    notes_gen_idx = _step_index(steps, lambda s: "blizzard-change-notes render" in str(s.get("run", "")))
-    publish_idx = _step_index(steps, lambda s: "gh release create" in str(s.get("run", "")))
-    assert notes_gen_idx < publish_idx
-    assert 'render "${GITHUB_REF_NAME}" > release-notes.md' in steps[notes_gen_idx]["run"]
-    publish_run = str(steps[publish_idx].get("run", ""))
+    steps = _build_job()["steps"]
+    notes_gen = steps[_step_index(steps, lambda s: "blizzard-change-notes render" in str(s.get("run", "")))]
+    assert 'render "${GITHUB_REF_NAME}" > release-notes.md' in notes_gen["run"]
+    publish_steps = _publish_job()["steps"]
+    publish_run = str(
+        publish_steps[_step_index(publish_steps, lambda s: "gh release create" in str(s.get("run", "")))]["run"]
+    )
     assert "--notes-file release-notes.md" in publish_run
     assert "--generate-notes" not in publish_run
 
 
-def test_release_job_waits_for_each_full_suite_tier() -> None:
+def test_build_job_waits_for_each_full_suite_tier() -> None:
     """A tag release must not publish ahead of the full suite's three parallel
     jobs (service tier, FULL crash sweep, e2e) — `gate` alone isn't sufficient
     for a release the way it is for the master dev channel."""
-    needs = _release_job()["needs"]
-    for job in ("service-tier", "crash-sweep", "e2e"):
+    needs = _build_job()["needs"]
+    for job in ("gate", "service-tier", "crash-sweep", "e2e"):
         assert job in needs
 
 
@@ -122,7 +130,7 @@ def test_tags_are_derived_from_the_image_tags_script_not_hardcoded() -> None:
     """The semver fan-out logic lives in scripts/image-tags.sh (unit-tested in
     tests/test_image_tags.py) — the workflow step must consume its output, not
     re-implement the fan-out inline."""
-    steps = _release_job()["steps"]
+    steps = _build_job()["steps"]
     derive_idx = _step_index(steps, lambda s: "image-tags.sh" in str(s.get("run", "")))
     build_push_idx = _step_index(steps, lambda s: "build-push-action" in str(s.get("uses", "")))
     assert derive_idx < build_push_idx
@@ -140,11 +148,77 @@ def test_workflow_level_permissions_are_read_only() -> None:
     assert _workflow()["permissions"] == {"contents": "read"}
 
 
-def test_only_the_release_job_holds_a_write_scope() -> None:
+def test_only_the_publish_job_holds_contents_write() -> None:
     for name, job in _workflow()["jobs"].items():
-        if name == "release":
+        if name == "publish":
             continue
         granted = job.get("permissions") or {}
-        assert "write" not in (granted.values() if isinstance(granted, dict) else [granted]), (
-            f"job {name!r} holds a write scope; only `release` publishes"
-        )
+        assert granted.get("contents") != "write", f"job {name!r} holds contents: write; only `publish` publishes"
+
+
+def test_the_image_is_signed_then_attested_by_the_push_digest_before_the_inventory() -> None:
+    steps = _build_job()["steps"]
+    push_idx = _step_index(steps, lambda s: "build-push-action" in str(s.get("uses", "")))
+    push_id = steps[push_idx]["id"]
+    digest = f"${{{{ steps.{push_id}.outputs.digest }}}}"
+    sign_idx = _step_index(steps, lambda s: "cosign sign --yes --recursive" in str(s.get("run", "")))
+    assert digest in str(steps[sign_idx]["env"].values())
+    image_attest_idx = _step_index(
+        steps, lambda s: _uses(s, "actions/attest-build-provenance") and "subject-digest" in s.get("with", {})
+    )
+    image_attest = steps[image_attest_idx]["with"]
+    assert image_attest["subject-digest"] == digest
+    assert image_attest["push-to-registry"] is True
+    inventory_idx = _step_index(steps, lambda s: "release-inventory.sh" in str(s.get("run", "")))
+    assert digest in str(steps[inventory_idx]["env"].values())
+    file_attest_idx = _step_index(
+        steps, lambda s: _uses(s, "actions/attest-build-provenance") and "subject-path" in s.get("with", {})
+    )
+    upload_idx = _step_index(steps, lambda s: _uses(s, "actions/upload-artifact"))
+    assert push_idx < sign_idx < image_attest_idx < inventory_idx < file_attest_idx < upload_idx
+    assert steps[file_attest_idx]["with"]["subject-path"] == "inventory/*"
+
+
+def test_the_compat_breaks_path_is_always_passed_to_the_inventory_script() -> None:
+    steps = _build_job()["steps"]
+    run = str(steps[_step_index(steps, lambda s: "release-inventory.sh" in str(s.get("run", "")))]["run"])
+    assert "--compat-breaks compat-breaks.json" in run
+
+
+def test_the_upload_preserves_the_inventory_directory_for_the_publish_glob() -> None:
+    """Two upload paths with a common ancestor at the workspace root keep the
+    `inventory/` prefix, so the download into `.` yields what `inventory/*` globs."""
+    steps = _build_job()["steps"]
+    upload = steps[_step_index(steps, lambda s: _uses(s, "actions/upload-artifact"))]["with"]
+    assert upload["path"].split() == ["inventory/", "release-notes.md"]
+    download_steps = _publish_job()["steps"]
+    download = download_steps[_step_index(download_steps, lambda s: _uses(s, "actions/download-artifact"))]["with"]
+    assert download["name"] == upload["name"]
+    assert download["path"] == "."
+
+
+def test_publish_attaches_the_inventory_in_one_call_with_the_notes_file() -> None:
+    steps = _publish_job()["steps"]
+    runs = [str(s.get("run", "")) for s in steps if "gh release create" in str(s.get("run", ""))]
+    assert len(runs) == 1
+    assert runs[0].count("gh release create") == 1
+    assert "inventory/*" in runs[0]
+    assert "--notes-file release-notes.md" in runs[0]
+    assert "--generate-notes" not in runs[0]
+    assert not any(s.get("uses", "").startswith("actions/checkout@") for s in steps)
+
+
+@pytest.mark.parametrize(
+    "action",
+    [
+        "sigstore/cosign-installer",
+        "actions/attest-build-provenance",
+        "actions/upload-artifact",
+        "actions/download-artifact",
+    ],
+)
+def test_signing_and_artifact_actions_are_pinned_by_commit_sha(action: str) -> None:
+    uses = [step["uses"] for name in ("build", "publish") for step in _job(name)["steps"] if _uses(step, action)]
+    assert uses, f"no step uses {action}"
+    for ref in uses:
+        assert re.fullmatch(rf"{re.escape(action)}@[0-9a-f]{{40}}", ref), ref

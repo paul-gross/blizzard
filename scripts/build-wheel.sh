@@ -13,7 +13,7 @@
 #      install or runtime.
 #
 # Invoke as `mise run build` or `./scripts/build-wheel.sh`. Both CI (the tag-v*
-# release job) and a human building locally use this same entrypoint.
+# build job) and a human building locally use this same entrypoint.
 #
 # Optional env:
 #   BLIZZARD_VERSION   override the wheel version (dev builds, tag releases).
