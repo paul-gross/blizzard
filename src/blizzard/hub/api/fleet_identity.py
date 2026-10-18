@@ -39,6 +39,7 @@ def get_runner_identity(request: Request, services: Hub) -> RunnerIdentityView |
         runner_name=identified.runner_name,
         tenant_id=identified.tenant_id,
         tenant_name=services.tenants.open_tenants.name(identified.tenant_id),
+        fleet_flags=request.app.state.flags.fleet_answer(),
     )
 
 

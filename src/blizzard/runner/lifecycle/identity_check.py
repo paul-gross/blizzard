@@ -14,6 +14,11 @@ process environment or the host file supplied stays fixed until a restart. A hub
 verdict as it stood: an outage never reads as a mismatch. The check writes only the token's own verdict; the
 runner's standing under a registered host is the host tick's, and neither clears the other.
 
+A matching answer also carries the hub's ``fleet`` flags, which the check applies to the runner's flags before any
+later step of the tick reads them. Any other outcome — an outage, a refused token, a mismatch, a hub with no identity
+read — leaves the flags as they stood: a mismatched answer is not this runner's hub's, and an outage never flips
+behavior.
+
 A hub forward served outside the loop — the hub proxy — is a first contact too: while the loop has not
 checked yet, it judges the hub's answer the same way first (:class:`ProxyIdentityCheck`), writing nothing."""
 
@@ -35,6 +40,7 @@ from blizzard.runner.hub.client import (
     TokenIdentity,
     TokenRefusal,
 )
+from blizzard.runner.hub.flags import FlagsHolder
 from blizzard.runner.hub.held_token import HubTokenHolder, TokenReread
 from blizzard.runner.hub.identity import (
     ICurrentIdentityVerdict,
@@ -76,6 +82,8 @@ class IdentityCheckContext(Protocol):
     def identity_verdict(self) -> IdentityVerdictHolder: ...
     @property
     def hub_token(self) -> HubTokenHolder: ...
+    @property
+    def flags(self) -> FlagsHolder: ...
 
 
 def log_transition(holder: IdentityVerdictHolder, was: IdentityState, *, token_fixed: bool) -> None:
@@ -182,7 +190,8 @@ def check_token(
 
 @dataclass(frozen=True)
 class IdentityCheck:
-    """Verify that the token resolves to the configured runner, filling in the tenant a matching answer names."""
+    """Verify that the token resolves to the configured runner, filling in the tenant a matching answer names and
+    applying the hub's ``fleet`` flags."""
 
     ctx: IdentityCheckContext
 
@@ -200,6 +209,8 @@ class IdentityCheck:
             )
         except HubClientError:
             return  # unreachable — the verdict stands
+        if answer is not None and ctx.identity_verdict.matched():
+            ctx.flags.apply_fleet_answer(answer.fleet_flags)
         stored = ctx.stores.identity.runner_identity()
         if answer is None or stored is None or stored.runner_id != answer.runner_id:
             return

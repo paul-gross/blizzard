@@ -59,6 +59,7 @@ default = "off"
 
 [retired]
 old-thing = "fleet"
+old-hub-thing = "hub"
 """
 
 
@@ -134,6 +135,39 @@ def test_on_raises_on_an_unknown_name_reads_a_tombstone_on_and_a_default_as_decl
     assert flags.on("hub-thing") is False
     with pytest.raises(FlagNotReadable):
         flags.on("runner-thing")
+
+
+@pytest.mark.unit
+def test_the_hubs_fleet_answer_holds_exactly_the_fleet_flags_with_tombstones_on() -> None:
+    hub = resolve_flags(_fixture(), "hub", {"fleet-thing": True}).flags
+    assert hub.fleet_answer() == {"fleet-thing": True, "old-thing": True}
+    assert resolve_flags(_fixture(), "hub", {}).flags.fleet_answer() == {"fleet-thing": False, "old-thing": True}
+    assert resolve_flags(FlagRegistry(), "hub", {}).flags.fleet_answer() == {}
+
+
+@pytest.mark.unit
+def test_applying_a_fleet_answer_sets_named_flags_reads_omitted_ones_off_and_ignores_unknown_names() -> None:
+    runner = resolve_flags(_fixture(), "runner", {}).flags
+    assert runner.on("fleet-thing") is False
+
+    applied = runner.with_fleet_answer({"fleet-thing": True, "no-such-flag": True, "hub-thing": True})
+    assert applied.on("fleet-thing") is True
+    assert applied.on("runner-thing") is True
+    assert applied.overridden == runner.overridden
+    assert "no-such-flag" not in applied.values
+    with pytest.raises(FlagNotReadable):
+        applied.on("hub-thing")
+    assert runner.on("fleet-thing") is False, "applying returns a new Flags and never mutates one"
+
+    assert applied.with_fleet_answer({}).on("fleet-thing") is False
+
+
+@pytest.mark.unit
+def test_applying_a_fleet_answer_leaves_runner_overrides_standing() -> None:
+    runner = resolve_flags(_fixture(), "runner", {"runner-thing": False}).flags
+    applied = runner.with_fleet_answer({"fleet-thing": True, "runner-thing": True})
+    assert applied.on("runner-thing") is False
+    assert applied.overridden == ("runner-thing",)
 
 
 @pytest.mark.unit
@@ -341,7 +375,7 @@ def test_a_host_answers_its_runner_flags_and_warns_once_per_ignored_key(
         with TestClient(hosted.app) as client:
             assert client.get("/api/flags").json() == {"flags": {"runner-thing": False}, "overridden": ["runner-thing"]}
         for runner in host.runners:
-            assert runner.flags.on("runner-thing") is False
+            assert runner.flags.current().on("runner-thing") is False
     finally:
         hosted.close()
         host.close()

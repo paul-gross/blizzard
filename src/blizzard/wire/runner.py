@@ -162,7 +162,8 @@ class RunnerAddResponse(BaseModel):
 
 class RunnerIdentityView(BaseModel):
     """Who the presented runner bearer token belongs to — its hub-minted id and current name, and
-    the tenant it was added in. Answering records nothing: no registration, no liveness."""
+    the tenant it was added in, and the hub's ``fleet`` flags. Answering records nothing: no registration, no
+    liveness."""
 
     runner_id: str
     runner_name: str
@@ -171,6 +172,9 @@ class RunnerIdentityView(BaseModel):
     tenant_id: str | None = None
     #: That tenant's current name.
     tenant_name: str | None = None
+    #: Every live ``fleet`` flag at the hub's resolved value, and every retired one on; empty from a hub that predates
+    #: them. A runner applies it only once the answer names the runner it is configured as.
+    fleet_flags: dict[str, bool] = {}
 
 
 class RunnerIdentityRefusal(BaseModel):

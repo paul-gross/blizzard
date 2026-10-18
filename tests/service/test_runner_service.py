@@ -27,9 +27,11 @@ import pytest
 import uvicorn
 from fastapi import FastAPI
 
+from blizzard.foundation.flags import FlagRegistry
 from blizzard.foundation.leases import LeaseClosureReason
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.trace_export.config import TracingConfig
+from blizzard.runner.composition import RunnerProcess, build_runner_process
 from blizzard.runner.config import RunnerConfig, SubscriptionDeclaration
 from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.leases.lease_auth import LeaseToken
@@ -1225,3 +1227,53 @@ def test_a_grpc_protocol_serves_with_tracing_off_and_one_rejection_reaches_the_h
         finally:
             client.close()
             terminate(proc)
+
+
+_FLEET_FLAG_REGISTRY = """
+[flag.fleet-thing]
+owner = "epic:ui-toolkit"
+summary = "A capability hub and runners agree on"
+scope = "fleet"
+default = "off"
+"""
+
+
+def test_the_runner_reads_a_fleet_flag_as_its_hub_answers_it_each_tick(tmp_path: Path) -> None:
+    bin_dir = require_mock_fleet()
+    workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
+    fenced = _tick_env()
+
+    hub_port = free_port()
+    with mock_hub(bin_dir, hub_port) as hub:
+        config = runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+        process = build_runner_process(config, flag_registry=FlagRegistry.parse(_FLEET_FLAG_REGISTRY, "fixture"))
+        try:
+
+            def tick_then_read() -> bool:
+                _tick_with(config, fenced, process)
+                return process.flags.current().on("fleet-thing")
+
+            def arm(flags: dict[str, bool]) -> None:
+                armed = hub.post("/_levers/fleet_flags", json={"payload": flags})
+                assert armed.status_code == 200 and "error" not in armed.json(), armed.text
+
+            assert tick_then_read() is False, "unarmed: the hub answers no fleet flags"
+
+            arm({"fleet-thing": True, "no-such-flag": True})
+            assert tick_then_read() is True, "armed on: the identity check applies the hub's answer"
+
+            assert hub.delete("/_levers/fleet_flags").status_code == 200
+            assert tick_then_read() is False, "cleared: the hub answers none, so the flag reads off again"
+        finally:
+            process.close()
+
+
+def _tick_with(config: RunnerConfig, fenced: dict[str, str], process: RunnerProcess) -> None:
+    """One synchronous tick over the caller-owned ``process``, with the harness fence set."""
+    prior = dict(os.environ)
+    os.environ.update(fenced)
+    try:
+        LoopWiring.of(config).tick_once(process=process)
+    finally:
+        os.environ.clear()
+        os.environ.update(prior)

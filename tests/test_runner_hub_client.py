@@ -461,6 +461,23 @@ _TENANT = {"tenant_id": "tn_1", "tenant_name": "acme"}
 
 @pytest.mark.unit
 @pytest.mark.parametrize(
+    ("answered", "expected"),
+    [({"fleet_flags": {"a": True, "b": False}}, {"a": True, "b": False}), ({}, {})],
+    ids=["carries-the-flags", "predates-fleet-flags"],
+)
+def test_identity_carries_the_fleet_flags_the_hub_answers_with(
+    answered: dict[str, dict[str, bool]], expected: dict[str, bool]
+) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"runner_id": "rn_1", "runner_name": "r-claude", **answered})
+
+    identity = _client(handler).identity()
+    assert isinstance(identity, TokenIdentity)
+    assert dict(identity.fleet_flags) == expected
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
     ("answered", "tenant"),
     [(_TENANT, ("tn_1", "acme")), ({}, (None, None))],
     ids=["names-its-tenant", "predates-tenants"],

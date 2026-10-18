@@ -59,6 +59,7 @@ from blizzard.runner.host_config import BuiltRunner, HaltedRunner, HostConfig, R
 from blizzard.runner.host_layout import HostFileEditor, HostLayout
 from blizzard.runner.hub.client import HostReport, HostReportedWorkspace, IHostHubClient
 from blizzard.runner.hub.client import SubscriptionDeclaration as HubSubscriptionDeclaration
+from blizzard.runner.hub.flags import FlagsHolder
 from blizzard.runner.hub.held_token import HubTokenHolder
 from blizzard.runner.hub.host_identity import HostIdentity, HostIdentityHolder
 from blizzard.runner.hub.host_registration import HostRegistration, HostRegistrationHolder, ICurrentHostRegistration
@@ -267,8 +268,9 @@ class RunnerProcess:
     hub_token: HubTokenHolder
     #: What the enabled bindings together do with each of a worker's telemetry signals, derived once at startup.
     harness_telemetry: HarnessTelemetryPlan = field(default_factory=HarnessTelemetryPlan)
-    #: This runner's own resolved flags: its ``runner`` flags at the host's overrides.
-    flags: Flags = field(default_factory=lambda: resolve_flags(FlagRegistry(), "runner", {}).flags)
+    #: This runner's own resolved flags: its ``runner`` flags at the host's overrides, and its ``fleet`` flags as its
+    #: hub last answered them.
+    flags: FlagsHolder = field(default_factory=lambda: FlagsHolder(resolve_flags(FlagRegistry(), "runner", {}).flags))
     #: Whether closing this runner closes the host it was built over — the host-of-one a standalone build makes.
     closes_host: bool = False
 
@@ -937,7 +939,7 @@ def _build_runner(
             identity_verdict=IdentityVerdictHolder(_identity_remedy(config, runner_id)),
             hub_token=held_hub_token(config, token),
             harness_telemetry=plan,
-            flags=resolve_flags(host.flag_registry, "runner", config.flags).flags,
+            flags=FlagsHolder(resolve_flags(host.flag_registry, "runner", config.flags).flags),
             closes_host=closes_host,
         )
     except BaseException:

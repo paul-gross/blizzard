@@ -488,6 +488,8 @@ class FakeHub:
         # The tenant registration and the identity read answer with; ``None`` plays a hub that predates tenants.
         self.tenant_id: str | None = None
         self.tenant_name: str | None = None
+        #: The ``fleet`` flags the identity answer carries.
+        self.fleet_flags: dict[str, bool] = {}
         # The served projects every registration answers with; `None` is a hub that predates projects.
         self.served_projects: tuple[ServedProject, ...] | None = None
         self.queue: list[QueueEntry] = []
@@ -758,7 +760,11 @@ class FakeHub:
         if runner_id is None:
             return TokenRefusal(reason=RunnerTokenRefusalReason.UNKNOWN)
         return TokenIdentity(
-            runner_id=runner_id, runner_name="runner-local", tenant_id=self.tenant_id, tenant_name=self.tenant_name
+            runner_id=runner_id,
+            runner_name="runner-local",
+            tenant_id=self.tenant_id,
+            tenant_name=self.tenant_name,
+            fleet_flags=dict(self.fleet_flags),
         )
 
     def fetch_runner_paused(self, runner_id: str) -> bool:

@@ -7425,9 +7425,16 @@ export type RunnerIdentityRefusal = {
  * RunnerIdentityView
  *
  * Who the presented runner bearer token belongs to — its hub-minted id and current name, and
- * the tenant it was added in. Answering records nothing: no registration, no liveness.
+ * the tenant it was added in, and the hub's ``fleet`` flags. Answering records nothing: no registration, no
+ * liveness.
  */
 export type RunnerIdentityView = {
+    /**
+     * Fleet Flags
+     */
+    fleet_flags?: {
+        [key: string]: boolean;
+    };
     /**
      * Runner Id
      */

@@ -13,6 +13,7 @@ import pytest
 import sqlalchemy as sa
 from fastapi.testclient import TestClient
 
+from blizzard.foundation.flags import FlagRegistry, resolve_flags
 from blizzard.hub import app as hub_app
 from blizzard.hub import runtime as hub_runtime
 from blizzard.hub.config import HubConfig
@@ -49,13 +50,56 @@ def _event_rows(hub: HubHarness) -> int:
         return int(conn.execute(hub_scoped(sa.select(sa.func.count()).select_from(s.event_log))).scalar_one())
 
 
+_FLEET_REGISTRY = """
+[flag.fleet-thing]
+owner = "epic:ui-toolkit"
+summary = "A capability hub and runners agree on"
+scope = "fleet"
+default = "off"
+
+[flag.hub-thing]
+owner = "epic:x"
+summary = "A hub capability"
+scope = "hub"
+default = "on"
+
+[flag.runner-thing]
+owner = "epic:x"
+summary = "A runner capability"
+scope = "runner"
+default = "on"
+
+[retired]
+old-fleet = "fleet"
+old-hub = "hub"
+"""
+
+
+def test_the_answer_carries_the_hubs_fleet_flags_and_nothing_of_another_scope(tmp_path: Path) -> None:
+    registry = FlagRegistry.parse(_FLEET_REGISTRY, "fixture")
+    hub = build_hub(tmp_path, flags=resolve_flags(registry, "hub", {"fleet-thing": True}).flags)
+    added = hub.services.enrollment.add("r-claude", by="op")
+
+    status, body = _identity(hub, added.token)
+
+    assert status == 200
+    assert body["fleet_flags"] == {"fleet-thing": True, "old-fleet": True}
+
+
+def test_a_hub_over_the_empty_packaged_registry_answers_no_fleet_flags(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    added = hub.services.enrollment.add("r-claude", by="op")
+
+    assert _identity(hub, added.token)[1]["fleet_flags"] == {}
+
+
 def test_a_token_names_its_added_runner_before_it_ever_registers(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     added = hub.services.enrollment.add("r-claude", by="op")
 
     assert _identity(hub, added.token) == (
         200,
-        {"runner_id": added.runner_id, "runner_name": "r-claude", **_tenant(hub)},
+        {"runner_id": added.runner_id, "runner_name": "r-claude", **_tenant(hub), "fleet_flags": {}},
     )
 
 
@@ -69,7 +113,10 @@ def test_a_registered_runners_token_names_it_with_its_latest_name(tmp_path: Path
     )
     assert registered.status_code == 201, registered.text
 
-    assert _identity(hub, token) == (200, {"runner_id": "runner-a", "runner_name": "r-new", **_tenant(hub)})
+    assert _identity(hub, token) == (
+        200,
+        {"runner_id": "runner-a", "runner_name": "r-new", **_tenant(hub), "fleet_flags": {}},
+    )
 
 
 def test_a_token_names_the_tenant_its_runner_was_added_in(tmp_path: Path) -> None:
@@ -80,7 +127,13 @@ def test_a_token_names_the_tenant_its_runner_was_added_in(tmp_path: Path) -> Non
 
     assert _identity(hub, token) == (
         200,
-        {"runner_id": "rn-bravo-1", "runner_name": "r-bravo", "tenant_id": bravo, "tenant_name": "bravo"},
+        {
+            "runner_id": "rn-bravo-1",
+            "runner_name": "r-bravo",
+            "tenant_id": bravo,
+            "tenant_name": "bravo",
+            "fleet_flags": {},
+        },
     )
     assert _identity(hub, home)[1]["tenant_id"] == default_tenant(hub.engine)
 

@@ -7,7 +7,7 @@ token have theirs, :class:`IHostHubClient`."""
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any, Protocol
@@ -464,12 +464,14 @@ class RegistrationReply:
 @dataclass(frozen=True)
 class TokenIdentity:
     """The runner the hub says a presented bearer token belongs to — its id and current name, and
-    its tenant's id and name (``None`` from a hub that predates tenants)."""
+    its tenant's id and name (``None`` from a hub that predates tenants), and the hub's ``fleet`` flags (empty from
+    a hub that predates them)."""
 
     runner_id: str
     runner_name: str
     tenant_id: str | None = None
     tenant_name: str | None = None
+    fleet_flags: Mapping[str, bool] = field(default_factory=dict)
 
 
 @domain_model

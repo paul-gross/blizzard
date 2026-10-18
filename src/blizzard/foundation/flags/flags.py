@@ -6,7 +6,7 @@ resolution is pure: it reports each override it ignored with its reason, and lea
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from types import MappingProxyType
 from typing import Literal
 
@@ -53,6 +53,10 @@ class Flags:
     published: frozenset[str]
     #: Names whose applied override changed the registry's decision, whatever the value.
     overridden: tuple[str, ...] = ()
+    #: The live ``fleet`` flags in the registry — those only the hub's answer turns on for a runner.
+    fleet: frozenset[str] = frozenset()
+    #: The retired ``fleet`` flags, which the hub's answer reports on.
+    fleet_retired: frozenset[str] = frozenset()
 
     def on(self, name: str) -> bool:
         """Whether ``name`` is on. Raises for a name the registry does not hold, so a typo fails its first test."""
@@ -67,6 +71,21 @@ class Flags:
     def answer(self) -> dict[str, bool]:
         """The live flags this process publishes, each to whether it is on."""
         return {name: self.values[name] for name in sorted(self.published)}
+
+    def fleet_answer(self) -> dict[str, bool]:
+        """What the hub tells its runners about the ``fleet`` flags: each live one at its resolved value, and each
+        retired one on, since a runner that predates the retirement still reads it."""
+        answer = {name: self.values[name] for name in sorted(self.fleet) if name in self.values}
+        answer.update(dict.fromkeys(sorted(self.fleet_retired), True))
+        return answer
+
+    def with_fleet_answer(self, answer: Mapping[str, bool]) -> Flags:
+        """These flags with the hub's ``fleet`` ``answer`` applied: each live fleet flag takes the answer's value, a
+        name the answer omits reads off, and a name the registry lacks is ignored. Runner-scope values and
+        ``overridden`` are untouched."""
+        values = dict(self.values)
+        values.update({name: answer.get(name, False) for name in self.fleet})
+        return replace(self, values=MappingProxyType(values))
 
 
 @domain_model
@@ -102,6 +121,8 @@ def resolve_flags(registry: FlagRegistry, side: FlagSide, overrides: Mapping[str
         values=MappingProxyType(values),
         published=published,
         overridden=tuple(sorted(applied)),
+        fleet=frozenset(name for name, flag in registry.live.items() if flag.scope == "fleet"),
+        fleet_retired=frozenset(name for name, scope in registry.retired.items() if scope == "fleet"),
     )
     return FlagResolution(flags=flags, ignored=tuple(ignored))
 

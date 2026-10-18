@@ -383,6 +383,7 @@ class HttpHubClient:
             runner_name=view.runner_name,
             tenant_id=view.tenant_id,
             tenant_name=view.tenant_name,
+            fleet_flags=view.fleet_flags,
         )
 
     def rekey_route_token(self, chunk_id: str) -> str:
