@@ -152,3 +152,9 @@ def test_the_exported_contract_leaves_the_flag_out() -> None:
 @pytest.mark.unit
 def test_config_key_is_still_the_declaration_type() -> None:
     assert ConfigKey("k", "string", flag="hub-thing").flag == "hub-thing"
+
+
+@pytest.mark.unit
+def test_a_table_key_cannot_be_guarded(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="cannot be guarded"):
+        _hub(tmp_path, "", _guard(HUB_REGISTRY, "transcripts", "hub-thing"))

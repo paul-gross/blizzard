@@ -30,9 +30,9 @@ def without_off_fields[Model: BaseModel](model: Model, flags: Flags) -> Model:
     updates: dict[str, Any] = {}
     for name, info in type(model).model_fields.items():
         guards = [m for m in info.metadata if isinstance(m, FlagGuarded)]
+        if guards and info.is_required():
+            raise TypeError(f"{type(model).__name__}.{name} is flag-guarded and so needs a default")
         if any(not flags.on(g.flag) for g in guards):
-            if info.is_required():
-                raise TypeError(f"{type(model).__name__}.{name} is flag-guarded and so needs a default")
             updates[name] = info.get_default(call_default_factory=True, validated_data={})
             continue
         held = getattr(model, name)

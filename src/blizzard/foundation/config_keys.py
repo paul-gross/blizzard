@@ -123,6 +123,8 @@ class HeldKeys:
         self.held: dict[str, str] = {}
 
 
+SCALAR_TYPES: Final = (STRING, INTEGER, NUMBER, BOOLEAN, STRING_LIST, STRING_OR_LIST)
+
 _TYPE_CHECKS: Final[Mapping[str, Callable[[object], bool]]] = {
     STRING: lambda v: isinstance(v, str),
     INTEGER: lambda v: isinstance(v, int) and not isinstance(v, bool),

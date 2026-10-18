@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 import structlog
 
-from blizzard.foundation.config_keys import ConfigRegistry, ConfigView
+from blizzard.foundation.config_keys import SCALAR_TYPES, ConfigRegistry, ConfigView
 from blizzard.foundation.flags.flags import FlagResolution, FlagSide, resolve_flags, side_answers
 from blizzard.foundation.flags.overrides import parse_overrides
 from blizzard.foundation.flags.registry import FlagRegistry
@@ -29,6 +29,8 @@ def check_guarded_keys(registry: ConfigRegistry, flags: FlagRegistry, side: Flag
     for key in registry.keys:
         if key.flag is None:
             continue
+        if key.type not in SCALAR_TYPES:
+            raise ValueError(f"config key {key.path!r} is a {key.type} and cannot be guarded; guard its scalar keys")
         scope = flags.scope_of(key.flag)
         if scope is None:
             raise ValueError(f"config key {key.path!r} names flag {key.flag!r}, which the flag registry does not hold")

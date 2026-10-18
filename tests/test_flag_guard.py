@@ -148,6 +148,8 @@ def test_a_guarded_field_without_a_default_is_a_declaration_error() -> None:
 
     with pytest.raises(TypeError, match="needs a default"):
         without_off_fields(Bad(required=1), _flags("hub"))
+    with pytest.raises(TypeError, match="needs a default"):
+        without_off_fields(Bad(required=1), _flags("hub", **{"hub-thing": True}))
 
 
 @pytest.mark.component
