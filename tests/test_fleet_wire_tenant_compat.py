@@ -16,7 +16,7 @@ from fastapi.testclient import TestClient
 from blizzard.hub.app import create_app_for_export
 from blizzard.runner.hub.client import TokenIdentity
 from blizzard.runner.hub.internal.http_hub import HttpHubClient
-from blizzard.tools.wire_compat import classify_spec_diff
+from blizzard.tools.compat.surfaces.wire import classify_spec_diff
 from tests.support import add_tenant, build_hub, seed_runner
 
 pytestmark = pytest.mark.component
