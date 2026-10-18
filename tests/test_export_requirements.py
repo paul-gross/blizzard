@@ -73,7 +73,9 @@ def test_a_stale_lock_is_refused_with_no_output(wheel: Path, tmp_path: Path) -> 
     stale, count = re.subn(r"(?m)^version = \"[^\"]*\"", 'version = "99.0.0"', pyproject, count=1)
     assert count == 1
     (repo / "pyproject.toml").write_text(stale)
-    result = subprocess.run([str(repo / "scripts" / _SCRIPT.name), _VERSION, str(wheel)], capture_output=True, text=True)
+    result = subprocess.run(
+        [str(repo / "scripts" / _SCRIPT.name), _VERSION, str(wheel)], capture_output=True, text=True
+    )
     assert result.returncode != 0
     assert result.stdout == ""
     assert "uv.lock" in result.stderr
