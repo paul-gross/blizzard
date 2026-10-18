@@ -3,10 +3,8 @@ import type { runnerApi } from 'fleet';
 import { type MachineChunkStatus, deriveMachineChunkStatus } from './chunk-list/chunk-status';
 
 /** One row in the machine-chunks list: a chunk's newest lease plus its derived
- * machine-side status, pre-folded so the layout needs no second read. `leases`
- * carries *every* attempt of the chunk (oldest → newest) — the detail dock
- * resolves its own summary off the newest entry without a second read of its
- * own; `lease` is that same newest entry, already resolved for the row. */
+ * machine-side status. `leases` carries *every* attempt of the chunk (oldest →
+ * newest); `lease` is that same newest entry, already resolved for the row. */
 export interface MachineChunkRow {
   readonly lease: runnerApi.LeaseView;
   readonly leases: readonly runnerApi.LeaseView[];

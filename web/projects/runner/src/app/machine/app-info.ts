@@ -17,8 +17,8 @@ import { injectRunnerDashboardQuery } from '../core/status.query';
  * hub read, so unlike the rest of this panel they arrive through the same
  * dashboard read's `fleet_summary` section. `fleet_summary` is `null`
  * when the hub read is unavailable — a **200** carrying a null slot, not a failed
- * request, so the strip's degraded/last-known state can no longer be read off
- * the query's own `isError()`. See {@link latchedFleet}.
+ * request, so the strip's degraded/last-known state is not the query's own
+ * `isError()`. See {@link latchedFleet}.
  */
 @Component({
   selector: 'app-info',

@@ -33,28 +33,14 @@ import { routeRunnerId } from './active-runner-route';
  * (`app.routes.ts`); on mobile the {@link RunnerSwitcher} sits under the titlebar,
  * where the desktop strip carries it. The mobile/desktop fork is picked once
  * here, mirroring the hub app-root's own "adaptive shells over shared guts"
- * placement (`../docs/designs/mobile/README.md`) — `LocalPanelLayout`'s own
- * internal desktop/mobile fork (which shell renders the panel's *contents*)
- * is a separate, narrower concern this fork does not replace.
+ * placement (`../docs/designs/mobile/README.md`).
  *
- * Session-aware fork, mirroring the hub shell's own auth fork in
- * spirit though not in shape — `app-panel.ts` is already at the `max-lines`
- * cap, so the fork sits here instead: {@link SessionRecovery.recovering} renders
+ * Session-aware fork: {@link SessionRecovery.recovering} renders
  * {@link SessionRecoveryView} in place of the routed shell for the one condition
  * where there is no session left to render it against (a bounce already
- * attempted, and a further no-session `401` arrived before it completed). Every
- * other case — including an upstream `401` the seam cannot fix — renders the
- * shell exactly as before, since only the seam's own classification ever sets
- * `recovering`.
+ * attempted, and a further no-session `401` arrived before it completed).
  *
- * {@link RunnerLiveUpdates} starts here too, unconditionally
- * and unlike the hub's own `authState`-gated start: the panel carries no session
- * gate of its own — every read already polls regardless of auth state, degrading to
- * its own region's `401` on an expired session — so the stream opens the same way.
- * A stream `401` is not a special case to fork the template on: `SessionRecovery`
- * already renders {@link SessionRecoveryView} once its own classification sets
- * `recovering`, and the live-updates service drives that same classification
- * on the stream's `authFailed`.
+ * {@link RunnerLiveUpdates} starts here unconditionally.
  *
  * The shell is the one reader of the route's `:runnerId`: it writes the active-runner
  * signal ({@link ACTIVE_RUNNER}) as each navigation resolves, before the routed page

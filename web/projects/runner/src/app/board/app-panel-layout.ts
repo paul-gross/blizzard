@@ -27,8 +27,7 @@ import type { MachineChunkRow } from './app-panel.model';
  *   host's subscriptions are the host page's.
  *
  * Presentational only: it renders exactly the leases/chunks/selection it is
- * handed and emits `selectChunk`; the derived-status fold and
- * the selection state live in the container ({@link LocalPanel}). Color
+ * handed and emits `selectChunk`. Color
  * resolves through the shared design tokens (`fleet` library,
  * design/tokens.css), never hard-coded hex.
  *

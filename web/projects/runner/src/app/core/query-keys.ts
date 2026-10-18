@@ -32,11 +32,8 @@ export function runnerLeasesKey(runnerId: string | null): readonly unknown[] {
 }
 
 /**
- * One runner's dashboard — `GET /runners/{runner_id}/api/dashboard`: the panel's status
- * reads composed into one response: `runner` (identity, capacities, hub connectivity,
- * last tick), `asks`, `escalations`, `takeovers`, `facts`, `harness_health`, and
- * `fleet_summary`. One key for every rail this panel polls, so TanStack dedupes the N
- * components that inject it into one request.
+ * One runner's dashboard — `GET /runners/{runner_id}/api/dashboard`; the composition
+ * and the shared-request dedupe are `status.query.ts`'s.
  */
 export function runnerDashboardKey(runnerId: string | null): readonly unknown[] {
   return [runnerId, 'dashboard'];
@@ -52,10 +49,8 @@ export function runnerChunkWorkItemsKey(runnerId: string | null, chunkId: string
 }
 
 /**
- * One chunk's full detail aggregate on one runner — the chunk-detail dock's header,
- * pass-through-forwarded to the hub (`ChunkDetail.pause` is the only way this panel learns
- * a chunk is paused). Defined once by `fleet`'s {@link chunkDetailKey}, since the shared
- * chunk page and this dock read the same entry.
+ * One chunk's full detail aggregate on one runner, defined once by `fleet`'s
+ * {@link chunkDetailKey}.
  */
 export function runnerChunkDetailKey(runnerId: string, chunkId: string): readonly unknown[] {
   return chunkDetailKey(runnerId, chunkId);

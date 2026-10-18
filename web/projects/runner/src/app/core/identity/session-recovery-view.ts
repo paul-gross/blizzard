@@ -15,7 +15,6 @@ import { KitButton } from 'fleet';
   styleUrl: './session-recovery-view.css',
 })
 export class SessionRecoveryView {
-  /** The operator asked to retry — the container clears the mark and re-drives
-   * the bounce (`SessionRecovery.retry()`). */
+  /** The operator asked to retry. */
   readonly retry = output<void>();
 }

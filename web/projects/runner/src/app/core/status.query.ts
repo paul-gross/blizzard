@@ -62,22 +62,11 @@ export interface LocalPauseVars {
  * surface in the web UI, through the generated runner client
  * (`bzh:generated-client`). Sets `paused` declaratively on the runner
  * singleton; the hub's own brake (`hub_paused`) is untouched — this route
- * neither reads nor writes it. Named `injectLocalPauseMutation` — not
- * `injectRunnerPauseMutation` — because `fleet`'s own `runners.mutations.ts`
- * already owns that name for the hub pausing *a* runner; this one is a
- * runner pausing *itself* (`bzh:frontend-selector-prefix`'s
- * collision class).
+ * neither reads nor writes it.
  *
- * `onSettled` **returns** the invalidation, not fires it fire-and-forget:
- * `injectMutation`'s `isPending()` only clears once the returned promise settles, so
- * the toggle stays disabled through the re-read that follows the PATCH rather than
- * re-enabling the instant the PATCH itself resolves — closing the stale-read window
- * where a fast second click would compute its flip off the pre-PATCH `local` value
- * and send the opposite of what the operator just asked for. `onSettled` rather than
- * `onSuccess` so pending survives a failed invalidation attempt too, not just a
- * successful one. Invalidates the paused runner's {@link runnerDashboardKey} — the read
- * the panel's pause state comes from — so the stale-toggle race stays closed, and the
- * host's reads, whose runner rows and switcher show the brake.
+ * `onSettled` returns the invalidation, so `isPending()` holds through the re-read.
+ * Invalidates the paused runner's {@link runnerDashboardKey} — the read
+ * the panel's pause state comes from — and the host's reads, whose runner rows and switcher show the brake.
  */
 export function injectLocalPauseMutation() {
   const queryClient = inject(QueryClient);
