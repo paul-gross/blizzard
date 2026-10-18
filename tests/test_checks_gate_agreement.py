@@ -46,8 +46,15 @@ _SCENARIOS = [
     ("ungated-green-is-fine", False, [("a", True)], False),
 ]
 
+#: The same verdicts when the gated `pass` crosses graphs — the gate binds a migration choice too.
+_CROSS_GRAPH_SCENARIOS = [
+    ("cross-graph-gated-all-green", True, [("a", True), ("b", True)], False),
+    ("cross-graph-gated-one-red", True, [("a", True), ("b", False)], True),
+]
 
-def _graph_yaml(requires_checks: bool) -> str:
+
+def _graph_yaml(requires_checks: bool, *, cross_graph: bool = False) -> str:
+    destination = "graph:delivery" if cross_graph else "deliver"
     gate = "\n          requires_checks: true" if requires_checks else ""
     return f"""
 name: default-delivery
@@ -66,7 +73,7 @@ nodes:
       choices:
         pass:
           description: Complete and green.
-          to: deliver{gate}
+          to: {destination}{gate}
         fail:
           description: Incomplete.
           to: build
@@ -85,10 +92,34 @@ nodes:
 """
 
 
-def _hub_rejects(tmp_path: Path, requires_checks: bool, results: list[tuple[str, bool]]) -> bool:
+_DELIVERY_YAML = """
+name: delivery
+entry: land
+nodes:
+  land:
+    executor: hub
+    run:
+      - command: "true"
+    judgement:
+      choices:
+        success:
+          description: Landed.
+          to: done
+        failure:
+          description: Failed.
+          to: land
+"""
+
+
+def _hub_rejects(
+    tmp_path: Path, requires_checks: bool, results: list[tuple[str, bool]], *, cross_graph: bool = False
+) -> bool:
     tmp_path.mkdir(parents=True, exist_ok=True)
     hub = build_hub(tmp_path)
-    assert hub.client.post("/api/graphs", json={"definition_yaml": _graph_yaml(requires_checks)}).status_code == 201
+    if cross_graph:
+        assert hub.client.post("/api/graphs", json={"definition_yaml": _DELIVERY_YAML}).status_code == 201
+    yaml = _graph_yaml(requires_checks, cross_graph=cross_graph)
+    assert hub.client.post("/api/graphs", json={"definition_yaml": yaml}).status_code == 201
     chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]}).json()["chunk_id"]
     make_ready(hub, chunk_id)
     node_id = hub.client.post(
@@ -174,14 +205,15 @@ def _runner_fails(tmp_path: Path, requires_checks: bool, results: list[tuple[str
 
 
 @pytest.mark.parametrize(
-    ("requires_checks", "results", "expected_reject"),
-    [pytest.param(rc, r, e, id=i) for i, rc, r, e in _SCENARIOS],
+    ("requires_checks", "results", "expected_reject", "cross_graph"),
+    [pytest.param(rc, r, e, False, id=i) for i, rc, r, e in _SCENARIOS]
+    + [pytest.param(rc, r, e, True, id=i) for i, rc, r, e in _CROSS_GRAPH_SCENARIOS],
 )
 def test_hub_and_runner_agree_on_the_checks_gate(
-    tmp_path: Path, requires_checks: bool, results: list[tuple[str, bool]], expected_reject: bool
+    tmp_path: Path, requires_checks: bool, results: list[tuple[str, bool]], expected_reject: bool, cross_graph: bool
 ) -> None:
     """One scenario, both real decision sites, same verdict — and the verdict is expected."""
-    hub_rejects = _hub_rejects(tmp_path / "hub", requires_checks, results)
+    hub_rejects = _hub_rejects(tmp_path / "hub", requires_checks, results, cross_graph=cross_graph)
     runner_fails = _runner_fails(tmp_path / "runner", requires_checks, results)
 
     assert hub_rejects == runner_fails, (
