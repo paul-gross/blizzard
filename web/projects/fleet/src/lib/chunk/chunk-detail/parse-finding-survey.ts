@@ -5,19 +5,12 @@ import type { FindingCandidate, FindingSurvey } from '../../api/hub';
  * publishes against the generated `FindingSurvey` — a JSON object carrying `scope`,
  * `revisions`, `measurement`, and `candidates`, each candidate a `FindingCandidate`.
  *
- * Unlike {@link parseFindingDelta}'s subject, this shape has **no server-side parse at
- * all**: the delta is validated at delivery, but the survey is an intra-run handoff —
- * the survey node writes it so the reconcile session, which enters cold, can read
- * what that session saw.
- *
  * So an unknown key — top level or on a candidate — is ignored rather than rejected,
  * so a field the shape grows later does not turn every already-published survey into
  * a fallback-to-raw.
  *
- * `candidates` is the key that discriminates a survey from the delta it is published
- * alongside: the two share `scope`/`revisions`/`measurement` exactly, and differ only
- * in that a delta carries `findings` (op-tagged) and a survey carries `candidates`
- * (identity-less, since the hub mints the `fin_` id at delivery, never the run).
+ * `candidates` is the key that discriminates a survey from a delta: the two share
+ * `scope`/`revisions`/`measurement` and differ only in that a delta carries `findings`.
  */
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -28,9 +21,8 @@ function isNullableString(value: unknown): value is string | null {
   return value === null || typeof value === 'string';
 }
 
-/** One `candidates` entry. `class`, `locus`, and `summary` are the three the survey prompt
- * requires of every candidate; `ref` and `introduced` are best-effort there ("omit
- * rather than guess"), so both default to `null` when absent. */
+/** One `candidates` entry. `class`, `locus`, and `summary` are required; `ref` and
+ * `introduced` default to `null` when absent. */
 function parseCandidate(value: unknown): FindingCandidate | null {
   if (!isRecord(value)) return null;
   if (typeof value['class'] !== 'string') return null;

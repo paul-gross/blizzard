@@ -18,12 +18,9 @@ import { parseFindingSurvey } from './parse-finding-survey';
  * (`parse-finding-survey.ts`) through {@link ChunkArtifactSurvey} — with the verbatim
  * text still one click away behind the raw-JSON toggle either way.
  *
- * Detection is by shape, never by the artifact's own name, and the two shapes are
- * disjoint by exactly one key: a survey and the delta published beside it share
- * `scope`/`revisions`/`measurement`, and differ only in the delta's op-tagged
- * `findings` versus the survey's identity-less `candidates`. Delta is tried first, so
- * a document somehow carrying both reads as the delivered shape. Anything matching
- * neither renders verbatim.
+ * The garden shapes are detected by shape (`parse-finding-survey.ts` owns what
+ * discriminates them); delta is tried first, so a document somehow carrying both reads
+ * as the delivered shape. Anything matching neither renders verbatim.
  *
  * The single owner of that rendering: every surface that shows an artifact
  * composes this rather than re-typing the kind branch, so a new field or a third

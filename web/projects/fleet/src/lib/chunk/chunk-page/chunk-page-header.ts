@@ -10,22 +10,13 @@ import { WorkRefLink } from '../work-ref-link/work-ref-link';
 
 /**
  * The chunk-detail-page identity header — the chunk's own id beside its
- * derived-status badge, lifted from the hub's `chunk-page.ts` `.cp-hdr`
- * verbatim (the layout the user approved) and shared with the runner's own
- * page, which never had one at all. Presentational, no injection: an input
- * for the id, the status text, and the {@link Tone} it colors the badge by —
- * every caller already derives that triad off its own detail read.
+ * derived-status badge. Presentational, no injection: an input for the id,
+ * the status text, and the {@link Tone} it colors the badge by.
  *
  * Renders the **full** `ch_…` id, not `compactRef`'s short form
- * (`compact-ref.ts`) — a board card or a rail row still wants the compact
- * ref for a dense list, but a page whose whole job is naming *this one*
- * chunk reads better in full. That id is a single unbroken token far wider
- * than a compact ref, so `.cid` allows a mid-token
- * break (`overflow-wrap: anywhere`, with `min-width: 0` so the flex item can
- * actually shrink to less than its content's width) rather than pushing a
- * phone-width page wider than its viewport — the shell sweeps
- * (the hub's and the runner's `chunk-page-layout.shell-sweep.spec.ts`) assert that
- * at 320px.
+ * (`compact-ref.ts`). That id is a single unbroken token, so `.cid` allows a
+ * mid-token break (`overflow-wrap: anywhere`, with `min-width: 0` so the flex
+ * item can shrink) rather than widening a phone-width page.
  */
 @Component({
   selector: 'fleet-chunk-page-header',

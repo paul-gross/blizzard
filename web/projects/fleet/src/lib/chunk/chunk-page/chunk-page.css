@@ -46,8 +46,4 @@ fleet-chunk-general-tab {
   flex: 1;
   min-height: 0;
 }
-/* No rule targets `fleet-chunk-artifacts-panel`, which already sizes its own `:host`,
-   nor `fleet-chunk-node-history-container` or `fleet-chunk-transcripts-container` —
-   each of those two is `display: contents`, so it generates no box of its own to size;
-   its presentational child is a direct flex item of the shell's own `.cps-body` instead,
-   and carries `flex: 1; min-height: 0` on its own `:host`. */
+/* No rule targets the other tab bodies; each sizes its own `:host`. */

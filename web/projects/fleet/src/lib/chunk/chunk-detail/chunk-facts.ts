@@ -99,11 +99,7 @@ export class ChunkFacts {
     return `${ref}#${detail.graph_name}-${ymd}`;
   });
 
-  /** Whether the chunk's graph may be edited — the wire's `graph_editable`: unclaimed **and**
-   * never moved. A chunk detached mid-graph derives `ready` again while standing on a node of
-   * its old graph, and re-pinning it there is a migration's job, so the facts column withholds
-   * the row rather than offer an edit that always 409s
-   * (`blizzard-context:/domain/work/migration.md` `bzh:migration-not-transition`). */
+  /** Whether the chunk's graph may be edited — read straight off the wire's `graph_editable`. */
   protected readonly editable = computed<boolean>(() => this.detail().graph_editable ?? false);
 
   /** The chunk's standing dependency edges, each direction its own fact row. Placement

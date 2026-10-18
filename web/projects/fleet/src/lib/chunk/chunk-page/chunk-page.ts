@@ -23,9 +23,8 @@ import { ChunkPageShell } from './chunk-page-shell';
 import { LensLink } from '../../core/lens-link';
 
 /**
- * The chunk detail page (`/board/chunk/:chunkId`), written once for both daemons — the
- * hub's board and a runner's panel each mount it on their own route, handing it their
- * daemon through {@link CHUNK_PAGE_DAEMON}: the target every read on the page crosses,
+ * The chunk detail page (`/board/chunk/:chunkId`), written once for both daemons,
+ * handed its daemon through {@link CHUNK_PAGE_DAEMON}: the target every read on the page crosses,
  * the board it links back to, and an optional operator-action port. One shell serves
  * both widths; at phone width the tab bodies opt into the list/detail drill-down.
  *
@@ -45,9 +44,7 @@ import { LensLink } from '../../core/lens-link';
  *
  * Every daemon difference rides the token: with no actions port the page renders
  * read-only — no answer, resolve, or graph-edit controls, no graph links — and still
- * offers the Transcripts tab, since a daemon without a port has no permission model to
- * consult. The dock's destructive and structural operator actions are never mounted
- * here, port or not.
+ * offers the Transcripts tab.
  */
 @Component({
   selector: 'fleet-chunk-page',
@@ -227,8 +224,7 @@ export class ChunkPage {
 
   protected readonly tone = computed(() => STATUS_TONE[this.detail()?.status ?? 'ready']);
   /** Every prerequisite this chunk still waits on, and every chunk it still holds up —
-   * the whole edge set the identity line names, rather than `blocked`'s one
-   * representative. A satisfied edge blocks nothing and is left off. */
+   * the whole edge set the identity line names. */
   protected readonly blockedBy = computed<readonly string[]>(() =>
     openEdgeIds(this.detail()?.neighborhood?.prerequisites ?? []),
   );

@@ -97,8 +97,7 @@ export interface StepUsageTotal {
  * migration (`source: 'restart'`); that migration is folded into the restart's own
  * row rather than rendered as a second step for the one operator move. The single
  * owner of this derivation (`canon:one-owner`, the same precedent
- * `sort-artifacts.ts`/`transcript-steps.ts` establish for their own lists) —
- * {@link ChunkTimeline} reads it rather than re-deriving it inline.
+ * `sort-artifacts.ts`/`transcript-steps.ts` establish for their own lists).
  */
 export function deriveHistoryRows(detail: ChunkDetail, now: Date): readonly HistoryRow[] {
   const transitions: HistoryRow[] = (detail.history ?? [])

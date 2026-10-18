@@ -5,8 +5,7 @@ import { KitProseBlock } from '../../kit/kit-prose-block';
 import { shortSha } from './short-sha';
 
 /** The fields a finding reads by before it has an identity — a survey's
- * `FindingCandidate`. A delta's `AddFindingOp` is the candidate minus its identity
- * plus its `op` tag, so it satisfies this type as it stands. */
+ * `FindingCandidate`. */
 export type FindingEntryView = FindingCandidate;
 
 /**

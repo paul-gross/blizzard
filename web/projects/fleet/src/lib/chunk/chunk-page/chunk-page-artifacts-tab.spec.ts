@@ -27,9 +27,7 @@ const NEWER: ArtifactView = {
   recorded_at: '2026-07-16T11:30:00.000Z',
 };
 
-/** The chunk page's Artifacts tab — {@link ChunkArtifactsPanel} under the
- * `artifacts-tab` testid prefix `ChunkPage` mounts it with, the handles the hub's
- * demo tour and browser e2e steer by. */
+/** {@link ChunkArtifactsPanel} under the `artifacts-tab` testid prefix. */
 function createTab() {
   const fixture = TestBed.createComponent(ChunkArtifactsPanel);
   fixture.componentRef.setInput('testidPrefix', 'artifacts-tab');
