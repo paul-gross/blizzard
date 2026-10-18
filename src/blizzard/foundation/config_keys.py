@@ -2,7 +2,8 @@
 
 A registry names each key of a daemon's toml file and each durable path under its runtime root; the loader passes it to
 the root :class:`ConfigView`, so no section parser imports it. With ``BLIZZARD_STRICT_CONFIG=1`` — the suite sets it,
-spawned daemons included — reading an undeclared key raises; unset, a read is a plain mapping read and the key is ignored."""
+spawned daemons included — reading an undeclared key raises; unset, a read is a plain mapping
+read and the key is ignored."""
 
 from __future__ import annotations
 
