@@ -1388,7 +1388,7 @@
    "comments": 2,
    "docstrings": 9,
    "over_cap": 1,
-   "total": 64
+   "total": 80
   },
   "blizzard/cli/window.py": {
    "comments": 2,
@@ -2762,7 +2762,7 @@
    "comments": 14,
    "docstrings": 9,
    "over_cap": 3,
-   "total": 107
+   "total": 113
   },
   "blizzard/hub/cli/scope.py": {
    "comments": 0,
@@ -6566,7 +6566,7 @@
    "comments": 22,
    "docstrings": 105,
    "over_cap": 2,
-   "total": 1206
+   "total": 1212
   },
   "blizzard/runner/cli/scope.py": {
    "comments": 0,
@@ -9118,6 +9118,42 @@
    "over_cap": 0,
    "total": 3
   },
+  "blizzard/tools/change_notes/__init__.py": {
+   "comments": 0,
+   "docstrings": 1,
+   "over_cap": 0,
+   "total": 1
+  },
+  "blizzard/tools/change_notes/anchors.py": {
+   "comments": 0,
+   "docstrings": 2,
+   "over_cap": 0,
+   "total": 27
+  },
+  "blizzard/tools/change_notes/cli.py": {
+   "comments": 0,
+   "docstrings": 3,
+   "over_cap": 0,
+   "total": 34
+  },
+  "blizzard/tools/change_notes/contract.py": {
+   "comments": 0,
+   "docstrings": 9,
+   "over_cap": 0,
+   "total": 220
+  },
+  "blizzard/tools/change_notes/tree.py": {
+   "comments": 0,
+   "docstrings": 4,
+   "over_cap": 0,
+   "total": 77
+  },
+  "blizzard/tools/change_notes/validate.py": {
+   "comments": 0,
+   "docstrings": 2,
+   "over_cap": 0,
+   "total": 71
+  },
   "blizzard/tools/cli_surface.py": {
    "comments": 8,
    "docstrings": 13,
@@ -10554,11 +10590,17 @@
    "over_cap": 1,
    "total": 332
   },
+  "test_change_notes.py": {
+   "comments": 0,
+   "docstrings": 1,
+   "over_cap": 0,
+   "total": 321
+  },
   "test_check_version_tag.py": {
    "comments": 0,
    "docstrings": 6,
    "over_cap": 0,
-   "total": 64
+   "total": 73
   },
   "test_checks_gate_agreement.py": {
    "comments": 5,
@@ -10828,7 +10870,7 @@
    "comments": 20,
    "docstrings": 47,
    "over_cap": 1,
-   "total": 600
+   "total": 644
   },
   "test_cli_analytics.py": {
    "comments": 1,
@@ -13088,9 +13130,9 @@
   },
   "test_push_workflow.py": {
    "comments": 0,
-   "docstrings": 15,
+   "docstrings": 14,
    "over_cap": 0,
-   "total": 121
+   "total": 140
   },
   "test_question_decision_project_api.py": {
    "comments": 2,
@@ -13184,9 +13226,9 @@
   },
   "test_release_workflow.py": {
    "comments": 2,
-   "docstrings": 20,
+   "docstrings": 19,
    "over_cap": 0,
-   "total": 132
+   "total": 151
   },
   "test_repo_files.py": {
    "comments": 1,

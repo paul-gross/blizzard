@@ -107,6 +107,8 @@ blizzard-export-openapi = "blizzard.tools.openapi:main"
 blizzard-export-contracts = "blizzard.tools.contracts:main"
 # Fails on a breaking change to the hub↔runner wire surface (bzh:fleet-wire-additive).
 blizzard-wire-compat = "blizzard.tools.wire_compat:main"
+# Validates the change notes under changes/ (the format is documented in changes/README.md).
+blizzard-change-notes = "blizzard.tools.change_notes.cli:main"
 
 [dependency-groups]
 dev = [
@@ -187,6 +189,8 @@ also_copy = [
     # Registers the suite plugin, whose fixtures isolate tests from the host; without it the copied suite runs bare.
     "conftest.py",
     "openapi",
+    # The README case checks every example in the format reference against the note rules.
+    "changes/README.md",
     ".github/workflows/gate.yml",
     ".github/workflows/pr.yml",
     ".github/workflows/push.yml",

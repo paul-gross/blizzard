@@ -138,6 +138,19 @@ jobs:
       - name: wire compatibility (blizzard:wire-compat)
         run: uv run blizzard-wire-compat --baseline merge-base --against origin/master
 
+  change-notes:
+    name: change notes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          python-version: "3.12"
+      - run: uv sync
+      - name: change notes (blizzard-change-notes check)
+        run: uv run blizzard-change-notes check
+
   frontend:
     name: eslint + vitest + client drift
     runs-on: ubuntu-latest

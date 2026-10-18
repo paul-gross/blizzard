@@ -11,7 +11,8 @@ file is the in-repo operator reference for running it.
 every trigger workflow: ruff format+check, pyright, the `blizzard:structural-gate` ast-grep scan
 (`contracts/ast-grep/`), pytest (unit + component), OpenAPI spec drift, contract document drift
 (`gate / contract drift`), hub↔runner wire compatibility against the PR's merge-base
-(`gate / hub↔runner wire compatibility`, PR-only — see below), the `web/` frontend checks (eslint, vitest,
+(`gate / hub↔runner wire compatibility`, PR-only — see below), the change notes under `changes/`
+(`gate / change notes`, every trigger — see below), the `web/` frontend checks (eslint, vitest,
 structural gate, generated-client drift), and the Vale prose lint (`gate / process-reference and change-history lint`,
 `styles/Blizzard/ProcessReference.yml`, `styles/Blizzard/ChangeHistory.yml`, `styles/Blizzard/VariantHolder.yml` and
 `styles/Blizzard/ShortFormPointer.yml` against `.vale.ini`). The
@@ -41,6 +42,7 @@ uv run pytest -n auto
 uv run blizzard-export-openapi --out-dir openapi && git diff --exit-code -- openapi/
 uv run blizzard-export-contracts --out-dir contracts && git diff --exit-code -- contracts/ && test -z "$(git ls-files --others --exclude-standard -- contracts/)"
 uv run blizzard-wire-compat --baseline merge-base --against origin/master
+uv run blizzard-change-notes check
 cd web && npm ci && npm run lint && npm run test && npm run structural-gate && npm run generate:client && cd .. && git diff --exit-code -- web/
 ```
 
@@ -49,6 +51,10 @@ surface — `bzh:fleet-wire-additive` owns what counts as breaking. The `gate.ym
 is `pull_request` (`if: github.event_name == 'pull_request'`), diffing `HEAD` against its merge-base with
 `origin/master` so a break is attributed to the PR that makes it. `mise run wire-compat` reproduces it locally against
 the current branch's own merge-base.
+
+`blizzard-change-notes check` (`src/blizzard/tools/change_notes/`) fails on a file under `changes/` that breaks the format
+[`changes/README.md`](../changes/README.md) documents, naming the file and the rule for every failure. The `gate.yml`
+job runs on every trigger, and `mise run change-notes` reproduces it locally.
 
 ## The upper tiers
 
