@@ -117,7 +117,9 @@ def gate_refusal(graph: Graph, from_node_id: str) -> Node:
 
 def decision_choices(node: Node) -> list[DecisionChoice]:
     """A gate decision's choices — the node's own choice set."""
-    return [DecisionChoice(name=c.name, description=c.description) for c in node.choices]
+    return [
+        DecisionChoice(name=c.name, description=c.description, requires_checks=c.requires_checks) for c in node.choices
+    ]
 
 
 @domain_model
@@ -165,8 +167,9 @@ class CompletionPlan:
         """A completion carrying no decision id. Refusals, in order: leaving a human-judged node
         (only its resolving transition may), a runner-configured gate at this node-step that no
         transition has carried yet — open, or resolved and awaiting its resolving transition — an
-        unknown choice, then — unless the edge crosses graphs — an unknown destination, the
-        ``produces`` backstop, and a red check on a choice that requires green ones."""
+        unknown choice, a red check on a choice that requires green ones — a cross-graph choice
+        included — then, unless the edge crosses graphs, an unknown destination and the ``produces``
+        backstop."""
         if from_node.judged_by is JudgedBy.HUMAN:
             raise CompletionRefused(f"human signoff required: node `{from_node.name}` is a gate — resolve its decision")
         if open_gate is not None and open_gate.is_open:
@@ -179,15 +182,15 @@ class CompletionPlan:
         edge = graph.edge_for_choice(from_node.node_id, submission.choice)
         if edge is None:
             raise CompletionRefused(f"node {from_node.name} has no choice `{submission.choice}`")
+        selected = next((c for c in from_node.choices if c.name == submission.choice), None)
+        if selected is not None and ChecksGate(selected.requires_checks, submission.check_results).violated:
+            raise CompletionRefused(f"choice `{submission.choice}` requires green checks but a check is red")
         if edge.target_graph is not None:
             return cls(edge, None)
         to_node_id = cls._destination(graph, edge, submission.choice)
         produces_rejection = Produces(from_node, submission.artifacts).rejection(mode=produces_mode)
         if produces_rejection is not None:
             raise CompletionRefused(produces_rejection)
-        selected = next((c for c in from_node.choices if c.name == submission.choice), None)
-        if selected is not None and ChecksGate(selected.requires_checks, submission.check_results).violated:
-            raise CompletionRefused(f"choice `{submission.choice}` requires green checks but a check is red")
         return cls(edge, to_node_id)
 
     @classmethod

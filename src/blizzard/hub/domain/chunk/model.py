@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Protocol
 
 from blizzard.foundation.chunk_migration import MigrationMode
 from blizzard.foundation.chunk_status import PRE_CLAIM_STATUSES, TERMINAL_STATUSES, ChunkStatus
+from blizzard.foundation.completion_gates import ChecksGate
 from blizzard.foundation.event_log import EVENT_LOG_SEVERITY, EventLogKind, EventLogSeverity
 from blizzard.foundation.hub_event_types import ActivityChunkChangeCause
 from blizzard.foundation.ids import Id, IdPrefix
@@ -738,10 +739,21 @@ class ActivityFeed:
 @domain_model
 @dataclass(frozen=True)
 class DecisionChoice:
-    """One selectable gate outcome."""
+    """One selectable gate outcome; ``requires_checks`` snapshots whether the node demands green
+    checks of whoever selects it."""
 
     name: str
     description: str
+    requires_checks: bool = False
+
+
+@domain_model
+@dataclass(frozen=True)
+class DecisionCheck:
+    """One check the runner executed at the gated step's exit, as the decision holds it."""
+
+    command: str
+    passed: bool
 
 
 class GateState(StrEnum):
@@ -794,6 +806,11 @@ class GateDecision:
     imposed_by_runner_id: str | None = None
     #: The project of the chunk the gate is on; ``None`` for a gate built outside the store.
     project_id: ProjectId | None = None
+    #: The checks the runner ran at the gated step's exit; empty when the node declares none or the
+    #: submitting runner predates them.
+    check_results: list[DecisionCheck] = field(default_factory=list)
+    #: Whether the resolution took a ``requires_checks`` choice over a red check.
+    overrode_red_checks: bool = False
 
     @property
     def resolved(self) -> bool:  # ast-grep-ignore: bzh:property-delegates
@@ -844,6 +861,13 @@ class GateDecision:
             raise DecisionClosed(f"decision {self.decision_id} was closed undecided by a restart")
         if not verb_legal_from(ChunkVerb.RESOLVE_DECISION, chunk_status):
             raise DecisionClosed(f"decision {self.decision_id} closed: chunk {self.chunk_id} is {chunk_status.value}")
+
+    def overrides_red_checks(self, choice: str) -> bool:
+        """Whether resolving to ``choice`` takes a ``requires_checks`` choice over a red check — a
+        human's override of the gate that binds an agent. Judged on the choices and checks as
+        stored, the set the person saw."""
+        taken = next((c for c in self.choices if c.name == choice), None)
+        return taken is not None and ChecksGate(taken.requires_checks, self.check_results).violated
 
     def resolving_refusal(self, *, chunk_id: str, node_id: str, node_name: str, choice: str) -> str | None:
         """Why a resolving transition naming this gate cannot leave ``node_id``, or ``None``: the

@@ -217,9 +217,12 @@ An open gate decision shows wherever a waiting chunk does, derived from the deci
 - the board rail's Open gates section, which lists every open gate fleet-wide with its node, origin, and choices;
 - a `gate` marker on the board card of a chunk with an open gate, and a `gate` pill in the mobile "Needs you" list;
 - the Gate panel of a waiting chunk, which reads "gated by runner `R-XXXX.<name>` (runner config)" — the runner's
-  compact id and name — or "declared by the graph" when the graph made the node human-judged;
+  compact id and name — or "declared by the graph" when the graph made the node human-judged. On a runner-configured
+  gate the panel also lists the step's check results, each as its command and pass or red. Resolving to a choice that
+  requires green checks while one is red is accepted and recorded as an override, and the panel marks such a choice;
 - the resolved line that replaces the Gate panel's choices once someone resolves it, "`<choice>` by `<who>`, `<when>`",
-  until the runner records the transition. A resolve that loses the race to another person shows the same line.
+  until the runner records the transition, noting an override when there was one. A resolve that loses the race to
+  another person shows the same line.
 
 `blizzard runner status` prints a `gates:` line too, which reads from the runner's own configuration and so works with
 the hub unreachable.

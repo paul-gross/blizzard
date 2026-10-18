@@ -44,6 +44,7 @@ def gate_submission_of(submission: DecisionSubmission, *, runner_id: str) -> Gat
         from_node_id=submission.from_node_id,
         epoch=submission.epoch,
         runner_id=runner_id,
+        check_results=tuple(CheckOutcome(command=c.command, passed=c.passed) for c in submission.check_results),
         artifacts=_artifacts(submission.artifacts),
         route_token=submission.route_token,
         lease_id=submission.lease_id,

@@ -59,10 +59,11 @@ class Completion:
 @dataclass(frozen=True)
 class GateSubmission:
     """A runner-configured gate: a decision submitted in place of a transition, carrying the
-    gated step's artifacts under its fencing ``epoch``."""
+    gated step's artifacts and the checks it ran under its fencing ``epoch``."""
 
     from_node_id: str
     epoch: int
+    check_results: list[CheckVerdict] = field(default_factory=list)
     artifacts: list[CompletionArtifact] = field(default_factory=list)
     route_token: str | None = None
     lease_id: str | None = None

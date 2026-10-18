@@ -459,6 +459,24 @@ export type CapacitiesView = {
 };
 
 /**
+ * CheckResult
+ *
+ * One deterministic check's **runner-executed** outcome.
+ *
+ * Carries only ``(command, passed)``; ``output_tail`` deliberately does not ride the wire.
+ */
+export type CheckResult = {
+    /**
+     * Command
+     */
+    command: string;
+    /**
+     * Passed
+     */
+    passed: boolean;
+};
+
+/**
  * ChunkAskView
  *
  * One question asked on a chunk, open or answered. ``node`` is the asking node's name,
@@ -995,7 +1013,8 @@ export type DashboardView = {
 /**
  * DecisionChoiceModel
  *
- * One selectable gate outcome.
+ * One selectable gate outcome; ``requires_checks`` marks a choice that overrides red checks
+ * when a person resolves to it while one is red.
  */
 export type DecisionChoiceModel = {
     /**
@@ -1006,6 +1025,10 @@ export type DecisionChoiceModel = {
      * Name
      */
     name: string;
+    /**
+     * Requires Checks
+     */
+    requires_checks?: boolean;
 };
 
 /**
@@ -1017,6 +1040,10 @@ export type DecisionChoiceModel = {
  * resolving transition has been recorded.
  */
 export type DecisionView = {
+    /**
+     * Check Results
+     */
+    check_results?: Array<CheckResult>;
     /**
      * Choices
      */
@@ -1049,6 +1076,10 @@ export type DecisionView = {
      * Node Name
      */
     node_name: string;
+    /**
+     * Overrode Red Checks
+     */
+    overrode_red_checks?: boolean;
     /**
      * Project Id
      */

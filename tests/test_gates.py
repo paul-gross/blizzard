@@ -306,6 +306,64 @@ def test_runner_config_gate_submits_a_decision_for_a_worker_node(tmp_path: Path)
     assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "done"
 
 
+_CHECKED_YAML = _PLAIN_YAML.replace(
+    "    prompt: |\n      Build the change.\n",
+    "    prompt: |\n      Build the change.\n    checks:\n      - make test\n",
+).replace(
+    "          to: deliver\n        fail:", "          to: deliver\n          requires_checks: true\n        fail:", 1
+)
+
+
+def _gate_with_checks(hub, passed: bool) -> tuple[str, dict, dict]:  # type: ignore[no-untyped-def]
+    chunk_id, nodes = _ingest(hub, _CHECKED_YAML)
+    _claim_and_lease(hub, chunk_id)
+    resp = hub.client.post(
+        f"/api/fleet/chunks/{chunk_id}/decisions",
+        json={
+            "from_node_id": nodes["build"],
+            "epoch": 1,
+            "runner_id": "r1",
+            "check_results": [{"command": "make test", "passed": passed}],
+            "artifacts": [_BUILD_ARTIFACT],
+        },
+    )
+    assert resp.json()["outcome"] == "parked_at_gate", resp.text
+    return chunk_id, nodes, hub.client.get(f"/api/chunks/{chunk_id}").json()["decision"]
+
+
+def test_a_human_resolving_a_requires_checks_choice_over_a_red_check_overrides_it(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id, nodes, decision = _gate_with_checks(hub, passed=False)
+    assert decision["check_results"] == [{"command": "make test", "passed": False}]
+    assert {c["name"]: c["requires_checks"] for c in decision["choices"]} == {"pass": True, "fail": False}
+
+    resolve = hub.client.post(f"/api/decisions/{decision['decision_id']}/resolutions", json={"choice": "pass"})
+
+    assert resolve.status_code == 200, resolve.text
+    assert resolve.json()["overrode_red_checks"] is True
+    read = hub.client.get(f"/api/chunks/{chunk_id}").json()["decision"]
+    assert read["overrode_red_checks"] is True and read["check_results"] == decision["check_results"]
+    resolving = hub.client.post(
+        f"/api/fleet/chunks/{chunk_id}/completions",
+        json=_completion(nodes["build"], choice="pass", decision_id=decision["decision_id"]),
+    )
+    assert resolving.json()["outcome"] == "hub_node_taken", resolving.text
+
+
+def test_resolving_an_ungated_choice_or_over_green_checks_records_no_override(tmp_path: Path) -> None:
+    (tmp_path / "red").mkdir()
+    (tmp_path / "green").mkdir()
+    red = build_hub(tmp_path / "red")
+    _, _, over_red = _gate_with_checks(red, passed=False)
+    ungated = red.client.post(f"/api/decisions/{over_red['decision_id']}/resolutions", json={"choice": "fail"})
+    assert ungated.json()["overrode_red_checks"] is False
+
+    green = build_hub(tmp_path / "green")
+    _, _, over_green = _gate_with_checks(green, passed=True)
+    gated = green.client.post(f"/api/decisions/{over_green['decision_id']}/resolutions", json={"choice": "pass"})
+    assert gated.json()["overrode_red_checks"] is False
+
+
 def test_runner_config_gate_submission_is_idempotent(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     chunk_id, nodes = _ingest(hub, _PLAIN_YAML)

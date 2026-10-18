@@ -8,23 +8,27 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
-from blizzard.wire.completion import SubmittedArtifact
+from blizzard.wire.completion import CheckResult, SubmittedArtifact
 
 
 class DecisionChoiceModel(BaseModel):
-    """One selectable gate outcome."""
+    """One selectable gate outcome; ``requires_checks`` marks a choice that overrides red checks
+    when a person resolves to it while one is red."""
 
     name: str
     description: str
+    requires_checks: bool = False
 
 
 class DecisionSubmission(BaseModel):
     """A runner-config gate: submit a decision in place of a transition, carrying the
-    gated step's artifacts and fencing epoch as one atomic write."""
+    gated step's artifacts, the checks it ran, and fencing epoch as one atomic write."""
 
     from_node_id: str  # the gated node — its choices become the decision's
     epoch: int  # the step's lease fence, checked against the chunk's latest
     artifacts: list[SubmittedArtifact] = []
+    # The node's `checks:` as the runner ran them at the step's exit; empty when it declares none.
+    check_results: list[CheckResult] = []
     # The route capability token stamped at enqueue.
     route_token: str | None = None
     # The submitting attempt's lease.
@@ -56,6 +60,10 @@ class DecisionView(BaseModel):
     project_id: str | None = None
     project_slug: str | None = None
     project_name: str | None = None
+    #: The checks the runner ran at the gated step's exit; empty when none ran.
+    check_results: list[CheckResult] = []
+    #: Whether the resolution took a `requires_checks` choice over a red check.
+    overrode_red_checks: bool = False
 
 
 class OpenDecisionsResponse(BaseModel):
@@ -78,6 +86,8 @@ class DecisionResolutionResponse(BaseModel):
     choice: str
     resolved_by: str
     resolved_at: str
+    #: Whether this resolution took a `requires_checks` choice over a red check.
+    overrode_red_checks: bool = False
 
 
 class DecisionResolutionConflict(BaseModel):

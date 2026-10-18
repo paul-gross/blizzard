@@ -1,5 +1,5 @@
 {
-  "head_revision": "20261016_0900_chunk_demoted",
+  "head_revision": "20261018_0900_decision_check_results",
   "store": "hub",
   "tables": {
     "answer_deliveries": {
@@ -1608,6 +1608,12 @@
           "server_default": false,
           "type": "String"
         },
+        "overrode_red_checks": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": true,
+          "type": "Boolean"
+        },
         "resolved_at": {
           "deprecated": null,
           "nullable": false,
@@ -1660,6 +1666,12 @@
     "decisions": {
       "checks": [],
       "columns": {
+        "check_results": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": true,
+          "type": "Text"
+        },
         "choices": {
           "deprecated": null,
           "nullable": false,

@@ -91,6 +91,7 @@ _BUILD = _node(
         Choice("ch_ship", "ship", "ship it"),
         Choice("ch_review", "review", "", requires_checks=True),
         Choice("ch_hand", "hand-off", ""),
+        Choice("ch_gated_hand", "gated-hand-off", "", requires_checks=True),
         Choice("ch_lost", "lost", ""),
     ],
 )
@@ -108,6 +109,7 @@ _GRAPH = make_graph(
         Edge("nd_build", "ch_ship", RESERVED_TERMINAL),
         Edge("nd_build", "ch_review", "review"),
         Edge("nd_build", "ch_hand", "graph:delivery", target_graph="delivery", model="opus"),
+        Edge("nd_build", "ch_gated_hand", "graph:delivery", target_graph="delivery"),
         Edge("nd_build", "ch_lost", "nowhere"),
         Edge("nd_review", "ch_ok", "land"),
         Edge("nd_gate", "ch_yes", "review"),
@@ -255,6 +257,14 @@ def test_a_plain_completion_lands_on_its_edges_destination() -> None:
 def test_a_cross_graph_choice_migrates_instead() -> None:
     plan = _plain(_submission("hand-off"))
     assert plan.migrates and plan.edge.target_graph == "delivery"
+
+
+def test_a_cross_graph_choice_that_requires_green_checks_is_refused_over_a_red_one() -> None:
+    red = [CheckOutcome(command="make test", passed=False)]
+    with pytest.raises(CompletionRefused, match="requires green checks"):
+        _plain(_submission("gated-hand-off", check_results=red))
+    green = [CheckOutcome(command="make test", passed=True)]
+    assert _plain(_submission("gated-hand-off", check_results=green)).migrates
 
 
 def test_a_human_judged_node_is_left_only_by_its_resolving_transition() -> None:

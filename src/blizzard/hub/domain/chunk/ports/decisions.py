@@ -3,14 +3,14 @@ decision and its first-write-wins resolution."""
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
 
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.artifact.model import StoredArtifact
-from blizzard.hub.domain.chunk.model import DecisionChoice, GateDecision
+from blizzard.hub.domain.chunk.model import DecisionCheck, DecisionChoice, GateDecision
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, FenceRefusal
 from blizzard.hub.domain.projects.model import ProjectId
@@ -69,6 +69,7 @@ class IWriteChunkDecisionsRepository(IReadChunkDecisionsRepository, Protocol):
         admission: EpochAdmission,
         claimant: Claimant | None = None,
         choices: list[DecisionChoice],
+        check_results: Sequence[DecisionCheck] = (),
         at: datetime,
         artifacts: list[StoredArtifact],
         imposed_by_runner_id: str | None,
@@ -92,6 +93,7 @@ class IWriteChunkDecisionsRepository(IReadChunkDecisionsRepository, Protocol):
         admission: EpochAdmission,
         claimant: Claimant | None = None,
         choices: list[DecisionChoice],
+        check_results: Sequence[DecisionCheck] = (),
         at: datetime,
         artifacts: list[StoredArtifact],
         imposed_by_runner_id: str | None,
@@ -102,7 +104,10 @@ class IWriteChunkDecisionsRepository(IReadChunkDecisionsRepository, Protocol):
         lost-ack replay, nothing written; ``True`` is a fresh write; a refusal writes nothing."""
         ...
 
-    def record_decision_resolution(self, decision_id: str, *, choice: str, resolved_by: str, at: datetime) -> bool:
-        """First-write-wins CAS: record the person's choice, or return ``False`` if the
+    def record_decision_resolution(
+        self, decision_id: str, *, choice: str, resolved_by: str, at: datetime, overrode_red_checks: bool = False
+    ) -> bool:
+        """First-write-wins CAS: record the person's choice — and whether it took a
+        ``requires_checks`` choice over a red check — or return ``False`` if the
         decision was already resolved (the loser is told who won)."""
         ...

@@ -1,7 +1,7 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 
-import type { ChunkDetail, QuestionView } from '../../api/hub';
+import type { ChunkDetail, DecisionView, QuestionView } from '../../api/hub';
 import { formatWhen } from '../../core/when';
 import { ChunkAwaitingHuman } from './chunk-awaiting-human';
 
@@ -237,6 +237,63 @@ describe('ChunkAwaitingHuman', () => {
     expect(el.querySelector('[data-testid="question-text"]')).not.toBeNull();
     expect(el.querySelector('[data-testid="answer-input"]')).toBeNull();
     expect(el.querySelector('[data-testid="question-option"]')).toBeNull();
+  });
+
+  describe('the step\'s checks on a gate decision', () => {
+    function withChecks(passed: boolean, overrides: Partial<DecisionView> = {}): ChunkDetail {
+      return {
+        ...WAITING_DECISION_DETAIL,
+        decision: {
+          ...WAITING_DECISION_DETAIL.decision!,
+          choices: [
+            { name: 'approve', description: 'Ship it.', requires_checks: true },
+            { name: 'reject', description: 'Send it back.' },
+          ],
+          check_results: [{ command: 'make test', passed }],
+          ...overrides,
+        },
+      };
+    }
+
+    function checkLines(el: HTMLElement): string[][] {
+      return [...el.querySelectorAll('[data-testid="decision-check"]')].map((li) =>
+        [...li.querySelectorAll('span')].map((span) => span.textContent?.trim() ?? ''),
+      );
+    }
+
+    async function render(detail: ChunkDetail): Promise<HTMLElement> {
+      const fixture = TestBed.createComponent(ChunkAwaitingHuman);
+      fixture.componentRef.setInput('detail', detail);
+      fixture.componentRef.setInput('canResolve', true);
+      await fixture.whenStable();
+      return fixture.nativeElement as HTMLElement;
+    }
+
+    it('lists each check with its command and verdict, and marks the gated choice as an override while one is red', async () => {
+      const el = await render(withChecks(false));
+
+      expect(checkLines(el)).toEqual([['make test', 'red']]);
+      const choices = [...el.querySelectorAll('[data-testid="decision-choice"]')].map((c) => c.textContent?.trim());
+      expect(choices).toEqual(['approve · overrides red checks', 'reject']);
+    });
+
+    it('marks no override while every check is green', async () => {
+      const el = await render(withChecks(true));
+
+      expect(checkLines(el)).toEqual([['make test', 'pass']]);
+      const choices = [...el.querySelectorAll('[data-testid="decision-choice"]')].map((c) => c.textContent?.trim());
+      expect(choices).toEqual(['approve', 'reject']);
+    });
+
+    it('notes an override on the resolved line, and none on a clean resolution', async () => {
+      const resolved = { resolved_choice: 'approve', resolved_by: 'alice', resolved_at: '2026-07-13T00:02:00Z' };
+
+      const overridden = await render(withChecks(false, { ...resolved, overrode_red_checks: true }));
+      expect(overridden.querySelector('[data-testid="decision-override"]')?.textContent?.trim()).toBe('overrode red checks');
+
+      const clean = await render(withChecks(true, resolved));
+      expect(clean.querySelector('[data-testid="decision-override"]')).toBeNull();
+    });
   });
 
   it('renders a resolved-but-untransitioned gate as "<choice> by <who>, <when>" in place of its choices', async () => {

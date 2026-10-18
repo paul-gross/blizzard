@@ -606,6 +606,25 @@
         "title": "CapacitiesView",
         "type": "object"
       },
+      "CheckResult": {
+        "description": "One deterministic check's **runner-executed** outcome.\n\nCarries only ``(command, passed)``; ``output_tail`` deliberately does not ride the wire.",
+        "properties": {
+          "command": {
+            "title": "Command",
+            "type": "string"
+          },
+          "passed": {
+            "title": "Passed",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "command",
+          "passed"
+        ],
+        "title": "CheckResult",
+        "type": "object"
+      },
       "ChunkAskView": {
         "description": "One question asked on a chunk, open or answered. ``node`` is the asking node's name,\nfalling back to its raw id when the payload names no node by that id.",
         "properties": {
@@ -1594,7 +1613,7 @@
         "type": "object"
       },
       "DecisionChoiceModel": {
-        "description": "One selectable gate outcome.",
+        "description": "One selectable gate outcome; ``requires_checks`` marks a choice that overrides red checks\nwhen a person resolves to it while one is red.",
         "properties": {
           "description": {
             "title": "Description",
@@ -1603,6 +1622,11 @@
           "name": {
             "title": "Name",
             "type": "string"
+          },
+          "requires_checks": {
+            "default": false,
+            "title": "Requires Checks",
+            "type": "boolean"
           }
         },
         "required": [
@@ -1615,6 +1639,14 @@
       "DecisionView": {
         "description": "A gate decision in full.\n\n``resolved_choice`` is set once a person has decided; ``transitioned`` is true once the\nresolving transition has been recorded.",
         "properties": {
+          "check_results": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/CheckResult"
+            },
+            "title": "Check Results",
+            "type": "array"
+          },
           "choices": {
             "default": [],
             "items": {
@@ -1664,6 +1696,11 @@
           "node_name": {
             "title": "Node Name",
             "type": "string"
+          },
+          "overrode_red_checks": {
+            "default": false,
+            "title": "Overrode Red Checks",
+            "type": "boolean"
           },
           "project_id": {
             "anyOf": [

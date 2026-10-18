@@ -122,6 +122,7 @@ def decision_submission(gate: GateSubmission) -> DecisionSubmission:
     return DecisionSubmission(
         from_node_id=gate.from_node_id,
         epoch=gate.epoch,
+        check_results=[CheckResult(command=c.command, passed=c.passed) for c in gate.check_results],
         artifacts=[_submitted(a) for a in gate.artifacts],
         route_token=gate.route_token,
         lease_id=gate.lease_id,
@@ -132,6 +133,7 @@ def gate_submission_of(wire: DecisionSubmission) -> GateSubmission:
     return GateSubmission(
         from_node_id=wire.from_node_id,
         epoch=wire.epoch,
+        check_results=[CheckVerdict(command=c.command, passed=c.passed) for c in wire.check_results],
         artifacts=[_artifact_of(a) for a in wire.artifacts],
         route_token=wire.route_token,
         lease_id=wire.lease_id,
