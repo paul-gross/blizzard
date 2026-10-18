@@ -664,22 +664,22 @@ describe('BoardPage', () => {
     });
   });
 
-  it('docks chunk detail beside the rails, so selecting never resizes the board', async () => {
+  it('keeps chunk detail mounted under the board, closed until a chunk is selected', async () => {
     const { el, harness } = await open();
 
-    // Nothing selected: the dock is already mounted, stacked under the board inside
-    // the centre column, and holds a rest state prompting the operator to pick a chunk.
+    // Nothing selected: the dock is already mounted, stacked under the board inside the
+    // centre column, but closed — it takes no room, so the board runs the column's height.
     const dockBefore = el.querySelector('app-chunk-detail.dock');
     expect(dockBefore).toBeTruthy();
     expect(dockBefore?.closest('.col')).toBe(el.querySelector('app-board-shell')?.closest('.col'));
+    expect(dockBefore?.classList).toContain('closed');
     expect(el.querySelector('app-chunk-detail-panel')).toBeNull();
-    expect(el.querySelector('[data-testid="chunk-detail-empty"]')?.textContent).toContain('SELECT');
 
-    // Selecting a card fills the SAME dock element — the layout gains no node, so the
-    // board columns cannot resize or shift.
+    // Selecting a card opens and fills the SAME dock element — the layout gains no node.
     await openCard(harness, RUNNING);
 
     expect(el.querySelector('app-chunk-detail.dock')).toBe(dockBefore);
+    expect(dockBefore?.classList).not.toContain('closed');
     expect(el.querySelector('app-chunk-detail-panel')).toBeTruthy();
   });
 

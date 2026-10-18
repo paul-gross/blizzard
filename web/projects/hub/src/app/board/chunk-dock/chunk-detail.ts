@@ -31,7 +31,8 @@ import { ChunkDetailPanel } from './chunk-detail-panel';
 /**
  * The chunk detail **container** (`bzh:frontend-container-presentational`) — owns the
  * detail query and the operator-action mutations, and renders {@link ChunkDetailPanel}
- * over them, or a rest state while no chunk is open.
+ * over them, or a rest state while no chunk is open — which the board, its one host, keeps out of
+ * sight by closing the dock until a chunk is selected.
  *
  * Every action reports through two channels: `actionError` for a failure, and
  * `actionOutcome` for a non-failure result that still needs saying (a lost answer race,

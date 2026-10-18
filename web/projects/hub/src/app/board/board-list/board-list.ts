@@ -1,51 +1,108 @@
-import { ChangeDetectionStrategy, Component, input, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
+import { CdkDrag, type CdkDragDrop, CdkDropList } from '@angular/cdk/drag-drop';
+import { NgTemplateOutlet } from '@angular/common';
 
-import { DONE_LANE, KitAccordionSection } from 'fleet';
 import type { BoardCard } from '../board-card/board-card';
+import type { BoardLaneMove, BoardReorderList, BoardReposition } from '../board-shell/board-column';
+import { resolveDrop } from '../board-shell/board-drop.model';
 import { BoardListRow } from './board-list-row';
+import { ReorderGrip } from '../reorder-grip/reorder-grip';
+import { BoardListRowSkeleton } from './board-list-row-skeleton';
 
-/** One section of the list — one board lane's cards, in the board's own order for that lane. */
-export interface BoardListSection {
-  readonly key: string;
-  readonly label: string;
-  readonly count: number | null;
-  readonly cards: readonly BoardCard[];
+/** One row of the list: a chunk's card and the board lane it sits in. */
+export interface BoardListEntry {
+  readonly lane: string;
+  readonly card: BoardCard;
+}
+
+/** The list's rows in the order they render: what wants a person and work in flight, then the
+ * two ranked lists — READY over BACKLOG, each in its hub order — then DONE. */
+export interface BoardListGroups {
+  readonly live: readonly BoardListEntry[];
+  readonly ready: readonly BoardListEntry[];
+  readonly backlog: readonly BoardListEntry[];
+  readonly done: readonly BoardListEntry[];
+}
+
+const NO_GROUPS: BoardListGroups = { live: [], ready: [], backlog: [], done: [] };
+
+/** The DOM id of a ranked list's drop target in the list layout — what the other one connects to. */
+export function listDropId(list: BoardReorderList): string {
+  return `board-list-drop-${list}`;
 }
 
 /**
- * The board read as a list: each lane a collapsible section of full-width rows, so a
- * chunk's titles have room to read in full. Sections arrive in the order they render;
- * DONE starts collapsed.
+ * The board read as a list: one full-width row per chunk, its lane drawn as an icon in the first
+ * column, so a chunk's titles have room to read in full. READY and BACKLOG sit together, split by
+ * a marked line, each in its hub order; an identity holding `queue:reorder` drags their rows to
+ * reorder either list, and — with `chunk:control` too — across the line to promote or demote.
  *
- * Presentational only: selection leaves as {@link selectChunk}, exactly as a board card's does.
+ * Presentational only: selection, reorders, and moves leave as outputs, exactly as the lane
+ * grid's do.
  */
 @Component({
   selector: 'app-board-list',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [BoardListRow, KitAccordionSection],
+  imports: [BoardListRow, BoardListRowSkeleton, CdkDrag, CdkDropList, NgTemplateOutlet, ReorderGrip],
   templateUrl: './board-list.html',
   styleUrl: './board-list.css',
 })
 export class BoardList {
-  readonly sections = input.required<readonly BoardListSection[]>();
+  readonly groups = input<BoardListGroups>(NO_GROUPS);
   readonly selectedChunkId = input<string | null>(null);
   readonly gatedChunkIds = input<ReadonlySet<string>>(new Set());
-  /** Whether the chunk read has answered — until then an empty section says nothing. */
+  /** Whether the chunk read has answered — until then an empty list says nothing. */
   readonly loaded = input(false);
+
+  /** How many row skeletons stand in for the rows while the chunk read is loading — 0 once it
+   * has answered. */
+  readonly skeletonRows = input(0);
+
+  /** Whether the current identity may reorder the ready queue or backlog (`queue:reorder`) —
+   * arms the READY and BACKLOG rows' drag. */
+  readonly canReorder = input(false);
+
+  /** Whether the current identity may promote or demote (`chunk:control`) — with
+   * {@link canReorder}, lets a row cross the line between READY and BACKLOG. */
+  readonly canControl = input(false);
 
   readonly selectChunk = output<string>();
 
-  private readonly collapsed = signal<ReadonlySet<string>>(new Set([DONE_LANE]));
+  /** Emitted when a row is dropped somewhere new within its own ranked list. */
+  readonly reposition = output<BoardReposition>();
 
-  protected isCollapsed(key: string): boolean {
-    return this.collapsed().has(key);
+  /** Emitted when a row is dropped across the line into the other ranked list. */
+  readonly laneMove = output<BoardLaneMove>();
+
+  protected readonly readyDropId = listDropId('ready');
+  protected readonly backlogDropId = listDropId('notready');
+
+  /** Whether any row renders at all. */
+  protected readonly hasRows = computed(() => {
+    const groups = this.groups();
+    return groups.live.length + groups.ready.length + groups.backlog.length + groups.done.length > 0;
+  });
+
+  /** The other ranked list a list's drop target connects to — none unless a row may cross. */
+  protected connectedTo(list: BoardReorderList): string[] {
+    return this.canReorder() && this.canControl() ? [listDropId(list === 'ready' ? 'notready' : 'ready')] : [];
   }
 
-  protected toggle(key: string): void {
-    this.collapsed.update((keys) => {
-      const next = new Set(keys);
-      if (!next.delete(key)) next.add(key);
-      return next;
+  /** One index per skeleton row, for the template's loop. */
+  protected readonly skeletonIndexes = computed(() => Array.from({ length: this.skeletonRows() }, (_, i) => i));
+
+  /** A row dropped into `list`, resolved (`resolveDrop`) to the anchor it now sits after. */
+  protected dropped(list: BoardReorderList, event: CdkDragDrop<unknown>): void {
+    const entries = list === 'ready' ? this.groups().ready : this.groups().backlog;
+    const ids = entries.map((entry) => entry.card.chunkId);
+    const crossed = event.previousContainer !== event.container;
+    const resolved = resolveDrop(list, ids, {
+      chunkId: crossed ? String(event.item.data) : ids[event.previousIndex],
+      previousIndex: event.previousIndex,
+      currentIndex: event.currentIndex,
+      crossed,
     });
+    if (resolved?.kind === 'lane') this.laneMove.emit(resolved.move);
+    if (resolved?.kind === 'reposition') this.reposition.emit(resolved.move);
   }
 }

@@ -13,13 +13,17 @@ describe('BoardShell layouts', () => {
     work_refs: [{ source: 'hub', ref: suffix, label: `hub#${suffix}` }],
   });
 
-  const render = async (layout: 'board' | 'list', workItems: ReadonlyMap<string, WorkItemsView> = new Map()) => {
+  const render = async (
+    layout: 'board' | 'list',
+    workItems: ReadonlyMap<string, WorkItemsView> = new Map(),
+    chunks: readonly ChunkSummary[] = [RUNNING('a')],
+  ) => {
     await TestBed.configureTestingModule({
       imports: [BoardShell],
       providers: [provideZonelessChangeDetection()],
     }).compileComponents();
     const fixture = TestBed.createComponent(BoardShell);
-    fixture.componentRef.setInput('chunks', [RUNNING('a')]);
+    fixture.componentRef.setInput('chunks', chunks);
     fixture.componentRef.setInput('state', 'ready');
     fixture.componentRef.setInput('layout', layout);
     fixture.componentRef.setInput('workItems', workItems);
@@ -35,9 +39,23 @@ describe('BoardShell layouts', () => {
     TestBed.resetTestingModule();
     const list = (await render('list')).nativeElement as HTMLElement;
     expect(list.querySelector('[data-testid="board"]')).toBeNull();
-    expect(
-      [...list.querySelectorAll('[data-testid="list-section"]')].map((s) => s.getAttribute('data-lane')),
-    ).toEqual(['needs', 'waiting', 'running', 'ready', 'notready', 'done']);
+    expect(list.querySelectorAll('[data-testid="list-row"]')).toHaveLength(1);
+  });
+
+  it('lists what wants a person and work in flight, then READY and BACKLOG in their hub order, then DONE', async () => {
+    const done: ChunkSummary = { ...RUNNING('b'), status: 'done', terminal: true };
+    const ready: ChunkSummary = { ...RUNNING('c'), status: 'ready' };
+    const backlog: ChunkSummary = { ...RUNNING('d'), status: 'not_ready' };
+    const list = (await render('list', new Map(), [done, backlog, RUNNING('a'), ready])).nativeElement as HTMLElement;
+
+    const rows = [...list.querySelectorAll('[data-testid="list-row"]')];
+    expect(rows.map((row) => row.getAttribute('data-chunk'))).toEqual(['ch_01runninga', 'ch_01runningc', 'ch_01runningd', 'ch_01runningb']);
+    expect(rows.map((row) => row.querySelector('[data-testid="list-row-lane"]')?.getAttribute('data-glyph'))).toEqual([
+      'running',
+      'ready',
+      'notready',
+      'done',
+    ]);
   });
 
   it('emits the layout its switch is set to', async () => {

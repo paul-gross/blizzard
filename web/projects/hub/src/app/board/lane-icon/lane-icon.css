@@ -1,0 +1,43 @@
+:host {
+  display: inline-flex;
+  flex: none;
+}
+.icon {
+  width: var(--lane-icon-size, 16px);
+  height: var(--lane-icon-size, 16px);
+  overflow: visible;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+/* A shape's tinted body: the lane's color, washed back so the stroke over it still reads. */
+.fill {
+  fill: color-mix(in srgb, currentColor 22%, transparent);
+}
+.fill.solid {
+  fill: currentColor;
+  stroke: none;
+}
+.faint {
+  opacity: 0.35;
+}
+.dot {
+  fill: currentColor;
+  stroke: none;
+}
+.spin {
+  transform-origin: 8px 8px;
+  animation: lane-icon-spin 1.6s linear infinite;
+}
+@keyframes lane-icon-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .spin {
+    animation: none;
+  }
+}

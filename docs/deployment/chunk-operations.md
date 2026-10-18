@@ -6,12 +6,12 @@ declaring or releasing a dependency between chunks, and entering a parked chunk'
 ## Review and landing links
 
 The hub board card shows each open pull request by repository, with outbound links outside the card's chunk-selection
-button; a row of the board's list layout shows each by number alone. Select a card to see the same delivery information
-in the desktop detail dock; on a narrow screen, open the chunk's routed page and use its General tab. A landed
-repository shows its merged commit, not the earlier working-branch tip. Repositories land independently, so a partially
-landed chunk can show both a landed commit and an open PR. Delivery lands only the commit the chunk submitted, plus base
-merges it makes itself, so a commit you push onto a delivering PR's branch sends the chunk back for repair instead of
-landing.
+button; the list layout shows them as [board.md](./board.md#board-and-list-layouts) describes. Select a card to see the
+same delivery information in the desktop detail dock; on a narrow screen, open the chunk's routed page and use its
+General tab. A landed repository shows its merged commit, not the earlier working-branch tip. Repositories land
+independently, so a partially landed chunk can show both a landed commit and an open PR. Delivery lands only the commit
+the chunk submitted, plus base merges it makes itself, so a commit you push onto a delivering PR's branch sends the
+chunk back for repair instead of landing.
 
 An open PR alone does not mean you must merge it: automatic delivery can have a reviewable PR while CI or merge runs.
 “Awaiting your merge” appears only when delivery explicitly parks for an external merge. If a repository has no known

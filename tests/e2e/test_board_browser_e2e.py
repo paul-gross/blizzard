@@ -359,16 +359,28 @@ def test_board_browser_live_group_reorder_answer_and_pause(tmp_path: Path, chrom
                 expect(col("waiting").get_by_test_id("chunk-status")).to_have_text("waiting_on_human")
                 expect(ready_card(chunk_a)).to_have_count(1)  # A still ready, still queued
 
-                # Selecting must not move the board — the one assertion here
-                # that needs real layout; the unit tier's jsdom cannot see this at all.
-                expect(page.get_by_test_id("chunk-detail-empty")).to_be_visible()
+                # With nothing selected the dock takes no room and the board runs the
+                # column's full height; selecting opens the dock beneath it, keeping the
+                # board's top, left, and width — the assertions here that need real
+                # layout, which the unit tier's jsdom cannot see at all.
+                dock = page.locator("app-chunk-detail.dock")
+                expect(dock).to_have_class(re.compile(r"\bclosed\b"))
+                assert dock.bounding_box() is None, "the closed dock still takes room under the board"
                 board_at_rest = page.get_by_test_id("board").bounding_box()
+                assert board_at_rest is not None
 
                 col_cards("waiting").first.click()
                 expect(page.get_by_test_id("chunk-detail")).to_be_visible()
                 expect(page.get_by_test_id("detail-id")).to_have_text(chunk_b)
-                assert page.get_by_test_id("board").bounding_box() == board_at_rest, (
-                    "selecting a chunk moved or resized the board — the dock is not holding its track"
+                board_docked = page.get_by_test_id("board").bounding_box()
+                assert board_docked is not None
+                assert (board_docked["x"], board_docked["y"], board_docked["width"]) == (
+                    board_at_rest["x"],
+                    board_at_rest["y"],
+                    board_at_rest["width"],
+                ), "selecting a chunk moved or narrowed the board — the dock opens beneath it only"
+                assert board_docked["height"] < board_at_rest["height"], (
+                    "selecting a chunk did not open the dock beneath the board"
                 )
                 expect(page.get_by_test_id("question-text")).to_contain_text("API style")
                 page.get_by_test_id("answer-input").fill(_ANSWER_SCRIPT)
@@ -437,12 +449,13 @@ def test_board_browser_live_group_reorder_answer_and_pause(tmp_path: Path, chrom
                 expect(page.get_by_test_id("chunk-detail")).to_be_visible()
                 expect(page.get_by_test_id("detail-status")).to_have_text("done")
 
-                # Dismissing clears the dock back to its rest state, and the board still
-                # has not moved — the round trip is geometry-neutral.
+                # Dismissing closes the dock again, and the board returns to the full
+                # height it held at rest — the round trip is geometry-neutral.
                 page.get_by_test_id("detail-close").click()
-                expect(page.get_by_test_id("chunk-detail-empty")).to_be_visible()
+                expect(dock).to_have_class(re.compile(r"\bclosed\b"))
+                assert dock.bounding_box() is None, "the dismissed dock still takes room under the board"
                 assert page.get_by_test_id("board").bounding_box() == board_at_rest, (
-                    "deselecting resized or shifted the board — the dock did not return to its track"
+                    "deselecting left the board short of its full height — the dock did not close"
                 )
 
                 # --- Pause brake (set from the Fleet tab): A stays ready while paused ------------

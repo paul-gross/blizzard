@@ -6,6 +6,9 @@ import { ChangeDetectionStrategy, Component, computed, input } from '@angular/co
  * coming than a bare status line (`KitAsyncState`'s `loadingMode="content"`
  * slot). Presentational: it takes only a count and a variant, no query.
  *
+ * A line bar stands 14px tall unless the consumer sets `--kit-skeleton-height`, so a placeholder
+ * can be sized to the text it stands in for.
+ *
  * The shimmer honors `prefers-reduced-motion` (`kit-async-state.ts`'s own
  * `.dot.offline` blink follows the same rule) — a static bar reads as a
  * placeholder just as well as an animated one, and a user who has asked the

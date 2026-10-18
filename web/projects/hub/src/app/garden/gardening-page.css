@@ -27,7 +27,7 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  padding: 8px;
+  padding: 6px;
 }
 /* The breadcrumb — `Gardening › {project} › {surface}`, the lens shown in place. */
 .crumbs {

@@ -2,7 +2,6 @@
   display: block;
   flex: 1;
   min-height: 0;
-  padding: 6px;
   position: relative;
 }
 .change-error {

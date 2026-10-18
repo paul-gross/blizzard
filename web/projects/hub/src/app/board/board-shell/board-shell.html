@@ -2,16 +2,20 @@
   <fleet-kit-panel class="board-panel" aria-label="Chunk board" label="Chunk board" [bodyScroll]="false">
     <div fleetKitPanelHeader class="hdr">
       <fleet-kit-tabs variant="sub" [options]="layoutTabs" [activeValue]="layout()" (choose)="chooseLayout($event)" />
-      <span class="col-lbl">all workflows</span>
     </div>
     @if (layout() === 'list') {
       <app-board-list
         class="list"
-        [sections]="sections()"
+        [groups]="listGroups()"
         [selectedChunkId]="selectedChunkId()"
         [gatedChunkIds]="gatedChunkIds()"
         [loaded]="state() === 'ready'"
+        [skeletonRows]="state() === 'loading' ? listSkeletons() : 0"
+        [canControl]="canControl()"
+        [canReorder]="canReorder()"
         (selectChunk)="selectChunk.emit($event)"
+        (reposition)="reposition.emit($event)"
+        (laneMove)="laneMove.emit($event)"
       />
     } @else {
       <div class="board" data-testid="board">
@@ -20,6 +24,7 @@
             [column]="col"
             [cards]="cardsFor(col.key)"
             [count]="countFor(col.key)"
+            [skeletons]="skeletonsFor(col.key)"
             [selectedChunkId]="selectedChunkId()"
             [gatedChunkIds]="gatedChunkIds()"
             [reorderControls]="col.key === 'ready' || col.key === 'notready'"
@@ -41,9 +46,8 @@
       emptyText="NO CHUNKS — FLEET IDLE"
       emptyTestid="empty-state"
     >
-      <div loading class="board-skeleton" data-testid="board-loading">
-        <fleet-kit-skeleton variant="card" [rows]="4" />
-      </div>
+      <!-- The lanes and the list draw their own skeletons in place; this only names the wait. -->
+      <span loading class="loading-note" role="status" data-testid="board-loading">Loading chunks…</span>
     </fleet-kit-async-state>
   </fleet-kit-panel>
 </div>

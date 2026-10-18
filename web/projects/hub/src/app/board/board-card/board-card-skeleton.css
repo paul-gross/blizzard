@@ -1,0 +1,39 @@
+:host {
+  display: block;
+}
+/* The card's own box — `board-card.css`'s border, inset, and resting surface — held to a
+   one-item card's height. */
+.card {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 77px;
+  padding: 4px 6px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--line);
+  background: var(--surface-resting);
+}
+.ref {
+  width: 32%;
+  --kit-skeleton-height: 10px;
+}
+.title {
+  gap: 5px;
+  --kit-skeleton-height: 12px;
+}
+.title,
+.step-row {
+  margin-top: 4px;
+}
+.step-row {
+  display: flex;
+  justify-content: space-between;
+  --kit-skeleton-height: 10px;
+}
+.step {
+  width: 28%;
+}
+.id {
+  width: 22%;
+}

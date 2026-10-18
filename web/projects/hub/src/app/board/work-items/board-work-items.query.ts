@@ -12,6 +12,9 @@ export const WORK_ITEMS_READ_CONCURRENCY = 6;
  * an external forge. */
 const WORK_ITEMS_HOLD_MS = 5 * 60_000;
 
+/** What a chunk whose read failed answers with: no items, so the board stops waiting on it. */
+const NO_ITEMS_READ: WorkItemsView = { items: [] };
+
 /** One chunk's work items through the generated hub client, read into the dock's own entry —
  * `null` when the read fails. */
 async function readChunkWorkItems(queryClient: QueryClient, chunkId: string): Promise<WorkItemsView | null> {
@@ -39,8 +42,9 @@ async function readChunkWorkItems(queryClient: QueryClient, chunkId: string): Pr
  * One batch of chunks' work items, keyed by chunk id. A chunk whose items were written within the
  * hold — by this read or by the chunk dock's own — is answered from that entry, whatever has
  * invalidated it since, so a live update or a reconnect re-reads nothing from the forge. The rest
- * are read one chunk at a time, a few at once, into the dock's entry. A chunk whose
- * read fails is left out, and an aborted batch stops starting reads.
+ * are read one chunk at a time, a few at once, into the dock's entry. A chunk whose read fails
+ * answers as carrying no items — its card stops waiting and names its work refs alone until a
+ * read past the hold succeeds — and an aborted batch stops starting reads.
  *
  * The hub has no batched read: the unheld chunks are where a bulk endpoint would take over.
  */
@@ -64,8 +68,7 @@ async function readWorkItemsBatch(
   const worker = async (): Promise<void> => {
     while (next < unheld.length && !signal.aborted) {
       const chunkId = unheld[next++];
-      const view = await readChunkWorkItems(queryClient, chunkId);
-      if (view !== null) found.set(chunkId, view);
+      found.set(chunkId, (await readChunkWorkItems(queryClient, chunkId)) ?? NO_ITEMS_READ);
     }
   };
   await Promise.all(Array.from({ length: Math.min(WORK_ITEMS_READ_CONCURRENCY, unheld.length) }, worker));

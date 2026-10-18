@@ -1,0 +1,12 @@
+:host {
+  display: grid;
+  grid-template-columns: repeat(2, 3px);
+  grid-auto-rows: 3px;
+  gap: 2px;
+  width: max-content;
+  pointer-events: none;
+}
+span {
+  border-radius: 50%;
+  background: var(--cyan);
+}

@@ -102,9 +102,13 @@
   gap: 6px;
   min-width: 0;
 }
-/* The cost row's figures sit flush with the card's right edge. */
+/* The cost row's figures sit flush with the card's right edge; a done card's completion
+   stamp holds the row's left. */
 .cost-row {
   justify-content: flex-end;
+}
+.cost-row .done-at {
+  margin-right: auto;
 }
 .nd {
   color: var(--label);
@@ -139,16 +143,27 @@
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
-/* A grouped chunk's titles: each wraps up to three lines before it clamps. */
-.titles {
+/* The work items: each a label over its title, the pairs set a little apart. */
+.items {
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 6px;
   min-width: 0;
 }
-.title.one-line {
+.item {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+/* A grouped chunk's titles each wrap up to three lines before they clamp. */
+.items.group .title {
   -webkit-line-clamp: 3;
   line-clamp: 3;
+}
+/* The title's stand-in while the work items are read: one line, the card's full width. */
+.title-skeleton {
+  width: 100%;
 }
 /* The fold toggle under a large group's titles — a quiet link, not another title. */
 .fold {
@@ -167,14 +182,6 @@
 .fold:focus-visible {
   outline: 1px solid var(--cyan);
   outline-offset: 1px;
-}
-/* One label per line: a column, not the wrapping single line every other
-   card row uses. Each line still clips on its own rather than wrapping
-   (the file's standing rule, restated here since the container is new). */
-.iss-list {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
 }
 .iss,
 .st {

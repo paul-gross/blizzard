@@ -20,7 +20,8 @@ const CARD: BoardCard = {
   promotable: false,
   node: 'verify',
   nodeId: 'nd_verify',
-  pointerLabels: ['hub#7'],
+  workLines: [{ label: 'hub#7', title: 'Migrate the event log onto the new store' }],
+  itemsRead: true,
   costUsd: 1.23,
   costPartial: false,
   estimatedCostUsd: null,
@@ -29,7 +30,6 @@ const CARD: BoardCard = {
   blockedCount: 1,
   blockedOnStatus: 'running',
   openPrs: [{ repo: 'owner/repo', number: 7, url: 'https://example.test/pr/7' }],
-  titles: ['Migrate the event log onto the new store'],
 };
 
 // 800 (wider than any real board column) and 390/320 (the phone pair
@@ -110,7 +110,7 @@ describe('board card row order shell sweep (web:shell-sweep)', () => {
 
   for (const width of WIDTHS) {
     it(`lets a real pointer reach the PR link, the fold, and Promote over the open control at width ${width}`, async () => {
-      const root = await renderCard(width, { ...CARD, titles: ['One', 'Two', 'Three', 'Four'], promotable: true }, true);
+      const root = await renderCard(width, { ...CARD, workLines: ['One', 'Two', 'Three', 'Four'].map((title) => ({ label: null, title })), promotable: true }, true);
       try {
         for (const testid of ['card-pr-link', 'chunk-title-fold', 'promote-chunk']) {
           const control = root.querySelector<HTMLElement>(`[data-testid="${testid}"]`);

@@ -1,8 +1,11 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
-import { CdkDrag, type CdkDragDrop, CdkDropList, moveItemInArray } from '@angular/cdk/drag-drop';
+import { CdkDrag, type CdkDragDrop, CdkDropList } from '@angular/cdk/drag-drop';
 
 import { BoardCardComponent, type BoardCard } from '../board-card/board-card';
+import { BoardCardSkeleton } from '../board-card/board-card-skeleton';
 import { type Lane, KitBeacon } from 'fleet';
+import { ReorderGrip } from '../reorder-grip/reorder-grip';
+import { resolveDrop } from './board-drop.model';
 
 /**
  * Which hub-ranked list a reorder targets — the READY queue or the BACKLOG
@@ -59,7 +62,7 @@ export function laneDropId(list: BoardReorderList): string {
 @Component({
   selector: 'app-board-column',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [BoardCardComponent, CdkDrag, CdkDropList, KitBeacon],
+  imports: [BoardCardComponent, BoardCardSkeleton, CdkDrag, CdkDropList, KitBeacon, ReorderGrip],
   host: { '[attr.data-col]': 'column().key' },
   templateUrl: './board-column.html',
   styleUrl: './board-column.css',
@@ -70,6 +73,13 @@ export class BoardColumn {
 
   /** The lane's cards, already in the order they should render. */
   readonly cards = input<readonly BoardCard[]>([]);
+
+  /** How many card skeletons stand in for the lane's cards while the chunk read is loading —
+   * 0 once it has answered. */
+  readonly skeletons = input(0);
+
+  /** One index per skeleton, for the template's loop. */
+  protected readonly skeletonIndexes = computed(() => Array.from({ length: this.skeletons() }, (_, i) => i));
 
   /** The lane's all-time count, or null before the counts read resolves — the head
    * withholds the number rather than show the card list's length, which the board's
@@ -139,34 +149,19 @@ export class BoardColumn {
     throw new Error(`board column ${key} has no reorder list`);
   }
 
-  /**
-   * A dropped card, resolved to the anchor it now sits after, tagged with this
-   * lane's {@link list}.
-   *
-   * The rendered order is replayed on a copy (cdk moves nothing itself) so the
-   * anchor is the chunk that ends up immediately *above* the dropped one — a
-   * drop at the top has none, which is the `null` the hub reads as "very top".
-   * A drop that changed nothing writes nothing.
-   */
+  /** A dropped card, resolved (`resolveDrop`) to the anchor it now sits after, tagged with this
+   * lane's {@link list}. A drop that changed nothing writes nothing. */
   protected dropped(event: CdkDragDrop<unknown>): void {
-    if (event.previousContainer !== event.container) {
-      const cards = this.cards();
-      this.laneMove.emit({
-        chunkId: String(event.item.data),
-        afterChunkId: event.currentIndex === 0 ? null : cards[event.currentIndex - 1].chunkId,
-        from: this.list === 'ready' ? 'notready' : 'ready',
-        to: this.list,
-      });
-      return;
-    }
-    if (event.previousIndex === event.currentIndex) return;
     const ids = this.cards().map((card) => card.chunkId);
-    moveItemInArray(ids, event.previousIndex, event.currentIndex);
-    this.reposition.emit({
-      chunkId: ids[event.currentIndex],
-      afterChunkId: event.currentIndex === 0 ? null : ids[event.currentIndex - 1],
-      list: this.list,
+    const crossed = event.previousContainer !== event.container;
+    const resolved = resolveDrop(this.list, ids, {
+      chunkId: crossed ? String(event.item.data) : ids[event.previousIndex],
+      previousIndex: event.previousIndex,
+      currentIndex: event.currentIndex,
+      crossed,
     });
+    if (resolved?.kind === 'lane') this.laneMove.emit(resolved.move);
+    if (resolved?.kind === 'reposition') this.reposition.emit(resolved.move);
   }
 
 }

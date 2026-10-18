@@ -1,40 +1,77 @@
 <div class="list" data-testid="board-list">
   <div class="cols" aria-hidden="true">
+    <span></span>
     <span>Work</span>
-    <span>Project</span>
     <span>Step</span>
-    <span>Runner</span>
-    <span>PRs</span>
+    <span>Runner · PRs</span>
     <span class="r">Cost</span>
-    <span class="r">Chunk</span>
   </div>
-  @for (section of sections(); track section.key) {
-    <fleet-kit-accordion-section
-      class="section"
-      data-testid="list-section"
-      [attr.data-lane]="section.key"
-      [sectionId]="'board-list-' + section.key"
-      [expanded]="!isCollapsed(section.key)"
-      (expandedChange)="toggle(section.key)"
-    >
-      <span accordionHeader class="section-head">
-        <span class="section-label">{{ section.label }}</span>
-        <span class="section-count">{{ section.count ?? section.cards.length }}</span>
-      </span>
-      @for (card of section.cards; track card.chunkId) {
-        <app-board-list-row
-          [card]="card"
-          [selected]="card.chunkId === selectedChunkId()"
-          [gated]="gatedChunkIds().has(card.chunkId)"
-          (selectChunk)="selectChunk.emit($event)"
-        />
-      } @empty {
-        <!-- Only a read that has answered can say a lane is empty; while it loads or after
-             it fails, the board's own async state speaks instead. -->
-        @if (loaded()) {
-          <p class="empty" data-testid="list-section-empty">Nothing here</p>
+  <ng-template #row let-entry>
+    <app-board-list-row
+      [card]="entry.card"
+      [lane]="entry.lane"
+      [selected]="entry.card.chunkId === selectedChunkId()"
+      [gated]="gatedChunkIds().has(entry.card.chunkId)"
+      (selectChunk)="selectChunk.emit($event)"
+    />
+  </ng-template>
+  <ng-template #ranked let-entries="entries" let-list="list" let-dropId="dropId" let-testid="testid">
+    <!-- The drop list is armed only for an identity holding queue:reorder; anyone else gets the
+         same rows, undraggable, exactly as the lane grid withholds its drag. -->
+    @if (canReorder()) {
+      <div
+        class="ranked"
+        cdkDropList
+        [id]="dropId"
+        [attr.data-testid]="testid"
+        [cdkDropListConnectedTo]="connectedTo(list)"
+        (cdkDropListDropped)="dropped(list, $event)"
+      >
+        @for (entry of entries; track entry.card.chunkId) {
+          <div class="drag-row" cdkDrag [cdkDragData]="entry.card.chunkId">
+            <app-reorder-grip class="reorder-grip" data-testid="list-reorder-grip" />
+            <ng-container *ngTemplateOutlet="row; context: { $implicit: entry }" />
+          </div>
         }
-      }
-    </fleet-kit-accordion-section>
+      </div>
+    } @else {
+      <div class="ranked" [attr.data-testid]="testid">
+        @for (entry of entries; track entry.card.chunkId) {
+          <ng-container *ngTemplateOutlet="row; context: { $implicit: entry }" />
+        }
+      </div>
+    }
+  </ng-template>
+
+  @for (entry of groups().live; track entry.card.chunkId) {
+    <ng-container *ngTemplateOutlet="row; context: { $implicit: entry }" />
+  }
+  @if (hasRows()) {
+    <ng-container
+      *ngTemplateOutlet="ranked; context: { entries: groups().ready, list: 'ready', dropId: readyDropId, testid: 'list-ready' }"
+    />
+    <!-- Where the dispatch queue stops and the backlog begins: a row dragged above this line
+         is promoted, one dragged below it demoted. -->
+    <div class="divider" data-testid="list-ready-divider" role="separator" aria-label="Ready above, backlog below">
+      <span class="divider-label">▲ Ready</span>
+      <span class="divider-rule"></span>
+      <span class="divider-label">Backlog ▼</span>
+    </div>
+    <ng-container
+      *ngTemplateOutlet="ranked; context: { entries: groups().backlog, list: 'notready', dropId: backlogDropId, testid: 'list-backlog' }"
+    />
+  }
+  @for (entry of groups().done; track entry.card.chunkId) {
+    <ng-container *ngTemplateOutlet="row; context: { $implicit: entry }" />
+  }
+  @if (!hasRows()) {
+    <!-- Only a read that has answered can say the list is empty; while it loads, skeleton rows
+         stand in, and after it fails the board's own async state speaks instead. -->
+    @for (i of skeletonIndexes(); track i) {
+      <app-board-list-row-skeleton />
+    }
+    @if (loaded()) {
+      <p class="empty" data-testid="list-empty">Nothing here</p>
+    }
   }
 </div>
