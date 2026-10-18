@@ -79,8 +79,10 @@
   position: relative;
   cursor: grab;
 }
+/* Raised over the card, which is itself positioned and follows it in the DOM. */
 .reorder-grip {
   position: absolute;
+  z-index: 1;
   top: 50%;
   left: 6px;
   transform: translateY(-50%);
