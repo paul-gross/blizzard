@@ -20,13 +20,7 @@ const VERB_LABELS: Record<FindingTriageVerb, string> = {
   reopen: 'Reopen',
 };
 
-/** What each verb actually does to the finding, stated before the operator writes
- * the note that justifies it — these are exit verbs and most of them are one-way, so
- * the dialog says which bucket the finding lands in rather than leaving the
- * distinction to the verb's name alone. Wording follows the `hub finding` CLI's own
- * help for the matching verb and the wire's `FindingExit` outflow/withdrawn split: an *outflow* exit means the ground
- * itself moved, a *withdrawn* one means it didn't and a person decided the finding
- * doesn't merit standing regardless. */
+/** What each verb does to the finding, shown above the note field. */
 const VERB_BLURBS: Record<FindingTriageVerb, string> = {
   resolve: 'The work that answers this finding has landed. It leaves the live bucket as resolved.',
   'confirm-gone':
@@ -40,7 +34,7 @@ const VERB_BLURBS: Record<FindingTriageVerb, string> = {
 };
 
 /**
- * The findings triage bulk-action dialog's presentational view
+ * The findings triage dialog's presentational view
  * — a required note field every verb takes plus, for `supersede` alone, a second
  * required field naming the absorbing finding,
  * `gardening-proposal-accept-dialog-view.ts`'s own conditional-extra-field
@@ -50,15 +44,8 @@ const VERB_BLURBS: Record<FindingTriageVerb, string> = {
  * matching mutation and maps its async state into `submitting()`/`submitError()`
  * (`bzh:frontend-container-presentational`).
  *
- * Opens on a short statement of what the chosen verb does ({@link VERB_BLURBS}):
- * every verb here is an exit, most are one-way, and the note the operator is about
- * to write is the record of why — so the consequence belongs above the field, not
- * behind the verb's name. The dialog dispatches one finding at a time (the list
- * carries no multi-select), which is why the heading names no count.
- *
- * Owns the note/`supersededBy` fields as local signals — the host page renders
- * this component (and its container) with `@if`, tearing it down between opens,
- * so a stale value never survives to a later open.
+ * Opens on a short statement of what the chosen verb does ({@link VERB_BLURBS}).
+ * Owns the note/`supersededBy` fields as local signals.
  */
 @Component({
   selector: 'app-gardening-finding-triage-dialog-view',

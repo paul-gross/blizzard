@@ -115,7 +115,7 @@ export interface RoutinePanelVm {
 
 /**
  * The gardening routine panel's single-routine detail, as three stacked
- * `fleet-kit-panel`s (blizzard-product:/delivered/garden/user-interface.md §Declaring
+ * `fleet-kit-panel`s (`blizzard-product:/delivered/garden/user-interface.md` §Declaring
  * and running a routine): **Routine** — what the routine *is*: a header holding its
  * name, project chip and lifecycle with Run…, Edit and Retire at the right, its record as a
  * fact list, and its recent runs in the runs window; **Activity** — what it *has done*, the inflow/outflow trend,

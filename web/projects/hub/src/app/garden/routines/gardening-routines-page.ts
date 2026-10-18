@@ -12,7 +12,7 @@ import { injectLensedProject } from '../../core/lensed-project';
 import { firstRowToOpen } from '../../core/first-row';
 
 /**
- * The `/gardening/routines` sub-tab (`plans/garden/user-interface.md` §Declaring
+ * The `/gardening/routines` sub-tab (`blizzard-product:/delivered/garden/user-interface.md` §Declaring
  * and running a routine) — the routine list, beside a `<router-outlet>` holding
  * whichever routine the URL names (`gardening-routine-detail.ts`).
  *

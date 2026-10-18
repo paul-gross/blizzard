@@ -14,21 +14,10 @@ import { firstRowToOpen } from '../../core/first-row';
  * beside a `<router-outlet>` holding whichever finding the URL names
  * (`gardening-finding-detail.ts`, where triage itself lives).
  *
- * `gardening-scopes-page.ts`'s own parent-list/child-detail shape, and the tab
- * this shape matters most for: the filters below are what a flat pair of routes
- * would throw away on every row click.
- *
  * A container: it injects the bucket read through
- * `gardening-findings-bucket-filters.ts` and forwards plain rows to the
- * presentational {@link FleetFindingList}. The routine/scope pair, the class/state
- * filters, and the bucket read all live in that module; its resting state, with no
- * query params at all, reads every routine and every scope. All four filters render
- * as `fleet-kit-select` dropdowns, always visible, one labeled row per filter on
- * desktop — `kit-fact-list.css`'s own fixed-label-column shape — and two per row on
- * mobile, each trigger carrying its own label. Each carries a leading "All"
-  * option: class comes from the scoped distinct-classes read and state from the
-  * generated vocabulary; neither depends on the loaded pages.
- * routine and scope's each name every fetched routine/scope.
+ * `gardening-findings-bucket-filters.ts`, which owns the filters, and forwards
+ * plain rows to the presentational {@link FleetFindingList}. The four filters
+ * render as `fleet-kit-select` dropdowns, each with a leading "All" option.
  */
 @Component({
   selector: 'app-gardening-findings-page',

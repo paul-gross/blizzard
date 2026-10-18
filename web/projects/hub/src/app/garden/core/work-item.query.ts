@@ -4,14 +4,9 @@ import { getWorkItemApiWorkSourcesSourceItemsRefGet, type WorkItemView, hubWorkI
 
 /**
  * Hub `GET /api/work-sources/{source}/items/{ref}` read — an accepted proposal's
- * linked work item, resolved through its closure's `source`/`ref` pointer rather
- * than the accept response's `chunk_id`: `chunk_id` rides only
- * `GardenProposalAcceptResponse` and does not persist, so the stored closure's
- * pointer is what a later read has to work with). `label`/`web_url` come from this
- * view rather than being guessed; `web_url` is `null` once the chunk is terminal.
- * Reactive over the
- * selected (source, ref) pair, `graphs.query.ts`'s own `injectHubGraphQuery`
- * null-tolerant conditional-query shape.
+ * linked work item, resolved through its closure's `source`/`ref` pointer.
+ * `web_url` is `null` once the chunk is terminal. Reactive over the selected
+ * (source, ref) pair; disabled while either is null.
  */
 export function injectHubWorkItemQuery(source: () => string | null, ref: () => string | null) {
   return injectQuery(() => {

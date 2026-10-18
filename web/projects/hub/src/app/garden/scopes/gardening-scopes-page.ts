@@ -13,8 +13,8 @@ import { defaultRoutineWindow } from '../core/routine-window';
 import { injectHubRunsQuery } from '../runs/garden-runs.query';
 
 /**
- * The `/gardening/scopes` sub-tab (`plans/garden/user-interface.md` §Declaring and
- * running a routine) — the scope list, beside a `<router-outlet>` holding whichever
+ * The `/gardening/scopes` sub-tab (`blizzard-product:/delivered/garden/user-interface.md` §Declaring
+ * and running a routine) — the scope list, beside a `<router-outlet>` holding whichever
  * scope the URL names (`gardening-scope-detail.ts`).
  *
  * The list is the parent route and the detail its child, so picking a row swaps only

@@ -1,15 +1,8 @@
 import { type FindingView } from 'fleet';
 import { type FindingListRowVm } from '../core/finding-list';
 
-/** Pared to what the 320px master column renders — `observed_count` and
- * `introduced` show in the detail pane once the row is picked, not here;
- * `last_seen_at` rides both, since the row's own fourth line is the most recent
- * observation. Only the dimension the active filter leaves unnamed shows on the
- * row: a bucket widened to every routine or every scope needs each row to
- * say which it came from, but a bucket already filtered to one doesn't need it
- * repeated on every row. `source`/`severity`/`raised_by_chunk_id`
- * ride every row verbatim — unlike routine/scope they carry no filter-dependent
- * `null`-out. */
+/** Maps the bucket to {@link FindingListRowVm}s. `routineName`/`scopeSlug` are
+ * `null` where the active filter already names that dimension. */
 export function findingListRows(
   bucket: readonly FindingView[],
   selectedRoutine: string | null,

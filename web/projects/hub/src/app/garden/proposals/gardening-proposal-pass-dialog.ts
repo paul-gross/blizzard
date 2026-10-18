@@ -12,10 +12,6 @@ import { GardeningProposalPassDialogView } from './gardening-proposal-pass-dialo
  * real outcome, not an impossible one — it surfaces through {@link submitError},
  * exactly the mutation's `errorMessage` fallback shape every other
  * mutation in this app already answers with.
- *
- * The host page mounts this with `@if` around the passing proposal
- * (`gardening-proposals-page.ts`'s own dialog-open signal), so a fresh instance — and
- * a fresh view, with its own fresh reason field — exists for every open.
  */
 @Component({
   selector: 'app-gardening-proposal-pass-dialog',

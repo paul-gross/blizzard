@@ -15,11 +15,7 @@ const FINDINGS_PAGE = 50;
  * (re-derived per selected proposal), and Angular's injection context cannot vary a
  * fixed number of `injectQuery` calls at runtime the way a per-id call would need.
  *
- * A finding that fails to read (a 404, or any other error) is dropped from the joined
- * result rather than failing every other finding's row — one id going stale never
- * blanks the whole evidence table. That is a table's bargain, not a detail pane's:
- * a surface reading exactly one finding wants the failure, and takes
- * {@link injectHubFindingQuery} instead.
+ * A finding that fails to read is dropped from the joined result.
  */
 export function injectHubFindingsQuery(findingIds: () => readonly string[]) {
   return injectQuery(() => {

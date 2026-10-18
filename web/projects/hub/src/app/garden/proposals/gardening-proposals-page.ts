@@ -31,15 +31,11 @@ import { ProjectLens } from '../../core/project-lens';
  * `<router-outlet>` holding whichever proposal the URL names
  * (`gardening-proposal-detail.ts`).
  *
- * `gardening-scopes-page.ts`'s own parent-list/child-detail shape. All three
- * filters live in the query string (`route-state.ts`), so a pick survives a row
- * click and a filtered docket is a link the operator can hand somebody.
+ * All three filters live in the query string (`route-state.ts`).
  *
  * A container: it injects the one list read and derives the rows the
  * presentational {@link FleetProposalList} renders. The class and routine chips
- * both come from the fetched data (`class` is the deployment's own
- * opaque vocabulary, never a hardcoded list; `routine_name` likewise, though it is
- * blizzard's own vocabulary rather than the deployment's).
+ * both come from the fetched data.
  *
  * On desktop, this is the one tab whose bare route does not rest on an empty pane:
  * {@link reconcileSelection} sends it to the first row of the *filtered* set. On
@@ -77,7 +73,7 @@ export class GardeningProposalsPage {
   /** Every proposal id a Pass or Accept mutation is currently pending for
    * (`bzh:frontend-pending-override`) — read by `mutationKey` alone; this container
    * owns neither mutation. Both are the domain's own two closing verbs
-   * (`domain/findings-and-proposals.md` "Closing a proposal: pass or accept") and
+   * (`blizzard-context:/domain/findings-and-proposals.md` §Closing a proposal: pass or accept) and
    * closure is terminal — {@link isGardenProposalWaiting} reads `false` the instant
    * either lands, whichever closure kind it records, so this needs only the pending
    * id, never which of the two is in flight or what it mints. */

@@ -43,9 +43,7 @@ export interface FindingPanelVm {
    * straight to {@link FleetFindingFactTimeline}, which owns its own rendering. */
   readonly facts: readonly FindingFactView[];
   readonly workItem: ProposalWorkItemVm | null;
-  /** `FindingView.source` — `"routine"` or `"review"`. Drives
-   * whether {@link severity}/{@link raisedByChunkId} render at all
-   * (`finding-list.ts`'s own `FindingListRowVm.source` shape). */
+  /** `FindingView.source` — `"routine"` or `"review"`. */
   readonly source: hubApi.FindingSource;
   /** `FindingView.severity` — set only when {@link source} is `"review"`. */
   readonly severity: hubApi.FindingSeverity | null;
@@ -57,16 +55,9 @@ export interface FindingPanelVm {
 /**
  * The gardening findings tab's single-finding detail panel — the record,
  * its summary and any note as prose (`fleet-kit-prose-block`), the linked work item
- * when one names it, and the single-finding triage verbs (`finding-list.ts`'s own
- * `FindingTriageVerb`, minus `supersede`). Presentational only, no query injection:
- * the container resolves the read and wires {@link triage} to
- * `finding.mutations.ts`, `routine-panel.ts`'s own container/presentational split.
- *
- * Which verbs render depends on whether the finding has exited, read straight off
- * `finding-state.ts`'s own {@link isFindingExited} rather than re-derived locally:
- * the four exit verbs render only while the finding has not exited, and `reopen`
- * renders only once it has (`canControl` gating aside) — the hub refuses an exit
- * verb on an exited finding, and reopening one that hasn't exited.
+ * when one names it, and the single-finding triage verbs. Presentational only.
+ * The exit verbs render while the finding has not exited ({@link isFindingExited});
+ * `reopen` renders once it has.
  */
 @Component({
   selector: 'app-finding-panel',
@@ -92,10 +83,7 @@ export class FleetFindingPanel {
    * `false` withholds every triage button outright. */
   readonly canControl = input(false);
 
-  /** Emitted with the verb a triage button names — the container owns what it
-   * means (`bzh:frontend-container-presentational`), routed to
-   * `finding.mutations.ts` against this panel's own {@link vm}'s single finding
-   * id. */
+  /** Emitted with the verb a triage button names. */
   readonly triage = output<FindingPanelTriageVerb>();
 
   protected readonly compactRef = compactRef;

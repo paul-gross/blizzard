@@ -30,18 +30,6 @@ async function loadDesignTokens(): Promise<void> {
  * three lines rather than merely carrying the `-webkit-line-clamp` declaration —
  * jsdom performs no layout, so it cannot tell a clamped headline from an
  * unclamped one.
- *
- * Multi-select and the bulk action bar were removed from `FleetFindingList`:
- * triage now dispatches one finding at a time, from `app-finding-panel`'s own
- * `triage` output, opened by a row click. This file's own bulk-bar-in-viewport
- * sweep went with it — there is nothing left of that concern to sweep. A later
- * `shell-sweep` pass owns deciding whether a narrow-viewport claim belongs on the
- * finding panel's own triage affordance instead; this file stays scoped to
- * `FleetFindingList`.
- *
- * Excluded from the default `ng test fleet` run (`angular.json`'s `test.exclude`)
- * because it needs `--browsers=ChromiumHeadless`, not jsdom — run it via
- * `npm run shell-sweep` (`web/scripts/shell-sweep.js`).
  */
 const ROWS: readonly FindingListRowVm[] = [
   {

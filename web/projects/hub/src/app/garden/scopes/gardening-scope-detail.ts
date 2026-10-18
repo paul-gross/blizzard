@@ -110,12 +110,8 @@ export class GardeningScopeDetail {
    * overrides `scope.retired`, computed purely off {@link pendingScopeLifecycle}'s
    * own variables, never a cache read or write.
    *
-   * **Total in both directions.** A scope's lifecycle carries exactly the two states
-   * `domain/routines-and-scopes.md`'s "The retired brake" section names — `retired`
-   * and enabled — with no third state or precedence rule complicating either
-   * transition: `retire` and `enable` are each reachable from the other unconditionally,
-   * so the fired direction is always the resulting one, the same strong case
-   * `graph-lifecycle.mutations.ts`'s own `retired` boolean rides.
+   * Total in both directions: `blizzard-context:/domain/routines-and-scopes.md`
+   * §The retired brake.
    */
   protected readonly overrideRetired = computed<boolean | null>(() =>
     scopeOverrideRetired(this.selectedScope(), this.pendingScopeLifecycle()),

@@ -14,11 +14,9 @@ export interface FindingWorkItemLookup {
  * Resolves every finding's accepted-and-minted work item off the garden
  * proposals docket.
  *
- * Every proposal's `findings` list maps its own finding ids to that proposal's own
- * `source`/`ref` pointer (`gardening-proposals-page.ts`'s own `acceptedItemPointer`
- * computed, generalized from one proposal to every accepted-and-minted proposal in
- * the docket at once), and every distinct pointer fans out through
- * `injectHubWorkItemsQuery` in one read rather than one per finding.
+ * Every accepted-and-minted proposal's `findings` map to that proposal's
+ * `source`/`ref` pointer, and every distinct pointer fans out through
+ * `injectHubWorkItemsQuery` in one read.
  */
 export function injectFindingWorkItemLookup(): FindingWorkItemLookup {
   const proposalsQuery = injectHubGardenProposalsQuery();

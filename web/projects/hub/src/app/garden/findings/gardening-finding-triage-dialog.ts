@@ -6,28 +6,10 @@ import { type FindingTriageVerb } from '../core/finding-list';
 import { GardeningFindingTriageDialogView } from './gardening-finding-triage-dialog-view';
 
 /**
- * The findings triage bucket's bulk-action dialog container — one dialog for
- * every verb {@link FindingTriageVerb} names, submitted
- * through whichever of the six `finding.mutations.ts` mutations {@link verb}
- * picks out (`gardening-proposal-pass-dialog.ts`'s own shape). All six are
- * injected unconditionally at field-initializer time — the same DI context every
- * one of these `inject*` calls already runs in, not a conditional hook call.
- *
- * {@link mutationsByVerb} collapses `isPending()` and the actual `.mutate(...)`
- * call for all six into one `Record<FindingTriageVerb, …>`, built once, rather
- * than two parallel six-arm `switch`es that would otherwise have to be kept in
- * sync by hand. `supersede`'s vars carry `supersededBy` where every other verb's
- * don't, so each entry's own `mutate` closes over its own mutation and folds that
- * field in only where it applies — {@link onSubmit} passes it through unconditionally,
- * `undefined` for the five verbs that ignore it.
- *
- * A rejected batch surfaces through {@link submitError} and does **not** close
- * the dialog, so the same batch is one click away from a retry.
- *
- * The host page mounts this with `@if` around the bulk action in flight
- * (`gardening-proposals-page.ts`'s own dialog-open signal shape), so a fresh
- * instance — and a fresh view, with its own fresh note field — exists for every
- * open.
+ * The findings triage dialog container — one dialog for every verb
+ * {@link FindingTriageVerb} names, submitted through the `finding.mutations.ts`
+ * mutation {@link verb} picks out via {@link mutationsByVerb}. A rejected
+ * submission surfaces through {@link submitError} and does not close the dialog.
  */
 @Component({
   selector: 'app-gardening-finding-triage-dialog',
