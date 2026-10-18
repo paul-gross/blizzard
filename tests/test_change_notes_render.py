@@ -220,3 +220,18 @@ def test_a_flag_added_on_after_a_tag_without_a_registry_is_listed(repo: Path, mo
     result = _render(repo, "v0.3.0", monkeypatch)
     assert result.exit_code == 0, result.output
     assert "## Turned on\n\n- Immediate use" in result.output
+
+
+def test_stable_tag_on_candidates_commit_does_not_repeat_its_flag(repo: Path, monkeypatch) -> None:
+    path = "src/blizzard/foundation/flags/registry.toml"
+    off = '[flag.alpha]\ndefault = "off"\nsummary = "Alpha capability"\n'
+    _commit(repo, "feat: staged", {path: off})
+    _git(repo, "tag", "v0.3.0")
+    _commit(repo, "feat: enabled", {path: off.replace('"off"', '"on"')})
+    _git(repo, "tag", "v0.4.0-rc.1")
+    _git(repo, "tag", "v0.4.0")
+    candidate = _render(repo, "v0.4.0-rc.1", monkeypatch)
+    stable = _render(repo, "v0.4.0", monkeypatch)
+    assert candidate.exit_code == stable.exit_code == 0
+    assert "## Turned on\n\n- Alpha capability" in candidate.output
+    assert "## Turned on" not in stable.output

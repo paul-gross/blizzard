@@ -30,6 +30,10 @@ class Repository:
         """Every ``v*`` tag name."""
         return self._git("tag", "--list", "v*").split()
 
+    def tags_on_commit(self, rev: str) -> list[str]:
+        """Tags pointing at the same commit as ``rev`` (including annotated tags)."""
+        return self._git("tag", "--points-at", rev, "--list", "v*").split()
+
     def show(self, rev: str, path: str) -> str | None:
         """``path`` as ``rev`` holds it, or ``None`` when ``rev`` has no such path."""
         if not self._git("ls-tree", rev, "--", path).strip():

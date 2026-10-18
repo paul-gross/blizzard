@@ -7,6 +7,7 @@ from pathlib import Path
 
 from blizzard.tools.change_notes.contract import FLAG_REGISTRY
 from blizzard.tools.compat.git import Repository
+from blizzard.tools.compat.releases import parse_release, parse_releases
 
 
 def registry(text: str) -> dict[str, dict[str, str]]:
@@ -24,7 +25,9 @@ def turned_on(repo: Repository, tag: str) -> list[str]:
     current = repo.show(tag, FLAG_REGISTRY)
     if current is None:
         return []
-    previous = repo.previous_tag(tag)
+    release = parse_release(tag)
+    same_commit = [r for r in parse_releases(repo.tags_on_commit(tag)) if release and r.order() < release.order()]
+    previous = same_commit[-1].tag if same_commit else repo.previous_tag(tag)
     previous_text = repo.show(previous, FLAG_REGISTRY) if previous else None
     before = registry(previous_text) if previous_text is not None else {}
     after = registry(current)

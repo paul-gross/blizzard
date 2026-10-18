@@ -41,6 +41,19 @@ def _release_heading(version: str) -> str:
     return f"Upgrading to {version}"
 
 
+def staged_anchors(text: str) -> set[str]:
+    """Anchors under the next-release heading, including nested boundaries."""
+    lines = text.splitlines()
+    heads = anchored_headings(text)
+    staged = next(
+        (i for i, (_, lvl, idx) in enumerate(heads) if lvl == 2 and _title(lines[idx]) == STAGING_HEADING), None
+    )
+    if staged is None:
+        return set()
+    end = _section_end(heads, staged, len(lines))
+    return {anchor for anchor, _, idx in heads[staged + 1 :] if idx < end}
+
+
 def move_boundaries(text: str, version: str, wanted: Collection[str]) -> Moved:
     """Move each staged boundary whose anchor is in ``wanted`` under ``## Upgrading to <version>``.
 

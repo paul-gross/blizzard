@@ -197,7 +197,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          # release-notes.sh needs the commit range since the previous tag, and
+          # The release-note renderer needs the commit range since the previous tag, and
           # `git describe` needs every tag reachable — a shallow (depth-1)
           # checkout would see neither.
           fetch-depth: 0
@@ -239,16 +239,9 @@ jobs:
             > "dist/blizzard-${VERSION}-requirements.txt"
           ./scripts/export-requirements.sh "$VERSION" "$WHEEL" --extra postgres --no-project \
             > "dist/blizzard-${VERSION}-requirements-pg.txt"
-      - name: generate release notes (scripts/release-notes.sh)
+      - name: generate release notes from the tag tree
         run: |
-          PREV_TAG="$(git describe --tags --abbrev=0 "${GITHUB_REF_NAME}^" 2>/dev/null || true)"
-          if [ -n "$PREV_TAG" ]; then
-            echo "Notes range: $PREV_TAG..${GITHUB_REF_NAME}"
-            ./scripts/release-notes.sh --range "$PREV_TAG..${GITHUB_REF_NAME}" > release-notes.md
-          else
-            echo "No previous tag found — first release, an empty commit range."
-            ./scripts/release-notes.sh --from-stdin < /dev/null > release-notes.md
-          fi
+          uv run blizzard-change-notes render "${GITHUB_REF_NAME}" > release-notes.md
           cat release-notes.md
       - name: derive the GHCR tag fan-out (scripts/image-tags.sh) and OCI annotations
         id: image_meta
