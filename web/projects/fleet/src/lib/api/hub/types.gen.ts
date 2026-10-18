@@ -5681,7 +5681,7 @@ export type ProducesEntry = {
 /**
  * ProjectColor
  *
- * A project's color, by palette name; the board renders each name through its own token.
+ * A project's color, by palette name; each name maps to one fixed display color.
  */
 export const ProjectColor = {
     RED: 'red',
@@ -5701,7 +5701,7 @@ export const ProjectColor = {
 /**
  * ProjectColor
  *
- * A project's color, by palette name; the board renders each name through its own token.
+ * A project's color, by palette name; each name maps to one fixed display color.
  */
 export type ProjectColor = typeof ProjectColor[keyof typeof ProjectColor];
 

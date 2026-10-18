@@ -6,7 +6,7 @@ from enum import StrEnum
 
 
 class ProjectColor(StrEnum):
-    """A project's color, by palette name; the board renders each name through its own token."""
+    """A project's color, by palette name; each name maps to one fixed display color."""
 
     RED = "red"
     ORANGE = "orange"

@@ -8949,7 +8949,7 @@
         "type": "object"
       },
       "ProjectColor": {
-        "description": "A project's color, by palette name; the board renders each name through its own token.",
+        "description": "A project's color, by palette name; each name maps to one fixed display color.",
         "enum": [
           "red",
           "orange",
