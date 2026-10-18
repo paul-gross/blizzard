@@ -52,11 +52,17 @@ def test_a_system_user_owns_the_runtime_dir() -> None:
     assert "chown" in text and "/var/lib/blizzard" in text, "the runtime dir must be owned by that user"
 
 
-def test_postgres_extra_is_installed_from_the_built_wheel() -> None:
+def test_image_installs_the_locked_set_with_hashes_then_the_wheel_without_resolving() -> None:
     text = _dockerfile()
-    assert re.search(r"pip install.*blizzard-\*\.whl.*\[postgres\]", text), (
-        "the image must install the wheel's `postgres` extra (bzh:sql-portable — the "
-        "driver makes the store URL a real choice, not just a declared one)"
+    assert re.search(r"pip install .*--require-hashes -r /tmp/requirements\.txt", text), (
+        "the image must install its dependencies from the hashed lock export"
+    )
+    assert re.search(r"pip install .*--no-deps /tmp/blizzard-\*\.whl", text), (
+        "the wheel goes on top of the locked set without resolving anything"
+    )
+    assert re.search(r"COPY dist/blizzard-\*-requirements-pg\.txt /tmp/requirements\.txt", text), (
+        "the requirements file carries the `postgres` extra (bzh:sql-portable — the driver "
+        "makes the store URL a real choice, not just a declared one)"
     )
 
 

@@ -231,6 +231,14 @@ jobs:
         env:
           BLIZZARD_VERSION: ${{ steps.ver.outputs.version }}
         run: ./scripts/build-wheel.sh
+      - name: export the locked requirements (the image installs from them)
+        run: |
+          VERSION="${{ steps.ver.outputs.version }}"
+          WHEEL="$(ls dist/blizzard-*.whl)"
+          ./scripts/export-requirements.sh "$VERSION" "$WHEEL" --no-project \
+            > "dist/blizzard-${VERSION}-requirements.txt"
+          ./scripts/export-requirements.sh "$VERSION" "$WHEEL" --extra postgres --no-project \
+            > "dist/blizzard-${VERSION}-requirements-pg.txt"
       - name: generate release notes (scripts/release-notes.sh)
         run: |
           PREV_TAG="$(git describe --tags --abbrev=0 "${GITHUB_REF_NAME}^" 2>/dev/null || true)"

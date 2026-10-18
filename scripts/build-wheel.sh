@@ -7,7 +7,8 @@
 #   2. builds the wheel (uv build --wheel), which embeds those assets plus both
 #      Alembic migration trees;
 #   3. verifies the wheel actually contains the embedded frontend assets; and
-#   4. installs the wheel into a clean, node-free virtualenv and runs
+#   4. installs the wheel into a clean, node-free virtualenv — its dependencies from
+#      the hashed export of uv.lock, as the image installs them — and runs
 #      `blizzard --version`, proving the released artifact needs no Node at
 #      install or runtime.
 #
@@ -107,6 +108,9 @@ rm -rf dist
 uv build --wheel
 WHEEL="$(ls dist/blizzard-*.whl)"
 log "Built $WHEEL"
+# The version override is only for the build; `uv export --locked` (step 4) needs the
+# pyproject.toml the lock was written for.
+restore_version
 
 # --- 3. verify the wheel contains the embedded frontend assets --------------
 log "Verifying the wheel embeds the frontend assets"
@@ -138,7 +142,13 @@ log "Installing the wheel into a clean virtualenv and running blizzard --version
 VENV="$(mktemp -d)/venv"
 python3 -m venv "$VENV"
 "$VENV/bin/pip" install --quiet --upgrade pip
-"$VENV/bin/pip" install --quiet "$WHEEL"
+# The install an operator runs: the locked set, every package hash-checked, then the
+# wheel itself (scripts/export-requirements.sh).
+WHEEL_VERSION="$(basename "$WHEEL" | cut -d- -f2)"
+REQUIREMENTS="$(dirname "$VENV")/requirements.txt"
+./scripts/export-requirements.sh "$WHEEL_VERSION" "$WHEEL" --no-project > "$REQUIREMENTS"
+"$VENV/bin/pip" install --quiet --require-hashes -r "$REQUIREMENTS"
+"$VENV/bin/pip" install --quiet --no-deps "$WHEEL"
 # Assert, don't just print: the binary must report the version this wheel was built
 # as. `blizzard.__version__` reads installed package metadata, so a build that stamps
 # pyproject.toml and a binary that answers with something else means the two have come
@@ -148,7 +158,6 @@ python3 -m venv "$VENV"
 # From the wheel's own filename, not from $BLIZZARD_VERSION: the filename carries the
 # PEP 427-normalized version, which is what package metadata — and so the binary —
 # reports back.
-WHEEL_VERSION="$(basename "$WHEEL" | cut -d- -f2)"
 REPORTED="$("$VENV/bin/blizzard" --version)"
 EXPECTED="blizzard, version $WHEEL_VERSION"
 log "$REPORTED"

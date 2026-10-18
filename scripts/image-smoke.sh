@@ -37,6 +37,12 @@ trap cleanup EXIT
 log "Building the wheel (mise run build)"
 ./scripts/build-wheel.sh
 
+log "Exporting the locked requirements the image installs from"
+WHEEL="$(ls dist/blizzard-*.whl)"
+WHEEL_VERSION="$(basename "$WHEEL" | cut -d- -f2)"
+./scripts/export-requirements.sh "$WHEEL_VERSION" "$WHEEL" --extra postgres --no-project \
+  > "dist/blizzard-${WHEEL_VERSION}-requirements-pg.txt"
+
 log "Building the image ($IMAGE_TAG)"
 docker build -f packaging/docker/Dockerfile -t "$IMAGE_TAG" .
 

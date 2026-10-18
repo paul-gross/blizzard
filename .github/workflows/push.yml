@@ -120,11 +120,21 @@ jobs:
         env:
           BLIZZARD_VERSION: ${{ steps.ver.outputs.version }}
         run: ./scripts/build-wheel.sh
+      - name: export the locked requirements beside the wheel (the dev image installs from them)
+        run: |
+          VERSION="${{ steps.ver.outputs.version }}"
+          WHEEL="$(ls dist/blizzard-*.whl)"
+          ./scripts/export-requirements.sh "$VERSION" "$WHEEL" --no-project \
+            > "dist/blizzard-${VERSION}-requirements.txt"
+          ./scripts/export-requirements.sh "$VERSION" "$WHEEL" --extra postgres --no-project \
+            > "dist/blizzard-${VERSION}-requirements-pg.txt"
       - name: upload dev wheel artifact
         uses: actions/upload-artifact@v4
         with:
           name: blizzard-dev-wheel-${{ steps.ver.outputs.version }}
-          path: dist/*.whl
+          path: |
+            dist/*.whl
+            dist/*-requirements*.txt
           if-no-files-found: error
 
   dev-image:
@@ -141,8 +151,9 @@ jobs:
       packages: write
     steps:
       - uses: actions/checkout@v4
-      # packaging/docker/Dockerfile does `COPY dist/blizzard-*.whl` — it installs a
-      # wheel from the build context rather than building one itself. The tag
+      # packaging/docker/Dockerfile does `COPY dist/blizzard-*.whl` and the `-pg`
+      # requirements file — it installs them from the build context rather than
+      # building one itself. The tag
       # `release` job satisfies that by running build-wheel.sh earlier in its OWN
       # job; here the wheel already exists as dev-build's uploaded artifact, so
       # download it into dist/ instead of building a second one. That also makes
