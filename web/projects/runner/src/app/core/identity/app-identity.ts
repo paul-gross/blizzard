@@ -11,7 +11,8 @@ import { RunnerLogout } from './runner-logout';
  * `none`-mode hub the surface is authless, so the query answers `auth_enabled: false`
  * and this renders nothing at all — no username, no logout.
  *
- * Logout clears the runner's own session cookie (`POST /api/auth/logout`), then reloads.
+ * Logout clears the runner's own session cookie (`POST /api/auth/logout`), then reloads so the served shell's SSO
+ * gate re-evaluates rather than every rail 401ing on a cookie that is gone.
  * See `session-recovery.ts` for how `runnerLogoutInFlight` is treated.
  *
  * Two shapes, one owner of the session read and the logout call. The default

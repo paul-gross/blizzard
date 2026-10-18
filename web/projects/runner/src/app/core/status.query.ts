@@ -66,8 +66,7 @@ export interface LocalPauseVars {
  *
  * `onSettled` returns the invalidation, so `isPending()` holds through the re-read.
  * Invalidates the paused runner's {@link runnerDashboardKey} — the read
- * the panel's pause state comes from — so the stale-toggle race stays closed, and the
- * host's reads, whose runner rows and switcher show the brake.
+ * the panel's pause state comes from — and the host's reads, whose runner rows and switcher show the brake.
  */
 export function injectLocalPauseMutation() {
   const queryClient = inject(QueryClient);
