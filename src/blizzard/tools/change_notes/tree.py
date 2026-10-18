@@ -3,12 +3,9 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Hashable
 from pathlib import Path
-from typing import Any
 
-import yaml
-
+from blizzard.hub.documents import YAML_CODEC, ConfigDecodeError
 from blizzard.tools.change_notes.contract import Failure, Note
 
 CHANGES_DIR = "changes"
@@ -19,29 +16,16 @@ VERSION_DIR = re.compile(r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
 _FRONTMATTER = re.compile(r"\A---[ \t]*\n(?:(.*?)\n)?---[ \t]*(?:\n|\Z)(.*)\Z", re.DOTALL)
 
 
-class _StrictLoader(yaml.SafeLoader):
-    """A safe loader that refuses a repeated mapping key instead of keeping the last."""
-
-    def construct_mapping(self, node: yaml.MappingNode, deep: bool = False) -> dict[Hashable, Any]:
-        seen: set[Any] = set()
-        for key_node, _ in node.value:
-            key = self.construct_object(key_node, deep=True)
-            if key in seen:
-                raise yaml.YAMLError(f"duplicate key {key!r}")
-            seen.add(key)
-        return super().construct_mapping(node, deep)
-
-
 def parse_note(text: str, *, path: str, directory: str, note_id: str) -> Note | Failure:
     """Split a note file into frontmatter and body; a file that does not parse is a ``Failure``."""
     match = _FRONTMATTER.match(text)
     if match is None:
         return Failure(path, "no-frontmatter", "the file must open with a '---' delimited YAML frontmatter block")
     try:
-        loaded = yaml.load(match.group(1) or "", Loader=_StrictLoader)
-    except yaml.YAMLError as exc:
+        loaded = YAML_CODEC.decode((match.group(1) or "").encode("utf-8"))
+    except ConfigDecodeError as exc:
         return Failure(path, "bad-frontmatter", f"the frontmatter is not valid YAML: {exc}".splitlines()[0])
-    if not isinstance(loaded, dict) or not all(isinstance(key, str) for key in loaded):
+    if not all(isinstance(key, str) for key in loaded):
         return Failure(path, "bad-frontmatter", "the frontmatter must be a mapping of field names to values")
     return Note(path=path, directory=directory, id=note_id, fields=loaded, body=match.group(2))
 
