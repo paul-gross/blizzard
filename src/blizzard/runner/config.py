@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from blizzard.foundation.config_keys import ConfigView
+from blizzard.foundation.flags import FlagResolution, HeldKey
 from blizzard.foundation.public_origins import PublicOrigins
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.runner_paths import runner_prefix
@@ -590,6 +591,10 @@ class RunnerConfig:
     tracing: TracingConfig = field(default_factory=TracingConfig)
     #: The host's ``[flags]`` overrides — flag name to on or off; matched to the registry at composition.
     flags: Mapping[str, bool] = field(default_factory=dict)
+    #: The ``[flags]`` as the host's load resolved them, applied by composition.
+    flag_resolution: FlagResolution | None = None
+    #: The guarded keys the host's file carried while their flag was off.
+    held_keys: tuple[HeldKey, ...] = ()
 
     def worker_env(self, tracing: TracingSettings) -> AllowlistedEnv:
         """The one allowlisted env every runner-spawned child is built from

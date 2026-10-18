@@ -18,8 +18,15 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
-from blizzard.foundation.config_keys import ConfigView
-from blizzard.foundation.flags import parse_overrides
+from blizzard.foundation.config_keys import ConfigRegistry, ConfigView, InvalidConfigValue
+from blizzard.foundation.flags import (
+    FlagRegistry,
+    FlagResolution,
+    HeldKey,
+    held_keys,
+    parse_overrides,
+    resolve_for_keys,
+)
 from blizzard.foundation.forwarded import TrustedProxies
 from blizzard.foundation.public_origins import PublicOrigins
 from blizzard.foundation.roles import collaborator, domain_model
@@ -318,6 +325,10 @@ class HostConfig:
     tracing: TracingConfig = field(default_factory=TracingConfig)
     #: The ``[flags]`` overrides, laid onto every runner's config.
     flags: Mapping[str, bool] = field(default_factory=dict)
+    #: The ``[flags]`` as the load resolved them, applied by composition; ``None`` for a config built in code.
+    flag_resolution: FlagResolution | None = None
+    #: The guarded keys the file carried while their flag was off.
+    held_keys: tuple[HeldKey, ...] = ()
     transcripts: Transcripts = field(default_factory=lambda: Transcripts.of(None))
     worker_stdout: WorkerStdout = field(default_factory=lambda: WorkerStdout.of(None))
     #: The host's own credential, resolved from the environment, then the host file, then ``.env``.
@@ -479,12 +490,22 @@ class HostConfig:
             worker_stdout_retention_days=self.worker_stdout.retention_days,
             tracing=self.tracing,
             flags=self.flags,
+            flag_resolution=self.flag_resolution,
+            held_keys=self.held_keys,
             workspaces=self.workspaces or base.workspaces,
         )
         return shared
 
     @classmethod
-    def load(cls, root: Path, *, host: str | None = None, port: int | None = None) -> HostConfig:
+    def load(
+        cls,
+        root: Path,
+        *,
+        host: str | None = None,
+        port: int | None = None,
+        flag_registry: FlagRegistry | None = None,
+        key_registry: ConfigRegistry | None = None,
+    ) -> HostConfig:
         """Read a host directory's ``blizzard-host.toml``; overlay CLI host/port when given. A directory
         holding only the pre-host file, an uninitialised one, and every host error are refused."""
         root = root.resolve()
@@ -506,7 +527,17 @@ class HostConfig:
             raw = tomllib.loads(path.read_text())
         except (OSError, tomllib.TOMLDecodeError) as exc:
             raise HostConfigError((f"{path} cannot be read: {exc}",)) from exc
-        return _parse(raw, layout=layout, host=host, port=port)
+        try:
+            return _parse(
+                raw,
+                layout=layout,
+                host=host,
+                port=port,
+                flag_registry=flag_registry or FlagRegistry.load(),
+                key_registry=key_registry,
+            )
+        except InvalidConfigValue as exc:
+            raise HostConfigError((str(exc),)) from exc
 
     @classmethod
     def load_for_store(cls, root: Path, *, host: str | None = None, port: int | None = None) -> HostConfig:
@@ -702,11 +733,26 @@ class _Errors:
             return fallback
 
 
-def _parse(raw: dict[str, Any], *, layout: HostLayout, host: str | None, port: int | None) -> HostConfig:
+def _parse(
+    raw: dict[str, Any],
+    *,
+    layout: HostLayout,
+    host: str | None,
+    port: int | None,
+    flag_registry: FlagRegistry | None = None,
+    key_registry: ConfigRegistry | None = None,
+) -> HostConfig:
     errors = _Errors()
     root = layout.root
     path = layout.config_path
-    document = ConfigView.root(HOST_REGISTRY, raw)
+    document = ConfigView.root(key_registry or HOST_REGISTRY, raw)
+    # Resolved first: every key read below that a flag guards reads against it.
+    resolved = errors.attempt(
+        "[flags]", lambda: resolve_for_keys(document, "runner", flag_registry or FlagRegistry.load(), ConfigError), None
+    )
+    resolution: FlagResolution | None = None
+    if resolved is not None:
+        document, resolution = resolved
     _refuse_misplaced_keys(document, errors)
     session_secret_env = str(document.get("session_secret_env", DEFAULT_SESSION_SECRET_ENV))
     session_secret = errors.attempt("session_secret_env", lambda: resolve_session_secret(session_secret_env), b"")
@@ -733,7 +779,9 @@ def _parse(raw: dict[str, Any], *, layout: HostLayout, host: str | None, port: i
     tracing = errors.attempt(
         "[tracing]", lambda: TracingConfig.of(document.table("tracing"), ConfigError), TracingConfig()
     )
-    flags = errors.attempt("[flags]", lambda: parse_overrides(document, ConfigError), {})
+    flags: Mapping[str, bool] = {}
+    if resolved is not None:
+        flags = parse_overrides(document, ConfigError)
     if not isinstance(document.get("hub_tokens", {}), dict):
         errors.add("[hub_tokens] must be a table of tokens keyed by runner name")
     hub_tokens = Table.of(document).pairs("hub_tokens")
@@ -760,6 +808,8 @@ def _parse(raw: dict[str, Any], *, layout: HostLayout, host: str | None, port: i
         auth=Auth.of(document.table("auth")),
         tracing=tracing,
         flags=flags,
+        flag_resolution=resolution,
+        held_keys=held_keys(document),
         transcripts=transcripts,
         worker_stdout=worker_stdout,
         host_token=host_token,
@@ -767,7 +817,10 @@ def _parse(raw: dict[str, Any], *, layout: HostLayout, host: str | None, port: i
         subscriptions=subscriptions,
         workspaces=workspaces,
         runners=entries,
-        warnings=_permission_warnings(path, holds_credentials="host_token" in document or bool(hub_tokens)),
+        warnings=(
+            *_permission_warnings(path, holds_credentials="host_token" in document or bool(hub_tokens)),
+            *(f"{entry.key} is ignored while the flag {entry.flag} is off" for entry in held_keys(document)),
+        ),
     )
 
 

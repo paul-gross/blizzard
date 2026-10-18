@@ -18,8 +18,15 @@ from urllib.parse import urlsplit
 
 from sqlalchemy.engine import make_url
 
-from blizzard.foundation.config_keys import ConfigView
-from blizzard.foundation.flags import parse_overrides
+from blizzard.foundation.config_keys import ConfigRegistry, ConfigView, InvalidConfigValue
+from blizzard.foundation.flags import (
+    FlagRegistry,
+    FlagResolution,
+    HeldKey,
+    held_keys,
+    parse_overrides,
+    resolve_for_keys,
+)
 from blizzard.foundation.forwarded import TrustedProxies
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.trace_export.config import TracingConfig
@@ -526,6 +533,10 @@ class HubConfig:
     public_url: str | None = None
     #: The ``[flags]`` overrides — flag name to on or off; matched to the registry at composition, not here.
     flags: Mapping[str, bool] = field(default_factory=dict)
+    #: The ``[flags]`` as the load resolved them, applied by composition; ``None`` for a config built in code.
+    flag_resolution: FlagResolution | None = None
+    #: The guarded keys the file carried while their flag was off.
+    held_keys: tuple[HeldKey, ...] = ()
 
     @staticmethod
     def parse_public_url(value: object) -> str | None:
@@ -660,6 +671,8 @@ class HubConfig:
         host: str | None = None,
         port: int | None = None,
         allow_external_db: bool = False,
+        flag_registry: FlagRegistry | None = None,
+        key_registry: ConfigRegistry | None = None,
     ) -> HubConfig:
         """Read a runtime root's config file; overlay CLI host/port when given.
 
@@ -670,7 +683,33 @@ class HubConfig:
         path = root / CONFIG_FILENAME
         if not path.exists():
             raise ConfigError(f"{root} is not an initialized hub runtime (run `blizzard hub init {root}`)")
-        raw = ConfigView.root(HUB_REGISTRY, tomllib.loads(path.read_text()))
+        try:
+            return cls._read(
+                root,
+                path,
+                host,
+                port,
+                allow_external_db,
+                flag_registry or FlagRegistry.load(),
+                key_registry or HUB_REGISTRY,
+            )
+        except InvalidConfigValue as exc:
+            raise ConfigError(str(exc)) from exc
+
+    @classmethod
+    def _read(
+        cls,
+        root: Path,
+        path: Path,
+        host: str | None,
+        port: int | None,
+        allow_external_db: bool,
+        flag_registry: FlagRegistry,
+        key_registry: ConfigRegistry,
+    ) -> HubConfig:
+        raw, resolution = resolve_for_keys(
+            ConfigView.root(key_registry, tomllib.loads(path.read_text())), "hub", flag_registry, ConfigError
+        )
         route_token_mode = str(raw.get("route_token_mode", ROUTE_TOKEN_WARN))
         if route_token_mode not in _KNOWN_ROUTE_TOKEN_MODES:
             raise ConfigError(
@@ -717,4 +756,6 @@ class HubConfig:
             trusted_proxies=TrustedProxies.entries(raw.get("trusted_proxies"), ConfigError),
             public_url=cls.parse_public_url(raw.get("public_url")),
             flags=parse_overrides(raw, ConfigError),
+            flag_resolution=resolution,
+            held_keys=held_keys(raw),
         )

@@ -600,7 +600,7 @@ def build_hosted_app(
         readiness=readiness,
         services=services,
         platform_tracing=platform_tracing,
-        flags=build_hub_flags(config.flags, flag_registry),
+        flags=build_hub_flags(config.flags, flag_registry, loaded=config.flag_resolution, held=config.held_keys),
     )
     # `host` disposes this on `app.state` — carried here.
     app.state.engine = engine

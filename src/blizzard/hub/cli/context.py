@@ -39,6 +39,7 @@ _TENANT_REQUIRED = "tenant_required"
 
 #: The error code a call answers when it needs a project, named none, and the tenant holds several.
 _PROJECT_REQUIRED = "project_required"
+_FLAG_OFF = "flag_off"
 
 #: The ``detail`` a call answers when the tenant it acts in does not exist, is closed, or is one the caller cannot
 #: enter — the hub tells those apart for no one.
@@ -205,6 +206,7 @@ class CliContext:
                     resp.read()
                 self._refuse_tenant(resp)
                 self._refuse_project(resp)
+                self._refuse_flag_off(resp)
                 self.check(resp, operation, on_status=on_status)
                 yield from resp.iter_lines()
         except httpx.HTTPError as exc:
@@ -251,6 +253,7 @@ class CliContext:
             raise self.failed(f"{method.upper()} {path}", exc) from exc
         self._refuse_tenant(resp)
         self._refuse_project(resp)
+        self._refuse_flag_off(resp)
         return resp
 
     def check(self, resp: httpx.Response, operation: str, *, on_status: dict[int, str] | None = None) -> None:
@@ -374,6 +377,11 @@ class CliContext:
         if resp.status_code != httpx.codes.UNPROCESSABLE_ENTITY or _error_code(resp) != _PROJECT_REQUIRED:
             return
         raise project_required(_projects_of(resp))
+
+    def _refuse_flag_off(self, resp: httpx.Response) -> None:
+        """Raise on a ``404 flag_off`` — the route is held behind a flag that is off — in the refusal's own words."""
+        if resp.status_code == httpx.codes.NOT_FOUND and _error_code(resp) == _FLAG_OFF:
+            raise click.ClickException(self.detail(resp, "not available yet: its flag is off"))
 
     def _tenant_refusal(self, headline: str) -> click.ClickException:
         """``headline``, then the tenants the caller can name with ``--tenant``. ``/api/me`` is asked without the

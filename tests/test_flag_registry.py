@@ -234,7 +234,20 @@ def _misnamed_flag_stores(sources: Mapping[str, str]) -> list[str]:
 
 
 #: The calls whose first string argument names a flag: a read, a guard declaration, a field marker.
-_READ_CALLS = frozenset({"on", "require_on", "flag_guard", "FlagGuarded"})
+_READ_CALLS = frozenset(
+    {
+        "on",
+        "require_on",
+        "flag_guard",
+        "FlagGuarded",
+        "flag_command",
+        "flag_option",
+        "hub_flag_command",
+        "hub_flag_option",
+        "runner_flag_command",
+        "runner_flag_option",
+    }
+)
 
 
 def _call_name(node: ast.Call) -> str | None:
@@ -264,6 +277,12 @@ def _flag_reads(sources: Mapping[str, str]) -> set[str]:
                 and isinstance(node.args[0].value, str)
             ):
                 names.add(node.args[0].value)
+            if isinstance(node, ast.Call) and _call_name(node) == "ConfigKey":
+                names.update(
+                    kw.value.value
+                    for kw in node.keywords
+                    if kw.arg == "flag" and isinstance(kw.value, ast.Constant) and isinstance(kw.value.value, str)
+                )
     return names
 
 
@@ -515,3 +534,15 @@ def test_the_lint_counts_a_guard_and_a_field_marker_as_a_read_of_their_name() ->
     assert _lint(FlagRegistry(), sources) == [
         f"source reads undeclared flag {name!r}" for name in ("fleet-thing", "hub-thing", "runner-thing")
     ]
+
+
+@pytest.mark.unit
+def test_the_lint_counts_a_cli_guard_as_a_read_of_its_name() -> None:
+    sources = {"a.py": '@hub_flag_command("hub-thing")\n@runner_flag_option("runner-thing", "--x")\ndef f(): ...\n'}
+    assert _flag_reads(sources) == {"hub-thing", "runner-thing"}
+
+
+@pytest.mark.unit
+def test_the_lint_counts_a_guarded_key_declaration_as_a_read_of_its_flag() -> None:
+    sources = {"a.py": 'KEYS = (ConfigKey("a", STRING, flag="hub-thing"), ConfigKey("b", STRING, default="flag"))\n'}
+    assert _flag_reads(sources) == {"hub-thing"}

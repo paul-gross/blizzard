@@ -21,6 +21,11 @@ type FlagSide = Literal["hub", "runner"]
 _HUB_ANSWERS: frozenset[FlagScope] = frozenset({"hub", "fleet"})
 
 
+def side_answers(side: FlagSide, scope: FlagScope) -> bool:
+    """Whether ``side``'s daemon answers a flag of ``scope`` at all."""
+    return scope in (_HUB_ANSWERS if side == "hub" else frozenset({"runner"}))
+
+
 class UnknownFlag(LookupError):
     """A flag name the registry holds neither live nor retired — a mistyped name, never read as off."""
 

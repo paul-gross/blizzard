@@ -4,6 +4,7 @@ switch and is ignored without it."""
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -57,7 +58,8 @@ def test_every_declared_hub_key_is_read_by_a_load_that_carries_it(
     monkeypatch.setattr(ConfigView, "_check", recording)
     root = _initialised(tmp_path)
     document = _document_carrying_every_key(HUB_REGISTRY, _SAMPLES)
-    monkeypatch.setattr(hub_config.tomllib, "loads", lambda _text: document)
+    # Replaces the module's parser alone: the flag registry is parsed with the real one.
+    monkeypatch.setattr(hub_config, "tomllib", SimpleNamespace(loads=lambda _text: document))
     HubConfig.load(root, allow_external_db=True)
     hub_config.read_legacy_keys(root / hub_config.CONFIG_FILENAME, {})  # [[work_source]] is read apart from the load
 

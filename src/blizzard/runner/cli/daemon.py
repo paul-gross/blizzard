@@ -182,8 +182,19 @@ class RunnerDaemon:
         if params is not None:
             kwargs["params"] = params
         resp = getattr(self.client, method)(path, **kwargs)
+        if resp.status_code == httpx.codes.NOT_FOUND and _flag_off(resp):
+            raise click.ClickException(resp.json()["detail"]["message"])
         resp.raise_for_status()
         return resp
+
+
+def _flag_off(resp: httpx.Response) -> bool:
+    """Whether a ``404`` is the host's ``flag_off`` refusal: the route is held behind a flag that is off."""
+    try:
+        detail = resp.json().get("detail")
+    except ValueError:
+        return False
+    return isinstance(detail, dict) and detail.get("code") == "flag_off" and isinstance(detail.get("message"), str)
 
 
 def _named(items: list[dict[str, Any]]) -> str:
