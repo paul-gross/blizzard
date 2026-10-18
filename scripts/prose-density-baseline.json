@@ -9228,9 +9228,9 @@
   },
   "blizzard/tools/change_notes/cli.py": {
    "comments": 0,
-   "docstrings": 5,
+   "docstrings": 6,
    "over_cap": 0,
-   "total": 80
+   "total": 122
   },
   "blizzard/tools/change_notes/contract.py": {
    "comments": 0,
@@ -9242,7 +9242,13 @@
    "comments": 0,
    "docstrings": 4,
    "over_cap": 0,
-   "total": 61
+   "total": 97
+  },
+  "blizzard/tools/change_notes/guide.py": {
+   "comments": 0,
+   "docstrings": 3,
+   "over_cap": 0,
+   "total": 72
   },
   "blizzard/tools/change_notes/released.py": {
    "comments": 1,
@@ -9255,6 +9261,12 @@
    "docstrings": 3,
    "over_cap": 0,
    "total": 72
+  },
+  "blizzard/tools/change_notes/schedule.py": {
+   "comments": 0,
+   "docstrings": 5,
+   "over_cap": 0,
+   "total": 59
   },
   "blizzard/tools/change_notes/tree.py": {
    "comments": 0,
@@ -10822,7 +10834,13 @@
    "comments": 1,
    "docstrings": 1,
    "over_cap": 0,
-   "total": 174
+   "total": 372
+  },
+  "test_change_notes_guide.py": {
+   "comments": 0,
+   "docstrings": 1,
+   "over_cap": 0,
+   "total": 202
   },
   "test_change_notes_render.py": {
    "comments": 0,

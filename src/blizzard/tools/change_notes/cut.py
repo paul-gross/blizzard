@@ -8,6 +8,8 @@ from pathlib import Path
 from blizzard.foundation.roles import domain_model
 from blizzard.tools.change_notes.anchors import anchor_titles
 from blizzard.tools.change_notes.flags import working_registry
+from blizzard.tools.change_notes.contract import Note
+from blizzard.tools.change_notes.schedule import latest_released_schedule, line_order, release_line
 from blizzard.tools.change_notes.tree import CHANGES_DIR, UNRELEASED, VERSION_DIR, read_tree
 from blizzard.tools.change_notes.upgrade_doc import UpgradeDocError, move_boundaries, staged_anchors
 from blizzard.tools.change_notes.validate import UPGRADE_DOC, validate
@@ -29,6 +31,37 @@ class CutReport:
     held: tuple[str, ...]
 
 
+def _schedule_refusals(notes: list[Note], moving: list[Note], version: str) -> list[str]:
+    current = release_line(version)
+    scheduled = latest_released_schedule(notes)
+    refusals: list[str] = []
+    for note in moving:
+        line = note.fields.get("removes-in")
+        if not isinstance(line, str):
+            continue
+        expected = "pre-1.0 minor" if version.startswith("0.") else "major"
+        if ("." in line) != (expected == "pre-1.0 minor"):
+            refusals.append(f"{note.path}: removes-in must name a {expected} line at {version}")
+        elif line_order(line) <= line_order(current):
+            refusals.append(f"{note.path}: removes-in {line} must be later than cut line {current}")
+        target = note.fields.get("postpones")
+        if isinstance(target, str) and target in scheduled and line_order(line) <= line_order(scheduled[target]):
+            refusals.append(
+                f"{note.path}: postpones {target} to {line}, "
+                f"not later than its latest released line {scheduled[target]}"
+            )
+    major, minor, patch = (int(part) for part in version.split("."))
+    if patch == 0 and (major != 0 or minor != 0):
+        postponed = {n.fields.get("postpones") for n in moving}
+        retired = {
+            n.fields.get("retires") for n in notes if n.directory == UNRELEASED or release_line(n.directory) == current
+        }
+        for note_id, due in scheduled.items():
+            if line_order(due) <= line_order(current) and note_id not in retired and note_id not in postponed:
+                refusals.append(f"deprecation {note_id} is due in {current} without a retiring removal or postponement")
+    return refusals
+
+
 def cut(root: Path, version: str) -> CutReport:
     """Move ``changes/unreleased/`` into ``changes/<version>/``; refuse before writing anything."""
     if not VERSION_DIR.match(version):
@@ -41,6 +74,9 @@ def cut(root: Path, version: str) -> CutReport:
     defaults = working_registry(root)
     moving = [n for n in unreleased if not n.fields.get("flag") or defaults[n.fields["flag"]]["default"] == "on"]
     held = tuple(n.id for n in unreleased if n not in moving)
+    refusals = _schedule_refusals(notes, moving, version)
+    if refusals:
+        raise CutRefused("\n".join(refusals))
     guides = sorted({g for n in moving if isinstance(g := n.fields.get("upgrade-guide"), str)})
     doc = root / UPGRADE_DOC
     original = doc.read_text(encoding="utf-8") if guides else ""

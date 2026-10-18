@@ -131,10 +131,14 @@ tags can point to that same commit: [`scripts/check-version-tag.sh`](../scripts/
 candidate suffix when checking against `pyproject.toml`, while the release wheel stamps the full tag version. On
 `master`, dev wheels and images target the *next* minor as `X.(Y+1).0.dev<run>+<sha>`.
 
-Release notes are generated from the Conventional Commits since the previous tag by
-[`scripts/release-notes.sh`](../scripts/release-notes.sh). A `!`-marked commit surfaces at the top of the notes under
-**Breaking changes**. An **Upgrade notes** section is always emitted — directly beneath that section when the release
-has one, at the very top when it does not — as a placeholder when the release asks nothing of the operator, and
-hand-written prose whenever it asks for something.
+Release notes are assembled from the tag's `changes/<X.Y.Z>/` notes and the Conventional Commits since the previous
+tag by [`blizzard-change-notes render`](../changes/README.md#cutting-and-rendering). A line-opening release leads with
+**Upgrading to <line>**: promised deprecations, their retiring removals and upgrade instructions, then unrelated
+breaking notes. Run `blizzard-change-notes guide <line>` before cutting to preview the crossing, including pending
+removals in `changes/unreleased/`. Before 1.0 the line is a minor such as `0.12`; from 1.0 it is a major such as `1`.
+The current removal line is the latest *released* postponement's `removes-in`, or the deprecation's own when none has
+shipped. The cut refuses a new deprecation due no later than the cut line, a non-advancing postponement, or an opening
+line with an unretired promise, before moving any notes or boundaries. `check` validates the note format and references
+independently of those release-readiness decisions. Older tags without `changes/` still render their commit block.
 
 [`docs/ci.md`](./ci.md) owns the release and dev-publish workflow contracts.

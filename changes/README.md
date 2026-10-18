@@ -23,12 +23,23 @@ when a candidate already made it. It prints notes held because their flag's regi
 them when that default turns on. It also moves each `docs/upgrade.md` section the moved notes' `upgrade-guide` names from
 `## Upgrading to the next release` into `## Upgrading to <X.Y.Z>`, creating that heading directly beneath
 `## Before you pull` when it is absent. A cut that would leave an `upgrade-guide` on another heading refuses and writes
-nothing.
+nothing. It also refuses a new deprecation promised for the cut's line or earlier, or a postponement that does not move
+the promise beyond its latest released line. At a line-opening cut, every promise due on that line must have a retiring
+removal in that line's notes or a postponement in the cut. A refusal names the offending notes and writes nothing; `check`
+still checks format and references, not whether a release is ready to cut.
+
+`blizzard-change-notes guide <line>` previews the crossing into a major (`1`) or pre-1.0 minor (`0.12`). It reads
+released notes and pending removals and breaking notes from `changes/unreleased/`. Deprecations appear in the order their
+releases carried them, followed by their retiring removal's prose and `## Upgrade` instructions and any named boundary
+link; unrelated breaking notes follow. It refuses by name when a promise due on that line has no retiring removal in
+that line or in `unreleased/`. A released postponement moves the promise's current line; an unreleased postponement does
+not change the guide until it is cut.
 
 `blizzard-change-notes render <tag>`, or `mise run release-notes <tag>`, prints the notes a tag publishes, read from the
-tag's own tree: upgrade notes, flags newly on since the previous release under **Turned on** by registry summary, then
-breaking changes, deprecations, and the added, changed, fixed and security notes, then the commits since the previous
-tag in a collapsed block. A note that an earlier release on another line also
+tag's own tree: an opening release leads with **Upgrading to <line>**, followed by upgrade notes, flags newly on since
+the previous release under **Turned on** by registry summary, then breaking changes, deprecations, and the added,
+changed, fixed and security notes, then the commits since the previous tag in a collapsed block. The **Deprecated**
+section shows each promise's current line after released postponements. A note that an earlier release on another line also
 carries is marked `(also in X.Y.Z)`. Rendering a tag twice gives the same text.
 
 ## The id
