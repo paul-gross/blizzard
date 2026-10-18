@@ -6,6 +6,7 @@ credentials or live image build.
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 
 import pytest
@@ -138,3 +139,38 @@ def test_build_push_step_retries_a_transient_ghcr_error_before_failing() -> None
         int(line.split("=", 1)[1]) for line in run.splitlines() if line.strip().startswith("max_attempts=")
     )
     assert max_attempts >= 3, "at least two retries (three total attempts) are required"
+
+
+def test_only_dev_image_holds_the_signing_permissions() -> None:
+    """Keyless signing and attestation need `id-token: write` and
+    `attestations: write`; granting either anywhere else widens who can mint
+    the master identity."""
+    workflow = yaml.safe_load(_WORKFLOW_PATH.read_text())
+    assert "id-token" not in workflow.get("permissions", {})
+    assert "attestations" not in workflow.get("permissions", {})
+    for name, job in _jobs().items():
+        permissions = job.get("permissions", {})
+        held = {"id-token", "attestations"} & {k for k, v in permissions.items() if v == "write"}
+        if name == "dev-image":
+            assert held == {"id-token", "attestations"}
+        else:
+            assert not held, f"{name} must not hold {held}"
+
+
+def test_dev_image_signs_and_attests_the_pushed_digest_after_the_push() -> None:
+    steps = _dev_image_job()["steps"]
+    push_idx = _step_index(steps, lambda s: s.get("id") == "build_push")
+    sign_idx = _step_index(steps, lambda s: "cosign sign --yes --recursive" in str(s.get("run", "")))
+    attest_idx = _step_index(steps, lambda s: "attest-build-provenance" in str(s.get("uses", "")))
+    assert push_idx < sign_idx
+    assert push_idx < attest_idx
+    assert "--sbom" not in str(steps[sign_idx]["run"])
+    assert steps[attest_idx]["with"]["push-to-registry"] is True
+    assert steps[attest_idx]["with"]["subject-digest"] == "${{ steps.build_push.outputs.digest }}"
+
+
+def test_dev_image_signing_actions_are_pinned_by_sha() -> None:
+    steps = _dev_image_job()["steps"]
+    for fragment in ("cosign-installer", "attest-build-provenance"):
+        uses = steps[_step_index(steps, lambda s, f=fragment: f in str(s.get("uses", "")))]["uses"]
+        assert re.fullmatch(r".+@[0-9a-f]{40}", uses), uses
