@@ -1,7 +1,6 @@
 """SQLAlchemy adapter for the change log (package-private).
 
-Writes are never made here on their own: each configured-record adapter calls
-:func:`append_change` inside its own write block, so the row commits with the record
+:func:`append_change` writes inside the caller's transaction
 (``bzh:configured-record``). This class is the read side."""
 
 from __future__ import annotations

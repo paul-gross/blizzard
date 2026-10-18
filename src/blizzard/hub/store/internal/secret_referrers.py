@@ -1,8 +1,7 @@
 """The one query answering which active configured records name a secret (package-private).
 
-Both the secret retire refusal (inside its transaction) and the secret view's ``used by``
-read through :func:`active_referrers`, so the two never drift. It unions every referring
-kind; retired derives from each kind's newest lifecycle fact (``bzh:facts-not-status``)."""
+:func:`active_referrers` unions every referring kind; retired derives from each kind's
+newest lifecycle fact (``bzh:facts-not-status``)."""
 
 from __future__ import annotations
 

@@ -254,9 +254,9 @@ class FindingStore:
 
     def record_facts(self, entries: Sequence[FactEntry], *, expect: Mapping[str, str] | None = None) -> list[str]:
         """All-or-nothing — pinned by
-        `tests/test_finding_store.py::test_record_facts_is_all_or_nothing`. With ``expect``, each
-        named finding's state is re-derived under its row lock first (`lock_findings`); any that moved off its
-        expected state is returned and nothing is written."""
+        `tests/test_finding_store.py::test_record_facts_is_all_or_nothing`. ``expect`` is the
+        port's compare-and-set (``src/blizzard/hub/domain/garden/findings/model.py``); each named
+        finding is re-derived under its row lock first (`lock_findings`)."""
         for entry in entries:
             if entry.kind not in FACT_KINDS:
                 raise UnknownFactKindError(entry.kind)

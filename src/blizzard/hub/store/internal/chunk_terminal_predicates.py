@@ -28,9 +28,8 @@ def _done_by_transition(
     stmts: ScopedStatements, chunk_id: ColumnElement[str], *, finished_before: datetime | None = None
 ) -> ColumnElement[bool]:
     """The chunk named by ``chunk_id`` has a transition into the reserved terminal that is its newest
-    movement across transitions, migrations, and restarts. A migration or restart at the same
-    ``(recorded_at, epoch)`` supersedes it (the later kind rank wins, as
-    :meth:`~blizzard.hub.domain.chunk.model.ChunkFacts.latest_movement` ranks); so does a transition
+    movement across transitions, migrations, and restarts. Supersession follows
+    :meth:`~blizzard.hub.domain.chunk.model.ChunkFacts.latest_movement`; a transition
     that is newer or ties it while not itself terminal. A tie among terminal transitions settles, since
     every order of it derives ``done``. ``finished_before`` further requires that transition to be
     recorded before the instant."""

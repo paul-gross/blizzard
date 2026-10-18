@@ -1,4 +1,4 @@
-"""The usage/cost aggregate fold's one prose home (`bzh:one-prose-home`) — the ten
+"""The usage/cost aggregate fold's one prose home (`bzh:one-prose-home`) — the
 labeled columns, shared by the chunk-usage seam (``src/blizzard/hub/store/internal/chunk_usage_store.py``) and the
 analytics seam (``src/blizzard/hub/store/internal/analytics_operational_store.py``)."""
 

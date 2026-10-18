@@ -141,9 +141,7 @@ _CURSOR_ARITY = 1
 
 
 def _decode_chunk_cursor(cursor: str) -> str:
-    """``spend_by_chunk``'s cursor: the shared codec over one part, a chunk id — validated
-    through the canonical id parser rather than a hand-rolled pattern, so a too-short or
-    malformed value 422s instead of being accepted as a keyset offset."""
+    """``spend_by_chunk``'s cursor: the shared codec over one part, a chunk id."""
     parts = decode_cursor(cursor)
     if len(parts) != _CURSOR_ARITY or not isinstance(parts[0], str):
         raise MalformedCursor(cursor)
@@ -180,8 +178,7 @@ def _spend_group_stmt(stmts: ScopedStatements, criteria: OperationalCriteria, *,
 def _node_names(stmts: ScopedStatements, node_id: Any) -> tuple[Any, Any]:
     """Scalar lookups of a node's graph name and its own name by primary key, correlated to
     ``node_id`` — null where the id no longer resolves (``usage_facts.node_id`` has no foreign
-    key). Scalar subqueries, not joins, so the names add no grouping column: the ``GROUP BY``
-    stays on the node-id index with no temp B-tree."""
+    key). Scalar subqueries, not joins: ``tests/test_chunk_fact_table_indexes.py`` pins the plan."""
     gn, g = s.graph_nodes, s.graphs
     graph_name = (
         stmts.select(stmts.scope_join(g, gn, g.c.graph_id == gn.c.graph_id), g.c.name)
