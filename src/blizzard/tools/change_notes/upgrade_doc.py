@@ -48,7 +48,7 @@ def move_boundaries(text: str, version: str, wanted: Collection[str]) -> Moved:
     a new one directly beneath ``## Before you pull``. Without a staging heading, or with nothing wanted staged,
     the text is returned as it came."""
     lines = text.splitlines()
-    heads = anchored_headings(text)
+    heads = heads_before = anchored_headings(text)
     staged = next(
         (i for i, (_, lvl, idx) in enumerate(heads) if lvl == 2 and _title(lines[idx]) == STAGING_HEADING), None
     )
@@ -88,7 +88,8 @@ def move_boundaries(text: str, version: str, wanted: Collection[str]) -> Moved:
         insert = ["", f"## {_release_heading(version)}", *[line for block in blocks for line in ["", *block]]]
     rewritten = [*kept[:at], *insert, *kept[at:]]
     trailing = "\n" if text.endswith("\n") else ""
-    return Moved("\n".join(rewritten) + trailing, tuple(anchor for anchor, _, _ in ranges))
+    nested = tuple(a for a, _, i in heads_before if a in wanted and any(s <= i < e for _, s, e in ranges))
+    return Moved("\n".join(rewritten) + trailing, nested)
 
 
 def _title(line: str) -> str:

@@ -189,3 +189,10 @@ def test_previous_tag_is_the_nearest_tag_before_a_revision_or_none(tmp_path: Pat
     _git(repo, "tag", "v0.2.0")
     assert Repository(repo).previous_tag("v0.2.0") == "v0.1.0"
     assert Repository(repo).previous_tag("v0.1.0") is None
+
+
+def test_previous_tag_raises_on_a_git_failure_other_than_no_earlier_tag(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    _commit(repo, "chore: one")
+    with pytest.raises(GitError):
+        Repository(repo).previous_tag("no-such-rev")

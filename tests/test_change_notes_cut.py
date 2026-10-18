@@ -165,3 +165,10 @@ def test_move_boundaries_without_a_staging_heading_returns_the_text(tmp_path: Pa
 def test_move_boundaries_needs_before_you_pull_for_a_new_section() -> None:
     with pytest.raises(UpgradeDocError):
         move_boundaries("## Upgrading to the next release\n\n### A\n\nx\n", "0.3.0", ["a"])
+
+
+def test_a_wanted_boundary_nested_in_another_wanted_one_counts_as_moved() -> None:
+    text = "## Before you pull\n\nx\n\n## Upgrading to the next release\n\n### Outer\n\no\n\n#### Inner\n\ni\n"
+    moved = move_boundaries(text, "0.3.0", ["outer", "inner"])
+    assert moved.anchors == ("outer", "inner")
+    assert moved.text.index("## Upgrading to 0.3.0") < moved.text.index("#### Inner")

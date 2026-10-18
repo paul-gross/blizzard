@@ -46,8 +46,12 @@ class Repository:
         return sorted(line.rsplit("/", 1)[-1] for line in listed)
 
     def previous_tag(self, rev: str) -> str | None:
-        """The nearest tag before ``rev``, or ``None`` when no tag precedes it."""
+        """The nearest tag before ``rev``, or ``None`` when no tag precedes it; any other git failure raises."""
+        if len(self._git("rev-list", "--parents", "-n", "1", rev).split()) < 2:
+            return None
         try:
             return self._git("describe", "--tags", "--abbrev=0", f"{rev}^").strip()
-        except GitError:
-            return None
+        except GitError as exc:
+            if "No names found" in str(exc) or "No tags can describe" in str(exc):
+                return None
+            raise
