@@ -98,15 +98,14 @@ def test_release_wheel_stamps_the_full_tag_version(tmp_path, tag: str) -> None:
 
 
 def test_release_notes_are_generated_not_auto_generated() -> None:
-    """`gh release create` must consume the commit-type-grouped notes
-    (scripts/release-notes.sh, tests/test_release_notes.py), not GitHub's own
-    `--generate-notes`."""
+    """The published notes come from the tag-tree renderer, including its flag summaries."""
     steps = _release_job()["steps"]
-    notes_gen_idx = _step_index(steps, lambda s: "release-notes.sh" in str(s.get("run", "")))
+    notes_gen_idx = _step_index(steps, lambda s: "blizzard-change-notes render" in str(s.get("run", "")))
     publish_idx = _step_index(steps, lambda s: "gh release create" in str(s.get("run", "")))
     assert notes_gen_idx < publish_idx
+    assert 'render "${GITHUB_REF_NAME}" > release-notes.md' in steps[notes_gen_idx]["run"]
     publish_run = str(steps[publish_idx].get("run", ""))
-    assert "--notes-file" in publish_run
+    assert "--notes-file release-notes.md" in publish_run
     assert "--generate-notes" not in publish_run
 
 

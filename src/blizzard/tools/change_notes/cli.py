@@ -7,6 +7,7 @@ from pathlib import Path
 import click
 
 from blizzard.tools.change_notes.cut import CutRefused, cut
+from blizzard.tools.change_notes.flags import turned_on
 from blizzard.tools.change_notes.released import ReleasedNoteInvalid, also_in, commit_block, notes_at
 from blizzard.tools.change_notes.render import render
 from blizzard.tools.change_notes.tree import CHANGES_DIR
@@ -48,9 +49,13 @@ def cut_command(version: str) -> None:
         click.echo(str(exc), err=True)
         raise SystemExit(1) from exc
     if not report.notes:
-        click.echo(f"nothing to cut: {CHANGES_DIR}/unreleased/ holds no notes")
+        click.echo(
+            "nothing to cut: all unreleased notes are held" if report.held else "nothing to cut: no unreleased notes"
+        )
     for note_id in report.notes:
         click.echo(f"moved {note_id} to {CHANGES_DIR}/{version}/")
+    for note_id in report.held:
+        click.echo(f"held {note_id} in {CHANGES_DIR}/unreleased/: its flag is off")
     for anchor in report.boundaries:
         click.echo(f"moved upgrade boundary {anchor}")
     for anchor in report.left:
@@ -69,7 +74,13 @@ def render_command(tag: str) -> None:
     try:
         earlier = [r for r in parse_releases(repo.tags()) if r.order() < release.order()]
         notes = notes_at(repo, tag, version)
-        text = render(tag, notes, also_in(repo, earlier, version, (n.id for n in notes)), commit_block(repo, tag))
+        text = render(
+            tag,
+            notes,
+            also_in(repo, earlier, version, (n.id for n in notes)),
+            commit_block(repo, tag),
+            turned_on(repo, tag),
+        )
     except (GitError, ReleasedNoteInvalid) as exc:
         click.echo(str(exc), err=True)
         raise SystemExit(1) from exc

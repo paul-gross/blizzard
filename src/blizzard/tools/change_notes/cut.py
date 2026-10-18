@@ -7,8 +7,9 @@ from pathlib import Path
 
 from blizzard.foundation.roles import domain_model
 from blizzard.tools.change_notes.anchors import anchor_titles
+from blizzard.tools.change_notes.flags import working_registry
 from blizzard.tools.change_notes.tree import CHANGES_DIR, UNRELEASED, VERSION_DIR, read_tree
-from blizzard.tools.change_notes.upgrade_doc import UpgradeDocError, move_boundaries
+from blizzard.tools.change_notes.upgrade_doc import UpgradeDocError, move_boundaries, staged_anchors
 from blizzard.tools.change_notes.validate import UPGRADE_DOC, validate
 
 
@@ -25,6 +26,7 @@ class CutReport:
     notes: tuple[str, ...]
     boundaries: tuple[str, ...]
     left: tuple[str, ...]
+    held: tuple[str, ...]
 
 
 def cut(root: Path, version: str) -> CutReport:
@@ -35,7 +37,10 @@ def cut(root: Path, version: str) -> CutReport:
     if failures:
         raise CutRefused("\n".join([*map(str, failures), f"{len(failures)} change-note failure(s)"]))
     notes, _ = read_tree(root)
-    moving = sorted((n for n in notes if n.directory == UNRELEASED), key=lambda n: n.id)
+    unreleased = sorted((n for n in notes if n.directory == UNRELEASED), key=lambda n: n.id)
+    defaults = working_registry(root)
+    moving = [n for n in unreleased if not n.fields.get("flag") or defaults[n.fields["flag"]]["default"] == "on"]
+    held = tuple(n.id for n in unreleased if n not in moving)
     guides = sorted({g for n in moving if isinstance(g := n.fields.get("upgrade-guide"), str)})
     doc = root / UPGRADE_DOC
     original = doc.read_text(encoding="utf-8") if guides else ""
@@ -43,6 +48,10 @@ def cut(root: Path, version: str) -> CutReport:
         moved = move_boundaries(original, version, guides)
     except UpgradeDocError as exc:
         raise CutRefused(str(exc)) from exc
+    held_guides = {g for n in unreleased if n.id in held if isinstance(g := n.fields.get("upgrade-guide"), str)}
+    displaced = held_guides & (staged_anchors(original) - staged_anchors(moved.text))
+    if displaced:
+        raise CutRefused(f"held notes' upgrade boundaries would move with another note: {', '.join(sorted(displaced))}")
     if guides:
         before, after = anchor_titles(original), anchor_titles(moved.text)
         for note in notes:
@@ -58,4 +67,4 @@ def cut(root: Path, version: str) -> CutReport:
         target.mkdir(exist_ok=True)
         (root / note.path).rename(target / f"{note.id}.md")
     left = tuple(g for g in guides if g not in moved.anchors)
-    return CutReport(version, tuple(n.id for n in moving), moved.anchors, left)
+    return CutReport(version, tuple(n.id for n in moving), moved.anchors, left, held)

@@ -18,15 +18,17 @@ and the rule it broke.
 ## Cutting and rendering
 
 `blizzard-change-notes cut <X.Y.Z>` runs at a release's cut. It refuses on any `check` failure, and otherwise moves
-every note in `changes/unreleased/` into `changes/<X.Y.Z>/`, adding to the directory when a candidate already made it.
-It also moves each `docs/upgrade.md` section the moved notes' `upgrade-guide` names from
+every note in `changes/unreleased/` whose flag is on (or has no flag) into `changes/<X.Y.Z>/`, adding to the directory
+when a candidate already made it. It prints notes held because their flag's registry default is off; a later cut moves
+them when that default turns on. It also moves each `docs/upgrade.md` section the moved notes' `upgrade-guide` names from
 `## Upgrading to the next release` into `## Upgrading to <X.Y.Z>`, creating that heading directly beneath
 `## Before you pull` when it is absent. A cut that would leave an `upgrade-guide` on another heading refuses and writes
 nothing.
 
 `blizzard-change-notes render <tag>`, or `mise run release-notes <tag>`, prints the notes a tag publishes, read from the
-tag's own tree: upgrade notes, then breaking changes, deprecations, and the added, changed, fixed and security notes,
-then the commits since the previous tag in a collapsed block. A note that an earlier release on another line also
+tag's own tree: upgrade notes, flags newly on since the previous release under **Turned on** by registry summary, then
+breaking changes, deprecations, and the added, changed, fixed and security notes, then the commits since the previous
+tag in a collapsed block. A note that an earlier release on another line also
 carries is marked `(also in X.Y.Z)`. Rendering a tag twice gives the same text.
 
 ## The id
@@ -48,7 +50,7 @@ The file opens with a `---` delimited YAML block. A repeated key and an unknown 
 | `postpones`     | The id of a deprecation note. Only on `changed`.                                                                                |
 | `retires`       | The id of a deprecation note. Only on `removed`.                                                                                |
 | `upgrade-guide` | An anchor of a heading in `docs/upgrade.md`, without the `#`, as GitHub renders it.                                             |
-| `flag`          | Refused: it waits for the flag lifecycle check.                                                                                 |
+| `flag`          | A live name in `src/blizzard/foundation/flags/registry.toml`; retired and unknown names are refused on unreleased notes.      |
 
 `retires` and `postpones` must name a `deprecated` note under a released `changes/<X.Y.Z>/` directory; an unreleased
 note, or a note of another kind, does not count.
