@@ -209,9 +209,9 @@ describe('BoardShell', () => {
     expect(el.querySelector('[data-testid="empty-state"]')).toBeNull();
     expect(el.querySelectorAll('[data-testid="chunk-card"]')).toHaveLength(3);
 
-    // A card carries the derived status and the current node id.
+    // A card carries the current node id, and leaves unsaid the status its lane's heading names.
     const running = el.querySelector('[data-col="running"] [data-testid="chunk-card"]');
-    expect(running?.querySelector('[data-testid="chunk-status"]')?.textContent).toContain('running');
+    expect(running?.querySelector('[data-testid="chunk-status"]')).toBeNull();
     expect(running?.querySelector('[data-testid="chunk-node"]')?.textContent).toContain('nd_build');
 
     // Each status lands in its own column, and a chunk is a card in exactly one of them.

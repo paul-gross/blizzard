@@ -1,7 +1,7 @@
 import { compactRef, type WorkItemsView } from 'fleet';
 import { describe, expect, it } from 'vitest';
 
-import { blockedLabel, firstLine, foldTitles, stepLabel, titledCardShowsStatus, workItemDescription, workItemTitles } from './board-card.model';
+import { blockedLabel, cardShowsStatus, firstLine, foldTitles, stepLabel, workItemDescription, workItemTitles } from './board-card.model';
 
 const item = (fields: { title?: string; label?: string; body?: string }) => ({
   source: 'hub',
@@ -92,16 +92,16 @@ describe('foldTitles', () => {
   });
 });
 
-describe('titledCardShowsStatus', () => {
+describe('cardShowsStatus', () => {
   it("leaves a lane's namesake status unsaid", () => {
     for (const status of ['running', 'ready', 'not_ready', 'needs_human'] as const) {
-      expect(titledCardShowsStatus(status)).toBe(false);
+      expect(cardShowsStatus(status)).toBe(false);
     }
   });
 
   it('names a status that says more than its lane', () => {
     for (const status of ['paused', 'waiting_on_human', 'delivering'] as const) {
-      expect(titledCardShowsStatus(status)).toBe(true);
+      expect(cardShowsStatus(status)).toBe(true);
     }
   });
 });

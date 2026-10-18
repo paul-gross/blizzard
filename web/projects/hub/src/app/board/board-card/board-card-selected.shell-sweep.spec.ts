@@ -87,14 +87,17 @@ describe('board card selected state shell sweep (web:shell-sweep)', () => {
         expect(links.bottom).toBeLessThanOrEqual(cardRect.bottom);
 
         // The content's inset from the card edge is the card's border + padding alone.
-        const content = root.querySelector<HTMLElement>('[data-testid="chunk-id"]')!.getBoundingClientRect();
+        const content = root.querySelector<HTMLElement>('[data-testid="work-ref-chip"]')!.getBoundingClientRect();
         const inset = content.left - cardRect.left;
         const expected = parseFloat(cardStyle.borderLeftWidth) + parseFloat(cardStyle.paddingLeft);
         expect(inset, `content inset ${inset} vs card border+padding ${expected}`).toBeCloseTo(expected, 0);
 
-        // Nothing in the row overflows the card.
-        expect(button.scrollWidth).toBeLessThanOrEqual(button.clientWidth + 1);
-        expect(content.right).toBeLessThanOrEqual(cardRect.right);
+        // The open control spans the card's padding box, and the id ending the step row stays inside it.
+        const buttonRect = button.getBoundingClientRect();
+        expect(buttonRect.width).toBeCloseTo(card.clientWidth, 0);
+        expect(buttonRect.height).toBeCloseTo(card.clientHeight, 0);
+        const id = root.querySelector<HTMLElement>('[data-testid="chunk-id"]')!.getBoundingClientRect();
+        expect(id.right).toBeLessThanOrEqual(cardRect.right);
       } finally {
         root.remove();
       }

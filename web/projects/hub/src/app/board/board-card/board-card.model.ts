@@ -4,15 +4,15 @@ import { type ChunkStatus, compactRef, type WorkItemsView } from 'fleet';
 const UNFOLDED_TITLES = 3;
 const FOLDED_TITLES = 2;
 
-/** The statuses a lane's own heading already names, so a titled card leaves them unsaid:
+/** The statuses a lane's own heading already names, so a card leaves them unsaid:
  * RUNNING, READY, BACKLOG, and NEEDS YOU each hold one of these as their namesake. The
  * rest — paused beside waiting_on_human, delivering beside running — say more than their
  * lane does, as does any status added later until it is named here. */
 const LANE_NAMESAKES: ReadonlySet<ChunkStatus> = new Set(['running', 'ready', 'not_ready', 'needs_human']);
 
 /** Every work item's title, in pointer order, an item with no title standing in by its
- * label — `null` while the chunk's work items are unread, so the card keeps its untitled
- * layout until they arrive. */
+ * label — `null` while the chunk's work items are unread, so the card leads with its
+ * work-ref labels until they arrive. */
 export function workItemTitles(view: WorkItemsView | undefined): readonly string[] | null {
   if (view === undefined) return null;
   return (view.items ?? []).flatMap((item) => {
@@ -61,8 +61,8 @@ export function foldTitles(titles: readonly string[], expanded: boolean): { show
   return { shown, hidden: titles.length - shown.length };
 }
 
-/** Whether a titled card names its status — only where it says more than the lane does. */
-export function titledCardShowsStatus(status: ChunkStatus): boolean {
+/** Whether a card names its status — only where it says more than the lane does. */
+export function cardShowsStatus(status: ChunkStatus): boolean {
   return !LANE_NAMESAKES.has(status);
 }
 

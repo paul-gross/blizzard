@@ -54,10 +54,20 @@ describe('BoardCardComponent work item titles', () => {
     expect(el.querySelector('[data-testid="work-ref-chip"]')).toBeNull();
   });
 
-  it('keeps the untitled layout while the titles are unread', async () => {
+  it('leads with the work-ref labels while the titles are unread', async () => {
     const el = await render({ ...RUNNING, pointerLabels: ['hub#7'], titles: null });
     expect(titlesOf(el)).toEqual([]);
     expect(el.querySelector('[data-testid="work-ref-chip"]')?.textContent?.trim()).toBe('hub#7');
+  });
+
+  it('keeps the same step row titled or not — the step, then the id', async () => {
+    for (const titles of [null, items(1)]) {
+      const el = await render({ ...RUNNING, shortId: 'C-QQFM', titles });
+      const row = el.querySelector('[data-testid="chunk-node"]')!.parentElement!;
+      expect(row.firstElementChild?.getAttribute('data-testid')).toBe('chunk-node');
+      expect(row.lastElementChild?.textContent?.trim()).toBe('C-QQFM');
+      TestBed.resetTestingModule();
+    }
   });
 
   it('names every item of a group of three, with no fold', async () => {
@@ -83,9 +93,12 @@ describe('BoardCardComponent work item titles', () => {
     expect(selected).not.toHaveBeenCalled();
   });
 
-  it("drops the status word where the lane's heading already names it", async () => {
-    const el = await render({ ...RUNNING, titles: items(1) });
-    expect(el.querySelector('[data-testid="chunk-status"]')).toBeNull();
+  it("drops the status word where the lane's heading already names it, titled or not", async () => {
+    for (const titles of [null, items(1)]) {
+      const el = await render({ ...RUNNING, titles });
+      expect(el.querySelector('[data-testid="chunk-status"]')).toBeNull();
+      TestBed.resetTestingModule();
+    }
   });
 
   it('keeps the status word where it says more than the lane', async () => {
@@ -126,14 +139,14 @@ describe('BoardCardComponent completion stamp (issue #173)', () => {
 });
 
 describe('BoardCardComponent DONE-column layout (issue #215)', () => {
-  it('shows "done" once, in the upper-right node slot, and nothing in the lower-left status slot', async () => {
+  it('shows "done" once, in the step slot, and no status word', async () => {
     const el = await render(BASE);
 
     expect(el.querySelector('[data-testid="chunk-node"]')?.textContent?.trim()).toBe('done');
     expect(el.querySelector('[data-testid="chunk-status"]')).toBeNull();
   });
 
-  it('shows "stopped" in the upper-right node slot for a stopped chunk, not its last node name', async () => {
+  it('shows "stopped" in the step slot for a stopped chunk, not its last node name', async () => {
     const el = await render({ ...BASE, status: 'stopped', node: 'deliver' });
 
     expect(el.querySelector('[data-testid="chunk-node"]')?.textContent?.trim()).toBe('stopped');
@@ -141,9 +154,9 @@ describe('BoardCardComponent DONE-column layout (issue #215)', () => {
   });
 
   it('still names the status for a non-done-lane card', async () => {
-    const el = await render({ ...BASE, status: 'running', terminal: false, node: 'build', completedAt: null });
+    const el = await render({ ...BASE, status: 'delivering', terminal: false, node: 'build', completedAt: null });
 
-    expect(el.querySelector('[data-testid="chunk-status"]')?.textContent?.trim()).toBe('running');
+    expect(el.querySelector('[data-testid="chunk-status"]')?.textContent?.trim()).toBe('delivering');
     expect(el.querySelector('[data-testid="chunk-node"]')?.textContent?.trim()).toBe('build');
   });
 });
@@ -272,14 +285,14 @@ describe('BoardCardComponent blocked marking (issue #461)', () => {
   it('keeps every other control and the status unaffected by carrying a blockedOn', async () => {
     const el = await render({
       ...BASE,
-      status: 'running',
+      status: 'paused',
       terminal: false,
       node: 'build',
       blockedOn: 'ch_01prereq00000000000000000',
       blockedCount: 1,
     });
 
-    expect(el.querySelector('[data-testid="chunk-status"]')?.textContent?.trim()).toBe('running');
+    expect(el.querySelector('[data-testid="chunk-status"]')?.textContent?.trim()).toBe('paused');
     expect(el.querySelector('[data-testid="chunk-node"]')?.textContent?.trim()).toBe('build');
   });
 });
@@ -332,11 +345,52 @@ describe('BoardCardComponent gate marker', () => {
 });
 
 describe('BoardCardComponent open control', () => {
+  const PR = { repo: 'widget', number: 42, url: 'https://forge.example/widget/pull/42' };
+  const DELIVERING: BoardCard = {
+    ...BASE,
+    status: 'delivering',
+    terminal: false,
+    promotable: true,
+    completedAt: null,
+    openPrs: [PR],
+    titles: items(5),
+  };
+
   it("names the focusable button 'Open chunk <id>'", async () => {
     const el = await render({ ...BASE, shortId: 'C-OPEN' });
 
     const button = el.querySelector('fleet-kit-select-row button');
     expect(button?.getAttribute('aria-label')).toBe('Open chunk C-OPEN');
+  });
+
+  it('opens the chunk from its button and from a click on the rows over it', async () => {
+    const fixture = await renderFixture(DELIVERING, false, true);
+    const el = fixture.nativeElement as HTMLElement;
+    const selected = vi.fn();
+    fixture.componentInstance.selectChunk.subscribe(selected);
+
+    el.querySelector<HTMLElement>('fleet-kit-select-row button')!.click();
+    el.querySelector<HTMLElement>('[data-testid="chunk-title"]')!.click();
+    el.querySelector<HTMLElement>('[data-testid="chunk-id"]')!.click();
+
+    expect(selected.mock.calls).toEqual([[DELIVERING.chunkId], [DELIVERING.chunkId], [DELIVERING.chunkId]]);
+  });
+
+  it('leaves the PR link and Promote to act for themselves', async () => {
+    const fixture = await renderFixture(DELIVERING, false, true);
+    const el = fixture.nativeElement as HTMLElement;
+    const selected = vi.fn();
+    const promoted = vi.fn();
+    fixture.componentInstance.selectChunk.subscribe(selected);
+    fixture.componentInstance.promote.subscribe(promoted);
+
+    const link = el.querySelector<HTMLAnchorElement>('[data-testid="card-pr-link"]')!;
+    link.addEventListener('click', (event) => event.preventDefault());
+    link.click();
+    el.querySelector<HTMLElement>('[data-testid="promote-chunk"]')!.click();
+
+    expect(selected).not.toHaveBeenCalled();
+    expect(promoted).toHaveBeenCalledWith(DELIVERING.chunkId);
   });
 });
 

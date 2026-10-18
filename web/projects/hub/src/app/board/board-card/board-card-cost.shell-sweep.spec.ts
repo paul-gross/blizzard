@@ -6,9 +6,10 @@ import type { BoardCard } from './board-card';
 import { BoardCardComponent } from './board-card';
 
 /**
- * The card's right-hand meta group at its fullest — a done-lane card's completion stamp and
- * cost figure side by side — never overlaps, wraps, or overflows the card, at 800px and at
- * 390px/320px (`bzh:narrow-viewport-tier-rule`). Under a real browser — see `blizzard-context:/verification/blizzard/commands/web/shell-sweep.md` §web:shell-sweep.
+ * The card's cost row at its fullest — a done-lane card's completion stamp and cost figure
+ * side by side — sits below the step row, flush with the card's right edge, and never
+ * overlaps, wraps, or overflows the card, at 800px and at 390px/320px
+ * (`bzh:narrow-viewport-tier-rule`). Under a real browser — see `blizzard-context:/verification/blizzard/commands/web/shell-sweep.md` §web:shell-sweep.
  */
 const CARD: BoardCard = {
   chunkId: 'ch_01costcard00000000000000000',
@@ -82,20 +83,21 @@ describe('board card cost figures shell sweep (web:shell-sweep)', () => {
     });
   }
 
-  /** A done-lane card renders no status, so `.meta-right` can be its row's only child. */
-  const META_CASES: readonly { label: string; card: BoardCard }[] = [
-    { label: 'one child', card: { ...CARD, costUsd: 0, estimatedCostUsd: null, costPartial: false } },
-    { label: 'two children', card: CARD },
+  const COST_ROW_CASES: readonly { label: string; card: BoardCard }[] = [
+    { label: 'one figure', card: { ...CARD, costUsd: 0, estimatedCostUsd: null, costPartial: false } },
+    { label: 'two figures', card: CARD },
   ];
-  for (const { label, card } of META_CASES) {
-    it(`sits the meta group flush with its row's end with ${label}`, async () => {
+  for (const { label, card } of COST_ROW_CASES) {
+    it(`sits the cost row below the step row, flush with the card's end, with ${label}`, async () => {
       const root = await renderCard(390, card);
       try {
-        const meta = root.querySelector<HTMLElement>('.meta-right');
-        const row = root.querySelector<HTMLElement>('.st-row');
-        expect(meta, 'fixture defect — .meta-right did not render').not.toBeNull();
-        expect(meta!.children.length, 'fixture defect — wrong meta child count').toBe(label === 'one child' ? 1 : 2);
-        expect(Math.abs(meta!.getBoundingClientRect().right - row!.getBoundingClientRect().right)).toBeLessThanOrEqual(0.5);
+        const row = root.querySelector<HTMLElement>('[data-testid="card-cost-row"]');
+        expect(row, 'fixture defect — the cost row did not render').not.toBeNull();
+        expect(row!.children.length, 'fixture defect — wrong cost-row child count').toBe(label === 'one figure' ? 1 : 2);
+        const last = row!.lastElementChild!.getBoundingClientRect();
+        expect(Math.abs(last.right - row!.getBoundingClientRect().right)).toBeLessThanOrEqual(0.5);
+        const id = root.querySelector<HTMLElement>('[data-testid="chunk-id"]')!.getBoundingClientRect();
+        expect(row!.getBoundingClientRect().top, 'the cost row is not below the step row').toBeGreaterThanOrEqual(id.bottom - 0.5);
       } finally {
         root.remove();
       }

@@ -1,3 +1,8 @@
+<!-- The open control is the kit's select row, stretched under the whole card, so the PR links
+     and the fold between its rows stay controls of their own rather than nesting inside a
+     button. The rows sit over it and keep their hover text, so a click landing on them is
+     forwarded to the same open. -->
+<!-- eslint-disable-next-line @angular-eslint/template/click-events-have-key-events, @angular-eslint/template/interactive-supports-focus -- The select row beneath is the card's focusable, keyboard-operable open control; this only forwards a pointer click that lands on the rows over it. -->
 <div
   class="card"
   data-testid="chunk-card"
@@ -5,86 +10,46 @@
   [attr.data-chunk]="card().chunkId"
   [class.selected]="selected()"
   [attr.aria-current]="selected() ? 'true' : null"
+  (click)="open($event)"
 >
-  <fleet-kit-select-row
-    class="card-open"
-    bare
-    [ariaLabel]="'Open chunk ' + card().shortId"
-    [selected]="selected()"
-    (click)="selectChunk.emit(card().chunkId)"
-  >
-    @if (title(); as title) {
-      <!-- Titled: the work item's title leads, and the id, node, and status step back
-           to the meta row beneath it. -->
-      @if (titles().length === 1) {
-        <span class="title" data-testid="chunk-title" [title]="title">{{ title }}</span>
-      } @else {
-        <!-- A grouped chunk names every item it carries; past three, the first two show
-             until the fold below the card is opened. -->
-        <span class="titles">
-          @for (each of fold().shown; track $index) {
-            <span class="title one-line" data-testid="chunk-title" [title]="each">{{ each }}</span>
-          }
-        </span>
-      }
+  <fleet-kit-select-row class="card-open" bare [ariaLabel]="'Open chunk ' + card().shortId" [selected]="selected()" />
+  @if (title(); as title) {
+    @if (titles().length === 1) {
+      <span class="title" data-testid="chunk-title" [title]="title">{{ title }}</span>
     } @else {
-      <span class="tid">
-        <span class="card-id" data-testid="chunk-id">{{ card().shortId }}</span>
-        <span class="nd" data-testid="chunk-node" [attr.title]="nodeTitle(card())">{{
-          nodeLabel(card())
-        }}</span>
-      </span>
-      <!-- Pointer labels are plain text here, not links: a card is a
-           target for opening the chunk, and an anchor inside it competes
-           for the same click. The detail panel owns the link out to the work source. -->
-      <span class="iss-list">
-        @for (label of card().pointerLabels; track label) {
-          <span class="iss" data-testid="work-ref-chip" [title]="label">{{ label }}</span>
+      <!-- A grouped chunk names every item it carries; past three, the first two show
+           until the fold beneath them is opened. -->
+      <span class="titles">
+        @for (each of fold().shown; track $index) {
+          <span class="title one-line" data-testid="chunk-title" [title]="each">{{ each }}</span>
         }
       </span>
     }
-    <span class="st-row">
-      <!-- The status names only what its column does not: the DONE lane's node slot
-           already reads "done"/"stopped", and a titled card drops it wherever the lane
-           holds that one status alone. -->
-      @if (showsStatus(card())) {
-        <span class="st" data-testid="chunk-status" [title]="card().status">{{ card().status }}</span>
+  } @else {
+    <!-- Until the titles arrive, the work-ref labels stand in for them. Plain text, not
+         links: the detail panel owns the link out to the work source. -->
+    <span class="iss-list">
+      @for (label of card().pointerLabels; track label) {
+        <span class="iss" data-testid="work-ref-chip" [title]="label">{{ label }}</span>
       }
-      @if (gated()) {
-        <fleet-kit-badge class="gate" data-testid="chunk-gate" tone="waiting" variant="pill">gate</fleet-kit-badge>
-      }
-      <!-- The blocked marking reads beside the status, in the status's own
-           engraved style. Non-link pinned by `board-card.spec.ts`'s "references the
-           prerequisite rather than reaching it…" case. -->
-      @if (card().blockedOn) {
-        <span class="st sep" aria-hidden="true">·</span>
-        <span class="st blk" data-testid="chunk-blocked-by" [title]="card().blockedOn">
-          blocked by <span class="blk-ref" [class.blk-count]="card().blockedCount > 1">{{ blockedLabel(card()) }}</span
-          >@if (blockedOnStatus(card()); as blockerStatus) {
-            <span class="blk-state" data-testid="chunk-blocked-by-state"> ({{ blockerStatus }})</span>
-          }
-        </span>
-      }
-      <!-- Pushed to the row's end — pinned by `board-card-cost.shell-sweep.spec.ts`'s
-           "sits the meta group flush with its row's end with one child" and "…with two children". -->
-      <span class="meta-right">
-        @if (title()) {
-          <span class="nd" data-testid="chunk-node" [attr.title]="nodeTitle(card())">{{ nodeLabel(card()) }}</span>
-        }
-        @if (isDoneLane(card()) && card().completedAt; as completedAt) {
-          <fleet-when class="done-at" data-testid="chunk-done-at" [iso]="completedAt" />
-        }
-        @if (hasCostFigure(card().costUsd, card().estimatedCostUsd, card().costPartial)) {
-          <span class="cost" data-testid="card-cost">{{
-            formatCost(card().costUsd, card().estimatedCostUsd, card().costPartial)
-          }}</span>
-        }
-        @if (title()) {
-          <span class="card-id small" data-testid="chunk-id">{{ card().shortId }}</span>
-        }
-      </span>
     </span>
-  </fleet-kit-select-row>
+  }
+  @if (fold().hidden > 0 || expanded()) {
+    <!-- eslint-disable-next-line no-restricted-syntax -- A text disclosure under the titles, not an action: the kit button's bordered chrome would outweigh the titles it opens. -->
+    <button type="button" class="fold" data-testid="chunk-title-fold" [attr.aria-expanded]="expanded()" (click)="toggleFold()">
+      {{ fold().hidden > 0 ? '+' + fold().hidden + ' more' : 'show less' }}
+    </button>
+  }
+  <!-- The blocked marking, in the status's engraved style. Non-link pinned by
+       `board-card.spec.ts`'s "references the prerequisite rather than reaching it…" case. -->
+  @if (card().blockedOn) {
+    <span class="st blk" data-testid="chunk-blocked-by" [title]="card().blockedOn">
+      blocked by <span class="blk-ref" [class.blk-count]="card().blockedCount > 1">{{ blockedLabel(card()) }}</span
+      >@if (blockedOnStatus(card()); as blockerStatus) {
+        <span class="blk-state" data-testid="chunk-blocked-by-state"> ({{ blockerStatus }})</span>
+      }
+    </span>
+  }
   @if (showsDelivery(card())) {
     <div class="delivery-links" data-testid="card-delivery">
       @if (card().awaitingExternalMerge) {
@@ -95,18 +60,35 @@
       }
     </div>
   }
-  <!-- The card's control row: Promote (the hub's `promotable`) is its one occupant now
-       that Delete moved to the chunk detail dock's header, where it no longer
-       eats into the card's own space. -->
-  <div class="card-controls">
-    <!-- The fold sits outside the card's open control, which is itself a button. -->
-    @if (fold().hidden > 0 || expanded()) {
-      <!-- eslint-disable-next-line no-restricted-syntax -- A text disclosure under the titles, not an action: the kit button's bordered chrome would outweigh the titles it opens. -->
-      <button type="button" class="fold" data-testid="chunk-title-fold" [attr.aria-expanded]="expanded()" (click)="toggleFold()">
-        {{ fold().hidden > 0 ? '+' + fold().hidden + ' more' : 'show less' }}
-      </button>
+  <!-- The step row: where the chunk is, left, and its id flush right. -->
+  <span class="row step-row">
+    <span class="nd" data-testid="chunk-node" [attr.title]="nodeTitle(card())">{{ nodeLabel(card()) }}</span>
+    <!-- The status names only what its column does not: the DONE lane's step slot already
+         reads "done"/"stopped", and a card drops it wherever the lane holds that one status
+         alone. -->
+    @if (showsStatus(card())) {
+      <span class="st" data-testid="chunk-status" [title]="card().status">{{ card().status }}</span>
     }
-    @if (card().promotable && canControl()) {
+    @if (gated()) {
+      <fleet-kit-badge class="gate" data-testid="chunk-gate" tone="waiting" variant="pill">gate</fleet-kit-badge>
+    }
+    <span class="card-id" data-testid="chunk-id">{{ card().shortId }}</span>
+  </span>
+  <!-- The cost row, flush right — pinned by `board-card-cost.shell-sweep.spec.ts`. -->
+  @if (completedStamp(card()) || hasCostFigure(card().costUsd, card().estimatedCostUsd, card().costPartial)) {
+    <span class="row cost-row" data-testid="card-cost-row">
+      @if (completedStamp(card()); as completedAt) {
+        <fleet-when class="done-at" data-testid="chunk-done-at" [iso]="completedAt" />
+      }
+      @if (hasCostFigure(card().costUsd, card().estimatedCostUsd, card().costPartial)) {
+        <span class="cost" data-testid="card-cost">{{
+          formatCost(card().costUsd, card().estimatedCostUsd, card().costPartial)
+        }}</span>
+      }
+    </span>
+  }
+  @if (card().promotable && canControl()) {
+    <div class="card-controls">
       <fleet-kit-button
         class="card-promote"
         testid="promote-chunk"
@@ -115,6 +97,6 @@
       >
         PROMOTE
       </fleet-kit-button>
-    }
-  </div>
+    </div>
+  }
 </div>

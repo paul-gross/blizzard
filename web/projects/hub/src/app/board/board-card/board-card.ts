@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
 
 import { type ChunkStatus, type LandedRepoView, type PrView, STATUS_LANE, formatCost, hasCostFigure, FleetWhen, KitBadge, KitButton, KitSelectRow } from 'fleet';
-import { blockedLabel, foldTitles, stepLabel, titledCardShowsStatus } from './board-card.model';
+import { blockedLabel, cardShowsStatus, foldTitles, stepLabel } from './board-card.model';
 
 /** One rendered board card — the derived-status view of a chunk. */
 export interface BoardCard {
@@ -114,12 +114,24 @@ export class BoardCardComponent {
     this.expanded.update((open) => !open);
   }
 
-  /** Whether the card belongs to the DONE column — the hub's `terminal` flag, and the
-   * completion stamp's render gate. Checked against the lane rather than
-   * {@link BoardCard.completedAt}'s own null-ness alone, so a card outside the done lane
-   * never renders a stamp even if it somehow carried one. */
+  /** Opens the chunk on a click anywhere on the card but a control of its own — a link or
+   * a button other than the open control beneath the rows — which acts for itself. */
+  protected open(event: MouseEvent): void {
+    const control = (event.target as Element).closest('a, button');
+    if (control && !control.closest('.card-open')) return;
+    this.selectChunk.emit(this.card().chunkId);
+  }
+
+  /** Whether the card belongs to the DONE column — the hub's `terminal` flag. */
   protected isDoneLane(card: BoardCard): boolean {
     return card.terminal;
+  }
+
+  /** The completion stamp's instant: a done-lane card's {@link BoardCard.completedAt}.
+   * Gated on the lane rather than the instant's own null-ness alone, so a card outside the
+   * done lane never renders a stamp even if it somehow carried one. */
+  protected completedStamp(card: BoardCard): string | null {
+    return this.isDoneLane(card) ? card.completedAt : null;
   }
 
   /** Whether the card renders its delivery block: only in the lanes where a chunk's delivery is
@@ -134,14 +146,13 @@ export class BoardCardComponent {
     );
   }
 
-  /** Whether the status word renders: never in the DONE lane (the node slot already says
-   * it), and on a titled card only where it says more than the lane's own heading. */
+  /** Whether the status word renders: never in the DONE lane (the step slot already says
+   * it), and elsewhere only where it says more than the lane's own heading. */
   protected showsStatus(card: BoardCard): boolean {
-    if (this.isDoneLane(card)) return false;
-    return this.title() === null || titledCardShowsStatus(card.status);
+    return !this.isDoneLane(card) && cardShowsStatus(card.status);
   }
 
-  /** The upper-right node slot's label — {@link BoardCard.node} for every status
+  /** The step slot's label — {@link BoardCard.node} for every status
    * except `stopped`, which shows the status word instead: a stopped chunk's
    * last-active node name (e.g. "deliver") is unhelpful noise once the chunk
    * has stopped, so it's replaced rather than shown alongside. */
@@ -149,14 +160,14 @@ export class BoardCardComponent {
     return stepLabel(card.status, card.node);
   }
 
-  /** The node slot's hover text: the full label the card clips, with the raw node id
+  /** The step slot's hover text: the full label the card clips, with the raw node id
    * beside it when the label is a name rather than that id. */
   protected nodeTitle(card: BoardCard): string | null {
     const label = this.nodeLabel(card);
     return card.nodeId && card.nodeId !== label ? `${label} (${card.nodeId})` : label || null;
   }
 
-  /** What the blocked marking names, beside the status: the one unmet prerequisite's compact
+  /** What the blocked marking names: the one unmet prerequisite's compact
    * ref, or a count once there is more than one — pinned by `board-card.spec.ts`'s "counts the
    * prerequisites instead of naming the first…" case. */
   protected blockedLabel(card: BoardCard): string {

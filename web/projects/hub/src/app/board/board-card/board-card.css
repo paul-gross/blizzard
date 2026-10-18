@@ -4,14 +4,19 @@
   border-left: 3px solid var(--amber);
   background: var(--surface-resting);
   padding: 4px 6px;
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 3px;
   width: 100%;
   min-width: 0;
+  cursor: pointer;
 }
+/* An armed card clears room for `board-column.css`'s reorder grip beside it, and stands at
+   least the grip's 32px tall so a one-row card still holds it. */
 :host(.reorder-armed) .card {
   padding-left: 22px;
+  min-height: 34px;
 }
 /* Hover reads as the background step plus a dim-cyan edge on three sides
    (never the left, which stays status-colored) — the background step alone
@@ -58,14 +63,16 @@
 .card[data-status='not_ready'] {
   border-left-color: var(--label-dim);
 }
+/* The open control fills the card beneath its rows, which stack over it in order. */
 .card-open {
+  position: absolute;
+  inset: 0;
   display: flex;
-  flex-direction: column;
-  gap: 2px;
-  width: 100%;
-  min-width: 0;
 }
-.card-open:has(:focus-visible) {
+.card > :not(.card-open) {
+  position: relative;
+}
+.card:has(.card-open :focus-visible) {
   outline: 1px solid var(--cyan);
   outline-offset: 1px;
 }
@@ -80,30 +87,26 @@
   overflow-wrap: anywhere;
   min-width: 0;
 }
-.delivery-links a { color: var(--cyan); }
+.delivery-links a { color: var(--cyan); cursor: pointer; }
 .delivery-links .merge-wait { color: var(--amber-hi); }
-/* The card's identity line: the chunk's short name, with the node it currently
-   sits at pushed to the far right.
+/* The step and cost rows.
 
    Every line here holds to one line and ellipsises instead of wrapping. A board
    column is narrow, and a wrapped card is worse than a clipped one twice over: it
    breaks a value mid-token (a chunk name split across two lines is unreadable and
    unsearchable) and it makes cards in the same column different heights, so the
    column stops scanning as a list. The full value stays reachable in the detail. */
-.tid {
+.row {
   display: flex;
-  justify-content: space-between;
   align-items: baseline;
   gap: 6px;
   min-width: 0;
 }
-.card-id {
-  color: var(--amber);
-  font-size: var(--fs-md);
-  letter-spacing: 0.04em;
-  white-space: nowrap;
+/* The cost row's figures sit flush with the card's right edge. */
+.cost-row {
+  justify-content: flex-end;
 }
-.tid .nd {
+.nd {
   color: var(--label);
   font-size: var(--fs-label);
   letter-spacing: 0.12em;
@@ -111,6 +114,16 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  min-width: 0;
+}
+/* The id ends the step row, and is the one thing on it that never clips. */
+.card-id {
+  flex: none;
+  margin-left: auto;
+  color: var(--amber);
+  font-size: var(--fs-sm);
+  letter-spacing: 0.04em;
+  white-space: nowrap;
 }
 /* The work item's title — the one line that says what the chunk is. The deliberate
    exception to the one-line rule above: a title clipped to one line in a column this
@@ -139,6 +152,7 @@
 }
 /* The fold toggle under a large group's titles — a quiet link, not another title. */
 .fold {
+  align-self: flex-start;
   padding: 0;
   border: 0;
   background: none;
@@ -153,22 +167,6 @@
 .fold:focus-visible {
   outline: 1px solid var(--cyan);
   outline-offset: 1px;
-}
-/* On a titled card the id and node step down into the meta row, the id at the row's
-   end — the card's one amber accent, a size below the untitled card's header id. */
-.card-id.small {
-  font-size: var(--fs-sm);
-  letter-spacing: 0.04em;
-}
-.meta-right .nd {
-  color: var(--label);
-  font-size: var(--fs-label);
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  min-width: 0;
 }
 /* One label per line: a column, not the wrapping single line every other
    card row uses. Each line still clips on its own rather than wrapping
@@ -188,24 +186,17 @@
   color: var(--cyan);
   font-size: var(--fs-xs);
 }
-.st-row {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-  min-width: 0;
-}
 .st {
   color: var(--label);
   font-size: var(--fs-label);
   letter-spacing: 0.14em;
   text-transform: uppercase;
 }
-.meta-right {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-  margin-left: auto;
-  min-width: 0;
+/* The status word takes only the step row's leftover room, so on a crowded row it clips
+   before the step it qualifies does. */
+.step-row .st {
+  flex: 1 1 0;
+  max-width: max-content;
 }
 /* The chunk's one derived cost figure, rendered by `formatCost`; no separate badge on a
    card this small. */
@@ -221,9 +212,8 @@
   font-size: var(--fs-xs);
   white-space: nowrap;
 }
-/* The control row: Promote is its one occupant — empty (no control renders) when canControl is
-   false or the status is not_ready, so it never adds a visible gap on a
-   read-only or non-backlog card. */
+/* The control row: Promote is its one occupant, and the row renders only with it, so it
+   never adds a visible gap on a read-only or non-backlog card. */
 .card-controls {
   display: flex;
   align-items: center;
@@ -233,21 +223,11 @@
   --kit-button-pad: 1px 6px;
   --kit-button-fs: var(--fs-label);
 }
-/* The blocked marking beside the status: "BLOCKED BY" carries `.st`'s own engraved
+/* The blocked marking under the titles: "BLOCKED BY" carries `.st`'s own engraved
    label style, and the prerequisite it names reads gold against it — the one part of
-   the row that identifies another chunk. `.blk-ref` is `--amber` rather than the
-   `.card-id` cyan so it does not read as this card's own id. */
-/* The separator between the status and the marking — its own flex child rather than
-   a character inside `.blk`, so the marking's own text stays exactly what it says. */
-.sep {
-  flex: none;
-  letter-spacing: 0;
-}
+   the line that identifies another chunk. */
 .blk {
-  white-space: nowrap;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 .blk-ref {
   color: var(--amber);
@@ -262,7 +242,7 @@
 .blk-state {
   color: var(--label);
 }
-/* The open-decision marker sits beside the status and never shrinks: it is the
+/* The open-decision marker sits on the step row and never shrinks: it is the
    one thing on the card that says a person is being waited on. */
 .gate {
   flex: none;

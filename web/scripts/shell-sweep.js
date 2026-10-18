@@ -210,17 +210,18 @@
  *     leading "All" option, genuinely fit with no horizontal overflow, and a row
  *     from a bucket mixing routines and scopes genuinely renders both its own
  *     routine and scope with no horizontal overflow of the row itself, at 390/320px.
- *   - projects/hub/src/app/board/board-card/board-card-blocked.shell-sweep.spec.ts —
- *     the blocked marking's adjacency to a card's status: it renders directly below the
- *     status row without moving the status's own position or overflowing the card, at
- *     800px and at 390/320px.
+ *   - projects/hub/src/app/board/board-card/board-card-rows.shell-sweep.spec.ts —
+ *     a card's rows stack in order — title, blocked marking, PR links, the step row with
+ *     its id flush right, then the cost row — each inside the card, at 800px and at
+ *     390/320px.
  *   - projects/hub/src/app/board/board-card/board-card-selected.shell-sweep.spec.ts — a
  *     selected card draws only the outer card's cyan edge (the bare kit select row
  *     inside has no padding, border or background), its PR links sit inside the card,
  *     and the content inset is the card's own padding, at 800px, 390px and 320px.
  *   - projects/hub/src/app/board/board-card/board-card-cost.shell-sweep.spec.ts — a
  *     done-lane card's completion stamp, billed cost, and estimate stay side by side on
- *     one line without overflowing the card, at 800px and at 390/320px.
+ *     one line below the step row, flush right, without overflowing the card, at 800px
+ *     and at 390/320px.
  *   - projects/hub/src/app/board/board-shell/board-column.shell-sweep.spec.ts — the
  *     READY and BACKLOG whole-card drag cue: its decorative token-coloured dots
  *     resolve as a two-wide grid only when reordering is armed.
@@ -354,7 +355,7 @@ const SWEEPS = [
   { project: 'hub', spec: 'projects/hub/src/app/garden/findings/gardening-finding-triage-dialog.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/garden/gardening-page-grids.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/garden/findings/gardening-findings-filters.shell-sweep.spec.ts' },
-  { project: 'hub', spec: 'projects/hub/src/app/board/board-card/board-card-blocked.shell-sweep.spec.ts' },
+  { project: 'hub', spec: 'projects/hub/src/app/board/board-card/board-card-rows.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/board/board-card/board-card-cost.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/board/board-card/board-card-selected.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/board/board-shell/board-column.shell-sweep.spec.ts' },
