@@ -141,20 +141,20 @@ describe('AgentRow', () => {
       expect(row?.getAttribute('tabindex')).toBe('0');
     });
 
-    it('emits selectLease with the full lease_id on click', async () => {
+    it('emits selectChunk with the lease’s full chunk_id on click', async () => {
       const fixture = await renderRow(lease());
       const emitted: string[] = [];
-      fixture.componentInstance.selectLease.subscribe((id: string) => emitted.push(id));
+      fixture.componentInstance.selectChunk.subscribe((id: string) => emitted.push(id));
 
       (fixture.nativeElement as HTMLElement).querySelector<HTMLElement>('[data-testid="agent-row"]')?.click();
 
-      expect(emitted).toEqual(['lease_01KXKVVF1J3D6H6VYZ3XYNZPRR']);
+      expect(emitted).toEqual([lease().chunk_id]);
     });
 
-    it('emits selectLease on Enter and Space', async () => {
+    it('emits selectChunk on Enter and Space', async () => {
       const fixture = await renderRow(lease());
       const emitted: string[] = [];
-      fixture.componentInstance.selectLease.subscribe((id: string) => emitted.push(id));
+      fixture.componentInstance.selectChunk.subscribe((id: string) => emitted.push(id));
       const row = (fixture.nativeElement as HTMLElement).querySelector<HTMLElement>('[data-testid="agent-row"]');
 
       row?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));

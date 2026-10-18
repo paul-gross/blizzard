@@ -5,7 +5,7 @@ import { HostCardView } from './host-card';
 import { NO_HOST_VERBS, type HostVerbEvent, type HostVerbsVm } from './host-verbs.model';
 import { groupHostRows, type HostCard, type HostGroups } from './host-rows.model';
 import { ServedProjectGroup } from './served-project-group';
-import { localPauseHint, runnerSeenLabel, runnerToggleHint, type RunnerRow } from './runner-rows';
+import { localPauseHint, runnerSeenLabel, runnerToggleHint, type RunnerRow } from './runner-rows.model';
 
 /**
  * The mobile Fleet screen's presentational half: a phone-width, full-width

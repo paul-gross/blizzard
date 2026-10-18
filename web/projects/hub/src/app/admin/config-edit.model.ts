@@ -4,9 +4,10 @@ import type { FieldChangeView } from 'fleet';
  * never reads back. */
 export type ConfigFieldKind = 'text' | 'password' | 'checkbox';
 
-/** One field of a config record's form. */
-export interface ConfigFieldDef {
-  readonly key: string;
+/** One field of a config record's form. `K` is the set of keys the form may name — a
+ * list typed against a generated model fails to build when a wire field is renamed. */
+export interface ConfigFieldDef<K extends string = string> {
+  readonly key: K;
   readonly label: string;
   readonly kind: ConfigFieldKind;
   /** Whether a create needs a value for it. */
@@ -98,6 +99,12 @@ export function createBody(
     }
   }
   return body;
+}
+
+/** One text field of a create body — `''` when the form left it empty. */
+export function createText(body: Readonly<Record<string, string | boolean>>, key: string): string {
+  const value = body[key];
+  return typeof value === 'string' ? value : '';
 }
 
 /** A shown record's form values, or `null` with no record loaded. */

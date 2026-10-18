@@ -50,14 +50,6 @@
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
-.chip {
-  color: var(--cyan);
-  text-decoration: none;
-  margin-right: 6px;
-}
-a.chip:hover {
-  text-decoration: underline;
-}
 .line3 {
   color: var(--label);
   font-size: var(--fs-xs);

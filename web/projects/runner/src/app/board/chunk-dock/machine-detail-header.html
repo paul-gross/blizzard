@@ -3,18 +3,13 @@
     <a class="cid" data-testid="detail-chunk-ref" [routerLink]="[...linkBase(), chunkId()]">{{ chunkId() }}</a>
     <span class="d-sub">
       @for (ref of workRefs(); track ref.source + ':' + ref.ref) {
-        @if (ref.web_url) {
-          <a
-            class="iss"
-            data-testid="detail-pointer"
-            [href]="ref.web_url"
-            target="_blank"
-            rel="noreferrer"
-            [attr.title]="ref.web_url"
-          >{{ ref.label ?? ref.source + '#' + ref.ref }}</a>
-        } @else {
-          <span class="iss" data-testid="detail-pointer">{{ ref.label ?? ref.source + '#' + ref.ref }}</span>
+        @if (!$first) {
+          <span class="sep" aria-hidden="true">·</span>
         }
+        <fleet-work-ref-link [workRef]="ref" testid="detail-pointer" />
+      }
+      @if (workRefs().length) {
+        <span class="sep" aria-hidden="true">·</span>
       }
       <span class="st" data-testid="machine-detail-status">
         @if (statusTone(); as tone) {

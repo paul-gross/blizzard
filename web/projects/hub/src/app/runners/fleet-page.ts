@@ -12,7 +12,8 @@ import { groupHostRows } from './host-rows.model';
 import { injectHostVerbs } from './host-verbs';
 import type { HostVerbEvent } from './host-verbs.model';
 import { pendingRunnerIds, withPendingRunnerPauses } from './runner-pause-override.model';
-import { injectRunnerRows, type RunnerRow } from './runner-rows';
+import { injectRunnerRows } from './runner-rows';
+import { type RunnerRow } from './runner-rows.model';
 import { injectRunnerPauseMutation, type RunnerPauseVars } from './runners.mutations';
 
 /**

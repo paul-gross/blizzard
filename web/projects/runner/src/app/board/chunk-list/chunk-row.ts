@@ -33,7 +33,7 @@ export class ChunkRow {
   /** Whether the container considers this row the current selection. */
   readonly selected = input(false);
 
-  /** Emits this row's `chunk_id` on click/Enter/Space — same convention as `selectLease`. */
+  /** Emits this row's `chunk_id` on click/Enter/Space — same convention as the agent row's `selectChunk`. */
   readonly selectChunk = output<string>();
 
   protected readonly chunkId = computed(() => this.lease().chunk_id);

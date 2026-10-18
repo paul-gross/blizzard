@@ -3530,6 +3530,40 @@
         "title": "DecisionOpenedPayload",
         "type": "object"
       },
+      "DecisionResolutionConflict": {
+        "description": "The 409 body: the decision was already resolved (the loser is told who won, with what, and when).",
+        "properties": {
+          "already_resolved_by": {
+            "title": "Already Resolved By",
+            "type": "string"
+          },
+          "decision_id": {
+            "title": "Decision Id",
+            "type": "string"
+          },
+          "detail": {
+            "default": "decision already resolved",
+            "title": "Detail",
+            "type": "string"
+          },
+          "resolved_at": {
+            "default": "",
+            "title": "Resolved At",
+            "type": "string"
+          },
+          "resolved_choice": {
+            "default": "",
+            "title": "Resolved Choice",
+            "type": "string"
+          }
+        },
+        "required": [
+          "decision_id",
+          "already_resolved_by"
+        ],
+        "title": "DecisionResolutionConflict",
+        "type": "object"
+      },
       "DecisionResolutionRequest": {
         "description": "A person's choice for an open decision \u2014 first-write-wins CAS.",
         "properties": {
@@ -20294,6 +20328,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionResolutionConflict"
+                }
+              }
+            },
+            "description": "A lost first-write-wins race, carrying the winning resolution. A decision closed without a resolution shares the status and answers a bare `{detail}` instead."
           },
           "422": {
             "content": {

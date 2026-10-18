@@ -3,6 +3,7 @@ import { QueryClient, injectMutation } from '@tanstack/angular-query-experimenta
 
 import {
   createSecretApiSecretsPost,
+  type SecretCreateRequestWritable,
   enableSecretApiSecretsNameEnablePost,
   hubConfigKey,
   replaceSecretApiSecretsNameValuePut,
@@ -13,12 +14,6 @@ import {
   replaceSecretMutationKey,
   secretLifecycleMutationKey,
 } from '../../core/mutation-keys';
-
-/** A new secret — its name and its write-only value. */
-export interface SecretCreateVars {
-  readonly name: string;
-  readonly value: string;
-}
 
 /** A secret's new value, against the shown `revision`. */
 export interface SecretReplaceVars {
@@ -38,7 +33,7 @@ export function injectCreateSecretMutation() {
   const queryClient = inject(QueryClient);
   return injectMutation(() => ({
     mutationKey: createSecretMutationKey,
-    mutationFn: async (vars: SecretCreateVars): Promise<void> => {
+    mutationFn: async (vars: SecretCreateRequestWritable): Promise<void> => {
       const { error } = await createSecretApiSecretsPost({
         body: vars,
         throwOnError: false,

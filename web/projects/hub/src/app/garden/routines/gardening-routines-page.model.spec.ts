@@ -1,4 +1,4 @@
-import type { GraphSummaryView, RoutineView } from 'fleet';
+import type { AsyncStateQuery, GraphSummaryView, RoutineView } from 'fleet';
 import { describe, expect, it } from 'vitest';
 
 import { presentRoutineName, routineListRows } from './gardening-routines-page.model';
@@ -35,19 +35,28 @@ describe('presentRoutineName', () => {
   });
 });
 
+const query = (state: 'pending' | 'error' | 'success'): AsyncStateQuery => ({
+  isPending: () => state === 'pending',
+  isError: () => state === 'error',
+});
+
 describe('routineListRows', () => {
   it('flags a routine blocked when its graph has no effective mint', () => {
-    expect(routineListRows([NIGHTLY, ORPHAN], [EFFECTIVE_GRAPH], false)).toEqual([
+    expect(routineListRows([NIGHTLY, ORPHAN], [EFFECTIVE_GRAPH], query('success'))).toEqual([
       { routineId: 'rtn_1', name: 'nightly', graphName: 'garden-routine', blocked: false, retired: false },
       { routineId: 'rtn_2', name: 'orphan', graphName: 'unminted', blocked: true, retired: true },
     ]);
   });
 
   it('flags no routine blocked while the graph read is pending', () => {
-    expect(routineListRows([ORPHAN], [], true).map((row) => row.blocked)).toEqual([false]);
+    expect(routineListRows([ORPHAN], [], query('pending')).map((row) => row.blocked)).toEqual([false]);
+  });
+
+  it('flags no routine blocked when the graph read failed', () => {
+    expect(routineListRows([ORPHAN], [], query('error')).map((row) => row.blocked)).toEqual([false]);
   });
 
   it('answers no rows for no routines', () => {
-    expect(routineListRows([], [EFFECTIVE_GRAPH], false)).toEqual([]);
+    expect(routineListRows([], [EFFECTIVE_GRAPH], query('success'))).toEqual([]);
   });
 });

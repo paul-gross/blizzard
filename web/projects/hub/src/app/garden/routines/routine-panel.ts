@@ -107,6 +107,8 @@ export interface RoutinePanelVm {
   readonly recentRuns: readonly RecentRunVm[] | null;
   /** The recent-runs section's own async state, gated on the runs read (`bzh:frontend-empty-state-gated`). */
   readonly recentRunsState: KitAsyncStateValue;
+  /** The measurement section's own async state, gated on the sweeps read (`bzh:frontend-empty-state-gated`). */
+  readonly measurementsState: KitAsyncStateValue;
   /** The Runs fact: how many runs the window holds, labelled with the window — `null` while the runs read is pending. */
   readonly runsLabel: string | null;
 }

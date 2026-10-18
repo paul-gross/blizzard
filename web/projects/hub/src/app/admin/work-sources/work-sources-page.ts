@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { Router, RouterOutlet } from '@angular/router';
-import { asyncState, errorMessage, type KitAsyncStateValue, ViewportService, type WorkSourceDocument } from 'fleet';
+import { asyncState, errorMessage, type KitAsyncStateValue, ViewportService } from 'fleet';
 
 import { hasPermission, injectMeQuery } from '../../core/auth/me.query';
 import { injectCreateWorkSourceMutation } from './work-sources.mutations';
@@ -18,7 +18,7 @@ import { ConfigMaster } from '../config-master';
 import { injectLensLinks, withinLens } from '../projects/lens-links';
 import { lensedListState } from '../projects/projects.model';
 import type { ConfigRowVm } from '../config-record-list';
-import { WORK_SOURCE_FIELDS, workSourceKey, workSourceRows } from './work-sources.model';
+import { WORK_SOURCE_FIELDS, workSourceCreate, workSourceKey, workSourceRows } from './work-sources.model';
 import { injectWorkSourcesQuery } from './work-sources.query';
 import { ProjectLens } from '../../core/project-lens';
 
@@ -97,7 +97,7 @@ export class WorkSourcesPage {
   }
 
   protected onCreate(values: ConfigFormValues): void {
-    const body = createBody(this.fields, values) as unknown as WorkSourceDocument;
+    const body = workSourceCreate(createBody(this.fields, values));
     this.createError.set(null);
     this.createMutation.mutate(body, {
       onSuccess: () => {

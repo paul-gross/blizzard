@@ -97,14 +97,14 @@ describe('LocalPanelLayout', () => {
     expect(rows[0].getAttribute('data-lease-id')).toBe('lease_01KXKVVF1J3D6H6VYZ3XYNZPRR');
   });
 
-  it('emits selectLease when an agent row is activated', async () => {
+  it('emits the lease’s chunk id as selectChunk when an agent row is activated', async () => {
     const fixture = await render({ activeLeases: [LEASE()] });
     let selected: string | undefined;
-    fixture.componentInstance.selectLease.subscribe((id) => (selected = id));
+    fixture.componentInstance.selectChunk.subscribe((id) => (selected = id));
     const el = fixture.nativeElement as HTMLElement;
 
     el.querySelector<HTMLElement>('[data-testid="agent-row"]')?.click();
-    expect(selected).toBe('lease_01KXKVVF1J3D6H6VYZ3XYNZPRR');
+    expect(selected).toBe(LEASE().chunk_id);
   });
 
   it('renders one chunk-row per machine chunk and marks the selected one', async () => {

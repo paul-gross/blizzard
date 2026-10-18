@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
-import { compactRef, KitBadge, type runnerApi } from 'fleet';
+import { compactRef, KitBadge, type runnerApi, WorkRefLink } from 'fleet';
 
 import type { MachineChunkStatus } from './chunk-status';
 
@@ -10,7 +10,7 @@ import type { MachineChunkStatus } from './chunk-status';
 @Component({
   selector: 'app-chunk-card-view',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitBadge],
+  imports: [KitBadge, WorkRefLink],
   templateUrl: './chunk-card-view.html',
   styleUrl: './chunk-card-view.css',
 })

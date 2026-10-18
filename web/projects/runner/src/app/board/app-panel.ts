@@ -138,22 +138,16 @@ export class LocalPanel {
 
   /**
    * The `chunk_id` currently selected. A lease row selects its chunk too
-   * ({@link selectLease}) — the lease rail and the chunks list share one
+   * ({@link selectChunk}) — the lease rail and the chunks list share one
    * selection, reflected on both.
    */
   protected readonly selectedChunkId = this.selection.chunkId;
 
   /** Write a chunk selection to the URL, clearing any stale `attempt` (attempt
-   * lease ids are chunk-specific, so a new chunk defaults to its newest). */
+   * lease ids are chunk-specific, so a new chunk defaults to its newest) — a lease row
+   * selects its chunk, so the detail dock defaults to the chunk's newest attempt. */
   protected selectChunk(chunkId: string): void {
     this.selection.select(chunkId);
-  }
-
-  /** Selecting a lease row selects its chunk — the shared selection both rails
-   * reflect; the detail dock defaults to the chunk's newest attempt. */
-  protected selectLease(leaseId: string): void {
-    const lease = this.leases().find((candidate) => candidate.lease_id === leaseId);
-    if (lease) this.selection.select(lease.chunk_id);
   }
 
   /** Clear the selection entirely — the mobile shell's back affordance, which

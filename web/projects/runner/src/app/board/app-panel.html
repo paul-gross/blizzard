@@ -13,7 +13,6 @@
         [selectedChunkLeases]="selectedChunkLeases()"
         [selectedStatus]="selectedStatus()"
         [selectedEscalation]="selectedEscalation()"
-        (selectLease)="selectLease($event)"
         (selectChunk)="selectChunk($event)"
         (toggleShowAllChunks)="showAllChunks.set($event)"
         (dismiss)="clearSelection()"
@@ -30,7 +29,6 @@
           [selectedStatus]="selectedStatus()"
           [selectedEscalation]="selectedEscalation()"
           (selectChunk)="selectChunk($event)"
-          (selectLease)="selectLease($event)"
           (closeDetail)="clearSelection()"
         />
       }

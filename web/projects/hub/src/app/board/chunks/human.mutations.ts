@@ -1,7 +1,7 @@
 import { inject } from '@angular/core';
 import { QueryClient, injectMutation } from '@tanstack/angular-query-experimental';
 
-import { type AnswerResult, type DecisionResolutionResponse, answerQuestionApiQuestionsQuestionIdAnswersPost, resolveDecisionApiDecisionsDecisionIdResolutionsPost, errorMessage, formatWhen, hubChunkKey, hubChunksKey, hubDecisionsKey } from 'fleet';
+import { type AnswerResult, type DecisionResolutionConflict, type DecisionResolutionResponse, answerQuestionApiQuestionsQuestionIdAnswersPost, resolveDecisionApiDecisionsDecisionIdResolutionsPost, errorMessage, formatWhen, hubChunkKey, hubChunksKey, hubDecisionsKey } from 'fleet';
 import { answerQuestionMutationKey, resolveDecisionMutationKey } from '../../core/mutation-keys';
 
 /** Answer a chunk's open question. */
@@ -81,25 +81,19 @@ export function injectAnswerQuestionMutation() {
   }));
 }
 
-/** A losing resolve's 409 body — the winner's choice, who, and when. */
-interface DecisionConflict {
-  readonly already_resolved_by: string;
-  readonly resolved_choice: string;
-  readonly resolved_at: string;
-}
-
 /**
- * Read a losing resolve's 409 body, or `null` for any other failure — narrowed by shape,
- * the same way {@link readAnswerConflict} narrows the answer race.
+ * Read a losing resolve's 409 body, or `null` for any other failure — the 409 also carries a
+ * bare `{detail}` for a closed decision, so it is narrowed by shape, the same way
+ * {@link readAnswerConflict} narrows the answer race.
  */
-function readDecisionConflict(error: unknown): DecisionConflict | null {
+function readDecisionConflict(error: unknown): DecisionResolutionConflict | null {
   if (!error || typeof error !== 'object') return null;
-  const body = error as Partial<DecisionConflict>;
+  const body = error as Partial<DecisionResolutionConflict>;
   return typeof body.already_resolved_by === 'string' &&
     typeof body.resolved_choice === 'string' &&
     body.resolved_choice !== '' &&
     typeof body.resolved_at === 'string'
-    ? (body as DecisionConflict)
+    ? (body as DecisionResolutionConflict)
     : null;
 }
 

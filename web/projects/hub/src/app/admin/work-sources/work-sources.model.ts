@@ -1,10 +1,28 @@
-import type { WorkSourceSummary } from 'fleet';
+import type { WorkSourceDocument, WorkSourceSummary } from 'fleet';
 
-import type { ConfigFieldDef } from '../config-edit.model';
+import { type ConfigFieldDef, createText } from '../config-edit.model';
 import { factText, secretLinks } from '../config-links.model';
 import { filterByLifecycle, type LifecycleFilter } from '../config-filter.model';
 import type { ConfigBadgeVm, ConfigRowVm } from '../config-record-list';
 import type { ConfigRecordVm } from '../config-record-panel';
+
+/** The create a new work source's form sends: an optional text field left empty is omitted, and
+ * `annotate` is the form's one checkbox. */
+export function workSourceCreate(body: Readonly<Record<string, string | boolean>>): WorkSourceDocument {
+  const text = (key: string): string => createText(body, key);
+  const optional = (key: 'name' | 'api_base' | 'web_base' | 'secret'): Partial<WorkSourceDocument> =>
+    text(key) === '' ? {} : { [key]: text(key) };
+  return {
+    slug: text('slug'),
+    provider: text('provider'),
+    locator: text('locator'),
+    ...optional('name'),
+    ...optional('api_base'),
+    ...optional('web_base'),
+    ...optional('secret'),
+    ...(typeof body['annotate'] === 'boolean' ? { annotate: body['annotate'] } : {}),
+  };
+}
 
 /** A work source's badges — built-in, retired. */
 export function workSourceBadges(source: WorkSourceSummary): readonly ConfigBadgeVm[] {
@@ -86,7 +104,7 @@ export function workSourceRecordVm(source: WorkSourceSummary | undefined): Confi
 
 /** A work source's form fields. The slug is the handle people type and may be renamed; the
  * name is its display label, and left blank on create it takes the slug. */
-export const WORK_SOURCE_FIELDS: readonly ConfigFieldDef[] = [
+export const WORK_SOURCE_FIELDS: readonly ConfigFieldDef<keyof WorkSourceDocument>[] = [
   { key: 'slug', label: 'Slug', kind: 'text', required: true },
   { key: 'name', label: 'Name', kind: 'text' },
   { key: 'provider', label: 'Provider', kind: 'text', required: true },

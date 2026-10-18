@@ -9,8 +9,6 @@ import { foldHostCards, type HostCard } from './host-rows.model';
 import { injectHubHostsQuery } from './hosts.query';
 import { injectHubRunnersQuery } from '../core/runners.query';
 
-export * from './runner-rows.model';
-
 /**
  * Folds the runners, hosts and chunks reads into {@link RunnerRow}s — each runner's claims,
  * slot-bar numerator, pace bars, served projects and bindings — and into the {@link HostCard}s

@@ -31,7 +31,7 @@
           >
             <div class="rows">
               @for (lease of activeLeases(); track lease.lease_id) {
-                <app-agent-row [agent]="lease" (selectLease)="selectLease.emit($event)" />
+                <app-agent-row [agent]="lease" (selectChunk)="selectChunk.emit($event)" />
               }
             </div>
           </fleet-kit-async-state>

@@ -43,15 +43,14 @@ const START_RADIUS = DONE_RADIUS;
  * (those come from the domain as `n_<name>`), so it can't collide with one. */
 const START_TERMINAL = '__start__';
 const START_EDGE_NAME = 'start';
-const TargetKind = hubApi.ChoiceTargetKind;
 /** Dagre graph-lib id for the shared `done` sink — the reserved terminal's own
  * name, never a real `node_id` (those come from the domain as `n_<name>`). */
-const DONE_SINK = TargetKind.DONE;
+const DONE_SINK = hubApi.ChoiceTargetKind.DONE;
 /** Dagre graph-lib id for a migration sink — `graph:<name>`, namespaced by the
  * target kind so it can't collide with a real `node_id`, {@link DONE_SINK}, or
  * {@link START_TERMINAL}. */
 function migrationSinkId(targetGraph: string): string {
-  return `${TargetKind.GRAPH}:${targetGraph}`;
+  return `${hubApi.ChoiceTargetKind.GRAPH}:${targetGraph}`;
 }
 /** Horizontal margin reserved so a self-loop's side arc doesn't clip the viewBox. */
 const SELF_LOOP_MARGIN = 60;
@@ -164,11 +163,11 @@ function curvedPath(points: readonly { x: number; y: number }[]): string {
  * `done` sink, or a migration's own sink, one per distinct target graph name. */
 function dagreTargetId(target: EdgeTarget): string {
   switch (target.kind) {
-    case TargetKind.NODE:
+    case hubApi.ChoiceTargetKind.NODE:
       return target.nodeId;
-    case TargetKind.DONE:
+    case hubApi.ChoiceTargetKind.DONE:
       return DONE_SINK;
-    case TargetKind.GRAPH:
+    case hubApi.ChoiceTargetKind.GRAPH:
       return migrationSinkId(target.targetGraph);
   }
 }
@@ -188,20 +187,20 @@ export function layoutGraph(graph: GraphView, measure: TextMeasurer): LayoutOutc
 
   const selfLoopsByNode = new Map<string, ResolvedEdge>();
   for (const edge of resolved) {
-    if (edge.target.kind === TargetKind.NODE && edge.target.nodeId === edge.fromId) {
+    if (edge.target.kind === hubApi.ChoiceTargetKind.NODE && edge.target.nodeId === edge.fromId) {
       if (selfLoopsByNode.has(edge.fromId)) return { ok: false }; // >1 self-loop per node: unsupported
       selfLoopsByNode.set(edge.fromId, edge);
     }
   }
 
-  const usesDone = resolved.some((e) => e.target.kind === TargetKind.DONE);
+  const usesDone = resolved.some((e) => e.target.kind === hubApi.ChoiceTargetKind.DONE);
   // First-seen order, one sink per distinct target graph name — mirrors the `done`
   // sink's "shared by every edge into it" shape, just keyed by name instead of a
   // single reserved terminal.
   const migrationNames: string[] = [];
   const seenMigrations = new Set<string>();
   for (const edge of resolved) {
-    if (edge.target.kind === TargetKind.GRAPH && !seenMigrations.has(edge.target.targetGraph)) {
+    if (edge.target.kind === hubApi.ChoiceTargetKind.GRAPH && !seenMigrations.has(edge.target.targetGraph)) {
       seenMigrations.add(edge.target.targetGraph);
       migrationNames.push(edge.target.targetGraph);
     }
@@ -229,7 +228,7 @@ export function layoutGraph(graph: GraphView, measure: TextMeasurer): LayoutOutc
       g.setEdge(START_TERMINAL, graph.entry_node_id, {}, START_EDGE_NAME);
     }
 
-    const forwardEdges = resolved.filter((e) => !(e.target.kind === TargetKind.NODE && e.target.nodeId === e.fromId));
+    const forwardEdges = resolved.filter((e) => !(e.target.kind === hubApi.ChoiceTargetKind.NODE && e.target.nodeId === e.fromId));
     for (const edge of forwardEdges) {
       const target = dagreTargetId(edge.target);
       const labelW = labelBoxWidth(edge.label, measure);

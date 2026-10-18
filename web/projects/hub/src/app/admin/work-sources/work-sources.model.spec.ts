@@ -1,7 +1,13 @@
 import type { WorkSourceSummary } from 'fleet';
 import { describe, expect, it } from 'vitest';
 
-import { workSourceBadges, workSourceCliName, workSourceRecordVm, workSourceRows } from './work-sources.model';
+import {
+  workSourceBadges,
+  workSourceCliName,
+  workSourceCreate,
+  workSourceRecordVm,
+  workSourceRows,
+} from './work-sources.model';
 
 const WINTER: WorkSourceSummary = {
   work_source_id: 'wsrc_w',
@@ -97,5 +103,19 @@ describe('workSourceCliName', () => {
     expect(workSourceCliName(OLD)).toBe('old');
     expect(workSourceCliName(HUB)).toBeNull();
     expect(workSourceCliName(undefined)).toBeNull();
+  });
+
+  it('creates a work source from the form, carrying the checkbox as a boolean and leaving empty text out', () => {
+    const body = { slug: 'winter', name: '', provider: 'github', locator: 'paul-gross/winter', api_base: '', web_base: '', secret: '', annotate: true };
+    expect(workSourceCreate(body)).toEqual({
+      slug: 'winter',
+      provider: 'github',
+      locator: 'paul-gross/winter',
+      annotate: true,
+    });
+    expect(workSourceCreate({ ...body, annotate: false, secret: 'gh-winter' })).toMatchObject({
+      annotate: false,
+      secret: 'gh-winter',
+    });
   });
 });

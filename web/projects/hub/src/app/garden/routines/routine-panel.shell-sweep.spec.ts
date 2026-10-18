@@ -80,6 +80,7 @@ const VM: RoutinePanelVm = {
     { chunkId: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJA', scopeSlug: 'blizzard', mode: 'full', findings: 0, mintedAt: '2026-01-03T00:00:00Z' },
   ],
   recentRunsState: 'ready',
+  measurementsState: 'ready',
   runsLabel: '2 in the last 28 days',
 };
 

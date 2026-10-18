@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
-import { compactRef, KitBadge, toneColor, type runnerApi } from 'fleet';
+import { compactRef, KitBadge, toneColor, type runnerApi, WorkRefLink } from 'fleet';
 
 import type { MachineChunkStatus } from './chunk-status';
 
@@ -12,7 +12,7 @@ import type { MachineChunkStatus } from './chunk-status';
 @Component({
   selector: 'app-chunk-row-view',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitBadge],
+  imports: [KitBadge, WorkRefLink],
   templateUrl: './chunk-row-view.html',
   styleUrl: './chunk-row-view.css',
 })
@@ -29,7 +29,7 @@ export class ChunkRowView {
   /** The chunk's linked work items — empty when none are known. */
   readonly linkedItems = input<readonly runnerApi.WorkItemEntry[]>([]);
 
-  /** Emits this row's `chunk_id` on click/Enter/Space — same convention as `selectLease`. */
+  /** Emits this row's `chunk_id` on click/Enter/Space — same convention as the agent row's `selectChunk`. */
   readonly selectChunk = output<string>();
 
   protected onSelect(event?: Event): void {

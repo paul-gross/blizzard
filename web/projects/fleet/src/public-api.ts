@@ -27,6 +27,7 @@ export * from './lib/shell/board-header';
 export * from './lib/chunk/chunk-detail';
 export * from './lib/chunk/chunk-artifacts-panel';
 export * from './lib/chunk/chunk-issue-list';
+export * from './lib/chunk/work-ref-link';
 export * from './lib/sse';
 export * from './lib/core/mutation-pending';
 export * from './lib/transcripts';
@@ -109,6 +110,8 @@ export { client as hubClient } from './lib/api/hub/client.gen';
 export type { Client } from './lib/api/hub/client';
 export type {
   RepositoryDocument,
+  SecretCreateRequestWritable,
+  SecretReplaceRequest,
   RepositoryPatchRequest,
   WorkSourceDocument,
   WorkSourcePatchRequest,
@@ -126,6 +129,7 @@ export type {
   ChunkCountsView,
   ChunkStatus,
   ChunkSummary,
+  DecisionResolutionConflict,
   DecisionResolutionResponse,
   DecisionView,
   EventView,

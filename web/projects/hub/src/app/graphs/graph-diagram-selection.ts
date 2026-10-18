@@ -1,4 +1,4 @@
-import type { GraphChoiceView, GraphNodeView, GraphView } from 'fleet';
+import { hubApi, type GraphChoiceView, type GraphNodeView, type GraphView } from 'fleet';
 import type { EdgeKind, EdgeTarget } from './graph-edge-target';
 import type { LaidOutGraph } from './graph-layout';
 
@@ -34,7 +34,7 @@ export function selectionKey(selection: DiagramSelection | null): string | null 
 export function incidentEdgeIds(laidOut: LaidOutGraph, nodeId: string): readonly string[] {
   const ids: string[] = [];
   for (const edge of laidOut.edges) {
-    if (edge.fromNodeId === nodeId || (edge.target.kind === 'node' && edge.target.nodeId === nodeId)) ids.push(edge.id);
+    if (edge.fromNodeId === nodeId || (edge.target.kind === hubApi.ChoiceTargetKind.NODE && edge.target.nodeId === nodeId)) ids.push(edge.id);
   }
   for (const loop of laidOut.selfLoops) {
     if (loop.nodeId === nodeId) ids.push(loop.id);
@@ -48,7 +48,7 @@ export function incidentEdgeIds(laidOut: LaidOutGraph, nodeId: string): readonly
 export function endpointNodeIds(selection: DiagramSelection | null): readonly string[] {
   if (selection === null || selection.kind !== 'edge') return [];
   const ids = [selection.fromNodeId];
-  if (selection.target.kind === 'node' && selection.target.nodeId !== selection.fromNodeId) ids.push(selection.target.nodeId);
+  if (selection.target.kind === hubApi.ChoiceTargetKind.NODE && selection.target.nodeId !== selection.fromNodeId) ids.push(selection.target.nodeId);
   return ids;
 }
 

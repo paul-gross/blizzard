@@ -17,7 +17,7 @@ import {
 import { CapabilityBadgeGroup } from './capability-badge-group';
 import { GateBadgeGroup } from './gate-badge-group';
 import { busyAgents, declaredAgents } from './host-rows.model';
-import { localPauseHint, runnerSeenLabel, runnerToggleHint, type RunnerRow } from './runner-rows';
+import { localPauseHint, runnerSeenLabel, runnerToggleHint, type RunnerRow } from './runner-rows.model';
 import { RunnerSubscription } from './runner-subscription';
 import { ServedProjectGroup } from './served-project-group';
 

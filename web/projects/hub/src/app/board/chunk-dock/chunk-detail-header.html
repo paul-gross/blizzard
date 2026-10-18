@@ -17,18 +17,7 @@
         @if (!$first) {
           <span class="sep" aria-hidden="true">·</span>
         }
-        @if (p.web_url) {
-          <a
-            class="iss"
-            data-testid="detail-pointer"
-            [href]="p.web_url"
-            target="_blank"
-            rel="noreferrer"
-            [attr.title]="p.web_url"
-          >{{ p.label ?? p.source + '#' + p.ref }}</a>
-        } @else {
-          <span class="iss" data-testid="detail-pointer">{{ p.label ?? p.source + '#' + p.ref }}</span>
-        }
+        <fleet-work-ref-link [workRef]="p" testid="detail-pointer" />
       }
       @if (pointers().length) {
         <span class="sep" aria-hidden="true">·</span>

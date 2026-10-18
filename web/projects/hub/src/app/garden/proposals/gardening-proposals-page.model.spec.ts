@@ -10,6 +10,7 @@ import {
   pendingClosureIds,
   proposalClassChips,
   proposalListRows,
+  proposalSelectionTarget,
   proposalRoutineChips,
   waitingChipValue,
   type ProposalFilters,
@@ -173,5 +174,40 @@ describe('proposalListRows', () => {
         createdAt: '2026-01-01T00:00:00Z',
       },
     ]);
+  });
+});
+
+describe('proposalSelectionTarget', () => {
+  const ROWS = ['p1', 'p2'];
+
+  it('stays while the list read has not settled', () => {
+    expect(proposalSelectionTarget(false, 'gone', [], false)).toBeNull();
+    expect(proposalSelectionTarget(false, null, ROWS, false)).toBeNull();
+  });
+
+  it('stays on a routed proposal the filters keep', () => {
+    expect(proposalSelectionTarget(true, 'p2', ROWS, false)).toBeNull();
+    expect(proposalSelectionTarget(true, 'p2', ROWS, true)).toBeNull();
+  });
+
+  it('moves an excluded proposal to the first row on desktop', () => {
+    expect(proposalSelectionTarget(true, 'gone', ROWS, false)).toEqual({ proposalId: 'p1' });
+  });
+
+  it('opens the first row from a bare route on desktop', () => {
+    expect(proposalSelectionTarget(true, null, ROWS, false)).toEqual({ proposalId: 'p1' });
+  });
+
+  it('returns an excluded proposal to the bare docket when no row remains on desktop', () => {
+    expect(proposalSelectionTarget(true, 'gone', [], false)).toEqual({ proposalId: null });
+  });
+
+  it('stays on a bare route over an empty docket on desktop', () => {
+    expect(proposalSelectionTarget(true, null, [], false)).toBeNull();
+  });
+
+  it('returns an excluded proposal to the docket on mobile and leaves a bare route there', () => {
+    expect(proposalSelectionTarget(true, 'gone', ROWS, true)).toEqual({ proposalId: null });
+    expect(proposalSelectionTarget(true, null, ROWS, true)).toBeNull();
   });
 });

@@ -23,13 +23,7 @@
   <div class="line2" data-testid="local-chunk-card-title">
     @for (item of linkedItems(); track item.ref) {
       <div class="wi">
-        @if (item.web_url) {
-          <a class="chip" [href]="item.web_url" target="_blank" rel="noopener" (click)="$event.stopPropagation()">{{
-            item.label
-          }}</a>
-        } @else if (item.label) {
-          <span class="chip">{{ item.label }}</span>
-        }
+        <fleet-work-ref-link [workRef]="item" appearance="chip" />
         {{ item.title }}
       </div>
     }

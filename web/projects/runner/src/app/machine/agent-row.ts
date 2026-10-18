@@ -17,7 +17,7 @@ import { HeartbeatFreshness } from './heartbeat-freshness';
  * `data-lease-id` remains a stable hook for the e2e tier to select a row by
  * (`bzh:sweep-release-only-tiers` — `data-*` is the sanctioned e2e seam). The
  * row is the selection affordance: `role="button"` + `tabindex="0"`,
- * click/Enter/Space all emit {@link selectLease}, and `selected` reflects the
+ * click/Enter/Space all emit {@link selectChunk}, and `selected` reflects the
  * container's current mark.
  */
 @Component({
@@ -35,18 +35,17 @@ export class AgentRow {
   readonly selected = input(false);
 
   /**
-   * Emits this row's `lease_id` on click, Enter, or Space. Named
-   * `selectLease`, matching `board-shell.ts`'s `selectChunk` — the house
-   * convention for a row-select output — rather than the native `select`
-   * DOM event name.
+   * Emits the `chunk_id` of this row's lease on click, Enter, or Space — a lease
+   * row selects its chunk. Named `selectChunk`, matching `board-shell.ts`'s
+   * row-select output convention, rather than the native `select` DOM event name.
    */
-  readonly selectLease = output<string>();
+  readonly selectChunk = output<string>();
 
-  /** Emits {@link selectLease}; `event` is only present for the keyboard bindings, where it is
+  /** Emits {@link selectChunk}; `event` is only present for the keyboard bindings, where it is
    * prevented so Space doesn't also scroll the page. */
   protected onSelect(event?: Event): void {
     event?.preventDefault();
-    this.selectLease.emit(this.agent().lease_id);
+    this.selectChunk.emit(this.agent().chunk_id);
   }
 
   protected readonly leaseRef = computed(() => compactRef(this.agent().lease_id));

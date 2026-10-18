@@ -6,6 +6,7 @@ import { compactRef } from '../../core/compact-ref';
 import { toneColor } from '../../kit/kit-badge';
 import type { Tone } from '../../kit/tone';
 import { LensLink } from '../../core/lens-link';
+import { WorkRefLink } from '../work-ref-link/work-ref-link';
 
 /**
  * The chunk-detail-page identity header — the chunk's own id beside its
@@ -29,7 +30,7 @@ import { LensLink } from '../../core/lens-link';
 @Component({
   selector: 'fleet-chunk-page-header',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RouterLink, LensLink],
+  imports: [RouterLink, LensLink, WorkRefLink],
   templateUrl: './chunk-page-header.html',
   styleUrl: './chunk-page-header.css',
 })

@@ -168,15 +168,15 @@ describe('LocalPanelMobile', () => {
     expect(picked).toEqual([LEASE().chunk_id]);
   });
 
-  it('emits the tapped agent row lease id — a lease tap selects its chunk too', async () => {
+  it('emits the tapped agent row’s chunk id — a lease tap selects its chunk', async () => {
     const fixture = await render({ activeLeases: [LEASE()] });
     const el = fixture.nativeElement as HTMLElement;
     const picked: string[] = [];
-    fixture.componentInstance.selectLease.subscribe((id) => picked.push(id));
+    fixture.componentInstance.selectChunk.subscribe((id) => picked.push(id));
 
     el.querySelector<HTMLElement>('[data-testid="agent-row"]')?.click();
 
-    expect(picked).toEqual([LEASE().lease_id]);
+    expect(picked).toEqual([LEASE().chunk_id]);
   });
 
   it('drills down to the chunk detail screen once the container resolves a selection', async () => {

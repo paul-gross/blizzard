@@ -4,7 +4,8 @@ import { hasPermission, injectMeQuery } from '../core/auth/me.query';
 import { injectHostVerbs } from './host-verbs';
 import type { HostVerbEvent } from './host-verbs.model';
 import { injectRunnerPauseMutation, type RunnerPauseVars } from './runners.mutations';
-import { injectRunnerRows, type RunnerRow } from './runner-rows';
+import { injectRunnerRows } from './runner-rows';
+import { type RunnerRow } from './runner-rows.model';
 import { pendingRunnerIds, withPendingRunnerPauses } from './runner-pause-override.model';
 import { runnerPauseMutationKey } from '../core/mutation-keys';
 
