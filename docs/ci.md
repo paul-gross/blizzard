@@ -120,19 +120,35 @@ the last successful baseline is clean again, `wire-compat-deployed` passes and `
 history rewrite required.
 
 [`.github/workflows/release.yml`](../.github/workflows/release.yml) (tag `v*`) runs the full suite — gate, service tier,
-the **full** crash sweep, and e2e — then builds the wheel with the embedded frontend, pushes a multi-arch
-(`linux/amd64` + `linux/arm64`) hub image to GHCR, and publishes a GitHub Release with the wheel attached. The Release
-is published with the workflow's built-in `GITHUB_TOKEN`; there is no external package-index publish.
+the **full** crash sweep, and e2e — then two jobs. `build` builds the wheel with the embedded frontend, pushes a
+multi-arch (`linux/amd64` + `linux/arm64`) hub image to GHCR, signs it keylessly by its manifest-list digest
+(`cosign sign --yes --recursive`), attests its build provenance, assembles the release's attached files with
+[`scripts/release-inventory.sh`](../scripts/release-inventory.sh) — the wheel, both hashed requirements files with their
+project lines, the image file naming the digest, `compat-breaks.json` when the build produced it, and `SHA256SUMS` over
+all of them — attests the provenance of every attached file, and uploads them as one workflow artifact. `publish` then
+downloads that artifact and makes one `gh release create` call with every file attached; there is no external
+package-index publish.
 
 The release tag fan-out (`vX.Y.Z` → exact + minor + `latest`; `vX.Y.Z-rc.*` → exact only) lives in
-[`scripts/image-tags.sh`](../scripts/image-tags.sh), unit-tested by `tests/test_image_tags.py`, never inline in workflow
+[`scripts/image-tags.sh`](../scripts/image-tags.sh), unit-tested by `tests/test_image_tags.py`, and the attached set's
+assembly in `scripts/release-inventory.sh`, unit-tested by `tests/test_release_inventory.py` — never inline in workflow
 YAML.
 
-The workflow-level `permissions:` is `contents: read`, so the release workflow's test jobs hold no write scope. The
-`release` job's job-level `permissions:` block declares both `contents: write` (`gh release create`) and
-`packages: write` (the GHCR push) — job-level blocks replace the workflow-level one — and the image push runs before
-`gh release create`, so a failed image build cannot leave a Release advertising a missing image;
-`tests/test_release_workflow.py` pins both scopes and the read-only workflow level.
+The workflow-level `permissions:` is `contents: read`, so the release workflow's test jobs hold no write scope. Job-level
+blocks replace the workflow-level one: `build` declares `contents: read`, `packages: write` (the GHCR push),
+`id-token: write` (the OIDC identity), and `attestations: write`; `publish` declares only `contents: write`
+(`gh release create`). The image push runs in `build`, before `publish`, so a failed image build cannot leave a Release
+advertising a missing image; `tests/test_release_workflow.py` pins each job's scopes and the read-only workflow level.
+
+Every signature and attestation carries the identity
+`https://github.com/paul-gross/blizzard/.github/workflows/release.yml@refs/tags/v<version>`, issued by
+`https://token.actions.githubusercontent.com`; no key exists to rotate.
+
+Two repository settings back that identity. Like package visibility, no workflow can assert them; a real cut is their
+only proof:
+
+- A **tag ruleset on `v*`** that lets only the maintainers create a release tag and lets nobody update or delete one.
+- **Immutable releases**, so a published release's tag and attached files cannot be replaced after the fact.
 
 The `ghcr.io/paul-gross/blizzard-hub` package must be **public** — package visibility is a GHCR repository setting no
 workflow can assert, and every unauthenticated `docker pull` the operator docs prescribe depends on it. It is verified
@@ -143,7 +159,7 @@ docker pull ghcr.io/paul-gross/blizzard-hub:latest
 ```
 
 `mise run image-smoke` builds and boots the image locally but cannot prove the multi-arch GHCR push — only a real tag
-cut's `release` run proves that.
+cut's `build` run proves that.
 
 ## The wheel build
 
@@ -153,5 +169,5 @@ humans, and the release workflow alike. It builds both Angular apps into the whe
 migration trees, verifies the wheel actually contains them, then proves a Node-free install by running
 `blizzard --version` from a clean node-free virtualenv.
 
-Setting `BLIZZARD_VERSION=<v>` overrides the wheel version — the dev-build and release jobs set it — and the original is
-restored after the build.
+Setting `BLIZZARD_VERSION=<v>` overrides the wheel version — the dev-build and release `build` jobs set it —
+and the original is restored after the build.

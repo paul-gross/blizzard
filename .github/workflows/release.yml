@@ -23,8 +23,8 @@ on:
     tags:
       - "v*"
 
-# Read-only by default: the test jobs hold no write scope. Only the `release` job declares
-# `contents: write` and `packages: write`, at job level.
+# Read-only by default: the test jobs hold no write scope. `build` and `publish` each declare
+# their own scopes at job level; only `publish` holds `contents: write`.
 permissions:
   contents: read
 
@@ -181,19 +181,22 @@ jobs:
           MISE_TRUSTED_CONFIG_PATHS: ${{ github.workspace }}/blizzard
         run: cd blizzard && mise run e2e
 
-  release:
-    name: build wheel + image, publish release
+  build:
+    name: build wheel + image, sign and attest, assemble the inventory
     needs: [gate, service-tier, crash-sweep, e2e]
     runs-on: ubuntu-latest
+    outputs:
+      prerelease: ${{ steps.ver.outputs.prerelease }}
     # A job-level `permissions:` block REPLACES the workflow-level one rather than
-    # merging with it — every unlisted scope becomes `none`. `packages: write`
-    # (the GHCR push below) must therefore be declared *alongside* `contents:
-    # write` (the `gh release create` step already here), not instead of it — the
-    # repo's first job-level permissions block, no local precedent to copy from.
-    # tests/test_release_workflow.py pins both scopes stay present.
+    # merging with it — every unlisted scope becomes `none`. This job pushes to GHCR,
+    # mints the OIDC identity the signature and attestations carry, and stores them;
+    # it cannot write the Release, which `publish` alone does.
+    # tests/test_release_workflow.py pins the exact scopes.
     permissions:
-      contents: write
+      contents: read
       packages: write
+      id-token: write
+      attestations: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -272,8 +275,10 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: build and push the hub image (linux/amd64, linux/arm64)
-        # Before `gh release create` (decision 5) — a failed image build must never
-        # leave a published Release advertising an image that does not exist.
+        # Before `publish` — a failed image build must never leave a published Release
+        # advertising an image that does not exist. The `digest` output is the
+        # manifest-list digest of the multi-platform push.
+        id: build_push
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -282,12 +287,60 @@ jobs:
           push: true
           tags: ${{ steps.image_meta.outputs.tags }}
           annotations: ${{ steps.image_meta.outputs.annotations }}
-      - name: publish GitHub Release with the wheel attached
+      - name: install cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+      - name: sign the pushed manifest list and each platform manifest (keyless)
+        env:
+          IMAGE_DIGEST: ${{ steps.build_push.outputs.digest }}
+        run: cosign sign --yes --recursive "ghcr.io/paul-gross/blizzard-hub@${IMAGE_DIGEST}"
+      - name: attest build provenance of the pushed image
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ghcr.io/paul-gross/blizzard-hub
+          subject-digest: ${{ steps.build_push.outputs.digest }}
+          push-to-registry: true
+      - name: assemble the attached files and their checksums (scripts/release-inventory.sh)
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+          IMAGE_DIGEST: ${{ steps.build_push.outputs.digest }}
+        run: |
+          ./scripts/release-inventory.sh "$VERSION" "$(ls dist/blizzard-*.whl)" "$IMAGE_DIGEST" inventory \
+            --compat-breaks compat-breaks.json
+          ls -l inventory
+      - name: attest build provenance of every attached file
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: inventory/*
+      - name: hand the attached files and the notes to publish
+        # Two paths whose common ancestor is the workspace root, so the archive keeps
+        # the `inventory/` prefix `publish` globs on.
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: release-files
+          path: |
+            inventory/
+            release-notes.md
+          if-no-files-found: error
+
+  publish:
+    name: publish GitHub Release with every file attached
+    needs: [build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: release-files
+          path: .
+      - name: publish GitHub Release (one call, so immutable releases see every file)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          PRERELEASE: ${{ needs.build.outputs.prerelease }}
         run: |
           FLAGS=(--notes-file release-notes.md --title "${GITHUB_REF_NAME}")
-          if [ "${{ steps.ver.outputs.prerelease }}" = "true" ]; then
+          if [ "$PRERELEASE" = "true" ]; then
             FLAGS+=(--prerelease)
           fi
-          gh release create "${GITHUB_REF_NAME}" dist/*.whl "${FLAGS[@]}"
+          gh release create "${GITHUB_REF_NAME}" inventory/* "${FLAGS[@]}"

@@ -211,6 +211,7 @@ also_copy = [
     "scripts/export-requirements.sh",
     "scripts/image-tags.sh",
     "scripts/is-retryable-push-error.sh",
+    "scripts/release-inventory.sh",
     "scripts/release-notes.sh",
     "scripts/restated-invariants.json",
     "src/blizzard/foundation/flags/registry.toml",
