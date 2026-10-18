@@ -22,7 +22,7 @@ const BASE: BoardCard = {
   blockedOnStatus: null,
 };
 
-async function render(card: BoardCard, gated = false, canControl = false) {
+async function renderFixture(card: BoardCard, gated = false, canControl = false) {
   await TestBed.configureTestingModule({
     imports: [BoardCardComponent],
     providers: [provideZonelessChangeDetection()],
@@ -32,8 +32,67 @@ async function render(card: BoardCard, gated = false, canControl = false) {
   fixture.componentRef.setInput('gated', gated);
   fixture.componentRef.setInput('canControl', canControl);
   await fixture.whenStable();
-  return fixture.nativeElement as HTMLElement;
+  return fixture;
 }
+
+async function render(card: BoardCard, gated = false, canControl = false) {
+  return (await renderFixture(card, gated, canControl)).nativeElement as HTMLElement;
+}
+
+/** `n` titles, "Item 1" … "Item n". */
+const items = (n: number) => Array.from({ length: n }, (_, i) => `Item ${i + 1}`);
+
+const titlesOf = (el: HTMLElement) =>
+  [...el.querySelectorAll('[data-testid="chunk-title"]')].map((title) => title.textContent?.trim());
+
+describe('BoardCardComponent work item titles', () => {
+  const RUNNING: BoardCard = { ...BASE, status: 'running', terminal: false, node: 'build', completedAt: null };
+
+  it('leads with the one work item title in place of the id and work-ref chips', async () => {
+    const el = await render({ ...RUNNING, pointerLabels: ['hub#7'], titles: ['Migrate the event log'] });
+    expect(titlesOf(el)).toEqual(['Migrate the event log']);
+    expect(el.querySelector('[data-testid="work-ref-chip"]')).toBeNull();
+  });
+
+  it('keeps the untitled layout while the titles are unread', async () => {
+    const el = await render({ ...RUNNING, pointerLabels: ['hub#7'], titles: null });
+    expect(titlesOf(el)).toEqual([]);
+    expect(el.querySelector('[data-testid="work-ref-chip"]')?.textContent?.trim()).toBe('hub#7');
+  });
+
+  it('names every item of a group of three, with no fold', async () => {
+    const el = await render({ ...RUNNING, titles: items(3) });
+    expect(titlesOf(el)).toEqual(['Item 1', 'Item 2', 'Item 3']);
+    expect(el.querySelector('[data-testid="chunk-title-fold"]')).toBeNull();
+  });
+
+  it('folds a larger group to its first two titles, and opens in place without selecting', async () => {
+    const fixture = await renderFixture({ ...RUNNING, titles: items(5) });
+    const el = fixture.nativeElement as HTMLElement;
+    const selected = vi.fn();
+    fixture.componentInstance.selectChunk.subscribe(selected);
+    expect(titlesOf(el)).toEqual(['Item 1', 'Item 2']);
+
+    const fold = el.querySelector<HTMLElement>('[data-testid="chunk-title-fold"]')!;
+    expect(fold.textContent?.trim()).toBe('+3 more');
+    fold.click();
+    await fixture.whenStable();
+
+    expect(titlesOf(el)).toEqual(['Item 1', 'Item 2', 'Item 3', 'Item 4', 'Item 5']);
+    expect(el.querySelector('[data-testid="chunk-title-fold"]')?.textContent?.trim()).toBe('show less');
+    expect(selected).not.toHaveBeenCalled();
+  });
+
+  it("drops the status word where the lane's heading already names it", async () => {
+    const el = await render({ ...RUNNING, titles: items(1) });
+    expect(el.querySelector('[data-testid="chunk-status"]')).toBeNull();
+  });
+
+  it('keeps the status word where it says more than the lane', async () => {
+    const el = await render({ ...RUNNING, status: 'paused', titles: items(1) });
+    expect(el.querySelector('[data-testid="chunk-status"]')?.textContent?.trim()).toBe('paused');
+  });
+});
 
 
 describe('BoardCardComponent completion stamp (issue #173)', () => {

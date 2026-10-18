@@ -1,0 +1,69 @@
+<!-- The open control is the kit's select row, stretched under the whole row; the cells sit
+     over it and let a click fall through to it, so the PR links and the fold stay controls of
+     their own rather than nesting inside a button. -->
+<div
+  class="row"
+  data-testid="list-row"
+  [attr.data-status]="card().status"
+  [attr.data-chunk]="card().chunkId"
+  [class.selected]="selected()"
+  [attr.aria-current]="selected() ? 'true' : null"
+>
+  <fleet-kit-select-row
+    class="row-open"
+    bare
+    testid="list-row-open"
+    [ariaLabel]="'Open chunk ' + card().shortId"
+    [selected]="selected()"
+    (picked)="selectChunk.emit(card().chunkId)"
+  />
+  <div class="work">
+    @for (each of fold().shown; track $index) {
+      <span class="title" data-testid="list-row-title" [title]="each">{{ each }}</span>
+    } @empty {
+      <span class="title untitled" data-testid="list-row-title">{{ fallback() }}</span>
+    }
+    @if (card().description; as text) {
+      <span class="desc" data-testid="list-row-desc" [title]="text">{{ text }}</span>
+    }
+    @if (fold().hidden > 0 || expanded()) {
+      <!-- eslint-disable-next-line no-restricted-syntax -- A text disclosure under the titles, not an action: the kit button's bordered chrome would outweigh the titles it opens. -->
+      <button
+        type="button"
+        class="fold"
+        data-testid="list-row-fold"
+        [attr.aria-expanded]="expanded()"
+        (click)="toggleFold()"
+      >
+        {{ fold().hidden > 0 ? '+' + fold().hidden + ' more' : 'show less' }}
+      </button>
+    }
+  </div>
+  <span class="cell project">{{ card().projectName ?? '' }}</span>
+  <span class="cell step">
+    <span class="step-name" [title]="step()">{{ step() }}</span>
+    @if (gated()) {
+      <fleet-kit-badge class="gate" tone="waiting" variant="pill">gate</fleet-kit-badge>
+    }
+    @if (blocked(); as blocker) {
+      <span class="blocked" [title]="card().blockedOn">blocked · {{ blocker }}</span>
+    }
+  </span>
+  <span class="cell runner">{{ card().runnerName ?? '' }}</span>
+  <span class="cell prs">
+    @if (card().awaitingExternalMerge) {
+      <span class="merge-wait">awaiting merge</span>
+    }
+    @for (pr of card().openPrs ?? []; track pr.repo + ':' + pr.number) {
+      <a [href]="pr.url" target="_blank" rel="noopener noreferrer">#{{ pr.number }}</a>
+    }
+  </span>
+  <span class="cell cost">
+    @if (card().terminal && card().completedAt; as completedAt) {
+      <fleet-when class="done-at" [iso]="completedAt" />
+    } @else if (hasCostFigure(card().costUsd, card().estimatedCostUsd, card().costPartial)) {
+      {{ formatCost(card().costUsd, card().estimatedCostUsd, card().costPartial) }}
+    }
+  </span>
+  <span class="cell id">{{ card().shortId }}</span>
+</div>

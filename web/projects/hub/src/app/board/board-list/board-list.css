@@ -1,0 +1,58 @@
+:host {
+  display: block;
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  /* The tracks every row and the column header share. */
+  --list-columns: minmax(0, 1fr) 90px 130px 110px 90px 70px 64px;
+}
+.list {
+  font-family: var(--mono);
+}
+/* The column header, held at the top while the sections scroll beneath it. Indented by
+   the rows' own left accent so its labels sit over their columns. */
+.cols {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: var(--list-columns);
+  gap: 12px;
+  padding: 5px 10px 5px 11px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-resting);
+  font-size: var(--fs-label);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--label-dim);
+}
+.cols .r {
+  text-align: right;
+}
+/* Sections stack flush: each is ruled off from the next by its own bottom line alone. */
+.section {
+  border: 0;
+  border-bottom: 1px solid var(--line);
+}
+.section-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-family: var(--mono);
+  font-size: var(--fs-label);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+.section-count {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.section[data-lane='needs'] .section-label {
+  color: var(--red);
+}
+.empty {
+  margin: 0;
+  padding: 8px 14px;
+  font-size: var(--fs-xs);
+  color: var(--label-dim);
+}

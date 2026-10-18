@@ -236,6 +236,12 @@ export function hubChunkWorkItemsKey(chunkId: string | null): readonly unknown[]
   return ['hub', 'chunk', chunkId, 'work-items'];
 }
 
+/** One batch of the board's work-items read, keyed by its sorted chunk ids. Kept outside the
+ * `[hub, chunk, id]` prefixes so a chunk's own change does not re-run the batch holding it. */
+export function hubWorkItemsBatchKey(chunkIds: readonly string[]): readonly unknown[] {
+  return ['hub', 'work-items-batch', chunkIds];
+}
+
 /** One minted graph's full structure, keyed by id. */
 export function hubGraphKey(graphId: string | null): readonly unknown[] {
   return ['hub', 'graph', graphId];

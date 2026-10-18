@@ -112,6 +112,64 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* The work item's title — the one line that says what the chunk is. The deliberate
+   exception to the one-line rule above: a title clipped to one line in a column this
+   narrow rarely says enough, so it wraps to two and clamps there. */
+.title {
+  color: var(--text);
+  font-size: var(--fs-sm);
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+/* A grouped chunk's titles: each wraps up to three lines before it clamps. */
+.titles {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+.title.one-line {
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+}
+/* The fold toggle under a large group's titles — a quiet link, not another title. */
+.fold {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--cyan);
+  font-family: var(--mono);
+  font-size: var(--fs-xs);
+  cursor: pointer;
+}
+.fold:hover {
+  text-decoration: underline;
+}
+.fold:focus-visible {
+  outline: 1px solid var(--cyan);
+  outline-offset: 1px;
+}
+/* On a titled card the id and node step down into the meta row, the id at the row's
+   end — the card's one amber accent, a size below the untitled card's header id. */
+.card-id.small {
+  font-size: var(--fs-sm);
+  letter-spacing: 0.04em;
+}
+.meta-right .nd {
+  color: var(--label);
+  font-size: var(--fs-label);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
 /* One label per line: a column, not the wrapping single line every other
    card row uses. Each line still clips on its own rather than wrapping
    (the file's standing rule, restated here since the container is new). */

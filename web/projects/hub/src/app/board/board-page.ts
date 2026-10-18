@@ -1,5 +1,8 @@
-import { ChangeDetectionStrategy, Component, computed, signal } from '@angular/core';
-import { BoardShell } from './board-shell/board-shell';
+import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
+import { ActivatedRoute, Router } from '@angular/router';
+import { map } from 'rxjs';
+import { BoardShell, type BoardLayout } from './board-shell/board-shell';
 import { type BoardLaneMove, type BoardReposition } from './board-shell/board-column';
 import { type ChunkSummary, asyncState, errorMessage, injectChunkUrlSelection, type KitAsyncStateValue, injectHubChunkDetailQuery, injectPendingMutationVariables } from 'fleet';
 import { ChunkDetail } from './chunk-dock/chunk-detail';
@@ -19,6 +22,7 @@ import { injectPromoteChunkMutation, type PromoteVars } from './chunks/promote.m
 import { injectRepositionBacklogMutation, injectRepositionQueueMutation, type RepositionVars } from './queue/queue.mutations';
 import { foldRepositions, gatedChunkIds, orderedChunkIds, placedMoves, resolveSelectedChunk, withPendingBoardChanges } from './board-page.model';
 import { UnservedBanner } from './unserved/unserved-banner';
+import { injectBoardWorkItemsQuery } from './work-items/board-work-items.query';
 
 /**
  * The board route — the two-column mission-control surface:
@@ -184,6 +188,27 @@ export class BoardPage {
   protected readonly selected = computed<string | null>(() =>
     resolveSelectedChunk(this.selection.chunkId(), this.chunks(), this.linkedDetail.data()?.chunk_id),
   );
+
+  private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
+
+  /** The board's layout, the URL's `?layout=list` — absent is the lane grid. */
+  protected readonly layout = toSignal(
+    this.route.queryParamMap.pipe(map((params): BoardLayout => (params.get('layout') === 'list' ? 'list' : 'board'))),
+    { initialValue: 'board' as BoardLayout },
+  );
+
+  /** Switch the layout by writing the URL, keeping every other param (the open chunk among them). */
+  protected setLayout(layout: BoardLayout): void {
+    void this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: { layout: layout === 'list' ? 'list' : null },
+      queryParamsHandling: 'merge',
+    });
+  }
+
+  /** Every chunk's work items, read once the chunk list has answered. */
+  protected readonly workItems = injectBoardWorkItemsQuery(() => orderedChunkIds(this.boardChunks()));
 
   /** Select a chunk — or clear the selection — by writing the URL. */
   protected select(chunkId: string | null): void {

@@ -65,3 +65,12 @@ fleet-kit-panel.board-panel {
   flex: 1;
   min-height: 0;
 }
+/* The panel header: the Board/List switch, then the board's own label. */
+.hdr {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.list {
+  height: 100%;
+}
