@@ -287,3 +287,26 @@ def test_a_recorded_node_step_replays_as_already_recorded() -> None:
 
 def test_an_unrecorded_node_step_proceeds_to_validation() -> None:
     assert delivery_replay_outcome(recorded=False) is None
+
+
+@pytest.mark.parametrize(
+    ("deltas", "proposals", "delta_ids", "proposal_ids"),
+    [
+        ([_delta([])], [], ["art_1", "art_2"], []),
+        ([], [_candidate()], [], ["art_p1", "art_p2"]),
+    ],
+    ids=["delta-ids", "proposal-ids"],
+)
+def test_an_artifact_id_list_not_parallel_to_its_items_refuses(
+    deltas: list[DeliveredDelta], proposals: list[ProposalCandidate], delta_ids: list[str], proposal_ids: list[str]
+) -> None:
+    with pytest.raises(ValueError, match="zip"):
+        build_delivery_plan(
+            ValidatedDelivery(run=_RUN, deltas=deltas, proposals=proposals),
+            chunk=_CHUNK,
+            node=_NODE,
+            epoch=1,
+            delta_artifact_ids=delta_ids,
+            proposal_artifact_ids=proposal_ids,
+            at=_AT,
+        )

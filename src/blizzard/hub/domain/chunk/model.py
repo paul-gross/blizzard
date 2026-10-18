@@ -1098,25 +1098,25 @@ class ChunkFacts:
         def seen(recorded_at: datetime) -> bool:
             return as_of is None or recorded_at <= as_of
 
-        ranked: list[tuple[tuple[datetime, int, int], Movement]] = []
+        ranked: dict[tuple[datetime, int, int], Movement] = {}
         transitions = [t for t in self.transitions if seen(t.recorded_at)]
         if transitions:
             t = max(transitions, key=lambda t: (t.recorded_at, t.epoch))
             movement = Movement(MovementKind.TRANSITION, t.to_node_id, t.to_node_executor, t.graph_id)
-            ranked.append((MovementKind.TRANSITION.order_key(t.recorded_at, t.epoch), movement))
+            ranked[MovementKind.TRANSITION.order_key(t.recorded_at, t.epoch)] = movement
         migrations = [m for m in self.migrations if seen(m.recorded_at)]
         if migrations:
             m = max(migrations, key=lambda m: (m.recorded_at, m.epoch))
             movement = Movement(MovementKind.MIGRATION, m.landed_node_id, m.landed_node_executor, m.to_graph_id)
-            ranked.append((MovementKind.MIGRATION.order_key(m.recorded_at, m.epoch), movement))
+            ranked[MovementKind.MIGRATION.order_key(m.recorded_at, m.epoch)] = movement
         restarts = [r for r in self.restarts if seen(r.recorded_at)]
         if restarts:
             r = max(restarts, key=lambda r: (r.recorded_at, r.epoch))
             movement = Movement(MovementKind.RESTART, r.to_node_id, r.to_node_executor, r.graph_id)
-            ranked.append((MovementKind.RESTART.order_key(r.recorded_at, r.epoch), movement))
+            ranked[MovementKind.RESTART.order_key(r.recorded_at, r.epoch)] = movement
         if not ranked:
             return None
-        return max(ranked, key=lambda entry: entry[0])[1]
+        return ranked[max(ranked)]
 
     def current_node_id(self) -> str | None:
         """The chunk's current node id — the newest movement fact's target, else ``None``.

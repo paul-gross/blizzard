@@ -99,3 +99,10 @@ def test_a_zero_events_cursor_decodes_to_offset_zero() -> None:
 def test_a_negative_events_cursor_is_malformed() -> None:
     with pytest.raises(MalformedCursor):
         store_module._decode_cursor(encode_cursor(-1))  # type: ignore[attr-defined]
+
+
+def test_an_events_cursor_of_the_wrong_arity_is_malformed_naming_the_cursor() -> None:
+    cursor = encode_cursor(7, 8)
+    with pytest.raises(MalformedCursor) as exc_info:
+        store_module._decode_cursor(cursor)  # type: ignore[attr-defined]
+    assert exc_info.value.cursor == cursor

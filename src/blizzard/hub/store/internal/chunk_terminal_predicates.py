@@ -57,13 +57,8 @@ def _unsuperseded_terminal(stmts: ScopedStatements, terminal: Any) -> list[Colum
         stmts.exists(
             other,
             other.c.chunk_id == terminal.c.chunk_id,
-            other.c.transition_id != terminal.c.transition_id,
             not_older(other),
-            or_(
-                other.c.to_node_id != RESERVED_TERMINAL,
-                other.c.recorded_at > terminal.c.recorded_at,
-                other.c.epoch > terminal.c.epoch,
-            ),
+            or_(other.c.to_node_id != RESERVED_TERMINAL, other.c.recorded_at > terminal.c.recorded_at),
         ),
         stmts.exists(
             s.chunk_migrations, s.chunk_migrations.c.chunk_id == terminal.c.chunk_id, not_older(s.chunk_migrations)

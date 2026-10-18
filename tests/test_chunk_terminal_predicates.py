@@ -13,14 +13,23 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
-from sqlalchemy import Engine
+from sqlalchemy import Engine, insert
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_terminal_predicates import done_completed_at, settled_done
-from tests.support import chunk_stores, hub_store_connections, migrate_to, seed_chunk, seed_graph
+from tests.support import (
+    add_tenant,
+    chunk_stores,
+    default_tenant,
+    hub_store_connections,
+    migrate_to,
+    seed_chunk,
+    seed_graph,
+    stamp,
+)
 from tests.support_chunk_world import complete, migration, restart, stop, transition
 
 pytestmark = pytest.mark.unit
@@ -55,6 +64,13 @@ class _World:
         )
         with connections.read("done_completed_at") as conn:
             return {chunk_id: _utc(at) for chunk_id, at in conn.execute(stmt).all()}
+
+    def unfiltered_completed_at(self) -> dict[str, datetime | None]:
+        """:func:`done_completed_at` for every chunk, settled or not."""
+        connections = hub_store_connections(self.engine)
+        stmt = connections.select(s.chunks, s.chunks.c.chunk_id, done_completed_at(connections))
+        with connections.read("done_completed_at_unfiltered") as conn:
+            return {chunk_id: None if at is None else _utc(at) for chunk_id, at in conn.execute(stmt).all()}
 
     def derived_done(self) -> set[str]:
         facts = chunk_stores(self.engine, self.clock).facts.load_all_facts()
@@ -172,6 +188,24 @@ def test_a_terminal_transition_settles_only_when_recorded_strictly_before_finish
     assert world.settled_done(finished_before=_NOW - _AGO) == {"ch_before"}
 
 
+def test_same_instant_same_epoch_terminal_transitions_settle_done(world: _World) -> None:
+    world.mint("ch_tie")
+    transition(world, "ch_tie", RESERVED_TERMINAL, epoch=1, ago=_AGO, n=1)
+    transition(world, "ch_tie", RESERVED_TERMINAL, epoch=1, ago=_AGO, n=2)
+
+    assert world.settled_done() == world.derived_done() == {"ch_tie"}
+    assert world.done_completed_at() == world.derived_completed_at() == {"ch_tie": _NOW - _AGO}
+
+
+def test_a_later_terminal_at_a_lower_epoch_moves_the_finish_past_finished_before(world: _World) -> None:
+    world.mint("ch_refinished")
+    _terminal(world, "ch_refinished", epoch=2, ago=_AGO + _MINUTE)
+    _terminal(world, "ch_refinished", epoch=1, ago=_AGO - _MINUTE)
+
+    assert world.settled_done(finished_before=_NOW - _AGO) == set()
+    assert world.derived_completed_at() == {"ch_refinished": _NOW - _AGO + _MINUTE}
+
+
 # --- settled_done: the completion and stop arms ---------------------------------------------------
 
 
@@ -220,6 +254,15 @@ def test_another_chunks_stop_or_completion_never_unsettles_a_done_chunk(world: _
     }
 
 
+def test_a_late_completion_keeps_an_early_terminal_transition_out_of_finished_before(world: _World) -> None:
+    world.mint("ch_completed_late")
+    _terminal(world, "ch_completed_late", ago=_AGO + _MINUTE)
+    complete(world, "ch_completed_late", ago=_AGO - _MINUTE)
+
+    assert world.settled_done(finished_before=_NOW - _AGO) == set()
+    assert world.derived_completed_at() == {"ch_completed_late": _NOW - _AGO + _MINUTE}
+
+
 # --- done_completed_at ----------------------------------------------------------------------------
 
 
@@ -254,3 +297,51 @@ def test_the_completion_instant_ranks_only_the_chunks_own_rows(world: _World) ->
             "ch_other": _NOW - newest,
         }
     )
+
+
+def test_the_completion_instant_is_null_for_a_chunk_no_terminal_settles(world: _World) -> None:
+    world.mint("ch_moving", "ch_restarted")
+    transition(world, "ch_moving", "nd_1", epoch=1, ago=_AGO)
+    _terminal(world, "ch_restarted", ago=_AGO + _MINUTE)
+    restart(world, "ch_restarted", epoch=2, ago=_AGO)
+
+    assert world.unfiltered_completed_at() == {"ch_moving": None, "ch_restarted": None}
+
+
+def test_the_completion_instant_never_ranks_another_tenants_rows(world: _World) -> None:
+    world.mint("ch_by_transition", "ch_by_completion")
+    _terminal(world, "ch_by_transition", ago=_AGO)
+    complete(world, "ch_by_completion", ago=_AGO)
+    default_tenant(world.engine)
+    other = add_tenant(world.engine, "other")
+    newer = world.clock.now() - _MINUTE
+    with world.engine.begin() as conn:
+        conn.execute(
+            insert(s.chunk_completed).values(
+                stamp(
+                    s.chunk_completed,
+                    chunk_id="ch_by_completion",
+                    completed_at=newer,
+                    completed_by="op",
+                    tenant_id=other,
+                )
+            )
+        )
+        conn.execute(
+            insert(s.transitions).values(
+                stamp(
+                    s.transitions,
+                    transition_id="tr_foreign",
+                    chunk_id="ch_by_transition",
+                    graph_id="gr_1",
+                    from_node_id=None,
+                    to_node_id=RESERVED_TERMINAL,
+                    epoch=1,
+                    runner_id="r",
+                    recorded_at=newer,
+                    tenant_id=other,
+                )
+            )
+        )
+
+    assert world.done_completed_at() == {"ch_by_transition": _NOW - _AGO, "ch_by_completion": _NOW - _AGO}

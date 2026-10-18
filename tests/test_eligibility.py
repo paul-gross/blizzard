@@ -471,3 +471,8 @@ def test_a_chunk_without_a_movement_is_peeked_by_its_entry_node(facts: dict[str,
 )
 def test_a_moved_chunk_is_peeked_by_the_node_it_moved_to(moved: ChunkFacts) -> None:
     assert _peek({"ch_1": moved}) is None
+
+
+def test_a_chunk_moved_to_a_node_its_graph_lacks_is_passed_over() -> None:
+    gone = ChunkFacts(minted=True, transitions=[TransitionFact("nd_gone", Executor.RUNNER, 1, _MOVED_AT)])
+    assert _peek({"ch_1": gone}) is None

@@ -218,3 +218,7 @@ def test_a_migration_out_of_the_node_at_the_epoch_is_its_exit() -> None:
 def test_a_newer_epoch_from_any_fence_source_supersedes_the_visit(newer: ChunkFacts) -> None:
     assert not newer.awaits_exit_from(_VISITED, epoch=2)
     assert newer.awaits_exit_from(_VISITED, epoch=3)
+
+
+def test_a_visit_at_epoch_zero_awaits_its_exit_before_any_fence_source_lands() -> None:
+    assert ChunkFacts(minted=True).awaits_exit_from(_VISITED, epoch=0)

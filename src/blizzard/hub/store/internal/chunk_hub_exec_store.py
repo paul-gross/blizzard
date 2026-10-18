@@ -74,7 +74,7 @@ class ChunkHubExecStore:
             slot_id = Id.mint(IdPrefix.HUB_EXEC_SLOT, self._clock).value
             conn.execute(
                 self._store.insert(s.hub_exec_slot).values(
-                    slot_id=slot_id, holder_chunk_id=chunk_id, node_id=node_id, acquired_at=at, released_at=None
+                    slot_id=slot_id, holder_chunk_id=chunk_id, node_id=node_id, acquired_at=at
                 )
             )
             return slot_id

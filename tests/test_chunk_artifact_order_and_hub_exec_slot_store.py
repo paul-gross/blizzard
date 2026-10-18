@@ -46,6 +46,7 @@ def _artifact(engine: Engine, chunk_id: str, artifact_id: str, *, seq: int, name
                     data="d",
                     produced_at=_T0,
                     seq=seq,
+                    forge=f"forge-{artifact_id}",
                 )
             )
         )
@@ -69,6 +70,7 @@ def test_load_artifacts_returns_one_chunks_rows_in_seq_order_breaking_ties_by_ar
     loaded = _artifacts(engine).load_artifacts("ch_a")
 
     assert [a.artifact_id for a in loaded] == ["ar_3", "ar_1", "ar_2", "ar_9"]
+    assert [(a.chunk_id, a.forge) for a in loaded] == [("ch_a", f"forge-{a.artifact_id}") for a in loaded]
 
 
 def test_delivery_sources_for_returns_each_chunks_markers_in_seq_order_breaking_ties_by_artifact_id(
@@ -127,6 +129,7 @@ def test_acquire_reclaims_a_slot_held_stale_after_or_longer(tmp_path: Path, past
     slot_id = _hub_exec(engine).acquire_hub_exec_slot("ch_b", node_id="nd_2", at=at, stale_after=_STALE)
 
     assert slot_id is not None
+    assert slot_id.startswith("hes_")
     assert _released(engine) == {"hx_held": at, slot_id: None}
 
 

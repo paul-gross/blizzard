@@ -16,6 +16,7 @@ from typing import Any, cast
 
 import pytest
 
+from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.migration_source import MigrationSource
 from blizzard.foundation.node_steps import ApplyOutcome, Executor
@@ -23,6 +24,7 @@ from blizzard.hub.domain.chunk.model import (
     Chunk,
     ChunkFacts,
     EscalationFact,
+    GateDecision,
     IntendedMigration,
     QuestionFact,
     TransitionFact,
@@ -38,10 +40,21 @@ from blizzard.hub.domain.chunk.ports.route import IReadChunkRouteRepository, IWr
 from blizzard.hub.domain.execution.apply import ApplyResult, ApplyService
 from blizzard.hub.domain.execution.completion import MigrationTargets
 from blizzard.hub.domain.execution.decisions import DecisionService
-from blizzard.hub.domain.execution.submissions import GateSubmission
+from blizzard.hub.domain.execution.envelope import Arrival
+from blizzard.hub.domain.execution.submissions import CompletionArtifact, GateSubmission
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL, Graph, Node
 from blizzard.hub.domain.runners.registration import RetiredRunnerGuard
-from tests.test_completion_rules import _AT_BUILD, _BUILD, _CHUNK, _DELIVERY, _GRAPH, _T1, _migration, _submission
+from tests.test_completion_rules import (
+    _AT_BUILD,
+    _BUILD,
+    _CHUNK,
+    _DELIVERY,
+    _GRAPH,
+    _T1,
+    _gate,
+    _migration,
+    _submission,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -64,7 +77,10 @@ class _Ports:
     transitions: list[dict[str, Any]] = field(default_factory=list)
     decisions: list[dict[str, Any]] = field(default_factory=list)
     hub_runs: list[tuple[str, str, int]] = field(default_factory=list)
+    hub_run_chunks: list[str] = field(default_factory=list)
+    migration_handles: list[ILockedChunkRead] = field(default_factory=list)
     refusal: FenceRefusal | None = None
+    gate: GateDecision | None = None
 
     # facts
     def load_facts(self, chunk_id: str) -> ChunkFacts:
@@ -78,6 +94,7 @@ class _Ports:
         return None
 
     def record_migration_locked(self, handle: ILockedChunkRead, chunk_id: str, **kwargs: Any) -> str | FenceRefusal:
+        self.migration_handles.append(handle)
         self.migrations.append({"chunk_id": chunk_id, **kwargs})
         return self.refusal or "mg_recorded"
 
@@ -86,6 +103,9 @@ class _Ports:
         return self.refusal
 
     # decisions
+    def get_decision(self, decision_id: str) -> GateDecision | None:
+        return self.gate
+
     def find_decision(self, chunk_id: str, *, node_id: str, epoch: int) -> None:
         return None
 
@@ -104,6 +124,7 @@ class _Ports:
         return False
 
     def run(self, chunk: Chunk, graph: Graph, node: Node, *, epoch: int) -> None:
+        self.hub_run_chunks.append(chunk.chunk_id)
         self.hub_runs.append((graph.graph_id, node.node_id, epoch))
 
     @property
@@ -116,9 +137,11 @@ class _Ports:
 
 @dataclass
 class _LockedRead:
-    chunk_facts: ChunkFacts
+    chunk_facts: ChunkFacts | None
+    read_ids: list[str] = field(default_factory=list)
 
-    def facts(self, chunk_id: str) -> ChunkFacts:
+    def facts(self, chunk_id: str) -> ChunkFacts | None:
+        self.read_ids.append(chunk_id)
         return self.chunk_facts
 
     def __getattr__(self, name: str) -> Any:
@@ -127,23 +150,27 @@ class _LockedRead:
 
 @dataclass
 class _FakeExclusiveWrites:
-    under_lock: ChunkFacts
+    under_lock: ChunkFacts | None
     clock: FixedClock
+    locked_ids: list[list[str]] = field(default_factory=list)
+    handles: list[_LockedRead] = field(default_factory=list)
 
     @contextmanager
     def locked(self, chunk_ids: Sequence[str]) -> Iterator[ILockedChunkRead]:
         self.clock.advance(_LOCK_WAIT)  # time passes while the lock is awaited
-        yield cast(ILockedChunkRead, _LockedRead(self.under_lock))
+        self.locked_ids.append(list(chunk_ids))
+        self.handles.append(_LockedRead(self.under_lock))
+        yield cast(ILockedChunkRead, self.handles[-1])
 
 
-def _wired(under_lock: ChunkFacts, *, pre_lock: ChunkFacts = _AT_BUILD) -> tuple[_Ports, FixedClock, Any]:
+def _wired(under_lock: ChunkFacts | None, *, pre_lock: ChunkFacts = _AT_BUILD) -> tuple[_Ports, FixedClock, Any]:
     assert under_lock != pre_lock, "a race case needs the lock to see facts the pre-lock read did not"
     ports = _Ports(pre_lock=pre_lock)
     clock = FixedClock(_T1 + timedelta(hours=1))
     return ports, clock, cast(IChunkExclusiveWrites, _FakeExclusiveWrites(under_lock, clock))
 
 
-def _apply_service(under_lock: ChunkFacts) -> tuple[ApplyService, _Ports, FixedClock]:
+def _apply_service(under_lock: ChunkFacts | None) -> tuple[ApplyService, _Ports, FixedClock]:
     ports, clock, exclusive = _wired(under_lock)
     service = ApplyService(
         facts=cast(IReadChunkFactsRepository, ports),
@@ -174,7 +201,7 @@ def _decision_service(under_lock: ChunkFacts) -> tuple[DecisionService, _Ports, 
     return service, ports, clock
 
 
-def _hand_off(under_lock: ChunkFacts) -> tuple[ApplyResult, _Ports, FixedClock]:
+def _hand_off(under_lock: ChunkFacts | None) -> tuple[ApplyResult, _Ports, FixedClock]:
     service, ports, clock = _apply_service(under_lock)
     return service.apply(_CHUNK, _GRAPH, _submission("hand-off", lease_id="lease_1"), targets=_HAND_OFF), ports, clock
 
@@ -259,6 +286,7 @@ def test_a_migration_landing_on_a_hub_node_keeps_the_route_and_hands_the_node_to
         (_D_LAND, False, True)
     ]
     assert ports.hub_runs == [("gr_d", _D_LAND, 1)]
+    assert ports.hub_run_chunks == ["chk_1"]
     assert (result.outcome, result.migration_id) == (ApplyOutcome.HUB_NODE_TAKEN, "mg_recorded")
     assert not result.fresh_migration  # only a MIGRATED answer is a fresh migration
 
@@ -273,6 +301,45 @@ def test_a_fenced_migration_write_answers_the_refusal() -> None:
     assert len(ports.migrations) == 1
 
 
+def test_a_migration_locks_reads_and_writes_the_submitted_chunk_through_the_lock_handle() -> None:
+    service, ports, _clock = _apply_service(replace(_AT_BUILD, promoted=False))
+    exclusive = cast(_FakeExclusiveWrites, service._exclusive)  # pyright: ignore[reportPrivateUsage]
+
+    service.apply(_CHUNK, _GRAPH, _submission("hand-off"), targets=_HAND_OFF)
+
+    assert exclusive.locked_ids == [["chk_1"]]
+    assert exclusive.handles[0].read_ids == ["chk_1"]
+    assert ports.migration_handles == [exclusive.handles[0]]
+
+
+def test_a_migration_lands_its_artifacts_at_the_node_and_epoch_it_left() -> None:
+    service, ports, _clock = _apply_service(replace(_AT_BUILD, promoted=False))
+    note = CompletionArtifact(name="notes", kind=ArtifactKind.ASSET, content="done")
+
+    service.apply(_CHUNK, _GRAPH, _submission("hand-off", artifacts=(note,)), targets=_HAND_OFF)
+
+    [migration] = ports.migrations
+    assert [(a.name, a.data, a.chunk_id, a.node_id, a.node_name, a.epoch) for a in migration["artifacts"]] == [
+        ("notes", "done", "chk_1", "nd_build", "build", 1)
+    ]
+
+
+def test_a_gate_resolving_migration_records_the_decision_it_resolves() -> None:
+    service, ports, _clock = _apply_service(replace(_AT_BUILD, promoted=False))
+    ports.gate = _gate(node_id="nd_build", resolved="hand-off")
+
+    service.apply(_CHUNK, _GRAPH, _submission("hand-off", decision_id="dec_1"), targets=_HAND_OFF)
+
+    assert [m["decision_id"] for m in ports.migrations] == ["dec_1"]
+
+
+def test_a_migration_of_a_chunk_the_lock_cannot_find_answers_the_unknown_chunk() -> None:
+    result, ports, _clock = _hand_off(None)
+
+    assert ports.writes == []
+    assert (result.outcome, result.detail) == (ApplyOutcome.FAILURE, "unknown chunk chk_1")
+
+
 # --- races at the same (node, epoch): answered as the replay, never written twice ---------------
 
 
@@ -281,6 +348,17 @@ def test_a_migration_racing_a_landed_transition_answers_the_transitions_replay()
 
     assert ports.writes == []
     assert (result.outcome, result.transition_id, result.migration_id) == (ApplyOutcome.DONE, None, None)
+
+
+def test_a_migration_racing_a_transition_onto_a_runner_node_answers_its_envelope() -> None:
+    result, ports, _clock = _hand_off(_transitioned_from_build("nd_review"))
+
+    assert ports.writes == []
+    assert result.outcome is ApplyOutcome.NEXT
+    envelope = result.envelope
+    assert envelope is not None
+    assert (envelope.chunk, envelope.graph, envelope.node.node_id) == (_CHUNK, _GRAPH, "nd_review")
+    assert envelope.arrival_addendum == Arrival.of_choice(_GRAPH, _BUILD, "hand-off").addendum
 
 
 @pytest.mark.parametrize(
