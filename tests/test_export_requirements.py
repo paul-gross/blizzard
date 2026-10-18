@@ -68,7 +68,8 @@ def test_a_stale_lock_is_refused_with_no_output(wheel: Path, tmp_path: Path) -> 
     repo = tmp_path / "repo"
     (repo / "scripts").mkdir(parents=True)
     shutil.copy(_SCRIPT, repo / "scripts" / _SCRIPT.name)
-    shutil.copy(_ROOT / "uv.lock", repo / "uv.lock")
+    # A symlink, not a copy: uv.lock is deliberately not a declared test read.
+    (repo / "uv.lock").symlink_to(_ROOT / "uv.lock")
     pyproject = (_ROOT / "pyproject.toml").read_text()
     stale, count = re.subn(r"(?m)^version = \"[^\"]*\"", 'version = "99.0.0"', pyproject, count=1)
     assert count == 1
