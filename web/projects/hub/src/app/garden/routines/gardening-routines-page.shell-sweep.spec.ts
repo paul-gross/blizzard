@@ -393,16 +393,8 @@ describe('gardening routines page independent-scroll shell sweep (web:shell-swee
       // not `.gr-left`'s outer box, which the header row keeps just tall
       // enough for header + clipped body to exactly fill.
       const left = leftHost.querySelector<HTMLElement>(':scope > .p-body') ?? leftHost;
-      // `.gr-right` wraps the routed detail child, which is `display: contents`
-      // (`gardening-detail-host.css`) so `app-routine-panel` and its three
-      // stacked `<fleet-kit-panel>`s (Routine, Activity, Strategy) sit in this
-      // column directly. Unlike the
-      // left column, those panels do *not* shrink to share the column's bound:
-      // `routine-panel.css` gives them `flex: none` so each stands at its own
-      // content height, and each passes `bodyScroll` false so no `.p-body`
-      // opens a scrollport of its own. The column itself is therefore the one
-      // real scroller on this side — a long Activity or Strategy panel is
-      // reached by scrolling `.gr-right` past the panels above it.
+      // `.gr-right` is the one real scroller on this side; the panels' own
+      // `.p-body`s are asserted below not to open a scrollport.
       const right = root.querySelector<HTMLElement>('.gr-right')!;
       expect(right, 'no .gr-right in the DOM').not.toBeNull();
       const rightHost = right;

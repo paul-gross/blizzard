@@ -3,8 +3,7 @@ import { type GardenProposalAcceptVars, type GardenProposalPassVars } from './ga
 import { type ProposalListRowVm } from './proposal-list';
 
 /** A proposal is still waiting on a person exactly when it carries no closure
- * (`GardenProposalView.closure`) — the gardening strip's own reading of
- * "waiting", shared here so the tab shell and any future docket sheet agree. */
+ * (`GardenProposalView.closure`). */
 export function isGardenProposalWaiting(proposal: GardenProposalView): boolean {
   return proposal.closure == null;
 }
@@ -25,9 +24,7 @@ export const CLASS_VALUE_PREFIX = 'class:';
  * proposals not yet closed), and this one value widens it to every proposal. */
 export const SHOW_ALL = 'all';
 
-/** The routine chip row's "All routines" value. Unlike `class`, `routine_name` is
- * not opaque deployment vocabulary — it names one of blizzard's own gardening
- * routines — so it needs no `CLASS_VALUE_PREFIX`-style collision guard. */
+/** The routine chip row's "All routines" value. */
 export const ALL_ROUTINES = 'all';
 
 /** The docket's three filters plus the proposals a Pass/Accept is in flight for. */

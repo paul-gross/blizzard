@@ -11,12 +11,9 @@ import { gardenProjectGuard, gardeningDoorwayGuard } from './garden-lens.guard';
  *
  * All five have one shape: the tab's list *is* the route, and its detail pane is a
  * child route under it — a bare child that selects nothing, and a `:param` child
- * naming the selection, both mounting the same detail component. Angular reuses a
- * route's component only across the same route config, so two flat routes onto one
- * component would tear the whole tab down on every row click. Nested, only the
- * right-hand child is swapped; the list, its filters, and its scroll position all
- * survive. Filter state itself rides the query string (`route-state.ts`), which
- * makes a filtered view shareable by URL as well as durable.
+ * naming the selection, both mounting the same detail component
+ * (`gardening.routes.spec.ts` pins the list staying mounted across the pair).
+ * Filter state rides the query string (`route-state.ts`).
  *
  * Every noun belongs to one project, so the tabs are a project's garden and exist only under its lens
  * (`/p/{project}/gardening/…`). On All the bare path is the doorway — one card per project and no tabs — and a tab's

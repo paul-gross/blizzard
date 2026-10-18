@@ -23,8 +23,7 @@ function unnested(path: string): string {
  * `runs` (the leftmost tab), and each of the five bare/param pairs (`scopes`,
  * `routines`, `runs`, `findings`, `proposals`) actually mounts its page and selects
  * the right detail — through the actual router rather than by mounting a page component
- * directly (that's each page's own spec). None of the five shares a selection with
- * a sibling any more — each tab's own list has only one kind of thing to select. A
+ * directly (that's each page's own spec). A
  * bare `<router-outlet>` host stands in for `App`'s heavier one (auth session gate,
  * live-update spine) — irrelevant to whether this route subtree itself is wired
  * correctly.

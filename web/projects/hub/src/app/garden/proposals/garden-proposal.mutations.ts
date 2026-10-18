@@ -44,8 +44,7 @@ export function injectPassGardenProposalMutation() {
 }
 
 /** `POST /api/garden-proposals/{proposal_id}/accept` — `reason`/`body` ride only
- * when supplied, never as an explicit `null` (the `hub garden-proposal accept` CLI
- * never sends a field the operator didn't set either). */
+ * when supplied, never as an explicit `null`. */
 export interface GardenProposalAcceptVars {
   readonly proposalId: string;
   readonly mintWorkItem: boolean;

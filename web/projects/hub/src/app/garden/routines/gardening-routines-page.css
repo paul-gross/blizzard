@@ -30,15 +30,7 @@
  * status line, `routine-panel.html`) so a routine-less right column reads as a
  * panel awaiting a selection rather than a bare line of text collapsed to fit
  * its content.
- *
- * `.gr-right` wraps the routed detail child, which is `display: contents`
- * (`gardening-detail-host.css`) so `app-routine-panel` and its stacked
- * `<fleet-kit-panel>`s sit here directly. Those panels size to their own
- * content and do not shrink to share this column's height, so `.gr-right`'s
- * `overflow-y: auto` above is the one real scroller for all of them — a long Activity or Strategy
- * panel is reached by scrolling this column, not by scrolling inside the panel.
- * That is why the panels set `bodyScroll` false (`kit-panel.ts`): a second
- * scrollport inside a panel would steal the drag from this one. */
+ */
 .gr-right {
   min-height: 240px;
 }

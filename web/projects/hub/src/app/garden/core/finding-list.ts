@@ -5,16 +5,9 @@ import { compactRef, type hubApi, KitAsyncState, type KitAsyncStateValue, KitBad
 import { findingSeverityTone, findingStateTone, isFindingExited, isFindingGoneFlagged } from './finding-state';
 import { LensLink } from 'fleet/shell';
 
-/** One row of the findings triage bucket list (`hub finding list`'s own read),
- * pared to what a 320px master-column row actually shows — the summary as the
- * row's own headline, the class and compact ref, the locus, and the most recent
- * observation (`lastSeenAt`). `observed_count` and `introduced` stay off this row
- * (they render on `finding-panel.ts`'s own `FindingPanelVm`, the right-hand detail
- * pane a row click opens) — `findingClass` renames the wire's `class`,
- * `RunDeltaVm`'s own `AddedFindingView.class` → `findingClass` rename, so a
- * template never confuses it with the DOM `class` attribute. `state` and `exit`
- * ride the row for classification — {@link FleetFindingList.isGone} reads `state`,
- * {@link FleetFindingList.isExited} reads `exit`. */
+/** One row of the findings triage bucket list, pared to what a 320px
+ * master-column row shows. `findingClass` renames the wire's `class` so a
+ * template never confuses it with the DOM `class` attribute. */
 export interface FindingListRowVm {
   readonly findingId: string;
   readonly findingClass: string;
@@ -25,12 +18,7 @@ export interface FindingListRowVm {
    * `null` while it is still open. */
   readonly exit: hubApi.FindingExit | null;
   readonly lastSeenAt: string | null;
-  /** The finding's own routine/scope, rendered only when the
-   * container hands a non-null value. The widened findings bucket can mix rows
-   * from every routine and every scope, so a row needs to say which it came from
-   * once the active filter no longer names one for it; a bucket already filtered
-   * to a concrete routine or scope leaves the matching field `null` rather than
-   * repeat what every row already shares. */
+  /** The finding's own routine/scope, rendered only when non-null. */
   readonly routineName: string | null;
   readonly scopeSlug: string | null;
   /** `FindingView.source` — `"routine"` or `"review"`. A
@@ -41,49 +29,24 @@ export interface FindingListRowVm {
   /** `FindingView.severity` — set only when {@link source} is `"review"`. */
   readonly severity: hubApi.FindingSeverity | null;
   /** `FindingView.raised_by_chunk_id` — the chunk id whose review raised the
-   * finding, set only when {@link source} is `"review"`. Linked like every other
-   * chunk-id reference on the board (`run-delta.ts`'s own `['/board', 'chunk', id]`
-   * shape). */
+   * finding, set only when {@link source} is `"review"`. */
   readonly raisedByChunkId: string | null;
 }
 
-/** The triage verbs a finding can be dispatched under — every human-driven exit
- * `finding.mutations.ts` exposes, plus `reopen`. Named off the `hub finding` CLI's
- * own verb spelling, so a container routes an emitted
- * verb straight to the matching mutation with no translation table of its own.
- * Dispatched one finding at a time, from `app-finding-panel`'s own `triage`
- * output — this list renders rows only, it carries no selection or bulk action of
- * its own. */
+/** The triage verbs a finding can be dispatched under, spelled as the `hub finding` CLI spells them. */
 export type FindingTriageVerb = 'resolve' | 'confirm-gone' | 'wont-fix' | 'not-a-finding' | 'supersede' | 'reopen';
 
 /**
- * The gardening findings tab's findings triage list — presentational only, no
- * query injection, `run-list.ts`'s own shape: renders the rows it is handed,
- * exactly as filtered by the container (class/state filtering happens
- * client-side, this component stays dumb over whatever `rows()` it's given).
+ * The gardening findings tab's findings triage list — presentational only:
+ * renders the rows it is handed, exactly as filtered by the container.
  *
- * Built on `fleet-kit-select-row`: a row click emits {@link findingPick}, opening
- * that finding in the right-hand `app-finding-panel` — the container turns the
- * picked id into a route navigation, `run-list.ts`'s own `runPick` shape. Triage
- * itself is single-finding only, dispatched from the panel a row click opens, not
- * from this list.
+ * Built on `fleet-kit-select-row`: a row click emits {@link findingPick}.
  *
- * A row's own `state` decides its tint (`finding-state.ts`'s own three-way
- * classification), carried on the projected `.fl-body` div rather than the kit row's
- * own encapsulated button — `run-list.ts`'s own `.rl-body`/`.rl-body--escalated`
- * shape and its doc comment on why: still open with no flag renders untinted; a
- * `gone`-flagged row renders tinted (`.fl-body--gone`) but stays a normal,
- * fully rendered row — `gone` is *not* exited; an exited row (a non-null wire
- * `exit`) renders dimmed (`.fl-body--exited`)
- * but never leaves the DOM.
- *
- * The row's state rides the last-seen line, pushed to that line's right edge — the
- * row is otherwise silent about whether a finding is still open, resolved, or
- * withdrawn, and that is the first thing a triage pass needs to see. It renders as
- * `fleet-kit-badge`'s soft pill (`bzh:frontend-kit-floor`), the board's own pill
- * vocabulary, tinted by `finding-state.ts`'s shared mapping. The row's own
- * gone/exited *tint* stays alongside it rather than being replaced by it: the tint
- * classifies three broad buckets at a glance, the badge names the exact state.
+ * A row's `state` decides its tint, carried on the projected `.fl-body` div: open
+ * renders untinted, a `gone`-flagged row renders tinted (`.fl-body--gone`), an
+ * exited row (a non-null wire `exit`) renders dimmed (`.fl-body--exited`) but never
+ * leaves the DOM. The state also renders as a `fleet-kit-badge` on the last-seen
+ * line, tinted by `finding-state.ts`.
  *
  * The row's own headline (`.fl-summary`) is the finding's summary as plain text
  * clamped to three lines — pinned by `finding-list.spec.ts`'s "clamps the summary
@@ -102,8 +65,7 @@ export class FleetFindingList {
   readonly rows = input.required<readonly FindingListRowVm[]>();
   readonly state = input.required<KitAsyncStateValue>();
 
-  /** The finding currently open in the right-hand panel, `run-list.ts`'s own
-   * `selectedChunkId` shape. */
+  /** The finding currently open in the right-hand panel. */
   readonly selectedId = input<string | null>(null);
 
   /** Emitted with the id of the row a click picked. */
@@ -119,15 +81,12 @@ export class FleetFindingList {
     return isFindingExited(row.exit);
   }
 
-  /** The row's state badge tone — `finding-state.ts`'s own mapping, so this row and
-   * `finding-panel.ts`'s own title badge cannot disagree on a state's color. */
+  /** The row's state badge tone, per `findingStateTone`. */
   protected stateTone(row: FindingListRowVm): Tone {
     return findingStateTone(row.state);
   }
 
-  /** The row's severity badge tone, when the row is review-sourced and carries one —
-   * `finding-state.ts`'s own mapping, shared with `finding-panel.ts` so the two
-   * never disagree on a severity's color. */
+  /** The row's severity badge tone, when the row carries a severity. */
   protected severityTone(row: FindingListRowVm): Tone {
     return row.severity === null ? 'idle' : findingSeverityTone(row.severity);
   }

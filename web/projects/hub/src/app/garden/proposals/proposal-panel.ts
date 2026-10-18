@@ -98,8 +98,7 @@ export interface ProposalPanelVm {
 
 /**
  * The garden proposal docket's detail panel — the case as prose, the closure record
- * once one exists, and the evidence table (`blizzard-product:/delivered/garden/user-
- * interface.md` §The docket). Presentational only: renders exactly the view model
+ * once one exists, and the evidence table (`blizzard-product:/delivered/garden/user-interface.md` §The docket). Presentational only: renders exactly the view model
  * and evidence rows it is handed and injects no query of its own — the container
  * resolves the live finding reads and the accepted work item read
  * (`bzh:frontend-container-presentational`).
@@ -148,9 +147,7 @@ export class FleetProposalPanel {
     return origin.routineName === null ? `operator · ${origin.createdBy}` : `operator · ${origin.createdBy} · ${origin.routineName}`;
   }
 
-  /** Whether the row has already exited, classified off the wire `exit` through the
-   * shared predicate — the same one `finding-panel.ts` gates its own verbs on, so the
-   * two surfaces never disagree about what a finding may still be triaged into. */
+  /** Whether the row has already exited, classified off the wire `exit`. */
   protected readonly isExited = isFindingExited;
 
   /** The shared finding-state palette (`finding-state.ts`), so an evidence row and

@@ -1,24 +1,8 @@
 import type { hubApi, Tone } from 'fleet';
 
-/**
- * The findings triage surface's own state classification
- * (`plans/garden/user-interface.md`'s "Triaging what's left" section) — shared here
- * so {@link FleetFindingList} and any later triage affordance (`reopen` on an
- * exited row) read the same three buckets off the wire rather than each
- * re-deriving them.
- *
- * `FindingView.live` is **not** this classification — it is a wire boolean that is
- * true only while `state` is `"live"`, so a `gone`-flagged finding reads
- * `live: false` on the wire even though it has not exited (a `gone` row stays open,
- * tinted, and actionable until a person confirms it). Whether a finding has exited
- * is the wire's own `FindingView.exit` (`outflow`, `withdrawn`, or `null` while
- * still open); every helper below classifies off `exit` and `state` for exactly
- * that reason.
- */
+/** The findings state classification — `exit` and `state` decide it; the wire's `FindingView.live` does not. */
 
-/** Whether a finding has exited — the wire carries a non-null `exit` (`outflow` or
- * `withdrawn`). An exited finding renders dimmed but present, never removed from
- * the list. */
+/** Whether a finding has exited — the wire carries a non-null `exit` (`outflow` or `withdrawn`). */
 export function isFindingExited(exit: hubApi.FindingExit | null | undefined): boolean {
   return exit != null;
 }
@@ -51,11 +35,7 @@ export function findingStateTone(state: string): Tone {
   return tones[state] ?? 'idle';
 }
 
-/** A review-sourced finding's own severity → badge tone.
- * `blocking` reads `needs`, the same red a human-blocked chunk reads — a blocking
- * finding is exactly that, something standing in the way until a person addresses
- * it. `should-fix` reads `waiting`, the same amber-hi a parked chunk reads: real,
- * but not fatal to the round. */
+/** A review-sourced finding's severity → badge tone. */
 const SEVERITY_TONE: Readonly<Record<hubApi.FindingSeverity, Tone>> = {
   blocking: 'needs',
   'should-fix': 'waiting',

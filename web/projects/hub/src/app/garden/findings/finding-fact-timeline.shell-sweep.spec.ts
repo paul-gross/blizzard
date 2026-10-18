@@ -29,10 +29,6 @@ import { FleetFindingPanel, type FindingPanelVm } from './finding-panel';
  * fails this spec; restoring it passes again (`chunk-page-layout.shell-sweep.spec.ts`'s
  * own "proven able to fail" convention,
  * `blizzard-context:verification/blizzard/commands/web/shell-sweep.md`).
- *
- * Excluded from the default `ng test fleet` run (`angular.json`'s `test.exclude`)
- * because it needs `--browsers=ChromiumHeadless`, not jsdom — run it via
- * `npm run shell-sweep` (`web/scripts/shell-sweep.js`).
  */
 const LONG_UNBROKEN_NOTE = '4ba7ef06d9'.repeat(8) + 'abcdef0123456789';
 
