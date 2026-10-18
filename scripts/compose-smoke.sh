@@ -55,6 +55,10 @@ EOF
 
 log "Building the wheel + the hub image ($IMAGE_TAG) for the smoke run"
 ./scripts/build-wheel.sh
+WHEEL="$(ls dist/blizzard-*.whl)"
+WHEEL_VERSION="$(basename "$WHEEL" | cut -d- -f2)"
+./scripts/export-requirements.sh "$WHEEL_VERSION" "$WHEEL" --extra postgres --no-project \
+  > "dist/blizzard-${WHEEL_VERSION}-requirements-pg.txt"
 docker build -f packaging/docker/Dockerfile -t "$IMAGE_TAG" .
 
 assert_ready_through_the_proxy() {
