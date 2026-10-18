@@ -11,13 +11,8 @@ import { RunnerLogout } from './runner-logout';
  * `none`-mode hub the surface is authless, so the query answers `auth_enabled: false`
  * and this renders nothing at all — no username, no logout.
  *
- * Logout clears the runner's own session cookie (`POST /api/auth/logout`), then reloads
- * so the served shell's SSO gate re-evaluates the next visit: a still-live hub session
- * silently re-authenticates through the bounce (correct — ending fleet-wide access is
- * *hub* logout), an ended one lands on the hub's login surface. The reload also escapes
- * the moment-after state where every other rail would start `401`ing on its next poll
- * with the session now gone. See `session-recovery.ts` for how `runnerLogoutInFlight`
- * is treated.
+ * Logout clears the runner's own session cookie (`POST /api/auth/logout`), then reloads.
+ * See `session-recovery.ts` for how `runnerLogoutInFlight` is treated.
  *
  * Two shapes, one owner of the session read and the logout call. The default
  * `control` shape is the header's own username-plus-button block. The `label`

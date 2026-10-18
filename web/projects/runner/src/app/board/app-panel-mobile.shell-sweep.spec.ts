@@ -76,9 +76,8 @@ const LONG_ASK = {
 };
 
 /** A full `DashboardView` body, `asks` set to `asks` and every other section a
- * plausible/empty default — `LocalPanelMobile` and its children
- * (`app-info`, `app-asks`) all read one shared `/runners/rn_1/api/dashboard` poll, so
- * this shell's default fallback cannot leave them pending/malformed. */
+ * plausible/empty default, so the shell's default fallback cannot
+ * leave the dashboard readers pending/malformed. */
 function dashboardBody(asks: unknown) {
   return {
     runner: {

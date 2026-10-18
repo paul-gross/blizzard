@@ -28,28 +28,18 @@ import { MachineDetailHeader } from './machine-detail-header';
  * lease (the last entry of the `leases` list the shell hands in, oldest →
  * newest) — this dock owns no list read of its own.
  *
- * The header ({@link MachineDetailHeader}) is a presentational sibling. Unlike the
- * rest of this dock's facts (container-folded, "one owner"), the work-item links and
- * the pause fact are this dock's own severable enrichment — self-fetching, like
- * `injectChunkTitleQuery` — read through
- * {@link injectChunkDetailQuery}, the runner's pass-through proxy serving the
- * hub's `ChunkDetail` aggregate whole. `pause` is the *only*
- * way this panel learns a chunk is paused (it sits independently of the derived
- * {@link status}, which folds in machine-only facts the hub aggregate does not
- * carry), so Pause/Resume's own gating reads the fresh `pause`/`status` off that
- * read, never the machine-derived one.
+ * The header ({@link MachineDetailHeader}) is a presentational sibling. The
+ * work-item links and the pause fact are this dock's own self-fetched enrichment
+ * ({@link injectChunkDetailQuery}); Pause/Resume's gating reads the fresh
+ * `pause`/`status` off that read, never the machine-derived {@link status}.
  *
  * The execution-facts template itself belongs to the presentational
  * {@link MachineDetailView} (`bzh:frontend-container-presentational`) — this
  * container keeps only what `fleet-kit-panel`'s header-slot projection requires
  * of the template that mounts the panel, plus the query and the ticking clock.
  *
- * The dock paints its own panel chrome via {@link KitPanel}. `KitPanel`'s header slot can only be filled
- * from the template that mounts the panel, so this container is the one place
- * that projection can happen; `MachineDetailHeader` is projected in with
- * `KitPanel`'s own `label` left unset, so exactly one header bar renders —
- * {@link MachineDetailHeader}'s own — rather than stacking below a second,
- * empty one.
+ * The dock paints its own panel chrome via {@link KitPanel}, with
+ * {@link MachineDetailHeader} projected in and `label` left unset.
  */
 @Component({
   selector: 'app-machine-detail',
@@ -119,16 +109,12 @@ export class MachineDetail {
    * own `.isPending()` and threaded to the header's Pause/Resume buttons, so a double
    * click cannot fire the request twice while the first still settles. This dock shows
    * exactly one chunk at a time, so there is no sibling row to distinguish pending
-   * mutations by variables (mirrors the hub's `board/chunk-dock/chunk-detail.ts`'s own
-   * `pausePending`). */
+   * mutations by variables. */
   protected readonly pausePending = computed<boolean>(() => this.pauseMutation.isPending());
 
   /** The dock's last Pause/Resume failure, or `null` — reset on every new attempt
-   * (the "report, don't swallow" requirement, the same shape
-   * {@link LocalPauseControl}'s own `error` follows for the top bar's pause toggle),
-   * and whenever a different chunk is selected (mirrors `fleet/chunk/chunk-detail/
-   * chunk-detail.ts`'s own `beginAction`, below), so a stale failure from a chunk
-   * no longer open never lingers into the next one's dock. */
+   * and whenever a different chunk is selected,
+   * so a stale failure never lingers into the next chunk's dock. */
   protected readonly actionError = signal<string | null>(null);
 
   constructor() {
@@ -140,8 +126,7 @@ export class MachineDetail {
 
   /** This runner's display name (its configured name alone before its first registration),
    * for the header's `pauseCopy`/`resumeCopy` `<runner>` slot
-   * (`bzh:claim-vocabulary`) — the same dashboard read every other rail on the panel
-   * already polls (`status.query.ts`'s own dedupe note), not a second one. */
+   * (`bzh:claim-vocabulary`), read off {@link injectRunnerDashboardQuery}. */
   private readonly dashboardQuery = injectRunnerDashboardQuery();
   protected readonly runnerName = computed<string | null>(() => ownRunnerLabel(this.dashboardQuery.data()?.runner));
 

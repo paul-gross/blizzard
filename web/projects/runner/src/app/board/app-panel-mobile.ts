@@ -13,22 +13,14 @@ import type { MachineChunkRow } from './app-panel.model';
  * The runner local panel's mobile shell (mobile mockups, `../docs/designs/mobile/README.md`)
  * — a single scrolling column stacking the glance-relevant pieces in attention
  * order: machine info/status first (the hub link, `app-info`), then
- * agents/leases (`AgentRow` already carries its own heartbeat-freshness bar
- * per row), then chunks on this machine, then local asks. Every section is a
+ * agents/leases, then chunks on this machine, then local asks. Every section is a
  * desktop-layout component reused verbatim (`bzh:frontend-kit`) — this shell
  * only orders and stacks them, it never forks or re-styles their internals.
  *
- * Selecting a chunk (a {@link ChunkCard} tap, or an {@link AgentRow} tap —
- * which selects that lease's chunk, the same shared selection the desktop
- * rails have) drills down to a **detail screen** in place of the list: the
- * mobile answer to the desktop layout's side-by-side detail dock, which
- * assumes width a single column doesn't have. The screen itself is
- * {@link MachineDetail} reused verbatim (`bzh:frontend-kit`) — the same
- * execution facts (lease/session/pid/env/workdir/heartbeat) the desktop dock
- * renders; this shell only swaps which of the two screens is mounted and adds
- * the back affordance a drill-down needs. Selection itself stays the container's
- * (and the URL's), so a detail screen is deep-linkable and the
- * device back button walks out of it like any other navigation.
+ * Selecting a chunk (a {@link ChunkCard} or {@link AgentRow} tap) drills down
+ * to a **detail screen** ({@link MachineDetail}, `bzh:frontend-kit`) in place of
+ * the list; this shell only swaps which of the two screens is mounted and adds
+ * the back affordance a drill-down needs.
  *
  * {@link LocalPauseControl} is not mounted here — pinned by
  * `app-panel-mobile.spec.ts`'s "mounts no local pause control or paused-by-hub

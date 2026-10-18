@@ -140,10 +140,8 @@ describe('MachineDetail summary facts', () => {
 });
 
 /**
- * The header: pause/resume and work-item links. Pause/Resume and the work-item links are the dock's own
- * severable read ({@link injectChunkDetailQuery}); these specs drive that read
- * through the stubbed `GET /api/chunks/{id}` route rather than the container-fed
- * `leases`/`status` inputs the attempt-tab specs above cover.
+ * The header: pause/resume and work-item links, driven through the stubbed
+ * `GET /api/chunks/{id}` route behind {@link injectChunkDetailQuery}.
  */
 describe('MachineDetail header', () => {
   let stub: RequestClientStub;

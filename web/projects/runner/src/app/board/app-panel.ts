@@ -28,18 +28,8 @@ import { injectRunnerDashboardQuery } from '../core/status.query';
  * Every panel below it (via {@link LocalPanelLayout}) is presentational or
  * owns just its own read.
  *
- * The fold and the selection stay here rather than in the layout, per the
- * epic's design decision: the layout takes `machineChunks`/`selected*` as
- * plain inputs, so it is testable without a runner-client stub. The URL is the
- * single source of truth — the panel derives its selection from the query params
- * and every click writes them back, never the reverse.
- *
- * Owns no header state: the desktop header and the mobile titlebar mount at
- * the app root (`../../runner/src/app/shell/nav/app-header.ts`,
- * `../../runner/src/app/shell/nav/mobile-titlebar.ts`) and inject
- * {@link injectRunnerDashboardQuery} themselves rather than reading it off
- * this container — TanStack dedupes the extra injection, so it costs no
- * extra request.
+ * Owns no header state; see `../shell/nav/app-header.ts` and
+ * `../shell/nav/mobile-titlebar.ts`.
  */
 @Component({
   selector: 'app-panel',

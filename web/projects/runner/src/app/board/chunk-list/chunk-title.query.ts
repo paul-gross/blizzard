@@ -4,10 +4,7 @@ import { runnerApi } from 'fleet';
 import { injectActiveRunner } from '../../core/active-runner';
 import { runnerChunkWorkItemsKey } from '../../core/query-keys';
 
-/** The `GET /runners/{runner_id}/api/chunks/{chunk_id}/work-items` fetch behind {@link injectChunkTitleQuery}.
- * The chunk page's full-fidelity read of the same endpoint is `fleet`'s plane-generic
- * `injectChunkWorkItemsQuery`, which differs in cache key and observer options (the real
- * severability distinction between them), never in what it fetches. */
+/** The `GET /runners/{runner_id}/api/chunks/{chunk_id}/work-items` fetch behind {@link injectChunkTitleQuery}. */
 async function fetchWorkItems(runnerId: string, chunkId: string): Promise<runnerApi.WorkItemsView> {
   const { data, error } = await runnerApi.getWorkItemsRunnersRunnerIdApiChunksChunkIdWorkItemsGet({
     path: { runner_id: runnerId, chunk_id: chunkId },

@@ -6,7 +6,7 @@ import { injectActiveRunner } from '../../core/active-runner';
 import { chunkPauseMutationKey } from '../../core/mutation-keys';
 import { runnerChunkDetailKey, runnerLeasesKey } from '../../core/query-keys';
 
-/** Toggle a chunk's operator pause brake from the machine panel: `paused` is the
+/** Toggle a chunk's operator pause brake: `paused` is the
  * state to set — `true` pauses the chunk, `false` resumes it. `runnerId` is the runner
  * the chunk is on, the route's `runner_id`. */
 export interface ChunkPauseVars {
@@ -20,10 +20,8 @@ export interface ChunkPauseVars {
  * onto the hub's fleet-mounted counterpart, called through the generated
  * `pauseChunkRunnersRunnerIdApiChunksChunkIdPausePost` or
  * `resumeChunkRunnersRunnerIdApiChunksChunkIdResumePost` by the desired `paused` state
- * (bzh:generated-client). The hub refuses a chunk whose `ChunkDetail.pausable` is false — the
- * header offers the toggle only while the wire's `pausable` holds, and surfaces a 409 anyway if
- * the race is lost. On success it re-reads the chunk's detail (the pause fact the header renders off)
- * and the leases list (the derived machine status the row/dock summary render off).
+ * (bzh:generated-client). The hub refuses a chunk whose `ChunkDetail.pausable` is false with a
+ * 409. On settle it re-reads the chunk's detail and the leases list.
  */
 export function injectChunkPauseMutation() {
   const queryClient = inject(QueryClient);
