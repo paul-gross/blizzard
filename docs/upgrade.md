@@ -14,6 +14,12 @@ gh release view v0.2.0 --repo paul-gross/blizzard
 
 [`docs/versioning.md`](./versioning.md) owns what counts as breaking and the skew window a runner may lag its hub by.
 
+## Upgrading to 0.2.0
+
+`0.2.0` is reached from `v0.1.0-rc.1` or any `edge` build, stepping through no intermediate release, since none exists.
+Every boundary below therefore applies at once, each with its own ordering: runners first across the
+subscription-usage boundary, the hub first across runner identity.
+
 ### Subscription-usage response boundary
 
 One release removes `RunnerView.external_subscription_usage` — the singular usage response — leaving the per-slug
@@ -276,7 +282,7 @@ should be re-added instead (`blizzard runner init --allow-readd`).
 From `packaging/docker/`, pull the tag:
 
 ```bash
-docker pull ghcr.io/paul-gross/blizzard-hub:v0.2.0
+docker pull ghcr.io/paul-gross/blizzard-hub:0.2.0
 ```
 
 Set `BLIZZARD_HUB_IMAGE` to that tag in `.env`, then recreate the hub alone, leaving postgres and Caddy untouched:
