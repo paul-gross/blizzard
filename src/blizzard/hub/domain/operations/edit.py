@@ -185,8 +185,7 @@ def plan_edit(
     validated before anything is planned, in field order, so a refusal writes nothing.
 
     A graph pin edit names its loaded target graph and the target's retirement; the retirement check is
-    pinned by ``tests/test_edit_service.py``'s
-    ``test_edit_graph_id_retirement_check_is_not_bypassed_by_a_different_migration_target``."""
+    pinned by ``test_edit_graph_id_retirement_check_is_not_bypassed_by_a_different_migration_target``."""
     graph_id: str | None = None
     if edit.graph_id is not UNSET:
         if graph_target is None or graph_target.graph_id != edit.graph_id:
