@@ -13,24 +13,23 @@
   (click)="open($event)"
 >
   <fleet-kit-select-row class="card-open" bare [ariaLabel]="'Open chunk ' + card().shortId" [selected]="selected()" />
-  @if (title(); as title) {
-    @if (titles().length === 1) {
-      <span class="title" data-testid="chunk-title" [title]="title">{{ title }}</span>
-    } @else {
-      <!-- A grouped chunk names every item it carries; past three, the first two show
-           until the fold beneath them is opened. -->
-      <span class="titles">
-        @for (each of fold().shown; track $index) {
-          <span class="title one-line" data-testid="chunk-title" [title]="each">{{ each }}</span>
-        }
-      </span>
-    }
-  } @else {
-    <!-- Until the titles arrive, the work-ref labels stand in for them. Plain text, not
-         links: the detail panel owns the link out to the work source. -->
-    <span class="iss-list">
-      @for (label of card().pointerLabels; track label) {
-        <span class="iss" data-testid="work-ref-chip" [title]="label">{{ label }}</span>
+  <!-- Each work item is its work-ref label over its title, the title held by a one-line
+       skeleton until it is read. The labels are plain text, not links: the detail panel owns
+       the link out to the work source. A grouped chunk names every item it carries; past
+       three, the first two show until the fold beneath them is opened. -->
+  @if (fold().shown.length) {
+    <span class="items" [class.group]="lines().length > 1">
+      @for (line of fold().shown; track $index) {
+        <span class="item">
+          @if (line.label; as label) {
+            <span class="iss" data-testid="work-ref-chip" [title]="label">{{ label }}</span>
+          }
+          @if (titlesPending()) {
+            <fleet-kit-skeleton class="title-skeleton" data-testid="chunk-title-skeleton" [rows]="1" />
+          } @else if (line.title; as title) {
+            <span class="title" data-testid="chunk-title" [title]="title">{{ title }}</span>
+          }
+        </span>
       }
     </span>
   }

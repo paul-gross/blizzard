@@ -5,29 +5,39 @@ narrows it to one project is [projects.md](./projects.md#the-boards-project-lens
 
 ## Board and list layouts
 
-The switch in the board's header picks a layout. **Board** is the lane grid. **List** reads the same lanes top to bottom
-as collapsible sections, in this order: needs human, waiting, running, ready, backlog, and done. Done starts folded.
-Each section keeps its lane's own order, so ready and backlog still read in the hub's dispatch and backlog order. A row
-puts the chunk's work, project, step, runner, open PRs, cost and id in aligned columns. PRs show by number alone, and a
-blocked chunk's marking is plain text there, so a row selects its own chunk only.
+The switch in the board's header picks a layout. **Board** is the lane grid. **List** reads every chunk as one
+full-width row, top to bottom: needs human, waiting, and running, each lane newest first; then ready and backlog in the
+hub's dispatch and backlog order, split by a `▲ Ready · Backlog ▼` line; then done, newest finished first. Each row
+leads with an icon for its lane — paused and stopped have icons of their own — then the chunk's id over its work items,
+its step, its runner over its open PRs, and its cost. PRs show by number alone, a blocked chunk's marking is plain text,
+and a finished row closes on a check with the time it completed or stopped.
+
+With the `queue:reorder` permission ([tenants.md](./tenants.md)), each ready and backlog row carries a grip and drags to
+a new place in its own list; with `chunk:control` as well, a row dragged above the line is promoted into the ready queue
+and one dragged below it is demoted to the backlog. Either way the chunk lands right after the row above where it was
+dropped, or first at the top. Only ready and backlog rows drag; a row's own controls — its links and its `+N more` fold
+— still act for themselves, and a click anywhere else opens the chunk. Without the permission the rows are the same,
+without the grip.
 
 The layout lives in the URL as `?layout=list`, beside the open chunk's `?chunk=` and under either lens, so a reload or a
 shared link keeps it. With no `layout` the board opens on the grid.
 
 ## Work item titles
 
-A card leads with its work items' titles. A chunk carrying up to three items lists every title; past three it shows the
-first two and folds the rest behind `+N more`, which opens in place without opening the chunk. Beneath the titles come a
-blocked chunk's `blocked by` marking, then, on a card in the running, waiting, or needs-human lane, its open PRs or
-`Awaiting your merge`. Next is a row with the chunk's step on the left, beside a `gate` badge while a decision waits on
-a person, and its id on the right, and last its cost on the right, beside the completion time on a done card. The status
-word shows on the step row only where it says more than the lane's heading: paused and waiting on human, which share the
-waiting lane, and delivering, within running. In the list, a chunk with one work item also shows the first line of that
-item's description.
+A card names each work item as its work-ref label over its title. A chunk carrying up to three items lists every pair;
+past three it shows the first two and folds the rest behind `+N more`, which opens in place without opening the chunk.
+Beneath the items come a blocked chunk's `blocked by` marking, then, on a card in the running, waiting, or needs-human
+lane, its open PRs or `Awaiting your merge`. Next is a row with the chunk's step on the left, beside a `gate` badge
+while a decision waits on a person, and its id on the right, and last its cost on the right, with a done card's
+completion time on the left. The status word shows on the step row only where it says more than the lane's heading:
+paused and waiting on human, which share the waiting lane, and delivering, within running. In the list each label links
+out to its item at the work source.
 
 The titles are a second read, made after the chunk list has answered, so the lanes fill first. The board reads its
-chunks in batches of 100, and each batch's cards gain their titles as that batch answers. Until then a card shows its
-work-ref labels in their place, as does a chunk whose items failed to read. Each chunk's items are read through its work
-source as the chunk page reads them ([work-sources.md](./work-sources.md)), and the board reuses what it read for five
-minutes, across live updates and reconnects alike. For a GitHub source a read costs two API requests per item, so
-loading the board spends the source's rate limit in proportion to the items on it not read in the last five minutes.
+chunks in batches of 100, and each batch's cards gain their titles as that batch answers. Until then each title is a
+one-line placeholder under its label; a chunk whose items failed to read keeps its labels alone. While the chunk list
+itself is first loading, each lane and the list fill with placeholder cards and rows. Each chunk's items are read
+through its work source as the chunk page reads them ([work-sources.md](./work-sources.md)), and the board reuses what
+it read for five minutes, across live updates and reconnects alike. For a GitHub source a read costs two API requests
+per item, so loading the board spends the source's rate limit in proportion to the items on it not read in the last five
+minutes.

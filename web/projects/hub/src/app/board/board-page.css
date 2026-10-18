@@ -4,6 +4,7 @@
   min-height: 0;
 }
 .main {
+  box-sizing: border-box;
   height: 100%;
   min-height: 0;
   display: grid;
@@ -36,10 +37,14 @@
   flex: 1;
   min-height: 0;
 }
+/* The banner renders nothing while every chunk is served; it then takes no gap above the board. */
+app-unserved-banner:empty {
+  display: none;
+}
 /* The centre column stacks the board over the chunk detail, so the detail sits
-   to the left of the rail rather than spanning the window beneath it. Both
-   are permanently mounted and hold their share of the column, so selecting or
-   clearing a chunk never resizes or reflows the board. */
+   to the left of the rail rather than spanning the window beneath it. The dock
+   stays mounted but takes no room until a chunk is selected, so an unselected
+   board runs the column's full height. */
 .board {
   flex: 1.15;
   min-height: 0;
@@ -49,6 +54,9 @@
   flex: 1;
   min-height: 0;
   min-width: 0;
+}
+.dock.closed {
+  display: none;
 }
 /* A promote or reorder failure reads between the board and the dock, next to the
    controls that fired it. */

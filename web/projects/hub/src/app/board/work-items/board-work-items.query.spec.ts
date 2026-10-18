@@ -87,13 +87,14 @@ describe('injectBoardWorkItemsQuery', () => {
     expect(stub.requests.map((r) => chunkOf(r.path))).toEqual(['ch_old']);
   });
 
-  it('leaves out a chunk whose read fails, keeping the rest', async () => {
+  it('answers a chunk whose read fails as carrying no items, keeping the rest', async () => {
     stub = stubRequestClient(hubClient, (_method, path) =>
       chunkOf(path) === 'ch_bad' ? stubError(502, { detail: 'forge down' }) : titled(chunkOf(path)),
     );
     const found = await readAll(['ch_bad', 'ch_ok']);
 
-    expect([...found.keys()]).toEqual(['ch_ok']);
+    expect(found.get('ch_bad')).toEqual({ items: [] });
+    expect(found.get('ch_ok')?.items?.length).toBeGreaterThan(0);
   });
 
   it(`never has more than ${WORK_ITEMS_READ_CONCURRENCY} reads of a batch in flight`, async () => {

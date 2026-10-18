@@ -16,7 +16,13 @@
      queue:reorder — a read-only board must not offer a drag it would then
      refuse, not merely hide a button. A guest on a reorderable lane
      falls to the plain, undraggable branch below, same as every non-reorderable lane. -->
-@if (reorderControls() && canReorder()) {
+@if (skeletons() > 0 && cards().length === 0) {
+  <div class="b-col-body" data-testid="lane-skeleton">
+    @for (i of skeletonIndexes(); track i) {
+      <app-board-card-skeleton />
+    }
+  </div>
+} @else if (reorderControls() && canReorder()) {
   <div
     class="b-col-body"
     cdkDropList
@@ -26,9 +32,7 @@
   >
     @for (card of cards(); track card.chunkId) {
       <div class="q-card" cdkDrag [cdkDragData]="card.chunkId">
-        <span class="reorder-grip" data-testid="board-reorder-grip" aria-hidden="true">
-          <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
-        </span>
+        <app-reorder-grip class="reorder-grip" data-testid="board-reorder-grip" />
         <app-board-card
           class="reorder-armed"
           [card]="card"

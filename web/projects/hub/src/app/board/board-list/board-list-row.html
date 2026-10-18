@@ -1,5 +1,5 @@
 <!-- The open control is the kit's select row, stretched under the whole row; the cells sit
-     over it and let a click fall through to it, so the PR links and the fold stay controls of
+     over it and let a click fall through to it, so the links and the fold stay controls of
      their own rather than nesting inside a button. -->
 <div
   class="row"
@@ -17,14 +17,26 @@
     [selected]="selected()"
     (picked)="selectChunk.emit(card().chunkId)"
   />
+  <!-- The icon takes the pointer for its tooltip, so a click on it opens the chunk itself, as the
+       select row beneath would. -->
+  <app-lane-icon class="lane" data-testid="list-row-lane" [lane]="lane()" [status]="card().status" (click)="selectChunk.emit(card().chunkId)" />
   <div class="work">
-    @for (each of fold().shown; track $index) {
-      <span class="title" data-testid="list-row-title" [title]="each">{{ each }}</span>
-    } @empty {
-      <span class="title untitled" data-testid="list-row-title">{{ fallback() }}</span>
-    }
-    @if (card().description; as text) {
-      <span class="desc" data-testid="list-row-desc" [title]="text">{{ text }}</span>
+    <span class="id" data-testid="list-row-id">{{ card().shortId }}</span>
+    @for (line of fold().shown; track $index) {
+      <span class="item">
+        @if (line.label; as label) {
+          @if (line.url; as url) {
+            <a class="ref" data-testid="list-row-ref" [href]="url" target="_blank" rel="noopener noreferrer" [title]="label">{{ label }}</a>
+          } @else {
+            <span class="ref" data-testid="list-row-ref" [title]="label">{{ label }}</span>
+          }
+        }
+        @if (titlesPending()) {
+          <fleet-kit-skeleton class="title-skeleton" data-testid="list-row-title-skeleton" [rows]="1" />
+        } @else if (line.title; as title) {
+          <span class="title" data-testid="list-row-title" [title]="title">{{ title }}</span>
+        }
+      </span>
     }
     @if (fold().hidden > 0 || expanded()) {
       <!-- eslint-disable-next-line no-restricted-syntax -- A text disclosure under the titles, not an action: the kit button's bordered chrome would outweigh the titles it opens. -->
@@ -38,8 +50,14 @@
         {{ fold().hidden > 0 ? '+' + fold().hidden + ' more' : 'show less' }}
       </button>
     }
+    @if (finishedAt(); as finished) {
+      <span class="finished" data-testid="list-row-finished" [style.color]="finishedColor()">
+        <app-lane-icon class="finished-icon" lane="done" [status]="card().status" />
+        {{ finishedWord(card().status) }}
+        <fleet-when class="done-at" [iso]="finished" />
+      </span>
+    }
   </div>
-  <span class="cell project">{{ card().projectName ?? '' }}</span>
   <span class="cell step">
     <span class="step-name" [title]="step()">{{ step() }}</span>
     @if (gated()) {
@@ -49,21 +67,22 @@
       <span class="blocked" [title]="card().blockedOn">blocked · {{ blocker }}</span>
     }
   </span>
-  <span class="cell runner">{{ card().runnerName ?? '' }}</span>
-  <span class="cell prs">
-    @if (card().awaitingExternalMerge) {
-      <span class="merge-wait">awaiting merge</span>
-    }
-    @for (pr of card().openPrs ?? []; track pr.repo + ':' + pr.number) {
-      <a [href]="pr.url" target="_blank" rel="noopener noreferrer">#{{ pr.number }}</a>
+  <span class="cell holder">
+    <span class="runner" data-testid="list-row-runner">{{ card().runnerName ?? '' }}</span>
+    @if (card().awaitingExternalMerge || card().openPrs?.length) {
+      <span class="prs">
+        @if (card().awaitingExternalMerge) {
+          <span class="merge-wait">awaiting merge</span>
+        }
+        @for (pr of card().openPrs ?? []; track pr.repo + ':' + pr.number) {
+          <a [href]="pr.url" target="_blank" rel="noopener noreferrer" [title]="pr.repo + ' PR #' + pr.number">#{{ pr.number }}</a>
+        }
+      </span>
     }
   </span>
   <span class="cell cost">
-    @if (card().terminal && card().completedAt; as completedAt) {
-      <fleet-when class="done-at" [iso]="completedAt" />
-    } @else if (hasCostFigure(card().costUsd, card().estimatedCostUsd, card().costPartial)) {
+    @if (hasCostFigure(card().costUsd, card().estimatedCostUsd, card().costPartial)) {
       {{ formatCost(card().costUsd, card().estimatedCostUsd, card().costPartial) }}
     }
   </span>
-  <span class="cell id">{{ card().shortId }}</span>
 </div>

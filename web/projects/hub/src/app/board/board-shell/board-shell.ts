@@ -1,24 +1,20 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 
-import { type ChunkCountsView, type ChunkSummary, type WorkItemsView, chunkLane, compactRef, DONE_LANE, LANES, laneCounts, KitAsyncState, type KitAsyncStateValue, KitPanel, KitPanelHeader, KitSkeleton, KitTabs, type KitTabOption } from 'fleet';
+import { type ChunkCountsView, type ChunkSummary, type WorkItemsView, chunkLane, compactRef, DONE_LANE, LANES, laneCounts, KitAsyncState, type KitAsyncStateValue, KitPanel, KitPanelHeader, KitTabs, type KitTabOption } from 'fleet';
 import type { BoardCard } from '../board-card/board-card';
-import { workItemDescription, workItemTitles } from '../board-card/board-card.model';
+import { workLines } from '../board-card/board-card.model';
 import { BoardColumn, type BoardLaneMove, type BoardReposition } from './board-column';
-import { BoardList, type BoardListSection } from '../board-list/board-list';
+import { BoardList, type BoardListEntry, type BoardListGroups } from '../board-list/board-list';
 
 export type { BoardCard, BoardLaneMove, BoardReposition };
 
-/** How the board lays out its chunks: the lane grid, or the lanes as a list of sections. */
+/** How the board lays out its chunks: the lane grid, or one list of full-width rows. */
 export type BoardLayout = 'board' | 'list';
 
 const LAYOUT_TABS: readonly KitTabOption[] = [
   { value: 'board', label: 'Board', testid: 'board-layout-board' },
   { value: 'list', label: 'List', testid: 'board-layout-list' },
 ];
-
-/** The list's section order — what wants a person first, then the pipeline back to front,
- * DONE last. The grid keeps the pipeline's own left-to-right order. */
-const LIST_ORDER: readonly string[] = ['needs', 'waiting', 'running', 'ready', 'notready', DONE_LANE];
 
 /**
  * The mission-control chunk board — the six status columns and their
@@ -34,7 +30,7 @@ const LIST_ORDER: readonly string[] = ['needs', 'waiting', 'running', 'ready', '
 @Component({
   selector: 'app-board-shell',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [BoardColumn, BoardList, KitPanel, KitPanelHeader, KitAsyncState, KitSkeleton, KitTabs],
+  imports: [BoardColumn, BoardList, KitPanel, KitPanelHeader, KitAsyncState, KitTabs],
   templateUrl: './board-shell.html',
   styleUrl: './board-shell.css',
 })
@@ -79,11 +75,12 @@ export class BoardShell {
 
   /** Emitted when a READY or BACKLOG card is dragged somewhere new — the chunk,
    * the anchor it now sits after (`null` = the very top of that list), and which
-   * list it belongs to (forwarded as-is from {@link BoardColumn}). */
+   * list it belongs to (forwarded as-is from {@link BoardColumn} or {@link BoardList}). */
   readonly reposition = output<BoardReposition>();
 
   /** Emitted when a card is dropped into the other ranked list — a demote out of READY or a
-   * promote out of BACKLOG, with the destination anchor (forwarded as-is from {@link BoardColumn}). */
+   * promote out of BACKLOG, with the destination anchor (forwarded as-is from {@link BoardColumn} or
+   * {@link BoardList}). */
   readonly laneMove = output<BoardLaneMove>();
 
   /** Whether the current identity may promote a backlog chunk (`chunk:control`),
@@ -95,9 +92,15 @@ export class BoardShell {
    * (`queue:reorder`), forwarded to the ranked {@link BoardColumn}s. */
   readonly canReorder = input(false);
 
-  /** Every chunk's work items read so far, by chunk id — a card leads with their titles
-   * once its chunk's arrive, and keeps its untitled layout until then. */
+  /** Every chunk's work items read so far, by chunk id — a card fills each work ref's title
+   * once its chunk's arrive, and holds a skeleton in its place until then. */
   readonly workItems = input<ReadonlyMap<string, WorkItemsView>>(new Map());
+
+  /** How many card skeletons each lane draws while the chunk read loads (`laneSkeletonCounts`). */
+  readonly laneSkeletons = input<ReadonlyMap<string, number>>(new Map());
+
+  /** How many row skeletons the list draws while the chunk read loads (`listSkeletonCount`). */
+  readonly listSkeletons = input(0);
 
   /** Which layout renders — the lane grid or the list. */
   readonly layout = input<BoardLayout>('board');
@@ -106,16 +109,24 @@ export class BoardShell {
   readonly layoutChange = output<BoardLayout>();
 
   protected readonly columns = LANES;
+
+  protected skeletonsFor(columnKey: string): number {
+    return this.state() === 'loading' ? (this.laneSkeletons().get(columnKey) ?? 0) : 0;
+  }
   protected readonly layoutTabs = LAYOUT_TABS;
 
-  /** Every lane as a list section, in {@link LIST_ORDER}, each holding the same cards in the
-   * same order its grid column does. */
-  protected readonly sections = computed<readonly BoardListSection[]>(() =>
-    LIST_ORDER.flatMap((key) => {
-      const lane = LANES.find((l) => l.key === key);
-      return lane ? [{ key, label: lane.headerLabel, count: this.countFor(key), cards: this.cardsFor(key) }] : [];
-    }),
-  );
+  /** The list's rows, each tagged with its lane: what wants a person, then work in flight —
+   * each lane newest first — then READY and BACKLOG in their hub order, then DONE, newest
+   * finished first. Every group holds the same cards in the same order its grid column does. */
+  protected readonly listGroups = computed<BoardListGroups>(() => {
+    const tagged = (key: string): readonly BoardListEntry[] => this.cardsFor(key).map((card) => ({ lane: key, card }));
+    return {
+      live: [...tagged('needs'), ...tagged('waiting'), ...tagged('running')],
+      ready: tagged('ready'),
+      backlog: tagged('notready'),
+      done: tagged(DONE_LANE),
+    };
+  });
 
   protected chooseLayout(value: string): void {
     this.layoutChange.emit(value === 'list' ? 'list' : 'board');
@@ -137,9 +148,6 @@ export class BoardShell {
         promotable: chunk.promotable ?? false,
         node: chunk.current_node_name ?? chunk.current_node_id ?? '—',
         nodeId: chunk.current_node_id ?? '',
-        // Only labeled pointers show — a pointer naming no configured source has a
-        // null label and the card leans on the short id instead.
-        pointerLabels: (chunk.work_refs ?? []).flatMap((p) => (p.label ? [p.label] : [])),
         costUsd: chunk.cost?.cost_usd ?? 0,
         costPartial: chunk.cost?.cost_partial ?? false,
         estimatedCostUsd: chunk.cost?.estimated_cost_usd ?? null,
@@ -157,8 +165,8 @@ export class BoardShell {
         awaitingExternalMerge: chunk.awaiting_external_merge ?? false,
         projectName: chunk.project_name ?? null,
         runnerName: chunk.runner_name ?? null,
-        titles: workItemTitles(workItems),
-        description: workItemDescription(workItems),
+        workLines: workLines(chunk.work_refs ?? [], workItems),
+        itemsRead: workItems !== undefined,
       });
     }
     // READY is ordered rather than listed: it is a queue, so its rank comes

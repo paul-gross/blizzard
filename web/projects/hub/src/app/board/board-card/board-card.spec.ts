@@ -12,7 +12,8 @@ const BASE: BoardCard = {
   promotable: false,
   node: 'done',
   nodeId: 'nd_done',
-  pointerLabels: [],
+  workLines: [],
+  itemsRead: true,
   costUsd: 0,
   costPartial: false,
   estimatedCostUsd: null,
@@ -39,8 +40,8 @@ async function render(card: BoardCard, gated = false, canControl = false) {
   return (await renderFixture(card, gated, canControl)).nativeElement as HTMLElement;
 }
 
-/** `n` titles, "Item 1" … "Item n". */
-const items = (n: number) => Array.from({ length: n }, (_, i) => `Item ${i + 1}`);
+/** `n` titled work items, "Item 1" … "Item n", each under its label `hub#1` … `hub#n`. */
+const items = (n: number) => Array.from({ length: n }, (_, i) => ({ label: `hub#${i + 1}`, title: `Item ${i + 1}` }));
 
 const titlesOf = (el: HTMLElement) =>
   [...el.querySelectorAll('[data-testid="chunk-title"]')].map((title) => title.textContent?.trim());
@@ -48,21 +49,44 @@ const titlesOf = (el: HTMLElement) =>
 describe('BoardCardComponent work item titles', () => {
   const RUNNING: BoardCard = { ...BASE, status: 'running', terminal: false, node: 'build', completedAt: null };
 
-  it('leads with the one work item title in place of the id and work-ref chips', async () => {
-    const el = await render({ ...RUNNING, pointerLabels: ['hub#7'], titles: ['Migrate the event log'] });
+  it('keeps the work-ref chips once the title arrives, with the title beneath them', async () => {
+    const el = await render({ ...RUNNING, workLines: [{ label: 'hub#7', title: 'Migrate the event log' }] });
     expect(titlesOf(el)).toEqual(['Migrate the event log']);
-    expect(el.querySelector('[data-testid="work-ref-chip"]')).toBeNull();
+    const chip = el.querySelector('[data-testid="work-ref-chip"]')!;
+    expect(chip.textContent?.trim()).toBe('hub#7');
+    expect(chip.nextElementSibling?.getAttribute('data-testid')).toBe('chunk-title');
+    expect(el.querySelector('[data-testid="chunk-title-skeleton"]')).toBeNull();
   });
 
-  it('leads with the work-ref labels while the titles are unread', async () => {
-    const el = await render({ ...RUNNING, pointerLabels: ['hub#7'], titles: null });
+  it('pairs each work ref with its own title, one pair after another', async () => {
+    const el = await render({
+      ...RUNNING,
+      workLines: [
+        { label: 'hub#1', title: 'First' },
+        { label: 'hub#2', title: 'Second' },
+      ],
+    });
+    const order = [...el.querySelectorAll('[data-testid="work-ref-chip"], [data-testid="chunk-title"]')].map((node) => node.textContent?.trim());
+    expect(order).toEqual(['hub#1', 'First', 'hub#2', 'Second']);
+  });
+
+  it('holds a one-line skeleton under the work-ref labels while the titles are unread', async () => {
+    const el = await render({ ...RUNNING, workLines: [{ label: 'hub#7', title: null }], itemsRead: false });
     expect(titlesOf(el)).toEqual([]);
     expect(el.querySelector('[data-testid="work-ref-chip"]')?.textContent?.trim()).toBe('hub#7');
+    expect(el.querySelectorAll('[data-testid="chunk-title-skeleton"] .bar')).toHaveLength(1);
+  });
+
+  it('names a read item with no title by its label alone, with no skeleton', async () => {
+    const el = await render({ ...RUNNING, workLines: [{ label: 'hub#7', title: null }] });
+    expect(el.querySelector('[data-testid="work-ref-chip"]')?.textContent?.trim()).toBe('hub#7');
+    expect(titlesOf(el)).toEqual([]);
+    expect(el.querySelector('[data-testid="chunk-title-skeleton"]')).toBeNull();
   });
 
   it('keeps the same step row titled or not — the step, then the id', async () => {
-    for (const titles of [null, items(1)]) {
-      const el = await render({ ...RUNNING, shortId: 'C-QQFM', titles });
+    for (const itemsRead of [false, true]) {
+      const el = await render({ ...RUNNING, shortId: 'C-QQFM', workLines: items(1), itemsRead });
       const row = el.querySelector('[data-testid="chunk-node"]')!.parentElement!;
       expect(row.firstElementChild?.getAttribute('data-testid')).toBe('chunk-node');
       expect(row.lastElementChild?.textContent?.trim()).toBe('C-QQFM');
@@ -71,13 +95,13 @@ describe('BoardCardComponent work item titles', () => {
   });
 
   it('names every item of a group of three, with no fold', async () => {
-    const el = await render({ ...RUNNING, titles: items(3) });
+    const el = await render({ ...RUNNING, workLines: items(3) });
     expect(titlesOf(el)).toEqual(['Item 1', 'Item 2', 'Item 3']);
     expect(el.querySelector('[data-testid="chunk-title-fold"]')).toBeNull();
   });
 
   it('folds a larger group to its first two titles, and opens in place without selecting', async () => {
-    const fixture = await renderFixture({ ...RUNNING, titles: items(5) });
+    const fixture = await renderFixture({ ...RUNNING, workLines: items(5) });
     const el = fixture.nativeElement as HTMLElement;
     const selected = vi.fn();
     fixture.componentInstance.selectChunk.subscribe(selected);
@@ -94,15 +118,15 @@ describe('BoardCardComponent work item titles', () => {
   });
 
   it("drops the status word where the lane's heading already names it, titled or not", async () => {
-    for (const titles of [null, items(1)]) {
-      const el = await render({ ...RUNNING, titles });
+    for (const itemsRead of [false, true]) {
+      const el = await render({ ...RUNNING, workLines: items(1), itemsRead });
       expect(el.querySelector('[data-testid="chunk-status"]')).toBeNull();
       TestBed.resetTestingModule();
     }
   });
 
   it('keeps the status word where it says more than the lane', async () => {
-    const el = await render({ ...RUNNING, status: 'paused', titles: items(1) });
+    const el = await render({ ...RUNNING, status: 'paused', workLines: items(1) });
     expect(el.querySelector('[data-testid="chunk-status"]')?.textContent?.trim()).toBe('paused');
   });
 });
@@ -165,7 +189,7 @@ describe('BoardCardComponent work-ref chips (issue #176)', () => {
   it('renders one chip per pointer label, in order, each carrying its own title', async () => {
     const el = await render({
       ...BASE,
-      pointerLabels: ['blizzard#146', 'blizzard#164', 'widget#9'],
+      workLines: ['blizzard#146', 'blizzard#164', 'widget#9'].map((label) => ({ label, title: null })),
     });
 
     const chips = el.querySelectorAll('[data-testid="work-ref-chip"]');
@@ -182,7 +206,7 @@ describe('BoardCardComponent work-ref chips (issue #176)', () => {
   });
 
   it('renders exactly one chip for a single pointer label', async () => {
-    const el = await render({ ...BASE, pointerLabels: ['blizzard#146'] });
+    const el = await render({ ...BASE, workLines: [{ label: 'blizzard#146', title: null }] });
 
     const chips = el.querySelectorAll('[data-testid="work-ref-chip"]');
     expect(chips).toHaveLength(1);
@@ -190,7 +214,7 @@ describe('BoardCardComponent work-ref chips (issue #176)', () => {
   });
 
   it('renders no chip when there are no pointer labels', async () => {
-    const el = await render({ ...BASE, pointerLabels: [] });
+    const el = await render({ ...BASE, workLines: [] });
 
     expect(el.querySelectorAll('[data-testid="work-ref-chip"]')).toHaveLength(0);
   });
@@ -353,7 +377,7 @@ describe('BoardCardComponent open control', () => {
     promotable: true,
     completedAt: null,
     openPrs: [PR],
-    titles: items(5),
+    workLines: items(5),
   };
 
   it("names the focusable button 'Open chunk <id>'", async () => {

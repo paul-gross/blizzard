@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, InjectionToken, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
 import { map } from 'rxjs';
@@ -21,14 +21,22 @@ import { injectDemoteChunkMutation, type DemoteVars } from './chunks/demote.muta
 import { injectPromoteChunkMutation, type PromoteVars } from './chunks/promote.mutations';
 import { injectRepositionBacklogMutation, injectRepositionQueueMutation, type RepositionVars } from './queue/queue.mutations';
 import { foldRepositions, gatedChunkIds, orderedChunkIds, placedMoves, resolveSelectedChunk, withPendingBoardChanges } from './board-page.model';
+import { laneSkeletonCounts, listSkeletonCount } from './board-shell/board-skeletons.model';
 import { UnservedBanner } from './unserved/unserved-banner';
 import { injectBoardWorkItemsQuery } from './work-items/board-work-items.query';
+
+/** The random source the board's loading skeletons draw their counts from — `Math.random`, unless
+ * a spec pins it. */
+export const BOARD_SKELETON_RANDOM = new InjectionToken<() => number>('BOARD_SKELETON_RANDOM', {
+  providedIn: 'root',
+  factory: () => Math.random,
+});
 
 /**
  * The board route — the two-column mission-control surface:
  *
  * - the **centre** stacks {@link BoardShell} over the always-mounted {@link ChunkDetail}
- *   dock, so selecting or deselecting a card never reflows the board;
+ *   dock, which is hidden while no card is selected so the board takes the full height;
  * - the **right rail** holds {@link RunnerPanel}, {@link QuestionsPanel},
  *   {@link GatesPanel}, and {@link ActivityPanel}.
  *
@@ -50,6 +58,12 @@ export class BoardPage {
   /** The board's last operator-action failure — a promote, a demote, or a reorder — or `null`.
    * Reset at the start of every new attempt. */
   protected readonly actionError = signal<string | null>(null);
+
+  /** The loading skeletons each lane and the list draw — drawn once, so a re-render mid-load
+   * never reshuffles them. */
+  private readonly skeletonRandom = inject(BOARD_SKELETON_RANDOM);
+  protected readonly laneSkeletons = laneSkeletonCounts(this.skeletonRandom);
+  protected readonly listSkeletons = listSkeletonCount(this.skeletonRandom);
 
   private readonly chunksQuery = injectHubBoardChunksQuery();
   private readonly countsQuery = injectHubChunkCountsQuery();

@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
 
-import { type ChunkStatus, type LandedRepoView, type PrView, STATUS_LANE, formatCost, hasCostFigure, FleetWhen, KitBadge, KitButton, KitSelectRow } from 'fleet';
-import { blockedLabel, cardShowsStatus, foldTitles, stepLabel } from './board-card.model';
+import { type ChunkStatus, type LandedRepoView, type PrView, STATUS_LANE, formatCost, hasCostFigure, FleetWhen, KitBadge, KitButton, KitSelectRow, KitSkeleton } from 'fleet';
+import { blockedLabel, cardShowsStatus, foldTitles, stepLabel, type WorkLine } from './board-card.model';
 
 /** One rendered board card — the derived-status view of a chunk. */
 export interface BoardCard {
@@ -16,8 +16,10 @@ export interface BoardCard {
   readonly node: string;
   /** The raw `nd_` ULID, kept reachable as the node label's tooltip. */
   readonly nodeId: string;
-  /** The chunk's work-item labels, each a `{source}#{ref}`; rendered one per line. */
-  readonly pointerLabels: readonly string[];
+  /** The chunk's work items as label-and-title pairs, in pointer order (`workLines`). */
+  readonly workLines: readonly WorkLine[];
+  /** Whether the chunk's work items have been read — until then each title holds a skeleton. */
+  readonly itemsRead: boolean;
   /** The chunk's derived spend total, from `ChunkSummary.cost`. */
   readonly costUsd: number;
   /** Whether {@link costUsd} is a lower bound, never presented as exact — `UsageTotal`'s
@@ -47,11 +49,6 @@ export interface BoardCard {
   readonly projectName?: string | null;
   /** The runner holding the chunk, from `ChunkSummary.runner_name` — null when none does. */
   readonly runnerName?: string | null;
-  /** The chunk's work items' titles, in pointer order — absent or `null` until they are
-   * read, and empty for a chunk carrying none; the card leads with them once present. */
-  readonly titles?: readonly string[] | null;
-  /** One line of a single-item chunk's description, or `null`. */
-  readonly description?: string | null;
 }
 
 /**
@@ -69,7 +66,7 @@ export interface BoardCard {
 @Component({
   selector: 'app-board-card',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FleetWhen, KitBadge, KitButton, KitSelectRow],
+  imports: [FleetWhen, KitBadge, KitButton, KitSelectRow, KitSkeleton],
   templateUrl: './board-card.html',
   styleUrl: './board-card.css',
 })
@@ -98,17 +95,17 @@ export class BoardCardComponent {
   /** Emitted with the chunk id when a promotable card's Promote is clicked. */
   readonly promote = output<string>();
 
-  /** The card's work item titles; empty while unread or when the chunk carries none. */
-  protected readonly titles = computed(() => this.card().titles ?? []);
+  /** Whether the card's work items are still unread — each title slot then holds a skeleton. */
+  protected readonly titlesPending = computed(() => !this.card().itemsRead);
 
-  /** The first title, or `null` when the card renders untitled. */
-  protected readonly title = computed(() => this.titles()[0] ?? null);
+  /** The card's work items, each a label over its title. */
+  protected readonly lines = computed(() => this.card().workLines);
 
-  /** Whether a folded group has been opened to show every title. */
+  /** Whether a folded group has been opened to show every item. */
   protected readonly expanded = signal(false);
 
-  /** The titles the card shows, and how many its fold hides. */
-  protected readonly fold = computed(() => foldTitles(this.titles(), this.expanded()));
+  /** The items the card shows, and how many its fold hides. */
+  protected readonly fold = computed(() => foldTitles(this.lines(), this.expanded()));
 
   protected toggleFold(): void {
     this.expanded.update((open) => !open);

@@ -1,7 +1,7 @@
 import { compactRef, type WorkItemsView } from 'fleet';
 import { describe, expect, it } from 'vitest';
 
-import { blockedLabel, cardShowsStatus, firstLine, foldTitles, stepLabel, workItemDescription, workItemTitles } from './board-card.model';
+import { blockedLabel, cardShowsStatus, finishedWord, foldTitles, stepLabel, workLines } from './board-card.model';
 
 const item = (fields: { title?: string; label?: string; body?: string }) => ({
   source: 'hub',
@@ -11,67 +11,39 @@ const item = (fields: { title?: string; label?: string; body?: string }) => ({
   ...fields,
 });
 
-describe('workItemTitles', () => {
-  it('reads null while the work items are unread', () => {
-    expect(workItemTitles(undefined)).toBeNull();
+describe('workLines', () => {
+  const at = (ref: string, fields: { title?: string; label?: string; web_url?: string } = {}) => ({ ...item(fields), ref });
+
+  it('pairs each labeled pointer with its own item, matched by source and ref rather than position', () => {
+    const refs = [
+      { source: 'hub', ref: '1', label: 'hub#1', web_url: 'https://example.test/1' },
+      { source: 'hub', ref: '2', label: 'hub#2' },
+    ];
+    const view = { items: [at('2', { title: 'Second', web_url: 'https://example.test/2' }), at('1', { title: 'First' })] } as WorkItemsView;
+    expect(workLines(refs, view)).toEqual([
+      { label: 'hub#1', title: 'First', url: 'https://example.test/1' },
+      { label: 'hub#2', title: 'Second', url: 'https://example.test/2' },
+    ]);
   });
 
-  it('reads empty for a chunk carrying no work item', () => {
-    expect(workItemTitles({ items: [] })).toEqual([]);
+  it("leaves a read item's missing title null rather than repeating the label it sits under", () => {
+    const view = { items: [at('1', { label: 'hub#1' })] } as WorkItemsView;
+    expect(workLines([{ source: 'hub', ref: '1', label: 'hub#1' }], view)).toEqual([{ label: 'hub#1', title: null, url: null }]);
   });
 
-  it('keeps pointer order, standing an untitled item in by its label and dropping one with neither', () => {
-    const view: WorkItemsView = { items: [item({ title: 'First' }), item({ label: 'hub#2' }), item({}), item({ title: 'Fourth' })] };
-    expect(workItemTitles(view)).toEqual(['First', 'hub#2', 'Fourth']);
-  });
-});
-
-describe('workItemDescription', () => {
-  it("reads a single item's first line of prose", () => {
-    expect(workItemDescription({ items: [item({ title: 'T', body: 'The events table is past 40M rows.' })] })).toBe(
-      'The events table is past 40M rows.',
-    );
+  it('holds every title null while the items are unread', () => {
+    expect(workLines([{ source: 'hub', ref: '1', label: 'hub#1' }], undefined)).toEqual([{ label: 'hub#1', title: null, url: null }]);
   });
 
-  it('reads null for a group, whose titles fill the row', () => {
-    expect(workItemDescription({ items: [item({ body: 'one' }), item({ body: 'two' })] })).toBeNull();
+  it('holds an empty line for an unlabeled pointer until read, then names its item by title', () => {
+    const refs = [{ source: 'hub', ref: '9' }];
+    expect(workLines(refs, undefined)).toEqual([{ label: null, title: null, url: null }]);
+    expect(workLines(refs, { items: [at('9', { title: 'Orphan' })] } as WorkItemsView)).toEqual([{ label: null, title: 'Orphan', url: null }]);
   });
 
-  it('reads null for an item with no body, and while unread', () => {
-    expect(workItemDescription({ items: [item({ title: 'T' })] })).toBeNull();
-    expect(workItemDescription(undefined)).toBeNull();
-  });
-});
-
-describe('firstLine', () => {
-  it('skips a heading that only restates the title', () => {
-    expect(firstLine('# Fix the lease\n\nA runner that drops leaves the lease open.', 'Fix the lease')).toBe(
-      'A runner that drops leaves the lease open.',
-    );
-  });
-
-  it('strips heading, quote, and list marks', () => {
-    expect(firstLine('## Context', null)).toBe('Context');
-    expect(firstLine('> quoted line', null)).toBe('quoted line');
-    expect(firstLine('- [ ] a task', null)).toBe('a task');
-    expect(firstLine('3. numbered', null)).toBe('numbered');
-  });
-
-  it('unwraps links, inline code, and emphasis, keeping underscores in identifiers', () => {
-    expect(firstLine('See [the doc](https://x) for `occurred_at` and **bold** _x_', null)).toBe(
-      'See the doc for occurred_at and bold _x_',
-    );
-  });
-
-  it('drops comments, fenced code (closed or not), tables, and rules', () => {
-    expect(firstLine('<!-- template\nhint -->\nReal prose.', null)).toBe('Real prose.');
-    expect(firstLine('```sh\nrm -rf\n```\nAfter the fence.', null)).toBe('After the fence.');
-    expect(firstLine('```sh\nnever closed', null)).toBeNull();
-    expect(firstLine('| a | b |\n|---|---|\n---\nBelow the table.', null)).toBe('Below the table.');
-  });
-
-  it('reads null for a body with no prose', () => {
-    expect(firstLine('\n\n', null)).toBeNull();
+  it('drops an unlabeled pointer whose item has nothing to name it by, and names an item read under no pointer', () => {
+    const view = { items: [at('9', {}), at('5', { title: 'Unpointed' })] } as WorkItemsView;
+    expect(workLines([{ source: 'hub', ref: '9' }], view)).toEqual([{ label: null, title: 'Unpointed', url: undefined }]);
   });
 });
 
@@ -117,5 +89,12 @@ describe('blockedLabel', () => {
   it('names one prerequisite by compact ref, and counts several', () => {
     expect(blockedLabel('ch_01abcdefghijklmnopqrstuvwx', 1)).toBe(compactRef('ch_01abcdefghijklmnopqrstuvwx'));
     expect(blockedLabel('ch_01abcdefghijklmnopqrstuvwx', 3)).toBe('3 chunks');
+  });
+});
+
+describe('finishedWord', () => {
+  it('names a stopped chunk Stopped and every other finish Completed', () => {
+    expect(finishedWord('stopped')).toBe('Stopped');
+    expect(finishedWord('done')).toBe('Completed');
   });
 });

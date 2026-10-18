@@ -13,34 +13,19 @@
   height: 100%;
   min-height: 0;
 }
-/* The board's own engraved label: the second panel-head span, projected into
-   the kit panel's header slot. Content projected into a child component keeps
-   *this* component's style scope (Angular content projection doesn't move a
-   node into the child's encapsulation), so this is a local rule, not a
-   re-typed copy of the kit panel's own label chrome — same look, kept
-   separate from the retired chrome class names so the structural gate stays
-   honest. Each column's own head label is BoardColumn's, for the same reason
-   in reverse: a rule here could not reach into its encapsulation. */
-.col-lbl {
-  font-size: var(--fs-label);
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--label);
-  text-shadow: 0 1px 0 var(--overlay-90);
-}
 fleet-kit-panel.board-panel {
   flex: 1;
   position: relative;
 }
-/* Overlaid centered, same footprint as the status line it replaces in
-   loadingMode="content" — a handful of card-shaped placeholders standing
-   in for the lane grid's still-loading cards, not a status message. */
-.board-skeleton {
+/* The loading state's spoken name: the lanes and the list draw the skeletons themselves, so this
+   is for a screen reader alone. */
+.loading-note {
   position: absolute;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  width: min(320px, 80%);
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 /* One equal track per lane, laid out by flow rather than a repeat() count —
    LANES is the single owner of how many lanes there are (READY included),
@@ -65,7 +50,7 @@ fleet-kit-panel.board-panel {
   flex: 1;
   min-height: 0;
 }
-/* The panel header: the Board/List switch, then the board's own label. */
+/* The panel header: the Board/List switch. */
 .hdr {
   display: flex;
   align-items: center;

@@ -3,14 +3,15 @@
   height: 100%;
   min-height: 0;
   overflow-y: auto;
-  /* The tracks every row and the column header share. */
-  --list-columns: minmax(0, 1fr) 90px 130px 110px 90px 70px 64px;
+  /* The tracks every row and the column header share: the lane icon, the work, the step,
+     the runner over its PRs, and the cost. */
+  --list-columns: 18px minmax(0, 1fr) 130px 150px 90px;
 }
 .list {
   font-family: var(--mono);
 }
-/* The column header, held at the top while the sections scroll beneath it. Indented by
-   the rows' own left accent so its labels sit over their columns. */
+/* The column header, held at the top while the rows scroll beneath it. Indented by the rows'
+   own left accent and inset so its labels sit over their columns. */
 .cols {
   position: sticky;
   top: 0;
@@ -18,7 +19,7 @@
   display: grid;
   grid-template-columns: var(--list-columns);
   gap: 12px;
-  padding: 5px 10px 5px 11px;
+  padding: 5px 10px 5px 21px;
   border-bottom: 1px solid var(--line);
   background: var(--surface-resting);
   font-size: var(--fs-label);
@@ -29,26 +30,48 @@
 .cols .r {
   text-align: right;
 }
-/* Sections stack flush: each is ruled off from the next by its own bottom line alone. */
-.section {
-  border: 0;
-  border-bottom: 1px solid var(--line);
+/* A ranked list's drop target holds a row's height even when empty, so a row can still be
+   dragged into an empty queue or backlog. */
+.ranked {
+  min-height: 12px;
 }
-.section-head {
+/* An armed row is the whole drag target; the grip over its left edge is only the cue, in the
+   gutter left of the lane icon. */
+.drag-row {
+  position: relative;
+  cursor: grab;
+}
+.reorder-grip {
+  position: absolute;
+  z-index: 2;
+  top: 50%;
+  left: 5px;
+  transform: translateY(-50%);
+  padding: 2px 0;
+}
+/* The gap holding a dragged row's destination. cdk's preview is appended to the body, outside
+   this component's encapsulation; the placeholder stays inside the list and this reaches it. */
+.cdk-drag-placeholder {
+  opacity: 0.35;
+}
+/* The line between the dispatch queue and the backlog: READY's label over it, BACKLOG's under,
+   in the cyan the board gives the surfaces an operator reshapes. */
+.divider {
   display: flex;
-  align-items: baseline;
-  gap: 8px;
-  font-family: var(--mono);
+  align-items: center;
+  gap: 10px;
+  padding: 4px 10px 4px 21px;
+  background: var(--surface-resting);
+  border-bottom: 1px solid var(--line);
+  color: var(--cyan);
   font-size: var(--fs-label);
   letter-spacing: 0.18em;
   text-transform: uppercase;
 }
-.section-count {
-  color: var(--text);
-  font-variant-numeric: tabular-nums;
-}
-.section[data-lane='needs'] .section-label {
-  color: var(--red);
+.divider-rule {
+  flex: 1;
+  height: 0;
+  border-top: 1px dashed var(--cyan-dim);
 }
 .empty {
   margin: 0;

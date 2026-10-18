@@ -4,6 +4,7 @@
   min-height: 0;
 }
 .layout {
+  box-sizing: border-box;
   height: 100%;
   min-height: 0;
   padding: 6px;

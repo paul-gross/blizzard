@@ -1,0 +1,49 @@
+<svg class="icon" viewBox="0 0 16 16" role="img" [attr.aria-label]="label()">
+  @switch (glyph()) {
+    @case ('notready') {
+      <!-- Three stacked layers: work held, not yet queued. -->
+      <path class="fill" d="M8 1.75 14.25 5 8 8.25 1.75 5z" />
+      <path d="M1.75 8.25 8 11.5l6.25-3.25" />
+      <path class="faint" d="M1.75 11.25 8 14.5l6.25-3.25" />
+    }
+    @case ('ready') {
+      <!-- A play mark set in its ring: queued, next to dispatch. -->
+      <circle cx="8" cy="8" r="6.25" />
+      <path class="fill" d="M6.5 5.25v5.5L11 8z" />
+    }
+    @case ('waiting') {
+      <!-- An hourglass part run: parked on a human. -->
+      <path d="M3.75 1.75h8.5M3.75 14.25h8.5" />
+      <path d="M4.75 1.75c0 3 3.25 3.9 3.25 6.25S4.75 11.25 4.75 14.25M11.25 1.75c0 3-3.25 3.9-3.25 6.25s3.25 3.25 3.25 6.25" />
+      <path class="fill solid" d="M6 4.5h4L8 6.5zM8 11l2.6 2.25H5.4z" />
+    }
+    @case ('paused') {
+      <!-- Two bars in the ring: an operator's pause. -->
+      <circle cx="8" cy="8" r="6.25" />
+      <path d="M6.4 5.5v5M9.6 5.5v5" />
+    }
+    @case ('needs') {
+      <!-- A person, flagged: the fleet escalated to someone. -->
+      <circle cx="6.25" cy="5" r="2.5" />
+      <path d="M1.5 14.25c0-2.9 2.1-4.75 4.75-4.75S11 11.35 11 14.25" />
+      <path class="flag" d="M13.75 2v6.25" />
+      <circle class="flag dot" cx="13.75" cy="11.5" r="0.9" />
+    }
+    @case ('running') {
+      <!-- A turning arc around a live core. -->
+      <circle class="faint" cx="8" cy="8" r="6.25" />
+      <path class="spin" d="M8 1.75a6.25 6.25 0 0 1 6.25 6.25" />
+      <circle class="fill solid" cx="8" cy="8" r="2" />
+    }
+    @case ('done') {
+      <!-- A check in its ring: finished. -->
+      <circle class="fill" cx="8" cy="8" r="6.25" />
+      <path d="M5 8.25l2 2 4-4.5" />
+    }
+    @case ('stopped') {
+      <!-- A barred octagon: halted short of done. -->
+      <path d="M5.4 1.75h5.2l3.65 3.65v5.2l-3.65 3.65H5.4l-3.65-3.65v-5.2z" />
+      <path d="M5.25 8h5.5" />
+    }
+  }
+</svg>

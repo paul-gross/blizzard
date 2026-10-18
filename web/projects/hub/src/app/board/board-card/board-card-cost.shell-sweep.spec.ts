@@ -6,8 +6,8 @@ import type { BoardCard } from './board-card';
 import { BoardCardComponent } from './board-card';
 
 /**
- * The card's cost row at its fullest — a done-lane card's completion stamp and cost figure
- * side by side — sits below the step row, flush with the card's right edge, and never
+ * The card's cost row at its fullest — a done-lane card's completion stamp at its left, the
+ * cost figure flush with the card's right edge — sits below the step row and never
  * overlaps, wraps, or overflows the card, at 800px and at 390px/320px
  * (`bzh:narrow-viewport-tier-rule`). Under a real browser — see `blizzard-context:/verification/blizzard/commands/web/shell-sweep.md` §web:shell-sweep.
  */
@@ -19,7 +19,8 @@ const CARD: BoardCard = {
   promotable: false,
   node: 'deliver',
   nodeId: 'nd_deliver',
-  pointerLabels: [],
+  workLines: [],
+  itemsRead: true,
   costUsd: 123.45,
   costPartial: true,
   estimatedCostUsd: 678.9,
@@ -83,21 +84,28 @@ describe('board card cost figures shell sweep (web:shell-sweep)', () => {
     });
   }
 
-  const COST_ROW_CASES: readonly { label: string; card: BoardCard }[] = [
-    { label: 'one figure', card: { ...CARD, costUsd: 0, estimatedCostUsd: null, costPartial: false } },
-    { label: 'two figures', card: CARD },
+  const COST_ROW_CASES: readonly { label: string; card: BoardCard; stamp: boolean; cost: boolean }[] = [
+    { label: 'the stamp alone', card: { ...CARD, costUsd: 0, estimatedCostUsd: null, costPartial: false }, stamp: true, cost: false },
+    { label: 'the cost alone', card: { ...CARD, status: 'running', terminal: false, completedAt: null }, stamp: false, cost: true },
+    { label: 'both', card: CARD, stamp: true, cost: true },
   ];
-  for (const { label, card } of COST_ROW_CASES) {
-    it(`sits the cost row below the step row, flush with the card's end, with ${label}`, async () => {
+  for (const { label, card, stamp, cost } of COST_ROW_CASES) {
+    it(`sits the cost row below the step row, the stamp at its left and the cost at its end, with ${label}`, async () => {
       const root = await renderCard(390, card);
       try {
         const row = root.querySelector<HTMLElement>('[data-testid="card-cost-row"]');
         expect(row, 'fixture defect — the cost row did not render').not.toBeNull();
-        expect(row!.children.length, 'fixture defect — wrong cost-row child count').toBe(label === 'one figure' ? 1 : 2);
-        const last = row!.lastElementChild!.getBoundingClientRect();
-        expect(Math.abs(last.right - row!.getBoundingClientRect().right)).toBeLessThanOrEqual(0.5);
+        const rowRect = row!.getBoundingClientRect();
+        if (stamp) {
+          const at = root.querySelector<HTMLElement>('[data-testid="chunk-done-at"]')!.getBoundingClientRect();
+          expect(Math.abs(at.left - rowRect.left), 'the stamp does not hold the row\'s left').toBeLessThanOrEqual(0.5);
+        }
+        if (cost) {
+          const figure = root.querySelector<HTMLElement>('[data-testid="card-cost"]')!.getBoundingClientRect();
+          expect(Math.abs(figure.right - rowRect.right), 'the cost is not flush with the row\'s end').toBeLessThanOrEqual(0.5);
+        }
         const id = root.querySelector<HTMLElement>('[data-testid="chunk-id"]')!.getBoundingClientRect();
-        expect(row!.getBoundingClientRect().top, 'the cost row is not below the step row').toBeGreaterThanOrEqual(id.bottom - 0.5);
+        expect(rowRect.top, 'the cost row is not below the step row').toBeGreaterThanOrEqual(id.bottom - 0.5);
       } finally {
         root.remove();
       }

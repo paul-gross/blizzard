@@ -4,7 +4,7 @@
   flex: 1;
   min-height: 0;
 }
-app-lens-note {
+app-lens-note:not(:empty) {
   padding: 6px 6px 0;
 }
 .layout {

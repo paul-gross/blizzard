@@ -1,9 +1,11 @@
+import { CdkDropList, type CdkDragDrop } from '@angular/cdk/drag-drop';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 
-import { DONE_LANE } from 'fleet';
 import type { BoardCard } from '../board-card/board-card';
-import { BoardList, type BoardListSection } from './board-list';
+import type { BoardLaneMove, BoardReposition } from '../board-shell/board-column';
+import { BoardList, type BoardListEntry, type BoardListGroups } from './board-list';
 
 const CARD: BoardCard = {
   chunkId: 'ch_01running000000000000000',
@@ -13,7 +15,8 @@ const CARD: BoardCard = {
   promotable: false,
   node: 'build',
   nodeId: 'nd_build',
-  pointerLabels: ['hub#1'],
+  workLines: [{ label: 'hub#1', title: null }],
+  itemsRead: true,
   costUsd: 0,
   costPartial: false,
   estimatedCostUsd: null,
@@ -30,19 +33,24 @@ const card = (suffix: string, fields: Partial<BoardCard> = {}): BoardCard => ({
   ...fields,
 });
 
-const section = (key: string, cards: readonly BoardCard[]): BoardListSection => ({ key, label: key.toUpperCase(), count: null, cards });
+const entry = (lane: string, each: BoardCard): BoardListEntry => ({ lane, card: each });
+const fourItems = ['1', '2', '3', '4'].map((title) => ({ label: null, title }));
+const running = (...cards: readonly BoardCard[]): BoardListGroups => groups({ live: cards.map((each) => entry('running', each)) });
+const groups = (fields: Partial<BoardListGroups>): BoardListGroups => ({ live: [], ready: [], backlog: [], done: [], ...fields });
 
 describe('BoardList', () => {
   let fixture: ComponentFixture<BoardList>;
   let selected: string[];
 
-  const render = async (sections: readonly BoardListSection[], loaded = true) => {
+  const render = async (rendered: BoardListGroups, loaded = true, permissions: { canReorder?: boolean; canControl?: boolean } = {}) => {
     await TestBed.configureTestingModule({
       imports: [BoardList],
       providers: [provideZonelessChangeDetection()],
     }).compileComponents();
     fixture = TestBed.createComponent(BoardList);
-    fixture.componentRef.setInput('sections', sections);
+    fixture.componentRef.setInput('groups', rendered);
+    fixture.componentRef.setInput('canReorder', permissions.canReorder ?? false);
+    fixture.componentRef.setInput('canControl', permissions.canControl ?? false);
     fixture.componentRef.setInput('loaded', loaded);
     selected = [];
     fixture.componentInstance.selectChunk.subscribe((id) => selected.push(id));
@@ -50,65 +58,158 @@ describe('BoardList', () => {
     return fixture.nativeElement as HTMLElement;
   };
 
-  const lanes = (el: HTMLElement) =>
-    [...el.querySelectorAll('[data-testid="list-section"]')].map((s) => s.getAttribute('data-lane'));
-  const rowsIn = (el: HTMLElement, lane: string) =>
-    [...el.querySelectorAll(`[data-lane="${lane}"] [data-testid="list-row"]`)].map((r) => r.getAttribute('data-chunk'));
-  const head = (el: HTMLElement, lane: string) =>
-    el.querySelector<HTMLElement>(`[data-lane="${lane}"] [data-testid="accordion-section-head"]`)!;
+  const rows = (el: HTMLElement) => [...el.querySelectorAll('[data-testid="list-row"]')].map((r) => r.getAttribute('data-chunk'));
 
-  it('renders its sections in the order given, each with its own rows', async () => {
-    const el = await render([section('needs', [card('a')]), section('running', [card('b'), card('c')])]);
-
-    expect(lanes(el)).toEqual(['needs', 'running']);
-    expect(rowsIn(el, 'running')).toEqual(['ch_01b', 'ch_01c']);
+  const ready = (suffix: string) => entry('ready', card(suffix, { status: 'ready' }));
+  const backlog = (suffix: string) => entry('notready', card(suffix, { status: 'not_ready' }));
+  const LISTED = groups({
+    live: [entry('needs', card('n', { status: 'needs_human' })), entry('running', card('r'))],
+    ready: [ready('q1'), ready('q2')],
+    backlog: [backlog('b1'), backlog('b2')],
+    done: [entry('done', card('d', { status: 'done', terminal: true }))],
   });
 
-  it('starts DONE folded, and opens it from its header', async () => {
-    const el = await render([section(DONE_LANE, [card('d', { status: 'done', terminal: true })])]);
-    expect(rowsIn(el, DONE_LANE)).toEqual([]);
+  it('renders the live lanes, then READY over a marked line over BACKLOG, then DONE', async () => {
+    const el = await render(LISTED);
 
-    head(el, DONE_LANE).click();
+    expect(rows(el)).toEqual(['ch_01n', 'ch_01r', 'ch_01q1', 'ch_01q2', 'ch_01b1', 'ch_01b2', 'ch_01d']);
+    const divider = el.querySelector('[data-testid="list-ready-divider"]')!;
+    const readyRows = el.querySelector('[data-testid="list-ready"]')!;
+    const backlogRows = el.querySelector('[data-testid="list-backlog"]')!;
+    expect(readyRows.compareDocumentPosition(divider) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(divider.compareDocumentPosition(backlogRows) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("leads each row with its lane's icon", async () => {
+    const el = await render(groups({ live: [entry('needs', card('a', { status: 'needs_human' }))], done: [entry('done', card('b', { status: 'stopped', terminal: true }))] }));
+
+    const glyphs = [...el.querySelectorAll('[data-testid="list-row-lane"]')].map((icon) => icon.getAttribute('data-glyph'));
+    expect(glyphs).toEqual(['needs', 'stopped']);
+  });
+
+  describe('drag', () => {
+    const dropOn = (testid: string, event: Partial<CdkDragDrop<unknown>>): void => {
+      const list = fixture.debugElement.queryAll(By.directive(CdkDropList)).find((each) => each.nativeElement.getAttribute('data-testid') === testid);
+      expect(list, `no armed drop list ${testid}`).toBeTruthy();
+      const target = list!.injector.get(CdkDropList);
+      target.dropped.emit({ container: target, previousContainer: target, ...event } as CdkDragDrop<unknown>);
+    };
+
+    it('arms no row without queue:reorder', async () => {
+      const el = await render(LISTED);
+
+      expect(el.querySelector('[data-testid="list-reorder-grip"]')).toBeNull();
+      expect(fixture.debugElement.queryAll(By.directive(CdkDropList))).toHaveLength(0);
+    });
+
+    it('arms READY and BACKLOG rows alone, each with the grip', async () => {
+      const el = await render(LISTED, true, { canReorder: true });
+
+      const gripped = [...el.querySelectorAll('[data-testid="list-reorder-grip"]')].map((grip) =>
+        grip.parentElement!.querySelector('[data-testid="list-row"]')!.getAttribute('data-chunk'),
+      );
+      expect(gripped).toEqual(['ch_01q1', 'ch_01q2', 'ch_01b1', 'ch_01b2']);
+    });
+
+    it('resolves a drop within READY to the anchor it landed after', async () => {
+      await render(LISTED, true, { canReorder: true });
+      const moves: BoardReposition[] = [];
+      fixture.componentInstance.reposition.subscribe((move) => moves.push(move));
+
+      dropOn('list-ready', { previousIndex: 1, currentIndex: 0 });
+
+      expect(moves).toEqual([{ chunkId: 'ch_01q2', afterChunkId: null, list: 'ready' }]);
+    });
+
+    it('turns a drop across the line into a lane move — above it a promote, below it a demote', async () => {
+      await render(LISTED, true, { canReorder: true, canControl: true });
+      const moves: BoardLaneMove[] = [];
+      fixture.componentInstance.laneMove.subscribe((move) => moves.push(move));
+      const other = {} as CdkDropList;
+
+      dropOn('list-ready', { previousContainer: other, previousIndex: 0, currentIndex: 1, item: { data: 'ch_01b1' } as never });
+      dropOn('list-backlog', { previousContainer: other, previousIndex: 0, currentIndex: 0, item: { data: 'ch_01q1' } as never });
+
+      expect(moves).toEqual([
+        { chunkId: 'ch_01b1', afterChunkId: 'ch_01q1', from: 'notready', to: 'ready' },
+        { chunkId: 'ch_01q1', afterChunkId: null, from: 'ready', to: 'notready' },
+      ]);
+    });
+
+    it('connects the two lists only when a row may cross them (chunk:control too)', async () => {
+      await render(LISTED, true, { canReorder: true });
+      const connected = () =>
+        fixture.debugElement.queryAll(By.directive(CdkDropList)).map((list) => list.injector.get(CdkDropList).connectedTo);
+      expect(connected()).toEqual([[], []]);
+
+      fixture.componentRef.setInput('canControl', true);
+      await fixture.whenStable();
+      expect(connected()).toEqual([['board-list-drop-notready'], ['board-list-drop-ready']]);
+    });
+  });
+
+  it('stands skeleton rows in for the rows while the chunk read loads', async () => {
+    const el = await render(groups({}), false);
+    fixture.componentRef.setInput('skeletonRows', 3);
     await fixture.whenStable();
-    expect(rowsIn(el, DONE_LANE)).toEqual(['ch_01d']);
+
+    expect(el.querySelectorAll('[data-testid="list-row-skeleton"]')).toHaveLength(3);
   });
 
-  it('folds an open section from its header', async () => {
-    const el = await render([section('running', [card('a')])]);
-    head(el, 'running').click();
-    await fixture.whenStable();
-
-    expect(rowsIn(el, 'running')).toEqual([]);
-  });
-
-  it('says a section is empty only once the chunk read has answered', async () => {
-    const unloaded = await render([section('ready', [])], false);
-    expect(unloaded.querySelector('[data-testid="list-section-empty"]')).toBeNull();
+  it('says the list is empty only once the chunk read has answered', async () => {
+    const unloaded = await render(groups({}), false);
+    expect(unloaded.querySelector('[data-testid="list-empty"]')).toBeNull();
 
     fixture.componentRef.setInput('loaded', true);
     await fixture.whenStable();
-    expect(unloaded.querySelector('[data-testid="list-section-empty"]')?.textContent?.trim()).toBe('Nothing here');
+    expect(unloaded.querySelector('[data-testid="list-empty"]')?.textContent?.trim()).toBe('Nothing here');
   });
 
   describe('a row', () => {
     const titles = (el: HTMLElement) =>
       [...el.querySelectorAll('[data-testid="list-row-title"]')].map((t) => t.textContent?.trim());
 
-    it("leads with its titles and a single item's description", async () => {
-      const el = await render([section('running', [card('a', { titles: ['Migrate the event log'], description: 'Past 40M rows.' })])]);
+    it('closes a finished row with when it completed, leaving the cost column to the cost', async () => {
+      const el = await render(groups({ done: [entry('done', card('a', { status: 'done', terminal: true, completedAt: '2026-07-13T00:00:01+00:00', costUsd: 1.5 }))] }));
 
-      expect(titles(el)).toEqual(['Migrate the event log']);
-      expect(el.querySelector('[data-testid="list-row-desc"]')?.textContent?.trim()).toBe('Past 40M rows.');
+      const finished = el.querySelector('[data-testid="list-row-finished"]')!;
+      expect(finished.closest('.work')).not.toBeNull();
+      expect(finished.textContent).toContain('Completed');
+      expect(finished.querySelector('app-lane-icon')?.getAttribute('data-glyph')).toBe('done');
+      expect(el.querySelector('.cost fleet-when')).toBeNull();
     });
 
-    it('falls back to its first work ref while its titles are unread', async () => {
-      const el = await render([section('running', [card('a', { titles: null })])]);
+    it('heads its work with the chunk id, then each work ref over its title', async () => {
+      const el = await render(
+        running(card('a', { workLines: [{ label: 'hub#1', title: 'Migrate the event log', url: 'https://example.test/1' }] })),
+      );
 
-      expect(titles(el)).toEqual(['hub#1']);
+      const work = el.querySelector('.work')!;
+      expect(work.firstElementChild?.textContent?.trim()).toBe('C-a');
+      const ref = el.querySelector<HTMLAnchorElement>('a[data-testid="list-row-ref"]')!;
+      expect(ref.textContent?.trim()).toBe('hub#1');
+      expect(ref.href).toBe('https://example.test/1');
+      expect(titles(el)).toEqual(['Migrate the event log']);
+    });
+
+    it('holds a skeleton under its work ref while its titles are unread', async () => {
+      const el = await render(running(card('a', { itemsRead: false })));
+
+      expect(titles(el)).toEqual([]);
+      expect(el.querySelector('[data-testid="list-row-ref"]')?.textContent?.trim()).toBe('hub#1');
+      expect(el.querySelector('[data-testid="list-row-title-skeleton"]')).not.toBeNull();
+    });
+
+    it('puts its runner over its PRs in one cell', async () => {
+      const el = await render(running(card('a', { runnerName: 'r-claude', openPrs: [{ repo: 'blizzard', number: 7, url: 'https://example.test/pr/7' }] })));
+
+      const holder = el.querySelector('.holder')!;
+      expect(holder.firstElementChild?.textContent?.trim()).toBe('r-claude');
+      expect(holder.querySelector('.prs a')?.textContent?.trim()).toBe('#7');
     });
 
     it('folds a large group, and opens it without selecting the row', async () => {
-      const el = await render([section('running', [card('a', { titles: ['1', '2', '3', '4'] })])]);
+      const el = await render(running(card('a', { workLines: fourItems })));
       expect(titles(el)).toEqual(['1', '2']);
 
       el.querySelector<HTMLElement>('[data-testid="list-row-fold"]')!.click();
@@ -118,8 +219,16 @@ describe('BoardList', () => {
       expect(selected).toEqual([]);
     });
 
+    it('opens its chunk from a click on its lane icon, which keeps the pointer for its tooltip', async () => {
+      const el = await render(running(card('a')));
+
+      el.querySelector<HTMLElement>('[data-testid="list-row-lane"]')!.click();
+
+      expect(selected).toEqual(['ch_01a']);
+    });
+
     it('opens its chunk through its own open control, named for the chunk', async () => {
-      const el = await render([section('running', [card('a')])]);
+      const el = await render(running(card('a')));
       const open = el.querySelector<HTMLButtonElement>('[data-testid="list-row-open"]')!;
 
       expect(open.tagName).toBe('BUTTON');
@@ -130,13 +239,11 @@ describe('BoardList', () => {
     });
 
     it('keeps its PR links and fold outside the open control, each its own target', async () => {
-      const el = await render([
-        section('running', [
-          card('a', { titles: ['1', '2', '3', '4'], openPrs: [{ repo: 'blizzard', number: 7, url: 'https://example.test/pr/7' }] }),
-        ]),
-      ]);
+      const el = await render(
+        running(card('a', { workLines: fourItems, openPrs: [{ repo: 'blizzard', number: 7, url: 'https://example.test/pr/7' }] })),
+      );
       const open = el.querySelector('[data-testid="list-row-open"]')!;
-      const link = el.querySelector<HTMLAnchorElement>('[data-testid="list-row"] a')!;
+      const link = el.querySelector<HTMLAnchorElement>('[data-testid="list-row"] .prs a')!;
       link.addEventListener('click', (event) => event.preventDefault());
 
       link.click();

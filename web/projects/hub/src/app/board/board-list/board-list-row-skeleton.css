@@ -1,0 +1,55 @@
+:host {
+  display: block;
+}
+/* `board-list-row.css`'s row box and `board-list.css`'s tracks, held to a one-item row's height. */
+.row {
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: var(--list-columns);
+  align-items: start;
+  gap: 12px;
+  min-height: 68px;
+  padding: 9px 10px 7px 18px;
+  border-left: 3px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-resting);
+  --kit-skeleton-height: 10px;
+}
+.lane {
+  width: 14px;
+  justify-self: center;
+  --kit-skeleton-height: 14px;
+}
+.work {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.id {
+  width: 56px;
+}
+.ref {
+  width: 48px;
+}
+.title {
+  width: min(60%, 420px);
+  --kit-skeleton-height: 12px;
+}
+/* Titles run to different lengths, so the stand-ins do too. */
+:host(:nth-child(3n + 1)) .title {
+  width: min(44%, 320px);
+}
+:host(:nth-child(4n + 2)) .title {
+  width: min(72%, 520px);
+}
+.step {
+  width: 60%;
+}
+.holder {
+  width: 75%;
+}
+.cost {
+  width: 50%;
+  justify-self: end;
+}

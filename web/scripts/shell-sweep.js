@@ -225,6 +225,10 @@
  *   - projects/hub/src/app/board/board-shell/board-column.shell-sweep.spec.ts — the
  *     READY and BACKLOG whole-card drag cue: its decorative token-coloured dots
  *     resolve as a two-wide grid only when reordering is armed.
+ *   - projects/hub/src/app/board/board-list/board-list.shell-sweep.spec.ts — the board
+ *     list's rows stay inside the list, an armed row's reorder grip clears its lane icon,
+ *     and the READY/BACKLOG line sits between the two ranked runs, at a wide centre
+ *     column and at the narrowest the desktop board renders.
  *   - projects/hub/src/app/board/board-shell/board-shell.shell-sweep.spec.ts — a
  *     120-character current-node name truncates inside its card: every lane stays
  *     inside a 1440px viewport.
@@ -359,6 +363,7 @@ const SWEEPS = [
   { project: 'hub', spec: 'projects/hub/src/app/board/board-card/board-card-cost.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/board/board-card/board-card-selected.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/board/board-shell/board-column.shell-sweep.spec.ts' },
+  { project: 'hub', spec: 'projects/hub/src/app/board/board-list/board-list.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/board/board-shell/board-shell.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/board/chunk-dock/chunk-detail-header.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/board/chunk-dock/chunk-delivery.shell-sweep.spec.ts' },
