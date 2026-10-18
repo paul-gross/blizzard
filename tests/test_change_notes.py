@@ -229,10 +229,23 @@ def test_postpones_naming_no_note_fails(tmp_path: Path) -> None:
     assert _only(tmp_path, _UNR, text) == {(_UNR, "unresolved-postpones")}
 
 
-def test_flag_is_refused_until_the_lifecycle_check_exists(tmp_path: Path) -> None:
-    failures = validate(_tree(tmp_path, {_UNR: _note("kind: added\nflag: some-flag")}))
-    assert _pairs(failures) == {(_UNR, "flag-unsupported")}
-    assert "flag lifecycle check" in failures[0].detail
+def test_flag_must_name_a_live_registry_entry(tmp_path: Path) -> None:
+    root = _tree(tmp_path, {_UNR: _note("kind: added\nflag: some-flag")})
+    registry = root / "src/blizzard/foundation/flags/registry.toml"
+    registry.parent.mkdir(parents=True)
+    registry.write_text('[flag.some-flag]\ndefault = "off"\nsummary = "A capability"\n[retired]\nold-flag = "hub"\n')
+    assert validate(root) == []
+    (root / _UNR).write_text(_note("kind: added\nflag: old-flag"))
+    assert _pairs(validate(root)) == {(_UNR, "unknown-flag")}
+    (root / _UNR).write_text(_note("kind: added\nflag: missing"))
+    assert _pairs(validate(root)) == {(_UNR, "unknown-flag")}
+    (root / _UNR).write_text(_note("kind: added\nflag: [some-flag]"))
+    assert _pairs(validate(root)) == {(_UNR, "bad-flag")}
+
+
+def test_a_released_flag_note_survives_registry_retirement(tmp_path: Path) -> None:
+    root = _tree(tmp_path, {"changes/0.1.0/thing.md": _note("kind: added\nflag: old-flag")})
+    assert validate(root) == []
 
 
 def test_an_upgrade_guide_anchor_that_exists_passes(tmp_path: Path) -> None:

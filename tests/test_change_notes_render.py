@@ -189,3 +189,34 @@ def test_a_note_that_breaks_the_format_fails_naming_it(repo: Path, monkeypatch) 
 
 def test_a_non_release_tag_is_a_usage_error(repo: Path, monkeypatch) -> None:
     assert _render(repo, "nightly", monkeypatch).exit_code == 2
+
+
+def test_turning_on_flags_reads_each_tags_registry_and_omits_empty_section(repo: Path, monkeypatch) -> None:
+    path = "src/blizzard/foundation/flags/registry.toml"
+    off = '[flag.alpha]\ndefault = "off"\nsummary = "Alpha capability"\n'
+    _commit(repo, "feat: staged", {path: off})
+    _git(repo, "tag", "v0.3.0")
+    _commit(repo, "feat: enabled", {path: off.replace('"off"', '"on"')})
+    _git(repo, "tag", "v0.4.0")
+    _commit(repo, "chore: later", {"README.md": "later"})
+    _git(repo, "tag", "v0.5.0")
+    turned = _render(repo, "v0.4.0", monkeypatch)
+    assert turned.exit_code == 0, turned.output
+    assert turned.output.startswith("## Turned on\n\n- Alpha capability\n")
+    assert "## Turned on" not in _render(repo, "v0.3.0", monkeypatch).output
+    assert "## Turned on" not in _render(repo, "v0.5.0", monkeypatch).output
+    assert "## Turned on" not in _render(repo, "v0.2.0", monkeypatch).output
+
+
+def test_a_flag_added_on_after_a_tag_without_a_registry_is_listed(repo: Path, monkeypatch) -> None:
+    _commit(
+        repo,
+        "feat: immediate capability",
+        {
+            "src/blizzard/foundation/flags/registry.toml": '[flag.immediate]\ndefault = "on"\nsummary = "Immediate use"\n'
+        },
+    )
+    _git(repo, "tag", "v0.3.0")
+    result = _render(repo, "v0.3.0", monkeypatch)
+    assert result.exit_code == 0, result.output
+    assert "## Turned on\n\n- Immediate use" in result.output

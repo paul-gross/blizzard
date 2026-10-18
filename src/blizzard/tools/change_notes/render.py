@@ -51,7 +51,9 @@ def _upgrade_entry(note: Note, tag: str, prose: str, upgrade: str) -> str:
     return f"### {title}\n\n{upgrade}"
 
 
-def render(tag: str, notes: Sequence[Note], also_in: Mapping[str, Sequence[str]], commits: str) -> str:
+def render(
+    tag: str, notes: Sequence[Note], also_in: Mapping[str, Sequence[str]], commits: str, turned_on: Sequence[str] = ()
+) -> str:
     """The published notes for ``tag``: sections in order, empty ones omitted, then the collapsed commits."""
     grouped: dict[str, list[str]] = {}
     upgrades: list[str] = []
@@ -66,6 +68,7 @@ def render(tag: str, notes: Sequence[Note], also_in: Mapping[str, Sequence[str]]
     order = ("Breaking changes", "Deprecated", *(title for _, title in _KIND_SECTIONS))
     sections = [
         _section("Upgrade notes", upgrades, separator="\n\n"),
+        _section("Turned on", [f"- {summary}" for summary in turned_on]),
         *(_section(title, grouped.get(title, [])) for title in order),
         f"## Commits\n\n<details>\n<summary>Commits</summary>\n\n{commits.strip()}\n\n</details>\n",
     ]

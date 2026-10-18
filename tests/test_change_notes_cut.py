@@ -97,6 +97,26 @@ def test_a_cut_with_nothing_to_move_succeeds_and_says_so(tmp_path: Path, monkeyp
     assert not (root / "changes" / "0.3.0").exists()
 
 
+def test_cut_holds_off_flag_then_moves_note_and_guide_when_on(tmp_path: Path, monkeypatch) -> None:
+    root = _tree(tmp_path, {"unreleased/alpha.md": _BREAKING.replace("breaking: true", "breaking: true\nflag: staged")})
+    registry = root / "src/blizzard/foundation/flags/registry.toml"
+    registry.parent.mkdir(parents=True)
+    registry.write_text('[flag.staged]\ndefault = "off"\nsummary = "Staged capability"\n')
+    before = (root / "docs/upgrade.md").read_text()
+    result = _cut(root, "0.3.0", monkeypatch)
+    assert result.exit_code == 0, result.output
+    assert "held alpha" in result.output
+    assert "all unreleased notes are held" in result.output
+    assert (root / "changes/unreleased/alpha.md").is_file()
+    assert (root / "docs/upgrade.md").read_text() == before
+    registry.write_text(registry.read_text().replace('"off"', '"on"'))
+    result = _cut(root, "0.4.0", monkeypatch)
+    assert result.exit_code == 0, result.output
+    assert "moved alpha" in result.output
+    assert (root / "changes/0.4.0/alpha.md").is_file()
+    assert "## Upgrading to 0.4.0" in (root / "docs/upgrade.md").read_text()
+
+
 def test_cut_moves_a_named_boundary_into_a_new_section_beneath_before_you_pull(tmp_path: Path, monkeypatch) -> None:
     root = _tree(tmp_path, {"unreleased/alpha.md": _BREAKING})
     result = _cut(root, "0.3.0", monkeypatch)

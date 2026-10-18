@@ -7,6 +7,7 @@ from pathlib import Path
 
 from blizzard.tools.change_notes.anchors import anchors
 from blizzard.tools.change_notes.contract import Failure, Kind, Note, check_note
+from blizzard.tools.change_notes.flags import working_registry
 from blizzard.tools.change_notes.tree import UNRELEASED, read_tree
 
 UPGRADE_DOC = "docs/upgrade.md"
@@ -65,6 +66,14 @@ def validate(root: Path) -> list[Failure]:
     notes, failures = read_tree(root)
     for note in notes:
         failures.extend(check_note(note))
+    flagged = [n for n in notes if n.directory == UNRELEASED and isinstance(n.fields.get("flag"), str)]
+    if flagged:
+        declared = working_registry(root)
+        failures.extend(
+            Failure(n.path, "unknown-flag", f"flag {n.fields['flag']!r} is not declared in the flag registry")
+            for n in flagged
+            if n.fields["flag"] not in declared
+        )
     failures.extend(_duplicate_ids(notes))
     failures.extend(_unresolved_references(notes))
     failures.extend(_unknown_anchors(root, notes))
