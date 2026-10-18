@@ -92,14 +92,14 @@ def test_system_scope_list_and_get_serve_the_seeded_set_end_to_end(tmp_path: Pat
 
             listed = CliRunner().invoke(runner_group, ["artifact", "list", "--scope", "system"], env=env)
             assert listed.exit_code == 0, listed.output
-            names = {a["name"] for a in json.loads(listed.output)}
+            names = {a["name"] for a in json.loads(listed.stdout)}
             assert "garden/finding-format" in names
 
             got_json = CliRunner().invoke(
                 runner_group, ["artifact", "get", "garden/finding-format", "--scope", "system"], env=env
             )
             assert got_json.exit_code == 0, got_json.output
-            assert json.loads(got_json.output)["scope"] == "system"
+            assert json.loads(got_json.stdout)["scope"] == "system"
 
             got_content = CliRunner().invoke(
                 runner_group,

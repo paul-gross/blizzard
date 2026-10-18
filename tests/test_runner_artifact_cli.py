@@ -103,7 +103,7 @@ def test_list_elides_content_by_default_and_reports_byte_length() -> None:
     result = bound.runner.invoke(runner_group, ["artifact", "list"], env=_ENV)
 
     assert result.exit_code == 0, result.output
-    body = json.loads(result.output)
+    body = json.loads(result.stdout)
     assert "content" not in body[0] and "content" not in body[1]
     asset = next(a for a in body if a["name"] == "plan")
     assert asset["bytes"] == len(b"the plan text")
@@ -122,7 +122,7 @@ def test_list_content_flag_restores_the_full_raw_payload() -> None:
     result = bound.runner.invoke(runner_group, ["artifact", "list", "--content"], env=_ENV)
 
     assert result.exit_code == 0, result.output
-    body = json.loads(result.output)
+    body = json.loads(result.stdout)
     assert [{k: v for k, v in a.items() if k != "staged"} for a in body] == _ARTIFACTS_PAYLOAD
     assert all(a["staged"] is False for a in body)
 
@@ -139,7 +139,7 @@ def test_list_includes_staged_submissions_marked_as_such() -> None:
     result = bound.runner.invoke(runner_group, ["artifact", "list"], env=_ENV)
 
     assert result.exit_code == 0, result.output
-    body = json.loads(result.output)
+    body = json.loads(result.stdout)
     staged_entry = next(a for a in body if a["name"] == "review-findings")
     assert staged_entry["staged"] is True
     assert staged_entry["bytes"] == len(b"looks good")
@@ -687,7 +687,7 @@ def test_staged_gets_the_lease_scoped_attachments_route(monkeypatch: pytest.Monk
     assert calls == [
         ("http://127.0.0.1:8431/api/leases/lease_9/attachments", {"X-Blizzard-Lease-Token": "the-lease-token"})
     ]
-    body = json.loads(result.output)
+    body = json.loads(result.stdout)
     assert body == [{"name": "review-findings", "bytes": len(b"looks good")}]
 
 
@@ -698,7 +698,7 @@ def test_staged_content_flag_restores_the_full_raw_payload() -> None:
     result = bound.runner.invoke(runner_group, ["artifact", "staged", "--content"], env=_ENV)
 
     assert result.exit_code == 0, result.output
-    assert json.loads(result.output) == payload
+    assert json.loads(result.stdout) == payload
 
 
 @pytest.mark.unit

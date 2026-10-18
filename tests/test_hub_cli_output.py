@@ -50,7 +50,7 @@ def test_json_on_a_read_verb_prints_the_raw_response_body(monkeypatch: pytest.Mo
     result = CliRunner().invoke(hub_group, ["chunk", "list", "--json"])
 
     assert result.exit_code == 0, result.output
-    assert json.loads(result.output) == payload
+    assert json.loads(result.stdout) == payload
 
 
 def test_json_on_a_write_verb_prints_the_raw_response_body(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -63,4 +63,4 @@ def test_json_on_a_write_verb_prints_the_raw_response_body(monkeypatch: pytest.M
     result = CliRunner().invoke(hub_group, ["chunk", "promote", "ch_42", "--json"])
 
     assert result.exit_code == 0, result.output
-    assert json.loads(result.output) == payload
+    assert json.loads(result.stdout) == payload

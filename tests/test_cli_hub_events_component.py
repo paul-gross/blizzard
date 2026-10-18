@@ -68,7 +68,7 @@ def _seeded_hub(tmp_path: Path) -> tuple[HubHarness, str, str]:
 
 def _messages(result: Result) -> list[str]:
     assert result.exit_code == 0, result.output
-    return [e["message"] for e in json.loads(result.output)["events"]]
+    return [e["message"] for e in json.loads(result.stdout)["events"]]
 
 
 def test_each_filter_matches_the_route(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -88,7 +88,7 @@ def test_json_carries_detail_and_the_table_reads_the_real_rows(tmp_path: Path, m
     _relay(hub, monkeypatch, token)
 
     as_json = _invoke("--chunk", "ch_b", "--json")
-    assert json.loads(as_json.output)["events"][0]["detail"] == {"n": 20}
+    assert json.loads(as_json.stdout)["events"][0]["detail"] == {"n": 20}
 
     table = _invoke("--chunk", "ch_b")
     assert table.exit_code == 0, table.output

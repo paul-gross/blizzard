@@ -216,7 +216,7 @@ def test_json_prints_the_raw_envelope(monkeypatch: pytest.MonkeyPatch) -> None:
     result = CliRunner().invoke(hub_group, ["analytics", "summary", "counts-skills", "--json"])
 
     assert result.exit_code == 0, result.output
-    assert json.loads(result.output) == body
+    assert json.loads(result.stdout) == body
 
 
 # --- the per-dataset filter-applicability table -----------------------------------

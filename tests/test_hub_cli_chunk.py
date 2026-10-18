@@ -186,7 +186,7 @@ def test_migrate_json_prints_the_raw_response_body(monkeypatch: pytest.MonkeyPat
     result = CliRunner().invoke(hub_group, ["chunk", "migrate", "ch_1", "--to-graph", "beta", "--json"])
 
     assert result.exit_code == 0, result.output
-    assert json.loads(result.output) == payload
+    assert json.loads(result.stdout) == payload
 
 
 # `chunk restart` (#370, #371) — an event, not the standing intent `migrate` records.

@@ -97,7 +97,7 @@ def test_every_dataset_choice_is_reachable_at_the_real_router(tmp_path: Path, mo
     for dataset, spec in _DATASETS.items():
         result = _invoke(dataset, "--json")
         assert result.exit_code == 0, (dataset, result.output)
-        assert spec.response_key in json.loads(result.output)
+        assert spec.response_key in json.loads(result.stdout)
 
 
 # --- filter round-trips: the events-derived counts datasets ---------------------------
@@ -108,25 +108,25 @@ def test_each_counts_datasets_applicable_filters_round_trip(tmp_path: Path, monk
     _relay(hub, token, monkeypatch)
 
     by_kind = _invoke("counts-nodes", "--kind", "file_read", "--json")
-    assert json.loads(by_kind.output)["counts"] == [
+    assert json.loads(by_kind.stdout)["counts"] == [
         {"key": "nd_build", "count": 1, "graph_name": None, "node_name": None}
     ]
 
     by_tool = _invoke("counts-agent-types", "--tool", "Agent", "--json")
-    assert json.loads(by_tool.output)["counts"] == []  # main-lane spawn: agent_type unset
+    assert json.loads(by_tool.stdout)["counts"] == []  # main-lane spawn: agent_type unset
 
     by_node = _invoke("counts-skills", "--node", "nd_build", "--json")
-    assert json.loads(by_node.output)["counts"] == [
+    assert json.loads(by_node.stdout)["counts"] == [
         {"key": "wf-commit", "count": 1, "graph_name": None, "node_name": None}
     ]
 
     by_prefix = _invoke("counts-files", "--subject-prefix", "src/", "--json")
-    assert json.loads(by_prefix.output)["counts"] == [
+    assert json.loads(by_prefix.stdout)["counts"] == [
         {"key": "src/a.py", "count": 1, "graph_name": None, "node_name": None}
     ]
 
     by_stale_version = _invoke("counts-files", "--extractor-version", "stale-version", "--json")
-    assert json.loads(by_stale_version.output)["counts"] == []
+    assert json.loads(by_stale_version.stdout)["counts"] == []
 
 
 # --- filter round-trip + --ndjson: spend-chunks, the one paginated/streamable dataset --
@@ -144,13 +144,13 @@ def test_spend_chunks_filters_round_trip_and_ndjson_streams_the_real_rollup(
 
     paged = _invoke("spend-chunks", "--json")
     assert paged.exit_code == 0, paged.output
-    paged_rows = json.loads(paged.output)["spend"]
+    paged_rows = json.loads(paged.stdout)["spend"]
     assert {r["chunk_id"] for r in paged_rows} == {chunk_a, chunk_b}
 
     limited = _invoke("spend-chunks", "--limit", "1", "--json")
-    assert len(json.loads(limited.output)["spend"]) == 1
+    assert len(json.loads(limited.stdout)["spend"]) == 1
 
     streamed = _invoke("spend-chunks", "--ndjson")
     assert streamed.exit_code == 0, streamed.output
-    lines = [json.loads(line) for line in streamed.output.strip().splitlines()]
+    lines = [json.loads(line) for line in streamed.stdout.strip().splitlines()]
     assert [r["chunk_id"] for r in lines] == [r["chunk_id"] for r in paged_rows]

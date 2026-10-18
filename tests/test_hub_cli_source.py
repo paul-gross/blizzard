@@ -226,7 +226,7 @@ def test_an_exported_document_applies_back_as_all_unchanged(client: TestClient, 
         exported = _config(["export", "--format", fmt])
         assert exported.exit_code == 0, exported.output
         out = tmp_path / f"out.{suffix}"
-        out.write_text(exported.output)
+        out.write_text(exported.stdout)
         replay = _config(["apply", str(out)])
         assert replay.exit_code == 0, replay.output
         unchanged = _lines(replay.output, "unchanged")
