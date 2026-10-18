@@ -1,0 +1,61 @@
+"""The cut: move the unreleased notes, and the upgrade boundaries they name, under a release's version."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from pathlib import Path
+
+from blizzard.foundation.roles import domain_model
+from blizzard.tools.change_notes.anchors import anchor_titles
+from blizzard.tools.change_notes.tree import CHANGES_DIR, UNRELEASED, VERSION_DIR, read_tree
+from blizzard.tools.change_notes.upgrade_doc import UpgradeDocError, move_boundaries
+from blizzard.tools.change_notes.validate import UPGRADE_DOC, validate
+
+
+class CutRefused(RuntimeError):
+    """The cut would not leave the tree sound; nothing was written."""
+
+
+@domain_model
+@dataclass(frozen=True)
+class CutReport:
+    """What a cut moved: note ids, boundary anchors, and named anchors left where they were."""
+
+    version: str
+    notes: tuple[str, ...]
+    boundaries: tuple[str, ...]
+    left: tuple[str, ...]
+
+
+def cut(root: Path, version: str) -> CutReport:
+    """Move ``changes/unreleased/`` into ``changes/<version>/``; refuse before writing anything."""
+    if not VERSION_DIR.match(version):
+        raise CutRefused(f"{version!r} is not a release version; expected X.Y.Z")
+    failures = validate(root)
+    if failures:
+        raise CutRefused("\n".join([*map(str, failures), f"{len(failures)} change-note failure(s)"]))
+    notes, _ = read_tree(root)
+    moving = sorted((n for n in notes if n.directory == UNRELEASED), key=lambda n: n.id)
+    guides = sorted({g for n in moving if isinstance(g := n.fields.get("upgrade-guide"), str)})
+    doc = root / UPGRADE_DOC
+    original = doc.read_text(encoding="utf-8") if guides else ""
+    try:
+        moved = move_boundaries(original, version, guides)
+    except UpgradeDocError as exc:
+        raise CutRefused(str(exc)) from exc
+    if guides:
+        before, after = anchor_titles(original), anchor_titles(moved.text)
+        for note in notes:
+            guide = note.fields.get("upgrade-guide")
+            if isinstance(guide, str) and after.get(guide) != before.get(guide):
+                raise CutRefused(
+                    f"{note.path}: the rewrite of {UPGRADE_DOC} leaves anchor {guide!r} on another heading"
+                )
+    if moved.text != original:
+        doc.write_text(moved.text, encoding="utf-8")
+    target = root / CHANGES_DIR / version
+    for note in moving:
+        target.mkdir(exist_ok=True)
+        (root / note.path).rename(target / f"{note.id}.md")
+    left = tuple(g for g in guides if g not in moved.anchors)
+    return CutReport(version, tuple(n.id for n in moving), moved.anchors, left)

@@ -15,13 +15,26 @@ def _slug(text: str) -> str:
     return _DROPPED.sub("", plain.strip().lower()).replace(" ", "-")
 
 
-def anchors(markdown: str) -> set[str]:
-    """Every heading's slug, a repeat taking GitHub's ``-1``, ``-2`` suffixes. ATX headings only."""
+def anchored_headings(markdown: str) -> list[tuple[str, int, int]]:
+    """Every ATX heading as ``(anchor, level, line index)``, a repeat taking GitHub's ``-1``, ``-2`` suffixes."""
     seen: dict[str, int] = {}
-    found: set[str] = set()
-    for _, text, _ in headings(markdown):
+    found: list[tuple[str, int, int]] = []
+    for level, text, index in headings(markdown):
         slug = _slug(text)
         count = seen.get(slug, 0)
         seen[slug] = count + 1
-        found.add(slug if count == 0 else f"{slug}-{count}")
+        found.append((slug if count == 0 else f"{slug}-{count}", level, index))
     return found
+
+
+def anchors(markdown: str) -> set[str]:
+    """Every heading's anchor. ATX headings only."""
+    return {anchor for anchor, _, _ in anchored_headings(markdown)}
+
+
+def anchor_titles(markdown: str) -> dict[str, tuple[int, str]]:
+    """Each heading anchor mapped to the level and text of the heading it names."""
+    return {
+        anchor: (level, text)
+        for (anchor, level, _), (_, text, _) in zip(anchored_headings(markdown), headings(markdown), strict=True)
+    }
