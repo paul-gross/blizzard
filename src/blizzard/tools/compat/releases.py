@@ -45,11 +45,9 @@ class Release:
     def line(self) -> str:
         return f"{self.major}.{self.minor}"
 
-    @property
-    def stable(self) -> bool:
+    def is_stable(self) -> bool:
         return self.candidate is None
 
-    @property
     def order(self) -> tuple[int, int, int, int]:
         """Sorts oldest first: a stable release is newer than every candidate of its version."""
         return self.major, self.minor, self.patch, self.candidate if self.candidate is not None else 1 << 30
@@ -65,7 +63,7 @@ def parse_release(tag: str) -> Release | None:
 
 def parse_releases(tags: Iterable[str]) -> list[Release]:
     """Every release among ``tags``, oldest first."""
-    return sorted((r for r in map(parse_release, tags) if r is not None), key=lambda r: r.order)
+    return sorted((r for r in map(parse_release, tags) if r is not None), key=lambda r: r.order())
 
 
 def supported(tags: Iterable[str], window: Window) -> list[Release]:
@@ -80,7 +78,7 @@ def supported(tags: Iterable[str], window: Window) -> list[Release]:
         if (release.major, release.minor) == floor:
             chosen[f"line:{release.line}"] = release
         chosen[f"major:{release.major}"] = release
-    return sorted(set(chosen.values()), key=lambda r: r.order)
+    return sorted(set(chosen.values()), key=lambda r: r.order())
 
 
 def line_of(branch: str) -> str:
@@ -97,7 +95,7 @@ def on_line(tags: Iterable[str], line: str) -> list[Release]:
 
 
 def newest_stable(tags: Iterable[str]) -> Release | None:
-    stable = [r for r in parse_releases(tags) if r.stable]
+    stable = [r for r in parse_releases(tags) if r.is_stable()]
     return stable[-1] if stable else None
 
 
@@ -107,6 +105,7 @@ def releases_document(window: Window, releases: list[Release]) -> dict[str, Any]
         "floor": window.floor,
         "opening": window.opening,
         "releases": [
-            {"tag": r.tag, "line": r.line, "stable": r.stable, "oldest": index == 0} for index, r in enumerate(releases)
+            {"tag": r.tag, "line": r.line, "stable": r.is_stable(), "oldest": index == 0}
+            for index, r in enumerate(releases)
         ],
     }
