@@ -49,6 +49,5 @@ class Payload:
         return value if isinstance(value, dict) else None
 
     def instant(self, key: str, fallback: datetime) -> datetime:
-        """An ISO-8601 stamp, falling back on a malformed one and coerced to UTC
-        (``bzh:utc-instants``) — store-and-forward resends the naive stamp it buffered."""
+        """:func:`~blizzard.hub.domain.execution.questions.parse_instant` over ``key``'s value."""
         return parse_instant(self.body.get(key), fallback)

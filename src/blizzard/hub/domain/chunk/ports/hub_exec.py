@@ -34,8 +34,8 @@ class IWriteChunkHubExecRepository(IReadChunkHubExecRepository, Protocol):
         ...
 
     def release_live_hub_exec_slots(self, *, at: datetime) -> int:
-        """Release every live hub-execution slot of this tenant and return how many — the
-        boot-time sweep of a dead process's runs, sound only while one hub process serves the store."""
+        """Release every live hub-execution slot of this tenant and return how many — sound only while one
+        hub process serves the store."""
         ...
 
     def record_hub_step_transition(

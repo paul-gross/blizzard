@@ -2,8 +2,7 @@
 
 Every rule here is pure: it takes the chunk, its facts, the graphs, and the submission, and
 returns a decision — the plan to record, the landing to migrate onto, the next step to answer
-with — or raises a :class:`CompletionRefused` carrying the failure detail. The apply and decision
-services read the stores and the clock, call these, and hand the decision to their ports."""
+with — or raises a :class:`CompletionRefused` carrying the failure detail."""
 
 from __future__ import annotations
 
@@ -413,8 +412,7 @@ class NextStep:
 def stored_artifacts(
     chunk_id: str, node: Node, epoch: int, artifacts: Sequence[CompletionArtifact], *, artifact_ids: Sequence[str]
 ) -> list[StoredArtifact]:
-    """The artifact rows a submission lands, one minted id each. A ``git_commit`` encodes
-    ``branch:hash`` and alone carries its repo and forge — the envelope's projection decodes it."""
+    """The artifact rows a submission lands, one minted id each."""
     rows: list[StoredArtifact] = []
     for artifact, artifact_id in zip(artifacts, artifact_ids, strict=True):
         is_commit = artifact.kind is ArtifactKind.GIT_COMMIT

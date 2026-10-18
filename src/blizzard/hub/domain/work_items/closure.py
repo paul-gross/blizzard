@@ -83,7 +83,7 @@ _STATE_AFTER: Mapping[WorkItemCloseOutcome, CloseIntentState] = {
     WorkItemCloseOutcome.FAILED: CloseIntentState.BACKING_OFF,
 }
 
-#: The outcomes that retire an intent, filtered on by the store's retire and re-enqueue guards.
+#: The outcomes that retire an intent.
 TERMINAL_CLOSE_OUTCOMES: frozenset[WorkItemCloseOutcome] = frozenset(
     outcome for outcome in WorkItemCloseOutcome if CloseIntentState.after(outcome) is CloseIntentState.RETIRED
 )

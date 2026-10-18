@@ -1,8 +1,7 @@
 """Runner enrollment — hub-minted runner identities and per-runner bearer tokens.
 
 ``add`` mints a runner's ``rn_`` id and bearer token together, and ``enroll`` rotates an existing
-runner's token; each returns the plaintext exactly once. Rotating records the prior hash as revoked
-in the same write, so the old token is refused from that instant."""
+runner's token; each returns the plaintext exactly once."""
 
 from __future__ import annotations
 

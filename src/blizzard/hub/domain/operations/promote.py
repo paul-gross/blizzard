@@ -21,8 +21,7 @@ from blizzard.hub.domain.operations.queue import QueueList, resolve_landing
 
 
 class ChunkNotPromotable(Exception):
-    """A promote targeted a never-promoted chunk that is already terminal ({done, stopped}) —
-    there is no queue left for it to join."""
+    """A promote targeted a never-promoted chunk outside :attr:`ChunkVerb.PROMOTE`'s window."""
 
     def __init__(self, chunk_id: str, status: ChunkStatus) -> None:
         super().__init__(f"chunk {chunk_id} is {status.value}, not promotable")

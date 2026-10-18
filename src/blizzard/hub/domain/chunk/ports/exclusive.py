@@ -49,9 +49,9 @@ class ILockedChunkRead(Protocol):
 
 
 class ILockedWorkRefRead(Protocol):
-    """The guard read an ingest consults, resolved on the one connection its pointer locks
-    were taken on. Deliberately not an :class:`ILockedChunkRead`: a pointer-lock handle holds
-    no chunk-row lock, so it cannot satisfy a chunk-row ``*_locked`` write."""
+    """The guard read resolved on the one connection its pointer locks were taken on.
+    Deliberately not an :class:`ILockedChunkRead`: a pointer-lock handle holds no chunk-row lock,
+    so it cannot satisfy a chunk-row ``*_locked`` write."""
 
     def live_holders(self, pointers: Sequence[WorkRef]) -> dict[WorkRef, str]:
         """:meth:`~blizzard.hub.domain.chunk.ports.work_refs.IReadChunkWorkRefsRepository.live_holders`,
@@ -81,7 +81,7 @@ class IChunkExclusiveWrites(Protocol):
     ) -> AbstractContextManager[ILockedWorkRefRead]:
         """Lock every named pointer, first, in sorted order, then yield the read handle bound
         to that one connection — for a decision whose race has no chunk row yet to lock. Each
-        pointer locks only its own key, so ingests of different pointers never contend. With
+        pointer locks only its own key. With
         ``project``, its source links' key is taken before any pointer's, the one order every
         locker of both keeps; a source link or unlink of that project waits for the commit. A
         write under the lock goes through a write repository's own ``*_locked`` method, taking

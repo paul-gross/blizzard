@@ -47,10 +47,8 @@ class IReadChunkFactsRepository(Protocol):
 
     def status_counts(self, *, project: ProjectId | None = None) -> dict[ChunkStatus, int]:
         """How many non-ephemeral chunks derive each :class:`ChunkStatus` — every status keyed,
-        zero-filled; the same set ``list_all`` returns, or ``project``'s chunks of it.
-        Settled-terminal chunks are counted in the store query without being loaded
-        (``bzh:live-set-read``); only the candidates a terminal fact doesn't already settle are
-        derived per chunk."""
+        zero-filled; the same set ``list_all`` returns, or ``project``'s chunks of it
+        (``bzh:live-set-read``)."""
         ...
 
     def done_since_count(self, since: datetime, *, project: ProjectId | None = None) -> int:

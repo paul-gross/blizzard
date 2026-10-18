@@ -24,9 +24,7 @@ class IReadChunkDeliveryRepository(Protocol):
     def pending_close_intents(self) -> list[PendingCloseIntent]:
         """Every ``(chunk_id, ref)`` pair carrying a pending ``close_intents`` row,
         due or not, with its own ``close_intent_attempts`` history; a chunk in the ephemeral
-        set is excluded even if its intent enqueued before it was grouped or deleted.
-        Whether an intent is due is the drainer's call (``close_intent_is_due``), never
-        this read's."""
+        set is excluded even if its intent enqueued before it was grouped or deleted."""
         ...
 
 

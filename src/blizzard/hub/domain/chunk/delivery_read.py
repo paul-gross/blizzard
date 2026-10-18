@@ -31,11 +31,8 @@ class PrMarker:
 @domain_model
 @dataclass(frozen=True)
 class DeliverySources:
-    """The narrowed, page-keyed delivery read (not the chunk's whole artifact history).
-
-    ``markers`` (the ``merged/`` and ``awaiting-external-merge`` markers) and ``pr_markers`` each arrive in
-    durable write order; :meth:`DeliveryRead.of` folds them as given, so a later replacement reference
-    supersedes an earlier one."""
+    """The narrowed, page-keyed delivery read (not the chunk's whole artifact history): the ``merged/`` and
+    ``awaiting-external-merge`` ``markers`` and the ``pr_markers``, each in durable write order."""
 
     markers: list[StoredArtifact] = field(default_factory=list)
     pr_markers: list[PrMarker] = field(default_factory=list)

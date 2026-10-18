@@ -219,9 +219,7 @@ class ApplyService:
         """Apply a completion. ``targets`` arrive pre-resolved — each ``None`` meaning "names no
         enabled graph" — so this holds no graph repo of its own (``bzh:domain-takes-objects``).
 
-        Order is behavior: retired → facts → migration replay → route token → from node →
-        transition replay → attempt coherence → commit pointer → plan → record. Attempt
-        coherence is re-derived under the chunk's row lock, ahead of the write itself."""
+        Order is behavior."""
         targets = targets or MigrationTargets(cross_graph=None, intended=None, follow_latest=None)
         self._retired.refuse_if_retired(submission.runner_id, action="completion")
         facts = self._facts.load_facts(chunk.chunk_id)
@@ -487,9 +485,7 @@ class ApplyService:
         if step.node is None:
             return ApplyResult.failure(f"transition target {to_node_id} is not a node")
         if step.kind is NextStepKind.HUB_TAKES:
-            # Run on BOTH the fresh apply and the replay: a re-flush resumes an interrupted run
-            # (a crashed one's slot is released at boot), while the executor defers a replay whose
-            # run is live or already left the node, so it never starts a second one.
+            # Run on BOTH the fresh apply and the replay.
             self._hub_node_executor.run(chunk, graph, step.node, epoch=submission.epoch)
             return ApplyResult.taken_over(step.node, transition_id)
         if step.kind is NextStepKind.GATE:
