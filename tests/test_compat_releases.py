@@ -171,3 +171,21 @@ def test_the_text_parse_reads_what_load_reads() -> None:
 def test_the_text_parse_rejects_what_load_rejects_naming_its_source(text: str) -> None:
     with pytest.raises(VersionWindowError, match=re.escape("v0.9.0:window.toml")):
         VersionWindow.parse(text, "v0.9.0:window.toml")
+
+
+def test_names_lists_the_files_under_a_directory_at_a_revision(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    _commit(repo, "chore: base", {"changes/0.1.0/b.md": "b", "changes/0.1.0/a.md": "a", "changes/README.md": "r"})
+    assert Repository(repo).names("HEAD", "changes/0.1.0") == ["a.md", "b.md"]
+    assert Repository(repo).names("HEAD", "changes") == ["0.1.0", "README.md"]
+    assert Repository(repo).names("HEAD", "absent") == []
+
+
+def test_previous_tag_is_the_nearest_tag_before_a_revision_or_none(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    _commit(repo, "chore: one")
+    _git(repo, "tag", "v0.1.0")
+    _commit(repo, "chore: two")
+    _git(repo, "tag", "v0.2.0")
+    assert Repository(repo).previous_tag("v0.2.0") == "v0.1.0"
+    assert Repository(repo).previous_tag("v0.1.0") is None

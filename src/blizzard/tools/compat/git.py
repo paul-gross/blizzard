@@ -1,4 +1,4 @@
-"""The one subprocess seam: the repository facts the compatibility check reads."""
+"""The one subprocess seam: the repository facts the compatibility check and the change-note tool read."""
 
 from __future__ import annotations
 
@@ -39,3 +39,15 @@ class Repository:
     def subjects(self, revision_range: str) -> list[str]:
         """The commit subjects of ``revision_range``, newest first."""
         return self._git("log", "--format=%s", revision_range).splitlines()
+
+    def names(self, rev: str, directory: str) -> list[str]:
+        """The file names directly under ``directory`` as ``rev`` holds it, empty when it has none."""
+        listed = self._git("ls-tree", "--name-only", rev, f"{directory.rstrip('/')}/").splitlines()
+        return sorted(line.rsplit("/", 1)[-1] for line in listed)
+
+    def previous_tag(self, rev: str) -> str | None:
+        """The nearest tag before ``rev``, or ``None`` when no tag precedes it."""
+        try:
+            return self._git("describe", "--tags", "--abbrev=0", f"{rev}^").strip()
+        except GitError:
+            return None

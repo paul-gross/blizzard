@@ -6,14 +6,28 @@ and the rule it broke.
 
 ## Where notes live
 
-| Path                         | Holds                                                            |
-| ---------------------------- | ---------------------------------------------------------------- |
-| `changes/unreleased/<id>.md` | A note no release has carried. `unreleased/` ships a `.gitkeep`. |
-| `changes/<X.Y.Z>/<id>.md`    | A note a release carried. Written only when a release is cut.    |
-| `changes/README.md`          | This reference.                                                  |
+| Path                         | Holds                                                             |
+| ---------------------------- | ----------------------------------------------------------------- |
+| `changes/unreleased/<id>.md` | A note no release has carried. `unreleased/` ships a `.gitkeep`.  |
+| `changes/<X.Y.Z>/<id>.md`    | A note a release carried. Written by `blizzard-change-notes cut`. |
+| `changes/README.md`          | This reference.                                                   |
 
 `X.Y.Z` is a version core without leading zeros. A release candidate shares its version's directory: `v0.8.0-rc.1` and
 `v0.8.0` both use `changes/0.8.0/`. Any other file or directory under `changes/` fails.
+
+## Cutting and rendering
+
+`blizzard-change-notes cut <X.Y.Z>` runs at a release's cut. It refuses on any `check` failure, and otherwise moves
+every note in `changes/unreleased/` into `changes/<X.Y.Z>/`, adding to the directory when a candidate already made it.
+It also moves each `docs/upgrade.md` section the moved notes' `upgrade-guide` names from
+`## Upgrading to the next release` into `## Upgrading to <X.Y.Z>`, creating that heading directly beneath
+`## Before you pull` when it is absent. A cut that would leave an `upgrade-guide` on another heading refuses and writes
+nothing.
+
+`blizzard-change-notes render <tag>`, or `mise run release-notes <tag>`, prints the notes a tag publishes, read from the
+tag's own tree: upgrade notes, then breaking changes, deprecations, and the added, changed, fixed and security notes,
+then the commits since the previous tag in a collapsed block. A note that an earlier release on another line also
+carries is marked `(also in X.Y.Z)`. Rendering a tag twice gives the same text.
 
 ## The id
 
