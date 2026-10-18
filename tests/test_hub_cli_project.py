@@ -262,6 +262,6 @@ def test_project_option_is_optional_on_the_command_line_and_says_what_it_does(re
     unnamed = CliRunner().invoke(verb, [])
     shown = CliRunner().invoke(verb, ["--help"])
 
-    assert json.loads(named.output) == {"project": "gears"}
-    assert json.loads(unnamed.output) == {}
+    assert json.loads(named.stdout) == {"project": "gears"}
+    assert json.loads(unnamed.stdout) == {}
     assert says in " ".join(shown.output.split())

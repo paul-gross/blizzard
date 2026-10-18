@@ -121,7 +121,7 @@ def test_add_under_json_prints_the_raw_body(monkeypatch: pytest.MonkeyPatch) -> 
     result = CliRunner().invoke(hub_group, ["runner", "add", "r-claude", "--json"], env=_ENV)
 
     assert result.exit_code == 0, result.output
-    assert json.loads(result.output) == _ADDED
+    assert json.loads(result.stdout) == _ADDED
 
 
 @pytest.mark.unit

@@ -58,7 +58,7 @@ def _seed() -> None:
 def test_create_list_and_show_with_and_without_json(client: TestClient) -> None:
     _seed()
 
-    listed = json.loads(_repo(["list", "--json"]).output)
+    listed = json.loads(_repo(["list", "--json"]).stdout)
     assert [(r["slug"], r["name"]) for r in listed] == [("blizzard", "blizzard")]
     assert (
         f"blizzard  blizzard  {listed[0]['repository_id']}  r1  enabled  paul-gross/blizzard  master"
@@ -68,7 +68,7 @@ def test_create_list_and_show_with_and_without_json(client: TestClient) -> None:
     shown = _repo(["show", "blizzard"])
     assert "revision 1" in shown.output
     assert "secret gh-test" in shown.output
-    assert json.loads(_repo(["show", "blizzard", "--json"]).output) == client.get("/api/repositories/blizzard").json()
+    assert json.loads(_repo(["show", "blizzard", "--json"]).stdout) == client.get("/api/repositories/blizzard").json()
     assert _repo(["show", "nope"]).exit_code != 0
 
 
@@ -105,7 +105,7 @@ def test_retire_enable_and_the_change_log(client: TestClient) -> None:
     assert refused.exit_code != 0
     assert "secret_name" in refused.output
 
-    raw = json.loads(_cli("config", ["changes", "--json", "--kind", "repository", "--all"]).output)["changes"]
+    raw = json.loads(_cli("config", ["changes", "--json", "--kind", "repository", "--all"]).stdout)["changes"]
     assert [(c["op"], c["door"]) for c in raw] == [("retire", "cli"), ("edit", "cli"), ("create", "cli")]
     assert raw[1]["diff"] == [{"field": "base_branch", "old": "master", "new": "main"}]
     text = _cli("config", ["changes", "--kind", "repository"]).output

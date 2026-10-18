@@ -259,7 +259,7 @@ def test_releases_json_emits_the_baseline_shape(tmp_path: Path, monkeypatch: pyt
     repo.git("tag", "v0.3.0-rc.1")
     result = _run(repo, monkeypatch, "releases", "--json")
     assert result.exit_code == 0
-    assert json.loads(result.output) == {
+    assert json.loads(result.stdout) == {
         "floor": "0.2",
         "opening": None,
         "releases": [
@@ -281,7 +281,7 @@ def test_an_empty_supported_set_exits_zero_and_says_so(tmp_path: Path, monkeypat
     repo.commit("chore: base")
     repo.git("tag", "v0.1.0-rc.1")
     listed = _run(repo, monkeypatch, "releases", "--json")
-    assert listed.exit_code == 0 and json.loads(listed.output)["releases"] == []
+    assert listed.exit_code == 0 and json.loads(listed.stdout)["releases"] == []
     checked = _run(repo, monkeypatch)
     assert checked.exit_code == 0
     assert "no release is supported yet" in checked.output

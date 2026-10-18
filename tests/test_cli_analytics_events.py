@@ -107,7 +107,7 @@ def test_json_prints_the_raw_envelope_including_next_cursor(monkeypatch: pytest.
     result = CliRunner().invoke(hub_group, ["analytics", "events", "--json"])
 
     assert result.exit_code == 0, result.output
-    assert json.loads(result.output) == body
+    assert json.loads(result.stdout) == body
 
 
 def test_ndjson_streams_every_line_to_stdout(monkeypatch: pytest.MonkeyPatch) -> None:

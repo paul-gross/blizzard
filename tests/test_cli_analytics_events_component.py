@@ -83,35 +83,35 @@ def test_each_filter_flag_round_trips_to_a_filtered_result(tmp_path: Path, monke
 
     by_kind = _invoke("--kind", "skill_invocation", "--json")
     assert by_kind.exit_code == 0, by_kind.output
-    assert [e["subject"] for e in json.loads(by_kind.output)["events"]] == ["wf-commit"]
+    assert [e["subject"] for e in json.loads(by_kind.stdout)["events"]] == ["wf-commit"]
 
     by_tool = _invoke("--tool", "Agent", "--json")
-    assert [e["subject"] for e in json.loads(by_tool.output)["events"]] == ["explorer"]
+    assert [e["subject"] for e in json.loads(by_tool.stdout)["events"]] == ["explorer"]
 
     by_prefix = _invoke("--subject-prefix", "src/", "--json")
-    assert [e["subject"] for e in json.loads(by_prefix.output)["events"]] == ["src/a.py"]
+    assert [e["subject"] for e in json.loads(by_prefix.stdout)["events"]] == ["src/a.py"]
 
     by_node = _invoke("--node", "nd_build", "--json")
-    assert len(json.loads(by_node.output)["events"]) == 3
+    assert len(json.loads(by_node.stdout)["events"]) == 3
 
     with _local_timezone("UTC"):
         by_window = _invoke("--since", "2026-08-12T09:30:00", "--until", "2026-08-12T10:30:00", "--json")
-    assert [e["subject"] for e in json.loads(by_window.output)["events"]] == ["wf-commit"]
+    assert [e["subject"] for e in json.loads(by_window.stdout)["events"]] == ["wf-commit"]
 
     by_stale_version = _invoke("--extractor-version", "stale-version", "--json")
-    assert json.loads(by_stale_version.output)["events"] == []
+    assert json.loads(by_stale_version.stdout)["events"] == []
 
 
 def test_ndjson_streams_every_line_unmodified_and_untruncated(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     hub, token, _chunk_id = _seeded_hub(tmp_path)
     _relay(hub, token, monkeypatch)
     paged = _invoke("--json")
-    expected = json.loads(paged.output)["events"]
+    expected = json.loads(paged.stdout)["events"]
 
     streamed = _invoke("--ndjson")
 
     assert streamed.exit_code == 0, streamed.output
-    lines = [json.loads(line) for line in streamed.output.strip().splitlines()]
+    lines = [json.loads(line) for line in streamed.stdout.strip().splitlines()]
     assert lines == expected
     assert len(lines) == 3
 

@@ -143,7 +143,7 @@ def test_json_prints_the_raw_response_including_detail(monkeypatch: pytest.Monke
     result = CliRunner().invoke(hub_group, ["events", "--json"])
 
     assert result.exit_code == 0, result.output
-    assert json.loads(result.output) == body
+    assert json.loads(result.stdout) == body
 
 
 @pytest.mark.parametrize(
