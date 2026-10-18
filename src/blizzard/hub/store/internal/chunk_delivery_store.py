@@ -56,8 +56,7 @@ class ChunkDeliveryStore:
 
     def pending_close_intents(self) -> list[PendingCloseIntent]:
         """Every pending, non-ephemeral intent's own backoff history in one flat, outer-
-        joined, already-aggregated read — never one query per intent. Due-ness is not decided
-        here: the drainer applies ``close_intent_is_due`` to the history each row carries."""
+        joined, already-aggregated read — never one query per intent."""
         attempts = (
             self._store.select(
                 s.close_intent_attempts,

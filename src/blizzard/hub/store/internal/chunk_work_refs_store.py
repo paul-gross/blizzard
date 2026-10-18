@@ -142,8 +142,7 @@ class ChunkWorkRefsStore:
     def _resolve(
         pairs: list[tuple[WorkRef, str]], maybe_live_ids: set[str], facts_by_id: Mapping[str, ChunkFacts]
     ) -> dict[WorkRef, str]:
-        # A chunk outside `maybe_live_ids` is ephemeral or settled terminal, so its pairs drop
-        # here — `resolve_live_holders` would read an absent status as live.
+        # A chunk outside `maybe_live_ids` is ephemeral or settled terminal, so its pairs drop.
         live_pairs = [(pointer, chunk_id) for pointer, chunk_id in pairs if chunk_id in maybe_live_ids]
         statuses = {chunk_id: facts.status() for chunk_id, facts in facts_by_id.items()}
         return resolve_live_holders(live_pairs, statuses)

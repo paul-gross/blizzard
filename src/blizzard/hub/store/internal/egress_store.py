@@ -76,7 +76,7 @@ class EgressStore:
         return self._usage.usage_after(position, until, limit)
 
     def newest_egress_latch(self) -> HubEventKind | None:
-        """The newer of the two latch kinds' newest events — run once per process start, not per pass."""
+        """The newer of the two latch kinds' newest events."""
         event = self._hub_events.newest(_LATCH_KINDS)
         return next((k for k in _LATCH_KINDS if event is not None and k == event.kind), None)
 

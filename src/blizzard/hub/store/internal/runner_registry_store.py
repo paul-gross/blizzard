@@ -2,7 +2,7 @@
 
 All ``sqlalchemy`` usage is confined here (``bzh:dependency-inversion``). Facts only,
 status derived (``bzh:facts-not-status``): each brake derives from the newest row of its
-own fact table; ``name``, ``last_seen_at`` and ``token_hash`` are the refreshed-in-place columns.
+own fact table.
 """
 
 from __future__ import annotations

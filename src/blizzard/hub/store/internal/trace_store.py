@@ -119,7 +119,7 @@ class TraceStore:
         return TraceExportFailure(event.at, event.message) if event is not None else None
 
     def newest_export_latch(self) -> HubEventKind | None:
-        """The newer of the two latch kinds' newest events — run once per process start, not per pass."""
+        """The newer of the two latch kinds' newest events."""
         event = self._hub_events.newest(_LATCH_KINDS)
         return next((k for k in _LATCH_KINDS if event is not None and k == event.kind), None)
 

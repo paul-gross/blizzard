@@ -104,8 +104,7 @@ def _counts_stmt(
 
 
 def _counts_by_node_stmt(stmts: ScopedStatements, criteria: EventQueryCriteria) -> Select[Any]:
-    """Counts by node id, each naming its node and graph by scalar lookups on the primary
-    keys — null where the id no longer resolves — so the names add no grouping column."""
+    """Counts by node id, naming each node and graph as ``_node_names`` does."""
     t, gn, g = s.transcript_events, s.graph_nodes, s.graphs
     graph_name = (
         stmts.select(stmts.scope_join(g, gn, g.c.graph_id == gn.c.graph_id), g.c.name)

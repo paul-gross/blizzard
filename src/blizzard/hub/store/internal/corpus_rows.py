@@ -609,8 +609,8 @@ def _event(row: Any) -> TranscriptEvent:
 
 
 def _provenance(events: Sequence[Any], records: Sequence[Any]) -> SegmentProvenance:
-    """As derived: stamped on the events when there are any; otherwise the segment's own, by the derivation's rule
-    — the first record's identity and the last known ``harness_version``."""
+    """As derived: stamped on the events when there are any; otherwise the segment's own,
+    as ``transcript_event_store._provenance`` derives it."""
     if events:
         first = events[0]
         return SegmentProvenance(first.harness_id, first.harness_version, first.model, first.effort)

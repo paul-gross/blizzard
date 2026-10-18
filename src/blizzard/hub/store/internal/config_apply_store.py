@@ -1,9 +1,8 @@
 """SQLAlchemy adapter for the declarative apply (package-private).
 
 One ``store.write`` executes every planned write through the same per-operation bodies the per-record
-adapters run, so each write keeps its in-transaction checks — secret availability, name and locator or
-coordinate uniqueness, the compare-and-set on ``from_revision`` — and the first refusal rolls the whole
-apply back. A dry run is that transaction with a rollback after the last write (``bzh:config-apply``)."""
+adapters run, and the first refusal rolls the whole apply back. A dry run is that transaction with a
+rollback after the last write (``bzh:config-apply``)."""
 
 from __future__ import annotations
 

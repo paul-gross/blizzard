@@ -67,8 +67,7 @@ class ChunkRouteStore:
     def live_routes_of_runner(self, runner_id: str) -> list[Route]:
         """See :meth:`~blizzard.hub.domain.chunk.ports.route.IReadChunkRouteRepository.live_routes_of_runner` —
         the chunks this runner ever routed, resolved through :meth:`_routes`, kept where the
-        live route is still this runner's. Not a hot-path read, so it narrows by the runner's
-        route history rather than a live-set prefilter."""
+        live route is still this runner's."""
         with self._store.read("live_routes_of_runner") as conn:
             chunk_ids = [
                 row.chunk_id

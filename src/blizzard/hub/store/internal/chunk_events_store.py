@@ -2,10 +2,7 @@
 
 All ``sqlalchemy`` usage is confined here (``bzh:dependency-inversion``). Facts only
 (``bzh:facts-not-status``): every write appends a row; nothing here derives status.
-Timestamps arrive already stamped (``bzh:injected-clock``).
-
-``activity_facts_since`` performs one bounded read per mapped fact table on one
-connection."""
+Timestamps arrive already stamped (``bzh:injected-clock``)."""
 
 from __future__ import annotations
 
@@ -319,9 +316,7 @@ class ChunkEventsStore:
         self, since: datetime, *, limit: int, lens: FeedLens | None = None
     ) -> list[OperationalEvent]:
         """See
-        :meth:`~blizzard.hub.domain.chunk.ports.events.IReadChunkEventsRepository.activity_events_since` —
-        the feed's own event source: recency-ordered and deleted-chunk-excluding, which
-        ``list_events`` is not."""
+        :meth:`~blizzard.hub.domain.chunk.ports.events.IReadChunkEventsRepository.activity_events_since`."""
         with self._store.read("activity_events_since") as conn:
             deleted = _deleted_chunk_ids_stmt(self._store)
             stmt = (

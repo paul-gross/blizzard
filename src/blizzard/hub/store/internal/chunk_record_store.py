@@ -279,8 +279,7 @@ class ChunkRecordStore:
         return list(self.get_many([chunk_id for chunk_id, derived in statuses.items() if derived is status]).values())
 
     def mint(self, chunk: Chunk) -> None:
-        """Insert a chunk's rows with no pointer lock held — the unguarded seed write for
-        fixtures; the ingest path mints through :meth:`mint_locked`."""
+        """Insert a chunk's rows with no pointer lock held."""
         with self._store.write("mint") as conn:
             insert_chunk_rows(conn, chunk)
 

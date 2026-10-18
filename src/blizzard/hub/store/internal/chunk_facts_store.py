@@ -196,10 +196,8 @@ class ChunkFactsStore:
 
     def status_facts_for(self, chunk_ids: Sequence[str]) -> dict[str, ChunkFacts]:
         """`load_facts_for`'s status-only sibling — every id's :class:`ChunkFacts`, keyed
-        by chunk id, reading only :attr:`_STATUS_FAMILIES` plus ``usage`` — the families
-        behind :meth:`~blizzard.hub.domain.chunk.model.ChunkFacts.status`, ``open_pause``,
-        ``latest_epoch``, ``restarts``, and ``usage_total`` — rather than every family
-        :meth:`load_facts_for` loads. An id that doesn't exist or is ephemeral is silently
+        by chunk id, reading only the families ``_TICK_STATUS_FAMILIES`` names rather than
+        every family :meth:`load_facts_for` loads. An id that doesn't exist or is ephemeral is silently
         dropped, the same as :meth:`load_facts_for`."""
         if not chunk_ids:
             return {}
@@ -224,10 +222,7 @@ class ChunkFactsStore:
         return {chunk_id: status for chunk_id, status in statuses.items() if status not in TERMINAL_STATUSES}
 
     def status_counts(self, *, project: ProjectId | None = None) -> dict[ChunkStatus, int]:
-        """See :meth:`~blizzard.hub.domain.chunk.ports.facts.IReadChunkFactsRepository.status_counts` —
-        the settled-terminal chunks are counted in SQL (:func:`settled_stopped`,
-        :func:`settled_done`) without loading a fact row; only the :func:`maybe_live`
-        candidates :meth:`load_live_statuses` already hydrates are derived per chunk."""
+        """See :meth:`~blizzard.hub.domain.chunk.ports.facts.IReadChunkFactsRepository.status_counts`."""
         counted = s.chunks.c.chunk_id.not_in(ephemeral_ids_select(self._store))
         if project is not None:
             counted = and_(s.chunks.c.project_id == project, counted)
