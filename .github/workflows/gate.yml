@@ -190,6 +190,12 @@ jobs:
         name: structural gate
         run: cd web && npm run structural-gate
       - if: steps.detect.outputs.present == 'true'
+        name: install chromium
+        run: cd web && npx playwright install --with-deps chromium
+      - if: steps.detect.outputs.present == 'true'
+        name: story render
+        run: cd web && npm run story-render
+      - if: steps.detect.outputs.present == 'true'
         name: bundle composition
         run: cd web && npm run bundle-check
       - if: steps.detect.outputs.present == 'true'
