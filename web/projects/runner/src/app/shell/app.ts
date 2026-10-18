@@ -6,7 +6,7 @@ import { RunnerLiveUpdates } from '../core/live/runner-live-updates';
 import { SessionRecovery } from '../core/identity/session-recovery';
 import { SessionRecoveryView } from '../core/identity/session-recovery-view';
 
-import { AppShell, ViewportService } from 'fleet';
+import { AppShell, FlagStore, ViewportService } from 'fleet';
 import { AppHeader } from './nav/app-header';
 import { AppNav } from './nav/app-nav';
 import { MobileTabBar } from './nav/mobile-tab-bar';
@@ -57,6 +57,9 @@ export class App {
   private readonly sessionRecovery = inject(SessionRecovery);
   private readonly liveUpdates = inject(RunnerLiveUpdates);
   private readonly viewport = inject(ViewportService);
+
+  /** Injected here so the host's one flags read fires at start, whichever shell renders. */
+  private readonly flags = inject(FlagStore);
 
   protected readonly recovering = this.sessionRecovery.recovering;
 

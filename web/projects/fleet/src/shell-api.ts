@@ -10,6 +10,8 @@ export { FleetLiveUpdates } from './lib/sse/fleet-live';
 export { EVENT_SOURCE_FACTORY, FetchEventSource, type EventSourceFactory } from './lib/sse/sse.service';
 export { FLEET_CLOCK, injectNowSignal } from './lib/core/now-signal';
 export { HUB_PROJECT_FILTER, injectProjectFilter } from './lib/core/project-filter';
+export { FlagStore, provideFlags, type FlagsRead, type FlagsView } from './lib/core/flags/flag-store';
+export { flagGuard } from './lib/core/flags/flag-guard';
 export { IN_APP_LINK, LensLink, type InAppLink } from './lib/core/lens-link';
 
 export { ViewportService } from './lib/core/viewport/viewport-service';
@@ -28,6 +30,7 @@ export {
   hubBoardChunksKey,
   hubChunkCountsKey,
   hubDecisionsKey,
+  hubFlagsKey,
   hubFleetSpendKey,
   hubHealthKey,
   hubMeKey,
@@ -42,6 +45,7 @@ export { client as hubClient } from './lib/api/hub/client.gen';
 export {
   chunkCountsApiChunkCountsGet,
   fleetSpendApiSpendGet,
+  flagsApiFlagsGet,
   getProjectApiProjectsProjectGet,
   healthApiHealthGet,
   listChunksApiChunksGet,

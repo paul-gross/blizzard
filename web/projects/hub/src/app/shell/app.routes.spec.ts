@@ -16,6 +16,8 @@ import { OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubError, stubRe
 import { LAST_TENANT_KEY, PAGE_RELOAD, TAB_TENANT_KEY } from '../core/auth/tenant-context';
 import { App } from './app';
 import { routes } from './app.routes';
+import { provideFlags } from 'fleet/shell';
+import { hubFlagsRead } from '../core/flags.query';
 
 /** A do-nothing EventSource so the live-update spine can open without a real stream
  * (`App`'s constructor calls `FleetLiveUpdates.start()` unconditionally). */
@@ -63,6 +65,7 @@ describe('the board route (route-table mobile/desktop fork)', () => {
       providers: [
         provideZonelessChangeDetection(),
         provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
+        provideFlags(hubFlagsRead),
         provideRouter(routes, withRouterConfig({ onSameUrlNavigation: 'reload' })),
         provideViewportRenavigation(),
         { provide: EVENT_SOURCE_FACTORY, useValue: (() => new FakeEventSource() as unknown as FleetEventSource) as EventSourceFactory },
@@ -151,6 +154,7 @@ describe('the fleet route (mobile RunnersPage, desktop FleetPage)', () => {
       providers: [
         provideZonelessChangeDetection(),
         provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
+        provideFlags(hubFlagsRead),
         provideRouter(routes, withRouterConfig({ onSameUrlNavigation: 'reload' })),
         provideViewportRenavigation(),
         { provide: EVENT_SOURCE_FACTORY, useValue: (() => new FakeEventSource() as unknown as FleetEventSource) as EventSourceFactory },
@@ -238,6 +242,7 @@ describe('the public pages (sign-in refusals and invitations)', () => {
       providers: [
         provideZonelessChangeDetection(),
         provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
+        provideFlags(hubFlagsRead),
         provideRouter(routes, withRouterConfig({ onSameUrlNavigation: 'reload' })),
         provideViewportRenavigation(),
         { provide: EVENT_SOURCE_FACTORY, useValue: (() => new FakeEventSource() as unknown as FleetEventSource) as EventSourceFactory },
@@ -331,6 +336,7 @@ describe('the admin members route', () => {
       providers: [
         provideZonelessChangeDetection(),
         provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
+        provideFlags(hubFlagsRead),
         provideRouter(routes, withRouterConfig({ onSameUrlNavigation: 'reload' })),
         provideViewportRenavigation(),
         { provide: EVENT_SOURCE_FACTORY, useValue: (() => new FakeEventSource() as unknown as FleetEventSource) as EventSourceFactory },
@@ -405,6 +411,7 @@ describe('the views under the project lens', () => {
       providers: [
         provideZonelessChangeDetection(),
         provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
+        provideFlags(hubFlagsRead),
         provideRouter(routes, withRouterConfig({ onSameUrlNavigation: 'reload' })),
         provideViewportRenavigation(),
         { provide: EVENT_SOURCE_FACTORY, useValue: (() => new FakeEventSource() as unknown as FleetEventSource) as EventSourceFactory },

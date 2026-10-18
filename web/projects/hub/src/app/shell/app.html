@@ -59,6 +59,7 @@
             shell-header
             [tagline]="tenantName()"
             [connection]="connection()"
+            [overridden]="flags.overridden()"
             [counts]="counts()"
             [spendToday]="spendToday.data() ?? null"
             [spendYesterday]="spendYesterday.data() ?? null"

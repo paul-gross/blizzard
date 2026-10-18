@@ -108,6 +108,14 @@
 .conn .v {
   color: var(--cyan);
 }
+/* Sits on the value's own line, so the marker never grows the header's height. */
+.conn .overridden {
+  margin-left: 6px;
+  color: var(--label);
+  font-size: var(--fs-label);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
 .spend .v {
   color: var(--amber-hi);
 }

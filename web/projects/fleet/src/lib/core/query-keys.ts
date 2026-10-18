@@ -5,6 +5,10 @@
  * gap-recovery invalidation after a reconnect can target the whole tree.
  */
 export const hubHealthKey = ['hub', 'health'] as const;
+/** The hub's flags read — `GET /api/flags`, read once at start and never refetched. */
+export const hubFlagsKey = ['hub', 'flags'] as const;
+/** The host's flags read — `GET /api/flags` on the host root, read once at start and never refetched. */
+export const runnerFlagsKey = ['host', 'flags'] as const;
 export const hubChunksKey = ['hub', 'chunks'] as const;
 /** The board's windowed chunk list and the all-time counts — both nested under
  * {@link hubChunksKey}, so every prefix invalidation of the chunk list refreshes them. */

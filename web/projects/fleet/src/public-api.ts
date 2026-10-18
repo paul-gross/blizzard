@@ -37,6 +37,7 @@ export * from './lib/core/viewport';
 export * from './lib/core/query-state';
 export * from './lib/core/polling';
 export * from './lib/core/daemon-target';
+export * from './lib/core/flags';
 export * from './lib/shell/mobile-chrome';
 
 export {
@@ -75,6 +76,7 @@ export {
   hubFindingsBucketPrefixKey,
   hubFindingsKey,
   hubFleetSpendKey,
+  hubFlagsKey,
   hubGardenProposalKey,
   hubMeKey,
   hubRoutineBaselinesKey,
@@ -96,6 +98,7 @@ export {
   hubProjectLinksKey,
   hubProjectsKey,
   lensedKey,
+  runnerFlagsKey,
   type ProjectKeyPart,
 } from './lib/core/query-keys';
 

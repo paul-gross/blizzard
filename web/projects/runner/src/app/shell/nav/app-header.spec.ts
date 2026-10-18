@@ -10,6 +10,8 @@ import { vi } from 'vitest';
 
 import { AppHeader } from './app-header';
 import { provideActiveRunner } from '../../core/active-runner';
+import { provideFlags } from 'fleet';
+import { runnerFlagsRead } from '../../core/flags.query';
 
 /** A `RunnerLiveUpdates` stand-in so a spec can drive {@link AppHeader}'s
  * `connection` fold without opening a real stream — the header
@@ -25,6 +27,7 @@ async function render(extraProviders: Provider[] = []) {
       provideZonelessChangeDetection(),
       provideActiveRunner('rn_1'),
       provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
+      provideFlags(runnerFlagsRead),
       provideRouter([]),
       ...extraProviders,
     ],
@@ -109,6 +112,26 @@ describe('AppHeader', () => {
     expect(el.querySelector('[data-testid="stat-agents"]')?.textContent?.trim()).toBe('1/3');
   });
 
+  it('shows the overridden-flags marker in the Runner cell, naming the flags, when the host’s answer overrides any', async () => {
+    stub = stubRequestClient(runnerClient, (_method, path) =>
+      path === '/api/flags' ? { flags: { alpha: true }, overridden: ['alpha'] } : { items: [] },
+    );
+    const fixture = await render();
+    const marker = (fixture.nativeElement as HTMLElement).querySelector('[data-testid="conn"] [data-testid="flags-overridden"]');
+
+    expect(marker).not.toBeNull();
+    expect(marker?.getAttribute('title')).toContain('alpha');
+  });
+
+  it('shows no overridden-flags marker when the host’s answer overrides none', async () => {
+    stub = stubRequestClient(runnerClient, (_method, path) =>
+      path === '/api/flags' ? { flags: {}, overridden: [] } : { items: [] },
+    );
+    const fixture = await render();
+
+    expect((fixture.nativeElement as HTMLElement).querySelector('[data-testid="flags-overridden"]')).toBeNull();
+  });
+
   it('renders the pause control only while a runner is active', async () => {
     const onRunner = await render();
     expect((onRunner.nativeElement as HTMLElement).querySelector('[data-testid="pause-control"]')).not.toBeNull();
@@ -126,6 +149,7 @@ describe('AppHeader', () => {
         provideZonelessChangeDetection(),
         provideActiveRunner('rn_1'),
         provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
+        provideFlags(runnerFlagsRead),
         provideRouter([]),
       ],
     }).compileComponents();

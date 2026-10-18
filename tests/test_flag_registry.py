@@ -4,6 +4,7 @@ files, the two ``GET /api/flags`` answers, and the lint tying every flag name in
 from __future__ import annotations
 
 import ast
+import re
 from collections.abc import Iterator, Mapping
 from pathlib import Path
 from typing import Any
@@ -35,6 +36,7 @@ from tests.host_files import write_minimal_host
 from tests.support import build_hub
 
 _SRC = Path(__file__).resolve().parent.parent / "src" / "blizzard"
+_WEB = Path(__file__).resolve().parent.parent / "web" / "projects"
 _TOKEN = {"BZ_HUB_TOKEN_RUNNER_LOCAL": "tok"}
 
 #: One live flag of each scope, and a tombstone.
@@ -212,10 +214,33 @@ def test_a_runner_applies_runner_overrides_and_ignores_fleet_with_the_hub_named_
 # --- the lint ------------------------------------------------------------------------------------------------------
 
 
+#: A TypeScript or template flag read with a string-literal name: ``flags.on('<name>')`` or ``flagGuard('<name>')``.
+_WEB_FLAG_READ = re.compile(r"""\b(?:flags\.on|flagGuard)\(\s*(['"])([^'"\n]*)\1""")
+
+
+#: A field or variable holding the injected ``FlagStore``; the lint recognises a read only through the name ``flags``.
+_FLAG_STORE_HOLDER = re.compile(r"\b(\w+)\s*=\s*(?:TestBed\.)?inject\(\s*FlagStore\s*\)")
+
+
+def _misnamed_flag_stores(sources: Mapping[str, str]) -> list[str]:
+    """Every source holding the injected ``FlagStore`` under a name other than ``flags``, which the lint cannot see."""
+    return [
+        f"{path}: FlagStore held as {match.group(1)!r}, not 'flags'"
+        for path, text in sources.items()
+        if path.endswith(".ts")
+        for match in _FLAG_STORE_HOLDER.finditer(text)
+        if match.group(1) != "flags"
+    ]
+
+
 def _flag_reads(sources: Mapping[str, str]) -> set[str]:
-    """Every string literal passed to a ``.on(...)`` call: the flag names the code reads."""
+    """Every flag name the code reads: a string literal passed to a Python ``.on(...)`` call, and — in a ``.ts`` or
+    ``.html`` source — one passed to ``flags.on(...)`` or ``flagGuard(...)``."""
     names: set[str] = set()
-    for text in sources.values():
+    for path, text in sources.items():
+        if path.endswith((".ts", ".html")):
+            names.update(match.group(2) for match in _WEB_FLAG_READ.finditer(text))
+            continue
         for node in ast.walk(ast.parse(text)):
             if (
                 isinstance(node, ast.Call)
@@ -238,13 +263,24 @@ def _lint(registry: FlagRegistry, sources: Mapping[str, str]) -> list[str]:
     return problems
 
 
+def _web_sources(root: Path = _WEB) -> dict[str, str]:
+    """The web apps' TypeScript and templates, minus specs and the generated client."""
+    generated = root / "fleet" / "src" / "lib" / "api"
+    return {
+        str(path): path.read_text()
+        for pattern in ("*.ts", "*.html")
+        for path in sorted(root.rglob(pattern))
+        if "node_modules" not in path.parts and generated not in path.parents and not path.name.endswith(".spec.ts")
+    }
+
+
 def _python_sources() -> dict[str, str]:
     return {str(path): path.read_text() for path in sorted(_SRC.rglob("*.py"))}
 
 
 @pytest.mark.unit
 def test_the_packaged_registry_agrees_with_every_flag_read_in_source() -> None:
-    assert _lint(FlagRegistry.load(), _python_sources()) == []
+    assert _lint(FlagRegistry.load(), {**_python_sources(), **_web_sources()}) == []
 
 
 @pytest.mark.unit
@@ -265,6 +301,54 @@ def test_the_lint_fails_on_a_live_flag_no_source_reads_and_passes_when_one_does(
 def test_the_lint_fails_on_a_malformed_registry_entry() -> None:
     with pytest.raises(FlagRegistryError):
         _lint(FlagRegistry.parse(_flag(scope="nowhere"), "fixture"), {})
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("name", "text"),
+    [
+        ("a.ts", "if (this.flags.on('not-declared')) {}\n"),
+        ("a.html", '@if (flags.on("not-declared")) { <p></p> }\n'),
+        ("routes.ts", "{ path: 'x', canActivate: [flagGuard('not-declared')] }\n"),
+    ],
+)
+def test_the_lint_fails_on_an_undeclared_flag_name_read_from_typescript(name: str, text: str) -> None:
+    assert _lint(FlagRegistry(), {name: text}) == ["source reads undeclared flag 'not-declared'"]
+
+
+@pytest.mark.unit
+def test_a_live_flag_read_only_from_typescript_satisfies_the_lint() -> None:
+    registry = _fixture()
+    sources = {"a.py": 'flags.on("hub-thing")\nflags.on("old-thing")\n', "b.ts": "flags.on('runner-thing')\n"}
+    assert _lint(registry, sources) == ["live flag 'fleet-thing' is read by no source"]
+    assert _lint(registry, {**sources, "c.html": "@if (flags.on('fleet-thing')) {}"}) == []
+
+
+@pytest.mark.unit
+def test_the_web_scan_skips_specs_and_the_generated_client(tmp_path: Path) -> None:
+    app = tmp_path / "hub" / "src" / "app"
+    generated = tmp_path / "fleet" / "src" / "lib" / "api" / "hub"
+    app.mkdir(parents=True)
+    generated.mkdir(parents=True)
+    (app / "a.ts").write_text("flags.on('read')\n")
+    (app / "a.spec.ts").write_text("flags.on('only-in-a-spec')\n")
+    (app / "a.shell-sweep.spec.ts").write_text("flags.on('only-in-a-sweep')\n")
+    (generated / "sdk.gen.ts").write_text("flags.on('generated')\n")
+    assert _flag_reads(_web_sources(tmp_path)) == {"read"}
+
+
+@pytest.mark.unit
+def test_every_injected_flag_store_in_the_web_tree_is_held_as_flags() -> None:
+    assert _misnamed_flag_stores(_web_sources()) == []
+
+
+@pytest.mark.unit
+def test_an_injected_flag_store_under_another_name_is_reported() -> None:
+    sources = {
+        "ok.ts": "protected readonly flags = inject(FlagStore);\n",
+        "bad.ts": "private readonly store = inject(FlagStore);\n",
+    }
+    assert _misnamed_flag_stores(sources) == ["bad.ts: FlagStore held as 'store', not 'flags'"]
 
 
 @pytest.mark.unit

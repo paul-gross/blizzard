@@ -429,4 +429,22 @@ describe('BoardHeader', () => {
       expect(getComputedStyle(trailing).flexShrink).toBe('1');
     });
   });
+
+  describe('the overridden-flags marker', () => {
+    it('shows in the connection cell, naming the flags, while any are overridden', async () => {
+      const fixture = TestBed.createComponent(BoardHeader);
+      fixture.componentRef.setInput('overridden', ['alpha', 'beta']);
+      await fixture.whenStable();
+      const marker = (fixture.nativeElement as HTMLElement).querySelector('[data-testid="conn"] [data-testid="flags-overridden"]');
+
+      expect(marker).not.toBeNull();
+      expect(marker?.getAttribute('title')).toContain('alpha, beta');
+    });
+
+    it('is absent while none are overridden', async () => {
+      const el = await render([]);
+
+      expect(el.querySelector('[data-testid="flags-overridden"]')).toBeNull();
+    });
+  });
 });

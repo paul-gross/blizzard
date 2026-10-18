@@ -70,6 +70,13 @@ export class BoardHeader {
    * runner's local panel. */
   readonly connectionLabel = input('Hub');
 
+  /** The flags the connected server's operator overrode — non-empty shows a quiet marker in the connection cell, its
+   * tooltip naming them. */
+  readonly overridden = input<readonly string[]>([]);
+
+  /** The marker's tooltip: the overridden flags, by name. */
+  protected readonly overriddenTitle = computed(() => `Flags overridden on this server: ${this.overridden().join(', ')}`);
+
   /** The brand block's subtitle line — the hub board names the tenant it is in here. A long one truncates, its full
    * text on hover, so it never widens the brand past the room the stat strip gives up. */
   readonly tagline = input('fleet hub · mission control');

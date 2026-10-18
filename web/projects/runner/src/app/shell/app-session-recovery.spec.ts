@@ -10,6 +10,8 @@ import { vi } from 'vitest';
 import { App } from './app';
 import { routes } from './app.routes';
 import { provideActiveRunner } from '../core/active-runner';
+import { provideFlags } from 'fleet';
+import { runnerFlagsRead } from '../core/flags.query';
 
 /** A do-nothing EventSource so `RunnerLiveUpdates` can open
  * without a real stream — mirrors `app.spec.ts`'s own `FakeEventSource`. */
@@ -25,6 +27,14 @@ class FakeEventSource {
   }
 }
 
+/** A host with no session: the session probe answers, the flags read is exempt (it is not what these cases count), and
+ * every other call is a no-session 401. */
+function noSession(path: string): unknown {
+  if (path === '/api/auth/session') return { auth_enabled: true, username: null };
+  if (path === '/api/flags') return { flags: {}, overridden: [] };
+  return stubError(401, { detail: 'no session' });
+}
+
 /** Registers a fresh `SessionRecovery`'s interceptor, spying its navigation so no
  * case actually leaves jsdom — see `core/identity/session-recovery.spec.ts`
  * for why each case owns (and ejects) its own registration. */
@@ -36,6 +46,7 @@ async function setUp(route: (method: string, path: string) => unknown) {
       provideZonelessChangeDetection(),
       provideActiveRunner('rn_1'),
       provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
+      provideFlags(runnerFlagsRead),
       provideRouter(routes),
       { provide: EVENT_SOURCE_FACTORY, useValue: factory },
     ],
@@ -89,9 +100,7 @@ describe('runner App session-recovery fork (issue #312)', () => {
   });
 
   it('renders the recovery view instead of app-panel once the seam sets recovering', async () => {
-    const { recovery, restore: r } = await setUp((_method, path) =>
-      path === '/api/auth/session' ? { auth_enabled: true, username: null } : stubError(401, { detail: 'no session' }),
-    );
+    const { recovery, restore: r } = await setUp((_method, path) => noSession(path));
     restore = r;
 
     // First no-session 401: mark set, the (mocked) bounce is "attempted".
@@ -110,9 +119,7 @@ describe('runner App session-recovery fork (issue #312)', () => {
   });
 
   it('re-attempts the bounce when the recovery view is retried', async () => {
-    const { recovery, navigateSpy, restore: r } = await setUp((_method, path) =>
-      path === '/api/auth/session' ? { auth_enabled: true, username: null } : stubError(401, { detail: 'no session' }),
-    );
+    const { recovery, navigateSpy, restore: r } = await setUp((_method, path) => noSession(path));
     restore = r;
 
     await runnerApi.listLeasesRunnersRunnerIdApiLeasesGet({ path: { runner_id: 'rn_1' }, throwOnError: false });
@@ -151,6 +158,7 @@ describe('runner App session-recovery fork (issue #312)', () => {
         provideZonelessChangeDetection(),
         provideActiveRunner('rn_1'),
         provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
+        provideFlags(runnerFlagsRead),
         provideRouter(routes),
         { provide: EVENT_SOURCE_FACTORY, useValue: factory },
       ],
@@ -164,6 +172,7 @@ describe('runner App session-recovery fork (issue #312)', () => {
       fetch: (async (input: Request) => {
         const path = new URL(input.url).pathname;
         if (path === '/api/auth/session') return pendingSession;
+        if (path === '/api/flags') return new Response(JSON.stringify({ flags: {}, overridden: [] }), { status: 200 });
         return new Response(JSON.stringify({ detail: 'not authenticated' }), {
           status: 401,
           headers: { 'Content-Type': 'application/json' },

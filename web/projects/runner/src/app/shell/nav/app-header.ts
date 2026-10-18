@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { CdkMenuTrigger } from '@angular/cdk/menu';
-import { BoardHeader, KitAvatar, KitMenu, KitMenuItem, KitMenuPanel, type StatCell, ViewportMenu } from 'fleet';
+import { BoardHeader, FlagStore, KitAvatar, KitMenu, KitMenuItem, KitMenuPanel, type StatCell, ViewportMenu } from 'fleet';
 import { injectActiveRunner } from '../../core/active-runner';
 import { injectHostEnvironmentsQuery, injectHostRunnersQuery } from '../../host/host.query';
 import { LocalIdentity } from '../../core/identity/app-identity';
@@ -48,6 +48,9 @@ export class AppHeader {
   private readonly runnersQuery = injectHostRunnersQuery();
   private readonly environmentsQuery = injectHostEnvironmentsQuery();
   private readonly liveUpdates = inject(RunnerLiveUpdates);
+
+  /** The host's flags — the header shows what the operator overrode. */
+  protected readonly flags = inject(FlagStore);
 
   /** Whether a runner is active — the pause control renders only then. */
   private readonly activeRunner = injectActiveRunner();
