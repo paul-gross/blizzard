@@ -3,6 +3,9 @@
 Blizzard follows [Semantic Versioning](https://semver.org/) as `MAJOR.MINOR.PATCH`, with `MAJOR` pinned at `0` until the
 project reaches 1.0 — so under semver's own pre-1.0 carve-out a `MINOR` bump may carry a breaking change.
 
+These rules bind what a release shipped. An `edge` or `sha-` image, a dev wheel, or a wheel built from a source checkout
+carries no promise; `0.2.0` is the first release that does.
+
 ## What counts as breaking
 
 | Surface         | A release breaks it when it…                                                                                                                                      |
@@ -69,8 +72,14 @@ deliberate edit to the dictionary.
 
 ## The hub↔runner skew window
 
-A runner may lag its hub by one minor version, and a hub never requires a runner newer than itself: hub `0.5.x` works
-with runners at `0.4.x` or `0.5.x`, but not `0.3.x`.
+A hub accepts runners of any line from the window's `floor` up to its own, at any patch, and never requires a runner
+newer than itself; the hub is upgraded first and its runners after it. The `floor` is declared in
+[`src/blizzard/wire/window.toml`](../src/blizzard/wire/window.toml).
+
+Before 1.0, the `floor` rises only in the change that removes surface a released minor deprecated, to the line that
+deprecated it, so the window spans every minor since the last removal. From 1.0, a runner works against any hub of its
+own major at the same minor or later, and a hub of a new major also accepts runners at the previous major's final minor,
+which is then the `floor`.
 
 There is still no version negotiation and no minimum-runner rejection to catch a runner that has fallen outside the
 window at runtime. What is checked is the per-commit unit the window actually depends on: `blizzard:wire-compat`
@@ -81,21 +90,6 @@ Commits `!` marker, in which case it reports the break rather than failing. A me
 request against its own merge-base; a deployed-mode run gates every push to `master` against the last commit `edge` was
 published from, so a hand-redeployed runner from any earlier commit keeps working until the next acknowledged break.
 [`docs/ci.md`](./ci.md) owns where each mode runs.
-
-Two user-approved exceptions have been taken against it, each scoped to its own boundary; neither widens the policy. The
-release that removes `RunnerView.external_subscription_usage` requires every runner to report slug-carrying
-per-subscription usage **before** the hub is deployed, so across that boundary a previous-minor runner is not supported.
-The hub rejects a slug-less usage sample rather than defaulting it.
-
-The release that keys runners by a hub-minted id is the second. The hub takes every runner's identity from its bearer
-token, refuses a fleet call without one, and answers with the `rn_` ids its migration mints, which a previous-minor
-runner, knowing itself only by the id its config declares, cannot follow. Across that boundary the hub is upgraded first
-and every runner after it, each staying stopped until it runs the new release. [`docs/upgrade.md`](./upgrade.md) owns
-the operator-facing ordering and recovery detail of both boundaries.
-
-The release that holds the hub's fleets as tenants takes no exception. The registration and identity answers gain
-optional `tenant_id` and `tenant_name` fields, which a previous-minor runner ignores, so a runner keeps working across
-it while it lags.
 
 Most string-valued wire fields stay open strings, so a value the receiver does not recognize round-trips instead of
 failing. `TurnSegmentView.kind` (`src/blizzard/wire/transcript_segment.py`) is the exception: it is typed as a closed
@@ -125,7 +119,8 @@ Every image below is `ghcr.io/paul-gross/blizzard-hub`.
 | A prerelease, `vX.Y.Z-rc.N`  | the exact version alone — never `latest`, never the `X.Y` minor line                                                          |
 | Every green push to `master` | `edge`, a mutable pointer at the newest proven `master` commit, and `sha-<full-git-sha>`, immutable and pinned to that commit |
 
-`latest` never follows `master`; it moves only on a stable release tag.
+`latest` never follows `master`; it moves only on a stable release tag. A deployment that wants a release pins its exact
+version, and its digest where it can hold one — never `latest` or an `X.Y` line, which never carry a candidate.
 [`scripts/image-tags.sh`](../scripts/image-tags.sh) computes the stable fan-out.
 
 `pyproject.toml`'s `[project] version` names the release most recently cut on its branch; the minor counts release

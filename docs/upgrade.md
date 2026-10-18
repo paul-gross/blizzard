@@ -12,7 +12,16 @@ Read the release's **Upgrade notes** and act on whatever it asks:
 gh release view v0.2.0 --repo paul-gross/blizzard
 ```
 
-[`docs/versioning.md`](./versioning.md) owns what counts as breaking and the skew window a runner may lag its hub by.
+[`docs/versioning.md`](./versioning.md) owns what counts as breaking and the floor a runner may lag its hub down to.
+
+## Upgrading to 0.2.0
+
+`0.2.0` is reached from `v0.1.0-rc.1` or any `edge` build, stepping through no intermediate release, since none exists.
+Every boundary below therefore applies at once, and one sequence satisfies all of them: let the chunks in flight finish,
+stop every runner, and take a hub store backup ([`docs/backup.md`](./backup.md)); install the `0.2.0` runner software
+on every runner, leaving each stopped; upgrade the hub, which migrates on boot; then start the runners. The runners
+are upgraded before the hub deploys, as the subscription-usage boundary needs, and none runs against the hub until it
+is on `0.2.0`, as the runner-identity boundary needs.
 
 ### Subscription-usage response boundary
 
@@ -22,9 +31,9 @@ changes**, and its **Upgrade notes** name the hub version that drops the field a
 reports per-subscription samples; read those before pulling, because the two facts below are what make this boundary
 safe to cross.
 
-**Order.** Upgrade every runner to slug-carrying, per-subscription reporting **before** deploying the hub. This is a
-user-approved exception to the skew window in [`docs/versioning.md`](./versioning.md) — a runner may normally lag its
-hub by one minor version, and across this one boundary it may not. API clients must read `subscriptions`; the removed
+**Order.** Upgrade every runner to slug-carrying, per-subscription reporting **before** deploying the hub, because the
+hub rejects a slug-less sample rather than defaulting it; a runner left behind is not supported against the upgraded
+hub. API clients must read `subscriptions`; the removed
 field is gone from `openapi/hub.openapi.json` and the generated TypeScript client in the same release.
 
 **If a runner is still pre-boundary.** Its usage samples carry no `slug`, and the hub **rejects** them — it does not
@@ -99,8 +108,9 @@ One release keys every runner by an id the hub mints, and retires `runner_auth_m
   [egress.md](./deployment/egress.md#upgrading-to-hub-minted-runner-ids) owns re-exporting history under the new ids,
   and [tracing.md](./deployment/tracing.md#upgrading-to-hub-minted-runner-ids) owns querying across the upgrade.
 
-**Order.** Across this boundary a runner may not lag its hub, the second exception
-[`docs/versioning.md`](./versioning.md#the-hubrunner-skew-window) records. Let the chunks in flight finish, stop every
+**Order.** Across this boundary a runner may not run against the hub until it has been upgraded: the hub takes every
+runner's identity from its bearer token and answers with `rn_` ids that a runner of the previous release cannot follow.
+Let the chunks in flight finish, stop every
 runner, and take a hub store backup ([`docs/backup.md`](./backup.md)). Upgrade the hub, which migrates on boot. Then
 upgrade each runner: its store migration runs offline before the daemon starts, as the packaged unit's `ExecStartPre`
 runs it. Start the runners; each registers with the token it already holds and keeps the id the hub minted for it.
@@ -276,7 +286,7 @@ should be re-added instead (`blizzard runner init --allow-readd`).
 From `packaging/docker/`, pull the tag:
 
 ```bash
-docker pull ghcr.io/paul-gross/blizzard-hub:v0.2.0
+docker pull ghcr.io/paul-gross/blizzard-hub:0.2.0
 ```
 
 Set `BLIZZARD_HUB_IMAGE` to that tag in `.env`, then recreate the hub alone, leaving postgres and Caddy untouched:
