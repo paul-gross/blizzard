@@ -287,7 +287,8 @@ def _forwards(source: str, filename: str = "<source>") -> tuple[list[Call], list
             method, path_node = node.func.attr.upper(), node.args[0] if node.args else None
         elif node.func.attr == "forward":
             method_node = node.args[0] if node.args else None
-            method = method_node.value.upper() if isinstance(method_node, ast.Constant) else "?"
+            literal = method_node.value if isinstance(method_node, ast.Constant) else None
+            method = literal.upper() if isinstance(literal, str) else "?"
             path_node = node.args[1] if len(node.args) > 1 else None
         else:
             continue
@@ -379,7 +380,7 @@ def test_a_deprecated_property_read_is_an_error_under_the_drive() -> None:
     from pydantic import BaseModel, Field
 
     class Reply(BaseModel):
-        old: str = Field("x", deprecated="use new")
+        old: str = Field(default="x", deprecated="use new")
 
     with pytest.raises(DeprecationWarning):
-        _drive(lambda _client: Reply().old, lambda client: client)
+        _drive(lambda _client: Reply(old="y").old, lambda client: client)

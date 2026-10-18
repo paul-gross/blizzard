@@ -75,7 +75,7 @@ def test_a_release_branch_names_its_line() -> None:
 
 
 def test_the_newest_stable_release_skips_candidates() -> None:
-    assert newest_stable(_TAGS).tag == "v0.2.0"
+    assert (newest_stable(_TAGS) or pytest.fail()).tag == "v0.2.0"
     assert newest_stable(["v0.3.0-rc.1"]) is None
 
 
@@ -92,8 +92,8 @@ def test_the_releases_document_marks_only_the_oldest() -> None:
 
 
 def test_parse_release_reads_the_candidate_number() -> None:
-    assert parse_release("v1.2.3-rc.4").candidate == 4
-    assert parse_release("v1.2.3").candidate is None
+    assert (parse_release("v1.2.3-rc.4") or pytest.fail()).candidate == 4
+    assert (parse_release("v1.2.3") or pytest.fail()).candidate is None
 
 
 # --- git ----------------------------------------------------------------------------------
