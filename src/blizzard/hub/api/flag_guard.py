@@ -5,6 +5,7 @@ route's OpenAPI entry declares; the app's one handler serves it as a :class:`~bl
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 from fastapi import Depends, Request, status
@@ -14,16 +15,18 @@ from blizzard.foundation.flags import FlagOffError, Flags
 from blizzard.wire.flags import FlagOff, FlagOffResponse
 
 
-def flag_guard(name: str) -> dict[str, Any]:
-    """The route keyword arguments that hold a route behind the hub flag ``name``: its dependency and its ``404``."""
+def flag_guard(
+    name: str, *, dependencies: Sequence[Any] = (), responses: Mapping[int | str, Any] | None = None
+) -> dict[str, Any]:
+    """The route keyword arguments that hold a route behind the hub flag ``name``, after the route's own ones."""
 
     def hold(request: Request) -> None:
         held: Flags = request.app.state.flags
         held.require_on(name)
 
     return {
-        "dependencies": [Depends(hold)],
-        "responses": {status.HTTP_404_NOT_FOUND: {"model": FlagOffResponse}},
+        "dependencies": [*dependencies, Depends(hold)],
+        "responses": {**(responses or {}), status.HTTP_404_NOT_FOUND: {"model": FlagOffResponse}},
     }
 
 

@@ -5,6 +5,7 @@ route's OpenAPI entry declares; the app's one handler serves it as a :class:`~bl
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 from fastapi import Depends, Request, status
@@ -15,15 +16,17 @@ from blizzard.runner.api.wiring import RunnerWiring
 from blizzard.wire.flags import FlagOff, FlagOffResponse
 
 
-def flag_guard(name: str) -> dict[str, Any]:
-    """The route keyword arguments that hold a route behind the runner flag ``name``: its dependency and its ``404``."""
+def flag_guard(
+    name: str, *, dependencies: Sequence[Any] = (), responses: Mapping[int | str, Any] | None = None
+) -> dict[str, Any]:
+    """The route keyword arguments that hold a route behind the runner flag ``name``, after the route's own ones."""
 
     def hold(request: Request) -> None:
         RunnerWiring.of(request).flags().require_on(name)
 
     return {
-        "dependencies": [Depends(hold)],
-        "responses": {status.HTTP_404_NOT_FOUND: {"model": FlagOffResponse}},
+        "dependencies": [*dependencies, Depends(hold)],
+        "responses": {**(responses or {}), status.HTTP_404_NOT_FOUND: {"model": FlagOffResponse}},
     }
 
 

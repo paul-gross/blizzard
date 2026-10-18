@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Annotated, Any
 
 import pytest
-from fastapi import APIRouter, FastAPI
+from fastapi import APIRouter, Depends, FastAPI
 from fastapi.testclient import TestClient
 from pydantic import BaseModel
 
@@ -148,3 +148,26 @@ def test_a_guarded_field_without_a_default_is_a_declaration_error() -> None:
 
     with pytest.raises(TypeError, match="needs a default"):
         without_off_fields(Bad(required=1), _flags("hub"))
+
+
+@pytest.mark.component
+@pytest.mark.parametrize(("build", "side"), [(_hub, "hub"), (_host, "runner")])
+def test_a_guard_keeps_the_dependencies_and_responses_a_route_already_declares(build: Any, side: str) -> None:
+    flag = "hub-thing" if side == "hub" else "runner-thing"
+    guard = hub_flag_guard if side == "hub" else runner_flag_guard
+    seen: list[str] = []
+
+    def own() -> None:
+        seen.append("own")
+
+    router = APIRouter()
+
+    @router.get("/api/own", **guard(flag, dependencies=[Depends(own)], responses={409: {"description": "Conflict"}}))
+    def own_route() -> dict[str, str]:
+        return {"held": "yes"}
+
+    app = _mount(build(_flags(side, **{flag: True})), router)
+    assert TestClient(app).get("/api/own").status_code == 200
+    assert seen == ["own"]
+    responses = app.openapi()["paths"]["/api/own"]["get"]["responses"]
+    assert {"404", "409"} <= set(responses)
