@@ -299,6 +299,78 @@ jobs:
           subject-name: ghcr.io/paul-gross/blizzard-hub
           subject-digest: ${{ steps.build_push.outputs.digest }}
           push-to-registry: true
+      - name: resolve each platform's image digest from the pushed manifest list
+        id: platform_digests
+        env:
+          IMAGE_DIGEST: ${{ steps.build_push.outputs.digest }}
+        run: |
+          mkdir -p inventory
+          MANIFEST="$(docker buildx imagetools inspect --raw "ghcr.io/paul-gross/blizzard-hub@${IMAGE_DIGEST}")"
+          for ARCH in amd64 arm64; do
+            DIGEST="$(jq -r --arg arch "$ARCH" \
+              '.manifests[] | select(.platform.os == "linux" and .platform.architecture == $arch) | .digest' \
+              <<< "$MANIFEST")"
+            [[ "$DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "no linux/$ARCH digest in the manifest list" >&2; exit 1; }
+            echo "$ARCH=$DIGEST" >> "$GITHUB_OUTPUT"
+          done
+      - name: bill of materials for the linux/amd64 image (Syft, SPDX 2.3 JSON)
+        uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
+        with:
+          image: registry:ghcr.io/paul-gross/blizzard-hub@${{ steps.platform_digests.outputs.amd64 }}
+          registry-username: ${{ github.actor }}
+          registry-password: ${{ secrets.GITHUB_TOKEN }}
+          format: spdx-json
+          output-file: inventory/blizzard-hub-${{ steps.ver.outputs.version }}-linux-amd64.spdx.json
+          upload-artifact: false
+          upload-release-assets: false
+      - name: attest the linux/amd64 image bill of materials against its platform digest
+        uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e # v4.1.0
+        with:
+          subject-name: ghcr.io/paul-gross/blizzard-hub
+          subject-digest: ${{ steps.platform_digests.outputs.amd64 }}
+          sbom-path: inventory/blizzard-hub-${{ steps.ver.outputs.version }}-linux-amd64.spdx.json
+          push-to-registry: true
+      - name: bill of materials for the linux/arm64 image (Syft, SPDX 2.3 JSON)
+        uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
+        with:
+          image: registry:ghcr.io/paul-gross/blizzard-hub@${{ steps.platform_digests.outputs.arm64 }}
+          registry-username: ${{ github.actor }}
+          registry-password: ${{ secrets.GITHUB_TOKEN }}
+          format: spdx-json
+          output-file: inventory/blizzard-hub-${{ steps.ver.outputs.version }}-linux-arm64.spdx.json
+          upload-artifact: false
+          upload-release-assets: false
+      - name: attest the linux/arm64 image bill of materials against its platform digest
+        uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e # v4.1.0
+        with:
+          subject-name: ghcr.io/paul-gross/blizzard-hub
+          subject-digest: ${{ steps.platform_digests.outputs.arm64 }}
+          sbom-path: inventory/blizzard-hub-${{ steps.ver.outputs.version }}-linux-arm64.spdx.json
+          push-to-registry: true
+      - name: stage the wheel's runtime for its bill of materials (clean venv + the board's lockfile)
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          # The venv holds exactly the hashed base requirements plus the wheel; the board's
+          # JavaScript ships compiled inside the wheel, so its lockfile stands in for the
+          # packages no Python scan sees (Syft leaves the lockfile's dev packages out).
+          uv venv sbom-wheel/venv
+          uv pip install --python sbom-wheel/venv --require-hashes -r "dist/blizzard-${VERSION}-requirements.txt"
+          uv pip install --python sbom-wheel/venv --no-deps dist/blizzard-*.whl
+          cp web/package-lock.json sbom-wheel/package-lock.json
+      - name: bill of materials for the wheel (Syft, SPDX 2.3 JSON)
+        uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
+        with:
+          path: sbom-wheel
+          format: spdx-json
+          output-file: inventory/blizzard-${{ steps.ver.outputs.version }}.spdx.json
+          upload-artifact: false
+          upload-release-assets: false
+      - name: attest the wheel bill of materials against the wheel
+        uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e # v4.1.0
+        with:
+          subject-path: dist/blizzard-*.whl
+          sbom-path: inventory/blizzard-${{ steps.ver.outputs.version }}.spdx.json
       - name: assemble the attached files and their checksums (scripts/release-inventory.sh)
         env:
           VERSION: ${{ steps.ver.outputs.version }}
