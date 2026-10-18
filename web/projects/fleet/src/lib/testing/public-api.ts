@@ -15,3 +15,4 @@ export {
   type StubHttpError,
 } from './stub-request-client';
 export { OPERATOR_ME_RESPONSE } from './auth-fixtures';
+export { FIXTURE_NOW } from './builders/clock';
