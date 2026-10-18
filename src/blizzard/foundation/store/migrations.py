@@ -17,7 +17,8 @@ from alembic.runtime.migration import MigrationContext
 from alembic.script import ScriptDirectory
 from alembic.script.revision import ResolutionError
 from alembic.util import CommandError
-from sqlalchemy import Column, MetaData, String, Table
+from sqlalchemy import Column, MetaData, String, Table, create_engine
+from sqlalchemy.engine import make_url
 from sqlalchemy.exc import OperationalError
 
 from blizzard.foundation.clock import IClock
@@ -105,7 +106,7 @@ class MigrationRunner:
     def upgrade(self, revision: str = "head") -> None:
         """Apply pending revisions up to ``revision`` (idempotent — a no-op when current)."""
         try:
-            self.refuse_below_floor(store=self.url)
+            self.refuse_below_floor(store=self._store_label())
             self._ensure_wide_version_table()
             command.upgrade(self._config(), revision)
         except OperationalError as exc:
@@ -113,7 +114,15 @@ class MigrationRunner:
 
     def downgrade(self, revision: str) -> None:
         """Reverse revisions down to ``revision`` (``"base"`` unwinds the whole tree)."""
+        self.refuse_below_floor(store=self._store_label())
         command.downgrade(self._config(), revision)
+
+    def _store_label(self) -> str:
+        """A store location useful to an operator, without URL credentials or query parameters."""
+        url = make_url(self.url)
+        if url.get_backend_name() == "sqlite":
+            return f"SQLite store at {url.database}"
+        return f"{url.get_backend_name()} store {url.database} on {url.host}"
 
     def script_head(self) -> str | None:
         """The head revision the code carries (the tree's latest script)."""
@@ -162,7 +171,9 @@ class MigrationRunner:
 
     def current_revision(self) -> str | None:
         """The revision applied to the store, or ``None`` if unmigrated."""
-        engine = create_engine_from_url(self.url)
+        # The write-path factory switches SQLite to WAL on connect. Revision inspection must not
+        # change an older store's journal mode before a below-floor refusal can stop the command.
+        engine = create_engine(self.url, future=True)
         try:
             with engine.connect() as conn:
                 return MigrationContext.configure(conn).get_current_revision()
@@ -178,7 +189,7 @@ class MigrationRunner:
         current = self.current_revision()
         expected = self.script_head()
         if current != expected:
-            self.refuse_below_floor(store=f"{store} ({self.url})", current=current)
+            self.refuse_below_floor(store=f"{store} ({self._store_label()})", current=current)
             raise RevisionMismatchError(store=store, current=current, expected=expected, remedy=remedy)
 
 

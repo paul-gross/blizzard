@@ -49,6 +49,11 @@ def _snapshot(path: Path) -> list[str]:
         return list(conn.iterdump())
 
 
+def _journal_mode(path: Path) -> str:
+    with sqlite3.connect(path) as conn:
+        return conn.execute("PRAGMA journal_mode").fetchone()[0]
+
+
 def test_absorbed_revision_refuses_before_upgrade_changes_store(tree: Path, tmp_path: Path) -> None:
     store = tmp_path / "store.db"
     _store(store, "old_rev")
@@ -56,14 +61,40 @@ def test_absorbed_revision_refuses_before_upgrade_changes_store(tree: Path, tmp_
     assert runner.baseline_floor == "v0.2.0"
     assert runner.absorbed == frozenset({"old_rev"})
     before = _snapshot(store)
+    physical = store.read_bytes()
+    assert _journal_mode(store) == "delete"
 
-    for action in (lambda: runner.upgrade(), lambda: runner.check_current(store="runner", remedy="migrate")):
+    for action in (
+        lambda: runner.upgrade(),
+        lambda: runner.downgrade("base"),
+        lambda: runner.check_current(store="runner", remedy="migrate"),
+    ):
         with pytest.raises(StoreBelowFloorError) as caught:
             action()
         assert str(store) in str(caught.value)
         assert "old_rev" in str(caught.value)
         assert "v0.2.0" in str(caught.value)
         assert _snapshot(store) == before
+        assert _journal_mode(store) == "delete"
+        assert store.read_bytes() == physical
+        assert not store.with_name(store.name + "-wal").exists()
+
+
+def test_floor_error_never_discloses_database_credentials(tree: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    runner = MigrationRunner(tree, "postgresql://operator:secret-password@db.example:5432/records?sslmode=require")
+    monkeypatch.setattr(MigrationRunner, "current_revision", lambda self: "old_rev")
+    for action in (
+        lambda: runner.upgrade(),
+        lambda: runner.downgrade("base"),
+        lambda: runner.check_current(store="hub", remedy="migrate"),
+    ):
+        with pytest.raises(StoreBelowFloorError) as caught:
+            action()
+        assert "records" in str(caught.value)
+        assert "db.example" in str(caught.value)
+        assert "secret-password" not in str(caught.value)
+        assert "operator" not in str(caught.value)
+        assert "sslmode" not in str(caught.value)
 
 
 def test_known_and_unknown_revisions_keep_their_paths(tree: Path, tmp_path: Path) -> None:
