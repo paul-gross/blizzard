@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
-import { compactRef, KitAsyncState, type KitAsyncStateValue, KitBadge, KitSelectRow } from 'fleet';
+import { compactRef, KitAsyncState, type KitAsyncStateValue, KitBadge, KitSelectRow, KitSwatch } from 'fleet';
 
 import type { ProjectRowVm } from './projects.model';
 
@@ -11,7 +11,7 @@ import type { ProjectRowVm } from './projects.model';
 @Component({
   selector: 'app-projects-table',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitAsyncState, KitBadge, KitSelectRow],
+  imports: [KitAsyncState, KitBadge, KitSelectRow, KitSwatch],
   templateUrl: './projects-table.html',
   styleUrl: './projects-table.css',
 })

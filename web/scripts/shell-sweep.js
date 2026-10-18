@@ -156,6 +156,10 @@
  *     while the page behind it does not, and `CdkTrapFocus` keeps repeated
  *     real `Tab` presses cycling inside the panel rather than escaping to the
  *     page — real layout and focus-management claims jsdom cannot make.
+ *   - projects/fleet/src/lib/kit/kit-swatch.shell-sweep.spec.ts — the project
+ *     swatch: every name in the generated `ProjectColor` enum resolves through
+ *     `tokens.css` to a distinct background holding 3:1 against the resting and
+ *     selected surfaces, so the enum and the tokens cannot drift apart.
  *   - projects/fleet/src/lib/kit/kit-select.shell-sweep.spec.ts — the shared
  *     dropdown keeps all options at full height in a capped long list, scrolls
  *     keyboard-focused choices into view, and leaves short lists unscrolled.
@@ -346,6 +350,7 @@ const SWEEPS = [
   { project: 'hub', spec: 'projects/hub/src/app/garden/findings/finding-fact-timeline.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/garden/routines/gardening-routines-page.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/kit/kit-dialog.shell-sweep.spec.ts' },
+  { project: 'fleet', spec: 'projects/fleet/src/lib/kit/kit-swatch.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/kit/kit-select.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/kit/kit-confirm-dialog.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/kit/kit-tooltip.shell-sweep.spec.ts' },

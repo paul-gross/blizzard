@@ -17,6 +17,7 @@ const WINTER: ProjectView = {
   slug: 'winter',
   name: 'Winter',
   description: '',
+  color: 'teal',
   revision: 1,
   created_at: '2026-10-01T00:00:00Z',
 };

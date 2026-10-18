@@ -196,6 +196,7 @@ export {
 export {
   ChunkDeleteRefusal,
   GraphLifecycle,
+  ProjectColor,
   RecordKind,
   RunnerConnection,
   createRepositoryApiRepositoriesPost,

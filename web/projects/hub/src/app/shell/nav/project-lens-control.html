@@ -7,7 +7,9 @@
         [title]="choice.slug ?? 'every project of the tenant'"
         [testid]="'project-lens-' + (choice.slug ?? 'all')"
         (click)="onChoose(choice)"
-        >{{ choice.label }}</fleet-kit-chip
+        >@if (choice.color; as color) {
+          <fleet-kit-swatch class="lens-swatch" [color]="color" />
+        }{{ choice.label }}</fleet-kit-chip
       >
     }
   </div>

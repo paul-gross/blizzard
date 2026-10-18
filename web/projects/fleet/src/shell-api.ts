@@ -20,6 +20,7 @@ export { provideViewportRenavigation } from './lib/core/viewport/viewport-renavi
 
 export { KitTab, KitTabStrip } from './lib/kit/kit-tab';
 export { KitChip } from './lib/kit/kit-chips';
+export { KitSwatch } from './lib/kit/kit-swatch';
 export { MobileTabBar, type MobileTabItem } from './lib/shell/mobile-chrome/mobile-tab-bar';
 
 export { KitButton } from './lib/kit/kit-button';

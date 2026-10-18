@@ -15,6 +15,7 @@ export { KitAvatar } from './kit-avatar';
 export { KitBackBar } from './kit-back-bar';
 export { KitBadge, toneColor } from './kit-badge';
 export { KitBeacon, type BeaconBlink, type BeaconTone } from './kit-beacon';
+export { KitSwatch } from './kit-swatch';
 export { KitButton } from './kit-button';
 export { KitChip, KitChips, type KitChipOption } from './kit-chips';
 export { KitCheckbox } from './kit-checkbox';

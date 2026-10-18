@@ -28,6 +28,7 @@ const PROJECTS = [
   slug: name.toLowerCase().split(' ')[0],
   name,
   description: '',
+  color: 'teal' as const,
   revision: 1,
   created_at: '2026-10-01T00:00:00Z',
 }));

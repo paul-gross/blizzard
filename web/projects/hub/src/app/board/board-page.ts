@@ -20,8 +20,9 @@ import { injectHubChunkCountsQuery } from './chunks/chunk-counts.query';
 import { injectDemoteChunkMutation, type DemoteVars } from './chunks/demote.mutations';
 import { injectPromoteChunkMutation, type PromoteVars } from './chunks/promote.mutations';
 import { injectRepositionBacklogMutation, injectRepositionQueueMutation, type RepositionVars } from './queue/queue.mutations';
-import { foldRepositions, gatedChunkIds, orderedChunkIds, placedMoves, resolveSelectedChunk, withPendingBoardChanges } from './board-page.model';
+import { foldRepositions, gatedChunkIds, projectColorsById, orderedChunkIds, placedMoves, resolveSelectedChunk, withPendingBoardChanges } from './board-page.model';
 import { laneSkeletonCounts, listSkeletonCount } from './board-shell/board-skeletons.model';
+import { injectProjectsQuery } from '../core/projects.query';
 import { UnservedBanner } from './unserved/unserved-banner';
 import { injectBoardWorkItemsQuery } from './work-items/board-work-items.query';
 
@@ -220,6 +221,10 @@ export class BoardPage {
       queryParamsHandling: 'merge',
     });
   }
+
+  /** The tenant's projects, shared with the shell's own read of them; the cards take their swatch color from it. */
+  private readonly projectsQuery = injectProjectsQuery();
+  protected readonly projectColors = computed(() => projectColorsById(this.projectsQuery.data() ?? []));
 
   /** Every chunk's work items, read once the chunk list has answered. */
   protected readonly workItems = injectBoardWorkItemsQuery(() => orderedChunkIds(this.boardChunks()));

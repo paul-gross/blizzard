@@ -16,6 +16,7 @@ const BLIZZARD: ProjectView = {
   slug: 'blizzard',
   name: 'Blizzard',
   description: 'The platform',
+  color: 'teal',
   revision: 2,
   created_at: '2026-10-01T00:00:00Z',
 };

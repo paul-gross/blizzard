@@ -257,3 +257,7 @@
   letter-spacing: 0.14em;
   text-transform: uppercase;
 }
+/* The project's swatch leads the step row, centred on the text beside it. */
+.project-swatch {
+  align-self: center;
+}

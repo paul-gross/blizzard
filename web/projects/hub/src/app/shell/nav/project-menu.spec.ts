@@ -6,8 +6,8 @@ import type { LensChoice } from './project-lens.model';
 import { ProjectMenu } from './project-menu';
 
 const CHOICES: readonly LensChoice[] = [
-  { slug: null, label: 'All' },
-  { slug: 'blizzard', label: 'Blizzard' },
+  { slug: null, label: 'All', color: null },
+  { slug: 'blizzard', label: 'Blizzard', color: 'teal' },
 ];
 
 describe('ProjectMenu', () => {

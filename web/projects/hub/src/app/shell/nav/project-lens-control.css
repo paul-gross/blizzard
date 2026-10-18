@@ -39,3 +39,9 @@
     display: none;
   }
 }
+
+/* A project chip's swatch leads its name. */
+.lens-swatch {
+  margin-right: 6px;
+  vertical-align: middle;
+}

@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
 
-import { type ChunkStatus, type LandedRepoView, type PrView, STATUS_LANE, formatCost, hasCostFigure, FleetWhen, KitBadge, KitButton, KitSelectRow, KitSkeleton } from 'fleet';
+import { KitSwatch, type ChunkStatus, type LandedRepoView, type PrView, STATUS_LANE, formatCost, hasCostFigure, FleetWhen, KitBadge, KitButton, KitSelectRow, KitSkeleton } from 'fleet';
 import { blockedLabel, cardShowsStatus, foldTitles, stepLabel, type WorkLine } from './board-card.model';
 
 /** One rendered board card — the derived-status view of a chunk. */
@@ -47,6 +47,9 @@ export interface BoardCard {
   readonly awaitingExternalMerge?: boolean;
   /** The chunk's project's display name, from `ChunkSummary.project_name`. */
   readonly projectName?: string | null;
+  /** The chunk's project's palette color, joined from the projects list by `ChunkSummary.project_id` — `null` until
+   * that list is read or when the project is unknown. */
+  readonly projectColor?: string | null;
   /** The runner holding the chunk, from `ChunkSummary.runner_name` — null when none does. */
   readonly runnerName?: string | null;
 }
@@ -66,7 +69,7 @@ export interface BoardCard {
 @Component({
   selector: 'app-board-card',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FleetWhen, KitBadge, KitButton, KitSelectRow, KitSkeleton],
+  imports: [FleetWhen, KitBadge, KitButton, KitSelectRow, KitSkeleton, KitSwatch],
   templateUrl: './board-card.html',
   styleUrl: './board-card.css',
 })
