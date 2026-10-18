@@ -10,7 +10,8 @@ composition root: it alone reads the packaged window type and maps it to compat'
 from __future__ import annotations
 
 import json
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterator, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -149,6 +150,15 @@ def _split_range(commits: str) -> str:
     return base
 
 
+@contextmanager
+def _git_errors() -> Iterator[None]:
+    """A failed git call ends the command with its one-line message, not a traceback."""
+    try:
+        yield
+    except GitError as error:
+        raise click.ClickException(str(error)) from error
+
+
 @click.group(invoke_without_command=True)
 @click.option("--commits", default=None, help="BASE..HEAD: the range whose commit subjects may carry a `!`.")
 @click.option("--line", default=None, help="release/X.Y: hold HEAD to every release cut on that line instead.")
@@ -157,10 +167,8 @@ def main(context: click.Context, commits: str | None, line: str | None) -> None:
     """Hold HEAD's surface documents to the supported releases."""
     if context.invoked_subcommand is not None:
         return
-    try:
+    with _git_errors():
         _run(commits, line)
-    except GitError as error:
-        raise click.ClickException(str(error)) from error
 
 
 def _run(commits: str | None, line: str | None) -> None:
@@ -214,10 +222,10 @@ def _run(commits: str | None, line: str | None) -> None:
 @click.option("--line", default=None, help="release/X.Y: list every release cut on that line instead.")
 def releases(as_json: bool, line: str | None) -> None:
     """The supported releases of HEAD's tree, oldest first."""
-    repo = Repository(Path.cwd())
-    root = repo.toplevel()
-    window = _read_head_window(root)
-    listed = _resolve(line, Repository(root).tags(), window)
+    with _git_errors():
+        root = Repository(Path.cwd()).toplevel()
+        window = _read_head_window(root)
+        listed = _resolve(line, Repository(root).tags(), window)
     if as_json:
         click.echo(json.dumps(releases_document(window, listed), indent=2))
     elif listed:

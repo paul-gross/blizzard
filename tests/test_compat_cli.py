@@ -291,3 +291,15 @@ def test_a_malformed_range_is_a_usage_error(tmp_path: Path, monkeypatch: pytest.
     repo = _Repo(tmp_path / "r")
     repo.commit("chore: base")
     assert _run(repo, monkeypatch, "--commits", "HEAD").exit_code != 0
+
+
+@pytest.mark.parametrize("args", [("releases",), ("releases", "--json"), ()])
+def test_outside_a_git_repository_the_command_ends_with_a_one_line_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, args: tuple[str, ...]
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("GIT_CEILING_DIRECTORIES", str(tmp_path.parent))
+    result = CliRunner().invoke(main, list(args))
+    assert result.exit_code == 1
+    assert result.output.startswith("Error: git rev-parse --show-toplevel failed")
+    assert "Traceback" not in result.output
