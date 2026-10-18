@@ -218,6 +218,21 @@ def test_a_runner_applies_runner_overrides_and_ignores_fleet_with_the_hub_named_
 _WEB_FLAG_READ = re.compile(r"""\b(?:flags\.on|flagGuard)\(\s*(['"])([^'"\n]*)\1""")
 
 
+#: A field or variable holding the injected ``FlagStore``; the lint recognises a read only through the name ``flags``.
+_FLAG_STORE_HOLDER = re.compile(r"\b(\w+)\s*=\s*(?:TestBed\.)?inject\(\s*FlagStore\s*\)")
+
+
+def _misnamed_flag_stores(sources: Mapping[str, str]) -> list[str]:
+    """Every source holding the injected ``FlagStore`` under a name other than ``flags``, which the lint cannot see."""
+    return [
+        f"{path}: FlagStore held as {match.group(1)!r}, not 'flags'"
+        for path, text in sources.items()
+        if path.endswith(".ts")
+        for match in _FLAG_STORE_HOLDER.finditer(text)
+        if match.group(1) != "flags"
+    ]
+
+
 def _flag_reads(sources: Mapping[str, str]) -> set[str]:
     """Every flag name the code reads: a string literal passed to a Python ``.on(...)`` call, and — in a ``.ts`` or
     ``.html`` source — one passed to ``flags.on(...)`` or ``flagGuard(...)``."""
@@ -320,6 +335,20 @@ def test_the_web_scan_skips_specs_and_the_generated_client(tmp_path: Path) -> No
     (app / "a.shell-sweep.spec.ts").write_text("flags.on('only-in-a-sweep')\n")
     (generated / "sdk.gen.ts").write_text("flags.on('generated')\n")
     assert _flag_reads(_web_sources(tmp_path)) == {"read"}
+
+
+@pytest.mark.unit
+def test_every_injected_flag_store_in_the_web_tree_is_held_as_flags() -> None:
+    assert _misnamed_flag_stores(_web_sources()) == []
+
+
+@pytest.mark.unit
+def test_an_injected_flag_store_under_another_name_is_reported() -> None:
+    sources = {
+        "ok.ts": "protected readonly flags = inject(FlagStore);\n",
+        "bad.ts": "private readonly store = inject(FlagStore);\n",
+    }
+    assert _misnamed_flag_stores(sources) == ["bad.ts: FlagStore held as 'store', not 'flags'"]
 
 
 @pytest.mark.unit
