@@ -107,6 +107,8 @@ blizzard-export-openapi = "blizzard.tools.openapi:main"
 blizzard-export-contracts = "blizzard.tools.contracts:main"
 # Fails on a breaking change to the hub↔runner wire surface (bzh:fleet-wire-additive).
 blizzard-wire-compat = "blizzard.tools.wire_compat:main"
+# Holds HEAD's committed surface documents to the supported releases (the window and the tags).
+blizzard-compat = "blizzard.tools.compat.cli:main"
 # Validates the change notes under changes/ (the format is documented in changes/README.md).
 blizzard-change-notes = "blizzard.tools.change_notes.cli:main"
 

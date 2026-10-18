@@ -49,3 +49,23 @@ def test_a_malformed_window_is_refused_by_name(tmp_path: Path, text: str) -> Non
     path = _window(tmp_path, text)
     with pytest.raises(VersionWindowError, match=re.escape(path.name)):
         VersionWindow.load(path)
+
+
+@pytest.mark.parametrize(
+    ("text", "wording"),
+    [
+        ('floor = "0"\n', "`floor` must be a quoted string of MAJOR.MINOR"),
+        ('floor = "0.2"\nopening = "x"\n', "`opening` must be a quoted string of a major number"),
+        ('floor = "0.2"\nopening = 1\n', "got 1"),
+        ("", "`floor` is required"),
+    ],
+)
+def test_a_refusal_states_what_the_key_must_be(tmp_path: Path, text: str, wording: str) -> None:
+    with pytest.raises(VersionWindowError, match=re.escape(wording)):
+        VersionWindow.load(_window(tmp_path, text))
+
+
+def test_loading_with_no_source_reads_the_packaged_file() -> None:
+    packaged = VersionWindow.load()
+    assert re.fullmatch(r"\d+\.\d+", packaged.floor)
+    assert packaged.opening is None or packaged.opening.isdigit()
