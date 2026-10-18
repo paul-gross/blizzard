@@ -5,7 +5,7 @@
 # so an agent or human can reproduce the gate before pushing:
 #   ruff format --check · ruff check · pyright · Vale prose lint ·
 #   structural gate (ast-grep scan + test) · pytest (unit + component) · OpenAPI
-#   spec drift · hub↔runner wire compatibility · change notes · eslint · vitest · web
+#   spec drift · hub↔runner wire compatibility · change notes · flag lifecycle · eslint · vitest · web
 #   structural gate · bundle composition · story render · generated-client drift
 #
 # Invoke as `mise run gate` or `./scripts/ci-gate.sh`. Frontend steps run live
@@ -83,6 +83,9 @@ mise run wire-compat
 # --- change notes: changes/ holds only well-formed notes --------------------
 step "change notes: mise run change-notes"
 mise run change-notes
+
+step "flag lifecycle: mise run flag-lifecycle pr"
+mise run flag-lifecycle pr
 
 # --- Frontend: eslint + vitest + structural gate + story render + generated-client drift ---
 # $WEB_DIR is the Angular workspace with `npm run lint` (eslint, including the

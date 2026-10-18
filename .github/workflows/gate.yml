@@ -151,6 +151,23 @@ jobs:
       - name: change notes (blizzard-change-notes check)
         run: uv run blizzard-change-notes check
 
+  flag-lifecycle:
+    name: flag lifecycle
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          python-version: "3.12"
+      - run: uv sync
+      - name: flag lifecycle (pr)
+        run: uv run blizzard-flag-lifecycle pr
+
   frontend:
     name: eslint + vitest + client drift
     runs-on: ubuntu-latest
