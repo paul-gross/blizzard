@@ -101,6 +101,7 @@ class RunnerChangedPayload(SseFramePayload):
     #: The runner's registered name at publish time; omitted when the registry holds none.
     runner_name: str | None = None
     kind: RunnerChangeKind
+    #: Actor on ``added``, pause/resume (local included) and retirement; absent on other kinds.
     by: str | None = None
     reason: str | None = None
     key: str | None = None
@@ -120,7 +121,7 @@ class EventLoggedPayload(SseFramePayload):
     kind: str
     chunk_id: str | None
     runner_id: str | None
-    #: The runner's registered name at publish time; omitted whenever ``runner_id`` is ``null``.
+    #: The runner's name when supplied to the recorder; omitted if no name was supplied.
     runner_name: str | None = None
     key: str | None = None
     #: The named chunk's project, stamped by the recorder; omitted when no chunk is named.

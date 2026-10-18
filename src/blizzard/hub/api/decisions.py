@@ -39,9 +39,7 @@ router = APIRouter(
 
 
 def to_decision_view(row: GateDecision, runner_names: Mapping[str, str], project: ProjectLabelFields) -> DecisionView:
-    """Map a :class:`GateDecision` to its wire view (shared with the chunk detail), naming the
-    imposing runner out of ``runner_names``, the caller's one batched read, and the chunk's
-    project labels."""
+    """Map a :class:`GateDecision` to its wire view, using ``runner_names`` and ``project``."""
     return DecisionView(
         decision_id=row.decision_id,
         chunk_id=row.chunk_id,

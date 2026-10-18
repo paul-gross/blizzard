@@ -18,8 +18,7 @@ class GitHubCommitResolver:
     """Resolves a ``(repo, commit)`` pair against a GitHub REST v3 forge — never raises
     (`RepositoryCommitResolver`'s contract): a transport failure or an unexpected
     status degrades to ``None`` rather than rejecting or crashing a delivery on a resolver
-    fault. The forge, owner and token come with each call, from the repository record the
-    caller resolved — nothing about a forge is held here."""
+    fault. The forge, owner and token are per-call parameters; nothing about a forge is held here."""
 
     def __init__(self, client: httpx.Client) -> None:
         self._client = client

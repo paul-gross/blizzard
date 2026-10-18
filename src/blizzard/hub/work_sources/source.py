@@ -133,9 +133,8 @@ class IWorkSourceRegistry(Protocol):
         ...
 
     def label_clearer(self, source: str) -> IWorkAnnotator | None:
-        """The write half of the source keyed ``source`` whether or not it annotates, used only to clear the labels it
-        carries once it leaves annotation; ``None`` when no configured source has that key or the source has no forge
-        labels."""
+        """The write half of the source keyed ``source`` whether or not it annotates;
+        ``None`` when no configured source has that key or it has no forge labels."""
         ...
 
     def closer(self, source: str) -> IWorkCloser | None:

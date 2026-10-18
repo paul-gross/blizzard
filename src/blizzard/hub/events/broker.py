@@ -126,8 +126,7 @@ class EventBroker(_EventBroker):
     ) -> int:
         """A runner's registry state changed — ``kind`` names which change.
 
-        ``by`` rides ``added``, the four pause/resume kinds and the three retirement kinds, ``reason`` the
-        runner-local pair. ``key`` names the pause- or retirement-family fact's identity, absent on
+        ``key`` names the pause- or retirement-family fact's identity, absent on
         ``added``/``registered``/``heartbeat``, which have no fact table."""
         payload = RunnerChangedPayload(
             runner_id=runner_id, runner_name=runner_name, kind=kind, by=by, reason=reason, key=key
@@ -164,8 +163,7 @@ class EventBroker(_EventBroker):
     ) -> int:
         """An operational event landed in the event log. The frame carries
         only identifying fields; the row itself is read back off ``GET /api/events``.
-        ``key`` names the ``event_log`` row's own id; ``runner_name`` rides only when the
-        recorder was handed the runner's name; ``project_id`` names the logged chunk's project."""
+        ``key`` names the ``event_log`` row's own id; ``project_id`` names the logged chunk's project."""
         payload = EventLoggedPayload(
             severity=severity,
             kind=kind,

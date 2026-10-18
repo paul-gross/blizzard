@@ -76,7 +76,6 @@ class GraphReconciliation:
             doc = packaged.doc
             definition_yaml = packaged.inlined_yaml(self.yaml)
         except (OSError, ValueError) as exc:
-            # ValueError covers GraphParseError (its base) and the loader's "not a mapping".
             _log.warning("packaged graph failed to load", path=str(path), error=str(exc))
             return GraphSyncOutcome(name=path.parent.name, status=GraphSyncStatus.FAILED, detail=str(exc))
 

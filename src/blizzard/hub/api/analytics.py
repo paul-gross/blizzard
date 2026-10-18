@@ -187,10 +187,7 @@ class EventScopeFilters:
     @property
     def criteria(self) -> EventQueryCriteria:
         """The derived-event routes' shared reading of these filters, with no narrowing filter
-        named; a route narrows it by ``dataclasses.replace`` with exactly the filters it exposes.
-        Built off :meth:`ScopeFilters.normalized`'s own conversion rather than re-deriving it —
-        the ScopeFilters/EventScopeFilters split's byte-identical-spec constraint binds the
-        parameter declarations, not this conversion."""
+        named; a route narrows it by ``dataclasses.replace`` with exactly the filters it exposes."""
         normalized = self.scope.normalized()
         return EventQueryCriteria(
             extractor_version=read_version(self.extractor_version),
@@ -477,12 +474,10 @@ def spend_response(stats: list[SpendStats]) -> AnalyticsSpendResponse:
 
 
 def named_counts(rows: list[KeyedCount], by_name: bool) -> list[KeyedCount]:
-    """Shared with the fleet router, so both route families fold identically."""
     return fold_counts_by_name(rows) if by_name else rows
 
 
 def named_spend(stats: list[SpendStats], by_name: bool) -> list[SpendStats]:
-    """Shared with the fleet router, so both route families fold identically."""
     return fold_spend_by_name(stats) if by_name else stats
 
 

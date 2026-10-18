@@ -1,6 +1,4 @@
-"""The analytics events/counts routes (component tier): the
-TRANSCRIPT_READ auth triad, a runner principal refused at every route, filters and
-paging over real derived events, and the four counts."""
+"""Analytics events/counts route authentication, filters, paging and counts."""
 
 from __future__ import annotations
 
