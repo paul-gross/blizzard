@@ -16,7 +16,7 @@ from blizzard.foundation.node_steps import ApplyOutcome
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.errors import ChunkNotFound
-from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, ChunkVerb, GateDecision
+from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, ChunkVerb, DecisionCheck, GateDecision
 from blizzard.hub.domain.chunk.ports.decisions import IWriteChunkDecisionsRepository
 from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
@@ -172,6 +172,7 @@ class DecisionService:
                 admission=EpochAdmission.CURRENT,
                 claimant=Claimant(submission.runner_id, submission.lease_id),
                 choices=decision_choices(node),
+                check_results=[DecisionCheck(command=c.command, passed=c.passed) for c in submission.check_results],
                 at=self._clock.now(),
                 artifacts=artifact_rows,
                 imposed_by_runner_id=submission.runner_id,
@@ -195,7 +196,11 @@ class DecisionService:
         facts = ChunkFacts.or_default(self._facts.load_facts(decision.chunk_id))
         decision.require_resolvable(choice=choice, chunk_status=facts.status())
         won = self._decisions.record_decision_resolution(
-            decision.decision_id, choice=choice, resolved_by=resolved_by, at=self._clock.now()
+            decision.decision_id,
+            choice=choice,
+            resolved_by=resolved_by,
+            at=self._clock.now(),
+            overrode_red_checks=decision.overrides_red_checks(choice),
         )
         if won:
             return ResolutionResult(resolved=True, choice=choice, resolved_by=resolved_by)

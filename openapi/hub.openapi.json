@@ -3469,7 +3469,7 @@
         "type": "object"
       },
       "DecisionChoiceModel": {
-        "description": "One selectable gate outcome.",
+        "description": "One selectable gate outcome; ``requires_checks`` marks a choice that overrides red checks\nwhen a person resolves to it while one is red.",
         "properties": {
           "description": {
             "title": "Description",
@@ -3478,6 +3478,11 @@
           "name": {
             "title": "Name",
             "type": "string"
+          },
+          "requires_checks": {
+            "default": false,
+            "title": "Requires Checks",
+            "type": "boolean"
           }
         },
         "required": [
@@ -3594,6 +3599,11 @@
             "title": "Decision Id",
             "type": "string"
           },
+          "overrode_red_checks": {
+            "default": false,
+            "title": "Overrode Red Checks",
+            "type": "boolean"
+          },
           "resolved_at": {
             "title": "Resolved At",
             "type": "string"
@@ -3656,7 +3666,7 @@
         "type": "object"
       },
       "DecisionSubmission": {
-        "description": "A runner-config gate: submit a decision in place of a transition, carrying the\ngated step's artifacts and fencing epoch as one atomic write.",
+        "description": "A runner-config gate: submit a decision in place of a transition, carrying the\ngated step's artifacts, the checks it ran, and fencing epoch as one atomic write.",
         "properties": {
           "artifacts": {
             "default": [],
@@ -3664,6 +3674,14 @@
               "$ref": "#/components/schemas/SubmittedArtifact"
             },
             "title": "Artifacts",
+            "type": "array"
+          },
+          "check_results": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/CheckResult"
+            },
+            "title": "Check Results",
             "type": "array"
           },
           "epoch": {
@@ -3707,6 +3725,14 @@
       "DecisionView": {
         "description": "A gate decision in full.\n\n``resolved_choice`` is set once a person has decided; ``transitioned`` is true once the\nresolving transition has been recorded.",
         "properties": {
+          "check_results": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/CheckResult"
+            },
+            "title": "Check Results",
+            "type": "array"
+          },
           "choices": {
             "default": [],
             "items": {
@@ -3756,6 +3782,11 @@
           "node_name": {
             "title": "Node Name",
             "type": "string"
+          },
+          "overrode_red_checks": {
+            "default": false,
+            "title": "Overrode Red Checks",
+            "type": "boolean"
           },
           "project_id": {
             "anyOf": [

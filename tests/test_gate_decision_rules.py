@@ -8,7 +8,13 @@ from datetime import UTC, datetime
 import pytest
 
 from blizzard.foundation.chunk_status import ChunkStatus
-from blizzard.hub.domain.chunk.model import DecisionChoice, DecisionClosed, GateDecision, NotADecisionChoice
+from blizzard.hub.domain.chunk.model import (
+    DecisionCheck,
+    DecisionChoice,
+    DecisionClosed,
+    GateDecision,
+    NotADecisionChoice,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -67,3 +73,23 @@ def test_a_resolving_transition_needs_this_gates_resolution_to_the_same_choice()
     assert refusal(_RESOLVED, node_id="nd_other") == "decision dec_1 does not match node `gate`"
     assert refusal(_OPEN) == "decision dec_1 is not yet resolved"
     assert refusal(_RESOLVED, choice="no") == "choice `no` is not the resolved choice `yes`"
+
+
+_GATED = replace(
+    _OPEN,
+    choices=[
+        DecisionChoice(name="yes", description="", requires_checks=True),
+        DecisionChoice(name="no", description=""),
+    ],
+)
+_RED = [DecisionCheck(command="a", passed=True), DecisionCheck(command="b", passed=False)]
+_GREEN = [DecisionCheck(command="a", passed=True)]
+
+
+def test_resolving_overrides_red_checks_exactly_when_the_choice_requires_green_and_a_check_is_red() -> None:
+    assert replace(_GATED, check_results=_RED).overrides_red_checks("yes")
+    assert not replace(_GATED, check_results=_RED).overrides_red_checks("no")
+    assert not replace(_GATED, check_results=_GREEN).overrides_red_checks("yes")
+    assert not _GATED.overrides_red_checks("yes")  # no checks ran
+    assert not replace(_OPEN, check_results=_RED).overrides_red_checks("yes")  # the choice is ungated
+    assert not replace(_GATED, check_results=_RED).overrides_red_checks("maybe")

@@ -2142,7 +2142,8 @@ export type ConfigDocument = {
 /**
  * DecisionChoiceModel
  *
- * One selectable gate outcome.
+ * One selectable gate outcome; ``requires_checks`` marks a choice that overrides red checks
+ * when a person resolves to it while one is red.
  */
 export type DecisionChoiceModel = {
     /**
@@ -2153,6 +2154,10 @@ export type DecisionChoiceModel = {
      * Name
      */
     name: string;
+    /**
+     * Requires Checks
+     */
+    requires_checks?: boolean;
 };
 
 /**
@@ -2236,6 +2241,10 @@ export type DecisionResolutionResponse = {
      */
     decision_id: string;
     /**
+     * Overrode Red Checks
+     */
+    overrode_red_checks?: boolean;
+    /**
      * Resolved At
      */
     resolved_at: string;
@@ -2271,13 +2280,17 @@ export type DecisionResolvedPayload = {
  * DecisionSubmission
  *
  * A runner-config gate: submit a decision in place of a transition, carrying the
- * gated step's artifacts and fencing epoch as one atomic write.
+ * gated step's artifacts, the checks it ran, and fencing epoch as one atomic write.
  */
 export type DecisionSubmission = {
     /**
      * Artifacts
      */
     artifacts?: Array<SubmittedArtifact>;
+    /**
+     * Check Results
+     */
+    check_results?: Array<CheckResult>;
     /**
      * Epoch
      */
@@ -2305,6 +2318,10 @@ export type DecisionSubmission = {
  * resolving transition has been recorded.
  */
 export type DecisionView = {
+    /**
+     * Check Results
+     */
+    check_results?: Array<CheckResult>;
     /**
      * Choices
      */
@@ -2337,6 +2354,10 @@ export type DecisionView = {
      * Node Name
      */
     node_name: string;
+    /**
+     * Overrode Red Checks
+     */
+    overrode_red_checks?: boolean;
     /**
      * Project Id
      */

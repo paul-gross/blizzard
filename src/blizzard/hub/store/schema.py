@@ -23,6 +23,7 @@ from sqlalchemy import (
     Table,
     Text,
     UniqueConstraint,
+    false,
 )
 
 from blizzard.foundation.store.utc import UtcDateTime
@@ -1645,7 +1646,10 @@ decisions = Table(
     Column("node_id", String, nullable=False),  # the gate node awaiting the decision
     Column("node_name", String, nullable=False),  # the node's name — what runner gate-config matches
     Column("epoch", Integer, nullable=False),  # the parked step's fence; stale decisions rejected
-    Column("choices", Text, nullable=False),  # JSON list of {name, description} — the buttons
+    # JSON list of {name, description, requires_checks} — the buttons
+    Column("choices", Text, nullable=False),
+    # JSON list of {command, passed} — the checks the runner ran at the gated step's exit; `[]` when none
+    Column("check_results", Text, nullable=False, server_default="[]"),
     Column("submitted_at", UtcDateTime, nullable=False),
     # The runner whose configuration imposed this gate — a fact of the write; `NULL` when the graph declared it.
     Column("imposed_by_runner_id", String, nullable=True),
@@ -1688,6 +1692,8 @@ decision_resolutions = Table(
     Column("choice", String, nullable=False),  # the picked choice name — routes the resolving transition
     Column("resolved_by", String, nullable=False),
     Column("resolved_at", UtcDateTime, nullable=False),
+    # The choice was a `requires_checks` one taken over a red check — a person's override of the gate.
+    Column("overrode_red_checks", Boolean, nullable=False, server_default=false()),
     Column(
         "tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_decision_resolutions_tenant_id"), nullable=False
     ),

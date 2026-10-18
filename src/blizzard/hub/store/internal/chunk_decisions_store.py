@@ -15,7 +15,7 @@ from sqlalchemy import ColumnElement, Connection, Select, and_
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.artifact.model import StoredArtifact
-from blizzard.hub.domain.chunk.model import DecisionChoice, GateDecision
+from blizzard.hub.domain.chunk.model import DecisionCheck, DecisionChoice, GateDecision
 from blizzard.hub.domain.chunk.ports.decisions import IWriteChunkDecisionsRepository, LiveDecisionStatus
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, FenceRefusal
@@ -178,6 +178,7 @@ class ChunkDecisionsStore:
         admission: EpochAdmission,
         claimant: Claimant | None = None,
         choices: list[DecisionChoice],
+        check_results: Sequence[DecisionCheck] = (),
         at: datetime,
         artifacts: list[StoredArtifact],
         imposed_by_runner_id: str | None,
@@ -194,6 +195,7 @@ class ChunkDecisionsStore:
                 admission=admission,
                 claimant=claimant,
                 choices=choices,
+                check_results=check_results,
                 at=at,
                 artifacts=artifacts,
                 imposed_by_runner_id=imposed_by_runner_id,
@@ -211,6 +213,7 @@ class ChunkDecisionsStore:
         admission: EpochAdmission,
         claimant: Claimant | None = None,
         choices: list[DecisionChoice],
+        check_results: Sequence[DecisionCheck] = (),
         at: datetime,
         artifacts: list[StoredArtifact],
         imposed_by_runner_id: str | None,
@@ -231,6 +234,7 @@ class ChunkDecisionsStore:
             admission=admission,
             claimant=claimant,
             choices=choices,
+            check_results=check_results,
             at=at,
             artifacts=artifacts,
             imposed_by_runner_id=imposed_by_runner_id,
@@ -249,11 +253,15 @@ class ChunkDecisionsStore:
         admission: EpochAdmission,
         claimant: Claimant | None = None,
         choices: list[DecisionChoice],
+        check_results: Sequence[DecisionCheck] = (),
         at: datetime,
         artifacts: list[StoredArtifact],
         imposed_by_runner_id: str | None,
     ) -> FenceRefusal | None:
-        payload = json.dumps([{"name": c.name, "description": c.description} for c in choices])
+        payload = json.dumps(
+            [{"name": c.name, "description": c.description, "requires_checks": c.requires_checks} for c in choices]
+        )
+        checks_payload = json.dumps([{"command": c.command, "passed": c.passed} for c in check_results])
         refusal = fence(conn, chunk_id, epoch=epoch, admission=admission, claimant=claimant)
         if refusal is not None:
             return refusal
@@ -269,6 +277,7 @@ class ChunkDecisionsStore:
                 node_name=node_name,
                 epoch=epoch,
                 choices=payload,
+                check_results=checks_payload,
                 submitted_at=at,
                 imposed_by_runner_id=imposed_by_runner_id,
             )
@@ -309,7 +318,9 @@ class ChunkDecisionsStore:
             is not None
         )
 
-    def record_decision_resolution(self, decision_id: str, *, choice: str, resolved_by: str, at: datetime) -> bool:
+    def record_decision_resolution(
+        self, decision_id: str, *, choice: str, resolved_by: str, at: datetime, overrode_red_checks: bool = False
+    ) -> bool:
         with self._store.write("record_decision_resolution") as conn:
             existing = conn.execute(
                 self._store.select(s.decision_resolutions, s.decision_resolutions.c.decision_id).where(
@@ -320,7 +331,11 @@ class ChunkDecisionsStore:
                 return False  # first-write-wins: the loser is told who won
             conn.execute(
                 self._store.insert(s.decision_resolutions).values(
-                    decision_id=decision_id, choice=choice, resolved_by=resolved_by, resolved_at=at
+                    decision_id=decision_id,
+                    choice=choice,
+                    resolved_by=resolved_by,
+                    resolved_at=at,
+                    overrode_red_checks=overrode_red_checks,
                 )
             )
             return True
@@ -367,7 +382,13 @@ class ChunkDecisionsStore:
         """The one ``decisions`` row + resolution + transitioned flag ->
         :class:`GateDecision` assembly, shared by :meth:`_decision_row` (one row) and
         :meth:`_hydrate` (batched) so neither keeps its own copy of the shape."""
-        choices = [DecisionChoice(name=c["name"], description=c["description"]) for c in json.loads(row.choices)]
+        choices = [
+            DecisionChoice(
+                name=c["name"], description=c["description"], requires_checks=c.get("requires_checks", False)
+            )
+            for c in json.loads(row.choices)
+        ]
+        check_results = [DecisionCheck(command=c["command"], passed=c["passed"]) for c in json.loads(row.check_results)]
         return GateDecision(
             decision_id=row.decision_id,
             chunk_id=row.chunk_id,
@@ -382,6 +403,8 @@ class ChunkDecisionsStore:
             transitioned=transitioned,
             imposed_by_runner_id=row.imposed_by_runner_id,
             project_id=row.project_id,
+            check_results=check_results,
+            overrode_red_checks=resolution.overrode_red_checks if resolution is not None else False,
         )
 
 

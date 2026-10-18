@@ -184,8 +184,9 @@ class Judgement:
             artifacts = DeclaredCommits(self.ctx, lease, self.bindings).verify()
         if route is ExitRoute.BUFFER_DECISION:
             # This operator gates this node by name, so the outcome is a human's: buffer a
-            # Decision instead of eliciting a verdict. Not a spawn, so it is ungated.
-            self._buffer_decision(artifacts)
+            # Decision instead of eliciting a verdict. Not a spawn, so it is ungated. The node's
+            # checks run first, against the tree the worker left, so the human decides with them.
+            self._buffer_decision(artifacts, self.checks())
             return
         if Spawner(self.ctx).suppressed(via="advance", chunk_id=lease.chunk_id, lease_id=lease.lease_id):
             return
@@ -542,15 +543,16 @@ class Judgement:
         artifacts += produces.collect_assets(artifacts, assessment, attachments)
         self._buffer_completion(selected.name, checks, artifacts)
 
-    def _buffer_decision(self, artifacts: list[CompletionArtifact]) -> None:
+    def _buffer_decision(self, artifacts: list[CompletionArtifact], checks: list[ExecutedCheck]) -> None:
         """Buffer a runner-config gate decision — the gated node-step's outcome.
 
-        The choice set is not the runner's, so the submission carries only the step's artifacts
-        and its fence; ADVANCE skips this lease until the flush closes it."""
+        The choice set is not the runner's, so the submission carries only the step's artifacts,
+        the checks it ran, and its fence; ADVANCE skips this lease until the flush closes it."""
         lease = self.lease
         submission = GateSubmission(
             from_node_id=lease.node_id,
             epoch=lease.epoch,
+            check_results=[CheckVerdict(command=c.command, passed=c.passed) for c in checks],
             artifacts=artifacts,
             route_token=self.ctx.stores.tokens.route_token(lease.chunk_id),
             lease_id=lease.lease_id,

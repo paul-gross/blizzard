@@ -117,7 +117,9 @@ def gate_refusal(graph: Graph, from_node_id: str) -> Node:
 
 def decision_choices(node: Node) -> list[DecisionChoice]:
     """A gate decision's choices — the node's own choice set."""
-    return [DecisionChoice(name=c.name, description=c.description) for c in node.choices]
+    return [
+        DecisionChoice(name=c.name, description=c.description, requires_checks=c.requires_checks) for c in node.choices
+    ]
 
 
 @domain_model

@@ -24,6 +24,7 @@ from blizzard.hub.api.project_labels import ProjectLabels
 from blizzard.hub.api.project_params import QueryProject
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.domain.chunk.model import DecisionClosed, GateDecision, NotADecisionChoice
+from blizzard.wire.completion import CheckResult
 from blizzard.wire.decision import (
     DecisionChoiceModel,
     DecisionResolutionConflict,
@@ -46,7 +47,10 @@ def to_decision_view(row: GateDecision, runner_names: Mapping[str, str], project
         node_id=row.node_id,
         node_name=row.node_name,
         epoch=row.epoch,
-        choices=[DecisionChoiceModel(name=c.name, description=c.description) for c in row.choices],
+        choices=[
+            DecisionChoiceModel(name=c.name, description=c.description, requires_checks=c.requires_checks)
+            for c in row.choices
+        ],
         submitted_at=iso_utc(row.submitted_at),
         resolved_choice=row.resolved_choice,
         resolved_by=row.resolved_by,
@@ -56,6 +60,8 @@ def to_decision_view(row: GateDecision, runner_names: Mapping[str, str], project
         imposed_by_runner_name=runner_names.get(row.imposed_by_runner_id)
         if row.imposed_by_runner_id is not None
         else None,
+        check_results=[CheckResult(command=c.command, passed=c.passed) for c in row.check_results],
+        overrode_red_checks=row.overrode_red_checks,
         **project,
     )
 
@@ -133,4 +139,5 @@ def resolve_decision(
         choice=result.choice,
         resolved_by=result.resolved_by,
         resolved_at=(iso_utc(decision.resolved_at) if decision is not None and decision.resolved_at else ""),
+        overrode_red_checks=decision.overrode_red_checks if decision is not None else False,
     )

@@ -18,7 +18,10 @@ class DecisionListing(Listing):
 
     def line(self, row: Any) -> str:
         choices = ", ".join(c["name"] for c in row.get("choices", []))
-        return f"{row['decision_id']}  chunk={row['chunk_id']}  node={row['node_name']}  choices=[{choices}]"
+        checks = row.get("check_results", [])
+        red = sum(1 for c in checks if not c["passed"])
+        summary = f"  checks={red}/{len(checks)} red" if checks else ""
+        return f"{row['decision_id']}  chunk={row['chunk_id']}  node={row['node_name']}  choices=[{choices}]{summary}"
 
 
 @click.group("decision")
@@ -58,4 +61,5 @@ def decision_resolve(cli: CliContext, decision_id: str, choice: str, resolved_by
         on_status={404: f"no such decision {decision_id}", 400: "invalid choice", 422: "invalid choice"},
     )
     body = resp.json()
-    cli.show_lines(body, f"decision {decision_id} resolved: {body['choice']} (by {body['resolved_by']})")
+    override = " — overrode red checks" if body.get("overrode_red_checks") else ""
+    cli.show_lines(body, f"decision {decision_id} resolved: {body['choice']} (by {body['resolved_by']}){override}")

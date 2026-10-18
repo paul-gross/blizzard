@@ -15,12 +15,14 @@ from blizzard.foundation.node_steps import ApplyOutcome
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.leases.model import NewLease
+from blizzard.runner.lifecycle.judgement.check_runner import CheckOutcome
 from blizzard.runner.loop.context import LoopConfig
 from blizzard.runner.loop.steps import Advance, Fill, Pull
 from blizzard.runner.node_steps.chunk_state import ChunkGate, ChunkState
 from blizzard.runner.node_steps.submissions import ApplyReply
 from tests.runner_fakes import (
     FIXTURE_RUNNER_ID,
+    FakeCheckRunner,
     FakeHarness,
     FakeHub,
     FakeProbe,
@@ -110,6 +112,36 @@ def test_runner_config_gate_buffers_a_decision_not_a_completion(tmp_path):  # ty
     assert submission.artifacts[0].commit_hash == "abc123"
     assert store.active_lease_for_chunk("ch_1") is None  # lease closed (parked)
     assert store.held_environment_ids() == ["e1"]  # envs held while waiting_on_human
+
+
+@pytest.mark.unit
+def test_runner_config_gate_runs_the_nodes_checks_and_buffers_their_results(tmp_path):  # type: ignore[no-untyped-def]
+    """The worker exit runs the gated node's `checks:` and the decision carries `(command, passed)`."""
+    store = _store(tmp_path)
+    _seed_running_lease(store)
+    hub = FakeHub()
+    hub.envelopes["ch_1"] = make_envelope(
+        "ch_1", "build", node_id="nd_build", choices=_CHOICES, checks=["green", "red"], requires_checks={"pass"}
+    )
+    harness = FakeHarness(handle=_HANDLE, verdict="pass")
+    ctx = make_context(
+        store,
+        hub=hub,
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=harness,
+        probe=FakeProbe(),
+        check_runner=FakeCheckRunner(
+            {"green": CheckOutcome(passed=True, output_tail=""), "red": CheckOutcome(passed=False, output_tail="boom")}
+        ),
+        config=LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID, gates=("build",)),
+    )
+
+    Advance(ctx).run()
+    Pull(ctx).run()
+
+    assert harness.judged == []  # the harness is still never asked to judge
+    [(_, submission)] = hub.decisions_submitted
+    assert [(c.command, c.passed) for c in submission.check_results] == [("green", True), ("red", False)]
 
 
 @pytest.mark.unit

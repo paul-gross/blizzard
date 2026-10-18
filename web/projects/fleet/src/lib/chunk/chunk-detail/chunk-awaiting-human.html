@@ -46,8 +46,19 @@
             declared by the graph
           }
         </p>
+        <!-- The checks the runner ran at the step's exit: the human decides with them in view. -->
+        @if ((d.check_results ?? []).length > 0) {
+          <ul class="gate-checks" data-testid="decision-checks">
+            @for (check of d.check_results; track check.command) {
+              <li [class.red]="!check.passed" data-testid="decision-check">
+                <span class="gate-check-command">{{ check.command }}</span>
+                <span class="gate-check-verdict">{{ check.passed ? 'pass' : 'red' }}</span>
+              </li>
+            }
+          </ul>
+        }
         @if (canResolve()) {
-          <fleet-kit-chips class="decision-chips" [options]="decisionOptions(d.choices ?? [])" [action]="true"
+          <fleet-kit-chips class="decision-chips" [options]="decisionOptions(d)" [action]="true"
             [disabled]="resolvePending()" (choose)="resolve(d.decision_id, $event)" />
         }
       </div>
@@ -60,7 +71,7 @@
         </div>
         <!-- Resolved, awaiting the runner's transition: the choices give way to the outcome. -->
         <p class="gate-resolved" data-testid="decision-resolved-line">
-          <span class="gate-choice">{{ d.resolved_choice }}</span> by {{ d.resolved_by || 'operator' }}@if (d.resolved_at; as at) {, <fleet-when [iso]="at" />}
+          <span class="gate-choice">{{ d.resolved_choice }}</span> by {{ d.resolved_by || 'operator' }}@if (d.resolved_at; as at) {, <fleet-when [iso]="at" />}@if (d.overrode_red_checks) { · <span class="gate-override" data-testid="decision-override">overrode red checks</span>}
         </p>
       </div>
     }
