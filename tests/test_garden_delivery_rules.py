@@ -262,6 +262,22 @@ def test_an_introduced_instant_is_looked_up_only_for_a_single_repo_delta() -> No
     assert [d.new_findings[0].introduced_at for d in plan.deltas] == [introduced, None]
 
 
+def test_the_plan_carries_a_copy_of_the_validated_expected_finding_states() -> None:
+    observed, gone = (Id.mint_at(IdPrefix.FINDING, _AT).value for _ in range(2))
+    expect = {observed: "open", gone: "open"}
+    validated = ValidatedDelivery(
+        run=_RUN,
+        deltas=[_delta([{"op": "observed", "id": observed}, {"op": "gone", "id": gone, "note": "fixed"}])],
+        proposals=[],
+        expect=expect,
+    )
+
+    plan = build_delivery_plan(validated, chunk=_CHUNK, node=_NODE, epoch=1, delta_artifact_ids=["art_d"], at=_AT)
+
+    assert plan.expect == {observed: "open", gone: "open"}
+    assert plan.expect is not validated.expect
+
+
 # -- the replay verb -------------------------------------------------------------------
 
 
@@ -271,3 +287,26 @@ def test_a_recorded_node_step_replays_as_already_recorded() -> None:
 
 def test_an_unrecorded_node_step_proceeds_to_validation() -> None:
     assert delivery_replay_outcome(recorded=False) is None
+
+
+@pytest.mark.parametrize(
+    ("deltas", "proposals", "delta_ids", "proposal_ids"),
+    [
+        ([_delta([])], [], ["art_1", "art_2"], []),
+        ([], [_candidate()], [], ["art_p1", "art_p2"]),
+    ],
+    ids=["delta-ids", "proposal-ids"],
+)
+def test_an_artifact_id_list_not_parallel_to_its_items_refuses(
+    deltas: list[DeliveredDelta], proposals: list[ProposalCandidate], delta_ids: list[str], proposal_ids: list[str]
+) -> None:
+    with pytest.raises(ValueError, match="zip"):
+        build_delivery_plan(
+            ValidatedDelivery(run=_RUN, deltas=deltas, proposals=proposals),
+            chunk=_CHUNK,
+            node=_NODE,
+            epoch=1,
+            delta_artifact_ids=delta_ids,
+            proposal_artifact_ids=proposal_ids,
+            at=_AT,
+        )

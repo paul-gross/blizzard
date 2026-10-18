@@ -215,9 +215,7 @@ def build_delivery_plan(
                     NewFindingFact(finding_id=finding_id, kind="add", finding_set_id=finding_set_id, ref=op.ref)
                 )
             elif isinstance(op, FindingObservedOp):
-                facts.append(
-                    NewFindingFact(finding_id=op.id, kind="observed", finding_set_id=finding_set_id, note=None)
-                )
+                facts.append(NewFindingFact(finding_id=op.id, kind="observed", finding_set_id=finding_set_id))
             else:
                 assert isinstance(op, FindingGoneOp)
                 kind, actor = validated.gone_settlements.get(op.id, ("gone", None))

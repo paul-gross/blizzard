@@ -78,6 +78,26 @@ def test_a_reader_at_the_moment_meta_is_replaced_sees_the_previous_whole_file(
     assert seen == [{"current": first.key_id, "previous": None}]
 
 
+def test_the_meta_temp_file_is_created_in_the_keys_dir_so_the_rename_stays_on_one_filesystem(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    keys_dir = tmp_path / "secret-keys"
+    provider = DirectoryKeyProvider(keys_dir)
+    second = provider.mint()
+    sources: list[Path] = []
+    replace = os.replace
+
+    def spying_replace(src: object, dst: object) -> None:
+        sources.append(Path(str(src)))
+        replace(src, dst)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(os, "replace", spying_replace)
+    provider.promote(second.key_id)
+
+    assert [source.parent for source in sources] == [keys_dir]
+    assert [(source.name.startswith("meta.json."), source.suffix) for source in sources] == [(True, ".tmp")]
+
+
 @pytest.mark.parametrize("failing", ["fsync", "replace"])
 def test_a_failed_meta_write_keeps_the_previous_meta_and_leaves_no_temp_file(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, failing: str
@@ -165,3 +185,23 @@ def test_without_the_env_key_the_directory_source_mints(tmp_path: Path) -> None:
 def test_a_previous_env_key_without_a_current_one_is_refused(tmp_path: Path) -> None:
     with pytest.raises(ConfigError, match=ENV_SECRET_KEY_PREVIOUS):
         hub_key_provider({ENV_SECRET_KEY_PREVIOUS: _b64(_MATERIAL)}, data_dir=tmp_path)
+
+
+def test_an_interrupt_landing_after_the_meta_rename_propagates_unmasked(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    keys_dir = tmp_path / "secret-keys"
+    provider = DirectoryKeyProvider(keys_dir)
+    second = provider.mint()
+    replace = os.replace
+
+    def replace_then_interrupt(src: object, dst: object) -> None:
+        replace(src, dst)  # type: ignore[arg-type]
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(os, "replace", replace_then_interrupt)
+    with pytest.raises(KeyboardInterrupt):
+        provider.promote(second.key_id)
+    monkeypatch.undo()
+
+    assert json.loads((keys_dir / "meta.json").read_text())["current"] == second.key_id

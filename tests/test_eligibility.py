@@ -10,10 +10,11 @@ from pathlib import Path
 import pytest
 
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
-from blizzard.hub.domain.chunk.model import Chunk, WorkRef
+from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, MigrationFact, RestartFact, TransitionFact, WorkRef
 from blizzard.hub.domain.execution import eligibility
 from blizzard.hub.domain.execution.eligibility import EligibilityCheck
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL, Edge, Graph, Node, SessionDecl
+from blizzard.hub.domain.operations.queue import MatchedEntry, QueueMatchPolicy, select_matched_entry
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.domain.runners.registration import RunnerCapability
 
@@ -404,3 +405,74 @@ def test_the_predicate_the_matched_peek_and_claim_admission_agree(row) -> None: 
         claimable = False
 
     assert (eligible, peeked is not None, claimable) == (expected, expected, expected)
+
+
+# --- The matched peek judges the chunk's current node, not its entry node ---
+
+_MOVED_AT = datetime(2026, 7, 14, tzinfo=UTC)
+
+
+def _moved_graph() -> Graph:
+    """An entry node the ``h_ok`` capability can work and an unconnected node it cannot — the
+    walk from either never reaches the other, so only the node judged decides eligibility."""
+    return _graph(
+        [_node("entry", session_source="sess_ok"), _node("moved", session_source="sess_bad")],
+        sessions=[
+            SessionDecl(name="sess_ok", harnesses=["h_ok"]),
+            SessionDecl(name="sess_bad", harnesses=["h_missing"]),
+        ],
+    )
+
+
+def _peek(facts: dict[str, ChunkFacts]) -> MatchedEntry | None:
+    graph = _moved_graph()
+    return select_matched_entry(
+        [_chunk()],
+        served={_PROJECT},
+        graphs={graph.graph_id: graph},
+        facts=facts,
+        capabilities=[_capability("h_ok")],
+        blocked={},
+        policy=QueueMatchPolicy.PASS_OVER,
+    )
+
+
+@pytest.mark.parametrize(
+    "facts",
+    [{}, {"ch_1": ChunkFacts(minted=True, promoted=True)}, {"ch_other": ChunkFacts(minted=True)}],
+    ids=["no-facts", "unmoved", "facts-of-another-chunk"],
+)
+def test_a_chunk_without_a_movement_is_peeked_by_its_entry_node(facts: dict[str, ChunkFacts]) -> None:
+    assert _peek(facts) == MatchedEntry(chunk=_chunk(), position=0)
+
+
+@pytest.mark.parametrize(
+    "moved",
+    [
+        ChunkFacts(minted=True, transitions=[TransitionFact("nd_moved", Executor.RUNNER, 1, _MOVED_AT)]),
+        ChunkFacts(
+            minted=True,
+            migrations=[
+                MigrationFact(
+                    from_node_id="nd_entry",
+                    from_graph_id="gr_0",
+                    to_graph_id="gr_1",
+                    landed_node_id="nd_moved",
+                    choice_name=None,
+                    model=None,
+                    epoch=1,
+                    recorded_at=_MOVED_AT,
+                )
+            ],
+        ),
+        ChunkFacts(minted=True, restarts=[RestartFact("nd_moved", "nd_entry", "gr_1", 1, _MOVED_AT)]),
+    ],
+    ids=["transition", "migration", "restart"],
+)
+def test_a_moved_chunk_is_peeked_by_the_node_it_moved_to(moved: ChunkFacts) -> None:
+    assert _peek({"ch_1": moved}) is None
+
+
+def test_a_chunk_moved_to_a_node_its_graph_lacks_is_passed_over() -> None:
+    gone = ChunkFacts(minted=True, transitions=[TransitionFact("nd_gone", Executor.RUNNER, 1, _MOVED_AT)])
+    assert _peek({"ch_1": gone}) is None

@@ -243,6 +243,41 @@ def test_escalation_candidate_read_rows_flat_across_history_depth(tmp_path: Path
     _flat(tmp_path, chunks, seed, read)
 
 
+# --- artifacts ------------------------------------------------------------------------------------
+
+
+def test_latest_artifacts_read_rows_flat_across_history_depth(tmp_path: Path) -> None:
+    names = ["plan", "report"]
+
+    def seed(engine: Engine, depth: int) -> None:
+        with engine.begin() as conn:
+            for name in names:
+                for n in range(depth):
+                    conn.execute(
+                        insert(s.artifacts).values(
+                            stamp(
+                                s.artifacts,
+                                artifact_id=f"ar_{name}_{n}",
+                                chunk_id="ch_1",
+                                node_id="nd_1",
+                                node_name="n",
+                                epoch=1,
+                                name=name,
+                                kind="asset",
+                                data="newest" if n == depth - 1 else f"old-{n}",
+                                produced_at=_at(n),
+                                seq=n,
+                            )
+                        )
+                    )
+
+    def read(engine: Engine) -> object:
+        latest = ChunkArtifactsStore(hub_store_connections(engine), FixedClock(_T0)).latest_artifacts("ch_1", names)
+        return {name: a.data for name, a in latest.items()}
+
+    _flat(tmp_path, ["ch_1"], seed, read)
+
+
 # --- graph enablement -----------------------------------------------------------------------------
 
 

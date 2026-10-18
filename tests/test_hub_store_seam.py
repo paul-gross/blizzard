@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -64,7 +64,7 @@ from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from blizzard.hub.tenancy import TenantId
 from tests.support import migrated_hub_at, scoped_connections
 
-pytestmark = pytest.mark.component
+pytestmark = pytest.mark.unit
 
 _NOW = datetime(2026, 1, 1, tzinfo=UTC)
 _MARKER = DerivationMarker("sg_x", "v", "fp", _NOW, 0, True)
@@ -183,6 +183,18 @@ _ADAPTER_CASES = [
         lambda store: ChunkHubExecStore(store, FixedClock(_NOW)),
         lambda a: a.count_live_hub_exec_slots(),
         "count_live_hub_exec_slots",
+    ),
+    _AdapterCase(
+        "ChunkHubExecStore.acquire",
+        lambda store: ChunkHubExecStore(store, FixedClock(_NOW)),
+        lambda a: a.acquire_hub_exec_slot("ch_x", node_id="nd_x", at=_NOW, stale_after=timedelta(minutes=1)),
+        "acquire_hub_exec_slot",
+    ),
+    _AdapterCase(
+        "ChunkHubExecStore.release",
+        lambda store: ChunkHubExecStore(store, FixedClock(_NOW)),
+        lambda a: a.release_hub_exec_slot("hes_x", at=_NOW),
+        "release_hub_exec_slot",
     ),
     _AdapterCase(
         "ChunkDependenciesStore",

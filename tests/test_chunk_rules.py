@@ -9,21 +9,24 @@ import pytest
 
 from blizzard.foundation.chunk_status import PRE_CLAIM_STATUSES, TERMINAL_STATUSES, ChunkStatus
 from blizzard.foundation.event_log import EventLogSeverity
-from blizzard.foundation.node_steps import Executor
+from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
 from blizzard.hub.domain.chunk.dependencies import BlockedMarking
 from blizzard.hub.domain.chunk.model import (
     CHUNK_VERB_LEGALITY,
     ChunkFacts,
     ChunkVerb,
+    EpochOwnerFact,
     EscalationOpen,
     GateDecision,
+    LeaseFact,
+    MigrationFact,
     RestartFact,
     RouteCreatedFact,
     TransitionFact,
     holds_work_refs,
     verb_legal_from,
 )
-from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
+from blizzard.hub.domain.graph.model import RESERVED_TERMINAL, Node
 
 pytestmark = pytest.mark.unit
 
@@ -147,3 +150,75 @@ def test_the_blocked_marking_names_the_earliest_declared_unmet_prerequisite_and_
 @pytest.mark.parametrize("unmet", [None, []])
 def test_no_unmet_prerequisite_is_no_marking(unmet: list[str] | None) -> None:
     assert BlockedMarking.of(unmet) is None
+
+
+# --- awaits_exit_from: the (from_node, epoch) replay key and the newer-epoch bound ---
+
+_VISITED = Node(
+    node_id="nd_visit",
+    graph_id="gr_a",
+    name="visit",
+    executor=Executor.RUNNER,
+    prompt=None,
+    checks=[],
+    produces=[],
+    session=SessionMode.FRESH,
+    judged_by=JudgedBy.WORKER,
+    retries_max=None,
+    retries_exhausted=None,
+)
+
+
+def _exit_migration(from_node_id: str, *, epoch: int) -> MigrationFact:
+    return MigrationFact(
+        from_node_id=from_node_id,
+        from_graph_id="gr_a",
+        to_graph_id="gr_b",
+        landed_node_id="nd_landed",
+        choice_name=None,
+        model=None,
+        epoch=epoch,
+        recorded_at=_at(1),
+    )
+
+
+def test_a_visit_with_no_exit_and_no_newer_epoch_awaits_its_exit() -> None:
+    assert ChunkFacts(minted=True).awaits_exit_from(_VISITED, epoch=2)
+    assert ChunkFacts(minted=True, leases=[LeaseFact(epoch=2, minted_at=_at(0))]).awaits_exit_from(_VISITED, epoch=2)
+
+
+def test_a_transition_out_of_the_node_at_the_epoch_is_its_exit() -> None:
+    exited = TransitionFact("nd_next", Executor.RUNNER, 2, _at(1), from_node_id="nd_visit")
+    elsewhere = TransitionFact("nd_next", Executor.RUNNER, 2, _at(1), from_node_id="nd_other")
+    earlier_visit = TransitionFact("nd_next", Executor.RUNNER, 1, _at(1), from_node_id="nd_visit")
+
+    assert not ChunkFacts(minted=True, transitions=[exited]).awaits_exit_from(_VISITED, epoch=2)
+    assert ChunkFacts(minted=True, transitions=[elsewhere, earlier_visit]).awaits_exit_from(_VISITED, epoch=2)
+
+
+def test_a_migration_out_of_the_node_at_the_epoch_is_its_exit() -> None:
+    other_node = _exit_migration("nd_other", epoch=2)
+    other_epoch = _exit_migration("nd_visit", epoch=1)
+
+    assert not ChunkFacts(minted=True, migrations=[_exit_migration("nd_visit", epoch=2)]).awaits_exit_from(
+        _VISITED, epoch=2
+    )
+    assert ChunkFacts(minted=True, migrations=[other_node, other_epoch]).awaits_exit_from(_VISITED, epoch=2)
+
+
+@pytest.mark.parametrize(
+    "newer",
+    [
+        ChunkFacts(minted=True, leases=[LeaseFact(epoch=3, minted_at=_at(2))]),
+        ChunkFacts(minted=True, restarts=[RestartFact("nd_visit", None, "gr_a", 3, _at(2))]),
+        ChunkFacts(minted=True, epoch_owners=[EpochOwnerFact(epoch=3, runner_id="r_1")]),
+    ],
+    ids=["lease", "restart", "epoch-owner"],
+)
+def test_a_newer_epoch_from_any_fence_source_supersedes_the_visit(newer: ChunkFacts) -> None:
+    assert not newer.awaits_exit_from(_VISITED, epoch=2)
+    assert newer.awaits_exit_from(_VISITED, epoch=3)
+
+
+def test_a_visit_at_epoch_zero_awaits_its_exit_before_any_fence_source_lands() -> None:
+    assert ChunkFacts(minted=True).awaits_exit_from(_VISITED, epoch=0)

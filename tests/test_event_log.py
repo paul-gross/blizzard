@@ -415,3 +415,90 @@ def test_newest_escalation_per_chunk_breaks_a_recorded_at_tie_by_id(tmp_path: Pa
     newest = store.escalations._newest_escalation_per_chunk()  # type: ignore[attr-defined]
 
     assert {chunk_id: row.takeover_command for chunk_id, row in newest.items()} == {"ch_tie": "second"}
+
+
+def test_newest_escalation_per_chunk_picks_the_newest_recorded_at_per_chunk_and_skips_ephemeral_chunks(
+    tmp_path: Path,
+) -> None:
+    store, engine, _clock = _store(tmp_path)
+
+    def escalate(conn, chunk_id: str, command: str, *, at: datetime) -> None:  # type: ignore[no-untyped-def]
+        conn.execute(
+            insert(s.escalations).values(
+                stamp(
+                    s.escalations,
+                    chunk_id=chunk_id,
+                    epoch=1,
+                    takeover_command=command,
+                    recorded_at=at,
+                    cause=None,
+                    detail=None,
+                )
+            )
+        )
+
+    with engine.begin() as conn:
+        seed_chunk(conn, "ch_deleted", graph_id="gr_1", at=_T0)
+        seed_chunk(conn, "ch_grouped", graph_id="gr_1", at=_T0)
+        # The newer recorded_at lands first, so it holds the lower id.
+        escalate(conn, "ch_a", "newer", at=_at(20))
+        escalate(conn, "ch_a", "older", at=_at(10))
+        escalate(conn, "ch_b", "only", at=_at(5))
+        escalate(conn, "ch_deleted", "deleted", at=_at(1))
+        escalate(conn, "ch_grouped", "grouped", at=_at(1))
+        conn.execute(
+            insert(s.chunk_deleted).values(
+                stamp(s.chunk_deleted, chunk_id="ch_deleted", deleted_at=_at(2), deleted_by="op")
+            )
+        )
+        conn.execute(
+            insert(s.chunk_grouped).values(
+                stamp(s.chunk_grouped, chunk_id="ch_grouped", grouped_into="ch_b", grouped_at=_at(2))
+            )
+        )
+
+    newest = store.escalations._newest_escalation_per_chunk()  # type: ignore[attr-defined]
+
+    assert {chunk_id: row.takeover_command for chunk_id, row in newest.items()} == {"ch_a": "newer", "ch_b": "only"}
+
+
+def _raw_event(engine: Engine, *, kind: str, severity: str, message: str) -> None:
+    with engine.begin() as conn:
+        conn.execute(
+            insert(s.event_log).values(
+                stamp(s.event_log, recorded_at=_at(10), severity=severity, kind=kind, message=message)
+            )
+        )
+
+
+def _seed_unrecognized_severities(engine: Engine) -> None:
+    _raw_event(engine, kind="attempt-failed", severity="info", message="recognized")
+    _raw_event(engine, kind="attempt-abandoned", severity="bogus", message="kind-fallback")
+    _raw_event(engine, kind="mystery-kind", severity="bogus", message="unknown-kind")
+
+
+def test_list_events_narrows_an_unknown_severity_by_its_kind_and_an_unknown_kind_to_critical(tmp_path: Path) -> None:
+    store, engine, _clock = _store(tmp_path)
+    _seed_unrecognized_severities(engine)
+
+    by_message = {e.message: e.severity for e in store.events.list_events()}
+
+    assert by_message["recognized"] is EventLogSeverity.INFO
+    assert by_message["kind-fallback"] is EventLogSeverity.INFO
+    assert by_message["unknown-kind"] is EventLogSeverity.CRITICAL
+
+
+def test_activity_events_since_narrows_an_unknown_severity_by_its_kind_and_an_unknown_kind_to_critical(
+    tmp_path: Path,
+) -> None:
+    store, engine, _clock = _store(tmp_path)
+    _seed_unrecognized_severities(engine)
+
+    by_message = {e.message: e.severity for e in store.events.activity_events_since(_T0, limit=10)}
+
+    assert by_message == {
+        "recognized": EventLogSeverity.INFO,
+        "kind-fallback": EventLogSeverity.INFO,
+        "unknown-kind": EventLogSeverity.CRITICAL,
+    }
+    assert all(type(severity) is EventLogSeverity for severity in by_message.values())

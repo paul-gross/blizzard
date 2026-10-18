@@ -1,19 +1,32 @@
-"""A seeded world of chunks across every terminal branch, shared by the component tests that
-pin the SQL terminal predicates against :meth:`ChunkFacts.status`."""
+"""A seeded world of chunks across every terminal branch, shared by the tests that pin the SQL
+terminal predicates against :meth:`ChunkFacts.status`. The raw fact seeders take any
+:class:`SeededWorld` — a wired hub, or a bare migrated engine with its clock."""
 
 from __future__ import annotations
 
 from datetime import timedelta
 from pathlib import Path
+from typing import Protocol
 
-from sqlalchemy import insert
+from sqlalchemy import Engine, insert
 
+from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.chunk.model import Chunk
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
 from blizzard.hub.store import schema as s
 from tests.support import HubHarness, build_hub, chunk_stores, seed_chunk_record, seed_graph, stamp
 
 OLD = timedelta(days=30)
+
+
+class SeededWorld(Protocol):
+    """An engine to seed raw fact rows into, and the clock their ``ago`` offsets count back from."""
+
+    @property
+    def engine(self) -> Engine: ...
+
+    @property
+    def clock(self) -> IClock: ...
 
 
 def hub_with_graph(tmp_path: Path) -> HubHarness:
@@ -31,7 +44,7 @@ def mint(hub: HubHarness, chunk_id: str, *, ago: timedelta, promote: bool = True
         stores.queue.record_promote(chunk_id, at=at)
 
 
-def transition(hub: HubHarness, chunk_id: str, to_node: str, *, epoch: int, ago: timedelta, n: int = 0) -> None:
+def transition(hub: SeededWorld, chunk_id: str, to_node: str, *, epoch: int, ago: timedelta, n: int = 0) -> None:
     with hub.engine.begin() as conn:
         conn.execute(
             insert(s.transitions).values(
@@ -50,18 +63,53 @@ def transition(hub: HubHarness, chunk_id: str, to_node: str, *, epoch: int, ago:
         )
 
 
-def stop(hub: HubHarness, chunk_id: str, *, ago: timedelta) -> None:
+def stop(hub: SeededWorld, chunk_id: str, *, ago: timedelta) -> None:
     with hub.engine.begin() as conn:
         conn.execute(
             insert(s.chunk_stopped).values(stamp(s.chunk_stopped, chunk_id=chunk_id, stopped_at=hub.clock.now() - ago))
         )
 
 
-def complete(hub: HubHarness, chunk_id: str, *, ago: timedelta) -> None:
+def complete(hub: SeededWorld, chunk_id: str, *, ago: timedelta) -> None:
     with hub.engine.begin() as conn:
         conn.execute(
             insert(s.chunk_completed).values(
                 stamp(s.chunk_completed, chunk_id=chunk_id, completed_at=hub.clock.now() - ago, completed_by="op")
+            )
+        )
+
+
+def migration(hub: SeededWorld, chunk_id: str, *, epoch: int, ago: timedelta, n: int = 0) -> None:
+    with hub.engine.begin() as conn:
+        conn.execute(
+            insert(s.chunk_migrations).values(
+                stamp(
+                    s.chunk_migrations,
+                    migration_id=f"mg_{chunk_id}_{epoch}_{n}",
+                    chunk_id=chunk_id,
+                    from_graph_id="gr_1",
+                    to_graph_id="gr_1",
+                    landed_node_id="nd_1",
+                    epoch=epoch,
+                    recorded_at=hub.clock.now() - ago,
+                )
+            )
+        )
+
+
+def restart(hub: SeededWorld, chunk_id: str, *, epoch: int, ago: timedelta) -> None:
+    with hub.engine.begin() as conn:
+        conn.execute(
+            insert(s.chunk_restarts).values(
+                stamp(
+                    s.chunk_restarts,
+                    chunk_id=chunk_id,
+                    graph_id="gr_1",
+                    to_node_id="nd_1",
+                    epoch=epoch,
+                    restarted_by="op",
+                    recorded_at=hub.clock.now() - ago,
+                )
             )
         )
 
@@ -94,38 +142,11 @@ def every_branch(hub: HubHarness) -> None:
 
         mint(hub, f"ch_restarted_{label}", ago=ago + timedelta(hours=1))
         transition(hub, f"ch_restarted_{label}", RESERVED_TERMINAL, epoch=1, ago=ago + timedelta(minutes=1))
-        with hub.engine.begin() as conn:
-            conn.execute(
-                insert(s.chunk_restarts).values(
-                    stamp(
-                        s.chunk_restarts,
-                        chunk_id=f"ch_restarted_{label}",
-                        graph_id="gr_1",
-                        to_node_id="nd_1",
-                        epoch=2,
-                        restarted_by="op",
-                        recorded_at=hub.clock.now() - ago,
-                    )
-                )
-            )
+        restart(hub, f"ch_restarted_{label}", epoch=2, ago=ago)
 
         mint(hub, f"ch_migrated_{label}", ago=ago + timedelta(hours=1))
         transition(hub, f"ch_migrated_{label}", RESERVED_TERMINAL, epoch=1, ago=ago)
-        with hub.engine.begin() as conn:
-            conn.execute(
-                insert(s.chunk_migrations).values(
-                    stamp(
-                        s.chunk_migrations,
-                        migration_id=f"mg_{label}",
-                        chunk_id=f"ch_migrated_{label}",
-                        from_graph_id="gr_1",
-                        to_graph_id="gr_1",
-                        landed_node_id="nd_1",
-                        epoch=1,
-                        recorded_at=hub.clock.now() - ago,  # a tie with the terminal transition
-                    )
-                )
-            )
+        migration(hub, f"ch_migrated_{label}", epoch=1, ago=ago)  # a tie with the terminal transition
 
         # Two same-instant terminal transitions: every order of the tie derives done, so the
         # predicate settles it.

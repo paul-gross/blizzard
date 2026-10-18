@@ -407,9 +407,8 @@ class ApplyService:
             locked = handle.facts(chunk.chunk_id)
             if locked is None:
                 return ApplyResult.failure(f"unknown chunk {chunk.chunk_id}")
-            raced = self._landed_under_lock(locked, submission)
-            recorded: str | None = None
-            if raced is None:
+            landed = self._landed_under_lock(locked, submission)
+            if landed is None:
                 try:
                     refuse_incoherent_attempt(locked, graph, from_node=from_node, epoch=submission.epoch)
                 except CompletionRefused as refused:
@@ -436,16 +435,16 @@ class ApplyService:
                 )
                 if isinstance(outcome, FenceRefusal):
                     return ApplyResult.failure(outcome.detail)
-                recorded = outcome
-        if raced is not None:
-            return self._answer_raced(chunk, graph, from_node, submission, raced)
+                landed = outcome
+        if isinstance(landed, _Raced):
+            return self._answer_raced(chunk, graph, from_node, submission, landed)
         _CP_MIGRATE_AFTER_RECORD.reached()
         landed_node = landing.node
         if not landing.releases_route:
             assert landed_node is not None
             self._hub_node_executor.run(chunk, landing.graph, landed_node, epoch=submission.epoch)
-            return ApplyResult.landed_on_hub(landed_node, recorded)
-        return ApplyResult.migrated(from_node, landing.graph, recorded)
+            return ApplyResult.landed_on_hub(landed_node, landed)
+        return ApplyResult.migrated(from_node, landing.graph, landed)
 
     @staticmethod
     def _landed_under_lock(locked: ChunkFacts, submission: Completion) -> _Raced | None:
