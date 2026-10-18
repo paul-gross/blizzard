@@ -29,8 +29,9 @@ removal in that line's notes or a postponement in the cut. A refusal names the o
 still checks format and references, not whether a release is ready to cut.
 
 `blizzard-change-notes guide <line>` previews the crossing into a major (`1`) or pre-1.0 minor (`0.12`). It reads
-released notes and pending removals and breaking notes from `changes/unreleased/`. Deprecations appear in the order their
-releases carried them, followed by their retiring removal's prose and `## Upgrade` instructions and any named boundary
+released notes and pending removals and breaking notes whose flags are on (or absent) from `changes/unreleased/`.
+Deprecations appear in the order their releases carried them, followed by their retiring removal's prose and
+`## Upgrade` instructions and any named boundary
 link; unrelated breaking notes follow. It refuses by name when a promise due on that line has no retiring removal in
 that line or in `unreleased/`. A released postponement moves the promise's current line; an unreleased postponement does
 not change the guide until it is cut.
@@ -39,8 +40,8 @@ not change the guide until it is cut.
 tag's own tree: an opening release leads with **Upgrading to <line>**, followed by upgrade notes, flags newly on since
 the previous release under **Turned on** by registry summary, then breaking changes, deprecations, and the added,
 changed, fixed and security notes, then the commits since the previous tag in a collapsed block. The **Deprecated**
-section shows each promise's current line after released postponements. A note that an earlier release on another line also
-carries is marked `(also in X.Y.Z)`. Rendering a tag twice gives the same text.
+section shows each promise's current line after released postponements. A note that an earlier release on another line
+also carries is marked `(also in X.Y.Z)`. Rendering a tag twice gives the same text.
 
 ## The id
 

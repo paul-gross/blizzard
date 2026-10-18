@@ -74,7 +74,9 @@ def cut_refusals(notes: Iterable[Note], version: str, moving: Iterable[Note] | N
     material = list(notes)
     selected = list(moving) if moving is not None else [n for n in material if n.directory == UNRELEASED]
     all_notes = [
-        n for n in material if n.directory != UNRELEASED and tuple(int(part) for part in n.directory.split(".")) <= limit
+        n
+        for n in material
+        if n.directory != UNRELEASED and tuple(int(part) for part in n.directory.split(".")) <= limit
     ] + selected
     current = release_line(version)
     scheduled = latest_released_schedule(all_notes)

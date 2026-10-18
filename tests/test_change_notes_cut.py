@@ -422,6 +422,28 @@ def test_opening_cut_accepts_postponement_without_removal(tmp_path: Path, monkey
     assert result.exit_code == 0, result.output
 
 
+@pytest.mark.parametrize(
+    "pending",
+    [
+        _REMOVAL.replace("kind: removed", "kind: removed\nflag: staged"),
+        _scheduled("changed", "3", target="old").replace("kind: changed", "kind: changed\nflag: staged"),
+    ],
+)
+def test_held_note_cannot_satisfy_an_opening_promise(tmp_path: Path, monkeypatch, pending: str) -> None:
+    root = _tree(tmp_path, {"1.9.0/old.md": _scheduled("deprecated", "2"), "unreleased/pending.md": pending})
+    registry = root / "src/blizzard/foundation/flags/registry.toml"
+    registry.parent.mkdir(parents=True)
+    registry.write_text('[flag.staged]\ndefault = "off"\nsummary = "Staged capability"\n')
+    before = _snapshot(root)
+    result = _cut(root, "2.0.0", monkeypatch)
+    assert result.exit_code == 1 and "deprecation old is due in 2" in result.output
+    assert _snapshot(root) == before
+    guide_result = CliRunner().invoke(main, ["guide", "2"])
+    assert guide_result.exit_code == 1 and "old" in guide_result.output
+    registry.write_text('[flag.staged]\ndefault = "on"\nsummary = "Staged capability"\n')
+    assert _cut(root, "2.0.0", monkeypatch).exit_code == 0
+
+
 def test_patch_cut_does_not_enforce_opening_removals(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     root = _tree(tmp_path, {"1.9.0/old.md": _scheduled("deprecated", "2"), "unreleased/fix.md": _FIXED})
     result = _cut(root, "2.0.1", monkeypatch)
