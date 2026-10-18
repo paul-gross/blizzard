@@ -229,10 +229,10 @@ def test_postpones_naming_no_note_fails(tmp_path: Path) -> None:
     assert _only(tmp_path, _UNR, text) == {(_UNR, "unresolved-postpones")}
 
 
-def test_flag_is_refused_naming_the_registry(tmp_path: Path) -> None:
+def test_flag_is_refused_until_the_lifecycle_check_exists(tmp_path: Path) -> None:
     failures = validate(_tree(tmp_path, {_UNR: _note("kind: added\nflag: some-flag")}))
     assert _pairs(failures) == {(_UNR, "flag-unsupported")}
-    assert "flag registry" in failures[0].detail
+    assert "flag lifecycle check" in failures[0].detail
 
 
 def test_an_upgrade_guide_anchor_that_exists_passes(tmp_path: Path) -> None:

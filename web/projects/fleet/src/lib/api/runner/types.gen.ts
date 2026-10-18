@@ -1465,6 +1465,24 @@ export type FindingView = {
 };
 
 /**
+ * FlagsResponse
+ *
+ * An open map, so adding or retiring a flag never changes the OpenAPI document.
+ */
+export type FlagsResponse = {
+    /**
+     * Flags
+     */
+    flags: {
+        [key: string]: boolean;
+    };
+    /**
+     * Overridden
+     */
+    overridden: Array<string>;
+};
+
+/**
  * FleetSummaryView
  *
  * The fleet-pulse counts: ``ready``; ``running`` (``running`` + ``delivering``);
@@ -4182,6 +4200,22 @@ export type ReadSessionApiAuthSessionGetResponses = {
 };
 
 export type ReadSessionApiAuthSessionGetResponse = ReadSessionApiAuthSessionGetResponses[keyof ReadSessionApiAuthSessionGetResponses];
+
+export type FlagsApiFlagsGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/flags';
+};
+
+export type FlagsApiFlagsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: FlagsResponse;
+};
+
+export type FlagsApiFlagsGetResponse = FlagsApiFlagsGetResponses[keyof FlagsApiFlagsGetResponses];
 
 export type HealthApiHealthGetData = {
     body?: never;

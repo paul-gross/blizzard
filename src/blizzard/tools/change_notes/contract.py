@@ -135,7 +135,9 @@ def _upgrade_guide(value: Any, _fields: Mapping[str, Any]) -> list[tuple[str, st
 
 
 def _flag(_value: Any, _fields: Mapping[str, Any]) -> list[tuple[str, str]]:
-    return [("flag-unsupported", f"flag needs the flag registry ({FLAG_REGISTRY}), which does not exist yet")]
+    return [
+        ("flag-unsupported", f"flag waits for the flag lifecycle check, which holds a note's flag to {FLAG_REGISTRY}")
+    ]
 
 
 FIELD_RULES: Mapping[str, FieldRule] = {

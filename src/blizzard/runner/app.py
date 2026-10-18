@@ -24,6 +24,7 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 
 from blizzard import __version__
 from blizzard.foundation.clock import IClock, IMonotonicClock, SystemClock, SystemMonotonicClock
+from blizzard.foundation.flags import FlagRegistry, Flags, resolve_flags
 from blizzard.foundation.forwarded import TrustedProxies
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.platform_tracing.attributes import annotate
@@ -55,6 +56,7 @@ from blizzard.runner.api.federation import (
 )
 from blizzard.runner.api.federation import router as auth_router
 from blizzard.runner.api.finding import router as finding_router
+from blizzard.runner.api.flags import router as flags_router
 from blizzard.runner.api.fleet_summary import router as fleet_summary_router
 from blizzard.runner.api.garden import router as garden_router
 from blizzard.runner.api.git_commits import router as git_commits_router
@@ -146,7 +148,7 @@ class Lane:
 _HUMAN_GATE = (Depends(require_human_api),)
 
 # The host's own routes, at the root. Ungated: liveness and the SSO bounce.
-_HOST_UNGATED = (health_router, readiness_router, auth_router)
+_HOST_UNGATED = (health_router, flags_router, readiness_router, auth_router)
 # The host's human web lane: its own reads, the workspace prompts, and the one event stream.
 _HOST_HUMAN = (host_router, workspace_prompt_router, events_router)
 # Each runner's ungated routes, in mount order: the worker hooks. `asks_router` is the one mixed router — its
@@ -331,6 +333,7 @@ def create_app(
     identity_check: IIdentityOnContact | None = None,
     hub_token: ICurrentHubToken | None = None,
     binding: IRunnerBinding | None = None,
+    flags: Flags | None = None,
 ) -> FastAPI:
     """Build the host's app from resolved config: its own routes at the root, and each of ``runners`` under its
     prefix, keyed by id; ``halted`` are the runners the host holds unbuilt.
@@ -342,7 +345,8 @@ def create_app(
     absent, leaving the stream silent. ``platform_tracing`` is off unless the composition root passes a handle.
     ``telemetry_receiver`` is the host's worker telemetry receiver; absent, the OTLP routes answer 503. ``identity`` is
     the process's holder; absent, the federation routes answer 503. ``host_stores`` are the host-scoped stores;
-    ``jti_cache`` defaults to theirs."""
+    ``jti_cache`` defaults to theirs. ``flags`` is the host's resolved answer, defaulting to the packaged
+    registry's with no overrides."""
     log = get_logger("blizzard.runner")
     clock = clock or SystemClock()
     process = process or LinuxProcessProbe()
@@ -391,6 +395,7 @@ def create_app(
         else DISABLED_TELEMETRY,
     )
     app.state.config = config
+    app.state.flags = flags or resolve_flags(FlagRegistry.load(), "runner", {}).flags
     app.state.runners = RunnerRegistry(tuple(runners), tuple(halted))
     app.state.workspaces = tuple(workspaces)
     app.state.subscriptions = tuple(subscriptions if subscriptions is not None else config.subscriptions)
@@ -620,6 +625,7 @@ def _wire_hosted_app(
         events=host.events,
         clock=host.clock,
         process=host.process,
+        flags=host.flags,
     )
     resumes = tuple(
         ResumeMarking(runner.stores, runner.host_stores, host.clock, host.process) for runner in host.runners
@@ -801,6 +807,7 @@ def _wire_runnerless_app(
         events=host.events,
         clock=host.clock,
         process=host.process,
+        flags=host.flags,
     )
     return HostedApp(app, (), host.engine, None, (), hub_http_client, owned_host)
 

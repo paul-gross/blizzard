@@ -24,6 +24,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import Engine
 
 from blizzard import __version__
+from blizzard.foundation.flags import FlagRegistry, Flags, resolve_flags
 from blizzard.foundation.forwarded import TrustedProxies
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.platform_tracing.attributes import annotate
@@ -54,6 +55,7 @@ from blizzard.hub.api.egress import router as egress_router
 from blizzard.hub.api.events import router as events_router
 from blizzard.hub.api.findings import project_router as project_findings_router
 from blizzard.hub.api.findings import router as findings_router
+from blizzard.hub.api.flags import router as flags_router
 from blizzard.hub.api.fleet import claim_router as fleet_claim_router
 from blizzard.hub.api.fleet import router as fleet_router
 from blizzard.hub.api.fleet_host import router as fleet_host_router
@@ -96,6 +98,7 @@ from blizzard.hub.composition import (
     LiveConfig,
     TenantStores,
     build_config_authoring,
+    build_hub_flags,
     build_process_core,
     build_services,
 )
@@ -378,11 +381,13 @@ def create_app(
     readiness: ReadinessService | None = None,
     services: HubServices | None = None,
     platform_tracing: IPlatformTracing | None = None,
+    flags: Flags | None = None,
 ) -> FastAPI:
     """Build a fully wired hub app from resolved config.
 
     ``readiness`` and ``services`` are optional so the store-free paths build the app
-    without opening a database. ``platform_tracing`` is off unless the composition root passes one.
+    without opening a database. ``platform_tracing`` is off unless the composition root passes one, and ``flags``
+    is the packaged registry's defaults, with no overrides, unless it passes the hub's resolved ones.
     """
     log = get_logger("blizzard.hub")
 
@@ -397,6 +402,7 @@ def create_app(
     )
     app.state.platform_tracing = platform_tracing
     app.state.config = config
+    app.state.flags = flags or resolve_flags(FlagRegistry.load(), "hub", {}).flags
     app.state.readiness = readiness
     app.state.services = services
     # Set on shutdown by ``_lifespan``; every SSE stream races it.
@@ -411,6 +417,7 @@ def create_app(
 
     # API routers first, so /api/* always wins over the web mount at /.
     app.include_router(health_router)
+    app.include_router(flags_router)
     app.include_router(readiness_router)
     app.include_router(me_router)
     app.include_router(auth_login_router)
@@ -486,12 +493,14 @@ def build_hosted_app(
     *,
     platform_tracing: IPlatformTracing | None = None,
     oauth_http_client: httpx.Client | None = None,
+    flag_registry: FlagRegistry | None = None,
 ) -> FastAPI:
     """The ``host`` composition root: open the store and wire every fleet seam.
 
     ``platform_tracing`` defaults to the handle ``[tracing]`` and the OTLP environment decide.
     ``oauth_http_client`` replaces the OAuth
-    providers' client. Either way, the engine and every outbound client are instrumented through it."""
+    providers' client. Either way, the engine and every outbound client are instrumented through it.
+    ``flag_registry`` is the registry the hub's flags resolve against — the packaged one unless given."""
     platform_tracing = platform_tracing or build_platform_tracing(
         config.tracing,
         os.environ,
@@ -584,7 +593,13 @@ def build_hosted_app(
         _announce_started(expected, services)
         _announce_rejected_tracing(tracing, services)
         _announce_rejected_egress(config.egress, services)
-    app = create_app(config, readiness=readiness, services=services, platform_tracing=platform_tracing)
+    app = create_app(
+        config,
+        readiness=readiness,
+        services=services,
+        platform_tracing=platform_tracing,
+        flags=build_hub_flags(config.flags, flag_registry),
+    )
     # `host` disposes this on `app.state` — carried here.
     app.state.engine = engine
     return app

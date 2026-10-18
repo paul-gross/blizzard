@@ -28,6 +28,7 @@ pytestmark = pytest.mark.unit
 #: Public plane — no permission gate; reachable with no session at all.
 _PUBLIC: set[tuple[str, str]] = {
     ("GET", "/api/health"),
+    ("GET", "/api/flags"),
     ("GET", "/api/ready"),
     ("GET", "/api/me"),
     ("GET", "/api/auth/providers"),

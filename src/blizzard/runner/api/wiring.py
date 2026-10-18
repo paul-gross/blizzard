@@ -18,6 +18,7 @@ from starlette.datastructures import State
 
 from blizzard.foundation.clock import IClock, IMonotonicClock
 from blizzard.foundation.events.broker import EventBroker
+from blizzard.foundation.flags import FlagRegistry, Flags, resolve_flags
 from blizzard.foundation.forwarded import TrustedProxies
 from blizzard.foundation.roles import collaborator, dto
 from blizzard.foundation.store.readiness import ReadinessService
@@ -135,6 +136,11 @@ class RunnerWiring:
     def for_runner(self, runner: ServedRunner) -> RunnerWiring:
         """This wiring, bound to ``runner`` — how a host read composes each runner's own seams."""
         return RunnerWiring(self.state, runner.seams)
+
+    def flags(self) -> Flags:
+        """The host's resolved flags — the packaged registry's defaults when nothing wired them."""
+        flags: Flags | None = self._seam("flags")
+        return flags if flags is not None else resolve_flags(FlagRegistry.load(), "runner", {}).flags
 
     def workspaces(self) -> tuple[ServedWorkspace, ...]:
         workspaces: tuple[ServedWorkspace, ...] | None = self._seam("workspaces")

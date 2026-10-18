@@ -13,7 +13,7 @@ import tempfile
 # and the tenant cache's lock, which guards this process's memory, not a store decision
 # ast-grep-ignore: bzh:store-exclusive-write
 import threading
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import timedelta
 from pathlib import Path
@@ -23,6 +23,7 @@ import httpx
 from sqlalchemy import Engine
 
 from blizzard.foundation.clock import IClock, SystemClock
+from blizzard.foundation.flags import FlagRegistry, Flags, resolve_flags, warn_ignored_flags
 from blizzard.foundation.forwarded import TrustedProxies
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.platform_tracing.tracer import IPlatformTracer
@@ -776,6 +777,14 @@ def build_config_authoring(stores: TenantStores, *, cipher: ISecretCipher) -> Co
         import_writer=stores.config_import,
         clock=stores.clock,
     )
+
+
+def build_hub_flags(flags: Mapping[str, bool], registry: FlagRegistry | None = None) -> Flags:
+    """The hub's resolved flags: every ``hub`` and ``fleet`` flag at its registry default, then the ``[flags]``
+    overrides. Each override the hub ignores is warned of here, once per process."""
+    resolution = resolve_flags(registry or FlagRegistry.load(), "hub", flags)
+    warn_ignored_flags(get_logger("blizzard.hub"), resolution)
+    return resolution.flags
 
 
 def build_process_core(engine: Engine) -> HubCore:
