@@ -1,0 +1,1229 @@
+{
+  "daemon": "host",
+  "keys": [
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "auth",
+      "replaced_by": null,
+      "required": false,
+      "type": "table"
+    },
+    {
+      "default": "mirror",
+      "deprecated": false,
+      "path": "auth.hub_role_default",
+      "replaced_by": null,
+      "required": false,
+      "type": "string"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "auth.superuser",
+      "replaced_by": null,
+      "required": false,
+      "type": "string"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "auth.users",
+      "replaced_by": null,
+      "required": false,
+      "type": "open table"
+    },
+    {
+      "default": null,
+      "deprecated": true,
+      "path": "base_branch",
+      "replaced_by": "workspace[].base_branch",
+      "required": false,
+      "type": "string"
+    },
+    {
+      "default": null,
+      "deprecated": true,
+      "path": "claude_code",
+      "replaced_by": "runner[].claude_code",
+      "required": false,
+      "type": "table"
+    },
+    {
+      "default": null,
+      "deprecated": true,
+      "path": "claude_code_credentials_path",
+      "replaced_by": "runner[].claude_code_credentials_path",
+      "required": false,
+      "type": "string"
+    },
+    {
+      "default": null,
+      "deprecated": true,
+      "path": "context",
+      "replaced_by": "runner[].context",
+      "required": false,
+      "type": "table"
+    },
+    {
+      "default": null,
+      "deprecated": true,
+      "path": "cost",
+      "replaced_by": "runner[].cost",
+      "required": false,
+      "type": "table"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "db_url",
+      "replaced_by": null,
+      "required": false,
+      "type": "string"
+    },
+    {
+      "default": null,
+      "deprecated": true,
+      "path": "effort",
+      "replaced_by": "runner[].effort",
+      "required": false,
+      "type": "table"
+    },
+    {
+      "default": null,
+      "deprecated": true,
+      "path": "envs",
+      "replaced_by": "workspace[].envs",
+      "required": false,
+      "type": "list of strings"
+    },
+    {
+      "default": null,
+      "deprecated": true,
+      "path": "external_subscription_usage",
+      "replaced_by": "subscription",
+      "required": false,
+      "type": "table"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "flags",
+      "replaced_by": null,
+      "required": false,
+      "type": "open table"
+    },
+    {
+      "default": null,
+      "deprecated": true,
+      "path": "gates",
+      "replaced_by": "runner[].gates",
+      "required": false,
+      "type": "list of strings"
+    },
+    {
+      "default": null,
+      "deprecated": true,
+      "path": "harness",
+      "replaced_by": "runner[].harness",
+      "required": false,
+      "type": "table"
+    },
+    {
+      "default": null,
+      "deprecated": true,
+      "path": "harness_binary",
+      "replaced_by": "runner[].harness_binary",
+      "required": false,
+      "type": "string"
+    },
+    {
+      "default": null,
+      "deprecated": true,
+      "path": "harness_permission_mode",
+      "replaced_by": "runner[].harness_permission_mode",
+      "required": false,
+      "type": "string"
+    },
+    {
+      "default": "127.0.0.1",
+      "deprecated": false,
+      "path": "host",
+      "replaced_by": null,
+      "required": false,
+      "type": "string"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "host_token",
+      "replaced_by": null,
+      "required": false,
+      "type": "string"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "hub_tokens",
+      "replaced_by": null,
+      "required": false,
+      "type": "open table"
+    },
+    {
+      "default": "http://127.0.0.1:8421",
+      "deprecated": false,
+      "path": "hub_url",
+      "replaced_by": null,
+      "required": false,
+      "type": "string"
+    },
+    {
+      "default": null,
+      "deprecated": true,
+      "path": "max_agents",
+      "replaced_by": "runner[].projects[].agents",
+      "required": false,
+      "type": "integer"
+    },
+    {
+      "default": null,
+      "deprecated": true,
+      "path": "max_environments",
+      "replaced_by": "workspace[].max_environments",
+      "required": false,
+      "type": "integer"
+    },
+    {
+      "default": null,
+      "deprecated": true,
+      "path": "models",
+      "replaced_by": "runner[].models",
+      "required": false,
+      "type": "table"
+    },
+    {
+      "default": null,
+      "deprecated": true,
+      "path": "name",
+      "replaced_by": "runner[].name",
+      "required": false,
+      "type": "string"
+    },
+    {
+      "default": null,
+      "deprecated": true,
+      "path": "opencode",
+      "replaced_by": "runner[].opencode",
+      "required": false,
+      "type": "table"
+    },
+    {
+      "default": 8431,
+      "deprecated": false,
+      "path": "port",
+      "replaced_by": null,
+      "required": false,
+      "type": "integer"
+    },
+    {
+      "default": null,
+      "deprecated": true,
+      "path": "projects",
+      "replaced_by": "runner[].projects",
+      "required": false,
+      "type": "array of tables"
+    },
+    {
+      "default": null,
+      "deprecated": true,
+      "path": "prompt",
+      "replaced_by": "workspace[].prompt",
+      "required": false,
+      "type": "string"
+    },
+    {
+      "default": null,
+      "deprecated": true,
+      "path": "prompt_file",
+      "replaced_by": "workspace[].prompt_file",
+      "required": false,
+      "type": "string"
+    },
+    {
+      "default": null,
+      "deprecated": true,
+      "path": "prompt_package",
+      "replaced_by": "workspace[].prompt_package",
+      "required": false,
+      "type": "string"
+    },
+    {
+      "default": null,
+      "deprecated": true,
+      "path": "provider",
+      "replaced_by": "workspace[].provider",
+      "required": false,
+      "type": "string"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "public_url",
+      "replaced_by": null,
+      "required": false,
+      "type": "string or list of strings"
+    },
+    {
+      "default": null,
+      "deprecated": true,
+      "path": "queue",
+      "replaced_by": "runner[].queue",
+      "required": false,
+      "type": "table"
+    },
+    {
+      "default": null,
+      "deprecated": true,
+      "path": "repo",
+      "replaced_by": "workspace[].repo",
+      "required": false,
+      "type": "array of tables"
+    },
+    {
+      "default": null,
+      "deprecated": true,
+      "path": "root",
+      "replaced_by": "workspace[].root",
+      "required": false,
+      "type": "string"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "runner",
+      "replaced_by": null,
+      "required": false,
+      "type": "array of tables"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "runner[].claude_code",
+      "replaced_by": null,
+      "required": false,
+      "type": "table"
+    },
+    {
+      "default": "claude",
+      "deprecated": false,
+      "path": "runner[].claude_code.binary",
+      "replaced_by": null,
+      "required": false,
+      "type": "string"
+    },
+    {
+      "default": true,
+      "deprecated": false,
+      "path": "runner[].claude_code.enabled",
+      "replaced_by": null,
+      "required": false,
+      "type": "boolean"
+    },
+    {
+      "default": null,
+      "deprecated": true,
+      "path": "runner[].claude_code_credentials_path",
+      "replaced_by": null,
+      "required": false,
+      "type": "string"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "runner[].context",
+      "replaced_by": null,
+      "required": false,
+      "type": "table"
+    },
+    {
+      "default": 60,
+      "deprecated": false,
+      "path": "runner[].context.sample_interval_seconds",
+      "replaced_by": null,
+      "required": false,
+      "type": "integer"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "runner[].context.warn_tokens",
+      "replaced_by": null,
+      "required": false,
+      "type": "integer"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "runner[].cost",
+      "replaced_by": null,
+      "required": false,
+      "type": "table"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "runner[].cost.chunk_cap_usd",
+      "replaced_by": null,
+      "required": false,
+      "type": "number"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "runner[].cost.runner_ceiling_usd",
+      "replaced_by": null,
+      "required": false,
+      "type": "number"
+    },
+    {
+      "default": 24.0,
+      "deprecated": false,
+      "path": "runner[].cost.window_hours",
+      "replaced_by": null,
+      "required": false,
+      "type": "number"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "runner[].effort",
+      "replaced_by": null,
+      "required": false,
+      "type": "table"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "runner[].effort.aliases",
+      "replaced_by": null,
+      "required": false,
+      "type": "open table"
+    },
+    {
+      "default": null,
+      "deprecated": true,
+      "path": "runner[].external_subscription_usage",
+      "replaced_by": "subscription",
+      "required": false,
+      "type": "table"
+    },
+    {
+      "default": [],
+      "deprecated": false,
+      "path": "runner[].gates",
+      "replaced_by": null,
+      "required": false,
+      "type": "list of strings"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "runner[].harness",
+      "replaced_by": null,
+      "required": false,
+      "type": "table"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "runner[].harness.autonomy",
+      "replaced_by": null,
+      "required": false,
+      "type": "string"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "runner[].harness.config_dir",
+      "replaced_by": null,
+      "required": false,
+      "type": "string"
+    },
+    {
+      "default": null,
+      "deprecated": true,
+      "path": "runner[].harness_binary",
+      "replaced_by": "runner[].claude_code.binary",
+      "required": false,
+      "type": "string"
+    },
+    {
+      "default": null,
+      "deprecated": true,
+      "path": "runner[].harness_permission_mode",
+      "replaced_by": "runner[].harness.autonomy",
+      "required": false,
+      "type": "string"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "runner[].id",
+      "replaced_by": null,
+      "required": false,
+      "type": "string"
+    },
+    {
+      "default": null,
+      "deprecated": true,
+      "path": "runner[].max_agents",
+      "replaced_by": "runner[].projects[].agents",
+      "required": false,
+      "type": "integer"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "runner[].models",
+      "replaced_by": null,
+      "required": false,
+      "type": "table"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "runner[].models.aliases",
+      "replaced_by": null,
+      "required": false,
+      "type": "open table"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "runner[].name",
+      "replaced_by": null,
+      "required": true,
+      "type": "string"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "runner[].opencode",
+      "replaced_by": null,
+      "required": false,
+      "type": "table"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "runner[].opencode.auth_path",
+      "replaced_by": null,
+      "required": false,
+      "type": "string"
+    },
+    {
+      "default": "opencode",
+      "deprecated": false,
+      "path": "runner[].opencode.binary",
+      "replaced_by": null,
+      "required": false,
+      "type": "string"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "runner[].opencode.effort",
+      "replaced_by": null,
+      "required": false,
+      "type": "table"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "runner[].opencode.effort.aliases",
+      "replaced_by": null,
+      "required": false,
+      "type": "open table"
+    },
+    {
+      "default": true,
+      "deprecated": false,
+      "path": "runner[].opencode.enabled",
+      "replaced_by": null,
+      "required": false,
+      "type": "boolean"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "runner[].opencode.models",
+      "replaced_by": null,
+      "required": false,
+      "type": "table"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "runner[].opencode.models.aliases",
+      "replaced_by": null,
+      "required": false,
+      "type": "open table"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "runner[].opencode.worker_config_path",
+      "replaced_by": null,
+      "required": false,
+      "type": "string"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "runner[].projects",
+      "replaced_by": null,
+      "required": true,
+      "type": "array of tables"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "runner[].projects[].agents",
+      "replaced_by": null,
+      "required": true,
+      "type": "integer"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "runner[].projects[].project",
+      "replaced_by": null,
+      "required": true,
+      "type": "string"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "runner[].projects[].workspace",
+      "replaced_by": null,
+      "required": true,
+      "type": "string"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "runner[].queue",
+      "replaced_by": null,
+      "required": false,
+      "type": "table"
+    },
+    {
+      "default": false,
+      "deprecated": false,
+      "path": "runner[].queue.strict",
+      "replaced_by": null,
+      "required": false,
+      "type": "boolean"
+    },
+    {
+      "default": null,
+      "deprecated": true,
+      "path": "runner[].runner_id",
+      "replaced_by": "runner[].id",
+      "required": false,
+      "type": "string"
+    },
+    {
+      "default": "",
+      "deprecated": false,
+      "path": "runner[].runner_prompt",
+      "replaced_by": null,
+      "required": false,
+      "type": "string"
+    },
+    {
+      "default": "",
+      "deprecated": false,
+      "path": "runner[].runner_prompt_file",
+      "replaced_by": null,
+      "required": false,
+      "type": "string"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "runner[].subscription",
+      "replaced_by": null,
+      "required": false,
+      "type": "string"
+    },
+    {
+      "default": null,
+      "deprecated": true,
+      "path": "runner[].token_env",
+      "replaced_by": null,
+      "required": false,
+      "type": "string"
+    },
+    {
+      "default": "",
+      "deprecated": false,
+      "path": "runner[].transcripts_root",
+      "replaced_by": null,
+      "required": false,
+      "type": "string"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "runner[].worker",
+      "replaced_by": null,
+      "required": false,
+      "type": "table"
+    },
+    {
+      "default": [],
+      "deprecated": false,
+      "path": "runner[].worker.env_passthrough",
+      "replaced_by": null,
+      "required": false,
+      "type": "list of strings"
+    },
+    {
+      "default": [],
+      "deprecated": false,
+      "path": "runner[].worker.path_prepend",
+      "replaced_by": null,
+      "required": false,
+      "type": "list of strings"
+    },
+    {
+      "default": null,
+      "deprecated": true,
+      "path": "runner[].worker_settings_path",
+      "replaced_by": null,
+      "required": false,
+      "type": "string"
+    },
+    {
+      "default": null,
+      "deprecated": true,
+      "path": "runner[].workspace_envs",
+      "replaced_by": "workspace[].envs",
+      "required": false,
+      "type": "list of strings"
+    },
+    {
+      "default": null,
+      "deprecated": true,
+      "path": "runner[].workspace_id",
+      "replaced_by": "workspace[].id",
+      "required": false,
+      "type": "string"
+    },
+    {
+      "default": null,
+      "deprecated": true,
+      "path": "runner[].workspace_prompt",
+      "replaced_by": "workspace[].prompt",
+      "required": false,
+      "type": "string"
+    },
+    {
+      "default": null,
+      "deprecated": true,
+      "path": "runner[].workspace_prompt_file",
+      "replaced_by": "workspace[].prompt_file",
+      "required": false,
+      "type": "string"
+    },
+    {
+      "default": null,
+      "deprecated": true,
+      "path": "runner[].workspace_prompt_package",
+      "replaced_by": "workspace[].prompt_package",
+      "required": false,
+      "type": "string"
+    },
+    {
+      "default": null,
+      "deprecated": true,
+      "path": "runner[].workspace_provider",
+      "replaced_by": "workspace[].provider",
+      "required": false,
+      "type": "string"
+    },
+    {
+      "default": null,
+      "deprecated": true,
+      "path": "runner[].workspace_repo",
+      "replaced_by": "workspace[].repo",
+      "required": false,
+      "type": "array of tables"
+    },
+    {
+      "default": null,
+      "deprecated": true,
+      "path": "runner[].workspace_root",
+      "replaced_by": "workspace[].root",
+      "required": false,
+      "type": "string"
+    },
+    {
+      "default": null,
+      "deprecated": true,
+      "path": "runner_id",
+      "replaced_by": "runner[].id",
+      "required": false,
+      "type": "string"
+    },
+    {
+      "default": null,
+      "deprecated": true,
+      "path": "runner_prompt",
+      "replaced_by": "runner[].runner_prompt",
+      "required": false,
+      "type": "string"
+    },
+    {
+      "default": null,
+      "deprecated": true,
+      "path": "runner_prompt_file",
+      "replaced_by": "runner[].runner_prompt_file",
+      "required": false,
+      "type": "string"
+    },
+    {
+      "default": "BZ_RUNNER_SESSION_SECRET",
+      "deprecated": false,
+      "path": "session_secret_env",
+      "replaced_by": null,
+      "required": false,
+      "type": "string"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "subscription",
+      "replaced_by": null,
+      "required": false,
+      "type": "array of tables"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "subscription[].credentials_path",
+      "replaced_by": null,
+      "required": false,
+      "type": "string"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "subscription[].name",
+      "replaced_by": null,
+      "required": true,
+      "type": "string"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "subscription[].provider",
+      "replaced_by": null,
+      "required": true,
+      "type": "string"
+    },
+    {
+      "default": 300,
+      "deprecated": false,
+      "path": "subscription[].sample_interval_seconds",
+      "replaced_by": null,
+      "required": false,
+      "type": "integer"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "subscription[].slug",
+      "replaced_by": null,
+      "required": true,
+      "type": "string"
+    },
+    {
+      "default": null,
+      "deprecated": true,
+      "path": "token_env",
+      "replaced_by": null,
+      "required": false,
+      "type": "string"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "tracing",
+      "replaced_by": null,
+      "required": false,
+      "type": "table"
+    },
+    {
+      "default": 200,
+      "deprecated": false,
+      "path": "tracing.batch_limit",
+      "replaced_by": null,
+      "required": false,
+      "type": "integer"
+    },
+    {
+      "default": false,
+      "deprecated": false,
+      "path": "tracing.harness_telemetry",
+      "replaced_by": null,
+      "required": false,
+      "type": "boolean"
+    },
+    {
+      "default": 86400,
+      "deprecated": false,
+      "path": "tracing.max_lag_seconds",
+      "replaced_by": null,
+      "required": false,
+      "type": "integer"
+    },
+    {
+      "default": false,
+      "deprecated": false,
+      "path": "tracing.platform",
+      "replaced_by": null,
+      "required": false,
+      "type": "boolean"
+    },
+    {
+      "default": 0.01,
+      "deprecated": false,
+      "path": "tracing.platform_sample_ratio",
+      "replaced_by": null,
+      "required": false,
+      "type": "number"
+    },
+    {
+      "default": 604800,
+      "deprecated": false,
+      "path": "tracing.replay_max_window",
+      "replaced_by": null,
+      "required": false,
+      "type": "integer"
+    },
+    {
+      "default": 300,
+      "deprecated": false,
+      "path": "tracing.settle_seconds",
+      "replaced_by": null,
+      "required": false,
+      "type": "integer"
+    },
+    {
+      "default": 60,
+      "deprecated": false,
+      "path": "tracing.sweep_seconds",
+      "replaced_by": null,
+      "required": false,
+      "type": "integer"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "tracing.worker_program_services",
+      "replaced_by": null,
+      "required": false,
+      "type": "open table"
+    },
+    {
+      "default": false,
+      "deprecated": false,
+      "path": "tracing.worker_programs",
+      "replaced_by": null,
+      "required": false,
+      "type": "boolean"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "transcripts",
+      "replaced_by": null,
+      "required": false,
+      "type": "table"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "transcripts.chunk_max_bytes",
+      "replaced_by": null,
+      "required": false,
+      "type": "integer"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "transcripts.record_max_bytes",
+      "replaced_by": null,
+      "required": false,
+      "type": "integer"
+    },
+    {
+      "default": false,
+      "deprecated": false,
+      "path": "transcripts.ship",
+      "replaced_by": null,
+      "required": false,
+      "type": "boolean"
+    },
+    {
+      "default": null,
+      "deprecated": true,
+      "path": "transcripts_root",
+      "replaced_by": "runner[].transcripts_root",
+      "required": false,
+      "type": "string"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "trusted_proxies",
+      "replaced_by": null,
+      "required": false,
+      "type": "list of strings"
+    },
+    {
+      "default": null,
+      "deprecated": true,
+      "path": "worker",
+      "replaced_by": "runner[].worker",
+      "required": false,
+      "type": "table"
+    },
+    {
+      "default": null,
+      "deprecated": true,
+      "path": "worker_settings_path",
+      "replaced_by": "runner[].worker_settings_path",
+      "required": false,
+      "type": "string"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "worker_stdout",
+      "replaced_by": null,
+      "required": false,
+      "type": "table"
+    },
+    {
+      "default": 14,
+      "deprecated": false,
+      "path": "worker_stdout.retention_days",
+      "replaced_by": null,
+      "required": false,
+      "type": "integer"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "workspace",
+      "replaced_by": null,
+      "required": false,
+      "type": "array of tables"
+    },
+    {
+      "default": "main",
+      "deprecated": false,
+      "path": "workspace[].base_branch",
+      "replaced_by": null,
+      "required": false,
+      "type": "string"
+    },
+    {
+      "default": [
+        "e1"
+      ],
+      "deprecated": false,
+      "path": "workspace[].envs",
+      "replaced_by": null,
+      "required": false,
+      "type": "list of strings"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "workspace[].id",
+      "replaced_by": null,
+      "required": true,
+      "type": "string"
+    },
+    {
+      "default": 10,
+      "deprecated": false,
+      "path": "workspace[].max_environments",
+      "replaced_by": null,
+      "required": false,
+      "type": "integer"
+    },
+    {
+      "default": "",
+      "deprecated": false,
+      "path": "workspace[].prompt",
+      "replaced_by": null,
+      "required": false,
+      "type": "string"
+    },
+    {
+      "default": "",
+      "deprecated": false,
+      "path": "workspace[].prompt_file",
+      "replaced_by": null,
+      "required": false,
+      "type": "string"
+    },
+    {
+      "default": "",
+      "deprecated": false,
+      "path": "workspace[].prompt_package",
+      "replaced_by": null,
+      "required": false,
+      "type": "string"
+    },
+    {
+      "default": "winter",
+      "deprecated": false,
+      "path": "workspace[].provider",
+      "replaced_by": null,
+      "required": false,
+      "type": "string"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "workspace[].repo",
+      "replaced_by": null,
+      "required": false,
+      "type": "array of tables"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "workspace[].repo[].name",
+      "replaced_by": null,
+      "required": true,
+      "type": "string"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "workspace[].repo[].url",
+      "replaced_by": null,
+      "required": true,
+      "type": "string"
+    },
+    {
+      "default": "",
+      "deprecated": false,
+      "path": "workspace[].root",
+      "replaced_by": null,
+      "required": false,
+      "type": "string"
+    },
+    {
+      "default": null,
+      "deprecated": true,
+      "path": "workspace_envs",
+      "replaced_by": "workspace[].envs",
+      "required": false,
+      "type": "list of strings"
+    },
+    {
+      "default": null,
+      "deprecated": true,
+      "path": "workspace_id",
+      "replaced_by": "workspace[].id",
+      "required": false,
+      "type": "string"
+    },
+    {
+      "default": null,
+      "deprecated": true,
+      "path": "workspace_prompt",
+      "replaced_by": "workspace[].prompt",
+      "required": false,
+      "type": "string"
+    },
+    {
+      "default": null,
+      "deprecated": true,
+      "path": "workspace_prompt_file",
+      "replaced_by": "workspace[].prompt_file",
+      "required": false,
+      "type": "string"
+    },
+    {
+      "default": null,
+      "deprecated": true,
+      "path": "workspace_prompt_package",
+      "replaced_by": "workspace[].prompt_package",
+      "required": false,
+      "type": "string"
+    },
+    {
+      "default": null,
+      "deprecated": true,
+      "path": "workspace_provider",
+      "replaced_by": "workspace[].provider",
+      "required": false,
+      "type": "string"
+    },
+    {
+      "default": null,
+      "deprecated": true,
+      "path": "workspace_repo",
+      "replaced_by": "workspace[].repo",
+      "required": false,
+      "type": "array of tables"
+    },
+    {
+      "default": null,
+      "deprecated": true,
+      "path": "workspace_root",
+      "replaced_by": "workspace[].root",
+      "required": false,
+      "type": "string"
+    }
+  ],
+  "paths": [
+    {
+      "holds": "the hub tokens the host reads when the environment holds none",
+      "path": ".env"
+    },
+    {
+      "holds": "the host's configuration",
+      "path": "blizzard-host.toml"
+    },
+    {
+      "holds": "the host's data directory",
+      "path": "data"
+    },
+    {
+      "holds": "the host's default store",
+      "path": "data/host.db"
+    },
+    {
+      "holds": "the lock that keeps one host process on the directory",
+      "path": "data/host.lock"
+    },
+    {
+      "holds": "the host's local API socket",
+      "path": "host.sock"
+    },
+    {
+      "holds": "each runner's own files, by runner name",
+      "path": "runners"
+    }
+  ]
+}

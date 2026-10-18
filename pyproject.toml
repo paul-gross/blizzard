@@ -194,6 +194,7 @@ also_copy = [
     ".github/workflows/upper-tiers.yml",
     "contracts/ast-grep/rules/domain-takes-objects.yml",
     "contracts/cli",
+    "contracts/config",
     "contracts/egress",
     "contracts/sse",
     "contracts/store",

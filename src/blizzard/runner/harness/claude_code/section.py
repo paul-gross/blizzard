@@ -9,8 +9,8 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
+from blizzard.foundation.config_keys import BOOLEAN, OPEN_TABLE, STRING, TABLE, ConfigKey, ConfigView
 from blizzard.foundation.roles import domain_model
 from blizzard.runner.config_table import ConfigError, Table
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID
@@ -93,26 +93,42 @@ class ClaudeCodeSectionKind:
     def table(self) -> str:
         return "claude_code"
 
-    def parse(self, document: Mapping[str, Any], *, root: Path, path: Path) -> ClaudeCodeSection:
-        table = Table.of(document.get(self.table))
-        if "harness_binary" in document and "binary" in table.body:
+    @property
+    def keys(self) -> tuple[ConfigKey, ...]:
+        return (
+            ConfigKey("claude_code", TABLE),
+            ConfigKey("claude_code.enabled", BOOLEAN, default=ClaudeCodeSection.enabled),
+            ConfigKey("claude_code.binary", STRING, default=DEFAULT_HARNESS_BINARY),
+            ConfigKey("models", TABLE),
+            ConfigKey("models.aliases", OPEN_TABLE),
+            ConfigKey("effort", TABLE),
+            ConfigKey("effort.aliases", OPEN_TABLE),
+            ConfigKey("harness_binary", STRING, deprecated=True, replaced_by="claude_code.binary"),
+            ConfigKey("harness_permission_mode", STRING, deprecated=True, replaced_by="harness.autonomy"),
+            ConfigKey("worker_settings_path", STRING, deprecated=True),
+            ConfigKey("claude_code_credentials_path", STRING, deprecated=True),
+        )
+
+    def parse(self, document: ConfigView, *, root: Path, path: Path) -> ClaudeCodeSection:
+        table = Table.of(document.table(self.table))
+        if "harness_binary" in document and "binary" in table.view:
             raise ConfigError("set Claude Code's binary once: 'harness_binary' or '[claude_code].binary', not both")
         permission_mode = (
-            None if "harness_permission_mode" not in document else str(document["harness_permission_mode"])
+            None if "harness_permission_mode" not in document else str(document.get("harness_permission_mode"))
         )
-        if permission_mode is not None and "autonomy" in Table.of(document.get("harness")).body:
+        if permission_mode is not None and "autonomy" in document.table("harness"):
             raise ConfigError(
                 f"set the approval posture once in {path}: 'harness_permission_mode' and '[harness] autonomy' "
                 "are both set; keep only '[harness] autonomy'"
             )
         return ClaudeCodeSection(
-            binary=str(document.get("harness_binary", table.body.get("binary", DEFAULT_HARNESS_BINARY))),
+            binary=str(document.get("harness_binary", table.view.get("binary", DEFAULT_HARNESS_BINARY))),
             enabled=table.boolean("enabled", True),
             permission_mode=permission_mode,
             worker_settings_path=_present(document, "worker_settings_path"),
             credentials_path=_present(document, "claude_code_credentials_path"),
-            model_aliases=Table.of(document.get("models")).pairs("aliases"),
-            effort_aliases=Table.of(document.get("effort")).pairs("aliases"),
+            model_aliases=Table.of(document.table("models")).pairs("aliases"),
+            effort_aliases=Table.of(document.table("effort")).pairs("aliases"),
         )
 
     def default(self) -> ClaudeCodeSection:
@@ -127,7 +143,7 @@ class ClaudeCodeSectionKind:
         )
 
 
-def _present(document: Mapping[str, Any], key: str) -> str | None:
+def _present(document: ConfigView, key: str) -> str | None:
     """A legacy root path key whose empty value counts as absent."""
     value = document.get(key)
     return str(value) if value else None

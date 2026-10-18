@@ -18,6 +18,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
+from blizzard.foundation.config_keys import ConfigView
 from blizzard.foundation.forwarded import TrustedProxies
 from blizzard.foundation.public_origins import PublicOrigins
 from blizzard.foundation.roles import collaborator, domain_model
@@ -66,6 +67,7 @@ from blizzard.runner.config import (
     effective_autonomy_source,
     resolve_session_secret,
 )
+from blizzard.runner.config_keys import HOST_REGISTRY
 from blizzard.runner.config_table import ConfigError, Table
 from blizzard.runner.environments.factory import WORKSPACE_PROVIDERS
 from blizzard.runner.harness.wiring import HarnessSections
@@ -700,56 +702,57 @@ def _parse(raw: dict[str, Any], *, layout: HostLayout, host: str | None, port: i
     errors = _Errors()
     root = layout.root
     path = layout.config_path
-    _refuse_misplaced_keys(raw, errors)
-    session_secret_env = str(raw.get("session_secret_env", DEFAULT_SESSION_SECRET_ENV))
+    document = ConfigView.root(HOST_REGISTRY, raw)
+    _refuse_misplaced_keys(document, errors)
+    session_secret_env = str(document.get("session_secret_env", DEFAULT_SESSION_SECRET_ENV))
     session_secret = errors.attempt("session_secret_env", lambda: resolve_session_secret(session_secret_env), b"")
-    transcripts = Transcripts.of(raw.get("transcripts"))
+    transcripts = Transcripts.of(document.table("transcripts"))
     errors.attempt(
         "[transcripts]", lambda: (transcripts.ship, transcripts.record_max_bytes, transcripts.chunk_max_bytes), None
     )
-    worker_stdout = WorkerStdout.of(raw.get("worker_stdout"))
+    worker_stdout = WorkerStdout.of(document.table("worker_stdout"))
     errors.attempt("[worker_stdout]", lambda: worker_stdout.retention_days, 0)
-    subscriptions = errors.attempt(
-        "[[subscription]]", lambda: SubscriptionDeclaration.declared(raw.get("subscription", [])), ()
-    )
-    workspaces = _workspaces(raw.get("workspace", []), root=root, errors=errors)
-    db_url = str(raw["db_url"]) if "db_url" in raw else layout.default_db_url
+    subscriptions = errors.attempt("[[subscription]]", lambda: SubscriptionDeclaration.declared(document), ())
+    workspaces = _workspaces(document, root=root, errors=errors)
+    db_url = str(document.get("db_url")) if "db_url" in document else layout.default_db_url
     if not db_url.strip():
         errors.add("db_url must not be blank")
     resolved_port = errors.attempt(
-        "port", lambda: port if port is not None else int(raw.get("port", DEFAULT_PORT)), DEFAULT_PORT
+        "port", lambda: port if port is not None else int(document.get("port", DEFAULT_PORT)), DEFAULT_PORT
     )
-    public_urls = errors.attempt("public_url", lambda: PublicOrigins.entries(raw.get("public_url"), ConfigError), ())
+    public_urls = errors.attempt(
+        "public_url", lambda: PublicOrigins.entries(document.get("public_url"), ConfigError), ()
+    )
     trusted_proxies = errors.attempt(
-        "trusted_proxies", lambda: TrustedProxies.entries(raw.get("trusted_proxies"), ConfigError), ()
+        "trusted_proxies", lambda: TrustedProxies.entries(document.get("trusted_proxies"), ConfigError), ()
     )
     tracing = errors.attempt(
-        "[tracing]", lambda: TracingConfig.of(raw.get("tracing", {}), ConfigError), TracingConfig()
+        "[tracing]", lambda: TracingConfig.of(document.table("tracing"), ConfigError), TracingConfig()
     )
-    if not isinstance(raw.get("hub_tokens", {}), dict):
+    if not isinstance(document.get("hub_tokens", {}), dict):
         errors.add("[hub_tokens] must be a table of tokens keyed by runner name")
-    hub_tokens = Table.of(raw).pairs("hub_tokens")
+    hub_tokens = Table.of(document).pairs("hub_tokens")
     host_token = resolve_token(
         HOST_TOKEN_VARIABLE,
         environ=os.environ,
-        from_file=str(raw.get("host_token", "")),
+        from_file=str(document.get("host_token", "")),
         dotenv_text=_dotenv_text(root),
     )
-    entries = _runner_entries(raw.get("runner", []), root=root, db_url=db_url, path=path, errors=errors)
+    entries = _runner_entries(document, root=root, db_url=db_url, path=path, errors=errors)
     _check_runner_uniqueness(entries, has_host_token=bool(host_token.value), errors=errors)
     if errors.found:
         raise HostConfigError(tuple(errors.found))
     return HostConfig(
         root=root,
         db_url=db_url,
-        host=host or str(raw.get("host", DEFAULT_HOST)),
+        host=host or str(document.get("host", DEFAULT_HOST)),
         port=resolved_port,
-        hub_url=str(raw.get("hub_url", DEFAULT_HUB_URL)),
+        hub_url=str(document.get("hub_url", DEFAULT_HUB_URL)),
         public_urls=public_urls,
         trusted_proxies=trusted_proxies,
         session_secret_env=session_secret_env,
         session_secret=session_secret,
-        auth=Auth.of(raw.get("auth")),
+        auth=Auth.of(document.table("auth")),
         tracing=tracing,
         transcripts=transcripts,
         worker_stdout=worker_stdout,
@@ -758,7 +761,7 @@ def _parse(raw: dict[str, Any], *, layout: HostLayout, host: str | None, port: i
         subscriptions=subscriptions,
         workspaces=workspaces,
         runners=entries,
-        warnings=_permission_warnings(path, holds_credentials="host_token" in raw or bool(hub_tokens)),
+        warnings=_permission_warnings(path, holds_credentials="host_token" in document or bool(hub_tokens)),
     )
 
 
@@ -802,7 +805,7 @@ def _graduated_raw(legacy: Mapping[str, Any], *, runner_id: str, served: tuple[s
     return raw
 
 
-def _refuse_misplaced_keys(raw: Mapping[str, Any], errors: _Errors) -> None:
+def _refuse_misplaced_keys(raw: ConfigView, errors: _Errors) -> None:
     """Top-level keys with no home under a host, and keys whose home is a ``[[runner]]`` or
     ``[[workspace]]``, each named with where it belongs."""
     for key, home in _RETIRED_KEYS.items():
@@ -816,23 +819,26 @@ def _refuse_misplaced_keys(raw: Mapping[str, Any], errors: _Errors) -> None:
             errors.add(f"{key!r} belongs under [[workspace]], not at the top level")
 
 
-def _entries(raw: object, table: str, errors: _Errors) -> list[dict[str, Any]]:
+def _entries(document: ConfigView, table: str, errors: _Errors) -> list[ConfigView]:
+    raw = document.get(table, [])
     if not isinstance(raw, list):
         errors.add(f"[[{table}]] must be an array of tables")
         return []
-    entries: list[dict[str, Any]] = []
+    entries: list[ConfigView] = []
     for position, entry in enumerate(raw, start=1):
         if isinstance(entry, dict):
-            entries.append(entry)
+            entries.append(document.element(table, entry))
         else:
             errors.add(f"[[{table}]] #{position} must be a table")
     return entries
 
 
-def _workspaces(raw: object, *, root: Path, errors: _Errors) -> tuple[HostWorkspace, ...]:
+def _workspaces(document: ConfigView, *, root: Path, errors: _Errors) -> tuple[HostWorkspace, ...]:
     workspaces: list[HostWorkspace] = []
-    for position, entry in enumerate(_entries(raw, "workspace", errors), start=1):
-        label = f"[[workspace]] {entry['id']!r}" if isinstance(entry.get("id"), str) else f"[[workspace]] #{position}"
+    for position, entry in enumerate(_entries(document, "workspace", errors), start=1):
+        label = (
+            f"[[workspace]] {entry.get('id')!r}" if isinstance(entry.get("id"), str) else f"[[workspace]] #{position}"
+        )
         workspace = errors.attempt(label, lambda entry=entry: _workspace(entry), None)
         if workspace is None:
             continue
@@ -856,7 +862,7 @@ def _workspaces(raw: object, *, root: Path, errors: _Errors) -> tuple[HostWorksp
     return tuple(workspaces)
 
 
-def _workspace(entry: Mapping[str, Any]) -> HostWorkspace:
+def _workspace(entry: ConfigView) -> HostWorkspace:
     identity = entry.get("id")
     if not isinstance(identity, str) or not identity.strip():
         raise ConfigError("id must be a non-blank string")
@@ -876,7 +882,7 @@ def _workspace(entry: Mapping[str, Any]) -> HostWorkspace:
         provider=provider,
         envs=tuple(str(env) for env in envs),
         max_environments=cap,
-        repos=_workspace_repos(entry.get("repo", [])),
+        repos=_workspace_repos(entry),
         base_branch=str(entry.get("base_branch", DEFAULT_BASE_BRANCH)),
         prompt=str(entry.get("prompt", "")),
         prompt_file=str(entry.get("prompt_file", "")),
@@ -884,9 +890,11 @@ def _workspace(entry: Mapping[str, Any]) -> HostWorkspace:
     )
 
 
-def _runner_entries(raw: object, *, root: Path, db_url: str, path: Path, errors: _Errors) -> tuple[RunnerEntry, ...]:
+def _runner_entries(
+    document: ConfigView, *, root: Path, db_url: str, path: Path, errors: _Errors
+) -> tuple[RunnerEntry, ...]:
     entries: list[RunnerEntry] = []
-    for position, entry in enumerate(_entries(raw, "runner", errors), start=1):
+    for position, entry in enumerate(_entries(document, "runner", errors), start=1):
         name = entry.get("name")
         if not isinstance(name, str) or not name.strip():
             errors.add(f"[[runner]] #{position} has no name")
@@ -895,7 +903,7 @@ def _runner_entries(raw: object, *, root: Path, db_url: str, path: Path, errors:
     return tuple(entries)
 
 
-def _runner_entry(raw: Mapping[str, Any], name: str, *, root: Path, db_url: str, path: Path) -> RunnerEntry:
+def _runner_entry(raw: ConfigView, name: str, *, root: Path, db_url: str, path: Path) -> RunnerEntry:
     problems = _Errors()
     identity = raw.get("id")
     if "id" in raw and (not isinstance(identity, str) or not identity.strip()):
@@ -924,19 +932,20 @@ def _runner_entry(raw: Mapping[str, Any], name: str, *, root: Path, db_url: str,
     )
 
 
-def _bindings(raw: Mapping[str, Any], errors: _Errors) -> tuple[ProjectBinding, ...]:
+def _bindings(raw: ConfigView, errors: _Errors) -> tuple[ProjectBinding, ...]:
     if "projects" not in raw:
         errors.add("has no projects: list the projects it serves, or `projects = []` to serve none")
         return ()
-    listed = raw["projects"]
+    listed = raw.get("projects")
     if not isinstance(listed, list):
         errors.add(f"projects must be a list of {{ project, workspace, agents }} bindings, got {listed!r}")
         return ()
     bindings: list[ProjectBinding] = []
     for binding in listed:
-        project = binding.get("project") if isinstance(binding, dict) else None
-        workspace = binding.get("workspace") if isinstance(binding, dict) else None
-        agents = binding.get("agents") if isinstance(binding, dict) else None
+        entry = raw.element("projects", binding)
+        project = entry.get("project") if isinstance(binding, dict) else None
+        workspace = entry.get("workspace") if isinstance(binding, dict) else None
+        agents = entry.get("agents") if isinstance(binding, dict) else None
         if (
             not isinstance(project, str)
             or not project.strip()
@@ -956,28 +965,28 @@ def _bindings(raw: Mapping[str, Any], errors: _Errors) -> tuple[ProjectBinding, 
     return tuple(bindings)
 
 
-def _own_tables(raw: Mapping[str, Any], *, root: Path, db_url: str, path: Path) -> RunnerConfig:
+def _own_tables(raw: ConfigView, *, root: Path, db_url: str, path: Path) -> RunnerConfig:
     """The tables only a runner owns, parsed onto a :class:`RunnerConfig` the host's keys are projected over."""
     sections = HarnessSections.parse(raw, root=root, path=path)
-    harness = Table.of(raw.get("harness"))
+    harness = Table.of(raw.table("harness"))
     gates = raw.get("gates", [])
     if not isinstance(gates, list):
         raise ConfigError(f"gates must be a list of node names, got {gates!r}")
-    spend = Spend.of(raw.get("cost"))
-    context = Context.of(raw.get("context"))
-    worker = Table.of(raw.get("worker"))
+    spend = Spend.of(raw.table("cost"))
+    context = Context.of(raw.table("context"))
+    worker = Table.of(raw.table("worker"))
     return RunnerConfig(
         root=root,
         db_url=db_url,
         harness_sections=sections,
-        autonomy=_parse_autonomy(harness.body.get("autonomy"), path),
-        autonomy_source=effective_autonomy_source(sections, "autonomy" in harness.body),
-        harness_config_dir=_parse_harness_config_dir(harness.body.get("config_dir"), root, path),
+        autonomy=_parse_autonomy(harness.get("autonomy"), path),
+        autonomy_source=effective_autonomy_source(sections, "autonomy" in harness.view),
+        harness_config_dir=_parse_harness_config_dir(harness.get("config_dir"), root, path),
         gates=tuple(str(gate) for gate in gates),
         runner_prompt=str(raw.get("runner_prompt", "")),
         runner_prompt_file=str(raw.get("runner_prompt_file", "")),
         transcripts_root=str(raw.get("transcripts_root", "")),
-        queue_strict=Queue.of(raw.get("queue")).strict,
+        queue_strict=Queue.of(raw.table("queue")).strict,
         chunk_cap_usd=spend.chunk_cap_usd,
         runner_ceiling_usd=spend.ceiling_usd,
         runner_ceiling_window_hours=spend.window_hours,

@@ -24,6 +24,16 @@ column, a new value of an enumerated egress column, or a migration that walks ba
 Mark a breaking commit with a `!` before the colon of its Conventional Commit subject: `feat!: ...`,
 `feat(scope)!: ...`.
 
+## The configuration contract
+
+[`contracts/config/`](../contracts/config/README.md) lists every key each daemon reads from its toml file —
+`hub.json` for `blizzard-hub.toml`, `host.json` for `blizzard-host.toml` — and every durable path under its runtime
+root. `blizzard:config-contract` and the merge gate's contract drift step fail when the code and the documents disagree,
+so adding, retiring or retyping a key is always a deliberate edit to the document.
+
+A key marked `deprecated` is still read, or still refused with a message naming its home; `replaced_by` names the key or
+table that took its place, and is `null` when nothing did. Removing a deprecated key is the breaking change.
+
 ## The trace contract
 
 [`contracts/traces/`](../contracts/traces/README.md) pins the shape of a chunk's traces — the work root, its step roots

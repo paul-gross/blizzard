@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 
+from blizzard.foundation.config_keys import STRICT_CONFIG_ENVIRONMENT_VARIABLE
 from blizzard.foundation.operator_sessions.internal import session_file
 from blizzard.foundation.runner_token_names import HUB_TOKEN_VARIABLE_PREFIX
 from blizzard.hub.domain.config.legacy_keys import LEGACY_FORGE_VARIABLES
@@ -160,7 +161,10 @@ def pytest_configure() -> None:
     spawns inherits this environ, and a hub refuses to start while one is set.
 
     Switch the tenant and runner statement guards on for every engine the suite opens: in process here, and in every
-    hub and runner subprocess, which inherits the variables and installs its guard as it opens its engine."""
+    hub and runner subprocess, which inherits the variables and installs its guard as it opens its engine.
+
+    Switch strict config reads on the same way: an undeclared key read through a daemon's config registry raises, in
+    process and in every spawned daemon."""
     for name in LEGACY_FORGE_VARIABLES:
         os.environ.pop(name, None)
     os.environ.update(
@@ -176,6 +180,7 @@ def pytest_configure() -> None:
     install_tenant_guard()
     os.environ[RUNNER_GUARD_ENVIRONMENT_VARIABLE] = "1"
     install_runner_guard()
+    os.environ[STRICT_CONFIG_ENVIRONMENT_VARIABLE] = "1"
 
 
 @pytest.fixture(autouse=True)

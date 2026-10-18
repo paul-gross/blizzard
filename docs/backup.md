@@ -29,6 +29,9 @@ ciphertext is useless without it, and a lost key means every secret must be set 
 (`config.data_dir / "hub_workdirs"`) — is reclaimable: re-cloned from the delivery forge on next use, carrying no state
 the store lacks, so skip it.
 
+[`contracts/config/hub.json`](../contracts/config/README.md) lists these paths beside the config keys the hub reads; the
+merge gate fails when one moves without the document.
+
 Signing keys, secret keys, and hub workdirs live on the `blizzard_hub-data` volume regardless of which store backend
 runs.
 

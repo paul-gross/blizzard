@@ -80,7 +80,7 @@ description = "Export the hub and runner OpenAPI specs to ./openapi (frontend co
 run = "uv run blizzard-export-openapi --out-dir openapi"
 
 [tasks.export-contracts]
-description = "Export the store schema documents to ./contracts (CI drift baseline and reflection-test input)"
+description = "Export the store schema and daemon config documents to ./contracts (CI drift baseline and reflection-test input)"
 run = "uv run blizzard-export-contracts --out-dir contracts"
 
 [tasks."process-ref-lint"]

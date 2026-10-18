@@ -13,6 +13,7 @@ from pathlib import Path
 
 import pytest
 
+from blizzard.foundation.config_keys import ConfigView
 from blizzard.foundation.trace_export.config import TracingConfig, toml_literal
 from blizzard.hub.config import ENV_DB_URL as HUB_ENV_DB_URL
 from blizzard.hub.config import ENV_HOST as HUB_ENV_HOST
@@ -1021,9 +1022,9 @@ def test_tracing_rejects_an_invalid_knob(tmp_path: Path, key: str, value: str) -
     ],
 )
 def test_tracing_integer_knobs_enforce_their_individual_minima(key: str, minimum: int, bound: str) -> None:
-    assert getattr(TracingConfig.of({key: minimum}, HubConfigError), key) == minimum
+    assert getattr(TracingConfig.of(ConfigView.unchecked({key: minimum}), HubConfigError), key) == minimum
     with pytest.raises(HubConfigError) as error:
-        TracingConfig.of({key: minimum - 1}, HubConfigError)
+        TracingConfig.of(ConfigView.unchecked({key: minimum - 1}), HubConfigError)
     assert str(error.value) == f"tracing.{key} must be {bound}, got {minimum - 1!r}"
 
 
@@ -1159,16 +1160,16 @@ def test_egress_rejects_an_invalid_key(tmp_path: Path, key: str, value: str) -> 
 @pytest.mark.unit
 @pytest.mark.parametrize("key", ["sweep_seconds", "batch_limit", "max_rows_per_file", "backfill_max_window"])
 def test_egress_positive_keys_accept_one_and_refuse_zero(tmp_path: Path, key: str) -> None:
-    assert getattr(parse_egress_config({key: 1}), key) == 1
+    assert getattr(parse_egress_config(ConfigView.unchecked({key: 1})), key) == 1
     with pytest.raises(HubConfigError) as error:
-        parse_egress_config({key: 0})
+        parse_egress_config(ConfigView.unchecked({key: 0}))
     assert str(error.value) == f"egress.{key} must be positive, got 0"
 
 
 @pytest.mark.unit
 def test_egress_file_paths_refuses_a_non_string_naming_every_mode() -> None:
     with pytest.raises(HubConfigError) as error:
-        parse_egress_config({"file_paths": 3})
+        parse_egress_config(ConfigView.unchecked({"file_paths": 3}))
     assert str(error.value) == "egress.file_paths must be one of relative, hashed, absolute, omit, got 3"
 
 

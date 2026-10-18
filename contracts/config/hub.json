@@ -1,0 +1,527 @@
+{
+  "daemon": "hub",
+  "keys": [
+    {
+      "default": 120,
+      "deprecated": false,
+      "path": "annotation_interval_seconds",
+      "replaced_by": null,
+      "required": false,
+      "type": "integer"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "auth",
+      "replaced_by": null,
+      "required": false,
+      "type": "table"
+    },
+    {
+      "default": "none",
+      "deprecated": false,
+      "path": "auth.mode",
+      "replaced_by": null,
+      "required": false,
+      "type": "string"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "auth.oauth",
+      "replaced_by": null,
+      "required": false,
+      "type": "table"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "auth.oauth.provider",
+      "replaced_by": null,
+      "required": false,
+      "type": "array of tables"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "auth.oauth.provider[].api_base",
+      "replaced_by": null,
+      "required": false,
+      "type": "string"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "auth.oauth.provider[].client_id",
+      "replaced_by": null,
+      "required": true,
+      "type": "string"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "auth.oauth.provider[].client_secret_env",
+      "replaced_by": null,
+      "required": true,
+      "type": "string"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "auth.oauth.provider[].display_name",
+      "replaced_by": null,
+      "required": true,
+      "type": "string"
+    },
+    {
+      "default": false,
+      "deprecated": false,
+      "path": "auth.oauth.provider[].emails_authoritative",
+      "replaced_by": null,
+      "required": false,
+      "type": "boolean"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "auth.oauth.provider[].issuer",
+      "replaced_by": null,
+      "required": false,
+      "type": "string"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "auth.oauth.provider[].name",
+      "replaced_by": null,
+      "required": true,
+      "type": "string"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "auth.oauth.provider[].type",
+      "replaced_by": null,
+      "required": true,
+      "type": "string"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "auth.superuser",
+      "replaced_by": null,
+      "required": false,
+      "type": "string"
+    },
+    {
+      "default": true,
+      "deprecated": false,
+      "path": "close_forge_writes_enabled",
+      "replaced_by": null,
+      "required": false,
+      "type": "boolean"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "db_url",
+      "replaced_by": null,
+      "required": false,
+      "type": "string"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "egress",
+      "replaced_by": null,
+      "required": false,
+      "type": "table"
+    },
+    {
+      "default": 604800,
+      "deprecated": false,
+      "path": "egress.backfill_max_window",
+      "replaced_by": null,
+      "required": false,
+      "type": "integer"
+    },
+    {
+      "default": 5000,
+      "deprecated": false,
+      "path": "egress.batch_limit",
+      "replaced_by": null,
+      "required": false,
+      "type": "integer"
+    },
+    {
+      "default": [
+        "steps",
+        "invocations",
+        "events"
+      ],
+      "deprecated": false,
+      "path": "egress.datasets",
+      "replaced_by": null,
+      "required": false,
+      "type": "list of strings"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "egress.directory",
+      "replaced_by": null,
+      "required": false,
+      "type": "string"
+    },
+    {
+      "default": "current",
+      "deprecated": false,
+      "path": "egress.extractor_versions",
+      "replaced_by": null,
+      "required": false,
+      "type": "string"
+    },
+    {
+      "default": "relative",
+      "deprecated": false,
+      "path": "egress.file_paths",
+      "replaced_by": null,
+      "required": false,
+      "type": "string"
+    },
+    {
+      "default": "ndjson",
+      "deprecated": false,
+      "path": "egress.format",
+      "replaced_by": null,
+      "required": false,
+      "type": "string"
+    },
+    {
+      "default": 100000,
+      "deprecated": false,
+      "path": "egress.max_rows_per_file",
+      "replaced_by": null,
+      "required": false,
+      "type": "integer"
+    },
+    {
+      "default": 1073741824,
+      "deprecated": false,
+      "path": "egress.min_free_bytes",
+      "replaced_by": null,
+      "required": false,
+      "type": "integer"
+    },
+    {
+      "default": "BZ_EGRESS_PATH_KEY",
+      "deprecated": false,
+      "path": "egress.path_key_env",
+      "replaced_by": null,
+      "required": false,
+      "type": "string"
+    },
+    {
+      "default": 300,
+      "deprecated": false,
+      "path": "egress.settle_seconds",
+      "replaced_by": null,
+      "required": false,
+      "type": "integer"
+    },
+    {
+      "default": 60,
+      "deprecated": false,
+      "path": "egress.sweep_seconds",
+      "replaced_by": null,
+      "required": false,
+      "type": "integer"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "flags",
+      "replaced_by": null,
+      "required": false,
+      "type": "open table"
+    },
+    {
+      "default": false,
+      "deprecated": false,
+      "path": "follow_latest",
+      "replaced_by": null,
+      "required": false,
+      "type": "boolean"
+    },
+    {
+      "default": "127.0.0.1",
+      "deprecated": false,
+      "path": "host",
+      "replaced_by": null,
+      "required": false,
+      "type": "string"
+    },
+    {
+      "default": null,
+      "deprecated": true,
+      "path": "pm_source",
+      "replaced_by": "work_source",
+      "required": false,
+      "type": "array of tables"
+    },
+    {
+      "default": 8421,
+      "deprecated": false,
+      "path": "port",
+      "replaced_by": null,
+      "required": false,
+      "type": "integer"
+    },
+    {
+      "default": "warn",
+      "deprecated": false,
+      "path": "produces_mode",
+      "replaced_by": null,
+      "required": false,
+      "type": "string"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "public_url",
+      "replaced_by": null,
+      "required": false,
+      "type": "string"
+    },
+    {
+      "default": "warn",
+      "deprecated": false,
+      "path": "route_token_mode",
+      "replaced_by": null,
+      "required": false,
+      "type": "string"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "tracing",
+      "replaced_by": null,
+      "required": false,
+      "type": "table"
+    },
+    {
+      "default": 200,
+      "deprecated": false,
+      "path": "tracing.batch_limit",
+      "replaced_by": null,
+      "required": false,
+      "type": "integer"
+    },
+    {
+      "default": false,
+      "deprecated": false,
+      "path": "tracing.harness_telemetry",
+      "replaced_by": null,
+      "required": false,
+      "type": "boolean"
+    },
+    {
+      "default": 86400,
+      "deprecated": false,
+      "path": "tracing.max_lag_seconds",
+      "replaced_by": null,
+      "required": false,
+      "type": "integer"
+    },
+    {
+      "default": false,
+      "deprecated": false,
+      "path": "tracing.platform",
+      "replaced_by": null,
+      "required": false,
+      "type": "boolean"
+    },
+    {
+      "default": 0.01,
+      "deprecated": false,
+      "path": "tracing.platform_sample_ratio",
+      "replaced_by": null,
+      "required": false,
+      "type": "number"
+    },
+    {
+      "default": 604800,
+      "deprecated": false,
+      "path": "tracing.replay_max_window",
+      "replaced_by": null,
+      "required": false,
+      "type": "integer"
+    },
+    {
+      "default": 300,
+      "deprecated": false,
+      "path": "tracing.settle_seconds",
+      "replaced_by": null,
+      "required": false,
+      "type": "integer"
+    },
+    {
+      "default": 60,
+      "deprecated": false,
+      "path": "tracing.sweep_seconds",
+      "replaced_by": null,
+      "required": false,
+      "type": "integer"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "tracing.worker_program_services",
+      "replaced_by": null,
+      "required": false,
+      "type": "open table"
+    },
+    {
+      "default": false,
+      "deprecated": false,
+      "path": "tracing.worker_programs",
+      "replaced_by": null,
+      "required": false,
+      "type": "boolean"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "transcripts",
+      "replaced_by": null,
+      "required": false,
+      "type": "table"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "transcripts.chunk_budget_max_bytes",
+      "replaced_by": null,
+      "required": false,
+      "type": "integer"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "transcripts.record_max_bytes",
+      "replaced_by": null,
+      "required": false,
+      "type": "integer"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "transcripts.runner_daily_rate_max_bytes",
+      "replaced_by": null,
+      "required": false,
+      "type": "integer"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "trusted_proxies",
+      "replaced_by": null,
+      "required": false,
+      "type": "list of strings"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "work_source",
+      "replaced_by": null,
+      "required": false,
+      "type": "array of tables"
+    },
+    {
+      "default": false,
+      "deprecated": false,
+      "path": "work_source[].annotate",
+      "replaced_by": null,
+      "required": false,
+      "type": "boolean"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "work_source[].api_base",
+      "replaced_by": null,
+      "required": false,
+      "type": "string"
+    },
+    {
+      "default": null,
+      "deprecated": true,
+      "path": "work_source[].close",
+      "replaced_by": null,
+      "required": false,
+      "type": "boolean"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "work_source[].name",
+      "replaced_by": null,
+      "required": true,
+      "type": "string"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "work_source[].provider",
+      "replaced_by": null,
+      "required": true,
+      "type": "string"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "work_source[].repo",
+      "replaced_by": null,
+      "required": true,
+      "type": "string"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "work_source[].token_env",
+      "replaced_by": null,
+      "required": true,
+      "type": "string"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "work_source[].web_base",
+      "replaced_by": null,
+      "required": false,
+      "type": "string"
+    }
+  ],
+  "paths": [
+    {
+      "holds": "the hub's configuration",
+      "path": "blizzard-hub.toml"
+    },
+    {
+      "holds": "the keys that seal every stored secret",
+      "path": "data/auth/secret-keys"
+    },
+    {
+      "holds": "the IdP signing keypairs and their meta.json",
+      "path": "data/auth/signing-keys"
+    },
+    {
+      "holds": "the default store, with its -wal sidecar when one exists",
+      "path": "data/hub.db"
+    },
+    {
+      "holds": "scratch clones a hub command node uses; reclaimable",
+      "path": "data/hub_workdirs"
+    }
+  ]
+}

@@ -39,7 +39,7 @@ vale --output=line .
 uv run ast-grep scan --error=unused-suppression .
 uv run pytest -n auto
 uv run blizzard-export-openapi --out-dir openapi && git diff --exit-code -- openapi/
-uv run blizzard-export-contracts --out-dir contracts && git diff --exit-code -- contracts/
+uv run blizzard-export-contracts --out-dir contracts && git diff --exit-code -- contracts/ && test -z "$(git ls-files --others --exclude-standard -- contracts/)"
 uv run blizzard-wire-compat --baseline merge-base --against origin/master
 cd web && npm ci && npm run lint && npm run test && npm run structural-gate && npm run generate:client && cd .. && git diff --exit-code -- web/
 ```

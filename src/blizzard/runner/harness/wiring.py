@@ -12,6 +12,7 @@ from functools import cache
 from pathlib import Path
 from typing import Any
 
+from blizzard.foundation.config_keys import ConfigView
 from blizzard.foundation.roles import domain_model
 from blizzard.runner.config_table import ConfigError
 from blizzard.runner.harness.adapter import EverySpawnRootProbe, IHarnessHealthProbe
@@ -52,7 +53,7 @@ class HarnessSections:
         return cls(tuple(kind.scaffold(root, environ) for kind in HARNESS_SECTION_KINDS))
 
     @classmethod
-    def parse(cls, document: Mapping[str, Any], *, root: Path, path: Path) -> HarnessSections:
+    def parse(cls, document: ConfigView, *, root: Path, path: Path) -> HarnessSections:
         """Every section read from ``document``; refuses a document enabling no binding."""
         parsed = cls(tuple(kind.parse(document, root=root, path=path) for kind in HARNESS_SECTION_KINDS))
         if not any(section.enabled for section in parsed):

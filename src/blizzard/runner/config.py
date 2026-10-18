@@ -11,6 +11,7 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from blizzard.foundation.config_keys import ConfigView
 from blizzard.foundation.public_origins import PublicOrigins
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.runner_paths import runner_prefix
@@ -86,6 +87,9 @@ DEFAULT_AUTH_HUB_ROLE = "mirror"
 # sweep prunes them — long enough to investigate a stalled or rate-limited
 # invocation days after the fact.
 DEFAULT_WORKER_STDOUT_RETENTION_DAYS = 14
+# Both switches are off until an operator turns them on.
+DEFAULT_QUEUE_STRICT = False
+DEFAULT_TRANSCRIPTS_SHIP = False
 
 
 def resolve_session_secret(env_name: str) -> bytes:
@@ -143,7 +147,8 @@ def _parse_harness_config_dir(value: object, root: Path, path: Path) -> Path | N
     return expanded
 
 
-def _workspace_repos(raw: object) -> tuple[WorkspaceRepo, ...]:
+def _workspace_repos(workspace: ConfigView) -> tuple[WorkspaceRepo, ...]:
+    raw = workspace.get("repo", [])
     if not isinstance(raw, list):
         raise ConfigError("[[workspace_repo]] must be an array of tables")
     repos: list[WorkspaceRepo] = []
@@ -154,7 +159,8 @@ def _workspace_repos(raw: object) -> tuple[WorkspaceRepo, ...]:
             or not isinstance(entry.get("url"), str)
         ):
             raise ConfigError("[[workspace_repo]] requires name and url strings")
-        name, url = entry["name"], entry["url"]
+        view = workspace.element("repo", entry)
+        name, url = view.get("name"), view.get("url")
         if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]*", name) or not url.strip():
             raise ConfigError(f"invalid [[workspace_repo]] name or url: {entry!r}")
         if any(repo.name == name for repo in repos):
@@ -183,8 +189,8 @@ class Spend:
     table: Table
 
     @classmethod
-    def of(cls, raw: object) -> Spend:
-        return cls(Table.of(raw))
+    def of(cls, view: ConfigView | None) -> Spend:
+        return cls(Table.of(view))
 
     @property
     def chunk_cap_usd(self) -> float | None:
@@ -211,8 +217,8 @@ class Context:
     table: Table
 
     @classmethod
-    def of(cls, raw: object) -> Context:
-        return cls(Table.of(raw))
+    def of(cls, view: ConfigView | None) -> Context:
+        return cls(Table.of(view))
 
     @property
     def warn_tokens(self) -> int | None:  # ast-grep-ignore: bzh:property-delegates
@@ -242,10 +248,11 @@ class SubscriptionDeclaration:
     sample_interval_seconds: int = DEFAULT_EXTERNAL_USAGE_SAMPLE_INTERVAL_SECONDS
 
     @classmethod
-    def declared(cls, raw_declarations: object) -> tuple[SubscriptionDeclaration, ...]:
-        """Validate and project ``[[subscription]]`` entries; each rejection names the
+    def declared(cls, document: ConfigView) -> tuple[SubscriptionDeclaration, ...]:
+        """Validate and project the ``[[subscription]]`` entries of ``document``; each rejection names the
         offending entry. An empty list (none authored) is zero declarations; anything else
         non-list (e.g. a singular ``[subscription]`` table) is rejected rather than silently read as zero."""
+        raw_declarations = document.get("subscription", [])
         if not isinstance(raw_declarations, list):
             raise ConfigError(
                 f"[[subscription]] must be an array of tables, got {type(raw_declarations).__name__}: "
@@ -253,24 +260,25 @@ class SubscriptionDeclaration:
             )
         declarations: list[SubscriptionDeclaration] = []
         seen_slugs: set[str] = set()
-        for entry in raw_declarations:
-            if not isinstance(entry, dict):
-                raise ConfigError(f"[[subscription]] entry must be a table, got {entry!r}")
+        for raw_entry in raw_declarations:
+            if not isinstance(raw_entry, dict):
+                raise ConfigError(f"[[subscription]] entry must be a table, got {raw_entry!r}")
+            entry = document.element("subscription", raw_entry)
             missing = [key for key in _REQUIRED_SUBSCRIPTION_KEYS if key not in entry]
             if missing:
-                raise ConfigError(f"[[subscription]] entry is missing required key(s) {missing}: {entry!r}")
-            slug = str(entry["slug"])
+                raise ConfigError(f"[[subscription]] entry is missing required key(s) {missing}: {raw_entry!r}")
+            slug = str(entry.get("slug"))
             if not slug:
-                raise ConfigError(f"[[subscription]] slug must not be empty: {entry!r}")
+                raise ConfigError(f"[[subscription]] slug must not be empty: {raw_entry!r}")
             if slug in seen_slugs:
                 raise ConfigError(f"duplicate [[subscription]] slug {slug!r}")
             seen_slugs.add(slug)
-            credentials_path = str(entry["credentials_path"]) if entry.get("credentials_path") else None
+            credentials_path = str(entry.get("credentials_path")) if entry.get("credentials_path") else None
             declarations.append(
                 cls(
                     slug=slug,
-                    name=str(entry["name"]),
-                    provider=str(entry["provider"]),
+                    name=str(entry.get("name")),
+                    provider=str(entry.get("provider")),
                     credentials_path=credentials_path,
                     sample_interval_seconds=int(
                         entry.get("sample_interval_seconds", DEFAULT_EXTERNAL_USAGE_SAMPLE_INTERVAL_SECONDS)
@@ -289,15 +297,15 @@ class Queue:
     table: Table
 
     @classmethod
-    def of(cls, raw: object) -> Queue:
-        return cls(Table.of(raw))
+    def of(cls, view: ConfigView | None) -> Queue:
+        return cls(Table.of(view))
 
     @property
     def strict(self) -> bool:
         """Off by default: a marked head is reached past for the first unmarked entry.
         ``True`` holds at a marked head instead, yielding no entry rather than falling
         through — that runner's operator has chosen to idle over reaching ahead."""
-        return self.table.boolean("strict", False)
+        return self.table.boolean("strict", DEFAULT_QUEUE_STRICT)
 
 
 @domain_model
@@ -309,8 +317,8 @@ class WorkerStdout:
     table: Table
 
     @classmethod
-    def of(cls, raw: object) -> WorkerStdout:
-        return cls(Table.of(raw))
+    def of(cls, view: ConfigView | None) -> WorkerStdout:
+        return cls(Table.of(view))
 
     @property
     def retention_days(self) -> int:
@@ -326,13 +334,13 @@ class Transcripts:
     table: Table
 
     @classmethod
-    def of(cls, raw: object) -> Transcripts:
-        return cls(Table.of(raw))
+    def of(cls, view: ConfigView | None) -> Transcripts:
+        return cls(Table.of(view))
 
     @property
     def ship(self) -> bool:
         """Whether transcript segments are shipped to the hub; off by default."""
-        return self.table.boolean("ship", False)
+        return self.table.boolean("ship", DEFAULT_TRANSCRIPTS_SHIP)
 
     @property
     def record_max_bytes(self) -> int | None:
@@ -347,7 +355,7 @@ class Transcripts:
         return self._cap("chunk_max_bytes")
 
     def _cap(self, key: str) -> int | None:
-        value = self.table.body.get(key)
+        value = self.table.get(key)
         if value is None:
             return None
         if isinstance(value, bool) or not isinstance(value, int):
@@ -366,8 +374,8 @@ class Auth:
     table: Table
 
     @classmethod
-    def of(cls, raw: object) -> Auth:
-        return cls(Table.of(raw))
+    def of(cls, view: ConfigView | None) -> Auth:
+        return cls(Table.of(view))
 
     @property
     def superuser(self) -> str | None:

@@ -24,13 +24,14 @@ from blizzard.hub.domain.config.secrets import (
     require_revealable,
     uncovered_key_ids,
 )
+from blizzard.hub.layout import SECRET_KEYS_PARTS
 from blizzard.hub.secrets.internal.aes_gcm import AesGcmSecretCipher
 from blizzard.hub.secrets.internal.directory_keys import DirectoryKeyProvider
 from blizzard.hub.secrets.internal.env_keys import ENV_SECRET_KEY, ENV_SECRET_KEY_PREVIOUS, EnvKeyProvider
 
 
 def secret_keys_dir(data_dir: Path) -> Path:
-    return data_dir / "auth" / "secret-keys"
+    return data_dir.joinpath(*SECRET_KEYS_PARTS)
 
 
 def hub_key_provider(environ: Mapping[str, str], *, data_dir: Path) -> IRotatableHubKeyProvider:
