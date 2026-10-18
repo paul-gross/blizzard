@@ -1,14 +1,6 @@
 """project_color — every project holds a color, one name from the palette.
 
-``projects`` gains ``color``, a required string. It is added nullable, filled, then tightened to ``NOT NULL``. Each
-tenant's projects are given colors in ``project_id`` order: a project takes the palette entry at its rank among its
-tenant's projects, modulo the palette's length, so a tenant's first twelve projects hold twelve distinct colors. The
-fill pages along ``project_id`` per tenant in bounded batches, each page seeking past the last id the one before it
-covered, and writes only rows still without a color. Each step inspects first and skips what a stopped run already
-did: a column already added is not added again, a row already holding a color is not rewritten, and a column already
-required is not tightened again.
-
-The downgrade drops the column; every project's color is lost.
+Added nullable, filled per tenant in bounded pages, then required. The downgrade drops the column and its colors.
 Revision ID: 20261018_1200_project_color
 Revises: 20261018_0900_decision_check_results
 """
