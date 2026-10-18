@@ -8,9 +8,7 @@ import type { AddFindingOp, FindingDelta, GoneFindingOp, ObservedFindingOp } fro
  * already-delivered artifact into a fallback-to-raw. The one deliberate departure
  * from the wire model's own optionality is `findings` (defaulted to `[]` on the
  * hub): {@link parseFindingDelta} requires the key to be *present* (an empty array
- * is fine) because `findings` is the one field that actually discriminates a delta
- * from a routine's own survey-shaped JSON, which shares `scope`/`revisions`/
- * `measurement` but never carries a `findings` list.
+ * is fine), because `findings` is what discriminates a delta from a survey.
  */
 
 type FindingOp = FindingDelta['findings'][number];
@@ -71,9 +69,7 @@ function parseFindingOp(value: unknown): FindingOp | null {
  * Parses `raw` as JSON and validates it against {@link FindingDelta}, returning `null`
  * on a JSON syntax failure, a non-object top level, or any field that fails its
  * check below — never throwing, so a caller renders structurally on a match and
- * falls back to the artifact's own verbatim text on anything else, the same
- * unparseable-or-mismatched fallback `chunk-artifact-body.ts` already owed its
- * asset content before this existed.
+ * falls back to the artifact's own verbatim text on anything else.
  *
  * `scope` and `findings` (as an array — see the module doc comment on why `findings`
  * is required here despite defaulting to `[]` on the wire) are the two keys that

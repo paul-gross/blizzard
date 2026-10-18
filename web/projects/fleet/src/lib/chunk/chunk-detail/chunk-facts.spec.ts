@@ -17,7 +17,7 @@ const ROUTED_DETAIL: ChunkDetail = {
   route: { runner_id: 'rn_01', runner_name: 'r-claude', workspace_id: 'ws_01', environment_ids: ['env_01'] },
 };
 
-// A not_ready chunk the wire calls graph-editable — the one window the graph edit is open.
+// A not_ready chunk the wire calls graph-editable.
 const NOT_READY_DETAIL: ChunkDetail = {
   chunk_id: 'ch_01ready000000000000000000000',
   graph_id: 'gr_default',
@@ -170,8 +170,6 @@ describe('ChunkFacts', () => {
   });
 
   it('withholds the graph edit input when the wire calls the graph not editable', async () => {
-    // A chunk detached mid-graph derives `ready` again while standing on a node of its old
-    // graph: the hub refuses that re-pin and says so with `graph_editable: false`.
     const fixture = TestBed.createComponent(ChunkFacts);
     fixture.componentRef.setInput('detail', {
       ...NOT_READY_DETAIL,

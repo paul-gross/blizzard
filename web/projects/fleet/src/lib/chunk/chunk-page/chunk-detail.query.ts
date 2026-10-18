@@ -52,9 +52,7 @@ async function fetchChunkWorkItems(target: DaemonTarget, chunkId: string): Promi
 
 /**
  * `GET /api/chunks/{chunk_id}` read — one chunk's full aggregate: its derived status,
- * current node, transition history, inline artifact store, and the `pause` fact. The hub
- * serves it from its own store; a runner serves the identically-shaped route under
- * `/runners/{runner_id}` as a pass-through to the hub, with the hub's credentials.
+ * current node, transition history, inline artifact store, and the `pause` fact.
  *
  * Target-generic: `target` is the daemon the read crosses to — it picks the generated
  * module, the cache key ({@link chunkDetailKey}, under the key root that daemon's
@@ -70,9 +68,7 @@ export function injectChunkDetailQuery(target: () => DaemonTarget | null, chunkI
       queryKey: chunkDetailKey(active === null ? '' : targetKeyRoot(active), id),
       enabled: id !== null && active !== null,
       queryFn: () => fetchChunkDetail(active!, id!),
-      // Hub: covered by chunk-changed, question-asked/-answered, decision-opened/-resolved,
-      // and event-logged when named (EVENT_INVALIDATION_REGISTRY, sse/fleet-live.ts).
-      // Runner: staled by every runner event naming the chunk. See polling.ts.
+      // Live updates stale this key; see EVENT_INVALIDATION_REGISTRY and polling.ts.
       refetchInterval: POLL_BACKSTOP_MS[active?.plane ?? 'hub'],
     };
   });
@@ -106,8 +102,7 @@ export function injectChunkWorkItemsQuery(target: () => DaemonTarget | null, chu
 const HUB_TARGET: DaemonTarget = { plane: 'hub', client: hubClient };
 
 /** The hub-plane aggregate read — a thin, permanently-hub-bound alias of
- * {@link injectChunkDetailQuery} for the hub's own callers (the board dock, the
- * single-artifact page) that have no reason to thread a target through. */
+ * {@link injectChunkDetailQuery}. */
 export function injectHubChunkDetailQuery(chunkId: () => string | null) {
   return injectChunkDetailQuery(() => HUB_TARGET, chunkId);
 }

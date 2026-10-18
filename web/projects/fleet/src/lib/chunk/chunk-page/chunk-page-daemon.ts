@@ -7,9 +7,8 @@ import type { DaemonTarget } from '../../core/daemon-target/daemon-target';
 /**
  * The operator-action port a daemon may hand {@link ChunkPage} — everything about the
  * page that depends on *who may act* and *how an action writes*, kept off the shared
- * page so it injects no daemon's auth or mutations itself. The hub implements it from
- * its `/api/me` permissions and its chunk mutations; a daemon that provides none renders
- * the page read-only.
+ * page so it injects no daemon's auth or mutations itself. A daemon that provides none
+ * renders the page read-only.
  *
  * Built per page instance ({@link ChunkPageDaemon.actions} is a factory the page calls
  * from its own injection context), so the notice channels and mutation state belong to
@@ -46,13 +45,10 @@ export interface ChunkPageActions {
 }
 
 /**
- * The daemon {@link ChunkPage} reads its chunk from — each app provides one on its own
- * `board/chunk/:chunkId` route, so the page is written once and both daemons serve it.
- * `target` is the same seam `ChunkTranscriptsContainer` takes: the generated transport,
- * the `runner_id` a runner's routes are addressed under, and the key root whose
+ * The daemon {@link ChunkPage} reads its chunk from. `target` is the generated
+ * transport, the `runner_id` its routes are addressed under, and the key root whose
  * live-update registry keeps the reads current. Both members are accessors because a
- * route's providers outlive one visit — a runner's panel reads them off its active
- * runner, which changes without remounting the route.
+ * route's providers outlive one visit, so the daemon may change without remounting.
  */
 export interface ChunkPageDaemon {
   /** The daemon every read on the page crosses to, or `null` — every read held. */

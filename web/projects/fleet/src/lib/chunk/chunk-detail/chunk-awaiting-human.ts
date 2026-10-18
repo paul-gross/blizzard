@@ -86,11 +86,7 @@ export class ChunkAwaitingHuman {
   /** Emitted when the operator resolves an open gate decision. */
   readonly resolveDecision = output<ResolveDecisionEvent>();
 
-  /** Each open question's in-progress answer, keyed by `question_id` — `KitTextInput`
-   * is a controlled control, so
-   * this dock holds the live draft itself rather than reading a template-ref'd
-   * `<input>`'s `.value` at submit time, one draft per question since several can be
-   * open at once. */
+  /** Each open question's in-progress answer, keyed by `question_id`. */
   private readonly answerDrafts = signal<Readonly<Partial<Record<string, string>>>>({});
 
   /** A gate-imposing runner's display name. */
@@ -107,16 +103,8 @@ export class ChunkAwaitingHuman {
    * somewhere: who answered, what they said, and whether the runner has delivered it
    * into the resumed session.
    *
-   * Sorted on `answered_at`, not on the hub's own order — that list is by `asked_at`,
-   * and the two disagree whenever asks and answers
-   * interleave. Since the whole question this panel answers is "did *my* answer just
-   * land", ordering by when it was *asked* can push the row the operator is looking for
-   * out of the cap entirely.
-   *
-   * Capped at {@link ANSWERED_TRAIL_LIMIT} because this is a *recency* affordance, not
-   * a history: a chunk that asked its way through a long build would otherwise bury the
-   * live ask under every answer it ever got. The cap is presentational only — the chunk
-   * read carries every question, so nothing here is the record.
+   * Sorted on `answered_at` and capped at {@link ANSWERED_TRAIL_LIMIT}; the cap is
+   * presentational only.
    */
   protected readonly answeredQuestions = computed<readonly QuestionView[]>(() =>
     // `filter` already copied, so sorting in place does not mutate the query's data.

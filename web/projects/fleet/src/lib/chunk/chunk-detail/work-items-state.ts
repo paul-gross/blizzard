@@ -22,18 +22,7 @@ export interface WorkItemsQuery {
 /**
  * Derives a {@link WorkItemsState} from a work-items query — the same
  * isPending/isError/success fold `query-state.ts`'s {@link asyncState} derives
- * for the generic triad, specialized to carry the resolved `items` alongside it
- * rather than a bare `KitAsyncStateValue` — every container mounting the issue
- * pane (the desktop dock's `chunk-detail.ts` and the shared `chunk-page.ts`) shares
- * this one derivation rather than
- * duplicating it. `isPending()` is checked before `isError()`, which is
- * harmless rather than a real precedence choice: TanStack's underlying
- * `status` is mutually exclusive, so a query is never both at once.
- *
- * Lives here rather than beside `asyncState` because it is typed on
- * `WorkItemEntry` — a chunk-detail domain concept, which is what
- * `query-state.ts` deliberately holds none of (`bzh:one-owner`: this feature
- * owns its own fold).
+ * for the generic triad, specialized to carry the resolved `items` alongside it.
  */
 export function deriveWorkItemsState(query: WorkItemsQuery): WorkItemsState {
   if (query.isPending()) return { status: 'loading', items: [] };

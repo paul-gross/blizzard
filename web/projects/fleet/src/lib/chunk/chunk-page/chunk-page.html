@@ -61,10 +61,6 @@
         />
       }
       @case ('artifacts') {
-        <!-- `testidPrefix="artifacts-tab"` keeps every handle this tab has always
-             rendered — `DemoDirector`'s unattended kiosk tour steers by
-             `artifacts-tab-artifact` / `artifacts-tab-artifact-key`, so it cannot drift
-             onto the panel's own `artifacts-panel-*` default. -->
         <fleet-chunk-artifacts-panel
           [artifacts]="d.artifacts ?? []"
           [selectedKey]="selection.artifactKey()"
