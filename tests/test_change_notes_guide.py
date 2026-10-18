@@ -11,8 +11,9 @@ from click.testing import CliRunner
 
 from blizzard.tools.change_notes.cli import main
 from blizzard.tools.change_notes.contract import Note
-from blizzard.tools.change_notes.guide import due_without_removal, guide
+from blizzard.tools.change_notes.guide import guide
 from blizzard.tools.change_notes.render import render
+from blizzard.tools.change_notes.schedule import due_without_removal
 from tests.repo_files import repo_root
 from tests.test_change_notes_render import _commit, _git
 
@@ -120,10 +121,16 @@ def test_guide_refuses_only_when_due_has_neither_released_nor_pending_removal(tm
     assert "First gone." in result.output and "Second gone." in result.output
 
 
-def test_legacy_removal_without_breaking_flag_or_matching_deprecation_still_appears() -> None:
-    notes = [_note("2.0.0", "legacy", "removed", retires="old")]
-    assert "legacy prose" in guide(notes, "2")
-    assert "legacy prose" not in guide(notes, "3")
+def test_retirement_of_another_line_is_not_a_standalone_breaking_entry() -> None:
+    notes = [
+        _note("1.9.0", "old", "deprecated", **{"removes-in": "3"}),
+        _note("2.0.0", "premature", "removed", retires="old", breaking=True),
+        _note("2.0.0", "direct", "changed", breaking=True),
+    ]
+    text = guide(notes, "2")
+    assert "premature prose" not in text
+    assert "direct prose" in text
+    assert due_without_removal(notes, "3") == ("old",)
 
 
 def test_earlier_retirement_does_not_block_later_line() -> None:

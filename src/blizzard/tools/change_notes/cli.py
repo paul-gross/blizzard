@@ -7,12 +7,12 @@ from pathlib import Path
 import click
 
 from blizzard.tools.change_notes.cut import CutRefused, cut
-from blizzard.tools.change_notes.flags import turned_on
-from blizzard.tools.change_notes.guide import due_without_removal, guide
+from blizzard.tools.change_notes.flags import turned_on, working_registry
+from blizzard.tools.change_notes.guide import guide
 from blizzard.tools.change_notes.released import ReleasedNoteInvalid, also_in, commit_block, notes_at
 from blizzard.tools.change_notes.render import render
-from blizzard.tools.change_notes.schedule import latest_released_schedule, release_line
-from blizzard.tools.change_notes.tree import CHANGES_DIR, VERSION_DIR, read_tree
+from blizzard.tools.change_notes.schedule import due_without_removal, latest_released_schedule, release_line
+from blizzard.tools.change_notes.tree import CHANGES_DIR, UNRELEASED, VERSION_DIR, read_tree
 from blizzard.tools.change_notes.validate import validate
 from blizzard.tools.compat.git import GitError, Repository
 from blizzard.tools.compat.releases import parse_release, parse_releases
@@ -122,10 +122,16 @@ def guide_command(line: str) -> None:
         click.echo("\n".join(map(str, failures)), err=True)
         raise SystemExit(1)
     notes, _ = read_tree(root)
-    if due := due_without_removal(notes, line, prospective=True):
+    defaults = working_registry(root)
+    eligible = [
+        n
+        for n in notes
+        if n.directory != UNRELEASED or not n.fields.get("flag") or defaults[n.fields["flag"]]["default"] == "on"
+    ]
+    if due := due_without_removal(eligible, line, prospective=True):
         click.echo(f"deprecations due in {line} without a retiring removal: {', '.join(due)}", err=True)
         raise SystemExit(1)
-    click.echo(guide(notes, line, prospective=True), nl=False)
+    click.echo(guide(eligible, line, prospective=True), nl=False)
 
 
 if __name__ == "__main__":

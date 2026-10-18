@@ -263,6 +263,38 @@ def test_earlier_retirement_does_not_refuse_a_later_opening_cut(tmp_path: Path, 
     assert result.exit_code == 0, result.output
 
 
+def test_opening_cut_cannot_borrow_a_later_removal_in_its_line(tmp_path: Path, monkeypatch) -> None:
+    root = _tree(
+        tmp_path,
+        {
+            "1.9.0/old.md": _scheduled("deprecated", "2"),
+            "2.1.0/removal.md": _REMOVAL,
+        },
+    )
+    before = _snapshot(root)
+    result = _cut(root, "2.0.0", monkeypatch)
+    assert result.exit_code == 1
+    assert "deprecation old is due in 2" in result.output
+    assert _snapshot(root) == before
+    (root / "changes" / "unreleased" / "cut-removal.md").write_text(_REMOVAL)
+    assert _cut(root, "2.0.0", monkeypatch).exit_code == 0
+
+
+def test_opening_cut_cannot_borrow_a_later_postponement(tmp_path: Path, monkeypatch) -> None:
+    root = _tree(
+        tmp_path,
+        {
+            "1.9.0/old.md": _scheduled("deprecated", "2"),
+            "2.1.0/later.md": _scheduled("changed", "3", target="old"),
+        },
+    )
+    before = _snapshot(root)
+    result = _cut(root, "2.0.0", monkeypatch)
+    assert result.exit_code == 1
+    assert "deprecation old is due in 2" in result.output
+    assert _snapshot(root) == before
+
+
 @pytest.mark.parametrize(
     ("version", "line", "accepted"),
     [
