@@ -1,8 +1,6 @@
 """Workspace-binding selection: the one place a ``workspace_provider`` name is read.
 
-A name→builder registry shared by the runner's two composition roots. Config
-validation reads its names; everything downstream asks the built provider for its facts
-(``spawn_root``/``capacity``/``pool``) rather than comparing the name."""
+A name→builder registry shared by the runner's two composition roots."""
 
 from __future__ import annotations
 

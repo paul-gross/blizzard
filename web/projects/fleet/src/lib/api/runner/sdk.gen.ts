@@ -350,7 +350,7 @@ export const getArtifactRunnersRunnerIdApiLeasesLeaseIdArtifactsNameGet = <Throw
  * Get Chunk Asks
  *
  * Every question asked on the worker's own chunk, oldest-first — open, answered, and
- * restart-superseded alike. An answer a person gave binds every later session on the chunk.
+ * restart-superseded alike.
  */
 export const getChunkAsksRunnersRunnerIdApiLeasesLeaseIdAsksGet = <ThrowOnError extends boolean = false>(options: Options<GetChunkAsksRunnersRunnerIdApiLeasesLeaseIdAsksGetData, ThrowOnError>): RequestResult<GetChunkAsksRunnersRunnerIdApiLeasesLeaseIdAsksGetResponses, GetChunkAsksRunnersRunnerIdApiLeasesLeaseIdAsksGetErrors, ThrowOnError> => (options.client ?? client).get<GetChunkAsksRunnersRunnerIdApiLeasesLeaseIdAsksGetResponses, GetChunkAsksRunnersRunnerIdApiLeasesLeaseIdAsksGetErrors, ThrowOnError>({ url: '/runners/{runner_id}/api/leases/{lease_id}/asks', ...options });
 

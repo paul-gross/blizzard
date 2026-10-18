@@ -20,8 +20,7 @@ _LEASE_TOKEN_BYTES = 32
 
 
 class LeaseTokenRejected(Exception):
-    """The presented token does not authorize the lease it names — the API edge maps this
-    to ``403``."""
+    """The presented token does not authorize the lease it names."""
 
 
 @domain_model

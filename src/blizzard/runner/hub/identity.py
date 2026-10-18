@@ -3,8 +3,7 @@ tenant the hub answered with.
 
 The runner learns it from each successful registration's reply and keeps it in its store's single
 identity row, so a restart with the hub unreachable keeps it. The tenant is for display: a runner
-never changes tenant, so the id alone settles which world the store belongs to. Before the first
-registration there is no identity, and the runner claims nothing and tells no traces. Every step and
+never changes tenant, so the id alone settles which world the store belongs to. Every step and
 consumer reads the process holder (:class:`ICurrentRunnerIdentity`), seeded from the row at boot and
 replaced at each successful one."""
 

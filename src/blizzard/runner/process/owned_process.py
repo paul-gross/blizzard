@@ -109,9 +109,7 @@ def owned_process_alive(
     process: IOwnedProcessControl, *, pid: int | None, process_start_time: str | None, pgid: int | None
 ) -> bool:
     """True iff an owned worker's recorded LEADER is alive OR its recorded GROUP still is
-    (:meth:`OwnedProcess.alive`). The one shared owner of this liveness check: every owned-process
-    teardown or settled-probe reaches it here rather than reimplementing the check against a
-    possibly-reused pid/pgid."""
+    (:meth:`OwnedProcess.alive`)."""
     owned = OwnedProcess(pid=pid, process_start_time=process_start_time, pgid=pgid)
     readings = _readings(process, owned)
     return readings is not None and owned.alive(leader_alive=readings[0], group_alive=readings[1])
@@ -138,8 +136,7 @@ def interrupt_owned_process(
     process: IOwnedProcessControl, *, pid: int | None, process_start_time: str | None, pgid: int | None
 ) -> bool:
     """Best-effort SIGINT to an owned worker's recorded group, signalling
-    :meth:`OwnedProcess.interrupt_target` — a recycled pgid is never signalled. The one shared
-    owner of the guarded interrupt: every caller reaches it here rather than keeping its own copy.
+    :meth:`OwnedProcess.interrupt_target` — a recycled pgid is never signalled.
     ``False`` when nothing was signalled: no recorded group, or a leader already dead."""
     owned = OwnedProcess(pid=pid, process_start_time=process_start_time, pgid=pgid)
     identity = owned.identity()

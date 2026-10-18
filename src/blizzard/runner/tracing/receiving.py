@@ -2,8 +2,7 @@
 whether the lease's rate admits it, and where the kept items go.
 
 :mod:`~blizzard.runner.tracing.receiver` decides what one span, data point or log record keeps; this
-orchestrates one export. The OTLP routes only authenticate the lease, bound and decode the body, and
-map :class:`ReceiverOff` and :class:`RateExceeded` to their statuses."""
+orchestrates one export."""
 
 from __future__ import annotations
 

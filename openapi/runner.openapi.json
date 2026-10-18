@@ -8511,7 +8511,7 @@
     },
     "/runners/{runner_id}/api/leases/{lease_id}/asks": {
       "get": {
-        "description": "Every question asked on the worker's own chunk, oldest-first \u2014 open, answered, and\nrestart-superseded alike. An answer a person gave binds every later session on the chunk.",
+        "description": "Every question asked on the worker's own chunk, oldest-first \u2014 open, answered, and\nrestart-superseded alike.",
         "operationId": "get_chunk_asks_runners__runner_id__api_leases__lease_id__asks_get",
         "parameters": [
           {

@@ -2,8 +2,7 @@
 
 Chunk→env binding, release, and tenure facts — a *held* env is one whose binding has
 no release fact (``bzh:facts-not-status``). The rules over those facts — who may bind an
-env, and at what instant a release is stamped — are pure functions here; the claim and
-release orchestration reads the clock and the held bindings, and writes what they decide."""
+env, and at what instant a release is stamped — are pure functions here."""
 
 from __future__ import annotations
 

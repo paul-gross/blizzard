@@ -136,8 +136,8 @@ class LeaseActivity:
         human: OpenHumanFacts = NO_HUMAN_FACTS,
     ) -> LeaseActivity:
         """Assemble ``lease``'s activity from facts already read: its liveness facts (``None``
-        when it has none yet), the parked and backing-off lease ids, its chunk's held bindings
-        (the first is the one the panel shows), and whether its process probes alive."""
+        when it has none yet), the parked and backing-off lease ids, its chunk's held bindings,
+        and whether its process probes alive."""
         heartbeat = facts.latest_heartbeat if facts is not None else None
         liveness = Liveness.of(lease, heartbeat=heartbeat, spawn=facts.latest_spawn if facts is not None else None)
         binding = bindings[0] if bindings else None

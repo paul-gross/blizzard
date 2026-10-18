@@ -62,8 +62,7 @@ class SubprocessOneShotProcess:
     @staticmethod
     def _terminate_group(process: subprocess.Popen[str]) -> tuple[str, str]:
         """SIGTERM the child's whole process group (it leads its own session), then SIGKILL the
-        group after a grace period — reaching an npm-shim's real app-server, and sparing a
-        credential file a hard kill mid-write."""
+        group after a grace period."""
         output = terminate_group(
             process.pid, grace=_TERMINATE_GRACE_SECONDS, wait=lambda grace: process.communicate(timeout=grace)
         )

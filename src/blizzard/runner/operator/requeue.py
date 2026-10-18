@@ -3,7 +3,7 @@
 The explicit hand-back after a human worked a needs_human chunk interactively. Appends the clearing fact
 only (``bzh:crash-correctness``); the route is never released and the retry budget is **carried, not
 reset**: a requeue buys exactly one more try. Legal only from :attr:`RequeueStanding.REQUEUEABLE`; a
-requeue over a pending one writes a second mark, and the one fresh attempt FILL mints consumes both."""
+requeue over a pending one writes a second mark."""
 
 from __future__ import annotations
 
