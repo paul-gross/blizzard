@@ -121,6 +121,15 @@ def test_an_unknown_kind_fails(tmp_path: Path) -> None:
     assert (_UNR, "bad-kind") in _only(tmp_path, _UNR, _note("kind: improved"))
 
 
+def test_a_list_valued_kind_fails_instead_of_crashing(tmp_path: Path) -> None:
+    assert (_UNR, "bad-kind") in _only(tmp_path, _UNR, _note("kind: [added]"))
+
+
+def test_a_mapping_valued_kind_with_breaking_fails_instead_of_crashing(tmp_path: Path) -> None:
+    found = _only(tmp_path, _UNR, _note("kind: {a: b}\nbreaking: true"))
+    assert {(_UNR, "bad-kind"), (_UNR, "breaking-kind")} <= found
+
+
 def test_an_unknown_surface_fails(tmp_path: Path) -> None:
     assert (_UNR, "bad-surfaces") in _only(tmp_path, _UNR, _note("kind: added\nsurfaces: [moon]"))
 

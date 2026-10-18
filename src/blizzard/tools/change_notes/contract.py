@@ -74,7 +74,7 @@ def _is_string_list(value: object) -> bool:
 
 
 def _kind(value: Any, _fields: Mapping[str, Any]) -> list[tuple[str, str]]:
-    if value in {k.value for k in Kind}:
+    if value in tuple(Kind):
         return []
     return [("bad-kind", f"kind must be one of {', '.join(k.value for k in Kind)}, not {value!r}")]
 
@@ -89,7 +89,7 @@ def _surfaces(value: Any, _fields: Mapping[str, Any]) -> list[tuple[str, str]]:
 def _breaking(value: Any, fields: Mapping[str, Any]) -> list[tuple[str, str]]:
     if not isinstance(value, bool):
         return [("bad-breaking", "breaking must be true or false")]
-    if value and fields.get("kind") not in {Kind.CHANGED, Kind.REMOVED}:
+    if value and fields.get("kind") not in (Kind.CHANGED, Kind.REMOVED):
         return [("breaking-kind", "breaking: true is only for kind changed or removed")]
     return []
 
