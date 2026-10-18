@@ -118,9 +118,11 @@ Every image below is `ghcr.io/paul-gross/blizzard-hub`.
 `latest` never follows `master`; it moves only on a stable release tag.
 [`scripts/image-tags.sh`](../scripts/image-tags.sh) computes the stable fan-out.
 
-`pyproject.toml`'s `[project] version` must equal the tag being cut — `v1.2.3` pairs with `version = "1.2.3"` — and
-[`scripts/check-version-tag.sh`](../scripts/check-version-tag.sh) asserts it before the release builds anything, so a
-forgotten bump fails the release instead of shipping a wheel that misreports its own version.
+`pyproject.toml`'s `[project] version` names the release most recently cut on its branch; the minor counts release
+trains. A cut commit carrying `Release-Cut: X.Y.Z` moves it to `X.Y.Z`. Candidate `vX.Y.Z-rc.N` and stable `vX.Y.Z`
+tags can point to that same commit: [`scripts/check-version-tag.sh`](../scripts/check-version-tag.sh) strips the
+candidate suffix when checking against `pyproject.toml`, while the release wheel stamps the full tag version. On
+`master`, dev wheels and images target the *next* minor as `X.(Y+1).0.dev<run>+<sha>`.
 
 Release notes are generated from the Conventional Commits since the previous tag by
 [`scripts/release-notes.sh`](../scripts/release-notes.sh). A `!`-marked commit surfaces at the top of the notes under

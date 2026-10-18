@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
-# scripts/check-version-tag.sh — assert pyproject.toml's [project] version agrees
-# with a release tag (issue #190). Wired as an early failing step in
-# .github/workflows/release.yml's release job, so a version/tag mismatch fails
-# before any wheel or image is built — the version bump is part of the release
-# ceremony (bzh:release step 3), not something this script does for you.
+# Assert the tag's release version agrees with pyproject.toml's [project]
+# version before building. A cut commit carries Release-Cut: X.Y.Z and moves
+# pyproject.toml to the most recently cut release on its branch; candidate and
+# stable tags share that commit. The minor counts release trains.
 #
 # Usage: check-version-tag.sh <v-prefixed-tag>
 set -euo pipefail
@@ -19,6 +18,7 @@ case "$tag" in
     ;;
 esac
 tag_version="${tag#v}"
+release_version="${tag_version%-rc.*}"
 
 pyproject_version="$(python3 -c '
 import tomllib
@@ -26,10 +26,9 @@ with open("pyproject.toml", "rb") as f:
     print(tomllib.load(f)["project"]["version"])
 ')"
 
-if [ "$tag_version" != "$pyproject_version" ]; then
-  echo "check-version-tag.sh: tag $tag names version '$tag_version', but pyproject.toml's" \
-       "[project] version is '$pyproject_version' — bump pyproject.toml in the release-prep" \
-       "commit before tagging (bzh:release step 3)." >&2
+if [ "$release_version" != "$pyproject_version" ]; then
+  echo "check-version-tag.sh: tag $tag names version '$tag_version' (release '$release_version')," \
+       "but pyproject.toml's [project] version is '$pyproject_version' — set it in the cut commit." >&2
   exit 1
 fi
 
