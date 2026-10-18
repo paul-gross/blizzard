@@ -39,15 +39,22 @@ class VersionWindow:
         """Parse ``source``, or the packaged ``window.toml`` when none is given."""
         if source is None:
             source = Path(str(files("blizzard.wire").joinpath(_PACKAGED)))
-        floor, opening = _parse(source)
+        try:
+            text = source.read_text()
+        except OSError as error:
+            raise VersionWindowError(f"{source}: cannot read the window file: {error}") from error
+        return cls.parse(text, str(source))
+
+    @classmethod
+    def parse(cls, text: str, source: str) -> Self:
+        """Parse window ``text`` read from ``source``, which labels every refusal — the same rule as ``load``."""
+        floor, opening = _parse(text, source)
         return cls(floor=floor, opening=opening)
 
 
-def _parse(source: Path) -> tuple[str, str | None]:
+def _parse(text: str, source: str) -> tuple[str, str | None]:
     try:
-        raw = tomllib.loads(source.read_text())
-    except OSError as error:
-        raise VersionWindowError(f"{source}: cannot read the window file: {error}") from error
+        raw = tomllib.loads(text)
     except tomllib.TOMLDecodeError as error:
         raise VersionWindowError(f"{source}: not valid TOML: {error}") from error
     unknown = sorted(set(raw) - _KEYS)
@@ -59,7 +66,7 @@ def _parse(source: Path) -> tuple[str, str | None]:
     return floor, _text(source, raw, "opening", _MAJOR, "a major number")
 
 
-def _text(source: Path, raw: dict[str, Any], key: str, shape: re.Pattern[str], described: str) -> str | None:
+def _text(source: str, raw: dict[str, Any], key: str, shape: re.Pattern[str], described: str) -> str | None:
     if key not in raw:
         return None
     value = raw[key]
