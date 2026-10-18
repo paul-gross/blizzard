@@ -341,6 +341,7 @@ def _add_project(conn: sa.Connection, project_id: str, *, slug: str) -> None:
                 slug=slug,
                 name=slug.title(),
                 description="",
+                color="slate",
                 revision=1,
                 created_at=_NOW,
             )

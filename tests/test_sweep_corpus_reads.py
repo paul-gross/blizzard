@@ -65,6 +65,7 @@ class _World:
                 slug="default",
                 name="Default",
                 description="",
+                color="slate",
                 revision=1,
                 created_at=_AT,
             )
