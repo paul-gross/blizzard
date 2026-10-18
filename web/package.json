@@ -13,10 +13,13 @@
     "build": "npm run build:hub && npm run build:runner",
     "build:hub": "ng build hub",
     "build:runner": "ng build runner",
-    "generate:client": "openapi-ts -f openapi-ts.hub.config.ts && openapi-ts -f openapi-ts.runner.config.ts"
+    "generate:client": "openapi-ts -f openapi-ts.hub.config.ts && openapi-ts -f openapi-ts.runner.config.ts",
+    "storybook": "ng run fleet:storybook --port=${BZ_STORYBOOK_PORT:-6006}",
+    "storybook:build": "ng run fleet:build-storybook"
   },
   "private": true,
   "packageManager": "npm@10.9.4",
+  "//": "vite is a direct devDependency because @storybook/angular-vite needs Vite 8 as a peer while @angular/build keeps its own Vite 7.3.6 nested beneath it, so ng build and ng serve build as before and only the unit-test builder and the workshop run on the hoisted Vite 8. npm's resolver cannot add this set under strict peer checking, because it walks optional peers (analog -> @angular-devkit/build-angular -> @angular/localize -> exact @angular/compiler-cli 21.2.25), so the next change to it must resolve the lock once with --legacy-peer-deps, never commit that setting, and re-prove that a strict npm install leaves package-lock.json unchanged and a strict npm ci passes. The one npm ci ERESOLVE warning is expected: @vitejs/plugin-basic-ssl, under @angular/build, peers vite ^6 || ^7 and sees the hoisted 8, which only ng serve --ssl loads.",
   "dependencies": {
     "@angular/cdk": "^21.2.14",
     "@angular/common": "^21.2.22",
@@ -31,11 +34,14 @@
     "tslib": "^2.3.0"
   },
   "devDependencies": {
+    "@analogjs/vite-plugin-angular": "2.8.1",
+    "@angular/animations": "21.2.22",
     "@angular/build": "^21.2.22",
     "@angular/cli": "^21.2.22",
     "@angular/compiler-cli": "^21.2.22",
     "@eslint/js": "^10.0.1",
     "@hey-api/openapi-ts": "^0.99.0",
+    "@storybook/angular-vite": "10.6.2",
     "@types/node": "^22.20.1",
     "@vitest/browser-playwright": "^4.1.10",
     "angular-eslint": "21.4.0",
@@ -43,8 +49,10 @@
     "jsdom": "^28.0.0",
     "ng-packagr": "^21.2.0",
     "playwright": "^1.61.0",
+    "storybook": "10.6.2",
     "typescript": "~5.9.2",
     "typescript-eslint": "8.59.2",
+    "vite": "8.3.4",
     "vitest": "^4.0.8"
   }
 }

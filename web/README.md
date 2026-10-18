@@ -28,8 +28,10 @@ Tailwind, no chart library, and no prettier** (eslint owns formatting).
 | `npm run test`            | `ng test …`                       | The vitest unit/component tier, all three projects.                              |
 | `npm run build`           | `ng build hub && ng build runner` | Build both apps into `../src/blizzard/static/{hub,runner}` for the wheel embed. |
 | `npm run generate:client` | `openapi-ts -f …`                 | Regenerate the two API clients from `../openapi/*.openapi.json`.                |
+| `npm run storybook`       | `ng run fleet:storybook …`        | Serve the component workshop.                                                   |
+| `npm run storybook:build` | `ng run fleet:build-storybook`    | Build the static workshop into `dist/storybook`.                                |
 
-`mise.toml` mirrors these as `web-install`, `web-lint`, `web-test`, `web-build`, `web-generate-client`.
+`mise.toml` mirrors these as `web-install`, `web-lint`, `web-test`, `web-build`, `web-generate-client`, `web-storybook`, `web-storybook-build`.
 
 ## The dev server (`ng serve`)
 
@@ -55,6 +57,22 @@ injects the env band, or set it explicitly for an ad-hoc client (e.g.
 
 So: run it under `winter service up <env>` (which injects the band), or export the port yourself. The daemons must be up
 — the dev server proxies to them, it does not start them.
+
+## The workshop (Storybook)
+
+The workshop shows `fleet`'s parts one state at a time, on the board's own stylesheets, zoneless, with the board's
+widths (`phone-sm`, `phone`, `mobile-max`, `desktop`) in its viewport menu. It is Storybook 10 on
+`@storybook/angular-vite` with no addon; its configuration lives in `projects/fleet/.storybook/`, and a part's stories
+sit beside it in a `*.stories.ts` file.
+
+```sh
+npm run storybook
+```
+
+It needs no daemon, no seed, and no environment. It serves on `BZ_STORYBOOK_PORT` when the environment sets one, and
+otherwise on Storybook's own 6006. `npm run storybook:build` writes the static workshop to `dist/storybook`; it is never
+published, deployed, or embedded in the wheel. Stories are for people to open: they are never bundled into either app or
+the library, and they assert nothing.
 
 ## The generated API client (`bzh:generated-client`)
 

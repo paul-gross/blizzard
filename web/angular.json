@@ -222,6 +222,26 @@
             ],
             "eslintConfig": "projects/fleet/eslint.config.js"
           }
+        },
+        "storybook": {
+          "builder": "@storybook/angular-vite:start-storybook",
+          "options": {
+            "configDir": "projects/fleet/.storybook",
+            "tsConfig": "projects/fleet/.storybook/tsconfig.json",
+            "zoneless": true,
+            "port": 6006,
+            "ci": true
+          }
+        },
+        "build-storybook": {
+          "builder": "@storybook/angular-vite:build-storybook",
+          "options": {
+            "configDir": "projects/fleet/.storybook",
+            "tsConfig": "projects/fleet/.storybook/tsconfig.json",
+            "zoneless": true,
+            "enableProdMode": false,
+            "outputDir": "dist/storybook"
+          }
         }
       }
     }

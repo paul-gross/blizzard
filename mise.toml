@@ -155,3 +155,13 @@ run = "npm run build"
 description = "Regenerate the openapi-ts clients from ./openapi (CI drift check baseline)"
 dir = "web"
 run = "npm run generate:client"
+
+[tasks.web-storybook]
+description = "Serve the component workshop (Storybook) on BZ_STORYBOOK_PORT, or 6006"
+dir = "web"
+run = "npm run storybook"
+
+[tasks.web-storybook-build]
+description = "Build the static component workshop into web/dist/storybook"
+dir = "web"
+run = "npm run storybook:build"
