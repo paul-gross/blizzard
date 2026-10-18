@@ -173,6 +173,7 @@ class LoopWiring:
             token_identity=hub,
             identity_verdict=graph.identity_verdict,
             hub_token=graph.hub_token,
+            flags=graph.flags,
             # The non-memoizing default — only `tick()` itself upgrades this per call.
             chunk_views=ReadThroughChunkViews(verified),
             workspaces=workspaces,

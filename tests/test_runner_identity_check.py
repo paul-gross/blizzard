@@ -20,12 +20,14 @@ from pytest import MonkeyPatch
 from structlog.testing import capture_logs
 
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.flags import FlagRegistry, resolve_flags
 from blizzard.foundation.runner_identity_state import IdentityState
 from blizzard.runner.app import create_app
 from blizzard.runner.composition import held_hub_token
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.host_config import ResolvedToken, TokenSource
 from blizzard.runner.hub.client import IdentityRouteMissing, TokenIdentity, TokenRefusal
+from blizzard.runner.hub.flags import FlagsHolder
 from blizzard.runner.hub.held_token import HubTokenHolder
 from blizzard.runner.hub.identity import IdentityVerdictHolder
 from blizzard.runner.hub.internal.http_hub import HeldTokenAuth, HttpHubClient
@@ -51,6 +53,13 @@ pytestmark = pytest.mark.component
 
 _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
 _RESET = "blizzard runner store reset /runner"
+_FLEET_FLAG = """
+[flag.fleet-thing]
+owner = "epic:ui-toolkit"
+summary = "A capability hub and runners agree on"
+scope = "fleet"
+default = "off"
+"""
 
 
 class _HubWithoutIdentityRead(FakeHub):
@@ -118,6 +127,57 @@ def test_the_check_compares_the_token_runner_with_the_store_runner(
     stored = ctx.stores.identity.runner_identity()
     assert (stored.runner_id if stored is not None else None) == store_runner
     assert ctx.identity.current() == stored
+
+
+def _fleet_ctx(tmp_path: Path, hub: FakeHub) -> LoopContext:
+    """A context whose runner reads one ``fleet`` flag, off until its hub answers it on."""
+    registry = FlagRegistry.parse(_FLEET_FLAG, "fixture")
+    ctx = _ctx(tmp_path, hub)
+    return dataclasses.replace(ctx, flags=FlagsHolder(resolve_flags(registry, "runner", {}).flags))
+
+
+def test_a_matched_answer_applies_the_hubs_fleet_flags_before_the_tick_goes_on(tmp_path: Path) -> None:
+    hub = FakeHub(default_runner_id="r1")
+    hub.fleet_flags = {"fleet-thing": True, "no-such-flag": True}
+    ctx = _fleet_ctx(tmp_path, hub)
+    assert ctx.flags.current().on("fleet-thing") is False
+
+    IdentityCheck(ctx).run()
+
+    assert ctx.flags.current().on("fleet-thing") is True
+    hub.fleet_flags = {}
+    IdentityCheck(ctx).run()
+    assert ctx.flags.current().on("fleet-thing") is False
+
+
+def test_an_answer_that_is_not_a_match_leaves_the_held_flags_as_they_stood(tmp_path: Path) -> None:
+    hub = FakeHub(default_runner_id="r1")
+    hub.fleet_flags = {"fleet-thing": True}
+    ctx = _fleet_ctx(tmp_path, hub)
+    IdentityCheck(ctx).run()
+    assert ctx.flags.current().on("fleet-thing") is True
+
+    hub.fleet_flags = {"fleet-thing": False}
+    hub.down = True  # an outage
+    IdentityCheck(ctx).run()
+    assert ctx.flags.current().on("fleet-thing") is True
+
+    hub.down = False
+    hub.issued[hub.token] = "rn_other"  # a mismatch
+    IdentityCheck(ctx).run()
+    assert ctx.flags.current().on("fleet-thing") is True
+
+    del hub.issued[hub.token]  # a refused token
+    IdentityCheck(ctx).run()
+    assert ctx.flags.current().on("fleet-thing") is True
+
+
+def test_a_hub_without_the_identity_read_leaves_the_held_flags_as_they_stood(tmp_path: Path) -> None:
+    ctx = _fleet_ctx(tmp_path, _HubWithoutIdentityRead(default_runner_id="r1"))
+
+    IdentityCheck(ctx).run()
+
+    assert ctx.flags.current().on("fleet-thing") is False
 
 
 def test_an_unregistered_store_records_its_identity_at_the_first_registration_never_at_the_check(

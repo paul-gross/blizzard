@@ -11591,8 +11591,16 @@
         "type": "object"
       },
       "RunnerIdentityView": {
-        "description": "Who the presented runner bearer token belongs to \u2014 its hub-minted id and current name, and\nthe tenant it was added in. Answering records nothing: no registration, no liveness.",
+        "description": "Who the presented runner bearer token belongs to \u2014 its hub-minted id and current name, and\nthe tenant it was added in, and the hub's ``fleet`` flags. Answering records nothing: no registration, no\nliveness.",
         "properties": {
+          "fleet_flags": {
+            "additionalProperties": {
+              "type": "boolean"
+            },
+            "default": {},
+            "title": "Fleet Flags",
+            "type": "object"
+          },
           "runner_id": {
             "title": "Runner Id",
             "type": "string"

@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from blizzard.foundation.clock import IClock
+from blizzard.foundation.flags import FlagRegistry, resolve_flags
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.platform_tracing.tracer import IPlatformTracer, NoopPlatformTracer
 from blizzard.foundation.roles import domain_model
@@ -30,6 +31,7 @@ from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource
 from blizzard.runner.hub.chunk_status_cache import IChunkViews
 from blizzard.runner.hub.client import BindingDeclaration, IHubClient, ITokenIdentityReader
+from blizzard.runner.hub.flags import FlagsHolder
 from blizzard.runner.hub.held_token import HubTokenHolder
 from blizzard.runner.hub.identity import IdentityVerdictHolder, RunnerIdentityHolder
 from blizzard.runner.leases.worker_stdout import IWorkerStdoutFiles
@@ -197,6 +199,9 @@ class LoopContext:
     slug_spenders: tuple[SpendingRunner, ...] = ()
     #: Opens the tick's root and step spans — the no-op on a standalone ``blizzard runner tick``.
     tracer: IPlatformTracer = field(default_factory=NoopPlatformTracer)
+    #: This runner's flags as they stand — its own resolved answer with its hub's ``fleet`` answer applied, which the
+    #: tick's identity check refreshes. The default holds an empty registry's answer.
+    flags: FlagsHolder = field(default_factory=lambda: FlagsHolder(resolve_flags(FlagRegistry(), "runner", {}).flags))
     #: This tick's capability memo (``tick()`` wires it); ``None`` rebuilds it per read.
     capabilities: TickCapabilities | None = None
     #: The loop's own cross-tick harness-version cache — unlike ``capabilities`` above, never rebound per tick.
