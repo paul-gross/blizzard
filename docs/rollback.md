@@ -25,7 +25,8 @@ The revision the target tag expects at its head comes straight out of that image
 store:
 
 ```bash
-docker run --rm --entrypoint blizzard-hub ghcr.io/paul-gross/blizzard-hub:v0.2.0 migrate --head
+OLDER_REVISION=$(docker run --rm --entrypoint blizzard-hub ghcr.io/paul-gross/blizzard-hub:v0.2.0 migrate --head)
+printf '%s\n' "$OLDER_REVISION"
 ```
 
 It prints a revision id such as `20260713_1218_hub_walking_skeleton`.
@@ -44,7 +45,7 @@ the hub's.
 Reverse the store to that revision:
 
 ```bash
-docker compose run --rm hub blizzard-hub migrate --dir /var/lib/blizzard/hub --down 20260713_1218_hub_walking_skeleton
+docker compose run --rm hub blizzard-hub migrate --dir /var/lib/blizzard/hub --down "$OLDER_REVISION"
 ```
 
 The downgrade must be run using the **new** image — the one being rolled back from — because a revision's `downgrade()`
@@ -55,7 +56,8 @@ command instead, which is what runs the downgrade without booting the daemon.
 
 ## 4. Put the older tag back
 
-Set `BLIZZARD_HUB_IMAGE=ghcr.io/paul-gross/blizzard-hub:v0.1.0` in `.env`, then bring the hub up:
+Set `BLIZZARD_HUB_IMAGE=ghcr.io/paul-gross/blizzard-hub:v0.2.0` in `.env` — the same target tag queried in step 2 —
+then bring the hub up:
 
 ```bash
 docker compose up -d hub
