@@ -1,6 +1,6 @@
 # Tag v* — the release build.
 #
-# Pushing a `v*` tag IS cutting the milestone build: the full suite runs, the
+# Pushing a `v*` tag builds a release: the full suite runs, the
 # wheel is built with the embedded frontend, and a GitHub Release is published
 # from the tag. Prerelease candidates are `v*-rc.*` tags.
 #
@@ -215,8 +215,10 @@ jobs:
       - name: derive version from tag
         id: ver
         run: |
-          # v0.1.0 -> 0.1.0 ; v0.1.0-rc.1 -> 0.1.0-rc.1 (hatchling normalizes the
-          # PEP 440 pre-release form). The version scheme is 0.<milestone>.<patch>.
+          # The minor counts release trains. pyproject.toml names the release
+          # most recently cut on this branch, moved only by a cut commit with
+          # Release-Cut: X.Y.Z. Both candidate and stable tags can share it;
+          # stamp the full tag version (the wheel builder normalizes rc for PEP 440).
           TAG="${GITHUB_REF_NAME}"
           VERSION="${TAG#v}"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"

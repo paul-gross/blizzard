@@ -1,10 +1,12 @@
-"""``.github/workflows/push.yml``'s ``dev-image`` job — the dogfood image
-channel published for every proven `master` commit. Static YAML
-assertions only, the same docker-free shape as ``tests/test_release_workflow.py``:
-no docker/GHCR credentials, no live build.
+"""``.github/workflows/push.yml``'s dev build and dogfood image channel.
+YAML assertions plus shell execution of the version step; no Docker/GHCR
+credentials or live image build.
 """
 
 from __future__ import annotations
+
+import os
+import subprocess
 
 import pytest
 import yaml
@@ -47,7 +49,7 @@ def test_dev_image_job_waits_for_gate_and_upper_tiers() -> None:
 
 
 def test_dev_image_job_needs_dev_build_for_the_shared_version_string() -> None:
-    """dev-image consumes dev-build's computed version (0.<minor>.0.dev<run>)
+    """dev-image consumes dev-build's computed next-minor dev version
     for its OCI version annotation rather than recomputing it inline — one
     source of truth for what "the dev version" means for a given commit."""
     assert "dev-build" in _dev_image_job()["needs"]
@@ -65,8 +67,25 @@ def test_the_dev_version_carries_the_commit_it_was_built_from() -> None:
     compute = next(s for s in steps if s.get("id") == "ver")
     assert "GITHUB_SHA" in compute["run"], (
         "the dev version must embed the commit sha as a PEP 440 local segment "
-        "(0.<minor>.0.dev<run>+<sha>) — see the step's own comment for why"
+        "(X.(Y+1).0.dev<run>+<sha>) — see the step's own comment for why"
     )
+
+
+@pytest.mark.parametrize("cut_version, expected", [("0.1.0", "0.2.0"), ("0.2.0", "0.3.0")])
+def test_dev_version_targets_the_next_minor_train(tmp_path, cut_version: str, expected: str) -> None:
+    compute = next(s for s in _jobs()["dev-build"]["steps"] if s.get("id") == "ver")
+    (tmp_path / "pyproject.toml").write_text(f'[project]\nversion = "{cut_version}"\n')
+    output = tmp_path / "output"
+    script = compute["run"].replace("${{ github.run_number }}", "42")
+    result = subprocess.run(
+        ["bash", "-e", "-c", script],
+        cwd=tmp_path,
+        env={**os.environ, "GITHUB_SHA": "abcdef123456789", "GITHUB_OUTPUT": str(output)},
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    assert output.read_text().strip() == f"version={expected}.dev42+abcdef123"
 
 
 def test_dev_image_puts_a_wheel_in_dist_before_building() -> None:

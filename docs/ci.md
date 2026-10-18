@@ -79,10 +79,11 @@ The e2e tier runs only locally and in the tag `release` workflow — it is never
 CI-profile crash sweep as real gate jobs.
 
 [`.github/workflows/push.yml`](../.github/workflows/push.yml) (push to `master`) runs the gate and upper tiers, then
-uploads a dev-build wheel versioned `0.<milestone>.0.dev<run>+<9-char-sha>` as a workflow artifact and publishes
-`ghcr.io/paul-gross/blizzard-hub` under two dev tags, multi-arch like the release image: `edge`, mutable — the newest
-proven `master` image — and `sha-<full-git-sha>`, immutable. `edge` is the dogfooding pointer; `latest` never follows
-`master` and moves only on a stable release cut — [`docs/versioning.md`](./versioning.md) owns the channel semantics.
+uploads a dev-build wheel versioned `X.(Y+1).0.dev<run>+<9-char-sha>` from the most recently cut `X.Y.Z` as a workflow
+artifact and publishes `ghcr.io/paul-gross/blizzard-hub` under two dev tags, multi-arch like the release image: `edge`,
+mutable — the newest proven `master` image — and `sha-<full-git-sha>`, immutable. `edge` is the dogfooding pointer;
+`latest` never follows `master` and moves only on a stable release cut — [`docs/versioning.md`](./versioning.md) owns the
+channel semantics.
 
 The dev-build wheel is downloaded from its run with:
 

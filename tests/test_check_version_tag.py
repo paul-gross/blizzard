@@ -58,7 +58,16 @@ def test_non_v_prefixed_tag_is_rejected(tmp_path: Path) -> None:
     assert result.returncode != 0
 
 
-def test_prerelease_tag_matches_a_literal_prerelease_version(tmp_path: Path) -> None:
-    root = _scratch_repo(tmp_path, "1.2.3-rc.1")
-    result = _run(root, "v1.2.3-rc.1")
+@pytest.mark.parametrize("tag", ["v0.2.0-rc.1", "v0.2.0-rc.2", "v0.2.0"])
+def test_candidate_and_stable_tags_match_the_cut_version(tmp_path: Path, tag: str) -> None:
+    root = _scratch_repo(tmp_path, "0.2.0")
+    result = _run(root, tag)
     assert result.returncode == 0, result.stderr
+
+
+def test_candidate_tag_rejects_literal_candidate_version(tmp_path: Path) -> None:
+    root = _scratch_repo(tmp_path, "0.2.0-rc.1")
+    result = _run(root, "v0.2.0-rc.1")
+    assert result.returncode != 0
+    assert "0.2.0-rc.1" in result.stderr
+    assert "pyproject.toml's [project] version is '0.2.0-rc.1'" in result.stderr

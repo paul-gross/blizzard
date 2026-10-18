@@ -1,10 +1,12 @@
-"""``.github/workflows/release.yml`` — static properties a tag cut can't rehearse locally: the image
-build-push step runs before `gh release create`, the ``release`` job's `permissions:` block declares both
-`contents: write` and `packages: write` (a job-level block replaces the workflow-level one rather than merging),
-and no other job holds a write scope. A pure YAML parse — no docker/GHCR credentials needed.
+"""``.github/workflows/release.yml`` — release ordering, permissions, and
+version stamping. Parse YAML and run the tag derivation shell step without
+Docker/GHCR credentials.
 """
 
 from __future__ import annotations
+
+import os
+import subprocess
 
 import pytest
 import yaml
@@ -76,6 +78,23 @@ def test_version_tag_check_runs_before_anything_is_built() -> None:
     check_idx = _step_index(steps, lambda s: "check-version-tag.sh" in str(s.get("run", "")))
     wheel_build_idx = _step_index(steps, lambda s: "build-wheel.sh" in str(s.get("run", "")))
     assert check_idx < wheel_build_idx
+
+
+@pytest.mark.parametrize("tag", ["v0.2.0-rc.1", "v0.2.0"])
+def test_release_wheel_stamps_the_full_tag_version(tmp_path, tag: str) -> None:
+    steps = _release_job()["steps"]
+    derive = steps[_step_index(steps, lambda s: s.get("id") == "ver")]
+    wheel = steps[_step_index(steps, lambda s: str(s.get("run", "")).strip() == "./scripts/build-wheel.sh")]
+    assert wheel["env"]["BLIZZARD_VERSION"] == "${{ steps.ver.outputs.version }}"
+    output = tmp_path / "output"
+    result = subprocess.run(
+        ["bash", "-e", "-c", derive["run"]],
+        env={**os.environ, "GITHUB_REF_NAME": tag, "GITHUB_OUTPUT": str(output)},
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    assert f"version={tag[1:]}" in output.read_text().splitlines()
 
 
 def test_release_notes_are_generated_not_auto_generated() -> None:

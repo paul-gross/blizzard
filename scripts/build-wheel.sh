@@ -56,7 +56,7 @@ fi
 # --- version override (dev builds / tag releases / local builds) ------------
 #
 # With BLIZZARD_VERSION set, the caller owns the version — that is how CI stamps
-# `0.<milestone>.0.dev<run>` and how a tag release stamps the tag. Both workflow
+# the next-train dev version and how a tag release stamps the tag. Both workflow
 # callers always set it.
 #
 # With it unset — a local `mise run build` — derive one instead of shipping
@@ -68,6 +68,10 @@ fi
 # the release version it is built from, and `.dirty` marks a tree with
 # uncommitted changes so a stamp never claims a commit it is not.
 EFFECTIVE_VERSION="${BLIZZARD_VERSION:-}"
+# Metadata readers return the literal Version field, while wheel filenames
+# normalize prereleases. Stamp the PEP 440 spelling so the running daemon and
+# the wheel filename report the same candidate version.
+EFFECTIVE_VERSION="${EFFECTIVE_VERSION/-rc./rc}"
 if [ -z "$EFFECTIVE_VERSION" ] && git rev-parse --git-dir >/dev/null 2>&1; then
   BASE_VERSION="$(python3 -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")"
   LOCAL_SEGMENT="$(git rev-parse --short=9 HEAD 2>/dev/null || echo unknown)"
