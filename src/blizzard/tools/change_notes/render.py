@@ -52,7 +52,12 @@ def _upgrade_entry(note: Note, tag: str, prose: str, upgrade: str) -> str:
 
 
 def render(
-    tag: str, notes: Sequence[Note], also_in: Mapping[str, Sequence[str]], commits: str, turned_on: Sequence[str] = ()
+    tag: str,
+    notes: Sequence[Note],
+    also_in: Mapping[str, Sequence[str]],
+    commits: str,
+    turned_on: Sequence[str] = (),
+    schedule: Mapping[str, str] | None = None,
 ) -> str:
     """The published notes for ``tag``: sections in order, empty ones omitted, then the collapsed commits."""
     grouped: dict[str, list[str]] = {}
@@ -61,7 +66,8 @@ def render(
         prose, upgrade = _split(note)
         versions = also_in.get(note.id, ())
         marker = f"(also in {', '.join(versions)})" if versions else ""
-        trailer = f"Removal planned for {note.fields['removes-in']}." if note.fields["kind"] == Kind.DEPRECATED else ""
+        line = (schedule or {}).get(note.id, note.fields.get("removes-in"))
+        trailer = f"Removal planned for {line}." if note.fields["kind"] == Kind.DEPRECATED else ""
         grouped.setdefault(_section_of(note), []).append(_item(prose, marker, trailer))
         if upgrade:
             upgrades.append(_upgrade_entry(note, tag, prose, upgrade))

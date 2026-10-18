@@ -12,6 +12,7 @@ from click.testing import CliRunner
 from blizzard.tools.change_notes.cli import main
 from blizzard.tools.change_notes.contract import Note
 from blizzard.tools.change_notes.guide import due_without_removal, guide
+from blizzard.tools.change_notes.render import render
 from tests.repo_files import repo_root
 from tests.test_change_notes_render import _commit, _git
 
@@ -125,6 +126,15 @@ def test_legacy_removal_without_breaking_flag_or_matching_deprecation_still_appe
     assert "legacy prose" not in guide(notes, "3")
 
 
+def test_earlier_retirement_does_not_block_later_line() -> None:
+    notes = [
+        _note("0.9.0", "old", "deprecated", **{"removes-in": "0.12"}),
+        _note("0.12.0", "gone", "removed", retires="old"),
+        _note("0.12.0", "next", "deprecated", **{"removes-in": "1"}),
+    ]
+    assert due_without_removal(notes, "1") == ("next",)
+
+
 def test_pending_postponement_does_not_change_due_line(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     (tmp_path / "changes" / "1.9.0").mkdir(parents=True)
     (tmp_path / "changes" / "unreleased").mkdir()
@@ -171,6 +181,11 @@ def test_tagged_render_sees_history_at_tag_not_working_tree_and_candidate_is_rep
     assert first.exit_code == 0, first.output
     assert first.output.startswith("## Upgrading to 3\n")
     assert first.output.index("Old API.") < first.output.index("Gone.") < first.output.index("## Upgrade notes")
+    postponed = CliRunner().invoke(main, ["render", "v1.9.0"])
+    assert "Removal planned for 2." in postponed.output
+    assert "Removal planned for 3." in render(
+        "v3.0.0", [_note("1.9.0", "old", "deprecated", **{"removes-in": "2"})], {}, "", schedule={"old": "3"}
+    )
     assert CliRunner().invoke(main, ["render", "v3.0.0-rc.1"]).output == first.output
     assert subprocess.run(["git", "status", "--porcelain"], cwd=repo, capture_output=True, text=True).stdout == ""
 

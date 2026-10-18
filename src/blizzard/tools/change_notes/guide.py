@@ -36,10 +36,23 @@ def due_without_removal(notes: Iterable[Note], line: str, *, prospective: bool =
     all_notes = list(notes)
     material = [n for n in all_notes if n.directory != UNRELEASED]
     schedule = latest_released_schedule(material)
-    retired = {n.fields.get("retires") for n in material if release_line(n.directory) == line}
+    retirements = [
+        (n.fields.get("retires"), line_order(release_line(n.directory)))
+        for n in material
+        if line_order(release_line(n.directory)) <= line_order(line)
+    ]
     if prospective:
-        retired.update(n.fields.get("retires") for n in all_notes if n.directory == UNRELEASED)
-    return tuple(sorted(n for n, due in schedule.items() if line_order(due) <= line_order(line) and n not in retired))
+        retirements.extend((n.fields.get("retires"), line_order(line)) for n in all_notes if n.directory == UNRELEASED)
+    return tuple(
+        sorted(
+            note_id
+            for note_id, due in schedule.items()
+            if line_order(due) <= line_order(line)
+            and not any(
+                retired_id == note_id and retired_line >= line_order(due) for retired_id, retired_line in retirements
+            )
+        )
+    )
 
 
 def guide(notes: Iterable[Note], line: str, *, tag: str | None = None, prospective: bool = False) -> str:

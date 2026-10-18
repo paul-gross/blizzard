@@ -53,11 +53,14 @@ def _schedule_refusals(notes: list[Note], moving: list[Note], version: str) -> l
     major, minor, patch = (int(part) for part in version.split("."))
     if patch == 0 and (major != 0 or minor != 0):
         postponed = {n.fields.get("postpones") for n in moving}
-        retired = {
-            n.fields.get("retires") for n in notes if n.directory == UNRELEASED or release_line(n.directory) == current
-        }
+        retirements = [
+            (n.fields.get("retires"), line_order(current if n.directory == UNRELEASED else release_line(n.directory)))
+            for n in notes
+            if n.directory == UNRELEASED or line_order(release_line(n.directory)) <= line_order(current)
+        ]
         for note_id, due in scheduled.items():
-            if line_order(due) <= line_order(current) and note_id not in retired and note_id not in postponed:
+            retired = any(rid == note_id and rline >= line_order(due) for rid, rline in retirements)
+            if line_order(due) <= line_order(current) and not retired and note_id not in postponed:
                 refusals.append(f"deprecation {note_id} is due in {current} without a retiring removal or postponement")
     return refusals
 

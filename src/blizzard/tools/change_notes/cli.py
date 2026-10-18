@@ -81,10 +81,10 @@ def render_command(tag: str) -> None:
     try:
         earlier = [r for r in parse_releases(repo.tags()) if r.order() < release.order()]
         notes = notes_at(repo, tag, version)
+        history = _tag_notes(repo, tag) if notes else []
         opening = release.patch == 0 and (release.major != 0 or release.minor != 0)
         introduction = ""
         if opening and notes:
-            history = _tag_notes(repo, tag)
             line = release_line(version)
             if release.major == 0 and line not in latest_released_schedule(history).values():
                 opening = False
@@ -93,7 +93,12 @@ def render_command(tag: str) -> None:
             if opening:
                 introduction = guide(history, line, tag=tag) or f"## Upgrading to {line}\n\n"
         text = introduction + render(
-            tag, notes, also_in(repo, earlier, version, (n.id for n in notes)), commit_block(repo, tag), turned_on(repo, tag)
+            tag,
+            notes,
+            also_in(repo, earlier, version, (n.id for n in notes)),
+            commit_block(repo, tag),
+            turned_on(repo, tag),
+            latest_released_schedule(history),
         )
     except (GitError, ReleasedNoteInvalid) as exc:
         click.echo(str(exc), err=True)

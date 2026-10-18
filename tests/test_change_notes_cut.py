@@ -251,6 +251,18 @@ def test_due_major_deprecation_refuses_an_empty_cut_without_writes(tmp_path: Pat
     assert _snapshot(root) == before
 
 
+def test_earlier_retirement_does_not_refuse_a_later_opening_cut(tmp_path: Path, monkeypatch) -> None:
+    root = _tree(
+        tmp_path,
+        {
+            "0.10.0/old.md": _scheduled("deprecated", "0.12"),
+            "0.12.0/removal.md": _REMOVAL,
+        },
+    )
+    result = _cut(root, "1.0.0", monkeypatch)
+    assert result.exit_code == 0, result.output
+
+
 @pytest.mark.parametrize(
     ("version", "line", "accepted"),
     [
