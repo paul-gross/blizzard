@@ -24,6 +24,8 @@ working `downgrade()`, held mechanically for every revision in the tree by
 Adding an optional config key, a new route, a new event type, a new trace attribute or span, a new nullable egress
 column, a new value of an enumerated egress column, or a migration that walks back cleanly is not breaking.
 
+A release carries a surface whether or not a feature flag has it on, so it is held to these rules from that release on.
+
 Mark a breaking commit with a `!` before the colon of its Conventional Commit subject: `feat!: ...`,
 `feat(scope)!: ...`.
 

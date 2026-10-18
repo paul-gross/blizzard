@@ -24,7 +24,7 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 
 from blizzard import __version__
 from blizzard.foundation.clock import IClock, IMonotonicClock, SystemClock, SystemMonotonicClock
-from blizzard.foundation.flags import FlagRegistry, Flags, resolve_flags
+from blizzard.foundation.flags import FlagOffError, FlagRegistry, Flags, resolve_flags
 from blizzard.foundation.forwarded import TrustedProxies
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.platform_tracing.attributes import annotate
@@ -56,6 +56,7 @@ from blizzard.runner.api.federation import (
 )
 from blizzard.runner.api.federation import router as auth_router
 from blizzard.runner.api.finding import router as finding_router
+from blizzard.runner.api.flag_guard import refuse_flag_off
 from blizzard.runner.api.flags import router as flags_router
 from blizzard.runner.api.fleet_summary import router as fleet_summary_router
 from blizzard.runner.api.garden import router as garden_router
@@ -458,6 +459,8 @@ def create_app(
             env_var=config.session_secret_env,
         )
         app.state.session_secret = secrets.token_bytes(32)
+
+    app.add_exception_handler(FlagOffError, refuse_flag_off)
 
     @app.exception_handler(NeedsFederationBounce)
     def _bounce_to_login(_: Request, exc: NeedsFederationBounce) -> RedirectResponse:

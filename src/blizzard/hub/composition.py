@@ -23,7 +23,15 @@ import httpx
 from sqlalchemy import Engine
 
 from blizzard.foundation.clock import IClock, SystemClock
-from blizzard.foundation.flags import FlagRegistry, Flags, resolve_flags, warn_ignored_flags
+from blizzard.foundation.flags import (
+    FlagRegistry,
+    FlagResolution,
+    Flags,
+    HeldKey,
+    resolve_flags,
+    warn_held_keys,
+    warn_ignored_flags,
+)
 from blizzard.foundation.forwarded import TrustedProxies
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.platform_tracing.tracer import IPlatformTracer
@@ -779,11 +787,24 @@ def build_config_authoring(stores: TenantStores, *, cipher: ISecretCipher) -> Co
     )
 
 
-def build_hub_flags(flags: Mapping[str, bool], registry: FlagRegistry | None = None) -> Flags:
+def build_hub_flags(
+    flags: Mapping[str, bool],
+    registry: FlagRegistry | None = None,
+    *,
+    loaded: FlagResolution | None = None,
+    held: tuple[HeldKey, ...] = (),
+) -> Flags:
     """The hub's resolved flags: every ``hub`` and ``fleet`` flag at its registry default, then the ``[flags]``
-    overrides. Each override the hub ignores is warned of here, once per process."""
-    resolution = resolve_flags(registry or FlagRegistry.load(), "hub", flags)
-    warn_ignored_flags(get_logger("blizzard.hub"), resolution)
+    overrides. Each override the hub ignores, and each guarded key read as absent, is warned of here, once per
+    process. ``loaded`` is the resolution the config load already made, used as is unless ``registry`` is given."""
+    resolution = (
+        loaded
+        if loaded is not None and registry is None
+        else resolve_flags(registry or FlagRegistry.load(), "hub", flags)
+    )
+    log = get_logger("blizzard.hub")
+    warn_ignored_flags(log, resolution)
+    warn_held_keys(log, held)
     return resolution.flags
 
 

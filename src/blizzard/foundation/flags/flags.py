@@ -21,12 +21,25 @@ type FlagSide = Literal["hub", "runner"]
 _HUB_ANSWERS: frozenset[FlagScope] = frozenset({"hub", "fleet"})
 
 
+def side_answers(side: FlagSide, scope: FlagScope) -> bool:
+    """Whether ``side``'s daemon answers a flag of ``scope`` at all."""
+    return scope in (_HUB_ANSWERS if side == "hub" else frozenset({"runner"}))
+
+
 class UnknownFlag(LookupError):
     """A flag name the registry holds neither live nor retired — a mistyped name, never read as off."""
 
 
 class FlagNotReadable(LookupError):
     """A live flag of the other side's scope — the hub's flag asked of a runner, or a runner's of the hub."""
+
+
+class FlagOffError(LookupError):
+    """A guarded behavior was reached while its flag is off. ``flag`` names the flag."""
+
+    def __init__(self, flag: str) -> None:
+        super().__init__(f"{flag!r} is off")
+        self.flag = flag
 
 
 @domain_model
@@ -67,6 +80,11 @@ class Flags:
         if name not in self.values:
             raise FlagNotReadable(f"{name!r} is not a flag this process answers")
         return self.values[name]
+
+    def require_on(self, name: str) -> None:
+        """Raise :class:`FlagOffError` unless ``name`` is on; the name is checked as ``on`` checks it."""
+        if not self.on(name):
+            raise FlagOffError(name)
 
     def answer(self) -> dict[str, bool]:
         """The live flags this process publishes, each to whether it is on."""

@@ -8,11 +8,14 @@ read and the key is ignored."""
 from __future__ import annotations
 
 import os
-from collections.abc import Iterator, Mapping
-from dataclasses import dataclass, field
-from typing import Any, Final
+from collections.abc import Callable, Iterator, Mapping
+from dataclasses import dataclass, field, replace
+from typing import TYPE_CHECKING, Any, Final
 
 from blizzard.foundation.roles import domain_model
+
+if TYPE_CHECKING:
+    from blizzard.foundation.flags import Flags
 
 #: Set to ``1`` and an undeclared read raises; the test suite sets it for itself and every daemon it spawns.
 STRICT_CONFIG_ENVIRONMENT_VARIABLE: Final = "BLIZZARD_STRICT_CONFIG"
@@ -43,6 +46,10 @@ class UndeclaredConfigKey(RuntimeError):
         super().__init__(f"config key {path!r} is read but not declared in the {registry} config registry")
 
 
+class InvalidConfigValue(ValueError):
+    """A guarded key carries a value of the wrong type for its declaration; the message names the key."""
+
+
 @domain_model
 @dataclass(frozen=True)
 class ConfigKey:
@@ -56,6 +63,8 @@ class ConfigKey:
     deprecated: bool = False
     #: The key or table that replaces a deprecated one.
     replaced_by: str | None = None
+    #: The flag holding this key: off, it reads as absent once its value passed ``type``; not in the contract.
+    flag: str | None = None
 
 
 @domain_model
@@ -77,10 +86,16 @@ class ConfigRegistry:
     paths: tuple[DurablePath, ...] = ()
     _declared: frozenset[str] = field(init=False, repr=False, compare=False)
     _open: frozenset[str] = field(init=False, repr=False, compare=False)
+    _by_path: Mapping[str, ConfigKey] = field(init=False, repr=False, compare=False)
 
     def __post_init__(self) -> None:
+        object.__setattr__(self, "_by_path", {key.path: key for key in self.keys})
         object.__setattr__(self, "_declared", frozenset(key.path for key in self.keys))
         object.__setattr__(self, "_open", frozenset(key.path for key in self.keys if key.type == OPEN_TABLE))
+
+    def key(self, path: str) -> ConfigKey | None:
+        """The declaration of ``path``, or ``None`` when it has none."""
+        return self._by_path.get(path)
 
     def declares(self, path: str) -> bool:
         """Whether ``path`` is a declared key, or lies beneath an open table."""
@@ -98,6 +113,28 @@ class ConfigRegistry:
         return ConfigRegistry(name, (*self.keys, *keys), (*self.paths, *paths))
 
 
+class HeldKeys:
+    """The flags a file's guarded keys read against, and each guarded key that was present while its flag was off —
+    shared by a root view and every table beneath it."""
+
+    def __init__(self, flags: Flags) -> None:
+        self.flags = flags
+        #: Key path to the flag holding it, for each present key read as absent.
+        self.held: dict[str, str] = {}
+
+
+SCALAR_TYPES: Final = (STRING, INTEGER, NUMBER, BOOLEAN, STRING_LIST, STRING_OR_LIST)
+
+_TYPE_CHECKS: Final[Mapping[str, Callable[[object], bool]]] = {
+    STRING: lambda v: isinstance(v, str),
+    INTEGER: lambda v: isinstance(v, int) and not isinstance(v, bool),
+    NUMBER: lambda v: isinstance(v, int | float) and not isinstance(v, bool),
+    BOOLEAN: lambda v: isinstance(v, bool),
+    STRING_LIST: lambda v: isinstance(v, list) and all(isinstance(item, str) for item in v),
+    STRING_OR_LIST: lambda v: isinstance(v, str) or (isinstance(v, list) and all(isinstance(i, str) for i in v)),
+}
+
+
 @domain_model
 @dataclass(frozen=True)
 class ConfigView:
@@ -110,6 +147,8 @@ class ConfigView:
     body: Mapping[str, Any]
     #: ``False`` for a :meth:`blank` view, which no file fed and so has nothing to check.
     checked: bool = True
+    #: Set by a loader once it has resolved the flags; a view without it reads every key plainly.
+    held: HeldKeys | None = None
 
     @classmethod
     def root(cls, registry: ConfigRegistry, document: Mapping[str, Any]) -> ConfigView:
@@ -128,22 +167,26 @@ class ConfigView:
     def get(self, key: str, default: object = None) -> Any:
         """The value at ``key``, or ``default`` when the file does not carry it."""
         self._check(key)
-        return self.body.get(key, default)
+        return default if self._held(key) else self.body.get(key, default)
 
     def __contains__(self, key: object) -> bool:
         if not isinstance(key, str):
             return False
         self._check(key)
-        return key in self.body
+        return key in self.body and not self._held(key)
 
     def table(self, key: str) -> ConfigView:
         """The sub-table at ``key``; empty when absent or not a table."""
         value = self.get(key)
-        return ConfigView(self.registry, self._join(key), value if isinstance(value, dict) else {}, self.checked)
+        return ConfigView(
+            self.registry, self._join(key), value if isinstance(value, dict) else {}, self.checked, self.held
+        )
 
     def element(self, key: str, value: object) -> ConfigView:
         """One entry of the array of tables at ``key``, its path marked ``key[]``; empty when not a table."""
-        return ConfigView(self.registry, f"{self._join(key)}[]", value if isinstance(value, dict) else {}, self.checked)
+        return ConfigView(
+            self.registry, f"{self._join(key)}[]", value if isinstance(value, dict) else {}, self.checked, self.held
+        )
 
     def entries(self, key: str) -> Iterator[ConfigView]:
         """Each table of the array at ``key``; none when absent or not an array."""
@@ -156,6 +199,24 @@ class ConfigView:
         if self.checked and not self.registry.is_open(self.path):
             self._undeclared(f"{self.path}.*" if self.path else "*")
         return iter(self.body.items())
+
+    def holding(self, flags: Flags) -> ConfigView:
+        """This view with its guarded keys read against ``flags``."""
+        return replace(self, held=HeldKeys(flags))
+
+    def _held(self, key: str) -> bool:
+        """Whether ``key`` is present, guarded, and its flag off — after its value passed the declared type, so a
+        malformed value fails whatever the flag says."""
+        declared = self.registry.key(self._join(key)) if self.checked and self.held is not None else None
+        if declared is None or declared.flag is None or key not in self.body:
+            return False
+        assert self.held is not None
+        if not _TYPE_CHECKS[declared.type](self.body[key]):
+            raise InvalidConfigValue(f"{declared.path} must be a {declared.type}, got {self.body[key]!r}")
+        if self.held.flags.on(declared.flag):
+            return False
+        self.held.held[declared.path] = declared.flag
+        return True
 
     def _join(self, key: str) -> str:
         return f"{self.path}.{key}" if self.path else key

@@ -22,7 +22,7 @@ from sqlalchemy import Engine
 
 from blizzard import __version__
 from blizzard.foundation.clock import IClock, SystemClock
-from blizzard.foundation.flags import FlagRegistry, Flags, resolve_flags, warn_ignored_flags
+from blizzard.foundation.flags import FlagRegistry, Flags, resolve_flags, warn_held_keys, warn_ignored_flags
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.platform_tracing.handle import (
     DisabledPlatformTracing,
@@ -708,8 +708,14 @@ def _build_host_graph(
         platform_tracing = platform_tracing or DisabledPlatformTracing()
         received_telemetry = received_telemetry or DisabledReceivedTelemetryExport()
         registry = flag_registry or FlagRegistry.load()
-        resolution = resolve_flags(registry, "runner", config.flags)
-        warn_ignored_flags(get_logger("blizzard.runner"), resolution)
+        # The load resolved the host's flags against the packaged registry; a registry given here replaces that.
+        loaded = config.flag_resolution
+        resolution = (
+            loaded if loaded is not None and flag_registry is None else resolve_flags(registry, "runner", config.flags)
+        )
+        log = get_logger("blizzard.runner")
+        warn_ignored_flags(log, resolution)
+        warn_held_keys(log, config.held_keys)
         platform_tracing.instrument_engine(engine)
         readiness = ReadinessService(
             reader=SqlAlchemyStoreStatusReader(engine), expected_revision=migration_runner(config).script_head()
