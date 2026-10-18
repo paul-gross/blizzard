@@ -159,9 +159,10 @@ jobs:
       # packaging/docker/Dockerfile does `COPY dist/blizzard-*.whl` and the `-pg`
       # requirements file — it installs them from the build context rather than
       # building one itself. The tag workflow's `build` job satisfies that by
-      # running build-wheel.sh earlier in its OWN job; here the wheel already exists as dev-build's uploaded artifact, so
-      # download it into dist/ instead of building a second one. That also makes
-      # the image carry byte-identical the wheel published for this commit.
+      # running build-wheel.sh earlier in its OWN job; here the wheel already
+      # exists as dev-build's uploaded artifact, so download it into dist/
+      # instead of building a second one. That also makes the image carry
+      # byte-identical the wheel published for this commit.
       - name: fetch the dev wheel dev-build produced (the Dockerfile's build context)
         uses: actions/download-artifact@v4
         with:

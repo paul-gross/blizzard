@@ -169,5 +169,5 @@ humans, and the release workflow alike. It builds both Angular apps into the whe
 migration trees, verifies the wheel actually contains them, then proves a Node-free install by running
 `blizzard --version` from a clean node-free virtualenv.
 
-Setting `BLIZZARD_VERSION=<v>` overrides the wheel version — the dev-build and release `build` jobs set it — and the original is
-restored after the build.
+Setting `BLIZZARD_VERSION=<v>` overrides the wheel version — the dev-build and release `build` jobs set it —
+and the original is restored after the build.
