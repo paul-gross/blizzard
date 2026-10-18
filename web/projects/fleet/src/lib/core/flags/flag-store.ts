@@ -35,7 +35,7 @@ function flagsQueryOptions(read: FlagsRead) {
  * Reads the app's server once, at start. A name the answer does not hold reads off, and so does every name while the
  * read is pending or has failed — a page never fails on a flag.
  *
- * Hold the injected store as `flags`: the registry lint (`tests/test_flag_registry.py`) finds a flag read by that
+ * Hold the injected store as `flags`: the flag registry lint finds a flag read by that
  * receiver name, and fails a web source that holds the store under another.
  */
 @Injectable({ providedIn: 'root' })
