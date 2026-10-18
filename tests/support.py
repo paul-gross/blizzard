@@ -37,6 +37,7 @@ from sqlalchemy.sql.base import Executable
 
 from blizzard.auth_core import MEMBERSHIP_ROLES, Role
 from blizzard.foundation.clock import FixedClock, IClock
+from blizzard.foundation.flags import Flags
 from blizzard.foundation.forwarded import TrustedProxies
 from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.logging import get_logger
@@ -1279,6 +1280,7 @@ def build_hub(
     egress: EgressConfig | None = None,
     egress_path_key: bytes | None = None,
     auto_register_claimants: bool = True,
+    flags: Flags | None = None,
 ) -> HubHarness:
     """A migrated, fully-wired hub over ``tmp_path`` with fake external seams.
 
@@ -1372,7 +1374,7 @@ def build_hub(
     )
     hub_services.tenants.open_tenants.refresh()
     services = hub_services.tenants.open_services(default)
-    app = create_app(config, services=hub_services)
+    app = create_app(config, services=hub_services, flags=flags)
     client = RunnerFleetClient(app, services=services, register_claimants=auto_register_claimants)
     # Warm FastAPI's per-router route-resolution cache: it lazily caches routes on first
     # use, which is thread-unsafe under the component tier's OS-thread races.

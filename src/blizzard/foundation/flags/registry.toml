@@ -1,0 +1,4 @@
+# Every flag the fleet ships dark. A flag is declared under [flag.<name>] with owner, summary, scope, and default;
+# retiring one moves its name to [retired] with its scope. Nothing here is a version or a date.
+
+[retired]

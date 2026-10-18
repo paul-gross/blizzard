@@ -2351,6 +2351,31 @@
         "title": "FindingView",
         "type": "object"
       },
+      "FlagsResponse": {
+        "description": "An open map, so adding or retiring a flag never changes the OpenAPI document.",
+        "properties": {
+          "flags": {
+            "additionalProperties": {
+              "type": "boolean"
+            },
+            "title": "Flags",
+            "type": "object"
+          },
+          "overridden": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Overridden",
+            "type": "array"
+          }
+        },
+        "required": [
+          "flags",
+          "overridden"
+        ],
+        "title": "FlagsResponse",
+        "type": "object"
+      },
       "FleetSummaryView": {
         "description": "The fleet-pulse counts: ``ready``; ``running`` (``running`` + ``delivering``);\n``waiting`` (``waiting_on_human`` + ``paused``); ``needs`` (``needs_human``).\n``not_ready``, ``stopped``, and ``done`` count toward no bucket \u2014 a pulse, not a total.",
         "properties": {
@@ -6564,6 +6589,27 @@
         "summary": "Read Session",
         "tags": [
           "auth"
+        ]
+      }
+    },
+    "/api/flags": {
+      "get": {
+        "operationId": "flags_api_flags_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FlagsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Flags",
+        "tags": [
+          "meta"
         ]
       }
     },

@@ -8,6 +8,7 @@ import base64
 import binascii
 import os
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -587,6 +588,8 @@ class RunnerConfig:
     worker_stdout_retention_days: int = DEFAULT_WORKER_STDOUT_RETENTION_DAYS
     #: Lease-trace sweep knobs; every field at its default when ``[tracing]`` is absent.
     tracing: TracingConfig = field(default_factory=TracingConfig)
+    #: The host's ``[flags]`` overrides — flag name to on or off; matched to the registry at composition.
+    flags: Mapping[str, bool] = field(default_factory=dict)
 
     def worker_env(self, tracing: TracingSettings) -> AllowlistedEnv:
         """The one allowlisted env every runner-spawned child is built from

@@ -47,7 +47,7 @@ pytestmark = pytest.mark.component
 _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
 
 #: The routes that belong to the host and answer at the root; every other operation is one runner's.
-_ROOT_ALLOWLIST = ("/api/health", "/api/ready", "/api/auth/", "/api/events/stream", "/api/host/")
+_ROOT_ALLOWLIST = ("/api/health", "/api/flags", "/api/ready", "/api/auth/", "/api/events/stream", "/api/host/")
 
 
 def _status(store: SqlAlchemyRunnerStore, config: RunnerConfig) -> RunnerStatusService:

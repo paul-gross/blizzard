@@ -22,6 +22,7 @@ from sqlalchemy import Engine
 
 from blizzard import __version__
 from blizzard.foundation.clock import IClock, SystemClock
+from blizzard.foundation.flags import FlagRegistry, Flags, resolve_flags, warn_ignored_flags
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.platform_tracing.handle import (
     DisabledPlatformTracing,
@@ -184,6 +185,9 @@ class HostProcess:
     host_tick: HostTick
     #: The one HTTP client every declared subscription's sampler shares, built on first use and closed with the host.
     usage_http_client: LazyUsageHttpClient
+    #: Every flag the fleet declares, and the host's own resolved answer — what its ``GET /api/flags`` publishes.
+    flag_registry: FlagRegistry
+    flags: Flags
     #: Platform spans — disabled unless a handle is supplied; every collaborator opens spans through it.
     platform_tracing: IPlatformTracing = field(default_factory=DisabledPlatformTracing)
     #: Where admitted metrics and logs leave — disabled unless a handle is supplied.
@@ -263,6 +267,8 @@ class RunnerProcess:
     hub_token: HubTokenHolder
     #: What the enabled bindings together do with each of a worker's telemetry signals, derived once at startup.
     harness_telemetry: HarnessTelemetryPlan = field(default_factory=HarnessTelemetryPlan)
+    #: This runner's own resolved flags: its ``runner`` flags at the host's overrides.
+    flags: Flags = field(default_factory=lambda: resolve_flags(FlagRegistry(), "runner", {}).flags)
     #: Whether closing this runner closes the host it was built over — the host-of-one a standalone build makes.
     closes_host: bool = False
 
@@ -545,6 +551,7 @@ def build_host_process(
     platform_tracing: IPlatformTracing | None = None,
     received_telemetry: IReceivedTelemetryExport | None = None,
     trace_platform: bool = False,
+    flag_registry: FlagRegistry | None = None,
 ) -> HostProcess:
     """Construct the host graph from its file, and one runner over it for each of ``runners`` — each bound to its
     configured id before anything runs. ``halted`` are the runners left unbuilt; the host keeps them to report.
@@ -553,7 +560,8 @@ def build_host_process(
     ``environ`` decides whether tracing is enabled; ``trace_exporter`` replaces the OTLP binding an enabled sweep would
     otherwise build. ``trace_platform`` builds the platform-tracing and received-telemetry handles the config and
     environment decide, stamped from the host's runners; otherwise ``platform_tracing`` and ``received_telemetry`` are
-    used as given. ``bundles`` are the harness-config snapshots each runner published, by runner id."""
+    used as given. ``bundles`` are the harness-config snapshots each runner published, by runner id. ``flag_registry``
+    is the registry every flag resolves against — the packaged one unless given."""
     graph = _build_host_graph(
         runners[0].config if runners else host.host_view(),
         subscriptions=host.subscriptions,
@@ -563,6 +571,7 @@ def build_host_process(
         received_telemetry=received_telemetry,
         trace_platform=trace_platform,
         host_token=host.host_token.value,
+        flag_registry=flag_registry,
     )
     try:
         for built in runners:
@@ -605,6 +614,7 @@ def build_runner_process(
     runner_id: str | None = None,
     token: ResolvedToken | None = None,
     host_token: str = "",
+    flag_registry: FlagRegistry | None = None,
 ) -> RunnerProcess:
     """A host of one and its runner, for the standalone commands and tests that drive one runner: closing the
     returned runner closes the host too. The runner is bound to ``runner_id``, else to the id ``config`` carries;
@@ -619,6 +629,7 @@ def build_runner_process(
         received_telemetry=received_telemetry,
         trace_platform=False,
         host_token=host_token,
+        flag_registry=flag_registry,
     )
     try:
         runner = _build_runner(
@@ -674,10 +685,12 @@ def _build_host_graph(
     received_telemetry: IReceivedTelemetryExport | None,
     trace_platform: bool,
     host_token: str = "",
+    flag_registry: FlagRegistry | None = None,
 ) -> HostProcess:
     """The host's own graph, with no runner on it yet. ``config`` carries the host's keys — listeners, tracing, the
     workspaces, its hub — and ``subscriptions`` are the host's declarations, which its credential renewal covers.
-    ``host_token`` is the host's own credential; a host holding one is registered, and reports itself to its hub."""
+    ``host_token`` is the host's own credential; a host holding one is registered, and reports itself to its hub.
+    ``flag_registry`` is the registry its flags resolve against; each override it ignores is warned of here, once."""
     install_runner_guard()
     engine = create_engine_from_url(config.db_url)
     host_hub_http_client: httpx.Client | None = None
@@ -692,6 +705,9 @@ def _build_host_graph(
             received_telemetry = build_runner_received_telemetry(config, environ)
         platform_tracing = platform_tracing or DisabledPlatformTracing()
         received_telemetry = received_telemetry or DisabledReceivedTelemetryExport()
+        registry = flag_registry or FlagRegistry.load()
+        resolution = resolve_flags(registry, "runner", config.flags)
+        warn_ignored_flags(get_logger("blizzard.runner"), resolution)
         platform_tracing.instrument_engine(engine)
         readiness = ReadinessService(
             reader=SqlAlchemyStoreStatusReader(engine), expected_revision=migration_runner(config).script_head()
@@ -774,6 +790,8 @@ def _build_host_graph(
                 credential_renewal=_credential_renewal_pass(subscriptions, host_stores, clock),
             ),
             usage_http_client=usage_http_client,
+            flag_registry=registry,
+            flags=resolution.flags,
             subscriptions=tuple(subscriptions),
             platform_tracing=platform_tracing,
             received_telemetry=received_telemetry,
@@ -919,6 +937,7 @@ def _build_runner(
             identity_verdict=IdentityVerdictHolder(_identity_remedy(config, runner_id)),
             hub_token=held_hub_token(config, token),
             harness_telemetry=plan,
+            flags=resolve_flags(host.flag_registry, "runner", config.flags).flags,
             closes_host=closes_host,
         )
     except BaseException:

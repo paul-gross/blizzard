@@ -19,7 +19,7 @@ export function injectHubHealthQuery() {
     queryFn: async () => {
       const { data, error } = await healthApiHealthGet({ throwOnError: false });
       if (error) throw error;
-      return data ?? {};
+      return data ?? ({} as Partial<NonNullable<typeof data>>);
     },
     refetchInterval: 5000,
   }));

@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any
 
 from blizzard.foundation.config_keys import ConfigView
+from blizzard.foundation.flags import parse_overrides
 from blizzard.foundation.forwarded import TrustedProxies
 from blizzard.foundation.public_origins import PublicOrigins
 from blizzard.foundation.roles import collaborator, domain_model
@@ -315,6 +316,8 @@ class HostConfig:
     session_secret: bytes = field(default=b"", repr=False)
     auth: Auth = field(default_factory=lambda: Auth.of(None))
     tracing: TracingConfig = field(default_factory=TracingConfig)
+    #: The ``[flags]`` overrides, laid onto every runner's config.
+    flags: Mapping[str, bool] = field(default_factory=dict)
     transcripts: Transcripts = field(default_factory=lambda: Transcripts.of(None))
     worker_stdout: WorkerStdout = field(default_factory=lambda: WorkerStdout.of(None))
     #: The host's own credential, resolved from the environment, then the host file, then ``.env``.
@@ -475,6 +478,7 @@ class HostConfig:
             trusted_proxies=self.trusted_proxies,
             worker_stdout_retention_days=self.worker_stdout.retention_days,
             tracing=self.tracing,
+            flags=self.flags,
             workspaces=self.workspaces or base.workspaces,
         )
         return shared
@@ -729,6 +733,7 @@ def _parse(raw: dict[str, Any], *, layout: HostLayout, host: str | None, port: i
     tracing = errors.attempt(
         "[tracing]", lambda: TracingConfig.of(document.table("tracing"), ConfigError), TracingConfig()
     )
+    flags = errors.attempt("[flags]", lambda: parse_overrides(document, ConfigError), {})
     if not isinstance(document.get("hub_tokens", {}), dict):
         errors.add("[hub_tokens] must be a table of tokens keyed by runner name")
     hub_tokens = Table.of(document).pairs("hub_tokens")
@@ -754,6 +759,7 @@ def _parse(raw: dict[str, Any], *, layout: HostLayout, host: str | None, port: i
         session_secret=session_secret,
         auth=Auth.of(document.table("auth")),
         tracing=tracing,
+        flags=flags,
         transcripts=transcripts,
         worker_stdout=worker_stdout,
         host_token=host_token,

@@ -3360,6 +3360,24 @@ export type FindingsPageView = {
 };
 
 /**
+ * FlagsResponse
+ *
+ * An open map, so adding or retiring a flag never changes the OpenAPI document.
+ */
+export type FlagsResponse = {
+    /**
+     * Flags
+     */
+    flags: {
+        [key: string]: boolean;
+    };
+    /**
+     * Overridden
+     */
+    overridden: Array<string>;
+};
+
+/**
  * FleetSpendView
  *
  * The fleet's usage/cost total since ``since`` and, when the caller bounded the window, strictly
@@ -4292,6 +4310,30 @@ export type HttpValidationError = {
      * Detail
      */
     detail?: Array<ValidationError>;
+};
+
+/**
+ * HealthResponse
+ *
+ * The wire shape of the liveness probe; ``overridden`` names the flags this hub's ``[flags]`` table changed.
+ */
+export type HealthResponse = {
+    /**
+     * Overridden
+     */
+    overridden: Array<string>;
+    /**
+     * Service
+     */
+    service: string;
+    /**
+     * Status
+     */
+    status: string;
+    /**
+     * Version
+     */
+    version: string;
 };
 
 /**
@@ -12497,6 +12539,22 @@ export type GetFindingApiFindingsFindingIdGetResponses = {
 
 export type GetFindingApiFindingsFindingIdGetResponse = GetFindingApiFindingsFindingIdGetResponses[keyof GetFindingApiFindingsFindingIdGetResponses];
 
+export type FlagsApiFlagsGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/flags';
+};
+
+export type FlagsApiFlagsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: FlagsResponse;
+};
+
+export type FlagsApiFlagsGetResponse = FlagsApiFlagsGetResponses[keyof FlagsApiFlagsGetResponses];
+
 export type GetChunkStatusesApiFleetChunkStatusesGetData = {
     body?: never;
     path?: never;
@@ -14238,13 +14296,9 @@ export type HealthApiHealthGetData = {
 
 export type HealthApiHealthGetResponses = {
     /**
-     * Response Health Api Health Get
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: string;
-    };
+    200: HealthResponse;
 };
 
 export type HealthApiHealthGetResponse = HealthApiHealthGetResponses[keyof HealthApiHealthGetResponses];

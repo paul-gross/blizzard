@@ -48,7 +48,7 @@ The file opens with a `---` delimited YAML block. A repeated key and an unknown 
 | `postpones`     | The id of a deprecation note. Only on `changed`.                                                                                |
 | `retires`       | The id of a deprecation note. Only on `removed`.                                                                                |
 | `upgrade-guide` | An anchor of a heading in `docs/upgrade.md`, without the `#`, as GitHub renders it.                                             |
-| `flag`          | Refused: it waits for the flag registry.                                                                                        |
+| `flag`          | Refused: it waits for the flag lifecycle check.                                                                                 |
 
 `retires` and `postpones` must name a `deprecated` note under a released `changes/<X.Y.Z>/` directory; an unreleased
 note, or a note of another kind, does not count.

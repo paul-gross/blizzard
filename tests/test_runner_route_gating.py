@@ -72,6 +72,7 @@ _HUMAN: set[tuple[str, str]] = {
 #: public routes (health/readiness, the auth bounce, logout/session). Never ``401``.
 _OPEN: set[tuple[str, str]] = {
     ("GET", "/api/health"),
+    ("GET", "/api/flags"),
     ("GET", "/api/ready"),
     ("GET", "/api/auth/login"),
     ("POST", "/api/auth/callback"),

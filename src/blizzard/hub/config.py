@@ -19,6 +19,7 @@ from urllib.parse import urlsplit
 from sqlalchemy.engine import make_url
 
 from blizzard.foundation.config_keys import ConfigView
+from blizzard.foundation.flags import parse_overrides
 from blizzard.foundation.forwarded import TrustedProxies
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.trace_export.config import TracingConfig
@@ -523,6 +524,8 @@ class HubConfig:
     trusted_proxies: tuple[str, ...] = ()
     #: Absolute ``http(s)`` board origin; ``None`` omits every board link.
     public_url: str | None = None
+    #: The ``[flags]`` overrides — flag name to on or off; matched to the registry at composition, not here.
+    flags: Mapping[str, bool] = field(default_factory=dict)
 
     @staticmethod
     def parse_public_url(value: object) -> str | None:
@@ -713,4 +716,5 @@ class HubConfig:
             egress=parse_egress_config(raw.table("egress")),
             trusted_proxies=TrustedProxies.entries(raw.get("trusted_proxies"), ConfigError),
             public_url=cls.parse_public_url(raw.get("public_url")),
+            flags=parse_overrides(raw, ConfigError),
         )

@@ -5469,6 +5469,31 @@
         "title": "FindingsPageView",
         "type": "object"
       },
+      "FlagsResponse": {
+        "description": "An open map, so adding or retiring a flag never changes the OpenAPI document.",
+        "properties": {
+          "flags": {
+            "additionalProperties": {
+              "type": "boolean"
+            },
+            "title": "Flags",
+            "type": "object"
+          },
+          "overridden": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Overridden",
+            "type": "array"
+          }
+        },
+        "required": [
+          "flags",
+          "overridden"
+        ],
+        "title": "FlagsResponse",
+        "type": "object"
+      },
       "FleetSpendView": {
         "description": "The fleet's usage/cost total since ``since`` and, when the caller bounded the window, strictly\nbefore ``until`` (``None`` for the open-ended tail). ``cost_partial`` is ``True`` iff some summed row\ncarries neither a billed nor an estimated amount, so ``cost_usd`` is then a lower bound;\n``estimated_cost_usd`` is ``None`` unless some summed row carried one, and never enters ``cost_usd``.",
         "properties": {
@@ -6903,6 +6928,38 @@
           }
         },
         "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "HealthResponse": {
+        "description": "The wire shape of the liveness probe; ``overridden`` names the flags this hub's ``[flags]`` table changed.",
+        "properties": {
+          "overridden": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Overridden",
+            "type": "array"
+          },
+          "service": {
+            "title": "Service",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "service",
+          "version",
+          "overridden"
+        ],
+        "title": "HealthResponse",
         "type": "object"
       },
       "HostAddRequest": {
@@ -21213,6 +21270,27 @@
         ]
       }
     },
+    "/api/flags": {
+      "get": {
+        "operationId": "flags_api_flags_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FlagsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Flags",
+        "tags": [
+          "meta"
+        ]
+      }
+    },
     "/api/fleet/chunk-statuses": {
       "get": {
         "description": "The runner tick's slim batch status read \u2014 repeatable ``chunk_id``;\nan unknown or ephemeral id is omitted, never a 404.",
@@ -24035,11 +24113,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": {
-                    "type": "string"
-                  },
-                  "title": "Response Health Api Health Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/HealthResponse"
                 }
               }
             },
