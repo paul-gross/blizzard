@@ -7,5 +7,5 @@
   @if (showAdmin()) {
     <a fleetKitTab [routerLink]="'/admin' | lensLink" routerLinkActive="active" data-testid="nav-admin">Admin</a>
   }
-  <app-project-lens-control [enabled]="lensEnabled()" />
+  <app-project-lens-control [choices]="lensChoices()" [current]="lensCurrent()" (choose)="lensChoose.emit($event)" />
 </nav>

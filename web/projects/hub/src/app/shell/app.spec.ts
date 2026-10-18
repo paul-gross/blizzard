@@ -56,9 +56,19 @@ function stubAuth(me: MeResponse | null = OPERATOR_ME_RESPONSE, providers: reado
     // `BoardHeader` renders its spend cell whenever the read resolves truthy at all
     // (`{}` included) and calls `.toFixed` on `cost_usd` unconditionally.
     if (path === '/api/spend') return { cost_usd: 0, cost_partial: false };
+    if (path === '/api/projects') return { projects: LENS_PROJECTS };
     return {};
   });
 }
+
+const LENS_PROJECTS = ['zeta', 'blizzard'].map((slug) => ({
+  project_id: `proj_${slug}`,
+  slug,
+  name: slug[0].toUpperCase() + slug.slice(1),
+  description: '',
+  revision: 1,
+  created_at: '2026-10-01T00:00:00Z',
+}));
 
 /** Same shape as {@link stubAuth}, but also captures each `/api/spend` request's
  * full URL (query string included) — unlike `stubRequestClient`'s `CapturedRequest`,
@@ -347,6 +357,48 @@ describe('hub App', () => {
       // slot (first in the column), not fall through to the default content slot.
       const shell = el.querySelector('fleet-app-shell .shell');
       expect(shell?.firstElementChild?.tagName.toLowerCase()).toBe('app-mobile-titlebar');
+    });
+  });
+
+  describe('the project lens selectors', () => {
+    afterEach(() => localStorage.removeItem('blizzard.viewport.override'));
+
+    it('feeds the desktop chips from one projects read and switches the lens on a choice', async () => {
+      TestBed.inject(ViewportService).setOverride('desktop');
+      const fixture = TestBed.createComponent(App);
+      const router = TestBed.inject(Router);
+      await router.navigateByUrl('/p/blizzard/board');
+      await settle(fixture);
+      const el = fixture.nativeElement as HTMLElement;
+      const chip = (slug: string) => el.querySelector<HTMLElement>(`[data-testid="project-lens-${slug}"]`);
+
+      expect(chip('all')?.getAttribute('aria-pressed')).toBe('false');
+      expect(chip('blizzard')?.getAttribute('aria-pressed')).toBe('true');
+      expect(authStub.forRoute('/api/projects', 'GET')).toHaveLength(1);
+
+      chip('zeta')!.click();
+      await settle(fixture);
+      expect(router.url).toBe('/p/zeta/board');
+    });
+
+    it('feeds the mobile submenu from the same read', async () => {
+      TestBed.inject(ViewportService).setOverride('mobile');
+      const fixture = TestBed.createComponent(App);
+      const router = TestBed.inject(Router);
+      await router.navigateByUrl('/p/blizzard/board');
+      await settle(fixture);
+      const el = fixture.nativeElement as HTMLElement;
+
+      el.querySelector<HTMLElement>('[data-testid="mobile-titlebar-menu"]')?.click();
+      await settle(fixture);
+      document.body.querySelector<HTMLElement>('[data-testid="mobile-titlebar-project"]')?.click();
+      await settle(fixture);
+      const item = (slug: string) => document.body.querySelector<HTMLElement>(`[data-testid="mobile-titlebar-project-${slug}"]`);
+
+      expect(item('blizzard')?.getAttribute('aria-checked')).toBe('true');
+      item('all')!.click();
+      await settle(fixture);
+      expect(router.url).toBe('/board');
     });
   });
 

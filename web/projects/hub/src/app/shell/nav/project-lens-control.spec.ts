@@ -1,81 +1,58 @@
-import { Component, provideZonelessChangeDetection } from '@angular/core';
+import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { Router, provideRouter } from '@angular/router';
-import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { hubClient } from 'fleet';
-import { type RequestClientStub, settle, stubRequestClient } from 'fleet/testing';
+import { settle } from 'fleet/testing';
 
-import { ProjectLensControl, lensChoices } from './project-lens-control';
+import { ProjectLensControl } from './project-lens-control';
+import type { LensChoice } from './project-lens.model';
 
-@Component({ selector: 'app-test-lens-control-view', template: '' })
-class TestView {}
-
-const project = (slug: string, name: string) => ({
-  project_id: `proj_${slug}`,
-  slug,
-  name,
-  description: '',
-  revision: 1,
-  created_at: '2026-10-01T00:00:00Z',
-});
+const CHOICES: readonly LensChoice[] = [
+  { slug: null, label: 'All' },
+  { slug: 'blizzard', label: 'Blizzard' },
+  { slug: 'zeta', label: 'Zeta' },
+];
 
 describe('ProjectLensControl', () => {
-  let stub: RequestClientStub;
-
   beforeEach(async () => {
-    stub = stubRequestClient(hubClient, (_method, path) =>
-      path === '/api/projects' ? { projects: [project('zeta', 'Zeta'), project('blizzard', 'Blizzard')] } : {},
-    );
     await TestBed.configureTestingModule({
       imports: [ProjectLensControl],
-      providers: [
-        provideZonelessChangeDetection(),
-        provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
-        provideRouter([
-          { path: 'p/:projectSlug', children: [{ path: '**', component: TestView }] },
-          { path: '**', component: TestView },
-        ]),
-      ],
+      providers: [provideZonelessChangeDetection()],
     }).compileComponents();
   });
 
-  afterEach(() => stub.restore());
-
-  it('offers All, then every project by name', () => {
-    expect(lensChoices([project('zeta', 'Zeta'), project('blizzard', 'Blizzard')])).toEqual([
-      { slug: null, label: 'All' },
-      { slug: 'blizzard', label: 'Blizzard' },
-      { slug: 'zeta', label: 'Zeta' },
-    ]);
-  });
-
-  it('marks the lens the URL is on, and switches the lens keeping the view', async () => {
-    const router = TestBed.inject(Router);
-    await router.navigateByUrl('/gardening/runs/chk_1');
+  async function mount(current: string | null) {
     const fixture = TestBed.createComponent(ProjectLensControl);
+    fixture.componentRef.setInput('choices', CHOICES);
+    fixture.componentRef.setInput('current', current);
     await settle(fixture);
     const el = fixture.nativeElement as HTMLElement;
     const chip = (slug: string) => el.querySelector<HTMLElement>(`[data-testid="project-lens-${slug}"]`);
+    const chosen: (string | null)[] = [];
+    fixture.componentInstance.choose.subscribe((slug) => chosen.push(slug));
+    return { fixture, chip, chosen };
+  }
 
-    expect(chip('all')?.getAttribute('aria-pressed')).toBe('true');
-    expect(chip('blizzard')?.textContent).toContain('Blizzard');
+  it('renders every choice and marks the current one', async () => {
+    const { chip } = await mount('blizzard');
 
-    chip('blizzard')!.click();
-    await settle(fixture);
-    expect(router.url).toBe('/p/blizzard/gardening/runs');
+    expect(chip('all')?.getAttribute('aria-pressed')).toBe('false');
     expect(chip('blizzard')?.getAttribute('aria-pressed')).toBe('true');
-
-    chip('all')!.click();
-    await settle(fixture);
-    expect(router.url).toBe('/gardening/runs');
+    expect(chip('zeta')?.textContent).toContain('Zeta');
   });
 
-  it('reads no project while the shell has not entered its tenant', async () => {
-    const fixture = TestBed.createComponent(ProjectLensControl);
-    fixture.componentRef.setInput('enabled', false);
-    await settle(fixture);
+  it('emits the chosen slug, and null for All', async () => {
+    const { chip, chosen } = await mount('blizzard');
 
-    expect(stub.forRoute('/api/projects', 'GET').length).toBe(0);
-    expect((fixture.nativeElement as HTMLElement).querySelector('[data-testid="project-lens-all"]')).not.toBeNull();
+    chip('zeta')!.click();
+    chip('all')!.click();
+
+    expect(chosen).toEqual(['zeta', null]);
+  });
+
+  it('emits nothing when the current choice is chosen again', async () => {
+    const { chip, chosen } = await mount('blizzard');
+
+    chip('blizzard')!.click();
+
+    expect(chosen).toEqual([]);
   });
 });

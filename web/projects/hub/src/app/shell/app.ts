@@ -26,10 +26,12 @@ import { isPublicUrl, redirectToLogin } from '../core/auth/auth-redirect';
 
 import { readDemoConfig } from '../demo/demo-config';
 import { startOfLocalDayIso, startOfPreviousLocalDayIso } from '../core/local-day';
+import { injectProjectsQuery } from '../core/projects.query';
 import { AppNav } from './nav/app-nav';
 import { AppNavMenu } from './nav/app-nav-menu';
 import { MobileTabBar } from './nav/mobile-tab-bar';
 import { MobileTitlebar } from './nav/mobile-titlebar';
+import { lensChoices } from './nav/project-lens.model';
 import {
   type AuthState,
   authState,
@@ -284,6 +286,20 @@ export class App {
 
   protected onLogout(): void {
     this.logoutMutation.mutate();
+  }
+
+  /** The tenant's projects, read once for both lens selectors once the board has entered the tenant. */
+  private readonly projectsQuery = injectProjectsQuery(() => this.ready());
+
+  /** The lens selectors' choices — All, then the tenant's projects by name. */
+  protected readonly lensChoices = computed(() => lensChoices(this.projectsQuery.data() ?? []));
+
+  /** The slug the lens is on, `null` for All. */
+  protected readonly lensCurrent = this.lens.slug;
+
+  /** Re-navigates the view the board is on under the chosen lens. */
+  protected onChooseLens(slug: string | null): void {
+    void this.lens.switchTo(slug);
   }
 
   /** The project lens's notice — a link that named no project of the tenant, opened on All. */

@@ -1,8 +1,9 @@
-import { ChangeDetectionStrategy, Component, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 import { CdkMenuTrigger } from '@angular/cdk/menu';
 import { KitMenuItem, KitMenuPanel, MobileTitlebar as FleetMobileTitlebar, ViewportMenu } from 'fleet';
 
 import { injectLensedProject } from '../../core/lensed-project';
+import type { LensChoice } from './project-lens.model';
 import { ProjectMenu } from './project-menu';
 import { TenantMenu } from './tenant-menu';
 import { injectTenantSwitch } from './tenant-switch';
@@ -38,6 +39,15 @@ export class MobileTitlebar {
    * state (`app.ts`'s `streamLive`) the desktop titlebar's own "Hub" cell derives
    * its own connection string from. */
   readonly live = input.required<boolean>();
+
+  /** The choices the project lens submenu offers, from the shell. */
+  readonly lensChoices = input<readonly LensChoice[]>([]);
+
+  /** The slug the lens is on, `null` for All. */
+  readonly lensCurrent = input<string | null>(null);
+
+  /** The lens submenu's chosen slug, `null` for All. */
+  readonly lensChoose = output<string | null>();
 
   /** The memberships and the switch the tenant submenu offers, and the tenant the titlebar names. */
   protected readonly tenants = injectTenantSwitch();

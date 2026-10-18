@@ -1,9 +1,10 @@
-import { ChangeDetectionStrategy, Component, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 import { RouterLink, RouterLinkActive } from '@angular/router';
 
 import { KitTab, KitTabStrip, LensLink } from 'fleet/shell';
 
 import { ProjectLensControl } from './project-lens-control';
+import type { LensChoice } from './project-lens.model';
 
 /**
  * The top nav's tab strip — one `routerLink` per top-level route, with
@@ -33,6 +34,12 @@ export class AppNav {
   /** Whether the `Admin` tab renders — `user:manage`, gated by the app root. */
   readonly showAdmin = input(false);
 
-  /** Whether the lens control reads the tenant's projects — once the shell has entered its tenant. */
-  readonly lensEnabled = input(false);
+  /** The choices the lens control offers, from the shell. */
+  readonly lensChoices = input<readonly LensChoice[]>([]);
+
+  /** The slug the lens is on, `null` for All. */
+  readonly lensCurrent = input<string | null>(null);
+
+  /** The lens control's chosen slug, `null` for All. */
+  readonly lensChoose = output<string | null>();
 }

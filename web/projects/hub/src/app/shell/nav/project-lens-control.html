@@ -6,7 +6,7 @@
         [selected]="choice.slug === current()"
         [title]="choice.slug ?? 'every project of the tenant'"
         [testid]="'project-lens-' + (choice.slug ?? 'all')"
-        (click)="choose(choice)"
+        (click)="onChoose(choice)"
         >{{ choice.label }}</fleet-kit-chip
       >
     }

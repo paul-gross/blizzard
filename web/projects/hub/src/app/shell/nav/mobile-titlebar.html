@@ -23,7 +23,7 @@
   />
 </ng-template>
 <ng-template #projectMenu>
-  <app-project-menu />
+  <app-project-menu [choices]="lensChoices()" [current]="lensCurrent()" (choose)="lensChoose.emit($event)" />
 </ng-template>
 <ng-template #appearanceMenu>
   <fleet-viewport-menu testid="mobile-titlebar-appearance-panel" />

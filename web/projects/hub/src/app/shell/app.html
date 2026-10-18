@@ -42,7 +42,12 @@
                through to projection, so the wrapper names the slot instead. -->
           <ng-container ngProjectAs="[shell-header]">
             @defer (on immediate) {
-              <app-mobile-titlebar [live]="streamLive()" />
+              <app-mobile-titlebar
+                [live]="streamLive()"
+                [lensChoices]="lensChoices()"
+                [lensCurrent]="lensCurrent()"
+                (lensChoose)="onChooseLens($event)"
+              />
             } @placeholder {
               <!-- Holds the titlebar's box so the routed content below does not
                    shift when the real titlebar arrives. -->
@@ -66,7 +71,13 @@
           </fleet-board-header>
         }
         @if (!mobile()) {
-          <app-nav shell-nav [showAdmin]="canManageUsers()" [lensEnabled]="ready()" />
+          <app-nav
+            shell-nav
+            [showAdmin]="canManageUsers()"
+            [lensChoices]="lensChoices()"
+            [lensCurrent]="lensCurrent()"
+            (lensChoose)="onChooseLens($event)"
+          />
         }
         @if (logoutError(); as error) {
           <p class="logout-error" role="alert" data-testid="logout-error">{{ error }}</p>
