@@ -25,6 +25,10 @@ class Repository:
             raise GitError(f"git {' '.join(args)} failed: {result.stderr.strip()}")
         return result.stdout
 
+    def toplevel(self) -> Path:
+        """The working tree's root."""
+        return Path(self._git("rev-parse", "--show-toplevel").strip())
+
     def tags(self) -> list[str]:
         """Every ``v*`` tag name."""
         return self._git("tag", "--list", "v*").split()

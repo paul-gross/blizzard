@@ -980,6 +980,7 @@ _COMPOSITION_ROOTS = frozenset(
         _RUNNER_COMPOSITION_FILE,
         _RUNNER_DIR / "cli" / "opencode.py",
         _SRC_DIR / "tools" / "invariants.py",
+        _SRC_DIR / "tools" / "compat" / "cli.py",
     }
 )
 
