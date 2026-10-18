@@ -950,7 +950,7 @@
       "short_help": "Scaffold the host file + data dir + a migrated store under DIRECTORY, then register the host at its hub and join each of its runners under it."
     },
     "migrate": {
-      "help": "Apply pending store migrations, or reverse with --down <rev>.\n\nA directory that has not graduated to a host is refused and left as it is. A graduated one holding a pre-host\n`data/runner.db` and no `data/host.db` adopts that store first. Adoption and --down hold the directory and are\nrefused while a host is running; a plain upgrade is refused only while a pre-host daemon answers.",
+      "help": "Apply or reverse migrations, or inspect this build's migration tree.\n\nA directory that has not graduated to a host is refused and left as it is. A graduated one holding a pre-host\n`data/runner.db` and no `data/host.db` adopts that store first. Adoption and --down hold the directory and are\nrefused while a host is running; a plain upgrade is refused only while a pre-host daemon answers.",
       "params": [
         {
           "help": "Host directory (overrides $BZ_RUNNER_DIR).",
@@ -975,10 +975,34 @@
           "required": false,
           "secondary_opts": [],
           "type": "text"
+        },
+        {
+          "help": "Print this build's runner migration head without opening a store.",
+          "hidden": false,
+          "kind": "option",
+          "name": "head",
+          "opts": [
+            "--head"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "type": "boolean"
+        },
+        {
+          "help": "Exit successfully if this build holds REV; print nothing.",
+          "hidden": false,
+          "kind": "option",
+          "name": "knows",
+          "opts": [
+            "--knows"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "type": "text"
         }
       ],
       "path": "runner migrate",
-      "short_help": "Apply pending store migrations, or reverse with --down <rev>."
+      "short_help": "Apply or reverse migrations, or inspect this build's migration tree."
     },
     "opencode": {
       "commands": {
