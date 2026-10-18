@@ -27,9 +27,8 @@ import { injectHubRunsQuery } from './runs/garden-runs.query';
 /**
  * One project's garden — the `/p/{project}/gardening` route, a top-level tab beside the board, not a
  * panel inside it (`blizzard-product:/delivered/garden/user-interface.md` §Where it
- * lives). This page owns its own
- * second strip, divided along the garden's surfaces in this fixed order — scopes, routines, runs, findings,
- * proposals — each a real child route (`gardening.routes.ts`) so a tab is a deep link, not this component's own
+ * lives). This page owns its own second strip, divided along the garden's surfaces in this fixed order — scopes,
+ * routines, runs, findings, proposals — each a real child route (`gardening.routes.ts`) so a tab is a deep link, not this component's own
  * selection state.
  *
  * Above the strip, the breadcrumb `Gardening › {project} › {surface}` is the lens shown in place: `Gardening` opens the

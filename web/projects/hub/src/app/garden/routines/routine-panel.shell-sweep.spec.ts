@@ -36,7 +36,7 @@ function tokenColor(token: string): string {
  * (`bzh:narrow-viewport-tier-rule`) — gardening sits in the hub's mobile bottom tab
  * bar, so the narrow widths are load-bearing, not incidental.
  *
- * Excluded from the default `ng test fleet` run (`angular.json`'s `test.exclude`)
+ * Excluded from the default `ng test hub` run (`angular.json`'s `test.exclude`)
  * because it needs `--browsers=ChromiumHeadless`, not jsdom — run it via
  * `npm run shell-sweep` (`web/scripts/shell-sweep.js`).
  */
