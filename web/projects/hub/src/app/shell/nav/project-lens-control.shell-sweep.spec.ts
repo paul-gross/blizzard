@@ -1,13 +1,17 @@
 import { Component, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
-import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
+import {
+  QueryClient,
+  provideTanStackQuery,
+} from '@tanstack/angular-query-experimental';
 import { type MeResponse, hubClient } from 'fleet';
 import { OPERATOR_ME_RESPONSE, stubRequestClient } from 'fleet/testing';
 import { page } from 'vitest/browser';
 
 import { TAB_TENANT_KEY } from '../../core/auth/tenant-context';
 import { AppNav } from './app-nav';
+import { lensChoices } from './project-lens.model';
 import { MobileTitlebar } from './mobile-titlebar';
 
 @Component({ selector: 'app-test-sweep-view', template: '' })
@@ -45,14 +49,15 @@ describe('project lens control sweep (web:shell-sweep)', () => {
     const onError = (e: ErrorEvent) => pageErrors.push(e.message);
     window.addEventListener('error', onError);
 
-    const stub = stubRequestClient(hubClient, (_method, path) => (path === '/api/projects' ? { projects: PROJECTS } : {}));
     await TestBed.configureTestingModule({
       imports: [AppNav],
       providers: [
         provideZonelessChangeDetection(),
-        provideTanStackQuery(new QueryClient()),
         provideRouter([
-          { path: 'p/:projectSlug', children: [{ path: '**', component: TestView }] },
+          {
+            path: 'p/:projectSlug',
+            children: [{ path: '**', component: TestView }],
+          },
           { path: '**', component: TestView },
         ]),
       ],
@@ -60,7 +65,8 @@ describe('project lens control sweep (web:shell-sweep)', () => {
     await TestBed.inject(Router).navigateByUrl('/p/blizzard/board');
     const fixture = TestBed.createComponent(AppNav);
     fixture.componentRef.setInput('showAdmin', true);
-    fixture.componentRef.setInput('lensEnabled', true);
+    fixture.componentRef.setInput('lensChoices', lensChoices(PROJECTS));
+    fixture.componentRef.setInput('lensCurrent', 'blizzard');
     const root = fixture.nativeElement as HTMLElement;
     document.body.appendChild(root);
     await fixture.whenStable();
@@ -68,51 +74,87 @@ describe('project lens control sweep (web:shell-sweep)', () => {
     await fixture.whenStable();
 
     try {
-      expect(root.querySelectorAll('[data-testid^="project-lens-"]').length, 'All and every project').toBe(
-        PROJECTS.length + 1,
-      );
+      expect(
+        root.querySelectorAll('[data-testid^="project-lens-"]').length,
+        'All and every project',
+      ).toBe(PROJECTS.length + 1);
       for (const width of WIDTHS) {
         await page.viewport(width, 800);
         await new Promise((resolve) => requestAnimationFrame(resolve));
         const label = `width=${width}`;
 
         const nav = root.querySelector<HTMLElement>('[data-testid="app-nav"]')!;
-        expect(nav.getBoundingClientRect().right, `${label}: the tab row is past the viewport`).toBeLessThanOrEqual(
-          window.innerWidth,
-        );
-        expect(document.documentElement.scrollWidth, `${label}: the page scrolls sideways`).toBeLessThanOrEqual(
-          window.innerWidth,
-        );
+        expect(
+          nav.getBoundingClientRect().right,
+          `${label}: the tab row is past the viewport`,
+        ).toBeLessThanOrEqual(window.innerWidth);
+        expect(
+          document.documentElement.scrollWidth,
+          `${label}: the page scrolls sideways`,
+        ).toBeLessThanOrEqual(window.innerWidth);
 
-        for (const testid of ['nav-board', 'nav-graphs', 'nav-events', 'nav-gardening', 'nav-admin', 'project-lens-all']) {
-          const el = root.querySelector<HTMLElement>(`[data-testid="${testid}"]`);
+        for (const testid of [
+          'nav-board',
+          'nav-graphs',
+          'nav-events',
+          'nav-gardening',
+          'nav-admin',
+          'project-lens-all',
+        ]) {
+          const el = root.querySelector<HTMLElement>(
+            `[data-testid="${testid}"]`,
+          );
           expect(el, `${label}: no ${testid}`).not.toBeNull();
           const rect = el!.getBoundingClientRect();
-          expect(rect.width, `${label}: ${testid} has no width`).toBeGreaterThan(0);
-          expect(rect.right, `${label}: ${testid} is past the viewport (${rect.right})`).toBeLessThanOrEqual(
-            window.innerWidth,
+          expect(
+            rect.width,
+            `${label}: ${testid} has no width`,
+          ).toBeGreaterThan(0);
+          expect(
+            rect.right,
+            `${label}: ${testid} is past the viewport (${rect.right})`,
+          ).toBeLessThanOrEqual(window.innerWidth);
+          const hit = document.elementFromPoint(
+            rect.left + rect.width / 2,
+            rect.top + rect.height / 2,
           );
-          const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
-          expect(el!.contains(hit), `${label}: ${testid}'s center hit-tests to something else`).toBe(true);
+          expect(
+            el!.contains(hit),
+            `${label}: ${testid}'s center hit-tests to something else`,
+          ).toBe(true);
         }
 
-        const chosen = root.querySelector<HTMLElement>('[data-testid="project-lens-blizzard"]')!;
-        expect(chosen.getAttribute('aria-pressed'), `${label}: the lens's choice is not marked`).toBe('true');
+        const chosen = root.querySelector<HTMLElement>(
+          '[data-testid="project-lens-blizzard"]',
+        )!;
+        expect(
+          chosen.getAttribute('aria-pressed'),
+          `${label}: the lens's choice is not marked`,
+        ).toBe('true');
       }
     } finally {
-      stub.restore();
       root.remove();
       window.removeEventListener('error', onError);
     }
 
-    expect(pageErrors, `page errors fired during the sweep: ${pageErrors.join('; ')}`).toEqual([]);
+    expect(
+      pageErrors,
+      `page errors fired during the sweep: ${pageErrors.join('; ')}`,
+    ).toEqual([]);
   });
 });
 
 /** A caller whose tenant has a long name, so the mobile titlebar's tenant and project lines compete for the room. */
 const LONG_TENANT_ME: MeResponse = {
   ...OPERATOR_ME_RESPONSE,
-  tenants: [{ tenant_id: 'ten_acme', name: 'Acme Interplanetary Holdings', role: 'admin', permissions: ['fleet:view'] }],
+  tenants: [
+    {
+      tenant_id: 'ten_acme',
+      name: 'Acme Interplanetary Holdings',
+      role: 'admin',
+      permissions: ['fleet:view'],
+    },
+  ],
 };
 
 // Phone widths, down to the narrowest the board renders.
@@ -141,7 +183,10 @@ describe('mobile titlebar lens sweep (web:shell-sweep)', () => {
         provideZonelessChangeDetection(),
         provideTanStackQuery(new QueryClient()),
         provideRouter([
-          { path: 'p/:projectSlug', children: [{ path: '**', component: TestView }] },
+          {
+            path: 'p/:projectSlug',
+            children: [{ path: '**', component: TestView }],
+          },
           { path: '**', component: TestView },
         ]),
       ],
@@ -156,31 +201,55 @@ describe('mobile titlebar lens sweep (web:shell-sweep)', () => {
     await fixture.whenStable();
 
     try {
-      const detail = root.querySelector<HTMLElement>('[data-testid="mobile-titlebar-detail"]');
-      expect(detail?.textContent?.trim(), 'the lensed project is not named').toBe('Northwind Interplanetary Logistics');
+      const detail = root.querySelector<HTMLElement>(
+        '[data-testid="mobile-titlebar-detail"]',
+      );
+      expect(
+        detail?.textContent?.trim(),
+        'the lensed project is not named',
+      ).toBe('Northwind Interplanetary Logistics');
       for (const width of PHONE_WIDTHS) {
         await page.viewport(width, 800);
         await new Promise((resolve) => requestAnimationFrame(resolve));
         const label = `width=${width}`;
 
-        const bar = root.querySelector<HTMLElement>('[data-testid="mobile-titlebar"]')!;
-        expect(bar.getBoundingClientRect().right, `${label}: the bar is past the viewport`).toBeLessThanOrEqual(
-          window.innerWidth,
-        );
-        expect(document.documentElement.scrollWidth, `${label}: the page scrolls sideways`).toBeLessThanOrEqual(
-          window.innerWidth,
-        );
-        expect(detail!.getBoundingClientRect().width, `${label}: the project's name has no room`).toBeGreaterThan(40);
+        const bar = root.querySelector<HTMLElement>(
+          '[data-testid="mobile-titlebar"]',
+        )!;
+        expect(
+          bar.getBoundingClientRect().right,
+          `${label}: the bar is past the viewport`,
+        ).toBeLessThanOrEqual(window.innerWidth);
+        expect(
+          document.documentElement.scrollWidth,
+          `${label}: the page scrolls sideways`,
+        ).toBeLessThanOrEqual(window.innerWidth);
+        expect(
+          detail!.getBoundingClientRect().width,
+          `${label}: the project's name has no room`,
+        ).toBeGreaterThan(40);
 
-        for (const testid of ['mobile-titlebar-livedot', 'mobile-titlebar-menu']) {
-          const el = root.querySelector<HTMLElement>(`[data-testid="${testid}"]`);
+        for (const testid of [
+          'mobile-titlebar-livedot',
+          'mobile-titlebar-menu',
+        ]) {
+          const el = root.querySelector<HTMLElement>(
+            `[data-testid="${testid}"]`,
+          );
           expect(el, `${label}: no ${testid}`).not.toBeNull();
           const rect = el!.getBoundingClientRect();
-          expect(rect.right, `${label}: ${testid} is past the viewport (${rect.right})`).toBeLessThanOrEqual(
-            window.innerWidth,
+          expect(
+            rect.right,
+            `${label}: ${testid} is past the viewport (${rect.right})`,
+          ).toBeLessThanOrEqual(window.innerWidth);
+          const hit = document.elementFromPoint(
+            rect.left + rect.width / 2,
+            rect.top + rect.height / 2,
           );
-          const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
-          expect(el!.contains(hit), `${label}: ${testid}'s center hit-tests to something else`).toBe(true);
+          expect(
+            el!.contains(hit),
+            `${label}: ${testid}'s center hit-tests to something else`,
+          ).toBe(true);
         }
       }
     } finally {
@@ -190,6 +259,9 @@ describe('mobile titlebar lens sweep (web:shell-sweep)', () => {
       window.removeEventListener('error', onError);
     }
 
-    expect(pageErrors, `page errors fired during the sweep: ${pageErrors.join('; ')}`).toEqual([]);
+    expect(
+      pageErrors,
+      `page errors fired during the sweep: ${pageErrors.join('; ')}`,
+    ).toEqual([]);
   });
 });
