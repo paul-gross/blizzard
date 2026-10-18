@@ -215,8 +215,7 @@ class FactIngestService:
 
     @staticmethod
     def _fenced(kind: str, fact: Payload, refusal: FenceRefusal) -> tuple[bool, None]:
-        """A fact the write fence refused — rejected in the ack like a route-token refusal,
-        so the runner's drain acks it and moves on."""
+        """A fact the write fence refused — rejected in the ack like a route-token refusal."""
         _log.warning("fact fenced", kind=kind, chunk_id=fact.text("chunk_id"), detail=refusal.detail)
         return False, None
 

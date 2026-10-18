@@ -16,9 +16,7 @@ from blizzard.hub.domain.chunk.ports.lifecycle import IWriteChunkLifecycleReposi
 
 
 def is_completion_replay(facts: ChunkFacts) -> bool:
-    """Whether a completion would replay one already standing: at ``done`` it writes nothing.
-    :attr:`~blizzard.hub.domain.chunk.model.ChunkVerb.COMPLETE` is legal from every status,
-    ``stopped`` included, so a completion is never refused."""
+    """Whether a completion would replay one already standing: at ``done`` it writes nothing."""
     return facts.status() is ChunkStatus.DONE
 
 

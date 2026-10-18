@@ -1,14 +1,9 @@
 """Chunk ingest — wrap ``{source, ref}`` pointers into a chunk pinned to a graph, storing the pointer
 and never the contents.
 
-**Batch = one chunk.** :func:`decide_ingest` owns what an ingest decides: a chunk wraps one or more
-work refs, a ref named twice is wrapped once, and a pointer already held by a live chunk rejects the
-whole ingest ``409`` — re-ingest is legal once its holder is finished.
+**Batch = one chunk.** :func:`decide_ingest` owns what an ingest decides.
 
-**One project.** :func:`choose_ingest_project` owns which project the chunk is minted into: the named
-one, else the one every configured source's links agree on — the built-in hub source sits out that
-inference, and an ingest of hub items alone follows the items' own project. Every configured source
-must be linked to the project chosen; ingest never links.
+**One project.** :func:`choose_ingest_project` owns which project the chunk is minted into.
 
 **Keys, not slugs.** A pointer's ``source`` is ``hub`` or a configured source's id — the registry resolved any slug
 the token named before the pointer reached here. A refusal's text renders the source's current label, which the

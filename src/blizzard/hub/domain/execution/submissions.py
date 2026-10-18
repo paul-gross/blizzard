@@ -1,6 +1,5 @@
 """What a runner submits at the end of a node-step — its completion, or a runner-configured gate in
-place of one — as the hub's execution rules read it. The fleet controller maps the wire bodies to
-these at the edge (``bzh:data-roles``)."""
+place of one — as the hub's execution rules read it (``bzh:data-roles``)."""
 
 from __future__ import annotations
 

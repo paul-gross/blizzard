@@ -184,8 +184,9 @@ def plan_edit(
     """Decide an all-or-nothing edit of ``chunk`` at ``facts``: every supplied field is
     validated before anything is planned, in field order, so a refusal writes nothing.
 
-    A graph pin edit names its loaded target graph and the target's retirement; each target is checked
-    on its own, so a valid migration target never stands in for a retired pin target."""
+    A graph pin edit names its loaded target graph and the target's retirement; the retirement check is
+    pinned by ``tests/test_edit_service.py``'s
+    ``test_edit_graph_id_retirement_check_is_not_bypassed_by_a_different_migration_target``."""
     graph_id: str | None = None
     if edit.graph_id is not UNSET:
         if graph_target is None or graph_target.graph_id != edit.graph_id:

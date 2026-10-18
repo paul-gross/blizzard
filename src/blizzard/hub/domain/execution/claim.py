@@ -67,8 +67,7 @@ class ClaimDeniedPaused(Exception):
 class ClaimDeniedUnregistered(Exception):
     """The claiming runner has never registered at the hub — added but never connected — refused
     before any race, in the runner-refusal shape of :class:`ClaimDeniedPaused`. Neither runner brake
-    nor its capabilities can be judged without a registration, and a live runner re-registers every
-    tick."""
+    nor its capabilities can be judged without a registration."""
 
     def __init__(self, *, runner_id: str) -> None:
         super().__init__(f"runner {runner_id} is not registered at the hub")

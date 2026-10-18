@@ -620,8 +620,7 @@ class IReadRunnerRegistry(Protocol):
         ...
 
     def list_pause_facts_since(self, since: datetime, *, limit: int) -> list[RecordedPause]:
-        """Every fact off the fleet's two pause-family fact tables at or after ``since``;
-        ``registered``/``heartbeat`` carry no fact table. On this seam,
+        """Every fact off the fleet's two pause-family fact tables at or after ``since``. On this seam,
         not the chunk one (``bzh:repository-split``): a runner-pause fact names no chunk. Each table is
         read with its own ``ORDER BY <ts> DESC, <pk> DESC LIMIT :limit``, never a full scan, so this
         returns up to ``2 * limit`` rows unsorted across the two; the caller merges and re-caps."""
@@ -633,8 +632,7 @@ class IWriteRunnerRegistry(IReadRunnerRegistry, Protocol):
 
     def add(self, addition: RunnerAddition) -> None:
         """Insert ``addition`` as a never-connected registration — its id, name, and token hash, with
-        ``added_at``/``added_by`` from its ``at``/``by`` and no workspace, registration, or contact.
-        The id is the caller's: minted in production, chosen by a test."""
+        ``added_at``/``added_by`` from its ``at``/``by`` and no workspace, registration, or contact."""
         ...
 
     def record_registration(

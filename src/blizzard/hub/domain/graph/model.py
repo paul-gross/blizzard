@@ -667,13 +667,12 @@ class Graph:
         return None if edge is None else edge.target_graph
 
     def lifecycle_fact(self, *, retired: bool, at: datetime, by: str) -> GraphLifecycleFact:
-        """The fact a retire (``retired=True``) or enable appends — legal from either state, so a
-        repeat appends a duplicate the newest-fact-wins read absorbs (:data:`GRAPH_TRANSITIONS`)."""
+        """The fact a retire (``retired=True``) or enable appends (:data:`GRAPH_TRANSITIONS`)."""
         return GraphLifecycleFact(graph_id=self.graph_id, retired=retired, at=at, by=by)
 
     def policy_fact(self, *, follow_latest: bool | None, at: datetime, by: str) -> GraphPolicyFact:
         """The fact setting this mint's follow-latest tri-state appends — ``None`` reverts to the
-        hub default; legal from either state, and a repeat appends (:data:`GRAPH_TRANSITIONS`)."""
+        hub default (:data:`GRAPH_TRANSITIONS`)."""
         return GraphPolicyFact(graph_id=self.graph_id, follow_latest=follow_latest, at=at, by=by)
 
 
@@ -720,7 +719,7 @@ class GraphVerb(StrEnum):
     SET_FOLLOW_LATEST = "set_follow_latest"
     #: Resolution by name — a ``graph:<name>`` edge, a routine, the default graph.
     RESOLVE_BY_NAME = "resolve_by_name"
-    #: Naming the graph explicitly as a new target; a standing intent consulted at a transition is skipped.
+    #: Naming the graph explicitly as a new target.
     TARGET = "target"
     #: Running a chunk already pinned to the graph.
     RUN_PINNED = "run_pinned"
@@ -765,7 +764,7 @@ class GraphStanding:
         return GRAPH_TRANSITIONS[self.state][verb]
 
     def targetable(self) -> bool:
-        """Whether the graph may be named as a new target — the skip test for a consulted intent."""
+        """Whether the graph may be named as a new target."""
         return self.verdict(GraphVerb.TARGET) is GraphVerdict.LEGAL
 
     def require_targetable(self) -> None:

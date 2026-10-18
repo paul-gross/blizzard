@@ -110,9 +110,7 @@ class DecisionService:
         """Runner-config gate: park the chunk on a decision instead of transitioning. A retired submitting
         runner is refused with :class:`~blizzard.hub.domain.runners.registration.RunnerRetired` first.
 
-        Order is behavior: retired → node → facts → route token → replay → hub-executed node →
-        attempt coherence → commit pointer → produces → record. Attempt coherence is re-derived under the
-        chunk's row lock, ahead of the write itself."""
+        Order is behavior."""
         self._retired.refuse_if_retired(submission.runner_id, action="decision")
         try:
             node = gate_refusal(graph, submission.from_node_id)
@@ -143,8 +141,7 @@ class DecisionService:
         try:
             refuse_hub_executed(node)
             refuse_incoherent_attempt(facts, graph, from_node=node, epoch=submission.epoch)
-            # The same unconditional policies `ApplyService.apply` runs — a runner-config gate is a
-            # dispatch fork too, and the step's artifacts land here, so the produces backstop runs.
+            # The step's artifacts land here, so the commit-pointer and produces backstops run.
             for rejection in (
                 CommitPointerPolicy(submission.artifacts).rejection(),
                 Produces(node, submission.artifacts).rejection(mode=produces_mode),

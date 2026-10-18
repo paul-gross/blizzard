@@ -27,8 +27,8 @@ class ChunkNotPausable(Exception):
 def require_pausable(chunk_id: str, facts: ChunkFacts) -> None:
     """Refuse a pause outside :attr:`ChunkVerb.PAUSE`'s window with :class:`ChunkNotPausable`.
 
-    Pause is a process brake, not a fence: a completion, migration, or decision racing it is
-    not a reason to refuse — only the derived status is read."""
+    Pinned by ``tests/test_operator_verb_rules.py``'s
+    ``test_pause_is_a_brake_not_a_fence_an_open_decision_does_not_refuse_it``."""
     if not facts.admits(ChunkVerb.PAUSE):
         raise ChunkNotPausable(chunk_id, facts.status())
 
@@ -46,7 +46,7 @@ class PauseService:
         self._exclusive = exclusive
 
     def pause(self, chunk: Chunk, *, by: str) -> int:
-        """Append ``chunk.paused``; raises :class:`ChunkNotPausable` for done/stopped/delivering
+        """Append ``chunk.paused``; raises :class:`ChunkNotPausable` outside :attr:`ChunkVerb.PAUSE`'s window
         and :class:`ChunkNotFound` for a chunk gone under the lock.
 
         The status is re-derived under the row lock, so a status change since the caller's read is
@@ -59,8 +59,7 @@ class PauseService:
             return self._lifecycle.record_pause_locked(handle, chunk.chunk_id, by=by, at=self._clock.now())
 
     def resume(self, chunk: Chunk, *, by: str) -> int:
-        """Append ``chunk.resumed`` — idempotent, never refused (:attr:`ChunkVerb.RESUME` is
-        legal from every status; matches runner resume).
+        """Append ``chunk.resumed`` — idempotent, never refused (:attr:`ChunkVerb.RESUME`).
 
         Returns the freshly-written ``chunk_pause_facts.id`` — always a fresh row, never a
         skipped write."""

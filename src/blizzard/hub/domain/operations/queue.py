@@ -618,8 +618,7 @@ class GroupService:
             return self._group_locked(handle, survivor_id, merge_ids)
 
     def _group_locked(self, handle: ILockedChunkRead, survivor_id: str, merge_ids: list[str]) -> GroupResult:
-        # One read each for the survivor and every merge id; the checks below run
-        # against these maps in the same order the per-id reads did.
+        # One read each for the survivor and every merge id.
         ids = [survivor_id, *merge_ids]
         records = handle.records_for(ids)
         facts = handle.facts_for(ids)

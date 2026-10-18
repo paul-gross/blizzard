@@ -1,9 +1,8 @@
 """Chunk dependency edges — declare and release.
 
 A chunk names the chunks it depends on (``blizzard.hub.domain.chunk.ports.dependencies``);
-:func:`decide_declare` owns what declaring decides — idempotence first, then the dependent's window
-(:attr:`~blizzard.hub.domain.chunk.model.ChunkVerb.DECLARE_DEPENDENCY`), ephemerality, and the cycle — and
-release has no window. Declaring runs under the shared row lock (``bzh:store-exclusive-write``)
+:func:`decide_declare` owns what declaring decides, and release has no window. Declaring runs
+under the shared row lock (``bzh:store-exclusive-write``)
 ``ClaimService``/``EditService``/``RestartService``/``DeleteService`` all take, plus a
 residual fleet-wide ``threading.Lock`` the cycle check alone still needs — pinned by
 ``tests/test_dependency_race.py`` and ``tests/test_dependency_service_component.py``."""

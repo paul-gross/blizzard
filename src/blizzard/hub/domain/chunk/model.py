@@ -133,7 +133,7 @@ class PendingCloseIntent:
     ``intent_id`` is the backing ``close_intents.id`` — the key a
     skipped attempt's own ``close_intent_attempts`` row is recorded against.
     ``attempt_count`` and ``last_attempt_at`` are that intent's backoff history (``0`` and
-    ``None`` with no attempt), the input to ``close_intent_is_due``. All three are excluded
+    ``None`` with no attempt). All three are excluded
     from equality, so two instances compare equal by ``(chunk_id, ref)`` alone; each
     defaults to its unset value."""
 
@@ -883,10 +883,9 @@ class ChunkVerb(StrEnum):
     DECLARE_DEPENDENCY = "declare-dependency"
     #: Let a new ingest mint over a work ref this chunk holds: only once the holder is finished.
     INGEST_HELD_WORK_REF = "ingest-held-work-ref"
-    #: The operator's promote; on a currently promoted chunk, a replay that writes nothing whatever the status.
+    #: The operator's promote.
     PROMOTE = "promote"
-    #: The operator's demote, back to ``not_ready``; on a chunk not currently promoted, a replay that writes
-    #: nothing whatever the status.
+    #: The operator's demote, back to ``not_ready``.
     DEMOTE = "demote"
     #: The operator's per-chunk pause brake.
     PAUSE = "pause"
@@ -894,7 +893,7 @@ class ChunkVerb(StrEnum):
     RESUME = "resume"
     #: The operator's terminal abandonment.
     STOP = "stop"
-    #: The operator's manual completion. At ``done`` it is a replay that writes nothing.
+    #: The operator's manual completion.
     COMPLETE = "complete"
     #: The operator's forced move onto a node at a fresh epoch, same graph or across graphs.
     RESTART = "restart"
@@ -902,7 +901,7 @@ class ChunkVerb(StrEnum):
     DELETE = "delete"
     #: Take part in a group, as the survivor or as a chunk folded into it.
     GROUP = "group"
-    #: Edit the graph pin (also refused once the chunk has moved).
+    #: Edit the graph pin.
     EDIT_GRAPH_PIN = "edit-graph-pin"
     #: Edit the default model, effort, or harnesses.
     EDIT_DEFAULTS = "edit-defaults"
@@ -912,7 +911,7 @@ class ChunkVerb(StrEnum):
     REORDER_READY = "reorder-ready"
     #: Be named in a reorder of the ``not_ready`` backlog.
     REORDER_BACKLOG = "reorder-backlog"
-    #: A runner's claim of a ready chunk; a chunk whose live route is held refuses it as a lost race first.
+    #: A runner's claim of a ready chunk.
     CLAIM = "claim"
     #: Rotate the live route's capability token; a route left on an ended chunk confers no tenure.
     REKEY_ROUTE_TOKEN = "rekey-route-token"
@@ -1281,8 +1280,8 @@ class ChunkFacts:
         return terminal_transition.recorded_at if terminal_transition is not None else None
 
     def finished_before(self, instant: datetime) -> bool:
-        """Whether the chunk is ``done`` and finished strictly before ``instant`` — the board's
-        done-window cut. A ``stopped`` chunk never reads as finished here."""
+        """Whether the chunk is ``done`` and finished strictly before ``instant``. A ``stopped`` chunk
+        never reads as finished here."""
         if self.status() is not ChunkStatus.DONE:
             return False
         completed_at = self.completed_at()
