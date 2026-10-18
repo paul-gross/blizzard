@@ -45,7 +45,7 @@
  * project's source root is cut into folder units, and `LAYERED_PROJECTS` declares as data which
  * units each may import. An edge is an import, a `styleUrl`/`styleUrls`/`templateUrl`, or a CSS
  * `@import`. It fails an edge outside the table, a file in no declared unit, a relative import
- * into another project, a file in the root importing its own package entry (save a spec taking
+ * into another project, a file in the root importing its own package entry (save a spec or a story taking
  * the spec-support entry), and a cycle in a table.
  *
  * Finally, the containers-compose sweep (`containers-compose-sweep.js`,
@@ -677,7 +677,7 @@ function assertNoCacheWriteDetectorWorks() {
 // The package-layers sweep (`bzh:frontend-package-layers`). Each project's source root is cut
 // into units — folders, keyed by their path below the root — and each unit maps to the units it
 // may import (the backend's `tests/test_layering.py` shape). A unit may also always import the
-// project's shared kernel, and a spec may also import the project's spec-support unit. A file
+// project's shared kernel, and a spec or a story may also import the project's spec-support unit. A file
 // belongs to the longest key prefixing its path; a key with child keys (`garden` beside
 // `garden/core`) owns only the files directly inside it. Something two features need moves down
 // into `core`; nothing imports `shell`. There is no exemption list: a new edge is a table change.
@@ -887,6 +887,8 @@ function layerCycle(project) {
  * @returns {string[]}
  */
 function packageLayerViolations(projects, files) {
+  /** @param {string} file */
+  const isSpecLike = (file) => file.endsWith('.spec.ts') || file.endsWith('.stories.ts');
   /** @type {string[]} */
   const lines = [];
   const projectNames = new Set(projects.map((p) => p.name));
@@ -920,10 +922,10 @@ function packageLayerViolations(projects, files) {
     for (const specifier of importSpecifiers(file, source)) {
       if (!specifier.startsWith('.')) {
         // A file inside the source root reaching its own package entry steps around the table;
-        // only a spec may take the spec-support entry that way.
+        // only a spec or a story may take the spec-support entry that way.
         if (!underRoot || !namesOwnEntry(project, specifier)) continue;
         const specEntry = project.specSupport !== null && specifier === `${project.name}/${project.specSupport}`;
-        if (!(specEntry && file.endsWith('.spec.ts'))) {
+        if (!(specEntry && isSpecLike(file))) {
           lines.push(`  ${file}: imports its own package entry '${specifier}' — import the unit relatively`);
         }
         continue;
@@ -940,7 +942,7 @@ function packageLayerViolations(projects, files) {
       if (!target || !target.startsWith(`${project.root}/`)) continue;
       const targetUnit = layerUnitOf(target.slice(project.root.length + 1), project.layers);
       if (targetUnit === null || targetUnit === unit || targetUnit === project.kernel) continue;
-      if (file.endsWith('.spec.ts') && targetUnit === project.specSupport) continue;
+      if (isSpecLike(file) && targetUnit === project.specSupport) continue;
       if (!(project.layers[unit] ?? []).includes(targetUnit)) {
         lines.push(`  ${file}: ${unit} → ${targetUnit} ('${specifier}') is not in ${unit}'s table`);
       }
@@ -974,7 +976,7 @@ function assertPackageLayersDetectorWorks() {
       "@Component({ styleUrls: ['./a-view.css', '../beta/b.css'], templateUrl: '../beta/b.html' })\n",
     ],
     ['app/src/app/alpha/a-view.css', ':host { display: block; }\n'],
-    // must-catch: a file in the root reaching its own package entries; only a spec may take the spec-support one
+    // must-catch: a file in the root reaching its own package entries; only a spec or a story may take the spec-support one
     [
       'app/src/app/alpha/self.ts',
       "import { b } from 'app';\nimport { s } from 'app/shell';\nimport { stub } from 'app/testing';\n",
@@ -993,6 +995,11 @@ function assertPackageLayersDetectorWorks() {
     // must-pass: spec → spec support, relatively and through the spec-support entry
     [
       'app/src/app/beta/b.spec.ts',
+      "import { stub } from '../testing/stub';\nimport { stub as viaEntry } from 'app/testing';\n",
+    ],
+    // must-pass: story → spec support, relatively and through the spec-support entry
+    [
+      'app/src/app/beta/b.stories.ts',
       "import { stub } from '../testing/stub';\nimport { stub as viaEntry } from 'app/testing';\n",
     ],
     // must-pass: outside the root, the entry is the way in
@@ -1028,6 +1035,7 @@ function assertPackageLayersDetectorWorks() {
     'beta/b-card',
     'core/host.css:',
     'beta/b.spec.ts:',
+    'beta/b.stories.ts:',
     'shell/app.ts:',
     'public-api.spec.ts:',
     'a-view.css:',

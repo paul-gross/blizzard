@@ -94,7 +94,11 @@ const toPosix = (p) => p.split(path.sep).join('/');
 /** @param {string} rel `projects/`-relative posix path */
 function inScope(rel) {
   return (
-    rel.endsWith('.ts') && !rel.endsWith('.spec.ts') && !rel.endsWith('.d.ts') && !rel.startsWith(GENERATED_API_DIR)
+    rel.endsWith('.ts') &&
+    !rel.endsWith('.spec.ts') &&
+    !rel.endsWith('.stories.ts') &&
+    !rel.endsWith('.d.ts') &&
+    !rel.startsWith(GENERATED_API_DIR)
   );
 }
 
@@ -465,6 +469,15 @@ import { Component, computed } from '@angular/core';
 import { injectRowsQuery } from './rows.query';
 @Component({ selector: 'app-spec-host', template: '' })
 class SpecHost {
+  readonly query = injectRowsQuery();
+  readonly label = computed(() => (this.query.isPending() ? 'a' : 'b'));
+}
+`,
+  'app/src/kinds.stories.ts': `
+import { Component, computed } from '@angular/core';
+import { injectRowsQuery } from './rows.query';
+@Component({ selector: 'app-story-host', template: '' })
+class StoryHost {
   readonly query = injectRowsQuery();
   readonly label = computed(() => (this.query.isPending() ? 'a' : 'b'));
 }

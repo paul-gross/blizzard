@@ -42,8 +42,8 @@ const FLEET_LIB = 'projects/fleet/src/lib';
 /**
  * Units exempt from the reach rule, each with a reason:
  *
- * - `testing/` is spec support behind its own `fleet/testing` entry; only specs reach it,
- *   and spec reach does not count.
+ * - `testing/` is spec support behind its own `fleet/testing` entry; only specs and stories
+ *   reach it, and their reach does not count.
  * - `core/format/` is a declaration-free re-export barrel over top-level modules; reach lands on
  *   those modules, which are units of their own, never on the barrel.
  */
@@ -55,8 +55,10 @@ const GROUPING_FOLDERS = ['core', 'chunk', 'shell'];
 /** @param {string} p */
 const toPosix = (p) => p.split(path.sep).join('/');
 
-/** @param {string} file */
-const isSpec = (file) => file.endsWith('.spec.ts');
+/** A spec or a story: code that ships in no bundle, so its reach does not count.
+ * @param {string} file
+ */
+const isSpec = (file) => file.endsWith('.spec.ts') || file.endsWith('.stories.ts');
 
 /**
  * @param {string} file absolute
@@ -302,7 +304,7 @@ function assertPlacementDetectorWorks() {
     [
       `${root}/projects/fleet/src/public-api.ts`,
       "export * from './lib/shared';\nexport * from './lib/hub-only';\n" +
-        "export * from './lib/core/hub-tool';\nexport * from './lib/core/both-tool';\n",
+        "export * from './lib/core/hub-tool';\nexport * from './lib/core/both-tool';\nexport * from './lib/runner-only';\n",
     ],
     // A grouping folder's children are units of their own: `core/hub-tool` is caught though
     // its sibling `core/both-tool` reaches both apps.
@@ -330,12 +332,27 @@ function assertPlacementDetectorWorks() {
       `${root}/projects/runner/src/main.spec.ts`,
       "import { hubThing } from 'fleet';\nexport const specOnly = hubThing;\n",
     ],
+    // A hub story's `fleet` import adds no hub reach, as a hub spec's does not: `runner-only`
+    // stays reached by the runner alone.
+    [`${root}/projects/fleet/src/lib/runner-only/index.ts`, 'export const runnerThing = 5;\n'],
+    [
+      `${root}/projects/runner/src/runner-main.ts`,
+      "import { runnerThing } from 'fleet';\nexport const used = runnerThing;\n",
+    ],
+    [
+      `${root}/projects/hub/src/app/hub.stories.ts`,
+      "import { runnerThing } from 'fleet';\nexport const storyOnly = runnerThing;\n",
+    ],
   ]);
   const { units, appImports } = sweepPlacement({ root, memory });
 
   const hubOnly = units.find((u) => u.unit === 'hub-only');
   if (!hubOnly || hubOnly.reach.join(',') !== 'hub') {
     throw new Error('placement self-test: a unit only the hub reaches was not caught as hub-only');
+  }
+  const runnerOnly = units.find((u) => u.unit === 'runner-only');
+  if (!runnerOnly || runnerOnly.reach.join(',') !== 'runner') {
+    throw new Error('placement self-test: a unit only the runner reaches was counted as hub-reached through a hub story');
   }
   if (units.some((u) => u.unit === 'shared')) {
     throw new Error('placement self-test: a unit both apps reach was flagged');
