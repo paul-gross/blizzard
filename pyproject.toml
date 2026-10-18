@@ -208,6 +208,7 @@ also_copy = [
     "packaging/docker",
     "packaging/systemd",
     "scripts/check-version-tag.sh",
+    "scripts/export-requirements.sh",
     "scripts/image-tags.sh",
     "scripts/is-retryable-push-error.sh",
     "scripts/release-notes.sh",

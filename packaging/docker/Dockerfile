@@ -3,7 +3,9 @@
 # `scripts/build-wheel.sh`), which already embeds both Angular frontends and both
 # migration trees, so this image carries no Node and no separate frontend tier.
 #
-# Build (from the repo root, after `mise run build` has populated dist/):
+# Build (from the repo root, after `mise run build` has populated dist/ and
+# `scripts/export-requirements.sh <version> <wheel> --extra postgres --no-project`
+# has written dist/blizzard-<version>-requirements-pg.txt):
 #   docker build -f packaging/docker/Dockerfile -t blizzard-hub:local .
 #
 # See packaging/docker/README.md for the mounts, env vars, and the ordered
@@ -23,12 +25,15 @@ RUN groupadd --system blizzard \
     && mkdir -p /var/lib/blizzard/hub \
     && chown -R blizzard:blizzard /var/lib/blizzard
 
+# The locked dependency set (uv.lock, exported hashed with the `postgres` extra so the
+# store URL is a real choice, not just a declared one — bzh:sql-portable), then the
+# wheel on top of it. scripts/export-requirements.sh writes the file without its
+# project line: the wheel here is the build's own, installed without resolving anything.
 COPY dist/blizzard-*.whl /tmp/
-# The postgres driver so the store URL is a real choice, not just a declared one
-# (bzh:sql-portable) — installed as the `postgres` extra, kept out of the base wheel
-# so the sqlite/systemd deployment stays lean.
-RUN pip install --no-cache-dir "$(ls /tmp/blizzard-*.whl)[postgres]" \
-    && rm -f /tmp/blizzard-*.whl
+COPY dist/blizzard-*-requirements-pg.txt /tmp/requirements.txt
+RUN pip install --no-cache-dir --require-hashes -r /tmp/requirements.txt \
+    && pip install --no-cache-dir --no-deps /tmp/blizzard-*.whl \
+    && rm -f /tmp/blizzard-*.whl /tmp/requirements.txt
 
 COPY packaging/docker/entrypoint.sh /usr/local/bin/blizzard-hub-entrypoint
 RUN chmod +x /usr/local/bin/blizzard-hub-entrypoint

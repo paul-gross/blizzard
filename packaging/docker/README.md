@@ -11,6 +11,9 @@ precedence). This file documents the image itself.
 
 ```bash
 mise run build          # populates dist/blizzard-*.whl
+WHEEL="$(ls dist/blizzard-*.whl)"; VERSION="$(basename "$WHEEL" | cut -d- -f2)"
+./scripts/export-requirements.sh "$VERSION" "$WHEEL" --extra postgres --no-project \
+  > "dist/blizzard-$VERSION-requirements-pg.txt"   # the locked set the image installs
 docker build -f packaging/docker/Dockerfile -t blizzard-hub:local .
 ```
 
