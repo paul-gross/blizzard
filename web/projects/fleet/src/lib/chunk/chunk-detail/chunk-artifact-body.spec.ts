@@ -3,6 +3,7 @@ import { TestBed } from '@angular/core/testing';
 
 import type { ArtifactView } from '../../api/hub';
 import { formatAbsolute } from '../../core/when';
+import { bounceArtifactView, deltaArtifactView, surveyArtifactView } from 'fleet/testing';
 import { ChunkArtifactBody } from './chunk-artifact-body';
 
 const ASSET: ArtifactView = {
@@ -192,5 +193,18 @@ describe('ChunkArtifactBody', () => {
     fixture.componentRef.setInput('artifact', { ...ASSET, key: 'bounce-envelope', name: 'bounce-envelope', content: 'not json {' });
     await fixture.whenStable();
     expect(fixture.nativeElement.querySelector('[data-testid="artifact-content"]')?.textContent).toBe('not json {');
+  });
+
+  it.each([
+    ['surveyArtifactView', surveyArtifactView(), 'artifact-survey'],
+    ['deltaArtifactView', deltaArtifactView(), 'artifact-delta'],
+    ['bounceArtifactView', bounceArtifactView(), 'artifact-bounce-facts'],
+  ])('reaches its structured view from %s defaults', async (_name, artifact, handle) => {
+    const fixture = TestBed.createComponent(ChunkArtifactBody);
+    fixture.componentRef.setInput('artifact', artifact);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector(`[data-testid="${handle}"]`)).not.toBeNull();
+    expect(el.querySelector('[data-testid="artifact-content"]')).toBeNull();
   });
 });
