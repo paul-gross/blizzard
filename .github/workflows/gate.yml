@@ -114,6 +114,9 @@ jobs:
           uv run blizzard-export-contracts --out-dir contracts
           git diff --exit-code -- contracts/ \
             || { echo "::error::Contract documents under contracts/ are stale — run 'mise run export-contracts' and commit."; exit 1; }
+          # `git diff` ignores a document the exporter wrote that was never committed.
+          [ -z "$(git ls-files --others --exclude-standard -- contracts/)" ] \
+            || { echo "::error::Contract documents under contracts/ are untracked — run 'mise run export-contracts' and commit them."; git ls-files --others --exclude-standard -- contracts/; exit 1; }
 
   wire-compat:
     name: hub↔runner wire compatibility

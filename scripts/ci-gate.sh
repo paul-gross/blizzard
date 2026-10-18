@@ -67,6 +67,13 @@ if ! git diff --quiet -- contracts/; then
   git --no-pager diff -- contracts/ >&2
   exit 1
 fi
+# `git diff` ignores a document the exporter wrote that was never added.
+if [ -n "$(git ls-files --others --exclude-standard -- contracts/)" ]; then
+  echo "ERROR: the exporter wrote contract documents that are not tracked:" >&2
+  git ls-files --others --exclude-standard -- contracts/ >&2
+  echo "        Run 'mise run export-contracts', then 'git add contracts/'." >&2
+  exit 1
+fi
 echo "OK: committed contract documents match the exporter."
 
 # --- hub↔runner wire compatibility (bzh:fleet-wire-additive) ---------------

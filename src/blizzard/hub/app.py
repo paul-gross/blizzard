@@ -115,6 +115,7 @@ from blizzard.hub.domain.projects.declarations import ImportLinks
 from blizzard.hub.domain.projects.model import ProjectRequired
 from blizzard.hub.domain.runners.host import HostRetired
 from blizzard.hub.domain.runners.registration import RunnerRetired
+from blizzard.hub.layout import SIGNING_KEYS_PARTS, WORKDIRS_DIRNAME
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.secrets import KeyCoverage, hub_key_provider, require_hub_key, secret_cipher
 from blizzard.hub.secrets.rotation import RotationResult, rotate_keys
@@ -528,7 +529,7 @@ def build_hosted_app(
     oauth_providers = config.auth.oauth_providers if config.auth.mode == AUTH_MODE_OAUTH else ()
     # The IdP signing-key lifecycle — likewise built only under `oauth`; a
     # `none` deployment never touches disk for a keypair it will never mint or publish.
-    signing_keys_dir = config.data_dir / "auth" / "signing-keys" if config.auth.mode == AUTH_MODE_OAUTH else None
+    signing_keys_dir = config.data_dir.joinpath(*SIGNING_KEYS_PARTS) if config.auth.mode == AUTH_MODE_OAUTH else None
     oauth_client = oauth_http_client or httpx.Client(timeout=15.0)
     forge_client = httpx.Client(timeout=10.0)
     for client in (oauth_client, forge_client):
@@ -537,7 +538,7 @@ def build_hosted_app(
     services = build_services(
         core,
         work_sources=work_source_registry,
-        hub_workdir_root=config.data_dir / "hub_workdirs",
+        hub_workdir_root=config.data_dir / WORKDIRS_DIRNAME,
         hub_marker_callback_base_url=f"http://{config.host}:{config.port}",
         public_url=config.public_url,
         forge_http_client=forge_client,

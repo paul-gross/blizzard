@@ -10,8 +10,9 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Protocol, TypeVar
+from typing import Protocol, TypeVar
 
+from blizzard.foundation.config_keys import ConfigKey, ConfigView
 from blizzard.foundation.roles import domain_model
 from blizzard.runner.harness.adapter import IHarnessHealthProbe
 from blizzard.runner.harness.autonomy import Autonomy
@@ -65,8 +66,13 @@ class IHarnessSectionKind(Protocol):
         """The TOML table the section lives under."""
         ...
 
-    def parse(self, document: Mapping[str, Any], *, root: Path, path: Path) -> HarnessSection:
-        """Read the section from the whole TOML ``document`` — a binding may claim legacy root
+    @property
+    def keys(self) -> tuple[ConfigKey, ...]:
+        """Every key the section reads, relative to a ``[[runner]]`` — its own table's and any legacy root keys."""
+        ...
+
+    def parse(self, document: ConfigView, *, root: Path, path: Path) -> HarnessSection:
+        """Read the section from the whole ``[[runner]]`` ``document`` — a binding may claim legacy root
         keys — raising :class:`ConfigError` on a conflict among them."""
         ...
 

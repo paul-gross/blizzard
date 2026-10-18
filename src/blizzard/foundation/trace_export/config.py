@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 
 from blizzard.foundation.cli_spans import SCOPE_NAME
 from blizzard.foundation.cli_spans import SERVICE_NAME as CLI_SERVICE_NAME
+from blizzard.foundation.config_keys import BOOLEAN, INTEGER, NUMBER, OPEN_TABLE, TABLE, ConfigKey, ConfigView
 from blizzard.foundation.roles import domain_model
 
 RESERVED_SERVICE_NAMES = frozenset({"blizzard-hub", "blizzard-runner", "blizzard-chunk", CLI_SERVICE_NAME})
@@ -35,33 +36,30 @@ class TracingConfig:
     harness_telemetry: bool = False
 
     @classmethod
-    def of(cls, raw_tracing: object, invalid: type[Exception]) -> TracingConfig:
-        if not isinstance(raw_tracing, dict):
-            return cls()
+    def of(cls, tracing: ConfigView, invalid: type[Exception]) -> TracingConfig:
+        """The ``[tracing]`` table, read through ``tracing`` — the view at its path."""
         defaults = cls()
         return cls(
-            sweep_seconds=cls._integer(raw_tracing, "sweep_seconds", defaults.sweep_seconds, invalid, minimum=1),
-            settle_seconds=cls._integer(raw_tracing, "settle_seconds", defaults.settle_seconds, invalid, minimum=0),
-            batch_limit=cls._integer(raw_tracing, "batch_limit", defaults.batch_limit, invalid, minimum=1),
-            max_lag_seconds=cls._integer(raw_tracing, "max_lag_seconds", defaults.max_lag_seconds, invalid, minimum=1),
+            sweep_seconds=cls._integer(tracing, "sweep_seconds", defaults.sweep_seconds, invalid, minimum=1),
+            settle_seconds=cls._integer(tracing, "settle_seconds", defaults.settle_seconds, invalid, minimum=0),
+            batch_limit=cls._integer(tracing, "batch_limit", defaults.batch_limit, invalid, minimum=1),
+            max_lag_seconds=cls._integer(tracing, "max_lag_seconds", defaults.max_lag_seconds, invalid, minimum=1),
             replay_max_window=cls._integer(
-                raw_tracing, "replay_max_window", defaults.replay_max_window, invalid, minimum=1
+                tracing, "replay_max_window", defaults.replay_max_window, invalid, minimum=1
             ),
-            platform=cls._boolean(raw_tracing, "platform", defaults.platform, invalid),
-            platform_sample_ratio=cls._ratio(
-                raw_tracing, "platform_sample_ratio", defaults.platform_sample_ratio, invalid
-            ),
-            worker_programs=cls._boolean(raw_tracing, "worker_programs", defaults.worker_programs, invalid),
-            worker_program_services=cls._services(raw_tracing, invalid),
-            harness_telemetry=cls._boolean(raw_tracing, "harness_telemetry", defaults.harness_telemetry, invalid),
+            platform=cls._boolean(tracing, "platform", defaults.platform, invalid),
+            platform_sample_ratio=cls._ratio(tracing, "platform_sample_ratio", defaults.platform_sample_ratio, invalid),
+            worker_programs=cls._boolean(tracing, "worker_programs", defaults.worker_programs, invalid),
+            worker_program_services=cls._services(tracing, invalid),
+            harness_telemetry=cls._boolean(tracing, "harness_telemetry", defaults.harness_telemetry, invalid),
         )
 
     @staticmethod
-    def _services(raw: Mapping[str, object], invalid: type[Exception]) -> dict[str, str]:
-        table = raw.get("worker_program_services", {})
+    def _services(tracing: ConfigView, invalid: type[Exception]) -> dict[str, str]:
+        table = tracing.get("worker_program_services", {})
         if not isinstance(table, dict):
             raise invalid(f"tracing.worker_program_services must be a table, got {table!r}")
-        for scope, name in table.items():
+        for scope, name in tracing.table("worker_program_services").items():
             entry = f"tracing.worker_program_services.{scope}"
             if not scope.strip():
                 raise invalid("tracing.worker_program_services has an empty scope name")
@@ -74,15 +72,15 @@ class TracingConfig:
         return dict(table)
 
     @staticmethod
-    def _boolean(raw: Mapping[str, object], key: str, default: bool, invalid: type[Exception]) -> bool:
-        value = raw.get(key, default)
+    def _boolean(tracing: ConfigView, key: str, default: bool, invalid: type[Exception]) -> bool:
+        value = tracing.get(key, default)
         if not isinstance(value, bool):
             raise invalid(f"tracing.{key} must be true or false, got {value!r}")
         return value
 
     @staticmethod
-    def _ratio(raw: Mapping[str, object], key: str, default: float, invalid: type[Exception]) -> float:
-        value = raw.get(key, default)
+    def _ratio(tracing: ConfigView, key: str, default: float, invalid: type[Exception]) -> float:
+        value = tracing.get(key, default)
         if isinstance(value, bool) or not isinstance(value, int | float):
             raise invalid(f"tracing.{key} must be a number, got {value!r}")
         if not 0 <= value <= 1:
@@ -90,8 +88,8 @@ class TracingConfig:
         return float(value)
 
     @staticmethod
-    def _integer(raw: Mapping[str, object], key: str, default: int, invalid: type[Exception], *, minimum: int) -> int:
-        value = raw.get(key, default)
+    def _integer(tracing: ConfigView, key: str, default: int, invalid: type[Exception], *, minimum: int) -> int:
+        value = tracing.get(key, default)
         if isinstance(value, bool) or not isinstance(value, int):
             raise invalid(f"tracing.{key} must be an integer, got {value!r}")
         if value < minimum:
@@ -144,6 +142,24 @@ _KEYS = (
     "platform_sample_ratio",
     "worker_programs",
     "harness_telemetry",
+)
+
+
+_DEFAULTS = TracingConfig()
+
+#: Every ``[tracing]`` key, declared here beside the parser that reads it; each daemon's registry includes them.
+TRACING_KEYS: tuple[ConfigKey, ...] = (
+    ConfigKey("tracing", TABLE),
+    ConfigKey("tracing.sweep_seconds", INTEGER, default=_DEFAULTS.sweep_seconds),
+    ConfigKey("tracing.settle_seconds", INTEGER, default=_DEFAULTS.settle_seconds),
+    ConfigKey("tracing.batch_limit", INTEGER, default=_DEFAULTS.batch_limit),
+    ConfigKey("tracing.max_lag_seconds", INTEGER, default=_DEFAULTS.max_lag_seconds),
+    ConfigKey("tracing.replay_max_window", INTEGER, default=_DEFAULTS.replay_max_window),
+    ConfigKey("tracing.platform", BOOLEAN, default=_DEFAULTS.platform),
+    ConfigKey("tracing.platform_sample_ratio", NUMBER, default=_DEFAULTS.platform_sample_ratio),
+    ConfigKey("tracing.worker_programs", BOOLEAN, default=_DEFAULTS.worker_programs),
+    ConfigKey("tracing.worker_program_services", OPEN_TABLE),
+    ConfigKey("tracing.harness_telemetry", BOOLEAN, default=_DEFAULTS.harness_telemetry),
 )
 
 

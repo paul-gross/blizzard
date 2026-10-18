@@ -2154,7 +2154,18 @@ _RUNNER_PACKAGE_LAYERS: dict[str, frozenset[str]] = {
 _RUNNER_EDGE_PACKAGES = frozenset({"api", "cli", "store"})
 #: Top-level runner modules that assemble or serve the graph (composition roots, config loader, runtime).
 _RUNNER_EDGE_MODULES = frozenset(
-    {"app", "composition", "config", "host_config", "host_layout", "ingest", "listeners", "loop_wiring", "runtime"}
+    {
+        "app",
+        "composition",
+        "config",
+        "config_keys",
+        "host_config",
+        "host_layout",
+        "ingest",
+        "listeners",
+        "loop_wiring",
+        "runtime",
+    }
 )
 _RUNNER_SUBNODES = frozenset({"harness/claude_code", "harness/opencode", "harness/wiring"})
 

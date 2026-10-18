@@ -8,8 +8,8 @@ import json
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
+from blizzard.foundation.config_keys import BOOLEAN, OPEN_TABLE, STRING, TABLE, ConfigKey, ConfigView
 from blizzard.foundation.roles import domain_model
 from blizzard.runner.config_table import Table
 from blizzard.runner.harness.identity import OPENCODE_HARNESS_ID
@@ -91,14 +91,29 @@ class OpenCodeSectionKind:
     def table(self) -> str:
         return "opencode"
 
-    def parse(self, document: Mapping[str, Any], *, root: Path, path: Path) -> OpenCodeSection:
-        table = Table.of(document.get(self.table))
+    @property
+    def keys(self) -> tuple[ConfigKey, ...]:
+        return (
+            ConfigKey("opencode", TABLE),
+            ConfigKey("opencode.enabled", BOOLEAN, default=OpenCodeSection.enabled),
+            ConfigKey("opencode.binary", STRING, default=DEFAULT_OPENCODE_BINARY),
+            ConfigKey("opencode.auth_path", STRING),
+            ConfigKey("opencode.worker_config_path", STRING),
+            ConfigKey("opencode.models", TABLE),
+            ConfigKey("opencode.models.aliases", OPEN_TABLE),
+            ConfigKey("opencode.effort", TABLE),
+            ConfigKey("opencode.effort.aliases", OPEN_TABLE),
+        )
+
+    def parse(self, document: ConfigView, *, root: Path, path: Path) -> OpenCodeSection:
+        view = document.table(self.table)
+        table = Table.of(view)
         return OpenCodeSection(
             binary=table.word("binary") or DEFAULT_OPENCODE_BINARY,
             enabled=table.boolean("enabled", True),
             auth_path=table.word("auth_path"),
-            model_aliases=Table.of(table.body.get("models")).pairs("aliases"),
-            effort_aliases=Table.of(table.body.get("effort")).pairs("aliases"),
+            model_aliases=Table.of(view.table("models")).pairs("aliases"),
+            effort_aliases=Table.of(view.table("effort")).pairs("aliases"),
             # A pre-`[opencode]` config carries no `worker_config_path`; default to the
             # same path a fresh `runner init` scaffolds rather than `None`.
             worker_config_path=table.word("worker_config_path") or str(root / OPENCODE_WORKER_CONFIG_FILENAME),

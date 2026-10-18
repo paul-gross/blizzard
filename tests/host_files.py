@@ -10,6 +10,7 @@ import dataclasses
 from pathlib import Path
 from typing import Any
 
+from blizzard.foundation.config_keys import ConfigView
 from blizzard.runner.config import (
     DEFAULT_WORKSPACE_ID,
     SCAFFOLD_PROJECTS,
@@ -112,29 +113,33 @@ def host_config_of(config: RunnerConfig) -> HostConfig:
         trusted_proxies=config.trusted_proxies,
         session_secret_env=config.session_secret_env,
         auth=Auth.of(
-            {
-                key: value
-                for key, value in (
-                    ("superuser", config.auth_superuser),
-                    ("hub_role_default", config.auth_hub_role_default),
-                    ("users", dict(config.auth_users) or None),
-                )
-                if value
-            }
+            ConfigView.unchecked(
+                {
+                    key: value
+                    for key, value in (
+                        ("superuser", config.auth_superuser),
+                        ("hub_role_default", config.auth_hub_role_default),
+                        ("users", dict(config.auth_users) or None),
+                    )
+                    if value
+                }
+            )
         ),
         tracing=config.tracing,
         transcripts=Transcripts.of(
-            {
-                key: value
-                for key, value in (
-                    ("ship", config.transcripts_ship or None),
-                    ("record_max_bytes", config.transcript_record_max_bytes),
-                    ("chunk_max_bytes", config.transcript_chunk_max_bytes),
-                )
-                if value is not None
-            }
+            ConfigView.unchecked(
+                {
+                    key: value
+                    for key, value in (
+                        ("ship", config.transcripts_ship or None),
+                        ("record_max_bytes", config.transcript_record_max_bytes),
+                        ("chunk_max_bytes", config.transcript_chunk_max_bytes),
+                    )
+                    if value is not None
+                }
+            )
         ),
-        worker_stdout=WorkerStdout.of({"retention_days": config.worker_stdout_retention_days}),
+        worker_stdout=WorkerStdout.of(ConfigView.unchecked({"retention_days": config.worker_stdout_retention_days})),
         subscriptions=config.subscriptions,
         workspaces=config.workspaces,
         runners=(entry,),

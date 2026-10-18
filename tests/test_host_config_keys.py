@@ -9,6 +9,21 @@ from typing import Any
 
 import pytest
 
+from blizzard.foundation.config_keys import (
+    ARRAY_OF_TABLES,
+    BOOLEAN,
+    INTEGER,
+    NUMBER,
+    OPEN_TABLE,
+    STRICT_CONFIG_ENVIRONMENT_VARIABLE,
+    STRING_LIST,
+    STRING_OR_LIST,
+    TABLE,
+    ConfigRegistry,
+    ConfigView,
+    UndeclaredConfigKey,
+)
+from blizzard.runner import host_config
 from blizzard.runner.config import (
     DEFAULT_CONTEXT_SAMPLE_INTERVAL_SECONDS,
     DEFAULT_RUNNER_CEILING_WINDOW_HOURS,
@@ -16,6 +31,7 @@ from blizzard.runner.config import (
     ConfigError,
     RunnerConfig,
 )
+from blizzard.runner.config_keys import HOST_REGISTRY
 from blizzard.runner.host_config import (
     _GRADUATED_WORKSPACE_KEYS,
     _RETIRED_KEYS,
@@ -23,7 +39,9 @@ from blizzard.runner.host_config import (
     HostConfig,
     HostConfigError,
     _graduated_raw,
+    _parse,
 )
+from blizzard.runner.host_layout import HostLayout
 from tests.harness_sections import claude_code, opencode
 from tests.host_files import write_minimal_host
 from tests.runner_fakes import NO_TRACING
@@ -266,3 +284,90 @@ def test_every_retired_key_graduates_to_its_placement_and_never_into_the_runner(
     )
     assert [binding["agents"] for binding in runner["projects"]] == [2]
     assert runner["subscription"] == "anthropic"
+
+
+#: Values a key of each type takes that the loader accepts; a key the loader checks harder has its own below.
+_SAMPLE_BY_TYPE: dict[str, object] = {
+    BOOLEAN: True,
+    INTEGER: 1,
+    NUMBER: 0.5,
+    STRING_LIST: ["x"],
+    STRING_OR_LIST: "https://a.example",
+}
+_SAMPLE_BY_PATH: dict[str, object] = {
+    "trusted_proxies": ["127.0.0.1"],
+    "workspace[].provider": "basic",
+    "workspace[].prompt_package": "",
+    "workspace[].repo[].name": "repo",
+    "runner[].subscription": "sub",
+    "subscription[].slug": "sub",
+    "runner[].projects[].workspace": "ws",
+    "workspace[].id": "ws",
+    "runner[].harness.autonomy": "dangerous",
+    "runner[].harness.config_dir": "/opt/harness",
+    "runner[].worker.path_prepend": ["/opt/bin"],
+    "tracing.platform_sample_ratio": 0.5,
+    "tracing.worker_programs": False,
+}
+
+
+def _document_carrying_every_key(registry: ConfigRegistry) -> dict[str, Any]:
+    """A host document holding every declared key that is not deprecated, nested as the file nests it."""
+    document: dict[str, Any] = {}
+    for key in registry.keys:
+        if key.deprecated:
+            continue
+        *parents, leaf = key.path.split(".")
+        table = document
+        for parent in parents:
+            name = parent.removesuffix("[]")
+            if parent.endswith("[]"):
+                entries = table.setdefault(name, [{}])
+                table = entries[0]
+            else:
+                table = table.setdefault(name, {})
+        if key.type in (TABLE, OPEN_TABLE):
+            table.setdefault(leaf, {})
+        elif key.type == ARRAY_OF_TABLES:
+            table.setdefault(leaf.removesuffix("[]"), [{}])
+        else:
+            table[leaf] = _SAMPLE_BY_PATH.get(key.path, _SAMPLE_BY_TYPE.get(key.type, "x"))
+    document["flags"] = {"probe": True}
+    return document
+
+
+def test_every_declared_host_key_is_read_by_a_load_that_carries_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    read: set[str] = set()
+    checked = ConfigView._check  # pyright: ignore[reportPrivateUsage]
+
+    def recording(view: ConfigView, key: str) -> None:
+        read.add(view._join(key))  # pyright: ignore[reportPrivateUsage]
+        checked(view, key)
+
+    monkeypatch.setattr(ConfigView, "_check", recording)
+    loaded = _parse(_document_carrying_every_key(HOST_REGISTRY), layout=HostLayout(tmp_path), host=None, port=None)
+    loaded.host_view()  # the lazily read tables — [auth] — are read when projected
+
+    unread = [key.path for key in HOST_REGISTRY.keys if key.type != OPEN_TABLE and key.path not in read]
+    assert unread == []
+
+
+def test_an_undeclared_host_key_read_names_the_key_and_the_host_registry(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    without_port = ConfigRegistry("host", tuple(key for key in HOST_REGISTRY.keys if key.path != "port"))
+    monkeypatch.setattr(host_config, "HOST_REGISTRY", without_port)
+    write_minimal_host(tmp_path)
+    with pytest.raises(UndeclaredConfigKey, match=r"'port'.*host") as raised:
+        HostConfig.load(tmp_path)
+    assert (raised.value.path, raised.value.registry) == ("port", "host")
+
+
+def test_a_host_file_carrying_an_undeclared_key_loads_when_the_switch_is_off(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv(STRICT_CONFIG_ENVIRONMENT_VARIABLE)
+    write_minimal_host(tmp_path, top="undeclared_probe = 1\n[flags]\nprobe = true\n")
+    assert HostConfig.load(tmp_path).runner_config(_TOKEN).name == "runner-local"
