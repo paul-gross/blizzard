@@ -18,6 +18,12 @@
  * `.html` outside the kit hand-rolling `KitFactList`'s own `<dl class="kv">` grid.
  * A site that should not convert is named in `KIT_FLOOR_EXEMPT_SITES` with its reason.
  *
+ * Also the kit's stories sweep (`bzh:frontend-kit-stories`): every class `fleet/src/lib/kit/index.ts`
+ * exports as a `@Component` or `@Directive` needs a `*.stories.ts` beside it whose default-exported meta
+ * names that very class — resolved through imports and re-exports, not matched by name — as `component`.
+ * A part that genuinely cannot be shown alone is named in `KIT_STORIES_EXEMPT` with its reason; an entry
+ * that excuses nothing fails as stale.
+ *
  * Also two mutation-hook shape sweeps, over every `.ts` file that calls `injectMutation(`:
  * an invalidation whose result is discarded via `void` rather than returned (so
  * `injectMutation`'s own settle machinery never awaits it), named in
@@ -269,6 +275,184 @@ function assertKitFloorDetectorWorks() {
   for (const source of mustPassGrids) {
     if (KV_FACT_GRID.test(source)) throw new Error(`kit-floor fact-grid detector false-positived on \`${source}\``);
   }
+}
+
+const KIT_DIR = path.join(PROJECTS_DIR, 'fleet', 'src', 'lib', 'kit');
+
+/**
+ * A kit part that genuinely cannot be shown alone — a `{ file, class }` entry per part, `file` relative
+ * to `fleet/src/lib/kit/` and a reasoned bullet each, the `KIT_FLOOR_EXEMPT_SITES` idiom. An entry naming
+ * a class the kit no longer exports, or one a story's meta does name, fails the sweep as stale. Empty:
+ * every kit part today can be shown alone.
+ *
+ * @type {{ file: string, class: string }[]}
+ */
+const KIT_STORIES_EXEMPT = [];
+
+/** @param {ts.Node} node */
+function decoratorNames(node) {
+  return (ts.canHaveDecorators(node) ? (ts.getDecorators(node) ?? []) : []).flatMap((d) =>
+    ts.isCallExpression(d.expression) && ts.isIdentifier(d.expression.expression) ? [d.expression.expression.text] : [],
+  );
+}
+
+/** The module file a relative specifier from `from` names, in the sources' own key space; null when absent. */
+function kitModule(sources, from, specifier) {
+  if (!specifier.startsWith('.')) return null;
+  const target = path.posix.normalize(path.posix.join(path.posix.dirname(from), specifier)) + '.ts';
+  return sources.has(target) ? target : null;
+}
+
+/**
+ * The declaration a name exported by `file` resolves to, as `{ class, file }` when it is a class
+ * decorated `@Component` or `@Directive`: its own declaration, or the one a re-export leads to.
+ */
+function resolveKitClass(sources, file, name, seen = new Set()) {
+  if (seen.has(`${file}#${name}`)) return null;
+  seen.add(`${file}#${name}`);
+  const sf = ts.createSourceFile(file, sources.get(file) ?? '', ts.ScriptTarget.Latest, true);
+  for (const stmt of sf.statements) {
+    if (ts.isClassDeclaration(stmt) && stmt.name?.text === name) {
+      return decoratorNames(stmt).some((d) => d === 'Component' || d === 'Directive') ? { class: name, file } : null;
+    }
+    if (ts.isExportDeclaration(stmt) && stmt.moduleSpecifier && stmt.exportClause && ts.isNamedExports(stmt.exportClause)) {
+      const next = kitModule(sources, file, stmt.moduleSpecifier.text);
+      for (const el of stmt.exportClause.elements) {
+        if (el.name.text === name && next !== null) return resolveKitClass(sources, next, (el.propertyName ?? el.name).text, seen);
+      }
+    }
+  }
+  return null;
+}
+
+/** Every `@Component`/`@Directive` class `index.ts` exports: the kit's parts. */
+function kitParts(sources) {
+  const sf = ts.createSourceFile('index.ts', sources.get('index.ts') ?? '', ts.ScriptTarget.Latest, true);
+  const parts = [];
+  for (const stmt of sf.statements) {
+    if (!ts.isExportDeclaration(stmt) || stmt.isTypeOnly || !stmt.moduleSpecifier || !stmt.exportClause) continue;
+    if (!ts.isNamedExports(stmt.exportClause)) continue;
+    const from = kitModule(sources, 'index.ts', stmt.moduleSpecifier.text);
+    if (from === null) continue;
+    for (const el of stmt.exportClause.elements) {
+      if (el.isTypeOnly) continue;
+      const part = resolveKitClass(sources, from, (el.propertyName ?? el.name).text);
+      if (part !== null) parts.push(part);
+    }
+  }
+  return parts;
+}
+
+/** The expression a stories file default-exports: `export default <expr>`, or the binding it names. */
+function defaultExportedMeta(sf) {
+  const unwrap = (/** @type {ts.Expression} */ e) => {
+    while (ts.isAsExpression(e) || ts.isSatisfiesExpression(e) || ts.isParenthesizedExpression(e)) e = e.expression;
+    return e;
+  };
+  for (const stmt of sf.statements) {
+    if (!ts.isExportAssignment(stmt) || stmt.isExportEquals) continue;
+    const expr = unwrap(stmt.expression);
+    if (ts.isObjectLiteralExpression(expr)) return expr;
+    if (!ts.isIdentifier(expr)) return null;
+    for (const decl of sf.statements) {
+      if (!ts.isVariableStatement(decl)) continue;
+      for (const v of decl.declarationList.declarations) {
+        if (ts.isIdentifier(v.name) && v.name.text === expr.text && v.initializer) {
+          const init = unwrap(v.initializer);
+          return ts.isObjectLiteralExpression(init) ? init : null;
+        }
+      }
+    }
+  }
+  return null;
+}
+
+/** The kit parts a stories file's default-exported meta names as `component`, resolved through the file's imports. */
+function storiedParts(sources, file) {
+  const sf = ts.createSourceFile(file, sources.get(file) ?? '', ts.ScriptTarget.Latest, true);
+  const meta = defaultExportedMeta(sf);
+  if (meta === null) return [];
+  const prop = meta.properties.find(
+    (p) => ts.isPropertyAssignment(p) && ts.isIdentifier(p.name) && p.name.text === 'component',
+  );
+  if (!prop || !ts.isPropertyAssignment(prop) || !ts.isIdentifier(prop.initializer)) return [];
+  const local = prop.initializer.text;
+  for (const stmt of sf.statements) {
+    const bindings = ts.isImportDeclaration(stmt) ? stmt.importClause?.namedBindings : undefined;
+    if (!bindings || !ts.isNamedImports(bindings) || stmt.importClause?.isTypeOnly) continue;
+    const from = kitModule(sources, file, stmt.moduleSpecifier.text);
+    if (from === null) continue;
+    for (const el of bindings.elements) {
+      if (el.name.text !== local || el.isTypeOnly) continue;
+      const part = resolveKitClass(sources, from, (el.propertyName ?? el.name).text);
+      if (part !== null) return [part];
+    }
+  }
+  return [];
+}
+
+/**
+ * The kit-stories sweep's report lines, over the kit's sources — a map from path (relative to
+ * `fleet/src/lib/kit/`, posix) to text, the seam the detector check plants a kit through.
+ * @param {Map<string, string>} sources
+ * @param {{ file: string, class: string }[]} exempt
+ * @returns {{ unstoried: string[], stale: string[] }}
+ */
+function kitStoriesViolations(sources, exempt = KIT_STORIES_EXEMPT) {
+  const parts = kitParts(sources);
+  const storied = new Set();
+  for (const file of sources.keys()) {
+    if (!file.endsWith('.stories.ts')) continue;
+    for (const part of storiedParts(sources, file)) storied.add(`${part.file}#${part.class}`);
+  }
+  const key = (/** @type {{ file: string, class: string }} */ p) => `${p.file}#${p.class}`;
+  const excused = new Set(exempt.map(key));
+  const unstoried = parts
+    .filter((p) => !storied.has(key(p)) && !excused.has(key(p)))
+    .map((p) => `${p.class} (fleet/src/lib/kit/${p.file})`);
+  const stale = exempt
+    .filter((e) => !parts.some((p) => key(p) === key(e)) || storied.has(key(e)))
+    .map((e) => `${e.class} (fleet/src/lib/kit/${e.file})`);
+  return { unstoried, stale };
+}
+
+/** The kit directory's sources, keyed as `kitStoriesViolations` reads them. */
+function readKitSources() {
+  return new Map(
+    fs
+      .readdirSync(KIT_DIR)
+      .filter((f) => f.endsWith('.ts') && !f.endsWith('.spec.ts'))
+      .map((f) => [f, fs.readFileSync(path.join(KIT_DIR, f), 'utf8')]),
+  );
+}
+
+/**
+ * Prove the kit-stories sweep can still fail, before trusting it over the kit — the same reasoning
+ * `assertKitFloorDetectorWorks` follows. The planted kit holds a storied component, a storied
+ * directive, an unstoried component, and a stale exemption.
+ */
+function assertKitStoriesDetectorWorks() {
+  const sources = new Map([
+    ['index.ts', "export { KitA } from './kit-a';\nexport { KitB, KitC } from './kit-b';\nexport type { Gone } from './kit-b';\n"],
+    ['kit-a.ts', "@Component({ selector: 'a' })\nexport class KitA {}\n"],
+    ['kit-b.ts', "@Directive({ selector: '[b]' })\nexport class KitB {}\n@Component({ selector: 'c' })\nexport class KitC {}\n"],
+    ['kit-a.stories.ts', "import { KitA } from './kit-a';\nconst meta: Meta<KitA> = { title: 'Kit/A', component: KitA };\nexport default meta;\n"],
+    ['kit-b.stories.ts', "import { KitB } from './kit-b';\nexport default { title: 'Kit/B', component: KitB };\n"],
+  ]);
+  const recognized = kitParts(sources).map((p) => p.class).join(',');
+  if (recognized !== 'KitA,KitB,KitC') {
+    throw new Error(`kit-stories detector misread the planted kit's parts: ${recognized}`);
+  }
+  const exempt = [{ file: 'kit-gone.ts', class: 'KitGone' }];
+  const { unstoried, stale } = kitStoriesViolations(sources, exempt);
+  if (unstoried.length !== 1 || unstoried[0] !== 'KitC (fleet/src/lib/kit/kit-b.ts)') {
+    throw new Error(`kit-stories detector misjudged the planted kit's unstoried parts: ${JSON.stringify(unstoried)}`);
+  }
+  if (stale.length !== 1 || stale[0] !== 'KitGone (fleet/src/lib/kit/kit-gone.ts)') {
+    throw new Error(`kit-stories detector misjudged the planted kit's stale exemptions: ${JSON.stringify(stale)}`);
+  }
+  const storiedExempt = kitStoriesViolations(sources, [{ file: 'kit-a.ts', class: 'KitA' }]).stale;
+  if (storiedExempt.length !== 1) throw new Error('kit-stories detector missed an exemption for a storied part');
 }
 
 // The board's retired Top/group contracts and the test handles that exposed them.
@@ -1056,6 +1240,7 @@ function assertPackageLayersDetectorWorks() {
 function main() {
   assertRealTimerDetectorWorks();
   assertKitFloorDetectorWorks();
+  assertKitStoriesDetectorWorks();
   assertBoardControlDetectorWorks();
   assertDockControlDetectorWorks();
   assertInvalidateReturnedDetectorWorks();
@@ -1150,10 +1335,13 @@ function main() {
   }
   const packageLayerLines = packageLayerViolations(LAYERED_PROJECTS, layeredFiles);
   const containersComposeLines = containersComposeViolations();
+  const kitStories = kitStoriesViolations(readKitSources());
 
   if (
     realTimerViolations.length > 0 ||
     kitFloorViolations.length > 0 ||
+    kitStories.unstoried.length > 0 ||
+    kitStories.stale.length > 0 ||
     boardControlViolations.length > 0 ||
     dockControlViolations.length > 0 ||
     invalidateDiscardedViolations.length > 0 ||
@@ -1181,6 +1369,19 @@ function main() {
         '\nCompose the shared kit (`KitPanel`/`KitAsyncState`/`KitFactList`, from `fleet`) instead of a re-typed ' +
           'copy; a site that genuinely should not convert goes in KIT_FLOOR_EXEMPT_SITES with a one-line reason.',
       );
+    }
+    if (kitStories.unstoried.length > 0) {
+      console.error('structural-gate: kit parts with no stories in fleet/lib/kit/:\n');
+      for (const line of kitStories.unstoried) console.error(`  ${line}`);
+      console.error(
+        '\nGive the part a stories file beside it whose meta names it as `component` ([bzh:frontend-kit-stories]); ' +
+          'a part that genuinely cannot be shown alone goes in KIT_STORIES_EXEMPT with its reason.',
+      );
+    }
+    if (kitStories.stale.length > 0) {
+      console.error('structural-gate: stale KIT_STORIES_EXEMPT entries:\n');
+      for (const line of kitStories.stale) console.error(`  ${line}`);
+      console.error('\nAn exemption for a class the kit no longer exports, or one a story now names, is deleted.');
     }
     if (boardControlViolations.length > 0) {
       console.error('structural-gate: retired board controls under projects:\n');
@@ -1274,6 +1475,7 @@ function main() {
 
   console.log('structural-gate: real-timer sweep clean.');
   console.log('structural-gate: kit floor clean.');
+  console.log('structural-gate: kit-stories sweep clean.');
   console.log('structural-gate: retired board-control census clean.');
   console.log('structural-gate: retired dock-control census clean.');
   console.log('structural-gate: mutation-hook invalidation sweep clean.');

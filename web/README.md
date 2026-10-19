@@ -76,6 +76,7 @@ published, deployed, or embedded in the wheel. Stories are for people to open: t
 the library, and they assert nothing. The render check holds them: `npm run story-render` type-checks every story, builds
 the workshop in development mode, and opens each story in headless Chromium, failing on a story that no longer compiles
 or renders. It needs Chromium (`npx playwright install chromium`), and judges that a story renders, never what it shows.
+The structural gate's kit-stories sweep holds every kit part to having stories (`npm run structural-gate`).
 
 ## The generated API client (`bzh:generated-client`)
 
