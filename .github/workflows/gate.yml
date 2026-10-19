@@ -151,6 +151,23 @@ jobs:
       - name: change notes (blizzard-change-notes check)
         run: uv run blizzard-change-notes check
 
+  flag-lifecycle:
+    name: flag lifecycle
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          python-version: "3.12"
+      - run: uv sync
+      - name: flag lifecycle (pr)
+        run: uv run blizzard-flag-lifecycle pr
+
   frontend:
     name: eslint + vitest + client drift
     runs-on: ubuntu-latest
@@ -202,7 +219,8 @@ jobs:
         name: generated-client drift
         run: |
           cd web && npm run generate:client
-          cd "$GITHUB_WORKSPACE" && git diff --exit-code -- web/ \
+          cd "$GITHUB_WORKSPACE"
+          git diff --exit-code -- web/ \
             || { echo "::error::generated API client is stale — regenerate and commit."; exit 1; }
 
   # The web exemplars (blizzard:exemplar-check). The Python exemplars ride the ruff, pyright, and pytest jobs above;

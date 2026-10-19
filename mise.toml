@@ -99,6 +99,10 @@ run = "uv run blizzard-compat --commits origin/master..HEAD"
 description = "Validate the change notes under changes/ with blizzard-change-notes check — the format changes/README.md documents"
 run = "uv run blizzard-change-notes check"
 
+[tasks.flag-lifecycle]
+description = "Check release-derived flag lifetimes against HEAD (pr mode by default; cut and tag also available)"
+run = "uv run blizzard-flag-lifecycle"
+
 [tasks.release-notes]
 description = "Print the release notes a tag publishes with blizzard-change-notes render: `mise run release-notes v0.8.0`"
 run = "uv run blizzard-change-notes render"

@@ -111,6 +111,7 @@ blizzard-wire-compat = "blizzard.tools.wire_compat:main"
 blizzard-compat = "blizzard.tools.compat.cli:main"
 # Validates the change notes under changes/ (the format is documented in changes/README.md).
 blizzard-change-notes = "blizzard.tools.change_notes.cli:main"
+blizzard-flag-lifecycle = "blizzard.tools.flag_lifecycle:main"
 
 [dependency-groups]
 dev = [
