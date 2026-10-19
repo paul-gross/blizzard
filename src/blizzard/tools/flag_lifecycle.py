@@ -9,6 +9,7 @@ from typing import Literal
 import click
 
 from blizzard.foundation.flags.registry import FlagRegistry, FlagRegistryError
+from blizzard.foundation.roles import domain_model
 from blizzard.tools.compat.git import GitError, Repository
 from blizzard.tools.compat.releases import Release, parse_releases
 
@@ -16,12 +17,14 @@ _REGISTRY = "src/blizzard/foundation/flags/registry.toml"
 type Mode = Literal["pr", "cut", "tag"]
 
 
+@domain_model
 @dataclass(frozen=True)
 class Snapshot:
     release: Release
     registry: FlagRegistry
 
 
+@domain_model
 @dataclass(frozen=True)
 class Row:
     name: str
@@ -32,6 +35,7 @@ class Row:
     off_for: int
 
 
+@domain_model
 @dataclass(frozen=True)
 class Finding:
     name: str
