@@ -8,6 +8,8 @@ per engine instance, never globally."""
 from __future__ import annotations
 
 import sqlite3
+import warnings
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -75,3 +77,15 @@ def test_dispose_checkpoints_and_removes_the_wal_sidecar(tmp_path: Path) -> None
         assert direct.execute("SELECT value FROM t WHERE id = 1").fetchone() == ("hello",)
     finally:
         direct.close()
+
+
+def test_raw_datetime_bind_stores_the_space_separated_text_without_warning(tmp_path: Path) -> None:
+    """A `text()` bind bypasses SQLAlchemy's `DateTime`; the registered adapter must write what sqlite3's old default did."""
+    engine = create_engine_from_url(f"sqlite:///{tmp_path / 'store.db'}")
+    stamp = datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", DeprecationWarning)
+        with engine.connect() as conn:
+            stored = conn.execute(text("SELECT :at, :day"), {"at": stamp, "day": stamp.date()}).one()
+    assert tuple(stored) == ("2026-01-02 03:04:05+00:00", "2026-01-02")
+    engine.dispose()

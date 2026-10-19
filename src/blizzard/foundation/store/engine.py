@@ -10,8 +10,25 @@ data only right after a clean shutdown — a live store also has a ``-wal`` side
 from __future__ import annotations
 
 import sqlite3
+from datetime import date, datetime
 
 from sqlalchemy import Engine, create_engine, event
+
+
+def _adapt_datetime(value: datetime) -> str:
+    """The text sqlite3's deprecated default adapter wrote, so stored rows still order against new ones."""
+    return value.isoformat(" ")
+
+
+def _adapt_date(value: date) -> str:
+    return value.isoformat()
+
+
+# A raw datetime reaching the driver (a `text()` bind, which SQLAlchemy's `DateTime` type never sees) is adapted by
+# sqlite3's default adapter, deprecated since Python 3.12. Registering the same conversion explicitly keeps the
+# on-disk format and silences the warning.
+sqlite3.register_adapter(datetime, _adapt_datetime)
+sqlite3.register_adapter(date, _adapt_date)
 
 
 def create_engine_from_url(url: str) -> Engine:
