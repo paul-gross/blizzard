@@ -12,6 +12,6 @@ export function mobileTabItems(askCount: number): readonly MobileTabItem[] {
     pageTab('tab-board', 'Board', 'board'),
     { testid: 'tab-asks-runner', label: 'Asks', inert: true, badge: askCount, badgeTestid: 'tab-asks-runner-badge' },
     pageTab('tab-events', 'Events', 'events'),
-    pageTab('tab-machine', 'Machine', 'machine'),
+    pageTab('tab-host', 'Host', 'host'),
   ];
 }

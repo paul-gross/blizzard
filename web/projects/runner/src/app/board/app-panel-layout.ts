@@ -6,13 +6,13 @@ import { type BoardLayout, ChunkBoard } from './chunk-list/chunk-board';
 import type { MachineChunkStatus } from './chunk-list/chunk-status';
 import { BoardRail } from './rail/board-rail';
 import type { MachineChunkRow } from './app-panel.model';
-import type { PanelLease, RunnerOwner } from '../core/panel-reads.model';
+import type { PanelLease } from '../core/panel-reads.model';
 
 /**
  * The runner's machine-local panel's layout half — shaped like
  * the discovery mock's machine panel: a two-column grid over the runner's
  * local API, hub-free save for the rails that proxy through it — the
- * fleet-summary strip (`app-info`).
+ * hub panel's fleet counts.
  *
  * - **Center (1fr)** — work: the chunks on these runners as the hub's board lays them out
  *   ({@link ChunkBoard} — lanes or list, one card per chunk, its live worker inline) over
@@ -52,8 +52,6 @@ export class LocalPanelLayout {
   /** The open-ask count for the asks panel's header note. */
   readonly openAskCount = input.required<number>();
 
-  /** The runners the board reads — the hub-link rail shows each. */
-  readonly runners = input.required<readonly RunnerOwner[]>();
 
   /** The `chunk_id` currently selected, or `null`. */
   readonly selectedChunkId = input.required<string | null>();

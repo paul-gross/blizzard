@@ -33,8 +33,13 @@
   width: 0;
   height: 0;
 }
+/* A braked runner's glyph after its name — amber for its own pause, red for the hub's, as on the board rail. */
 .brake {
+  margin-left: 5px;
   color: var(--amber);
+}
+.brake[data-glyph='stop'] {
+  color: var(--red);
 }
 :host(.compact) .filter {
   flex: 1;

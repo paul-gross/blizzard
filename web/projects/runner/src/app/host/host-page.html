@@ -1,0 +1,106 @@
+<div class="page" data-testid="host-page">
+  <div class="hd" data-testid="host-title">
+    @if (registration(); as reg) {
+      <fleet-kit-beacon
+        class="dot"
+        aria-hidden="true"
+        [active]="true"
+        [tone]="hostTone()"
+        [blink]="hostTone() === 'green' ? 'pulse' : 'hold'"
+      />
+    }
+    <h2 class="name" data-testid="host-name">{{ hostName() }}</h2>
+    @if (hostRef(); as ref) {
+      <span class="ref" [title]="hostId()">{{ ref }}</span>
+    }
+    @if (registration(); as reg) {
+      <fleet-kit-badge class="state" variant="text" [tone]="reg.tone" data-testid="host-registration-state">{{ reg.label }}</fleet-kit-badge>
+      @if (reg.answeredAt; as at) {
+        <span class="report" data-testid="host-registration-answered">answered <fleet-when [iso]="at" [relative]="true" /></span>
+      }
+    }
+  </div>
+  <fleet-kit-panel class="sec" label="Subscription usage" [bodyScroll]="false" data-testid="host-subscriptions">
+    <fleet-kit-async-state
+      [state]="subscriptions().length > 0 ? 'ready' : 'empty'"
+      placement="inline"
+      emptyText="NO SUBSCRIPTIONS DECLARED"
+      emptyTestid="host-subscriptions-empty"
+    >
+      <div class="sec-bd">
+        <fleet-subscription-pace-group class="subs" [subscriptionPaces]="subscriptions()" />
+      </div>
+    </fleet-kit-async-state>
+  </fleet-kit-panel>
+  <fleet-kit-panel class="sec" [label]="'Runners · ' + rows().length" [bodyScroll]="false" data-testid="host-runners">
+    <fleet-kit-async-state
+      [state]="triadState()"
+      placement="inline"
+      loadingText="LOADING…"
+      errorText="RUNNERS UNAVAILABLE"
+      emptyText="NO RUNNER MATCHES THE FILTERS"
+      emptyTestid="host-runners-empty"
+    >
+      <div role="list">
+        @for (row of rows(); track row.key) {
+          <app-host-runner-row [row]="row">
+            @if (row.runnerId && !row.halted) {
+              <app-pause-control verbs [runnerId]="row.runnerId" [compact]="true" />
+            }
+          </app-host-runner-row>
+        }
+      </div>
+    </fleet-kit-async-state>
+  </fleet-kit-panel>
+  <fleet-kit-panel
+    class="sec"
+    label="Workspaces · environments"
+    [count]="envsLabel()"
+    [bodyScroll]="false"
+    data-testid="host-environments"
+  >
+    <fleet-kit-async-state
+      [state]="environments().length > 0 ? 'ready' : 'empty'"
+      placement="inline"
+      emptyText="NO WORKSPACES DECLARED"
+      emptyTestid="host-environments-empty"
+    >
+      @for (group of environments(); track group.workspaceId) {
+        <div class="ws" data-testid="host-workspace" [attr.data-workspace-id]="group.workspaceId">
+          <span class="ws-id">{{ group.workspaceId }}</span>
+          <span class="ws-use">{{
+            group.capacity === null ? group.inUse + ' in use' : group.inUse + ' / ' + group.capacity + ' in use'
+          }}</span>
+        </div>
+        @for (env of group.envs; track env.environmentId) {
+          @if (env.held) {
+            <div class="env held" [class.elsewhere]="env.elsewhere" data-testid="host-env-held">
+              <fleet-kit-beacon class="env-dot" aria-hidden="true" [active]="true" tone="amber" blink="hold" />
+              <span class="env-id">{{ env.environmentId }}</span>
+              @if (env.chunkId; as chunkId) {
+                <a class="chunk" routerLink="/board" [queryParams]="{ chunk: chunkId }" queryParamsHandling="merge" [title]="chunkId">
+                  @if (env.color; as color) {
+                    <fleet-kit-swatch [color]="color" />
+                  } @else {
+                    <span class="sw-none" aria-hidden="true"></span>
+                  }
+                  {{ env.chunkRef }}
+                </a>
+              } @else {
+                <span class="chunk"></span>
+              }
+              <span class="project">{{ env.projectName ?? '' }}</span>
+              <span class="holder">{{ env.holder ?? '' }}</span>
+            </div>
+          } @else {
+            <div class="env free" data-testid="host-env-free">
+              <fleet-kit-beacon class="env-dot" aria-hidden="true" />
+              <span class="env-id">{{ env.environmentId }}</span>
+              <span class="free-lbl">FREE</span>
+            </div>
+          }
+        }
+      }
+    </fleet-kit-async-state>
+  </fleet-kit-panel>
+</div>

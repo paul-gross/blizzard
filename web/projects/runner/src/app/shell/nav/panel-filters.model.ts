@@ -11,8 +11,9 @@ export interface FilterChoice {
   readonly title: string;
   /** Whether it can be chosen — a halted runner cannot. */
   readonly disabled: boolean;
-  /** A runner's brake in operator words, `null` while unbraked. */
-  readonly brake: string | null;
+  /** A runner's brake as a glyph beside its name — `pause` for its own, `stop` for the hub's — `null` while unbraked;
+   * the brake's words, its reason among them, ride in {@link title}. */
+  readonly brake: 'pause' | 'stop' | null;
 }
 
 const ALL: FilterChoice = { value: null, label: 'All', title: 'every runner', disabled: false, brake: null };
@@ -23,13 +24,13 @@ export function runnerFilterChoices(runners: readonly runnerApi.HostRunnerView[]
     ALL,
     ...runners.map((runner) => {
       const serving = runner.state === 'serving' && runner.runner_id !== null;
-      const brake = serving ? brakeLabel(runner.pause) : null;
+      const words = serving ? brakeLabel(runner.pause) : null;
       return {
         value: runner.name,
         label: runner.name,
-        title: serving ? (brake ?? runner.name) : `${runner.name} is halted`,
+        title: serving ? (words === null ? runner.name : `${runner.name} · ${words}`) : `${runner.name} is halted`,
         disabled: !serving,
-        brake,
+        brake: words === null ? null : runner.pause?.hub ? ('stop' as const) : ('pause' as const),
       };
     }),
   ];

@@ -26,6 +26,9 @@ export class LocalPauseControl {
   /** The runner this control pauses — the target {@link overridePaused} scopes to. */
   readonly runnerId = input.required<string>();
 
+  /** The toggle alone, where the brakes' state and reason already read beside it. */
+  readonly compact = input(false);
+
   private readonly dashboardQuery = injectRunnerDashboardQuery(() => this.runnerId());
   private readonly pauseMutation = injectLocalPauseMutation(() => this.runnerId());
 

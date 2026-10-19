@@ -18,14 +18,14 @@ import { headerConnectionLabel, headerStatCells } from './app-header.model';
  * runner and environment reads itself for {@link connection} and
  * {@link headerStats} — the header is the host's, on every page, narrowed only by
  * the Runner filter. TanStack dedupes query-key injections, so this component
- * injecting the same host reads the machine page and the filters inject costs no
+ * injecting the same host reads the host page and the filters inject costs no
  * extra network request. It also injects
  * {@link RunnerLiveUpdates} directly — the same root-provided
  * singleton `../app.ts` starts — purely to read its `status`/`authFailed` for
  * {@link connection}; it maps them into `BoardHeader`'s input the same way it
  * already maps the dashboard read, never starting or restarting the stream itself.
  *
- * Each runner's pause control lives on the machine page, beside the runner it acts on.
+ * Each runner's pause control lives on the host page, beside the runner it acts on.
  * The identity block ({@link LocalIdentity}) and the profile menu ride in the header's
  * `[header-trailing]` slot — each a self-fetching mini-container of its own, composed
  * here without this component or {@link BoardHeader} knowing anything about identity.

@@ -4,7 +4,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { map } from 'rxjs';
 import { asyncState, injectChunkUrlSelection, type runnerApi, ViewportService } from 'fleet';
 
-import { injectPanelAsks, injectPanelEscalations, injectPanelLeases, injectPanelProjects, injectPanelRunners } from '../core/panel-reads';
+import { injectPanelAsks, injectPanelEscalations, injectPanelLeases, injectPanelProjects } from '../core/panel-reads';
 import type { PanelLease } from '../core/panel-reads.model';
 
 import type { MachineChunkStatus } from './chunk-list/chunk-status';
@@ -53,8 +53,6 @@ export class LocalPanel {
 
   protected readonly leasesQuery = injectPanelLeases();
 
-  /** The runners the board reads — the hub-link rail shows each. */
-  protected readonly runners = injectPanelRunners().scoped;
 
   /** Every project the host serves — the rows take their project's name and tint from it. */
   private readonly projects = injectPanelProjects();

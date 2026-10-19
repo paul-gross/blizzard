@@ -1,5 +1,5 @@
-<div class="pause-control" data-testid="pause-control">
-  @if (hubPaused()) {
+<div class="pause-control" [class.compact]="compact()" data-testid="pause-control">
+  @if (hubPaused() && !compact()) {
     <fleet-kit-badge tone="waiting" variant="pill" data-testid="hub-paused-badge">Paused by hub</fleet-kit-badge>
   }
   <fleet-kit-button
@@ -11,7 +11,7 @@
   >
     {{ localPaused() ? 'Resume' : 'Pause' }}
   </fleet-kit-button>
-  @if (localPaused() && localReason(); as reason) {
+  @if (!compact() && localPaused() && localReason(); as reason) {
     <fleet-kit-badge tone="waiting" variant="pill" data-testid="pause-reason-badge">{{ reason }}</fleet-kit-badge>
   }
   @if (error(); as err) {
