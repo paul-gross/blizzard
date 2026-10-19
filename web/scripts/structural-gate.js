@@ -330,8 +330,13 @@ function kitParts(sources) {
   const sf = ts.createSourceFile('index.ts', sources.get('index.ts') ?? '', ts.ScriptTarget.Latest, true);
   const parts = [];
   for (const stmt of sf.statements) {
-    if (!ts.isExportDeclaration(stmt) || stmt.isTypeOnly || !stmt.moduleSpecifier || !stmt.exportClause) continue;
-    if (!ts.isNamedExports(stmt.exportClause)) continue;
+    if (!ts.isExportDeclaration(stmt) || stmt.isTypeOnly || !stmt.moduleSpecifier) continue;
+    if (!stmt.exportClause || !ts.isNamedExports(stmt.exportClause)) {
+      throw new Error(
+        `kit-stories sweep reads only \`export { … } from\` in kit/index.ts, not \`${stmt.getText(sf)}\`; ` +
+          'list the exported names so each part can be resolved',
+      );
+    }
     const from = kitModule(sources, 'index.ts', stmt.moduleSpecifier.text);
     if (from === null) continue;
     for (const el of stmt.exportClause.elements) {
@@ -437,6 +442,8 @@ function assertKitStoriesDetectorWorks() {
     ['kit-a.ts', "@Component({ selector: 'a' })\nexport class KitA {}\n"],
     ['kit-b.ts', "@Directive({ selector: '[b]' })\nexport class KitB {}\n@Component({ selector: 'c' })\nexport class KitC {}\n"],
     ['kit-a.stories.ts', "import { KitA } from './kit-a';\nconst meta: Meta<KitA> = { title: 'Kit/A', component: KitA };\nexport default meta;\n"],
+    ['kit-d.ts', "@Component({ selector: 'd' })\nexport class KitC {}\n"],
+    ['kit-d.stories.ts', "import { KitC } from './kit-d';\nexport default { title: 'Kit/D', component: KitC };\n"],
     ['kit-b.stories.ts', "import { KitB } from './kit-b';\nexport default { title: 'Kit/B', component: KitB };\n"],
   ]);
   const recognized = kitParts(sources).map((p) => p.class).join(',');
@@ -451,6 +458,14 @@ function assertKitStoriesDetectorWorks() {
   if (stale.length !== 1 || stale[0] !== 'KitGone (fleet/src/lib/kit/kit-gone.ts)') {
     throw new Error(`kit-stories detector misjudged the planted kit's stale exemptions: ${JSON.stringify(stale)}`);
   }
+  const starKit = new Map([['index.ts', "export * from './kit-a';\n"], ['kit-a.ts', sources.get('kit-a.ts') ?? '']]);
+  let starRefused = false;
+  try {
+    kitParts(starKit);
+  } catch {
+    starRefused = true;
+  }
+  if (!starRefused) throw new Error('kit-stories detector let an `export *` in kit/index.ts go unread');
   const storiedExempt = kitStoriesViolations(sources, [{ file: 'kit-a.ts', class: 'KitA' }]).stale;
   if (storiedExempt.length !== 1) throw new Error('kit-stories detector missed an exemption for a storied part');
 }
