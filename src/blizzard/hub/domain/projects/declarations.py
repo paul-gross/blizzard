@@ -268,7 +268,6 @@ class _Entry:
             if entry.edit.name is UNSET:
                 raise ConfigFieldError("name", "a project this document creates needs a name")
             description = "" if entry.edit.description is UNSET else entry.edit.description
-            # A stated color is parsed as stated, a stated null included; only an absent one takes the least used.
             color = (
                 decide_color(None, lambda: (sibling.color for sibling in siblings), pick)
                 if entry.edit.color is UNSET
