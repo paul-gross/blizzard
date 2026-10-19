@@ -36,5 +36,4 @@ export { KitSlotBar, type SlotBarSlot } from './kit-slot-bar';
 export { KitTab, KitTabStrip } from './kit-tab';
 export { KitTabs, type KitTabOption } from './kit-tabs';
 export { KitTextInput } from './kit-text-input';
-export { KitTooltip } from './kit-tooltip';
 export type { Tone } from './tone';

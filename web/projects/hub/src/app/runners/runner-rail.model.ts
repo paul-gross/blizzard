@@ -3,8 +3,6 @@ import { type BeaconBlink, type BeaconTone, isLapsedSubscription as isLapsed, Ru
 import type { HostGroups } from './host-rows.model';
 import type { RunnerRow } from './runner-rows.model';
 
-export { PACE_CELLS, type PaceCell, type PaceLine, type SubscriptionLine } from 'fleet';
-
 /** A used-over-total gauge, named for what it gauges. */
 export interface Gauge {
   readonly name: string;

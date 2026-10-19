@@ -1,6 +1,6 @@
 import { injectQuery } from '@tanstack/angular-query-experimental';
 
-import { type HostRegistryView, listHostsApiHostsGet, LIVE_COVERED_POLL_BACKSTOP_MS, hubHostsKey } from 'fleet';
+import { type HostRegistryView, listHostsApiHostsGet, LIVE_COVERED_POLL_BACKSTOP_MS, hubHostsKey } from 'fleet/shell';
 
 /**
  * Hub `GET /api/hosts` read — the host registry the runners view groups its runners under,

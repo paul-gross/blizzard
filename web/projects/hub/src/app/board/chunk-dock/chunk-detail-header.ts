@@ -120,7 +120,6 @@ export class ChunkDetailHeader {
     return route ? runnerTitle(route.runner_id, route.runner_name, this.runnerHosts().get(route.runner_id)) : null;
   });
 
-
   /** The node the chunk currently sits at, for display and for `detachCopy`'s own
    * `<node>` slot — the same fallback chain the `.nd` chip already reads
    * (`current_node_name`, then `current_node_id`, then an em dash). */

@@ -24,7 +24,7 @@ import {
   chunkPauseMutationKey,
   resolveDecisionMutationKey,
 } from '../../core/mutation-keys';
-import { openDetail, openWorkItems, pendingQuestionIds, pendingStatusOverride } from './chunk-detail.model';
+import { openDetail, openProjectColor, openWorkItems, pendingQuestionIds, pendingStatusOverride } from './chunk-detail.model';
 import { ChunkDetailPanel } from './chunk-detail-panel';
 
 /**
@@ -162,12 +162,8 @@ export class ChunkDetail {
   /** The open chunk's aggregate, or `undefined` while closed / still loading. */
   protected readonly detail = computed(() => openDetail(this.chunkId(), this.detailQuery.data()));
 
-  /** The open chunk's project's color, joined from the projects list by `project_id` — `null` until that list is read
-   * or when the project is unknown. */
-  protected readonly projectColor = computed(() => {
-    const projectId = this.detail()?.project_id;
-    return this.projectsQuery.data()?.find((project) => project.project_id === projectId)?.color ?? null;
-  });
+  /** The open chunk's project's color — {@link openProjectColor}. */
+  protected readonly projectColor = computed(() => openProjectColor(this.detail(), this.projectsQuery.data()));
 
   /**
    * The detail read's async state. Read only once a chunk is open: the query is
