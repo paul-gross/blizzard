@@ -793,7 +793,7 @@ def _incompatible(wire: RouteClaimIncompatibleDenial) -> IncompatibleDenial:
 
 
 def _served(wire: ServedProjectView) -> ServedProject:
-    return ServedProject(entry=wire.entry, project_id=wire.project_id, slug=wire.slug, name=wire.name)
+    return ServedProject(entry=wire.entry, project_id=wire.project_id, slug=wire.slug, name=wire.name, color=wire.color)
 
 
 def _paused(wire: RouteClaimPausedDenial) -> PausedDenial:

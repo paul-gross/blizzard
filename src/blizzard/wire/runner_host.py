@@ -9,6 +9,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from blizzard.foundation.host_registration_state import HostRegistrationState
+from blizzard.wire.runner import ExternalSubscriptionUsageWindowView
 from blizzard.wire.runner_status import EnvironmentView, PauseStateView, SubscriptionView
 
 #: Whether the host serves a runner, or holds it halted — by its own configuration errors, or, while served, by a hub
@@ -98,9 +99,13 @@ class HostEnvironmentListResponse(BaseModel):
 
 
 class HostSubscriptionView(SubscriptionView):
-    """One declared subscription's diagnostics, naming the runners that spend it."""
+    """One declared subscription's diagnostics, naming the runners that spend it, with its newest sampled snapshot's
+    usage ``windows`` — the hub's own window shape — and that snapshot's ``windows_sampled_at``. A miss never masks
+    them: they stand until a newer sample replaces them. Empty, and ``None``, before a first sample."""
 
     spenders: list[str] = Field(default_factory=list)
+    windows: list[ExternalSubscriptionUsageWindowView] = Field(default_factory=list)
+    windows_sampled_at: str | None = None
 
 
 class HostSubscriptionListResponse(BaseModel):

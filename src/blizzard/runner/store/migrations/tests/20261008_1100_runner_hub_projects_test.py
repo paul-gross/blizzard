@@ -60,6 +60,7 @@ def test_hub_projects_migration_adds_the_answer_and_its_marker_and_drops_both_lo
             "project_id",
             "slug",
             "name",
+            "color",
             "answered_at",
             "runner_id",
         }

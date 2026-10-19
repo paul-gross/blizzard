@@ -89,14 +89,15 @@ class IdentityVerdictView(BaseModel):
 
 class ServedProjectStatusView(BaseModel):
     """One project the runner serves, as its hub last answered: the ``entry`` as configured — a project id
-    or slug — and the project it resolved to. ``resolved`` is false for an entry no project answers to, and
-    ``answered`` false for a configured entry the hub has not answered yet; either way ``project_id``,
-    ``slug`` and ``name`` are ``None``."""
+    or slug — and the project it resolved to, with its palette ``color``. ``resolved`` is false for an entry
+    no project answers to, and ``answered`` false for a configured entry the hub has not answered yet; either
+    way ``project_id``, ``slug``, ``name`` and ``color`` are ``None``."""
 
     entry: str
     project_id: str | None = None
     slug: str | None = None
     name: str | None = None
+    color: str | None = None
     resolved: bool
     answered: bool = True
 

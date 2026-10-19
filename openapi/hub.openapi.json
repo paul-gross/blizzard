@@ -12879,8 +12879,19 @@
         "type": "object"
       },
       "ServedProjectView": {
-        "description": "One entry of the projects a runner serves: the ``entry`` as declared \u2014 a project id or slug \u2014 and the project\nit resolves to in the runner's tenant. ``project_id``, ``slug`` and ``name`` are ``None`` for an entry that\nresolves to no project, which serves nothing until a project answers to it.",
+        "description": "One entry of the projects a runner serves: the ``entry`` as declared \u2014 a project id or slug \u2014 and the project\nit resolves to in the runner's tenant, with its palette ``color`` \u2014 a palette name or a ``#rrggbb``.\n``project_id``, ``slug``, ``name`` and ``color`` are ``None`` for an entry that resolves to no project, which\nserves nothing until a project answers to it.",
         "properties": {
+          "color": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Color"
+          },
           "entry": {
             "title": "Entry",
             "type": "string"

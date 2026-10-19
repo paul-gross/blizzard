@@ -1235,6 +1235,32 @@ export type EscalationView = {
 };
 
 /**
+ * ExternalSubscriptionUsageWindowView
+ *
+ * One rate-limit window's utilization, as the harness's own account reported it
+ * — ``window`` is the harness-native label, ``utilization_pct`` is 0-100,
+ * ``resets_at`` the reset instant, ``window_seconds`` the window's length.
+ */
+export type ExternalSubscriptionUsageWindowView = {
+    /**
+     * Resets At
+     */
+    resets_at: string;
+    /**
+     * Utilization Pct
+     */
+    utilization_pct: number;
+    /**
+     * Window
+     */
+    window: string;
+    /**
+     * Window Seconds
+     */
+    window_seconds: number;
+};
+
+/**
  * FactChangedPayload
  *
  * A hub-bound fact was enqueued or acked — mirrors the hub's own ``event-logged``
@@ -2090,7 +2116,9 @@ export type HostSubscriptionListResponse = {
 /**
  * HostSubscriptionView
  *
- * One declared subscription's diagnostics, naming the runners that spend it.
+ * One declared subscription's diagnostics, naming the runners that spend it, with its newest sampled snapshot's
+ * usage ``windows`` — the hub's own window shape — and that snapshot's ``windows_sampled_at``. A miss never masks
+ * them: they stand until a newer sample replaces them. Empty, and ``None``, before a first sample.
  */
 export type HostSubscriptionView = {
     miss_reason?: SampleMissReason | null;
@@ -2124,6 +2152,14 @@ export type HostSubscriptionView = {
      * Spenders
      */
     spenders?: Array<string>;
+    /**
+     * Windows
+     */
+    windows?: Array<ExternalSubscriptionUsageWindowView>;
+    /**
+     * Windows Sampled At
+     */
+    windows_sampled_at?: string | null;
 };
 
 /**
@@ -3379,15 +3415,19 @@ export type SelfTestView = {
  * ServedProjectStatusView
  *
  * One project the runner serves, as its hub last answered: the ``entry`` as configured — a project id
- * or slug — and the project it resolved to. ``resolved`` is false for an entry no project answers to, and
- * ``answered`` false for a configured entry the hub has not answered yet; either way ``project_id``,
- * ``slug`` and ``name`` are ``None``.
+ * or slug — and the project it resolved to, with its palette ``color``. ``resolved`` is false for an entry
+ * no project answers to, and ``answered`` false for a configured entry the hub has not answered yet; either
+ * way ``project_id``, ``slug``, ``name`` and ``color`` are ``None``.
  */
 export type ServedProjectStatusView = {
     /**
      * Answered
      */
     answered?: boolean;
+    /**
+     * Color
+     */
+    color?: string | null;
     /**
      * Entry
      */

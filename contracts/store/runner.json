@@ -1,5 +1,5 @@
 {
-  "head_revision": "20261015_1000_host_ingests",
+  "head_revision": "20261019_1000_served_project_color",
   "store": "runner",
   "tables": {
     "asks": {
@@ -944,6 +944,12 @@
           "nullable": false,
           "server_default": false,
           "type": "DateTime"
+        },
+        "color": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "String"
         },
         "entry": {
           "deprecated": null,

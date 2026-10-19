@@ -8205,10 +8205,15 @@ export type SecretView = {
  * ServedProjectView
  *
  * One entry of the projects a runner serves: the ``entry`` as declared — a project id or slug — and the project
- * it resolves to in the runner's tenant. ``project_id``, ``slug`` and ``name`` are ``None`` for an entry that
- * resolves to no project, which serves nothing until a project answers to it.
+ * it resolves to in the runner's tenant, with its palette ``color`` — a palette name or a ``#rrggbb``.
+ * ``project_id``, ``slug``, ``name`` and ``color`` are ``None`` for an entry that resolves to no project, which
+ * serves nothing until a project answers to it.
  */
 export type ServedProjectView = {
+    /**
+     * Color
+     */
+    color?: string | null;
     /**
      * Entry
      */

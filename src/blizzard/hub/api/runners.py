@@ -243,6 +243,7 @@ def served_views(served: Iterable[ServedEntry], projects: Mapping[ProjectId, Pro
                 project_id=entry.project_id,
                 slug=None if project is None else project.slug,
                 name=None if project is None else project.name,
+                color=None if project is None else str(project.color),
             )
         )
     return views

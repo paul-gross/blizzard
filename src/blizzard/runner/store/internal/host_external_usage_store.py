@@ -30,6 +30,7 @@ from blizzard.runner.subscriptions.subscription_sampler import ExternalSubscript
 from blizzard.runner.usage.repository import (
     CredentialRenewalSummary,
     ExternalUsageAttemptSummary,
+    ExternalUsageSampleSummary,
     IWriteExternalUsageRepository,
 )
 
@@ -106,6 +107,15 @@ class ExternalUsageStore:
         # Only rows with a non-NULL payload.
         newest = self._newest_rows_by_slug(slugs, external_usage_samples.c.payload.is_not(None))
         return {slug: windows for slug, row in newest.items() if (windows := _decode_windows(row.payload))}
+
+    def latest_external_usage_samples_by_slug(self, slugs: Sequence[str]) -> dict[str, ExternalUsageSampleSummary]:
+        newest = self._newest_rows_by_slug(slugs, external_usage_samples.c.payload.is_not(None))
+        return {
+            slug: ExternalUsageSampleSummary(
+                slug=slug, sampled_at=as_utc(row.sampled_at), windows=_decode_windows(row.payload)
+            )
+            for slug, row in newest.items()
+        }
 
     def latest_external_usage_attempt(self, slug: str) -> ExternalUsageAttemptSummary | None:
         stmt = (

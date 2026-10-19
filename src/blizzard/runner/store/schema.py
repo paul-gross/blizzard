@@ -423,8 +423,8 @@ runner_identity = Table(
 
 # --- Served projects (the hub's latest answer to the runner's declaration) ----
 # Replaced whole at each answer, one row per declared entry in declared order. Display only: the hub
-# narrows the queue and rechecks claims against its own copy. ``project_id``/``slug``/``name`` are NULL
-# for an entry no project answers to.
+# narrows the queue and rechecks claims against its own copy. ``project_id``/``slug``/``name``/``color``
+# are NULL for an entry no project answers to; ``color`` also for an answer from a hub that predates it.
 
 hub_served_projects = Table(
     "hub_served_projects",
@@ -435,6 +435,7 @@ hub_served_projects = Table(
     Column("project_id", String, nullable=True),
     Column("slug", String, nullable=True),
     Column("name", String, nullable=True),
+    Column("color", String, nullable=True),
     Column("answered_at", UtcDateTime, nullable=False),
     Column("runner_id", String, nullable=False),
     UniqueConstraint("runner_id", "position", name="uq_hub_served_projects_runner_id_position"),

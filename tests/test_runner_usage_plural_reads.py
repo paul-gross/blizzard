@@ -139,7 +139,7 @@ def test_subscription_list_statement_count_is_flat_in_the_declared_subscriptions
 
     count = count_queries(store._engine, lambda: _subscription_list(declarations, store, {}))
 
-    assert count == 2  # one batched read each: the newest attempts, the newest renewals
+    assert count == 3  # one batched read each: the newest attempts, the newest renewals, the newest samples
 
 
 @pytest.mark.parametrize("declared", [1, 3])

@@ -18,7 +18,9 @@ from blizzard.runner.config import SubscriptionDeclaration
 from blizzard.runner.environments.repository import EnvBinding
 from blizzard.runner.environments.workspaces import held_workspace_id
 from blizzard.runner.hub.identity import ICurrentIdentityVerdict
+from blizzard.runner.subscriptions.subscription_sampler import ExternalSubscriptionUsageWindow
 from blizzard.runner.usage.repository import IReadExternalUsageRepository
+from blizzard.wire.runner import ExternalSubscriptionUsageWindowView
 from blizzard.wire.runner_host import (
     HostEnvironmentListResponse,
     HostEnvironmentView,
@@ -213,10 +215,12 @@ def _subscription_list(
     slugs = [d.slug for d in declarations]
     attempts = usage.latest_external_usage_attempts_by_slug(slugs)
     renewals = usage.latest_credential_renewals_by_slug(slugs)
+    samples = usage.latest_external_usage_samples_by_slug(slugs)
     items: list[HostSubscriptionView] = []
     for declaration in declarations:
         attempt = attempts.get(declaration.slug)
         renewal = renewals.get(declaration.slug)
+        sample = samples.get(declaration.slug)
         items.append(
             HostSubscriptionView(
                 slug=declaration.slug,
@@ -229,6 +233,17 @@ def _subscription_list(
                 renewal_result=renewal.result if renewal is not None else None,
                 renewal_failure_reason=renewal.failure_reason if renewal is not None else None,
                 spenders=spenders.get(declaration.slug, []),
+                windows=[_window_view(w) for w in sample.windows] if sample is not None else [],
+                windows_sampled_at=iso_utc(sample.sampled_at) if sample is not None else None,
             )
         )
     return HostSubscriptionListResponse(items=items)
+
+
+def _window_view(window: ExternalSubscriptionUsageWindow) -> ExternalSubscriptionUsageWindowView:
+    return ExternalSubscriptionUsageWindowView(
+        window=window.window,
+        utilization_pct=window.utilization_pct,
+        resets_at=iso_utc(window.resets_at),
+        window_seconds=window.window_seconds,
+    )
