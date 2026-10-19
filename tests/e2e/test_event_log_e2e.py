@@ -308,12 +308,6 @@ def _rail_messages(page: Page) -> list[str]:
     return page.get_by_test_id("activity-message").all_text_contents()
 
 
-def _added_rows(messages: list[str]) -> list[str]:
-    """The rail's runner-add rows. Each runner a scenario adds at the hub lands one, live only:
-    the hub's activity read backfills no add, so only the broker's replay tail renders it."""
-    return [message for message in messages if "added to the fleet" in message]
-
-
 def test_activity_rail_tracks_claim_transition_and_fact_burst_across_reload(
     tmp_path: Path, chromium_available: bool
 ) -> None:
@@ -351,17 +345,17 @@ def test_activity_rail_tracks_claim_transition_and_fact_burst_across_reload(
             page = browser.new_page()
             try:
                 page.goto(f"http://127.0.0.1:{hub_port}/board", wait_until="load")
-                # The mint, the promotion, and the runner's add.
-                expect(page.get_by_test_id("activity-row")).to_have_count(3)
-                assert len(_added_rows(_rail_messages(page))) == 1
+                # The mint and the promotion; the runner's add has no durable row, so the rail drops it live too.
+                expect(page.get_by_test_id("activity-row")).to_have_count(2)
+                assert not any("added to the fleet" in message for message in _rail_messages(page))
                 claim = runner.post("/_drive/claim", json={"chunk_id": chunk_id}).json()
                 assert claim["claimed"] is True, claim
-                expect(page.get_by_test_id("activity-row")).to_have_count(4)
+                expect(page.get_by_test_id("activity-row")).to_have_count(3)
                 assert any("claimed" in message for message in _rail_messages(page))
 
                 completed = runner.post("/_drive/complete", json={"chunk_id": chunk_id, "choice": "pass"}).json()
                 assert completed["response"]["outcome"] == "next", completed
-                expect(page.get_by_test_id("activity-row")).to_have_count(5)
+                expect(page.get_by_test_id("activity-row")).to_have_count(4)
                 node_id = hub.get(f"/api/chunks/{chunk_id}").json()["current_node_id"]
                 facts = [
                     {"seq": 3, "kind": "lease.minted", "payload": {"chunk_id": chunk_id, "epoch": 2}},
@@ -386,7 +380,7 @@ def test_activity_rail_tracks_claim_transition_and_fact_burst_across_reload(
                 assert pushed.status_code == 200, pushed.text
                 assert pushed.json()["applied"] == [3, 4], pushed.text
                 expect(page.get_by_test_id("spend-today-value")).to_have_text("$0.03")
-                expect(page.get_by_test_id("activity-row")).to_have_count(5)
+                expect(page.get_by_test_id("activity-row")).to_have_count(4)
 
                 asked = hub.post(
                     "/api/fleet/events",
@@ -412,7 +406,7 @@ def test_activity_rail_tracks_claim_transition_and_fact_burst_across_reload(
                 )
                 assert asked.status_code == 200, asked.text
                 assert asked.json()["applied"] == [5], asked.text
-                expect(page.get_by_test_id("activity-row")).to_have_count(6)
+                expect(page.get_by_test_id("activity-row")).to_have_count(5)
 
                 read = hub.get("/api/activity").json()["activity"]
                 keys = [row["key"] for row in read]
@@ -425,11 +419,10 @@ def test_activity_rail_tracks_claim_transition_and_fact_burst_across_reload(
                     "question-asked",
                 }
                 live_messages = _rail_messages(page)
-                assert len(live_messages) == len(keys) + len(_added_rows(live_messages)) == len(keys) + 1
+                assert len(live_messages) == len(keys)
                 assert sum("claimed" in message for message in live_messages) == 1
                 page.reload(wait_until="load")
-                # The same hub's replay tail still holds the add, so the reload renders it again.
-                expect(page.get_by_test_id("activity-row")).to_have_count(len(keys) + 1)
+                expect(page.get_by_test_id("activity-row")).to_have_count(len(keys))
                 assert sum("claimed" in message for message in _rail_messages(page)) == 1
                 assert hub.get("/api/activity", params={"limit": 201}).status_code == 422
             finally:
@@ -481,11 +474,9 @@ def test_the_rail_survives_a_reload_with_no_duplicate_or_missing_rows(tmp_path: 
                 expect(page.get_by_test_id("board-shell")).to_be_visible()
                 expect(page.get_by_test_id("activity-panel")).to_be_visible()
                 # Facts already landed before this subscribes; the initial activity read supplies the durable
-                # baseline. The fourth row is the add of the runner that pushed the event — live only.
-                expect(page.get_by_test_id("activity-row")).to_have_count(4)
-                added = _added_rows(_rail_messages(page))
-                assert len(added) == 1, added
-                first_load_messages = [m for m in _rail_messages(page) if m not in added]
+                # baseline. The add of the runner that pushed the event has no durable row, so it never renders.
+                expect(page.get_by_test_id("activity-row")).to_have_count(3)
+                first_load_messages = _rail_messages(page)
                 assert len(first_load_messages) == 3, first_load_messages
 
             # The hub exits here; facts are durable (sqlite) but `EventBroker`'s replay
@@ -494,10 +485,9 @@ def test_the_rail_survives_a_reload_with_no_duplicate_or_missing_rows(tmp_path: 
                 page.reload(wait_until="load")
                 expect(page.get_by_test_id("activity-panel")).to_be_visible()
                 # The fresh broker's replay tail is empty — only `GET /api/activity` backfill can repopulate
-                # these rows; the live-only add does not come back.
+                # these rows.
                 expect(page.get_by_test_id("activity-row")).to_have_count(3)
                 reload_messages = _rail_messages(page)
-                assert _added_rows(reload_messages) == [], reload_messages
 
                 # The event-logged row carries the same severity/kind fields whichever
                 # source renders it, so its text matches exactly across both loads.
