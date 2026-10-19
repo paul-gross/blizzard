@@ -195,7 +195,9 @@ def test_the_bills_of_materials_are_made_and_attested_after_the_push_before_the_
     for arch in ("amd64", "arm64"):
         digest = f"${{{{ steps.platform_digests.outputs.{arch} }}}}"
         scan = next(steps[i] for i in scans if str(steps[i]["with"].get("image", "")).endswith(f"@{digest}"))
-        assert scan["with"]["image"].startswith("registry:ghcr.io/paul-gross/blizzard-hub@")
+        assert scan["with"]["image"].startswith("ghcr.io/paul-gross/blizzard-hub@"), (
+            "a bare reference: given registry credentials, the action prefixes `registry:` itself"
+        )
         attest = next(steps[i]["with"] for i in attests if steps[i]["with"].get("subject-digest") == digest)
         assert attest["push-to-registry"] is True
         assert attest["sbom-path"] == scan["with"]["output-file"]
