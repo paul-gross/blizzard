@@ -26,6 +26,9 @@ export {
   prView,
   landedRepoView,
   chunkUsageTotalView,
+  questionView,
+  decisionView,
+  workItemEntry,
 } from './builders/chunk';
 export {
   assetArtifactView,

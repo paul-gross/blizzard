@@ -3,10 +3,13 @@ import type {
   ChunkEscalationView,
   ChunkNeighborView,
   ChunkUsageTotalView,
+  DecisionView,
   LandedRepoView,
   PrView,
+  QuestionView,
   RouteView,
   TransitionView,
+  WorkItemEntry,
   WorkRefView,
 } from '../../api/hub';
 import { fixtureInstant } from './clock';
@@ -117,6 +120,56 @@ export function chunkDetail(overrides: Partial<ChunkDetail> = {}): ChunkDetail {
     work_refs: [workRefView()],
     history: [transitionView()],
     artifacts: [],
+    ...overrides,
+  };
+}
+
+/** An open question the worker asked, with options to pick from, asked a minute before {@link FIXTURE_NOW}. */
+export function questionView(overrides: Partial<QuestionView> = {}): QuestionView {
+  return {
+    question_id: 'qn_01fixture0000000000000000000',
+    chunk_id: 'ch_01fixture0000000000000000000',
+    runner_id: 'rn_01fixture000000000000000000',
+    epoch: 1,
+    question: 'Should the stories reach the shared builders, or keep their own fixtures?',
+    options: ['Shared builders', 'Story-local fixtures'],
+    answered: false,
+    asked_at: fixtureInstant(-60),
+    ...overrides,
+  };
+}
+
+/** An unresolved gate decision with two choices and one red check, submitted a minute before {@link FIXTURE_NOW}. */
+export function decisionView(overrides: Partial<DecisionView> = {}): DecisionView {
+  return {
+    decision_id: 'dc_01fixture0000000000000000000',
+    chunk_id: 'ch_01fixture0000000000000000000',
+    node_id: 'nd_review',
+    node_name: 'review',
+    epoch: 1,
+    choices: [
+      { name: 'approve', description: 'Accept the change and move on.', requires_checks: true },
+      { name: 'rework', description: 'Send the change back to build.' },
+    ],
+    check_results: [
+      { command: 'npm run lint', passed: true },
+      { command: 'npm run test', passed: false },
+    ],
+    submitted_at: fixtureInstant(-60),
+    ...overrides,
+  };
+}
+
+/** A work item as its source returns it, fetched at {@link FIXTURE_NOW}. */
+export function workItemEntry(overrides: Partial<WorkItemEntry> = {}): WorkItemEntry {
+  return {
+    source: 'github',
+    ref: '1276',
+    label: 'blizzard#1276',
+    title: 'Story the chunk page tabs and transcripts',
+    body: 'Give the chunk page tabs and the transcript pieces a stories file each.',
+    web_url: 'https://github.com/paul-gross/blizzard/issues/1276',
+    fetched_at: fixtureInstant(0),
     ...overrides,
   };
 }
