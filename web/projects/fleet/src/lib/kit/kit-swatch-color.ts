@@ -20,6 +20,15 @@ export function isHexColor(value: string): boolean {
   return HEX.test(value);
 }
 
+/**
+ * A project color as a CSS value, unadjusted: the palette name's `--project-<name>` token (the dim label color for an
+ * unknown name), or a `#rrggbb` custom color as typed. For a surface tinted by the project rather than a mark drawn
+ * on one, where the lift `legibleOnDark` applies would only wash the tint out.
+ */
+export function projectColorValue(color: string): string {
+  return isHexColor(color) ? color.toLowerCase() : `var(--project-${color}, var(--label-dim))`;
+}
+
 type Rgb = readonly [number, number, number];
 
 const toLinear = (channel: number): number =>

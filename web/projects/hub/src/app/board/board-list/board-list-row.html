@@ -7,6 +7,9 @@
   [attr.data-status]="card().status"
   [attr.data-chunk]="card().chunkId"
   [class.selected]="selected()"
+  [class.tinted]="projectTint() !== null"
+  [style.--project-tint]="projectTint()"
+  [attr.title]="card().projectName ?? null"
   [attr.aria-current]="selected() ? 'true' : null"
 >
   <fleet-kit-select-row
@@ -24,12 +27,9 @@
     <span class="id" data-testid="list-row-id">{{ card().shortId }}</span>
     @for (line of fold().shown; track $index) {
       <span class="item">
+        <!-- Plain text, as on a board card: the detail panel owns the link out to the work source. -->
         @if (line.label; as label) {
-          @if (line.url; as url) {
-            <a class="ref" data-testid="list-row-ref" [href]="url" target="_blank" rel="noopener noreferrer" [title]="label">{{ label }}</a>
-          } @else {
-            <span class="ref" data-testid="list-row-ref" [title]="label">{{ label }}</span>
-          }
+          <span class="ref" data-testid="list-row-ref" [title]="label">{{ label }}</span>
         }
         @if (titlesPending()) {
           <fleet-kit-skeleton class="title-skeleton" data-testid="list-row-title-skeleton" [rows]="1" />
@@ -58,24 +58,35 @@
       </span>
     }
   </div>
-  <span class="cell step">
-    <span class="step-name" [title]="step()">{{ step() }}</span>
-    @if (gated()) {
-      <fleet-kit-badge class="gate" tone="waiting" variant="pill">gate</fleet-kit-badge>
-    }
-    @if (blocked(); as blocker) {
-      <span class="blocked" [title]="card().blockedOn">blocked · {{ blocker }}</span>
-    }
-  </span>
+  <!-- Where the chunk is: the runner holding it, the step it is on beneath, then what it has
+       delivered — its open PRs and landed commits. -->
   <span class="cell holder">
-    <span class="runner" data-testid="list-row-runner">{{ card().runnerName ?? '' }}</span>
-    @if (card().awaitingExternalMerge || card().openPrs?.length) {
+    @if (holder(); as holder) {
+      <span class="runner" data-testid="list-row-runner" [title]="holder">{{ holder }}</span>
+    }
+    <span class="step">
+      <span class="step-name" [title]="step()">{{ step() }}</span>
+      @if (gated()) {
+        <fleet-kit-badge class="gate" tone="waiting" variant="pill">gate</fleet-kit-badge>
+      }
+      @if (blocked(); as blocker) {
+        <span class="blocked" [title]="card().blockedOn">blocked · {{ blocker }}</span>
+      }
+    </span>
+    @if (card().awaitingExternalMerge || card().openPrs?.length || card().landedRepos?.length) {
       <span class="prs">
         @if (card().awaitingExternalMerge) {
           <span class="merge-wait">awaiting merge</span>
         }
         @for (pr of card().openPrs ?? []; track pr.repo + ':' + pr.number) {
           <a [href]="pr.url" target="_blank" rel="noopener noreferrer" [title]="pr.repo + ' PR #' + pr.number">#{{ pr.number }}</a>
+        }
+        @for (landed of card().landedRepos ?? []; track landed.repo) {
+          @if (landed.url; as url) {
+            <a [href]="url" target="_blank" rel="noopener noreferrer" [title]="landed.repo + ' @ ' + landed.commit_hash">{{ landed.commit_hash.slice(0, 7) }}</a>
+          } @else {
+            <span class="commit" [title]="landed.repo + ' @ ' + landed.commit_hash">{{ landed.commit_hash.slice(0, 7) }}</span>
+          }
         }
       </span>
     }

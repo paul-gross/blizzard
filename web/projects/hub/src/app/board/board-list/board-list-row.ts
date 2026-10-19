@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
 
-import { formatCost, hasCostFigure, FleetWhen, KitBadge, KitSelectRow, KitSkeleton, STATUS_TONE, toneColor } from 'fleet';
+import { formatCost, hasCostFigure, projectColorValue, FleetWhen, KitBadge, KitSelectRow, KitSkeleton, STATUS_TONE, toneColor } from 'fleet';
 import { LaneIcon } from '../lane-icon/lane-icon';
 import type { BoardCard } from '../board-card/board-card';
 import { blockedLabel, finishedWord, foldTitles, stepLabel } from '../board-card/board-card.model';
@@ -35,11 +35,24 @@ export class BoardListRow {
 
   protected readonly expanded = signal(false);
 
+  /** The chunk's project color the row's background is tinted with, or `null` for an untinted row. */
+  protected readonly projectTint = computed(() => {
+    const color = this.card().projectColor;
+    return color ? projectColorValue(color) : null;
+  });
+
   /** Whether the chunk's work items are still unread — each title then holds a skeleton. */
   protected readonly titlesPending = computed(() => !this.card().itemsRead);
 
   /** The items the row shows — each a work-ref label over its title — and how many its fold hides. */
   protected readonly fold = computed(() => foldTitles(this.card().workLines, this.expanded()));
+
+  /** The runner holding the chunk as `host/runner` — the bare runner when its host is unknown, `null` when none holds it. */
+  protected readonly holder = computed(() => {
+    const { hostName, runnerName } = this.card();
+    if (!runnerName) return null;
+    return hostName ? `${hostName}/${runnerName}` : runnerName;
+  });
 
   protected readonly step = computed(() => stepLabel(this.card().status, this.card().node));
 

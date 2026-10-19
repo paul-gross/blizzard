@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 
-import { isHexColor, legibleOnDark } from './kit-swatch-color';
+import { isHexColor, legibleOnDark, projectColorValue } from './kit-swatch-color';
 
 /**
  * A project's color as a small rounded square — the palette name resolves to its `--project-<name>` token, and an
@@ -24,6 +24,6 @@ export class KitSwatch {
 
   protected readonly fill = computed(() => {
     const color = this.color();
-    return isHexColor(color) ? legibleOnDark(color) : `var(--project-${color}, var(--label-dim))`;
+    return isHexColor(color) ? legibleOnDark(color) : projectColorValue(color);
   });
 }

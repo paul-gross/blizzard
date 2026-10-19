@@ -14,12 +14,22 @@
   padding: 7px 10px 7px 18px;
   border-left: 3px solid var(--amber);
   border-bottom: 1px solid var(--line);
-  background: var(--surface-resting);
+  --bg-resting: var(--surface-resting);
+  --bg-hover: var(--surface-hover);
+  --bg-selected: var(--surface-selected);
+  background: var(--bg-resting);
   cursor: pointer;
   font-family: var(--mono);
 }
+/* A project-tinted row, as a board card does, keeps its project's hue at a fixed dark lightness per surface state,
+   rather than blending the color into the surface, which greys it. */
+.row.tinted {
+  --bg-resting: oklch(from var(--project-tint) 0.22 min(calc(c * 0.5), 0.07) h);
+  --bg-hover: oklch(from var(--project-tint) 0.26 min(calc(c * 0.5), 0.07) h);
+  --bg-selected: oklch(from var(--project-tint) 0.3 min(calc(c * 0.5), 0.07) h);
+}
 .row:hover {
-  background: var(--surface-hover);
+  background: var(--bg-hover);
 }
 /* The open control fills the row beneath its cells; the cells pass a click down to it, but for
    the controls among them. */
@@ -43,7 +53,7 @@
 }
 .row.selected[data-status] {
   border-left-color: var(--cyan);
-  background: var(--surface-selected);
+  background: var(--bg-selected);
 }
 .row[data-status='done'],
 .row[data-status='stopped'] {
@@ -76,7 +86,7 @@
 .row[data-status='needs_human'] .id {
   color: var(--red);
 }
-/* A work item: its work-source link over its title. */
+/* A work item: its work-ref label over its title. */
 .item {
   display: flex;
   flex-direction: column;
@@ -91,12 +101,6 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-a.ref {
-  text-decoration: none;
-}
-a.ref:hover {
-  text-decoration: underline;
 }
 .title-skeleton {
   width: 100%;
@@ -161,7 +165,7 @@ a.ref:hover {
   color: var(--amber);
   white-space: nowrap;
 }
-/* The runner holding the chunk, its open PRs beneath. */
+/* The runner holding the chunk, its step beneath, then its PRs and landed commits. */
 .holder {
   display: flex;
   flex-direction: column;
@@ -178,6 +182,9 @@ a.ref:hover {
 }
 .prs a {
   color: var(--cyan);
+}
+.commit {
+  color: var(--label);
 }
 .merge-wait {
   color: var(--amber-hi);
