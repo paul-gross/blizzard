@@ -11,6 +11,7 @@
     @if (detail(); as d) {
       <app-chunk-detail-panel
         [detail]="d"
+        [projectColor]="projectColor()"
         [workItems]="workItems()"
         [actionError]="actionError()"
         [actionOutcome]="actionOutcome()"
@@ -23,7 +24,6 @@
         [completePending]="completePending()"
         [deletePending]="deletePending()"
         [resolvePending]="resolvePending()"
-        [graphPending]="graphPending()"
         [pendingAnswerQuestionIds]="pendingAnswerQuestionIds()"
         [renderedStatus]="renderedStatus(d)"
         (dismiss)="dismiss.emit()"
@@ -34,7 +34,6 @@
         (resumeChunk)="onResume($event)"
         (complete)="onComplete($event)"
         (delete)="onDelete($event)"
-        (editGraph)="onEditGraph($event)"
       />
     }
   </fleet-kit-async-state>

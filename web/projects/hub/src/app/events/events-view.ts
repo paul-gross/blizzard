@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 
-import { type EventView, hubApi, compactRef, runnerDisplayName, runnerTitle, KitAsyncState, type KitAsyncStateValue, KitBadge, KitButton, KitChips, type KitChipOption, KitSelect, KitPanel, type Tone, FleetWhen } from 'fleet';
+import { type EventView, hubApi, compactRef, runnerDisplayName, runnerTitle, injectRunnerHostNames, KitAsyncState, type KitAsyncStateValue, KitBadge, KitButton, KitChips, type KitChipOption, KitSelect, KitPanel, type Tone, FleetWhen } from 'fleet';
 
 /** Each severity's chip label. */
 const SEVERITY_LABEL: Readonly<Record<hubApi.EventLogSeverity, string>> = {
@@ -57,6 +57,8 @@ export class EventsView {
   /** The event feed to render, in the order given (server-sorted). */
   readonly events = input.required<readonly EventView[]>();
 
+  private readonly runnerHosts = injectRunnerHostNames();
+
   /** The active severity filter, or `null` for "all" — highlights the matching chip. */
   readonly severity = input<string | null>(null);
 
@@ -99,7 +101,7 @@ export class EventsView {
    * labelled with the runner's display name. Empty when the container handed no ids (nothing to filter). */
   protected readonly runnerFilterOptions = computed(() =>
     EventsView.toOptions(this.runnerIds(), 'events-runner-filter', (id) =>
-      runnerDisplayName(id, this.runnerNames().get(id)),
+      runnerDisplayName(id, this.runnerNames().get(id), this.runnerHosts().get(id)),
     ),
   );
 
@@ -131,10 +133,14 @@ export class EventsView {
     return compactRef(id);
   }
 
-  protected readonly runnerName = runnerDisplayName;
+  protected runnerName(runnerId: string, name: string | null | undefined): string {
+    return runnerDisplayName(runnerId, name, this.runnerHosts().get(runnerId));
+  }
 
   /** The runner cell's tooltip — the display name the cell may ellipsize, then the full id it compacts. */
-  protected readonly runnerTitle = runnerTitle;
+  protected runnerTitle(runnerId: string, name: string | null | undefined): string {
+    return runnerTitle(runnerId, name, this.runnerHosts().get(runnerId));
+  }
 
   protected onChoose(value: string): void {
     this.filterChange.emit(value);

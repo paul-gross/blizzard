@@ -1,13 +1,10 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 
-import { type ChunkDetail, type ChunkStatus, type AnswerQuestionEvent, ChunkAwaitingHuman, type ResolveDecisionEvent, ChunkDelivery, ChunkFacts, type EditGraphEvent, ChunkIssuePane, ChunkTimeline, ChunkTokenBreakdown, type WorkItemsState } from 'fleet';
+import { type ChunkDetail, type ChunkStatus, type AnswerQuestionEvent, ChunkAwaitingHuman, type ResolveDecisionEvent, ChunkDelivery, ChunkFacts, ChunkIssuePane, ChunkTimeline, ChunkTokenBreakdown, type WorkItemsState } from 'fleet';
 import { ChunkArtifacts } from './chunk-artifacts';
 import { ChunkDetailHeader } from './chunk-detail-header';
 
 export type { AnswerQuestionEvent, ResolveDecisionEvent } from 'fleet';
-// Re-exported alongside the panel's own outputs, so a consumer binding them
-// imports their event types from here.
-export type { EditGraphEvent } from 'fleet';
 
 /**
  * The chunk detail dock — a thin **composition** of presentational regions: the
@@ -42,6 +39,9 @@ export class ChunkDetailPanel {
   /** The chunk aggregate to render (status, current node, history, artifacts). */
   readonly detail = input.required<ChunkDetail>();
 
+  /** The chunk's project's color, forwarded to {@link ChunkDetailHeader}; `null` when unknown. */
+  readonly projectColor = input<string | null>(null);
+
   /** The chunk's related work items + fetch state, rendered by the Issue tab.
    * Defaults to `loading`. */
   readonly workItems = input<WorkItemsState>({ status: 'loading', items: [] });
@@ -54,9 +54,8 @@ export class ChunkDetailPanel {
    * still needs saying. Rendered as news, not as a failure. */
   readonly actionOutcome = input<string | null>(null);
 
-  /** Whether the current identity may pause/resume/detach or set the chunk's graph
-   * (`chunk:control`), forwarded to {@link ChunkDetailHeader} and
-   * {@link ChunkFacts}. `null`/pending resolves to `false`. */
+  /** Whether the current identity may pause/resume/detach the chunk
+   * (`chunk:control`), forwarded to {@link ChunkDetailHeader}. `null`/pending resolves to `false`. */
   readonly canControl = input(false);
 
   /** The graphs view's own path segments, forwarded to {@link ChunkFacts} and
@@ -86,9 +85,6 @@ export class ChunkDetailPanel {
   /** Whether the resolve-decision mutation is in flight, forwarded to
    * {@link ChunkAwaitingHuman}. */
   readonly resolvePending = input(false);
-
-  /** Whether a graph repin is in flight for this chunk, forwarded to {@link ChunkFacts}. */
-  readonly graphPending = input(false);
 
   /** The ids of the questions an answer mutation is in flight for, forwarded to
    * {@link ChunkAwaitingHuman}. */
@@ -123,9 +119,6 @@ export class ChunkDetailPanel {
 
   /** Emitted with the chunk id when the operator confirms Delete. */
   readonly delete = output<string>();
-
-  /** Emitted when the operator sets a not-ready chunk's graph from the facts column. */
-  readonly editGraph = output<EditGraphEvent>();
 
   /** The chunk's work ref count — legible before the forge read lands, for the
    * work-item column's own heading. */

@@ -1,6 +1,4 @@
-<!-- Graph is always shown; the edit row only while the chunk is still
-     not_ready — the same shape as the open-question answer
-     control, gated on the fact rather than confirmed. -->
+<!-- The pinned graph, read-only: linked to the graph page when a link base is set. -->
 <ng-template #graphValue>
   @if (graphLinkBase(); as linkBase) {
     <a
@@ -12,21 +10,6 @@
     >
   } @else {
     <span data-testid="graph-value" [title]="detail().graph_id">{{ graphLabel() }}</span>
-  }
-  @if (editable() && canControl()) {
-    <span class="edit-row">
-      <fleet-kit-text-input
-        class="edit-input"
-        testid="graph-input"
-        placeholder="New graph id…"
-        [ariaLabel]="'Set graph for chunk ' + detail().chunk_id"
-        [value]="graphDraft()"
-        (valueChange)="graphDraft.set($event)"
-      />
-      <fleet-kit-button testid="graph-submit" [disabled]="graphPending()" (click)="submitGraph(graphDraft())">
-        Set
-      </fleet-kit-button>
-    </span>
   }
 </ng-template>
 <!-- The chunk's standing edges, each direction its own row. Only the neighbor's ref

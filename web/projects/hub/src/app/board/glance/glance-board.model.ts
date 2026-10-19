@@ -12,8 +12,8 @@ export function liveRunners(runners: readonly RunnerRegistryView[]): readonly Ru
 }
 
 /** The display name of the runner holding a chunk's route, or `null` when none does. */
-function chunkRunner(chunk: ChunkSummary): string | null {
-  return chunk.runner_id ? runnerDisplayName(chunk.runner_id, chunk.runner_name) : null;
+function chunkRunner(chunk: ChunkSummary, hostNames: ReadonlyMap<string, string>): string | null {
+  return chunk.runner_id ? runnerDisplayName(chunk.runner_id, chunk.runner_name, hostNames.get(chunk.runner_id)) : null;
 }
 
 /**
@@ -25,19 +25,20 @@ export function needsYouRows(
   questions: readonly QuestionView[],
   decisions: readonly DecisionView[],
   chunks: readonly ChunkSummary[],
+  hostNames: ReadonlyMap<string, string>,
 ): readonly AttentionRow[] {
   const rows = new Map<string, AttentionRow>();
   for (const question of questions) {
     rows.set(question.chunk_id, {
       chunkId: question.chunk_id,
       shortId: compactRef(question.chunk_id),
-      runner: runnerDisplayName(question.runner_id, question.runner_name),
+      runner: runnerDisplayName(question.runner_id, question.runner_name, hostNames.get(question.runner_id)),
       tone: 'waiting',
       pillLabel: 'ask',
       sub: question.question,
     });
   }
-  const runnerOf = new Map(chunks.map((chunk) => [chunk.chunk_id, chunkRunner(chunk)]));
+  const runnerOf = new Map(chunks.map((chunk) => [chunk.chunk_id, chunkRunner(chunk, hostNames)]));
   for (const decision of decisions) {
     if (rows.has(decision.chunk_id)) continue;
     rows.set(decision.chunk_id, {
@@ -56,7 +57,7 @@ export function needsYouRows(
     rows.set(chunk.chunk_id, {
       chunkId: chunk.chunk_id,
       shortId: compactRef(chunk.chunk_id),
-      runner: chunkRunner(chunk),
+      runner: chunkRunner(chunk, hostNames),
       tone,
       pillLabel: tone === 'needs' ? 'needs human' : 'waiting',
       sub: chunk.current_node_name ?? chunk.current_node_id ?? '—',
@@ -66,13 +67,13 @@ export function needsYouRows(
 }
 
 /** Chunks in `STATUS_TONE`'s running lane (`running` + `delivering`) — the "In motion" rows. */
-export function inMotionRows(chunks: readonly ChunkSummary[]): readonly MotionRow[] {
+export function inMotionRows(chunks: readonly ChunkSummary[], hostNames: ReadonlyMap<string, string>): readonly MotionRow[] {
   return chunks
     .filter((chunk) => STATUS_TONE[chunk.status] === 'running')
     .map((chunk) => ({
       chunkId: chunk.chunk_id,
       shortId: compactRef(chunk.chunk_id),
-      runner: chunkRunner(chunk),
+      runner: chunkRunner(chunk, hostNames),
       node: chunk.current_node_name ?? chunk.current_node_id ?? '—',
       pillLabel: chunk.status === 'delivering' ? ('deliver' as const) : ('run' as const),
       costUsd: chunk.cost?.cost_usd ?? 0,

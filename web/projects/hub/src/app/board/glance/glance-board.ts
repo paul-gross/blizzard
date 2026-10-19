@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
-import { FleetLiveUpdates, asyncState, asyncStateOf, injectNowSignal, type ChunkSummary, type KitAsyncStateValue } from 'fleet';
+import { FleetLiveUpdates, asyncState, asyncStateOf, injectNowSignal, injectRunnerHostNames, type ChunkSummary, type KitAsyncStateValue } from 'fleet';
 import { injectHubBoardChunksQuery } from '../../core/chunks.query';
 import { injectHubChunkCountsQuery } from '../chunks/chunk-counts.query';
 import { injectHubFleetSpendQuery } from '../fleet-spend/fleet-spend.query';
@@ -37,6 +37,7 @@ export class GlanceBoard {
   private readonly live = inject(FleetLiveUpdates);
 
   private readonly now = injectNowSignal();
+  private readonly runnerHosts = injectRunnerHostNames();
 
   /** Local midnight, cut from the shared clock; string equality stops the tick here, so the spend key changes only when the day does. */
   private readonly dayStart = computed(() => startOfLocalDayIso(this.now()));
@@ -49,9 +50,9 @@ export class GlanceBoard {
   private readonly decisions = computed(() => this.decisionsQuery.data() ?? []);
   private readonly runners = computed(() => liveRunners(this.runnersQuery.data() ?? []));
 
-  protected readonly needsYou = computed<readonly AttentionRow[]>(() => needsYouRows(this.questions(), this.decisions(), this.chunks()));
+  protected readonly needsYou = computed<readonly AttentionRow[]>(() => needsYouRows(this.questions(), this.decisions(), this.chunks(), this.runnerHosts()));
 
-  protected readonly inMotion = computed<readonly MotionRow[]>(() => inMotionRows(this.chunks()));
+  protected readonly inMotion = computed<readonly MotionRow[]>(() => inMotionRows(this.chunks(), this.runnerHosts()));
 
   protected readonly upNext = computed<readonly UpNextRow[]>(() => upNextRows(this.queueQuery.data() ?? [], this.chunks()));
 

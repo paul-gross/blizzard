@@ -24,9 +24,9 @@
 /* A project-tinted row, as a board card does, keeps its project's hue at a fixed dark lightness per surface state,
    rather than blending the color into the surface, which greys it. */
 .row.tinted {
-  --bg-resting: oklch(from var(--project-tint) 0.22 min(calc(c * 0.5), 0.07) h);
-  --bg-hover: oklch(from var(--project-tint) 0.26 min(calc(c * 0.5), 0.07) h);
-  --bg-selected: oklch(from var(--project-tint) 0.3 min(calc(c * 0.5), 0.07) h);
+  --bg-resting: oklch(from var(--project-tint) 0.22 min(calc(c * 0.42), 0.058) h);
+  --bg-hover: oklch(from var(--project-tint) 0.26 min(calc(c * 0.42), 0.058) h);
+  --bg-selected: oklch(from var(--project-tint) 0.3 min(calc(c * 0.42), 0.058) h);
 }
 .row:hover {
   background: var(--bg-hover);

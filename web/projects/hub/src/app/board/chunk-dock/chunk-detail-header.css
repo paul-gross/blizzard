@@ -44,6 +44,24 @@
   text-transform: uppercase;
   white-space: nowrap;
 }
+/* The project leading the identity line, its swatch centred on its name. */
+.d-sub .project {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text);
+  font-size: var(--fs-xs);
+  white-space: nowrap;
+}
+/* The runner holding the chunk; a long name clips, its title carrying the whole name and id. */
+.d-sub .runner {
+  min-width: 0;
+  color: var(--cyan);
+  font-size: var(--fs-xs);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 /* The dot between adjacent items on the identity line — its own child rather than a
    pseudo-element on each item, so it never lands inside a pointer's anchor and become
    part of that link's own click target. */
@@ -90,39 +108,23 @@ a.edge-ref:focus-visible {
   justify-content: flex-end;
   gap: 8px;
 }
-.d-meta .nd {
-  color: var(--label);
-  font-size: var(--fs-label);
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  white-space: nowrap;
-}
 /* The pause marker reads amber — an operator-held state, not a fault. */
 .d-meta .pb {
   color: var(--amber-hi);
   font-size: var(--fs-xs);
   white-space: nowrap;
 }
-.d-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
+/* The ⋯ trigger and the close button, matched as two square targets large enough to hit
+   without aiming. */
+.actions {
+  --kit-menu-trigger-pad: 8px 15px;
+  --kit-menu-trigger-fs: var(--fs-lg);
 }
-/* The non-interactive "Claimed by <runner>" fact — plain text, no "Route" label. 31ch holds
-   `Claimed by R-XXXX.` and a name of up to 13 characters whole; a longer name clips from its
-   end, never the compact id leading it — what tells two runners sharing a name apart — and
-   the title carries the whole display name and the full id. */
-.claimed {
-  color: var(--cyan);
-  font-size: var(--fs-xs);
-  max-width: 31ch;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.close {
+  --kit-button-pad: 2px 10px;
+  --kit-button-fs: var(--fs-lg);
 }
-/* The ⋯ menu panel's own divider between Detach and Complete/Delete — a hairline,
+/* The ⋯ menu panel's own divider between the claim actions and Complete/Delete — a hairline,
    on the same `--line` token `.d-head`'s own border uses. */
 .menu-divider {
   border: none;
@@ -141,6 +143,4 @@ a.edge-ref:focus-visible {
 .danger:focus {
   color: var(--red);
 }
-.close {
-  --kit-button-pad: 2px 6px;
-}
+

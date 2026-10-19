@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 
-import { type KitAsyncStateValue, FleetLiveUpdates, type LoggedEvent } from 'fleet';
+import { type KitAsyncStateValue, FleetLiveUpdates, type LoggedEvent, injectRunnerHostNames } from 'fleet';
 import { ACTIVITY_LIMIT, injectHubActivityQuery } from './activity.query';
 import { ActivityFeedView, type ActivityRow } from './activity-view';
 import { activityPanelState, activityRows, backfillEvents, mergeActivityFeeds } from './activity-panel.model';
@@ -22,6 +22,7 @@ const RENDER_LIMIT = ACTIVITY_LIMIT;
 })
 export class ActivityPanel {
   private readonly live = inject(FleetLiveUpdates);
+  private readonly runnerHosts = injectRunnerHostNames();
   protected readonly activityQuery = injectHubActivityQuery();
 
   private readonly backfill = computed<readonly LoggedEvent[]>(() => backfillEvents(this.activityQuery.data()));
@@ -30,7 +31,7 @@ export class ActivityPanel {
     mergeActivityFeeds(this.backfill(), this.live.log(), RENDER_LIMIT),
   );
 
-  protected readonly rows = computed<readonly ActivityRow[]>(() => activityRows(this.merged()));
+  protected readonly rows = computed<readonly ActivityRow[]>(() => activityRows(this.merged(), this.runnerHosts()));
 
   /** The panel's async state — {@link activityPanelState}. */
   protected readonly state = computed<KitAsyncStateValue>(() =>

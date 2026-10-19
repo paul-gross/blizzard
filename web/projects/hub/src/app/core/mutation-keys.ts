@@ -13,7 +13,6 @@ export const graphLifecycleMutationKey = ['hub', 'mutation', 'graph-lifecycle'] 
 export const chunkDetachMutationKey = ['hub', 'mutation', 'chunk-detach'] as const;
 export const chunkCompleteMutationKey = ['hub', 'mutation', 'chunk-complete'] as const;
 export const chunkDeleteMutationKey = ['hub', 'mutation', 'chunk-delete'] as const;
-export const chunkSetGraphMutationKey = ['hub', 'mutation', 'chunk-set-graph'] as const;
 export const answerQuestionMutationKey = ['hub', 'mutation', 'answer-question'] as const;
 export const resolveDecisionMutationKey = ['hub', 'mutation', 'resolve-decision'] as const;
 export const scopeLifecycleMutationKey = ['hub', 'mutation', 'scope-lifecycle'] as const;

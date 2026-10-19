@@ -1,11 +1,11 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, input, output, signal } from '@angular/core';
 
-import { type ChunkDetail as ChunkDetailAggregate, type ChunkStatus, injectHubChunkDetailQuery, injectHubChunkWorkItemsQuery, errorMessage, FLEET_CLOCK, KitAsyncState, type KitAsyncStateValue, injectPendingMutationVariables, isPendingFor, asyncState, type WorkItemsState, type AnswerQuestionEvent, type EditGraphEvent, type ResolveDecisionEvent } from 'fleet';
+import { type ChunkDetail as ChunkDetailAggregate, type ChunkStatus, injectHubChunkDetailQuery, injectHubChunkWorkItemsQuery, errorMessage, FLEET_CLOCK, KitAsyncState, type KitAsyncStateValue, injectPendingMutationVariables, isPendingFor, asyncState, type WorkItemsState, type AnswerQuestionEvent, type ResolveDecisionEvent } from 'fleet';
 import { hasPermission, injectMeQuery } from '../../core/auth/me.query';
+import { injectProjectsQuery } from '../../core/projects.query';
 import { injectCompleteChunkMutation, type CompleteVars } from '../chunks/complete.mutations';
 import { type DeleteVars, injectDeleteChunkMutation } from '../chunks/delete.mutations';
 import { type DetachVars, injectDetachChunkMutation } from '../chunks/detach.mutations';
-import { type ChunkGraphEditVars, injectSetChunkGraphMutation } from '../chunks/edit.mutations';
 import {
   type AnswerFailure,
   type AnswerVars,
@@ -22,7 +22,6 @@ import {
   chunkDeleteMutationKey,
   chunkDetachMutationKey,
   chunkPauseMutationKey,
-  chunkSetGraphMutationKey,
   resolveDecisionMutationKey,
 } from '../../core/mutation-keys';
 import { openDetail, openWorkItems, pendingQuestionIds, pendingStatusOverride } from './chunk-detail.model';
@@ -65,11 +64,11 @@ export class ChunkDetail {
   private readonly pauseMutation = injectChunkPauseMutation();
   private readonly completeMutation = injectCompleteChunkMutation();
   private readonly deleteMutation = injectDeleteChunkMutation();
-  private readonly editGraphMutation = injectSetChunkGraphMutation();
   private readonly meQuery = injectMeQuery();
+  private readonly projectsQuery = injectProjectsQuery();
   private readonly clock = inject(FLEET_CLOCK);
 
-  /** Whether the current identity may pause/resume/detach or set the chunk's graph
+  /** Whether the current identity may pause/resume/detach the chunk
    * (`chunk:control`); `null`/pending resolves to `false`. */
   protected readonly canControl = computed(() => hasPermission(this.meQuery.data(), 'chunk:control'));
 
@@ -88,9 +87,6 @@ export class ChunkDetail {
 
   /** The same, for Resolve decision. */
   private readonly pendingResolves = injectPendingMutationVariables<ResolveVars>(resolveDecisionMutationKey);
-
-  /** The same, for Set graph. */
-  private readonly pendingGraphEdits = injectPendingMutationVariables<ChunkGraphEditVars>(chunkSetGraphMutationKey);
 
   /** Whether a Pause/Resume is in flight for the open chunk. Scoped to `chunkId` because
    * this container stays mounted across a selection change: a pause fired on one chunk must not disable another's controls,
@@ -112,11 +108,6 @@ export class ChunkDetail {
   /** Whether a Delete is in flight for the open chunk. */
   protected readonly deletePending = computed(() =>
     isPendingFor(this.pendingChunkDeletes(), (v) => v.chunkId === this.chunkId()),
-  );
-
-  /** Whether a Set graph is in flight for the open chunk. */
-  protected readonly graphPending = computed(() =>
-    isPendingFor(this.pendingGraphEdits(), (v) => v.chunkId === this.chunkId()),
   );
 
   /** Every chunk id a Pause/Resume mutation is currently pending for, with its variables
@@ -170,6 +161,13 @@ export class ChunkDetail {
 
   /** The open chunk's aggregate, or `undefined` while closed / still loading. */
   protected readonly detail = computed(() => openDetail(this.chunkId(), this.detailQuery.data()));
+
+  /** The open chunk's project's color, joined from the projects list by `project_id` — `null` until that list is read
+   * or when the project is unknown. */
+  protected readonly projectColor = computed(() => {
+    const projectId = this.detail()?.project_id;
+    return this.projectsQuery.data()?.find((project) => project.project_id === projectId)?.color ?? null;
+  });
 
   /**
    * The detail read's async state. Read only once a chunk is open: the query is
@@ -257,14 +255,6 @@ export class ChunkDetail {
         onSuccess: () => this.dismiss.emit(),
         onError: (error) => this.actionError.set(errorMessage(error, 'Delete failed.')),
       },
-    );
-  }
-
-  protected onEditGraph(event: EditGraphEvent): void {
-    this.beginAction();
-    this.editGraphMutation.mutate(
-      { chunkId: event.chunkId, graphId: event.graphId },
-      { onError: (error) => this.actionError.set(errorMessage(error, 'Set graph failed.')) },
     );
   }
 }

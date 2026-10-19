@@ -1,29 +1,17 @@
-import { ChangeDetectionStrategy, Component, TemplateRef, computed, input, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, TemplateRef, computed, input } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
 import type { ChunkDetail, ChunkNeighborView, RouteView } from '../../api/hub';
 import { compactRef } from '../../core/compact-ref';
-import { runnerDisplayName } from '../../core/runner-display-name';
-import { KitButton } from '../../kit/kit-button';
-import { KitTextInput } from '../../kit/kit-text-input';
+import { injectRunnerHostNames, runnerDisplayName } from '../../core/runner-display-name';
 import { KitFactList, type KitFact } from '../../kit/kit-fact-list';
 import { formatUtcYmd } from '../../core/when';
 import { LensLink } from '../../core/lens-link';
 
-/** Emitted when the operator repins a not-ready chunk's graph from the dock. */
-export interface EditGraphEvent {
-  readonly chunkId: string;
-  readonly graphId: string;
-}
-
 /**
  * The chunk's own facts — the fixed-height glance a long issue
  * body must not scroll away: status, node, runner, attempts, and its pinned
- * **graph**, editable inline (text-input-and-Set) while the chunk is unclaimed and has
- * not yet moved. The edit row is gated
- * on {@link editable} — the fact, not a confirm — so the control simply disappears once
- * the pin is the engine's rather than staying up to fail a 409.
-
+ * **graph**.
  *
  * Projects {@link ChunkTokenBreakdown}'s cost/tokens rows into the `[token-breakdown]`
  * slot between Attempts and Graph, so the two components share one continuous
@@ -32,22 +20,13 @@ export interface EditGraphEvent {
 @Component({
   selector: 'fleet-chunk-detail-facts',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitButton, KitFactList, KitTextInput, RouterLink, LensLink],
+  imports: [KitFactList, RouterLink, LensLink],
   templateUrl: './chunk-facts.html',
   styleUrl: './chunk-facts.css',
 })
 export class ChunkFacts {
-  protected readonly graphDraft = signal('');
   /** The chunk aggregate to render (status, node, route, epoch, graph). */
   readonly detail = input.required<ChunkDetail>();
-
-  /** Whether the current identity may set the chunk's graph (`chunk:control`).
-   * Withholds the edit row when `false`, alongside {@link editable};
-   * `null`/pending resolves to `false` (hidden until confirmed). */
-  readonly canControl = input(false);
-
-  /** Whether a graph repin is in flight for this chunk; disables the Set button. */
-  readonly graphPending = input(false);
 
   /** The graphs view's own path segments, before the graph id — when set, the Graph
    * row's value links there (`/graphs/:graphId`, `graphs-page.ts`) so the operator can
@@ -61,9 +40,7 @@ export class ChunkFacts {
    * since both apps have this route. */
   readonly chunkLinkBase = input<readonly string[]>(['/board', 'chunk']);
 
-  /** Emitted when the operator sets a not-ready chunk's graph. No
-   * confirm — repinning either before the chunk has run costs nothing to undo. */
-  readonly editGraph = output<EditGraphEvent>();
+  private readonly runnerHosts = injectRunnerHostNames();
 
   /** The chunk's live route, read here as a plain fact. */
   private readonly route = computed<RouteView | null>(() => this.detail().route ?? null);
@@ -71,7 +48,7 @@ export class ChunkFacts {
   /** The display name of the runner holding the chunk's route, or `—` when nothing holds it. */
   protected readonly runner = computed<string>(() => {
     const route = this.route();
-    return route ? runnerDisplayName(route.runner_id, route.runner_name) : '—';
+    return route ? runnerDisplayName(route.runner_id, route.runner_name, this.runnerHosts().get(route.runner_id)) : '—';
   });
 
   /**
@@ -99,9 +76,6 @@ export class ChunkFacts {
     return `${ref}#${detail.graph_name}-${ymd}`;
   });
 
-  /** Whether the chunk's graph may be edited — read straight off the wire's `graph_editable`. */
-  protected readonly editable = computed<boolean>(() => this.detail().graph_editable ?? false);
-
   /** The chunk's standing dependency edges, each direction its own fact row. Placement
    * pinned by `chunk-facts-alignment.shell-sweep.spec.ts`'s "keeps a standing-edge row's
    * value column…" case; the edge-less-direction-renders-no-row behavior by
@@ -124,14 +98,6 @@ export class ChunkFacts {
    * facts fail to resolve (`status: null`). */
   protected statusLabel(neighbor: ChunkNeighborView): string {
     return neighbor.status ?? 'unknown';
-  }
-
-  /** Emit a graph repin — no-op on a blank id. */
-  protected submitGraph(graphId: string): void {
-    const trimmed = graphId.trim();
-    if (!trimmed) return;
-    this.editGraph.emit({ chunkId: this.detail().chunk_id, graphId: trimmed });
-    this.graphDraft.set('');
   }
 
   /** The node fact's rendered value — the current node's name, falling back to its

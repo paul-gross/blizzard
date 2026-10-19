@@ -4,7 +4,7 @@ import { RouterLink } from '@angular/router';
 import type { WorkItemAuthorView, WorkItemEntry, WorkItemPriority } from '../../api/hub';
 import { KitAccordionSection, KitAsyncState, KitBadge, KitMarkdown } from '../../kit';
 import type { Tone } from '../../kit';
-import { runnerDisplayName } from '../../core/runner-display-name';
+import { injectRunnerHostNames, runnerDisplayName } from '../../core/runner-display-name';
 import { LensLink } from '../../core/lens-link';
 
 /** A stated priority's badge tone — advice for the triaging human, never
@@ -51,6 +51,8 @@ const PRIORITY_TONE: Record<WorkItemPriority, Tone> = {
   styleUrl: './chunk-issue-list.css',
 })
 export class ChunkIssueList {
+  private readonly runnerHosts = injectRunnerHostNames();
+
   /** The chunk's resolved work items — already past the loading/error/empty
    * triad, one entry per pointer. */
   readonly items = input.required<readonly WorkItemEntry[]>();
@@ -114,7 +116,7 @@ export class ChunkIssueList {
 
   /** A `fleet`-authored item's proposing runner, by display name. */
   protected runnerLabel(author: WorkItemAuthorView): string {
-    return author.runner_id ? runnerDisplayName(author.runner_id, author.runner_name) : 'unknown';
+    return author.runner_id ? runnerDisplayName(author.runner_id, author.runner_name, this.runnerHosts().get(author.runner_id)) : 'unknown';
   }
 
   /** Whether `item`'s section reads open right now — the operator's own

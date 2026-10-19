@@ -5,7 +5,7 @@ import { KitButton } from '../../kit/kit-button';
 import { KitChips, type KitChipOption } from '../../kit/kit-chips';
 import { KitTextInput } from '../../kit/kit-text-input';
 import { FleetWhen } from '../../core/when-display/fleet-when';
-import { runnerDisplayName } from '../../core/runner-display-name';
+import { injectRunnerHostNames, runnerDisplayName } from '../../core/runner-display-name';
 import { ChunkEscalation } from './chunk-escalation';
 
 /** Emitted when the operator answers a chunk's open question from the dock. */
@@ -99,8 +99,12 @@ export class ChunkAwaitingHuman {
   /** Each open question's in-progress answer, keyed by `question_id`. */
   private readonly answerDrafts = signal<Readonly<Partial<Record<string, string>>>>({});
 
-  /** A gate-imposing runner's display name. */
-  protected readonly runnerDisplayName = runnerDisplayName;
+  private readonly runnerHosts = injectRunnerHostNames();
+
+  /** A gate-imposing runner's display name, with its host when known. */
+  protected hostedRunnerName(runnerId: string, name: string | null | undefined): string {
+    return runnerDisplayName(runnerId, name, this.runnerHosts().get(runnerId));
+  }
 
   /** The chunk's open (unanswered) questions — the ask a parked chunk waits on. */
   protected readonly openQuestions = computed<readonly QuestionView[]>(() =>

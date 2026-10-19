@@ -4,7 +4,6 @@ import { ActivatedRoute, RouterLink } from '@angular/router';
 
 import { ChunkArtifactsPanel } from '../chunk-artifacts-panel/chunk-artifacts-panel';
 import type { AnswerQuestionEvent, ResolveDecisionEvent } from '../chunk-detail/chunk-awaiting-human';
-import type { EditGraphEvent } from '../chunk-detail/chunk-facts';
 import { deriveWorkItemsState, type WorkItemsState } from '../chunk-detail/work-items-state';
 import { STATUS_TONE } from '../../core/chunk-lanes';
 import { KitAsyncState, type KitAsyncStateValue } from '../../kit/kit-async-state';
@@ -191,12 +190,10 @@ export class ChunkPage {
     () => this.chunkId(),
   );
 
-  protected readonly canControl = computed(() => this.actions?.canControl() ?? false);
   protected readonly canAnswer = computed(() => this.actions?.canAnswer() ?? false);
   protected readonly canResolve = computed(() => this.actions?.canResolve() ?? false);
   protected readonly resolvePending = computed(() => this.actions?.resolvePending() ?? false);
   protected readonly pendingAnswerQuestionIds = computed(() => this.actions?.pendingAnswerQuestionIds() ?? []);
-  protected readonly pendingGraphChunkIds = computed(() => this.actions?.pendingGraphChunkIds() ?? []);
   protected readonly actionError = computed(() => this.actions?.actionError() ?? null);
   protected readonly actionOutcome = computed(() => this.actions?.actionOutcome() ?? null);
 
@@ -237,9 +234,5 @@ export class ChunkPage {
 
   protected onResolve(event: ResolveDecisionEvent): void {
     this.actions?.resolve(event);
-  }
-
-  protected onEditGraph(event: EditGraphEvent): void {
-    this.actions?.editGraph(event);
   }
 }
