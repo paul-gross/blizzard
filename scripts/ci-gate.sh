@@ -6,7 +6,7 @@
 #   ruff format --check · ruff check · pyright · Vale prose lint ·
 #   structural gate (ast-grep scan + test) · pytest (unit + component) · OpenAPI
 #   spec drift · hub↔runner wire compatibility · change notes · eslint · vitest · web
-#   structural gate · bundle composition · generated-client drift
+#   structural gate · bundle composition · story render · generated-client drift
 #
 # Invoke as `mise run gate` or `./scripts/ci-gate.sh`. Frontend steps run live
 # against the Angular workspace at $WEB_DIR, guarded only so a checkout without
@@ -84,10 +84,11 @@ mise run wire-compat
 step "change notes: mise run change-notes"
 mise run change-notes
 
-# --- Frontend: eslint + vitest + structural gate + generated-client drift ---
+# --- Frontend: eslint + vitest + structural gate + story render + generated-client drift ---
 # $WEB_DIR is the Angular workspace with `npm run lint` (eslint, including the
 # `max-lines` ceiling), `npm run test` (vitest), `npm run structural-gate`
-# (the real-timer, kit-floor, and retired-board-control sweeps), and
+# (the real-timer, kit-floor, and retired-board-control sweeps), `npm run story-render`
+# (type-checks the stories, builds the workshop, renders every story in headless Chromium), and
 # `npm run generate:client` (openapi-ts codegen of the committed client).
 # Guarded so a checkout without $WEB_DIR is still a green no-op.
 if [ -f "$WEB_DIR/package.json" ]; then
@@ -119,6 +120,9 @@ if [ -f "$WEB_DIR/package.json" ]; then
 
   step "bundle composition ($WEB_DIR) (web:bundle-composition)"
   ( cd "$WEB_DIR" && npm run bundle-check )
+
+  step "story render ($WEB_DIR) (web:story-render)"
+  ( cd "$WEB_DIR" && npm run story-render )
 
   step "generated-client drift ($WEB_DIR): openapi-ts codegen + git diff"
   ( cd "$WEB_DIR" && npm run generate:client >/dev/null )

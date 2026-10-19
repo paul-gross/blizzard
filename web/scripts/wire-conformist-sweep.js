@@ -88,6 +88,7 @@ function inBackendCitationScope(rel) {
   return (
     rel.endsWith(".ts") &&
     !rel.endsWith(".spec.ts") &&
+    !rel.endsWith(".stories.ts") &&
     !rel.startsWith(GENERATED_API_DIR)
   );
 }
@@ -163,6 +164,7 @@ function assertBackendCitationDetectorWorks() {
   }
   for (const rel of [
     "hub/src/app/board/board.spec.ts",
+    "fleet/src/lib/kit/kit-button.stories.ts",
     "fleet/src/lib/api/hub/types.gen.ts",
   ]) {
     if (inBackendCitationScope(rel))
@@ -322,6 +324,7 @@ function assertClientCallPlacementDetectorWorks() {
   }
   for (const rel of [
     "hub/src/app/board/board.spec.ts",
+    "fleet/src/lib/kit/kit-button.stories.ts",
     "hub/src/app/board/chunks.query.ts",
     "hub/src/app/admin/assign-role.mutations.ts",
     "fleet/src/lib/api/runner/index.ts",

@@ -165,3 +165,8 @@ run = "npm run storybook"
 description = "Build the static component workshop into web/dist/storybook"
 dir = "web"
 run = "npm run storybook:build"
+
+[tasks.web-story-render]
+description = "Type-check the stories, build the workshop, and render every story in headless Chromium"
+dir = "web"
+run = "npm run story-render"

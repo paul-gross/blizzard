@@ -13,7 +13,7 @@ every trigger workflow: ruff format+check, pyright, the `blizzard:structural-gat
 (`gate / contract drift`), hub↔runner wire compatibility against the PR's merge-base
 (`gate / hub↔runner wire compatibility`, PR-only — see below), the change notes under `changes/`
 (`gate / change notes`, every trigger — see below), the `web/` frontend checks (eslint, vitest,
-structural gate, generated-client drift), and the Vale prose lint (`gate / process-reference and change-history lint`,
+structural gate, bundle composition, story render, generated-client drift), and the Vale prose lint (`gate / process-reference and change-history lint`,
 `styles/Blizzard/ProcessReference.yml`, `styles/Blizzard/ChangeHistory.yml`, `styles/Blizzard/VariantHolder.yml` and
 `styles/Blizzard/ShortFormPointer.yml` against `.vale.ini`). The
 `mise run process-ref-lint` command covers Markdown, configured Python and `src/` YAML, and web TypeScript/CSS;
@@ -43,7 +43,7 @@ uv run blizzard-export-openapi --out-dir openapi && git diff --exit-code -- open
 uv run blizzard-export-contracts --out-dir contracts && git diff --exit-code -- contracts/ && test -z "$(git ls-files --others --exclude-standard -- contracts/)"
 uv run blizzard-wire-compat --baseline merge-base --against origin/master
 uv run blizzard-change-notes check
-cd web && npm ci && npm run lint && npm run test && npm run structural-gate && npm run generate:client && cd .. && git diff --exit-code -- web/
+cd web && npm ci && npm run lint && npm run test && npm run structural-gate && npm run bundle-check && npm run story-render && npm run generate:client && cd .. && git diff --exit-code -- web/
 ```
 
 `blizzard:wire-compat` (`src/blizzard/tools/wire_compat.py`) fails on a breaking change to the declared hub↔runner wire

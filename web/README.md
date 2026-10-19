@@ -30,8 +30,9 @@ Tailwind, no chart library, and no prettier** (eslint owns formatting).
 | `npm run generate:client` | `openapi-ts -f …`                 | Regenerate the two API clients from `../openapi/*.openapi.json`.                |
 | `npm run storybook`       | `ng run fleet:storybook …`        | Serve the component workshop.                                                   |
 | `npm run storybook:build` | `ng run fleet:build-storybook`    | Build the static workshop into `dist/storybook`.                                |
+| `npm run story-render`    | `tsc --noEmit … && … && node …`   | Type-check the stories, build the workshop, and render every story in headless Chromium. |
 
-`mise.toml` mirrors these as `web-install`, `web-lint`, `web-test`, `web-build`, `web-generate-client`, `web-storybook`, `web-storybook-build`.
+`mise.toml` mirrors these as `web-install`, `web-lint`, `web-test`, `web-build`, `web-generate-client`, `web-storybook`, `web-storybook-build`, `web-story-render`.
 
 ## The dev server (`ng serve`)
 
@@ -72,7 +73,9 @@ npm run storybook
 It needs no daemon, no seed, and no environment. It serves on `BZ_STORYBOOK_PORT` when the environment sets one, and
 otherwise on Storybook's own 6006. `npm run storybook:build` writes the static workshop to `dist/storybook`; it is never
 published, deployed, or embedded in the wheel. Stories are for people to open: they are never bundled into either app or
-the library, and they assert nothing.
+the library, and they assert nothing. The render check holds them: `npm run story-render` type-checks every story, builds
+the workshop in development mode, and opens each story in headless Chromium, failing on a story that no longer compiles
+or renders. It needs Chromium (`npx playwright install chromium`), and judges that a story renders, never what it shows.
 
 ## The generated API client (`bzh:generated-client`)
 
