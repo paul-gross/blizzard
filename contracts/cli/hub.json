@@ -5211,7 +5211,7 @@
               "type": "text"
             },
             {
-              "help": "The project's color on the board, by palette name; the hub picks the least-used one when omitted.",
+              "help": "The project's color on the board, by palette name or '#rrggbb' hex (quote the hex in a shell); the hub picks the least-used palette color when omitted.",
               "hidden": false,
               "kind": "option",
               "name": "color",
@@ -5313,7 +5313,7 @@
               "type": "text"
             },
             {
-              "help": "The project's color on the board, by palette name; the hub picks the least-used one when omitted.",
+              "help": "The project's color on the board, by palette name or '#rrggbb' hex (quote the hex in a shell); the hub picks the least-used palette color when omitted.",
               "hidden": false,
               "kind": "option",
               "name": "color",
