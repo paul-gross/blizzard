@@ -32,7 +32,7 @@ from blizzard.hub.domain.config.work_sources import (
 from blizzard.hub.domain.kernel import id_or_slug
 from blizzard.hub.domain.kernel.slugs import Slug
 from blizzard.hub.domain.kernel.unset import UNSET
-from blizzard.hub.domain.projects.color import ColorPick, decide_color
+from blizzard.hub.domain.projects.color import ColorPick, decide_color, parse_color
 from blizzard.hub.domain.projects.links import RepositoryLink, SourceLink
 from blizzard.hub.domain.projects.model import (
     IReadProjectRepository,
@@ -268,8 +268,12 @@ class _Entry:
             if entry.edit.name is UNSET:
                 raise ConfigFieldError("name", "a project this document creates needs a name")
             description = "" if entry.edit.description is UNSET else entry.edit.description
-            stated = None if entry.edit.color is UNSET else entry.edit.color
-            color = decide_color(stated, lambda: (sibling.color for sibling in siblings), pick)
+            # A stated color is parsed as stated, a stated null included; only an absent one takes the least used.
+            color = (
+                decide_color(None, lambda: (sibling.color for sibling in siblings), pick)
+                if entry.edit.color is UNSET
+                else parse_color(entry.edit.color)
+            )
             created, change = Project.new(entry.slug, entry.edit.name, color, ctx, at=at, description=description)
             self._write(RecordKind.PROJECT, created.slug, created, None, change)
             return created

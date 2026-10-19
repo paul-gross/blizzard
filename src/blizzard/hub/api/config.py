@@ -509,7 +509,7 @@ def _project_declaration(entry: ProjectDocument) -> ProjectDeclaration:
         edit=ProjectEdit(
             **({"name": entry.name} if "name" in stated and entry.name is not None else {}),
             **({"description": entry.description} if "description" in stated else {}),
-            **({"color": entry.color} if "color" in stated and entry.color is not None else {}),
+            **({"color": entry.color} if "color" in stated else {}),
         ),
         sources=tuple(entry.sources) if "sources" in stated else None,
         repositories=tuple(entry.repositories) if "repositories" in stated else None,

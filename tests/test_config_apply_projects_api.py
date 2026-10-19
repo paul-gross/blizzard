@@ -336,3 +336,16 @@ def test_a_stated_color_edits_a_stored_project_and_an_export_carries_it(hub: Hub
 
     exported = hub.client.get("/api/config/export").json()
     assert {p["slug"]: p["color"] for p in exported["projects"]}["web"] == "violet"
+
+
+def test_an_entry_stating_a_null_color_is_refused_whether_the_project_exists_or_not(hub: HubHarness) -> None:
+    _rows(_apply(hub, {"projects": [{"slug": "web", "name": "Web", "color": "blue"}]}))
+
+    stored = _apply(hub, {"projects": [{"slug": "web", "color": None}]})
+    created = _apply(hub, {"projects": [{"slug": "new", "name": "New", "color": None}]})
+
+    for refused in (stored, created):
+        assert refused.status_code == 422, refused.text
+        assert "color" in refused.text
+    assert {p["slug"]: p["color"] for p in hub.client.get("/api/projects").json()["projects"]}["web"] == "blue"
+    assert "new" not in {p["slug"] for p in hub.client.get("/api/projects").json()["projects"]}
