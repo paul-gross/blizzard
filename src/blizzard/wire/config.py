@@ -55,10 +55,10 @@ class ConfigChangesPage(BaseModel):
 class ProjectDocument(BaseModel):
     """A project as a document entry, named by its slug. A ``name``, ``description`` or ``color`` the entry omits is
     left as stored; a project the document creates needs a ``name`` and, with no ``color``, takes the tenant's
-    least-used one. A ``sources`` or ``repositories`` list the entry states is the project's whole set of links of that
-    kind — a record it leaves out is unlinked; a list it omits is left as stored. A source or repository is named by
-    its id or its slug, a slug it left included. A slug a project left is refused: name that project by its current
-    slug."""
+    least-used palette color; a ``color`` is a palette name or a ``#rrggbb``. A ``sources`` or ``repositories`` list
+    the entry states is the project's whole set of links of that kind — a record it leaves out is unlinked; a list it
+    omits is left as stored. A source or repository is named by its id or its slug, a slug it left included. A slug a
+    project left is refused: name that project by its current slug."""
 
     model_config = ConfigDict(extra="forbid")
 

@@ -11,7 +11,7 @@ from datetime import datetime
 from typing import NewType, Protocol
 
 from blizzard.foundation.ids import Id, IdPrefix
-from blizzard.foundation.project_colors import ProjectColor
+from blizzard.foundation.project_colors import HexColor, ProjectColor
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.config.changes import ChangeContext, ChangeOp, ConfigChange, FieldChange, RecordKind
 from blizzard.hub.domain.config.work_sources import ConfigFieldError, ConfigRevisionConflict
@@ -99,13 +99,20 @@ class Project:
     slug: str
     name: str
     description: str
-    color: ProjectColor
+    color: ProjectColor | HexColor
     revision: int
     created_at: datetime
 
     @classmethod
     def new(
-        cls, slug: str, name: str, color: ProjectColor, ctx: ChangeContext, *, at: datetime, description: str = ""
+        cls,
+        slug: str,
+        name: str,
+        color: ProjectColor | HexColor,
+        ctx: ChangeContext,
+        *,
+        at: datetime,
+        description: str = "",
     ) -> tuple[Project, ConfigChange]:
         """A new project in ``color``, the color its creator decided."""
         record = cls(

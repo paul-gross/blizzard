@@ -136,7 +136,8 @@ def create_project(
 ) -> ProjectView:
     """Store a new project at revision 1, serving no source or repository but the built-in ``hub`` source until it is
     linked. With no ``color``, it takes the tenant's least-used one. 422 naming the field for a malformed slug, a blank
-    or padded name or a color outside the palette; 409 when the slug is another project's current slug."""
+    or padded name or a color that is neither a palette name nor a #rrggbb; 409 when the slug is another project's
+    current slug."""
     try:
         record = services.project_authoring.create(
             request.slug,

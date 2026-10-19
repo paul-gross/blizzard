@@ -1,0 +1,37 @@
+:host {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+}
+.picker {
+  flex: none;
+  box-sizing: border-box;
+  width: 32px;
+  height: 28px;
+  padding: 0;
+  background: var(--overlay-35);
+  border: 1px solid var(--line);
+  cursor: pointer;
+}
+.text {
+  box-sizing: border-box;
+  flex: 1;
+  min-width: 0;
+  width: 9ch;
+  font-family: inherit;
+  font-size: var(--fs-sm);
+  background: var(--overlay-35);
+  border: 1px solid var(--line);
+  color: var(--text);
+  padding: 4px 6px;
+}
+.text.invalid {
+  border-color: var(--red);
+}
+.picker:focus-visible,
+.text:focus-visible {
+  outline: 1px solid var(--cyan);
+  outline-offset: 0;
+}

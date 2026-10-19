@@ -417,6 +417,32 @@ def test_a_color_outside_the_palette_answers_422_on_color_listing_the_palette(hu
     assert all(name in detail["msg"] for name in ("red", "orange", "amber", "lime", "green", "teal", "slate"))
 
 
+def test_a_hex_color_is_stored_lowercase_on_create_and_edit_and_an_unchanged_edit_writes_nothing(
+    hub: HubHarness,
+) -> None:
+    created = _create(hub.client, "widgets", color="#14B8A6")
+    same = _ok(hub.client.patch("/api/projects/widgets", json={"color": "#14b8a6"}))
+    edited = _ok(hub.client.patch("/api/projects/widgets", json={"color": "#FF8800"}))
+
+    assert (created["color"], same["revision"], edited["color"], edited["revision"]) == ("#14b8a6", 1, "#ff8800", 2)
+    assert _ok(hub.client.get("/api/projects/widgets"))["color"] == "#ff8800"
+
+
+@pytest.mark.parametrize("method", ["post", "patch"])
+@pytest.mark.parametrize("raw", ["#abc", "#12345g", "14b8a6"])
+def test_a_malformed_hex_color_answers_422_on_color_naming_both_forms(hub: HubHarness, method: str, raw: str) -> None:
+    _create(hub.client, "widgets")
+    if method == "post":
+        response = hub.client.post("/api/projects", json={"slug": "other", "name": "Other", "color": raw})
+    else:
+        response = hub.client.patch("/api/projects/widgets", json={"color": raw})
+
+    assert response.status_code == 422, response.text
+    detail = response.json()["detail"][0]
+    assert detail["loc"] == ["body", "color"]
+    assert "teal" in detail["msg"] and "#rrggbb" in detail["msg"]
+
+
 def test_an_explicit_null_color_answers_422(hub: HubHarness) -> None:
     _create(hub.client, "widgets")
 

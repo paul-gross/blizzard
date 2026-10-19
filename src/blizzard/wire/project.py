@@ -10,7 +10,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
-from blizzard.foundation.project_colors import ProjectColor
+from blizzard.foundation.project_colors import HexColor, ProjectColor
 
 
 class ProjectView(BaseModel):
@@ -20,7 +20,7 @@ class ProjectView(BaseModel):
     slug: str
     name: str
     description: str
-    color: ProjectColor
+    color: ProjectColor | HexColor
     revision: int
     created_at: str
 
@@ -33,8 +33,8 @@ class ProjectsListView(BaseModel):
 
 class ProjectCreateRequest(BaseModel):
     """A new project: a ``slug`` of 1-64 lowercase letters, digits and single inner hyphens, unique among the tenant's
-    current slugs, and a display ``name``. A ``color`` is a palette name; with none stated, the hub gives the project
-    the tenant's least-used one."""
+    current slugs, and a display ``name``. A ``color`` is a palette name or a
+    ``#rrggbb``; with none stated, the hub gives the project the tenant's least-used palette color."""
 
     model_config = ConfigDict(extra="forbid")
 

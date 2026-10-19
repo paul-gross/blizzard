@@ -330,6 +330,16 @@ def test_a_document_entry_states_a_color_or_takes_the_least_used_and_an_off_pale
     assert "color" in refused.text
 
 
+def test_a_document_entry_states_a_hex_color_stored_lowercase_and_a_malformed_one_is_refused(hub: HubHarness) -> None:
+    _rows(_apply(hub, {"projects": [{"slug": "p", "name": "P", "color": "#FF8800"}]}))
+    colors = {p["slug"]: p["color"] for p in hub.client.get("/api/projects").json()["projects"]}
+    assert colors["p"] == "#ff8800"
+
+    refused = _apply(hub, {"projects": [{"slug": "bad", "name": "Bad", "color": "#abc"}]})
+    assert refused.status_code == 422, refused.text
+    assert "#rrggbb" in refused.text
+
+
 def test_a_stated_color_edits_a_stored_project_and_an_export_carries_it(hub: HubHarness) -> None:
     _rows(_apply(hub, {"projects": [{"slug": "web", "name": "Web", "color": "blue"}]}))
     _rows(_apply(hub, {"projects": [{"slug": "web", "color": "violet"}]}))

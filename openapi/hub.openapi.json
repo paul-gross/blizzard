@@ -8969,7 +8969,7 @@
       },
       "ProjectCreateRequest": {
         "additionalProperties": false,
-        "description": "A new project: a ``slug`` of 1-64 lowercase letters, digits and single inner hyphens, unique among the tenant's\ncurrent slugs, and a display ``name``. A ``color`` is a palette name; with none stated, the hub gives the project\nthe tenant's least-used one.",
+        "description": "A new project: a ``slug`` of 1-64 lowercase letters, digits and single inner hyphens, unique among the tenant's\ncurrent slugs, and a display ``name``. A ``color`` is a palette name or a\n``#rrggbb``; with none stated, the hub gives the project the tenant's least-used palette color.",
         "properties": {
           "color": {
             "anyOf": [
@@ -9005,7 +9005,7 @@
       },
       "ProjectDocument": {
         "additionalProperties": false,
-        "description": "A project as a document entry, named by its slug. A ``name``, ``description`` or ``color`` the entry omits is\nleft as stored; a project the document creates needs a ``name`` and, with no ``color``, takes the tenant's\nleast-used one. A ``sources`` or ``repositories`` list the entry states is the project's whole set of links of that\nkind \u2014 a record it leaves out is unlinked; a list it omits is left as stored. A source or repository is named by\nits id or its slug, a slug it left included. A slug a project left is refused: name that project by its current\nslug.",
+        "description": "A project as a document entry, named by its slug. A ``name``, ``description`` or ``color`` the entry omits is\nleft as stored; a project the document creates needs a ``name`` and, with no ``color``, takes the tenant's\nleast-used palette color; a ``color`` is a palette name or a ``#rrggbb``. A ``sources`` or ``repositories`` list\nthe entry states is the project's whole set of links of that kind \u2014 a record it leaves out is unlinked; a list it\nomits is left as stored. A source or repository is named by its id or its slug, a slug it left included. A slug a\nproject left is refused: name that project by its current slug.",
         "properties": {
           "color": {
             "anyOf": [
@@ -9117,7 +9117,16 @@
         "description": "One project \u2014 the ``GET /api/projects`` listing row and every project verb's view.",
         "properties": {
           "color": {
-            "$ref": "#/components/schemas/ProjectColor"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProjectColor"
+              },
+              {
+                "pattern": "^#[0-9a-f]{6}$",
+                "type": "string"
+              }
+            ],
+            "title": "Color"
           },
           "created_at": {
             "title": "Created At",
@@ -24834,7 +24843,7 @@
         ]
       },
       "post": {
-        "description": "Store a new project at revision 1, serving no source or repository but the built-in ``hub`` source until it is\nlinked. With no ``color``, it takes the tenant's least-used one. 422 naming the field for a malformed slug, a blank\nor padded name or a color outside the palette; 409 when the slug is another project's current slug.",
+        "description": "Store a new project at revision 1, serving no source or repository but the built-in ``hub`` source until it is\nlinked. With no ``color``, it takes the tenant's least-used one. 422 naming the field for a malformed slug, a blank\nor padded name or a color that is neither a palette name nor a #rrggbb; 409 when the slug is another project's\ncurrent slug.",
         "operationId": "create_project_api_projects_post",
         "parameters": [
           {

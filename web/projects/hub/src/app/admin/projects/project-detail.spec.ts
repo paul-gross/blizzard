@@ -5,7 +5,7 @@ import { RouterTestingHarness } from '@angular/router/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { hubClient, type ProjectView } from 'fleet';
 import type { InAppLink } from 'fleet/shell';
-import { OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubRequestClient } from 'fleet/testing';
+import { OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
 
 import { ProjectLens, lensLink } from '../../core/project-lens';
 import { ProjectDetail } from './project-detail';
@@ -102,10 +102,11 @@ describe('ProjectDetail', () => {
     document.querySelectorAll('dialog').forEach((d) => d.remove());
   });
 
-  async function open(url: string, runners: unknown[] = []) {
+  async function open(url: string, runners: unknown[] = [], patched?: () => unknown) {
     stub = stubRequestClient(hubClient, (method, path) => {
       if (path === '/api/me') return EDITOR;
       if (path === '/api/projects/proj_b' || path === '/api/projects/default') {
+        if (method === 'PATCH' && patched) return patched();
         return method === 'PATCH' ? { ...BLIZZARD, slug: 'blizzard-hub', revision: 4 } : BLIZZARD;
       }
       if (path === '/api/projects/proj_b/source-links') return SOURCE_LINKS;
@@ -241,6 +242,35 @@ describe('ProjectDetail', () => {
     expect(patch).toHaveLength(1);
     expect(patch[0].body).toEqual({ color: 'pink' });
     expect(patch[0].headers['if-match']).toBe('3');
+  });
+
+  it('saves a committed custom hex as the color', async () => {
+    const { harness, el } = await open('/admin/projects/proj_b');
+    el.querySelector<HTMLElement>('[data-testid="admin-projects-color-open"]')!.click();
+    await settle(harness.fixture);
+    document.querySelector<HTMLElement>('[data-testid="project-color-custom"]')!.click();
+    await settle(harness.fixture);
+    const field = document.querySelector<HTMLInputElement>('[data-testid="project-color-custom-input"]')!;
+    field.value = '#FF8800';
+    field.dispatchEvent(new Event('input'));
+    await settle(harness.fixture);
+
+    const patch = stub.forRoute('/api/projects/proj_b', 'PATCH');
+    expect(patch).toHaveLength(1);
+    expect(patch[0].body).toEqual({ color: '#ff8800' });
+    expect(patch[0].headers['if-match']).toBe('3');
+  });
+
+  it("shows the hub's refusal of a color in the dialog", async () => {
+    const refusal = stubError(422, {
+      detail: [{ loc: ['body', 'color'], msg: 'must be one of red, or a #rrggbb hex color', type: 'value_error' }],
+    });
+    const { harness, el } = await open('/admin/projects/proj_b', [], () => refusal);
+    el.querySelector<HTMLElement>('[data-testid="admin-projects-color-open"]')!.click();
+    await settle(harness.fixture);
+    document.querySelector<HTMLElement>('[data-testid="project-color-pink"]')!.click();
+    await settle(harness.fixture);
+    expect(document.querySelector('[data-testid="admin-projects-color-error"]')?.textContent).toContain('#rrggbb');
   });
 
   it('links a source the project does not link yet, and unlinks one at its revision', async () => {

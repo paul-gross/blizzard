@@ -3,6 +3,15 @@
 from __future__ import annotations
 
 from enum import StrEnum
+from typing import Annotated
+
+from pydantic import StringConstraints
+
+#: The one grammar of a custom project color: a lowercase ``#rrggbb``. The hub's parse lowercases before it applies it.
+HEX_COLOR_PATTERN = r"^#[0-9a-f]{6}$"
+
+#: A project's custom color, a lowercase ``#rrggbb`` string beside the palette names.
+HexColor = Annotated[str, StringConstraints(pattern=HEX_COLOR_PATTERN)]
 
 
 class ProjectColor(StrEnum):

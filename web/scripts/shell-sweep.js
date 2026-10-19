@@ -159,7 +159,10 @@
  *   - projects/hub/src/app/core/kit-swatch.shell-sweep.spec.ts — the project
  *     swatch: every name in the generated `ProjectColor` enum resolves through
  *     `tokens.css` to a distinct background holding 3:1 against the resting and
- *     selected surfaces, so the enum and the tokens cannot drift apart.
+ *     selected surfaces, so the enum and the tokens cannot drift apart; a
+ *     custom `#rrggbb` (black, a dark blue, a hue spread of dark inputs and a
+ *     light one) resolves to an `rgb()` holding the same 3:1 after the kit's
+ *     legibility adjustment.
  *   - projects/fleet/src/lib/kit/kit-select.shell-sweep.spec.ts — the shared
  *     dropdown keeps all options at full height in a capped long list, scrolls
  *     keyboard-focused choices into view, and leaves short lists unscrolled.
