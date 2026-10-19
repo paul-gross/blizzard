@@ -35,3 +35,14 @@ export function openWorkItems(chunkId: string | null, query: WorkItemsQuery): Wo
   if (chunkId === null) return { status: 'loading', items: [] };
   return deriveWorkItemsState(query);
 }
+
+/** The open chunk's project's color, joined from the projects list by `project_id` — `null` while the dock is closed,
+ * before the list is read, or when the project is unknown. */
+export function openProjectColor(
+  detail: ChunkDetail | undefined,
+  projects: readonly { readonly project_id: string; readonly color: string }[] | undefined,
+): string | null {
+  const projectId = detail?.project_id;
+  if (!projectId) return null;
+  return projects?.find((project) => project.project_id === projectId)?.color ?? null;
+}
