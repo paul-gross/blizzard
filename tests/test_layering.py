@@ -1856,8 +1856,8 @@ def _undeclared_layer_nodes(tree: _LayeredTree) -> list[str]:
     """Every package outside the exempt edges, and every top-level module outside them, that maps to no node —
     a new package or module enters the graph."""
     undeclared: list[str] = []
-    for init in sorted(tree.root.rglob("__init__.py")):
-        rel = init.parent.relative_to(tree.root).parts
+    for directory in sorted({path.parent for path in _production_files(tree.root)}):
+        rel = directory.relative_to(tree.root).parts
         if rel and rel[0] not in tree.exempt and _layer_node(tree, rel) not in tree.layers:
             undeclared.append("/".join(rel))
     for module in sorted(tree.root.glob("*.py")):
@@ -2128,6 +2128,7 @@ def _plant_domain(tmp_path: Path, files: dict[str, str]) -> list[str]:
         ("__init__.py", "from blizzard.hub.domain.chunk.model import X", True),
         ("stray.py", "", True),
         ("mystery/__init__.py", "", True),
+        ("newpkg/mod.py", "from blizzard.hub.domain.chunk.model import X", True),
         ("chunk/ports.py", "from blizzard.hub.domain.chunk.model import X", False),
         ("chunk/ports.py", "from .model import X", False),
         ("chunk/ports.py", "from blizzard.hub.domain.kernel.unset import UNSET", False),
