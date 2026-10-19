@@ -25,7 +25,7 @@ function trackPageErrors() {
 // the whole panel, reachable at every width the shell itself is.
 const WIDTHS = [390, 320];
 
-describe('session-recovery view shell sweep (web:shell-sweep, blizzard#312)', () => {
+describe('session-recovery view shell sweep (web:shell-sweep)', () => {
   for (const width of WIDTHS) {
     it(`renders the headline, detail, and retry control with no horizontal overflow at width ${width}`, async () => {
       const { errors: pageErrors, stop: stopTrackingPageErrors } = trackPageErrors();

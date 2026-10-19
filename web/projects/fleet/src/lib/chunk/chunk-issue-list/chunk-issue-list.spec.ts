@@ -64,12 +64,12 @@ describe('ChunkIssueList', () => {
     return { fixture, el: fixture.nativeElement as HTMLElement };
   }
 
-  it('renders the ticket name before the ref, the ref as a dash-prefixed link', async () => {
+  it('renders the ticket name before the ref, the ref as a link', async () => {
     const { el } = await render([item({ source: 'widget', ref: '42', title: 'The widget flake' })]);
     const row = el.querySelector('[data-testid="issue-row"]') as HTMLElement;
     expect(row.querySelector('[data-testid="issue-name"]')?.textContent).toBe('The widget flake');
     const link = el.querySelector<HTMLAnchorElement>('[data-testid="issue-ref"]');
-    expect(link?.textContent?.trim()).toBe('- widget#42');
+    expect(link?.textContent?.trim()).toBe('widget#42');
     expect(link?.getAttribute('href')).toBe('https://forge.example/widget/issues/42');
   });
 
@@ -139,7 +139,7 @@ describe('ChunkIssueList', () => {
       }),
     ]);
     expect(el.querySelector('[data-testid="issue-name"]')?.textContent).toBe('—');
-    expect(el.querySelector('[data-testid="issue-ref"]')?.textContent?.trim()).toBe('- toyapi#1');
+    expect(el.querySelector('[data-testid="issue-ref"]')?.textContent?.trim()).toBe('toyapi#1');
     // A single issue starts expanded, so the per-item error notice is visible.
     expect(el.querySelector('[data-testid="issue-item-error"]')?.textContent).toContain('404 Not Found');
     expect(el.querySelector('[data-testid="issue-body"]')).toBeNull();

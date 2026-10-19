@@ -238,34 +238,6 @@ describe('ChunkDetailPanel', () => {
     expect(el.querySelector('[data-testid="detail-status"]')?.textContent?.trim()).toBe('paused');
   });
 
-  it('emits editGraph from the facts column', async () => {
-    // A not_ready chunk on no node, its graph editable.
-    const notReady: ChunkDetail = {
-      ...ROUTED_DETAIL,
-      status: 'not_ready',
-      deletable: true,
-      graph_editable: true,
-      route: null,
-      current_node_id: null,
-    };
-    const fixture = TestBed.createComponent(ChunkDetailPanel);
-    fixture.componentRef.setInput('detail', notReady);
-    fixture.componentRef.setInput('renderedStatus', notReady.status);
-    fixture.componentRef.setInput('canControl', true);
-    let emitted: { chunkId: string; graphId: string } | undefined;
-    fixture.componentInstance.editGraph.subscribe((event) => (emitted = event));
-    await fixture.whenStable();
-    const el = fixture.nativeElement as HTMLElement;
-
-    const input = el.querySelector<HTMLInputElement>('[data-testid="graph-input"]')!;
-    input.value = 'gr_alt';
-    input.dispatchEvent(new Event('input', { bubbles: true }));
-    await fixture.whenStable();
-    el.querySelector<HTMLButtonElement>('[data-testid="graph-submit"]')?.click();
-
-    expect(emitted).toEqual({ chunkId: notReady.chunk_id, graphId: 'gr_alt' });
-  });
-
   it('emits answerQuestion from the awaiting-human column', async () => {
     const fixture = TestBed.createComponent(ChunkDetailPanel);
     fixture.componentRef.setInput('detail', WAITING_QUESTION_DETAIL);

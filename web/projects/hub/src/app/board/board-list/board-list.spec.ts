@@ -179,16 +179,16 @@ describe('BoardList', () => {
       expect(el.querySelector('.cost fleet-when')).toBeNull();
     });
 
-    it('heads its work with the chunk id, then each work ref over its title', async () => {
+    it('heads its work with the chunk id, then each work ref, as plain text, over its title', async () => {
       const el = await render(
         running(card('a', { workLines: [{ label: 'hub#1', title: 'Migrate the event log', url: 'https://example.test/1' }] })),
       );
 
       const work = el.querySelector('.work')!;
       expect(work.firstElementChild?.textContent?.trim()).toBe('C-a');
-      const ref = el.querySelector<HTMLAnchorElement>('a[data-testid="list-row-ref"]')!;
+      const ref = el.querySelector('[data-testid="list-row-ref"]')!;
       expect(ref.textContent?.trim()).toBe('hub#1');
-      expect(ref.href).toBe('https://example.test/1');
+      expect(ref.tagName).toBe('SPAN');
       expect(titles(el)).toEqual(['Migrate the event log']);
     });
 
@@ -200,12 +200,33 @@ describe('BoardList', () => {
       expect(el.querySelector('[data-testid="list-row-title-skeleton"]')).not.toBeNull();
     });
 
-    it('puts its runner over its PRs in one cell', async () => {
+    it('puts its runner over its step and its PRs in one cell', async () => {
       const el = await render(running(card('a', { runnerName: 'r-claude', openPrs: [{ repo: 'blizzard', number: 7, url: 'https://example.test/pr/7' }] })));
 
       const holder = el.querySelector('.holder')!;
       expect(holder.firstElementChild?.textContent?.trim()).toBe('r-claude');
+      expect(holder.querySelector('.step')).not.toBeNull();
       expect(holder.querySelector('.prs a')?.textContent?.trim()).toBe('#7');
+    });
+
+    it('names its runner host/runner where the host is known, and no runner where none holds it', async () => {
+      const hosted = await render(running(card('a', { runnerName: 'r-claude', hostName: 'atlas' })));
+      expect(hosted.querySelector('[data-testid="list-row-runner"]')?.textContent?.trim()).toBe('atlas/r-claude');
+
+      fixture.componentRef.setInput('groups', running(card('b', { runnerName: null, hostName: 'atlas' })));
+      await fixture.whenStable();
+      expect(hosted.querySelector('[data-testid="list-row-runner"]')).toBeNull();
+    });
+
+    it("tints the row by its project's color, and leaves a project-less row untinted", async () => {
+      const tinted = await render(running(card('a', { projectColor: 'teal' })));
+      const row = tinted.querySelector<HTMLElement>('[data-testid="list-row"]')!;
+      expect(row.classList.contains('tinted')).toBe(true);
+      expect(row.style.getPropertyValue('--project-tint')).toBe('var(--project-teal, var(--label-dim))');
+
+      fixture.componentRef.setInput('groups', running(card('b', { projectColor: null })));
+      await fixture.whenStable();
+      expect(tinted.querySelector('[data-testid="list-row"]')?.classList.contains('tinted')).toBe(false);
     });
 
     it('folds a large group, and opens it without selecting the row', async () => {

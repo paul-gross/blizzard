@@ -9,7 +9,6 @@ import { RunnerLiveUpdates } from '../../core/live/runner-live-updates';
 import { page } from 'vitest/browser';
 
 import { AppHeader } from './app-header';
-import { provideActiveRunner } from '../../core/active-runner';
 import { provideFlags } from 'fleet';
 import { runnerFlagsRead } from '../../core/flags.query';
 
@@ -17,7 +16,7 @@ import { runnerFlagsRead } from '../../core/flags.query';
  * The runner app root's desktop header's half of `web:shell-sweep`
  * (`blizzard-context:/verification/blizzard.md` bzh:web-shell-sweep) — a
  * real, headless-Chromium proof that this header's own trailing cluster
- * (pause control + identity + profile menu, `app-header.ts`) never lets the
+ * (identity + profile menu, `app-header.ts`) never lets the
  * profile menu drift off-viewport, at every width from a wide monitor down to
  * a phone forced into desktop mode, and at every username length from
  * authless to a 64-character one.
@@ -38,10 +37,9 @@ async function render(degradedConnection = false) {
     imports: [AppHeader],
     providers: [
       provideZonelessChangeDetection(),
-      provideActiveRunner('rn_1'),
       provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
       provideFlags(runnerFlagsRead),
-      // The chunk name in the header is a `routerLink`.
+      // The Runner filter narrowing the stat cells reads the router.
       provideRouter([]),
       // `degraded` is the connection cell's longest string — a real
       // stand-in, not `RunnerLiveUpdates.start()`'d, since this sweep proves layout,
@@ -56,9 +54,9 @@ async function render(degradedConnection = false) {
   return fixture;
 }
 
-// authless, a short name, a typical one, and long ones straddling the band the
-// historical #163 fix's own manual sweep flagged (a name wide enough to push
-// the menu off runs to ~1000px at 38 characters — see board-header.ts).
+// authless, a short name, a typical one, and long ones straddling the band
+// where a name wide enough to push the menu off runs to ~1000px at 38
+// characters — see board-header.ts.
 const IDENTITY_LENGTHS = [0, 5, 20, 38, 64];
 
 // 1400 down to 320 — spans a wide monitor to the narrowest common phone,
@@ -70,7 +68,7 @@ function usernameOfLength(length: number): string {
   return 'a'.repeat(length);
 }
 
-describe('runner AppHeader shell sweep (web:shell-sweep, issue #163/#171/#325)', () => {
+describe('runner AppHeader shell sweep (web:shell-sweep)', () => {
   for (const length of IDENTITY_LENGTHS) {
     it(`keeps the profile menu on-screen, hit-testable, and overflow-free at every width (username length ${length})`, async () => {
       const pageErrors: string[] = [];
@@ -133,7 +131,7 @@ describe('runner AppHeader shell sweep (web:shell-sweep, issue #163/#171/#325)',
     });
   }
 
-  it('keeps the profile menu on-screen and the header overflow-free with the degraded connection cell (blizzard#333)', async () => {
+  it('keeps the profile menu on-screen and the header overflow-free with the degraded connection cell', async () => {
     const pageErrors: string[] = [];
     const onError = (e: ErrorEvent) => pageErrors.push(e.message);
     const onRejection = (e: PromiseRejectionEvent) => pageErrors.push(String(e.reason));

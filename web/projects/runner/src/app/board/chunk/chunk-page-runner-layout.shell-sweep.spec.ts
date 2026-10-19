@@ -7,8 +7,7 @@ import { runnerClient } from 'fleet';
 import { settle, stubError, stubRequestClient } from 'fleet/testing';
 import { page } from 'vitest/browser';
 
-import { CHUNK_PAGE_ROUTES } from './chunk-page.routes';
-import { provideActiveRunner } from '../../core/active-runner';
+import { RunnerChunkPage } from './runner-chunk-page';
 
 /**
  * The shared chunk page, mounted through the runner's own route table, as its half of
@@ -75,8 +74,54 @@ const DETAIL = {
   ],
 };
 
+/** The host's one runner — the chunk page finds the chunk's runner off its leases. */
+const HOST_RUNNERS = {
+  items: [
+    {
+      runner_id: 'rn_1',
+      name: 'r1',
+      state: 'serving',
+      served: true,
+      halted_reasons: [],
+      pause: { local: false, hub: false, effective: false, local_reason: null },
+      bindings: [{ project: 'p', workspace_id: 'ws', agents: 4 }],
+      agents_in_use: 1,
+      max_agents: 4,
+    },
+  ],
+};
+
+/** `rn_1`'s lease on the chunk — what makes it the chunk's owner. */
+const LEASES = {
+  items: [
+    {
+      lease_id: 'lease_01KXKVVF1J3D6H6VYZ3XYNZPRR',
+      chunk_id: CHUNK_ID,
+      graph_id: 'gr_1',
+      node_id: 'nd_review',
+      node_name: 'review',
+      epoch: 1,
+      session_id: 'sess-1',
+      pid: 4821,
+      environment_id: 'e1',
+      workdir: '/ws/e1',
+      created_at: '2026-07-16T11:00:00.000Z',
+      last_heartbeat_at: '2026-07-16T11:59:26.000Z',
+      state: 'running',
+      display_status: 'running',
+      closure_healthy: false,
+      closed_at: null,
+      closure_reason: null,
+      stale_after_seconds: 3600,
+    },
+  ],
+};
+
 function routes(method: string, path: string): unknown {
   if (method !== 'GET') return {};
+  if (path === '/api/host/runners') return HOST_RUNNERS;
+  if (path === '/api/host/environments') return { workspaces: [] };
+  if (path === '/runners/rn_1/api/leases') return LEASES;
   if (path === `/runners/rn_1/api/chunks/${CHUNK_ID}`) return DETAIL;
   if (path === `/runners/rn_1/api/chunks/${CHUNK_ID}/work-items`) return { items: [] };
   if (path === `/runners/rn_1/api/chunks/${CHUNK_ID}/transcripts`) return { chunk_id: CHUNK_ID, segments: [] };
@@ -104,9 +149,8 @@ describe('runner chunk page shell sweep (web:shell-sweep)', () => {
     await TestBed.configureTestingModule({
       providers: [
         provideZonelessChangeDetection(),
-        provideActiveRunner('rn_1'),
         provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
-        provideRouter([{ path: 'board/chunk/:chunkId', children: CHUNK_PAGE_ROUTES }]),
+        provideRouter([{ path: 'board/chunk/:chunkId', component: RunnerChunkPage }]),
       ],
     }).compileComponents();
     const harness = await RouterTestingHarness.create();
@@ -173,9 +217,8 @@ describe('runner chunk page shell sweep (web:shell-sweep)', () => {
     await TestBed.configureTestingModule({
       providers: [
         provideZonelessChangeDetection(),
-        provideActiveRunner('rn_1'),
         provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
-        provideRouter([{ path: 'board/chunk/:chunkId', children: CHUNK_PAGE_ROUTES }]),
+        provideRouter([{ path: 'board/chunk/:chunkId', component: RunnerChunkPage }]),
       ],
     }).compileComponents();
     const harness = await RouterTestingHarness.create();
@@ -212,17 +255,14 @@ describe('runner chunk page shell sweep (web:shell-sweep)', () => {
    */
   it('keeps the issue pane error status text within its section at phone widths', async () => {
     const stub = stubRequestClient(runnerClient, (method: string, path: string): unknown => {
-      if (method !== 'GET') return {};
-      if (path === `/runners/rn_1/api/chunks/${CHUNK_ID}`) return DETAIL;
-      if (path === `/runners/rn_1/api/chunks/${CHUNK_ID}/work-items`) return stubError(503, { detail: 'no work source is configured' });
-      return {};
+      if (method === 'GET' && path === `/runners/rn_1/api/chunks/${CHUNK_ID}/work-items`) return stubError(503, { detail: 'no work source is configured' });
+      return routes(method, path);
     });
     await TestBed.configureTestingModule({
       providers: [
         provideZonelessChangeDetection(),
-        provideActiveRunner('rn_1'),
         provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
-        provideRouter([{ path: 'board/chunk/:chunkId', children: CHUNK_PAGE_ROUTES }]),
+        provideRouter([{ path: 'board/chunk/:chunkId', component: RunnerChunkPage }]),
       ],
     }).compileComponents();
     const harness = await RouterTestingHarness.create();

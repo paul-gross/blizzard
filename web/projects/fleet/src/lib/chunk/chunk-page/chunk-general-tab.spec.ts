@@ -65,39 +65,7 @@ describe('ChunkGeneralTab', () => {
     expect(el.querySelector('[data-testid="issue-loading"]')).not.toBeNull();
   });
 
-  it('re-emits editGraph from the facts section when canControl opts in', async () => {
-    const fixture = TestBed.createComponent(ChunkGeneralTab);
-    fixture.componentRef.setInput('detail', DETAIL);
-    fixture.componentRef.setInput('canControl', true);
-    let emitted: { chunkId: string; graphId: string } | undefined;
-    fixture.componentInstance.editGraph.subscribe((event) => (emitted = event));
-    await fixture.whenStable();
-    const el = fixture.nativeElement as HTMLElement;
-
-    const input = el.querySelector<HTMLInputElement>('[data-testid="graph-input"]')!;
-    input.value = 'gr_alt';
-    input.dispatchEvent(new Event('input', { bubbles: true }));
-    await fixture.whenStable();
-    el.querySelector<HTMLButtonElement>('[data-testid="graph-submit"]')?.click();
-
-    expect(emitted).toEqual({ chunkId: DETAIL.chunk_id, graphId: 'gr_alt' });
-  });
-
-  it('disables Set while a repin is in flight for this chunk, and not for another', async () => {
-    const fixture = TestBed.createComponent(ChunkGeneralTab);
-    fixture.componentRef.setInput('detail', DETAIL);
-    fixture.componentRef.setInput('canControl', true);
-    fixture.componentRef.setInput('pendingGraphChunkIds', ['ch_other']);
-    await fixture.whenStable();
-    const set = () => (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>('[data-testid="graph-submit"]');
-    expect(set()?.disabled).toBe(false);
-
-    fixture.componentRef.setInput('pendingGraphChunkIds', [DETAIL.chunk_id]);
-    await fixture.whenStable();
-    expect(set()?.disabled).toBe(true);
-  });
-
-  it('withholds the graph edit row when canControl defaults off', async () => {
+  it('renders the graph read-only, with no edit row', async () => {
     const fixture = TestBed.createComponent(ChunkGeneralTab);
     fixture.componentRef.setInput('detail', DETAIL);
     await fixture.whenStable();

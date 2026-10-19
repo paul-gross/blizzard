@@ -1,4 +1,4 @@
-import { isHexColor, legibleOnDark } from './kit-swatch-color';
+import { isHexColor, legibleOnDark, projectColorValue } from './kit-swatch-color';
 
 function luminance(hex: string): number {
   const n = parseInt(hex.slice(1), 16);
@@ -49,5 +49,16 @@ describe('legibleOnDark', () => {
   it('lifts no further than it must: the same color a hair darker would fall short', () => {
     const lifted = legibleOnDark('#1a1f4d');
     expect(againstSelected(lifted)).toBeLessThan(3.6);
+  });
+});
+
+describe('projectColorValue', () => {
+  it("resolves a palette name to its project token, falling back to the dim label color", () => {
+    expect(projectColorValue('teal')).toBe('var(--project-teal, var(--label-dim))');
+  });
+
+  it('passes a custom color through lowercased, unlifted however dark', () => {
+    expect(projectColorValue('#0A0B0C')).toBe('#0a0b0c');
+    expect(projectColorValue('#0a0b0c')).not.toBe(legibleOnDark('#0a0b0c'));
   });
 });

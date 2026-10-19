@@ -1,13 +1,12 @@
 import { ChangeDetectionStrategy, Component, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
+import { QueryClient, injectQuery, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS, runnerClient } from 'fleet';
 import { type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
 import { vi } from 'vitest';
 
-import { injectRunnerLeasesQuery } from './leases.query';
+import { runnerLeasesQueryOptions } from './leases.query';
 import { runnerLeasesKey } from './query-keys';
-import { provideActiveRunner } from './active-runner';
 
 const LEASES = {
   items: [
@@ -29,23 +28,24 @@ const LEASES = {
   ],
 };
 
-/** A minimal host so the query — a `Component` field initializer concern — runs
- * inside a real injection context, mirroring how every consumer actually calls it. */
+/** A minimal host so one runner's leases query runs inside a real injection context, the
+ * way the panel's fan-out (`panel-reads.ts`) builds one query per runner from these options. */
 @Component({
   selector: 'app-test-leases-query-host',
   template: '',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 class LeasesQueryHost {
-  readonly query = injectRunnerLeasesQuery();
+  readonly query = injectQuery(() => runnerLeasesQueryOptions('rn_1'));
 }
 
-describe('injectRunnerLeasesQuery', () => {
+describe('runnerLeasesQueryOptions', () => {
   let stub: RequestClientStub | undefined;
 
   afterEach(() => stub?.restore());
 
   it('leads with the runner id, so two runners never share a cache entry', () => {
+    expect(runnerLeasesQueryOptions('rn_1').queryKey).toEqual(runnerLeasesKey('rn_1'));
     expect(runnerLeasesKey('rn_1')).toEqual(['rn_1', 'leases']);
     expect(runnerLeasesKey('rn_1')).not.toEqual(runnerLeasesKey('rn_2'));
   });
@@ -56,7 +56,6 @@ describe('injectRunnerLeasesQuery', () => {
       imports: [LeasesQueryHost],
       providers: [
         provideZonelessChangeDetection(),
-        provideActiveRunner('rn_1'),
         provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
       ],
     }).compileComponents();
@@ -73,7 +72,6 @@ describe('injectRunnerLeasesQuery', () => {
       imports: [LeasesQueryHost],
       providers: [
         provideZonelessChangeDetection(),
-        provideActiveRunner('rn_1'),
         provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
       ],
     }).compileComponents();
@@ -84,7 +82,7 @@ describe('injectRunnerLeasesQuery', () => {
     expect(fixture.componentInstance.query.data()).toEqual([]);
   });
 
-  it('re-reads GET /api/leases on the backstop interval — insurance under lease-changed, not the primary signal', async () => {
+  it('re-reads GET /runners/{runner_id}/api/leases on the backstop interval — insurance under lease-changed, not the primary signal', async () => {
     // `lease-changed` is the primary freshness path; this interval is what closes
     // the one gap no event marks — a lease gone quiet
     // without a further transition, whose `stale` flip depends on elapsed time, not
@@ -97,8 +95,7 @@ describe('injectRunnerLeasesQuery', () => {
         imports: [LeasesQueryHost],
         providers: [
           provideZonelessChangeDetection(),
-          provideActiveRunner('rn_1'),
-          provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
+            provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
         ],
       }).compileComponents();
       const fixture = TestBed.createComponent(LeasesQueryHost);
@@ -131,7 +128,6 @@ describe('injectRunnerLeasesQuery', () => {
       imports: [LeasesQueryHost],
       providers: [
         provideZonelessChangeDetection(),
-        provideActiveRunner('rn_1'),
         provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
       ],
     }).compileComponents();

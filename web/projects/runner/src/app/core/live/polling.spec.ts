@@ -1,14 +1,13 @@
 import { ChangeDetectionStrategy, Component, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
+import { QueryClient, injectQuery, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS, injectChunkDetailQuery, runnerClient } from 'fleet';
 import { type RequestClientStub, stubRequestClient } from 'fleet/testing';
 import { vi } from 'vitest';
 
 import { injectRunnerSessionQuery } from '../identity/auth.query';
-import { injectRunnerLeasesQuery } from '../leases.query';
+import { runnerLeasesQueryOptions } from '../leases.query';
 import { injectRunnerDashboardQuery } from '../status.query';
-import { provideActiveRunner } from '../active-runner';
 
 /** A minimal host mounting all four backstop-governed reads in one injection context —
  * `chunkId` is fixed `null` (unselected), the gating {@link injectChunkDetailQuery}
@@ -19,8 +18,8 @@ import { provideActiveRunner } from '../active-runner';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 class PollingHost {
-  readonly dashboard = injectRunnerDashboardQuery();
-  readonly leases = injectRunnerLeasesQuery();
+  readonly dashboard = injectRunnerDashboardQuery(() => 'rn_1');
+  readonly leases = injectQuery(() => runnerLeasesQueryOptions('rn_1'));
   readonly session = injectRunnerSessionQuery();
   readonly chunkDetail = injectChunkDetailQuery(
     () => ({ plane: 'runner', client: runnerClient, runnerId: 'rn_1' }),
@@ -35,7 +34,7 @@ class PollingHost {
  * and chunk-detail's backstop is gated on a selection this host never
  * makes, so it never even issues its one initial read.
  */
-describe('the panel\'s D7 poll floors, idle and unselected', () => {
+describe('the panel\'s poll floors, idle and unselected', () => {
   let stub: RequestClientStub | undefined;
 
   afterEach(() => {
@@ -55,7 +54,6 @@ describe('the panel\'s D7 poll floors, idle and unselected', () => {
       imports: [PollingHost],
       providers: [
         provideZonelessChangeDetection(),
-        provideActiveRunner('rn_1'),
         provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
       ],
     }).compileComponents();

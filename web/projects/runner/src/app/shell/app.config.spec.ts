@@ -15,7 +15,7 @@ import { appConfig } from './app.config';
  * (`bzh:gating-tier-pins-production-paths`), so this is the one `web:unit-test`
  * asserting against `appConfig.providers` itself rather than a hand-assembled list.
  */
-describe('runner appConfig wires session recovery (issue #312)', () => {
+describe('runner appConfig wires session recovery', () => {
   let stub: RequestClientStub;
 
   beforeEach(() => {

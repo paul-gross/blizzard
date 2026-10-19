@@ -67,3 +67,19 @@ export const AvatarTrigger: Story = {
       </ng-template>`,
   }),
 };
+/** Bordered, panel aligned to the trigger's right edge — a trigger at the end of a row of buttons. */
+export const BorderedEndAligned: Story = {
+  render: (args) => ({
+    props: args,
+    template: `
+      <div style="display: flex; justify-content: flex-end">
+        <fleet-kit-menu bordered align="end" [menu]="m" [ariaLabel]="ariaLabel" [testid]="testid" />
+      </div>
+      <ng-template #m>
+        <fleet-kit-menu-panel>
+          <fleet-kit-menu-item>Pause</fleet-kit-menu-item>
+          <fleet-kit-menu-item>Delete</fleet-kit-menu-item>
+        </fleet-kit-menu-panel>
+      </ng-template>`,
+  }),
+};

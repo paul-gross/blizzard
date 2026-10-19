@@ -40,6 +40,27 @@ describe('headerStatCells', () => {
     ]);
   });
 
+  it('narrows to one runner by name: the environments it holds over every environment, and its own agents', () => {
+    const runners: runnerApi.HostRunnerView[] = [
+      { runner_id: 'rn_1', name: 'a', state: 'serving', agents_in_use: 2, max_agents: 4 },
+      { runner_id: 'rn_2', name: 'b', state: 'serving', agents_in_use: 1, max_agents: 2 },
+    ];
+    const environments: runnerApi.HostWorkspaceEnvironmentsView[] = [
+      {
+        workspace_id: 'ws-a',
+        items: [
+          { environment_id: 'e1', held: true, chunk_id: 'ch_1', runner_id: 'rn_1' },
+          { environment_id: 'e2', held: true, chunk_id: 'ch_2', runner_id: 'rn_2' },
+          { environment_id: 'e3' },
+        ],
+      },
+    ];
+    expect(headerStatCells(false, runners, environments, 'b')).toEqual([
+      { key: 'envs', label: 'Envs', value: 1, capacity: 3 },
+      { key: 'agents', label: 'Agents', value: 1, capacity: 2 },
+    ]);
+  });
+
   it('reads zeroes off resolved but empty reads', () => {
     expect(headerStatCells(false, undefined, undefined)).toEqual([
       { key: 'envs', label: 'Envs', value: 0, capacity: 0 },

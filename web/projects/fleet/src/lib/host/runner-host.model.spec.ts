@@ -7,6 +7,7 @@ import {
   RENEWAL_FAILURE_TEXT,
   renewalLabel,
   runnerEnvironmentRows,
+  runnerSubscriptionLines,
   runnerSubscriptionPaces,
   runnerWorkspaceRows,
   sampledAgoLabel,
@@ -162,10 +163,10 @@ describe('renewalLabel', () => {
 });
 
 describe('runnerSubscriptionPaces', () => {
-  /** The hub's pace facts a runner row leaves empty — its sample line renders in their place. */
-  const UNPACED = { paceBars: [], condition: null, sampledAt: null, refreshedLabel: null, freshness: null, missReason: null };
+  /** The pace facts a row with no sampled windows leaves empty. */
+  const UNPACED = { paceBars: [], condition: null, sampledAt: null, refreshedLabel: null, refreshedTag: null, freshness: null };
 
-  it('maps each subscription to its row, defaulting absent optionals to null', () => {
+  it('carries a missed attempt with no windows as its sample line, a never-attempted one with no sample', () => {
     const subs: runnerApi.HostSubscriptionView[] = [
       {
         slug: 'claude-max',
@@ -187,6 +188,7 @@ describe('runnerSubscriptionPaces', () => {
         name: 'Claude Max',
         provider: 'anthropic',
         ...UNPACED,
+        missReason: 'endpoint_unreachable',
         sample: { conditionLabel: 'miss: endpoint unreachable', sampledAgo: '-34s ago', ok: false },
         renewalLabel: 'failed (vendor refused) -34s ago',
         spenders: ['r-claude', 'r-chatgpt'],
@@ -196,10 +198,68 @@ describe('runnerSubscriptionPaces', () => {
         name: 'ChatGPT',
         provider: 'openai',
         ...UNPACED,
-        sample: { conditionLabel: 'never sampled', sampledAgo: 'never', ok: null },
+        missReason: null,
+        sample: null,
         renewalLabel: null,
         spenders: [],
       },
     ]);
+  });
+
+  it('paces the newest sampled snapshot\'s windows, aged against that snapshot, with no sample line', () => {
+    const [pace] = runnerSubscriptionPaces(
+      [
+        {
+          slug: 'claude-max',
+          name: 'Claude Max', provider: 'anthropic',
+          ok: true,
+          sampled_at: '2026-07-16T11:59:00.000Z',
+          windows_sampled_at: '2026-07-16T11:55:00.000Z',
+          windows: [{ window: '5h', utilization_pct: 62, resets_at: '2026-07-16T13:30:00.000Z', window_seconds: 5 * 3600 }],
+        },
+      ],
+      NOW,
+      runnerName,
+    );
+    expect(pace.paceBars).toEqual([{ window: '5h', utilizationPct: 62, elapsedPct: 70 }]);
+    expect(pace).toMatchObject({ sampledAt: '2026-07-16T11:55:00.000Z', freshness: 'fresh', condition: null, missReason: null, sample: null });
+    expect(pace.refreshedLabel).not.toBeNull();
+    expect(pace.refreshedTag).not.toBeNull();
+  });
+
+  it('reads a lapsed credential as lapsed, whatever windows it last carried', () => {
+    const [pace] = runnerSubscriptionPaces(
+      [{ slug: 'claude-max', name: 'Claude Max', provider: 'anthropic', ok: false, miss_reason: 'credential_lapsed', sampled_at: '2026-07-16T11:59:00.000Z' }],
+      NOW,
+      runnerName,
+    );
+    expect(pace).toMatchObject({ condition: 'credential_lapsed', missReason: 'credential_lapsed', sample: null });
+  });
+});
+
+describe('runnerSubscriptionLines', () => {
+  it('draws sampled windows as a paced line, a lapsed credential as lapsed, and a miss with no windows as its note', () => {
+    const lines = runnerSubscriptionLines(
+      [
+        {
+          slug: 'paced',
+          name: 'Paced', provider: 'anthropic',
+          ok: true,
+          windows_sampled_at: '2026-07-16T11:55:00.000Z',
+          windows: [{ window: '5h', utilization_pct: 62, resets_at: '2026-07-16T13:30:00.000Z', window_seconds: 5 * 3600 }],
+        },
+        { slug: 'lapsed', name: 'Lapsed', provider: 'anthropic', ok: false, miss_reason: 'credential_lapsed' },
+        { slug: 'missed', name: 'Missed', provider: 'anthropic', ok: false, miss_reason: 'endpoint_unreachable', sampled_at: '2026-07-16T11:59:26.000Z' },
+        { slug: 'never', name: 'Never', provider: 'anthropic' },
+      ],
+      NOW,
+    );
+    expect(lines.map((line) => [line.slug, line.state, line.note])).toEqual([
+      ['paced', 'paced', null],
+      ['lapsed', 'lapsed', null],
+      ['missed', 'unsampled', 'miss: endpoint unreachable'],
+      ['never', 'unsampled', null],
+    ]);
+    expect(lines[0].windows.map((w) => [w.window, w.cells.filter((c) => c.on).length, w.ahead])).toEqual([['5h', 6, false]]);
   });
 });

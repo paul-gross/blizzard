@@ -13,7 +13,6 @@ import { vi } from 'vitest';
 import { hostKey, runnerChunkDetailKey, runnerDashboardKey, runnerLeasesKey } from '../query-keys';
 import { RunnerLiveUpdates, STREAM_REARM_MAX_ATTEMPTS } from './runner-live-updates';
 import { SessionRecovery } from '../identity/session-recovery';
-import { provideActiveRunner } from '../active-runner';
 
 /** EventSource stand-in with named-listener and auth-failure support — jsdom ships
  * none, and reconnect plus the stream's `401` channel must be driven deterministically.
@@ -59,7 +58,7 @@ class FakeEventSource {
   }
 }
 
-describe('RunnerLiveUpdates (blizzard#317 Phase 4)', () => {
+describe('RunnerLiveUpdates', () => {
   let queryClient: QueryClient;
   let recoverSpy: ReturnType<typeof vi.spyOn>;
 
@@ -71,7 +70,6 @@ describe('RunnerLiveUpdates (blizzard#317 Phase 4)', () => {
     TestBed.configureTestingModule({
       providers: [
         provideZonelessChangeDetection(),
-        provideActiveRunner('rn_1'),
         provideTanStackQuery(queryClient),
         { provide: EVENT_SOURCE_FACTORY, useValue: factory },
       ],
@@ -256,7 +254,7 @@ describe('RunnerLiveUpdates (blizzard#317 Phase 4)', () => {
     expect(FakeEventSource.instances).toHaveLength(1);
   });
 
-  describe('the daemon-restart shape (blizzard#333 D2/D3): stream 401, session-check fetch fails too', () => {
+  describe('the daemon-restart shape: stream 401, session-check fetch fails too', () => {
     beforeEach(() => {
       recoverSpy.mockResolvedValue('read-failed');
     });

@@ -1,7 +1,7 @@
 import { type ChunkDetail, type ChunkStatus, type WorkItemsQuery } from 'fleet';
 import { describe, expect, it } from 'vitest';
 
-import { openDetail, openWorkItems, pendingQuestionIds, pendingStatusOverride } from './chunk-detail.model';
+import { openDetail, openProjectColor, openWorkItems, pendingQuestionIds, pendingStatusOverride } from './chunk-detail.model';
 
 const detail = (status: ChunkStatus, chunkId = 'ch_a', statusIfPaused?: ChunkStatus): ChunkDetail =>
   ({ chunk_id: chunkId, status, status_if_paused: statusIfPaused }) as ChunkDetail;
@@ -102,5 +102,24 @@ describe('openWorkItems', () => {
     expect(openWorkItems('ch_a', query('pending'))).toEqual({ status: 'loading', items: [] });
     expect(openWorkItems('ch_a', query('error'))).toEqual({ status: 'error', items: [] });
     expect(openWorkItems('ch_a', query('success'))).toEqual({ status: 'success', items: [{ id: 'wi_1' }] });
+  });
+});
+
+describe('openProjectColor', () => {
+  const projects = [
+    { project_id: 'pr_a', color: 'teal' },
+    { project_id: 'pr_b', color: '#ff8800' },
+  ];
+  const inProject = (projectId: string | null): ChunkDetail => ({ chunk_id: 'ch_a', project_id: projectId }) as ChunkDetail;
+
+  it("joins the open chunk's project to its color", () => {
+    expect(openProjectColor(inProject('pr_b'), projects)).toBe('#ff8800');
+  });
+
+  it('reads null while closed, before the list is read, for an unknown project, or a chunk with none', () => {
+    expect(openProjectColor(undefined, projects)).toBeNull();
+    expect(openProjectColor(inProject('pr_a'), undefined)).toBeNull();
+    expect(openProjectColor(inProject('pr_gone'), projects)).toBeNull();
+    expect(openProjectColor(inProject(null), projects)).toBeNull();
   });
 });

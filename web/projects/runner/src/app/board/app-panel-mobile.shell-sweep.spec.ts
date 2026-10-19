@@ -1,18 +1,19 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { runnerClient, type runnerApi } from 'fleet';
+import { provideRouter } from '@angular/router';
+import { runnerClient } from 'fleet';
 import { stubRequestClient } from 'fleet/testing';
 import { commands, page } from 'vitest/browser';
 
+import { type MachineChunkRow, machineChunkRows } from '../core/chunk-rows.model';
+import type { PanelLease } from '../core/panel-reads.model';
 import { LocalPanelMobile } from './app-panel-mobile';
-import type { MachineChunkRow } from './app-panel.model';
-import { provideActiveRunner } from '../core/active-runner';
 
-/** Matches `GET /api/chunks/{chunk_id}/work-items` for any chunk id. */
+/** Matches `GET /runners/rn_1/api/chunks/{chunk_id}/work-items` for any chunk id. */
 const WORK_ITEMS_ROUTE = /^\/runners\/rn_1\/api\/chunks\/[^/]+\/work-items$/;
 
-const LEASE = (overrides: Partial<runnerApi.LeaseView> = {}): runnerApi.LeaseView => ({
+const LEASE = (overrides: Partial<PanelLease> = {}): PanelLease => ({
   lease_id: 'lease_01KXKVVF1J3D6H6VYZ3XYNZPRR',
   chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9',
   graph_id: 'gr_1',
@@ -31,10 +32,17 @@ const LEASE = (overrides: Partial<runnerApi.LeaseView> = {}): runnerApi.LeaseVie
   closed_at: null,
   closure_reason: null,
   stale_after_seconds: 3600,
+  // A long runner name, so the card's step row has to hold it inside a phone's width too.
+  owner: { runnerId: 'rn_1', name: 'r-claude-with-a-long-host-name', label: 'r-claude-with-a-long-host-name' },
+  projectSlug: 'blizzard',
   ...overrides,
 });
 
-const MACHINE_CHUNK: MachineChunkRow = { lease: LEASE(), leases: [LEASE()], status: { label: 'RUNNING', tone: 'running' } };
+/** A live chunk and one waiting on an ask, tinted by their project — the board's two common card shapes. */
+const MACHINE_CHUNKS: MachineChunkRow[] = machineChunkRows(
+  [LEASE(), LEASE({ lease_id: 'lease_ask', chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYNASK1', state: 'parked', display_status: 'waiting-ask' })],
+  [{ slug: 'blizzard', name: 'Blizzard', entries: ['blizzard'], color: 'cyan' }],
+);
 
 /** Five work items — enough to prove the lines genuinely stack rather than reflow. */
 const FIVE_WORK_ITEMS = {
@@ -66,7 +74,7 @@ const LONG_ASK = {
       options: [],
       asked_at: '2026-07-16T11:30:00.000Z',
       question:
-        'Issue #214 does not reproduce under any condition I can test. Details:\n\n' +
+        'The reported bug does not reproduce under any condition I can test. Details:\n\n' +
         '1. Code trace: the mutation already invalidates both query keys.\n' +
         '2. Live browser test: the board updated within 500ms.\n\n' +
         'The failing path is web/projects/fleet/src/lib/chunk/chunk-detail/chunk-awaiting-human.spec.ts\n\n' +
@@ -97,9 +105,28 @@ function dashboardBody(asks: unknown) {
   };
 }
 
+/** The host's one runner, whose dashboard the rail's panels read. */
+const HOST_RUNNERS = {
+  items: [
+    {
+      runner_id: 'rn_1',
+      name: 'r-claude-with-a-long-host-name',
+      state: 'serving',
+      served: true,
+      halted_reasons: [],
+      pause: { local: false, hub: false, effective: false, local_reason: null },
+      bindings: [{ project: 'p', workspace_id: 'ws', agents: 4 }],
+      agents_in_use: 0,
+      max_agents: 4,
+    },
+  ],
+};
+
 async function render(asks: unknown = { items: [] }) {
   const stub = stubRequestClient(runnerClient, (method, path) => {
     if (method === 'GET' && WORK_ITEMS_ROUTE.test(path)) return FIVE_WORK_ITEMS;
+    if (method === 'GET' && path === '/api/host/runners') return HOST_RUNNERS;
+    if (method === 'GET' && path === '/api/host/environments') return { workspaces: [] };
     if (method === 'GET' && path === '/runners/rn_1/api/dashboard') return dashboardBody(asks);
     return { items: [] };
   });
@@ -107,16 +134,14 @@ async function render(asks: unknown = { items: [] }) {
     imports: [LocalPanelMobile],
     providers: [
       provideZonelessChangeDetection(),
-      provideActiveRunner('rn_1'),
       provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
+      provideRouter([]),
     ],
   }).compileComponents();
   const fixture = TestBed.createComponent(LocalPanelMobile);
   const defaults = {
-    activeLeases: [LEASE()],
-    leasesTriadState: 'ready',
     chunksTriadState: 'ready',
-    machineChunks: [MACHINE_CHUNK],
+    machineChunks: MACHINE_CHUNKS,
     openAskCount: 0,
   };
   for (const [key, value] of Object.entries(defaults)) fixture.componentRef.setInput(key, value);
@@ -125,7 +150,7 @@ async function render(asks: unknown = { items: [] }) {
 }
 
 /** The design tokens are a global stylesheet the app build loads, never a standalone mount —
- * injected so the tone colours the agent-row and chunk-card badges bind resolve. */
+ * injected so the tone colours the chunk cards' badges bind resolve. */
 async function loadDesignTokens(): Promise<void> {
   const css = await commands.readFile('projects/fleet/src/lib/core/design/tokens.css');
   const styleEl = document.createElement('style');
@@ -147,7 +172,7 @@ function tokenColor(token: string): string {
 // shell is actually reached at, beneath the persistent mobile bottom tab bar.
 const WIDTHS = [390, 320];
 
-describe('runner mobile chunk list shell sweep (web:shell-sweep, issue #176)', () => {
+describe('runner mobile board shell sweep (web:shell-sweep)', () => {
   for (const width of WIDTHS) {
     it(`stacks a five-work-item chunk card's lines with no horizontal overflow at width ${width}`, async () => {
       const pageErrors: string[] = [];
@@ -165,19 +190,31 @@ describe('runner mobile chunk list shell sweep (web:shell-sweep, issue #176)', (
         await page.viewport(width, 800);
         await new Promise((resolve) => requestAnimationFrame(resolve));
 
-        const card = root.querySelector<HTMLElement>('[data-testid="local-chunk-card"]');
+        const card = root.querySelector<HTMLElement>('[data-testid="chunk-row"]');
         expect(card, `width ${width}: no chunk card in the DOM`).not.toBeNull();
 
-        const lines = card!.querySelectorAll<HTMLElement>('.wi');
+        const lines = card!.querySelectorAll<HTMLElement>('[data-testid="chunk-row-title"] .item');
         expect(lines.length, `width ${width}: expected 5 work-item lines`).toBe(5);
 
         const tops = Array.from(lines).map((line) => line.getBoundingClientRect().top);
         expect(new Set(tops).size, `width ${width}: lines did not stack — tops were ${tops.join(', ')}`).toBe(5);
 
+        // Every card — its worker line and its long-named runner's step row included — stays
+        // inside its own box, and the stacked lanes inside the shell.
+        for (const each of Array.from(root.querySelectorAll<HTMLElement>('[data-testid="chunk-row"]'))) {
+          expect(
+            each.scrollWidth,
+            `width ${width}: chunk card ${each.dataset['chunkId']} overflows horizontally (${each.scrollWidth} > ${each.clientWidth})`,
+          ).toBeLessThanOrEqual(each.clientWidth);
+        }
+        const lanes = Array.from(root.querySelectorAll<HTMLElement>('[data-testid^="lane-"]'));
+        expect(lanes.length, `width ${width}: expected the three lanes`).toBe(3);
+        const laneTops = lanes.map((lane) => lane.getBoundingClientRect().top);
+        expect(new Set(laneTops).size, `width ${width}: lanes did not stack — tops were ${laneTops.join(', ')}`).toBe(3);
         expect(
-          card!.scrollWidth,
-          `width ${width}: chunk card overflows horizontally (${card!.scrollWidth} > ${card!.clientWidth})`,
-        ).toBeLessThanOrEqual(card!.clientWidth);
+          root.scrollWidth,
+          `width ${width}: mobile shell overflows horizontally (${root.scrollWidth} > ${root.clientWidth})`,
+        ).toBeLessThanOrEqual(root.clientWidth);
       } finally {
         root.remove();
         stub.restore();
@@ -231,7 +268,7 @@ describe('runner mobile chunk list shell sweep (web:shell-sweep, issue #176)', (
     });
   }
 
-  it('reads a running lease amber on its agent row, the same colour as its chunk card status, at width 390', async () => {
+  it("reads a running worker amber on its card, and a chunk waiting on an ask in the ask's own tone, at width 390", async () => {
     await loadDesignTokens();
     const { fixture, stub } = await render();
     const root = fixture.nativeElement as HTMLElement;
@@ -242,11 +279,12 @@ describe('runner mobile chunk list shell sweep (web:shell-sweep, issue #176)', (
       await page.viewport(390, 800);
       await new Promise((resolve) => requestAnimationFrame(resolve));
 
-      const state = root.querySelector<HTMLElement>('app-agent-row [data-testid="agent-state"] .badge');
-      const chunkStatus = root.querySelector<HTMLElement>('[data-testid="local-chunk-card-status"] .badge');
-      expect(state?.textContent?.trim()).toBe('RUNNING');
-      expect(getComputedStyle(state!).color).toBe(tokenColor('--amber'));
-      expect(getComputedStyle(state!).color).toBe(getComputedStyle(chunkStatus!).color);
+      const worker = root.querySelector<HTMLElement>('[data-testid="lane-progress"] [data-testid="worker-state"] .badge');
+      const askStatus = root.querySelector<HTMLElement>('[data-testid="lane-needs"] [data-testid="chunk-row-status"] .badge');
+      expect(worker?.textContent?.trim()).toBe('RUNNING');
+      expect(getComputedStyle(worker!).color).toBe(tokenColor('--amber'));
+      expect(askStatus?.textContent?.trim()).toBe('WAITING · ASK');
+      expect(getComputedStyle(askStatus!).color).not.toBe(getComputedStyle(worker!).color);
     } finally {
       root.remove();
       stub.restore();

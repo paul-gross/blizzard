@@ -3,22 +3,28 @@ import { TestBed } from '@angular/core/testing';
 import type { runnerApi } from 'fleet';
 import { vi } from 'vitest';
 
+import type { PanelFact, RunnerOwner } from '../core/panel-reads.model';
 import { FactLogView } from './fact-log-view';
 
-async function render(facts: readonly runnerApi.FactView[]) {
+const R1: RunnerOwner = { runnerId: 'rn_1', name: 'r1', label: 'r1' };
+const R2: RunnerOwner = { runnerId: 'rn_2', name: 'r2', label: 'r2' };
+
+/** Render `facts`, each read off `R1` unless it names its own owner. */
+async function render(facts: readonly (runnerApi.FactView & { readonly owner?: RunnerOwner })[]) {
+  const owned: PanelFact[] = facts.map((fact) => ({ ...fact, owner: fact.owner ?? R1, projectSlug: null }));
   await TestBed.configureTestingModule({
     imports: [FactLogView],
     providers: [provideZonelessChangeDetection()],
   }).compileComponents();
   const fixture = TestBed.createComponent(FactLogView);
-  fixture.componentRef.setInput('facts', facts);
+  fixture.componentRef.setInput('facts', owned);
   fixture.detectChanges();
   await fixture.whenStable();
   return { el: fixture.nativeElement as HTMLElement };
 }
 
 describe('FactLogView', () => {
-  describe('fact timestamps render in browser-local time (issue #136)', () => {
+  describe('fact timestamps render in browser-local time', () => {
     // Pin both the zone and "now" so the local-day boundary is deterministic —
     // a bare wall-clock read would make this flaky in CI.
     beforeEach(() => {
@@ -100,5 +106,14 @@ describe('FactLogView', () => {
     const rows = el.querySelectorAll('[data-testid="fact-row"]');
     expect(rows[0].querySelector('.flush')?.classList.contains('acked')).toBe(false);
     expect(rows[1].querySelector('.flush')?.classList.contains('acked')).toBe(true);
+  });
+
+  it('names each fact’s runner, keeping two runners’ facts of one seq apart', async () => {
+    const fact = { seq: 7, kind: 'chunk_claimed', created_at: '2026-07-16T11:00:00+00:00', chunk_id: null, lease_id: null, acked_at: null };
+    const { el } = await render([fact, { ...fact, owner: R2 }]);
+
+    const rows = Array.from(el.querySelectorAll('[data-testid="fact-row"]'));
+    expect(rows.map((row) => row.getAttribute('data-runner-id'))).toEqual(['rn_1', 'rn_2']);
+    expect(rows.map((row) => row.querySelector('[data-testid="fact-runner"]')?.textContent)).toEqual(['r1', 'r2']);
   });
 });

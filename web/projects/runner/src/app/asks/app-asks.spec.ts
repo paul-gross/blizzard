@@ -1,20 +1,35 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { runnerClient, type runnerApi } from 'fleet';
 import { type RequestClientStub, settle, stubRequestClient } from 'fleet/testing';
 import { vi } from 'vitest';
 
 import { LocalAsks } from './app-asks';
-import { provideActiveRunner } from '../core/active-runner';
 
 let stub: RequestClientStub | undefined;
 
 afterEach(() => stub?.restore());
 
+/** A serving runner on the host, as `GET /api/host/runners` lists it. */
+function hostRunner(runnerId: string, name: string): runnerApi.HostRunnerView {
+  return {
+    runner_id: runnerId,
+    name,
+    state: 'serving',
+    served: true,
+    halted_reasons: [],
+    pause: { local: false, hub: false, effective: false, local_reason: null },
+    bindings: [{ project: 'p', workspace_id: 'ws', agents: 4 }],
+    agents_in_use: 0,
+    max_agents: 4,
+  };
+}
+
 /** A full `DashboardView` body, `asks.items` set to `asks` and every other section
- * its empty default — `LocalAsks` reads off the shared `/runners/rn_1/api/dashboard` poll,
- * not a `/api/asks` route of its own. */
+ * its empty default — `LocalAsks` reads off each runner's shared `/runners/<id>/api/dashboard`
+ * poll, not a `/api/asks` route of its own. */
 function dashboardBody(asks: readonly runnerApi.AskView[]): runnerApi.DashboardView {
   return {
     runner: {
@@ -34,13 +49,27 @@ function dashboardBody(asks: readonly runnerApi.AskView[]): runnerApi.DashboardV
   };
 }
 
-async function render(asks: readonly runnerApi.AskView[]): Promise<{ el: HTMLElement; fixture: ComponentFixture<LocalAsks> }> {
-  stub = stubRequestClient(runnerClient, (method, path) => (method === 'GET' && path === '/runners/rn_1/api/dashboard' ? dashboardBody(asks) : {}));
+/** Render `LocalAsks` over a host serving `rn_1` (`r1`) with `asks` open on it, and — given
+ * `otherAsks` — `rn_2` (`r2`) with those open on it. */
+async function render(
+  asks: readonly runnerApi.AskView[],
+  otherAsks?: readonly runnerApi.AskView[],
+): Promise<{ el: HTMLElement; fixture: ComponentFixture<LocalAsks> }> {
+  const runners = [hostRunner('rn_1', 'r1'), ...(otherAsks ? [hostRunner('rn_2', 'r2')] : [])];
+  stub = stubRequestClient(runnerClient, (method, path) => {
+    if (method !== 'GET') return {};
+    if (path === '/api/host/runners') return { items: runners };
+    if (path === '/api/host/environments') return { workspaces: [] };
+    if (path === '/runners/rn_1/api/dashboard') return dashboardBody(asks);
+    if (path === '/runners/rn_2/api/dashboard') return dashboardBody(otherAsks ?? []);
+    if (/^\/runners\/[^/]+\/api\/leases$/.test(path)) return { items: [] };
+    return {};
+  });
   await TestBed.configureTestingModule({
     imports: [LocalAsks],
     providers: [
       provideZonelessChangeDetection(),
-      provideActiveRunner('rn_1'),
+      provideRouter([]),
       provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
     ],
   }).compileComponents();
@@ -66,6 +95,14 @@ describe('LocalAsks', () => {
     expect(row?.getAttribute('data-question-id')).toBe('q-1');
     expect(row?.querySelector('.q')?.textContent).toBe('Proceed with the migration?');
     expect(row?.querySelector('.chunk')?.textContent?.trim().length).toBeGreaterThan(0);
+  });
+
+  it('merges every serving runner’s open asks, each row naming the runner it is open on', async () => {
+    const { el } = await render([ASK], [{ ...ASK, question_id: 'q-2', question: 'Ship it?' }]);
+
+    const rows = Array.from(el.querySelectorAll('[data-testid="ask-row"]'));
+    expect(rows.map((row) => row.getAttribute('data-question-id'))).toEqual(['q-1', 'q-2']);
+    expect(rows.map((row) => row.querySelector('[data-testid="ask-runner"]')?.textContent)).toEqual(['r1', 'r2']);
   });
 
   it('renders the empty state when there are no open asks', async () => {

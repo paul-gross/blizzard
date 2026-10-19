@@ -1,6 +1,7 @@
-import { compactRef, type runnerApi } from 'fleet';
+import { compactRef, runnerClient, type runnerApi } from 'fleet';
 
-import { heartbeatLabel, leaseRefLabel, ownRunnerLabel } from './chunk-detail.model';
+import type { PanelLease } from '../../core/panel-reads.model';
+import { heartbeatLabel, leaseRefLabel, liveWorker, runnerTarget } from './chunk-detail.model';
 
 const NOW = Date.parse('2026-07-16T12:00:00.000Z');
 
@@ -28,17 +29,35 @@ function lease(overrides: Partial<runnerApi.LeaseView> = {}): runnerApi.LeaseVie
   };
 }
 
-describe('ownRunnerLabel', () => {
-  it('names a registered runner by its display name', () => {
-    expect(ownRunnerLabel({ runner_id: 'rn_01KXKVVF1J3D6H6VYZ3XYNABF3', runner_name: 'r-claude' })).toBe('R-ABF3.r-claude');
+function panelLease(overrides: Partial<runnerApi.LeaseView> = {}): PanelLease {
+  return { ...lease(overrides), owner: { runnerId: 'rn_1', name: 'r1', label: 'r1' }, projectSlug: null };
+}
+
+describe('runnerTarget', () => {
+  it("targets the named runner's own API", () => {
+    expect(runnerTarget('rn_1')).toEqual({ plane: 'runner', client: runnerClient, runnerId: 'rn_1' });
   });
 
-  it('names the runner by its configured name before its first registration', () => {
-    expect(ownRunnerLabel({ runner_id: null, runner_name: 'r-claude' })).toBe('r-claude');
+  it('targets nothing while no chunk is selected', () => {
+    expect(runnerTarget(null)).toBeNull();
+  });
+});
+
+describe('liveWorker', () => {
+  it('is the newest lease while its session has not ended', () => {
+    const running = panelLease();
+    const parked = panelLease({ state: 'parked' });
+    expect(liveWorker(running)).toBe(running);
+    expect(liveWorker(parked)).toBe(parked);
   });
 
-  it('is null before the dashboard read resolves', () => {
-    expect(ownRunnerLabel(undefined)).toBeNull();
+  it('is null once the worker exited or the session closed', () => {
+    expect(liveWorker(panelLease({ state: 'exited' }))).toBeNull();
+    expect(liveWorker(panelLease({ state: 'closed' }))).toBeNull();
+  });
+
+  it('is null with nothing selected', () => {
+    expect(liveWorker(null)).toBeNull();
   });
 });
 

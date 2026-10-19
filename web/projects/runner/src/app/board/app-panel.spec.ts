@@ -7,16 +7,19 @@ import { type RequestClientStub, settle, stubError, stubRequestClient } from 'fl
 import { type MockInstance, vi } from 'vitest';
 
 import { LocalPanel } from './app-panel';
-import { provideActiveRunner } from '../core/active-runner';
 
-/** Matches `GET /api/chunks/{chunk_id}/work-items` for any chunk id. */
-const WORK_ITEMS_ROUTE = /^\/runners\/rn_1\/api\/chunks\/[^/]+\/work-items$/;
+/** Matches `GET /runners/{runner_id}/api/chunks/{chunk_id}/work-items` for any runner and chunk. */
+const WORK_ITEMS_ROUTE = /^\/runners\/[^/]+\/api\/chunks\/[^/]+\/work-items$/;
 
 const REF = Date.parse('2026-07-16T12:00:00.000Z');
 
-const LEASE = (overrides: Record<string, unknown> = {}) => ({
+const CHUNK = 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9';
+const OTHER_CHUNK = 'ch_01KXKVVF1J3D6H6VYZ3XYNDDDD';
+const R2_CHUNK = 'ch_01KXKVVF1J3D6H6VYZ3XYNR2R2';
+
+const LEASE = (overrides: Partial<runnerApi.LeaseView> = {}): runnerApi.LeaseView => ({
   lease_id: 'lease_01KXKVVF1J3D6H6VYZ3XYNZPRR',
-  chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9',
+  chunk_id: CHUNK,
   graph_id: 'gr_1',
   node_id: 'nd_build',
   node_name: 'build',
@@ -28,23 +31,41 @@ const LEASE = (overrides: Record<string, unknown> = {}) => ({
   created_at: '2026-07-16T11:00:00.000Z',
   last_heartbeat_at: '2026-07-16T11:59:26.000Z',
   state: 'running',
+  display_status: 'running',
+  closure_healthy: false,
   closed_at: null,
   closure_reason: null,
+  stale_after_seconds: 3600,
   ...overrides,
 });
 
-/**
- * A minimal-but-complete `DashboardView` — every rail below
- * `LocalPanel` reads one shared `GET /api/dashboard` poll, so a test overrides just the section(s) it cares about via
- * `overrides` rather than stubbing a path of its own.
- */
-function dashboardBody(overrides: Partial<runnerApi.DashboardView> = {}): runnerApi.DashboardView {
+/** A serving runner on the host, binding one project in one workspace. */
+function hostRunner(runnerId: string, name: string, project: string): runnerApi.HostRunnerView {
+  return {
+    runner_id: runnerId,
+    name,
+    state: 'serving',
+    served: true,
+    halted_reasons: [],
+    pause: { local: false, hub: false, effective: false, local_reason: null },
+    bindings: [{ project, workspace_id: 'ws', agents: 4 }],
+    agents_in_use: 0,
+    max_agents: 4,
+  };
+}
+
+/** The host's two runners: `r1` serving project `p`, `r2` serving project `q`. */
+const RUNNERS = [hostRunner('rn_1', 'r1', 'p'), hostRunner('rn_2', 'r2', 'q')];
+
+/** A minimal-but-complete `DashboardView` — every rail panel reads it per runner, so a test
+ * overrides only the section it cares about. */
+function dashboardBody(runnerId: string, overrides: Partial<runnerApi.DashboardView> = {}): runnerApi.DashboardView {
   return {
     runner: {
-      runner_id: 'runner-local',
-      workspace_id: 'workspace-local',
+      runner_id: runnerId,
+      workspace_id: 'ws',
       pause: { local: false, hub: false, effective: false },
-      capacities: { used: 0, bindings: [{ project: 'p', project_id: 'p', workspace_id: 'ws', agents: 4, used: 0, free: 4 }] },
+      capacities: { used: 0, bindings: [] },
       hub: { endpoint: 'http://127.0.0.1:8421', reachable: true, last_contact_at: null, buffer_depth: 0 },
       last_tick_at: null,
     },
@@ -58,26 +79,27 @@ function dashboardBody(overrides: Partial<runnerApi.DashboardView> = {}): runner
   };
 }
 
-/**
- * A route table for the shell's whole read surface. Leases come from `leases`;
- * the panel's other seven-sections-in-one read (`/runners/rn_1/api/dashboard`) defaults to
- * {@link dashboardBody}'s empty shape, overridable per section via
- * `dashboard`. Override any other path via `extra` (return `undefined` to
- * fall through to the defaults) — still needed for `/runners/rn_1/api/leases/{id}
- * /transcript` and `/runners/rn_1/api/chunks/{id}/work-items`, whose own reads are out of
- * this issue's scope.
- */
-function routes(
-  leases: unknown[],
-  dashboard: Partial<runnerApi.DashboardView> = {},
-  extra: (method: string, path: string) => unknown = () => undefined,
-): (method: string, path: string) => unknown {
+interface Fixture {
+  /** Each runner's leases, by runner id; a runner with no entry holds none. */
+  readonly leases?: Record<string, unknown[]>;
+  /** Each runner's dashboard sections, by runner id. */
+  readonly dashboards?: Record<string, Partial<runnerApi.DashboardView>>;
+  /** Answers a path ahead of the defaults; `undefined` falls through. */
+  readonly extra?: (method: string, path: string) => unknown;
+}
+
+/** The panel's whole read surface: the host's runners, then each runner's leases and dashboard under `/runners/{id}`. */
+function routes(fixture: Fixture = {}): (method: string, path: string) => unknown {
   return (method, path) => {
-    const special = extra(method, path);
+    const special = fixture.extra?.(method, path);
     if (special !== undefined) return special;
     if (method !== 'GET') return {};
-    if (path === '/runners/rn_1/api/leases') return { items: leases };
-    if (path === '/runners/rn_1/api/dashboard') return dashboardBody(dashboard);
+    if (path === '/api/host/runners') return { items: RUNNERS };
+    if (path === '/api/host/environments') return { workspaces: [] };
+    const leases = /^\/runners\/([^/]+)\/api\/leases$/.exec(path);
+    if (leases) return { items: fixture.leases?.[leases[1]] ?? [] };
+    const dashboard = /^\/runners\/([^/]+)\/api\/dashboard$/.exec(path);
+    if (dashboard) return dashboardBody(dashboard[1], fixture.dashboards?.[dashboard[1]]);
     return { items: [] };
   };
 }
@@ -85,22 +107,17 @@ function routes(
 let navigateSpy: MockInstance<Router['navigate']>;
 
 /**
- * A real router (`MachineDetailHeader`'s chunk name is a
- * `routerLink`), seeded with `initialQuery` before the panel
- * mounts so its first render already reflects a deep-linked URL. The catch-all
- * route is a no-op destination: `LocalPanel` is created directly rather than
- * through an outlet, so only the router's shared query-param state (what
- * `injectChunkUrlSelection` reads/writes) matters here, never the matched path.
- * `navigate` is spied (not replaced) so a write genuinely round-trips through
- * `ActivatedRoute.queryParamMap` the way it does in the app, and can still be
- * asserted or checked for a no-write.
+ * A real router (the dock's chunk name is a `routerLink`, and the filters and selection ride
+ * in the URL), seeded with `initialQuery` before the panel mounts so its first render already
+ * reflects a deep-linked URL. `LocalPanel` is created directly rather than through an outlet,
+ * so only the router's query-param state matters, never the matched path. `navigate` is
+ * spied (not replaced) so a write genuinely round-trips through the URL.
  */
 async function setUp(initialQuery: Record<string, string> = {}): Promise<void> {
   await TestBed.configureTestingModule({
     imports: [LocalPanel],
     providers: [
       provideZonelessChangeDetection(),
-      provideActiveRunner('rn_1'),
       provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
       provideRouter([{ path: '**', children: [] }]),
     ],
@@ -111,15 +128,30 @@ async function setUp(initialQuery: Record<string, string> = {}): Promise<void> {
   navigateSpy = vi.spyOn(router, 'navigate');
 }
 
-async function render(initialQuery: Record<string, string> = {}) {
+async function render(initialQuery: Record<string, string> = {}): Promise<HTMLElement> {
   await setUp(initialQuery);
   const fixture = TestBed.createComponent(LocalPanel);
   await settle(fixture);
-  return fixture;
+  // The filters and selection re-render through the router; one more pass settles them.
+  await settle(fixture);
+  return fixture.nativeElement as HTMLElement;
 }
+
+const chunkIds = (root: ParentNode | null, testid = 'chunk-row'): (string | null)[] =>
+  Array.from(root?.querySelectorAll(`[data-testid="${testid}"]`) ?? []).map((row) => row.getAttribute('data-chunk-id'));
+
+const ESCALATION = {
+  chunk_id: CHUNK,
+  lease_id: 'lease_01KXKVVF1J3D6H6VYZ3XYNZPRR',
+  node_id: 'nd_build',
+  epoch: 2,
+  closed_at: '2026-07-16T11:45:00.000Z',
+  resume_command: 'cd /ws/beta && claude --resume sess-77',
+};
 
 describe('LocalPanel', () => {
   let stub: RequestClientStub;
+  let fixtureRef: ReturnType<typeof TestBed.createComponent<LocalPanel>> | undefined;
 
   beforeEach(() => {
     vi.spyOn(Date, 'now').mockReturnValue(REF);
@@ -127,446 +159,389 @@ describe('LocalPanel', () => {
 
   afterEach(() => {
     stub.restore();
+    fixtureRef = undefined;
     vi.restoreAllMocks();
   });
 
-  it('polls GET /api/dashboard exactly once for the whole shell, and none of the seven folded-in endpoints (issue #311)', async () => {
-    // The desktop layout mounts four separate injectors of the dashboard query
-    // (LocalPanel itself, plus EnvList/LocalAsks/LocalInfo via LocalPanelLayout —
-    // the app root's own AppHeader is a distinct component tree, out of scope
-    // here) — proving one request here is what the issue's rate criterion asks
-    // for: TanStack's query-key dedupe, not a single shared read threaded down
-    // as an input.
-    stub = stubRequestClient(runnerClient, routes([LEASE()]));
-    await render();
+  /** Mounts the panel and keeps its fixture, so a click can settle the same tree. */
+  async function mount(initialQuery: Record<string, string> = {}): Promise<HTMLElement> {
+    await setUp(initialQuery);
+    fixtureRef = TestBed.createComponent(LocalPanel);
+    await settle(fixtureRef);
+    await settle(fixtureRef);
+    return fixtureRef.nativeElement as HTMLElement;
+  }
 
-    expect(stub.forRoute('/runners/rn_1/api/dashboard', 'GET')).toHaveLength(1);
-    for (const path of ['/runners/rn_1/api/runner', '/api/environments', '/api/asks', '/api/escalations', '/api/takeovers', '/api/facts', '/api/fleet-summary']) {
-      expect(stub.forRoute(path, 'GET')).toHaveLength(0);
-    }
-  });
+  async function click(target: HTMLElement | null | undefined): Promise<void> {
+    target?.click();
+    await settle(fixtureRef!);
+    await settle(fixtureRef!);
+  }
 
-  it('shows a loading line before the first read resolves, not the empty state', async () => {
-    stub = stubRequestClient(runnerClient, routes([]));
-    await setUp();
-    const fixture = TestBed.createComponent(LocalPanel);
-    // Right after creation the stubbed fetch's promise hasn't resolved yet — the
-    // panel must read as loading, never as "idle".
-    fixture.detectChanges();
-    const el = fixture.nativeElement as HTMLElement;
+  describe('reads across the host', () => {
+    it("reads the host's runners first, then each serving runner's leases under its own id", async () => {
+      stub = stubRequestClient(runnerClient, routes({ leases: { rn_1: [LEASE()] } }));
+      await render();
 
-    expect(el.querySelector('[data-testid="loading-state"]')).not.toBeNull();
-    expect(el.querySelector('[data-testid="empty-state"]')).toBeNull();
-    await settle(fixture);
-  });
-
-  it('renders the genuinely-idle empty state only once the read resolves with zero leases', async () => {
-    stub = stubRequestClient(runnerClient, routes([]));
-    const fixture = await render();
-    const el = fixture.nativeElement as HTMLElement;
-
-    expect(el.querySelector('[data-testid="empty-state"]')?.textContent).toContain('NO LIVE LEASES');
-    expect(el.querySelector('[data-testid="chunks-empty"]')).not.toBeNull();
-  });
-
-  it('shows a distinct degraded line on a 503 — the empty state must never appear on a failed read', async () => {
-    stub = stubRequestClient(runnerClient, (method, path) => {
-      if (method === 'GET' && path === '/runners/rn_1/api/leases') return stubError(503, { detail: 'stubbed route error (503)' });
-      return { items: [] };
+      expect(stub.forRoute('/api/host/runners', 'GET').length).toBeGreaterThan(0);
+      expect(stub.forRoute('/runners/rn_1/api/leases', 'GET')).toHaveLength(1);
+      expect(stub.forRoute('/runners/rn_2/api/leases', 'GET')).toHaveLength(1);
+      expect(stub.forRoute('/api/leases', 'GET')).toHaveLength(0);
     });
-    const fixture = await render();
-    const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('[data-testid="error-state"]')).not.toBeNull();
-    expect(el.querySelector('[data-testid="empty-state"]')).toBeNull();
-  });
+    it("reads each runner's dashboard exactly once for the whole board, however many panels read it", async () => {
+      stub = stubRequestClient(runnerClient, routes({ leases: { rn_1: [LEASE()] } }));
+      await render();
 
-  it('renders one agent-row per active lease and none for closed ones — the rail is liveness, not history', async () => {
-    const closed = LEASE({
-      lease_id: 'lease_01KXKVVF1J3D6H6VYZ3XYNCCCC',
-      chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYNDDDD',
-      state: 'closed',
-      closed_at: '2026-07-16T11:30:00.000Z',
-      closure_reason: 'transitioned', closure_healthy: true,
+      expect(stub.forRoute('/runners/rn_1/api/dashboard', 'GET')).toHaveLength(1);
+      expect(stub.forRoute('/runners/rn_2/api/dashboard', 'GET')).toHaveLength(1);
     });
-    stub = stubRequestClient(runnerClient, routes([LEASE(), closed]));
-    const fixture = await render();
-    const el = fixture.nativeElement as HTMLElement;
 
-    const rows = el.querySelectorAll('[data-testid="agent-row"]');
-    expect(rows).toHaveLength(1);
-    expect(rows[0].getAttribute('data-lease-id')).toBe('lease_01KXKVVF1J3D6H6VYZ3XYNZPRR');
-    expect(el.querySelector('[data-testid="lease-count"]')?.textContent).toContain('1 live');
-  });
+    it("merges every runner's chunks into one board, each card naming its runner", async () => {
+      stub = stubRequestClient(
+        runnerClient,
+        routes({ leases: { rn_1: [LEASE()], rn_2: [LEASE({ lease_id: 'lease_r2', chunk_id: R2_CHUNK })] } }),
+      );
+      const el = await render();
 
-  it('renders one chunk-row per distinct chunk, hiding a chunk whose newest lease is closed by default (issue #134)', async () => {
-    const otherChunk = LEASE({
-      lease_id: 'lease_01KXKVVF1J3D6H6VYZ3XYNCCCC',
-      chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYNDDDD',
-      state: 'closed',
-      closure_reason: 'transitioned', closure_healthy: true,
+      const progress = el.querySelector('[data-testid="lane-progress"]');
+      expect(new Set(chunkIds(progress))).toEqual(new Set([CHUNK, R2_CHUNK]));
+      const runnerOf = (chunkId: string) =>
+        progress?.querySelector(`[data-chunk-id="${chunkId}"] [data-testid="chunk-row-runner"]`)?.textContent?.trim();
+      expect(runnerOf(CHUNK)).toBe('r1');
+      expect(runnerOf(R2_CHUNK)).toBe('r2');
     });
-    stub = stubRequestClient(runnerClient, routes([LEASE(), otherChunk]));
-    const fixture = await render();
-    const el = fixture.nativeElement as HTMLElement;
 
-    const rows = el.querySelectorAll('[data-testid="chunk-row"]');
-    expect(rows).toHaveLength(1);
-    expect(rows[0].getAttribute('data-chunk-id')).toBe('ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9');
-    expect(el.querySelector<HTMLInputElement>('[data-testid="chunk-filter-show-all"]')?.checked).toBe(false);
-  });
+    it('keeps the other runners on the board when one runner cannot be read', async () => {
+      stub = stubRequestClient(
+        runnerClient,
+        routes({
+          leases: { rn_1: [LEASE()] },
+          extra: (method, path) => (method === 'GET' && path === '/runners/rn_2/api/leases' ? stubError(503, { detail: 'down' }) : undefined),
+        }),
+      );
+      const el = await render();
 
-  it('checking "show all" reveals the closed tail too, newest lease first, distinct chunk folded on chunk_id', async () => {
-    const older = LEASE({
-      lease_id: 'lease_01KXKVVF1J3D6H6VYZ3XYNBBBB',
-      epoch: 1,
-      state: 'closed',
-      closure_reason: 'failed',
+      expect(chunkIds(el)).toEqual([CHUNK]);
+      expect(el.textContent).not.toContain('CHUNKS UNAVAILABLE');
     });
-    const otherChunk = LEASE({
-      lease_id: 'lease_01KXKVVF1J3D6H6VYZ3XYNCCCC',
-      chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYNDDDD',
-      state: 'closed',
-      closure_reason: 'transitioned', closure_healthy: true,
+  });
+
+  describe('the filters narrow the board', () => {
+    const BOTH = { leases: { rn_1: [LEASE()], rn_2: [LEASE({ lease_id: 'lease_r2', chunk_id: R2_CHUNK })] } };
+
+    it("reads only the runner the Runner filter names, and shows only its chunks", async () => {
+      stub = stubRequestClient(runnerClient, routes(BOTH));
+      const el = await render({ runner: 'r2' });
+
+      expect(chunkIds(el)).toEqual([R2_CHUNK]);
+      expect(stub.forRoute('/runners/rn_1/api/leases', 'GET')).toHaveLength(0);
     });
-    stub = stubRequestClient(runnerClient, routes([LEASE(), otherChunk, older]));
-    const fixture = await render();
-    const el = fixture.nativeElement as HTMLElement;
 
-    el.querySelector<HTMLInputElement>('[data-testid="chunk-filter-show-all"]')?.click();
-    await settle(fixture);
+    it("shows only the chunks of the project the Project filter names", async () => {
+      stub = stubRequestClient(runnerClient, routes(BOTH));
+      const el = await render({ project: 'p' });
 
-    const rows = el.querySelectorAll('[data-testid="chunk-row"]');
-    // Two distinct chunks — the duplicate (older lease of the first chunk) folds away.
-    expect(rows).toHaveLength(2);
-    expect(rows[0].getAttribute('data-chunk-id')).toBe('ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9');
-    expect(rows[0].querySelector('[data-testid="chunk-row-status"]')?.textContent?.trim()).toBe('RUNNING');
-    expect(rows[1].querySelector('[data-testid="chunk-row-status"]')?.textContent?.trim()).toBe('TRANSITIONED');
+      expect(chunkIds(el)).toEqual([CHUNK]);
+    });
   });
 
-  it('shows a distinct filtered-empty state naming the hidden count when the filter hides every chunk, not a blank pane (issue #134)', async () => {
-    stub = stubRequestClient(runnerClient, routes([LEASE({ state: 'closed', closure_reason: 'transitioned', closure_healthy: true })]));
-    const fixture = await render();
-    const el = fixture.nativeElement as HTMLElement;
-
-    expect(el.querySelectorAll('[data-testid="chunk-row"]')).toHaveLength(0);
-    const emptyState = el.querySelector('[data-testid="chunks-empty"]');
-    expect(emptyState?.textContent).toContain('1 CHUNK HIDDEN BY THE FILTER');
-    expect(emptyState?.textContent).not.toContain('NO CHUNKS ON THIS MACHINE');
-  });
-
-  it('derives NEEDS HUMAN from an open escalation, outranking the lease state — visible without checking show-all', async () => {
-    stub = stubRequestClient(runnerClient,
-      routes([LEASE({ state: 'closed', closure_reason: 'escalated', display_status: 'needs-human' })], {
-        escalations: {
-          items: [
-            {
-              chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9',
-              lease_id: 'lease_01KXKVVF1J3D6H6VYZ3XYNZPRR',
-              node_id: 'nd_build',
-              epoch: 2,
-              closed_at: '2026-07-16T11:45:00.000Z',
-              resume_command: 'cd /ws/beta && claude --resume sess-77',
-            },
-          ],
-        },
-      }),
-    );
-    const fixture = await render();
-    const el = fixture.nativeElement as HTMLElement;
-
-    expect(el.querySelector('[data-testid="chunk-row-status"]')?.textContent?.trim()).toBe('NEEDS HUMAN');
-  });
-
-  describe('selection drives the machine detail dock', () => {
-    it('shows the SELECT A CHUNK placeholder before anything is selected', async () => {
-      stub = stubRequestClient(runnerClient, routes([LEASE()]));
-      const fixture = await render();
+  describe('async states', () => {
+    it('shows a loading line before the first read resolves, not the empty state', async () => {
+      stub = stubRequestClient(runnerClient, routes());
+      await setUp();
+      const fixture = TestBed.createComponent(LocalPanel);
+      fixture.detectChanges();
       const el = fixture.nativeElement as HTMLElement;
+
+      expect(el.querySelector('[data-testid="chunks-pane"]')?.textContent).toContain('LOADING…');
+      expect(el.querySelector('[data-testid="chunks-empty"]')).toBeNull();
+      await settle(fixture);
+    });
+
+    it('shows the empty state only once every read resolves with no chunk', async () => {
+      stub = stubRequestClient(runnerClient, routes());
+      const el = await render();
+
+      expect(el.querySelector('[data-testid="chunks-empty"]')?.textContent).toContain('NO CHUNKS ON THESE RUNNERS');
+      expect(el.querySelector('[data-testid="board"]')).toBeNull();
+    });
+
+    it('shows a degraded line once every runner fails — never the empty state', async () => {
+      stub = stubRequestClient(
+        runnerClient,
+        routes({ extra: (method, path) => (method === 'GET' && /\/api\/leases$/.test(path) ? stubError(503, { detail: 'down' }) : undefined) }),
+      );
+      const el = await render();
+
+      expect(el.querySelector('[data-testid="chunks-pane"]')?.textContent).toContain('CHUNKS UNAVAILABLE');
+      expect(el.querySelector('[data-testid="chunks-empty"]')).toBeNull();
+    });
+  });
+
+  describe('the board folds leases into chunks', () => {
+    it('renders one card per distinct chunk, its older attempts folded away', async () => {
+      const older = LEASE({ lease_id: 'lease_01KXKVVF1J3D6H6VYZ3XYNBBBB', epoch: 1, state: 'closed', closure_reason: 'failed', display_status: 'closed' });
+      stub = stubRequestClient(runnerClient, routes({ leases: { rn_1: [LEASE(), older] } }));
+      const el = await render();
+
+      expect(chunkIds(el)).toEqual([CHUNK]);
+    });
+
+    it("carries the chunk's live worker on its card — no separate worker rail", async () => {
+      stub = stubRequestClient(runnerClient, routes({ leases: { rn_1: [LEASE()] } }));
+      const el = await render();
+
+      expect(el.querySelector('[data-testid="chunk-row"] [data-testid="chunk-row-worker"] [data-testid="worker-env"]')?.textContent?.trim()).toBe(
+        'beta',
+      );
+      expect(el.querySelector('[data-testid="agent-row"]')).toBeNull();
+    });
+
+    it('keeps a chunk whose session ended on the board, in the Done lane', async () => {
+      const done = LEASE({
+        lease_id: 'lease_01KXKVVF1J3D6H6VYZ3XYNCCCC',
+        chunk_id: OTHER_CHUNK,
+        state: 'closed',
+        display_status: 'closed',
+        closure_reason: 'transitioned',
+        closure_healthy: true,
+        closed_at: '2026-07-16T11:30:00.000Z',
+      });
+      stub = stubRequestClient(runnerClient, routes({ leases: { rn_1: [LEASE(), done] } }));
+      const el = await render();
+
+      expect(chunkIds(el.querySelector('[data-testid="lane-progress"]'))).toEqual([CHUNK]);
+      expect(chunkIds(el.querySelector('[data-testid="lane-done"]'))).toEqual([OTHER_CHUNK]);
+      expect(el.querySelector('[data-testid="lane-done"] [data-testid="chunk-row-status"]')?.textContent?.trim()).toBe('COMPLETED');
+      expect(el.querySelector('[data-testid="chunk-filter-show-all"]')).toBeNull();
+    });
+
+    it('puts an escalated chunk in Needs human, outranking its closed lease', async () => {
+      stub = stubRequestClient(
+        runnerClient,
+        routes({
+          leases: { rn_1: [LEASE({ state: 'closed', closure_reason: 'escalated', display_status: 'needs-human' })] },
+          dashboards: { rn_1: { escalations: { items: [ESCALATION] } } },
+        }),
+      );
+      const el = await render();
+
+      expect(chunkIds(el.querySelector('[data-testid="lane-needs"]'))).toEqual([CHUNK]);
+      expect(el.querySelector('[data-testid="chunk-row-status"]')?.textContent?.trim()).toBe('NEEDS HUMAN');
+    });
+  });
+
+  describe('the Board/List layout rides the URL', () => {
+    it('renders the ranked list for ?layout=list', async () => {
+      stub = stubRequestClient(runnerClient, routes({ leases: { rn_1: [LEASE()] } }));
+      const el = await render({ layout: 'list' });
+
+      expect(el.querySelector('[data-testid="board"]')).toBeNull();
+      expect(chunkIds(el.querySelector('[data-testid="board-list"]'), 'list-row')).toEqual([CHUNK]);
+    });
+
+    it('writes the layout to the URL, keeping every other param, and drops it again for Board', async () => {
+      stub = stubRequestClient(runnerClient, routes({ leases: { rn_1: [LEASE()] } }));
+      const el = await mount({ chunk: CHUNK });
+
+      await click(el.querySelector<HTMLElement>('[data-testid="board-layout-list"]'));
+      expect(navigateSpy).toHaveBeenLastCalledWith([], expect.objectContaining({ queryParams: { layout: 'list' }, queryParamsHandling: 'merge' }));
+      expect(TestBed.inject(Router).url).toContain(`chunk=${CHUNK}`);
+      expect(el.querySelector('[data-testid="board-list"]')).not.toBeNull();
+
+      await click(el.querySelector<HTMLElement>('[data-testid="board-layout-board"]'));
+      expect(navigateSpy).toHaveBeenLastCalledWith([], expect.objectContaining({ queryParams: { layout: null } }));
+      expect(el.querySelector('[data-testid="board"]')).not.toBeNull();
+    });
+  });
+
+  describe('selection drives the detail dock', () => {
+    it('shows the SELECT A CHUNK placeholder before anything is selected', async () => {
+      stub = stubRequestClient(runnerClient, routes({ leases: { rn_1: [LEASE()] } }));
+      const el = await render();
 
       expect(el.querySelector('[data-testid="detail-empty"]')?.textContent).toContain('SELECT A CHUNK');
     });
 
-    it('selecting a chunk row renders its execution facts', async () => {
-      stub = stubRequestClient(runnerClient, routes([LEASE()]));
-      const fixture = await render();
-      const el = fixture.nativeElement as HTMLElement;
+    it('selecting a chunk card writes it to the URL and opens its execution facts', async () => {
+      stub = stubRequestClient(runnerClient, routes({ leases: { rn_1: [LEASE()] } }));
+      const el = await mount();
 
-      el.querySelector<HTMLElement>('[data-testid="chunk-row"]')?.click();
-      await settle(fixture);
+      await click(el.querySelector<HTMLElement>('[data-testid="chunk-row"]'));
 
-      expect(el.querySelector('[data-testid="detail-chunk-ref"]')?.textContent).toContain('ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9');
+      expect(navigateSpy).toHaveBeenCalledWith([], expect.objectContaining({ queryParams: { chunk: CHUNK }, queryParamsHandling: 'merge' }));
+      expect(el.querySelector('[data-testid="detail-chunk-ref"]')?.textContent).toContain(CHUNK);
       const facts = el.querySelector('[data-testid="detail-facts"]')?.textContent ?? '';
-      expect(facts).toContain('L-ZPRR');
       expect(facts).toContain('4821');
       expect(facts).toContain('/ws/beta');
       expect(facts).toContain('sess-77');
+      expect(el.querySelector('[data-testid="chunk-row"]')?.classList).toContain('selected');
     });
 
-    it('shows facts for the newest attempt of a multi-attempt chunk once selected', async () => {
-      const older = LEASE({
-        lease_id: 'lease_01KXKVVF1J3D6H6VYZ3XYNBBBB',
-        epoch: 1,
-        state: 'closed',
-        closure_reason: 'failed',
-        session_id: 'sess-old',
-      });
-      // Server order: newest active first, then the closed attempt.
-      stub = stubRequestClient(runnerClient, routes([LEASE(), older]));
-      const fixture = await render();
-      const el = fixture.nativeElement as HTMLElement;
-
-      el.querySelector<HTMLElement>('[data-testid="chunk-row"]')?.click();
-      await settle(fixture);
+    it('shows facts for the newest attempt of a multi-attempt chunk', async () => {
+      const older = LEASE({ lease_id: 'lease_01KXKVVF1J3D6H6VYZ3XYNBBBB', epoch: 1, state: 'closed', closure_reason: 'failed', session_id: 'sess-old' });
+      stub = stubRequestClient(runnerClient, routes({ leases: { rn_1: [LEASE(), older] } }));
+      const el = await render({ chunk: CHUNK });
 
       const facts = el.querySelector('[data-testid="detail-facts"]')?.textContent ?? '';
       expect(facts).toContain('sess-77');
       expect(facts).not.toContain('sess-old');
     });
 
-    it('selecting a lease row selects its chunk — one shared selection across both rails', async () => {
-      stub = stubRequestClient(runnerClient, routes([LEASE()]));
-      const fixture = await render();
-      const el = fixture.nativeElement as HTMLElement;
+    it("reads the selected chunk's detail off its own runner", async () => {
+      stub = stubRequestClient(runnerClient, routes({ leases: { rn_2: [LEASE({ lease_id: 'lease_r2', chunk_id: R2_CHUNK })] } }));
+      await render({ chunk: R2_CHUNK });
 
-      el.querySelector<HTMLElement>('[data-testid="agent-row"]')?.click();
-      await settle(fixture);
-
-      expect(el.querySelector('[data-testid="detail-chunk-ref"]')?.textContent).toContain('ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9');
-      expect(el.querySelector('[data-testid="chunk-row"]')?.classList.contains('selected')).toBe(true);
-      expect(el.querySelector('[data-testid="agent-row"]')?.classList.contains('selected')).toBe(true);
+      expect(stub.forRoute(`/runners/rn_2/api/chunks/${R2_CHUNK}`, 'GET').length).toBeGreaterThan(0);
+      expect(stub.forRoute(`/runners/rn_1/api/chunks/${R2_CHUNK}`, 'GET')).toHaveLength(0);
     });
 
-    it('shows the escalation resume command in the dock for an escalated selected chunk', async () => {
-      stub = stubRequestClient(runnerClient,
-        routes([LEASE({ state: 'closed', closure_reason: 'escalated', display_status: 'needs-human' })], {
-          escalations: {
-            items: [
-              {
-                chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9',
-                lease_id: 'lease_01KXKVVF1J3D6H6VYZ3XYNZPRR',
-                node_id: 'nd_build',
-                epoch: 2,
-                closed_at: '2026-07-16T11:45:00.000Z',
-                resume_command: 'cd /ws/beta && claude --resume sess-77',
-              },
-            ],
+    it("shows the resume command of the escalation its own runner holds", async () => {
+      stub = stubRequestClient(
+        runnerClient,
+        routes({
+          leases: { rn_1: [LEASE({ state: 'closed', closure_reason: 'escalated', display_status: 'needs-human' })] },
+          dashboards: {
+            rn_1: { escalations: { items: [ESCALATION] } },
+            rn_2: { escalations: { items: [{ ...ESCALATION, resume_command: 'another runner’s command' }] } },
           },
         }),
       );
-      const fixture = await render();
-      const el = fixture.nativeElement as HTMLElement;
-      // The escalated chunk's newest lease is closed, but NEEDS HUMAN outranks
-      // it (`deriveMachineChunkStatus`) — it's visible without checking show-all.
-      el.querySelector<HTMLElement>('[data-testid="chunk-row"]')?.click();
-      await settle(fixture);
+      const el = await render({ chunk: CHUNK });
 
-      expect(el.querySelector('[data-testid="detail-resume"]')?.textContent).toContain(
-        'cd /ws/beta && claude --resume sess-77',
-      );
+      const resume = el.querySelector('[data-testid="detail-resume"]')?.textContent;
+      expect(resume).toContain('cd /ws/beta && claude --resume sess-77');
+      expect(resume).not.toContain('another runner’s command');
     });
-  });
 
-  describe('the URL drives selection (issue #99)', () => {
-    const CHUNK = 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9';
-    const OLDER = () =>
-      LEASE({ lease_id: 'lease_01KXKVVF1J3D6H6VYZ3XYNBBBB', epoch: 1, state: 'closed', closure_reason: 'failed' });
+    it('hydrates the selection from the URL on load without rewriting it', async () => {
+      stub = stubRequestClient(runnerClient, routes({ leases: { rn_1: [LEASE()] } }));
+      const el = await render({ chunk: CHUNK });
 
-    it('hydrates the selected chunk from the URL on load, no click — a shareable/refresh-safe link', async () => {
-      stub = stubRequestClient(runnerClient, routes([LEASE()]));
-      const fixture = await render({ chunk: CHUNK });
-      const el = fixture.nativeElement as HTMLElement;
-
-      // The detail dock is open on the URL's chunk straight away…
-      expect(el.querySelector('[data-testid="detail-chunk-ref"]')?.textContent).toContain('ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9');
-      expect(el.querySelector('[data-testid="chunk-row"]')?.classList.contains('selected')).toBe(true);
-      // …and hydration is a pure read — nothing rewrote the URL.
+      expect(el.querySelector('[data-testid="detail-chunk-ref"]')?.textContent).toContain(CHUNK);
+      expect(el.querySelector('[data-testid="chunk-row"]')?.classList).toContain('selected');
       expect(navigateSpy).not.toHaveBeenCalled();
-    });
-
-    it('writes the chunk selection into the URL when a chunk row is clicked — no full reload', async () => {
-      stub = stubRequestClient(runnerClient, routes([LEASE()]));
-      const fixture = await render();
-      const el = fixture.nativeElement as HTMLElement;
-
-      el.querySelector<HTMLElement>('[data-testid="chunk-row"]')?.click();
-      await settle(fixture);
-
-      // A client-side query-param merge writing only the param this helper owns.
-      expect(navigateSpy).toHaveBeenCalledWith(
-        [],
-        expect.objectContaining({ queryParams: { chunk: CHUNK }, queryParamsHandling: 'merge' }),
-      );
     });
 
     it('touches no param but its own when a different chunk is selected', async () => {
-      const otherChunk = LEASE({
-        lease_id: 'lease_01KXKVVF1J3D6H6VYZ3XYNCCCC',
-        chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYNDDDD',
-      });
-      stub = stubRequestClient(runnerClient, routes([LEASE(), otherChunk]));
-      // Loaded on the first chunk with its older attempt encoded.
-      const fixture = await render({ chunk: CHUNK, attempt: OLDER().lease_id });
-      const el = fixture.nativeElement as HTMLElement;
+      const other = LEASE({ lease_id: 'lease_01KXKVVF1J3D6H6VYZ3XYNCCCC', chunk_id: OTHER_CHUNK });
+      stub = stubRequestClient(runnerClient, routes({ leases: { rn_1: [LEASE(), other] } }));
+      const el = await mount({ chunk: CHUNK, attempt: 'lease_01KXKVVF1J3D6H6VYZ3XYNBBBB' });
 
-      // `?attempt=` belongs to the chunk detail route, which this
-      // board neither reads nor writes — selection rewrites `chunk` and nothing else.
-      const rows = el.querySelectorAll<HTMLElement>('[data-testid="chunk-row"]');
-      rows[1].click();
-      await settle(fixture);
+      await click(el.querySelector<HTMLElement>(`[data-testid="chunk-row"][data-chunk-id="${OTHER_CHUNK}"]`));
 
-      expect(navigateSpy).toHaveBeenCalledWith(
-        [],
-        expect.objectContaining({ queryParams: { chunk: 'ch_01KXKVVF1J3D6H6VYZ3XYNDDDD' } }),
-      );
+      expect(navigateSpy).toHaveBeenCalledWith([], expect.objectContaining({ queryParams: { chunk: OTHER_CHUNK } }));
     });
 
-    it('degrades an unknown chunk id to no-selection without error, leaving the URL untouched', async () => {
-      stub = stubRequestClient(runnerClient, routes([LEASE()]));
-      const fixture = await render({ chunk: 'ch_GONE00000000000000000000' });
-      const el = fixture.nativeElement as HTMLElement;
+    it('degrades an unknown chunk id to no selection, leaving the URL untouched', async () => {
+      stub = stubRequestClient(runnerClient, routes({ leases: { rn_1: [LEASE()] } }));
+      const el = await render({ chunk: 'ch_GONE00000000000000000000' });
 
-      // The chunk names nothing on this machine — the dock reads as no-selection…
       expect(el.querySelector('[data-testid="detail-empty"]')?.textContent).toContain('SELECT A CHUNK');
-      expect(el.querySelector('[data-testid="chunk-row"]')?.classList.contains('selected')).toBe(false);
-      // …and the panel never rewrote the URL to "correct" it.
+      expect(el.querySelector('[data-testid="chunk-row"]')?.classList).not.toContain('selected');
       expect(navigateSpy).not.toHaveBeenCalled();
-    });
-
-    it('selecting a lease row writes its chunk to the URL — one shared selection across rails', async () => {
-      stub = stubRequestClient(runnerClient, routes([LEASE()]));
-      const fixture = await render();
-      const el = fixture.nativeElement as HTMLElement;
-
-      el.querySelector<HTMLElement>('[data-testid="agent-row"]')?.click();
-      await settle(fixture);
-
-      expect(navigateSpy).toHaveBeenCalledWith(
-        [],
-        expect.objectContaining({ queryParams: { chunk: CHUNK } }),
-      );
-      // And it round-trips: both rails reflect the now-selected chunk.
-      expect(el.querySelector('[data-testid="chunk-row"]')?.classList.contains('selected')).toBe(true);
-      expect(el.querySelector('[data-testid="agent-row"]')?.classList.contains('selected')).toBe(true);
     });
   });
 
   describe('the work-item enrichment stays severable', () => {
-    it('renders chunk rows on chunk_id alone when every work-items read 502s — the panel must not depend on the hub', async () => {
-      stub = stubRequestClient(runnerClient,
-        routes([LEASE()], {}, (method, path) => {
-          if (method === 'GET' && WORK_ITEMS_ROUTE.test(path)) return stubError(502, { detail: 'stubbed route error (502)' });
-          return undefined;
+    it('renders chunk cards on chunk_id alone when every work-items read 502s', async () => {
+      stub = stubRequestClient(
+        runnerClient,
+        routes({
+          leases: { rn_1: [LEASE()] },
+          extra: (method, path) => (method === 'GET' && WORK_ITEMS_ROUTE.test(path) ? stubError(502, { detail: 'stubbed route error (502)' }) : undefined),
         }),
       );
-      const fixture = await render();
-      const el = fixture.nativeElement as HTMLElement;
+      const el = await render();
 
-      expect(el.querySelectorAll('[data-testid="chunk-row"]')).toHaveLength(1);
+      expect(chunkIds(el)).toEqual([CHUNK]);
       expect(el.querySelector('[data-testid="chunk-row"]')?.textContent).toContain('C-3YJ9');
     });
 
-    it('renders the pointer label as a link to the work item when web_url arrived', async () => {
-      stub = stubRequestClient(runnerClient,
-        routes([LEASE()], {}, (method, path) =>
-          method === 'GET' && WORK_ITEMS_ROUTE.test(path)
-            ? {
-                items: [
-                  {
-                    source: 'blizzard',
-                    ref: '61',
-                    label: 'blizzard#61',
-                    web_url: 'https://github.com/paul-gross/blizzard/issues/61',
-                    fetched_at: '2026-07-16T11:00:00.000Z',
-                    title: 'runner machine panel',
-                  },
-                ],
-              }
-            : undefined,
-        ),
+    it("renders each linked item's label and title on the card", async () => {
+      stub = stubRequestClient(
+        runnerClient,
+        routes({
+          leases: { rn_1: [LEASE()] },
+          extra: (method, path) =>
+            method === 'GET' && WORK_ITEMS_ROUTE.test(path)
+              ? {
+                  items: [
+                    {
+                      source: 'blizzard',
+                      ref: '61',
+                      label: 'blizzard#61',
+                      web_url: 'https://github.com/paul-gross/blizzard/issues/61',
+                      fetched_at: '2026-07-16T11:00:00.000Z',
+                      title: 'runner machine panel',
+                    },
+                  ],
+                }
+              : undefined,
+        }),
       );
-      const fixture = await render();
-      const el = fixture.nativeElement as HTMLElement;
+      const el = await render();
 
-      const link = el.querySelector<HTMLAnchorElement>('[data-testid="chunk-row-title"] a');
-      expect(link?.textContent).toContain('blizzard#61');
-      expect(link?.href).toBe('https://github.com/paul-gross/blizzard/issues/61');
-      expect(el.querySelector('[data-testid="chunk-row-title"]')?.textContent).toContain('runner machine panel');
+      const title = el.querySelector('[data-testid="chunk-row-title"]')?.textContent;
+      expect(title).toContain('blizzard#61');
+      expect(title).toContain('runner machine panel');
     });
 
-    it('issues one work-items request per distinct chunk even with several leases for it', async () => {
+    it('issues one work-items request per distinct chunk, on its own runner, even with several leases for it', async () => {
       const older = LEASE({ lease_id: 'lease_01KXKVVF1J3D6H6VYZ3XYNBBBB', epoch: 1, state: 'closed' });
-      stub = stubRequestClient(runnerClient, routes([LEASE(), older]));
-      const fixture = await render();
-      await settle(fixture);
+      stub = stubRequestClient(runnerClient, routes({ leases: { rn_1: [LEASE(), older] } }));
+      await render();
 
-      const pmRequests = stub.requests.filter((r) => WORK_ITEMS_ROUTE.test(r.path));
-      expect(pmRequests).toHaveLength(1);
+      expect(stub.requests.filter((r) => WORK_ITEMS_ROUTE.test(r.path)).map((r) => r.path)).toEqual([
+        `/runners/rn_1/api/chunks/${CHUNK}/work-items`,
+      ]);
     });
   });
 
   describe('the right rail', () => {
-    it('renders the hub link panel off GET /api/dashboard, endpoint and board link included', async () => {
-      stub = stubRequestClient(runnerClient,
-        routes([], {
-          runner: {
-            runner_id: 'runner-local',
-            workspace_id: 'workspace-local',
-            pause: { local: false, hub: false, effective: false },
-            capacities: { used: 1, bindings: [{ project: 'p', project_id: 'p', workspace_id: 'ws', agents: 4, used: 1, free: 3 }] },
-            hub: {
-              endpoint: 'http://127.0.0.1:8421',
-              reachable: true,
-              last_contact_at: '2026-07-16T11:59:30.000Z',
-              buffer_depth: 2,
-            },
-            last_tick_at: '2026-07-16T11:59:45.000Z',
-          },
-        }),
-      );
-      const fixture = await render();
-      const el = fixture.nativeElement as HTMLElement;
-
-      expect(el.querySelector('[data-testid="hub-endpoint"]')?.textContent).toContain('http://127.0.0.1:8421');
-      expect(el.querySelector('[data-testid="hub-link"]')?.textContent).toContain('CONNECTED');
-      expect(el.querySelector('[data-testid="hub-last-flush"]')?.textContent).toContain('-30s');
-      expect(el.querySelector('[data-testid="hub-buffered"]')?.textContent).toContain('2 events');
-      expect(el.querySelector<HTMLAnchorElement>('[data-testid="board-link"]')?.href).toBe('http://127.0.0.1:8421/');
-    });
-
-    it('renders open asks with their chunk refs and age', async () => {
-      stub = stubRequestClient(runnerClient,
-        routes([], {
-          asks: {
-            items: [
-              {
-                question_id: 'qn_01KXKVVF1J3D6H6VYZ3XYNQ777',
-                chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9',
-                lease_id: 'lease_01KXKVVF1J3D6H6VYZ3XYNZPRR',
-                question: 'which branch?',
-                options: [],
-                session_id: 'sess-77',
-                asked_at: '2026-07-16T11:40:00.000Z',
+    it('renders the hub, host, and open-asks panels beside the board', async () => {
+      stub = stubRequestClient(
+        runnerClient,
+        routes({
+          dashboards: {
+            rn_1: {
+              asks: {
+                items: [
+                  {
+                    question_id: 'qn_01KXKVVF1J3D6H6VYZ3XYNQ777',
+                    chunk_id: CHUNK,
+                    lease_id: 'lease_01KXKVVF1J3D6H6VYZ3XYNZPRR',
+                    question: 'which branch?',
+                    options: [],
+                    session_id: 'sess-77',
+                    asked_at: '2026-07-16T11:40:00.000Z',
+                  },
+                ],
               },
-            ],
+            },
           },
         }),
       );
-      const fixture = await render();
-      const el = fixture.nativeElement as HTMLElement;
+      const el = await render();
 
+      expect(el.querySelector('[data-testid="hub-link"]')?.textContent).toContain('CONNECTED');
+      expect(Array.from(el.querySelectorAll('[data-testid="host-panel-runner-name"]')).map((name) => name.textContent?.trim())).toEqual([
+        'r1',
+        'r2',
+      ]);
+      expect(el.querySelector('[data-testid="rail-asks-pane"]')?.textContent).toContain('1 open');
       const ask = el.querySelector('[data-testid="ask-row"]');
       expect(ask?.textContent).toContain('C-3YJ9');
       expect(ask?.textContent).toContain('which branch?');
-      expect(ask?.textContent).toContain('20m');
     });
   });
 
   describe('the shell picker (ViewportService)', () => {
     afterEach(() => localStorage.removeItem('blizzard.viewport.override'));
 
-    it('desktop mode renders the existing three-column layout, unchanged', async () => {
-      stub = stubRequestClient(runnerClient, routes([]));
+    it('desktop mode renders the board and rail layout', async () => {
+      stub = stubRequestClient(runnerClient, routes());
       await setUp();
       TestBed.inject(ViewportService).setOverride('desktop');
       const fixture = TestBed.createComponent(LocalPanel);
@@ -578,16 +553,17 @@ describe('LocalPanel', () => {
     });
 
     it('mobile mode renders the deferred mobile stack instead, off the same reads', async () => {
-      stub = stubRequestClient(runnerClient, routes([LEASE()]));
+      stub = stubRequestClient(runnerClient, routes({ leases: { rn_1: [LEASE()] } }));
       await setUp();
       TestBed.inject(ViewportService).setOverride('mobile');
       const fixture = TestBed.createComponent(LocalPanel);
+      await settle(fixture);
       await settle(fixture);
       const el = fixture.nativeElement as HTMLElement;
 
       expect(el.querySelector('[data-testid="local-panel-mobile"]')).not.toBeNull();
       expect(el.querySelector('[data-testid="local-panel"]')).toBeNull();
-      expect(el.querySelectorAll('[data-testid="agent-row"]')).toHaveLength(1);
+      expect(chunkIds(el)).toEqual([CHUNK]);
     });
   });
 });

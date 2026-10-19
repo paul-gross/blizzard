@@ -9,7 +9,6 @@ import { vi } from 'vitest';
 
 import { App } from './app';
 import { routes } from './app.routes';
-import { provideActiveRunner } from '../core/active-runner';
 import { provideFlags } from 'fleet';
 import { runnerFlagsRead } from '../core/flags.query';
 
@@ -44,7 +43,6 @@ async function setUp(route: (method: string, path: string) => unknown) {
     imports: [App],
     providers: [
       provideZonelessChangeDetection(),
-      provideActiveRunner('rn_1'),
       provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
       provideFlags(runnerFlagsRead),
       provideRouter(routes),
@@ -74,7 +72,7 @@ async function setUp(route: (method: string, path: string) => unknown) {
   };
 }
 
-describe('runner App session-recovery fork (issue #312)', () => {
+describe('runner App session-recovery fork', () => {
   let restore: (() => Promise<void>) | undefined;
 
   afterEach(async () => {
@@ -91,7 +89,7 @@ describe('runner App session-recovery fork (issue #312)', () => {
 
     const fixture = TestBed.createComponent(App);
     const router = TestBed.inject(Router);
-    await router.navigateByUrl('/runners/rn_1/board');
+    await router.navigateByUrl('/board');
     await settle(fixture);
     const el = fixture.nativeElement as HTMLElement;
 
@@ -136,7 +134,7 @@ describe('runner App session-recovery fork (issue #312)', () => {
     expect(navigateSpy).toHaveBeenCalledTimes(2);
   });
 
-  it('drains a recovery genuinely still in flight when teardown runs, before sessionStorage clears (blizzard#347)', async () => {
+  it('drains a recovery genuinely still in flight when teardown runs, before sessionStorage clears', async () => {
     // A session read under this test's own control — pending until this test
     // resolves it, so the recovery it drives is provably still in flight, not
     // just probably fast enough to have finished already.
@@ -156,7 +154,6 @@ describe('runner App session-recovery fork (issue #312)', () => {
       imports: [App],
       providers: [
         provideZonelessChangeDetection(),
-        provideActiveRunner('rn_1'),
         provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
         provideFlags(runnerFlagsRead),
         provideRouter(routes),
