@@ -17,6 +17,10 @@
   gap: 2px;
   margin-top: 0;
 }
+/* More than ten cells: a tighter gap, so the cells keep their width instead of the gaps eating it. */
+:host(.dense) .gauge {
+  gap: 1px;
+}
 /* An empty cell carries a very dark hint of its bar's fill, so a bar reads as its colour even idle. */
 .cell {
   flex: 1;
@@ -30,6 +34,10 @@
 .cell.on {
   background: var(--kit-slot-bar-on, var(--amber));
   border-color: var(--kit-slot-bar-on-border, var(--amber-dim));
+}
+/* A slot the bar's consumer sets apart — held by someone other than the one in focus. */
+.cell.dim {
+  opacity: 0.35;
 }
 /* Past the total: an overload, cyan and pulsing on the beacon's blink. */
 .cell.over {

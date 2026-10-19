@@ -1,14 +1,19 @@
 <header class="d-hdr">
+  <!-- The chunk's identity in the hub header's order: the full id, then project · work item ·
+       runner · status · node, then the chunk's worker beneath. -->
   <div class="d-title">
-    <a class="cid" data-testid="detail-chunk-ref" [routerLink]="[...linkBase(), chunkId()]">{{ chunkId() }}</a>
+    <a class="cid" data-testid="detail-chunk-ref" [routerLink]="[...linkBase(), chunkId()]" queryParamsHandling="merge">{{ chunkId() }}</a>
     <span class="d-sub">
-      @for (ref of workRefs(); track ref.source + ':' + ref.ref) {
-        @if (!$first) {
-          <span class="sep" aria-hidden="true">·</span>
-        }
-        <fleet-work-ref-link [workRef]="ref" testid="detail-pointer" />
+      @if (projectName(); as project) {
+        <span class="project" data-testid="detail-project" [title]="project">{{ project }}</span>
+        <span class="sep" aria-hidden="true">·</span>
       }
-      @if (workRefs().length) {
+      @for (ref of workRefs(); track ref.source + ':' + ref.ref) {
+        <fleet-work-ref-link [workRef]="ref" testid="detail-pointer" />
+        <span class="sep" aria-hidden="true">·</span>
+      }
+      @if (runnerName(); as runner) {
+        <span class="runner" data-testid="detail-runner" [title]="runner">{{ runner }}</span>
         <span class="sep" aria-hidden="true">·</span>
       }
       <span class="st" data-testid="machine-detail-status">
@@ -17,37 +22,49 @@
         } @else {
           {{ statusLabel() }}
         }
-        · node {{ nodeName() }} · a{{ epoch() }}
       </span>
+      <span class="sep" aria-hidden="true">·</span>
+      <span class="st" data-testid="detail-node">{{ nodeName() }}</span>
+    </span>
+    <span class="worker" data-testid="detail-worker">
+      @if (worker(); as live) {
+        <span class="worker-tag">worker</span>
+        <app-worker-line class="worker-line" [lease]="live" />
+        <span class="pid" data-testid="detail-worker-pid">pid {{ live.pid ?? '—' }}</span>
+      } @else {
+        <span class="no-worker" data-testid="detail-no-worker">{{ noWorkerText() }}</span>
+      }
     </span>
   </div>
   <div class="d-actions">
-    @if (pause()) {
-      <fleet-kit-button
-        testid="resume-chunk"
-        [ariaLabel]="'Resume chunk ' + chunkId()"
-        [fleetTooltip]="resumeCopy(runnerName()).text"
-        [disabled]="pending()"
-        (click)="onResume()"
-      >
-        Resume
-      </fleet-kit-button>
-    } @else if (pausable()) {
-      <fleet-kit-button
-        testid="pause-chunk"
-        [ariaLabel]="'Pause chunk ' + chunkId()"
-        [fleetTooltip]="pauseCopy(runnerName()).text"
-        [disabled]="pending()"
-        (click)="onPause()"
-      >
-        Pause
-      </fleet-kit-button>
+    @if (pause() || pausable()) {
+      <fleet-kit-menu class="actions" testid="chunk-actions-menu" ariaLabel="Chunk actions" align="end" bordered [menu]="actionsMenu" />
     }
     <fleet-kit-button class="close" testid="detail-close" ariaLabel="Close" (click)="dismiss.emit()">
       ✕
     </fleet-kit-button>
   </div>
 </header>
+
+<!-- The ⋯ menu's panel: Pause or Resume, whichever applies. `KitMenu` needs the panel as a
+     `TemplateRef` in this view. -->
+<ng-template #actionsMenu>
+  <fleet-kit-menu-panel testid="chunk-actions-panel">
+    @if (pause()) {
+      @let resume = resumeCopy(runnerName());
+      <fleet-kit-menu-item testid="resume-chunk" [disabled]="pending()" (triggered)="onResume()">
+        <span fleetKitMenuItemSubtitle>{{ resume.subtitle }}</span>
+        {{ resume.label }}
+      </fleet-kit-menu-item>
+    } @else if (pausable()) {
+      @let pauseAction = pauseCopy(runnerName());
+      <fleet-kit-menu-item testid="pause-chunk" [disabled]="pending()" (triggered)="onPause()">
+        <span fleetKitMenuItemSubtitle>{{ pauseAction.subtitle }}</span>
+        {{ pauseAction.label }}
+      </fleet-kit-menu-item>
+    }
+  </fleet-kit-menu-panel>
+</ng-template>
 
 @if (pendingConfirm(); as confirm) {
   <fleet-kit-confirm-dialog

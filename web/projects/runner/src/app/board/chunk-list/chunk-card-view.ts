@@ -24,6 +24,9 @@ export class ChunkCardView {
   /** Whether this card is the current selection. */
   readonly selected = input(false);
 
+  /** The runner the chunk is on, as `host/runner`; `null` hides it. */
+  readonly runnerLabel = input<string | null>(null);
+
   /** The chunk's linked work items — empty when none are known. */
   readonly linkedItems = input<readonly runnerApi.WorkItemEntry[]>([]);
 

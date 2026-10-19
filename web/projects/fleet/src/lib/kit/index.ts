@@ -32,7 +32,7 @@ export { KitProseBlock } from './kit-prose-block';
 export { KitSelect } from './kit-select';
 export { KitSelectRow } from './kit-select-row';
 export { KitSkeleton } from './kit-skeleton';
-export { KitSlotBar } from './kit-slot-bar';
+export { KitSlotBar, type SlotBarSlot } from './kit-slot-bar';
 export { KitTab, KitTabStrip } from './kit-tab';
 export { KitTabs, type KitTabOption } from './kit-tabs';
 export { KitTextInput } from './kit-text-input';

@@ -1,5 +1,7 @@
 import { type Tone, runnerApi } from 'fleet';
 
+import { sessionEnding } from './worker-session';
+
 /** A lease's own derived label and {@link Tone} — the shared vocabulary
  * (`fleet/lib/kit/tone.ts`), so every surface that renders a lease state reads
  * the same colour for it. */
@@ -28,12 +30,12 @@ export function deriveLeaseStatus(lease: runnerApi.LeaseView): LeaseStatus {
     case 'spawning':
       return { label: 'SPAWNING', tone: 'spawning' };
     case 'exited':
-      return { label: 'EXITED', tone: 'idle' };
+      return { label: 'WORKER EXITED', tone: 'idle' };
     case 'closed':
       // A healthy closure (the node step completed and the chunk moved on) reads done;
-      // the rest (`failed`/`reaped`/`released`/…) read dim.
+      // the rest read dim, worded by how the session ended.
       return lease.closure_healthy
-        ? { label: 'TRANSITIONED', tone: 'done' }
-        : { label: `CLOSED · ${(lease.closure_reason ?? 'unknown').toUpperCase()}`, tone: 'idle' };
+        ? { label: 'COMPLETED', tone: 'done' }
+        : { label: `ENDED · ${(sessionEnding(lease) ?? 'unknown').toUpperCase()}`, tone: 'idle' };
   }
 }

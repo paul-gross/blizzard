@@ -1,0 +1,15 @@
+<fleet-kit-panel class="hub-panel" label="hub" data-testid="rail-hub-pane">
+  @for (runner of runners(); track runner.runnerId) {
+    @if (runners().length > 1) {
+      <div class="runner-label" data-testid="hub-runner-label">{{ runner.label }}</div>
+    }
+    <app-info [runnerId]="runner.runnerId" [hubOnly]="true" />
+  }
+</fleet-kit-panel>
+<fleet-kit-panel class="host-panel" label="host" data-testid="rail-host-pane">
+  <app-host-panel />
+</fleet-kit-panel>
+<fleet-kit-panel class="asks-panel" label="open asks" data-testid="rail-asks-pane">
+  <span fleetKitPanelHeader class="p-note">{{ openAskCount() }} open</span>
+  <app-asks />
+</fleet-kit-panel>

@@ -31,23 +31,18 @@ export class MachineDetailView {
    * command (primary when present) and the raw resume command (the fallback). */
   readonly escalation = input<runnerApi.EscalationView | null>(null);
 
-  /** {@link lease}'s compact ref. */
-  readonly leaseRef = input('');
-
   /** `-34s` shorthand, or `—` before the first beat / past the skew bound. */
   readonly heartbeatLabel = input('—');
 
   /** The execution-facts table's rows — a method, not a stored computed, since the
-   * lease/workdir/heartbeat rows need the `<ng-template>`s this template declares for them
+   * workdir/heartbeat rows need the `<ng-template>`s this template declares for them
    * (`KitFactList`'s own templated-row contract). */
   protected factRows(
     l: runnerApi.LeaseView,
-    leaseValue: TemplateRef<unknown>,
     workdirValue: TemplateRef<unknown>,
     heartbeatValue: TemplateRef<unknown>,
   ): readonly KitFact[] {
     return [
-      { label: 'lease', template: leaseValue },
       { label: 'session', value: l.session_id ?? '—' },
       { label: 'pid', value: l.pid !== null && l.pid !== undefined ? String(l.pid) : '—' },
       { label: 'env', value: l.environment_id ?? 'released' },

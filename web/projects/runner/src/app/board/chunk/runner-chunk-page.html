@@ -1,0 +1,11 @@
+@if (owner.state() === 'ready') {
+  <fleet-chunk-page />
+} @else {
+  <fleet-kit-async-state
+    [state]="owner.state()"
+    loadingText="LOADING…"
+    errorText="CHUNK UNAVAILABLE — RUNNERS UNREACHABLE"
+    [emptyText]="'NO RUNNER ON THIS HOST HOLDS CHUNK ' + (owner.chunkId() ?? '')"
+    emptyTestid="chunk-not-found"
+  />
+}

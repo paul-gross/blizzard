@@ -2,11 +2,12 @@ import { ChangeDetectionStrategy, Component, computed } from '@angular/core';
 import { asyncState, KitAsyncState } from 'fleet';
 
 import { FactLogView } from './fact-log-view';
-import { injectRunnerDashboardQuery } from '../core/status.query';
+import { injectPanelFacts } from '../core/panel-reads';
 
 /**
- * The local fact log **container** — "runner store": the newest hub-bound facts
- * off the outbound ledger (`GET /api/dashboard`), newest first. Owns the query and the
+ * The fact log **container** — "runner store": the newest hub-bound facts off each
+ * covered runner's outbound ledger (`GET /api/dashboard`), merged newest first and
+ * narrowed by the filters ({@link injectPanelFacts}). Owns the query and the
  * resolved async-state triad; the presentational {@link FactLogView} owns the row
  * template (`bzh:frontend-container-presentational`).
  */
@@ -18,9 +19,9 @@ import { injectRunnerDashboardQuery } from '../core/status.query';
   styleUrl: './fact-log.css',
 })
 export class FactLog {
-  protected readonly query = injectRunnerDashboardQuery();
+  protected readonly query = injectPanelFacts();
 
-  protected readonly facts = computed(() => this.query.data()?.facts?.items ?? []);
+  protected readonly facts = this.query.data;
 
   /** The async triad's resolved state — loading/error take precedence, then
    * an empty ledger, else the fact rows render. */

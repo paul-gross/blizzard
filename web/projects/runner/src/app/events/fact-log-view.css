@@ -44,3 +44,7 @@
   font-weight: normal;
   margin-left: 6px;
 }
+.runner {
+  margin-right: 6px;
+  color: var(--label);
+}

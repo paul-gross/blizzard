@@ -1,28 +1,30 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
+import { ActivatedRoute, Router } from '@angular/router';
+import { map } from 'rxjs';
 import { asyncState, injectChunkUrlSelection, type runnerApi, ViewportService } from 'fleet';
 
+import { injectPanelAsks, injectPanelEscalations, injectPanelLeases, injectPanelProjects, injectPanelRunners } from '../core/panel-reads';
+import type { PanelLease } from '../core/panel-reads.model';
+
 import type { MachineChunkStatus } from './chunk-list/chunk-status';
-import { injectRunnerLeasesQuery } from '../core/leases.query';
 import {
-  activeLeases,
   chunkLeasesFor,
-  chunksEmptyText,
   chunkStatusFor,
   escalationFor,
   type MachineChunkRow,
   machineChunkRows,
-  visibleChunkRows,
 } from './app-panel.model';
 import { LocalPanelLayout } from './app-panel-layout';
+import type { BoardLayout } from './chunk-list/chunk-board';
 import { LocalPanelMobile } from './app-panel-mobile';
-import { injectRunnerDashboardQuery } from '../core/status.query';
 
 /**
- * The runner's machine-local panel — the data-orchestration container.
- * Owns the leases query plus the one shared
- * {@link injectRunnerDashboardQuery} (the composed `GET
- * /api/dashboard` read, folding what were five separate query injections
- * here), the one derived-status fold ({@link machineChunkRows}), and
+ * The panel's board — the data-orchestration container.
+ * Owns the leases merged across the runners the filters leave
+ * ({@link injectPanelLeases}, the Project filter applied), their open asks and
+ * escalations off each runner's dashboard, the one derived-status fold
+ * ({@link machineChunkRows}), and
  * the selection — which chunk is open, bound to the URL's `?chunk=` query
  * param so a link is shareable and a reload keeps its place.
  * Every panel below it (via {@link LocalPanelLayout}) is presentational or
@@ -49,47 +51,26 @@ export class LocalPanel {
 
   protected readonly mode = this.viewport.mode;
 
-  protected readonly leasesQuery = injectRunnerLeasesQuery();
+  protected readonly leasesQuery = injectPanelLeases();
 
-  /** The panel's whole machine-local status read — `GET
-   * /api/dashboard`, the same 5s-polled query every other rail on this panel
-   * injects; TanStack dedupes the N injections into one request. */
-  protected readonly dashboardQuery = injectRunnerDashboardQuery();
+  /** The runners the board reads — the hub-link rail shows each. */
+  protected readonly runners = injectPanelRunners().scoped;
 
-  /** The active + recently-closed leases, server-ordered; empty until the first read resolves. */
+  /** Every project the host serves — the rows take their project's name and tint from it. */
+  private readonly projects = injectPanelProjects();
+
+  private readonly asks = injectPanelAsks();
+  private readonly escalations = injectPanelEscalations();
+
+  /** The active + recently-closed leases, merged across runners; empty until the first read resolves. */
   private readonly leases = computed(() => this.leasesQuery.data() ?? []);
 
-  /**
-   * The liveness rail shows *active* leases only — a closed lease is history,
-   * carried by {@link machineChunks} as its chunk's newest attempt instead.
-   */
-  protected readonly activeLeases = computed(() => activeLeases(this.leases()));
-
-  /** The leases rail's async triad state — loading/error take precedence, then
-   * no active leases, else the agent rows render. */
-  protected readonly leasesTriadState = computed(() => asyncState(this.leasesQuery, this.activeLeases().length === 0));
-
-  /** The mobile chunks pane's async triad state — mobile renders the
-   * unfiltered {@link machineChunks} (left mobile's own filter out
-   * of scope), so this reads that list's emptiness, sharing the leases
-   * query's loading/error state. */
+  /** The chunks pane's async triad state — the leases query's loading/error state, empty when no chunk has a row. */
   protected readonly chunksTriadState = computed(() => asyncState(this.leasesQuery, this.machineChunks().length === 0));
 
-  /** The desktop chunks pane's own triad state — derived from {@link visibleChunks},
-   * the filtered list {@link LocalPanelLayout} renders, not the unfiltered
-   * {@link machineChunks} the shared {@link chunksTriadState} above reads. Keeps
-   * "ready" and "has rows to show" in sync when the filter hides everything. */
-  protected readonly visibleChunksTriadState = computed(() => asyncState(this.leasesQuery, this.visibleChunks().length === 0));
-
-  /** The desktop chunks pane's empty-state text — distinguishes "nothing on this
-   * machine" from "the filter hid everything", naming the hidden count so the
-   * operator knows to check "show all". */
-  protected readonly chunksEmptyText = computed<string>(() =>
-    chunksEmptyText(this.machineChunks().length, this.visibleChunks().length),
-  );
-
   /**
-   * One row per chunk on this machine: the chunk's newest lease (the server
+   * One row per chunk on this machine — every chunk a lease names, so a live lease
+   * always has a row, carrying its worker inline: the chunk's newest lease (the server
    * orders actives first, then the recent-closed block, so the first lease
    * seen per `chunk_id` is the freshest attempt) plus every attempt of the
    * chunk and the derived status — folded once here, handed to the row and the
@@ -97,28 +78,30 @@ export class LocalPanel {
    * `lease` (the summary/status subject) is that list's own newest entry.
    */
   protected readonly machineChunks = computed<MachineChunkRow[]>(() =>
-    machineChunkRows(this.leases()),
+    machineChunkRows(this.leases(), this.projects()),
   );
 
-  /** The chunks list's "show all" filter state — plain UI state,
-   * unchecked by default. Client-side only: narrows what {@link visibleChunks}
-   * renders, never the server-side `RECENT_LEASE_LIMIT`-bounded `/api/leases` read. */
-  protected readonly showAllChunks = signal(false);
 
-  /** The chunks list's visible rows — {@link machineChunks} itself when
-   * {@link showAllChunks} is checked, else rows whose derived
-   * {@link MachineChunkStatus.tone} isn't `done`/`idle`. Filters on the
-   * *derived* status (not raw lease state), so a closed lease with an open
-   * escalation still shows as `NEEDS HUMAN`. Selection stays keyed off the
-   * unfiltered {@link machineChunks}, so a hidden chunk is still deep-linkable.
-   * Desktop-only — {@link LocalPanelMobile} takes the unfiltered
-   * list directly; mobile's own filter is out of scope here. */
-  protected readonly visibleChunks = computed<MachineChunkRow[]>(() =>
-    visibleChunkRows(this.machineChunks(), this.showAllChunks()),
+  private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
+
+  /** The chunks' layout, the URL's `?layout=list` — absent is the lane board, as on the hub's board. */
+  protected readonly layout = toSignal(
+    this.route.queryParamMap.pipe(map((params): BoardLayout => (params.get('layout') === 'list' ? 'list' : 'board'))),
+    { initialValue: 'board' as BoardLayout },
   );
+
+  /** Switch the layout by writing the URL, keeping every other param (the open chunk among them). */
+  protected setLayout(layout: BoardLayout): void {
+    void this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: { layout: layout === 'list' ? 'list' : null },
+      queryParamsHandling: 'merge',
+    });
+  }
 
   /** The open-ask count for the asks panel's header note. */
-  protected readonly openAskCount = computed(() => (this.dashboardQuery.data()?.asks?.items ?? []).length);
+  protected readonly openAskCount = computed(() => this.asks.data().length);
 
   /** What is open in the panel, held in the URL's `?chunk=` via the shared
    * {@link injectChunkUrlSelection} — the router coupling lives there, not
@@ -153,7 +136,7 @@ export class LocalPanel {
    * The selected chunk's attempts (oldest → newest) — what the detail dock's
    * summary/status renders off the newest. Empty when nothing is selected.
    */
-  protected readonly selectedChunkLeases = computed<readonly runnerApi.LeaseView[]>(() =>
+  protected readonly selectedChunkLeases = computed<readonly PanelLease[]>(() =>
     chunkLeasesFor(this.machineChunks(), this.selectedChunkId()),
   );
 
@@ -163,6 +146,6 @@ export class LocalPanel {
 
   /** The open escalation for the selected chunk, when one exists — carries the resume command. */
   protected readonly selectedEscalation = computed<runnerApi.EscalationView | null>(() =>
-    escalationFor(this.dashboardQuery.data(), this.selectedChunkId()),
+    escalationFor(this.escalations.data(), this.selectedChunkLeases().at(-1)?.owner.runnerId ?? null, this.selectedChunkId()),
   );
 }

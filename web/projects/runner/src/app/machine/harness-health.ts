@@ -1,11 +1,11 @@
-import { ChangeDetectionStrategy, Component, computed } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 import { asyncState, KitAsyncState } from 'fleet';
 
 import { injectRunnerDashboardQuery } from '../core/status.query';
 import { HarnessHealthView } from './harness-health-view';
 
 /**
- * The harness-health panel **container** — owns the active runner's dashboard read's
+ * The harness-health panel **container** — owns one runner's dashboard read's
  * `harness_health` section and its async-state triad; the presentational
  * {@link HarnessHealthView} owns the row template (`bzh:frontend-container-presentational`).
  */
@@ -17,7 +17,10 @@ import { HarnessHealthView } from './harness-health-view';
   styleUrl: './harness-health.css',
 })
 export class LocalHarnessHealth {
-  protected readonly query = injectRunnerDashboardQuery();
+  /** The runner whose harness bindings this shows. */
+  readonly runnerId = input.required<string>();
+
+  protected readonly query = injectRunnerDashboardQuery(() => this.runnerId());
 
   protected readonly harnesses = computed(() => this.query.data()?.harness_health?.items ?? []);
 

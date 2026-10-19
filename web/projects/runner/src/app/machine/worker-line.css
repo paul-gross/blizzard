@@ -1,0 +1,56 @@
+:host {
+  display: block;
+  min-width: 0;
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+.wl {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: var(--label);
+  font-size: var(--fs-xs);
+}
+/* The node and environment clip before the bar and the state give ground. */
+.facts {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  min-width: 0;
+  flex: 0 1 auto;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.facts > * {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* The environment alone holds a fixed slot, a longer name clipping with an ellipsis, so on cards stacked in a lane
+   every bar starts at the same x. */
+.facts.env-only {
+  flex: none;
+  width: 5ch;
+}
+.node {
+  color: var(--cyan);
+  font-weight: normal;
+}
+.sep {
+  flex: none;
+  color: var(--label-dim);
+}
+/* The bar takes every bit of the line the facts and the state leave. */
+.hb {
+  flex: 1 1 90px;
+  min-width: 60px;
+}
+/* A fixed slot for the state, right-aligned, wide enough for every live state up to SPAWNING, so the bar ends at the
+   same x on every card; the rarer BACKING OFF widens it. */
+.st {
+  flex: none;
+  display: inline-block;
+  min-width: 66px;
+  text-align: right;
+}

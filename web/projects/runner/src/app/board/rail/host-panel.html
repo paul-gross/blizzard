@@ -1,0 +1,5 @@
+<div class="wrap" data-testid="host-panel">
+  <fleet-kit-async-state [state]="triadState()" loadingText="LOADING…" errorText="HOST UNAVAILABLE">
+    <app-host-panel-view [subscriptions]="subscriptions()" [runners]="runners()" [pools]="pools()" />
+  </fleet-kit-async-state>
+</div>

@@ -1,0 +1,16 @@
+<span class="wl" data-testid="worker-line" [attr.data-lease-id]="lease().lease_id">
+  <span class="facts" [class.env-only]="!showNode()">
+    @if (showNode()) {
+      <b class="node" data-testid="worker-node" [title]="lease().node_name">{{ lease().node_name }}</b>
+      <span class="sep" aria-hidden="true">·</span>
+    }
+    <span data-testid="worker-env" [title]="lease().environment_id ?? ''">{{ lease().environment_id ?? 'no environment' }}</span>
+  </span>
+  <app-heartbeat-freshness
+    class="hb"
+    [lastHeartbeatAt]="lease().last_heartbeat_at"
+    [staleAfterSeconds]="lease().stale_after_seconds"
+    [stale]="isStale()"
+  />
+  <fleet-kit-badge class="st" [tone]="status().tone" data-testid="worker-state">{{ status().label }}</fleet-kit-badge>
+</span>

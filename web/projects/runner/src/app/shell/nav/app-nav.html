@@ -1,37 +1,6 @@
 <nav fleetKitTabStrip data-testid="app-nav">
-  <a
-    fleetKitTab
-    routerLink="/"
-    routerLinkActive="active"
-    [routerLinkActiveOptions]="{ exact: true }"
-    data-testid="nav-host"
-    >Host</a
-  >
-  @if (runnerBase(); as base) {
-    <a
-      fleetKitTab
-      [routerLink]="[...base, 'board']"
-      routerLinkActive="active"
-      queryParamsHandling="preserve"
-      data-testid="nav-board"
-      >Board</a
-    >
-    <a
-      fleetKitTab
-      [routerLink]="[...base, 'events']"
-      routerLinkActive="active"
-      queryParamsHandling="preserve"
-      data-testid="nav-events"
-      >Events</a
-    >
-    <a
-      fleetKitTab
-      [routerLink]="[...base, 'machine']"
-      routerLinkActive="active"
-      queryParamsHandling="preserve"
-      data-testid="nav-machine"
-      >Machine</a
-    >
-  }
-  <app-runner-switcher />
+  <a fleetKitTab routerLink="/board" routerLinkActive="active" queryParamsHandling="merge" data-testid="nav-board">Board</a>
+  <a fleetKitTab routerLink="/events" routerLinkActive="active" queryParamsHandling="merge" data-testid="nav-events">Events</a>
+  <a fleetKitTab routerLink="/machine" routerLinkActive="active" queryParamsHandling="merge" data-testid="nav-machine">Machine</a>
+  <app-panel-filters />
 </nav>

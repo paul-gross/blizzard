@@ -1,33 +1,23 @@
-import { ChangeDetectionStrategy, Component, computed } from '@angular/core';
+import { ChangeDetectionStrategy, Component } from '@angular/core';
 import { RouterLink, RouterLinkActive } from '@angular/router';
 
 import { KitTab, KitTabStrip } from 'fleet';
 
-import { injectActiveRunner } from '../../core/active-runner';
-import { RunnerSwitcher } from './runner-switcher';
+import { PanelFiltersBar } from './panel-filters-bar';
 
 /**
- * The panel's top-level tab strip — `Host`, then the active runner's `Board`, `Events`,
- * and `Machine`, one `routerLink` each, wearing the same {@link KitTabStrip}/{@link KitTab}
- * chrome the hub's own `app-nav.ts` wears — one tab treatment, not two — and the
- * {@link RunnerSwitcher} at its end. The runner's tabs render only while a runner is
- * active. `queryParamsHandling="preserve"` carries the board's `?chunk=` selection (the
- * shared `injectChunkUrlSelection`) across a Board → Events → Board round trip rather
- * than dropping it on navigation.
+ * The panel's top-level tab strip — `Board`, `Events`, and `Machine`, the same three on
+ * every page and under every filter, one `routerLink` each, wearing the same
+ * {@link KitTabStrip}/{@link KitTab} chrome the hub's own `app-nav.ts` wears — one tab
+ * treatment, not two — and the panel's filters ({@link PanelFiltersBar}) at its end.
+ * `queryParamsHandling="merge"` carries the filters' `?runner=`/`?project=` and the board's
+ * `?chunk=` selection (the shared `injectChunkUrlSelection`) across every tab switch.
  */
 @Component({
   selector: 'app-nav',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitTab, KitTabStrip, RouterLink, RouterLinkActive, RunnerSwitcher],
+  imports: [KitTab, KitTabStrip, PanelFiltersBar, RouterLink, RouterLinkActive],
   templateUrl: './app-nav.html',
   styleUrl: './app-nav.css',
 })
-export class AppNav {
-  private readonly activeRunner = injectActiveRunner();
-
-  /** The active runner's own path segments, `null` on a host page. */
-  protected readonly runnerBase = computed<readonly string[] | null>(() => {
-    const id = this.activeRunner();
-    return id === null ? null : ['/runners', id];
-  });
-}
+export class AppNav {}

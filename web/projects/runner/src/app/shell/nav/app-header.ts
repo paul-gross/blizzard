@@ -1,11 +1,10 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { CdkMenuTrigger } from '@angular/cdk/menu';
 import { BoardHeader, FlagStore, KitAvatar, KitMenu, KitMenuItem, KitMenuPanel, type StatCell, ViewportMenu } from 'fleet';
-import { injectActiveRunner } from '../../core/active-runner';
+import { PanelFilters } from '../../core/panel-filters';
 import { injectHostEnvironmentsQuery, injectHostRunnersQuery } from '../../host/host.query';
 import { LocalIdentity } from '../../core/identity/app-identity';
 import { RunnerLogout } from '../../core/identity/runner-logout';
-import { LocalPauseControl } from '../../machine/app-pause-control';
 import { RunnerLiveUpdates } from '../../core/live/runner-live-updates';
 import { headerConnectionLabel, headerStatCells } from './app-header.model';
 
@@ -17,30 +16,27 @@ import { headerConnectionLabel, headerStatCells } from './app-header.model';
  *
  * A small container, not a presentational component: it injects the host's
  * runner and environment reads itself for {@link connection} and
- * {@link headerStats} — the header is the host's, on every page, whether or not
- * a runner is active. TanStack dedupes query-key injections, so this component
- * injecting the same host reads the host page and the switcher inject costs no
+ * {@link headerStats} — the header is the host's, on every page, narrowed only by
+ * the Runner filter. TanStack dedupes query-key injections, so this component
+ * injecting the same host reads the machine page and the filters inject costs no
  * extra network request. It also injects
  * {@link RunnerLiveUpdates} directly — the same root-provided
  * singleton `../app.ts` starts — purely to read its `status`/`authFailed` for
  * {@link connection}; it maps them into `BoardHeader`'s input the same way it
  * already maps the dashboard read, never starting or restarting the stream itself.
  *
- * The pause control ({@link LocalPauseControl}) acts on the active runner and
- * renders only while one is active. It, the identity
- * block ({@link LocalIdentity}), and the profile menu ride in the header's
- * `[header-trailing]` slot, exactly as they did inside `LocalPanelLayout` —
- * each a self-fetching mini-container of its own, composed here without this
- * component or {@link BoardHeader} knowing anything about pause state or
- * identity. The `@container board-header (max-width: 699px)` narrow-tier
- * collapse moved with them: it drops the pause control and
- * identity at that width so the profile menu — this shell's only appearance
- * switcher in desktop mode — never gets pushed off a phone-width header.
+ * Each runner's pause control lives on the machine page, beside the runner it acts on.
+ * The identity block ({@link LocalIdentity}) and the profile menu ride in the header's
+ * `[header-trailing]` slot — each a self-fetching mini-container of its own, composed
+ * here without this component or {@link BoardHeader} knowing anything about identity.
+ * The `@container board-header (max-width: 699px)` narrow-tier collapse drops the
+ * identity at that width so the profile menu — this shell's only appearance switcher in
+ * desktop mode — never gets pushed off a phone-width header.
  */
 @Component({
   selector: 'app-header',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [BoardHeader, CdkMenuTrigger, KitAvatar, KitMenu, KitMenuItem, KitMenuPanel, LocalIdentity, LocalPauseControl, ViewportMenu],
+  imports: [BoardHeader, CdkMenuTrigger, KitAvatar, KitMenu, KitMenuItem, KitMenuPanel, LocalIdentity, ViewportMenu],
   templateUrl: './app-header.html',
   styleUrl: './app-header.css',
 })
@@ -52,9 +48,8 @@ export class AppHeader {
   /** The host's flags — the header shows what the operator overrode. */
   protected readonly flags = inject(FlagStore);
 
-  /** Whether a runner is active — the pause control renders only then. */
-  private readonly activeRunner = injectActiveRunner();
-  protected readonly runnerActive = computed(() => this.activeRunner() !== null);
+  /** The Runner filter, which narrows {@link headerStats} to the runner it names. */
+  private readonly filters = inject(PanelFilters);
 
   /** The shell's one logout owner; the menu item's pending flag and trigger bind to it. */
   protected readonly logout = inject(RunnerLogout);
@@ -78,12 +73,17 @@ export class AppHeader {
     ),
   );
 
-  /** The header's live stat cells across the host — environments in use over
-   * every workspace's environments, agents in use over every serving runner's
-   * ceiling. Withheld (`[]`) until the host's runner read has resolved at
+  /** The header's live stat cells across the host, or across the runner the Runner
+   * filter names — environments in use over the environments, agents in use over every
+   * serving runner's ceiling. Withheld (`[]`) until the host's runner read has resolved at
    * least once, the same stance the hub header's own `spendToday` cell takes
     * rather than show a misleading `Envs 0/0`. */
   protected readonly headerStats = computed<readonly StatCell[]>(() =>
-    headerStatCells(this.runnersQuery.isPending(), this.runnersQuery.data(), this.environmentsQuery.data()),
+    headerStatCells(
+      this.runnersQuery.isPending(),
+      this.runnersQuery.data(),
+      this.environmentsQuery.data(),
+      this.filters.runner(),
+    ),
   );
 }

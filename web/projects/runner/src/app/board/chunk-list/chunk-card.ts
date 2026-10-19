@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
-import type { runnerApi } from 'fleet';
+import type { PanelLease } from '../../core/panel-reads.model';
 
 import { injectChunkTitleQuery } from './chunk-title.query';
 import { ChunkCardView } from './chunk-card-view';
@@ -21,8 +21,8 @@ import type { MachineChunkStatus } from './chunk-status';
   styleUrl: './chunk-card.css',
 })
 export class ChunkCard {
-  /** The chunk's newest lease — the card's execution facts (node, epoch). */
-  readonly lease = input.required<runnerApi.LeaseView>();
+  /** The chunk's newest lease — the card's execution facts (node, epoch) and its runner. */
+  readonly lease = input.required<PanelLease>();
 
   /** The derived machine-side status, folded by the container (one owner). */
   readonly status = input.required<MachineChunkStatus>();
@@ -36,7 +36,10 @@ export class ChunkCard {
   protected readonly chunkId = computed(() => this.lease().chunk_id);
 
   /** The severable work-item read — never branched on for pending/error. */
-  protected readonly titleQuery = injectChunkTitleQuery(() => this.chunkId());
+  protected readonly titleQuery = injectChunkTitleQuery(
+    () => this.lease().owner.runnerId,
+    () => this.chunkId(),
+  );
 
   protected readonly linkedItems = computed(() => this.titleQuery.data()?.items ?? []);
 }

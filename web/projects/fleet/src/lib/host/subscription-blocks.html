@@ -18,7 +18,7 @@
           [attr.aria-label]="line().name + ' ' + pace.hint"
         >
           <span class="wl">{{ pace.window }}</span>
-          <span class="cells">
+          <span class="cells" [class.dense]="pace.cells.length > denseAfter">
             @for (cell of pace.cells; track $index) {
               <span class="cell" [class.on]="cell.on" [class.clock]="cell.clockBefore" [class.clock-end]="cell.clockAfter"></span>
             }
@@ -30,7 +30,11 @@
       <span class="miss lapsed" data-testid="subscription-blocks-lapsed" title="Credential lapsed — log in again">✕ lapsed</span>
     }
     @default {
-      <span class="miss" data-testid="subscription-blocks-unsampled" title="No usage reading yet">—</span>
+      @if (line().note; as note) {
+        <span class="miss" data-testid="subscription-blocks-note" title="Newest reading carries no usage windows">{{ note }}</span>
+      } @else {
+        <span class="miss" data-testid="subscription-blocks-unsampled" title="No usage reading yet">—</span>
+      }
     }
   }
 </div>

@@ -1,10 +1,9 @@
-import { type BeaconBlink, type BeaconTone, hubApi, RunnerConnection, type SubscriptionPace } from 'fleet';
+import { type BeaconBlink, type BeaconTone, isLapsedSubscription as isLapsed, RunnerConnection, type SubscriptionLine, subscriptionLine, type SubscriptionPace } from 'fleet';
 
 import type { HostGroups } from './host-rows.model';
 import type { RunnerRow } from './runner-rows.model';
 
-/** How many blocks a subscription window's pace line draws — one per tenth of the window. */
-export const PACE_CELLS = 10;
+export { PACE_CELLS, type PaceCell, type PaceLine, type SubscriptionLine } from 'fleet';
 
 /** A used-over-total gauge, named for what it gauges. */
 export interface Gauge {
@@ -27,37 +26,6 @@ export interface RailRow {
   readonly hostName: string | null;
   /** Empty when the runner declares no bindings, as a host-less runner has none. */
   readonly agents: readonly Gauge[];
-}
-
-/** One block of a pace line: filled to the window's usage, and marked where its clock stands. */
-export interface PaceCell {
-  readonly on: boolean;
-  /** The clock sits on this block's left edge — or, on the last block, `clockAfter` its right. */
-  readonly clockBefore: boolean;
-  readonly clockAfter: boolean;
-}
-
-/** One rate-limit window of a subscription, as blocks: usage filled, the window's clock a notch. */
-export interface PaceLine {
-  readonly window: string;
-  readonly cells: readonly PaceCell[];
-  /** Usage ahead of the clock — on pace to exhaust the window before it resets. */
-  readonly ahead: boolean;
-  /** The figures, for the tooltip: "5h · 62% used · 70% of window". */
-  readonly hint: string;
-}
-
-/** One distinct subscription on the rail: its windows' pace lines, or why it has none. */
-export interface SubscriptionLine {
-  readonly slug: string;
-  readonly name: string;
-  /** `paced` draws `windows`; `lapsed` is a credential to log in again; `unsampled` has no reading. */
-  readonly state: 'paced' | 'lapsed' | 'unsampled';
-  readonly windows: readonly PaceLine[];
-  /** Its last good sample is past the stale age — the line dims. */
-  readonly stale: boolean;
-  /** Its last good sample's age, bracketed — "[50s]"; `null` when never sampled. */
-  readonly age: string | null;
 }
 
 /** What the board's rail draws: one environment strip per pool, one line per distinct
@@ -86,40 +54,6 @@ export function envGauges(groups: HostGroups<RunnerRow>): readonly Gauge[] {
     gauges.push({ name: row.workspace_id ?? row.runner_name, used: row.used, total: row.env_capacity });
   }
   return gauges;
-}
-
-function toTenths(pct: number): number {
-  return Math.round(Math.min(100, Math.max(0, pct)) / (100 / PACE_CELLS));
-}
-
-function paceLine(window: string, utilizationPct: number, elapsedPct: number): PaceLine {
-  const used = toTenths(utilizationPct);
-  const clock = toTenths(elapsedPct);
-  return {
-    window,
-    cells: Array.from({ length: PACE_CELLS }, (_unused, i) => ({
-      on: i < used,
-      clockBefore: i === clock,
-      clockAfter: i === PACE_CELLS - 1 && clock === PACE_CELLS,
-    })),
-    ahead: utilizationPct > elapsedPct,
-    hint: `${window} · ${Math.round(utilizationPct)}% used · ${Math.round(elapsedPct)}% of window`,
-  };
-}
-
-const isLapsed = (pace: SubscriptionPace): boolean => pace.condition === hubApi.SampleMissReason.CREDENTIAL_LAPSED;
-
-function subscriptionLine(pace: SubscriptionPace): SubscriptionLine {
-  const lapsed = isLapsed(pace);
-  const paced = !lapsed && pace.sampledAt !== null && pace.paceBars.length > 0;
-  return {
-    slug: pace.slug,
-    name: pace.name,
-    state: lapsed ? 'lapsed' : paced ? 'paced' : 'unsampled',
-    windows: paced ? pace.paceBars.map((bar) => paceLine(bar.window, bar.utilizationPct, bar.elapsedPct)) : [],
-    stale: pace.freshness === 'stale',
-    age: pace.refreshedTag ?? null,
-  };
 }
 
 /** Whether `pace` should stand for its subscription over `held`: a lapsed login on any host outranks

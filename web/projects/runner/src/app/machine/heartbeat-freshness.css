@@ -8,12 +8,6 @@
   align-items: center;
   gap: 6px;
 }
-.hb-tag {
-  font-size: var(--fs-label);
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--label-dim);
-}
 .track {
   flex: 1;
   height: 4px;

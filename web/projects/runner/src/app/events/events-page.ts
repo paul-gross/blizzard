@@ -3,9 +3,9 @@ import { KitPanel } from 'fleet';
 import { FactLog } from './fact-log';
 
 /**
- * The `runners/:runnerId/events` route — the active runner's fact log at full width.
+ * The `events` route — the fact log of the runners the filters leave, at full width.
  * {@link FactLog} is self-fetching
- * (`status.query.ts`'s shared dashboard read), so this page owns nothing
+ * (each runner's shared dashboard read), so this page owns nothing
  * beyond mounting it in a full-height panel, mirroring the hub's own
  * `events-page.ts`.
  */

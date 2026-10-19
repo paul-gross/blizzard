@@ -1,11 +1,9 @@
-import { injectQuery } from '@tanstack/angular-query-experimental';
 import { RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS, runnerApi } from 'fleet';
 
-import { injectActiveRunner } from './active-runner';
 import { runnerLeasesKey } from './query-keys';
 
 /**
- * The active runner's `GET /runners/{runner_id}/api/leases` read — the hub-free local surface: every
+ * One runner's `GET /runners/{runner_id}/api/leases` read — the hub-free local surface: every
  * active lease with its joined binding facts and read-time-derived state
  * (`running`/`stale`/`parked`/`spawning`/`exited`), through TanStack Query and the
  * generated runner client (bzh:generated-client). Modeled on `fleet`'s
@@ -15,24 +13,22 @@ import { runnerLeasesKey } from './query-keys';
  * that goes quiet without a further transition needs a real re-read to flip
  * `stale` on the client's own clock — the interval below is that backstop,
  * not the primary signal a fresh lease/transition/close is covered by.
+ *
+ * Options, not a query: the panel fans this out over every runner it reads
+ * (`panel-reads.ts`), one query per runner under its own key.
  */
-export function injectRunnerLeasesQuery() {
-  const runnerId = injectActiveRunner();
-  return injectQuery(() => {
-    const id = runnerId();
-    return {
-      queryKey: runnerLeasesKey(id),
-      enabled: id !== null,
-      queryFn: async (): Promise<runnerApi.LeaseView[]> => {
-        const { data, error } = await runnerApi.listLeasesRunnersRunnerIdApiLeasesGet({
-          path: { runner_id: id! },
-          throwOnError: false,
-        });
-        if (error) throw error;
-        return data?.items ?? [];
-      },
-      // See RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS.
-      refetchInterval: RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS,
-    };
-  });
+export function runnerLeasesQueryOptions(runnerId: string) {
+  return {
+    queryKey: runnerLeasesKey(runnerId),
+    queryFn: async (): Promise<runnerApi.LeaseView[]> => {
+      const { data, error } = await runnerApi.listLeasesRunnersRunnerIdApiLeasesGet({
+        path: { runner_id: runnerId },
+        throwOnError: false,
+      });
+      if (error) throw error;
+      return data?.items ?? [];
+    },
+    // See RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS.
+    refetchInterval: RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS,
+  };
 }

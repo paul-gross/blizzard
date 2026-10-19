@@ -2,14 +2,13 @@ import { inject } from '@angular/core';
 import { QueryClient, injectMutation, injectQuery } from '@tanstack/angular-query-experimental';
 import { RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS, runnerApi } from 'fleet';
 
-import { injectActiveRunner } from './active-runner';
 import { localPauseMutationKey } from './mutation-keys';
 import { hostKey, runnerDashboardKey } from './query-keys';
 
 /**
- * The active runner's whole status read, composed into one poll —
+ * One runner's whole status read, composed into one poll —
  * `GET /runners/{runner_id}/api/dashboard`, through the generated runner client
- * (`bzh:generated-client`); disabled on a host page, where no runner is active. Most of
+ * (`bzh:generated-client`). Most of
  * its sections (`runner`, `asks`, `escalations`, `takeovers`, `facts`) are largely
  * covered by the runner's own SSE stream — every
  * event kind `RunnerLiveUpdates` dispatches stales this read
@@ -24,29 +23,33 @@ import { hostKey, runnerDashboardKey } from './query-keys';
  * (identity, capacities, hub connectivity, last tick), `asks`,
  * `escalations`, `takeovers`, `facts`, `harness_health`, and `fleet_summary` (the one section
  * that can be `null` — a hub outage or an unwired runner, never a
- * client-visible error for that case). Every consumer injects this same query
- * directly rather than threading it down as an input — TanStack's own
- * query-key dedupe folds N injections of {@link runnerDashboardKey} into one
- * network request, so this is still one poll for the whole panel, not seven.
+ * client-visible error for that case). TanStack's query-key dedupe folds every
+ * injection of one runner's {@link runnerDashboardKey} — the single-runner
+ * {@link injectRunnerDashboardQuery} and the panel's fan-out (`panel-reads.ts`)
+ * alike — into one network request.
  */
-export function injectRunnerDashboardQuery() {
-  const runnerId = injectActiveRunner();
+export function runnerDashboardQueryOptions(runnerId: string) {
+  return {
+    queryKey: runnerDashboardKey(runnerId),
+    queryFn: async (): Promise<runnerApi.DashboardView> => {
+      const { data, error } = await runnerApi.getDashboardRunnersRunnerIdApiDashboardGet({
+        path: { runner_id: runnerId },
+        throwOnError: false,
+      });
+      if (error) throw error;
+      return data!;
+    },
+    // See RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS.
+    refetchInterval: RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS,
+  };
+}
+
+/** One runner's dashboard ({@link runnerDashboardQueryOptions}) — for a section that shows
+ * a single runner; held while `runnerId` gives `null`. */
+export function injectRunnerDashboardQuery(runnerId: () => string | null) {
   return injectQuery(() => {
     const id = runnerId();
-    return {
-      queryKey: runnerDashboardKey(id),
-      enabled: id !== null,
-      queryFn: async (): Promise<runnerApi.DashboardView> => {
-        const { data, error } = await runnerApi.getDashboardRunnersRunnerIdApiDashboardGet({
-          path: { runner_id: id! },
-          throwOnError: false,
-        });
-        if (error) throw error;
-        return data!;
-      },
-      // See RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS.
-      refetchInterval: RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS,
-    };
+    return { ...runnerDashboardQueryOptions(id ?? ''), enabled: id !== null };
   });
 }
 
@@ -66,11 +69,10 @@ export interface LocalPauseVars {
  *
  * `onSettled` returns the invalidation, so `isPending()` holds through the re-read.
  * Invalidates the paused runner's {@link runnerDashboardKey} — the read
- * the panel's pause state comes from — and the host's reads, whose runner rows and switcher show the brake.
+ * the panel's pause state comes from — and the host's reads, whose runner rows and Runner filter show the brake.
  */
-export function injectLocalPauseMutation() {
+export function injectLocalPauseMutation(runnerId: () => string) {
   const queryClient = inject(QueryClient);
-  const runnerId = injectActiveRunner();
   return injectMutation(() => ({
     mutationKey: localPauseMutationKey(runnerId()),
     mutationFn: async (vars: LocalPauseVars): Promise<runnerApi.RunnerControlView> => {

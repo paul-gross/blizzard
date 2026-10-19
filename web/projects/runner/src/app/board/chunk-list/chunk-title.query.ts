@@ -1,7 +1,6 @@
 import { injectQuery } from '@tanstack/angular-query-experimental';
 import { runnerApi } from 'fleet';
 
-import { injectActiveRunner } from '../../core/active-runner';
 import { runnerChunkWorkItemsKey } from '../../core/query-keys';
 
 /** The `GET /runners/{runner_id}/api/chunks/{chunk_id}/work-items` fetch behind {@link injectChunkTitleQuery}. */
@@ -15,7 +14,7 @@ async function fetchWorkItems(runnerId: string, chunkId: string): Promise<runner
 }
 
 /**
- * The active runner's `GET /runners/{runner_id}/api/chunks/{chunk_id}/work-items` read — the layered pass-through
+ * One runner's `GET /runners/{runner_id}/api/chunks/{chunk_id}/work-items` read — the layered pass-through
  * (panel → its own runner → hub → vendor, with the hub's credentials) that
  * carries the issue title layered onto a lease row. This is a strictly
  * **severable, volatile** read, never the panel's critical path: the leases route
@@ -39,15 +38,14 @@ async function fetchWorkItems(runnerId: string, chunkId: string): Promise<runner
  * optimistically and render whatever arrived, or nothing. `chunk_id` is what a row
  * *is*; the title is decoration that *arrived*.
  */
-export function injectChunkTitleQuery(chunkId: () => string) {
-  const activeRunner = injectActiveRunner();
+export function injectChunkTitleQuery(runnerId: () => string, chunkId: () => string) {
   return injectQuery(() => {
     const id = chunkId();
-    const runnerId = activeRunner();
+    const runner = runnerId();
     return {
-      queryKey: runnerChunkWorkItemsKey(runnerId, id),
-      enabled: !!id && runnerId !== null,
-      queryFn: () => fetchWorkItems(runnerId!, id),
+      queryKey: runnerChunkWorkItemsKey(runner, id),
+      enabled: !!id,
+      queryFn: () => fetchWorkItems(runner, id),
       refetchInterval: false as const,
       staleTime: 5 * 60_000,
       gcTime: 30 * 60_000,

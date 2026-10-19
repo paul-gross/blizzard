@@ -7,6 +7,7 @@ import type {
   TranscriptSegmentIndexEntry,
 } from '../../api/hub';
 import { ChunkArtifactBody } from '../chunk-detail/chunk-artifact-body';
+import type { ChunkStepSession } from '../chunk-detail/chunk-step-sessions';
 import { ChunkTimelineSelection } from '../chunk-detail/chunk-timeline-selection';
 import { KitAccordionSection } from '../../kit/kit-accordion-section';
 import { KitAsyncState, type KitAsyncStateValue } from '../../kit/kit-async-state';
@@ -83,6 +84,9 @@ export class ChunkNodeHistoryTab {
   /** {@link ChunkTimelineSelection.graphLinkBase} — the daemon's graphs view, or `null`
    * to leave each row's graph badge unlinked where the daemon serves no graphs view. */
   readonly graphLinkBase = input<readonly string[] | null>(null);
+
+  /** {@link ChunkTimelineSelection.stepSessions}, forwarded. */
+  readonly stepSessions = input<ReadonlyMap<string, ChunkStepSession>>(new Map());
 
   protected readonly hasSelection = computed(() => this.selectedKey() !== null);
 

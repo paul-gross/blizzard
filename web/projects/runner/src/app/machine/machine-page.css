@@ -10,16 +10,19 @@
 }
 .machine {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr);
   align-items: start;
   gap: 6px;
   padding: 6px;
 }
-.control-panel {
+.registration-panel {
   grid-column: 1 / -1;
 }
-.control {
-  padding: 6px 8px;
+.none {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 12px 8px;
+  color: var(--label);
 }
 @media (max-width: 900px) {
   .machine {

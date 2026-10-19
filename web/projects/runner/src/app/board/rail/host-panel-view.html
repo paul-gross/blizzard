@@ -1,0 +1,78 @@
+<!-- Most important first: what the host can still spend, who is spending it, then the room it has. -->
+<section class="sec subs" data-testid="host-panel-subscriptions">
+  @for (sub of subscriptions(); track sub.slug) {
+    <fleet-subscription-blocks data-testid="host-panel-subscription" [line]="sub" />
+  } @empty {
+    <span class="none">none declared</span>
+  }
+</section>
+<section class="sec" data-testid="host-panel-runners">
+  <ul class="runners">
+    @for (runner of runners(); track runner.key) {
+      <li
+        class="runner"
+        data-testid="host-panel-runner"
+        [class.paused]="runner.localPause !== null || runner.hubPaused"
+        [class.halted]="runner.halted"
+        [attr.data-runner-id]="runner.runnerId"
+      >
+        <div class="r1">
+          <span class="name" data-testid="host-panel-runner-name">
+            <span class="light"><fleet-kit-beacon aria-hidden="true" [active]="true" [tone]="runner.tone" blink="hold" /></span>
+            {{ runner.name }}
+            <!-- Two brakes, two glyphs: they are cleared by different people in different places. -->
+            @if (runner.localPause; as hint) {
+              <fleet-kit-glyph class="brake" data-testid="host-panel-runner-local-paused" glyph="pause" [label]="hint" />
+            }
+            @if (runner.hubPaused) {
+              <fleet-kit-glyph class="brake" data-testid="host-panel-runner-hub-paused" glyph="stop" label="Paused by the hub — no new claims" />
+            }
+          </span>
+          @if (runner.halted) {
+            <span class="halted" data-testid="host-panel-runner-halted">halted</span>
+          }
+        </div>
+        @if (runner.halted) {
+          @for (reason of runner.haltedReasons; track $index) {
+            <div class="reason">{{ reason }}</div>
+          }
+        } @else {
+          @for (binding of runner.bindings; track binding.key) {
+            <fleet-kit-slot-bar
+              data-testid="host-panel-runner-binding"
+              unit="agents"
+              [name]="binding.label"
+              [used]="binding.used"
+              [total]="binding.agents"
+            />
+          } @empty {
+            <fleet-kit-slot-bar
+              data-testid="host-panel-runner-agents"
+              unit="agents"
+              name="agents"
+              [used]="runner.agentsInUse"
+              [total]="runner.maxAgents"
+            />
+          }
+        }
+      </li>
+    } @empty {
+      <li class="none">no runner matches the filter</li>
+    }
+  </ul>
+</section>
+<section class="sec envs" data-testid="host-panel-environments">
+  @for (pool of pools(); track pool.workspaceId) {
+    <fleet-kit-slot-bar
+      data-testid="host-panel-pool"
+      [attr.data-workspace-id]="pool.workspaceId"
+      unit="envs"
+      [name]="pool.workspaceId"
+      [used]="pool.inUse"
+      [total]="pool.capacity ?? pool.envs.length"
+      [slots]="pool.slots"
+    />
+  } @empty {
+    <span class="none">none configured</span>
+  }
+</section>

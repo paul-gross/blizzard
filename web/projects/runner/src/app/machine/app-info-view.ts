@@ -18,6 +18,11 @@ export class LocalInfoView {
   /** The runner's own hub-link facts. */
   readonly view = input.required<runnerApi.RunnerStatusView>();
 
+  /** Show the hub link alone, leaving out what describes the runner's own machine — its agent
+   * slots and its gates — where a host panel beside it shows them. A routing conflict stays: it is
+   * why the runner claims nothing from its hub. */
+  readonly hubOnly = input(false);
+
   /** The last-known fleet counts, or `null` before the first successful read. */
   readonly fleet = input<runnerApi.FleetSummaryView | null>(null);
 
@@ -75,6 +80,13 @@ export class LocalInfoView {
       value: `${conflict.entries.join(', ')} → ${conflict.project_id} · not claiming`,
       testid: 'routing-conflict',
     }));
+    const machineRows: readonly KitFact[] = this.hubOnly()
+      ? []
+      : [
+          { label: 'agents', value: `${v.capacities.used}/${slots} slots`, testid: 'agents-total' },
+          ...bindingRows,
+          { label: 'gates', value: v.gates?.join(', ') || 'none', testid: 'hub-gates' },
+        ];
     return [
       { label: 'runner', template: identityValue, testid: 'runner-identity' },
       ...verdict,
@@ -83,10 +95,8 @@ export class LocalInfoView {
       ...hubVersion,
       { label: 'last flush', value: this.lastFlushLabel(), testid: 'hub-last-flush' },
       { label: 'buffered', value: `${v.hub.buffer_depth} events`, testid: 'hub-buffered' },
-      { label: 'agents', value: `${v.capacities.used}/${slots} slots`, testid: 'agents-total' },
-      ...bindingRows,
+      ...machineRows,
       ...conflictRows,
-      { label: 'gates', value: v.gates?.join(', ') || 'none', testid: 'hub-gates' },
       { label: 'loop', template: loopValue },
     ];
   }

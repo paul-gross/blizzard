@@ -63,6 +63,14 @@
             }
             <span class="ts" data-testid="selection-when" [attr.title]="row.whenTitle || null">{{ row.when }}</span>
           </div>
+          @if (sessionFor(row.key); as s) {
+            <div class="line3 session" data-testid="selection-step-session">
+              <span>env {{ s.environment ?? '—' }}</span>
+              <span>pid {{ s.pid ?? '—' }}</span>
+              <span data-testid="selection-step-session-ending">{{ s.ending ?? 'live' }}</span>
+              <span>{{ sessionDuration(s) }}</span>
+            </div>
+          }
           @if (usageForStep(row); as u) {
             <div class="line3" data-testid="selection-step-usage">
               <span class="tok" data-testid="selection-step-tokens">{{ formatTokens(u.tokens) }} tok</span>
@@ -95,6 +103,14 @@
           <div class="line2">
             <span class="verdict" data-testid="selection-active-verb">{{ a.label }}</span>
           </div>
+          @if (sessionFor(a.key); as s) {
+            <div class="line3 session" data-testid="selection-step-session">
+              <span>env {{ s.environment ?? '—' }}</span>
+              <span>pid {{ s.pid ?? '—' }}</span>
+              <span data-testid="selection-step-session-ending">{{ s.ending ?? 'live' }}</span>
+              <span>{{ sessionDuration(s) }}</span>
+            </div>
+          }
         </div>
       </li>
     }

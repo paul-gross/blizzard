@@ -1,8 +1,10 @@
 @for (runner of runners(); track $index) {
   <div class="runner" data-testid="host-runner-row" [attr.data-runner-id]="runner.runnerId" [attr.data-serving]="runner.serving">
     <div class="head">
-      @if (runner.boardLink; as link) {
-        <a class="name" [routerLink]="link" data-testid="host-runner-link">{{ runner.name }}</a>
+      @if (runner.boardFilter; as name) {
+        <a class="name" routerLink="/board" [queryParams]="{ runner: name }" queryParamsHandling="merge" data-testid="host-runner-link">{{
+          runner.name
+        }}</a>
       } @else {
         <span class="name" data-testid="host-runner-name">{{ runner.name }}</span>
       }

@@ -3,6 +3,7 @@
     @if (view(); as v) {
       <app-info-view
         [view]="v"
+        [hubOnly]="hubOnly()"
         [fleet]="fleet()"
         [fleetStale]="fleetStale()"
         [lastFlushLabel]="lastFlushLabel()"

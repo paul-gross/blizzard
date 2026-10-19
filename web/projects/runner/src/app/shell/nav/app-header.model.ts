@@ -16,17 +16,23 @@ export function headerConnectionLabel(
 }
 
 /** The header's live stat cells, across the whole host — environments in use over every workspace's environments,
- * agents in use over every serving runner's `max_agents` — withheld (`[]`) while the host's runner read is still
- * pending. */
+ * agents in use over every serving runner's `max_agents` — or, with `runnerName` set, across that runner: the
+ * environments it holds over every environment, and its own agents. Withheld (`[]`) while the host's runner read is
+ * still pending. */
 export function headerStatCells(
   hostPending: boolean,
   runners: readonly runnerApi.HostRunnerView[] | undefined,
   environments: readonly runnerApi.HostWorkspaceEnvironmentsView[] | undefined,
+  runnerName: string | null = null,
 ): readonly StatCell[] {
   if (hostPending) return [];
+  const scoped = (runners ?? []).filter((runner) => runnerName === null || runner.name === runnerName);
+  const scopedIds = new Set(scoped.map((runner) => runner.runner_id));
   const envs = (environments ?? []).flatMap((workspace) => workspace.items ?? []);
-  const envsUsed = envs.filter((env) => env.held ?? env.chunk_id != null).length;
-  const serving = (runners ?? []).filter((runner) => runner.state === 'serving');
+  const envsUsed = envs.filter(
+    (env) => (env.held ?? env.chunk_id != null) && (runnerName === null || scopedIds.has(env.runner_id ?? null)),
+  ).length;
+  const serving = scoped.filter((runner) => runner.state === 'serving');
   return [
     { key: 'envs', label: 'Envs', value: envsUsed, capacity: envs.length },
     {

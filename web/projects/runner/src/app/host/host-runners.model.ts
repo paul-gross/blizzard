@@ -1,7 +1,6 @@
 import type { runnerApi } from 'fleet';
 
-/** One runner as the host page lists it and the switcher offers it — every value resolved
- * for display. */
+/** One runner as the machine page lists it — every value resolved for display. */
 export interface HostRunnerRow {
   /** The hub-minted id, `null` for a halted runner configured without one. */
   readonly runnerId: string | null;
@@ -14,9 +13,9 @@ export interface HostRunnerRow {
   /** One line per binding: its project, workspace, and agent ceiling there. */
   readonly bindings: readonly string[];
   readonly haltedReasons: readonly string[];
-  /** The runner's board, `null` where there is no runner to open — not served, or no id. A
-   * runner its hub halts is still served, so it keeps its link. */
-  readonly boardLink: readonly string[] | null;
+  /** The name the board's Runner filter narrows to it by, `null` where there is no runner to
+   * read — not served, or no id. A runner its hub halts is still served, so it keeps its link. */
+  readonly boardFilter: string | null;
 }
 
 /** A runner's brake in operator words — which side set it, and the local brake's reason
@@ -43,7 +42,7 @@ export function hostRunnerRows(runners: readonly runnerApi.HostRunnerView[]): re
         (binding) => `${binding.project} · ${binding.workspace_id} · ${binding.agents} agents`,
       ),
       haltedReasons: serving ? [] : (runner.halted_reasons ?? []),
-      boardLink: served && runner.runner_id !== null ? ['/runners', runner.runner_id, 'board'] : null,
+      boardFilter: served && runner.runner_id !== null ? runner.name : null,
     };
   });
 }

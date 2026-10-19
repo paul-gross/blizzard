@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { CdkMenuTrigger } from '@angular/cdk/menu';
 import { KitMenuItem, KitMenuPanel, MobileTitlebar as FleetMobileTitlebar, ViewportMenu } from 'fleet';
-import { injectRunnerDashboardQuery } from '../../core/status.query';
+import { injectPanelDashboards } from '../../core/panel-reads';
 import { injectRunnerSessionQuery, signedInUsername } from '../../core/identity/auth.query';
 import { LocalIdentity } from '../../core/identity/app-identity';
 import { RunnerLogout } from '../../core/identity/runner-logout';
@@ -32,15 +32,17 @@ import { RunnerLogout } from '../../core/identity/runner-logout';
   styleUrl: './mobile-titlebar.css',
 })
 export class MobileTitlebar {
-  /** The titlebar's own severable read (`app-info.ts`'s own instance dedupes
-   * on the same query key, so this is not a second poll) — `runner.hub.reachable`
-   * off `GET /api/dashboard`, the same fact `app-info`'s "link" cell renders. */
-  private readonly dashboardQuery = injectRunnerDashboardQuery();
+  /** The titlebar's own severable read (`app-info.ts`'s own instances dedupe
+   * on the same query keys, so this is not a second poll) — each covered runner's
+   * `runner.hub.reachable` off `GET /api/dashboard`, the same fact `app-info`'s "link" cell renders. */
+  private readonly dashboards = injectPanelDashboards();
 
-  /** Whether the hub link is reachable — the titlebar's `live` dot. A
+  /** Whether any covered runner reaches its hub — the titlebar's `live` dot. A
    * malformed body (e.g. a misrouted proxy) must degrade to `false`, not
    * throw mid-render — the same guard `app-info.ts`'s own `view` takes. */
-  protected readonly hubReachable = computed(() => this.dashboardQuery.data()?.runner?.hub?.reachable ?? false);
+  protected readonly hubReachable = computed(() =>
+    this.dashboards.data().some(({ dashboard }) => dashboard.runner?.hub?.reachable ?? false),
+  );
 
   /** The shell's one logout owner: the menu item's pending flag and the error rendered beside the titlebar. */
   protected readonly logout = inject(RunnerLogout);

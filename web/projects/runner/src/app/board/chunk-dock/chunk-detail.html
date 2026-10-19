@@ -3,12 +3,14 @@
     <app-machine-detail-header
       fleetKitPanelHeader
       [chunkId]="l.chunk_id"
-      [linkBase]="linkBase()"
+      [linkBase]="linkBase"
       [workRefs]="workRefs()"
       [statusLabel]="status()?.label ?? null"
       [statusTone]="status()?.tone"
       [nodeName]="l.node_name"
-      [epoch]="l.epoch"
+      [projectName]="projectName()"
+      [lease]="l"
+      [worker]="worker()"
       [runnerName]="runnerName()"
       [pause]="pause()"
       [pausable]="pausable()"
@@ -24,7 +26,6 @@
   <app-machine-detail-view
     [lease]="newestLease()"
     [escalation]="escalation()"
-    [leaseRef]="leaseRef()"
     [heartbeatLabel]="heartbeatLabel()"
   />
 </fleet-kit-panel>

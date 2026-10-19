@@ -61,12 +61,3 @@
 fleet-kit-panel.section {
   flex: none;
 }
-.p-note {
-  color: var(--label-dim);
-  font-size: var(--fs-label);
-  letter-spacing: 0.1em;
-}
-.rows {
-  display: flex;
-  flex-direction: column;
-}

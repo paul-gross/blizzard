@@ -2,33 +2,32 @@
   <div class="lp-content">
     @if (mode() === 'desktop') {
       <app-panel-layout
-        [activeLeases]="activeLeases()"
-        [leasesTriadState]="leasesTriadState()"
-        [chunksTriadState]="visibleChunksTriadState()"
-        [chunksEmptyText]="chunksEmptyText()"
-        [machineChunks]="visibleChunks()"
-        [showAllChunks]="showAllChunks()"
+        [chunksTriadState]="chunksTriadState()"
+        [machineChunks]="machineChunks()"
+        [layout]="layout()"
         [openAskCount]="openAskCount()"
+        [runners]="runners()"
         [selectedChunkId]="selectedChunkId()"
         [selectedChunkLeases]="selectedChunkLeases()"
         [selectedStatus]="selectedStatus()"
         [selectedEscalation]="selectedEscalation()"
         (selectChunk)="selectChunk($event)"
-        (toggleShowAllChunks)="showAllChunks.set($event)"
+        (layoutChange)="setLayout($event)"
         (dismiss)="clearSelection()"
       />
     } @else {
       @defer (on immediate) {
         <app-panel-mobile
-          [activeLeases]="activeLeases()"
-          [leasesTriadState]="leasesTriadState()"
           [chunksTriadState]="chunksTriadState()"
           [machineChunks]="machineChunks()"
+          [layout]="layout()"
           [openAskCount]="openAskCount()"
+          [runners]="runners()"
           [selectedChunkLeases]="selectedChunkLeases()"
           [selectedStatus]="selectedStatus()"
           [selectedEscalation]="selectedEscalation()"
           (selectChunk)="selectChunk($event)"
+          (layoutChange)="setLayout($event)"
           (closeDetail)="clearSelection()"
         />
       }

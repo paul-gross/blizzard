@@ -1,7 +1,9 @@
 import type * as runnerApi from '../api/runner';
 import { compactRef } from '../core/compact-ref';
-import { ageMs, formatAge, formatHeldFor } from '../core/when';
-import type { SubscriptionPace } from './subscription-pace.model';
+import { SampleMissReason } from '../api/hub';
+import { ageMs, formatAge, formatHeldFor, formatRefreshedAgo, formatSeenTag } from '../core/when';
+import { type SubscriptionLine, subscriptionLine } from './subscription-blocks.model';
+import { classifySubscriptionFreshness, type SubscriptionPace, toPaceBars } from './subscription-pace.model';
 import type { EnvironmentRow, WorkspaceRow } from './workspace-table';
 
 /**
@@ -116,36 +118,63 @@ export function renewalLabel(
   }
 }
 
+/** A subscription's newest reading is a lapsed credential — log in again. */
+function lapsedNow(sub: runnerApi.HostSubscriptionView): boolean {
+  return sub.ok === false && sub.miss_reason === 'credential_lapsed';
+}
+
 /** One shared subscription row per declared subscription, in wire order, aged against
- * `now`. The host reports the newest sampling attempt rather than usage windows, so
- * each row carries its {@link SubscriptionPace.sample} line and no pace bars, and names
- * the runners spending it — `runnerName` resolves a spender's id to its display name. */
+ * `now`: its newest sampled snapshot's windows as pace bars, refreshed against that snapshot,
+ * naming the runners spending it — `runnerName` resolves a spender's id to its display name.
+ * A lapsed credential reads as lapsed; a subscription attempted but never sampled carries its
+ * {@link SubscriptionPace.sample} line in place of the bars; one never attempted has no sample yet. */
 export function runnerSubscriptionPaces(
   subs: readonly runnerApi.HostSubscriptionView[],
   now: number,
   runnerName: (runnerId: string) => string,
 ): readonly SubscriptionPace[] {
-  return subs.map((sub) => ({
-    slug: sub.slug,
-    name: sub.name,
-    provider: sub.provider,
-    paceBars: [],
-    condition: null,
-    sampledAt: null,
-    refreshedLabel: null,
-    freshness: null,
-    missReason: null,
-    sample: {
-      conditionLabel: conditionLabel(sub.ok ?? null, sub.miss_reason ?? null),
-      sampledAgo: sampledAgoLabel(sub.sampled_at ?? null, now),
-      ok: sub.ok ?? null,
-    },
-    spenders: (sub.spenders ?? []).map(runnerName),
-    renewalLabel: renewalLabel(
-      sub.renewal_result ?? null,
-      sub.renewal_failure_reason ?? null,
-      sub.renewal_attempted_at ?? null,
-      now,
-    ),
+  return subs.map((sub) => {
+    const windowsSampledAt = sub.windows_sampled_at ?? null;
+    const delta = windowsSampledAt === null ? null : ageMs(windowsSampledAt, now);
+    const lapsed = lapsedNow(sub);
+    const ok = sub.ok ?? null;
+    const missReason = sub.miss_reason ?? null;
+    return {
+      slug: sub.slug,
+      name: sub.name,
+      provider: sub.provider,
+      paceBars: toPaceBars(now, sub.windows ?? []),
+      condition: lapsed ? SampleMissReason.CREDENTIAL_LAPSED : null,
+      sampledAt: windowsSampledAt,
+      refreshedLabel: delta === null ? null : formatRefreshedAgo(delta),
+      refreshedTag: delta === null ? null : formatSeenTag(windowsSampledAt, now),
+      freshness: delta === null ? null : classifySubscriptionFreshness(delta),
+      missReason: ok === false ? missReason : null,
+      sample:
+        windowsSampledAt === null && !lapsed && ok !== null
+          ? {
+              conditionLabel: conditionLabel(ok, missReason),
+              sampledAgo: sampledAgoLabel(sub.sampled_at ?? null, now),
+              ok,
+            }
+          : null,
+      spenders: (sub.spenders ?? []).map(runnerName),
+      renewalLabel: renewalLabel(
+        sub.renewal_result ?? null,
+        sub.renewal_failure_reason ?? null,
+        sub.renewal_attempted_at ?? null,
+        now,
+      ),
+    };
+  });
+}
+
+/** One line of blocks per declared subscription, in wire order, aged against `now`: its newest
+ * sampled snapshot's windows, paced; a lapsed credential reads `lapsed`; one never sampled carries
+ * its newest attempt's condition as the line's note, or the dash when never attempted. */
+export function runnerSubscriptionLines(subs: readonly runnerApi.HostSubscriptionView[], now: number): readonly SubscriptionLine[] {
+  return runnerSubscriptionPaces(subs, now, (id) => id).map((pace) => ({
+    ...subscriptionLine(pace),
+    note: pace.sample?.conditionLabel ?? null,
   }));
 }

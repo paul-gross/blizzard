@@ -2,6 +2,7 @@
   <div class="ask" data-testid="ask-row" [attr.data-question-id]="row.questionId">
     <div class="a-hdr">
       <span class="chunk">{{ row.chunkRef }}</span>
+      <span class="runner" data-testid="ask-runner">{{ row.runner }}</span>
       <span class="asked">asked {{ row.askedFor }} ago</span>
     </div>
     <div class="q">{{ row.question }}</div>
