@@ -10,6 +10,7 @@ export { FleetLiveUpdates } from './lib/sse/fleet-live';
 export { EVENT_SOURCE_FACTORY, FetchEventSource, type EventSourceFactory } from './lib/sse/sse.service';
 export { FLEET_CLOCK, injectNowSignal } from './lib/core/now-signal';
 export { HUB_PROJECT_FILTER, injectProjectFilter } from './lib/core/project-filter';
+export { RUNNER_HOST_NAMES } from './lib/core/runner-display-name';
 export { FlagStore, provideFlags, type FlagsRead, type FlagsView } from './lib/core/flags/flag-store';
 export { flagGuard } from './lib/core/flags/flag-guard';
 export { IN_APP_LINK, LensLink, type InAppLink } from './lib/core/lens-link';

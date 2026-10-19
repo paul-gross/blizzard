@@ -7,6 +7,7 @@ import { provideTenantInterceptor } from '../core/auth/tenant.interceptor';
 import { provideFlags, provideViewportRenavigation } from 'fleet/shell';
 import { hubFlagsRead } from '../core/flags.query';
 import { provideProjectLens } from '../core/project-lens';
+import { provideRunnerHostNames } from '../runners/runner-host-names';
 
 import { routes } from './app.routes';
 
@@ -31,6 +32,8 @@ export const appConfig: ApplicationConfig = {
     provideTenantInterceptor(),
     // The project lens narrows the reads and keeps the links under it, both read off the URL.
     provideProjectLens(),
+    // Every runner reference names its host, read off the host registry.
+    provideRunnerHostNames(),
     // Features read the hub's flags through the shared store: one read at start.
     provideFlags(hubFlagsRead),
   ],

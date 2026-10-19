@@ -10,11 +10,9 @@ import {
   ChunkIssuePane,
   ChunkTimeline,
   ChunkTokenBreakdown,
-  type EditGraphEvent,
   type ResolveDecisionEvent,
   type WorkItemsState,
 } from '../chunk-detail';
-import { isPendingFor } from '../../core/mutation-pending';
 import { KitPanel, KitPanelHeader } from '../../kit/kit-panel';
 import { ChunkDelivery } from '../chunk-detail/chunk-delivery';
 import { LensLink } from '../../core/lens-link';
@@ -33,7 +31,7 @@ import { LensLink } from '../../core/lens-link';
  *
  * Presentational only, `bzh:frontend-container-presentational`: inputs in,
  * the three operator-action outputs plus {@link pickStep} back out, no
- * injection. {@link canControl}, {@link canAnswer}, {@link canResolve}, and
+ * injection. {@link canAnswer}, {@link canResolve}, and
  * {@link graphLinkBase} default to read-only (off, unlinked), so a caller with no
  * actions opts into nothing; {@link issuePanePlacement} defaults to
  * {@link ChunkIssuePane}'s own `'center'`.
@@ -52,10 +50,6 @@ export class ChunkGeneralTab {
   /** The chunk's related work-source items + fetch state. */
   readonly workItems = input<WorkItemsState>({ status: 'loading', items: [] });
 
-  /** Whether the current identity may set the chunk's graph (`chunk:control`),
-   * forwarded to {@link ChunkFacts}. */
-  readonly canControl = input(false);
-
   /** Whether the current identity may answer an open question (`question:answer`),
    * forwarded to {@link ChunkAwaitingHuman}. */
   readonly canAnswer = input(false);
@@ -71,15 +65,6 @@ export class ChunkGeneralTab {
   /** The ids of the questions an answer mutation is in flight for, forwarded to
    * {@link ChunkAwaitingHuman}. */
   readonly pendingAnswerQuestionIds = input<readonly string[]>([]);
-
-  /** The ids of the chunks a graph repin is in flight for; the facts' Set button disables
-   * when this tab's own chunk is among them. */
-  readonly pendingGraphChunkIds = input<readonly string[]>([]);
-
-  /** Whether a graph repin is in flight for this tab's chunk. */
-  protected readonly graphPending = computed(() =>
-    isPendingFor(this.pendingGraphChunkIds(), (id) => id === this.detail().chunk_id),
-  );
 
   /** The graphs view's own path segments, forwarded to {@link ChunkFacts} and
    * {@link ChunkTimeline} — `null` (the default) withholds
@@ -104,9 +89,6 @@ export class ChunkGeneralTab {
 
   /** Emitted when the operator resolves an open gate decision. */
   readonly resolveDecision = output<ResolveDecisionEvent>();
-
-  /** Emitted when the operator sets a not-ready chunk's graph. */
-  readonly editGraph = output<EditGraphEvent>();
 
   /** Emitted with a node's join key when the operator activates it in this tab's own
    * node-history summary — {@link ChunkTimeline.pickStep} forwarded straight through, a

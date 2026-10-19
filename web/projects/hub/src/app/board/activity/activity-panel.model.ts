@@ -19,13 +19,13 @@ const RUNNER_CHANGE_VERB: ReadonlyMap<string, string> = new Map<RunnerChangeKind
 
 /**
  * A `runner-changed` frame as prose, naming the runner by display name — e.g.
- * `runner R-ABF3.r-claude paused by operator`, or `runner R-ABF3.r-claude locally paused by runner-ceiling — spend ceiling
+ * `runner atlas/r-claude paused by operator`, or `runner atlas/r-claude locally paused by runner-ceiling — spend ceiling
  * reached`. A kind with no phrasing above renders as the raw kind — pinned by
  * `activity-panel.spec.ts`'s "renders a runner-changed frame of an unrecognized kind as
  * its raw kind, keeping the row".
  */
-function summarizeRunnerChange(data: LoggedEvent['data']): string {
-  const runner = `runner ${data.runner_id ? runnerDisplayName(data.runner_id, data.runner_name) : '—'}`;
+function summarizeRunnerChange(data: LoggedEvent['data'], hostNames: ReadonlyMap<string, string>): string {
+  const runner = `runner ${data.runner_id ? runnerDisplayName(data.runner_id, data.runner_name, hostNames.get(data.runner_id)) : '—'}`;
   const verb = data.kind ? (RUNNER_CHANGE_VERB.get(data.kind) ?? data.kind) : 'changed';
   const by = data.by ? ` by ${data.by}` : '';
   const reason = data.reason ? ` — ${data.reason}` : '';
@@ -44,11 +44,11 @@ interface RowSummary {
  * generated `HubEventType` vocabulary onto plain phrasing; an unknown type degrades to
  * its raw name rather than dropping the row.
  */
-function summarize(event: LoggedEvent): RowSummary {
+function summarize(event: LoggedEvent, hostNames: ReadonlyMap<string, string>): RowSummary {
   const chunk = event.data.chunk_id ? compactRef(event.data.chunk_id) : '';
   switch (event.type) {
     case HubEventType.CHUNK_CHANGED: {
-      const { transition, runner } = summarizeChunkChange(event.data);
+      const { transition, runner } = summarizeChunkChange(event.data, hostNames);
       return { message: transition, detail: runner };
     }
     case HubEventType.QUESTION_ASKED:
@@ -62,10 +62,10 @@ function summarize(event: LoggedEvent): RowSummary {
     case HubEventType.QUEUE_CHANGED:
       return { message: 'ready queue changed' };
     case HubEventType.RUNNER_CHANGED:
-      return { message: summarizeRunnerChange(event.data) };
+      return { message: summarizeRunnerChange(event.data, hostNames) };
     case HubEventType.EVENT_LOGGED:
       return {
-        message: `${chunk || (event.data.runner_id ? runnerDisplayName(event.data.runner_id, event.data.runner_name) : '—')} · ${event.data.severity ?? '—'} ${event.data.kind ?? '—'}`,
+        message: `${chunk || (event.data.runner_id ? runnerDisplayName(event.data.runner_id, event.data.runner_name, hostNames.get(event.data.runner_id)) : '—')} · ${event.data.severity ?? '—'} ${event.data.kind ?? '—'}`,
       };
     default:
       return { message: event.type };
@@ -116,14 +116,14 @@ export function mergeActivityFeeds(
   return combined.length > limit ? combined.slice(combined.length - limit) : combined;
 }
 
-/** The merged feed newest-first, each frame shaped into its display row. */
-export function activityRows(merged: readonly LoggedEvent[]): readonly ActivityRow[] {
+/** The merged feed newest-first, each frame shaped into its display row, runners named with their host from `hostNames`. */
+export function activityRows(merged: readonly LoggedEvent[], hostNames: ReadonlyMap<string, string>): readonly ActivityRow[] {
   return merged
     .map((event) => ({
       seq: event.seq,
       type: event.type,
       time: formatClockTime(event.at),
-      ...summarize(event),
+      ...summarize(event, hostNames),
     }))
     .reverse();
 }

@@ -1,6 +1,7 @@
 <aside class="dock" data-testid="chunk-detail" role="region" aria-label="Chunk detail">
   <app-chunk-detail-header
     [detail]="detail()"
+    [projectColor]="projectColor()"
     [canControl]="canControl()"
     [pausePending]="pausePending()"
     [detachPending]="detachPending()"
@@ -32,10 +33,7 @@
       <div class="s-head"><span class="tag">Work item · {{ pointerCount() }}</span></div>
       <fleet-chunk-detail-facts
         [detail]="detail()"
-        [canControl]="canControl()"
         [graphLinkBase]="graphLinkBase()"
-        [graphPending]="graphPending()"
-        (editGraph)="editGraph.emit($event)"
       >
         <fleet-chunk-detail-token-breakdown token-breakdown [detail]="detail()" />
       </fleet-chunk-detail-facts>

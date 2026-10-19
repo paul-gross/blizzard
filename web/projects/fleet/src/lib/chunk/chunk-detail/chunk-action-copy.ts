@@ -13,7 +13,7 @@ export interface ChunkActionCopy {
 export function pauseCopy(runner: string | null): ChunkActionCopy {
   return {
     label: 'Pause',
-    subtitle: null,
+    subtitle: 'Park the agent, keep the claim',
     text: runner
       ? `Parks the agent within ~30s: its worker is interrupted and given a brief grace period to wind down before being force-stopped if it hasn't already exited, but its session is kept. ${runner} keeps the claim and its environment. Resume continues the same session.`
       : `Parks the agent within ~30s: its worker is interrupted and given a brief grace period to wind down before being force-stopped if it hasn't already exited, but its session is kept. No runner has claimed it yet, so pausing just holds it out of the queue. Resume continues the same session.`,
@@ -24,7 +24,7 @@ export function pauseCopy(runner: string | null): ChunkActionCopy {
 export function resumeCopy(runner: string | null): ChunkActionCopy {
   return {
     label: 'Resume',
-    subtitle: null,
+    subtitle: 'Continue the parked session',
     text: runner
       ? `Clears the pause. ${runner} continues the parked session within ~30s. If the chunk is also waiting on an answer, it stays parked until answered.`
       : `Clears the pause. With no runner holding it yet, clearing the pause simply lets it rejoin the queue. If the chunk is also waiting on an answer, it stays parked until answered.`,
@@ -35,7 +35,7 @@ export function resumeCopy(runner: string | null): ChunkActionCopy {
 export function detachCopy(runner: string, nodeName: string): ChunkActionCopy {
   return {
     label: `Detach from ${runner}`,
-    subtitle: 'End the agent, release the claim',
+    subtitle: 'End the agent, lose unpushed work',
     text: `Releases ${runner}'s claim: ends the agent's session and releases its environment, so uncommitted work is lost. The chunk stays at node ${nodeName} and returns to READY for any runner to claim, unless an open escalation or question still holds it.`,
   };
 }
@@ -43,8 +43,8 @@ export function detachCopy(runner: string, nodeName: string): ChunkActionCopy {
 /** Complete's copy — no interpolation. */
 export function completeCopy(): ChunkActionCopy {
   return {
-    label: 'Complete…',
-    subtitle: 'Mark done, close linked issues',
+    label: 'Complete',
+    subtitle: 'Mark done, close issues, no PR merge',
     text: 'Marks the chunk done and releases its claim, ending any running session. Closes linked GitHub issues as completed, marks hub items delivered, and unblocks chunks that depend on it. Does not merge a PR. Cannot be undone.',
   };
 }
@@ -52,8 +52,8 @@ export function completeCopy(): ChunkActionCopy {
 /** Delete's copy — no interpolation; any disabled-state subtitle is the caller's. */
 export function deleteCopy(): ChunkActionCopy {
   return {
-    label: 'Delete…',
-    subtitle: 'Remove from the hub permanently',
+    label: 'Delete',
+    subtitle: 'Remove permanently, issues stay open',
     text: 'Removes the chunk from the hub and withdraws its hub items. Linked GitHub issues stay open. Refused while another chunk depends on it. Cannot be undone.',
   };
 }

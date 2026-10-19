@@ -21,7 +21,7 @@
            navigates through the router rather than a full page load. -->
       @if (isHubEntry(item)) {
         <a accordionAside class="i-ref" data-testid="issue-ref" [routerLink]="item.web_url | lensLink" [attr.title]="item.web_url"
-          >- {{ refText(item) }}</a
+          >{{ refText(item) }}</a
         >
       } @else {
         <a
@@ -32,7 +32,7 @@
           target="_blank"
           rel="noreferrer"
           [attr.title]="item.web_url"
-          >- {{ refText(item) }}</a
+          >{{ refText(item) }}</a
         >
       }
       <!-- `.acc-body` is zero-padded (`kit-accordion-section.css`) for a

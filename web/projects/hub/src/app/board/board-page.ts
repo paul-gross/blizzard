@@ -4,14 +4,13 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { map } from 'rxjs';
 import { BoardShell, type BoardLayout } from './board-shell/board-shell';
 import { type BoardLaneMove, type BoardReposition } from './board-shell/board-column';
-import { type ChunkSummary, asyncState, errorMessage, injectChunkUrlSelection, type KitAsyncStateValue, injectHubChunkDetailQuery, injectPendingMutationVariables } from 'fleet';
+import { type ChunkSummary, asyncState, injectRunnerHostNames, errorMessage, injectChunkUrlSelection, type KitAsyncStateValue, injectHubChunkDetailQuery, injectPendingMutationVariables } from 'fleet';
 import { ChunkDetail } from './chunk-dock/chunk-detail';
 import { ActivityPanel } from './activity/activity-panel';
 import { QuestionsPanel } from './questions/questions-panel';
 import { GatesPanel } from './gates/gates-panel';
 import { injectHubDecisionsQuery } from './gates/gates.query';
 import { RunnerPanel } from '../runners/runner-panel';
-import { injectHubHostsQuery } from '../runners/hosts.query';
 import { chunkDeleteMutationKey, demoteChunkMutationKey, promoteChunkMutationKey, repositionBacklogMutationKey, repositionQueueMutationKey } from '../core/mutation-keys';
 import { hasPermission, injectMeQuery } from '../core/auth/me.query';
 import { type DeleteVars } from './chunks/delete.mutations';
@@ -21,7 +20,7 @@ import { injectHubChunkCountsQuery } from './chunks/chunk-counts.query';
 import { injectDemoteChunkMutation, type DemoteVars } from './chunks/demote.mutations';
 import { injectPromoteChunkMutation, type PromoteVars } from './chunks/promote.mutations';
 import { injectRepositionBacklogMutation, injectRepositionQueueMutation, type RepositionVars } from './queue/queue.mutations';
-import { foldRepositions, gatedChunkIds, hostNamesByRunner, projectColorsById, orderedChunkIds, placedMoves, resolveSelectedChunk, withPendingBoardChanges } from './board-page.model';
+import { foldRepositions, gatedChunkIds, projectColorsById, orderedChunkIds, placedMoves, resolveSelectedChunk, withPendingBoardChanges } from './board-page.model';
 import { laneSkeletonCounts, listSkeletonCount } from './board-shell/board-skeletons.model';
 import { injectProjectsQuery } from '../core/projects.query';
 import { UnservedBanner } from './unserved/unserved-banner';
@@ -227,9 +226,8 @@ export class BoardPage {
   private readonly projectsQuery = injectProjectsQuery();
   protected readonly projectColors = computed(() => projectColorsById(this.projectsQuery.data() ?? []));
 
-  /** The host registry, shared with the runner panel's read of it; a list row names its runner by host from it. */
-  private readonly hostsQuery = injectHubHostsQuery();
-  protected readonly runnerHosts = computed(() => hostNamesByRunner(this.hostsQuery.data() ?? []));
+  /** Each runner's host name, which a list row names its runner by. */
+  protected readonly runnerHosts = injectRunnerHostNames();
 
   /** Every chunk's work items, read once the chunk list has answered. */
   protected readonly workItems = injectBoardWorkItemsQuery(() => orderedChunkIds(this.boardChunks()));

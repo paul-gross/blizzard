@@ -11,6 +11,16 @@
       >{{ detail().chunk_id }}</a
     >
     <span class="d-sub">
+      <!-- The project the chunk belongs to leads the line, its swatch beside its name. -->
+      @if (detail().project_name; as projectName) {
+        <span class="project" data-testid="detail-project" [title]="projectName">
+          @if (projectColor(); as color) {
+            <fleet-kit-swatch class="project-swatch" [color]="color" />
+          }
+          {{ projectName }}
+        </span>
+        <span class="sep" aria-hidden="true">·</span>
+      }
       <!-- Each pointer links out to its work source.
            No web_url (unconfigured source) degrades to plain text, no broken link. -->
       @for (p of pointers(); track p.source + ':' + p.ref) {
@@ -22,7 +32,16 @@
       @if (pointers().length) {
         <span class="sep" aria-hidden="true">·</span>
       }
+      <!-- The runner holding the chunk as `host/runner` — a plain fact; Detach, in the ⋯ menu,
+           names it again in its own copy. Then where the chunk is: its status and the node it
+           sits at. -->
+      @if (claimant(); as runner) {
+        <span class="runner" data-testid="route-info" [attr.title]="claimantTitle()">{{ runner }}</span>
+        <span class="sep" aria-hidden="true">·</span>
+      }
       <span class="st" data-testid="detail-status">{{ renderedStatus() }}</span>
+      <span class="sep" aria-hidden="true">·</span>
+      <span class="st" data-testid="detail-node" [attr.title]="detail().current_node_id">{{ currentNodeName() }}</span>
       <!-- Every unmet prerequisite, then every chunk this one still holds up — the
            whole edge set the line can name, not one representative of it. Plain text
            like the pointers beside them: the dependency lists in the column below own
@@ -49,65 +68,47 @@
     @if (pause(); as p) {
       <span class="pb" data-testid="chunk-pause-by">Paused by {{ p.by }}</span>
     }
-    <!-- Pause/Resume is the header's one primary button — the halves of one choice
-         (pause keeps the claim, detach — in the ⋯ menu below — gives it away).
-         Unlike Detach it does not hang off the route, so it renders whether or not a
-         route is live. -->
-    <div class="d-actions">
-      @if (canControl()) {
-        @if (pause()) {
-          <fleet-kit-button
-            testid="resume-chunk"
-            [ariaLabel]="'Resume chunk ' + detail().chunk_id"
-            [fleetTooltip]="resumeCopy(claimant()).text"
-            [disabled]="pausePending()"
-            (click)="onResume()"
-          >
-            Resume
-          </fleet-kit-button>
-        } @else if (pausable()) {
-          <fleet-kit-button
-            testid="pause-chunk"
-            [ariaLabel]="'Pause chunk ' + detail().chunk_id"
-            [fleetTooltip]="pauseCopy(claimant()).text"
-            [disabled]="pausePending()"
-            (click)="onPause()"
-          >
-            Pause
-          </fleet-kit-button>
-        }
-        <!-- Detach/Complete/Delete live in the overflow menu (`#actionsMenu` below) —
-             the header keeps only Pause/Resume as an in-flow button. -->
-        <fleet-kit-menu testid="chunk-actions-menu" ariaLabel="Chunk actions" [menu]="actionsMenu" />
-      }
-    </div>
-    <!-- A non-interactive fact — Detach, in the ⋯ menu, names its own runner in its
-         own label/copy. -->
-    @if (route()) {
-      <span class="claimed" data-testid="route-info" [attr.title]="claimantTitle()">Claimed by {{ claimant() }}</span>
+    <!-- Every chunk action lives in the overflow menu (`#actionsMenu` below). -->
+    @if (canControl()) {
+      <fleet-kit-menu class="actions" testid="chunk-actions-menu" ariaLabel="Chunk actions" align="end" bordered [menu]="actionsMenu" />
     }
-    <span class="nd" data-testid="detail-node" [attr.title]="detail().current_node_id">{{ currentNodeName() }}</span>
     <fleet-kit-button class="close" testid="detail-close" ariaLabel="Close" (click)="dismiss.emit()">
       ✕
     </fleet-kit-button>
   </div>
 </header>
 
-<!-- The ⋯ overflow menu's own panel (Detach, then a divider, then Complete/Delete) —
-     `KitMenu` needs the panel as a `TemplateRef` in this view (`kit-menu.ts` owns why). -->
+<!-- The ⋯ overflow menu's own panel: the claim actions — Pause/Resume, the halves of one choice
+     with Detach (pause keeps the claim, detach gives it away) — then a divider, then
+     Complete/Delete. Pause/Resume does not hang off the route, so it shows whether or not a
+     route is live; Detach only while one is. `KitMenu` needs the panel as a `TemplateRef` in this view (`kit-menu.ts` owns why). -->
 <ng-template #actionsMenu>
   <fleet-kit-menu-panel testid="chunk-actions-panel">
+    @if (pause()) {
+      @let resume = resumeCopy(claimant());
+      <fleet-kit-menu-item testid="resume-chunk" [disabled]="pausePending()" (triggered)="onResume()">
+        <span fleetKitMenuItemSubtitle>{{ resume.subtitle }}</span>
+        {{ resume.label }}
+      </fleet-kit-menu-item>
+    } @else if (pausable()) {
+      @let pauseAction = pauseCopy(claimant());
+      <fleet-kit-menu-item testid="pause-chunk" [disabled]="pausePending()" (triggered)="onPause()">
+        <span fleetKitMenuItemSubtitle>{{ pauseAction.subtitle }}</span>
+        {{ pauseAction.label }}
+      </fleet-kit-menu-item>
+    }
     @if (claimant(); as runner) {
       @let detach = detachCopy(runner, currentNodeName());
       <fleet-kit-menu-item
         testid="detach-chunk"
         [disabled]="detachPending()"
-        [fleetTooltip]="detach.text"
         (triggered)="onDetach()"
       >
         <span fleetKitMenuItemSubtitle>{{ detach.subtitle }}</span>
         {{ detach.label }}
       </fleet-kit-menu-item>
+    }
+    @if (pause() || pausable() || claimant()) {
       <hr class="menu-divider" />
     }
     @let complete = completeCopy();
@@ -115,7 +116,6 @@
       class="danger"
       testid="complete-chunk"
       [disabled]="!completable() || completePending()"
-      [fleetTooltip]="complete.text"
       (triggered)="onComplete()"
     >
       <span fleetKitMenuItemSubtitle>{{ complete.subtitle }}</span>
@@ -126,7 +126,6 @@
       class="danger"
       testid="delete-chunk"
       [disabled]="deleteDisabled() || deletePending()"
-      [fleetTooltip]="del.text"
       (triggered)="onDelete()"
     >
       <span fleetKitMenuItemSubtitle>{{ deleteSubtitle() }}</span>

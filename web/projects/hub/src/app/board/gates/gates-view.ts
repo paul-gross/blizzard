@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 
-import { type DecisionView, compactRef, runnerDisplayName, KitAsyncState, type KitAsyncStateValue, KitPanel, KitSelectRow } from 'fleet';
+import { type DecisionView, compactRef, runnerDisplayName, injectRunnerHostNames, KitAsyncState, type KitAsyncStateValue, KitPanel, KitSelectRow } from 'fleet';
 
 /**
  * The open-gates rail's presentational half — one row per open decision,
@@ -19,6 +19,8 @@ import { type DecisionView, compactRef, runnerDisplayName, KitAsyncState, type K
   styleUrl: './gates-view.css',
 })
 export class GatesPanelView {
+  private readonly runnerHosts = injectRunnerHostNames();
+
   /** Every open gate across the fleet. */
   readonly gates = input.required<readonly DecisionView[]>();
 
@@ -35,7 +37,7 @@ export class GatesPanelView {
   /** Who imposed the gate: the chunk's graph, or the runner that added it. */
   protected origin(gate: DecisionView): string {
     return gate.imposed_by_runner_id
-      ? `runner ${runnerDisplayName(gate.imposed_by_runner_id, gate.imposed_by_runner_name)}`
+      ? `runner ${runnerDisplayName(gate.imposed_by_runner_id, gate.imposed_by_runner_name, this.runnerHosts().get(gate.imposed_by_runner_id))}`
       : 'graph';
   }
 

@@ -1,7 +1,6 @@
 import { InjectionToken, type Provider, type Signal } from '@angular/core';
 
 import type { AnswerQuestionEvent, ResolveDecisionEvent } from '../chunk-detail/chunk-awaiting-human';
-import type { EditGraphEvent } from '../chunk-detail/chunk-facts';
 import type { DaemonTarget } from '../../core/daemon-target/daemon-target';
 
 /**
@@ -15,8 +14,6 @@ import type { DaemonTarget } from '../../core/daemon-target/daemon-target';
  * one visit of one chunk and never outlive it.
  */
 export interface ChunkPageActions {
-  /** Whether the identity may set the chunk's graph (`chunk:control`). */
-  readonly canControl: Signal<boolean>;
   /** Whether the identity may answer an open question (`question:answer`). */
   readonly canAnswer: Signal<boolean>;
   /** Whether the identity may resolve an open gate decision (`gate:resolve`). */
@@ -27,8 +24,6 @@ export interface ChunkPageActions {
   readonly resolvePending: Signal<boolean>;
   /** The questions an answer is in flight for, so a double tap cannot answer twice. */
   readonly pendingAnswerQuestionIds: Signal<readonly string[]>;
-  /** The chunks a graph repin is in flight for, so a double tap cannot repin twice. */
-  readonly pendingGraphChunkIds: Signal<readonly string[]>;
   /** The last action's failure, or `null` — cleared on the next attempt. */
   readonly actionError: Signal<string | null>;
   /** The last action's non-failure outcome that still needs saying (a lost answer race
@@ -41,7 +36,6 @@ export interface ChunkPageActions {
   readonly eventsLinkBase: readonly string[];
   answer(event: AnswerQuestionEvent): void;
   resolve(event: ResolveDecisionEvent): void;
-  editGraph(event: EditGraphEvent): void;
 }
 
 /**

@@ -13,13 +13,6 @@ export function projectColorsById(
   return new Map(projects.map((project) => [project.project_id, project.color]));
 }
 
-/** Each runner's host name by runner id — what the board joins onto a card by its chunk's `runner_id`. */
-export function hostNamesByRunner(
-  hosts: readonly { readonly host_name: string; readonly runner_ids?: readonly string[] }[],
-): ReadonlyMap<string, string> {
-  return new Map(hosts.flatMap((host) => (host.runner_ids ?? []).map((runnerId) => [runnerId, host.host_name] as const)));
-}
-
 /** Every chunk id with an open decision, as a set each board card can test its own `gate` flag against. */
 export function gatedChunkIds(decisions: readonly { readonly chunk_id: string }[]): ReadonlySet<string> {
   return new Set(decisions.map((decision) => decision.chunk_id));

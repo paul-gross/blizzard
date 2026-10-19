@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
-import { WorkRefLink, ChunkDeleteRefusal, type ChunkDetail, type ChunkStatus, type PauseView, type WorkRefView, type RouteView, compactRef, runnerDisplayName, runnerTitle, KitButton, KitConfirmDialog, type KitConfirmDialogPrompt, KitMenu, KitMenuPanel, KitMenuItem, KitMenuItemSubtitle, KitTooltip, completeCopy, deleteCopy, detachCopy, pauseCopy, resumeCopy } from 'fleet';
+import { WorkRefLink, ChunkDeleteRefusal, type ChunkDetail, type ChunkStatus, type PauseView, type WorkRefView, type RouteView, compactRef, injectRunnerHostNames, runnerDisplayName, runnerTitle, KitButton, KitSwatch, KitConfirmDialog, type KitConfirmDialogPrompt, KitMenu, KitMenuPanel, KitMenuItem, KitMenuItemSubtitle, completeCopy, deleteCopy, detachCopy, pauseCopy, resumeCopy } from 'fleet';
 import { LensLink } from 'fleet/shell';
 
 /**
@@ -16,13 +16,16 @@ import { LensLink } from 'fleet/shell';
 @Component({
   selector: 'app-chunk-detail-header',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [WorkRefLink, KitButton, KitConfirmDialog, KitMenu, KitMenuItem, KitMenuItemSubtitle, KitMenuPanel, KitTooltip, RouterLink, LensLink],
+  imports: [WorkRefLink, KitButton, KitSwatch, KitConfirmDialog, KitMenu, KitMenuItem, KitMenuItemSubtitle, KitMenuPanel, RouterLink, LensLink],
   templateUrl: './chunk-detail-header.html',
   styleUrl: './chunk-detail-header.css',
 })
 export class ChunkDetailHeader {
   /** The chunk aggregate to render (identity, status, current node, pause, route). */
   readonly detail = input.required<ChunkDetail>();
+
+  /** The chunk's project's color, drawn as the swatch beside its name; `null` draws the name alone. */
+  readonly projectColor = input<string | null>(null);
 
   /** The chunk's status as the status chip renders it (`bzh:frontend-pending-override`).
    * Never consulted by
@@ -102,18 +105,21 @@ export class ChunkDetailHeader {
    * a chunk with no live route has nothing to release. */
   protected readonly route = computed<RouteView | null>(() => this.detail().route ?? null);
 
-  /** The display name of the runner holding the route, or `null` while none does — the
-   * claim line's and the Pause/Resume/Detach copy's `<runner>` slot. */
+  private readonly runnerHosts = injectRunnerHostNames();
+
+  /** The display name of the runner holding the route, as `host/runner`, or `null` while none
+   * does — the runner fact's and the Pause/Resume/Detach copy's `<runner>` slot. */
   protected readonly claimant = computed<string | null>(() => {
     const route = this.route();
-    return route ? runnerDisplayName(route.runner_id, route.runner_name) : null;
+    return route ? runnerDisplayName(route.runner_id, route.runner_name, this.runnerHosts().get(route.runner_id)) : null;
   });
 
-  /** The claim line's tooltip — the display name the line may clip, then the runner's full id. */
+  /** The runner fact's tooltip — the display name the fact may clip, then the runner's full id. */
   protected readonly claimantTitle = computed<string | null>(() => {
     const route = this.route();
-    return route ? runnerTitle(route.runner_id, route.runner_name) : null;
+    return route ? runnerTitle(route.runner_id, route.runner_name, this.runnerHosts().get(route.runner_id)) : null;
   });
+
 
   /** The node the chunk currently sits at, for display and for `detachCopy`'s own
    * `<node>` slot — the same fallback chain the `.nd` chip already reads
@@ -145,13 +151,19 @@ export class ChunkDetailHeader {
   /** Whether Delete is withheld — exactly when the hub reports a {@link deleteRefusal}. */
   protected readonly deleteDisabled = computed<boolean>(() => this.deleteRefusal() !== null);
 
-  /** Delete's menu subtitle — names the dependents in {@link blocking} when the hub refuses
-   * for `dependents`, falling back to `deleteCopy()`'s own subtitle otherwise. */
-  protected readonly deleteSubtitle = computed<string>(() =>
-    this.deleteRefusal() === ChunkDeleteRefusal.DEPENDENTS
-      ? `Blocked: ${this.blocking().map((id) => this.shortId(id)).join(', ')} depend on this`
-      : (deleteCopy().subtitle ?? ''),
-  );
+  /** Delete's menu subtitle — why the hub refuses it when it does (a runner has already claimed
+   * the chunk, or the dependents in {@link blocking} name it), falling back to `deleteCopy()`'s
+   * own subtitle otherwise. */
+  protected readonly deleteSubtitle = computed<string>(() => {
+    switch (this.deleteRefusal()) {
+      case ChunkDeleteRefusal.STATUS:
+        return 'Only before a runner claims it';
+      case ChunkDeleteRefusal.DEPENDENTS:
+        return `Blocked: ${this.blocking().map((id) => this.shortId(id)).join(', ')} depend on this`;
+      default:
+        return deleteCopy().subtitle ?? '';
+    }
+  });
 
   /** A neighbor's compact ref — every surface that names an entity compactly resolves
    * through {@link compactRef} (`compact-ref.ts`). */
@@ -166,7 +178,7 @@ export class ChunkDetailHeader {
     const chunkId = this.detail().chunk_id;
     this.pendingConfirm.set({
       heading: `Detach chunk ${chunkId}`,
-      message: detachCopy(runnerDisplayName(route.runner_id, route.runner_name), this.currentNodeName()).text,
+      message: detachCopy(this.claimant() ?? compactRef(route.runner_id), this.currentNodeName()).text,
       confirmLabel: 'Detach',
       variant: 'primary',
       run: () => this.detach.emit(chunkId),

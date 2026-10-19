@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 
-import { type QuestionView, compactRef, runnerDisplayName, KitAsyncState, type KitAsyncStateValue, KitPanel, KitSelectRow } from 'fleet';
+import { type QuestionView, compactRef, runnerDisplayName, injectRunnerHostNames, KitAsyncState, type KitAsyncStateValue, KitPanel, KitSelectRow } from 'fleet';
 
 /**
  * The open-questions rail's presentational half — the ask list
@@ -20,6 +20,8 @@ import { type QuestionView, compactRef, runnerDisplayName, KitAsyncState, type K
   styleUrl: './questions-view.css',
 })
 export class QuestionsPanelView {
+  private readonly runnerHosts = injectRunnerHostNames();
+
   /** Every open ask across the fleet. */
   readonly questions = input.required<readonly QuestionView[]>();
 
@@ -35,6 +37,6 @@ export class QuestionsPanelView {
 
   /** The asking runner's display name. */
   protected runnerName(question: QuestionView): string {
-    return runnerDisplayName(question.runner_id, question.runner_name);
+    return runnerDisplayName(question.runner_id, question.runner_name, this.runnerHosts().get(question.runner_id));
   }
 }

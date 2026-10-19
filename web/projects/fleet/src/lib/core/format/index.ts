@@ -6,7 +6,7 @@
  */
 
 export { compactRef } from '../compact-ref';
-export { RUNNER_NAME_SEPARATOR, runnerDisplayName, runnerTitle } from '../runner-display-name';
+export { RUNNER_HOST_SEPARATOR, RUNNER_NAME_SEPARATOR, RUNNER_HOST_NAMES, injectRunnerHostNames, runnerDisplayName, runnerTitle } from '../runner-display-name';
 export { formatCost, formatTokens, hasCostFigure } from '../cost-format';
 export { errorMessage } from '../error-message';
 export { harnessName } from '../harness-name';

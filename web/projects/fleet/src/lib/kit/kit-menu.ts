@@ -1,5 +1,6 @@
-import { ChangeDetectionStrategy, Component, TemplateRef, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, TemplateRef, booleanAttribute, computed, input } from '@angular/core';
 import { CdkMenu, CdkMenuTrigger } from '@angular/cdk/menu';
+import { type ConnectedPosition } from '@angular/cdk/overlay';
 
 /**
  * The quiet overflow menu's trigger (mobile polish feedback item 5,
@@ -42,6 +43,25 @@ export class KitMenu {
 
   /** The trigger button's `data-testid`, or `null` for none. */
   readonly testid = input<string | null>(null);
+
+  /** Whether the trigger wears {@link KitButton}'s outlined chrome rather than the quiet bare glyph — for a trigger
+   * that sits beside buttons and should read as one. */
+  readonly bordered = input(false, { transform: booleanAttribute });
+
+  /** Which edge the panel lines up with the trigger on: `start` hangs it from the trigger's left edge, `end` from its
+   * right — for a trigger at the right of its row, so the panel opens back across the row rather than past its end. */
+  readonly align = input<'start' | 'end'>('start');
+
+  /** The panel's placement for {@link align}: below the trigger, flipping above it when there is no room beneath.
+   * `undefined` for `start` leaves the CDK's own default placement. */
+  protected readonly positions = computed<ConnectedPosition[] | undefined>(() =>
+    this.align() === 'end'
+      ? [
+          { originX: 'end', originY: 'bottom', overlayX: 'end', overlayY: 'top' },
+          { originX: 'end', originY: 'top', overlayX: 'end', overlayY: 'bottom' },
+        ]
+      : undefined,
+  );
 }
 
 /**

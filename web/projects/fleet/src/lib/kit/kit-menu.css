@@ -8,8 +8,21 @@
   color: var(--label);
   cursor: pointer;
   line-height: 1;
-  padding: 3px 8px;
+  /* Tunable by a consumer, as `KitButton`'s `--kit-button-pad`/`--kit-button-fs` are; the
+     defaults are the quiet trigger's own size. */
+  padding: var(--kit-menu-trigger-pad, 3px 8px);
+  font-size: var(--kit-menu-trigger-fs, inherit);
   border-radius: 3px;
+}
+/* `bordered` — `KitButton`'s outlined chrome, for a trigger that sits among buttons. */
+.trigger.bordered {
+  background: var(--overlay-30);
+  border-color: var(--line);
+  border-radius: 0;
+  color: var(--text);
+}
+.trigger.bordered:hover {
+  border-color: var(--cyan);
 }
 .trigger:hover {
   color: var(--cyan);
