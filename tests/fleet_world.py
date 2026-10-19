@@ -94,18 +94,19 @@ def scripted_build_prompt(build: str, *, branch: str = BUILD_BRANCH, reset: bool
     """``build`` — a scripted build program written against ``repo = 'toy-api'`` — made to run on a basic worktree.
 
     The worktree arrives detached, so the program first switches to ``branch`` (``reset`` recreates it, which a
-    re-run of the node needs), and it
-    locates the repo through the injected ``BLIZZARD_ENV_WORKDIRS`` rather than assuming a layout."""
+    re-run of the node needs), and it locates the repo through the injected ``BLIZZARD_ENV_WORKDIRS``. A one-line
+    program stays one line, so it survives a single-line input such as the board's answer field."""
     if "BLIZZARD_ENV_WORKDIRS" in build:
         return build
+    sep = "\n" if "\n" in build.rstrip("\n") else "; "
     repo_path = f"str(pathlib.Path(os.environ['BLIZZARD_ENV_WORKDIRS'].split(',')[0]) / {REPO_NAME!r})"
-    build = build.replace(f"repo = {REPO_NAME!r}", f"repo = {REPO_NAME!r}\nrepo_path = {repo_path}")
+    build = build.replace(f"repo = {REPO_NAME!r}", f"repo = {REPO_NAME!r}; repo_path = {repo_path}")
     build = build.replace("pathlib.Path(repo)", "pathlib.Path(repo_path)")
     build = build.replace('["git", "-C", repo', '["git", "-C", repo_path')
     return (
-        "import os, pathlib, subprocess\n"
+        f"import os, pathlib, subprocess{sep}"
         f"subprocess.run(['git', '-C', {repo_path}, 'switch', {'-C' if reset else '-c'!r}, {branch!r}], "
-        "check=True)\n" + build
+        f"check=True){sep}" + build
     )
 
 
