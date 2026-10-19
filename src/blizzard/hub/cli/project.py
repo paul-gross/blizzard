@@ -23,8 +23,11 @@ _COLOR = click.option(
     "--color",
     "color",
     default=None,
-    metavar="NAME",
-    help="The project's color on the board, by palette name; the hub picks the least-used one when omitted.",
+    metavar="NAME|#RRGGBB",
+    help=(
+        "The project's color on the board, by palette name or '#rrggbb' hex (quote the hex in a shell); "
+        "the hub picks the least-used palette color when omitted."
+    ),
 )
 
 _SOURCE = click.option("--source", "source", default=None, metavar="SOURCE", help="A work source, by id or slug.")

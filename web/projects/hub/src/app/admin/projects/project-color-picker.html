@@ -4,9 +4,25 @@
       [selected]="color === current()"
       [disabled]="disabled()"
       [testid]="'project-color-' + color"
-      (click)="choose.emit(color)"
+      (click)="onPalette(color)"
     >
       <fleet-kit-swatch class="chip-swatch" [color]="color" />{{ color }}
     </fleet-kit-chip>
   }
+  <fleet-kit-chip
+    [selected]="isCustom()"
+    [disabled]="disabled()"
+    testid="project-color-custom"
+    (click)="customRequested.set(true)"
+  >
+    Custom
+  </fleet-kit-chip>
 </div>
+@if (customOpen()) {
+  <fleet-kit-color-input
+    class="custom-input"
+    [value]="current()"
+    testid="project-color-custom-input"
+    (valueChange)="choose.emit($event)"
+  />
+}

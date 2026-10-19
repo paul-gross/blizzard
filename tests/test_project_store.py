@@ -148,6 +148,19 @@ def test_a_stated_color_round_trips_through_create_and_edit(world: _World) -> No
     assert (stored.color, stored.revision) == (ProjectColor.PINK, 2)
 
 
+def test_a_hex_color_round_trips_lowercase_through_create_and_edit(world: _World) -> None:
+    created = world.authoring().create("winter", "Winter", OP, color="#14B8A6")
+    assert world.projects().get(created.project_id) == created
+    assert created.color == "#14b8a6"
+
+    edited = world.authoring().edit(created, ProjectEdit(color="#FF8800"), OP)
+
+    stored = world.projects().get(created.project_id)
+    assert stored == edited
+    assert stored is not None
+    assert (stored.color, stored.revision) == ("#ff8800", 2)
+
+
 def test_a_create_stating_no_color_takes_the_tenants_least_used_one(world: _World) -> None:
     held = {project.color for project in world.projects().list_all()}
 

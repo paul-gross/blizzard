@@ -28,6 +28,23 @@ describe('KitSwatch', () => {
     expect(el.style.background).toContain('--project-teal');
   });
 
+  it('draws a custom hex color as itself, lowercased, once it is light enough', () => {
+    const fixture = render();
+    fixture.componentInstance.color.set('#FF8800');
+    fixture.detectChanges();
+    const el: HTMLElement = fixture.nativeElement.querySelector('.swatch');
+    expect(el.style.background).toBe('rgb(255, 136, 0)');
+  });
+
+  it('lifts a dark custom color rather than drawing it into the surface', () => {
+    const fixture = render();
+    fixture.componentInstance.color.set('#1a1f4d');
+    fixture.detectChanges();
+    const el: HTMLElement = fixture.nativeElement.querySelector('.swatch');
+    expect(el.style.background).not.toBe('rgb(26, 31, 77)');
+    expect(el.style.background).toMatch(/^rgb\(/);
+  });
+
   it('is an image named by its label, with the label as its tooltip', () => {
     const fixture = render();
     fixture.componentInstance.label.set('Widgets');

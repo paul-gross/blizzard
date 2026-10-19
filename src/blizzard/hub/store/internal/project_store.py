@@ -9,7 +9,7 @@ from __future__ import annotations
 from sqlalchemy.engine import Connection, Row
 from sqlalchemy.exc import IntegrityError
 
-from blizzard.foundation.project_colors import ProjectColor
+from blizzard.foundation.project_colors import HexColor, ProjectColor
 from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.config.changes import ConfigChange
 from blizzard.hub.domain.config.work_sources import ConfigRevisionConflict
@@ -138,13 +138,21 @@ class ProjectStore:
         return resolve(value, self)
 
 
+def _color_of(stored: str) -> ProjectColor | HexColor:
+    """The palette color ``stored`` names, else the custom ``#rrggbb`` the hub stored."""
+    try:
+        return ProjectColor(stored)
+    except ValueError:
+        return stored
+
+
 def _of(row: Row) -> Project:  # type: ignore[type-arg]
     return Project(
         project_id=ProjectId(row.project_id),
         slug=row.slug,
         name=row.name,
         description=row.description,
-        color=ProjectColor(row.color),
+        color=_color_of(row.color),
         revision=row.revision,
         created_at=row.created_at,
     )

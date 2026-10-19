@@ -111,7 +111,7 @@ describe('ProjectDetail overview shell sweep', () => {
       root.remove();
     });
 
-    it(`states the color beside the name and in its fact, and wraps the picker's twelve chips inside the dialog at ${width}px`, async () => {
+    it(`states the color beside the name and in its fact, and wraps the picker's twelve chips and Custom inside the dialog at ${width}px`, async () => {
       const { harness, root } = await open(width, '/admin/projects/proj_b', true);
       expect(find(root, 'admin-projects-color')?.textContent).toContain('teal');
       const header = root.querySelector<HTMLElement>('.name-swatch')!.getBoundingClientRect();
@@ -129,7 +129,7 @@ describe('ProjectDetail overview shell sweep', () => {
       await settle(harness.fixture);
       const dialog = document.querySelector<HTMLElement>('[data-testid="admin-projects-color-dialog"]')!;
       const chips = [...dialog.querySelectorAll<HTMLElement>('button[data-testid^="project-color-"]')];
-      expect(chips).toHaveLength(12);
+      expect(chips).toHaveLength(13);
       const panel = dialog.getBoundingClientRect();
       for (const chip of chips) {
         const box = chip.getBoundingClientRect();

@@ -1,0 +1,21 @@
+<input
+  class="picker"
+  type="color"
+  aria-label="Pick a custom color"
+  [value]="pickerValue()"
+  (change)="onPick($event)"
+/>
+<input
+  class="text"
+  type="text"
+  spellcheck="false"
+  autocomplete="off"
+  placeholder="#rrggbb"
+  maxlength="7"
+  [attr.aria-label]="ariaLabel()"
+  [attr.aria-invalid]="invalid() ? 'true' : null"
+  [attr.data-testid]="testid()"
+  [class.invalid]="invalid()"
+  [value]="draft()"
+  (input)="onText($event)"
+/>

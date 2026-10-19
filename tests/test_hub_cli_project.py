@@ -277,3 +277,14 @@ def test_color_is_stated_on_create_and_edit_and_the_hub_refuses_a_name_outside_t
     assert (created["color"], edited["color"], edited["revision"]) == ("teal", "pink", 2)
     assert refused.exit_code != 0
     assert "mauve" in refused.output
+
+
+@pytest.mark.usefixtures("sent")
+def test_a_hex_color_is_stated_on_create_and_edit_and_a_malformed_one_is_refused_naming_both_forms() -> None:
+    created = _json(_cli("create", "widgets", "--color", "#14B8A6", "--json"))
+    edited = _json(_cli("edit", "widgets", "--color", "#ff8800", "--json"))
+    refused = _cli("edit", "widgets", "--color", "#abc")
+
+    assert (created["color"], edited["color"], edited["revision"]) == ("#14b8a6", "#ff8800", 2)
+    assert refused.exit_code != 0
+    assert "#rrggbb" in refused.output and "teal" in refused.output

@@ -46,12 +46,22 @@ def test_a_palette_name_parses() -> None:
     assert parse_color("teal") is ProjectColor.TEAL
 
 
-@pytest.mark.parametrize("raw", ["mauve", "", "Teal", "#14b8a6", " teal"])
-def test_an_off_palette_name_is_refused_on_color_listing_the_palette(raw: str) -> None:
+def test_a_hex_color_parses_lowercased() -> None:
+    assert parse_color("#14B8a6") == "#14b8a6"
+
+
+@pytest.mark.parametrize("raw", ["mauve", "", "Teal", " teal", "#abc", "#12345g", "14b8a6", "#14b8a6ff", "rgb(1,2,3)"])
+def test_a_value_that_is_neither_a_palette_name_nor_a_hex_is_refused_on_color_naming_both(raw: str) -> None:
     with pytest.raises(ConfigFieldError) as caught:
         parse_color(raw)
     assert caught.value.field == "color"
-    assert caught.value.message == f"must be one of {', '.join(_PALETTE)}, got {raw!r}"
+    assert caught.value.message == f"must be one of {', '.join(_PALETTE)}, or a #rrggbb hex color, got {raw!r}"
+
+
+def test_a_held_hex_color_counts_toward_no_palette_color() -> None:
+    pick = _Recording()
+    assert least_used(["#14b8a6", "#ff8800"], pick) is ProjectColor.SLATE
+    assert pick.offered == [tuple(ProjectColor)]
 
 
 def test_with_nothing_held_every_color_is_offered_in_palette_order() -> None:
