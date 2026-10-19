@@ -15,7 +15,7 @@ export {
   type StubHttpError,
 } from './stub-request-client';
 export { OPERATOR_ME_RESPONSE } from './auth-fixtures';
-export { FIXTURE_NOW } from './builders/clock';
+export { FIXTURE_NOW, fixtureInstant } from './builders/clock';
 export {
   chunkDetail,
   workRefView,
@@ -29,6 +29,15 @@ export {
   questionView,
   decisionView,
   workItemEntry,
+  bounceView,
+  chunkUsageView,
+  chunkNeighborhoodView,
+  queuedChunkDetail,
+  midFlightChunkDetail,
+  bouncedChunkDetail,
+  escalatedChunkDetail,
+  landedChunkDetail,
+  stoppedChunkDetail,
 } from './builders/chunk';
 export {
   assetArtifactView,

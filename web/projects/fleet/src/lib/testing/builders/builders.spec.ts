@@ -2,26 +2,35 @@ import {
   addFindingOp,
   assetArtifactView,
   bounceArtifactView,
+  bouncedChunkDetail,
+  bounceView,
   chunkCountsView,
   chunkDetail,
   chunkEscalationView,
+  chunkNeighborhoodView,
   chunkNeighborView,
   chunkUsageTotalView,
+  chunkUsageView,
   commitArtifactView,
   decisionView,
   deltaArtifactView,
+  escalatedChunkDetail,
   findingCandidate,
   findingDelta,
   findingSurvey,
   FIXTURE_NOW,
   fleetSpendView,
   goneFindingOp,
+  landedChunkDetail,
   landedRepoView,
+  midFlightChunkDetail,
   observedFindingOp,
   prView,
   questionView,
+  queuedChunkDetail,
   routeView,
   sidechainSegmentView,
+  stoppedChunkDetail,
   surveyArtifactView,
   toolCallSegmentView,
   transcriptSegmentContentView,
@@ -50,6 +59,15 @@ const BUILDERS: Record<string, () => unknown> = {
   questionView,
   decisionView,
   workItemEntry,
+  bounceView,
+  chunkUsageView,
+  chunkNeighborhoodView,
+  queuedChunkDetail,
+  midFlightChunkDetail,
+  bouncedChunkDetail,
+  escalatedChunkDetail,
+  landedChunkDetail,
+  stoppedChunkDetail,
   assetArtifactView,
   commitArtifactView,
   findingSurvey,
@@ -84,8 +102,18 @@ describe('wire-shape builders', () => {
     expect(assetArtifactView({ key: 'other' }).key).toBe('other');
   });
 
+  it('shapes each named chunk state by its lifecycle', () => {
+    expect(queuedChunkDetail()).toMatchObject({ status: 'ready', history: [] });
+    expect(midFlightChunkDetail().latest_epoch).toBe(3);
+    expect(bouncedChunkDetail().bounces).toHaveLength(1);
+    expect(escalatedChunkDetail().escalation).toBeTruthy();
+    expect(landedChunkDetail()).toMatchObject({ status: 'done', landed: true });
+    expect(stoppedChunkDetail().status).toBe('stopped');
+  });
+
   it('dates every instant as an offset from FIXTURE_NOW', () => {
     expect(offsetMs(transitionView().recorded_at)).toBe(-60_000);
+    expect(offsetMs(bounceView().recorded_at)).toBe(-45_000);
     expect(offsetMs(assetArtifactView().recorded_at)).toBe(-30_000);
     expect(offsetMs(commitArtifactView().recorded_at)).toBe(-30_000);
     expect(offsetMs(questionView().asked_at)).toBe(-60_000);

@@ -1,9 +1,12 @@
 import type {
+  BounceView,
   ChunkDetail,
   ChunkEscalationView,
+  ChunkNeighborhoodView,
   ChunkNeighborView,
   ChunkUsageTotalView,
   DecisionView,
+  ChunkUsageView,
   LandedRepoView,
   PrView,
   QuestionView,
@@ -172,4 +175,146 @@ export function workItemEntry(overrides: Partial<WorkItemEntry> = {}): WorkItemE
     fetched_at: fixtureInstant(0),
     ...overrides,
   };
+}
+
+/** A refusal the hub recorded against a worker's result, a minute before {@link FIXTURE_NOW}. */
+export function bounceView(overrides: Partial<BounceView> = {}): BounceView {
+  return {
+    cause: 'missing_artifact',
+    envelope: JSON.stringify({ cause: 'missing_artifact', detail: 'The step ended without declaring `commit`.' }),
+    recorded_at: fixtureInstant(-45),
+    ...overrides,
+  };
+}
+
+/** One invocation's spend at a node and epoch. */
+export function chunkUsageView(overrides: Partial<ChunkUsageView> = {}): ChunkUsageView {
+  return {
+    node_id: 'nd_build',
+    epoch: 1,
+    kind: 'spawn',
+    model: 'claude-sonnet-5-5',
+    input_tokens: 12_000,
+    output_tokens: 4_800,
+    cache_read_tokens: 310_000,
+    cache_create_tokens: 24_000,
+    cost_usd: 0.86,
+    ...overrides,
+  };
+}
+
+/** The chunks a chunk waits on and the chunks that wait on it. */
+export function chunkNeighborhoodView(overrides: Partial<ChunkNeighborhoodView> = {}): ChunkNeighborhoodView {
+  return { prerequisites: [], dependents: [], ...overrides };
+}
+
+/** A chunk accepted but not yet claimed: ready, with no history. */
+export function queuedChunkDetail(overrides: Partial<ChunkDetail> = {}): ChunkDetail {
+  return chunkDetail({
+    status: 'ready',
+    current_node_id: null,
+    current_node_name: null,
+    latest_epoch: null,
+    history: [],
+    ...overrides,
+  });
+}
+
+/** A chunk on its third build epoch, with spend recorded for the epochs behind it. */
+export function midFlightChunkDetail(overrides: Partial<ChunkDetail> = {}): ChunkDetail {
+  return chunkDetail({
+    latest_epoch: 3,
+    history: [
+      transitionView({ to_node_id: 'nd_plan', to_node_name: 'plan', epoch: 1, recorded_at: fixtureInstant(-900) }),
+      transitionView({
+        from_node_id: 'nd_plan',
+        from_node_name: 'plan',
+        choice_name: 'pass',
+        epoch: 2,
+        recorded_at: fixtureInstant(-600),
+      }),
+      transitionView({
+        from_node_id: 'nd_build',
+        from_node_name: 'build',
+        choice_name: 'pass',
+        epoch: 3,
+        recorded_at: fixtureInstant(-60),
+      }),
+    ],
+    usage: [
+      chunkUsageView({ node_id: 'nd_plan', epoch: 1 }),
+      chunkUsageView({ node_id: 'nd_build', epoch: 2, cost_usd: 1.24 }),
+    ],
+    ...overrides,
+  });
+}
+
+/** A chunk whose review failed and routed it back to build, with the hub's recorded bounce beside it. */
+export function bouncedChunkDetail(overrides: Partial<ChunkDetail> = {}): ChunkDetail {
+  return chunkDetail({
+    latest_epoch: 2,
+    history: [
+      transitionView({ to_node_id: 'nd_build', to_node_name: 'build', epoch: 1, recorded_at: fixtureInstant(-600) }),
+      transitionView({
+        from_node_id: 'nd_build',
+        from_node_name: 'build',
+        to_node_id: 'nd_review',
+        to_node_name: 'review',
+        choice_name: 'pass',
+        epoch: 1,
+        recorded_at: fixtureInstant(-300),
+      }),
+      transitionView({
+        from_node_id: 'nd_review',
+        from_node_name: 'review',
+        choice_name: 'fail',
+        epoch: 2,
+        recorded_at: fixtureInstant(-60),
+      }),
+    ],
+    bounces: [bounceView({ recorded_at: fixtureInstant(-50) })],
+    usage: [chunkUsageView(), chunkUsageView({ node_id: 'nd_review', cost_usd: 0.31 })],
+    ...overrides,
+  });
+}
+
+/** A chunk stuck with a worker that asked for a human. */
+export function escalatedChunkDetail(overrides: Partial<ChunkDetail> = {}): ChunkDetail {
+  return chunkDetail({
+    status: 'needs_human',
+    escalation: chunkEscalationView(),
+    ...overrides,
+  });
+}
+
+/** A chunk delivered to its base branch. */
+export function landedChunkDetail(overrides: Partial<ChunkDetail> = {}): ChunkDetail {
+  return chunkDetail({
+    status: 'done',
+    terminal: true,
+    landed: true,
+    current_node_id: 'nd_done',
+    current_node_name: 'done',
+    current_node_terminal: true,
+    landed_repos: [landedRepoView()],
+    cost: chunkUsageTotalView(),
+    history: [
+      transitionView({ recorded_at: fixtureInstant(-600) }),
+      transitionView({
+        from_node_id: 'nd_build',
+        from_node_name: 'build',
+        to_node_id: 'nd_done',
+        to_node_name: 'done',
+        choice_name: 'pass',
+        epoch: 1,
+        recorded_at: fixtureInstant(-60),
+      }),
+    ],
+    ...overrides,
+  });
+}
+
+/** A chunk an operator stopped mid-walk. */
+export function stoppedChunkDetail(overrides: Partial<ChunkDetail> = {}): ChunkDetail {
+  return chunkDetail({ status: 'stopped', terminal: true, ...overrides });
 }
