@@ -1,6 +1,6 @@
 [project]
 name = "blizzard"
-version = "0.1.0"
+version = "0.2.0"
 description = "Blizzard: the hub, the runner, and the CLI for orchestrating autonomous fleets of coding agents — one repo, one wheel."
 requires-python = ">=3.12"
 # The full dependency superset both daemons, the CLI, and the tooling will need
