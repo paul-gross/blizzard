@@ -17,6 +17,7 @@ from pathlib import Path
 
 import pytest
 
+from blizzard.runner.harness.wiring import HARNESS_SECTION_KINDS
 from tests.repo_files import repo_root
 
 pytestmark = pytest.mark.unit
@@ -1208,7 +1209,10 @@ def test_internal_check_admits_the_owner_and_public_imports(tmp_path: Path, impo
     assert _plant(tmp_path, importer, statement) == []
 
 
-_ADAPTER_PACKAGES = ("claude_code", "opencode")
+#: The harness binding ids, in the catalog's order (``HARNESS_SECTION_KINDS``) — the one roster every other
+#: binding list here derives from.
+_HARNESS_IDS = tuple(kind.harness_id for kind in HARNESS_SECTION_KINDS)
+_ADAPTER_PACKAGES = _HARNESS_IDS
 _PROCESS_PROBE_FILE = _RUNNER_DIR / "process" / "probe.py"
 _LINUX_PROCESS_PROBE_FILE = _RUNNER_DIR / "process" / "internal" / "linux_process_probe.py"
 
@@ -1630,9 +1634,9 @@ _DOMAIN_CORE_STDLIB_DRIVERS = ("os", "shutil", "subprocess", "tempfile")
 _DOMAIN_CORE_FORBIDDEN = (*_DOMAIN_CORE_FRAMEWORKS, *_DOMAIN_CORE_STDLIB_DRIVERS)
 
 #: The harness binding nodes: adapters, so they may bind a process or the filesystem (the stdlib-driver half
-#: of ``bzh:domain-core``) while staying held to the framework imports. An explicit set — a new binding
-#: fails the gate until it is named here.
-_HARNESS_BINDING_NODES = ("harness/claude_code", "harness/opencode")
+#: of ``bzh:domain-core``) while staying held to the framework imports. Derived from the catalog; a new
+#: binding still fails the gate until its own row stands in :data:`_RUNNER_PACKAGE_LAYERS`.
+_HARNESS_BINDING_NODES = tuple(f"harness/{harness_id}" for harness_id in _HARNESS_IDS)
 
 #: Runner module -> the stdlib driver packages admitted for it, each a reasoned exception; an entry that
 #: admits a package its module no longer imports is stale and fails the gate.
@@ -2199,7 +2203,7 @@ _RUNNER_PACKAGE_LAYERS: dict[str, frozenset[str]] = {
     "status": frozenset({"environments", "harness", "hub", "leases", "lifecycle", "throttle"}),
     "harness/claude_code": frozenset({"config_table", "harness", "node_steps", "process", "subscriptions"}),
     "harness/opencode": frozenset({"config_table", "harness", "node_steps", "process"}),
-    "harness/wiring": frozenset({"config_table", "harness", "process", "harness/claude_code", "harness/opencode"}),
+    "harness/wiring": frozenset({"config_table", "harness", "process", *_HARNESS_BINDING_NODES}),
     "stores": frozenset(
         {
             "auth",
@@ -2232,7 +2236,7 @@ _RUNNER_PACKAGE_LAYERS: dict[str, frozenset[str]] = {
         }
     ),
 }
-_RUNNER_SUBNODES = frozenset({"harness/claude_code", "harness/opencode", "harness/wiring"})
+_RUNNER_SUBNODES = frozenset({*_HARNESS_BINDING_NODES, "harness/wiring"})
 _RUNNER_EDGE_PACKAGES = frozenset({"api", "cli", "store"})
 #: Top-level runner modules that assemble or serve the graph (composition roots, config loader, runtime).
 _RUNNER_EDGE_MODULES = frozenset(
@@ -2273,6 +2277,41 @@ def _runner_domain_core_files(runner_dir: Path, layers: Mapping[str, frozenset[s
         for path in _production_files(runner_dir)
         if _layer_module_node(tree, path) in layers and "internal" not in path.relative_to(runner_dir).parts[:-1]
     ]
+
+
+_BINDING_FACTS_RULE = _REPO_ROOT / "contracts" / "ast-grep" / "rules" / "seam-answers-binding-facts.yml"
+
+
+def _declaration_packages(harness_dir: Path) -> set[str]:
+    """Every package directly under ``harness_dir`` holding a ``declaration.py``."""
+    return {path.parent.name for path in harness_dir.glob("*/declaration.py")}
+
+
+def test_the_harness_ids_are_the_declaration_packages() -> None:
+    """A harness id is its package's name: every catalog id names a ``harness/<id>/`` package holding its
+    ``declaration.py``, and no other ``harness/`` package holds one."""
+    assert _declaration_packages(_RUNNER_DIR / "harness") == set(_HARNESS_IDS)
+
+
+def test_the_declaration_pin_fails_closed_both_ways(tmp_path: Path) -> None:
+    harness = tmp_path / "harness"
+    for package in ("claude_code", "codex"):
+        (harness / package).mkdir(parents=True)
+        (harness / package / "declaration.py").write_text("")
+    assert _declaration_packages(harness) == {"claude_code", "codex"}
+    assert _declaration_packages(harness) != {"claude_code"}
+    assert _declaration_packages(harness) != {"claude_code", "opencode", "codex"}
+
+
+def test_the_binding_facts_rule_names_exactly_the_catalog_harnesses() -> None:
+    """``bzh:seam-answers-binding-facts`` names each harness id in its two regexes and its binding-module
+    ``ignores``; a YAML rule cannot read the catalog, so a binding added there fails here until the rule names it."""
+    text = _BINDING_FACTS_RULE.read_text()
+    alternations = re.findall(r"regex: \^\(([\w|]+)\)\$", text)
+    assert len(alternations) == 2
+    assert [set(alternation.split("|")) for alternation in alternations] == [set(_HARNESS_IDS)] * 2
+    globs = set(re.findall(r"^  - src/blizzard/runner/harness/(\w+)/\*\*$", text, re.MULTILINE))
+    assert globs == set(_HARNESS_IDS)
 
 
 _DOMAIN_TAKES_OBJECTS_RULE = _REPO_ROOT / "contracts" / "ast-grep" / "rules" / "domain-takes-objects.yml"

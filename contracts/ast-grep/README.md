@@ -85,12 +85,11 @@ load-bearing: without it a stale `# ast-grep-ignore` comment goes unreported ins
   its selection point; every other consumer asks the seam for the binding's fact (`IWorkspaceProvider`, the harness
   catalog's declarations). The rule's own prose home is `blizzard-context:/architecture/system-shape.md`; this file
   states none of that prose, only what the rule mechanically checks:
-  - Scoped to `src/blizzard/**`, excluding the selection points (`runner/environments/factory.py`,
-    `runner/harness/wiring.py`), the bindings' own modules (`runner/harness/claude_code/**`, `runner/harness/opencode/**`, `runner/harness/identity.py`,
-    `runner/environments/internal/**`) and every `migrations/` tree.
+  - Scoped to `src/blizzard/**`, excluding the selection points, the bindings' own modules and every `migrations/`
+    tree — the rule file's `ignores` list them. The harness ids in its `ignores` and its regexes are held to the
+    catalog's by a unit test (`test_layering.py`), so the rule names no binding this file could drift from.
   - Matches a comparison (`==`, `!=`, `in`, `not in`, …) with a `workspace_provider` name or attribute as an operand, or
-    with a harness-id string literal (`"claude_code"`, `"opencode"`) as an operand, directly or inside a literal set,
-    tuple or list. A registry lookup keyed by the name is unmatched. A name rebound to another variable before the
+    with a harness-id string literal as an operand, directly or inside a literal set, tuple or list. A registry lookup keyed by the name is unmatched. A name rebound to another variable before the
     comparison slips past — a floor, not a proof.
   - No exemption stands.
 

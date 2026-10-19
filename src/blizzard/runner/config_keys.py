@@ -68,7 +68,8 @@ _RETIRED: dict[str, tuple[str, str | None]] = {
     "max_agents": (INTEGER, "runner[].projects[].agents"),
     "external_subscription_usage": (TABLE, "subscription"),
 }
-#: Keys that belong to a ``[[runner]]`` and are refused at the top level.
+#: Keys that belong to a ``[[runner]]`` and are refused at the top level: each binding's table comes from its
+#: section kind.
 _RUNNER_HOME = (
     ("name", STRING),
     ("projects", ARRAY_OF_TABLES),
@@ -77,8 +78,7 @@ _RUNNER_HOME = (
     ("runner_prompt_file", STRING),
     ("transcripts_root", STRING),
     ("harness", TABLE),
-    ("claude_code", TABLE),
-    ("opencode", TABLE),
+    *((kind.table, TABLE) for kind in HARNESS_SECTION_KINDS),
     ("models", TABLE),
     ("effort", TABLE),
     ("cost", TABLE),
@@ -90,6 +90,8 @@ _RUNNER_HOME = (
     ("worker_settings_path", STRING),
     ("claude_code_credentials_path", STRING),
 )
+#: The names of :data:`_RUNNER_HOME`, for the host-file reader that refuses them.
+RUNNER_HOME_KEYS = tuple(name for name, _ in _RUNNER_HOME)
 #: Keys that belong to a ``[[workspace]]`` and are refused at the top level.
 _WORKSPACE_HOME = (
     ("root", STRING),

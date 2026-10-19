@@ -75,7 +75,7 @@ from blizzard.runner.config import (
     effective_autonomy_source,
     resolve_session_secret,
 )
-from blizzard.runner.config_keys import HOST_REGISTRY
+from blizzard.runner.config_keys import HOST_REGISTRY, RUNNER_HOME_KEYS
 from blizzard.runner.config_table import ConfigError, Table
 from blizzard.runner.environments.factory import WORKSPACE_PROVIDERS
 from blizzard.runner.harness.wiring import HarnessSections
@@ -171,29 +171,6 @@ _GRADUATED_WORKSPACE_KEYS: Mapping[str, str] = {
 #: The flat runner file's keys that stay at the top of the host file, as they are.
 _GRADUATED_HOST_KEYS = tuple(
     key for key, placed in _LEGACY_KEYS.items() if placed.placement is _Placement.HOST and not placed.retired
-)
-
-#: Keys that belong to a `[[runner]]` or `[[workspace]]`, so are refused at the top level.
-_RUNNER_HOME_KEYS = (
-    "name",
-    "projects",
-    "gates",
-    "runner_prompt",
-    "runner_prompt_file",
-    "transcripts_root",
-    "harness",
-    "claude_code",
-    "opencode",
-    "models",
-    "effort",
-    "cost",
-    "queue",
-    "context",
-    "worker",
-    "harness_binary",
-    "harness_permission_mode",
-    "worker_settings_path",
-    "claude_code_credentials_path",
 )
 
 
@@ -870,7 +847,7 @@ def _refuse_misplaced_keys(raw: ConfigView, errors: _Errors) -> None:
     for key, home in _RETIRED_KEYS.items():
         if key in raw:
             errors.add(f"{key!r} has no home under a host: it is {home}")
-    for key in _RUNNER_HOME_KEYS:
+    for key in RUNNER_HOME_KEYS:
         if key in raw:
             errors.add(f"{key!r} belongs under [[runner]], not at the top level")
     for key in _WORKSPACE_HOME_KEYS:
