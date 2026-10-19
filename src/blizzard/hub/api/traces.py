@@ -56,7 +56,7 @@ def trace_replay(request: TraceReplayRequest, services: Hub) -> TraceReplayRespo
     try:
         result = services.trace_replay.replay(as_utc(request.since), as_utc(request.until), dry_run=request.dry_run)
     except ReplayWindowRefused as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
     except ReplayUnavailable as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     if result.failed:

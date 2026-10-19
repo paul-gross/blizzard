@@ -142,7 +142,7 @@ def _create(
         RoutineScopeOtherProject,
         InvalidHarnesses,
     ) as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
     return _routine_view(routine, ProjectLabels.of_project(project).fields(routine.project_id))
 
 
@@ -202,7 +202,7 @@ def _parse_instant(value: str, *, field: str) -> datetime:
         return as_utc(datetime.fromisoformat(value))
     except ValueError as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=f"{field} {value!r} is not a valid ISO-8601 instant",
         ) from exc
 
@@ -261,7 +261,7 @@ def routine_trend(
             since=parsed_since, until=parsed_until, introduced_boundary=parsed_boundary, period_days=period_days
         )
     except InvalidWindowError as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
     return _trend_view(services.garden_trend.trend(project_id, routine, window))
 
 
@@ -308,7 +308,7 @@ def routine_proposal_counts(
     try:
         require_until_after_since(parsed_since, parsed_until)
     except InvalidWindowError as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
     project_id: str | None = project
     if routine is not None:
         if project_id is None:
@@ -383,7 +383,7 @@ def _resolve_scope_for_membership(routine: Routine, scope_slug: str, services: T
     try:
         slug = ScopeSlug.parse(scope_slug)
     except ScopeSlugError as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
     scope = services.scopes.get(routine.project_id, slug.value)
     if scope is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown scope {scope_slug}")
@@ -407,7 +407,7 @@ def link_routine_scope(
     try:
         services.routine_scope_membership.link(routine, scope, change_context(identity, door), if_match=if_match)
     except RoutineScopeOtherProject as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
     except ConfigRevisionConflict as exc:
         raise _revision_conflict(exc) from exc
     return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -431,7 +431,7 @@ def unlink_routine_scope(
     try:
         services.routine_scope_membership.unlink(routine, scope, change_context(identity, door), if_match=if_match)
     except (RoutineDefaultScopeUnlinkError, RoutineScopeOtherProject) as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
     except ConfigRevisionConflict as exc:
         raise _revision_conflict(exc) from exc
     return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -476,7 +476,7 @@ def edit_routine(
         RoutineScopeOtherProject,
         InvalidHarnesses,
     ) as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
     return _labelled(edited, services)
 
 
@@ -568,7 +568,7 @@ def routine_sweeps(
     try:
         window = SweepWindow.of(parsed_since, parsed_until)
     except InvalidWindowError as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
     sweeps = services.garden_sweeps.sweeps(routine, since=window.since, until=window.until)
     return _sweeps_view(sweeps)
 
@@ -624,10 +624,10 @@ def run_routine(
             ScopeSlug.parse(request.scope_slug) if request.scope_slug is not None else None
         )
     except ScopeSlugError as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
     scope = services.scopes.get(routine.project_id, slug.value)
     if scope is None:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"unknown scope {slug.value!r}")
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=f"unknown scope {slug.value!r}")
     try:
         result = services.routine_run.run(
             routine,
@@ -638,7 +638,7 @@ def run_routine(
         )
     except ScopeNotRelatedError as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=(
                 f"scope {exc.slug!r} is not related to routine {exc.routine_id!r} — link it first with "
                 f"`blizzard hub routine scope add {exc.routine_id} {exc.slug}`"

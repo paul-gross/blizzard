@@ -39,11 +39,11 @@ class ChunkPatchBody:
                 intended_migration=intended_migration,
             )
         except BlankEditValue as exc:
-            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
         try:
             self.services.edit.edit(chunk, edit, graph_target=graph_target, migration_target=migration_target)
         except InvalidHarnesses as exc:
-            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
 
     def _graph_target(self) -> Graph | None:
         ref = self.request.graph_id

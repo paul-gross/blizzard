@@ -154,7 +154,7 @@ def _page(
             limit=limit,
         )
     except MalformedCursor as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="malformed cursor") from exc
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="malformed cursor") from exc
     labels = ProjectLabels.read(services, (f.project_id for f in page.findings))
     return FindingsPageView(
         findings=[finding_view(f, labels.fields(f.project_id)) for f in page.findings], next_cursor=page.next_cursor
@@ -302,7 +302,7 @@ def _refusals_mapped() -> Iterator[None]:
     except (FindingTransitionRefused, FindingWriteContended) as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except (FindingNoteRequiredError, DuplicateFindingError, FindingSupersedesItself, AbsorberNotLive) as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
 
 
 @router.post("/findings/resolve", response_model=list[FindingView])

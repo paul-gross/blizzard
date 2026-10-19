@@ -90,7 +90,7 @@ def _require_editor(source: str, services: TenantServices) -> tuple[IWorkSource,
 
 
 def _blank(exc: WorkItemFieldBlank) -> HTTPException:
-    return HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
+    return HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc))
 
 
 def _runner_names(services: TenantServices, authors: Iterable[WorkItemAuthor]) -> dict[str, str]:

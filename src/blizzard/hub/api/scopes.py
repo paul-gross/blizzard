@@ -84,7 +84,7 @@ def _create(
     try:
         slug = ScopeSlug.parse(request.slug)
     except ScopeSlugError as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
     scope = services.scope_registry.ensure(
         project.project_id, slug, change_context(identity, door), description=request.description
     )
@@ -103,7 +103,7 @@ def _edit(
     try:
         parsed = ScopeSlug.parse(slug)
     except ScopeSlugError as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
     scope = _scope_or_404(project, parsed.value, services)
     edit = ScopeEdit(**{name: getattr(request, name) for name in request.model_fields_set})
     try:

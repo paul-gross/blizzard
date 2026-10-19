@@ -124,7 +124,7 @@ def grant_membership(user_id: str, body: MemberRoleRequest, services: Hub, actor
     tenant's last admin (``409``)."""
     if body.role not in MEMBERSHIP_ROLES:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"{body.role.value} is not a membership role"
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=f"{body.role.value} is not a membership role"
         )
     member = change_membership(services, actor, user_id, body.role)
     return _member_view(

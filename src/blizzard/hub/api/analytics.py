@@ -77,7 +77,7 @@ def re_derive(request: ReDeriveRequest, services: Services) -> ReDeriveResponse:
     try:
         scope = ReDeriveScope.of(segment_id=request.segment_id, chunk_id=request.chunk_id)
     except ReDeriveScopeRefused as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
     outcome = services.event_derivation_service.re_derive(scope, limit=request.limit)
     return ReDeriveResponse(derived=outcome.derived, remaining=outcome.remaining, not_visible=outcome.not_visible)
 
@@ -318,7 +318,7 @@ def list_events(
     try:
         page = services.analytics_events.events(filters.criteria, cursor=cursor, limit=limit)
     except MalformedCursor as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="malformed cursor") from exc
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="malformed cursor") from exc
     return _events_response(page)
 
 
@@ -562,7 +562,7 @@ def spend_by_chunk(
     try:
         page = services.operational_analytics.spend_by_chunk(operational_criteria(scope), cursor=cursor, limit=limit)
     except MalformedCursor as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="malformed cursor") from exc
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="malformed cursor") from exc
     return AnalyticsChunkSpendResponse(spend=[_chunk_spend_view(r) for r in page.records], next_cursor=page.next_cursor)
 
 
