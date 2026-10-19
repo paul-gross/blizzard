@@ -13554,6 +13554,12 @@
    "over_cap": 0,
    "total": 370
   },
+  "test_release_inventory.py": {
+   "comments": 0,
+   "docstrings": 4,
+   "over_cap": 0,
+   "total": 105
+  },
   "test_release_notes.py": {
    "comments": 0,
    "docstrings": 5,
@@ -13562,9 +13568,9 @@
   },
   "test_release_workflow.py": {
    "comments": 2,
-   "docstrings": 17,
+   "docstrings": 19,
    "over_cap": 0,
-   "total": 150
+   "total": 259
   },
   "test_repo_files.py": {
    "comments": 1,
@@ -15701,6 +15707,12 @@
    "docstrings": 6,
    "over_cap": 0,
    "total": 31
+  },
+  "test_web_workshop.py": {
+   "comments": 0,
+   "docstrings": 0,
+   "over_cap": 0,
+   "total": 59
   },
   "test_winter_free_ci.py": {
    "comments": 2,
