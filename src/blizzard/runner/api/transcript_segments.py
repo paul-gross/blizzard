@@ -11,8 +11,8 @@ from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.api.transcript_rendering import turn_view
 from blizzard.runner.api.wiring import RunnerWiring
 from blizzard.runner.harness.registry import UnavailableHarnessError, UnknownHarnessError
+from blizzard.runner.transcripts.home import ResolvedSegmentContent
 from blizzard.runner.transcripts.ledger import TranscriptSegmentState
-from blizzard.runner.transcripts.service import ResolvedSegmentContent
 from blizzard.wire.transcript_segment import (
     TranscriptSegmentContentView,
     TranscriptSegmentIndexEntry,

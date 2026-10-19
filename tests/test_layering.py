@@ -1746,6 +1746,13 @@ _DOMAIN_SHARED_KERNEL = "kernel"
 _HUB_DOMAIN_EDGES = ("config", "delivery")
 
 
+def _hub_domain_tree(domain_dir: Path, layers: Mapping[str, frozenset[str]]) -> _LayeredTree:
+    """The hub domain as a layered tree: ``kernel`` is its shared node, its edge modules are refused."""
+    umbrella = ("blizzard", "hub", "domain")
+    refused = tuple((*umbrella[:-1], edge) for edge in _HUB_DOMAIN_EDGES)
+    return _LayeredTree(domain_dir, umbrella, layers, shared=_DOMAIN_SHARED_KERNEL, refused=refused)
+
+
 def _import_statements(path: Path, src_root: Path) -> Iterator[tuple[int, list[list[str]]]]:
     """Each import statement in ``path``, wherever it sits (function bodies and ``TYPE_CHECKING``
     blocks included), as its line and the dotted segments of every name it binds — a relative import
@@ -1760,43 +1767,107 @@ def _import_statements(path: Path, src_root: Path) -> Iterator[tuple[int, list[l
             yield node.lineno, [[*base, alias.name] for alias in node.names]
 
 
-def _domain_layer_crossings(
-    domain_dir: Path, layers: dict[str, frozenset[str]], edges: tuple[str, ...] = ()
-) -> list[str]:
-    """Every import of a ``blizzard.hub.domain`` package its importer's layer does not allow, wherever it
-    sits in the module (function bodies and ``TYPE_CHECKING`` blocks included), resolved as
-    :func:`_internal_crossings` resolves them; plus every module that sits in no declared package.
-    ``edges`` names the modules beside the domain it may not import at all, compared by whole segment
-    so the domain's own same-named package is never mistaken for one."""
-    src_root = domain_dir.parent.parent.parent
-    umbrella = list(domain_dir.relative_to(src_root).parts)
-    refused = [[*umbrella[:-1], edge] for edge in edges]
+@dataclass(frozen=True)
+class _LayeredTree:
+    """One layered tree under ``bzh:domain-package-layers`` — the hub domain or the runner — and what its checks
+    read: the ``layers`` table, the ``shared`` node every node may import (``None`` where there is none), the
+    ``refused`` edge modules no node may import, the ``subnodes`` of a package that are nodes of their own, and
+    the ``exempt`` top-level names that are edges rather than nodes."""
+
+    root: Path
+    umbrella: tuple[str, ...]
+    layers: Mapping[str, frozenset[str]]
+    shared: str | None = None
+    refused: tuple[tuple[str, ...], ...] = ()
+    subnodes: frozenset[str] = frozenset()
+    exempt: frozenset[str] = frozenset()
+
+    @property
+    def src_root(self) -> Path:
+        return self.root.parents[len(self.umbrella) - 1]
+
+
+def _layer_node(tree: _LayeredTree, segments: Iterable[str]) -> str | None:
+    """The node a dotted path under the tree's root (given as its segments) belongs to: a subnode, else its
+    first segment; ``None`` for the bare root package."""
+    parts = list(segments)
+    if not parts:
+        return None
+    if len(parts) > 1 and f"{parts[0]}/{parts[1]}" in tree.subnodes:
+        return f"{parts[0]}/{parts[1]}"
+    return parts[0]
+
+
+def _layer_module_node(tree: _LayeredTree, path: Path) -> str | None:
+    rel = path.relative_to(tree.root).with_suffix("").parts
+    return _layer_node(tree, rel[:-1] if rel[-1] == "__init__" else rel)
+
+
+def _layer_statements(tree: _LayeredTree) -> Iterator[tuple[Path, int, str | None, list[list[str]]]]:
+    """Each import statement of a module of a declared node (or of the root package), as ``(path, lineno, own
+    node, [dotted segments of every name it binds])``, resolved as :func:`_import_statements` resolves it."""
+    for path in _production_files(tree.root):
+        own = _layer_module_node(tree, path)
+        if own is not None and own not in tree.layers:
+            continue
+        for lineno, named in _import_statements(path, tree.src_root):
+            yield path, lineno, own, named
+
+
+def _layer_targets(tree: _LayeredTree, named: Iterable[list[str]]) -> list[tuple[list[str], str | None]]:
+    """The ``(module, target node)`` of each name that lies under the tree's root."""
+    depth = len(tree.umbrella)
+    return [(module, _layer_node(tree, module[depth:])) for module in named if tuple(module[:depth]) == tree.umbrella]
+
+
+def _layer_crossings(tree: _LayeredTree) -> list[str]:
+    """Every import by a module of a declared node that its node's row does not allow, wherever it sits in the
+    module (function bodies and ``TYPE_CHECKING`` blocks included): an import of the shared node or of a node
+    in its row passes, and so does one of its own node; an import of a refused edge module, of a module that
+    is no node (``config``, ``composition``, ``api``), or of the bare root package fails."""
     violations: list[str] = []
-    for path in _production_files(domain_dir):
-        rel = path.relative_to(domain_dir).parts
-        if len(rel) == 1 and rel[0] != "__init__.py":
-            violations.append(f"{path.name} sits in no package")
+    for path, lineno, own, named in _layer_statements(tree):
+        rel = path.relative_to(tree.root)
+        allowed = {
+            node for node in (own, tree.shared, *(tree.layers[own] if own is not None else ())) if node is not None
+        }
+        refused = next((m for m in named for edge in tree.refused if tuple(m[: len(edge)]) == edge), None)
+        if refused is not None:
+            violations.append(f"{rel}:{lineno} imports the edge {'.'.join(refused)}")
             continue
-        own = rel[0] if len(rel) > 1 else None
-        if own is not None and own not in layers:
-            violations.append(f"{'/'.join(rel)} sits in undeclared package {own}")
-            continue
-        allowed = {own, _DOMAIN_SHARED_KERNEL, *layers[own]} if own is not None else set()
-        for lineno, named in _import_statements(path, src_root):
-            for module in named:
-                if any(module[: len(edge)] == edge for edge in refused):
-                    violations.append(f"{'/'.join(rel)}:{lineno} imports the edge {'.'.join(module)}")
-                    break
-                if module[: len(umbrella)] != umbrella:
-                    continue
-                target = module[len(umbrella)] if len(module) > len(umbrella) else None
-                if target not in allowed:
-                    violations.append(
-                        f"{'/'.join(rel)}:{lineno} ({own or 'the umbrella'}) imports {'.'.join(module)}"
-                        f" ({target or 'the umbrella'})"
-                    )
-                    break
+        crossing = next(((m, t) for m, t in _layer_targets(tree, named) if t not in allowed), None)
+        if crossing is not None:
+            module, target = crossing
+            violations.append(
+                f"{rel}:{lineno} ({own or 'the root package'}) imports {'.'.join(module)}"
+                f" ({target or 'the bare package'})"
+            )
     return violations
+
+
+def _unused_layer_edges(tree: _LayeredTree) -> list[str]:
+    """Every declared edge no import walks: slack a sideways or upward import could later pass along unreviewed."""
+    used = {
+        (own, target)
+        for _, _, own, named in _layer_statements(tree)
+        for _, target in _layer_targets(tree, named)
+        if target is not None and target != own
+    }
+    return sorted(f"{own} -> {dep}" for own, deps in tree.layers.items() for dep in deps if (own, dep) not in used)
+
+
+def _undeclared_layer_nodes(tree: _LayeredTree) -> list[str]:
+    """Every package outside the exempt edges, and every top-level module outside them, that maps to no node —
+    a new package or module enters the graph."""
+    undeclared: list[str] = []
+    for init in sorted(tree.root.rglob("__init__.py")):
+        rel = init.parent.relative_to(tree.root).parts
+        if rel and rel[0] not in tree.exempt and _layer_node(tree, rel) not in tree.layers:
+            undeclared.append("/".join(rel))
+    for module in sorted(tree.root.glob("*.py")):
+        if module.stem not in {"__init__", *tree.exempt} and module.stem not in tree.layers:
+            undeclared.append(module.name)
+    return undeclared
 
 
 def _layer_cycle(layers: Mapping[str, frozenset[str]], kernel: str | None = _DOMAIN_SHARED_KERNEL) -> list[str]:
@@ -1827,8 +1898,14 @@ def _layer_cycle(layers: Mapping[str, frozenset[str]], kernel: str | None = _DOM
 
 
 def test_hub_domain_packages_import_only_what_their_layer_allows() -> None:
-    violations = _domain_layer_crossings(_HUB_DOMAIN_DIR, _DOMAIN_PACKAGE_LAYERS, _HUB_DOMAIN_EDGES)
+    tree = _hub_domain_tree(_HUB_DOMAIN_DIR, _DOMAIN_PACKAGE_LAYERS)
+    violations = [*_layer_crossings(tree), *_undeclared_layer_nodes(tree)]
     assert not violations, f"a hub domain package may import only its own layer's dependencies: {violations}"
+
+
+def test_every_hub_domain_layer_edge_is_one_the_code_uses() -> None:
+    unused = _unused_layer_edges(_hub_domain_tree(_HUB_DOMAIN_DIR, _DOMAIN_PACKAGE_LAYERS))
+    assert not unused, f"a hub domain layer row may allow only edges today's code walks; drop: {unused}"
 
 
 def _domain_init_reexports(domain_dir: Path) -> list[str]:
@@ -1902,12 +1979,12 @@ def _module_bindings(tree: ast.Module) -> tuple[set[str], set[str]]:
     return defined, imported - defined
 
 
-def _domain_second_spellings(src_root: Path, domain_dir: Path, importer_roots: Iterable[Path]) -> list[str]:
-    """Every ``from <module> import <name>`` under ``importer_roots`` whose ``<module>`` sits under
-    ``domain_dir`` and only imports ``<name>`` rather than defining it — a second import path for a
-    name defined elsewhere. Relative imports resolve against the importer's package when it sits
-    under ``src_root``."""
-    umbrella = list(domain_dir.relative_to(src_root).parts)
+def _layer_second_spellings(tree: _LayeredTree, importer_roots: Iterable[Path]) -> list[str]:
+    """Every ``from <module> import <name>`` under ``importer_roots`` whose ``<module>`` sits under the tree's
+    root and only imports ``<name>`` rather than defining it — a second import path for a name defined
+    elsewhere. Relative imports resolve against the importer's package when it sits under the source root."""
+    src_root = tree.src_root
+    umbrella = list(tree.umbrella)
     bindings: dict[tuple[str, ...], set[str] | None] = {}
 
     def only_imported(module: tuple[str, ...]) -> set[str] | None:
@@ -1945,7 +2022,8 @@ def _domain_second_spellings(src_root: Path, domain_dir: Path, importer_roots: I
 
 
 def test_each_hub_domain_name_has_one_import_path() -> None:
-    violations = _domain_second_spellings(_SRC_DIR.parent, _HUB_DOMAIN_DIR, (_SRC_DIR, _TESTS_DIR))
+    tree = _hub_domain_tree(_HUB_DOMAIN_DIR, _DOMAIN_PACKAGE_LAYERS)
+    violations = _layer_second_spellings(tree, (_SRC_DIR, _TESTS_DIR))
     assert not violations, f"import a hub domain name from the module that defines it: {violations}"
 
 
@@ -1971,7 +2049,8 @@ def _plant_second_spelling(tmp_path: Path, rel: str, text: str) -> list[str]:
     }.items():
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(body)
-    return _domain_second_spellings(src, domain, (src / "blizzard", tmp_path / "tests"))
+    tree = _hub_domain_tree(domain, {"chunk": frozenset(), "operations": frozenset({"chunk"})})
+    return _layer_second_spellings(tree, (src / "blizzard", tmp_path / "tests"))
 
 
 @pytest.mark.parametrize(
@@ -2030,7 +2109,8 @@ def _plant_domain(tmp_path: Path, files: dict[str, str]) -> list[str]:
         "config": frozenset[str](),
         "garden": frozenset({"chunk", "config"}),
     }
-    return _domain_layer_crossings(domain, layers, _HUB_DOMAIN_EDGES)
+    tree = _hub_domain_tree(domain, layers)
+    return [*_layer_crossings(tree), *_undeclared_layer_nodes(tree)]
 
 
 @pytest.mark.parametrize(
@@ -2152,6 +2232,7 @@ _RUNNER_PACKAGE_LAYERS: dict[str, frozenset[str]] = {
         }
     ),
 }
+_RUNNER_SUBNODES = frozenset({"harness/claude_code", "harness/opencode", "harness/wiring"})
 _RUNNER_EDGE_PACKAGES = frozenset({"api", "cli", "store"})
 #: Top-level runner modules that assemble or serve the graph (composition roots, config loader, runtime).
 _RUNNER_EDGE_MODULES = frozenset(
@@ -2168,96 +2249,29 @@ _RUNNER_EDGE_MODULES = frozenset(
         "runtime",
     }
 )
-_RUNNER_SUBNODES = frozenset({"harness/claude_code", "harness/opencode", "harness/wiring"})
 
 
-def _runner_node(segments: Iterable[str]) -> str | None:
-    """The dependency node a dotted path under ``blizzard.runner`` (given as its segments) belongs to: a
-    ``harness`` subnode, else its first segment; ``None`` for the bare ``blizzard.runner`` package."""
-    parts = list(segments)
-    if not parts:
-        return None
-    if len(parts) > 1 and f"{parts[0]}/{parts[1]}" in _RUNNER_SUBNODES:
-        return f"{parts[0]}/{parts[1]}"
-    return parts[0]
-
-
-def _runner_module_node(path: Path, runner_dir: Path) -> str | None:
-    rel = path.relative_to(runner_dir).with_suffix("").parts
-    return _runner_node(rel[:-1] if rel[-1] == "__init__" else rel)
-
-
-def _runner_node_imports(
-    runner_dir: Path, layers: Mapping[str, frozenset[str]]
-) -> Iterator[tuple[Path, int, str, list[tuple[tuple[str, ...], str | None]]]]:
-    """Each import statement of a module of a declared node, as ``(path, lineno, own node, [(module, target
-    node)])`` over the ``blizzard.runner`` modules it names, resolved as :func:`_import_statements` resolves it."""
-    src_root = runner_dir.parent.parent
-    umbrella = list(runner_dir.relative_to(src_root).parts)
-    for path in _production_files(runner_dir):
-        own = _runner_module_node(path, runner_dir)
-        if own is None or own not in layers:
-            continue
-        for lineno, named in _import_statements(path, src_root):
-            targets = [
-                (tuple(module), _runner_node(module[len(umbrella) :]))
-                for module in named
-                if module[: len(umbrella)] == umbrella
-            ]
-            if targets:
-                yield path, lineno, own, targets
-
-
-def _runner_layer_crossings(runner_dir: Path, layers: Mapping[str, frozenset[str]]) -> list[str]:
-    """Every ``blizzard.runner`` import by a module of a declared node that its node's row does not allow,
-    wherever it sits in the module, resolved as :func:`_import_statements` resolves it — an import of a module
-    that is no node at all (``config``, ``composition``, ``api``, the bare package) included."""
-    violations: list[str] = []
-    for path, lineno, own, targets in _runner_node_imports(runner_dir, layers):
-        allowed = {own, *layers[own]}
-        crossing = next(((module, target) for module, target in targets if target not in allowed), None)
-        if crossing is not None:
-            module, target = crossing
-            violations.append(
-                f"{path.relative_to(runner_dir)}:{lineno} ({own}) imports {'.'.join(module)}"
-                f" ({target or 'the bare package'})"
-            )
-    return violations
-
-
-def _unused_runner_edges(runner_dir: Path, layers: Mapping[str, frozenset[str]]) -> list[str]:
-    """Every declared edge no import walks: slack a sideways or upward import could later pass along unreviewed."""
-    used = {
-        (own, target)
-        for _, _, own, targets in _runner_node_imports(runner_dir, layers)
-        for _, target in targets
-        if target is not None and target != own
-    }
-    return sorted(f"{own} -> {dep}" for own, deps in layers.items() for dep in deps if (own, dep) not in used)
-
-
-def _undeclared_runner_nodes(runner_dir: Path, layers: Mapping[str, frozenset[str]]) -> list[str]:
-    """Every runner package outside the edge packages, and every top-level runner module outside the edge
-    modules, that maps to no node — a new package or module enters the graph."""
-    undeclared: list[str] = []
-    for init in sorted(runner_dir.rglob("__init__.py")):
-        rel = init.parent.relative_to(runner_dir).parts
-        if rel and rel[0] not in _RUNNER_EDGE_PACKAGES and _runner_node(rel) not in layers:
-            undeclared.append("/".join(rel))
-    for module in sorted(runner_dir.glob("*.py")):
-        if module.stem not in {"__init__", *_RUNNER_EDGE_MODULES} and module.stem not in layers:
-            undeclared.append(module.name)
-    return undeclared
+def _runner_tree(runner_dir: Path, layers: Mapping[str, frozenset[str]]) -> _LayeredTree:
+    """The runner as a layered tree: it has no shared node, its edges are the ones named above, and the nodes
+    of ``harness`` it holds beside itself are its binding packages and ``wiring``."""
+    return _LayeredTree(
+        runner_dir,
+        ("blizzard", "runner"),
+        layers,
+        subnodes=_RUNNER_SUBNODES,
+        exempt=_RUNNER_EDGE_PACKAGES | _RUNNER_EDGE_MODULES,
+    )
 
 
 def _runner_domain_core_files(runner_dir: Path, layers: Mapping[str, frozenset[str]]) -> list[Path]:
     """Every module of a runner node outside an ``internal/`` package — the runner's ``bzh:domain-core``: a
     concept package's public surface holds its models, ports, and the services carrying its rules, while the
     adapters binding a framework or driver sit in its ``internal/`` (``bzh:internal-visibility``)."""
+    tree = _runner_tree(runner_dir, layers)
     return [
         path
         for path in _production_files(runner_dir)
-        if _runner_module_node(path, runner_dir) in layers and "internal" not in path.relative_to(runner_dir).parts[:-1]
+        if _layer_module_node(tree, path) in layers and "internal" not in path.relative_to(runner_dir).parts[:-1]
     ]
 
 
@@ -2338,19 +2352,25 @@ def test_the_loop_reach_follows_the_layer_table(tmp_path: Path) -> None:
 
 
 def test_runner_packages_import_only_what_their_layer_allows() -> None:
-    violations = _runner_layer_crossings(_RUNNER_DIR, _RUNNER_PACKAGE_LAYERS)
+    violations = _layer_crossings(_runner_tree(_RUNNER_DIR, _RUNNER_PACKAGE_LAYERS))
     assert not violations, f"a runner package may import only its own layer's dependencies: {violations}"
 
 
+def test_each_runner_name_has_one_import_path() -> None:
+    tree = _runner_tree(_RUNNER_DIR, _RUNNER_PACKAGE_LAYERS)
+    violations = _layer_second_spellings(tree, (_RUNNER_DIR,))
+    assert not violations, f"import a runner name from the module that defines it: {violations}"
+
+
 def test_every_runner_layer_edge_is_one_the_code_uses() -> None:
-    unused = _unused_runner_edges(_RUNNER_DIR, _RUNNER_PACKAGE_LAYERS)
+    unused = _unused_layer_edges(_runner_tree(_RUNNER_DIR, _RUNNER_PACKAGE_LAYERS))
     assert not unused, f"a runner layer row may allow only edges today's code walks; drop: {unused}"
 
 
 def test_runner_package_layers_are_acyclic() -> None:
     assert _layer_cycle(_RUNNER_PACKAGE_LAYERS, kernel=None) == []
     assert all(dep in _RUNNER_PACKAGE_LAYERS for deps in _RUNNER_PACKAGE_LAYERS.values() for dep in deps)
-    undeclared = _undeclared_runner_nodes(_RUNNER_DIR, _RUNNER_PACKAGE_LAYERS)
+    undeclared = _undeclared_layer_nodes(_runner_tree(_RUNNER_DIR, _RUNNER_PACKAGE_LAYERS))
     assert not undeclared, (
         f"every runner package outside api/, cli/ and store/, and every top-level module outside the edge "
         f"modules, is a declared node: {undeclared}"
@@ -2423,7 +2443,7 @@ def _plant_runner(tmp_path: Path, files: dict[str, str]) -> Path:
     ],
 )
 def test_runner_layer_check_counts_every_import_form(tmp_path: Path, rel: str, text: str, caught: bool) -> None:
-    violations = _runner_layer_crossings(_plant_runner(tmp_path, {rel: f"{text}\n"}), _PLANTED_RUNNER_LAYERS)
+    violations = _layer_crossings(_runner_tree(_plant_runner(tmp_path, {rel: f"{text}\n"}), _PLANTED_RUNNER_LAYERS))
     assert len(violations) == (1 if caught else 0), violations
 
 
@@ -2439,7 +2459,7 @@ def test_runner_layer_check_counts_every_import_form(tmp_path: Path, rel: str, t
     ],
 )
 def test_runner_node_check_catches_an_undeclared_package_or_module(tmp_path: Path, rel: str, caught: bool) -> None:
-    undeclared = _undeclared_runner_nodes(_plant_runner(tmp_path, {rel: ""}), _PLANTED_RUNNER_LAYERS)
+    undeclared = _undeclared_layer_nodes(_runner_tree(_plant_runner(tmp_path, {rel: ""}), _PLANTED_RUNNER_LAYERS))
     assert len(undeclared) == (1 if caught else 0), undeclared
 
 
@@ -2453,9 +2473,43 @@ def test_runner_unused_edge_check_catches_an_edge_no_import_walks(tmp_path: Path
             "harness/wiring.py": "from .claude_code import section\nfrom blizzard.runner import harness\n",
         },
     )
-    assert _unused_runner_edges(runner, _PLANTED_RUNNER_LAYERS) == []
+    assert _unused_layer_edges(_runner_tree(runner, _PLANTED_RUNNER_LAYERS)) == []
     widened = {**_PLANTED_RUNNER_LAYERS, "hub": frozenset({"leases", "config_table"})}
-    assert _unused_runner_edges(runner, widened) == ["hub -> config_table"]
+    assert _unused_layer_edges(_runner_tree(runner, widened)) == ["hub -> config_table"]
+
+
+def test_runner_second_spelling_check_flags_an_import_through_an_importer(tmp_path: Path) -> None:
+    runner = _plant_runner(
+        tmp_path,
+        {
+            "hub/ports.py": "from blizzard.runner.leases.record import R\n",
+            "leases/uses.py": "from blizzard.runner.hub.ports import R\nfrom blizzard.runner.hub.client import H\n",
+        },
+    )
+    tree = _runner_tree(runner, _PLANTED_RUNNER_LAYERS)
+    assert _layer_second_spellings(tree, (runner,)) == [
+        "runner/leases/uses.py:1 imports R from blizzard.runner.hub.ports"
+    ]
+
+
+def test_hub_domain_unused_edge_check_catches_an_edge_no_import_walks(tmp_path: Path) -> None:
+    domain = tmp_path / "blizzard" / "hub" / "domain"
+    for rel, text in {
+        "../../__init__.py": "",
+        "../__init__.py": "",
+        "__init__.py": "",
+        "chunk/__init__.py": "",
+        "chunk/model.py": "X = 1\n",
+        "garden/__init__.py": "",
+        "garden/run.py": "from blizzard.hub.domain.chunk.model import X\n",
+        "kernel/__init__.py": "",
+    }.items():
+        (domain / rel).parent.mkdir(parents=True, exist_ok=True)
+        (domain / rel).write_text(text)
+    layers = {"kernel": frozenset[str](), "chunk": frozenset[str](), "garden": frozenset({"chunk"})}
+    assert _unused_layer_edges(_hub_domain_tree(domain, layers)) == []
+    widened = {**layers, "garden": frozenset({"chunk", "kernel"})}
+    assert _unused_layer_edges(_hub_domain_tree(domain, widened)) == ["garden -> kernel"]
 
 
 def test_runner_layer_cycle_check_catches_a_cycle() -> None:

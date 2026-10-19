@@ -13,7 +13,7 @@ from fastapi.exceptions import HTTPException
 from blizzard.runner.api.transcript_rendering import turn_view
 from blizzard.runner.api.wiring import RunnerWiring
 from blizzard.runner.harness.registry import UnavailableHarnessError, UnknownHarnessError
-from blizzard.runner.transcripts.service import ResolvedTranscript
+from blizzard.runner.transcripts.home import ResolvedTranscript
 from blizzard.wire.transcript import TranscriptResponse
 
 router = APIRouter(prefix="/api", tags=["runner"])
