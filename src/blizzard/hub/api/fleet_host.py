@@ -104,7 +104,7 @@ def add_host_runner(
     try:
         added = services.host_enrollment.add_runner(host, request.name, by=host.name, projects=request.projects)
     except UnknownServedProject as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
     except HostRetired as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
     services.events.publish_runner_changed(added.runner_id, kind="added", runner_name=added.name, by=host.name)

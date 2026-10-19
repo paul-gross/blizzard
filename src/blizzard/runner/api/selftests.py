@@ -72,7 +72,7 @@ def start_selftest(request_body: SelfTestStartRequest, request: Request) -> Self
     except UnknownHarnessError as exc:
         known = ", ".join(exc.known) or "(none configured)"
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=f"unknown coding harness {exc.harness_id!r} — configured harnesses: {known}",
         ) from exc
     except UnavailableHarnessError as exc:

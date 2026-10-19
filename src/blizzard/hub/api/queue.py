@@ -118,7 +118,7 @@ def _replace(
     try:
         ordered = services.queue.reorder(list_, _resolved(list_, chunk_ids, services, statuses), statuses=statuses)
     except DuplicateReorderIds as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
     except NotInList as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     services.events.publish_queue_changed()
@@ -140,7 +140,7 @@ def _reposition(
         chunk, after = _resolved_move(list_, chunk_id, after_chunk_id, services, statuses)
         services.queue.move(list_, chunk, after, statuses=statuses)
     except SelfAnchoredMove as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
     except NotInList as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     services.events.publish_queue_changed()
@@ -290,7 +290,7 @@ def get_queue(
     try:
         page = services.queue.page(QueueList.READY, statuses=statuses, cursor=cursor, limit=limit, project=project)
     except MalformedCursor as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="malformed cursor") from exc
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="malformed cursor") from exc
     return _page_view(
         page,
         _blocked_markings(services, statuses, [entry.chunk.chunk_id for entry in page.entries]),
@@ -376,7 +376,7 @@ def get_backlog(
     try:
         page = services.queue.page(QueueList.NOT_READY, statuses=statuses, cursor=cursor, limit=limit, project=project)
     except MalformedCursor as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="malformed cursor") from exc
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="malformed cursor") from exc
     return _backlog_page_view(
         page,
         _blocked_markings(services, statuses, [entry.chunk.chunk_id for entry in page.entries]),

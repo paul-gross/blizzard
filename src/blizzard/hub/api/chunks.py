@@ -202,7 +202,7 @@ def ingest_chunk(request: ChunkIngestRequest, services: Services) -> object:
         if pointer is None:
             configured = ", ".join(sorted(services.work_sources.names())) or "none"
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail=(f"token {token!r} is not claimed by any configured work source (configured: {configured})"),
             )
         pointers.append(pointer)
@@ -211,7 +211,7 @@ def ingest_chunk(request: ChunkIngestRequest, services: Services) -> object:
         pointers = ingest_work_refs(pointers)
         project = _ingest_project(services, pointers, named)
     except EmptyIngest as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
     except (IngestProjectAmbiguous, IngestSourceNotLinked) as exc:
         return ingest_project_refusal(services, exc)
     try:
@@ -257,7 +257,7 @@ def list_chunks(
             cursor=cursor, limit=limit, done_since=done_since, done_kept=done_floor, project=project
         )
     except MalformedCursor as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="malformed cursor") from exc
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="malformed cursor") from exc
     facts = services.chunks.facts.load_facts_for([c.chunk_id for c in page.chunks])
     if done_since is not None:
         # The store's exclusion leaves a same-instant movement tie in; the derivation settles it. A floor
@@ -762,7 +762,7 @@ def promote_chunk(chunk_id: str, services: Services, request: ChunkPlacementRequ
     except (ChunkNotPromotable, NotInList) as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except SelfAnchoredMove as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
     key = f"chunk_promoted:{promoted_id}" if promoted_id is not None else None
     facts = change.publish(cause="promoted", key=key)
     services.events.publish_queue_changed()  # a promoted chunk enters the ready queue
@@ -797,7 +797,7 @@ def demote_chunk(chunk_id: str, services: Services, request: ChunkPlacementReque
     except (ChunkNotDemotable, NotInList) as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except SelfAnchoredMove as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
     key = f"chunk_demoted:{demoted_id}" if demoted_id is not None else None
     facts = change.publish(cause="demoted", key=key)
     services.events.publish_queue_changed()  # a demoted chunk leaves the ready queue

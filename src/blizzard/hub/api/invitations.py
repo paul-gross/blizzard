@@ -74,7 +74,7 @@ def create_invitation(
             email=request.email, role=request.role, lifetime_days=request.expires_in, by=identity.user_id
         )
     except MembershipRoleRefused as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
     return InvitationCreateResponse(
         invitation=invitation_view(issued.record, now=services.clock.now()), token=issued.token.plaintext
     )

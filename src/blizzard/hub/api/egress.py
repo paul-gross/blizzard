@@ -67,7 +67,7 @@ def egress_reset(request: EgressResetRequest, services: Hub) -> EgressResetRespo
     try:
         result = services.egress_reset.reset(request.dataset, as_utc(request.to))
     except ResetRefused as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
     except ResetUnavailable as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     return EgressResetResponse(
@@ -94,7 +94,7 @@ def egress_backfill(request: EgressBackfillRequest, services: Hub) -> EgressBack
             as_utc(request.since), as_utc(request.until), dataset=request.dataset, dry_run=request.dry_run
         )
     except BackfillWindowRefused as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
     except BackfillUnavailable as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     counts = [EgressBackfillCount(dataset=c.dataset, rows=c.rows, files=c.files) for c in result.datasets]

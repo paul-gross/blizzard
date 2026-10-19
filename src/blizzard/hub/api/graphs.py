@@ -126,13 +126,13 @@ def mint_graph(request: GraphMintRequest, services: Services) -> object:
         doc = GraphDoc.of(services.graph_yaml.decode(request.definition_yaml.encode("utf-8")))
     except (GraphParseError, ConfigDecodeError) as exc:
         report = GraphValidationReport(ok=False, errors=[str(exc)], warnings=[])
-        return JSONResponse(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, content=report.model_dump())
+        return JSONResponse(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, content=report.model_dump())
 
     try:
         graph, warnings = services.graph_mint.mint(doc, definition_yaml=request.definition_yaml)
     except GraphValidationError as exc:
         report = GraphValidationReport(ok=False, errors=exc.result.errors, warnings=exc.result.warnings)
-        return JSONResponse(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, content=report.model_dump())
+        return JSONResponse(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, content=report.model_dump())
 
     # A freshly minted graph carries no lifecycle fact yet — it starts enabled.
     return _graph_view(graph, retired=False, warnings=warnings)

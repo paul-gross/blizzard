@@ -427,7 +427,7 @@ def get_garden_proposals_page(
             run.project_id, run.routine_name, state=state, cursor=cursor, limit=limit
         )
     except MalformedCursor as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="malformed cursor") from exc
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="malformed cursor") from exc
     return GardenProposalsPageView(
         proposals=[garden_proposal_view(p, closure, labels) for p, closure in pairs], next_cursor=next_cursor
     )

@@ -48,7 +48,7 @@ def _parse_instant(value: str, *, field: str) -> datetime:
         return as_utc(datetime.fromisoformat(value))
     except ValueError as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=f"{field} {value!r} is not a valid ISO-8601 instant",
         ) from exc
 
@@ -137,7 +137,7 @@ def _runs(services: TenantServices, project_id: str | None, since: str | None, u
     try:
         rows = services.garden_run.list_runs(since=parsed_since, until=parsed_until, project_id=project_id)
     except InvalidWindowError as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
     names = GraphNames(services.graphs)
     names.prime(row.escalation.graph_id for row in rows if row.escalation is not None)
     labels = ProjectLabels.read(services, (row.project_id for row in rows))
