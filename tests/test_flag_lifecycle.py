@@ -11,7 +11,8 @@ from click.testing import CliRunner
 
 from blizzard.foundation.flags.registry import FlagRegistry
 from blizzard.tools.compat.releases import parse_release
-from blizzard.tools.flag_lifecycle import Snapshot, derive, main
+from blizzard.tools.flag_lifecycle import main
+from blizzard.tools.flag_lifecycle_domain import Snapshot, derive
 
 _PATH = "src/blizzard/foundation/flags/registry.toml"
 
@@ -71,6 +72,12 @@ def test_twelve_off_releases_and_historical_retirement() -> None:
     assert [(f.rule, f.severity) for f in derive(releases, registry(on=False), "cut")[1]] == [
         ("off-twelve-releases", "WARN")
     ]
+    retired_rows, retired_findings = derive(
+        [*releases, snapshot("v1.12.0", retired=True)], registry(retired=True), "pr"
+    )
+    assert retired_rows[0].off_for == 12
+    assert retired_rows[0].retired_in == "v1.12.0"
+    assert retired_findings == []
     history = [
         snapshot("v1.0.0", on=False),
         snapshot("v1.1.0", retired=True),
