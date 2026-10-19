@@ -162,7 +162,12 @@ def test_forge_status_projection_e2e(tmp_path: Path) -> None:
         assert _poll_until(lambda: _labels(forge, number_d) == {"blizzard:ingested"}, timeout=15.0), (
             "the projection did not re-converge once the forge returned"
         )
+        # The sweep names a source by its id, the handle every stored reference holds.
+        source_response = hub.get(f"/api/work-sources/{REPO_NAME}")
+        assert source_response.status_code == 200, source_response.text
+        source_id = source_response.json()["work_source_id"]
+        assert source_id
 
     log_text = read_daemon_log(hub_dir / "daemon.log")
-    skip_lines = [line for line in log_text.splitlines() if "sources_skipped" in line and REPO_NAME in line]
+    skip_lines = [line for line in log_text.splitlines() if "sources_skipped" in line and source_id in line]
     assert skip_lines, "the sweep should have logged a skip naming the source while the forge was unreachable"
