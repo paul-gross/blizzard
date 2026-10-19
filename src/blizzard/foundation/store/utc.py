@@ -6,7 +6,7 @@ the :func:`iso_utc` wire serializer."""
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 from sqlalchemy import DateTime
 from sqlalchemy.types import TypeDecorator
@@ -49,3 +49,12 @@ def iso_utc(value: datetime) -> str:
     An offset-less stamp is silently reinterpreted in the reader's local zone.
     """
     return as_utc(value).isoformat()
+
+
+def sqlite_adapt_datetime(value: datetime) -> str:
+    """The text sqlite3's deprecated default adapter wrote, so stored rows still order against new ones."""
+    return value.isoformat(" ")
+
+
+def sqlite_adapt_date(value: date) -> str:
+    return value.isoformat()
