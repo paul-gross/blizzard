@@ -8,6 +8,7 @@ import {
   chunkNeighborView,
   chunkUsageTotalView,
   commitArtifactView,
+  decisionView,
   deltaArtifactView,
   findingCandidate,
   findingDelta,
@@ -18,6 +19,7 @@ import {
   landedRepoView,
   observedFindingOp,
   prView,
+  questionView,
   routeView,
   sidechainSegmentView,
   surveyArtifactView,
@@ -26,6 +28,7 @@ import {
   transcriptSegmentIndexEntry,
   transitionView,
   turnSegmentView,
+  workItemEntry,
   workRefView,
 } from '../public-api';
 
@@ -44,6 +47,9 @@ const BUILDERS: Record<string, () => unknown> = {
   prView,
   landedRepoView,
   chunkUsageTotalView,
+  questionView,
+  decisionView,
+  workItemEntry,
   assetArtifactView,
   commitArtifactView,
   findingSurvey,
@@ -82,6 +88,9 @@ describe('wire-shape builders', () => {
     expect(offsetMs(transitionView().recorded_at)).toBe(-60_000);
     expect(offsetMs(assetArtifactView().recorded_at)).toBe(-30_000);
     expect(offsetMs(commitArtifactView().recorded_at)).toBe(-30_000);
+    expect(offsetMs(questionView().asked_at)).toBe(-60_000);
+    expect(offsetMs(decisionView().submitted_at)).toBe(-60_000);
+    expect(offsetMs(workItemEntry().fetched_at)).toBe(0);
     expect(offsetMs(turnSegmentView().timestamp)).toBe(-120_000);
     expect(offsetMs(transcriptSegmentIndexEntry().received_at)).toBe(-60_000);
     expect(offsetMs(fleetSpendView().since)).toBe(-24 * 3_600_000);
