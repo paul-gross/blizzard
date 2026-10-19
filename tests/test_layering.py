@@ -2276,13 +2276,13 @@ _BINDING_FACTS_RULE = _REPO_ROOT / "contracts" / "ast-grep" / "rules" / "seam-an
 
 
 def _declaration_packages(harness_dir: Path) -> set[str]:
-    """Every package directly under ``harness_dir`` holding a ``declaration.py``."""
+    """Every package directly under ``harness_dir`` holding its ``src/blizzard/runner/harness/<id>/declaration.py``."""
     return {path.parent.name for path in harness_dir.glob("*/declaration.py")}
 
 
 def test_the_harness_ids_are_the_declaration_packages() -> None:
     """A harness id is its package's name: every catalog id names a ``harness/<id>/`` package holding its
-    ``declaration.py``, and no other ``harness/`` package holds one."""
+    ``src/blizzard/runner/harness/<id>/declaration.py``, and no other ``harness/`` package holds one."""
     assert _declaration_packages(_RUNNER_DIR / "harness") == set(_HARNESS_IDS)
 
 
