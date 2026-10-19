@@ -16,29 +16,31 @@ async function render(rows: readonly AskRow[]) {
 }
 
 describe('LocalAsksView', () => {
-  it('renders an open ask with its chunk ref and question text — no query stub required', async () => {
-    const { el } = await render([{ questionId: 'q-1', chunkRef: 'C-3YJ9', askedFor: '30s', question: 'Proceed with the migration?' }]);
+  it('renders an open ask with its chunk ref, runner, and question text — no query stub required', async () => {
+    const { el } = await render([{ questionId: 'q-1', runner: 'r-claude', chunkRef: 'C-3YJ9', askedFor: '30s', question: 'Proceed with the migration?' }]);
 
     const row = el.querySelector('[data-testid="ask-row"]');
     expect(row?.getAttribute('data-question-id')).toBe('q-1');
     expect(row?.querySelector('.q')?.textContent).toBe('Proceed with the migration?');
     expect(row?.querySelector('.chunk')?.textContent).toBe('C-3YJ9');
     expect(row?.querySelector('.asked')?.textContent).toContain('30s');
+    expect(row?.querySelector('[data-testid="ask-runner"]')?.textContent).toBe('r-claude');
   });
 
-  it('renders one row per given ask', async () => {
+  it('renders one row per given ask, each naming the runner it is open on', async () => {
     const { el } = await render([
-      { questionId: 'q-1', chunkRef: 'C-1', askedFor: '30s', question: 'A?' },
-      { questionId: 'q-2', chunkRef: 'C-2', askedFor: '1m', question: 'B?' },
+      { questionId: 'q-1', runner: 'r1', chunkRef: 'C-1', askedFor: '30s', question: 'A?' },
+      { questionId: 'q-2', runner: 'r2', chunkRef: 'C-2', askedFor: '1m', question: 'B?' },
     ]);
 
     expect(el.querySelectorAll('[data-testid="ask-row"]')).toHaveLength(2);
+    expect(Array.from(el.querySelectorAll('[data-testid="ask-runner"]')).map((r) => r.textContent)).toEqual(['r1', 'r2']);
   });
 
   it('names the real answer verb and shows each row’s question id as visible text', async () => {
     const { el } = await render([
-      { questionId: 'qn_01ABC', chunkRef: 'C-1', askedFor: '30s', question: 'A?' },
-      { questionId: 'qn_01DEF', chunkRef: 'C-2', askedFor: '1m', question: 'B?' },
+      { questionId: 'qn_01ABC', runner: 'r1', chunkRef: 'C-1', askedFor: '30s', question: 'A?' },
+      { questionId: 'qn_01DEF', runner: 'r1', chunkRef: 'C-2', askedFor: '1m', question: 'B?' },
     ]);
 
     const routes = Array.from(el.querySelectorAll('.route')).map((r) => r.textContent?.replace(/\s+/g, ' ').trim());

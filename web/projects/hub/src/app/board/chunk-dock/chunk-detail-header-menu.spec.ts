@@ -453,7 +453,7 @@ describe('ChunkDetailHeader overflow menu', () => {
 
     const item = inOverlay('[data-testid="delete-chunk"]');
     expect(item?.getAttribute('aria-disabled')).not.toBe('true');
-    expect(item?.textContent).toContain('Remove from the hub permanently');
+    expect(item?.textContent).toContain('Remove permanently, issues stay open');
   });
 
   // --- Delete follows the hub's delete_refusal ------------------------------
@@ -477,7 +477,7 @@ describe('ChunkDetailHeader overflow menu', () => {
 
     const item = inOverlay('[data-testid="delete-chunk"]');
     expect(item?.getAttribute('aria-disabled')).not.toBe('true');
-    expect(item?.textContent).toContain('Remove from the hub permanently');
+    expect(item?.textContent).toContain('Remove permanently, issues stay open');
   });
 
   it('disables Delete with the plain subtitle on a status refusal, even with standing dependents', async () => {

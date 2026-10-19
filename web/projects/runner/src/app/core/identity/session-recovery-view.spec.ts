@@ -14,7 +14,7 @@ async function render() {
   return fixture;
 }
 
-describe('SessionRecoveryView (issue #312)', () => {
+describe('SessionRecoveryView', () => {
   it('renders the recovery surface with a retry control', async () => {
     const fixture = await render();
     const el = fixture.nativeElement as HTMLElement;

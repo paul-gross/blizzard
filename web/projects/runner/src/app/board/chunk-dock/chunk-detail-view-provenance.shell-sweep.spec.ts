@@ -48,7 +48,7 @@ const ESCALATION: runnerApi.EscalationView = {
   harness_version: '1.2.3',
 };
 
-describe('app-panel escalation harness-provenance layout shell sweep (web:shell-sweep, blizzard#441)', () => {
+describe('app-panel escalation harness-provenance layout shell sweep (web:shell-sweep)', () => {
   it('renders the harness badge beside the resume command with no page errors or horizontal overflow at ~390px', async () => {
     const pageErrors: string[] = [];
     const onError = (e: ErrorEvent) => pageErrors.push(e.message);
@@ -63,7 +63,6 @@ describe('app-panel escalation harness-provenance layout shell sweep (web:shell-
     const fixture = TestBed.createComponent(MachineDetailView);
     fixture.componentRef.setInput('lease', LEASE);
     fixture.componentRef.setInput('escalation', ESCALATION);
-    fixture.componentRef.setInput('leaseRef', 'L-EW1');
     fixture.componentRef.setInput('heartbeatLabel', '-34s');
     await fixture.whenStable();
     const root = fixture.nativeElement as HTMLElement;

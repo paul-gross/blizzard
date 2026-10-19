@@ -47,10 +47,16 @@ def _tenant(hub: HubHarness, tenant: TenantId | None = None) -> dict[str, str]:
 def _serving_default(hub: HubHarness, tenant: TenantId | None = None, *, entry: str | None = None) -> list[dict]:
     """The ``projects`` a registration answers for a runner serving ``tenant``'s only project (default: the store's
     only tenant's), declared as ``entry`` — the project's id, as adding a runner with no list stores it, when
-    ``None``."""
+    ``None`` — with the color the store gave it."""
+    tenant = tenant if tenant is not None else default_tenant(hub.engine)
     project_id = default_project(hub.engine, tenant)
     declared = project_id if entry is None else entry
-    return [{"entry": declared, "project_id": project_id, "slug": "default", "name": "Default"}]
+    projects = schema.projects
+    with hub.engine.connect() as conn:
+        color = conn.execute(
+            sa.select(projects.c.color).where(projects.c.tenant_id == tenant, projects.c.project_id == project_id)
+        ).scalar_one()
+    return [{"entry": declared, "project_id": project_id, "slug": "default", "name": "Default", "color": color}]
 
 
 def _rename(hub: HubHarness, tenant: TenantId, name: str) -> None:

@@ -2,14 +2,14 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { runnerClient, type runnerApi } from 'fleet';
+import { runnerClient } from 'fleet';
 import { type RequestClientStub, settle, stubRequestClient } from 'fleet/testing';
 
+import { type MachineChunkRow, machineChunkRows } from '../core/chunk-rows.model';
+import type { PanelLease } from '../core/panel-reads.model';
 import { LocalPanelMobile } from './app-panel-mobile';
-import type { MachineChunkRow } from './app-panel.model';
-import { provideActiveRunner } from '../core/active-runner';
 
-const LEASE = (overrides: Partial<runnerApi.LeaseView> = {}): runnerApi.LeaseView => ({
+const LEASE = (overrides: Partial<PanelLease> = {}): PanelLease => ({
   lease_id: 'lease_01KXKVVF1J3D6H6VYZ3XYNZPRR',
   chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9',
   graph_id: 'gr_1',
@@ -28,28 +28,26 @@ const LEASE = (overrides: Partial<runnerApi.LeaseView> = {}): runnerApi.LeaseVie
   closed_at: null,
   closure_reason: null,
   stale_after_seconds: 3600,
+  owner: { runnerId: 'rn_1', name: 'r1', label: 'r1' },
+  projectSlug: null,
   ...overrides,
 });
 
-const MACHINE_CHUNK: MachineChunkRow = { lease: LEASE(), leases: [LEASE()], status: { label: 'RUNNING', tone: 'running' } };
+const [MACHINE_CHUNK]: MachineChunkRow[] = machineChunkRows([LEASE()]);
 
 async function render(overrides: Record<string, unknown> = {}) {
   await TestBed.configureTestingModule({
     imports: [LocalPanelMobile],
     providers: [
       provideZonelessChangeDetection(),
-      provideActiveRunner('rn_1'),
-      // LocalPanelMobile renders `ChunkCard` and `LocalAsks`/`LocalInfo`, all of
-      // whose own reads need a TanStack Query context to construct at all.
+      // The cards' work-item reads and the rail's panels all need a TanStack Query context.
       provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
-      // The chunk name in the header is a `routerLink`.
+      // The dock's chunk name is a `routerLink`, and the rail reads the filters off the URL.
       provideRouter([]),
     ],
   }).compileComponents();
   const fixture = TestBed.createComponent(LocalPanelMobile);
   const defaults = {
-    activeLeases: [LEASE()],
-    leasesTriadState: 'ready',
     chunksTriadState: 'ready',
     machineChunks: [MACHINE_CHUNK],
     openAskCount: 0,
@@ -64,34 +62,28 @@ describe('LocalPanelMobile', () => {
   let stub: RequestClientStub;
 
   beforeEach(() => {
-    // Same reason as the provider above: only the self-contained children's own
-    // reads need an answer, so every route resolves to the empty shape.
+    // Only the self-fetching children's own reads need an answer, so every route resolves to the empty shape.
     stub = stubRequestClient(runnerClient, () => ({ items: [] }));
   });
 
   afterEach(() => stub.restore());
 
-  it('stacks the four sections in attention order — info, agents, chunks, asks', async () => {
+  it('stacks the chunks first, then the rail — hub, host, open asks', async () => {
     const fixture = await render();
     const el = fixture.nativeElement as HTMLElement;
 
-    const panes = [
-      'mobile-info-pane',
-      'mobile-agents-pane',
-      'mobile-chunks-pane',
-      'mobile-asks-pane',
-    ].map((testid) => el.querySelector(`[data-testid="${testid}"]`));
-    expect(panes.every((pane) => pane !== null)).toBe(true);
-
-    const order = Array.from(el.querySelectorAll('[data-testid$="-pane"]')).map((node) =>
+    const order = Array.from(el.querySelectorAll('[data-testid="mobile-chunks-pane"], [data-testid^="rail-"]')).map((node) =>
       node.getAttribute('data-testid'),
     );
-    expect(order).toEqual([
-      'mobile-info-pane',
-      'mobile-agents-pane',
-      'mobile-chunks-pane',
-      'mobile-asks-pane',
-    ]);
+    expect(order).toEqual(['mobile-chunks-pane', 'rail-hub-pane', 'rail-host-pane', 'rail-asks-pane']);
+  });
+
+  it('stacks the board lanes and the rail panels for the single column', async () => {
+    const fixture = await render();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('app-chunk-board')?.classList).toContain('stacked');
+    expect(el.querySelector('app-board-rail')?.classList).toContain('stacked');
   });
 
   it('mounts no local pause control or paused-by-hub badge', async () => {
@@ -103,48 +95,43 @@ describe('LocalPanelMobile', () => {
     expect(el.querySelector('[data-testid="hub-paused-badge"]')).toBeNull();
   });
 
-  it('renders the machine info section off its own query, no props needed', async () => {
+  it('renders one chunk card per chunk, its live worker on it with its heartbeat bar', async () => {
     const fixture = await render();
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('[data-testid="local-info"]')).not.toBeNull();
+    const cards = el.querySelectorAll('[data-testid="chunk-row"]');
+    expect(cards).toHaveLength(1);
+    expect(cards[0].querySelector('[data-testid="chunk-row-worker"] [data-testid="hb-freshness"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="agent-row"]')).toBeNull();
   });
 
-  it('renders one agent row per active lease, with its heartbeat-freshness bar', async () => {
-    const fixture = await render({ activeLeases: [LEASE()] });
+  it('renders the ranked list for the list layout', async () => {
+    const fixture = await render({ layout: 'list' });
     const el = fixture.nativeElement as HTMLElement;
 
-    const rows = el.querySelectorAll('[data-testid="agent-row"]');
-    expect(rows).toHaveLength(1);
-    expect(rows[0].querySelector('[data-testid="hb-freshness"]')).not.toBeNull();
+    expect(el.querySelectorAll('[data-testid="list-row"]')).toHaveLength(1);
+    expect(el.querySelector('[data-testid="chunk-row"]')).toBeNull();
   });
 
-  it('renders the leases triad state it is handed, without a query of its own', async () => {
-    const fixture = await render({ leasesTriadState: 'loading', activeLeases: [] });
+  it('renders the chunks triad state it is handed, without a query of its own', async () => {
+    const fixture = await render({ chunksTriadState: 'loading', machineChunks: [] });
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('[data-testid="loading-state"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="mobile-chunks-pane"]')?.textContent).toContain('LOADING…');
   });
 
-  it('renders one chunk card per machine chunk', async () => {
-    const fixture = await render({ machineChunks: [MACHINE_CHUNK] });
-    const el = fixture.nativeElement as HTMLElement;
-
-    expect(el.querySelectorAll('[data-testid="local-chunk-card"]')).toHaveLength(1);
-  });
-
-  it('renders the chunks empty state when the machine holds no chunks', async () => {
+  it('renders the chunks empty state when the runners hold no chunks', async () => {
     const fixture = await render({ chunksTriadState: 'empty', machineChunks: [] });
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('[data-testid="chunks-empty"]')?.textContent).toContain('NO CHUNKS ON THIS MACHINE');
+    expect(el.querySelector('[data-testid="chunks-empty"]')?.textContent).toContain('NO CHUNKS ON THESE RUNNERS');
   });
 
-  it('renders the local asks section off its own query, count in the header note', async () => {
+  it('renders the open asks panel off its own query, count in the header note', async () => {
     const fixture = await render({ openAskCount: 3 });
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('[data-testid="mobile-asks-pane"]')?.textContent).toContain('3 open');
+    expect(el.querySelector('[data-testid="rail-asks-pane"]')?.textContent).toContain('3 open');
     expect(el.querySelector('[data-testid="local-asks"]')).not.toBeNull();
   });
 
@@ -153,30 +140,29 @@ describe('LocalPanelMobile', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     expect(el.querySelector('[data-testid="panel-chunk-detail"]')).toBeNull();
-    expect(el.querySelector('[data-testid="transcript-panel"]')).toBeNull();
     expect(el.querySelector('[data-testid="mobile-chunks-pane"]')).not.toBeNull();
   });
 
   it('emits the tapped chunk card id — the container writes the selection', async () => {
-    const fixture = await render({ machineChunks: [MACHINE_CHUNK] });
+    const fixture = await render();
     const el = fixture.nativeElement as HTMLElement;
     const picked: string[] = [];
     fixture.componentInstance.selectChunk.subscribe((id) => picked.push(id));
 
-    el.querySelector<HTMLElement>('[data-testid="local-chunk-card"]')?.click();
+    el.querySelector<HTMLElement>('[data-testid="chunk-row"]')?.click();
 
     expect(picked).toEqual([LEASE().chunk_id]);
   });
 
-  it('emits the tapped agent row’s chunk id — a lease tap selects its chunk', async () => {
-    const fixture = await render({ activeLeases: [LEASE()] });
+  it('re-emits the Board/List switch as layoutChange', async () => {
+    const fixture = await render();
     const el = fixture.nativeElement as HTMLElement;
-    const picked: string[] = [];
-    fixture.componentInstance.selectChunk.subscribe((id) => picked.push(id));
+    const chosen: string[] = [];
+    fixture.componentInstance.layoutChange.subscribe((layout) => chosen.push(layout));
 
-    el.querySelector<HTMLElement>('[data-testid="agent-row"]')?.click();
+    el.querySelector<HTMLElement>('[data-testid="board-layout-list"]')?.click();
 
-    expect(picked).toEqual([LEASE().chunk_id]);
+    expect(chosen).toEqual(['list']);
   });
 
   it('drills down to the chunk detail screen once the container resolves a selection', async () => {
@@ -202,13 +188,13 @@ describe('LocalPanelMobile', () => {
 
     const back = el.querySelector<HTMLButtonElement>('[data-testid="mobile-detail-back"]');
     expect(back?.tagName).toBe('BUTTON');
-    expect(back?.getAttribute('aria-label')).toBe('Back to Machine');
+    expect(back?.getAttribute('aria-label')).toBe('Back to Board');
     back?.click();
 
     expect(closed).toBe(1);
   });
 
-  it('stays on the list when the selection names a chunk this machine does not hold', async () => {
+  it('stays on the list when the selection names a chunk none of the runners hold', async () => {
     const fixture = await render({ selectedChunkLeases: [] });
     const el = fixture.nativeElement as HTMLElement;
 

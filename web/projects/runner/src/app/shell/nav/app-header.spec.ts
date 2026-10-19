@@ -1,6 +1,6 @@
 import { type Provider, provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { provideRouter, Router } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { runnerClient, type SseStatus } from 'fleet';
 import { type RequestClientStub, hiddenAtContainerWidth, settle, stubError, stubRequestClient } from 'fleet/testing';
@@ -9,7 +9,6 @@ import { RunnerLiveUpdates } from '../../core/live/runner-live-updates';
 import { vi } from 'vitest';
 
 import { AppHeader } from './app-header';
-import { provideActiveRunner } from '../../core/active-runner';
 import { provideFlags } from 'fleet';
 import { runnerFlagsRead } from '../../core/flags.query';
 
@@ -25,7 +24,6 @@ async function render(extraProviders: Provider[] = []) {
     imports: [AppHeader],
     providers: [
       provideZonelessChangeDetection(),
-      provideActiveRunner('rn_1'),
       provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
       provideFlags(runnerFlagsRead),
       provideRouter([]),
@@ -46,7 +44,7 @@ describe('AppHeader', () => {
 
   afterEach(() => stub.restore());
 
-  it('shows ok in the header once the runner local API responds (issue #131)', async () => {
+  it('shows ok in the header once the runner local API responds', async () => {
     stub = stubRequestClient(runnerClient, () => ({ items: [] }));
     const fixture = await render();
     const el = fixture.nativeElement as HTMLElement;
@@ -54,7 +52,7 @@ describe('AppHeader', () => {
     expect(el.querySelector('[data-testid="conn"]')?.textContent).toContain('ok');
   });
 
-  it('shows offline in the header when the runner local API is unreachable (issue #131)', async () => {
+  it('shows offline in the header when the runner local API is unreachable', async () => {
     stub = stubRequestClient(runnerClient, (method, path) =>
       method === 'GET' && path === '/api/host/runners' ? stubError(503, { detail: 'down' }) : { items: [] },
     );
@@ -64,14 +62,14 @@ describe('AppHeader', () => {
     expect(el.querySelector('[data-testid="conn"]')?.textContent).toContain('offline');
   });
 
-  it('shows reconnecting… while the live stream retries a drop, even though the host read is ok (blizzard#333)', async () => {
+  it('shows reconnecting… while the live stream retries a drop, even though the host read is ok', async () => {
     const fixture = await render([fakeLiveUpdates('reconnecting')]);
     const el = fixture.nativeElement as HTMLElement;
 
     expect(el.querySelector('[data-testid="conn"]')?.textContent).toContain('reconnecting…');
   });
 
-  it('shows degraded once the stream has exhausted its bounded re-arm, even though the host read is ok (blizzard#333)', async () => {
+  it('shows degraded once the stream has exhausted its bounded re-arm, even though the host read is ok', async () => {
     const fixture = await render([fakeLiveUpdates('closed', true)]);
     const el = fixture.nativeElement as HTMLElement;
 
@@ -132,13 +130,49 @@ describe('AppHeader', () => {
     expect((fixture.nativeElement as HTMLElement).querySelector('[data-testid="flags-overridden"]')).toBeNull();
   });
 
-  it('renders the pause control only while a runner is active', async () => {
-    const onRunner = await render();
-    expect((onRunner.nativeElement as HTMLElement).querySelector('[data-testid="pause-control"]')).not.toBeNull();
+  it('narrows the header stat cells to the runner the Runner filter names', async () => {
+    stub = stubRequestClient(runnerClient, (method, path) => {
+      if (method !== 'GET') return {};
+      if (path === '/api/host/runners') {
+        return {
+          items: [
+            { runner_id: 'rn_1', name: 'r-claude', state: 'serving', agents_in_use: 1, max_agents: 2 },
+            { runner_id: 'rn_2', name: 'r-chatgpt', state: 'serving', agents_in_use: 1, max_agents: 1 },
+          ],
+        };
+      }
+      if (path === '/api/host/environments') {
+        return {
+          workspaces: [
+            {
+              workspace_id: 'ws-a',
+              items: [
+                { environment_id: 'alpha', held: true, chunk_id: 'ch_1', runner_id: 'rn_1' },
+                { environment_id: 'beta', held: true, chunk_id: 'ch_2', runner_id: 'rn_2' },
+                { environment_id: 'gamma', held: false },
+              ],
+            },
+          ],
+        };
+      }
+      return { items: [] };
+    });
+    const fixture = await render();
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('[data-testid="stat-envs"]')?.textContent?.trim()).toBe('2/3');
+    expect(el.querySelector('[data-testid="stat-agents"]')?.textContent?.trim()).toBe('2/3');
 
-    TestBed.resetTestingModule();
-    const onHost = await render([provideActiveRunner(null)]);
-    expect((onHost.nativeElement as HTMLElement).querySelector('[data-testid="pause-control"]')).toBeNull();
+    await TestBed.inject(Router).navigateByUrl('/?runner=r-chatgpt');
+    await settle(fixture);
+
+    expect(el.querySelector('[data-testid="stat-envs"]')?.textContent?.trim()).toBe('1/3');
+    expect(el.querySelector('[data-testid="stat-agents"]')?.textContent?.trim()).toBe('1/1');
+  });
+
+  it('carries no pause control — each runner’s sits beside it on the host page', async () => {
+    const fixture = await render();
+
+    expect((fixture.nativeElement as HTMLElement).querySelector('[data-testid="pause-control"]')).toBeNull();
   });
 
   it('withholds the header stat cells before the first read resolves, rather than a misleading 0/0', async () => {
@@ -147,8 +181,7 @@ describe('AppHeader', () => {
       imports: [AppHeader],
       providers: [
         provideZonelessChangeDetection(),
-        provideActiveRunner('rn_1'),
-        provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
+          provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
         provideFlags(runnerFlagsRead),
         provideRouter([]),
       ],
@@ -201,7 +234,7 @@ describe('AppHeader', () => {
     ).not.toBeNull();
   });
 
-  it('renders the shared avatar-circle trigger on the header menu (issue #132)', async () => {
+  it('renders the shared avatar-circle trigger on the header menu', async () => {
     stub = stubRequestClient(runnerClient, () => ({ items: [] }));
     const fixture = await render();
     const el = fixture.nativeElement as HTMLElement;
@@ -210,7 +243,7 @@ describe('AppHeader', () => {
   });
 
   /*
-   * The desktop profile menu owns this shell's logout since #163's narrow tier
+   * The desktop profile menu owns this shell's logout since the narrow tier
    * hides the identity block outright — a header cell that disappears must not
    * take the only way out with it.
    */
@@ -291,13 +324,13 @@ describe('AppHeader', () => {
   /*
    * This shell's half of the header's tiered collapse. `BoardHeader`
    * pins its trailing cluster `flex: none`, but it can only collapse the cells it
-   * renders itself — and this header projects a pause control and an identity
-   * block in beside the menu, where the hub board projects only the menu. jsdom
+   * renders itself — and this header projects an identity block in beside the
+   * menu, where the hub board projects only the menu. jsdom
    * parses `@container` rules without evaluating them, so these resolve the
    * rules this component actually ships at a given header width rather than
    * trusting `getComputedStyle`, which reports the wide-tier value at every one.
    */
-  describe('trailing-cluster collapse at narrow header widths (issue #163)', () => {
+  describe('trailing-cluster collapse at narrow header widths', () => {
     const at = (el: HTMLElement, selector: string, width: number) =>
       hiddenAtContainerWidth(el.querySelector(selector)!, { containerName: 'board-header', width });
 
@@ -308,15 +341,13 @@ describe('AppHeader', () => {
     it('keeps every trailing control at a full-width header', async () => {
       const el = (await render()).nativeElement as HTMLElement;
 
-      expect(at(el, 'app-pause-control', 1400)).toBe(false);
       expect(at(el, 'app-identity', 1400)).toBe(false);
       expect(at(el, '[data-testid="local-panel-menu"]', 1400)).toBe(false);
     });
 
-    it('gives up the pause control and identity at the narrow tier, never the profile menu', async () => {
+    it('gives up the identity at the narrow tier, never the profile menu', async () => {
       const el = (await render()).nativeElement as HTMLElement;
 
-      expect(at(el, 'app-pause-control', 390)).toBe(true);
       expect(at(el, 'app-identity', 390)).toBe(true);
       // The one that must survive: it is the only way back to mobile from a
       // forced-desktop phone on this shell.
@@ -328,15 +359,14 @@ describe('AppHeader', () => {
 
       expect(getComputedStyle(el.querySelector<HTMLElement>('app-identity')!).minWidth).toBe('0px');
       expect(getComputedStyle(el.querySelector<HTMLElement>('.menu')!).flexShrink).toBe('0');
-      expect(getComputedStyle(el.querySelector<HTMLElement>('app-pause-control')!).flexShrink).toBe('0');
     });
 
     it('rides the same named container the header declares, not a viewport media query', async () => {
       const el = (await render()).nativeElement as HTMLElement;
 
       expect(getComputedStyle(el.querySelector('.mc-header')!).containerName).toBe('board-header');
-      expect(at(el, 'app-pause-control', 700)).toBe(false);
-      expect(at(el, 'app-pause-control', 699)).toBe(true);
+      expect(at(el, 'app-identity', 700)).toBe(false);
+      expect(at(el, 'app-identity', 699)).toBe(true);
     });
   });
 });

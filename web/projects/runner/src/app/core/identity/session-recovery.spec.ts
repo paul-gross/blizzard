@@ -7,7 +7,6 @@ import { vi } from 'vitest';
 
 import { injectRunnerLogoutMutation, readRunnerSession } from './auth.query';
 import { SessionRecovery } from './session-recovery';
-import { provideActiveRunner } from '../active-runner';
 
 type Restore = () => void;
 
@@ -28,7 +27,7 @@ function unauthorized() {
  */
 function setUp(route: (method: string, path: string) => unknown) {
   TestBed.configureTestingModule({
-    providers: [provideZonelessChangeDetection(), provideActiveRunner('rn_1'), provideTanStackQuery(new QueryClient())],
+    providers: [provideZonelessChangeDetection(), provideTanStackQuery(new QueryClient())],
   });
   const recovery = TestBed.inject(SessionRecovery);
   const navigateSpy = vi
@@ -46,7 +45,7 @@ function setUp(route: (method: string, path: string) => unknown) {
   };
 }
 
-describe('SessionRecovery (issue #312)', () => {
+describe('SessionRecovery', () => {
   let restore: Restore | undefined;
 
   afterEach(() => {
@@ -95,7 +94,7 @@ describe('SessionRecovery (issue #312)', () => {
     expect(navigateSpy).toHaveBeenCalledWith(`/api/auth/login?return_to=${encodeURIComponent('/?chunk=ch_live')}`);
   });
 
-  it('reports read-failed, and does not navigate, when the session read itself errors (blizzard#333 D3)', async () => {
+  it('reports read-failed, and does not navigate, when the session read itself errors', async () => {
     const { navigateSpy, recovery, restore: r } = setUp((_method, path) =>
       path === '/api/auth/session' ? stubError(503, { detail: 'upstream unavailable' }) : unauthorized(),
     );
@@ -206,7 +205,7 @@ describe('SessionRecovery (issue #312)', () => {
 
   it('does not navigate on a 401 while a logout is in flight', async () => {
     TestBed.configureTestingModule({
-      providers: [provideZonelessChangeDetection(), provideActiveRunner('rn_1'), provideTanStackQuery(new QueryClient())],
+      providers: [provideZonelessChangeDetection(), provideTanStackQuery(new QueryClient())],
     });
     const recovery = TestBed.inject(SessionRecovery);
     const navigateSpy = vi

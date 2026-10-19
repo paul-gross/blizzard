@@ -457,3 +457,29 @@ describe('BoardCardComponent done-lane membership', () => {
     expect(unflagged.querySelector('[data-testid="chunk-status"]')?.textContent?.trim()).toBe('done');
   });
 });
+
+describe('BoardCardComponent project tint', () => {
+  it("tints the card by its project's palette color, titled with the project's name", async () => {
+    const el = await render({ ...BASE, projectColor: 'teal', projectName: 'blizzard' });
+
+    const card = el.querySelector<HTMLElement>('[data-testid="chunk-card"]')!;
+    expect(card.classList.contains('tinted')).toBe(true);
+    expect(card.style.getPropertyValue('--project-tint')).toBe('var(--project-teal, var(--label-dim))');
+    expect(card.getAttribute('title')).toBe('blizzard');
+  });
+
+  it('tints by a custom color as typed, unlifted', async () => {
+    const el = await render({ ...BASE, projectColor: '#0A0B0C' });
+
+    expect(el.querySelector<HTMLElement>('[data-testid="chunk-card"]')?.style.getPropertyValue('--project-tint')).toBe('#0a0b0c');
+  });
+
+  it('leaves a card with no project color untinted, with no swatch', async () => {
+    const el = await render({ ...BASE, projectColor: null });
+
+    const card = el.querySelector<HTMLElement>('[data-testid="chunk-card"]')!;
+    expect(card.classList.contains('tinted')).toBe(false);
+    expect(card.style.getPropertyValue('--project-tint')).toBe('');
+    expect(el.querySelector('fleet-kit-swatch')).toBeNull();
+  });
+});

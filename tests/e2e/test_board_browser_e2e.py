@@ -484,6 +484,8 @@ def test_board_browser_live_group_reorder_answer_and_pause(tmp_path: Path, chrom
                 # testids would actually render if the retired dependency UI ever came back.
                 for retired_control in ("dependency-prerequisite-input", "declare-dependency", "release-dependency"):
                     expect(page.get_by_test_id(retired_control)).to_have_count(0)
+                # Every chunk action lives in the dock header's ⋯ menu.
+                page.get_by_test_id("chunk-actions-menu").click()
                 page.get_by_test_id("pause-chunk").click()
                 page.get_by_test_id("confirm-dialog-confirm").click()
 
@@ -507,7 +509,9 @@ def test_board_browser_live_group_reorder_answer_and_pause(tmp_path: Path, chrom
                 expect(page.get_by_test_id("chunk-pause-by")).to_contain_text("operator")
 
                 # --- Resume the chunk from the dock: it returns and proceeds -----------
-                # Pause is gone and Resume stands in its place.
+                # Pause is gone from the ⋯ menu and Resume stands in its place.
+                page.get_by_test_id("chunk-actions-menu").click()
+                expect(page.get_by_test_id("resume-chunk")).to_be_visible()
                 expect(page.get_by_test_id("pause-chunk")).to_have_count(0)
                 page.get_by_test_id("resume-chunk").click()
                 page.get_by_test_id("confirm-dialog-confirm").click()

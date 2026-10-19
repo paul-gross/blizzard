@@ -6,7 +6,6 @@ import { vi } from 'vitest';
 import { runnerClient } from 'fleet';
 import { stubError, stubRequestClient, type RequestClientStub } from 'fleet/testing';
 import { RunnerLogout } from './runner-logout';
-import { provideActiveRunner } from '../active-runner';
 
 describe('RunnerLogout', () => {
   let stub: RequestClientStub;
@@ -18,7 +17,6 @@ describe('RunnerLogout', () => {
     TestBed.configureTestingModule({
       providers: [
         provideZonelessChangeDetection(),
-        provideActiveRunner('rn_1'),
         provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
       ],
     });

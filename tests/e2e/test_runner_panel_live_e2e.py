@@ -43,7 +43,7 @@ def _runner_bin() -> str:
 
 
 def test_runner_panel_updates_live_over_sse_with_no_reload(tmp_path: Path, chromium_available: bool) -> None:
-    """A lease minted, then closed, by the live loop renders on the panel with no
+    """A worker started, then ended, by the live loop renders on the panel's board with no
     reload — the runner counterpart of `test_board_browser_e2e`'s live-pause proof,
     over `runner-live-updates.ts`'s own registry rather than the hub's."""
     if not chromium_available:
@@ -70,7 +70,7 @@ def test_runner_panel_updates_live_over_sse_with_no_reload(tmp_path: Path, chrom
         assert ingested.status_code == 201, ingested.text
         chunk_id = ingested.json()["chunk_id"]
         # Left in `backlog` — promoting now would race the live loop's tick against
-        # Chromium launch/page-load; promotion moves below, after "0 live" is confirmed.
+        # Chromium launch/page-load; promotion moves below, after the empty board is confirmed.
 
         # Persisted to disk, unlike the other scenarios' in-process config, so a real
         # `blizzard-runner host --dir` subprocess can load it.
@@ -100,9 +100,8 @@ def test_runner_panel_updates_live_over_sse_with_no_reload(tmp_path: Path, chrom
 
             runner_client = httpx.Client(base_url=f"http://{config.host}:{config.port}", timeout=15.0)
             await_http(proc, runner_client, "/api/health", log=log)
-            # The panel's board is the runner's own page, under the id the host serves it at.
-            (served,) = runner_client.get("/api/host/runners").json()["items"]
-            board_url = f"http://{config.host}:{config.port}/runners/{served['runner_id']}/board"
+            # The panel's board, across every runner the host serves — this one alone.
+            board_url = f"http://{config.host}:{config.port}/board"
 
             with sync_playwright() as pw:
                 browser = pw.chromium.launch(headless=True)
@@ -110,22 +109,24 @@ def test_runner_panel_updates_live_over_sse_with_no_reload(tmp_path: Path, chrom
                 expect.set_options(timeout=15_000)
                 try:
                     # Load the panel ONCE, never reloaded again. Established pre-state, not a
-                    # race: nothing is promoted yet, so "0 live" holds regardless of launch time.
+                    # race: nothing is promoted yet, so the empty board holds regardless of launch time.
                     page.goto(board_url, wait_until="load")
                     expect(page.get_by_test_id("local-panel")).to_be_visible()
-                    expect(page.get_by_test_id("lease-count")).to_have_text("0 live")
-                    expect(page.get_by_test_id("agent-row")).to_have_count(0)
+                    card = page.locator(f'[data-testid="chunk-row"][data-chunk-id="{chunk_id}"]')
+                    expect(card).to_have_count(0)
 
                     # NOW promote — FILL mints a real lease-changed(created) frame the
-                    # panel's 1-minute backstop cannot explain, not a fixture shortcut.
+                    # panel's 1-minute backstop cannot explain, not a fixture shortcut: the
+                    # chunk's card arriving inside the 15s wait is the SSE proof. The mock
+                    # worker exits at once, so the card's live worker line is not waited on.
                     assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
-                    expect(page.get_by_test_id("lease-count")).to_have_text("1 live")
-                    expect(page.get_by_test_id("agent-row")).to_have_count(1)
+                    expect(card).to_have_count(1)
 
                     # build -> review -> deliver -> done under the same tick; this wait's own
-                    # timeout equals the same backstop, so unlike "1 live" it alone doesn't prove SSE.
-                    expect(page.get_by_test_id("lease-count")).to_have_text("0 live", timeout=60_000)
-                    expect(page.get_by_test_id("agent-row")).to_have_count(0)
+                    # timeout equals the same backstop, so unlike the card's arrival it alone
+                    # doesn't prove SSE. The ended chunk stays on the board, in the Done lane.
+                    expect(card).to_have_attribute("data-lane", "done", timeout=60_000)
+                    expect(card.get_by_test_id("chunk-row-worker")).to_have_count(0)
                 finally:
                     browser.close()
         finally:

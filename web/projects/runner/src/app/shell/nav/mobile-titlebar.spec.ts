@@ -1,6 +1,6 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { provideRouter, Router } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { runnerClient } from 'fleet';
 import { type RequestClientStub, settle, stubRequestClient } from 'fleet/testing';
@@ -8,14 +8,47 @@ import { RunnerLogout } from '../../core/identity/runner-logout';
 import { vi } from 'vitest';
 
 import { MobileTitlebar } from './mobile-titlebar';
-import { provideActiveRunner } from '../../core/active-runner';
+
+/** Two serving runners on the host. */
+const RUNNERS = {
+  items: ['rn_1', 'rn_2'].map((runnerId, i) => ({
+    runner_id: runnerId,
+    name: `r${i + 1}`,
+    state: 'serving',
+    served: true,
+    halted_reasons: [],
+    pause: { local: false, hub: false, effective: false, local_reason: null },
+    bindings: [{ project: 'p', workspace_id: 'ws', agents: 4 }],
+    agents_in_use: 0,
+    max_agents: 4,
+  })),
+};
+
+/** A runner's dashboard whose hub link reads `reachable`. */
+function dashboard(reachable: boolean) {
+  return {
+    runner: {
+      runner_id: 'runner-local',
+      workspace_id: 'workspace-local',
+      hub: { endpoint: 'http://127.0.0.1:8421', reachable, last_contact_at: null, buffer_depth: 0 },
+      capacities: { used: 0, bindings: [{ project: 'p', project_id: 'p', workspace_id: 'ws', agents: 4, used: 0, free: 4 }] },
+      pause: { local: false, hub: false, effective: false },
+      last_tick_at: null,
+    },
+    asks: { items: [] },
+    escalations: { items: [] },
+    takeovers: { items: [] },
+    facts: { items: [] },
+    harness_health: { items: [] },
+    fleet_summary: null,
+  };
+}
 
 async function render() {
   await TestBed.configureTestingModule({
     imports: [MobileTitlebar],
     providers: [
       provideZonelessChangeDetection(),
-      provideActiveRunner('rn_1'),
       provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
       provideRouter([]),
     ],
@@ -52,40 +85,40 @@ describe('MobileTitlebar (runner)', () => {
     ).not.toBeNull();
   });
 
-  it('derives the titlebar live dot from the runner status hub-reachable read', async () => {
+  const withHubs = (reachable: Record<string, boolean>) => {
     stub.restore();
     stub = stubRequestClient(runnerClient, (method, path) => {
-      if (method === 'GET' && path === '/runners/rn_1/api/dashboard') {
-        return {
-          runner: {
-            runner_id: 'runner-local',
-            workspace_id: 'workspace-local',
-            hub: {
-              endpoint: 'http://127.0.0.1:8421',
-              reachable: true,
-              last_contact_at: null,
-              buffer_depth: 0,
-            },
-            capacities: { used: 0, bindings: [{ project: 'p', project_id: 'p', workspace_id: 'ws', agents: 4, used: 0, free: 4 }] },
-            pause: { local: false, hub: false, effective: false },
-            last_tick_at: null,
-          },
-          asks: { items: [] },
-          escalations: { items: [] },
-          takeovers: { items: [] },
-          facts: { items: [] },
-          harness_health: { items: [] },
-          fleet_summary: null,
-        };
-      }
+      if (method !== 'GET') return { items: [] };
+      if (path === '/api/host/runners') return RUNNERS;
+      const match = /^\/runners\/(rn_\d)\/api\/dashboard$/.exec(path);
+      if (match) return dashboard(reachable[match[1]] ?? false);
       return { items: [] };
     });
-    const fixture = await render();
-    const el = fixture.nativeElement as HTMLElement;
+  };
+  const liveDot = (el: HTMLElement) =>
+    el.querySelector('[data-testid="local-panel-mobile-titlebar-livedot"]')?.classList.contains('active');
 
-    expect(
-      el.querySelector('[data-testid="local-panel-mobile-titlebar-livedot"]')?.classList.contains('active'),
-    ).toBe(true);
+  it('lights the live dot while any covered runner reaches its hub', async () => {
+    withHubs({ rn_1: false, rn_2: true });
+    const fixture = await render();
+
+    expect(liveDot(fixture.nativeElement as HTMLElement)).toBe(true);
+  });
+
+  it('dims the live dot while no covered runner reaches its hub', async () => {
+    withHubs({ rn_1: false, rn_2: false });
+    const fixture = await render();
+
+    expect(liveDot(fixture.nativeElement as HTMLElement)).toBe(false);
+  });
+
+  it('dims the live dot when the Runner filter leaves only a runner that cannot reach its hub', async () => {
+    withHubs({ rn_1: false, rn_2: true });
+    const fixture = await render();
+    await TestBed.inject(Router).navigateByUrl('/?runner=r1');
+    await settle(fixture);
+
+    expect(liveDot(fixture.nativeElement as HTMLElement)).toBe(false);
   });
 
   /*

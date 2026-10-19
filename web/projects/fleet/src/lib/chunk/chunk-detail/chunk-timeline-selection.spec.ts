@@ -209,6 +209,52 @@ describe('ChunkTimelineSelection', () => {
     expect(usage?.querySelector('[data-testid="selection-step-cost"]')?.textContent).toContain('$0.42');
   });
 
+  it('adds a session line to each row whose step the daemon recorded a session for, and none to the rest', async () => {
+    const fixture = TestBed.createComponent(ChunkTimelineSelection);
+    fixture.componentRef.setInput('detail', COST_DETAIL);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+    const stepKey = el.querySelector('[data-testid="selection-step"]')!.getAttribute('data-step-key')!;
+    expect(el.querySelector('[data-testid="selection-step-session"]')).toBeNull();
+
+    fixture.componentRef.setInput(
+      'stepSessions',
+      new Map([
+        [
+          stepKey,
+          { environment: 'env-2', pid: 4242, startedAt: '2026-07-13T00:00:00Z', endedAt: '2026-07-13T00:42:00Z', ending: 'finished' },
+        ],
+      ]),
+    );
+    await fixture.whenStable();
+
+    const sessions = el.querySelectorAll('[data-testid="selection-step-session"]');
+    expect(sessions).toHaveLength(1);
+    expect(el.querySelector('[data-testid="selection-step"] [data-testid="selection-step-session"]')).toBe(sessions[0]);
+    expect(sessions[0].textContent).toContain('env env-2');
+    expect(sessions[0].textContent).toContain('pid 4242');
+    expect(sessions[0].querySelector('[data-testid="selection-step-session-ending"]')?.textContent).toBe('finished');
+    expect(sessions[0].textContent).toContain('42m');
+  });
+
+  it('reads a session with no ending yet as live', async () => {
+    const fixture = TestBed.createComponent(ChunkTimelineSelection);
+    fixture.componentRef.setInput('detail', COST_DETAIL);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+    const activeKey = el.querySelector('[data-testid="selection-active"]')!.getAttribute('data-step-key')!;
+
+    fixture.componentRef.setInput(
+      'stepSessions',
+      new Map([[activeKey, { environment: null, pid: null, startedAt: '2026-07-13T00:00:00Z', endedAt: null, ending: null }]]),
+    );
+    await fixture.whenStable();
+
+    const session = el.querySelector('[data-testid="selection-active"] [data-testid="selection-step-session"]');
+    expect(session?.querySelector('[data-testid="selection-step-session-ending"]')?.textContent).toBe('live');
+    expect(session?.textContent).toContain('env —');
+  });
+
   it('omits line 3 for a step with no matched usage yet, including the in-flight row', async () => {
     const fixture = TestBed.createComponent(ChunkTimelineSelection);
     fixture.componentRef.setInput('detail', { ...COST_DETAIL, usage: [] });

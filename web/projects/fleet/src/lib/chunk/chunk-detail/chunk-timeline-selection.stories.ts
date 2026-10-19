@@ -32,11 +32,12 @@ const meta: Meta<ChunkTimelineSelection> = {
     detail: midFlightChunkDetail(),
     selectedKey: 'nd_plan:2',
     graphLinkBase: null,
+    stepSessions: new Map(),
     pickStep: fn(),
   },
   render: (args) => ({
     props: args,
-    template: `<fleet-chunk-detail-timeline-selection [detail]="detail" [selectedKey]="selectedKey" [graphLinkBase]="graphLinkBase" (pickStep)="pickStep($event)" />`,
+    template: `<fleet-chunk-detail-timeline-selection [detail]="detail" [selectedKey]="selectedKey" [graphLinkBase]="graphLinkBase" [stepSessions]="stepSessions" (pickStep)="pickStep($event)" />`,
   }),
 };
 export default meta;
@@ -49,3 +50,16 @@ export const SelectedAfterBounce: Story = { args: { detail: bouncedChunkDetail()
 export const Escalated: Story = { args: { detail: escalatedChunkDetail({ history: walked }), selectedKey: 'nd_build:1' } };
 export const Landed: Story = { args: { detail: landedChunkDetail(), selectedKey: 'nd_build:1' } };
 export const Stopped: Story = { args: { detail: stoppedChunkDetail({ history: walked }), selectedKey: 'nd_build:1' } };
+/** A daemon that records its sessions adds each known step's environment, pid, ending, and duration. */
+export const WithStepSessions: Story = {
+  args: {
+    detail: stoppedChunkDetail({ history: walked }),
+    selectedKey: null,
+    stepSessions: new Map([
+      [
+        'nd_build:1',
+        { environment: 'env-2', pid: 48211, startedAt: fixtureInstant(-900), endedAt: fixtureInstant(-600), ending: 'finished' },
+      ],
+    ]),
+  },
+};

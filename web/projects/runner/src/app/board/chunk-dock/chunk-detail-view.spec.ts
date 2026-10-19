@@ -33,7 +33,6 @@ async function render(overrides: Partial<{ lease: runnerApi.LeaseView | null; es
   const fixture = TestBed.createComponent(MachineDetailView);
   if (overrides.lease !== undefined) fixture.componentRef.setInput('lease', overrides.lease);
   if (overrides.escalation !== undefined) fixture.componentRef.setInput('escalation', overrides.escalation);
-  fixture.componentRef.setInput('leaseRef', 'L-EW1');
   fixture.componentRef.setInput('heartbeatLabel', '-34s');
   fixture.detectChanges();
   await fixture.whenStable();
@@ -51,8 +50,10 @@ describe('MachineDetailView', () => {
     const { el } = await render({ lease: LEASE });
 
     const facts = el.querySelector('[data-testid="detail-facts"]')?.textContent ?? '';
-    expect(facts).toContain(LEASE.lease_id);
     expect(facts).toContain('sess-new');
+    expect(facts).toContain('4821');
+    expect(facts).toContain('beta');
+    expect(facts).toContain('/ws/beta');
     expect(el.querySelector('[data-testid="heartbeat-label"]')?.textContent).toContain('-34s');
   });
 
@@ -78,7 +79,7 @@ describe('MachineDetailView', () => {
     expect(el.querySelector('[data-testid="detail-resume"]')?.textContent).toContain('blizzard runner resume sess-new');
   });
 
-  it('renders the escalated session’s harness as a short name (blizzard#441)', async () => {
+  it('renders the escalated session’s harness as a short name', async () => {
     const { el } = await render({
       lease: LEASE,
       escalation: {

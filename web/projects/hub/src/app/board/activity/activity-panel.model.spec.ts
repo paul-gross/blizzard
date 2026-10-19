@@ -3,6 +3,9 @@ import { describe, expect, it } from 'vitest';
 
 import { activityPanelState, activityRows, backfillEvents, mergeActivityFeeds } from './activity-panel.model';
 
+/** No runner's host known — every runner keeps its compact-id name. */
+const NO_HOSTS: ReadonlyMap<string, string> = new Map();
+
 const { HubEventType } = hubApi;
 
 const event = (seq: number, at: number, fields: Partial<LoggedEvent> = {}): LoggedEvent => ({
@@ -79,10 +82,13 @@ describe('mergeActivityFeeds', () => {
 
 describe('activityRows', () => {
   it('renders newest first with a summary per event type', () => {
-    const rows = activityRows([
-      event(1, 0, { type: HubEventType.QUESTION_ASKED, data: { chunk_id: 'ch_1' } }),
-      event(2, 0, { type: 'some-new-type' }),
-    ]);
+    const rows = activityRows(
+      [
+        event(1, 0, { type: HubEventType.QUESTION_ASKED, data: { chunk_id: 'ch_1' } }),
+        event(2, 0, { type: 'some-new-type' }),
+      ],
+      NO_HOSTS,
+    );
     expect(rows.map((r) => [r.seq, r.type])).toEqual([
       [2, 'some-new-type'],
       [1, HubEventType.QUESTION_ASKED],
@@ -93,24 +99,46 @@ describe('activityRows', () => {
   });
 
   it('phrases a runner change, falling back to the raw kind', () => {
-    const [paused, unrecognized] = activityRows([
-      event(1, 0, { type: HubEventType.RUNNER_CHANGED, data: { runner_id: 'r1', kind: 'mystery' } }),
-      event(2, 0, { type: HubEventType.RUNNER_CHANGED, data: { runner_id: 'r1', kind: 'paused', by: 'op', reason: 'why' } }),
-    ]);
+    const [paused, unrecognized] = activityRows(
+      [
+        event(1, 0, { type: HubEventType.RUNNER_CHANGED, data: { runner_id: 'r1', kind: 'mystery' } }),
+        event(2, 0, { type: HubEventType.RUNNER_CHANGED, data: { runner_id: 'r1', kind: 'paused', by: 'op', reason: 'why' } }),
+      ],
+      NO_HOSTS,
+    );
     expect(paused.message).toMatch(/^runner \S+ paused by op — why$/);
     expect(unrecognized.message).toMatch(/^runner \S+ mystery$/);
   });
 
   it('names a runner by display name, a runner with no name by its compact id', () => {
     const named = { runner_id: 'rn_01KXKVVF1J3D6H6VYZ3XYNABF3', runner_name: 'r-claude' };
-    const [logged, nameless, added] = activityRows([
-      event(1, 0, { type: HubEventType.RUNNER_CHANGED, data: { ...named, kind: 'added', by: 'alice' } }),
-      event(2, 0, { type: HubEventType.RUNNER_CHANGED, data: { runner_id: 'rn_01KXKVVF1J3D6H6VYZ3XYN7Q2M', kind: 'paused', by: 'op' } }),
-      event(3, 0, { type: HubEventType.EVENT_LOGGED, data: { ...named, severity: 'warning', kind: 'attempt-failed' } }),
-    ]);
+    const [logged, nameless, added] = activityRows(
+      [
+        event(1, 0, { type: HubEventType.RUNNER_CHANGED, data: { ...named, kind: 'added', by: 'alice' } }),
+        event(2, 0, { type: HubEventType.RUNNER_CHANGED, data: { runner_id: 'rn_01KXKVVF1J3D6H6VYZ3XYN7Q2M', kind: 'paused', by: 'op' } }),
+        event(3, 0, { type: HubEventType.EVENT_LOGGED, data: { ...named, severity: 'warning', kind: 'attempt-failed' } }),
+      ],
+      NO_HOSTS,
+    );
     expect(added.message).toBe('runner R-ABF3.r-claude added to the fleet by alice');
     expect(nameless.message).toBe('runner R-7Q2M paused by op');
     expect(logged.message).toBe('R-ABF3.r-claude · warning attempt-failed');
+  });
+});
+
+describe('activityRows with known hosts', () => {
+  it('names a runner host/name where the host map knows its host', () => {
+    const named = { runner_id: 'rn_01KXKVVF1J3D6H6VYZ3XYNABF3', runner_name: 'r-claude' };
+    const hosts = new Map([['rn_01KXKVVF1J3D6H6VYZ3XYNABF3', 'atlas']]);
+    const [logged, added] = activityRows(
+      [
+        event(1, 0, { type: HubEventType.RUNNER_CHANGED, data: { ...named, kind: 'added', by: 'alice' } }),
+        event(2, 0, { type: HubEventType.EVENT_LOGGED, data: { ...named, severity: 'warning', kind: 'attempt-failed' } }),
+      ],
+      hosts,
+    );
+    expect(added.message).toBe('runner atlas/r-claude added to the fleet by alice');
+    expect(logged.message).toBe('atlas/r-claude · warning attempt-failed');
   });
 });
 

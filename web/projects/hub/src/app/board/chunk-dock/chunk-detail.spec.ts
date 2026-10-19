@@ -140,7 +140,6 @@ describe('ChunkDetail container', () => {
   let pauseResponse: unknown = {};
   let completeResponse: unknown = {};
   let deleteResponse: unknown = {};
-  let editPatchResponse: unknown = {};
   let answerResponse: unknown = {};
   let resolveResponse: unknown | null = null;
   // Whether the chunk read for `ch_ask` has been answered yet, so a test can make the
@@ -154,7 +153,6 @@ describe('ChunkDetail container', () => {
     pauseResponse = {};
     completeResponse = {};
     deleteResponse = {};
-    editPatchResponse = {};
     answerResponse = {};
     resolveResponse = null;
     askAnswered = false;
@@ -175,7 +173,6 @@ describe('ChunkDetail container', () => {
       if (method === 'POST' && (path === '/api/chunks/ch_routed/pause' || path === '/api/chunks/ch_paused/resume')) {
         return pauseResponse;
       }
-      if (method === 'PATCH' && path === '/api/chunks/ch_ready') return editPatchResponse;
       if (method === 'GET' && path.endsWith('/work-items')) {
         return {
           items: [
@@ -542,9 +539,8 @@ describe('ChunkDetail container', () => {
     const fixture = TestBed.createComponent(ChunkDetail);
     fixture.componentRef.setInput('chunkId', 'ch_routed');
     await settle(fixture);
-    const el = fixture.nativeElement as HTMLElement;
 
-    el.querySelector<HTMLButtonElement>('[data-testid="pause-chunk"]')?.click();
+    await clickMenuAction(fixture, 'pause-chunk');
     await confirmAction(fixture);
     await settle(fixture);
 
@@ -562,9 +558,8 @@ describe('ChunkDetail container', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     expect(el.querySelector('[data-testid="detail-status"]')?.textContent).toContain('waiting_on_human');
-    expect(el.querySelector('[data-testid="pause-chunk"]')).toBeNull();
-
-    el.querySelector<HTMLButtonElement>('[data-testid="resume-chunk"]')?.click();
+    await clickMenuAction(fixture, 'resume-chunk');
+    expect(document.body.querySelector('[data-testid="pause-chunk"]')).toBeNull();
     await confirmAction(fixture);
     await settle(fixture);
 
@@ -578,7 +573,7 @@ describe('ChunkDetail container', () => {
     await settle(fixture);
     const el = fixture.nativeElement as HTMLElement;
 
-    el.querySelector<HTMLButtonElement>('[data-testid="pause-chunk"]')?.click();
+    await clickMenuAction(fixture, 'pause-chunk');
     await confirmAction(fixture);
     await settle(fixture);
 
@@ -609,7 +604,7 @@ describe('ChunkDetail container', () => {
       new Promise<void>((resolve) => (resolveInvalidate = resolve)),
     );
 
-    el.querySelector<HTMLButtonElement>('[data-testid="pause-chunk"]')?.click();
+    await clickMenuAction(fixture, 'pause-chunk');
     await confirmAction(fixture);
     // Held open by the `invalidateQueries` spy above — `settle()`'s own `whenStable()`
     // would hang on it, so a bare macrotask tick + a manual `detectChanges()` stands in.
@@ -636,14 +631,17 @@ describe('ChunkDetail container', () => {
       new Promise<void>((resolve) => (resolveInvalidate = resolve)),
     );
 
-    el.querySelector<HTMLButtonElement>('[data-testid="pause-chunk"]')?.click();
+    await clickMenuAction(fixture, 'pause-chunk');
     await confirmAction(fixture);
     await new Promise((resolve) => setTimeout(resolve, 0));
     fixture.detectChanges();
 
     // Disabled and pending alone, no rendered status change.
     expect(el.querySelector('[data-testid="detail-status"]')?.textContent?.trim()).toBe('waiting_on_human');
-    expect(el.querySelector<HTMLButtonElement>('[data-testid="pause-chunk"]')?.disabled).toBe(true);
+    el.querySelector<HTMLButtonElement>('[data-testid="chunk-actions-menu"]')?.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    fixture.detectChanges();
+    expect(document.body.querySelector('[data-testid="pause-chunk"]')?.getAttribute('aria-disabled')).toBe('true');
 
     resolveInvalidate();
     await settle(fixture);
@@ -686,14 +684,17 @@ describe('ChunkDetail container', () => {
       new Promise<void>((resolve) => (resolveInvalidate = resolve)),
     );
 
-    el.querySelector<HTMLButtonElement>('[data-testid="resume-chunk"]')?.click();
+    await clickMenuAction(fixture, 'resume-chunk');
     await confirmAction(fixture);
     await new Promise((resolve) => setTimeout(resolve, 0));
     fixture.detectChanges();
 
     // Disabled and pending alone, no rendered status change.
     expect(el.querySelector('[data-testid="detail-status"]')?.textContent?.trim()).toBe('waiting_on_human');
-    expect(el.querySelector<HTMLButtonElement>('[data-testid="resume-chunk"]')?.disabled).toBe(true);
+    el.querySelector<HTMLButtonElement>('[data-testid="chunk-actions-menu"]')?.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    fixture.detectChanges();
+    expect(document.body.querySelector('[data-testid="resume-chunk"]')?.getAttribute('aria-disabled')).toBe('true');
 
     resolveInvalidate();
     await settle(fixture);
@@ -728,49 +729,15 @@ describe('ChunkDetail container', () => {
     await settle(fixture);
   });
 
-  // --- Graph edit -------------------------------------------------
+  // --- Graph -------------------------------------------------------
 
-  it('fires the graph edit client call for a not_ready chunk', async () => {
+  it('renders the graph read-only, even for a not_ready chunk the hub calls editable', async () => {
     const fixture = TestBed.createComponent(ChunkDetail);
     fixture.componentRef.setInput('chunkId', 'ch_ready');
-    await settle(fixture);
-    const el = fixture.nativeElement as HTMLElement;
-
-    const input = el.querySelector<HTMLInputElement>('[data-testid="graph-input"]')!;
-    input.value = 'gr_alt';
-    input.dispatchEvent(new Event('input', { bubbles: true }));
-    await settle(fixture);
-    el.querySelector<HTMLButtonElement>('[data-testid="graph-submit"]')?.click();
-    await settle(fixture);
-
-    const calls = stub.forRoute('/api/chunks/ch_ready', 'PATCH');
-    expect(calls).toHaveLength(1);
-    expect(calls[0].body).toEqual({ graph_id: 'gr_alt' });
-  });
-
-  it('offers no graph edit input for a chunk that has left not_ready', async () => {
-    const fixture = TestBed.createComponent(ChunkDetail);
-    fixture.componentRef.setInput('chunkId', 'ch_routed');
     await settle(fixture);
     const el = fixture.nativeElement as HTMLElement;
 
     expect(el.querySelector('[data-testid="graph-input"]')).toBeNull();
   });
 
-  it('surfaces a 409 refusal from the graph edit rather than swallowing it', async () => {
-    editPatchResponse = stubError(409, { detail: 'chunk ch_ready is already ready' });
-    const fixture = TestBed.createComponent(ChunkDetail);
-    fixture.componentRef.setInput('chunkId', 'ch_ready');
-    await settle(fixture);
-    const el = fixture.nativeElement as HTMLElement;
-
-    const input = el.querySelector<HTMLInputElement>('[data-testid="graph-input"]')!;
-    input.value = 'gr_alt';
-    input.dispatchEvent(new Event('input', { bubbles: true }));
-    await settle(fixture);
-    el.querySelector<HTMLButtonElement>('[data-testid="graph-submit"]')?.click();
-    await settle(fixture);
-
-    expect(el.querySelector('[data-testid="action-error"]')?.textContent).toContain('already ready');
-  });
 });

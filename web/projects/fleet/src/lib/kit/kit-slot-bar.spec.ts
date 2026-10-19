@@ -1,18 +1,19 @@
 import { Component, provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 
-import { KitSlotBar } from './kit-slot-bar';
+import { DENSE_AFTER, KitSlotBar, type SlotBarSlot } from './kit-slot-bar';
 
 @Component({
   selector: 'fleet-test-host',
   imports: [KitSlotBar],
-  template: `<fleet-kit-slot-bar [used]="used()" [total]="total()" [unit]="unit()" [name]="name()" />`,
+  template: `<fleet-kit-slot-bar [used]="used()" [total]="total()" [unit]="unit()" [name]="name()" [slots]="slots()" />`,
 })
 class TestHost {
   readonly used = signal(2);
   readonly total = signal(4);
   readonly unit = signal('slots');
   readonly name = signal<string | null>(null);
+  readonly slots = signal<readonly SlotBarSlot[] | null>(null);
 }
 
 async function render(used: number, total: number): Promise<HTMLElement> {
@@ -101,5 +102,38 @@ describe('KitSlotBar', () => {
     const el = await render(2, 4);
 
     expect(el.querySelector('[data-testid="slot-bar-name"]')).toBeNull();
+  });
+
+  it('draws one cell per positional slot in its own order, each carrying its tooltip and dim', async () => {
+    const fixture = TestBed.createComponent(TestHost);
+    fixture.componentInstance.slots.set([
+      { on: false },
+      { on: true, title: 'C-1RJ1', dim: true },
+      { on: true, title: 'C-3YJ9' },
+    ]);
+    await fixture.whenStable();
+    const cells = [...(fixture.nativeElement as HTMLElement).querySelectorAll('.cell')];
+
+    expect(cells.map((c) => c.classList.contains('on'))).toEqual([false, true, true]);
+    expect(cells.map((c) => c.getAttribute('title'))).toEqual([null, 'C-1RJ1', 'C-3YJ9']);
+    expect(cells.map((c) => c.classList.contains('dim'))).toEqual([false, true, false]);
+  });
+
+  it('packs its cells closer only past the dense threshold', async () => {
+    const fixture = TestBed.createComponent(TestHost);
+    const host = () => (fixture.nativeElement as HTMLElement).querySelector('fleet-kit-slot-bar')!;
+    fixture.componentInstance.used.set(0);
+    fixture.componentInstance.total.set(DENSE_AFTER);
+    await fixture.whenStable();
+    expect(host().classList.contains('dense')).toBe(false);
+
+    fixture.componentInstance.total.set(DENSE_AFTER + 1);
+    await fixture.whenStable();
+    expect(host().classList.contains('dense')).toBe(true);
+
+    fixture.componentInstance.slots.set(Array.from({ length: DENSE_AFTER + 1 }, () => ({ on: false })));
+    fixture.componentInstance.total.set(1);
+    await fixture.whenStable();
+    expect(host().classList.contains('dense')).toBe(true);
   });
 });

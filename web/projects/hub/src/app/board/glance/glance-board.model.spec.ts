@@ -12,6 +12,9 @@ import {
   upNextRows,
 } from './glance-board.model';
 
+/** No runner's host known — every runner keeps its compact-id name. */
+const NO_HOSTS: ReadonlyMap<string, string> = new Map();
+
 const NOW = Date.parse('2026-06-01T12:00:00Z');
 const HOUR = 60 * 60 * 1000;
 const ago = (ms: number): string => new Date(NOW - ms).toISOString();
@@ -61,6 +64,7 @@ describe('needsYouRows', () => {
         chunk('ch_waiting', 'waiting_on_human', { current_node_id: null }),
         chunk('ch_running', 'running'),
       ],
+      NO_HOSTS,
     );
     expect(rows).toEqual([
       { chunkId: 'ch_ask', shortId: expect.any(String), runner: 'r1', tone: 'waiting', pillLabel: 'ask', sub: 'Which branch?' },
@@ -71,7 +75,7 @@ describe('needsYouRows', () => {
   });
 
   it('leaves a gate on an unlisted chunk unrouted', () => {
-    expect(needsYouRows([], [decision('ch_gone', 'approve')], [])[0]?.runner).toBeNull();
+    expect(needsYouRows([], [decision('ch_gone', 'approve')], [], NO_HOSTS)[0]?.runner).toBeNull();
   });
 
   it("names each row's runner by display name, a runner with no name by its compact id", () => {
@@ -82,6 +86,7 @@ describe('needsYouRows', () => {
         chunk('ch_gate', 'waiting_on_human', { runner_id: 'rn_01KXKVVF1J3D6H6VYZ3XYNABF3', runner_name: 'r-claude' }),
         chunk('ch_needs', 'needs_human', { runner_id: 'rn_01KXKVVF1J3D6H6VYZ3XYN7Q2M' }),
       ],
+      NO_HOSTS,
     );
     expect(rows.map((r) => [r.chunkId, r.runner])).toEqual([
       ['ch_ask', 'R-ABF3.r-claude'],
@@ -93,15 +98,18 @@ describe('needsYouRows', () => {
 
 describe('inMotionRows', () => {
   it('keeps the running lane, labels delivering, and zero-fills a missing cost', () => {
-    const rows = inMotionRows([
-      chunk('ch_run', 'running', {
-        runner_id: 'r1',
-        current_node_name: 'Build',
-        cost: { cost_usd: 1.5, cost_partial: true, estimated_cost_usd: 2 } as ChunkSummary['cost'],
-      }),
-      chunk('ch_deliver', 'delivering'),
-      chunk('ch_ready', 'ready'),
-    ]);
+    const rows = inMotionRows(
+      [
+        chunk('ch_run', 'running', {
+          runner_id: 'r1',
+          current_node_name: 'Build',
+          cost: { cost_usd: 1.5, cost_partial: true, estimated_cost_usd: 2 } as ChunkSummary['cost'],
+        }),
+        chunk('ch_deliver', 'delivering'),
+        chunk('ch_ready', 'ready'),
+      ],
+      NO_HOSTS,
+    );
     expect(rows).toEqual([
       expect.objectContaining({ chunkId: 'ch_run', runner: 'r1', node: 'Build', pillLabel: 'run', costUsd: 1.5, costPartial: true, estimatedCostUsd: 2 }),
       expect.objectContaining({ chunkId: 'ch_deliver', runner: null, node: 'nd_build', pillLabel: 'deliver', costUsd: 0, costPartial: false, estimatedCostUsd: null }),
@@ -109,14 +117,28 @@ describe('inMotionRows', () => {
   });
 
   it("names each row's runner by display name, a runner with no name by its compact id", () => {
-    const rows = inMotionRows([
-      chunk('ch_run', 'running', { runner_id: 'rn_01KXKVVF1J3D6H6VYZ3XYNABF3', runner_name: 'r-claude' }),
-      chunk('ch_deliver', 'delivering', { runner_id: 'rn_01KXKVVF1J3D6H6VYZ3XYN7Q2M' }),
-    ]);
+    const rows = inMotionRows(
+      [
+        chunk('ch_run', 'running', { runner_id: 'rn_01KXKVVF1J3D6H6VYZ3XYNABF3', runner_name: 'r-claude' }),
+        chunk('ch_deliver', 'delivering', { runner_id: 'rn_01KXKVVF1J3D6H6VYZ3XYN7Q2M' }),
+      ],
+      NO_HOSTS,
+    );
     expect(rows.map((r) => [r.chunkId, r.runner])).toEqual([
       ['ch_run', 'R-ABF3.r-claude'],
       ['ch_deliver', 'R-7Q2M'],
     ]);
+  });
+});
+
+describe('runner host names', () => {
+  it('names a runner host/name in both lists where the host map knows its host', () => {
+    const hosts = new Map([['rn_01KXKVVF1J3D6H6VYZ3XYNABF3', 'atlas']]);
+    const held = chunk('ch_run', 'running', { runner_id: 'rn_01KXKVVF1J3D6H6VYZ3XYNABF3', runner_name: 'r-claude' });
+    expect(inMotionRows([held], hosts)[0]?.runner).toBe('atlas/r-claude');
+    expect(
+      needsYouRows([{ ...question('ch_ask', 'Which?', 'rn_01KXKVVF1J3D6H6VYZ3XYNABF3'), runner_name: 'r-claude' }], [], [], hosts)[0]?.runner,
+    ).toBe('atlas/r-claude');
   });
 });
 

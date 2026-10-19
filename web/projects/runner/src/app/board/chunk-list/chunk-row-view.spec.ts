@@ -2,10 +2,11 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import type { runnerApi } from 'fleet';
 
+import { type MachineChunkRow, machineChunkRows } from '../../core/chunk-rows.model';
+import type { PanelLease } from '../../core/panel-reads.model';
 import { ChunkRowView } from './chunk-row-view';
-import type { MachineChunkStatus } from './chunk-status';
 
-const LEASE: runnerApi.LeaseView = {
+const LEASE = (overrides: Partial<PanelLease> = {}): PanelLease => ({
   lease_id: 'lease_01KXKVVF1J3D6H6VYZ3XYNZPRR',
   chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9',
   graph_id: 'gr_1',
@@ -24,56 +25,103 @@ const LEASE: runnerApi.LeaseView = {
   closed_at: null,
   closure_reason: null,
   stale_after_seconds: 3600,
-};
+  owner: { runnerId: 'rn_1', name: 'r-claude', label: 'r-claude' },
+  projectSlug: 'blizzard',
+  ...overrides,
+});
 
-const STATUS: MachineChunkStatus = { label: 'RUNNING', tone: 'running' };
+/** The chunk's folded row, as the board's container folds it. */
+function rowOf(overrides: Partial<PanelLease> = {}): MachineChunkRow {
+  return machineChunkRows([LEASE(overrides)], [{ slug: 'blizzard', name: 'Blizzard', entries: ['blizzard'], color: 'cyan' }])[0];
+}
 
-async function render(overrides: Partial<{ linkedItems: readonly runnerApi.WorkItemEntry[]; selected: boolean }> = {}) {
+async function render(
+  inputs: Partial<{ row: MachineChunkRow; projectTint: string | null; linkedItems: readonly runnerApi.WorkItemEntry[]; selected: boolean }> = {},
+) {
   await TestBed.configureTestingModule({
     imports: [ChunkRowView],
     providers: [provideZonelessChangeDetection()],
   }).compileComponents();
   const fixture = TestBed.createComponent(ChunkRowView);
-  fixture.componentRef.setInput('lease', LEASE);
-  fixture.componentRef.setInput('status', STATUS);
-  if (overrides.selected !== undefined) fixture.componentRef.setInput('selected', overrides.selected);
-  if (overrides.linkedItems !== undefined) fixture.componentRef.setInput('linkedItems', overrides.linkedItems);
+  fixture.componentRef.setInput('row', inputs.row ?? rowOf());
+  if (inputs.projectTint !== undefined) fixture.componentRef.setInput('projectTint', inputs.projectTint);
+  if (inputs.selected !== undefined) fixture.componentRef.setInput('selected', inputs.selected);
+  if (inputs.linkedItems !== undefined) fixture.componentRef.setInput('linkedItems', inputs.linkedItems);
   fixture.detectChanges();
   await fixture.whenStable();
-  return { fixture };
+  const el = fixture.nativeElement as HTMLElement;
+  return { fixture, el, card: el.querySelector<HTMLElement>('[data-testid="chunk-row"]')! };
 }
 
 describe('ChunkRowView', () => {
-  it('renders every field the container hands it — no query stub required', async () => {
-    const { fixture } = await render();
-    const el = fixture.nativeElement as HTMLElement;
-    const card = el.querySelector<HTMLElement>('[data-testid="chunk-row"]');
+  it('renders the step row — runner · node and the short id — off plain inputs, no query stub required', async () => {
+    const { el, card } = await render();
 
-    expect(card?.textContent).toContain('C-3YJ9');
-    expect(card?.textContent).toContain('build · a2');
-    expect(el.querySelector('[data-testid="chunk-row-status"]')?.textContent?.trim()).toBe('RUNNING');
+    expect(card.getAttribute('data-chunk-id')).toBe('ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9');
+    expect(card.getAttribute('data-lane')).toBe('progress');
+    expect(el.querySelector('[data-testid="chunk-row-runner"]')?.textContent?.trim()).toBe('r-claude');
+    expect(el.querySelector('[data-testid="chunk-row-node"]')?.textContent?.replace(/\s+/g, ' ').trim()).toBe('r-claude · build');
+    expect(el.querySelector('[data-testid="chunk-id"]')?.textContent?.trim()).toBe('C-3YJ9');
   });
 
-  it("colors the card's left edge with the derived status's own tone", async () => {
-    const { fixture } = await render();
-    fixture.componentRef.setInput('status', { label: 'NEEDS HUMAN', tone: 'needs' });
-    fixture.detectChanges();
-    const el = fixture.nativeElement as HTMLElement;
-    const card = el.querySelector<HTMLElement>('[data-testid="chunk-row"]');
+  it('carries the live worker inline on one line — its environment and state, with no heartbeat tag', async () => {
+    const { el } = await render();
+    const worker = el.querySelector<HTMLElement>('[data-testid="chunk-row-worker"]');
 
-    expect(card?.style.borderLeftColor).toBe('var(--red)');
+    expect(worker).not.toBeNull();
+    expect(worker?.querySelector('[data-testid="worker-env"]')?.textContent?.trim()).toBe('beta');
+    expect(worker?.querySelector('[data-testid="worker-state"]')?.textContent?.trim()).toBe('RUNNING');
+    // The step row already names the node, so the worker line leads with its environment.
+    expect(worker?.querySelector('[data-testid="worker-node"]')).toBeNull();
+    expect(worker?.textContent).not.toMatch(/\bhb\b/);
+  });
+
+  it("names no status while it only repeats the live worker's own state", async () => {
+    const { el } = await render();
+
+    expect(el.querySelector('[data-testid="chunk-row-status"]')).toBeNull();
+  });
+
+  it('names a human fact that outranks the live worker', async () => {
+    const { el } = await render({ row: rowOf({ state: 'parked', display_status: 'waiting-ask' }) });
+
+    expect(el.querySelector('[data-testid="chunk-row-status"]')?.textContent?.trim()).toBe('WAITING · ASK');
+  });
+
+  it('names the status and drops the worker line once the session ended', async () => {
+    const { el, card } = await render({
+      row: rowOf({ state: 'closed', display_status: 'closed', closure_healthy: true, closed_at: '2026-07-16T11:30:00.000Z', closure_reason: 'transitioned' }),
+    });
+
+    expect(el.querySelector('[data-testid="chunk-row-worker"]')).toBeNull();
+    expect(el.querySelector('[data-testid="chunk-row-status"]')?.textContent?.trim()).toBe('COMPLETED');
+    expect(card.getAttribute('data-lane')).toBe('done');
+  });
+
+  it("tints the card with its project's colour and names the project on hover", async () => {
+    const { card } = await render({ projectTint: 'var(--project-cyan, var(--label-dim))' });
+
+    expect(card.classList).toContain('tinted');
+    expect(card.style.getPropertyValue('--project-tint')).toBe('var(--project-cyan, var(--label-dim))');
+    expect(card.getAttribute('title')).toBe('Blizzard');
+  });
+
+  it('leaves a card with no project colour untinted', async () => {
+    const { card } = await render({ projectTint: null });
+
+    expect(card.classList).not.toContain('tinted');
+    expect(card.style.getPropertyValue('--project-tint')).toBe('');
   });
 
   it('renders on chunk_id alone when no linked items are given', async () => {
-    const { fixture } = await render();
-    const el = fixture.nativeElement as HTMLElement;
+    const { el, card } = await render();
 
-    expect(el.querySelector('[data-testid="chunk-row"]')).not.toBeNull();
-    expect(el.querySelector('[data-testid="chunk-row-title"]')?.textContent?.trim()).toBe('');
+    expect(card).not.toBeNull();
+    expect(el.querySelector('[data-testid="chunk-row-title"]')).toBeNull();
   });
 
-  it('renders one line per linked item, each with its own chip and its own title', async () => {
-    const { fixture } = await render({
+  it('renders one line per linked item, its label over its title', async () => {
+    const { el } = await render({
       linkedItems: [
         {
           source: 'blizzard',
@@ -85,27 +133,27 @@ describe('ChunkRowView', () => {
         },
       ],
     });
-    const el = fixture.nativeElement as HTMLElement;
 
-    const title = el.querySelector('[data-testid="chunk-row-title"]');
-    const lines = title?.querySelectorAll('.wi') ?? [];
-    expect(lines).toHaveLength(1);
-    const link = lines[0].querySelector<HTMLAnchorElement>('a.chip');
-    expect(link?.textContent).toContain('blizzard#61');
-    expect(link?.href).toBe('https://github.com/paul-gross/blizzard/issues/61');
-    expect(lines[0].textContent).toContain('runner machine panel');
+    const items = el.querySelectorAll('[data-testid="chunk-row-title"] .item');
+    expect(items).toHaveLength(1);
+    expect(items[0].querySelector('.iss')?.textContent?.trim()).toBe('blizzard#61');
+    expect(items[0].querySelector('.title')?.textContent?.trim()).toBe('runner machine panel');
+  });
+
+  it('marks the selected card', async () => {
+    const { card } = await render({ selected: true });
+
+    expect(card.classList).toContain('selected');
   });
 
   it('emits selectChunk on click, Enter, and Space', async () => {
-    const { fixture } = await render();
+    const { fixture, card } = await render();
     const emitted: string[] = [];
     fixture.componentInstance.selectChunk.subscribe((id) => emitted.push(id));
-    const el = fixture.nativeElement as HTMLElement;
-    const card = el.querySelector<HTMLElement>('[data-testid="chunk-row"]');
 
-    card?.click();
-    card?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
-    card?.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }));
+    card.click();
+    card.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    card.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }));
 
     expect(emitted).toEqual([
       'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9',

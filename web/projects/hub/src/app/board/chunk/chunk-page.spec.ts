@@ -512,30 +512,6 @@ describe('Mobile chunk drill-down', () => {
     expect(el.querySelector('[data-testid="mobile-chunk-loading"]')).toBeNull();
   });
 
-  it('surfaces an operator action failure instead of swallowing it', async () => {
-    stub.restore();
-    stub = stubRequestClient(hubClient, (method, path) => {
-      if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
-      if (method === 'PATCH') return stubError(409, { detail: 'chunk is not ready' });
-      if (method === 'GET' && path.endsWith('/work-items')) return { items: [] };
-      return { ...DETAIL, status: 'not_ready' };
-    });
-    const harness = await RouterTestingHarness.create();
-    const page = await harness.navigateByUrl(`/board/chunk/${CHUNK_ID}`, ChunkPage);
-    await settle(harness.fixture);
-
-    // Fire the edit the facts pane exposes for a not-ready chunk, through the
-    // same handler its output is bound to.
-    (page as unknown as { onEditGraph(e: { chunkId: string; graphId: string }): void }).onEditGraph({
-      chunkId: CHUNK_ID,
-      graphId: 'gr_alt',
-    });
-    await settle(harness.fixture);
-
-    const el = harness.fixture.nativeElement as HTMLElement;
-    expect(el.querySelector('[data-testid="mobile-chunk-action-error"]')?.textContent).toContain('chunk is not ready');
-  });
-
   // --- Answering from a phone ----------------------------------
   //
   // The mobile board exists so an ask can be answered from a phone, which makes this
@@ -646,6 +622,13 @@ describe('Mobile chunk drill-down', () => {
     const outcome = el.querySelector('[data-testid="mobile-chunk-action-outcome"]');
     expect(outcome?.textContent).toContain(`reject by alice, ${formatWhen('2026-07-16T11:21:00.000Z', new Date())}`);
     expect(el.querySelector('[data-testid="mobile-chunk-action-error"]')).toBeNull();
+  });
+
+  it('surfaces a resolve failure instead of swallowing it', async () => {
+    const el = await resolveOnMobile(stubError(404, { detail: 'unknown decision dc_77' }));
+
+    expect(el.querySelector('[data-testid="mobile-chunk-action-error"]')?.textContent).toContain('unknown decision');
+    expect(el.querySelector('[data-testid="mobile-chunk-action-outcome"]')).toBeNull();
   });
 
   it('shows an answered question’s delivery trail on the phone too', async () => {

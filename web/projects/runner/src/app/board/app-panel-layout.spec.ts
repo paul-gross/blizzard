@@ -2,14 +2,15 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { runnerClient, type runnerApi } from 'fleet';
-import { type RequestClientStub, stubRequestClient } from 'fleet/testing';
+import { runnerClient } from 'fleet';
+import { type RequestClientStub, settle, stubRequestClient } from 'fleet/testing';
 
+import { type MachineChunkRow, machineChunkRows } from '../core/chunk-rows.model';
+import type { PanelLease } from '../core/panel-reads.model';
 import { LocalPanelLayout } from './app-panel-layout';
-import type { MachineChunkRow } from './app-panel.model';
-import { provideActiveRunner } from '../core/active-runner';
+import type { BoardLayout } from './chunk-list/chunk-board';
 
-const LEASE = (overrides: Partial<runnerApi.LeaseView> = {}): runnerApi.LeaseView => ({
+const LEASE = (overrides: Partial<PanelLease> = {}): PanelLease => ({
   lease_id: 'lease_01KXKVVF1J3D6H6VYZ3XYNZPRR',
   chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9',
   graph_id: 'gr_1',
@@ -28,35 +29,30 @@ const LEASE = (overrides: Partial<runnerApi.LeaseView> = {}): runnerApi.LeaseVie
   closed_at: null,
   closure_reason: null,
   stale_after_seconds: 3600,
+  owner: { runnerId: 'rn_1', name: 'r1', label: 'r1' },
+  projectSlug: null,
   ...overrides,
 });
 
-const MACHINE_CHUNK: MachineChunkRow = { lease: LEASE(), leases: [LEASE()], status: { label: 'RUNNING', tone: 'running' } };
+const [MACHINE_CHUNK]: MachineChunkRow[] = machineChunkRows([LEASE()]);
 
 async function render(overrides: Record<string, unknown> = {}) {
   await TestBed.configureTestingModule({
     imports: [LocalPanelLayout],
     providers: [
       provideZonelessChangeDetection(),
-      provideActiveRunner('rn_1'),
-      // `LocalPanelLayout` itself is presentational, but it composes several
-      // self-fetching mini-containers that inject their own queries/mutations —
-      // `ChunkRow`'s severable work-item-title read —
-      // so a TanStack Query context has to exist for the fixture to construct
-      // at all.
+      // `LocalPanelLayout` itself is presentational, but it composes self-fetching
+      // containers — each card's work-item read, the rail's hub, host and asks panels —
+      // so a TanStack Query context has to exist for the fixture to construct at all.
       provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
-      // The chunk name in the header is a `routerLink`.
+      // The dock's chunk name is a `routerLink`, and the rail reads the filters off the URL.
       provideRouter([]),
     ],
   }).compileComponents();
   const fixture = TestBed.createComponent(LocalPanelLayout);
   const defaults = {
-    activeLeases: [LEASE()],
-    leasesTriadState: 'ready',
     chunksTriadState: 'ready',
-    chunksEmptyText: 'NO CHUNKS ON THIS MACHINE',
     machineChunks: [MACHINE_CHUNK],
-    showAllChunks: false,
     openAskCount: 0,
     selectedChunkId: null,
     selectedChunkLeases: [],
@@ -65,7 +61,7 @@ async function render(overrides: Record<string, unknown> = {}) {
     ...overrides,
   };
   for (const [key, value] of Object.entries(defaults)) fixture.componentRef.setInput(key, value);
-  await fixture.whenStable();
+  await settle(fixture);
   return fixture;
 }
 
@@ -73,87 +69,42 @@ describe('LocalPanelLayout', () => {
   let stub: RequestClientStub;
 
   beforeEach(() => {
-    // `ChunkRow`'s own work-item-title lookup just needs an answer, not a
-    // realistic one, so every route resolves to this one empty shape.
+    // The self-fetching children just need an answer, not a realistic one.
     stub = stubRequestClient(runnerClient, () => ({ items: [] }));
   });
 
   afterEach(() => stub.restore());
 
   it('renders the async triad state it is handed, without a query of its own', async () => {
-    const fixture = await render({ leasesTriadState: 'loading', activeLeases: [] });
+    const fixture = await render({ chunksTriadState: 'loading', machineChunks: [] });
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('[data-testid="loading-state"]')).not.toBeNull();
-    expect(el.querySelector('[data-testid="empty-state"]')).toBeNull();
+    expect(el.querySelector('[data-testid="chunks-pane"]')?.textContent).toContain('LOADING…');
+    expect(el.querySelector('[data-testid="chunks-empty"]')).toBeNull();
   });
 
-  it('renders one agent-row per active lease', async () => {
-    const fixture = await render({ activeLeases: [LEASE()] });
+  it('lays the chunks out as lanes, one card per chunk, and marks the selected one', async () => {
+    const fixture = await render({ selectedChunkId: MACHINE_CHUNK.lease.chunk_id });
     const el = fixture.nativeElement as HTMLElement;
 
-    const rows = el.querySelectorAll('[data-testid="agent-row"]');
-    expect(rows).toHaveLength(1);
-    expect(rows[0].getAttribute('data-lease-id')).toBe('lease_01KXKVVF1J3D6H6VYZ3XYNZPRR');
+    const cards = el.querySelectorAll('[data-testid="lane-progress"] [data-testid="chunk-row"]');
+    expect(cards).toHaveLength(1);
+    expect(cards[0].getAttribute('data-chunk-id')).toBe(MACHINE_CHUNK.lease.chunk_id);
+    expect(cards[0].classList).toContain('selected');
+    expect(el.querySelector('[data-testid="agent-row"]')).toBeNull();
+    expect(el.querySelector('[data-testid="chunk-filter-show-all"]')).toBeNull();
   });
 
-  it('emits the lease’s chunk id as selectChunk when an agent row is activated', async () => {
-    const fixture = await render({ activeLeases: [LEASE()] });
-    let selected: string | undefined;
-    fixture.componentInstance.selectChunk.subscribe((id) => (selected = id));
+  it('renders the ranked list for the list layout', async () => {
+    const fixture = await render({ layout: 'list' });
     const el = fixture.nativeElement as HTMLElement;
 
-    el.querySelector<HTMLElement>('[data-testid="agent-row"]')?.click();
-    expect(selected).toBe(LEASE().chunk_id);
+    expect(el.querySelector('[data-testid="board"]')).toBeNull();
+    expect(el.querySelectorAll('[data-testid="board-list"] [data-testid="list-row"]')).toHaveLength(1);
   });
 
-  it('renders one chunk-row per machine chunk and marks the selected one', async () => {
-    const fixture = await render({ machineChunks: [MACHINE_CHUNK], selectedChunkId: MACHINE_CHUNK.lease.chunk_id });
-    const el = fixture.nativeElement as HTMLElement;
-
-    expect(el.querySelectorAll('[data-testid="chunk-row"]')).toHaveLength(1);
-    expect(el.querySelector('[data-testid="chunk-row"]')?.classList.contains('selected')).toBe(true);
-  });
-
-  it("wires the chunk row's lease/status inputs through to ChunkRow — content itself is ChunkRow's own spec (issue #134)", async () => {
-    const fixture = await render({ machineChunks: [MACHINE_CHUNK] });
-    const el = fixture.nativeElement as HTMLElement;
-    const card = el.querySelector<HTMLElement>('[data-testid="chunk-row"]');
-
-    expect(card?.getAttribute('data-chunk-id')).toBe(MACHINE_CHUNK.lease.chunk_id);
-    // The lane-colored left edge — proof the `status` input itself (not just
-    // the chunk id) reached the child, the derived status's own tone color.
-    expect(card?.style.borderLeftColor).toBe('var(--amber)');
-  });
-
-  it('renders the "show all" checkbox bar above the chunks list, reflecting the input and emitting on toggle', async () => {
-    const fixture = await render({ showAllChunks: false });
-    let toggled: boolean | undefined;
-    fixture.componentInstance.toggleShowAllChunks.subscribe((checked) => (toggled = checked));
-    const el = fixture.nativeElement as HTMLElement;
-    const checkbox = el.querySelector<HTMLInputElement>('[data-testid="chunk-filter-show-all"]');
-
-    expect(checkbox?.checked).toBe(false);
-
-    checkbox?.click();
-    expect(toggled).toBe(true);
-  });
-
-  it('reflects a checked "show all" input and emits false on uncheck', async () => {
-    const fixture = await render({ showAllChunks: true });
-    let toggled: boolean | undefined;
-    fixture.componentInstance.toggleShowAllChunks.subscribe((checked) => (toggled = checked));
-    const el = fixture.nativeElement as HTMLElement;
-    const checkbox = el.querySelector<HTMLInputElement>('[data-testid="chunk-filter-show-all"]');
-
-    expect(checkbox?.checked).toBe(true);
-
-    checkbox?.click();
-    expect(toggled).toBe(false);
-  });
-
-  it('emits selectChunk when a chunk row is activated', async () => {
-    const fixture = await render({ machineChunks: [MACHINE_CHUNK] });
+  it('re-emits a picked chunk as selectChunk', async () => {
+    const fixture = await render();
     let selected: string | undefined;
     fixture.componentInstance.selectChunk.subscribe((id) => (selected = id));
     const el = fixture.nativeElement as HTMLElement;
@@ -162,17 +113,50 @@ describe('LocalPanelLayout', () => {
     expect(selected).toBe(MACHINE_CHUNK.lease.chunk_id);
   });
 
-  it('shows the SELECT A CHUNK placeholder in the detail dock before anything is selected', async () => {
+  it('re-emits the Board/List switch as layoutChange', async () => {
+    const fixture = await render();
+    const chosen: BoardLayout[] = [];
+    fixture.componentInstance.layoutChange.subscribe((layout) => chosen.push(layout));
+    const el = fixture.nativeElement as HTMLElement;
+
+    el.querySelector<HTMLElement>('[data-testid="board-layout-list"]')?.click();
+    expect(chosen).toEqual(['list']);
+  });
+
+  it('closes the detail dock — taking no room — while nothing is selected', async () => {
     const fixture = await render({ selectedChunkLeases: [] });
     const el = fixture.nativeElement as HTMLElement;
 
+    expect(el.querySelector('app-machine-detail')?.classList).toContain('closed');
     expect(el.querySelector('[data-testid="detail-empty"]')?.textContent).toContain('SELECT A CHUNK');
   });
 
-  it('renders the selected chunk in the detail dock, summary off the newest attempt', async () => {
+  it('opens the selected chunk in the detail dock, summary off the newest attempt', async () => {
     const fixture = await render({ selectedChunkLeases: [LEASE()], selectedStatus: MACHINE_CHUNK.status });
     const el = fixture.nativeElement as HTMLElement;
 
+    expect(el.querySelector('app-machine-detail')?.classList).not.toContain('closed');
     expect(el.querySelector('[data-testid="detail-chunk-ref"]')?.textContent).toContain('ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9');
+  });
+
+  it('emits dismiss from the dock close button', async () => {
+    const fixture = await render({ selectedChunkLeases: [LEASE()] });
+    let dismissed = 0;
+    fixture.componentInstance.dismiss.subscribe(() => (dismissed += 1));
+    const el = fixture.nativeElement as HTMLElement;
+
+    el.querySelector<HTMLElement>('[data-testid="detail-close"]')?.click();
+    expect(dismissed).toBe(1);
+  });
+
+  it('renders the rail — hub, host, then open asks, the count in its header note — in the right column', async () => {
+    const fixture = await render({ openAskCount: 2 });
+    const el = fixture.nativeElement as HTMLElement;
+    const right = el.querySelector('.col.right');
+
+    const panes = Array.from(right?.querySelectorAll('[data-testid^="rail-"]') ?? []).map((pane) => pane.getAttribute('data-testid'));
+    expect(panes).toEqual(['rail-hub-pane', 'rail-host-pane', 'rail-asks-pane']);
+    expect(right?.querySelector('[data-testid="rail-asks-pane"]')?.textContent).toContain('2 open');
+    expect(el.querySelector('.col.center [data-testid="chunks-pane"]')).not.toBeNull();
   });
 });

@@ -33,20 +33,20 @@ describe('deriveLeaseStatus', () => {
     expect(deriveLeaseStatus(lease({ state: 'parked' }))).toEqual({ label: 'PARKED', tone: 'waiting' });
     expect(deriveLeaseStatus(lease({ state: 'backing-off' }))).toEqual({ label: 'BACKING OFF', tone: 'waiting' });
     expect(deriveLeaseStatus(lease({ state: 'spawning' }))).toEqual({ label: 'SPAWNING', tone: 'spawning' });
-    expect(deriveLeaseStatus(lease({ state: 'exited' }))).toEqual({ label: 'EXITED', tone: 'idle' });
+    expect(deriveLeaseStatus(lease({ state: 'exited' }))).toEqual({ label: 'WORKER EXITED', tone: 'idle' });
   });
 
-  it('reads a healthy closure as done and any other closure dim, naming its reason', () => {
+  it('reads a healthy closure as completed and any other closure dim, naming how its session ended', () => {
     expect(deriveLeaseStatus(lease({ state: 'closed', closure_reason: 'transitioned', closure_healthy: true }))).toEqual({
-      label: 'TRANSITIONED',
+      label: 'COMPLETED',
       tone: 'done',
     });
     expect(deriveLeaseStatus(lease({ state: 'closed', closure_reason: 'reaped' }))).toEqual({
-      label: 'CLOSED · REAPED',
+      label: 'ENDED · TIMED OUT',
       tone: 'idle',
     });
     expect(deriveLeaseStatus(lease({ state: 'closed', closure_reason: null }))).toEqual({
-      label: 'CLOSED · UNKNOWN',
+      label: 'ENDED · UNKNOWN',
       tone: 'idle',
     });
   });

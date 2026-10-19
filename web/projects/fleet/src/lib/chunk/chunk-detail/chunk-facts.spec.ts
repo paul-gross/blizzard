@@ -158,34 +158,7 @@ describe('ChunkFacts', () => {
     expect(graphValue?.textContent).not.toContain('#');
   });
 
-  it('offers the graph edit input when the wire calls the graph editable', async () => {
-    const fixture = TestBed.createComponent(ChunkFacts);
-    fixture.componentRef.setInput('detail', NOT_READY_DETAIL);
-    fixture.componentRef.setInput('canControl', true);
-    await fixture.whenStable();
-    const el = fixture.nativeElement as HTMLElement;
-
-    expect(el.querySelector('[data-testid="graph-input"]')).not.toBeNull();
-    expect(el.querySelector('[data-testid="graph-submit"]')).not.toBeNull();
-  });
-
-  it('withholds the graph edit input when the wire calls the graph not editable', async () => {
-    const fixture = TestBed.createComponent(ChunkFacts);
-    fixture.componentRef.setInput('detail', {
-      ...NOT_READY_DETAIL,
-      status: 'ready',
-      current_node_id: 'nd_build',
-      graph_editable: false,
-    });
-    fixture.componentRef.setInput('canControl', true);
-    await fixture.whenStable();
-    const el = fixture.nativeElement as HTMLElement;
-
-    expect(el.querySelector('[data-testid="graph-input"]')).toBeNull();
-    expect(el.querySelector('[data-testid="graph-submit"]')).toBeNull();
-  });
-
-  it('withholds the graph edit input without chunk:control, even while editable', async () => {
+  it('renders the graph read-only even while the wire calls it editable', async () => {
     const fixture = TestBed.createComponent(ChunkFacts);
     fixture.componentRef.setInput('detail', NOT_READY_DETAIL);
     await fixture.whenStable();
@@ -239,45 +212,4 @@ describe('ChunkFacts', () => {
     }
   });
 
-  it('disables Set while a repin is in flight', async () => {
-    const fixture = TestBed.createComponent(ChunkFacts);
-    fixture.componentRef.setInput('detail', NOT_READY_DETAIL);
-    fixture.componentRef.setInput('canControl', true);
-    fixture.componentRef.setInput('graphPending', true);
-    await fixture.whenStable();
-    const el = fixture.nativeElement as HTMLElement;
-
-    expect(el.querySelector<HTMLButtonElement>('[data-testid="graph-submit"]')?.disabled).toBe(true);
-  });
-
-  it('emits editGraph with the typed graph id when Set is activated', async () => {
-    const fixture = TestBed.createComponent(ChunkFacts);
-    fixture.componentRef.setInput('detail', NOT_READY_DETAIL);
-    fixture.componentRef.setInput('canControl', true);
-    let emitted: { chunkId: string; graphId: string } | undefined;
-    fixture.componentInstance.editGraph.subscribe((event) => (emitted = event));
-    await fixture.whenStable();
-    const el = fixture.nativeElement as HTMLElement;
-
-    const input = el.querySelector<HTMLInputElement>('[data-testid="graph-input"]')!;
-    input.value = 'gr_alt';
-    input.dispatchEvent(new Event('input', { bubbles: true }));
-    await fixture.whenStable();
-    el.querySelector<HTMLButtonElement>('[data-testid="graph-submit"]')?.click();
-
-    expect(emitted).toEqual({ chunkId: NOT_READY_DETAIL.chunk_id, graphId: 'gr_alt' });
-  });
-
-  it('does not emit editGraph for a blank graph id', async () => {
-    const fixture = TestBed.createComponent(ChunkFacts);
-    fixture.componentRef.setInput('detail', NOT_READY_DETAIL);
-    fixture.componentRef.setInput('canControl', true);
-    let emitted = false;
-    fixture.componentInstance.editGraph.subscribe(() => (emitted = true));
-    await fixture.whenStable();
-    const el = fixture.nativeElement as HTMLElement;
-
-    el.querySelector<HTMLButtonElement>('[data-testid="graph-submit"]')?.click();
-    expect(emitted).toBe(false);
-  });
 });

@@ -1,5 +1,4 @@
 import type { Meta, StoryObj } from '@storybook/angular-vite';
-import { fn } from 'storybook/test';
 
 import {
   chunkDetail,
@@ -21,20 +20,16 @@ const meta: Meta<ChunkFacts> = {
       project_slug: 'blizzard',
       graph_name: 'build',
       graph_created_at: fixtureInstant(-86_400),
-      graph_editable: true,
       route: routeView(),
       cost: chunkUsageTotalView(),
       work_refs: [workRefView(), workRefView({ ref: '1275', label: 'blizzard#1275' })],
     }),
-    canControl: false,
-    graphPending: false,
     graphLinkBase: null,
     chunkLinkBase: ['/board', 'chunk'],
-    editGraph: fn(),
   },
   render: (args) => ({
     props: args,
-    template: `<fleet-chunk-detail-facts [detail]="detail" [canControl]="canControl" [graphPending]="graphPending" [graphLinkBase]="graphLinkBase" [chunkLinkBase]="chunkLinkBase" (editGraph)="editGraph($event)" />`,
+    template: `<fleet-chunk-detail-facts [detail]="detail" [graphLinkBase]="graphLinkBase" [chunkLinkBase]="chunkLinkBase" />`,
   }),
 };
 export default meta;
@@ -61,7 +56,6 @@ export const EveryFact: Story = {
 export const AlmostNone: Story = {
   args: { detail: chunkDetail({ work_refs: [], route: null, graph_name: null, history: [], latest_epoch: null }) },
 };
-export const GraphChangePending: Story = { args: { canControl: true, graphPending: true } };
 export const NeighborsBlockingAndBlocked: Story = {
   args: {
     detail: chunkDetail({
@@ -76,5 +70,5 @@ export const NeighborsBlockingAndBlocked: Story = {
     }),
   },
 };
-export const CanControl: Story = { args: { canControl: true } };
-export const CannotControl: Story = { args: { canControl: false } };
+/** The graph read-only, linked to its graph page. */
+export const GraphLinked: Story = { args: { graphLinkBase: ['/graphs'] } };

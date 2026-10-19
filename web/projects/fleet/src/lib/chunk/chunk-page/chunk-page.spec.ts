@@ -7,6 +7,7 @@ import { type RequestClientStub, settle, stubError, stubRequestClient } from 'fl
 
 import { client as runnerClient } from '../../api/runner/client.gen';
 import { ViewportService } from '../../core/viewport/viewport-service';
+import { CHUNK_STEP_SESSIONS, type ChunkStepSession } from '../chunk-detail/chunk-step-sessions';
 import { ChunkPage } from './chunk-page';
 import { type ChunkPageActions, provideChunkPageDaemon } from './chunk-page-daemon';
 
@@ -90,23 +91,22 @@ const ROUTES = [
   },
 ];
 
-/** A hub-shaped actions port whose only live member is the repin-in-flight set. */
-const PENDING_GRAPH_CHUNK_IDS = signal<readonly string[]>([]);
+/** The step sessions this suite's app provides — empty unless a case sets them. */
+const STEP_SESSIONS = signal<ReadonlyMap<string, ChunkStepSession>>(new Map());
+
+/** A hub-shaped actions port, its operator actions off. */
 const ACTIONS: ChunkPageActions = {
-  canControl: signal(true),
   canAnswer: signal(false),
   canResolve: signal(false),
   canReadTranscripts: signal(true),
   resolvePending: signal(false),
   pendingAnswerQuestionIds: signal([]),
-  pendingGraphChunkIds: PENDING_GRAPH_CHUNK_IDS,
   actionError: signal(null),
   actionOutcome: signal(null),
   graphLinkBase: [],
   eventsLinkBase: [],
   answer: () => undefined,
   resolve: () => undefined,
-  editGraph: () => undefined,
 };
 
 const SEGMENT = {
@@ -150,12 +150,16 @@ describe('ChunkPage on a runner daemon', () => {
         provideZonelessChangeDetection(),
         provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
         provideRouter(ROUTES),
+        { provide: CHUNK_STEP_SESSIONS, useValue: STEP_SESSIONS.asReadonly() },
       ],
     });
     TestBed.inject(ViewportService).setOverride('desktop');
   });
 
-  afterEach(() => stub.restore());
+  afterEach(() => {
+    stub.restore();
+    STEP_SESSIONS.set(new Map());
+  });
 
   async function open(url: string): Promise<HTMLElement> {
     const harness = await RouterTestingHarness.create();
@@ -236,6 +240,26 @@ describe('ChunkPage on a runner daemon', () => {
     const row = el.querySelector('[data-testid="selection-step"]');
     expect(row?.getAttribute('role')).toBe('button');
     expect(el.querySelector('[data-testid^="node-history-transcript"]')).toBeNull();
+  });
+
+  it("enriches the Node history rows from the app's CHUNK_STEP_SESSIONS, keyed by node-step", async () => {
+    STEP_SESSIONS.set(
+      new Map([
+        ['nd_build:1', { environment: 'env-2', pid: 4242, startedAt: '2026-07-13T00:00:00Z', endedAt: '2026-07-13T00:05:00Z', ending: 'finished' }],
+      ]),
+    );
+    const el = await open(`/board/chunk/${CHUNK_ID}?tab=node-history`);
+
+    const session = el.querySelector('[data-testid="chunk-node-history-tab"] [data-testid="selection-step-session"]');
+    expect(session?.textContent).toContain('env env-2');
+    expect(session?.querySelector('[data-testid="selection-step-session-ending"]')?.textContent).toBe('finished');
+  });
+
+  it('renders no session line where the app provides no step sessions', async () => {
+    const el = await open(`/board/chunk/${CHUNK_ID}?tab=node-history`);
+
+    expect(el.querySelector('[data-testid="selection-step"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="selection-step-session"]')).toBeNull();
   });
 
   it('activating a node-history row writes ?step= and shows that step’s own artifacts', async () => {
@@ -473,26 +497,6 @@ describe('ChunkPage on a runner daemon', () => {
     expect(el.querySelector('[data-testid="decision-choice"]')).toBeNull();
     expect(el.querySelector('[data-testid="mobile-chunk-action-error"]')).toBeNull();
     expect(el.querySelector('[data-testid="mobile-chunk-action-outcome"]')).toBeNull();
-  });
-
-  it("disables Set while the daemon port reports a repin in flight for this chunk", async () => {
-    stub.restore();
-    stub = stubRequestClient(runnerClient, (method, path) => {
-      if (method === 'GET' && path === `/runners/rn_1/api/chunks/${CHUNK_ID}`) return { ...DETAIL, status: 'not_ready', graph_editable: true };
-      return routes()(method, path);
-    });
-    PENDING_GRAPH_CHUNK_IDS.set(['ch_other']);
-    const harness = await RouterTestingHarness.create();
-    await harness.navigateByUrl(`/acting/chunk/${CHUNK_ID}`);
-    await settle(harness.fixture);
-    const el = harness.fixture.nativeElement as HTMLElement;
-    const set = () => el.querySelector<HTMLButtonElement>('[data-testid="graph-submit"]');
-    expect(set()?.disabled).toBe(false);
-
-    PENDING_GRAPH_CHUNK_IDS.set([CHUNK_ID]);
-    await settle(harness.fixture);
-    expect(set()?.disabled).toBe(true);
-    PENDING_GRAPH_CHUNK_IDS.set([]);
   });
 
   it('renders no graph edit for a not-ready chunk', async () => {

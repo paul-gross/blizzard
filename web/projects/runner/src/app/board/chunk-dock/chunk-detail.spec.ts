@@ -6,8 +6,8 @@ import { runnerClient, type runnerApi } from 'fleet';
 import { type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
 import { vi } from 'vitest';
 
+import type { PanelLease } from '../../core/panel-reads.model';
 import { MachineDetail } from './chunk-detail';
-import { provideActiveRunner } from '../../core/active-runner';
 
 /** A `ChunkDetail` fixture — the runner's own `GET /api/chunks/{id}` pass-through
  * proxy response the header renders off. */
@@ -26,8 +26,8 @@ const HEADER = (overrides: Partial<runnerApi.ChunkDetail> = {}): runnerApi.Chunk
 const NEW_LEASE = 'lease_01KXKVVF1J3D6H6VYZ3XYNNEW1';
 const OLD_LEASE = 'lease_01KXKVVF1J3D6H6VYZ3XYNOLD1';
 
-/** A running newest attempt (epoch 2) — the chunk's freshest lease. */
-const NEWEST = (overrides: Partial<runnerApi.LeaseView> = {}): runnerApi.LeaseView => ({
+/** A running newest attempt (epoch 2) — the chunk's freshest lease, read off runner `rn_1`. */
+const NEWEST = (overrides: Partial<PanelLease> = {}): PanelLease => ({
   lease_id: NEW_LEASE,
   chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9',
   graph_id: 'gr_1',
@@ -46,11 +46,13 @@ const NEWEST = (overrides: Partial<runnerApi.LeaseView> = {}): runnerApi.LeaseVi
   closed_at: null,
   closure_reason: null,
   stale_after_seconds: 3600,
+  owner: { runnerId: 'rn_1', name: 'r1', label: 'r1' },
+  projectSlug: 'p',
   ...overrides,
 });
 
 /** An older, failed attempt (epoch 1) of the same chunk. */
-const OLDER = (overrides: Partial<runnerApi.LeaseView> = {}): runnerApi.LeaseView =>
+const OLDER = (overrides: Partial<PanelLease> = {}): PanelLease =>
   NEWEST({
     lease_id: OLD_LEASE,
     epoch: 1,
@@ -60,6 +62,24 @@ const OLDER = (overrides: Partial<runnerApi.LeaseView> = {}): runnerApi.LeaseVie
     closure_reason: 'failed',
     ...overrides,
   });
+
+/** The host's one runner, binding project `p`. */
+const HOST_RUNNER = {
+  runner_id: 'rn_1',
+  name: 'r1',
+  state: 'serving',
+  served: true,
+  halted_reasons: [],
+  pause: { local: false, hub: false, effective: false, local_reason: null },
+  bindings: [{ project: 'p', workspace_id: 'ws', agents: 4 }],
+  agents_in_use: 1,
+  max_agents: 4,
+};
+
+/** `rn_1`'s dashboard, naming the project it serves under `p`. */
+const PROJECT_DASHBOARD = {
+  runner: { served_projects: [{ entry: 'p', project_id: 'proj_p', slug: 'p', name: 'Project P', color: null }] },
+};
 
 /** A transcript route that answers every lease's read with an empty transcript. */
 const TRANSCRIPT_ROUTE = /^\/api\/leases\/([^/]+)\/transcript$/;
@@ -86,7 +106,7 @@ function routes(header: runnerApi.ChunkDetail = HEADER(), pauseResult: unknown =
 }
 
 async function render(
-  leases: readonly runnerApi.LeaseView[],
+  leases: readonly PanelLease[],
   header: runnerApi.ChunkDetail = HEADER(),
   pauseResult: unknown = {},
 ): Promise<{
@@ -95,11 +115,15 @@ async function render(
   stub: RequestClientStub;
 }> {
   const stub = stubRequestClient(runnerClient, routes(header, pauseResult));
+  return { ...(await mount(leases)), stub };
+}
+
+/** Mounts the dock over `leases` against whatever stub is already installed. */
+async function mount(leases: readonly PanelLease[]): Promise<{ el: HTMLElement; fixture: ComponentFixture<MachineDetail> }> {
   await TestBed.configureTestingModule({
     imports: [MachineDetail],
     providers: [
       provideZonelessChangeDetection(),
-      provideActiveRunner('rn_1'),
       provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
       // The header's chunk id is a `routerLink`.
       provideRouter([]),
@@ -108,7 +132,41 @@ async function render(
   const fixture = TestBed.createComponent(MachineDetail);
   fixture.componentRef.setInput('leases', leases);
   await settle(fixture);
-  return { el: fixture.nativeElement as HTMLElement, fixture, stub };
+  return { el: fixture.nativeElement as HTMLElement, fixture };
+}
+
+/** Opens the header's ⋯ menu and picks the action `testid` names — the CDK renders the menu
+ * into an overlay on `document.body`, not inside the fixture. */
+async function clickMenuAction(fixture: ComponentFixture<MachineDetail>, testid: string): Promise<void> {
+  (fixture.nativeElement as HTMLElement).querySelector<HTMLElement>('[data-testid="chunk-actions-menu"]')?.click();
+  await fixture.whenStable();
+  document.body.querySelector<HTMLElement>(`[data-testid="${testid}"]`)?.click();
+  await fixture.whenStable();
+}
+
+/** The menu action `testid`'s `aria-disabled`, read with the menu opened and closed again. */
+async function actionDisabled(fixture: ComponentFixture<MachineDetail>, testid: string): Promise<string | null | undefined> {
+  const trigger = (fixture.nativeElement as HTMLElement).querySelector<HTMLElement>('[data-testid="chunk-actions-menu"]');
+  trigger?.click();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  fixture.detectChanges();
+  const value = document.body.querySelector(`[data-testid="${testid}"]`)?.getAttribute('aria-disabled');
+  trigger?.click();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  fixture.detectChanges();
+  return value;
+}
+
+/** The menu actions on offer, read with the menu opened and closed again. */
+async function menuActions(fixture: ComponentFixture<MachineDetail>): Promise<string[]> {
+  const trigger = (fixture.nativeElement as HTMLElement).querySelector<HTMLElement>('[data-testid="chunk-actions-menu"]');
+  if (!trigger) return [];
+  trigger.click();
+  await fixture.whenStable();
+  const actions = ['pause-chunk', 'resume-chunk'].filter((testid) => document.body.querySelector(`[data-testid="${testid}"]`) !== null);
+  trigger.click();
+  await fixture.whenStable();
+  return actions;
 }
 
 /**
@@ -133,8 +191,8 @@ describe('MachineDetail summary facts', () => {
     const { el } = rendered;
 
     const facts = el.querySelector('[data-testid="detail-facts"]')?.textContent ?? '';
-    expect(facts).toContain(NEW_LEASE);
     expect(facts).toContain('sess-new');
+    expect(facts).toContain('4821');
     expect(facts).not.toContain('sess-old');
   });
 });
@@ -159,12 +217,41 @@ describe('MachineDetail header', () => {
     expect(el.textContent).not.toContain('chunk detail');
   });
 
-  it('links the chunk id to the chunk page under the active runner', async () => {
+  it('links the chunk id to the chunk page, keeping the filters', async () => {
     const rendered = await render([NEWEST()]);
     stub = rendered.stub;
 
     const ref = rendered.el.querySelector('[data-testid="detail-chunk-ref"]');
-    expect(ref?.getAttribute('href')).toBe(`/runners/rn_1/board/chunk/${NEWEST().chunk_id}`);
+    expect(ref?.getAttribute('href')).toBe(`/board/chunk/${NEWEST().chunk_id}`);
+  });
+
+  it("names the chunk's runner and its project by name", async () => {
+    stub = stubRequestClient(runnerClient, (method, path) => {
+      if (method === 'GET' && path === '/api/host/runners') return { items: [HOST_RUNNER] };
+      if (method === 'GET' && path === '/runners/rn_1/api/dashboard') return PROJECT_DASHBOARD;
+      return routes()(method, path);
+    });
+    const { el } = await mount([NEWEST()]);
+
+    expect(el.querySelector('[data-testid="detail-runner"]')?.textContent?.trim()).toBe('r1');
+    expect(el.querySelector('[data-testid="detail-project"]')?.textContent?.trim()).toBe('Project P');
+  });
+
+  it("reads and acts on the newest attempt's own runner", async () => {
+    stub = stubRequestClient(runnerClient, (method, path) => {
+      if (method === 'GET' && path === `/runners/rn_2/api/chunks/${NEWEST().chunk_id}`) return HEADER();
+      if (method === 'POST' && path === `/runners/rn_2/api/chunks/${NEWEST().chunk_id}/pause`) return {};
+      return {};
+    });
+    const { el, fixture } = await mount([NEWEST({ owner: { runnerId: 'rn_2', name: 'r2', label: 'r2' } })]);
+
+    expect(el.querySelector('[data-testid="detail-pointer"]')?.textContent).toContain('blizzard#185');
+    await clickMenuAction(fixture, 'pause-chunk');
+    el.querySelector<HTMLElement>('[data-testid="confirm-dialog-confirm"]')?.click();
+    await settle(fixture);
+
+    expect(stub.forRoute(`/runners/rn_2/api/chunks/${NEWEST().chunk_id}/pause`, 'POST')).toHaveLength(1);
+    expect(stub.forRoute(`/runners/rn_1/api/chunks/${NEWEST().chunk_id}/pause`, 'POST')).toHaveLength(0);
   });
 
   it('renders work items as links out to their web url', async () => {
@@ -224,9 +311,8 @@ describe('MachineDetail header', () => {
     stub = rendered.stub;
     const { el, fixture } = rendered;
 
-    expect(el.querySelector('[data-testid="resume-chunk"]')).toBeNull();
-    el.querySelector<HTMLElement>('[data-testid="pause-chunk"]')?.click();
-    await fixture.whenStable();
+    expect(await menuActions(fixture)).toEqual(['pause-chunk']);
+    await clickMenuAction(fixture, 'pause-chunk');
     el.querySelector<HTMLElement>('[data-testid="confirm-dialog-confirm"]')?.click();
     await settle(fixture);
 
@@ -241,9 +327,8 @@ describe('MachineDetail header', () => {
     stub = rendered.stub;
     const { el, fixture } = rendered;
 
-    expect(el.querySelector('[data-testid="pause-chunk"]')).toBeNull();
-    el.querySelector<HTMLElement>('[data-testid="resume-chunk"]')?.click();
-    await fixture.whenStable();
+    expect(await menuActions(fixture)).toEqual(['resume-chunk']);
+    await clickMenuAction(fixture, 'resume-chunk');
     el.querySelector<HTMLElement>('[data-testid="confirm-dialog-confirm"]')?.click();
     await settle(fixture);
 
@@ -255,8 +340,7 @@ describe('MachineDetail header', () => {
     stub = rendered.stub;
     const { el, fixture } = rendered;
 
-    el.querySelector<HTMLElement>('[data-testid="pause-chunk"]')?.click();
-    await fixture.whenStable();
+    await clickMenuAction(fixture, 'pause-chunk');
     el.querySelector<HTMLElement>('[data-testid="confirm-dialog-cancel"]')?.click();
     await settle(fixture);
 
@@ -266,10 +350,10 @@ describe('MachineDetail header', () => {
   it('offers neither Pause nor Resume for a chunk in a non-pausable state', async () => {
     const rendered = await render([NEWEST()], HEADER({ status: 'done', pausable: false, pause: null }));
     stub = rendered.stub;
-    const { el } = rendered;
+    const { el, fixture } = rendered;
 
-    expect(el.querySelector('[data-testid="pause-chunk"]')).toBeNull();
-    expect(el.querySelector('[data-testid="resume-chunk"]')).toBeNull();
+    expect(el.querySelector('[data-testid="chunk-actions-menu"]')).toBeNull();
+    expect(await menuActions(fixture)).toEqual([]);
   });
 });
 
@@ -296,20 +380,19 @@ describe('MachineDetail Pause/Resume pending + failure', () => {
       new Promise<void>((resolve) => (resolveInvalidate = resolve)),
     );
 
-    el.querySelector<HTMLElement>('[data-testid="pause-chunk"]')?.click();
-    await fixture.whenStable();
+    await clickMenuAction(fixture, 'pause-chunk');
     el.querySelector<HTMLElement>('[data-testid="confirm-dialog-confirm"]')?.click();
     // Held open by the `invalidateQueries` spy above — `settle()`'s own `whenStable()`
     // would hang on it, so a bare macrotask tick + a manual `detectChanges()` stands in.
     await new Promise((resolve) => setTimeout(resolve, 0));
     fixture.detectChanges();
 
-    expect(el.querySelector<HTMLButtonElement>('[data-testid="pause-chunk"]')?.disabled).toBe(true);
+    expect(await actionDisabled(fixture, 'pause-chunk')).toBe('true');
 
     resolveInvalidate();
     await settle(fixture);
 
-    expect(el.querySelector<HTMLButtonElement>('[data-testid="pause-chunk"]')?.disabled).toBe(false);
+    expect(await actionDisabled(fixture, 'pause-chunk')).not.toBe('true');
   });
 
   it('disables Resume while the mutation is pending, re-enabling once it settles', async () => {
@@ -325,18 +408,17 @@ describe('MachineDetail Pause/Resume pending + failure', () => {
       new Promise<void>((resolve) => (resolveInvalidate = resolve)),
     );
 
-    el.querySelector<HTMLElement>('[data-testid="resume-chunk"]')?.click();
-    await fixture.whenStable();
+    await clickMenuAction(fixture, 'resume-chunk');
     el.querySelector<HTMLElement>('[data-testid="confirm-dialog-confirm"]')?.click();
     await new Promise((resolve) => setTimeout(resolve, 0));
     fixture.detectChanges();
 
-    expect(el.querySelector<HTMLButtonElement>('[data-testid="resume-chunk"]')?.disabled).toBe(true);
+    expect(await actionDisabled(fixture, 'resume-chunk')).toBe('true');
 
     resolveInvalidate();
     await settle(fixture);
 
-    expect(el.querySelector<HTMLButtonElement>('[data-testid="resume-chunk"]')?.disabled).toBe(false);
+    expect(await actionDisabled(fixture, 'resume-chunk')).not.toBe('true');
   });
 
   it('surfaces a rejected Pause inline rather than swallowing it', async () => {
@@ -348,14 +430,13 @@ describe('MachineDetail Pause/Resume pending + failure', () => {
     stub = rendered.stub;
     const { el, fixture } = rendered;
 
-    el.querySelector<HTMLElement>('[data-testid="pause-chunk"]')?.click();
-    await fixture.whenStable();
+    await clickMenuAction(fixture, 'pause-chunk');
     el.querySelector<HTMLElement>('[data-testid="confirm-dialog-confirm"]')?.click();
     await settle(fixture);
 
     expect(el.querySelector('[data-testid="action-error"]')?.textContent).toContain('already paused');
     // A rejected flip is not a stuck control — the button re-enables.
-    expect(el.querySelector<HTMLButtonElement>('[data-testid="pause-chunk"]')?.disabled).toBe(false);
+    expect(await actionDisabled(fixture, 'pause-chunk')).not.toBe('true');
   });
 
   it('surfaces a rejected Resume inline rather than swallowing it', async () => {
@@ -367,8 +448,7 @@ describe('MachineDetail Pause/Resume pending + failure', () => {
     stub = rendered.stub;
     const { el, fixture } = rendered;
 
-    el.querySelector<HTMLElement>('[data-testid="resume-chunk"]')?.click();
-    await fixture.whenStable();
+    await clickMenuAction(fixture, 'resume-chunk');
     el.querySelector<HTMLElement>('[data-testid="confirm-dialog-confirm"]')?.click();
     await settle(fixture);
 
@@ -384,14 +464,12 @@ describe('MachineDetail Pause/Resume pending + failure', () => {
     stub = rendered.stub;
     const { el, fixture } = rendered;
 
-    el.querySelector<HTMLElement>('[data-testid="pause-chunk"]')?.click();
-    await fixture.whenStable();
+    await clickMenuAction(fixture, 'pause-chunk');
     el.querySelector<HTMLElement>('[data-testid="confirm-dialog-confirm"]')?.click();
     await settle(fixture);
     expect(el.querySelector('[data-testid="action-error"]')).not.toBeNull();
 
-    el.querySelector<HTMLElement>('[data-testid="pause-chunk"]')?.click();
-    await fixture.whenStable();
+    await clickMenuAction(fixture, 'pause-chunk');
     el.querySelector<HTMLElement>('[data-testid="confirm-dialog-confirm"]')?.click();
     await settle(fixture);
 
@@ -446,8 +524,7 @@ describe('MachineDetail heartbeat label ticking', () => {
         imports: [MachineDetail],
         providers: [
           provideZonelessChangeDetection(),
-          provideActiveRunner('rn_1'),
-          provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
+              provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
           provideRouter([]),
         ],
       }).compileComponents();

@@ -7,22 +7,21 @@ import { vi } from 'vitest';
 
 import { injectLocalPauseMutation } from './status.query';
 import { hostKey, runnerDashboardKey } from './query-keys';
-import { provideActiveRunner } from './active-runner';
 
 /** A minimal host so the mutation — a `Component` field initializer concern —
  * runs inside a real injection context, and so `fixture.detectChanges()` can
  * flush the signal subscription `injectMutation` sets up via an `effect()`,
- * mirroring `leases.query.spec.ts`'s own host for `injectRunnerLeasesQuery`. */
+ * mirroring `leases.query.spec.ts`'s own query host. */
 @Component({
   selector: 'app-test-pause-mutation-host',
   template: '',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 class PauseMutationHost {
-  readonly mutation = injectLocalPauseMutation();
+  readonly mutation = injectLocalPauseMutation(() => 'rn_1');
 }
 
-describe('injectLocalPauseMutation (issue #133)', () => {
+describe('injectLocalPauseMutation', () => {
   let stub: RequestClientStub;
 
   beforeEach(() => {
@@ -39,7 +38,7 @@ describe('injectLocalPauseMutation (issue #133)', () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     await TestBed.configureTestingModule({
       imports: [PauseMutationHost],
-      providers: [provideZonelessChangeDetection(), provideActiveRunner('rn_1'), provideTanStackQuery(queryClient)],
+      providers: [provideZonelessChangeDetection(), provideTanStackQuery(queryClient)],
     }).compileComponents();
     const fixture = TestBed.createComponent(PauseMutationHost);
     fixture.detectChanges();
@@ -67,7 +66,7 @@ describe('injectLocalPauseMutation (issue #133)', () => {
       .mockReturnValue(new Promise<void>((resolve) => (resolveInvalidate = resolve)));
     await TestBed.configureTestingModule({
       imports: [PauseMutationHost],
-      providers: [provideZonelessChangeDetection(), provideActiveRunner('rn_1'), provideTanStackQuery(queryClient)],
+      providers: [provideZonelessChangeDetection(), provideTanStackQuery(queryClient)],
     }).compileComponents();
     const fixture = TestBed.createComponent(PauseMutationHost);
     fixture.detectChanges();

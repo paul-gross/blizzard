@@ -138,3 +138,39 @@ describe('KitMenu', () => {
     expect(trigger()?.getAttribute('aria-expanded')).toBe('true');
   });
 });
+
+@Component({
+  selector: 'fleet-test-host-bordered',
+  imports: [KitMenu, KitMenuPanel, KitMenuItem],
+  template: `
+    <fleet-kit-menu ariaLabel="Plain" testid="plain-menu" [menu]="panel" />
+    <fleet-kit-menu bordered align="end" ariaLabel="Bordered" testid="bordered-menu" [menu]="panel" />
+    <ng-template #panel>
+      <fleet-kit-menu-panel testid="aligned-panel"><fleet-kit-menu-item>projected content</fleet-kit-menu-item></fleet-kit-menu-panel>
+    </ng-template>
+  `,
+})
+class TestHostBordered {}
+
+describe('KitMenu bordered trigger', () => {
+  beforeEach(async () => {
+    await TestBed.configureTestingModule({
+      imports: [TestHostBordered],
+      providers: [provideZonelessChangeDetection()],
+    }).compileComponents();
+  });
+
+  it('wears the outlined chrome only when bordered, and still opens its panel aligned to the end', async () => {
+    const fixture = TestBed.createComponent(TestHostBordered);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="plain-menu"]')?.classList.contains('bordered')).toBe(false);
+    const bordered = el.querySelector<HTMLElement>('[data-testid="bordered-menu"]')!;
+    expect(bordered.classList.contains('bordered')).toBe(true);
+
+    bordered.click();
+    await fixture.whenStable();
+    expect(document.body.querySelector('[data-testid="aligned-panel"]')).not.toBeNull();
+  });
+});
