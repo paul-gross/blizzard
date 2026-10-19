@@ -132,6 +132,7 @@ def _runner_status_view(service: RunnerStatusService) -> RunnerStatusView:
                     project_id=p.project_id,
                     slug=p.slug,
                     name=p.name,
+                    color=p.color,
                     resolved=p.resolved(),
                     answered=p.answered,
                 )

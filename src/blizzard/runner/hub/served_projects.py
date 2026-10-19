@@ -21,13 +21,15 @@ from blizzard.foundation.roles import domain_model
 @dataclass(frozen=True)
 class ServedProject:
     """One declared entry as the hub resolved it: the ``entry`` as declared — a project id or slug —
-    and the project it names in the runner's tenant. ``project_id``, ``slug`` and ``name`` are
-    ``None`` for an entry no project answers to, which serves nothing."""
+    and the project it names in the runner's tenant, with its palette ``color``. ``project_id``,
+    ``slug``, ``name`` and ``color`` are ``None`` for an entry no project answers to, which serves
+    nothing — and ``color`` alone for a project answered by a hub that predates it."""
 
     entry: str
     project_id: str | None = None
     slug: str | None = None
     name: str | None = None
+    color: str | None = None
 
     def resolved(self) -> bool:
         """Whether a project answers to the entry."""
@@ -54,6 +56,7 @@ class ServedProjectStatus:
     project_id: str | None = None
     slug: str | None = None
     name: str | None = None
+    color: str | None = None
     answered: bool = True
 
     def resolved(self) -> bool:
@@ -70,7 +73,7 @@ def served_projects_status(
     if answer is None and configured is None:
         return None
     answered = tuple(
-        ServedProjectStatus(entry=p.entry, project_id=p.project_id, slug=p.slug, name=p.name)
+        ServedProjectStatus(entry=p.entry, project_id=p.project_id, slug=p.slug, name=p.name, color=p.color)
         for p in (answer.projects if answer is not None else ())
     )
     held = {p.entry for p in answered}

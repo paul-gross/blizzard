@@ -35,11 +35,13 @@ class ServedProjectsStore:
                 hub_served_projects.c.project_id,
                 hub_served_projects.c.slug,
                 hub_served_projects.c.name,
+                hub_served_projects.c.color,
             ).order_by(hub_served_projects.c.position)
         )
         return ServedProjectsAnswer(
             projects=tuple(
-                ServedProject(entry=str(r.entry), project_id=r.project_id, slug=r.slug, name=r.name) for r in rows
+                ServedProject(entry=str(r.entry), project_id=r.project_id, slug=r.slug, name=r.name, color=r.color)
+                for r in rows
             ),
             answered_at=marker[0].projects_answered_at,
         )
@@ -57,6 +59,7 @@ class ServedProjectsStore:
                             "project_id": p.project_id,
                             "slug": p.slug,
                             "name": p.name,
+                            "color": p.color,
                             "answered_at": at,
                         }
                         for position, p in enumerate(projects)

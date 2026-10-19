@@ -56,6 +56,8 @@ def test_a_never_attempted_slug_reports_every_field_none(tmp_path: Path) -> None
                 "renewal_result": None,
                 "renewal_failure_reason": None,
                 "spenders": [DEFAULT_RUNNER_NAME],
+                "windows": [],
+                "windows_sampled_at": None,
             }
         ]
     }

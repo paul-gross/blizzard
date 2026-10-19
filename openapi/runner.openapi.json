@@ -2002,6 +2002,35 @@
         "title": "EscalationView",
         "type": "object"
       },
+      "ExternalSubscriptionUsageWindowView": {
+        "description": "One rate-limit window's utilization, as the harness's own account reported it\n\u2014 ``window`` is the harness-native label, ``utilization_pct`` is 0-100,\n``resets_at`` the reset instant, ``window_seconds`` the window's length.",
+        "properties": {
+          "resets_at": {
+            "title": "Resets At",
+            "type": "string"
+          },
+          "utilization_pct": {
+            "title": "Utilization Pct",
+            "type": "number"
+          },
+          "window": {
+            "title": "Window",
+            "type": "string"
+          },
+          "window_seconds": {
+            "title": "Window Seconds",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "window",
+          "utilization_pct",
+          "resets_at",
+          "window_seconds"
+        ],
+        "title": "ExternalSubscriptionUsageWindowView",
+        "type": "object"
+      },
       "FactChangedPayload": {
         "additionalProperties": false,
         "description": "A hub-bound fact was enqueued or acked \u2014 mirrors the hub's own ``event-logged``\nshape: ``chunk_id``/``lease_id`` ride as a present ``null`` rather than omitted,\nsince a runner-wide fact (e.g. a chunk-less ``event.recorded``) legitimately carries\nneither. Never a heartbeat \u2014 those ride elsewhere, elapsed-time-derived.",
@@ -3299,7 +3328,7 @@
         "type": "object"
       },
       "HostSubscriptionView": {
-        "description": "One declared subscription's diagnostics, naming the runners that spend it.",
+        "description": "One declared subscription's diagnostics, naming the runners that spend it, with its newest sampled snapshot's\nusage ``windows`` \u2014 the hub's own window shape \u2014 and that snapshot's ``windows_sampled_at``. A miss never masks\nthem: they stand until a newer sample replaces them. Empty, and ``None``, before a first sample.",
         "properties": {
           "miss_reason": {
             "anyOf": [
@@ -3382,6 +3411,24 @@
             },
             "title": "Spenders",
             "type": "array"
+          },
+          "windows": {
+            "items": {
+              "$ref": "#/components/schemas/ExternalSubscriptionUsageWindowView"
+            },
+            "title": "Windows",
+            "type": "array"
+          },
+          "windows_sampled_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Windows Sampled At"
           }
         },
         "required": [
@@ -5297,12 +5344,23 @@
         "type": "object"
       },
       "ServedProjectStatusView": {
-        "description": "One project the runner serves, as its hub last answered: the ``entry`` as configured \u2014 a project id\nor slug \u2014 and the project it resolved to. ``resolved`` is false for an entry no project answers to, and\n``answered`` false for a configured entry the hub has not answered yet; either way ``project_id``,\n``slug`` and ``name`` are ``None``.",
+        "description": "One project the runner serves, as its hub last answered: the ``entry`` as configured \u2014 a project id\nor slug \u2014 and the project it resolved to, with its palette ``color``. ``resolved`` is false for an entry\nno project answers to, and ``answered`` false for a configured entry the hub has not answered yet; either\nway ``project_id``, ``slug``, ``name`` and ``color`` are ``None``.",
         "properties": {
           "answered": {
             "default": true,
             "title": "Answered",
             "type": "boolean"
+          },
+          "color": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Color"
           },
           "entry": {
             "title": "Entry",

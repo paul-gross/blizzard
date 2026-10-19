@@ -26,6 +26,7 @@ __all__ = [
     "CredentialRenewalSummary",
     "ExternalUsageAttempt",
     "ExternalUsageAttemptSummary",
+    "ExternalUsageSampleSummary",
     "HostBufferedFact",
     "IReadCredentialRenewalRepository",
     "IReadExternalUsageRepository",
@@ -82,6 +83,16 @@ class ExternalUsageAttemptSummary:
     sampled_at: datetime
     ok: bool
     miss_reason: str | None
+
+
+@domain_model
+@dataclass(frozen=True)
+class ExternalUsageSampleSummary:
+    """This ``slug``'s own newest sampled snapshot: when it was sampled, and its windows."""
+
+    slug: str
+    sampled_at: datetime
+    windows: tuple[ExternalSubscriptionUsageWindow, ...]
 
 
 @domain_model
@@ -378,6 +389,12 @@ class IReadExternalUsageRepository(IReadCredentialRenewalRepository, Protocol):
         (`bzh:bulk-reconstitution`) — each slug's answer exactly the singular's, including its
         exclusion of failed-attempt rows before the newest is picked. A slug that answers no
         windows is absent, which the caller reads as ``()``."""
+        ...
+
+    def latest_external_usage_samples_by_slug(self, slugs: Sequence[str]) -> dict[str, ExternalUsageSampleSummary]:
+        """Each slug's own newest sampled snapshot with its instant, in one batched read
+        (`bzh:bulk-reconstitution`) — the snapshot :meth:`latest_external_usage_windows_by_slug`
+        decodes, a failed attempt never masking it. A slug never sampled is absent."""
         ...
 
     def latest_external_usage_attempt(self, slug: str) -> ExternalUsageAttemptSummary | None:
