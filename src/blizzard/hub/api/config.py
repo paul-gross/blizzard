@@ -8,7 +8,7 @@ always as ``Door.APPLY`` — the door is never read from the request (``bzh:conf
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import ValidationError
@@ -504,13 +504,16 @@ def _projects(
 
 def _project_declaration(entry: ProjectDocument) -> ProjectDeclaration:
     stated = entry.model_fields_set
+    edit: dict[str, Any] = {}
+    if "name" in stated and entry.name is not None:
+        edit["name"] = entry.name
+    if "description" in stated:
+        edit["description"] = entry.description
+    if "color" in stated:
+        edit["color"] = entry.color
     return ProjectDeclaration(
         slug=entry.slug,
-        edit=ProjectEdit(
-            **({"name": entry.name} if "name" in stated and entry.name is not None else {}),
-            **({"description": entry.description} if "description" in stated else {}),
-            **({"color": entry.color} if "color" in stated else {}),
-        ),
+        edit=ProjectEdit(**edit),
         sources=tuple(entry.sources) if "sources" in stated else None,
         repositories=tuple(entry.repositories) if "repositories" in stated else None,
     )
