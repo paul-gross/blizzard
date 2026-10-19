@@ -155,6 +155,7 @@ def store(tmp_path: Path) -> _Store:
                 slug="default",
                 name="Default",
                 description="",
+                color="red",
                 revision=1,
                 created_at=_AT,
             )

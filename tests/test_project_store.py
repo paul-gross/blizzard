@@ -11,6 +11,7 @@ import pytest
 from sqlalchemy import Engine
 
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.project_colors import ProjectColor
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.domain.config.authoring import ConfigAuthoring
 from blizzard.hub.domain.config.changes import ChangeOp, ConfigChange, RecordKind
@@ -38,6 +39,7 @@ from tests.support import (
     config_authoring,
     default_project,
     default_tenant,
+    first_color,
     hub_migration_prototype,
     link_project,
     scoped_connections,
@@ -71,7 +73,9 @@ class _World:
         return ProjectLinkStore(self.conns(tenant))
 
     def authoring(self, tenant: TenantId | None = None) -> ProjectAuthoring:
-        return ProjectAuthoring(projects=self.projects(tenant), links=self.links(tenant), clock=self.clock)
+        return ProjectAuthoring(
+            projects=self.projects(tenant), links=self.links(tenant), pick=first_color, clock=self.clock
+        )
 
     def config(self) -> ConfigAuthoring:
         keys = hub_key_provider({}, data_dir=self.tmp_path / "data")
@@ -129,6 +133,28 @@ def test_a_created_project_reads_back_and_commits_its_create_change_in_its_proje
     assert [p.slug for p in world.projects().list_all()] == ["default", "winter"]
     [change] = world.changes(RecordKind.PROJECT, project.project_id)
     assert (change.op, change.revision, change.project_id) == (ChangeOp.CREATE, 1, project.project_id)
+
+
+def test_a_stated_color_round_trips_through_create_and_edit(world: _World) -> None:
+    created = world.authoring().create("winter", "Winter", OP, color="teal")
+    assert world.projects().get(created.project_id) == created
+    assert created.color is ProjectColor.TEAL
+
+    edited = world.authoring().edit(created, ProjectEdit(color="pink"), OP)
+
+    stored = world.projects().get(created.project_id)
+    assert stored == edited
+    assert stored is not None
+    assert (stored.color, stored.revision) == (ProjectColor.PINK, 2)
+
+
+def test_a_create_stating_no_color_takes_the_tenants_least_used_one(world: _World) -> None:
+    held = {project.color for project in world.projects().list_all()}
+
+    created = world.authoring().create("winter", "Winter", OP)
+
+    assert created.color == next(color for color in ProjectColor if color not in held)
+    assert world.projects().get(created.project_id) == created
 
 
 def test_a_slug_another_project_holds_is_refused(world: _World) -> None:
@@ -208,6 +234,7 @@ def test_an_edit_that_moves_no_slug_writes_no_former_slug(world: _World) -> None
         slug="winter",
         name="Winter, renamed",
         description="cold",
+        color=created.color,
         revision=2,
         created_at=_T0,
     )

@@ -48,3 +48,6 @@
   color: var(--label);
   font-size: var(--fs-sm);
 }
+.swatch {
+  align-self: center;
+}

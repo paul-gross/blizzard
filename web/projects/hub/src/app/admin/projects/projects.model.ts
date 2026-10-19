@@ -52,6 +52,8 @@ export interface ProjectRowVm {
   readonly name: string;
   /** The project's id, which the card's short id is built from. */
   readonly projectId: string;
+  /** The project's palette color. */
+  readonly color: string;
   /** What it still needs to take work in, land it and get it done (`needs a runner`), `null` while it is wired or
    * not yet judged. */
   readonly needs: string | null;
@@ -92,6 +94,7 @@ export function projectRows(
         key: project.project_id,
         name: project.name,
         projectId: project.project_id,
+        color: project.color,
         needs: missing !== null && missing.length > 0 ? needsText(missing) : null,
         wired: missing !== null && missing.length === 0,
       };

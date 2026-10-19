@@ -1,0 +1,11 @@
+:host {
+  display: inline-block;
+  flex: none;
+  line-height: 0;
+}
+.swatch {
+  display: block;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+}

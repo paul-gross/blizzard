@@ -19,10 +19,13 @@ import {
   type KitAsyncStateValue,
   KitAsyncState,
   KitButton,
+  KitDialog,
   type KitFact,
   KitFactList,
   type KitTabOption,
+  KitSwatch,
   KitTabs,
+  ProjectColor,
   RecordKind,
   restingAsyncState,
   ViewportService,
@@ -40,6 +43,7 @@ import { injectConfigHistoryQuery } from '../config-history.query';
 import { ConfigRevisions } from '../config-revisions';
 import { injectRepositoriesQuery } from '../repositories/repositories.query';
 import { injectWorkSourcesQuery } from '../work-sources/work-sources.query';
+import { ProjectColorPicker } from './project-color-picker';
 import { ProjectLinkDialog } from './project-link-dialog';
 import { ProjectLinkPanel } from './project-link-panel';
 import { ProjectOverviewCard } from './project-overview-card';
@@ -88,8 +92,11 @@ export type ProjectTab = 'overview' | 'sources' | 'repositories';
     FleetWhen,
     KitAsyncState,
     KitButton,
+    KitDialog,
     KitFactList,
+    KitSwatch,
     KitTabs,
+    ProjectColorPicker,
     ProjectLinkDialog,
     ProjectLinkPanel,
     ProjectOverviewCard,
@@ -167,11 +174,13 @@ export class ProjectDetail {
 
   private readonly meQuery = injectMeQuery();
   private readonly createdTemplate = viewChild<TemplateRef<unknown>>('createdFact');
+  private readonly colorTemplate = viewChild<TemplateRef<unknown>>('colorFact');
   private readonly revisionTemplate = viewChild<TemplateRef<unknown>>('revisionFact');
   protected readonly facts = computed<readonly KitFact[]>(() =>
     projectFacts(this.project(), {
       former: this.formerSlugs(),
       counts: this.countsQuery.data(),
+      color: this.colorTemplate(),
       created: this.createdTemplate(),
       revision: this.revisionTemplate(),
     }),
@@ -187,6 +196,10 @@ export class ProjectDetail {
   protected readonly fields = PROJECT_FIELDS;
   protected readonly slugHint = SLUG_HINT;
   protected readonly shown = computed(() => projectFormValues(this.project()));
+  /** The palette, by name, read from the generated enum. */
+  protected readonly palette: readonly string[] = Object.values(ProjectColor);
+  protected readonly colorOpen = signal(false);
+  protected readonly colorError = signal<string | null>(null);
   protected readonly editOpen = signal(false);
   protected readonly editError = signal<string | null>(null);
 
@@ -222,6 +235,30 @@ export class ProjectDetail {
   protected onEdit(): void {
     this.editError.set(null);
     this.editOpen.set(true);
+  }
+
+  protected onColorOpen(): void {
+    this.colorError.set(null);
+    this.colorOpen.set(true);
+  }
+
+  protected onColorClose(): void {
+    if (this.editMutation.isPending()) return;
+    this.colorOpen.set(false);
+  }
+
+  /** Save the chosen color against the revision on screen; a stale revision or a refusal shows in the dialog. */
+  protected onColor(color: string): void {
+    const project = this.project();
+    if (!project || color === project.color) return;
+    this.colorError.set(null);
+    this.editMutation.mutate(
+      { projectId: project.project_id, revision: project.revision, body: { color } },
+      {
+        onSuccess: () => this.colorOpen.set(false),
+        onError: (error) => this.colorError.set(errorMessage(error, 'Save failed.')),
+      },
+    );
   }
 
   protected onSave(values: ConfigFormValues): void {

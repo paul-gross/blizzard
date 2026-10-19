@@ -7,6 +7,7 @@ const project = (slug: string, name: string): ProjectView => ({
   slug,
   name,
   description: '',
+  color: 'teal',
   revision: 1,
   created_at: '2026-10-01T00:00:00Z',
 });
@@ -14,13 +15,13 @@ const project = (slug: string, name: string): ProjectView => ({
 describe('lensChoices', () => {
   it('offers All, then every project by name', () => {
     expect(lensChoices([project('zeta', 'Zeta'), project('blizzard', 'Blizzard')])).toEqual([
-      { slug: null, label: 'All' },
-      { slug: 'blizzard', label: 'Blizzard' },
-      { slug: 'zeta', label: 'Zeta' },
+      { slug: null, label: 'All', color: null },
+      { slug: 'blizzard', label: 'Blizzard', color: 'teal' },
+      { slug: 'zeta', label: 'Zeta', color: 'teal' },
     ]);
   });
 
   it('offers only All for a tenant with no project', () => {
-    expect(lensChoices([])).toEqual([{ slug: null, label: 'All' }]);
+    expect(lensChoices([])).toEqual([{ slug: null, label: 'All', color: null }]);
   });
 });

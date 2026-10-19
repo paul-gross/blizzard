@@ -15,6 +15,7 @@ const BLIZZARD: ProjectView = {
   slug: 'blizzard',
   name: 'Blizzard',
   description: 'The platform',
+  color: 'teal',
   revision: 3,
   created_at: '2026-10-01T00:00:00Z',
 };
@@ -225,6 +226,20 @@ describe('ProjectDetail', () => {
     const patch = stub.forRoute('/api/projects/proj_b', 'PATCH');
     expect(patch).toHaveLength(1);
     expect(patch[0].body).toEqual({ slug: 'blizzard-hub' });
+    expect(patch[0].headers['if-match']).toBe('3');
+  });
+
+  it('states the color and saves a picked one by id at the shown revision', async () => {
+    const { harness, el } = await open('/admin/projects/proj_b');
+    expect(text(el, 'admin-projects-color')).toContain('teal');
+    el.querySelector<HTMLElement>('[data-testid="admin-projects-color-open"]')!.click();
+    await settle(harness.fixture);
+    document.querySelector<HTMLElement>('[data-testid="project-color-pink"]')!.click();
+    await settle(harness.fixture);
+
+    const patch = stub.forRoute('/api/projects/proj_b', 'PATCH');
+    expect(patch).toHaveLength(1);
+    expect(patch[0].body).toEqual({ color: 'pink' });
     expect(patch[0].headers['if-match']).toBe('3');
   });
 

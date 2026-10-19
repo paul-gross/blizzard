@@ -76,3 +76,23 @@
 .note a:focus-visible {
   text-decoration: underline;
 }
+
+/* The swatch leads the project's name in the header. */
+.name-swatch {
+  align-self: center;
+}
+.fact-swatch {
+  margin-right: 6px;
+  vertical-align: middle;
+}
+.color-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.color-error {
+  margin: 0;
+  color: var(--red);
+  font-size: var(--fs-xs);
+}

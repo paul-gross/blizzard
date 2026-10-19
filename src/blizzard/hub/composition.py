@@ -7,6 +7,7 @@ every domain service's own narrow parameter alike — is the same instance built
 
 from __future__ import annotations
 
+import random
 import tempfile
 
 # Wires the residual cycle-check lock — debt, blizzard-context:/architecture/system-shape/exclusive-writes.md —
@@ -168,6 +169,7 @@ from blizzard.hub.domain.operations.restart import RestartService
 from blizzard.hub.domain.operations.stop import StopService
 from blizzard.hub.domain.projects.authoring import ProjectAuthoring
 from blizzard.hub.domain.projects.bulk_resolve import BulkProjectResolver
+from blizzard.hub.domain.projects.color import ColorPick
 from blizzard.hub.domain.projects.links import IReadProjectLinks
 from blizzard.hub.domain.projects.model import IReadProjectRepository, ProjectId
 from blizzard.hub.domain.runners.enrollment import RunnerEnrollmentService
@@ -343,6 +345,8 @@ class TenantServices:
     project_links: IReadProjectLinks
     #: The one writer of projects and their links, each write with its change row.
     project_authoring: ProjectAuthoring
+    #: Picks among equally least-used colors for a project created with none — the apply edge's seam.
+    color_pick: ColorPick
     #: The routine read Protocol — the same store instance as
     #: ``routine_authoring``'s writes.
     routines: IReadRoutineRepository
@@ -882,6 +886,7 @@ class TenantServiceParts:
     public_url: str | None
     transcript_caps: TranscriptCaps | None
     platform_tracer: IPlatformTracer | None
+    color_pick: ColorPick
 
 
 def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, events: EventBroker) -> ServedTenant:
@@ -1133,7 +1138,10 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         config_changes=stores.config_changes,
         projects=stores.projects,
         project_links=stores.project_links,
-        project_authoring=ProjectAuthoring(projects=stores.projects, links=stores.project_links, clock=clock),
+        project_authoring=ProjectAuthoring(
+            projects=stores.projects, links=stores.project_links, pick=parts.color_pick, clock=clock
+        ),
+        color_pick=parts.color_pick,
         routines=routine_store,
         routine_scopes=routine_scope_store,
         routine_scope_membership=RoutineScopeMembership(routine_scopes=routine_scope_store, clock=clock),
@@ -1265,6 +1273,8 @@ def build_services(
     brokers = brokers or TenantBrokers()
     marker_authority = MarkerAuthority()
     system_artifacts = system_artifacts or SYSTEM_ARTIFACTS_PACKAGED
+    # One process-scoped draw for every project color a create leaves to the hub.
+    color_pick = random.Random().choice
     parts = TenantServiceParts(
         clock=clock,
         hub_scoped_reads=core.hub_scoped_reads,
@@ -1284,6 +1294,7 @@ def build_services(
         public_url=public_url,
         transcript_caps=transcript_caps,
         platform_tracer=platform_tracer,
+        color_pick=color_pick,
     )
     core.tenants.serve(
         TenantServing(build=lambda stores, events: build_tenant_services(stores, parts, events=events), brokers=brokers)
@@ -1441,6 +1452,7 @@ def build_services(
         tenants=TenantAdministrationStore(store_connections, identity_transactions),
         mint_packaged=packaged_minter(clock, YAML_CODEC),
         changed=open_tenants.refresh,
+        pick=color_pick,
         clock=clock,
     )
 

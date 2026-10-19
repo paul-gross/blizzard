@@ -28,6 +28,7 @@ const PROJECTS = [
   slug: name.toLowerCase().split(' ')[0],
   name,
   description: '',
+  color: 'teal' as const,
   revision: 1,
   created_at: '2026-10-01T00:00:00Z',
 }));
@@ -74,6 +75,8 @@ describe('project lens control sweep (web:shell-sweep)', () => {
       expect(root.querySelectorAll('[data-testid^="project-lens-"]').length, 'All and every project').toBe(
         PROJECTS.length + 1,
       );
+      expect(root.querySelectorAll('fleet-kit-swatch').length, 'one swatch per project chip').toBe(PROJECTS.length);
+      expect(root.querySelector('[data-testid="project-lens-all"] fleet-kit-swatch'), 'All carries no swatch').toBeNull();
       for (const width of WIDTHS) {
         await page.viewport(width, 800);
         await new Promise((resolve) => requestAnimationFrame(resolve));

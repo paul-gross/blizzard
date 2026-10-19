@@ -42,6 +42,7 @@ from blizzard.foundation.forwarded import TrustedProxies
 from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
+from blizzard.foundation.project_colors import ProjectColor
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.migrations import MigrationRunner
 from blizzard.foundation.tokens import TokenHash
@@ -140,6 +141,11 @@ from blizzard.wire.work_source import WorkSourceDocument
 _GRAPH_T0 = datetime(2026, 1, 1, tzinfo=UTC)
 
 
+def first_color(colors: Sequence[ProjectColor]) -> ProjectColor:
+    """A deterministic project-color pick: the first candidate, in palette order."""
+    return colors[0]
+
+
 def hub_store_connections(engine: Engine) -> ScopedConnections:
     """The ``hub/store/internal/`` seam every adapter test wires over its
     own migrated engine, confined to the store's only tenant — one helper so every
@@ -178,6 +184,7 @@ def add_tenant(engine: Engine, name: str) -> TenantId:
                 slug="default",
                 name="Default",
                 description="",
+                color=ProjectColor.RED,
                 revision=1,
                 created_at=_GRAPH_T0,
             )
@@ -320,7 +327,9 @@ _SEEDER = ChangeContext(actor="test", door=Door.API)
 def _project_authoring(engine: Engine, tenant: TenantId) -> tuple[ProjectAuthoring, ProjectStore]:
     conns = scoped_connections(engine, tenant)
     projects = ProjectStore(conns)
-    return ProjectAuthoring(projects=projects, links=ProjectLinkStore(conns), clock=FixedClock(_GRAPH_T0)), projects
+    return ProjectAuthoring(
+        projects=projects, links=ProjectLinkStore(conns), pick=first_color, clock=FixedClock(_GRAPH_T0)
+    ), projects
 
 
 def seed_project(engine: Engine, slug: str, *, tenant: TenantId | None = None) -> ProjectId:

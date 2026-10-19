@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 
-import { KitChip } from 'fleet/shell';
+import { KitChip, KitSwatch } from 'fleet/shell';
 
 import type { LensChoice } from './project-lens.model';
 
@@ -15,7 +15,7 @@ import type { LensChoice } from './project-lens.model';
 @Component({
   selector: 'app-project-lens-control',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitChip],
+  imports: [KitChip, KitSwatch],
   templateUrl: './project-lens-control.html',
   styleUrl: './project-lens-control.css',
 })

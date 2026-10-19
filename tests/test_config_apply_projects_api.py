@@ -304,3 +304,48 @@ def test_an_id_never_resolves_as_a_slug_and_hub_is_never_a_slug(hub: HubHarness)
     assert hub.client.post("/api/work-sources", json={**_SOURCE, "slug": "hub"}).status_code == 422
     refused = _apply(hub, {"work_sources": [{**_SOURCE, "slug": "hub", "locator": "acme/hub"}]})
     assert refused.status_code == 422 and refused.json()["detail"][0]["loc"][-1] == "slug"
+
+
+def test_a_document_entry_states_a_color_or_takes_the_least_used_and_an_off_palette_one_is_refused(
+    hub: HubHarness,
+) -> None:
+    applied = _apply(
+        hub,
+        {
+            "projects": [
+                {"slug": "one", "name": "One"},
+                {"slug": "two", "name": "Two"},
+                {"slug": "p", "name": "P", "color": "pink"},
+            ]
+        },
+    )
+    _rows(applied)
+
+    colors = {p["slug"]: p["color"] for p in hub.client.get("/api/projects").json()["projects"]}
+    assert colors["p"] == "pink"
+    assert len({colors["default"], colors["one"], colors["two"]}) == 3
+
+    refused = _apply(hub, {"projects": [{"slug": "bad", "name": "Bad", "color": "mauve"}]})
+    assert refused.status_code == 422, refused.text
+    assert "color" in refused.text
+
+
+def test_a_stated_color_edits_a_stored_project_and_an_export_carries_it(hub: HubHarness) -> None:
+    _rows(_apply(hub, {"projects": [{"slug": "web", "name": "Web", "color": "blue"}]}))
+    _rows(_apply(hub, {"projects": [{"slug": "web", "color": "violet"}]}))
+
+    exported = hub.client.get("/api/config/export").json()
+    assert {p["slug"]: p["color"] for p in exported["projects"]}["web"] == "violet"
+
+
+def test_an_entry_stating_a_null_color_is_refused_whether_the_project_exists_or_not(hub: HubHarness) -> None:
+    _rows(_apply(hub, {"projects": [{"slug": "web", "name": "Web", "color": "blue"}]}))
+
+    stored = _apply(hub, {"projects": [{"slug": "web", "color": None}]})
+    created = _apply(hub, {"projects": [{"slug": "new", "name": "New", "color": None}]})
+
+    for refused in (stored, created):
+        assert refused.status_code == 422, refused.text
+        assert "color" in refused.text
+    assert {p["slug"]: p["color"] for p in hub.client.get("/api/projects").json()["projects"]}["web"] == "blue"
+    assert "new" not in {p["slug"] for p in hub.client.get("/api/projects").json()["projects"]}

@@ -5211,6 +5211,18 @@
               "type": "text"
             },
             {
+              "help": "The project's color on the board, by palette name; the hub picks the least-used one when omitted.",
+              "hidden": false,
+              "kind": "option",
+              "name": "color",
+              "opts": [
+                "--color"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
               "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
@@ -5295,6 +5307,18 @@
               "name": "description",
               "opts": [
                 "--description"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "The project's color on the board, by palette name; the hub picks the least-used one when omitted.",
+              "hidden": false,
+              "kind": "option",
+              "name": "color",
+              "opts": [
+                "--color"
               ],
               "required": false,
               "secondary_opts": [],
@@ -5443,7 +5467,7 @@
           "short_help": "Link PROJECT to one work source (--source) or one repository (--repository): work ingested from that source can belong to PROJECT, and PROJECT's work can land in that repository."
         },
         "list": {
-          "help": "List the tenant's projects \u2014 slug, name, id, revision.",
+          "help": "List the tenant's projects \u2014 slug, name, color, id, revision.",
           "params": [
             {
               "help": "Print the raw response body as JSON.",
@@ -5483,7 +5507,7 @@
             }
           ],
           "path": "hub project list",
-          "short_help": "List the tenant's projects \u2014 slug, name, id, revision."
+          "short_help": "List the tenant's projects \u2014 slug, name, color, id, revision."
         },
         "show": {
           "help": "Show PROJECT \u2014 named by its id, its slug, or a slug it has left \u2014 with the work sources and repositories\nlinked to it.",

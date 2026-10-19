@@ -8948,10 +8948,40 @@
         "title": "ProducesEntry",
         "type": "object"
       },
+      "ProjectColor": {
+        "description": "A project's color, by palette name; each name maps to one fixed display color.",
+        "enum": [
+          "red",
+          "orange",
+          "amber",
+          "lime",
+          "green",
+          "teal",
+          "cyan",
+          "blue",
+          "indigo",
+          "violet",
+          "pink",
+          "slate"
+        ],
+        "title": "ProjectColor",
+        "type": "string"
+      },
       "ProjectCreateRequest": {
         "additionalProperties": false,
-        "description": "A new project: a ``slug`` of 1-64 lowercase letters, digits and single inner hyphens, unique among the tenant's\ncurrent slugs, and a display ``name``.",
+        "description": "A new project: a ``slug`` of 1-64 lowercase letters, digits and single inner hyphens, unique among the tenant's\ncurrent slugs, and a display ``name``. A ``color`` is a palette name; with none stated, the hub gives the project\nthe tenant's least-used one.",
         "properties": {
+          "color": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Color"
+          },
           "description": {
             "default": "",
             "title": "Description",
@@ -8975,8 +9005,19 @@
       },
       "ProjectDocument": {
         "additionalProperties": false,
-        "description": "A project as a document entry, named by its slug. A ``name`` or ``description`` the entry omits is left as\nstored; a project the document creates needs a ``name``. A ``sources`` or ``repositories`` list the entry states\nis the project's whole set of links of that kind \u2014 a record it leaves out is unlinked; a list it omits is left\nas stored. A source or repository is named by its id or its slug, a slug it left included. A slug a project left\nis refused: name that project by its current slug.",
+        "description": "A project as a document entry, named by its slug. A ``name``, ``description`` or ``color`` the entry omits is\nleft as stored; a project the document creates needs a ``name`` and, with no ``color``, takes the tenant's\nleast-used one. A ``sources`` or ``repositories`` list the entry states is the project's whole set of links of that\nkind \u2014 a record it leaves out is unlinked; a list it omits is left as stored. A source or repository is named by\nits id or its slug, a slug it left included. A slug a project left is refused: name that project by its current\nslug.",
         "properties": {
+          "color": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Color"
+          },
           "description": {
             "default": "",
             "title": "Description",
@@ -9024,6 +9065,17 @@
         "additionalProperties": false,
         "description": "A sparse edit: an absent field is unchanged, a present one is set, and an explicit ``null`` is refused on every\nfield. A slug the project leaves keeps resolving to it until another project takes it.",
         "properties": {
+          "color": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Color"
+          },
           "description": {
             "anyOf": [
               {
@@ -9064,6 +9116,9 @@
       "ProjectView": {
         "description": "One project \u2014 the ``GET /api/projects`` listing row and every project verb's view.",
         "properties": {
+          "color": {
+            "$ref": "#/components/schemas/ProjectColor"
+          },
           "created_at": {
             "title": "Created At",
             "type": "string"
@@ -9094,6 +9149,7 @@
           "slug",
           "name",
           "description",
+          "color",
           "revision",
           "created_at"
         ],
@@ -24778,7 +24834,7 @@
         ]
       },
       "post": {
-        "description": "Store a new project at revision 1, serving no source or repository but the built-in ``hub`` source until it is\nlinked. 422 naming the field for a malformed slug or a blank or padded name; 409 when the slug is another\nproject's current slug.",
+        "description": "Store a new project at revision 1, serving no source or repository but the built-in ``hub`` source until it is\nlinked. With no ``color``, it takes the tenant's least-used one. 422 naming the field for a malformed slug, a blank\nor padded name or a color outside the palette; 409 when the slug is another project's current slug.",
         "operationId": "create_project_api_projects_post",
         "parameters": [
           {

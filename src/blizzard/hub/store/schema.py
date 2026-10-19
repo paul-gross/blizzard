@@ -240,6 +240,7 @@ projects = Table(
     Column("revision", Integer, nullable=False),
     Column("created_at", UtcDateTime, nullable=False),
     Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_projects_tenant_id"), nullable=False),
+    Column("color", String, nullable=False),  # a ProjectColor name; the enum alone holds the palette
     PrimaryKeyConstraint("project_id", name="pk_projects"),
     UniqueConstraint("tenant_id", "slug", name="uq_projects_tenant_slug"),
 )

@@ -60,6 +60,7 @@ def _view(record: Project) -> ProjectView:
         slug=record.slug,
         name=record.name,
         description=record.description,
+        color=record.color,
         revision=record.revision,
         created_at=iso_utc(record.created_at),
     )
@@ -117,7 +118,7 @@ def _edit(request: ProjectPatchRequest) -> ProjectEdit:
     for field, value in present.items():
         if value is None:
             raise _unprocessable(field, "may not be null")
-    return ProjectEdit(**{field: present.get(field, UNSET) for field in ("slug", "name", "description")})
+    return ProjectEdit(**{field: present.get(field, UNSET) for field in ("slug", "name", "description", "color")})
 
 
 # --- Projects ----------------------------------------------------------------------------------------------------
@@ -134,11 +135,15 @@ def create_project(
     request: ProjectCreateRequest, identity: Editor, door: RequestDoor, services: Services
 ) -> ProjectView:
     """Store a new project at revision 1, serving no source or repository but the built-in ``hub`` source until it is
-    linked. 422 naming the field for a malformed slug or a blank or padded name; 409 when the slug is another
-    project's current slug."""
+    linked. With no ``color``, it takes the tenant's least-used one. 422 naming the field for a malformed slug, a blank
+    or padded name or a color outside the palette; 409 when the slug is another project's current slug."""
     try:
         record = services.project_authoring.create(
-            request.slug, request.name, change_context(identity, door), description=request.description
+            request.slug,
+            request.name,
+            change_context(identity, door),
+            description=request.description,
+            color=request.color,
         )
     except ConfigFieldError as exc:
         raise _unprocessable(exc.field, exc.message) from exc

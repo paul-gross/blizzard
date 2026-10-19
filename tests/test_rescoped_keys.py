@@ -84,6 +84,7 @@ def tenants(tmp_path: Path) -> _Tenants:
                 slug="default",
                 name="Default",
                 description="",
+                color="red",
                 revision=1,
                 created_at=_AT,
             )

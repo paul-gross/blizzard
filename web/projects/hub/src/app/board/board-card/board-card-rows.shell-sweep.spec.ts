@@ -93,6 +93,27 @@ describe('board card row order shell sweep (web:shell-sweep)', () => {
     });
   }
 
+  for (const width of [800, 390]) {
+    it(`leads the step row with the project's swatch and keeps the id flush right at width ${width}`, async () => {
+      const root = await renderCard(width, { ...CARD, projectName: 'Blizzard', projectColor: 'teal' });
+      try {
+        const swatch = rectOf(root, 'chunk-project-swatch', width);
+        const node = rectOf(root, 'chunk-node', width);
+        const id = rectOf(root, 'chunk-id', width);
+        const card = rectOf(root, 'chunk-card', width);
+        expect(swatch.right, `width ${width}: the swatch overlaps the step`).toBeLessThanOrEqual(node.left + 0.5);
+        expect(id.left, `width ${width}: the id overlaps the step`).toBeGreaterThanOrEqual(node.right - 0.5);
+        expect(id.right, `width ${width}: the id left the card's right edge`).toBeLessThanOrEqual(card.right + 0.5);
+        expect(
+          root.querySelector('[data-testid="chunk-project-swatch"] .swatch')?.getAttribute('aria-label'),
+          `width ${width}: the swatch is not named for the project`,
+        ).toBe('Blizzard');
+      } finally {
+        root.remove();
+      }
+    });
+  }
+
   it('keeps a multi-prerequisite count in view, unclipped, at 320px', async () => {
     const root = await renderCard(320, { ...CARD, blockedCount: 4 });
     try {

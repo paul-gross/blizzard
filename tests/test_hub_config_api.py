@@ -710,7 +710,7 @@ def test_applying_an_export_writes_nothing(hub: HubHarness) -> None:
     assert document["version"] == 1
     assert list(document)[:2] == ["version", "projects"]
     assert document["projects"] == [
-        {"slug": "default", "name": "Default", "description": "", "sources": [], "repositories": []}
+        {"slug": "default", "name": "Default", "description": "", "color": "red", "sources": [], "repositories": []}
     ]
     assert document["secrets"] == ["gh"]
     assert [w["slug"] for w in document["work_sources"]] == ["demo"]

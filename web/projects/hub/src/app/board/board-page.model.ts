@@ -6,6 +6,13 @@ export interface LaneMove {
   readonly afterChunkId: string | null;
 }
 
+/** Each project's palette color by project id — what the board joins onto a card by its chunk's `project_id`. */
+export function projectColorsById(
+  projects: readonly { readonly project_id: string; readonly color: string }[],
+): ReadonlyMap<string, string> {
+  return new Map(projects.map((project) => [project.project_id, project.color]));
+}
+
 /** Every chunk id with an open decision, as a set each board card can test its own `gate` flag against. */
 export function gatedChunkIds(decisions: readonly { readonly chunk_id: string }[]): ReadonlySet<string> {
   return new Set(decisions.map((decision) => decision.chunk_id));

@@ -24,6 +24,7 @@
               [attr.aria-label]="lightLabel(row)"
               [attr.data-testid]="'projects-table-light-' + row.key"
             ></span>
+            <fleet-kit-swatch class="swatch" [color]="row.color" [attr.title]="row.color" />
             <span class="title">{{ row.name }}</span>
           </span>
           <span class="sub">

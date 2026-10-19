@@ -15,15 +15,28 @@ A project carries three names, each with one job:
 | `slug`       | The handle you type: in board URLs, `--project`, API paths and a runner's configuration. 1 to 64 lowercase letters, digits and hyphens, a hyphen only between two letters or digits. Unique in the tenant; two tenants may share one |
 | `name`       | The display name: 1 to 128 characters with no leading or trailing whitespace, unique nowhere. Only ever shown, never looked up                                                                                                       |
 
-Wherever a project is accepted, its id or its slug names it; a display name never does. An id names its project
-whatever the slug is now.
+Wherever a project is accepted, its id or its slug names it; a display name never does. An id names its project whatever
+the slug is now.
 
 A project's slug and name may change, and nothing that refers to the project moves. The slug a project leaves becomes
 its **former slug**: a URL, a script or a runner configuration written against it keeps reaching the project. The API
 serves it as the project; the board rewrites it to the current slug. Any project of the tenant may take a former slug,
 and from then on it names its new holder. The one place a former slug is refused is a configuration document, which
-answers `422` naming the project that left it ([config-documents.md](./config-documents.md)). A configuration that
-must survive any slug change, such as a runner's, names projects by id.
+answers `422` naming the project that left it ([config-documents.md](./config-documents.md)). A configuration that must
+survive any slug change, such as a runner's, names projects by id.
+
+## A project's color
+
+A project carries a `color`: one of twelve palette names, in order `red`, `orange`, `amber`, `lime`, `green`, `teal`,
+`cyan`, `blue`, `indigo`, `violet`, `pink` and `slate`. The board draws each name in its own shade; the name, not the
+shade, is what the hub stores and the API carries.
+
+A create that states no color takes the color the fewest of the tenant's projects hold, and picks at random among
+equally unused ones, so a tenant's first twelve projects get twelve different colors. A create or an edit that states a
+color stores it, and the change log records it like any other field. A name outside the palette answers `422` naming
+`color` and listing the twelve names. A project that existed before colors were introduced was given one when the hub
+upgraded, distinct among the first twelve of its tenant. The hub never recomputes a color: it changes only when someone
+edits it.
 
 ## The `default` project
 
@@ -37,16 +50,16 @@ apart: you may rename it or change its slug like any other project.
 Creating and editing a project, and linking or unlinking it, take the tenant role that holds `config:edit`. Reading
 projects and their links takes `fleet:view`.
 
-| Verb                                                                                         | Route                                                               |
-| -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
-| `blizzard hub project create <slug> [--name <name>] [--description <text>]`                  | `POST /api/projects`                                                |
-| `blizzard hub project list`                                                                  | `GET /api/projects`                                                 |
-| `blizzard hub project show <project>`                                                        | `GET /api/projects/{project}`, with its links                       |
-| `blizzard hub project edit <project> [--slug …] [--name …] [--description …] [--if-match N]` | `PATCH /api/projects/{project}`                                     |
-| `blizzard hub project link <project> --source <source>`                                      | `PUT /api/projects/{project}/source-links/{source}`                 |
-| `blizzard hub project link <project> --repository <repository>`                              | `PUT /api/projects/{project}/repository-links/{repository}`         |
-| `blizzard hub project unlink <project> --source <source>`                                    | `POST /api/projects/{project}/source-links/{source}/retire`         |
-| `blizzard hub project unlink <project> --repository <repository>`                            | `POST /api/projects/{project}/repository-links/{repository}/retire` |
+| Verb                                                                                                     | Route                                                               |
+| -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| `blizzard hub project create <slug> [--name <name>] [--description <text>] [--color <name>]`             | `POST /api/projects`                                                |
+| `blizzard hub project list`                                                                              | `GET /api/projects`                                                 |
+| `blizzard hub project show <project>`                                                                    | `GET /api/projects/{project}`, with its links                       |
+| `blizzard hub project edit <project> [--slug …] [--name …] [--description …] [--color …] [--if-match N]` | `PATCH /api/projects/{project}`                                     |
+| `blizzard hub project link <project> --source <source>`                                                  | `PUT /api/projects/{project}/source-links/{source}`                 |
+| `blizzard hub project link <project> --repository <repository>`                                          | `PUT /api/projects/{project}/repository-links/{repository}`         |
+| `blizzard hub project unlink <project> --source <source>`                                                | `POST /api/projects/{project}/source-links/{source}/retire`         |
+| `blizzard hub project unlink <project> --repository <repository>`                                        | `POST /api/projects/{project}/repository-links/{repository}/retire` |
 
 `create` names the project after its slug unless `--name` is given. A slug that is another project's current slug
 answers `409`; a malformed slug, or a blank or padded name, answers `422` naming the field. A project cannot be retired.
@@ -63,27 +76,27 @@ work is ingested from it, or when work lands in it.
 - **A source link** lets a project ingest from a work source, named by its id or its slug; the link holds the source's
   id, so it survives the slug changing ([work-sources.md](./work-sources.md#naming-a-work-source)). Every project draws
   from the built-in `hub` source without a link, and that link cannot be removed. When `blizzard hub chunk ingest` names
-  no `--project`, the hub uses the one project every pointer's source is linked to; a source linked to several
-  projects, or pointers whose sources are linked to different ones, answer `422 project_required`. A pointer whose
-  source is not linked to the chunk's project answers `422 source_not_linked`, naming the source
+  no `--project`, the hub uses the one project every pointer's source is linked to; a source linked to several projects,
+  or pointers whose sources are linked to different ones, answer `422 project_required`. A pointer whose source is not
+  linked to the chunk's project answers `422 source_not_linked`, naming the source
   ([work-sources.md](./work-sources.md#ingesting-work-items)).
 - **A repository link** lets a project's chunks land in a repository, named by its id or its slug; the link holds the
   repository's id, so it survives the slug changing ([repositories.md](./repositories.md#naming-a-repository)). A
-  `deliver` step resolves a chunk's commits only against the repositories its project links; one that would resolve to
-  a repository the project does not link refuses the step as `repository-not-linked`
+  `deliver` step resolves a chunk's commits only against the repositories its project links; one that would resolve to a
+  repository the project does not link refuses the step as `repository-not-linked`
   ([repositories.md](./repositories.md#how-delivery-uses-a-record)). A repository no project links receives nothing.
 
 Unlinking retires the link: no new work is ingested through it, and the next `deliver` step no longer lands there. A
 step already running finishes. `link` relinks a link unlinked earlier.
 
-A hub step's `run:` commands see the chunk's project as `BZ_HUB_PROJECT_ID`, its id, and `BZ_HUB_PROJECT`, its slug
-when the step starts.
+A hub step's `run:` commands see the chunk's project as `BZ_HUB_PROJECT_ID`, its id, and `BZ_HUB_PROJECT`, its slug when
+the step starts.
 
 ## A call that names no project
 
 A call that needs a project — creating a scope, routine, operator garden proposal, hub item or link, or looking up a
-scope by slug or a routine by name — and names none acts in the tenant's project when the tenant holds exactly one.
-When it holds several, the call is refused, never resolved across projects by a name only one of them holds:
+scope by slug or a routine by name — and names none acts in the tenant's project when the tenant holds exactly one. When
+it holds several, the call is refused, never resolved across projects by a name only one of them holds:
 
 ```json
 {
@@ -113,10 +126,10 @@ The CLI keeps no saved project, as it keeps no saved tenant. Every verb that act
   records.
 - `blizzard hub chunk ingest --project` picks the project to mint the chunk in, over the inference above.
 
-The tenant is settled first, by `--tenant` ([tenants.md](./tenants.md#naming-the-tenant-a-call-acts-in)); the project
-is looked up within it. The tenant-wide reads take the same filter over HTTP as `?project=<id|slug>`: chunks, chunk
-counts, the queue and backlog, open questions and decisions, runs, spend, the analytics reads, the event feed and the
-event stream.
+The tenant is settled first, by `--tenant` ([tenants.md](./tenants.md#naming-the-tenant-a-call-acts-in)); the project is
+looked up within it. The tenant-wide reads take the same filter over HTTP as `?project=<id|slug>`: chunks, chunk counts,
+the queue and backlog, open questions and decisions, runs, spend, the analytics reads, the event feed and the event
+stream.
 
 ## Runners serve projects
 
@@ -134,15 +147,16 @@ The runner sends the project list at every registration. A `[[runner]]` with no 
 key, and only `projects = []` declares that the runner serves nothing.
 
 A runner may bind its projects to several workspaces. Each binding's `agents` caps that binding alone, and a full
-binding asks the hub for nothing, so a busy project never stands in front of another project's work. The environments
-of one `[[workspace]]` form one pool, shared by every runner of the host that binds a project to it. Two entries that
+binding asks the hub for nothing, so a busy project never stands in front of another project's work. The environments of
+one `[[workspace]]` form one pool, shared by every runner of the host that binds a project to it. Two entries that
 resolve to the same project leave the runner claiming nothing until one is removed; its status names both.
 
-`blizzard-runner init` writes a binding of `default` into a fresh host file, so a new runner is offered work on
-its first registration with no edit. A repeated `--project <id|slug>` names other projects instead, and the runner is
-added serving them; a project the tenant does not hold refuses the add, and nothing is added. `blizzard hub runner add
-<name>` takes the same repeatable `--project`. Without one, the runner is added serving the tenant's project when the
-tenant holds one, and serving nothing when it holds several.
+`blizzard-runner init` writes a binding of `default` into a fresh host file, so a new runner is offered work on its
+first registration with no edit. A repeated `--project <id|slug>` names other projects instead, and the runner is added
+serving them; a project the tenant does not hold refuses the add, and nothing is added. `blizzard hub runner add
+<name>`
+takes the same repeatable `--project`. Without one, the runner is added serving the tenant's project when the tenant
+holds one, and serving nothing when it holds several.
 
 Registration never refuses over the declaration, because it is also the runner's heartbeat. An entry no project of the
 tenant answers to serves nothing, and is looked up again at every registration, so it starts serving once a project
@@ -163,9 +177,9 @@ link keeps it:
 /p/{project}/{view}/…   one project
 ```
 
-The lens control sits beside the view tabs and shows the project's display name; changing it opens the same view under
-the other lens. A lensed URL naming a project by id or by a former slug is rewritten to the current slug. One naming no
-project of the tenant opens the same view on All, with a notice.
+The lens control sits beside the view tabs and shows the project's display name, each project's chip led by its color;
+changing it opens the same view under the other lens. A lensed URL naming a project by id or by a former slug is
+rewritten to the current slug. One naming no project of the tenant opens the same view on All, with a notice.
 
 | View                                     | On one project                                                               | On All                     |
 | ---------------------------------------- | ---------------------------------------------------------------------------- | -------------------------- |

@@ -2,7 +2,7 @@
 
 Adds two tenant-keyed tables, permits keyed to their project; downgrade drops them.
 Revision ID: 20261015_0900_permits
-Revises: 20261014_0900_question_decision_project
+Revises: 20261018_1200_project_color
 """
 
 # exemplar: bzh:manual-migrations, bzh:frozen-revisions, bzh:sql-portable.
@@ -17,7 +17,7 @@ from alembic import op
 from blizzard.foundation.store.utc import UtcDateTime
 
 revision: str = "20261015_0900_permits"
-down_revision: str | None = "20261014_0900_question_decision_project"
+down_revision: str | None = "20261018_1200_project_color"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

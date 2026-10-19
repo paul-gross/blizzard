@@ -8,7 +8,7 @@ always as ``Door.APPLY`` — the door is never read from the request (``bzh:conf
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import ValidationError
@@ -499,17 +499,21 @@ def _projects(
         former_repositories=dict(planned.former),
     )
     declared = [_project_declaration(entry) for entry in document.projects]
-    return plan_projects(declared, stored, ctx, at=services.clock.now())
+    return plan_projects(declared, stored, ctx, pick=services.color_pick, at=services.clock.now())
 
 
 def _project_declaration(entry: ProjectDocument) -> ProjectDeclaration:
     stated = entry.model_fields_set
+    edit: dict[str, Any] = {}
+    if "name" in stated and entry.name is not None:
+        edit["name"] = entry.name
+    if "description" in stated:
+        edit["description"] = entry.description
+    if "color" in stated:
+        edit["color"] = entry.color
     return ProjectDeclaration(
         slug=entry.slug,
-        edit=ProjectEdit(
-            **({"name": entry.name} if "name" in stated and entry.name is not None else {}),
-            **({"description": entry.description} if "description" in stated else {}),
-        ),
+        edit=ProjectEdit(**edit),
         sources=tuple(entry.sources) if "sources" in stated else None,
         repositories=tuple(entry.repositories) if "repositories" in stated else None,
     )
@@ -647,6 +651,7 @@ def export_config(services: Services) -> ConfigDocument:
                 slug=project.slug,
                 name=project.name,
                 description=project.description,
+                color=project.color,
                 sources=sorted(source_slugs[link.work_source_id] for link in source_links.get(project.project_id, [])),
                 repositories=sorted(
                     repository_slugs[link.repository_id] for link in repository_links.get(project.project_id, [])

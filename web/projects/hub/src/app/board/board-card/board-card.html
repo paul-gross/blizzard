@@ -61,6 +61,11 @@
   }
   <!-- The step row: where the chunk is, left, and its id flush right. -->
   <span class="row step-row">
+    @if (card().projectColor; as projectColor) {
+      @if (card().projectName; as projectName) {
+        <fleet-kit-swatch class="project-swatch" data-testid="chunk-project-swatch" [color]="projectColor" [label]="projectName" />
+      }
+    }
     <span class="nd" data-testid="chunk-node" [attr.title]="nodeTitle(card())">{{ nodeLabel(card()) }}</span>
     <!-- The status names only what its column does not: the DONE lane's step slot already
          reads "done"/"stopped", and a card drops it wherever the lane holds that one status

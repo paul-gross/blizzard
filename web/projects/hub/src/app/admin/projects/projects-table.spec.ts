@@ -5,9 +5,9 @@ import { ProjectsTable } from './projects-table';
 import type { ProjectRowVm } from './projects.model';
 
 const ROWS: readonly ProjectRowVm[] = [
-  { key: 'proj_b', name: 'Blizzard', projectId: 'proj_01ABCDEFGHJKMNPQRSTVWXYZ12', needs: null, wired: true },
-  { key: 'proj_c', name: 'Celestial', projectId: 'proj_01ABCDEFGHJKMNPQRSTVWXYZ34', needs: 'needs a runner', wired: false },
-  { key: 'proj_d', name: 'Dormant', projectId: 'proj_01ABCDEFGHJKMNPQRSTVWXYZ56', needs: null, wired: false },
+  { key: 'proj_b', name: 'Blizzard', projectId: 'proj_01ABCDEFGHJKMNPQRSTVWXYZ12', color: 'teal', needs: null, wired: true },
+  { key: 'proj_c', name: 'Celestial', projectId: 'proj_01ABCDEFGHJKMNPQRSTVWXYZ34', color: 'teal', needs: 'needs a runner', wired: false },
+  { key: 'proj_d', name: 'Dormant', projectId: 'proj_01ABCDEFGHJKMNPQRSTVWXYZ56', color: 'teal', needs: null, wired: false },
 ];
 
 describe('ProjectsTable', () => {

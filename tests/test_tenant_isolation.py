@@ -54,6 +54,7 @@ from tests.support import (
     close_tenant,
     default_project,
     drain_stream,
+    first_color,
     hub_scoped,
     runner_token,
     scoped_connections,
@@ -916,7 +917,9 @@ def test_a_tenants_projects_and_links_answer_only_in_their_own_tenant(two: _Two)
     projects = {}
     for t in two.both():
         own = stores[t.label]
-        authoring = ProjectAuthoring(projects=own.projects, links=own.project_links, clock=two.hub.clock)
+        authoring = ProjectAuthoring(
+            projects=own.projects, links=own.project_links, pick=first_color, clock=two.hub.clock
+        )
         [project] = own.projects.list_all()
         source, repository = (
             own.work_source_records.get(WorkSourceId(t.ids["source"])),

@@ -1,0 +1,12 @@
+<div class="colors" role="group" aria-label="Project color" data-testid="project-color-picker">
+  @for (color of colors(); track color) {
+    <fleet-kit-chip
+      [selected]="color === current()"
+      [disabled]="disabled()"
+      [testid]="'project-color-' + color"
+      (click)="choose.emit(color)"
+    >
+      <fleet-kit-swatch class="chip-swatch" [color]="color" />{{ color }}
+    </fleet-kit-chip>
+  }
+</div>

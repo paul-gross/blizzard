@@ -22,6 +22,7 @@ const PROJECT = {
   slug: 'blizzard',
   name: 'Blizzard',
   description: 'The orchestration platform itself',
+  color: 'teal',
   revision: 1,
   created_at: '2026-09-20T00:00:00Z',
 };
@@ -42,7 +43,7 @@ describe('ProjectDetail overview shell sweep', () => {
     await page.viewport(width, 800);
     const pending = new Promise<unknown>(() => undefined);
     stub = stubRequestClient(hubClient, (_method, path) => {
-      if (path === '/api/me') return OPERATOR_ME_RESPONSE;
+      if (path === '/api/me') return { ...OPERATOR_ME_RESPONSE, permissions: [...OPERATOR_ME_RESPONSE.permissions, 'config:edit'] };
       if (path === '/api/projects/proj_b') return PROJECT;
       if (path.endsWith('/source-links')) return { source_links: [] };
       if (path.endsWith('/repository-links')) return { repository_links: [] };
@@ -106,6 +107,35 @@ describe('ProjectDetail overview shell sweep', () => {
       expect(root.textContent).toContain('Loading revisions…');
       expect(root.textContent).not.toContain('0 done today');
       noHorizontalOverflow(root, width);
+      harness.fixture.destroy();
+      root.remove();
+    });
+
+    it(`states the color beside the name and in its fact, and wraps the picker's twelve chips inside the dialog at ${width}px`, async () => {
+      const { harness, root } = await open(width, '/admin/projects/proj_b', true);
+      expect(find(root, 'admin-projects-color')?.textContent).toContain('teal');
+      const header = root.querySelector<HTMLElement>('.name-swatch')!.getBoundingClientRect();
+      const name = root.querySelector<HTMLElement>('.name')!.getBoundingClientRect();
+      expect(header.right, 'the swatch overlaps the name').toBeLessThanOrEqual(name.left + 0.5);
+
+      // Writes are a desktop affair: the Color control is absent on mobile.
+      if (width < 768) {
+        expect(find(root, 'admin-projects-color-open')).toBeNull();
+        harness.fixture.destroy();
+        root.remove();
+        return;
+      }
+      find(root, 'admin-projects-color-open')!.click();
+      await settle(harness.fixture);
+      const dialog = document.querySelector<HTMLElement>('[data-testid="admin-projects-color-dialog"]')!;
+      const chips = [...dialog.querySelectorAll<HTMLElement>('button[data-testid^="project-color-"]')];
+      expect(chips).toHaveLength(12);
+      const panel = dialog.getBoundingClientRect();
+      for (const chip of chips) {
+        const box = chip.getBoundingClientRect();
+        expect(box.right, 'a chip overflows the dialog').toBeLessThanOrEqual(panel.right + 0.5);
+        expect(box.left, 'a chip starts left of the dialog').toBeGreaterThanOrEqual(panel.left - 0.5);
+      }
       harness.fixture.destroy();
       root.remove();
     });

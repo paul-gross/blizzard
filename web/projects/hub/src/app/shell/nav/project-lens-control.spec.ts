@@ -6,9 +6,9 @@ import { ProjectLensControl } from './project-lens-control';
 import type { LensChoice } from './project-lens.model';
 
 const CHOICES: readonly LensChoice[] = [
-  { slug: null, label: 'All' },
-  { slug: 'blizzard', label: 'Blizzard' },
-  { slug: 'zeta', label: 'Zeta' },
+  { slug: null, label: 'All', color: null },
+  { slug: 'blizzard', label: 'Blizzard', color: 'teal' },
+  { slug: 'zeta', label: 'Zeta', color: 'pink' },
 ];
 
 describe('ProjectLensControl', () => {

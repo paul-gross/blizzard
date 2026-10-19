@@ -9,6 +9,7 @@ from __future__ import annotations
 from sqlalchemy.engine import Connection, Row
 from sqlalchemy.exc import IntegrityError
 
+from blizzard.foundation.project_colors import ProjectColor
 from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.config.changes import ConfigChange
 from blizzard.hub.domain.config.work_sources import ConfigRevisionConflict
@@ -39,6 +40,7 @@ def insert_project(conn: Connection, record: Project, change: ConfigChange) -> N
             slug=record.slug,
             name=record.name,
             description=record.description,
+            color=record.color,
             revision=record.revision,
             created_at=record.created_at,
         )
@@ -56,7 +58,13 @@ def update_project(
         statements_of(conn)
         .update(projects)
         .where(projects.c.project_id == record.project_id, projects.c.revision == from_revision)
-        .values(slug=record.slug, name=record.name, description=record.description, revision=record.revision)
+        .values(
+            slug=record.slug,
+            name=record.name,
+            description=record.description,
+            color=record.color,
+            revision=record.revision,
+        )
     ).rowcount
     if moved != 1:
         raise ConfigRevisionConflict("project", record.project_id, current=_revision(conn, record.project_id))
@@ -136,6 +144,7 @@ def _of(row: Row) -> Project:  # type: ignore[type-arg]
         slug=row.slug,
         name=row.name,
         description=row.description,
+        color=ProjectColor(row.color),
         revision=row.revision,
         created_at=row.created_at,
     )

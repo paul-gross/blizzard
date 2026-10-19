@@ -1,0 +1,10 @@
+.colors {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+.chip-swatch {
+  margin-right: 6px;
+  vertical-align: middle;
+}

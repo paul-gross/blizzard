@@ -21,6 +21,7 @@ const ROWS: readonly ProjectRowVm[] = [
     key: 'proj_long',
     name: LONG,
     projectId: 'proj_01ABCDEFGHJKMNPQRSTVWXYZ12',
+    color: 'teal',
     needs: 'needs a work source, a repository, a runner',
     wired: false,
   },
@@ -28,6 +29,7 @@ const ROWS: readonly ProjectRowVm[] = [
     key: 'proj_b',
     name: 'Blizzard',
     projectId: 'proj_01ABCDEFGHJKMNPQRSTVWXYZ34',
+    color: 'teal',
     needs: null,
     wired: true,
   },
@@ -59,6 +61,11 @@ async function sweep(width: number) {
     ).toBeLessThanOrEqual(width);
     const table = root.querySelector<HTMLElement>('[data-testid="projects-table"]')!;
     expect(table.getBoundingClientRect().right, `the table overruns ${width}px`).toBeLessThanOrEqual(width);
+
+    const light = root.querySelector<HTMLElement>('[data-testid="projects-table-light-proj_long"]')!.getBoundingClientRect();
+    const swatch = root.querySelector<HTMLElement>('[data-testid="projects-table-row-proj_long"] fleet-kit-swatch')!.getBoundingClientRect();
+    expect(swatch.width, 'the swatch has no width').toBeGreaterThan(0);
+    expect(swatch.left, `the swatch is not beside the light at ${width}px`).toBeGreaterThanOrEqual(light.right - 0.5);
 
     const badge = root.querySelector<HTMLElement>('[data-testid="projects-table-needs-proj_long"]')!;
     const box = badge.getBoundingClientRect();

@@ -3,6 +3,11 @@
     <fleet-when [iso]="p.created_at" [relative]="true" />
   }
 </ng-template>
+<ng-template #colorFact>
+  @if (project(); as p) {
+    <fleet-kit-swatch class="fact-swatch" [color]="p.color" />{{ p.color }}
+  }
+</ng-template>
 <ng-template #revisionFact>
   r{{ project()?.revision }}
   @if (lastChange(); as last) {
@@ -23,12 +28,14 @@
   @if (project(); as p) {
     <article class="record" data-testid="admin-projects-detail">
       <header class="hdr">
+        <fleet-kit-swatch class="name-swatch" [color]="p.color" />
         <h2 class="name">{{ p.name }}</h2>
         @if (p.description) {
           <span class="desc" data-testid="admin-projects-description">{{ p.description }}</span>
         }
         <span class="grow"></span>
         @if (canEdit()) {
+          <fleet-kit-button testid="admin-projects-color-open" (click)="onColorOpen()">Color</fleet-kit-button>
           <fleet-kit-button testid="admin-projects-edit" (click)="onEdit()">Edit</fleet-kit-button>
         }
       </header>
@@ -118,6 +125,25 @@
         (closed)="editOpen.set(false)"
         (submitted)="onSave($event)"
       />
+    }
+    @if (colorOpen()) {
+      <fleet-kit-dialog [open]="true" [ariaLabel]="'Color of ' + p.name" testid="admin-projects-color-dialog" (closed)="onColorClose()">
+        <h2 fleetKitDialogHeader>Color of {{ p.name }}</h2>
+        <app-project-color-picker
+          [colors]="palette"
+          [current]="p.color"
+          [disabled]="editMutation.isPending()"
+          (choose)="onColor($event)"
+        />
+        <div fleetKitDialogFooter class="color-footer">
+          @if (colorError(); as error) {
+            <p class="color-error" data-testid="admin-projects-color-error">{{ error }}</p>
+          }
+          <fleet-kit-button size="cta" [disabled]="editMutation.isPending()" testid="admin-projects-color-close" (click)="onColorClose()">
+            Close
+          </fleet-kit-button>
+        </div>
+      </fleet-kit-dialog>
     }
     @if (linkOpen() === 'source') {
       <app-project-link-dialog

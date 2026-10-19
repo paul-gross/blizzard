@@ -67,13 +67,15 @@ the same kind has left is refused `422`, naming that record: name it by its curr
 ([work-sources.md](./work-sources.md#naming-a-work-source), [repositories.md](./repositories.md#naming-a-repository)). A
 work source entry whose slug is `hub`, the built-in source's, is refused `422` at its `slug`.
 
-A project entry is keyed by its `slug`; one the document creates needs a `name`. A `sources` or `repositories` list the
-entry states is the project's whole set of links of that kind, so a name it leaves out is unlinked; a list it leaves out
-keeps the stored links ([projects.md](./projects.md#links)). A project names a work source or a repository by its id,
-its slug, or a slug the record left, among the records of that kind the apply leaves — those stored and those the
-document declares. A slug a project has left is refused `422`, naming that project: name it by its current slug. A scope
-or routine entry names its project with `project`, an id or a slug; an entry without one belongs to the tenant's only
-project, and is refused `project_required` when the tenant holds several.
+A project entry is keyed by its `slug`; one the document creates needs a `name`. A `color` it states is stored, and one
+it leaves out keeps the stored color, or gives a created project the tenant's least-used one
+([projects.md](./projects.md#a-projects-color)). A `sources` or `repositories` list the entry states is the project's
+whole set of links of that kind, so a name it leaves out is unlinked; a list it leaves out keeps the stored links
+([projects.md](./projects.md#links)). A project names a work source or a repository by its id, its slug, or a slug the
+record left, among the records of that kind the apply leaves — those stored and those the document declares. A slug a
+project has left is refused `422`, naming that project: name it by its current slug. A scope or routine entry names its
+project with `project`, an id or a slug; an entry without one belongs to the tenant's only project, and is refused
+`project_required` when the tenant holds several.
 
 The file's extension picks the format: `.yaml` and `.yml` read as YAML, `.json` as JSON. Over HTTP the `Content-Type`
 does: `POST /api/config/apply` takes `application/yaml` or `application/json`, and any other type is refused with 415.
@@ -114,7 +116,8 @@ The response lists `outcomes`, each with a `kind`, `key`, `op` and the changed f
 `config export` prints every active work source, repository, scope, and routine with every field, and every active
 secret name, as a document that applies back as a no-op. `--format` is `yaml` (the default) or `json`. Retired records
 are left out, because applying one would enable it again. Each work source and repository is written with its `slug` and
-`name`, and each project's `sources` and `repositories` as slugs. The built-in `hub` work source is never exported.
+`name`, and each project's `color`, `sources` and `repositories` as slugs. The built-in `hub` work source is never
+exported.
 
 ## Recording
 

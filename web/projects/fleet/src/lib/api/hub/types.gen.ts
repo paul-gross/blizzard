@@ -5679,12 +5679,44 @@ export type ProducesEntry = {
 };
 
 /**
+ * ProjectColor
+ *
+ * A project's color, by palette name; each name maps to one fixed display color.
+ */
+export const ProjectColor = {
+    RED: 'red',
+    ORANGE: 'orange',
+    AMBER: 'amber',
+    LIME: 'lime',
+    GREEN: 'green',
+    TEAL: 'teal',
+    CYAN: 'cyan',
+    BLUE: 'blue',
+    INDIGO: 'indigo',
+    VIOLET: 'violet',
+    PINK: 'pink',
+    SLATE: 'slate'
+} as const;
+
+/**
+ * ProjectColor
+ *
+ * A project's color, by palette name; each name maps to one fixed display color.
+ */
+export type ProjectColor = typeof ProjectColor[keyof typeof ProjectColor];
+
+/**
  * ProjectCreateRequest
  *
  * A new project: a ``slug`` of 1-64 lowercase letters, digits and single inner hyphens, unique among the tenant's
- * current slugs, and a display ``name``.
+ * current slugs, and a display ``name``. A ``color`` is a palette name; with none stated, the hub gives the project
+ * the tenant's least-used one.
  */
 export type ProjectCreateRequest = {
+    /**
+     * Color
+     */
+    color?: string | null;
     /**
      * Description
      */
@@ -5702,13 +5734,18 @@ export type ProjectCreateRequest = {
 /**
  * ProjectDocument
  *
- * A project as a document entry, named by its slug. A ``name`` or ``description`` the entry omits is left as
- * stored; a project the document creates needs a ``name``. A ``sources`` or ``repositories`` list the entry states
- * is the project's whole set of links of that kind — a record it leaves out is unlinked; a list it omits is left
- * as stored. A source or repository is named by its id or its slug, a slug it left included. A slug a project left
- * is refused: name that project by its current slug.
+ * A project as a document entry, named by its slug. A ``name``, ``description`` or ``color`` the entry omits is
+ * left as stored; a project the document creates needs a ``name`` and, with no ``color``, takes the tenant's
+ * least-used one. A ``sources`` or ``repositories`` list the entry states is the project's whole set of links of that
+ * kind — a record it leaves out is unlinked; a list it omits is left as stored. A source or repository is named by
+ * its id or its slug, a slug it left included. A slug a project left is refused: name that project by its current
+ * slug.
  */
 export type ProjectDocument = {
+    /**
+     * Color
+     */
+    color?: string | null;
     /**
      * Description
      */
@@ -5739,6 +5776,10 @@ export type ProjectDocument = {
  */
 export type ProjectPatchRequest = {
     /**
+     * Color
+     */
+    color?: string | null;
+    /**
      * Description
      */
     description?: string | null;
@@ -5758,6 +5799,7 @@ export type ProjectPatchRequest = {
  * One project — the ``GET /api/projects`` listing row and every project verb's view.
  */
 export type ProjectView = {
+    color: ProjectColor;
     /**
      * Created At
      */

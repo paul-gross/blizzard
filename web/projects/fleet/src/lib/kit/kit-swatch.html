@@ -1,0 +1,5 @@
+@if (label(); as name) {
+  <span class="swatch" role="img" [attr.aria-label]="name" [attr.title]="name" [style.background]="fill()"></span>
+} @else {
+  <span class="swatch" aria-hidden="true" [style.background]="fill()"></span>
+}

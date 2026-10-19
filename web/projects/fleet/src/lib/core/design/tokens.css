@@ -119,4 +119,20 @@
   --surface-resting: var(--panel);
   --surface-hover: var(--panel-hover);
   --surface-selected: var(--panel-hi);
+
+  /* A project's color, one token per palette name. Their own namespace, never an alias of the status colors above,
+   * so re-shading a status never recolors a project. Each holds at least 3:1 against the resting and selected
+   * surfaces and is distinct from the other eleven. */
+  --project-red: #f87171;
+  --project-orange: #fb923c;
+  --project-amber: #fbbf24;
+  --project-lime: #a3e635;
+  --project-green: #4ade80;
+  --project-teal: #14b8a6;
+  --project-cyan: #22d3ee;
+  --project-blue: #60a5fa;
+  --project-indigo: #818cf8;
+  --project-violet: #a78bfa;
+  --project-pink: #f472b6;
+  --project-slate: #94a3b8;
 }
