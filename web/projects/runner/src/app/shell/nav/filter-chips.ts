@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
-import { KitChip } from 'fleet';
+import { KitChip, KitGlyph } from 'fleet';
 
 import type { FilterChoice } from './panel-filters.model';
 
@@ -14,7 +14,7 @@ import type { FilterChoice } from './panel-filters.model';
 @Component({
   selector: 'app-filter-chips',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitChip],
+  imports: [KitChip, KitGlyph],
   templateUrl: './filter-chips.html',
   styleUrl: './filter-chips.css',
   host: { '[class.compact]': 'compact()' },

@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
-import { KitAsyncState, type KitAsyncStateValue, KitCheckbox, KitPanel, KitPanelHeader, KitTabs, type KitTabOption } from 'fleet';
+import { KitAsyncState, type KitAsyncStateValue, KitPanel, KitPanelHeader, KitTabs, type KitTabOption } from 'fleet';
 
 import { BOARD_LANES, type BoardLane, type MachineChunkRow, rankedRows } from '../app-panel.model';
 import { ChunkRow } from './chunk-row';
@@ -26,7 +26,7 @@ const LAYOUT_TABS: readonly KitTabOption[] = [
 @Component({
   selector: 'app-chunk-board',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ChunkRow, KitAsyncState, KitCheckbox, KitPanel, KitPanelHeader, KitTabs],
+  imports: [ChunkRow, KitAsyncState, KitPanel, KitPanelHeader, KitTabs],
   templateUrl: './chunk-board.html',
   styleUrl: './chunk-board.css',
   host: { '[class.stacked]': 'stacked()' },

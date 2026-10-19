@@ -26,10 +26,6 @@ fleet-kit-panel.asks-panel {
 :host(.stacked) fleet-kit-panel {
   flex: none;
 }
-.runner-label {
-  padding: 4px 8px 0;
-  color: var(--label);
-}
 .p-note {
   color: var(--label-dim);
   font-size: var(--fs-label);

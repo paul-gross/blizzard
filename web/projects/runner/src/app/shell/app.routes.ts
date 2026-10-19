@@ -7,7 +7,7 @@ import { legacyRunnerRedirect } from './legacy-runner-redirect';
  * `board` (the panel's board, selection riding in the URL's `?chunk=` via the shared
  * `injectChunkUrlSelection`), `board/chunk/:chunkId` (the shared chunk detail page,
  * `fleet`'s `ChunkPage`, mounted for the runner that owns the chunk), `events` (the fact
- * log), and `machine` (the host and each runner's own machine). Which runner and project
+ * log), and `host` (the host's runners, `machine` redirecting to it). Which runner and project
  * they show is the URL's `?runner=` and `?project=`, read by `core/panel-filters.ts` alone.
  *
  * `''` and any unknown path land on the board. A `runners/:runnerId/…` URL from the
@@ -23,7 +23,8 @@ export const routes: Routes = [
     loadComponent: () => import('../board/chunk/runner-chunk-page').then((m) => m.RunnerChunkPage),
   },
   { path: 'events', loadComponent: () => import('../events/events-page').then((m) => m.EventsPage) },
-  { path: 'machine', loadComponent: () => import('../machine/machine-page').then((m) => m.MachinePage) },
+  { path: 'host', loadComponent: () => import('../host/host-page').then((m) => m.HostPage) },
+  { path: 'machine', redirectTo: 'host' },
   { path: 'runners/:runnerId', canActivate: [legacyRunnerRedirect], children: [{ path: '**', children: [] }] },
   { path: '**', redirectTo: 'board' },
 ];

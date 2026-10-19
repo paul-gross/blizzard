@@ -25,7 +25,7 @@ import { PanelFiltersBar } from './nav/panel-filters-bar';
  *
  * Routed tab shell: a top {@link AppNav} strip (desktop) or a
  * persistent bottom {@link MobileTabBar} (mobile) frames the routed content
- * below `<router-outlet>` — the board, events, and machine pages
+ * below `<router-outlet>` — the board, events, and host pages
  * (`app.routes.ts`); on mobile the panel's filters ({@link PanelFiltersBar}) sit under
  * the titlebar, where the desktop strip carries them. The mobile/desktop fork is picked once
  * here, mirroring the hub app-root's own "adaptive shells over shared guts"

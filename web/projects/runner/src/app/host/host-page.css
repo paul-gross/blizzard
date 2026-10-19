@@ -1,0 +1,134 @@
+:host {
+  display: block;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: var(--fs-base);
+}
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px;
+}
+.hd {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  background: var(--overlay-25);
+}
+.dot {
+  display: inline-block;
+  flex: none;
+  width: 8px;
+  height: 8px;
+}
+.name {
+  margin: 0;
+  color: var(--amber);
+  font-size: var(--fs-lg);
+  font-weight: normal;
+  letter-spacing: 0.04em;
+}
+.ref,
+.report {
+  color: var(--label-dim);
+  font-size: var(--fs-xs);
+  letter-spacing: 0.06em;
+}
+.sec-bd {
+  padding: 10px;
+}
+.subs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 28px;
+  margin: 0;
+}
+.ws {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--line);
+  background: var(--overlay-20);
+  font-size: var(--fs-sm);
+}
+.ws-id {
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.ws-use {
+  color: var(--label);
+  font-size: var(--fs-xs);
+}
+/* Light, environment, chunk, project, runner — the hub Fleet page's environment line, named by its environment. */
+.env {
+  display: grid;
+  grid-template-columns: 12px 48px 96px minmax(0, 1fr) minmax(0, 160px);
+  align-items: center;
+  gap: 10px;
+  padding: 4px 10px;
+  border-bottom: 1px solid var(--line);
+  font-size: var(--fs-sm);
+}
+.env:last-child {
+  border-bottom: none;
+}
+/* Held by a runner the Runner filter leaves out. */
+.env.elsewhere {
+  opacity: 0.45;
+}
+.env-dot {
+  display: block;
+  width: 7px;
+  height: 7px;
+}
+.env-id {
+  color: var(--label);
+  font-size: var(--fs-xs);
+}
+.chunk {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--amber-hi);
+  text-decoration: none;
+}
+a.chunk:hover,
+a.chunk:focus-visible {
+  text-decoration: underline;
+  outline: none;
+}
+.sw-none {
+  flex: none;
+  width: 10px;
+}
+.project {
+  color: var(--text);
+  font-size: var(--fs-xs);
+  overflow-wrap: anywhere;
+}
+.holder {
+  color: var(--cyan);
+  font-size: var(--fs-xs);
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+.free-lbl {
+  grid-column: 3 / -1;
+  color: var(--label-dim);
+  font-size: var(--fs-xs);
+  letter-spacing: 0.08em;
+}
+@media (max-width: 900px) {
+  .subs {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

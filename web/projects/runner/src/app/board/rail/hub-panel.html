@@ -1,0 +1,43 @@
+<div class="wrap" data-testid="hub-panel">
+  <fleet-kit-async-state
+    [state]="triadState()"
+    placement="inline"
+    loadingText="LOADING…"
+    errorText="HUB LINK UNAVAILABLE"
+    emptyText="NO RUNNER REPORTS A HUB"
+    emptyTestid="hub-panel-empty"
+  >
+    @if (summary(); as hub) {
+      <div class="link-line">
+        <span
+          class="link"
+          data-testid="hub-link"
+          [class.up]="hub.reachable === hub.total"
+          [class.part]="hub.reachable > 0 && hub.reachable < hub.total"
+          [class.down]="hub.reachable === 0"
+          >{{ hub.reachable === hub.total ? 'CONNECTED' : hub.reachable === 0 ? 'UNREACHABLE' : hub.reachable + ' / ' + hub.total + ' CONNECTED' }}</span
+        >
+        @if (hub.lastContactAt; as at) {
+          <span class="mut" data-testid="hub-contact"><fleet-when [iso]="at" [relative]="true" /></span>
+        }
+        @if (hub.buffered > 0) {
+          <span class="mut" data-testid="hub-buffered">· {{ hub.buffered }} buffered</span>
+        }
+        @if (hub.endpoint; as endpoint) {
+          <a class="board-link" [href]="endpoint" target="_blank" rel="noopener" [title]="endpoint" data-testid="board-link">hub board ↗</a>
+        }
+      </div>
+      @for (issue of hub.issues; track issue.key) {
+        <div class="issue" data-testid="hub-issue" [title]="issue.title ?? ''">
+          <span class="runner">{{ issue.runner }}</span> {{ issue.text }}
+        </div>
+      }
+      <div class="fleet" [class.stale]="fleetStale()" data-testid="fleet-strip" [title]="fleetStale() ? 'last known — the hub did not answer' : 'the hub\'s whole fleet'">
+        <span class="fn" [style.color]="bucketColor.ready" data-testid="fleet-ready">{{ fleet()?.ready ?? '—' }}<small>ready</small></span>
+        <span class="fn" [style.color]="bucketColor.running" data-testid="fleet-running">{{ fleet()?.running ?? '—' }}<small>running</small></span>
+        <span class="fn" [style.color]="bucketColor.waiting" data-testid="fleet-waiting">{{ fleet()?.waiting ?? '—' }}<small>waiting</small></span>
+        <span class="fn" [style.color]="bucketColor.needs" data-testid="fleet-needs">{{ fleet()?.needs ?? '—' }}<small>needs</small></span>
+      </div>
+    }
+  </fleet-kit-async-state>
+</div>

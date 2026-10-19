@@ -6,7 +6,7 @@ import { MachineDetail } from './chunk-dock/chunk-detail';
 import type { MachineChunkStatus } from './chunk-list/chunk-status';
 import { BoardRail } from './rail/board-rail';
 import type { MachineChunkRow } from './app-panel.model';
-import type { PanelLease, RunnerOwner } from '../core/panel-reads.model';
+import type { PanelLease } from '../core/panel-reads.model';
 
 /**
  * The runner local panel's mobile shell (mobile mockups, `../docs/designs/mobile/README.md`)
@@ -53,8 +53,6 @@ export class LocalPanelMobile {
   /** The open-ask count for the app-asks section's header note. */
   readonly openAskCount = input.required<number>();
 
-  /** The runners the board reads — the hub-link rail shows each. */
-  readonly runners = input.required<readonly RunnerOwner[]>();
 
   /** The selected chunk's attempts (oldest → newest), resolved by the
    * container off the URL's `chunk` param — the detail screen's subject.

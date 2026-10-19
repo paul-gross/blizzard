@@ -22,7 +22,7 @@ import { RunnerLogout } from '../../core/identity/runner-logout';
  *
  * TanStack dedupes query-key injections, so this
  * component injecting the same dashboard/session queries `LocalPanel`'s other
- * rails (and `app-info`) also inject costs no extra network request.
+ * rails (the hub panel among them) also inject costs no extra network request.
  */
 @Component({
   selector: 'app-mobile-titlebar',
@@ -32,14 +32,14 @@ import { RunnerLogout } from '../../core/identity/runner-logout';
   styleUrl: './mobile-titlebar.css',
 })
 export class MobileTitlebar {
-  /** The titlebar's own severable read (`app-info.ts`'s own instances dedupe
-   * on the same query keys, so this is not a second poll) — each covered runner's
-   * `runner.hub.reachable` off `GET /api/dashboard`, the same fact `app-info`'s "link" cell renders. */
+  /** The titlebar's own severable read (the hub panel's dedupes on the same query keys, so
+   * this is not a second poll) — each covered runner's `runner.hub.reachable` off
+   * `GET /api/dashboard`, the same fact the hub panel's link reading folds. */
   private readonly dashboards = injectPanelDashboards();
 
   /** Whether any covered runner reaches its hub — the titlebar's `live` dot. A
    * malformed body (e.g. a misrouted proxy) must degrade to `false`, not
-   * throw mid-render — the same guard `app-info.ts`'s own `view` takes. */
+   * throw mid-render. */
   protected readonly hubReachable = computed(() =>
     this.dashboards.data().some(({ dashboard }) => dashboard.runner?.hub?.reachable ?? false),
   );

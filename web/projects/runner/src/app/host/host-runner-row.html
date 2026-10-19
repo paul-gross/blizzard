@@ -1,0 +1,179 @@
+<article
+  class="runner"
+  role="listitem"
+  data-testid="host-runner"
+  [class.halted]="row().halted"
+  [class.paused]="row().tone === 'amber'"
+  [attr.data-runner-id]="row().runnerId"
+>
+  <div class="r1">
+    <fleet-kit-beacon
+      class="dot"
+      aria-hidden="true"
+      [active]="true"
+      [tone]="row().tone"
+      [blink]="row().tone === 'green' ? 'pulse' : 'hold'"
+    />
+    <span class="name" data-testid="host-runner-name">{{ row().name }}</span>
+    @if (row().ref; as ref) {
+      <span class="ref" [title]="row().runnerId">{{ ref }}</span>
+    }
+    @if (row().summary; as text) {
+      <span class="summary" data-testid="host-runner-summary">{{ text }}</span>
+    }
+    <span class="grow"></span>
+    @if (row().lastTickAt; as at) {
+      <span class="seen" data-testid="host-runner-tick">ticked <fleet-when [iso]="at" [relative]="true" /></span>
+    }
+    <ng-content select="[verbs]" />
+  </div>
+  <div class="rgrid" [class.solo]="row().halted">
+    <fleet-kit-fact-list class="facts" [rows]="facts()" />
+    @if (!row().halted) {
+      <div class="held">
+        <div class="held-hd">Held chunks · {{ row().held.length }}</div>
+        <fleet-kit-async-state
+          [state]="row().held.length > 0 ? 'ready' : 'empty'"
+          placement="inline"
+          emptyText="HOLDS NO CHUNKS"
+          emptyTestid="host-runner-no-chunks"
+        >
+          <ul class="claims" data-testid="host-runner-chunks">
+            @for (chunk of row().held; track chunk.chunkId) {
+              <li class="claim">
+                <a
+                  class="c-link"
+                  routerLink="/board"
+                  [queryParams]="{ chunk: chunk.chunkId }"
+                  queryParamsHandling="merge"
+                  [title]="chunk.chunkId"
+                  data-testid="host-runner-chunk"
+                >
+                  @if (chunk.color; as color) {
+                    <fleet-kit-swatch [color]="color" [label]="chunk.projectName" />
+                  } @else {
+                    <span class="sw-none" aria-hidden="true"></span>
+                  }
+                  <span class="c-id">{{ chunk.ref }}</span>
+                </a>
+                <span class="node">{{ chunk.node }}</span>
+                <span class="grow"></span>
+                <fleet-kit-badge variant="soft" [tone]="chunk.status.tone">{{ chunk.status.label }}</fleet-kit-badge>
+              </li>
+            }
+          </ul>
+        </fleet-kit-async-state>
+      </div>
+    }
+  </div>
+</article>
+<ng-template #binds>
+  @if (row().bindings.length === 0) {
+    <span class="none-inline">none</span>
+  } @else {
+    <ul class="lines">
+      @for (binding of row().bindings; track binding.key) {
+        <li class="binding" data-testid="host-runner-binding">
+          <span class="project">
+            @if (binding.color; as color) {
+              <fleet-kit-swatch [color]="color" />
+            }
+            {{ binding.projectName }}
+          </span>
+          <span class="ws">{{ binding.workspaceId }}</span>
+          <span class="agents">{{ binding.used }} / {{ binding.agents }} agents</span>
+        </li>
+      }
+    </ul>
+  }
+</ng-template>
+<ng-template #spends>
+  <span class="badges">
+    @for (name of row().spends; track name) {
+      <span class="sub">{{ name }}</span>
+    }
+  </span>
+</ng-template>
+<ng-template #harness>
+  @if (row().harnesses.length === 0) {
+    <span class="none-inline">none reported</span>
+  } @else {
+    <ul class="lines">
+      @for (harness of row().harnesses; track harness.harnessId) {
+        <li>
+          <fleet-kit-badge
+            variant="soft"
+            [tone]="harness.available ? 'done' : 'needs'"
+            [title]="harness.admitted ? 'admits ' + harness.admitted : ''"
+            [attr.data-harness-id]="harness.harnessId"
+            >{{ harness.name }}</fleet-kit-badge
+          >
+          @if (harness.version; as version) {
+            <span class="ver">{{ version }}</span>
+          }
+          @if (!harness.available) {
+            <span class="warn">unavailable</span>
+          }
+          @if (harness.degradations.length > 0) {
+            <span class="mut caveats" data-testid="host-runner-harness-caveats" [title]="harness.degradations.join('\n\n')"
+              >· {{ harness.degradations.length }} {{ harness.degradations.length === 1 ? 'limit' : 'limits' }}</span
+            >
+          }
+          @if (harness.cause; as cause) {
+            <div class="note">{{ cause }}</div>
+          }
+        </li>
+      }
+    </ul>
+  }
+</ng-template>
+<ng-template #hub>
+  @if (row().hub; as hub) {
+    <span class="badges">
+      <fleet-kit-badge variant="soft" [tone]="hub.reachable ? 'done' : 'stale'" [title]="hub.endpoint">{{
+        hub.reachable ? 'CONNECTED' : 'UNREACHABLE'
+      }}</fleet-kit-badge>
+      @if (hub.refusal; as refusal) {
+        <fleet-kit-badge variant="soft" [tone]="refusal.tone" [title]="refusal.title ?? ''">{{ refusal.label }}</fleet-kit-badge>
+      }
+      @if (hub.lastContactAt; as at) {
+        <span class="mut">contact <fleet-when [iso]="at" [relative]="true" /></span>
+      }
+      @if (hub.buffered > 0) {
+        <span class="mut">· {{ hub.buffered }} buffered</span>
+      }
+    </span>
+  }
+</ng-template>
+<ng-template #gates>
+  @if (row().gates.length === 0) {
+    <span class="none-inline">none</span>
+  } @else {
+    <span class="badges">
+      @for (gate of row().gates; track gate) {
+        <fleet-kit-badge variant="soft" tone="waiting">{{ gate }}</fleet-kit-badge>
+      }
+    </span>
+  }
+</ng-template>
+<ng-template #problems>
+  <ul class="lines">
+    @for (problem of row().problems; track $index) {
+      <li class="problem">{{ problem }}</li>
+    }
+  </ul>
+</ng-template>
+<ng-template #state>
+  <span class="badges">
+    @for (badge of row().state; track badge.label) {
+      <fleet-kit-badge variant="soft" [tone]="badge.tone" [title]="badge.title ?? ''">{{ badge.label }}</fleet-kit-badge>
+    }
+  </span>
+  @if (row().halted) {
+    @for (badge of row().state; track badge.label) {
+      @if (badge.title; as reason) {
+        <div class="note">{{ reason }}</div>
+      }
+    }
+  }
+</ng-template>
