@@ -1209,8 +1209,7 @@ def test_internal_check_admits_the_owner_and_public_imports(tmp_path: Path, impo
     assert _plant(tmp_path, importer, statement) == []
 
 
-#: The harness binding ids, in the catalog's order (``HARNESS_SECTION_KINDS``) — the one roster every other
-#: binding list here derives from.
+#: The harness binding ids, in the catalog's order — the one roster every other binding list derives from.
 _HARNESS_IDS = tuple(kind.harness_id for kind in HARNESS_SECTION_KINDS)
 _ADAPTER_PACKAGES = _HARNESS_IDS
 _PROCESS_PROBE_FILE = _RUNNER_DIR / "process" / "probe.py"
@@ -1633,9 +1632,7 @@ _DOMAIN_CORE_FRAMEWORKS = ("fastapi", "starlette", "sqlalchemy", "click", "httpx
 _DOMAIN_CORE_STDLIB_DRIVERS = ("os", "shutil", "subprocess", "tempfile")
 _DOMAIN_CORE_FORBIDDEN = (*_DOMAIN_CORE_FRAMEWORKS, *_DOMAIN_CORE_STDLIB_DRIVERS)
 
-#: The harness binding nodes: adapters, so they may bind a process or the filesystem (the stdlib-driver half
-#: of ``bzh:domain-core``) while staying held to the framework imports. Derived from the catalog; a new
-#: binding still fails the gate until its own row stands in :data:`_RUNNER_PACKAGE_LAYERS`.
+#: The harness binding nodes: adapters, held to the framework imports only; a binding without a layer row fails the gate.
 _HARNESS_BINDING_NODES = tuple(f"harness/{harness_id}" for harness_id in _HARNESS_IDS)
 
 #: Runner module -> the stdlib driver packages admitted for it, each a reasoned exception; an entry that
@@ -1745,8 +1742,7 @@ _DOMAIN_PACKAGE_LAYERS: dict[str, frozenset[str]] = {
 _DOMAIN_SHARED_KERNEL = "kernel"
 
 
-#: The hub's edge modules beside its domain — config reads and parses, delivery executes; the domain takes
-#: their values as domain-owned types and their collaborators as domain Protocols.
+#: The hub's edge modules beside its domain: config reads and parses, delivery executes.
 _HUB_DOMAIN_EDGES = ("config", "delivery")
 
 
@@ -1773,10 +1769,9 @@ def _import_statements(path: Path, src_root: Path) -> Iterator[tuple[int, list[l
 
 @dataclass(frozen=True)
 class _LayeredTree:
-    """One layered tree under ``bzh:domain-package-layers`` — the hub domain or the runner — and what its checks
-    read: the ``layers`` table, the ``shared`` node every node may import (``None`` where there is none), the
-    ``refused`` edge modules no node may import, the ``subnodes`` of a package that are nodes of their own, and
-    the ``exempt`` top-level names that are edges rather than nodes."""
+    """One layered tree under ``bzh:domain-package-layers``: its ``layers`` table, the ``shared`` node every node
+    may import, the ``refused`` edge modules, the ``subnodes`` that are nodes of their own, and the ``exempt``
+    top-level names that are edges."""
 
     root: Path
     umbrella: tuple[str, ...]
@@ -1808,8 +1803,7 @@ def _layer_module_node(tree: _LayeredTree, path: Path) -> str | None:
 
 
 def _layer_statements(tree: _LayeredTree) -> Iterator[tuple[Path, int, str | None, list[list[str]]]]:
-    """Each import statement of a module of a declared node (or of the root package), as ``(path, lineno, own
-    node, [dotted segments of every name it binds])``, resolved as :func:`_import_statements` resolves it."""
+    """Each import statement of a declared node's module as ``(path, lineno, own node, bound names' segments)``."""
     for path in _production_files(tree.root):
         own = _layer_module_node(tree, path)
         if own is not None and own not in tree.layers:
@@ -1825,10 +1819,8 @@ def _layer_targets(tree: _LayeredTree, named: Iterable[list[str]]) -> list[tuple
 
 
 def _layer_crossings(tree: _LayeredTree) -> list[str]:
-    """Every import by a module of a declared node that its node's row does not allow, wherever it sits in the
-    module (function bodies and ``TYPE_CHECKING`` blocks included): an import of the shared node or of a node
-    in its row passes, and so does one of its own node; an import of a refused edge module, of a module that
-    is no node (``config``, ``composition``, ``api``), or of the bare root package fails."""
+    """Every import, wherever it sits, that a node's row does not allow: the shared node, a node in its row and its
+    own node pass; a refused edge module, a module that is no node, or the bare root package fails."""
     violations: list[str] = []
     for path, lineno, own, named in _layer_statements(tree):
         rel = path.relative_to(tree.root)
