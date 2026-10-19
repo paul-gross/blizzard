@@ -844,7 +844,7 @@
    "comments": 14,
    "docstrings": 82,
    "over_cap": 1,
-   "total": 427
+   "total": 426
   },
   "blizzard_mock/mock_hub/api/middleware.py": {
    "comments": 6,
@@ -9228,9 +9228,9 @@
   },
   "blizzard/tools/change_notes/cli.py": {
    "comments": 0,
-   "docstrings": 5,
+   "docstrings": 6,
    "over_cap": 0,
-   "total": 80
+   "total": 138
   },
   "blizzard/tools/change_notes/contract.py": {
    "comments": 0,
@@ -9242,7 +9242,19 @@
    "comments": 0,
    "docstrings": 4,
    "over_cap": 0,
-   "total": 61
+   "total": 74
+  },
+  "blizzard/tools/change_notes/flags.py": {
+   "comments": 0,
+   "docstrings": 3,
+   "over_cap": 0,
+   "total": 38
+  },
+  "blizzard/tools/change_notes/guide.py": {
+   "comments": 0,
+   "docstrings": 2,
+   "over_cap": 0,
+   "total": 59
   },
   "blizzard/tools/change_notes/released.py": {
    "comments": 1,
@@ -9254,7 +9266,13 @@
    "comments": 0,
    "docstrings": 3,
    "over_cap": 0,
-   "total": 72
+   "total": 81
+  },
+  "blizzard/tools/change_notes/schedule.py": {
+   "comments": 0,
+   "docstrings": 6,
+   "over_cap": 0,
+   "total": 105
   },
   "blizzard/tools/change_notes/tree.py": {
    "comments": 0,
@@ -9264,15 +9282,15 @@
   },
   "blizzard/tools/change_notes/upgrade_doc.py": {
    "comments": 0,
-   "docstrings": 8,
+   "docstrings": 9,
    "over_cap": 0,
-   "total": 96
+   "total": 109
   },
   "blizzard/tools/change_notes/validate.py": {
    "comments": 0,
    "docstrings": 2,
    "over_cap": 0,
-   "total": 71
+   "total": 80
   },
   "blizzard/tools/cli_surface.py": {
    "comments": 8,
@@ -9300,9 +9318,9 @@
   },
   "blizzard/tools/compat/git.py": {
    "comments": 0,
-   "docstrings": 9,
+   "docstrings": 10,
    "over_cap": 0,
-   "total": 57
+   "total": 61
   },
   "blizzard/tools/compat/releases.py": {
    "comments": 0,
@@ -10816,19 +10834,25 @@
    "comments": 0,
    "docstrings": 1,
    "over_cap": 0,
-   "total": 330
+   "total": 343
   },
   "test_change_notes_cut.py": {
    "comments": 1,
    "docstrings": 1,
    "over_cap": 0,
-   "total": 174
+   "total": 474
+  },
+  "test_change_notes_guide.py": {
+   "comments": 0,
+   "docstrings": 1,
+   "over_cap": 0,
+   "total": 224
   },
   "test_change_notes_render.py": {
    "comments": 0,
    "docstrings": 1,
    "over_cap": 0,
-   "total": 191
+   "total": 237
   },
   "test_check_version_tag.py": {
    "comments": 0,
@@ -13530,6 +13554,12 @@
    "over_cap": 0,
    "total": 370
   },
+  "test_release_inventory.py": {
+   "comments": 0,
+   "docstrings": 4,
+   "over_cap": 0,
+   "total": 105
+  },
   "test_release_notes.py": {
    "comments": 0,
    "docstrings": 5,
@@ -13540,7 +13570,7 @@
    "comments": 2,
    "docstrings": 19,
    "over_cap": 0,
-   "total": 151
+   "total": 259
   },
   "test_repo_files.py": {
    "comments": 1,
@@ -15677,6 +15707,12 @@
    "docstrings": 6,
    "over_cap": 0,
    "total": 31
+  },
+  "test_web_workshop.py": {
+   "comments": 0,
+   "docstrings": 0,
+   "over_cap": 0,
+   "total": 59
   },
   "test_winter_free_ci.py": {
    "comments": 2,

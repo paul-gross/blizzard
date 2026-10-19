@@ -8,6 +8,7 @@ from pathlib import Path
 from blizzard.foundation.roles import domain_model
 from blizzard.tools.change_notes.anchors import anchor_titles
 from blizzard.tools.change_notes.flags import working_registry
+from blizzard.tools.change_notes.schedule import cut_refusals
 from blizzard.tools.change_notes.tree import CHANGES_DIR, UNRELEASED, VERSION_DIR, read_tree
 from blizzard.tools.change_notes.upgrade_doc import UpgradeDocError, move_boundaries, staged_anchors
 from blizzard.tools.change_notes.validate import UPGRADE_DOC, validate
@@ -41,6 +42,9 @@ def cut(root: Path, version: str) -> CutReport:
     defaults = working_registry(root)
     moving = [n for n in unreleased if not n.fields.get("flag") or defaults[n.fields["flag"]]["default"] == "on"]
     held = tuple(n.id for n in unreleased if n not in moving)
+    refusals = cut_refusals(notes, version, moving)
+    if refusals:
+        raise CutRefused("\n".join(refusals))
     guides = sorted({g for n in moving if isinstance(g := n.fields.get("upgrade-guide"), str)})
     doc = root / UPGRADE_DOC
     original = doc.read_text(encoding="utf-8") if guides else ""

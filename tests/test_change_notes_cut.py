@@ -8,6 +8,8 @@ import pytest
 from click.testing import CliRunner
 
 from blizzard.tools.change_notes.cli import main
+from blizzard.tools.change_notes.contract import Note
+from blizzard.tools.change_notes.schedule import latest_released_schedule, line_order, release_line
 from blizzard.tools.change_notes.upgrade_doc import UpgradeDocError, move_boundaries
 from blizzard.tools.change_notes.validate import validate
 
@@ -208,3 +210,265 @@ def test_a_wanted_boundary_nested_in_another_wanted_one_counts_as_moved() -> Non
     moved = move_boundaries(text, "0.3.0", ["outer", "inner"])
     assert moved.anchors == ("outer", "inner")
     assert moved.text.index("## Upgrading to 0.3.0") < moved.text.index("#### Inner")
+
+
+def _scheduled(kind: str, line: str, *, target: str | None = None) -> str:
+    reference = f"postpones: {target}\n" if target else ""
+    return f'---\nkind: {kind}\n{reference}removes-in: "{line}"\n---\n\nChanges the schedule.\n'
+
+
+_REMOVAL = "---\nkind: removed\nbreaking: true\nretires: old\n---\n\nRemoves old.\n\n## Upgrade\n\nReplace it.\n"
+
+
+@pytest.mark.parametrize(
+    ("version", "other", "accepted"),
+    [
+        ("0.12.0", {}, False),
+        ("0.12.2", {"unreleased/removal.md": _REMOVAL}, True),
+        ("0.12.2", {"0.12.0/removal.md": _REMOVAL}, True),
+        ("0.12.2", {"unreleased/delay.md": _scheduled("changed", "0.13", target="old")}, True),
+        ("0.11.4", {}, True),
+    ],
+)
+def test_due_pre_one_deprecation_needs_removal_or_postponement_before_writes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, version: str, other: dict[str, str], accepted: bool
+) -> None:
+    root = _tree(tmp_path, {"0.10.0/old.md": _scheduled("deprecated", "0.12"), **other})
+    before = _snapshot(root)
+    result = _cut(root, version, monkeypatch)
+    assert (result.exit_code == 0) is accepted, result.output
+    if not accepted:
+        assert "deprecation old is due in 0.12" in result.output
+        assert _snapshot(root) == before
+
+
+def test_due_major_deprecation_refuses_an_empty_cut_without_writes(tmp_path: Path, monkeypatch) -> None:
+    root = _tree(tmp_path, {"1.9.0/old.md": _scheduled("deprecated", "2")})
+    before = _snapshot(root)
+    result = _cut(root, "2.0.0", monkeypatch)
+    assert result.exit_code == 1
+    assert "deprecation old is due in 2" in result.output
+    assert _snapshot(root) == before
+
+
+def test_earlier_retirement_does_not_refuse_a_later_opening_cut(tmp_path: Path, monkeypatch) -> None:
+    root = _tree(
+        tmp_path,
+        {
+            "0.10.0/old.md": _scheduled("deprecated", "0.12"),
+            "0.12.0/removal.md": _REMOVAL,
+        },
+    )
+    result = _cut(root, "1.0.0", monkeypatch)
+    assert result.exit_code == 0, result.output
+
+
+def test_opening_cut_cannot_borrow_a_later_removal_in_its_line(tmp_path: Path, monkeypatch) -> None:
+    root = _tree(
+        tmp_path,
+        {
+            "1.9.0/old.md": _scheduled("deprecated", "2"),
+            "2.1.0/removal.md": _REMOVAL,
+        },
+    )
+    before = _snapshot(root)
+    result = _cut(root, "2.0.0", monkeypatch)
+    assert result.exit_code == 1
+    assert "deprecation old is due in 2" in result.output
+    assert _snapshot(root) == before
+    (root / "changes" / "unreleased" / "cut-removal.md").write_text(_REMOVAL)
+    assert _cut(root, "2.0.0", monkeypatch).exit_code == 0
+
+
+def test_opening_cut_cannot_borrow_a_later_postponement(tmp_path: Path, monkeypatch) -> None:
+    root = _tree(
+        tmp_path,
+        {
+            "1.9.0/old.md": _scheduled("deprecated", "2"),
+            "2.1.0/later.md": _scheduled("changed", "3", target="old"),
+        },
+    )
+    before = _snapshot(root)
+    result = _cut(root, "2.0.0", monkeypatch)
+    assert result.exit_code == 1
+    assert "deprecation old is due in 2" in result.output
+    assert _snapshot(root) == before
+
+
+@pytest.mark.parametrize(
+    ("version", "line", "accepted"),
+    [
+        ("0.12.0", "0.12", False),
+        ("0.12.4", "0.13", True),
+        ("0.12.4", "0.11", False),
+        ("0.12.4", "2", False),
+        ("1.8.2", "1", False),
+        ("1.8.2", "2", True),
+        ("1.8.2", "0.12", False),
+        ("2.0.1", "2", False),
+        ("2.0.1", "3", True),
+    ],
+)
+def test_new_deprecation_must_name_a_later_line_in_the_cut_vocabulary(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, version: str, line: str, accepted: bool
+) -> None:
+    root = _tree(tmp_path, {"unreleased/new.md": _scheduled("deprecated", line)})
+    before = _snapshot(root)
+    result = _cut(root, version, monkeypatch)
+    assert (result.exit_code == 0) is accepted, result.output
+    if not accepted:
+        assert "changes/unreleased/new.md" in result.output
+        assert _snapshot(root) == before
+
+
+def test_schedule_uses_latest_released_postponement_by_version_not_filename_or_input_order() -> None:
+    def note(directory: str, note_id: str, kind: str, line: str, target: str | None = None) -> Note:
+        fields = {"kind": kind, "removes-in": line}
+        if target:
+            fields["postpones"] = target
+        return Note(f"changes/{directory}/{note_id}.md", directory, note_id, fields, "Text.\n")
+
+    notes = [
+        note("1.10.0", "a-latest", "changed", "4", "old"),
+        note("unreleased", "future", "changed", "5", "old"),
+        note("1.9.3", "z-earlier", "changed", "3", "old"),
+        note("1.0.0", "old", "deprecated", "2"),
+    ]
+    assert latest_released_schedule(notes) == {"old": "4"}
+    assert release_line("0.12.9") == "0.12"
+    assert release_line("2.4.9") == "2"
+    assert line_order("0.13") > line_order("0.12")
+    assert line_order("2") > line_order("1")
+
+
+@pytest.mark.parametrize(("new_line", "accepted"), [("3", False), ("2", False), ("4", False), ("5", True)])
+def test_postponement_must_advance_latest_released_line_before_any_write(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, new_line: str, accepted: bool
+) -> None:
+    root = _tree(
+        tmp_path,
+        {
+            "1.0.0/old.md": _scheduled("deprecated", "2"),
+            "1.2.0/first.md": _scheduled("changed", "3", target="old"),
+            "1.10.0/second.md": _scheduled("changed", "4", target="old"),
+            "unreleased/third.md": _scheduled("changed", new_line, target="old"),
+        },
+    )
+    before = _snapshot(root)
+    result = _cut(root, "1.11.1", monkeypatch)
+    assert (result.exit_code == 0) is accepted, result.output
+    if not accepted:
+        assert "latest released line 4" in result.output
+        assert _snapshot(root) == before
+
+
+def test_a_postponement_cannot_move_to_the_cut_line_even_if_it_advances_the_old_one(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _tree(
+        tmp_path,
+        {
+            "0.10.0/old.md": _scheduled("deprecated", "0.11"),
+            "unreleased/later.md": _scheduled("changed", "0.12", target="old"),
+        },
+    )
+    before = _snapshot(root)
+    result = _cut(root, "0.12.3", monkeypatch)
+    assert result.exit_code == 1
+    assert "later than cut line 0.12" in result.output
+    assert _snapshot(root) == before
+
+
+def test_pre_one_postponement_must_advance_the_latest_released_minor(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _tree(
+        tmp_path,
+        {
+            "0.10.0/old.md": _scheduled("deprecated", "0.11"),
+            "0.11.2/first.md": _scheduled("changed", "0.13", target="old"),
+            "unreleased/later.md": _scheduled("changed", "0.12", target="old"),
+        },
+    )
+    before = _snapshot(root)
+    result = _cut(root, "0.11.3", monkeypatch)
+    assert result.exit_code == 1
+    assert "latest released line 0.13" in result.output
+    assert _snapshot(root) == before
+
+
+def test_opening_cut_accepts_removal_in_same_candidate_and_refuses_if_missing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _tree(tmp_path, {"1.9.0/old.md": _scheduled("deprecated", "2"), "unreleased/removal.md": _REMOVAL})
+    assert _cut(root, "2.0.0", monkeypatch).exit_code == 0
+    (root / "changes" / "2.0.0" / "removal.md").unlink()
+    before = _snapshot(root)
+    refused = _cut(root, "2.0.0", monkeypatch)
+    assert refused.exit_code == 1
+    assert "deprecation old is due in 2" in refused.output
+    assert _snapshot(root) == before
+
+
+def test_opening_cut_accepts_postponement_without_removal(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    root = _tree(
+        tmp_path,
+        {
+            "1.9.0/old.md": _scheduled("deprecated", "2"),
+            "unreleased/delay.md": _scheduled("changed", "3", target="old"),
+        },
+    )
+    result = _cut(root, "2.0.0", monkeypatch)
+    assert result.exit_code == 0, result.output
+
+
+@pytest.mark.parametrize(
+    "pending",
+    [
+        _REMOVAL.replace("kind: removed", "kind: removed\nflag: staged"),
+        _scheduled("changed", "3", target="old").replace("kind: changed", "kind: changed\nflag: staged"),
+    ],
+)
+def test_held_note_cannot_satisfy_an_opening_promise(tmp_path: Path, monkeypatch, pending: str) -> None:
+    root = _tree(tmp_path, {"1.9.0/old.md": _scheduled("deprecated", "2"), "unreleased/pending.md": pending})
+    registry = root / "src/blizzard/foundation/flags/registry.toml"
+    registry.parent.mkdir(parents=True)
+    registry.write_text('[flag.staged]\ndefault = "off"\nsummary = "Staged capability"\n')
+    before = _snapshot(root)
+    result = _cut(root, "2.0.0", monkeypatch)
+    assert result.exit_code == 1 and "deprecation old is due in 2" in result.output
+    assert _snapshot(root) == before
+    guide_result = CliRunner().invoke(main, ["guide", "2"])
+    assert guide_result.exit_code == 1 and "old" in guide_result.output
+    registry.write_text('[flag.staged]\ndefault = "on"\nsummary = "Staged capability"\n')
+    assert _cut(root, "2.0.0", monkeypatch).exit_code == 0
+
+
+def test_patch_cut_does_not_enforce_opening_removals(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    root = _tree(tmp_path, {"1.9.0/old.md": _scheduled("deprecated", "2"), "unreleased/fix.md": _FIXED})
+    result = _cut(root, "2.0.1", monkeypatch)
+    assert result.exit_code == 0, result.output
+    assert (root / "changes" / "2.0.1" / "fix.md").exists()
+
+
+def test_opening_cut_checks_all_due_notes_with_mixed_pending_and_released_removals(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _tree(
+        tmp_path,
+        {
+            "1.9.0/old.md": _scheduled("deprecated", "2"),
+            "1.9.0/other.md": _scheduled("deprecated", "2"),
+            "1.9.0/third.md": _scheduled("deprecated", "2"),
+            "2.0.0/old-removal.md": _REMOVAL,
+            "unreleased/other-removal.md": _REMOVAL.replace("old", "other"),
+        },
+    )
+    before = _snapshot(root)
+    refused = _cut(root, "2.0.0", monkeypatch)
+    assert refused.exit_code == 1 and "third" in refused.output
+    assert "deprecation old is due" not in refused.output
+    assert "deprecation other is due" not in refused.output
+    assert _snapshot(root) == before
+    (root / "changes" / "unreleased" / "third-removal.md").write_text(_REMOVAL.replace("old", "third"))
+    assert _cut(root, "2.0.0", monkeypatch).exit_code == 0
