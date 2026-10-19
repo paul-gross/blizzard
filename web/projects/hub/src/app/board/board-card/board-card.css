@@ -2,7 +2,10 @@
   box-sizing: border-box;
   border: 1px solid var(--line);
   border-left: 3px solid var(--amber);
-  background: var(--surface-resting);
+  --bg-resting: var(--surface-resting);
+  --bg-hover: var(--surface-hover);
+  --bg-selected: var(--surface-selected);
+  background: var(--bg-resting);
   padding: 4px 6px;
   position: relative;
   display: flex;
@@ -18,6 +21,13 @@
   padding-left: 22px;
   min-height: 34px;
 }
+/* A project-tinted card keeps its project's hue at a fixed dark lightness per surface state,
+   rather than blending the color into the surface, which greys it. */
+.card.tinted {
+  --bg-resting: oklch(from var(--project-tint) 0.22 min(calc(c * 0.5), 0.07) h);
+  --bg-hover: oklch(from var(--project-tint) 0.26 min(calc(c * 0.5), 0.07) h);
+  --bg-selected: oklch(from var(--project-tint) 0.3 min(calc(c * 0.5), 0.07) h);
+}
 /* Hover reads as the background step plus a dim-cyan edge on three sides
    (never the left, which stays status-colored) — the background step alone
    measured too subtle against this card's own borders/text/chrome to read
@@ -28,7 +38,7 @@
   border-top-color: var(--cyan-dim);
   border-right-color: var(--cyan-dim);
   border-bottom-color: var(--cyan-dim);
-  background: var(--surface-hover);
+  background: var(--bg-hover);
 }
 /* Selected reads as the lightest background plus the left-edge accent: the status color
    below yields to it while selected — a transient override, not a loss of
@@ -38,12 +48,12 @@
    theirs, so it wins regardless of which rule a future edit places last. */
 .card.selected[data-status] {
   border-left-color: var(--cyan);
-  background: var(--surface-selected);
+  background: var(--bg-selected);
 }
 /* Selection is the "stickier" state: hovering an already-selected card keeps
    the selected background rather than dimming to the hover tone. */
 .card.selected:hover {
-  background: var(--surface-selected);
+  background: var(--bg-selected);
 }
 /* Done and stopped cards keep a green accent; an escalated card
    (needs_human) reads in the alarm color. */
@@ -256,8 +266,4 @@
   font-size: var(--fs-label);
   letter-spacing: 0.14em;
   text-transform: uppercase;
-}
-/* The project's swatch leads the step row, centred on the text beside it. */
-.project-swatch {
-  align-self: center;
 }

@@ -16,6 +16,7 @@ export { KitBackBar } from './kit-back-bar';
 export { KitBadge, toneColor } from './kit-badge';
 export { KitBeacon, type BeaconBlink, type BeaconTone } from './kit-beacon';
 export { KitSwatch } from './kit-swatch';
+export { projectColorValue } from './kit-swatch-color';
 export { KitColorInput } from './kit-color-input';
 export { KitButton } from './kit-button';
 export { KitChip, KitChips, type KitChipOption } from './kit-chips';

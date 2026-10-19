@@ -43,9 +43,6 @@
 :host(:nth-child(4n + 2)) .title {
   width: min(72%, 520px);
 }
-.step {
-  width: 60%;
-}
 .holder {
   width: 75%;
 }

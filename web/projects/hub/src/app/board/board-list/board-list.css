@@ -3,9 +3,17 @@
   height: 100%;
   min-height: 0;
   overflow-y: auto;
-  /* The tracks every row and the column header share: the lane icon, the work, the step,
-     the runner over its PRs, and the cost. */
-  --list-columns: 18px minmax(0, 1fr) 130px 150px 90px;
+  /* The tracks every row and the column header share: the lane icon, the work, the runner
+     over its step and delivery, and the cost. */
+  --list-columns: 18px minmax(0, 1fr) 220px 90px;
+}
+/* The rows stand apart by the same gap the lane grid holds between its cards
+   (`board-column.css`), in the list and in each ranked list nested in it. */
+.list,
+.ranked {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 .list {
   font-family: var(--mono);

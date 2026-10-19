@@ -9,6 +9,9 @@
   [attr.data-status]="card().status"
   [attr.data-chunk]="card().chunkId"
   [class.selected]="selected()"
+  [class.tinted]="projectTint() !== null"
+  [style.--project-tint]="projectTint()"
+  [attr.title]="card().projectName ?? null"
   [attr.aria-current]="selected() ? 'true' : null"
   (click)="open($event)"
 >
@@ -59,25 +62,6 @@
       }
     </div>
   }
-  <!-- The step row: where the chunk is, left, and its id flush right. -->
-  <span class="row step-row">
-    @if (card().projectColor; as projectColor) {
-      @if (card().projectName; as projectName) {
-        <fleet-kit-swatch class="project-swatch" data-testid="chunk-project-swatch" [color]="projectColor" [label]="projectName" />
-      }
-    }
-    <span class="nd" data-testid="chunk-node" [attr.title]="nodeTitle(card())">{{ nodeLabel(card()) }}</span>
-    <!-- The status names only what its column does not: the DONE lane's step slot already
-         reads "done"/"stopped", and a card drops it wherever the lane holds that one status
-         alone. -->
-    @if (showsStatus(card())) {
-      <span class="st" data-testid="chunk-status" [title]="card().status">{{ card().status }}</span>
-    }
-    @if (gated()) {
-      <fleet-kit-badge class="gate" data-testid="chunk-gate" tone="waiting" variant="pill">gate</fleet-kit-badge>
-    }
-    <span class="card-id" data-testid="chunk-id">{{ card().shortId }}</span>
-  </span>
   <!-- The cost row, flush right — pinned by `board-card-cost.shell-sweep.spec.ts`. -->
   @if (completedStamp(card()) || hasCostFigure(card().costUsd, card().estimatedCostUsd, card().costPartial)) {
     <span class="row cost-row" data-testid="card-cost-row">
@@ -91,6 +75,20 @@
       }
     </span>
   }
+  <!-- The step row: where the chunk is, left, and its id flush right. -->
+  <span class="row step-row">
+    <span class="nd" data-testid="chunk-node" [attr.title]="nodeTitle(card())">{{ nodeLabel(card()) }}</span>
+    <!-- The status names only what its column does not: the DONE lane's step slot already
+         reads "done"/"stopped", and a card drops it wherever the lane holds that one status
+         alone. -->
+    @if (showsStatus(card())) {
+      <span class="st" data-testid="chunk-status" [title]="card().status">{{ card().status }}</span>
+    }
+    @if (gated()) {
+      <fleet-kit-badge class="gate" data-testid="chunk-gate" tone="waiting" variant="pill">gate</fleet-kit-badge>
+    }
+    <span class="card-id" data-testid="chunk-id">{{ card().shortId }}</span>
+  </span>
   @if (card().promotable && canControl()) {
     <div class="card-controls">
       <fleet-kit-button
