@@ -1,13 +1,19 @@
 <div class="machine" data-testid="machine-page">
-  <fleet-kit-panel class="control-panel" label="runner" data-testid="machine-control-pane">
-    <div class="control">
-      <app-pause-control />
-    </div>
+  <fleet-kit-panel class="registration-panel" label="registration" data-testid="host-registration-pane">
+    <app-host-registration />
   </fleet-kit-panel>
-  <fleet-kit-panel class="hub-panel" label="hub" data-testid="machine-info-pane">
-    <app-info />
+  <fleet-kit-panel label="runners" data-testid="host-runners-pane">
+    <app-host-runners />
   </fleet-kit-panel>
-  <fleet-kit-panel class="harness-panel" label="harness health" data-testid="machine-harness-pane">
-    <app-harness-health />
+  <fleet-kit-panel label="environments" data-testid="host-environments-pane">
+    <app-host-environments />
   </fleet-kit-panel>
+  <fleet-kit-panel label="subscriptions" data-testid="host-subscriptions-pane">
+    <app-host-subscriptions />
+  </fleet-kit-panel>
+  @for (runner of sections(); track runner.runnerId) {
+    <app-runner-machine [runner]="runner" />
+  } @empty {
+    <p class="none" data-testid="machine-no-runners">NO SERVING RUNNER MATCHES THE FILTERS</p>
+  }
 </div>

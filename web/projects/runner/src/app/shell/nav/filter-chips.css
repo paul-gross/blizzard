@@ -2,13 +2,8 @@
   display: flex;
   flex: 0 1 auto;
   min-width: 0;
-  margin-left: auto;
 }
-:host(.mobile) {
-  margin-left: 0;
-  border-bottom: 1px solid var(--line);
-}
-.switcher {
+.filter {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -16,12 +11,7 @@
   padding: 0 12px;
   border-left: 1px solid var(--line);
 }
-:host(.mobile) .switcher {
-  flex: 1;
-  padding: 4px 8px;
-  border-left: none;
-}
-.switcher-label {
+.filter-label {
   flex: none;
   margin-right: 4px;
   color: var(--label);
@@ -46,9 +36,17 @@
 .brake {
   color: var(--amber);
 }
-/* In the desktop strip the label gives way first, leaving the tabs their room. */
+:host(.compact) .filter {
+  flex: 1;
+  padding: 3px 8px;
+  border-left: none;
+}
+:host(.compact) .filter-label {
+  width: 56px;
+}
+/* In the desktop strip the labels give way first, leaving the tabs their room. */
 @media (max-width: 900px) {
-  :host(:not(.mobile)) .switcher-label {
+  :host(:not(.compact)) .filter-label {
     display: none;
   }
 }

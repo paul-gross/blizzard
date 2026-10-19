@@ -16,7 +16,7 @@
     <fleet-kit-badge class="st" [tone]="status().tone" data-testid="agent-state">{{ status().label }}</fleet-kit-badge>
   </div>
   <div class="l2">
-    node <b>{{ agent().node_name }}</b> · env <b>{{ agent().environment_id ?? '—' }}</b> · pid
+    <span data-testid="agent-runner">{{ agent().owner.label }}</span> · node <b>{{ agent().node_name }}</b> · env <b>{{ agent().environment_id ?? '—' }}</b> · pid
     <b>{{ agent().pid ?? '—' }}</b>
   </div>
   <app-heartbeat-freshness [lastHeartbeatAt]="agent().last_heartbeat_at" [staleAfterSeconds]="agent().stale_after_seconds" [stale]="isStale()" />

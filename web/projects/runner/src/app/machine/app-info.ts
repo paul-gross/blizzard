@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, effect, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, input, signal } from '@angular/core';
 import { asyncState, injectNowSignal, KitAsyncState, type runnerApi } from 'fleet';
 
 import { LocalInfoView } from './app-info-view';
@@ -6,7 +6,7 @@ import { lastFlushLabel, lastTickLabel, wellFormedRunner } from './app-info.mode
 import { injectRunnerDashboardQuery } from '../core/status.query';
 
 /**
- * The hub-link panel **container** — the discovery mock's "hub · outbound only,
+ * One runner's hub-link panel **container** — the discovery mock's "hub · outbound only,
  * nothing dials in": owns `GET /api/dashboard`'s `runner` section read, the
  * resolved async-state triad, the fleet-strip latch, and the ticking clock the
  * last-flush/tick labels derive from; the presentational {@link LocalInfoView}
@@ -28,7 +28,13 @@ import { injectRunnerDashboardQuery } from '../core/status.query';
   styleUrl: './app-info.css',
 })
 export class LocalInfo {
-  protected readonly query = injectRunnerDashboardQuery();
+  /** The runner whose hub link this shows. */
+  readonly runnerId = input.required<string>();
+
+  /** Leave out the rows describing the runner's own machine — see {@link LocalInfoView.hubOnly}. */
+  readonly hubOnly = input(false);
+
+  protected readonly query = injectRunnerDashboardQuery(() => this.runnerId());
 
   /** The runner status section, or `null` on a malformed body — see {@link wellFormedRunner}. */
   protected readonly view = computed(() => wellFormedRunner(this.query.data()?.runner));

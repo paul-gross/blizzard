@@ -1,0 +1,84 @@
+:host {
+  display: block;
+  font-family: var(--mono);
+  font-size: var(--fs-base);
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+.sec {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--line);
+}
+.sec:last-child {
+  border-bottom: none;
+}
+.none {
+  color: var(--label-dim);
+  font-size: var(--fs-label);
+}
+.runners {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.runner {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+/* Held by either brake: the hub rail's faint amber hatching, as its yellow light says. */
+.runner.paused {
+  background: var(--hatch-paused);
+}
+.r1 {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 6px;
+}
+.name {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+  min-width: 0;
+  color: var(--amber);
+  font-size: var(--fs-md);
+  overflow-wrap: anywhere;
+}
+.runner.halted .name {
+  color: var(--label);
+}
+.light {
+  display: inline-flex;
+  flex: none;
+  justify-content: center;
+  width: 7px;
+}
+.brake {
+  color: var(--amber);
+}
+.brake[data-glyph='stop'] {
+  color: var(--red);
+}
+.halted {
+  color: var(--red);
+  font-size: var(--fs-label);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+.reason {
+  color: var(--label);
+  font-size: var(--fs-label);
+}
+/* Environments fill in grey, apart from the agents' amber — the hub board rail's environment strip. */
+.envs {
+  --kit-slot-bar-on: var(--grey);
+  --kit-slot-bar-on-border: var(--grey-dim);
+}

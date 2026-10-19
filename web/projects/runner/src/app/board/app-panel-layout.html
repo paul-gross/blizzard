@@ -1,62 +1,18 @@
 <div class="lp" data-testid="local-panel">
   <main class="cols">
-    <section class="col left">
-      <fleet-kit-panel
-        class="leases-panel"
-        data-testid="lease-pane"
-        label="active leases"
-      >
-        <span fleetKitPanelHeader class="p-note" data-testid="lease-count">{{ activeLeases().length }} live</span>
-        <fleet-kit-async-state
-          [state]="leasesTriadState()"
-          loadingText="LOADING…"
-          loadingTestid="loading-state"
-          errorText="LEASES UNAVAILABLE — RUNNER LOCAL API UNREACHABLE"
-          errorTestid="error-state"
-          emptyText="NO LIVE LEASES — LOOP IDLE OR PAUSED"
-          emptyTestid="empty-state"
-        >
-          <div class="rows" data-testid="lease-rows">
-            @for (lease of activeLeases(); track lease.lease_id) {
-              <app-agent-row
-                [agent]="lease"
-                [selected]="lease.chunk_id === selectedChunkId()"
-                (selectChunk)="selectChunk.emit($event)"
-              />
-            }
-          </div>
-        </fleet-kit-async-state>
-      </fleet-kit-panel>
-    </section>
     <section class="col center">
-      <fleet-kit-panel class="chunks-panel" data-testid="chunks-pane" label="chunks on this machine · derived status">
-        <div class="chunk-filter-bar" data-testid="chunk-filter-bar">
-          <fleet-kit-checkbox
-            label="show all"
-            testid="chunk-filter-show-all"
-            [checked]="showAllChunks()"
-            (checkedChange)="toggleShowAllChunks.emit($event)"
-          />
-        </div>
-        <fleet-kit-async-state
-          [state]="chunksTriadState()"
-          loadingText="LOADING…"
-          errorText="CHUNKS UNAVAILABLE — RUNNER LOCAL API UNREACHABLE"
-          [emptyText]="chunksEmptyText()"
-          emptyTestid="chunks-empty"
-        >
-          @for (chunk of machineChunks(); track chunk.lease.chunk_id) {
-            <app-chunk-row
-              [lease]="chunk.lease"
-              [status]="chunk.status"
-              [selected]="chunk.lease.chunk_id === selectedChunkId()"
-              (selectChunk)="selectChunk.emit($event)"
-            />
-          }
-        </fleet-kit-async-state>
-      </fleet-kit-panel>
+      <app-chunk-board
+        class="board"
+        [rows]="machineChunks()"
+        [layout]="layout()"
+        [state]="chunksTriadState()"
+        [selectedChunkId]="selectedChunkId()"
+        (selectChunk)="selectChunk.emit($event)"
+        (layoutChange)="layoutChange.emit($event)"
+      />
       <app-machine-detail
         class="detail-frame"
+        [class.closed]="selectedChunkLeases().length === 0"
         [leases]="selectedChunkLeases()"
         [status]="selectedStatus()"
         [escalation]="selectedEscalation()"
@@ -64,13 +20,7 @@
       />
     </section>
     <section class="col right">
-      <fleet-kit-panel class="hub-panel" label="hub">
-        <app-info />
-      </fleet-kit-panel>
-      <fleet-kit-panel class="asks-panel" label="local asks">
-        <span fleetKitPanelHeader class="p-note">{{ openAskCount() }} open</span>
-        <app-asks />
-      </fleet-kit-panel>
+      <app-board-rail class="rail" [runners]="runners()" [openAskCount]="openAskCount()" />
     </section>
   </main>
 </div>

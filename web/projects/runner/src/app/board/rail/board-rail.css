@@ -1,0 +1,37 @@
+/* A desktop column: the hub panel at its content's height, the host panel shrinking to scroll
+   its body when the column runs short, the asks taking the rest. */
+:host {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 0;
+  min-width: 0;
+  flex: 1;
+}
+fleet-kit-panel.hub-panel {
+  flex: none;
+}
+fleet-kit-panel.host-panel {
+  flex: 0 1 auto;
+  min-height: 0;
+}
+fleet-kit-panel.asks-panel {
+  flex: 1;
+  min-height: 0;
+}
+/* Stacked in a phone's scrolling column, every panel sizes to its content. */
+:host(.stacked) {
+  flex: none;
+}
+:host(.stacked) fleet-kit-panel {
+  flex: none;
+}
+.runner-label {
+  padding: 4px 8px 0;
+  color: var(--label);
+}
+.p-note {
+  color: var(--label-dim);
+  font-size: var(--fs-label);
+  letter-spacing: 0.1em;
+}

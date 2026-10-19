@@ -1,11 +1,10 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
-import { KitAsyncState, type KitAsyncStateValue, KitBeacon, KitGlyph, KitPanel, KitSlotBar, RunnerConnection } from 'fleet';
+import { KitAsyncState, type KitAsyncStateValue, KitBeacon, KitGlyph, KitPanel, KitSlotBar, RunnerConnection, SubscriptionBlocks } from 'fleet';
 import { LensLink } from 'fleet/shell';
 import { groupHostRows, type HostCard } from './host-rows.model';
 import { railVm } from './runner-rail.model';
-import { SubscriptionBlocks } from './subscription-blocks';
 import { localPauseHint, runnerSeenLabel, runnerSeenTag, type RunnerRow } from './runner-rows.model';
 
 /**

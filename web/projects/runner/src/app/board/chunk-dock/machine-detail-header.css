@@ -19,6 +19,7 @@
   font-family: var(--mono);
 }
 .d-title {
+  flex: 1 1 auto;
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -56,19 +57,63 @@
   text-transform: uppercase;
   color: var(--label);
 }
-.d-actions {
-  flex: none;
+.d-sub .project {
+  color: var(--text);
+  font-size: var(--fs-xs);
+  white-space: nowrap;
+}
+.d-sub .runner {
+  min-width: 0;
+  color: var(--cyan);
+  font-size: var(--fs-xs);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* The chunk's worker under the identity line: its line and pid, or the ended-session note. */
+.worker {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
+  min-width: 0;
+  margin-top: 2px;
+  font-size: var(--fs-xs);
+  color: var(--label);
 }
-:host ::ng-deep fleet-kit-button.close > button {
-  background: transparent;
-  border-color: var(--bezel);
+.worker-tag {
+  flex: none;
+  font-size: var(--fs-label);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
   color: var(--label-dim);
-  padding: 2px 6px;
 }
-:host ::ng-deep fleet-kit-button.close > button:hover {
-  border-color: var(--bezel);
-  color: var(--text);
+.worker-line {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 460px;
+}
+.pid {
+  flex: none;
+  white-space: nowrap;
+}
+.no-worker {
+  color: var(--label-dim);
+}
+/* Right-anchored, both vertically centred: the ⋯ trigger and the close button, matched as
+   two square targets large enough to hit without aiming — the hub dock header's own. */
+.d-actions {
+  flex: 0 1 auto;
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.actions {
+  --kit-menu-trigger-pad: 8px 15px;
+  --kit-menu-trigger-fs: var(--fs-lg);
+}
+.close {
+  --kit-button-pad: 2px 10px;
+  --kit-button-fs: var(--fs-lg);
 }

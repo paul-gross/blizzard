@@ -1,0 +1,129 @@
+:host {
+  display: block;
+  height: 100%;
+  min-height: 0;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: var(--fs-base);
+  font-variant-numeric: tabular-nums;
+}
+fleet-kit-panel.board-panel {
+  height: 100%;
+  position: relative;
+}
+/* The panel header: the panel's label on the left, the Board/List switch flush right. */
+.hdr {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  width: 100%;
+}
+/* One equal track per lane — the hub board's own grid: each lane scrolls its own body. */
+.board {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  grid-auto-rows: 100%;
+  gap: 1px;
+  background: var(--line);
+  height: 100%;
+  min-height: 0;
+}
+.b-col {
+  background: var(--panel-deep);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+}
+.b-col-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 6px;
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--line);
+  flex: none;
+}
+.col-lbl {
+  font-size: var(--fs-label);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--label);
+  text-shadow: 0 1px 0 var(--overlay-90);
+}
+.b-col-head .n {
+  font-size: var(--fs-md);
+  color: var(--label-dim);
+}
+/* The count carries each lane's colour, as on the hub board. */
+.b-col[data-col='progress'] .n {
+  color: var(--amber);
+}
+.b-col[data-col='needs'] .n {
+  color: var(--red);
+}
+.b-col[data-col='done'] .n {
+  color: var(--green);
+}
+.b-col[data-col='done'] .b-col-head {
+  border-bottom-color: var(--green-dim);
+}
+.b-col-body {
+  overflow-y: auto;
+  overflow-x: hidden;
+  flex: 1;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+/* The list: the hub board list's tracks and 4px row gap, its header held while the rows scroll. */
+.list {
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  --list-columns: minmax(0, 1fr) 260px 120px;
+}
+.cols {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: var(--list-columns);
+  gap: 12px;
+  padding: 5px 10px 5px 21px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-resting);
+  font-size: var(--fs-label);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--label-dim);
+}
+.cols .r {
+  text-align: right;
+}
+/* A phone's single column: the lanes stack, each sized to its cards, and the list drops the
+   runner column under the work. */
+:host(.stacked) {
+  height: auto;
+}
+:host(.stacked) .board {
+  grid-auto-flow: row;
+  grid-auto-rows: auto;
+  height: auto;
+}
+:host(.stacked) .b-col-body {
+  overflow: visible;
+}
+:host(.stacked) .list {
+  height: auto;
+  overflow: visible;
+  --list-columns: minmax(0, 1fr) 110px;
+}
+:host(.stacked) .cols {
+  display: none;
+}

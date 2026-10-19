@@ -1,32 +1,26 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
-import { type runnerApi, KitAsyncState, type KitAsyncStateValue, KitCheckbox, KitPanel, KitPanelHeader } from 'fleet';
+import { type runnerApi, type KitAsyncStateValue } from 'fleet';
 
-
-import { AgentRow } from '../machine/agent-row';
 import { MachineDetail } from './chunk-dock/chunk-detail';
+import { type BoardLayout, ChunkBoard } from './chunk-list/chunk-board';
 import type { MachineChunkStatus } from './chunk-list/chunk-status';
-import { ChunkRow } from './chunk-list/chunk-row';
-import { LocalAsks } from '../asks/app-asks';
-import { LocalInfo } from '../machine/app-info';
+import { BoardRail } from './rail/board-rail';
 import type { MachineChunkRow } from './app-panel.model';
+import type { PanelLease, RunnerOwner } from '../core/panel-reads.model';
 
 /**
  * The runner's machine-local panel's layout half — shaped like
- * the discovery mock's machine panel: a three-column grid over the runner's
+ * the discovery mock's machine panel: a two-column grid over the runner's
  * local API, hub-free save for the rails that proxy through it — the
  * fleet-summary strip (`app-info`).
  *
- * - **Left (340px)** — liveness: the *active* leases (closed rows are history,
- *   not liveness — they live on the chunks list), each with a heartbeat
- *   freshness bar. The host's environments are the host page's, not this runner's.
- * - **Center (1fr)** — work: the chunks on this machine (one row per chunk,
- *   work-item-enriched, derived status in the hub board's colors) over the machine
- *   detail dock for the selected chunk's execution facts.
- * - **Right (330px)** — the machine's account of itself: the hub link
- *   (endpoint, reachability, last flush, buffer) and the open local asks. The
- *   host's subscriptions are the host page's.
+ * - **Center (1fr)** — work: the chunks on these runners as the hub's board lays them out
+ *   ({@link ChunkBoard} — lanes or list, one card per chunk, its live worker inline) over
+ *   the detail dock for the selected chunk, which takes no room while nothing is selected.
+ * - **Right (330px)** — the rail ({@link BoardRail}): the hub link, this host, and the
+ *   open local asks.
  *
- * Presentational only: it renders exactly the leases/chunks/selection it is
+ * Presentational only: it renders exactly the chunks/selection it is
  * handed and emits `selectChunk`. Color
  * resolves through the shared design tokens (`fleet` library,
  * design/tokens.css), never hard-coded hex.
@@ -37,65 +31,46 @@ import type { MachineChunkRow } from './app-panel.model';
   selector: 'app-panel-layout',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
-    AgentRow,
+    ChunkBoard,
     MachineDetail,
-    ChunkRow,
-    KitAsyncState,
-    KitCheckbox,
-    KitPanel,
-    KitPanelHeader,
-    LocalAsks,
-    LocalInfo,
+    BoardRail,
   ],
   templateUrl: './app-panel-layout.html',
   styleUrl: './app-panel-layout.css',
 })
 export class LocalPanelLayout {
-  /** The active leases for the liveness rail. */
-  readonly activeLeases = input.required<readonly runnerApi.LeaseView[]>();
-
-  /** The leases rail's async triad state. */
-  readonly leasesTriadState = input.required<KitAsyncStateValue>();
-
   /** The machine-chunks list's async triad state. */
   readonly chunksTriadState = input.required<KitAsyncStateValue>();
 
-  /** The chunks pane's empty-state text — the container distinguishes
-   * "nothing on this machine" from "the filter hid everything", so this layout renders whichever text it is handed rather
-   * than a literal in the template. */
-  readonly chunksEmptyText = input.required<string>();
-
-  /** One row per chunk on this machine, pre-folded by the container **and**
-   * already filtered per {@link showAllChunks} — the container
+  /** One row per chunk on this machine, pre-folded by the container — the container
    * owns the fold, this renders exactly the rows it is handed. */
   readonly machineChunks = input.required<readonly MachineChunkRow[]>();
 
-  /** The chunks list's "show all" checkbox state — unchecked
-   * (the default) hides a chunk whose newest lease is closed; the container
-   * derives {@link machineChunks} from this, so this is display-only here. */
-  readonly showAllChunks = input.required<boolean>();
+  /** Which layout the chunks render in — the lane board or the ranked list. */
+  readonly layout = input<BoardLayout>('board');
 
   /** The open-ask count for the asks panel's header note. */
   readonly openAskCount = input.required<number>();
+
+  /** The runners the board reads — the hub-link rail shows each. */
+  readonly runners = input.required<readonly RunnerOwner[]>();
 
   /** The `chunk_id` currently selected, or `null`. */
   readonly selectedChunkId = input.required<string | null>();
 
   /** The selected chunk's attempts (oldest → newest). */
-  readonly selectedChunkLeases = input.required<readonly runnerApi.LeaseView[]>();
+  readonly selectedChunkLeases = input.required<readonly PanelLease[]>();
 
   readonly selectedStatus = input.required<MachineChunkStatus | null>();
 
   /** The open escalation for the selected chunk, when one exists. */
   readonly selectedEscalation = input.required<runnerApi.EscalationView | null>();
 
-  /** Emitted with a chunk id when the operator selects a lease row or a chunk row — the
-   * lease rail and the chunks list share one selection, so this drives both. */
+  /** Emitted with a chunk id when the operator selects a chunk card or row. */
   readonly selectChunk = output<string>();
 
-  /** Emitted with the checkbox's new checked state when the operator toggles
-   * "show all". */
-  readonly toggleShowAllChunks = output<boolean>();
+  /** Emitted with the layout the Board/List switch was set to. */
+  readonly layoutChange = output<BoardLayout>();
 
   /** Emitted when the operator dismisses the detail dock via its
    * own close button — the container clears the selection. */

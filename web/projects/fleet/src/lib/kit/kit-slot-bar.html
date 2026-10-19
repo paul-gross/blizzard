@@ -1,19 +1,37 @@
 @if (name(); as name) {
-  <!-- Named, the bar is one compact line — the name, then the cells, whose fill is the reading;
+<!-- Named, the bar is one compact line — the name, then the cells, whose fill is the reading;
        the figures move to the tooltip and the accessible name. -->
-  <span class="name" data-testid="slot-bar-name">{{ name }}</span>
-  <div class="gauge" data-testid="slot-bar-gauge" role="img" [attr.aria-label]="name + ' ' + count()" [attr.title]="count()">
-    @for (cell of cells(); track $index) {
-      <span class="cell" [class.on]="cell !== 'off'" [class.over]="cell === 'over'"></span>
-    }
-  </div>
+<span class="name" data-testid="slot-bar-name">{{ name }}</span>
+<div
+  class="gauge"
+  data-testid="slot-bar-gauge"
+  role="img"
+  [attr.aria-label]="name + ' ' + count()"
+  [attr.title]="count()"
+>
+  @for (cell of cells(); track $index) {
+  <span
+    class="cell"
+    [class.on]="cell.state !== 'off'"
+    [class.over]="cell.state === 'over'"
+    [class.dim]="cell.dim"
+    [attr.title]="cell.title"
+  ></span>
+  }
+</div>
 } @else {
-  <div class="gauge" data-testid="slot-bar-gauge">
-    @for (cell of cells(); track $index) {
-      <span class="cell" [class.on]="cell !== 'off'" [class.over]="cell === 'over'"></span>
-    }
-  </div>
-  <div class="gauge-lbl">
-    <span class="lbl" data-testid="slot-bar-label">{{ count() }}</span>
-  </div>
+<div class="gauge" data-testid="slot-bar-gauge">
+  @for (cell of cells(); track $index) {
+  <span
+    class="cell"
+    [class.on]="cell.state !== 'off'"
+    [class.over]="cell.state === 'over'"
+    [class.dim]="cell.dim"
+    [attr.title]="cell.title"
+  ></span>
+  }
+</div>
+<div class="gauge-lbl">
+  <span class="lbl" data-testid="slot-bar-label">{{ count() }}</span>
+</div>
 }

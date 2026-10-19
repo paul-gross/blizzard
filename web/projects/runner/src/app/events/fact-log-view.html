@@ -1,5 +1,5 @@
-@for (fact of facts(); track fact.seq) {
-  <div class="ev" data-testid="fact-row" [attr.data-seq]="fact.seq">
+@for (fact of facts(); track fact.owner.runnerId + ':' + fact.seq) {
+  <div class="ev" data-testid="fact-row" [attr.data-seq]="fact.seq" [attr.data-runner-id]="fact.owner.runnerId">
     <span class="t" [attr.title]="clockInfo(fact) ? absolute(fact) : null">
       @if (clockInfo(fact); as info) {
         @if (info.day) {
@@ -14,6 +14,7 @@
       {{ fact.acked_at !== null ? '✓' : '·' }}
     </span>
     <span class="msg">
+      <span class="runner" data-testid="fact-runner">{{ fact.owner.label }}</span>
       <b class="kind">{{ fact.kind }}</b>
       @if (fact.chunk_id; as chunk) {
         <b class="ref">{{ ref(chunk) }}</b>

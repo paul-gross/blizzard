@@ -1,11 +1,16 @@
-import { ChangeDetectionStrategy, Component, input, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import {
   KitBadge,
   KitButton,
   KitConfirmDialog,
   type KitConfirmDialogPrompt,
-  KitTooltip,
+  KitMenu,
+  KitMenuItem,
+  KitMenuItemSubtitle,
+  KitMenuPanel,
+  formatHeldFor,
+  injectNowSignal,
   pauseCopy,
   resumeCopy,
   type runnerApi,
@@ -13,11 +18,15 @@ import {
   WorkRefLink,
 } from 'fleet';
 
+import { sessionEnding } from '../../core/worker-session';
+import { WorkerLine } from '../../machine/worker-line';
+
 /**
- * The machine detail dock's header — the full chunk id linked to the chunk detail
- * route, its work items as links, the derived state, a Pause/Resume on the
- * `bzh:claim-vocabulary` copy and tooltip, and a close button. The chunk link
- * carries the chunk in the route's path and no query params.
+ * The machine detail dock's header, shaped like the hub dock's — the full chunk id linked to
+ * the chunk detail route, then the identity line in the hub's order (project · work items ·
+ * `host/runner` · status · node), the chunk's worker under it ({@link WorkerLine} and its pid,
+ * or how the last session ended when none is live), and on the right a ⋯ menu holding
+ * Pause/Resume on the `bzh:claim-vocabulary` copy, then a close button.
  *
  * Presentational (`bzh:frontend-container-presentational`): it renders its inputs
  * and asks for confirmation before emitting {@link pauseChunk}/{@link resumeChunk}.
@@ -25,7 +34,7 @@ import {
 @Component({
   selector: 'app-machine-detail-header',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [WorkRefLink, KitBadge, KitButton, KitConfirmDialog, KitTooltip, RouterLink],
+  imports: [WorkRefLink, KitBadge, KitButton, KitConfirmDialog, KitMenu, KitMenuItem, KitMenuItemSubtitle, KitMenuPanel, RouterLink, WorkerLine],
   templateUrl: './machine-detail-header.html',
   styleUrl: './machine-detail-header.css',
 })
@@ -48,9 +57,31 @@ export class MachineDetailHeader {
   readonly statusLabel = input<string | null>(null);
   readonly statusTone = input<Tone | undefined>(undefined);
 
-  /** The newest attempt's node name + epoch, alongside the status text. */
+  /** The node the chunk's newest session ran. */
   readonly nodeName = input<string>('');
-  readonly epoch = input<number>(0);
+
+  /** The project the chunk is attributed to, by name, or `null`. */
+  readonly projectName = input<string | null>(null);
+
+  /** The chunk's newest lease — its worker while live, else the session that ended last. */
+  readonly lease = input<runnerApi.LeaseView | null>(null);
+
+  /** The live worker, or `null` once the newest session ended. */
+  readonly worker = input<runnerApi.LeaseView | null>(null);
+
+  /** Ticks once a second so the ended-ago note advances. */
+  private readonly now = injectNowSignal();
+
+  /** With no live worker, how long ago the last session ended and how. */
+  protected readonly noWorkerText = computed<string>(() => {
+    const last = this.lease();
+    if (!last) return 'No worker';
+    const ending = sessionEnding(last);
+    const endedAt = last.closed_at ?? last.last_heartbeat_at;
+    const ago = endedAt ? ` ${formatHeldFor(this.now() - Date.parse(endedAt))} ago` : '';
+    const how = ending === null ? '' : ` · ${ending === 'exited' ? 'worker exited' : ending}`;
+    return `No live worker — last session ended${ago}${how}`;
+  });
 
   /** The chunk's open operator pause, if any — non-null renders Resume, null renders
    * Pause (subject to {@link pausable}). */

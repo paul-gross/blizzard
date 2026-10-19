@@ -1,5 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
-import { KitBadge, compactRef, type runnerApi } from 'fleet';
+import { KitBadge, compactRef } from 'fleet';
+
+import type { PanelLease } from '../core/panel-reads.model';
 
 import { deriveLeaseStatus } from '../core/lease-status';
 import { HeartbeatFreshness } from './heartbeat-freshness';
@@ -9,7 +11,7 @@ import { HeartbeatFreshness } from './heartbeat-freshness';
  * mock's `.lease` row: compact refs (`L-ZPRR · C-7S5D · epoch 2` —
  * `compactRef`, the app-wide short-name mechanism) with the server-derived
  * `state` right-aligned on the first line as a kit badge, labelled and toned by
- * the kernel's lease fold ({@link deriveLeaseStatus}), `node / env / pid / session` on the
+ * the kernel's lease fold ({@link deriveLeaseStatus}), its runner and `node / env / pid` on the
  * second, and a {@link HeartbeatFreshness} bar under both. Deliberately free of
  * issue chips/titles — the lease list is the *liveness* rail; what a chunk is
  * about lives on the machine-chunks list, which carries the work-item enrichment.
@@ -28,8 +30,8 @@ import { HeartbeatFreshness } from './heartbeat-freshness';
   styleUrl: './agent-row.css',
 })
 export class AgentRow {
-  /** The lease this row renders, incl. the server-derived `state`. */
-  readonly agent = input.required<runnerApi.LeaseView>();
+  /** The lease this row renders, incl. the server-derived `state` and its runner. */
+  readonly agent = input.required<PanelLease>();
 
   /** Whether a container considers this row the current selection. */
   readonly selected = input(false);

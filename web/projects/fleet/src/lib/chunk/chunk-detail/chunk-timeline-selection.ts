@@ -4,6 +4,8 @@ import { RouterLink } from '@angular/router';
 import type { ChunkDetail } from '../../api/hub';
 import { formatCost, formatTokens, STEP_COST_PARTIAL_TITLE } from '../../core/cost-format';
 import { injectNowSignal } from '../../core/now-signal';
+import { formatHeldFor } from '../../core/when';
+import type { ChunkStepSession } from './chunk-step-sessions';
 import { KitAsyncState } from '../../kit/kit-async-state';
 import { deriveActiveRow, deriveHistoryRows, deriveMultiGraph, type HistoryRow, rowChoice, rowMark, usageForStep as sumStepUsage } from './chunk-timeline-rows';
 import { LensLink } from '../../core/lens-link';
@@ -57,6 +59,11 @@ export class ChunkTimelineSelection {
    * `null`-keyed row (a migration, bounce, or restart, or an active row with no epoch yet). */
   readonly pickStep = output<string | null>();
 
+  /** Each step's agent session, keyed by the row's own join key — a daemon that records
+   * its sessions (`CHUNK_STEP_SESSIONS`) adds an environment/pid/ending/duration line to
+   * the rows it knows; empty (the default) renders no such line. */
+  readonly stepSessions = input<ReadonlyMap<string, ChunkStepSession>>(new Map());
+
   protected readonly rowMark = rowMark;
   protected readonly rowChoice = rowChoice;
   protected readonly stepCostPartialTitle = STEP_COST_PARTIAL_TITLE;
@@ -79,6 +86,18 @@ export class ChunkTimelineSelection {
   protected readonly multiGraph = computed<boolean>(() => deriveMultiGraph(this.historyRows()));
 
   protected readonly activeRow = computed(() => deriveActiveRow(this.detail()));
+
+  /** The session that worked the row's step, or `null` when none is known. */
+  protected sessionFor(key: string | null): ChunkStepSession | null {
+    return key === null ? null : (this.stepSessions().get(key) ?? null);
+  }
+
+  /** A session's held-for duration — to its end, or to now while it is still live. */
+  protected sessionDuration(session: ChunkStepSession): string {
+    const start = Date.parse(session.startedAt);
+    const end = session.endedAt === null ? this.now() : Date.parse(session.endedAt);
+    return formatHeldFor(end - start);
+  }
 
   /** One history row's summed usage, or `null` when no usage fact has landed for its
    * `(nodeId, epoch)` yet — see {@link ChunkTimeline.usageForStep}. */

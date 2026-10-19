@@ -28,5 +28,5 @@
       </div>
     }
   </div>
-  <div class="line3" data-testid="local-chunk-card-node">{{ lease().node_name }} · a{{ lease().epoch }}</div>
+  <div class="line3" data-testid="local-chunk-card-node">@if (runnerLabel(); as runner) {<span data-testid="local-chunk-card-runner">{{ runner }}</span> · }{{ lease().node_name }} · a{{ lease().epoch }}</div>
 </div>

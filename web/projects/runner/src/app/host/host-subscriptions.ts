@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import {
   asyncState,
   injectNowSignal,
@@ -8,6 +8,8 @@ import {
   SubscriptionPaceGroup,
 } from 'fleet';
 
+import { PanelFilters } from '../core/panel-filters';
+import { injectPanelRunners } from '../core/panel-reads';
 import { injectHostSubscriptionsQuery, injectRunnerNames } from './host.query';
 
 /**
@@ -17,7 +19,8 @@ import { injectHostSubscriptionsQuery, injectRunnerNames } from './host.query';
  * or an unparseable response — and the runners spending it. Owns the host's subscriptions
  * read, the resolved async-state triad, and the ticking clock each row's sampled-ago text
  * is derived from; the shared presentational {@link SubscriptionPaceGroup} owns the row
- * template (`bzh:frontend-container-presentational`). Read-only: it shows the newest
+ * template (`bzh:frontend-container-presentational`). Under the Runner filter, only the
+ * subscriptions that runner spends are listed. Read-only: it shows the newest
  * renewal and its outcome, and offers no operator action.
  */
 @Component({
@@ -30,8 +33,15 @@ import { injectHostSubscriptionsQuery, injectRunnerNames } from './host.query';
 export class HostSubscriptions {
   protected readonly query = injectHostSubscriptionsQuery();
   private readonly runnerNames = injectRunnerNames();
+  private readonly filters = inject(PanelFilters);
+  private readonly runners = injectPanelRunners();
 
-  protected readonly subscriptions = computed(() => this.query.data() ?? []);
+  protected readonly subscriptions = computed(() => {
+    const all = this.query.data() ?? [];
+    if (this.filters.runner() === null) return all;
+    const runnerIds = new Set(this.runners.scoped().map((owner) => owner.runnerId));
+    return all.filter((subscription) => (subscription.spenders ?? []).some((spender) => runnerIds.has(spender)));
+  });
 
   /** The async triad's resolved state — loading/error take precedence, then
    * no declared subscriptions, else the rows render. */

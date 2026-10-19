@@ -1,0 +1,51 @@
+<fleet-kit-panel class="board-panel" data-testid="chunks-pane" label="Chunks" [bodyScroll]="false">
+  <div fleetKitPanelHeader class="hdr">
+    <fleet-kit-tabs variant="sub" [options]="layoutTabs" [activeValue]="layout()" (choose)="chooseLayout($event)" />
+  </div>
+  @if (state() === 'ready') {
+    @if (layout() === 'list') {
+      <div class="list" data-testid="board-list">
+        <div class="cols" aria-hidden="true">
+          <span>Work</span>
+          <span>Runner · Step · Worker</span>
+          <span class="r">State</span>
+        </div>
+        @for (chunk of ranked(); track chunk.lease.chunk_id) {
+          <app-chunk-row
+            layout="list"
+            [row]="chunk"
+            [selected]="chunk.lease.chunk_id === selectedChunkId()"
+            (selectChunk)="selectChunk.emit($event)"
+          />
+        }
+      </div>
+    } @else {
+      <div class="board" data-testid="board">
+        @for (lane of lanes; track lane.key) {
+          <section class="b-col" [attr.data-col]="lane.key" [attr.data-testid]="'lane-' + lane.key">
+            <div class="b-col-head">
+              <span class="col-lbl">{{ lane.label }}</span>
+              <span class="n">{{ rowsFor(lane.key).length }}</span>
+            </div>
+            <div class="b-col-body">
+              @for (chunk of rowsFor(lane.key); track chunk.lease.chunk_id) {
+                <app-chunk-row
+                  [row]="chunk"
+                  [selected]="chunk.lease.chunk_id === selectedChunkId()"
+                  (selectChunk)="selectChunk.emit($event)"
+                />
+              }
+            </div>
+          </section>
+        }
+      </div>
+    }
+  }
+  <fleet-kit-async-state
+    [state]="state()"
+    loadingText="LOADING…"
+    errorText="CHUNKS UNAVAILABLE — RUNNER LOCAL API UNREACHABLE"
+    [emptyText]="emptyText()"
+    emptyTestid="chunks-empty"
+  />
+</fleet-kit-panel>

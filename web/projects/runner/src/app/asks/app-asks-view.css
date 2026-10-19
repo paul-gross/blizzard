@@ -40,3 +40,6 @@
 .route code {
   color: var(--label);
 }
+.runner {
+  color: var(--label);
+}

@@ -1,15 +1,13 @@
 import { ChangeDetectionStrategy, Component, computed } from '@angular/core';
 import { MobileTabBar as FleetMobileTabBar, type MobileTabItem } from 'fleet';
-import { injectActiveRunner } from '../../core/active-runner';
+import { injectPanelAsks } from '../../core/panel-reads';
 import { mobileTabItems } from './mobile-tab-bar.model';
-import { injectRunnerDashboardQuery } from '../../core/status.query';
 
 /**
  * The panel's mobile bottom tab bar, a thin wrapper around {@link FleetMobileTabBar}.
- * `Host` is always routed; `Board`, `Events`, and `Machine` route to the active runner's
- * pages, and render dimmed and inert on a host page, where no runner is active. `Asks`
- * has no screen of its own, so it is always inert; it carries the active runner's
- * open-ask count badge.
+ * `Board`, `Events`, and `Machine` are always routed. `Asks` has no screen of its own, so
+ * it is always inert; it carries the open-ask count across the runners and project the
+ * filters leave.
  */
 @Component({
   selector: 'app-mobile-tab-bar',
@@ -18,11 +16,10 @@ import { injectRunnerDashboardQuery } from '../../core/status.query';
   templateUrl: './mobile-tab-bar.html',
 })
 export class MobileTabBar {
-  private readonly dashboardQuery = injectRunnerDashboardQuery();
-  private readonly activeRunner = injectActiveRunner();
+  private readonly asks = injectPanelAsks();
 
   /** The open-ask count for the Asks tab's badge. */
-  protected readonly askCount = computed(() => (this.dashboardQuery.data()?.asks?.items ?? []).length);
+  protected readonly askCount = computed(() => this.asks.data().length);
 
-  protected readonly items = computed<readonly MobileTabItem[]>(() => mobileTabItems(this.activeRunner(), this.askCount()));
+  protected readonly items = computed<readonly MobileTabItem[]>(() => mobileTabItems(this.askCount()));
 }

@@ -1,0 +1,15 @@
+<div class="filter" role="group" [attr.aria-label]="label()" [attr.data-testid]="testid()">
+  <span class="filter-label" aria-hidden="true">{{ label() }}</span>
+  <div class="chips">
+    @for (choice of choices(); track choice.value) {
+      <fleet-kit-chip
+        [selected]="choice.value === current()"
+        [disabled]="choice.disabled"
+        [title]="choice.title"
+        [testid]="testid() + '-' + (choice.value ?? 'all')"
+        (click)="onChoose(choice)"
+        >{{ choice.label }}@if (choice.brake) {<span class="brake" data-testid="runner-brake"> · {{ choice.brake }}</span>}</fleet-kit-chip
+      >
+    }
+  </div>
+</div>

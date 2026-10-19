@@ -1,32 +1,36 @@
 import { ChangeDetectionStrategy, Component, computed, effect, input, output, signal } from '@angular/core';
 import {
+  type DaemonTarget,
   errorMessage,
   injectChunkDetailQuery,
   injectNowSignal,
   KitPanel,
   KitPanelHeader,
+  runnerClient,
   type runnerApi,
 } from 'fleet';
 
 import { injectChunkPauseMutation } from './chunk-pause.mutations';
-import { heartbeatLabel, leaseRefLabel, ownRunnerLabel } from './chunk-detail.model';
+import { heartbeatLabel } from './chunk-detail.model';
+import { injectPanelProjects } from '../../core/panel-reads';
+import { isLiveLease } from '../../core/worker-session';
 import { MachineDetailView } from './chunk-detail-view';
-import { injectActiveRunner, injectActiveRunnerTarget } from '../../core/active-runner';
-import { injectRunnerDashboardQuery } from '../../core/status.query';
+import type { PanelLease } from '../../core/panel-reads.model';
 import type { MachineChunkStatus } from '../chunk-list/chunk-status';
 import { MachineDetailHeader } from './machine-detail-header';
 
 /**
  * The machine detail dock's container (`bzh:frontend-container-presentational`) —
  * the discovery mock's "machine detail" panel for the selected chunk: execution
- * facts *from this box only* (lease, session, pid, env, workdir, heartbeat), and
+ * facts *from this box only* (its worker, session, pid, env, workdir, heartbeat), and
  * the escalation resume command when one is open. Per-attempt selection and the
  * transcript belong to the runner-local chunk detail route, which the chunk name in
  * the header links to.
  *
  * The summary facts, status, and escalation all render off the chunk's newest
  * lease (the last entry of the `leases` list the shell hands in, oldest →
- * newest) — this dock owns no list read of its own.
+ * newest) — this dock owns no list read of its own. Every read and action targets that
+ * lease's own runner.
  *
  * The header ({@link MachineDetailHeader}) is a presentational sibling. The
  * work-item links and the pause fact are this dock's own self-fetched enrichment
@@ -51,7 +55,7 @@ import { MachineDetailHeader } from './machine-detail-header';
 export class MachineDetail {
   /** The selected chunk's attempts, oldest → newest; empty when nothing is
    * selected. The newest is the summary/status subject. */
-  readonly leases = input.required<readonly runnerApi.LeaseView[]>();
+  readonly leases = input.required<readonly PanelLease[]>();
 
   /** The derived machine-side status for the selected chunk (shell-folded). */
   readonly status = input<MachineChunkStatus | null>(null);
@@ -61,7 +65,7 @@ export class MachineDetail {
 
   /** The chunk's newest attempt (the `leases` list's last entry) — the summary,
    * status, and escalation all render off it. */
-  protected readonly newestLease = computed<runnerApi.LeaseView | null>(() => this.leases().at(-1) ?? null);
+  protected readonly newestLease = computed<PanelLease | null>(() => this.leases().at(-1) ?? null);
 
   /** Emitted when the operator dismisses the dock. */
   readonly dismiss = output<void>();
@@ -75,11 +79,14 @@ export class MachineDetail {
    * this, the same self-fetching shape `injectChunkTitleQuery` established for the
    * chunks list (`chunk-title.query.ts`, `chunk-row.ts`).
    */
-  private readonly runnerId = injectActiveRunner();
-  private readonly target = injectActiveRunnerTarget();
+  private readonly runnerId = computed<string | null>(() => this.newestLease()?.owner.runnerId ?? null);
+  private readonly target = computed<DaemonTarget | null>(() => {
+    const runnerId = this.runnerId();
+    return runnerId === null ? null : { plane: 'runner', client: runnerClient, runnerId };
+  });
 
-  /** The chunk detail route's path segments before the chunk id, under the active runner. */
-  protected readonly linkBase = computed(() => ['/runners', this.runnerId() ?? '', 'board', 'chunk']);
+  /** The chunk detail route's path segments before the chunk id. */
+  protected readonly linkBase = ['/board', 'chunk'];
 
   protected readonly detailQuery = injectChunkDetailQuery(
     () => this.target(),
@@ -103,7 +110,7 @@ export class MachineDetail {
 
   /** The header's Pause/Resume mutation — fired from its `pauseChunk`/`resumeChunk`
    * outputs, once the operator has already confirmed. */
-  protected readonly pauseMutation = injectChunkPauseMutation();
+  protected readonly pauseMutation = injectChunkPauseMutation(() => this.runnerId());
 
   /** Whether the pause/resume mutation is in flight — read straight off the mutation's
    * own `.isPending()` and threaded to the header's Pause/Resume buttons, so a double
@@ -124,13 +131,23 @@ export class MachineDetail {
     });
   }
 
-  /** This runner's display name (its configured name alone before its first registration),
-   * for the header's `pauseCopy`/`resumeCopy` `<runner>` slot
-   * (`bzh:claim-vocabulary`), read off {@link injectRunnerDashboardQuery}. */
-  private readonly dashboardQuery = injectRunnerDashboardQuery();
-  protected readonly runnerName = computed<string | null>(() => ownRunnerLabel(this.dashboardQuery.data()?.runner));
+  /** The chunk's runner's display name, `host/runner`, for the header's
+   * `pauseCopy`/`resumeCopy` `<runner>` slot (`bzh:claim-vocabulary`). */
+  protected readonly runnerName = computed<string | null>(() => this.newestLease()?.owner.label ?? null);
 
-  protected readonly leaseRef = computed(() => leaseRefLabel(this.newestLease()));
+  /** The chunk's live worker — its newest lease while that has not ended — for the header. */
+  protected readonly worker = computed<PanelLease | null>(() => {
+    const newest = this.newestLease();
+    return newest && isLiveLease(newest) ? newest : null;
+  });
+
+  private readonly projects = injectPanelProjects();
+
+  /** The chunk's project by name, for the header's identity line. */
+  protected readonly projectName = computed<string | null>(() => {
+    const slug = this.newestLease()?.projectSlug ?? null;
+    return slug === null ? null : (this.projects().find((p) => p.slug === slug)?.name ?? slug);
+  });
 
   /** Ticks once a second so {@link heartbeatLabel} advances between polls, the
    * same cadence `HeartbeatFreshness`'s own bar reads (`bzh:frontend-formatters`). */

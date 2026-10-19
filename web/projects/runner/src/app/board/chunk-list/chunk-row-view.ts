@@ -1,35 +1,36 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
-import { compactRef, KitBadge, toneColor, type runnerApi, WorkRefLink } from 'fleet';
+import { compactRef, KitBadge, type runnerApi } from 'fleet';
 
-import type { MachineChunkStatus } from './chunk-status';
+import { WorkerLine } from '../../machine/worker-line';
+import { type MachineChunkRow, showsChunkStatus } from '../app-panel.model';
 
 /**
- * {@link ChunkRow}'s presentational sibling (`bzh:frontend-container-presentational`):
- * plain inputs only, injects nothing, and owns the row's template — the container
- * keeps the per-row {@link "./chunk-title.query".injectChunkTitleQuery} read and hands
- * this component its resolved {@link linkedItems}.
+ * {@link ChunkRow}'s lane card (`bzh:frontend-container-presentational`): plain inputs only,
+ * injects nothing — the hub board card's look, project tint included. Its work items (label
+ * over title), the chunk's live worker ({@link WorkerLine}), then the step row: runner and
+ * node — the last session's, once none is live — the derived status, and the short id.
  */
 @Component({
   selector: 'app-chunk-row-view',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitBadge, WorkRefLink],
+  imports: [KitBadge, WorkerLine],
   templateUrl: './chunk-row-view.html',
   styleUrl: './chunk-row-view.css',
 })
 export class ChunkRowView {
-  /** The chunk's newest lease — the row's execution facts (node, epoch). */
-  readonly lease = input.required<runnerApi.LeaseView>();
+  /** The chunk's folded row. */
+  readonly row = input.required<MachineChunkRow>();
 
-  /** The derived machine-side status. */
-  readonly status = input.required<MachineChunkStatus>();
+  /** The resolved project tint, or `null` for an untinted card. */
+  readonly projectTint = input<string | null>(null);
 
-  /** Whether this row is the current selection. */
+  /** Whether this card is the current selection. */
   readonly selected = input(false);
 
   /** The chunk's linked work items — empty when none are known. */
   readonly linkedItems = input<readonly runnerApi.WorkItemEntry[]>([]);
 
-  /** Emits this row's `chunk_id` on click/Enter/Space — same convention as the agent row's `selectChunk`. */
+  /** Emits this card's `chunk_id` on click/Enter/Space. */
   readonly selectChunk = output<string>();
 
   protected onSelect(event?: Event): void {
@@ -37,10 +38,10 @@ export class ChunkRowView {
     this.selectChunk.emit(this.chunkId());
   }
 
-  protected readonly chunkId = computed(() => this.lease().chunk_id);
-  protected readonly chunkRef = computed(() => compactRef(this.chunkId()));
+  protected readonly chunkId = computed(() => this.row().lease.chunk_id);
+  /** Whether the step row names the derived status — always once no worker is live, else only
+   * when a human fact outranks the worker's own state, which its line already shows. */
+  protected readonly showsStatus = computed(() => showsChunkStatus(this.row()));
 
-  /** The card's left edge — {@link toneColor} off the derived status, the
-   * same ladder the status badge paints with, so the two never disagree. */
-  protected readonly laneColor = computed(() => toneColor(this.status().tone));
+  protected readonly chunkRef = computed(() => compactRef(this.chunkId()));
 }

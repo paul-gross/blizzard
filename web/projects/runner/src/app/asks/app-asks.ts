@@ -3,11 +3,11 @@ import { asyncState, injectNowSignal, KitAsyncState } from 'fleet';
 
 import { type AskRow, LocalAsksView } from './app-asks-view';
 import { askRows } from './app-asks.model';
-import { injectRunnerDashboardQuery } from '../core/status.query';
+import { injectPanelAsks } from '../core/panel-reads';
 
 /**
  * The app-asks panel **container** — "answers live at the hub": every ask still
- * open on this machine, with the chunk it parks and the question text. Owns the
+ * open on the runners the filters leave, each naming its runner, with the chunk it parks and the question text. Owns the
  * query, the resolved async-state triad, and the ticking clock
  * {@link AskRow.askedFor} is derived from; the presentational {@link LocalAsksView}
  * owns the row template (`bzh:frontend-container-presentational`). Read-only: it
@@ -21,9 +21,9 @@ import { injectRunnerDashboardQuery } from '../core/status.query';
   styleUrl: './app-asks.css',
 })
 export class LocalAsks {
-  protected readonly query = injectRunnerDashboardQuery();
+  protected readonly query = injectPanelAsks();
 
-  protected readonly asks = computed(() => this.query.data()?.asks?.items ?? []);
+  protected readonly asks = this.query.data;
 
   /** The async triad's resolved state — loading/error take precedence, then
    * no open asks, else the ask rows render. */

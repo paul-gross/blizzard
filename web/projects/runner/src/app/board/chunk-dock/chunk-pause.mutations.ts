@@ -2,7 +2,6 @@ import { inject } from '@angular/core';
 import { QueryClient, injectMutation } from '@tanstack/angular-query-experimental';
 import { runnerApi } from 'fleet';
 
-import { injectActiveRunner } from '../../core/active-runner';
 import { chunkPauseMutationKey } from '../../core/mutation-keys';
 import { runnerChunkDetailKey, runnerLeasesKey } from '../../core/query-keys';
 
@@ -21,11 +20,11 @@ export interface ChunkPauseVars {
  * `pauseChunkRunnersRunnerIdApiChunksChunkIdPausePost` or
  * `resumeChunkRunnersRunnerIdApiChunksChunkIdResumePost` by the desired `paused` state
  * (bzh:generated-client). The hub refuses a chunk whose `ChunkDetail.pausable` is false with a
- * 409. On settle it re-reads the chunk's detail and the leases list.
+ * 409. On settle it re-reads the chunk's detail and that runner's leases list. Keyed by
+ * `runnerId`, the runner of the chunk the caller shows.
  */
-export function injectChunkPauseMutation() {
+export function injectChunkPauseMutation(runnerId: () => string | null) {
   const queryClient = inject(QueryClient);
-  const runnerId = injectActiveRunner();
   return injectMutation(() => ({
     mutationKey: chunkPauseMutationKey(runnerId()),
     mutationFn: async (vars: ChunkPauseVars): Promise<void> => {

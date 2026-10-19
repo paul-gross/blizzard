@@ -1,0 +1,16 @@
+<app-filter-chips
+  label="Runner"
+  testid="runner-filter"
+  [compact]="variant() === 'mobile'"
+  [choices]="runnerChoices()"
+  [current]="filters.runner()"
+  (choose)="filters.setRunner($event)"
+/>
+<app-filter-chips
+  label="Project"
+  testid="project-filter"
+  [compact]="variant() === 'mobile'"
+  [choices]="projectChoices()"
+  [current]="filters.project()"
+  (choose)="filters.setProject($event)"
+/>

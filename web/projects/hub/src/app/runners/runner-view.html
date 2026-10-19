@@ -19,7 +19,7 @@
     @if (rail().subscriptions.length > 0) {
       <div class="subs" data-testid="runner-subscriptions">
         @for (sub of rail().subscriptions; track sub.slug) {
-          <app-subscription-blocks data-testid="runner-subscription" [line]="sub" />
+          <fleet-subscription-blocks data-testid="runner-subscription" [line]="sub" />
         }
       </div>
     }

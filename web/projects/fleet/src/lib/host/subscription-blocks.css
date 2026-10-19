@@ -48,11 +48,15 @@
   font-size: var(--fs-label);
   color: var(--label-dim);
 }
+/* The slot bar's named gap, packed closer past ten blocks as its cells are. */
 .cells {
   display: flex;
   flex: 1;
-  gap: 1px;
+  gap: 2px;
   min-width: 0;
+}
+.cells.dense {
+  gap: 1px;
 }
 /* An empty block carries a very dark hint of its fill, as the slot bar's do. */
 .cell {

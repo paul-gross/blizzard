@@ -1,7 +1,17 @@
-<app-chunk-row-view
-  [lease]="lease()"
-  [status]="status()"
-  [selected]="selected()"
-  [linkedItems]="linkedItems()"
-  (selectChunk)="selectChunk.emit($event)"
-/>
+@if (layout() === 'list') {
+  <app-chunk-list-row-view
+    [row]="row()"
+    [projectTint]="projectTint()"
+    [selected]="selected()"
+    [linkedItems]="linkedItems()"
+    (selectChunk)="selectChunk.emit($event)"
+  />
+} @else {
+  <app-chunk-row-view
+    [row]="row()"
+    [projectTint]="projectTint()"
+    [selected]="selected()"
+    [linkedItems]="linkedItems()"
+    (selectChunk)="selectChunk.emit($event)"
+  />
+}
