@@ -6,7 +6,7 @@ function pageTab(testid: string, label: string, page: string): MobileTabItem {
 }
 
 /** The mobile tab bar's tabs: `Board`, the always-inert `Asks` carrying `askCount`, then
- * `Events` and `Machine` — the same on every page and under every filter. */
+ * `Events` and `Host` — the same on every page and under every filter. */
 export function mobileTabItems(askCount: number): readonly MobileTabItem[] {
   return [
     pageTab('tab-board', 'Board', 'board'),

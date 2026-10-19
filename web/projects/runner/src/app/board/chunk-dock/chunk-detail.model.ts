@@ -1,4 +1,17 @@
-import { ageMs, compactRef, formatAge, type runnerApi } from 'fleet';
+import { ageMs, compactRef, type DaemonTarget, formatAge, runnerClient, type runnerApi } from 'fleet';
+
+import type { PanelLease } from '../../core/panel-reads.model';
+import { isLiveLease } from '../../core/worker-session';
+
+/** The detail read's target — the runner `runnerId` names, or `null` while no chunk is selected. */
+export function runnerTarget(runnerId: string | null): DaemonTarget | null {
+  return runnerId === null ? null : { plane: 'runner', client: runnerClient, runnerId };
+}
+
+/** The chunk's live worker — its newest lease while that has not ended, else `null`. */
+export function liveWorker(newest: PanelLease | null): PanelLease | null {
+  return newest && isLiveLease(newest) ? newest : null;
+}
 
 /** The lease's compact ref, or blank when nothing is selected. */
 export function leaseRefLabel(lease: runnerApi.LeaseView | null): string {

@@ -1,8 +1,9 @@
 import { inject } from '@angular/core';
 import { type CanActivateFn, Router, type UrlTree } from '@angular/router';
 import { QueryClient } from '@tanstack/angular-query-experimental';
-import { runnerApi } from 'fleet';
+import type { runnerApi } from 'fleet';
 
+import { fetchHostRunners } from '../core/host.query';
 import { RUNNER_PARAM } from '../core/panel-filters';
 import { hostRunnersKey } from '../core/query-keys';
 
@@ -19,14 +20,7 @@ export const legacyRunnerRedirect: CanActivateFn = async (route, state): Promise
   const tree = router.parseUrl(state.url);
   const rest = (tree.root.children['primary']?.segments ?? []).slice(2).map((segment) => segment.path);
   const runners = await queryClient
-    .fetchQuery({
-      queryKey: hostRunnersKey,
-      queryFn: async (): Promise<runnerApi.HostRunnerView[]> => {
-        const { data, error } = await runnerApi.listRunnersApiHostRunnersGet({ throwOnError: false });
-        if (error) throw error;
-        return data?.items ?? [];
-      },
-    })
+    .fetchQuery({ queryKey: hostRunnersKey, queryFn: fetchHostRunners })
     .catch(() => [] as runnerApi.HostRunnerView[]);
   const name = runners.find((runner) => runner.runner_id === runnerId)?.name ?? null;
   return router.createUrlTree(['/', ...(rest.length > 0 ? rest : ['board'])], {

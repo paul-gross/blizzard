@@ -19,12 +19,12 @@ import {
 } from 'fleet';
 
 import { sessionEnding } from '../../core/worker-session';
-import { WorkerLine } from '../../machine/worker-line';
+import { WorkerLine } from '../../runners/worker-line';
 
 /**
  * The machine detail dock's header, shaped like the hub dock's — the full chunk id linked to
  * the chunk detail route, then the identity line in the hub's order (project · work items ·
- * `host/runner` · status · node), the chunk's worker under it ({@link WorkerLine} and its pid,
+ * runner · status · node), the chunk's worker under it ({@link WorkerLine} and its pid,
  * or how the last session ended when none is live), and on the right a ⋯ menu holding
  * Pause/Resume on the `bzh:claim-vocabulary` copy, then a close button.
  *

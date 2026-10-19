@@ -1,8 +1,8 @@
 <div class="lpm" data-testid="local-panel-mobile">
   @if (detailOpen()) {
     <div class="lpm-detail" data-testid="panel-chunk-detail">
-      <fleet-kit-button class="back-row" ariaLabel="Back to Machine" testid="mobile-detail-back" (click)="closeDetail.emit()">
-        <fleet-kit-back-bar label="Machine" />
+      <fleet-kit-button class="back-row" ariaLabel="Back to Board" testid="mobile-detail-back" (click)="closeDetail.emit()">
+        <fleet-kit-back-bar label="Board" />
       </fleet-kit-button>
       <app-machine-detail
         class="md"

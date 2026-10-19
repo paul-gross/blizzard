@@ -1,4 +1,4 @@
-import type { HostPanelEnv, HostPanelPool } from '../board/rail/host-panel.model';
+import type { HostPanelEnv, HostPanelPool } from '../core/host-pools.model';
 import type { PanelProject } from '../core/panel-reads.model';
 
 /** One environment as a line on the host page: free, or held — its chunk, project and runner named. */

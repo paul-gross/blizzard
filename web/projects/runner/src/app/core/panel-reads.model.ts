@@ -1,4 +1,4 @@
-import type { runnerApi } from 'fleet';
+import { projectColorValue, type runnerApi } from 'fleet';
 
 /** The runner a merged item came from — what its actions and links target. */
 export interface RunnerOwner {
@@ -40,6 +40,17 @@ export interface PanelProject {
  */
 export function projectColorFor(project: PanelProject | null | undefined): string | null {
   return project?.color ?? null;
+}
+
+/** The CSS value a project-tinted card or row paints with, or `null` for an untinted one. */
+export function projectTint(color: string | null): string | null {
+  return color ? projectColorValue(color) : null;
+}
+
+/** The project `slug` names among `projects`, by name — the slug itself for one `projects` does not
+ * name, `null` for no project. */
+export function projectNameFor(projects: readonly PanelProject[], slug: string | null): string | null {
+  return slug === null ? null : (projects.find((project) => project.slug === slug)?.name ?? slug);
 }
 
 /** Each runner's projects by runner id. */
@@ -174,4 +185,14 @@ export function ownByChunk<T extends { readonly chunk_id?: string | null }>(
 /** `items` narrowed to the project `slug`, every item for `null`. */
 export function inProject<T extends { readonly projectSlug: string | null }>(items: readonly T[], slug: string | null): readonly T[] {
   return slug === null ? items : items.filter((item) => item.projectSlug === slug);
+}
+
+/** Each runner's dashboard by runner id. */
+export function dashboardsByRunner(dashboards: readonly RunnerDashboard[]): ReadonlyMap<string, runnerApi.DashboardView> {
+  return new Map(dashboards.map((entry) => [entry.owner.runnerId, entry.dashboard] as const));
+}
+
+/** Whether any of `dashboards` reports its runner reaching its hub — a malformed body reads as not reaching it. */
+export function anyHubReachable(dashboards: readonly RunnerDashboard[]): boolean {
+  return dashboards.some(({ dashboard }) => dashboard.runner?.hub?.reachable ?? false);
 }

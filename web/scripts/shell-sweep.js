@@ -45,12 +45,15 @@
  *     username length — the axis issue #163's actual defect lived on: same
  *     profile-menu-drift proof.
  *   - projects/runner/src/app/board/app-panel-mobile.shell-sweep.spec.ts —
- *     the runner's mobile chunk list (`LocalPanelMobile` → `ChunkCard`,
- *     issue #176): a five-work-item chunk card's per-line
+ *     the runner's mobile board (`LocalPanelMobile` → its chunk cards): the
+ *     three lanes stack, a five-work-item card's per-line
  *     `-webkit-line-clamp: 2` lines genuinely stack (distinct
- *     `getBoundingClientRect().top`s) with no horizontal overflow, at the
- *     narrow phone widths this component — unlike `ChunkRow` — is actually
- *     reached at, beneath the persistent mobile bottom tab bar.
+ *     `getBoundingClientRect().top`s), and no card overflows, at 390px and
+ *     320px beneath the persistent mobile bottom tab bar.
+ *   - projects/runner/src/app/board/app-panel-layout.shell-sweep.spec.ts — the
+ *     runner's desktop board (`LocalPanelLayout`): the lanes and the right rail
+ *     sit side by side, the rail's panels stack, and nothing overflows at 1280px
+ *     and 1024px, with the chunk dock open or closed.
  *   - projects/hub/src/app/runners/runner-view.shell-sweep.spec.ts — the
  *     runner registry's rate-limit pace bars (issue #218): the stacked
  *     utilization/elapsed pair per sampled window genuinely stacks, with no
@@ -66,14 +69,12 @@
  *     headline, detail copy, and retry control hold their layout with no
  *     horizontal overflow at phone widths.
  *   - projects/runner/src/app/shell/nav/app-nav.shell-sweep.spec.ts — the runner
- *     shell's own top tab strip (`AppNav`): the Host/Board/Events/Machine
- *     labels and the runner switcher never force the strip to overflow its own width.
- *   - projects/runner/src/app/shell/nav/runner-switcher.shell-sweep.spec.ts — the
- *     runner switcher's mobile row: long-named, braked runners scroll inside the
- *     row at phone widths, the active runner's chip still hit-testable.
+ *     shell's own top tab strip (`AppNav`): the Board/Events/Host tabs and the
+ *     Runner and Project filters never force the strip to overflow its own width.
  *   - projects/runner/src/app/host/host-page.shell-sweep.spec.ts — the host page:
- *     its runners, environments, and subscriptions panels sit side by side when
- *     wide and genuinely stack at phone widths, with no horizontal overflow.
+ *     each runner's facts sit beside its held chunks when wide and stack under
+ *     them at 900px and below, and its runner rows and environment lines never
+ *     overflow, from 1400px down to 320px.
  *   - projects/runner/src/app/board/chunk/chunk-page-runner-layout.shell-sweep.spec.ts —
  *     the shared chunk page through the runner's own route: each of its four
  *     tabs — General, Node history, Artifacts, Transcripts — genuinely stacks its own
@@ -329,13 +330,12 @@ const SWEEPS = [
   { project: 'hub', spec: 'projects/hub/src/app/board/glance/glance-view.shell-sweep.spec.ts' },
   { project: 'runner', spec: 'projects/runner/src/app/shell/nav/app-header.shell-sweep.spec.ts' },
   { project: 'runner', spec: 'projects/runner/src/app/board/app-panel-mobile.shell-sweep.spec.ts' },
+  { project: 'runner', spec: 'projects/runner/src/app/board/app-panel-layout.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/runners/runner-view.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/runners/fleet-page.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/chunk/chunk-detail/chunk-awaiting-human.shell-sweep.spec.ts' },
-  { project: 'runner', spec: 'projects/runner/src/app/machine/app-info-view.shell-sweep.spec.ts' },
   { project: 'runner', spec: 'projects/runner/src/app/core/identity/session-recovery-view.shell-sweep.spec.ts' },
   { project: 'runner', spec: 'projects/runner/src/app/shell/nav/app-nav.shell-sweep.spec.ts' },
-  { project: 'runner', spec: 'projects/runner/src/app/shell/nav/runner-switcher.shell-sweep.spec.ts' },
   { project: 'runner', spec: 'projects/runner/src/app/host/host-page.shell-sweep.spec.ts' },
   { project: 'runner', spec: 'projects/runner/src/app/board/chunk/chunk-page-runner-layout.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/events/events-scroll.shell-sweep.spec.ts' },

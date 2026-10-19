@@ -7,14 +7,9 @@ import { asyncState, injectChunkUrlSelection, type runnerApi, ViewportService } 
 import { injectPanelAsks, injectPanelEscalations, injectPanelLeases, injectPanelProjects } from '../core/panel-reads';
 import type { PanelLease } from '../core/panel-reads.model';
 
-import type { MachineChunkStatus } from './chunk-list/chunk-status';
-import {
-  chunkLeasesFor,
-  chunkStatusFor,
-  escalationFor,
-  type MachineChunkRow,
-  machineChunkRows,
-} from './app-panel.model';
+import type { MachineChunkStatus } from '../core/chunk-status';
+import { type MachineChunkRow, machineChunkRows } from '../core/chunk-rows.model';
+import { chunkLeasesFor, chunkStatusFor, escalationFor } from './app-panel.model';
 import { LocalPanelLayout } from './app-panel-layout';
 import type { BoardLayout } from './chunk-list/chunk-board';
 import { LocalPanelMobile } from './app-panel-mobile';

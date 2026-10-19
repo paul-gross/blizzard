@@ -5,7 +5,7 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
  * injects nothing. */
 export interface AskRow {
   readonly questionId: string;
-  /** The runner the ask is open on, as `host/runner`. */
+  /** The runner the ask is open on, by its bare name. */
   readonly runner: string;
   readonly chunkRef: string;
   readonly askedFor: string;

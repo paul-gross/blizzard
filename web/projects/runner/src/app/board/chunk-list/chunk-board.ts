@@ -1,7 +1,8 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 import { KitAsyncState, type KitAsyncStateValue, KitPanel, KitPanelHeader, KitTabs, type KitTabOption } from 'fleet';
 
-import { BOARD_LANES, type BoardLane, type MachineChunkRow, rankedRows } from '../app-panel.model';
+import { BOARD_LANES, type BoardLane, type MachineChunkRow } from '../../core/chunk-rows.model';
+import { rankedRows } from '../app-panel.model';
 import { ChunkRow } from './chunk-row';
 
 /** Which layout the chunks render in — the lane board or the ranked list. */

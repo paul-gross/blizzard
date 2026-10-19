@@ -1,9 +1,6 @@
-import {
-  type BeaconTone,
-  compactRef,
-  type runnerApi,
-  type SlotBarSlot,
-} from 'fleet';
+import { type BeaconTone, type runnerApi } from 'fleet';
+
+import type { RunnerDashboard } from '../../core/panel-reads.model';
 
 /** One binding of a runner: the project it serves in one workspace, and its agents in use of those it declares. */
 export interface HostPanelBinding {
@@ -30,40 +27,6 @@ export interface HostPanelRunner {
   /** The runner's own brake, worded for its glyph's tooltip; `null` while it is off. */
   readonly localPause: string | null;
   readonly hubPaused: boolean;
-}
-
-/** One environment as a block: free, or held by a chunk of a project — named in the block's tooltip. */
-export interface HostPanelEnv {
-  readonly environmentId: string;
-  readonly held: boolean;
-  /** The holding chunk's short ref, `null` for a free one. */
-  readonly chunkRef: string | null;
-  readonly chunkId: string | null;
-  /** The holding chunk's project, as the panel's filters name it; `null` where none is told. */
-  readonly project: string | null;
-  /** The holding runner's display name, `null` where the host names none. */
-  readonly holder: string | null;
-  /** Held by a runner other than the one the Runner filter names — the block dims. */
-  readonly elsewhere: boolean;
-}
-
-/** One workspace's environments as a row of blocks. */
-export interface HostPanelPool {
-  readonly workspaceId: string;
-  /** Its declared ceiling, `null` for a workspace the host reports but does not declare. */
-  readonly capacity: number | null;
-  readonly inUse: number;
-  readonly envs: readonly HostPanelEnv[];
-  /** One block per environment in its own order, lit where held — which slot is busy, not only how many. */
-  readonly slots: readonly SlotBarSlot[];
-}
-
-/** A block's tooltip: the environment, then — held — its chunk, project and runner. */
-function envTitle(env: HostPanelEnv): string {
-  if (!env.held) return `${env.environmentId} · free`;
-  return [env.environmentId, env.chunkRef, env.project, env.holder]
-    .filter((part) => part !== null)
-    .join(' · ');
 }
 
 /** A runner's brake in operator words for its glyph, or `null` while its own brake is off. */
@@ -136,68 +99,21 @@ export function hostPanelRunners(
   });
 }
 
-/**
- * One {@link HostPanelPool} per declared workspace, in declaration order, then any workspace the
- * host reports environments under without declaring it. `focus` is the runner id set the Runner
- * filter leaves — `null` for All — and dims every block another runner holds.
- */
-export function hostPanelPools(
-  workspaces: readonly runnerApi.HostWorkspaceView[],
-  groups: readonly runnerApi.HostWorkspaceEnvironmentsView[],
-  runnerName: (runnerId: string) => string,
-  projectName: (entry: string) => string,
-  focus: ReadonlySet<string> | null,
-): readonly HostPanelPool[] {
-  const byId = new Map(
-    groups.map((group) => [group.workspace_id, group.items ?? []]),
+/** `runners` narrowed to the one named `name` on the host, every one for `null`. */
+export function runnersNamed(
+  runners: readonly runnerApi.HostRunnerView[],
+  name: string | null,
+): readonly runnerApi.HostRunnerView[] {
+  return name === null ? runners : runners.filter((runner) => runner.name === name);
+}
+
+/** Each runner's own slot accounting by runner id, off its dashboard. */
+export function capacitiesByRunner(
+  dashboards: readonly RunnerDashboard[],
+): ReadonlyMap<string, runnerApi.CapacitiesView> {
+  return new Map(
+    dashboards.map(
+      (entry) => [entry.owner.runnerId, entry.dashboard.runner.capacities] as const,
+    ),
   );
-  const declared = new Set(workspaces.map((ws) => ws.workspace_id));
-  const pool = (
-    workspaceId: string,
-    capacity: number | null,
-  ): HostPanelPool => {
-    const envs = [...(byId.get(workspaceId) ?? [])]
-      .sort((a, b) =>
-        a.environment_id.localeCompare(b.environment_id, undefined, {
-          numeric: true,
-        }),
-      )
-      .map((env): HostPanelEnv => {
-        const held = env.held ?? env.chunk_id != null;
-        const runnerId = env.runner_id ?? null;
-        return {
-          environmentId: env.environment_id,
-          held,
-          chunkRef: env.chunk_id == null ? null : compactRef(env.chunk_id),
-          chunkId: env.chunk_id ?? null,
-          project:
-            env.project == null || env.project === ''
-              ? null
-              : projectName(env.project),
-          holder: runnerId === null ? null : runnerName(runnerId),
-          elsewhere:
-            held &&
-            focus !== null &&
-            (runnerId === null || !focus.has(runnerId)),
-        };
-      });
-    const slots = envs.map((env) => ({
-      on: env.held,
-      title: envTitle(env),
-      dim: env.elsewhere,
-    }));
-    return {
-      workspaceId,
-      capacity,
-      inUse: envs.filter((env) => env.held).length,
-      envs,
-      slots,
-    };
-  };
-  return [
-    ...workspaces.map((ws) => pool(ws.workspace_id, ws.max_environments)),
-    ...groups
-      .filter((group) => !declared.has(group.workspace_id))
-      .map((group) => pool(group.workspace_id, null)),
-  ];
 }

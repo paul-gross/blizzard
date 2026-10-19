@@ -1,7 +1,8 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
-import { KitBeacon, KitGlyph, KitSlotBar, SubscriptionBlocks, type SubscriptionLine } from 'fleet';
+import { KitAsyncState, KitBeacon, KitGlyph, KitSlotBar, SubscriptionBlocks, type SubscriptionLine } from 'fleet';
 
-import type { HostPanelPool, HostPanelRunner } from './host-panel.model';
+import type { HostPanelPool } from '../../core/host-pools.model';
+import type { HostPanelRunner } from './host-panel.model';
 
 /**
  * The board rail's host panel — the presentational half, laid out as the hub's board rail
@@ -15,7 +16,7 @@ import type { HostPanelPool, HostPanelRunner } from './host-panel.model';
 @Component({
   selector: 'app-host-panel-view',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitBeacon, KitGlyph, KitSlotBar, SubscriptionBlocks],
+  imports: [KitAsyncState, KitBeacon, KitGlyph, KitSlotBar, SubscriptionBlocks],
   templateUrl: './host-panel-view.html',
   styleUrl: './host-panel-view.css',
 })

@@ -1,8 +1,8 @@
 import { type BeaconTone, compactRef, harnessName, type runnerApi, type Tone } from 'fleet';
 
+import type { MachineChunkRow } from '../core/chunk-rows.model';
 import type { PanelProject } from '../core/panel-reads.model';
 import { slugForEntry } from '../core/panel-reads.model';
-import type { MachineChunkRow } from '../board/app-panel.model';
 
 /** One binding of a runner: the project it serves in one workspace, and its agents in use of those it declares. */
 export interface HostRunnerBinding {

@@ -1,7 +1,15 @@
 import type { runnerApi } from 'fleet';
 
 import type { PanelProject } from '../../core/panel-reads.model';
-import { brakeLabel } from '../../host/host-runners.model';
+
+/** A runner's brake in operator words — which side set it, and the local brake's reason
+ * when it carries one — or `null` while neither brake is set. */
+export function brakeLabel(pause: runnerApi.PauseStateView | null | undefined): string | null {
+  if (!pause || (!pause.local && !pause.hub)) return null;
+  if (pause.local && pause.hub) return 'paused here and by hub';
+  if (pause.hub) return 'paused by hub';
+  return pause.local_reason ? `paused: ${pause.local_reason}` : 'paused';
+}
 
 /** One choice a filter control offers: All (`value` null) or one runner or project. */
 export interface FilterChoice {

@@ -15,10 +15,6 @@
 .sec:last-child {
   border-bottom: none;
 }
-.none {
-  color: var(--label-dim);
-  font-size: var(--fs-label);
-}
 .runners {
   list-style: none;
   margin: 0;

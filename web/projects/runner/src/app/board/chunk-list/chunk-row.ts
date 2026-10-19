@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
-import { projectColorValue } from 'fleet';
 
-import type { MachineChunkRow } from '../app-panel.model';
+import type { MachineChunkRow } from '../../core/chunk-rows.model';
+import { projectTint } from '../../core/panel-reads.model';
 import { injectChunkTitleQuery } from './chunk-title.query';
 import { ChunkListRowView } from './chunk-list-row-view';
 import { ChunkRowView } from './chunk-row-view';
@@ -40,10 +40,7 @@ export class ChunkRow {
   protected readonly chunkId = computed(() => this.row().lease.chunk_id);
 
   /** The project colour the background is tinted with, or `null` for an untinted row. */
-  protected readonly projectTint = computed(() => {
-    const color = this.row().projectColor;
-    return color ? projectColorValue(color) : null;
-  });
+  protected readonly projectTint = computed(() => projectTint(this.row().projectColor));
 
   /** The severable work-item read — never branched on for pending/error. */
   protected readonly titleQuery = injectChunkTitleQuery(
