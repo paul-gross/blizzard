@@ -10,6 +10,7 @@ from typing import Protocol
 from blizzard.foundation.credential_renewal import RenewalFailureReason, RenewalResult
 from blizzard.foundation.fact_kinds import EXTERNAL_SUBSCRIPTION_USAGE_MISSED, EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED
 from blizzard.foundation.roles import domain_model
+from blizzard.foundation.subscription_miss import SampleMissReason
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.usage import SessionCostBasis, UsageKind, UsageSample, invocation_cost
 from blizzard.runner.subscriptions.credential_renewer import RenewalOutcome
@@ -17,7 +18,6 @@ from blizzard.runner.subscriptions.subscription_sampler import (
     ExternalSubscriptionUsageSnapshot,
     ExternalSubscriptionUsageWindow,
     SampleMiss,
-    SampleMissReason,
 )
 
 __all__ = [

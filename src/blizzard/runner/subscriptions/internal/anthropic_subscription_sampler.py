@@ -15,13 +15,13 @@ import httpx
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import iso_utc
+from blizzard.foundation.subscription_miss import SampleMissReason
 from blizzard.runner.subscriptions.subscription_sampler import (
     ANTHROPIC_DEFAULT_CREDENTIALS_PATH,
     ExternalSubscriptionUsageSnapshot,
     ExternalSubscriptionUsageWindow,
     ISubscriptionSampler,
     SampleMiss,
-    SampleMissReason,
     credential_lapsed,
 )
 

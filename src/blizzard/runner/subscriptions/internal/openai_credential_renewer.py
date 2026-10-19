@@ -12,10 +12,10 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from blizzard.foundation.clock import IClock
+from blizzard.foundation.credential_renewal import RenewalFailureReason
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.subscriptions.credential_renewer import (
     ICredentialRenewer,
-    RenewalFailureReason,
     RenewalOutcome,
     RenewalOutcomeKind,
     renewal_due,
