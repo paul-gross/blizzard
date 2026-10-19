@@ -940,10 +940,10 @@ const RUNNER_LAYERS = {
   core: [],
   asks: [],
   events: [],
-  host: [],
-  machine: [],
-  board: ['asks', 'machine'],
-  shell: ['board', 'events', 'host', 'machine'],
+  host: ['runners'],
+  runners: [],
+  board: ['asks', 'runners'],
+  shell: ['board', 'events', 'host', 'runners'],
 };
 
 /**

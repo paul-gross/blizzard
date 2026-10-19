@@ -3,15 +3,14 @@ import { asyncState, injectNowSignal, KitAsyncState, runnerSubscriptionLines, ty
 
 import { PanelFilters } from '../../core/panel-filters';
 import { injectPanelDashboards, injectPanelProjects } from '../../core/panel-reads';
-import { slugForEntry } from '../../core/panel-reads.model';
 import {
   injectHostEnvironmentsQuery,
   injectHostRunnersQuery,
   injectHostSubscriptionsQuery,
   injectHostWorkspacesQuery,
-  runnerNameResolver,
-} from '../../host/host.query';
-import { hostPanelPools, hostPanelRunners, type HostPanelPool, type HostPanelRunner } from './host-panel.model';
+} from '../../core/host.query';
+import { type HostPanelPool, hostPoolsFor, runnerFocus } from '../../core/host-pools.model';
+import { capacitiesByRunner, hostPanelRunners, type HostPanelRunner, runnersNamed } from './host-panel.model';
 import { HostPanelView } from './host-panel-view';
 
 /**
@@ -43,11 +42,7 @@ export class HostPanel {
   private readonly now = injectNowSignal();
 
   /** The host's runners the Runner filter leaves, matched by their name on the host. */
-  private readonly scopedRunners = computed(() => {
-    const name = this.filters.runner();
-    const all = this.runnersQuery.data() ?? [];
-    return name === null ? all : all.filter((runner) => runner.name === name);
-  });
+  private readonly scopedRunners = computed(() => runnersNamed(this.runnersQuery.data() ?? [], this.filters.runner()));
 
   /** Each subscription's usage windows as a line of blocks — the hub board rail's compact reading. */
   protected readonly subscriptions = computed<readonly SubscriptionLine[]>(() =>
@@ -55,28 +50,23 @@ export class HostPanel {
   );
 
   /** Each runner's own slot accounting by runner id — the agents in use per binding. */
-  private readonly capacities = computed(
-    () => new Map(this.dashboards.data().map((entry) => [entry.owner.runnerId, entry.dashboard.runner.capacities] as const)),
-  );
+  private readonly capacities = computed(() => capacitiesByRunner(this.dashboards.data()));
 
   protected readonly runners = computed<readonly HostPanelRunner[]>(() =>
     hostPanelRunners(this.scopedRunners(), this.capacities()),
   );
 
-  protected readonly pools = computed<readonly HostPanelPool[]>(() => {
-    const projects = this.projects();
-    const focus =
-      this.filters.runner() === null
-        ? null
-        : new Set(this.scopedRunners().flatMap((runner) => (runner.runner_id === null ? [] : [runner.runner_id])));
-    return hostPanelPools(
-      this.workspacesQuery.data() ?? [],
-      this.environmentsQuery.data() ?? [],
-      runnerNameResolver(this.runnersQuery.data() ?? []),
-      (entry) => slugForEntry(projects, entry) ?? entry,
-      focus,
-    );
-  });
+  protected readonly pools = computed<readonly HostPanelPool[]>(() =>
+    hostPoolsFor(
+      {
+        workspaces: this.workspacesQuery.data() ?? [],
+        groups: this.environmentsQuery.data() ?? [],
+        runners: this.runnersQuery.data() ?? [],
+        projects: this.projects(),
+      },
+      runnerFocus(this.filters.runner(), this.scopedRunners(), (runner) => runner.runner_id),
+    ),
+  );
 
   /** The runners read leads the triad — it names every holder and spender — and the panel is
    * never empty: each section says when it has nothing. */

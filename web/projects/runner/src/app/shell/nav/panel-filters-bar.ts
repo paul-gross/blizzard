@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, input } from '@an
 
 import { PanelFilters } from '../../core/panel-filters';
 import { injectPanelProjects } from '../../core/panel-reads';
-import { injectHostRunnersQuery } from '../../host/host.query';
+import { injectHostRunnersQuery } from '../../core/host.query';
 import { FilterChips } from './filter-chips';
 import { projectFilterChoices, runnerFilterChoices } from './panel-filters.model';
 

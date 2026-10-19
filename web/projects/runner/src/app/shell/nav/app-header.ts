@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/c
 import { CdkMenuTrigger } from '@angular/cdk/menu';
 import { BoardHeader, FlagStore, KitAvatar, KitMenu, KitMenuItem, KitMenuPanel, type StatCell, ViewportMenu } from 'fleet';
 import { PanelFilters } from '../../core/panel-filters';
-import { injectHostEnvironmentsQuery, injectHostRunnersQuery } from '../../host/host.query';
+import { injectHostEnvironmentsQuery, injectHostRunnersQuery } from '../../core/host.query';
 import { LocalIdentity } from '../../core/identity/app-identity';
 import { RunnerLogout } from '../../core/identity/runner-logout';
 import { RunnerLiveUpdates } from '../../core/live/runner-live-updates';

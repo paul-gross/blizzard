@@ -3,7 +3,7 @@
   @for (sub of subscriptions(); track sub.slug) {
     <fleet-subscription-blocks data-testid="host-panel-subscription" [line]="sub" />
   } @empty {
-    <span class="none">none declared</span>
+    <fleet-kit-async-state state="empty" placement="inline" emptyText="none declared" />
   }
 </section>
 <section class="sec" data-testid="host-panel-runners">
@@ -57,7 +57,7 @@
         }
       </li>
     } @empty {
-      <li class="none">no runner matches the filter</li>
+      <li><fleet-kit-async-state state="empty" placement="inline" emptyText="no runner matches the filter" /></li>
     }
   </ul>
 </section>
@@ -73,6 +73,6 @@
       [slots]="pool.slots"
     />
   } @empty {
-    <span class="none">none configured</span>
+    <fleet-kit-async-state state="empty" placement="inline" emptyText="none configured" />
   }
 </section>

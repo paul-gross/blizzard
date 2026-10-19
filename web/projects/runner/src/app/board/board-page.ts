@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component } from '@angular/core';
 import { LocalPanel } from './app-panel';
 
 /**
- * The `runners/:runnerId/board` route — the active runner's machine panel. A thin route wrapper
+ * The `board` route — the board across the host's runners. A thin route wrapper
  * around {@link LocalPanel}, mirroring the hub's own page components: the
  * route owns nothing beyond mounting it.
  */

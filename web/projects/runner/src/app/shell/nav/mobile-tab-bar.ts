@@ -5,7 +5,7 @@ import { mobileTabItems } from './mobile-tab-bar.model';
 
 /**
  * The panel's mobile bottom tab bar, a thin wrapper around {@link FleetMobileTabBar}.
- * `Board`, `Events`, and `Machine` are always routed. `Asks` has no screen of its own, so
+ * `Board`, `Events`, and `Host` are always routed. `Asks` has no screen of its own, so
  * it is always inert; it carries the open-ask count across the runners and project the
  * filters leave.
  */

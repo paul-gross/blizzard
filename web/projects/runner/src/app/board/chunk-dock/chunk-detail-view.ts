@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, TemplateRef, input } from '@angular/core';
 import { createCopyFlash, harnessName, KitAsyncState, KitBadge, KitButton, type KitFact, KitFactList, type runnerApi } from 'fleet';
 
-import { HeartbeatFreshness } from '../../machine/heartbeat-freshness';
+import { HeartbeatFreshness } from '../../runners/heartbeat-freshness';
 
 /**
  * {@link MachineDetail}'s presentational sibling (`bzh:frontend-container-presentational`):

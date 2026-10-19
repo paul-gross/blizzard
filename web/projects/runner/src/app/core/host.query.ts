@@ -8,7 +8,8 @@ import {
   hostRunnersKey,
   hostSubscriptionsKey,
   hostWorkspacesKey,
-} from '../core/query-keys';
+} from './query-keys';
+import { runnerNameResolver } from './host-pools.model';
 
 /**
  * The host's reads — `GET /api/host/*`, at the host's root and through the generated
@@ -18,14 +19,17 @@ import {
  */
 
 /** `GET /api/host/runners` — every runner the host serves, and every one it holds halted. */
+export async function fetchHostRunners(): Promise<runnerApi.HostRunnerView[]> {
+  const { data, error } = await runnerApi.listRunnersApiHostRunnersGet({ throwOnError: false });
+  if (error) throw error;
+  return data?.items ?? [];
+}
+
+/** {@link fetchHostRunners} as a live query. */
 export function injectHostRunnersQuery() {
   return injectQuery(() => ({
     queryKey: hostRunnersKey,
-    queryFn: async (): Promise<runnerApi.HostRunnerView[]> => {
-      const { data, error } = await runnerApi.listRunnersApiHostRunnersGet({ throwOnError: false });
-      if (error) throw error;
-      return data?.items ?? [];
-    },
+    queryFn: fetchHostRunners,
     // See RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS.
     refetchInterval: RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS,
   }));
@@ -84,13 +88,6 @@ export function injectHostRegistrationQuery() {
     },
     refetchInterval: RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS,
   }));
-}
-
-/** A runner id's display name off the host's runner list — the id itself for one the list
- * does not (yet) name. */
-export function runnerNameResolver(runners: readonly runnerApi.HostRunnerView[]): (runnerId: string) => string {
-  const names = new Map(runners.flatMap((runner) => (runner.runner_id === null ? [] : [[runner.runner_id, runner.name] as const])));
-  return (runnerId) => names.get(runnerId) ?? runnerId;
 }
 
 /** {@link runnerNameResolver} over the host's live runner list. */

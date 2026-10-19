@@ -3,9 +3,9 @@ import { type runnerApi, type KitAsyncStateValue } from 'fleet';
 
 import { MachineDetail } from './chunk-dock/chunk-detail';
 import { type BoardLayout, ChunkBoard } from './chunk-list/chunk-board';
-import type { MachineChunkStatus } from './chunk-list/chunk-status';
+import type { MachineChunkStatus } from '../core/chunk-status';
 import { BoardRail } from './rail/board-rail';
-import type { MachineChunkRow } from './app-panel.model';
+import type { MachineChunkRow } from '../core/chunk-rows.model';
 import type { PanelLease } from '../core/panel-reads.model';
 
 /**

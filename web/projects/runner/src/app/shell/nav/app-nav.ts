@@ -6,7 +6,7 @@ import { KitTab, KitTabStrip } from 'fleet';
 import { PanelFiltersBar } from './panel-filters-bar';
 
 /**
- * The panel's top-level tab strip — `Board`, `Events`, and `Machine`, the same three on
+ * The panel's top-level tab strip — `Board`, `Events`, and `Host`, the same three on
  * every page and under every filter, one `routerLink` each, wearing the same
  * {@link KitTabStrip}/{@link KitTab} chrome the hub's own `app-nav.ts` wears — one tab
  * treatment, not two — and the panel's filters ({@link PanelFiltersBar}) at its end.

@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/c
 import { CdkMenuTrigger } from '@angular/cdk/menu';
 import { KitMenuItem, KitMenuPanel, MobileTitlebar as FleetMobileTitlebar, ViewportMenu } from 'fleet';
 import { injectPanelDashboards } from '../../core/panel-reads';
+import { anyHubReachable } from '../../core/panel-reads.model';
 import { injectRunnerSessionQuery, signedInUsername } from '../../core/identity/auth.query';
 import { LocalIdentity } from '../../core/identity/app-identity';
 import { RunnerLogout } from '../../core/identity/runner-logout';
@@ -21,8 +22,8 @@ import { RunnerLogout } from '../../core/identity/runner-logout';
  * the hub's.
  *
  * TanStack dedupes query-key injections, so this
- * component injecting the same dashboard/session queries `LocalPanel`'s other
- * rails (the hub panel among them) also inject costs no extra network request.
+ * component injecting the same dashboard/session queries the board's rail
+ * (its hub panel) injects costs no extra network request.
  */
 @Component({
   selector: 'app-mobile-titlebar',
@@ -40,9 +41,7 @@ export class MobileTitlebar {
   /** Whether any covered runner reaches its hub — the titlebar's `live` dot. A
    * malformed body (e.g. a misrouted proxy) must degrade to `false`, not
    * throw mid-render. */
-  protected readonly hubReachable = computed(() =>
-    this.dashboards.data().some(({ dashboard }) => dashboard.runner?.hub?.reachable ?? false),
-  );
+  protected readonly hubReachable = computed(() => anyHubReachable(this.dashboards.data()));
 
   /** The shell's one logout owner: the menu item's pending flag and the error rendered beside the titlebar. */
   protected readonly logout = inject(RunnerLogout);

@@ -1,8 +1,9 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 import { compactRef, KitBadge, type runnerApi } from 'fleet';
 
-import { WorkerLine } from '../../machine/worker-line';
-import { type MachineChunkRow, showsChunkStatus } from '../app-panel.model';
+import { WorkerLine } from '../../runners/worker-line';
+import type { MachineChunkRow } from '../../core/chunk-rows.model';
+import { showsChunkStatus } from '../app-panel.model';
 
 /**
  * {@link ChunkRow}'s list row (`bzh:frontend-container-presentational`): plain inputs only,

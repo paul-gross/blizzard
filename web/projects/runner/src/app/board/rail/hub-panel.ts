@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, effect, signal } from '@a
 import { asyncState, FleetWhen, KitAsyncState, type runnerApi, STATUS_TONE, toneColor } from 'fleet';
 
 import { injectPanelDashboards } from '../../core/panel-reads';
-import { hubSummary } from './hub-panel.model';
+import { hubSummary, latestFleetSummary } from './hub-panel.model';
 
 /**
  * The board rail's hub panel — the hub this host's runners report to, read at a glance: its
@@ -27,7 +27,7 @@ export class HubPanel {
   protected readonly summary = computed(() => hubSummary(this.dashboards.data()));
 
   private readonly currentFleet = computed<runnerApi.FleetSummaryView | null>(
-    () => this.dashboards.data().find((entry) => entry.dashboard.fleet_summary != null)?.dashboard.fleet_summary ?? null,
+    () => latestFleetSummary(this.dashboards.data()),
   );
 
   private readonly latchedFleet = signal<runnerApi.FleetSummaryView | null>(null);

@@ -3,7 +3,7 @@ import type { QueryObserverResult } from '@tanstack/angular-query-experimental';
 import { injectQueries } from '@tanstack/angular-query-experimental/inject-queries-experimental';
 import type { runnerApi } from 'fleet';
 
-import { injectHostEnvironmentsQuery, injectHostRunnersQuery } from '../host/host.query';
+import { injectHostEnvironmentsQuery, injectHostRunnersQuery } from './host.query';
 import { runnerLeasesQueryOptions } from './leases.query';
 import { PanelFilters } from './panel-filters';
 import {

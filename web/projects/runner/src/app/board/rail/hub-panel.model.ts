@@ -70,3 +70,8 @@ export function hubSummary(dashboards: readonly RunnerDashboard[]): HubSummary |
     issues,
   };
 }
+
+/** The fleet counts the first runner whose read carries them reports, `null` while none does. */
+export function latestFleetSummary(dashboards: readonly RunnerDashboard[]): runnerApi.FleetSummaryView | null {
+  return dashboards.find((entry) => entry.dashboard.fleet_summary != null)?.dashboard.fleet_summary ?? null;
+}

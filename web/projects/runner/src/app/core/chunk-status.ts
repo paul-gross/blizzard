@@ -1,6 +1,6 @@
 import type { Tone, runnerApi } from 'fleet';
 
-import { deriveLeaseStatus } from '../../core/lease-status';
+import { deriveLeaseStatus } from './lease-status';
 
 /**
  * The machine-side derived status of a chunk this runner holds — folded at

@@ -6,17 +6,15 @@ import {
   injectNowSignal,
   KitPanel,
   KitPanelHeader,
-  runnerClient,
   type runnerApi,
 } from 'fleet';
 
 import { injectChunkPauseMutation } from './chunk-pause.mutations';
-import { heartbeatLabel } from './chunk-detail.model';
+import { heartbeatLabel, liveWorker, runnerTarget } from './chunk-detail.model';
 import { injectPanelProjects } from '../../core/panel-reads';
-import { isLiveLease } from '../../core/worker-session';
 import { MachineDetailView } from './chunk-detail-view';
-import type { PanelLease } from '../../core/panel-reads.model';
-import type { MachineChunkStatus } from '../chunk-list/chunk-status';
+import { type PanelLease, projectNameFor } from '../../core/panel-reads.model';
+import type { MachineChunkStatus } from '../../core/chunk-status';
 import { MachineDetailHeader } from './machine-detail-header';
 
 /**
@@ -80,10 +78,7 @@ export class MachineDetail {
    * chunks list (`chunk-title.query.ts`, `chunk-row.ts`).
    */
   private readonly runnerId = computed<string | null>(() => this.newestLease()?.owner.runnerId ?? null);
-  private readonly target = computed<DaemonTarget | null>(() => {
-    const runnerId = this.runnerId();
-    return runnerId === null ? null : { plane: 'runner', client: runnerClient, runnerId };
-  });
+  private readonly target = computed<DaemonTarget | null>(() => runnerTarget(this.runnerId()));
 
   /** The chunk detail route's path segments before the chunk id. */
   protected readonly linkBase = ['/board', 'chunk'];
@@ -131,23 +126,19 @@ export class MachineDetail {
     });
   }
 
-  /** The chunk's runner's display name, `host/runner`, for the header's
+  /** The chunk's runner's bare name, for the header's
    * `pauseCopy`/`resumeCopy` `<runner>` slot (`bzh:claim-vocabulary`). */
   protected readonly runnerName = computed<string | null>(() => this.newestLease()?.owner.label ?? null);
 
   /** The chunk's live worker — its newest lease while that has not ended — for the header. */
-  protected readonly worker = computed<PanelLease | null>(() => {
-    const newest = this.newestLease();
-    return newest && isLiveLease(newest) ? newest : null;
-  });
+  protected readonly worker = computed<PanelLease | null>(() => liveWorker(this.newestLease()));
 
   private readonly projects = injectPanelProjects();
 
   /** The chunk's project by name, for the header's identity line. */
-  protected readonly projectName = computed<string | null>(() => {
-    const slug = this.newestLease()?.projectSlug ?? null;
-    return slug === null ? null : (this.projects().find((p) => p.slug === slug)?.name ?? slug);
-  });
+  protected readonly projectName = computed<string | null>(() =>
+    projectNameFor(this.projects(), this.newestLease()?.projectSlug ?? null),
+  );
 
   /** Ticks once a second so {@link heartbeatLabel} advances between polls, the
    * same cadence `HeartbeatFreshness`'s own bar reads (`bzh:frontend-formatters`). */
