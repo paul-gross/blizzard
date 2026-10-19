@@ -10,8 +10,17 @@ data only right after a clean shutdown — a live store also has a ``-wal`` side
 from __future__ import annotations
 
 import sqlite3
+from datetime import date, datetime
 
 from sqlalchemy import Engine, create_engine, event
+
+from blizzard.foundation.store.utc import sqlite_adapt_date, sqlite_adapt_datetime
+
+# A raw datetime reaching the driver (a `text()` bind, which SQLAlchemy's `DateTime` type never sees) is adapted by
+# sqlite3's default adapter, deprecated since Python 3.12. Registering the same conversion explicitly keeps the
+# on-disk format and silences the warning.
+sqlite3.register_adapter(datetime, sqlite_adapt_datetime)
+sqlite3.register_adapter(date, sqlite_adapt_date)
 
 
 def create_engine_from_url(url: str) -> Engine:
