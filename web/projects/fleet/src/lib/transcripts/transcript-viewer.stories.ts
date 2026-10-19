@@ -34,9 +34,10 @@ export const Long: Story = {
 export const ToolCalls: Story = {
   args: {
     turns: [
-      turnSegmentView({ index: 0, text: 'Checking the working tree.', tool: toolCallSegmentView() }),
+      turnSegmentView({ index: 0, kind: 'tool', text: 'Checking the working tree.', tool: toolCallSegmentView() }),
       turnSegmentView({
         index: 1,
+        kind: 'tool',
         text: 'Reading the header.',
         tool: toolCallSegmentView({
           name: 'Read',
@@ -47,6 +48,7 @@ export const ToolCalls: Story = {
       }),
       turnSegmentView({
         index: 2,
+        kind: 'tool',
         text: 'Running the suite.',
         tool: toolCallSegmentView({
           tool_use_id: 'toolu_03fixture',
@@ -63,12 +65,13 @@ export const Sidechain: Story = {
     turns: [
       turnSegmentView({
         index: 0,
+        kind: 'tool',
         text: 'Handing the search to a subagent.',
         tool: toolCallSegmentView({ name: 'Task', input: { description: 'Find the builders' } }),
         sidechain: sidechainSegmentView({
           turns: [
             turnSegmentView({ index: 0, kind: 'env', text: 'Find the builders.' }),
-            turnSegmentView({ index: 1, text: 'They live under fleet/testing.', tool: toolCallSegmentView() }),
+            turnSegmentView({ index: 1, kind: 'tool', text: 'They live under fleet/testing.', tool: toolCallSegmentView() }),
           ],
         }),
       }),

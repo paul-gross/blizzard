@@ -10,7 +10,7 @@ const meta: Meta<TranscriptSegmentView> = {
   args: {
     turns: [
       turnSegmentView({ index: 0 }),
-      turnSegmentView({ index: 1, text: 'Checking the working tree.', tool: toolCallSegmentView() }),
+      turnSegmentView({ index: 1, kind: 'tool', text: 'Checking the working tree.', tool: toolCallSegmentView() }),
     ],
     truncated: false,
     continuedFrom: null,

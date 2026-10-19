@@ -54,7 +54,7 @@ const FULL_ARGS: Story['args'] = {
     segment_id: 'sg_01build0000000000000000000',
     turns: [
       turnSegmentView({ index: 0 }),
-      turnSegmentView({ index: 1, text: 'Checking the working tree.', tool: toolCallSegmentView() }),
+      turnSegmentView({ index: 1, kind: 'tool', text: 'Checking the working tree.', tool: toolCallSegmentView() }),
     ],
   }),
 };
