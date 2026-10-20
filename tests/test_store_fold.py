@@ -205,3 +205,17 @@ def test_a_baseline_builds_the_schema_and_regenerates_minted_ids_and_instants_at
         runner.downgrade("base")
         assert sa.inspect(sa.create_engine(url)).get_table_names() == ["alembic_version"]
     assert seen[0] != seen[1]
+
+
+def test_a_failure_on_the_second_tree_leaves_the_first_unfolded(tmp_path: Path) -> None:
+    repo = _repo(tmp_path, ["a", "b", "c"], {"v1.0.0": "b"})
+    before = {path: path.read_text() for path in repo.rglob("*.py")}
+
+    def render(tree: str) -> dict[str, Any]:
+        if tree == "runner":
+            raise FoldError("the runner history failed to render")
+        return _rendering(tree)
+
+    with pytest.raises(FoldError, match="runner history"):
+        fold_store(repo, "v1.0.0", render)
+    assert {path: path.read_text() for path in repo.rglob("*.py")} == before

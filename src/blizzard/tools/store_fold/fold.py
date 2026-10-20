@@ -48,8 +48,19 @@ def floor_revision(repo: Path, floor_tag: str, tree: str) -> str:
     return head
 
 
-def fold_tree(repo: Path, floor_tag: str, tree: str, render_floor: Renderer) -> Fold:
-    """Replace ``tree``'s floor revision with a baseline and delete everything it absorbed, tests included.
+@domain_model
+@dataclass(frozen=True)
+class _Plan:
+    """One tree's fold, fully rendered and not yet written."""
+
+    tree: str
+    baseline: Path
+    source: str
+    deleted: tuple[Path, ...]
+
+
+def _plan_tree(repo: Path, floor_tag: str, tree: str, render_floor: Renderer) -> _Plan | None:
+    """``tree``'s fold as files to write and delete, or ``None`` when its floor revision is already its base.
 
     ``ABSORBED`` carries every id the baseline stands for that the tree no longer holds: the ids deleted now, and
     the previous baseline's own id and ``ABSORBED`` when the tree was folded before. It never holds the baseline's
@@ -61,35 +72,49 @@ def fold_tree(repo: Path, floor_tag: str, tree: str, render_floor: Renderer) -> 
         raise FoldError(f"{floor_tag} ships {tree} revision {floor}, which this tree does not hold")
     base = base_of(revisions)
     if base.revision == floor:
-        return Fold(tree, None, ())
+        return None
     below = ancestors(revisions, floor)
     absorbed = frozenset(entry.revision for entry in below) | base.absorbed
     source = write_baseline(
         tree=tree, revision=floor, floor_tag=floor_tag, absorbed=absorbed, rendered=render_floor(tree)
     )
     ast.parse(source)
-    doomed = [entry.path for entry in below]
     tests = migrations / "tests"
     colocated = [tests / f"{entry.path.stem}_test.py" for entry in (*below, revisions[floor])]
-    deleted = (*doomed, *(path for path in colocated if path.exists()))
-    revisions[floor].path.write_text(source)
-    for path in deleted:
+    deleted = (*(entry.path for entry in below), *(path for path in colocated if path.exists()))
+    return _Plan(tree, revisions[floor].path, source, deleted)
+
+
+def _apply(plan: _Plan | None, tree: str) -> Fold:
+    if plan is None:
+        return Fold(tree, None, ())
+    plan.baseline.write_text(plan.source)
+    for path in plan.deleted:
         path.unlink()
-    return Fold(tree, revisions[floor].path, deleted)
+    return Fold(tree, plan.baseline, plan.deleted)
+
+
+def fold_tree(repo: Path, floor_tag: str, tree: str, render_floor: Renderer) -> Fold:
+    """Replace ``tree``'s floor revision with a baseline and delete everything it absorbed, tests included."""
+    return _apply(_plan_tree(repo, floor_tag, tree, render_floor), tree)
 
 
 def fold_store(repo: Path, floor_tag: str, render_floor: Renderer | None = None) -> list[Fold]:
     """Fold every tree up to ``floor_tag``; with no ``render_floor``, the release's own wheel renders them.
 
-    Every tree is checked before any is written, so a refusal on one leaves none half-folded."""
-    for tree in TREES:
-        floor_revision(repo, floor_tag, tree)
+    Every tree is read and rendered before any is written, so a refusal or a failed render on one leaves none
+    half-folded."""
     if render_floor is not None:
-        return [fold_tree(repo, floor_tag, tree, render_floor) for tree in TREES]
+        return _fold_all(repo, floor_tag, render_floor)
     with tempfile.TemporaryDirectory(prefix="store-fold-") as scratch:
         work = Path(scratch)
         floor = install(floor_tag, download_release(floor_tag, work / "release"), work / "venv")
-        return [fold_tree(repo, floor_tag, tree, floor_renderer(floor, work)) for tree in TREES]
+        return _fold_all(repo, floor_tag, floor_renderer(floor, work))
+
+
+def _fold_all(repo: Path, floor_tag: str, render_floor: Renderer) -> list[Fold]:
+    plans = [_plan_tree(repo, floor_tag, tree, render_floor) for tree in TREES]
+    return [_apply(plan, tree) for plan, tree in zip(plans, TREES, strict=True)]
 
 
 def floor_renderer(floor: Installation, work: Path) -> Renderer:
