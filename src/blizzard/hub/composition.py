@@ -23,6 +23,7 @@ from typing import Protocol
 import httpx
 from sqlalchemy import Engine
 
+from blizzard import __version__
 from blizzard.foundation.clock import IClock, SystemClock
 from blizzard.foundation.flags import (
     FlagRegistry,
@@ -41,6 +42,7 @@ from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.foundation.trace_export.exporter import ITraceExporter
 from blizzard.foundation.trace_export.settings import TracingSettings
 from blizzard.hub.api.garden_formats import GardenFormats
+from blizzard.hub.api.version_window import HubVersionWindow
 from blizzard.hub.auth.auth_state import IWriteAuthStateRepository
 from blizzard.hub.auth.errors import RepoErrorFactory
 from blizzard.hub.auth.facts import AuthFactsService
@@ -177,6 +179,7 @@ from blizzard.hub.domain.runners.host import IReadHostRegistry
 from blizzard.hub.domain.runners.host_enrollment import HostEnrollmentService
 from blizzard.hub.domain.runners.host_report import HostReportService
 from blizzard.hub.domain.runners.registration import IReadRunnerRegistry, RetiredRunnerGuard
+from blizzard.hub.domain.runners.version import IVersionWindow
 from blizzard.hub.domain.tenancy.administration import TenantAdministration
 from blizzard.hub.domain.tenancy.teardown import TenantTeardown, TenantTeardownSweep
 from blizzard.hub.domain.work_items.closure import CloseDrainSweep, CloseIntentDrainer
@@ -238,6 +241,7 @@ from blizzard.hub.system_artifacts import PACKAGED as SYSTEM_ARTIFACTS_PACKAGED
 from blizzard.hub.system_artifacts import PackagedSystemArtifacts
 from blizzard.hub.tenancy import StoreScope, TenantClosed, TenantId, UnknownTenant
 from blizzard.hub.work_sources.source import IWorkSourceRegistry
+from blizzard.wire.version_window import VersionWindow
 
 
 @dataclass(frozen=True)
@@ -887,6 +891,7 @@ class TenantServiceParts:
     transcript_caps: TranscriptCaps | None
     platform_tracer: IPlatformTracer | None
     color_pick: ColorPick
+    versions: IVersionWindow
 
 
 def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, events: EventBroker) -> ServedTenant:
@@ -968,6 +973,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         detach=detach,
         retired=retired,
         served_projects=served_projects,
+        versions=parts.versions,
         clock=clock,
     )
     enrollment = RunnerEnrollmentService(registry=registry_store, served_projects=served_projects, clock=clock)
@@ -1260,6 +1266,8 @@ def build_services(
     egress: EgressConfig | None = None,
     egress_path_key: bytes | None = None,
     annotation_interval_seconds: int,
+    hub_version: str = __version__,
+    version_window: VersionWindow | None = None,
 ) -> HubServices:
     """Construct and wire the hub-level services over the shared :class:`HubCore`, and have its
     tenant cache serve each tenant's services (:func:`build_tenant_services`). The sweeps and exports
@@ -1267,7 +1275,8 @@ def build_services(
     the cache. ``work_sources`` builds a tenant's
     work-source registry; ``hub_command_runner``/``hub_workdir`` are the hub command node's
     mechanism seams, left ``None`` for real adapters; an explicit ``oauth_registry`` wins over
-    ``oauth_providers``."""
+    ``oauth_providers``. ``hub_version`` and ``version_window`` judge each runner registration — the installed
+    version and the packaged window unless given."""
     clock = core.clock
     store_connections = core.store_connections
     brokers = brokers or TenantBrokers()
@@ -1295,6 +1304,7 @@ def build_services(
         transcript_caps=transcript_caps,
         platform_tracer=platform_tracer,
         color_pick=color_pick,
+        versions=HubVersionWindow(hub_version, version_window or VersionWindow.load()),
     )
     core.tenants.serve(
         TenantServing(build=lambda stores, events: build_tenant_services(stores, parts, events=events), brokers=brokers)

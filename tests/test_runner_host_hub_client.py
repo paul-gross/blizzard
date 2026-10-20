@@ -80,6 +80,7 @@ def test_report_sends_the_hosts_facts_and_no_name_and_answers_its_record() -> No
         "redirect_uris": ["https://box.test/auth/callback"],
         "workspaces": [{"workspace_id": "ws_1", "env_capacity": 3}],
         "subscriptions": [{"slug": "anthropic", "name": "Claude", "provider": "anthropic"}],
+        "version": None,
     }
 
 

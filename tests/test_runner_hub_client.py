@@ -392,6 +392,7 @@ def test_register_runner_posts_registration() -> None:
         "capabilities": [],
         "subscriptions": [],
         "gates": [],
+        "version": None,
     }
 
 
@@ -421,6 +422,7 @@ def test_register_runner_sends_null_capacity_when_unset() -> None:
         "capabilities": [],
         "subscriptions": [],
         "gates": [],
+        "version": None,
     }
 
 

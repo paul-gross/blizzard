@@ -13,6 +13,7 @@ from datetime import datetime
 
 from sqlalchemy import Connection
 
+from blizzard.foundation.runner_version import VersionRefusalReason
 from blizzard.foundation.store.batching import id_batches
 from blizzard.foundation.store.utc import as_utc
 from blizzard.hub.domain.runners.registration import (
@@ -223,6 +224,7 @@ class RunnerRegistryStore:
         projects: tuple[ServedEntry, ...] | None = None,
         bindings: tuple[RunnerBinding, ...] | None = None,
         subscription: str | None = None,
+        version: str | None = None,
         at: datetime,
     ) -> bool:
         # Written unconditionally on every registration, `None`/empty verbatim included: the
@@ -263,6 +265,9 @@ class RunnerRegistryStore:
             "gates": gates_json,
             "bindings": _bindings_json(bindings),
             "subscription": subscription,
+            "reported_version": version,
+            "version_refusal": None,
+            "version_judged_at": at,
         }
         if name is not None:
             refreshed["name"] = name
@@ -282,6 +287,17 @@ class RunnerRegistryStore:
                 .values(registered_at=at)
             )
             return bool(first.rowcount)
+
+    def record_version_refusal(
+        self, runner_id: str, *, version: str | None, reason: VersionRefusalReason, at: datetime
+    ) -> None:
+        with self._store.write("record_version_refusal") as conn:
+            if not conn.execute(
+                self._store.update(s.runner_registrations)
+                .where(s.runner_registrations.c.runner_id == runner_id)
+                .values(reported_version=version, version_refusal=reason.value, version_judged_at=at)
+            ).rowcount:
+                raise LookupError(f"runner {runner_id!r} was never added")
 
     def touch_last_seen(self, runner_id: str, *, at: datetime) -> bool:
         with self._store.write("touch_last_seen") as conn:
@@ -682,6 +698,9 @@ class RunnerRegistryStore:
                 else None
             ),
             subscription=row.subscription,
+            reported_version=row.reported_version,
+            version_refusal=None if row.version_refusal is None else VersionRefusalReason(row.version_refusal),
+            version_judged_at=row.version_judged_at,
             served=tuple(
                 ServedEntry(entry=e["entry"], project_id=e.get("project_id"))
                 for e in (json.loads(row.projects) if row.projects else [])
