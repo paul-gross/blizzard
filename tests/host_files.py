@@ -23,7 +23,8 @@ from blizzard.runner.config import (
     WorkerStdout,
 )
 from blizzard.runner.host_config import HostConfig, RunnerEntry
-from blizzard.runner.host_layout import HostLayout, write_runner_id
+from blizzard.runner.host_file import write_runner_id
+from blizzard.runner.host_layout import HostLayout
 from blizzard.runner.hub.internal.token_file import HubTokenFile
 from blizzard.runner.subscriptions.subscription_sampler import PROVIDER_ANTHROPIC
 from tests.config_inputs import init_host, load_host_config
@@ -69,7 +70,7 @@ def init_runner_environment(root: Path | str, **kwargs: Any) -> RunnerConfig:
     config = init_host(Path(root), **kwargs)
     runner = config.runner_config()
     if runner.runner_id is None:
-        write_runner_id(config.layout, runner.name, FIXTURE_RUNNER_ID)
+        write_runner_id(config.layout, runner.name, FIXTURE_RUNNER_ID, strict=config.strict)
         HubTokenFile.of(config.root, runner.token_env).write(f"tok_{FIXTURE_RUNNER_ID}")
         runner = load_host_config(config.root).runner_config()
     return runner

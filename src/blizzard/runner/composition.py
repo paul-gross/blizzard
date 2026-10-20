@@ -56,7 +56,8 @@ from blizzard.runner.harness.wiring import (
     declared_telemetry_names,
 )
 from blizzard.runner.host_config import BuiltRunner, HaltedRunner, HostConfig, ResolvedToken
-from blizzard.runner.host_layout import HostFileEditor, HostLayout
+from blizzard.runner.host_file import HostFileEditor
+from blizzard.runner.host_layout import HostLayout
 from blizzard.runner.hub.client import HostReport, HostReportedWorkspace, IHostHubClient
 from blizzard.runner.hub.client import SubscriptionDeclaration as HubSubscriptionDeclaration
 from blizzard.runner.hub.flags import FlagsHolder
@@ -1190,7 +1191,7 @@ def build_runner_ingest(
     return RunnerIngest(
         host=host,
         stores=build_runner_store_files(resolved),
-        host_file=HostFileEditor(),
+        host_file=HostFileEditor(strict=host.strict),
         tokens=DotenvTokenFiles(),
         hub=hub,
         holder=holder,

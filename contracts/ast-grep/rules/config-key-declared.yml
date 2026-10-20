@@ -1,0 +1,20 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ast-grep/ast-grep/main/schemas/rule.json
+
+id: bzh:config-key-declared
+language: Python
+severity: error
+message: >-
+  tomllib is imported only by the daemons' config loaders. Decode host-file text through
+  blizzard.runner.host_config and read its keys through a ConfigView over the declared registry.
+files:
+  - src/blizzard/runner/**
+  - src/blizzard/hub/**
+ignores:
+  - src/blizzard/runner/host_config.py
+  - src/blizzard/hub/config.py
+  - src/blizzard/hub/domain/runners/version_window.py
+rule:
+  any:
+    - pattern: import tomllib
+    - pattern: import tomllib as $ALIAS
+    - pattern: from tomllib import $$$NAMES

@@ -25,7 +25,8 @@ from blizzard.runner.composition import (
     build_identity_writer,
 )
 from blizzard.runner.host_config import HOST_TOKEN_VARIABLE, BuiltRunner
-from blizzard.runner.host_layout import HostFileEditor, HostLayout, HostLock, append_workspace
+from blizzard.runner.host_file import HostFileEditor, append_workspace
+from blizzard.runner.host_layout import HostLayout, HostLock
 from blizzard.runner.hub.client import HostRefusalReason, HostRefused, HubClientError
 from blizzard.runner.hub.host_identity import HostIdentity
 from blizzard.runner.hub.identity import RunnerIdentity
@@ -34,7 +35,7 @@ from blizzard.runner.hub.token_file import ENV_FILENAME
 from blizzard.runner.ingest import RunnerIngest
 from blizzard.runner.runtime import migration_runner
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
-from tests.config_inputs import init_host, load_host_config
+from tests.config_inputs import STRICT, init_host, load_host_config
 from tests.runner_ingest_support import (
     HERE_HOST,
     MOVING,
@@ -306,6 +307,7 @@ def test_ingest_is_refused_for_a_new_workspace_id_this_host_gives_to_another_roo
     append_workspace(
         HostLayout(hosts.here),
         f'\n[[workspace]]\nid = "{_NEW_WORKSPACE}"\nroot = "{tmp_path / "elsewhere"}"\nenvs = ["e1"]\n',
+        strict=STRICT,
     )
     _refuse(
         fake_init_hub,
@@ -330,7 +332,7 @@ def test_ingest_is_refused_for_a_new_workspace_id_on_a_runner_bound_to_several(
 ) -> None:
     hosts = two_hosts(tmp_path, fake_init_hub)
     layout = HostLayout(hosts.there)
-    append_workspace(layout, '\n[[workspace]]\nid = "second"\nroot = "/srv/second"\nenvs = ["s1"]\n')
+    append_workspace(layout, '\n[[workspace]]\nid = "second"\nroot = "/srv/second"\nenvs = ["s1"]\n', strict=STRICT)
     text = layout.config_path.read_text()
     bound = '{ project = "default", workspace = "workspace-local", agents = 1 }'
     head, _, tail = text.rpartition(bound)

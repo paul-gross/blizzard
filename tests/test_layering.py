@@ -2454,6 +2454,7 @@ _RUNNER_EDGE_MODULES = frozenset(
         "config",
         "config_keys",
         "host_config",
+        "host_file",
         "host_layout",
         "ingest",
         "listeners",

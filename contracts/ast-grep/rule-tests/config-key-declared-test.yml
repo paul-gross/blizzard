@@ -1,0 +1,17 @@
+id: bzh:config-key-declared
+valid:
+  # Decoding through the loader's decode step.
+  - |
+    from blizzard.runner.host_config import decode_host_text
+
+    document = decode_host_text(text, what="the host file")
+  # A module merely named like the library.
+  - |
+    from blizzard.hub import tomllib_view
+invalid:
+  - |
+    import tomllib
+  - |
+    import tomllib as toml
+  - |
+    from tomllib import loads

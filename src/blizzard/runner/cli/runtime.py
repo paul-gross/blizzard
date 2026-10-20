@@ -58,7 +58,8 @@ from blizzard.runner.host_config import (
     RunnerEntry,
     TokenSource,
 )
-from blizzard.runner.host_layout import HOST_CONFIG_FILENAME, HostHeld, HostLock, write_runner_id
+from blizzard.runner.host_file import write_runner_id
+from blizzard.runner.host_layout import HOST_CONFIG_FILENAME, HostHeld, HostLock
 from blizzard.runner.hub.bootstrap import (
     BootstrapStop,
     BootstrapStopped,
@@ -439,7 +440,7 @@ def _join_runner(
     # left stale. A configured id differing from the joined runner's reaches here only by a re-add.
     if entry.id != joined.runner_id:
         with click_exception_on(ConfigError):
-            write_runner_id(config.layout, entry.name, joined.runner_id)
+            write_runner_id(config.layout, entry.name, joined.runner_id, strict=config.strict)
     _record_identity(config, joined)
 
 

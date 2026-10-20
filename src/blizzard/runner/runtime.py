@@ -29,6 +29,7 @@ from blizzard.foundation.store.migrations import MigrationConnectionError, Migra
 from blizzard.runner.config_table import ConfigError
 from blizzard.runner.harness.wiring import declared
 from blizzard.runner.host_config import HostConfig
+from blizzard.runner.host_file import write_scaffold
 from blizzard.runner.host_layout import (
     LEGACY_CONFIG_FILENAME,
     LEGACY_STORE_FILENAME,
@@ -38,7 +39,6 @@ from blizzard.runner.host_layout import (
     HostLayout,
     HostLock,
     migrate_remedy,
-    write_scaffold,
 )
 from blizzard.runner.store import MIGRATIONS_DIR, STORE_NAME
 from blizzard.runner.transfer.runner_stores import IRunnerBoundStoresFactory

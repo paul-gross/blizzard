@@ -30,7 +30,8 @@ from blizzard.runner.host_config import (
     runner_toml,
     scaffold_runner,
 )
-from blizzard.runner.host_layout import RUNNERS_DIRNAME, HostHeld, HostLayout, HostLock, append_runner, remove_runner
+from blizzard.runner.host_file import append_runner, remove_runner
+from blizzard.runner.host_layout import RUNNERS_DIRNAME, HostHeld, HostLayout, HostLock
 from blizzard.runner.hub.client import (
     HostRefusalReason,
     HostRefused,
@@ -133,7 +134,7 @@ def add(
         runner_id=answer.runner_id,
     )
     try:
-        append_runner(config.layout, runner_toml(entry))
+        append_runner(config.layout, runner_toml(entry), strict=config.strict)
     except ConfigError as exc:
         raise click.ClickException(
             f"runner {name} ({answer.runner_id}) was added at {hub} and its token written, but its [[runner]] was "
@@ -184,7 +185,7 @@ def retire(ctx: click.Context, directory: str, runner: str, force: bool) -> None
     released = f", releasing {', '.join(answer.released_chunk_ids)}" if answer.released_chunk_ids else ""
     forget_identity(config, entry.id)
     try:
-        remove_runner(config.layout, entry.name)
+        remove_runner(config.layout, entry.name, strict=config.strict)
     except ConfigError as exc:
         raise click.ClickException(
             f"runner {entry.name} ({entry.id}) was retired at {hub}{released}, but its [[runner]] was not removed: "

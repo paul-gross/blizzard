@@ -508,8 +508,8 @@ class HostConfig:
                 pass
         path = layout.config_path
         try:
-            raw = tomllib.loads(path.read_text())
-        except (OSError, tomllib.TOMLDecodeError) as exc:
+            raw = decode_host_text(path.read_text(), what=str(path))
+        except (OSError, ConfigError) as exc:
             raise HostConfigError((f"{path} cannot be read: {exc}",)) from exc
         try:
             return _parse(
@@ -838,6 +838,27 @@ def _parse(
 
 #: The agent count a flat runner file declaring no ``max_agents`` ran with.
 _LEGACY_MAX_AGENTS = 1
+
+
+def decode_host_text(text: str, *, what: str) -> dict[str, Any]:
+    """``text`` — a host file, a table to append to one, or a TOML literal — decoded to the mapping it holds: the one
+    decode step every read of host-file text goes through. :class:`ConfigError`, naming ``what``, when it is not
+    TOML."""
+    try:
+        return tomllib.loads(text)
+    except tomllib.TOMLDecodeError as error:
+        raise ConfigError(f"{what} is not valid TOML: {error}") from error
+
+
+def read_legacy_document(layout: HostLayout) -> dict[str, Any]:
+    """The pre-host ``blizzard-runner.toml`` of the runner directory ``layout`` names, decoded — the document
+    :meth:`HostConfig.graduated` takes. :class:`ConfigError` when it cannot be read or is not TOML."""
+    path = layout.legacy_config_path
+    try:
+        text = path.read_text()
+    except OSError as error:
+        raise ConfigError(f"cannot read {path}: {error}") from error
+    return decode_host_text(text, what=str(path))
 
 
 def _graduated_raw(legacy: Mapping[str, Any], *, runner_id: str, served: tuple[str, ...]) -> dict[str, Any]:
