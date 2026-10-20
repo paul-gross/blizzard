@@ -7,7 +7,8 @@
 # service tier, a structurally different shape from the bounded CI profile below.
 #
 # Both tiers need what a single-repo checkout does not carry: the sibling
-# `blizzard-mock` worktree (the mock fleet + fixture scaffold). The tiers are winter-free:
+# `blizzard-mock` worktree (the mock fleet + fixture scaffold), which the `mock-ref` job
+# resolves once through .github/actions/resolve-mock-ref. The tiers are winter-free:
 # their runners run on the built-in `basic` provider over a fixture of bare `file://`
 # origins the scaffold mints with no winter source — no tokens, no forge, no network
 # beyond package installs. This workflow provides the sibling with a two-repo checkout:

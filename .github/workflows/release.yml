@@ -9,7 +9,8 @@
 # (every registry point, not the bounded CI subset the master `push` gate runs), and the
 # e2e acceptance loop including the Playwright browser scenario. All three need the
 # two-repo checkout (blizzard + blizzard-mock) laid out as the siblings their discovery
-# expects — the same setup the `push` workflow proves green. They are winter-free: no
+# expects — the same setup the `push` workflow proves green, with the mock checked out at
+# the tag of the same name (.github/actions/resolve-mock-ref). They are winter-free: no
 # winter source is checked out, and the winter binding's tests (`winter-binding`) are
 # local-only.
 #
