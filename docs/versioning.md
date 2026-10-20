@@ -83,8 +83,11 @@ deprecated it, so the window spans every minor since the last removal. From 1.0,
 own major at the same minor or later, and a hub of a new major also accepts runners at the previous major's final minor,
 which is then the `floor`.
 
-There is still no version negotiation and no minimum-runner rejection to catch a runner that has fallen outside the
-window at runtime. What is checked is the per-commit unit the window actually depends on: `blizzard:wire-compat`
+At runtime, every registration carries the runner's version and the hub judges it against the window: a runner outside
+it is refused `409 RunnerVersionRefusal`, whose `detail` names the runner's version, the hub's, and the range to upgrade
+to, and is denied every claim until a later registration is admitted. The refused runner halts alone while its host's
+other runners carry on, and retries registration on its tick; a hub whose own line is below `floor` refuses to start.
+What is checked is the per-commit unit the window actually depends on: `blizzard:wire-compat`
 (`bzh:fleet-wire-additive`) diffs the declared hub↔runner surface — every `/api/fleet/...` route, the
 `POST /api/runners` call `runner init` adds its runner through, and the auth federation routes the runner calls —
 between consecutive commits, and fails on a breaking change unless a commit the step lands carries a Conventional
