@@ -3990,9 +3990,9 @@
   },
   "blizzard/hub/domain/runners/host.py": {
    "comments": 5,
-   "docstrings": 74,
+   "docstrings": 75,
    "over_cap": 0,
-   "total": 432
+   "total": 433
   },
   "blizzard/hub/domain/runners/host_enrollment.py": {
    "comments": 3,
@@ -4001,10 +4001,10 @@
    "total": 132
   },
   "blizzard/hub/domain/runners/host_report.py": {
-   "comments": 0,
+   "comments": 1,
    "docstrings": 6,
    "over_cap": 0,
-   "total": 49
+   "total": 55
   },
   "blizzard/hub/domain/runners/registration.py": {
    "comments": 39,
@@ -4541,10 +4541,10 @@
    "total": 650
   },
   "blizzard/hub/store/internal/host_registry_store.py": {
-   "comments": 13,
+   "comments": 15,
    "docstrings": 10,
    "over_cap": 0,
-   "total": 335
+   "total": 339
   },
   "blizzard/hub/store/internal/host_usage.py": {
    "comments": 0,
@@ -9026,7 +9026,7 @@
    "comments": 5,
    "docstrings": 93,
    "over_cap": 3,
-   "total": 456
+   "total": 443
   },
   "blizzard/runner/tracing/__init__.py": {
    "comments": 0,
@@ -12588,6 +12588,12 @@
    "over_cap": 0,
    "total": 372
   },
+  "test_host_rename_race.py": {
+   "comments": 1,
+   "docstrings": 2,
+   "over_cap": 0,
+   "total": 59
+  },
   "test_host_rules.py": {
    "comments": 0,
    "docstrings": 1,
@@ -13726,7 +13732,7 @@
    "comments": 0,
    "docstrings": 1,
    "over_cap": 0,
-   "total": 79
+   "total": 81
   },
   "test_release_inventory.py": {
    "comments": 0,
@@ -15193,10 +15199,10 @@
    "total": 88
   },
   "test_runner_usage_limit_fan_out.py": {
-   "comments": 11,
+   "comments": 12,
    "docstrings": 6,
    "over_cap": 0,
-   "total": 226
+   "total": 249
   },
   "test_runner_usage_plural_reads.py": {
    "comments": 11,
