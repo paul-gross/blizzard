@@ -149,8 +149,9 @@ in `scripts/verify-release.sh`, unit-tested by `tests/test_verify_release.py` â€
 The workflow-level `permissions:` is `contents: read`, so the release workflow's test jobs hold no write scope. Job-level
 blocks replace the workflow-level one: `build` declares `contents: read`, `packages: write` (the GHCR push),
 `id-token: write` (the OIDC identity), and `attestations: write`; `publish` declares only `contents: write`
-(`gh release create`); `verify` declares only `contents: read`. The image push runs in `build`, before `publish`, so a failed image build cannot leave a Release
-advertising a missing image; `tests/test_release_workflow.py` pins each job's scopes and the read-only workflow level.
+(`gh release create`); `verify` declares only `contents: read`. The image push runs in `build`, before `publish`, so a
+failed image build cannot leave a Release advertising a missing image; `tests/test_release_workflow.py` pins each job's
+scopes and the read-only workflow level.
 
 Every signature and attestation carries the identity
 `https://github.com/paul-gross/blizzard/.github/workflows/release.yml@refs/tags/v<version>`, issued by
