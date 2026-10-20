@@ -39,8 +39,8 @@ from opentelemetry.sdk.util.instrumentation import InstrumentationScope
 from opentelemetry.trace import TraceFlags
 
 from blizzard.foundation.logging import get_logger
-from blizzard.foundation.platform_tracing.internal.redaction import redacted
 from blizzard.foundation.platform_tracing.received import ReceivedDataPoint, ReceivedLogRecord
+from blizzard.foundation.platform_tracing.redaction import redacted
 
 _log = get_logger(__name__)
 

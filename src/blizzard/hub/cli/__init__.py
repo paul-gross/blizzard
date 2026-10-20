@@ -8,7 +8,7 @@ import click
 
 from blizzard.cli.operator_trace import OperatorGroup
 from blizzard.foundation.operator_sessions.internal.session_file import SessionFile
-from blizzard.foundation.operator_sessions.service import SessionService
+from blizzard.hub.cli.session_service import SessionService
 
 _CLI = "blizzard.hub.cli"
 

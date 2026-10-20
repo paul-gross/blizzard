@@ -32,6 +32,12 @@ HEARTBEAT_STALENESS_THRESHOLD = timedelta(hours=1)
 RECENT_LEASE_LIMIT = 20
 
 
+def is_healthy_closure(reason: str | None) -> bool:
+    """Whether a stored closure ``reason`` is the node-step completing and the chunk moving on — only ``transitioned``;
+    a store-only or absent reason is not."""
+    return reason == LeaseClosureReason.TRANSITIONED.value
+
+
 @domain_model
 @dataclass(frozen=True)
 class Liveness:
@@ -207,7 +213,7 @@ class ClosedLeaseActivity:
     @property
     def closure_healthy(self) -> bool:
         """Whether the closure was the node-step completing and the chunk moving on."""
-        return LeaseClosureReason.is_healthy(self.closure_reason)
+        return is_healthy_closure(self.closure_reason)
 
 
 class IProcessProbe(Protocol):

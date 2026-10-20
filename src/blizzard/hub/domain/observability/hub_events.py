@@ -7,13 +7,52 @@ tenant's, and no tenant sees the hub's occurrences."""
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Protocol
+from typing import Literal, Protocol, cast, get_args
 
-from blizzard.foundation.event_log import HUB_EVENT_SEVERITY, EventLogSeverity, HubEventKind
+from blizzard.foundation.event_log import EventLogSeverity
 from blizzard.foundation.roles import domain_model
+
+#: The kinds of the hub's own occurrences; the export kinds stay in ``EventLogKind`` too, for a runner's own exports.
+HubEventKind = Literal[
+    "trace-export-failed",
+    "trace-export-recovered",
+    "trace-window-skipped",
+    "trace-config-rejected",
+    "egress-write-failed",
+    "egress-write-recovered",
+    "egress-config-rejected",
+    "egress-cursor-reset",
+    "hub-started",
+    "hub-migrated",
+    "tenant-closed",
+    "tenant-deleted",
+]
+
+#: Each hub kind's one severity — an export kind's is the one ``EVENT_LOG_SEVERITY`` gives it.
+HUB_EVENT_SEVERITY: Mapping[HubEventKind, EventLogSeverity] = {
+    "trace-export-failed": EventLogSeverity.WARNING,
+    "trace-export-recovered": EventLogSeverity.INFO,
+    "trace-window-skipped": EventLogSeverity.WARNING,
+    "trace-config-rejected": EventLogSeverity.WARNING,
+    "egress-write-failed": EventLogSeverity.WARNING,
+    "egress-write-recovered": EventLogSeverity.INFO,
+    "egress-config-rejected": EventLogSeverity.WARNING,
+    "egress-cursor-reset": EventLogSeverity.INFO,
+    "hub-started": EventLogSeverity.INFO,
+    "hub-migrated": EventLogSeverity.INFO,
+    "tenant-closed": EventLogSeverity.INFO,
+    "tenant-deleted": EventLogSeverity.INFO,
+}
+
+_HUB_EVENT_KINDS = frozenset(get_args(HubEventKind))
+
+
+def narrow_hub_event_kind(value: str) -> HubEventKind | None:
+    """``value`` narrowed to :data:`HubEventKind`, or ``None`` outside the closed vocabulary."""
+    return cast(HubEventKind, value) if value in _HUB_EVENT_KINDS else None
 
 
 @domain_model
@@ -72,4 +111,13 @@ class HubEventLogService:
         return self._events.append(severity=HUB_EVENT_SEVERITY[kind], kind=kind, message=message, detail=detail, at=at)
 
 
-__all__ = ["HubEvent", "HubEventEntry", "HubEventLogService", "IReadHubEventLog", "IWriteHubEventLog"]
+__all__ = [
+    "HUB_EVENT_SEVERITY",
+    "HubEvent",
+    "HubEventEntry",
+    "HubEventKind",
+    "HubEventLogService",
+    "IReadHubEventLog",
+    "IWriteHubEventLog",
+    "narrow_hub_event_kind",
+]

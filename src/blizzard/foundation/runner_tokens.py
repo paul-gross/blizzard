@@ -15,13 +15,3 @@ class RunnerTokenRefusalReason(StrEnum):
     UNKNOWN = "unknown"
     REVOKED = "revoked"
     RETIRED = "retired"
-
-
-class HostTokenRefusalReason(StrEnum):
-    """Why a presented host bearer token names no host the hub admits — the runner vocabulary's
-    sibling. ``RETIRED`` outranks ``REVOKED``: retiring a host revokes its token."""
-
-    MISSING = "missing"
-    UNKNOWN = "unknown"
-    REVOKED = "revoked"
-    RETIRED = "retired"

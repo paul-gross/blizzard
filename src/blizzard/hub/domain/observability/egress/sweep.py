@@ -16,7 +16,6 @@ from datetime import date, datetime, timedelta
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.crash import crashpoint
-from blizzard.foundation.event_log import HubEventKind
 from blizzard.foundation.lane_retry import OutageLatch
 from blizzard.foundation.logging import get_logger
 from blizzard.hub.domain.observability.analytics.events import DropFact
@@ -41,7 +40,7 @@ from blizzard.hub.domain.observability.egress.schema import (
     INVOCATIONS_SCHEMA,
     STEPS_SCHEMA,
 )
-from blizzard.hub.domain.observability.hub_events import HubEventLogService
+from blizzard.hub.domain.observability.hub_events import HubEventKind, HubEventLogService
 from blizzard.hub.domain.observability.tracing.repository import IReadTraceSteps
 from blizzard.hub.domain.observability.tracing.window import read_window
 from blizzard.hub.egress.writer import (

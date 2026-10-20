@@ -1,7 +1,7 @@
 """Memberships — one user's role in one tenant, recorded as facts (``bzh:facts-not-status``).
 
 The newest fact per ``(tenant, user)`` is in force; a fact with no role revokes. A membership's role is drawn from
-:data:`~blizzard.auth_core.MEMBERSHIP_ROLES` alone. The facts are global — a person's memberships are read before any
+:data:`MEMBERSHIP_ROLES` alone. The facts are global — a person's memberships are read before any
 tenant is known — so the repository holds hub-level connections, never a tenant's. The concrete adapter lives at
 ``src/blizzard/hub/auth/internal/membership_repository.py`` (``bzh:dependency-inversion``).
 
@@ -16,7 +16,7 @@ from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import TYPE_CHECKING, Protocol
 
-from blizzard.auth_core import MEMBERSHIP_ROLES, Permission, Role
+from blizzard.auth_core import Permission, Role
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.auth.facts import AuthFactsService
@@ -36,8 +36,12 @@ SET_BY_BOOTSTRAP = "bootstrap"
 SET_BY_OPERATOR = "operator"
 
 
+#: The roles a tenant membership may carry — ``pending`` and ``superuser`` are never one.
+MEMBERSHIP_ROLES: tuple[Role, ...] = (Role.GUEST, Role.CONTRIBUTOR, Role.ADMIN)
+
+
 class MembershipRoleRefused(ValueError):
-    """Raised when a membership fact names a role outside :data:`~blizzard.auth_core.MEMBERSHIP_ROLES`."""
+    """Raised when a membership fact names a role outside :data:`MEMBERSHIP_ROLES`."""
 
     def __init__(self, role: Role) -> None:
         super().__init__(f"{role.value} is not a membership role")

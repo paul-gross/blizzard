@@ -12,10 +12,11 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel
 
-from blizzard.auth_core import Permission, Role, permissions_for
+from blizzard.auth_core import Permission, Role
 from blizzard.hub.api.auth_session import TENANT_HEADER, implicit_operator, resolve_identity
 from blizzard.hub.api.hub_level import hub_services
 from blizzard.hub.auth.memberships import Membership
+from blizzard.hub.auth.permissions import permissions_for
 from blizzard.hub.auth.service import ASSIGNABLE_ROLES
 from blizzard.hub.composition import HubServices
 from blizzard.hub.config import AUTH_MODE_NONE

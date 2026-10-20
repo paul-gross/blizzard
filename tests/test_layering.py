@@ -54,6 +54,28 @@ _MOVED_HOMES = {
     "EgressState": "blizzard.foundation.egress_state",
     "IdentityState": "blizzard.foundation.runner_identity_state",
     "HostRegistrationState": "blizzard.foundation.host_registration_state",
+    "HostRunnerState": "blizzard.foundation.host_runner_state",
+    "runner_prefix": "blizzard.runner.route_paths",
+    "is_api_path": "blizzard.runner.route_paths",
+    "within_runner": "blizzard.runner.route_paths",
+    "RUNNER_ROUTE_PREFIX": "blizzard.runner.route_paths",
+    "RUNNERS_SEGMENT": "blizzard.runner.route_paths",
+    "OTLP_PATHS": "blizzard.runner.route_paths",
+    "PublicOrigins": "blizzard.runner.public_origins",
+    "RedactingExporter": "blizzard.foundation.platform_tracing.redaction",
+    "redacted": "blizzard.foundation.platform_tracing.redaction",
+    "EnabledReceivedTelemetryExport": "blizzard.runner.tracing.internal.received_pipeline",
+    "TenantState": "blizzard.foundation.tenants",
+    "TenantDeletionState": "blizzard.foundation.tenants",
+    "TENANT_NAME_MAX_LENGTH": "blizzard.foundation.tenants",
+    "TENANT_NAME_PATTERN": "blizzard.foundation.tenants",
+    "is_tenant_name": "blizzard.foundation.tenants",
+    "HUB_PERMISSIONS": "blizzard.hub.auth.permissions",
+    "permissions_for": "blizzard.hub.auth.permissions",
+    "MEMBERSHIP_ROLES": "blizzard.hub.auth.memberships",
+    "HubEventKind": "blizzard.hub.domain.observability.hub_events",
+    "HUB_EVENT_SEVERITY": "blizzard.hub.domain.observability.hub_events",
+    "narrow_hub_event_kind": "blizzard.hub.domain.observability.hub_events",
     "RESERVED_HUB_SOURCE_NAME": "blizzard.hub.domain.kernel.hub_source",
     "KNOWN_WORK_SOURCE_PROVIDERS": "blizzard.hub.domain.config.work_sources",
     "ROUTE_TOKEN_WARN": "blizzard.hub.domain.execution.auth.route",
@@ -191,6 +213,198 @@ def _misrouted_moved_names(root: Path) -> list[str]:
 def test_kernel_imports_no_non_kernel_blizzard_package() -> None:
     violations = [v for root in _KERNEL_DIRS for v in _violations(root, _NON_KERNEL_PACKAGES)]
     assert not violations, f"A — wire/, foundation/ and auth_core/ must import no daemon, CLI or tool: {violations}"
+
+
+#: Kernel modules that stay shared despite one side reaching them, each with the reason — an entry the check no longer
+#: needs fails it (``bzh:shared-kernel``).
+_SINGLE_SIDE_KERNEL_ALLOWLIST = {
+    "blizzard.foundation.process": "the runner's child-process launch rule is undecided and may want that seam low",
+}
+
+
+def _defines_nothing(tree: ast.Module) -> bool:
+    """Whether a module body is only a docstring and ``from __future__ import annotations``."""
+    for node in tree.body:
+        is_docstring = isinstance(node, ast.Expr) and isinstance(node.value, ast.Constant)
+        is_future = isinstance(node, ast.ImportFrom) and node.module == "__future__"
+        if not (is_docstring or is_future):
+            return False
+    return True
+
+
+def _module_name(path: Path, src_root: Path) -> str:
+    return ".".join(path.relative_to(src_root).with_suffix("").parts).removesuffix(".__init__")
+
+
+def _reaching_sides(src_root: Path) -> tuple[dict[str, set[str]], dict[str, Path]]:
+    """For every production module under ``src_root/blizzard``, the tags of what reaches it — ``hub``, ``runner``,
+    ``wire`` — and the module's path. A hub or runner module is its own side; a wire, foundation, auth_core or cli
+    module passes on the tags of whatever imports it, a wire module adding ``wire``; a tool is no side. An import
+    names the longest dotted prefix that is a module, so ``from pkg import name`` reaches ``pkg`` and
+    ``from pkg import sub`` reaches ``pkg.sub``, never both."""
+    files = {_module_name(path, src_root): path for path in _production_files(src_root / "blizzard")}
+    imports: dict[str, set[str]] = {name: set() for name in files}
+    for name, path in files.items():
+        for _, bound in _import_statements(path, src_root):
+            for segments in bound:
+                reached = next(
+                    (m for m in (".".join(segments[:n]) for n in range(len(segments), 0, -1)) if m in files), None
+                )
+                if reached is not None and reached != name:
+                    imports[name].add(reached)
+    tags: dict[str, set[str]] = {name: set() for name in files}
+    fixed = {"blizzard.hub": "hub", "blizzard.runner": "runner"}
+    for name in files:
+        for prefix, side in fixed.items():
+            if name == prefix or name.startswith(f"{prefix}."):
+                tags[name].add(side)
+        if name.startswith("blizzard.wire"):
+            tags[name].add("wire")
+    passes_on = {n for n in files if n.split(".")[1:2] in (["wire"], ["foundation"], ["auth_core"], ["cli"])}
+    changed = True
+    while changed:
+        changed = False
+        for name, reached in imports.items():
+            if name.startswith("blizzard.tools"):
+                continue
+            for target in reached:
+                if target in passes_on and not tags[name] <= tags[target]:
+                    tags[target] |= tags[name]
+                    changed = True
+    return tags, files
+
+
+def _single_side_kernel_modules(src_root: Path, allowlist: Mapping[str, str]) -> list[str]:
+    """The ``foundation/`` and ``auth_core/`` modules reached by neither a ``wire/`` module nor both daemons, bar the
+    ``allowlist``, and the allowlist entries that name no such module or would pass without the entry
+    (``bzh:shared-kernel``). ``internal/`` modules and docstring-only ``__init__`` modules are not judged."""
+    tags, files = _reaching_sides(src_root)
+    judged = [
+        name
+        for name, path in files.items()
+        if name.split(".")[:2] in (["blizzard", "foundation"], ["blizzard", "auth_core"])
+        and "internal" not in name.split(".")
+        and not _defines_nothing(ast.parse(path.read_text(), filename=str(path)))
+    ]
+    problems: list[str] = []
+    for name in judged:
+        reach = tags[name]
+        shared = "wire" in reach or {"hub", "runner"} <= reach
+        if name in allowlist:
+            if shared:
+                problems.append(f"{name} is on the allowlist but is shared — drop the entry")
+        elif not shared:
+            sides = " and ".join(sorted(reach - {"wire"})) or "no"
+            problems.append(
+                f"{name} is reached by the {sides} side only and by no wire module — move it or allowlist it"
+            )
+    problems.extend(
+        f"{name} is on the allowlist but is no judged kernel module" for name in allowlist if name not in judged
+    )
+    return problems
+
+
+def test_every_kernel_module_is_shared_by_both_sides_or_the_wire() -> None:
+    """``bzh:shared-kernel`` — a ``foundation/`` or ``auth_core/`` module only one daemon reaches belongs to that
+    daemon, unless the wire reaches it."""
+    problems = _single_side_kernel_modules(_SRC_DIR.parent, _SINGLE_SIDE_KERNEL_ALLOWLIST)
+    assert not problems, f"G — a kernel module only one side uses must move into that side: {problems}"
+
+
+def _plant_kernel(tmp_path: Path, files: Mapping[str, str]) -> Path:
+    """A planted ``blizzard`` tree: each of ``files`` (keyed by path under ``blizzard/``) written, every package given an
+    ``__init__.py``."""
+    root = tmp_path / "src"
+    for rel, text in files.items():
+        path = root / "blizzard" / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text)
+    for package in {p for path in root.rglob("*.py") for p in path.parents if p != root.parent and root in p.parents}:
+        (package / "__init__.py").touch()
+    return root
+
+
+_SHARED = "from blizzard.foundation import shared\n"
+
+
+@pytest.mark.parametrize(
+    ("files", "expected"),
+    [
+        pytest.param({"hub/a.py": _SHARED, "foundation/shared.py": "X = 1\n"}, 1, id="one-sided"),
+        pytest.param(
+            {"hub/a.py": _SHARED, "runner/b.py": _SHARED, "foundation/shared.py": "X = 1\n"}, 0, id="two-sided"
+        ),
+        pytest.param({"wire/w.py": _SHARED, "foundation/shared.py": "X = 1\n"}, 0, id="wire-reached"),
+        pytest.param(
+            {
+                "wire/w.py": "from blizzard.foundation import mid\n",
+                "foundation/mid.py": "from blizzard.foundation import shared\n",
+                "foundation/shared.py": "X = 1\n",
+            },
+            0,
+            id="reached-through-a-wire-reached-module",
+        ),
+        pytest.param(
+            {
+                "hub/h.py": "from blizzard.cli import drive\n",
+                "runner/r.py": "from blizzard.cli import drive\n",
+                "cli/drive.py": _SHARED,
+                "foundation/shared.py": "X = 1\n",
+            },
+            0,
+            id="through-a-cli-module-driving-both",
+        ),
+        pytest.param(
+            {
+                "hub/h.py": "from blizzard.cli import drive\n",
+                "cli/drive.py": _SHARED,
+                "foundation/shared.py": "X = 1\n",
+            },
+            1,
+            id="through-a-cli-module-driving-one",
+        ),
+        pytest.param(
+            {"cli/drive.py": _SHARED, "foundation/shared.py": "X = 1\n"}, 1, id="through-an-unreached-cli-module"
+        ),
+        pytest.param({"tools/t.py": _SHARED, "foundation/shared.py": "X = 1\n"}, 1, id="reached-only-by-a-tool"),
+        pytest.param(
+            {"hub/a.py": "from blizzard.foundation import shared\n", "foundation/shared.py": "X = 1\n"},
+            1,
+            id="a-symbol-import-names-the-module-not-its-package",
+        ),
+        pytest.param(
+            {"hub/a.py": _SHARED, "foundation/shared.py": "X = 1\n", "foundation/internal/impl.py": "Y = 1\n"},
+            1,
+            id="an-internal-module-is-not-judged",
+        ),
+        pytest.param(
+            {"hub/a.py": "from blizzard.foundation.pkg import sub\n", "foundation/pkg/sub.py": "Z = 1\n"},
+            1,
+            id="a-docstring-only-package-init-is-not-judged",
+        ),
+    ],
+)
+def test_the_single_side_check_judges_each_planted_module(
+    tmp_path: Path, files: Mapping[str, str], expected: int
+) -> None:
+    root = _plant_kernel(tmp_path, files)
+    assert len(_single_side_kernel_modules(root, {})) == expected, _single_side_kernel_modules(root, {})
+
+
+def test_the_single_side_check_fails_a_stale_allowlist_entry(tmp_path: Path) -> None:
+    shared = {"hub/a.py": _SHARED, "runner/b.py": _SHARED, "foundation/shared.py": "X = 1\n"}
+    root = _plant_kernel(tmp_path, shared)
+    assert _single_side_kernel_modules(root, {"blizzard.foundation.shared": "no longer one-sided"}) == [
+        "blizzard.foundation.shared is on the allowlist but is shared — drop the entry"
+    ]
+    assert _single_side_kernel_modules(root, {"blizzard.foundation.gone": "deleted"}) == [
+        "blizzard.foundation.gone is on the allowlist but is no judged kernel module"
+    ]
+
+
+def test_the_single_side_check_admits_an_allowlisted_one_sided_module(tmp_path: Path) -> None:
+    root = _plant_kernel(tmp_path, {"hub/a.py": _SHARED, "foundation/shared.py": "X = 1\n"})
+    assert _single_side_kernel_modules(root, {"blizzard.foundation.shared": "kept low on purpose"}) == []
 
 
 def test_hub_does_not_import_runner() -> None:
@@ -1045,14 +1259,14 @@ def _write_session_store_accesses(root: Path, *, exempt: frozenset[Path]) -> lis
 
 
 def test_iwritesessionstore_is_named_only_inside_sessions_or_the_composition_root() -> None:
-    """Only `foundation/operator_sessions/` (the Protocol's own package) may name `IWriteSessionStore` — every
-    CLI module, the hub's login/logout included, takes the `SessionService` application service instead, never
-    the raw write seam (``bzh:controller-read-only``)."""
+    """Only `foundation/operator_sessions/` (the Protocol's own package) and the hub's `SessionService` module may
+    name `IWriteSessionStore` — every CLI module, the hub's login/logout included, takes the `SessionService`
+    application service instead, never the raw write seam (``bzh:controller-read-only``)."""
     sessions_dir = _FOUNDATION_DIR / "operator_sessions"
-    exempt = _COMPOSITION_ROOTS | set(sessions_dir.rglob("*.py"))
+    exempt = _COMPOSITION_ROOTS | set(sessions_dir.rglob("*.py")) | {_HUB_DIR / "cli" / "session_service.py"}
     violations = _write_session_store_accesses(_SRC_DIR, exempt=exempt)
     assert not violations, (
-        f"D4 — IWriteSessionStore must be named only inside foundation/operator_sessions/: {violations}"
+        f"D4 — IWriteSessionStore must be named only inside foundation/operator_sessions/ and hub/cli/session_service.py: {violations}"
     )
 
 
@@ -1737,7 +1951,7 @@ _DOMAIN_PACKAGE_LAYERS: dict[str, frozenset[str]] = {
     "work_items": frozenset({"operations", "chunk", "graph", "projects"}),
     "garden": frozenset({"work_items", "chunk", "graph", "config", "projects"}),
     "observability": frozenset({"chunk", "graph", "runners"}),
-    "tenancy": frozenset({"graph", "config", "projects"}),
+    "tenancy": frozenset({"graph", "config", "projects", "observability"}),
 }
 _DOMAIN_SHARED_KERNEL = "kernel"
 
@@ -2164,6 +2378,7 @@ _RUNNER_PACKAGE_LAYERS: dict[str, frozenset[str]] = {
     "config_table": frozenset(),
     "node_steps": frozenset(),
     "process": frozenset(),
+    "route_paths": frozenset(),
     "events": frozenset(),
     "environments": frozenset(),
     "harness": frozenset({"config_table", "environments", "node_steps", "process"}),
@@ -2191,7 +2406,7 @@ _RUNNER_PACKAGE_LAYERS: dict[str, frozenset[str]] = {
         }
     ),
     "operator": frozenset({"leases", "lifecycle"}),
-    "tracing": frozenset({"harness", "hub", "leases", "transcripts"}),
+    "tracing": frozenset({"harness", "hub", "leases", "route_paths", "transcripts"}),
     "selftest": frozenset({"environments", "harness", "lifecycle", "node_steps", "process"}),
     "status": frozenset({"environments", "harness", "hub", "leases", "lifecycle", "throttle"}),
     "harness/claude_code": frozenset({"config_table", "harness", "node_steps", "process", "subscriptions"}),
@@ -2243,6 +2458,7 @@ _RUNNER_EDGE_MODULES = frozenset(
         "ingest",
         "listeners",
         "loop_wiring",
+        "public_origins",
         "runtime",
     }
 )
@@ -2794,7 +3010,11 @@ def test_only_the_trace_bindings_import_opentelemetry() -> None:
     platform tracing, which hands one per-process provider to each instrumentation explicitly."""
     homes = tuple(
         str(path.relative_to(_REPO_ROOT))
-        for path in (_FOUNDATION_DIR / "trace_export" / "internal", _FOUNDATION_DIR / "platform_tracing")
+        for path in (
+            _FOUNDATION_DIR / "trace_export" / "internal",
+            _FOUNDATION_DIR / "platform_tracing",
+            _RUNNER_DIR / "tracing" / "internal",
+        )
     )
     violations = [v for v in _violations(_SRC_DIR, ("opentelemetry",)) if not v.startswith(homes)]
     assert not violations, violations

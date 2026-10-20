@@ -22,9 +22,10 @@ from typing import Protocol
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.crash import crashpoint
-from blizzard.foundation.event_log import HubEventKind
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import domain_model
+from blizzard.foundation.tenants import TenantDeletionState
+from blizzard.hub.domain.observability.hub_events import HubEventKind
 from blizzard.hub.tenancy import TenantId
 
 #: The most rows one drain transaction removes.
@@ -127,17 +128,12 @@ class IRecordHubEvents(Protocol):
         ...
 
 
-class DeletionState(StrEnum):
-    DELETED = "deleted"
-    DELETING = "deleting"
-
-
 @domain_model
 @dataclass(frozen=True)
 class DeletionProgress:
     """Where a delete left a tenant: deleted, with every row it removed, or still deleting."""
 
-    state: DeletionState
+    state: TenantDeletionState
     rows_removed: int | None
 
 
@@ -167,7 +163,7 @@ class TenantTeardown:
         untouched; one already completed raises :class:`TenantAlreadyDeleted`."""
         outcome = self.close(tenant, by=by)
         if outcome is CloseOutcome.UNDERWAY:
-            return DeletionProgress(DeletionState.DELETING, None)
+            return DeletionProgress(TenantDeletionState.DELETING, None)
         if outcome is CloseOutcome.DELETED:
             deletion = self._teardowns.deletion(tenant)
             assert deletion is not None
@@ -221,13 +217,13 @@ class TenantTeardown:
         """One drain pass over a closed ``tenant`` under ``budget`` rows, completing it when the pass finishes."""
         _, drained = self.drain(tenant, budget=budget)
         if not drained:
-            return DeletionProgress(DeletionState.DELETING, None)
+            return DeletionProgress(TenantDeletionState.DELETING, None)
         _CP_AFTER_DRAIN.reached()
         rows_removed = self.complete(tenant)
         if rows_removed is None:
             deletion = self._teardowns.deletion(tenant)
             rows_removed = deletion.rows_removed if deletion is not None else None
-        return DeletionProgress(DeletionState.DELETED, rows_removed)
+        return DeletionProgress(TenantDeletionState.DELETED, rows_removed)
 
 
 class TenantTeardownSweep:
@@ -252,7 +248,6 @@ __all__ = [
     "DRAIN_PASS_ROWS",
     "CloseOutcome",
     "DeletionProgress",
-    "DeletionState",
     "IReadTenantTeardowns",
     "IRecordHubEvents",
     "IWriteTenantTeardowns",

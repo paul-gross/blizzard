@@ -6,7 +6,7 @@ from typing import Any
 
 import click
 
-from blizzard.auth_core import MEMBERSHIP_ROLES
+from blizzard.hub.auth.memberships import MEMBERSHIP_ROLES
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
 from blizzard.hub.cli.views import Listing

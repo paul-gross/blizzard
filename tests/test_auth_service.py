@@ -14,14 +14,14 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from blizzard.auth_core import MEMBERSHIP_ROLES, Role, permissions_for
+from blizzard.auth_core import Role
 from blizzard.foundation.clock import FixedClock
 from blizzard.hub.auth.facts import AuthFactsService
 from blizzard.hub.auth.hashing import SessionId
 from blizzard.hub.auth.hub_admins import HubAdminFact
 from blizzard.hub.auth.identity_transaction import IdentityWrites
 from blizzard.hub.auth.invitations import IWriteInvitationRepository
-from blizzard.hub.auth.memberships import Membership, MembershipFact
+from blizzard.hub.auth.memberships import MEMBERSHIP_ROLES, Membership, MembershipFact
 from blizzard.hub.auth.models import (
     AuthFact,
     AuthStateEntry,
@@ -31,6 +31,7 @@ from blizzard.hub.auth.models import (
     SuperuserBootstrap,
     User,
 )
+from blizzard.hub.auth.permissions import permissions_for
 from blizzard.hub.auth.service import PROVIDER_LOGIN_STATE_KIND, AuthService
 from blizzard.hub.store.scoped import ScopedConnections
 from blizzard.hub.tenancy import StoreScope, TenantId

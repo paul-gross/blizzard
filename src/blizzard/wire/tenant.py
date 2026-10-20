@@ -3,15 +3,23 @@ administrator calls."""
 
 from __future__ import annotations
 
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any
 
 from pydantic import BaseModel, StringConstraints
 
+from blizzard.foundation.tenants import (
+    TENANT_NAME_MAX_LENGTH,
+    TENANT_NAME_PATTERN,
+    TenantDeletionState,
+    TenantState,
+)
 from blizzard.wire.graph import GraphSyncEntry
 
 #: A tenant's name: 1 to 64 characters, no leading or trailing whitespace; inner whitespace, line breaks included, is
-#: kept. The pattern stays ECMAScript-compatible, since the OpenAPI carries it.
-TenantName = Annotated[str, StringConstraints(min_length=1, max_length=64, pattern=r"^\S(?:[\s\S]*\S)?$")]
+#: kept.
+TenantName = Annotated[
+    str, StringConstraints(min_length=1, max_length=TENANT_NAME_MAX_LENGTH, pattern=TENANT_NAME_PATTERN)
+]
 
 
 class TenantCreateRequest(BaseModel):
@@ -36,7 +44,7 @@ class TenantView(BaseModel):
     name: str
     created_at: str
     created_by: str
-    state: Literal["open", "deleting"]
+    state: TenantState
     closed_at: str | None = None
 
 
@@ -45,7 +53,7 @@ class TenantDeletionResponse(BaseModel):
     ``deleting`` while the ``tenant_teardown`` sweep carries it on (``202``)."""
 
     tenant_id: str
-    state: Literal["deleted", "deleting"]
+    state: TenantDeletionState
     rows_removed: int | None = None
 
 

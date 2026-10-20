@@ -36,7 +36,7 @@ from sqlalchemy import insert as sa_insert
 from sqlalchemy.sql.base import Executable
 
 from blizzard import __version__
-from blizzard.auth_core import MEMBERSHIP_ROLES, Role
+from blizzard.auth_core import Role
 from blizzard.foundation.clock import FixedClock, IClock
 from blizzard.foundation.flags import Flags
 from blizzard.foundation.forwarded import TrustedProxies
@@ -54,6 +54,7 @@ from blizzard.foundation.trace_spans import FinishedSpan
 from blizzard.hub.api.auth_session import TENANT_HEADER
 from blizzard.hub.app import create_app
 from blizzard.hub.auth.invitations import InvitationToken
+from blizzard.hub.auth.memberships import MEMBERSHIP_ROLES
 from blizzard.hub.auth.models import User
 from blizzard.hub.auth.oauth.provider import IOAuthProvider
 from blizzard.hub.auth.oauth.registry import OAuthProviderRegistry

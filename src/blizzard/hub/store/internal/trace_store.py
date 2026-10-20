@@ -14,10 +14,9 @@ from datetime import datetime
 
 from sqlalchemy import insert, select
 
-from blizzard.foundation.event_log import HubEventKind
 from blizzard.hub.domain.chunk.model import WorkRef, WorkRefLabel
 from blizzard.hub.domain.graph.model import Graph
-from blizzard.hub.domain.observability.hub_events import IReadHubEventLog
+from blizzard.hub.domain.observability.hub_events import HubEventKind, IReadHubEventLog
 from blizzard.hub.domain.observability.tracing.cursor import CursorKey
 from blizzard.hub.domain.observability.tracing.facts import StepFacts
 from blizzard.hub.domain.observability.tracing.repository import (

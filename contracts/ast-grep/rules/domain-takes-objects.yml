@@ -21,6 +21,7 @@ files:
   - src/blizzard/runner/node_steps/**
   - src/blizzard/runner/operator/**
   - src/blizzard/runner/process/**
+  - src/blizzard/runner/route_paths.py
   - src/blizzard/runner/selftest/**
   - src/blizzard/runner/status/**
   - src/blizzard/runner/stores.py

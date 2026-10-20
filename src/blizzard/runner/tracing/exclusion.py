@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from blizzard.foundation.runner_paths import OTLP_PATHS, within_runner
+from blizzard.runner.route_paths import OTLP_PATHS, within_runner
 
 _HEARTBEAT = ("POST", "/api/heartbeat")
 _OTLP_SUFFIXES = tuple(OTLP_PATHS)

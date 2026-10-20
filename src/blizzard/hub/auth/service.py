@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import StrEnum
 
-from blizzard.auth_core import Role, permissions_for
+from blizzard.auth_core import Role
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.invitations import InvitationState
@@ -50,6 +50,7 @@ from blizzard.hub.auth.models import (
     SuperuserBootstrap,
     User,
 )
+from blizzard.hub.auth.permissions import permissions_for
 from blizzard.hub.auth.pkce import Pkce
 from blizzard.hub.auth.sessions import IWriteSessionRepository
 from blizzard.hub.auth.superuser_bootstrap import IWriteSuperuserBootstrapRepository

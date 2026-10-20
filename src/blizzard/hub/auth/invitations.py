@@ -15,13 +15,13 @@ from datetime import datetime, timedelta
 from enum import StrEnum
 from typing import ClassVar, Protocol
 
-from blizzard.auth_core import MEMBERSHIP_ROLES, Role
+from blizzard.auth_core import Role
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.hashing import Sha256Hex
 from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.invitations import MAX_LIFETIME_DAYS, MIN_LIFETIME_DAYS, InvitationState
 from blizzard.foundation.roles import domain_model
-from blizzard.hub.auth.memberships import MembershipRoleRefused
+from blizzard.hub.auth.memberships import MEMBERSHIP_ROLES, MembershipRoleRefused
 from blizzard.hub.auth.models import ProviderIdentity
 from blizzard.hub.tenancy import TenantId
 

@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import pytest
 
-from blizzard.foundation.operator_sessions.service import SessionService
+from blizzard.hub.cli.session_service import SessionService
 
 pytestmark = pytest.mark.unit
 

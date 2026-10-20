@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from blizzard.foundation.public_origins import PublicOrigins
+from blizzard.runner.public_origins import PublicOrigins
 
 pytestmark = pytest.mark.unit
 

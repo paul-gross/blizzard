@@ -10,13 +10,14 @@ from fastapi import APIRouter, Depends, HTTPException, Response, status
 
 from blizzard.auth_core import Permission
 from blizzard.foundation.store.utc import iso_utc
+from blizzard.foundation.tenants import TenantDeletionState
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require_hub
 from blizzard.hub.api.door import RequestDoor
 from blizzard.hub.api.hub_level import Hub
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.domain.tenancy.administration import Tenant, TenantAdminUnknown, TenantNameRefused
-from blizzard.hub.domain.tenancy.teardown import DeletionState, LastTenant, TenantAlreadyDeleted
+from blizzard.hub.domain.tenancy.teardown import LastTenant, TenantAlreadyDeleted
 from blizzard.hub.graph_sync import GraphReconciliation, GraphSyncStatus, reconcile_open_tenants
 from blizzard.hub.tenancy import StoreScope, TenantId, UnknownTenant
 from blizzard.wire.graph import GraphSyncEntry
@@ -40,7 +41,7 @@ def _view(tenant: Tenant) -> TenantView:
         name=tenant.name,
         created_at=iso_utc(tenant.created_at),
         created_by=tenant.created_by,
-        state=tenant.state.value,
+        state=tenant.state,
         closed_at=iso_utc(tenant.closed_at) if tenant.closed_at is not None else None,
     )
 
@@ -107,9 +108,9 @@ def delete_tenant(tenant_id: str, actor: TenantAdmin, services: Hub, response: R
         ) from exc
     except TenantAlreadyDeleted as exc:
         raise HTTPException(status.HTTP_410_GONE, detail="tenant deleted") from exc
-    if progress.state is DeletionState.DELETING:
+    if progress.state is TenantDeletionState.DELETING:
         response.status_code = status.HTTP_202_ACCEPTED
-    return TenantDeletionResponse(tenant_id=tenant, state=progress.state.value, rows_removed=progress.rows_removed)
+    return TenantDeletionResponse(tenant_id=tenant, state=progress.state, rows_removed=progress.rows_removed)
 
 
 @router.post(

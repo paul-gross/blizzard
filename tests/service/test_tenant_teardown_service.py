@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from blizzard.hub.domain.tenancy.teardown import DeletionState
+from blizzard.foundation.tenants import TenantDeletionState
 from tests.service.support import service_gate
 from tests.support import build_hub, default_tenant, ingest
 
@@ -36,6 +36,6 @@ def test_a_service_sized_tenant_tears_down_well_under_a_second(tmp_path: Path) -
     elapsed = time.perf_counter() - started
 
     print(f"\ntenant teardown: {progress.rows_removed} rows in {elapsed * 1000:.1f} ms")
-    assert progress.state is DeletionState.DELETED
+    assert progress.state is TenantDeletionState.DELETED
     assert progress.rows_removed is not None and progress.rows_removed > _CHUNKS
     assert elapsed < _LOOSE_BOUND_SECONDS

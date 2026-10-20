@@ -53,9 +53,9 @@ def build_received_telemetry_export(
     counts as that signal's destination — tests pass in-memory ones."""
     if not (config.harness_telemetry and platform_tracing_enabled(config, environ)):
         return DisabledReceivedTelemetryExport()
-    from blizzard.foundation.platform_tracing.received_pipeline import build_enabled_received_export
+    from blizzard.runner.tracing.internal.received_pipeline import EnabledReceivedTelemetryExport
 
-    return build_enabled_received_export(
+    return EnabledReceivedTelemetryExport.build(
         resource=resource,
         metric_exporter=metric_exporter,
         log_exporter=log_exporter,

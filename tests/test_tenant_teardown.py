@@ -15,13 +15,13 @@ from fastapi.testclient import TestClient
 
 from blizzard.auth_core import Role
 from blizzard.foundation.store.utc import as_utc
+from blizzard.foundation.tenants import TenantDeletionState
 from blizzard.hub.api.auth_session import TenantRequest, resolve_tenant
 from blizzard.hub.api.hub_level import Hub
 from blizzard.hub.config import AUTH_MODE_OAUTH
 from blizzard.hub.domain.tenancy import teardown
 from blizzard.hub.domain.tenancy.teardown import (
     CloseOutcome,
-    DeletionState,
     LastTenant,
     TenantAlreadyDeleted,
     TenantTeardown,
@@ -201,7 +201,7 @@ def test_a_runner_write_whose_tenant_closes_mid_request_answers_401_and_writes_n
     assert _rows_of(hub, tenant) == rows["closed"]
 
 
-def _deleting_after_resolution(hub: HubHarness, tenant: TenantId, states: list[DeletionState]) -> None:
+def _deleting_after_resolution(hub: HubHarness, tenant: TenantId, states: list[TenantDeletionState]) -> None:
     """Make each request delete ``tenant`` outright right after resolving it, before its route writes — the window a
     deletion completing mid-request lands in — keeping each deletion's state in ``states``."""
     assert hub.app is not None
@@ -227,14 +227,14 @@ def test_a_hub_administrators_grant_whose_tenant_is_deleted_mid_request_answers_
     tenant = _created(hub)
     nobody = seed_user(hub, username="nobody", role=Role.PENDING)
     headers = _hub_administrator(hub, tenant)
-    states: list[DeletionState] = []
+    states: list[TenantDeletionState] = []
     _deleting_after_resolution(hub, tenant, states)
     assert hub.app is not None
 
     response = TestClient(hub.app).put(f"/api/members/{nobody.user_id}", json={"role": "admin"}, headers=headers)
 
     assert (response.status_code, response.json()) == (404, {"detail": "no such tenant"})
-    assert states == [DeletionState.DELETED]
+    assert states == [TenantDeletionState.DELETED]
     assert _rows_of(hub, tenant) == {}
 
 
@@ -321,7 +321,7 @@ def test_a_delete_removes_every_row_of_the_tenant_and_nothing_of_another(hub: Hu
 
     progress = hub.hub_services.tenant_teardown.delete(tenant, by="usr_closer")
 
-    assert progress.state is DeletionState.DELETED
+    assert progress.state is TenantDeletionState.DELETED
     assert progress.rows_removed == sum(before.values())
     assert _rows_of(hub, tenant) == {}
     assert _rows_of(hub, other) == others_before
@@ -405,7 +405,7 @@ def test_a_budget_cut_short_leaves_the_deletion_underway_for_the_sweep_to_finish
 
     progress = torn.delete(tenant, by="usr_closer", budget=3)
 
-    assert (progress.state, progress.rows_removed) == (DeletionState.DELETING, None)
+    assert (progress.state, progress.rows_removed) == (TenantDeletionState.DELETING, None)
     assert sum(_rows_of(hub, tenant).values()) == total - 3
     assert store.underway() == [tenant]
     sweep = TenantTeardownSweep(teardown=torn, teardowns=store, budget=4)
@@ -436,12 +436,12 @@ def test_a_repeated_delete_changes_nothing_while_underway_and_is_gone_after(
     tenant = _created(hub)
     torn = hub.hub_services.tenant_teardown
     monkeypatch.setattr(teardown, "DRAIN_PASS_ROWS", 1)
-    assert torn.delete(tenant, by="usr_closer").state is DeletionState.DELETING
+    assert torn.delete(tenant, by="usr_closer").state is TenantDeletionState.DELETING
     rows = _rows_of(hub, tenant)
 
     again = torn.delete(tenant, by="usr_other")
 
-    assert (again.state, again.rows_removed) == (DeletionState.DELETING, None)
+    assert (again.state, again.rows_removed) == (TenantDeletionState.DELETING, None)
     assert _rows_of(hub, tenant) == rows
     monkeypatch.undo()
     hub.hub_services.tenant_teardown_sweep.sweep()

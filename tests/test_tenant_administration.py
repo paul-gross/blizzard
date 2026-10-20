@@ -16,6 +16,7 @@ import structlog
 from blizzard.auth_core import Permission, Role
 from blizzard.foundation.project_colors import ProjectColor
 from blizzard.foundation.store.utc import as_utc
+from blizzard.foundation.tenants import TenantState
 from blizzard.hub.auth.errors import RepoErrorFactory
 from blizzard.hub.auth.internal.identity_transaction import IdentityTransactions
 from blizzard.hub.documents import YAML_CODEC
@@ -27,7 +28,6 @@ from blizzard.hub.domain.tenancy.administration import (
     TenantAdministration,
     TenantAdminUnknown,
     TenantNameRefused,
-    TenantState,
 )
 from blizzard.hub.graph_sync import packaged_minter
 from blizzard.hub.graphs import PACKAGED, GraphFile

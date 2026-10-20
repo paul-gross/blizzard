@@ -28,7 +28,6 @@ from blizzard.foundation.flags import (
     resolve_for_keys,
 )
 from blizzard.foundation.forwarded import TrustedProxies
-from blizzard.foundation.public_origins import PublicOrigins
 from blizzard.foundation.roles import collaborator, domain_model
 from blizzard.foundation.runner_token_names import hub_token_variable
 from blizzard.foundation.trace_export.config import TracingConfig
@@ -88,6 +87,7 @@ from blizzard.runner.host_layout import (
     migrate_remedy,
 )
 from blizzard.runner.hub.token_file import ENV_FILENAME, assigned_token
+from blizzard.runner.public_origins import PublicOrigins
 from blizzard.runner.subscriptions.subscription_sampler import PROVIDER_ANTHROPIC
 from blizzard.runner.transcripts.caps import CHUNK_TRANSCRIPT_MAX_BYTES, TRANSCRIPT_RECORD_MAX_BYTES
 

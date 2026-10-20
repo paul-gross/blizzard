@@ -14,9 +14,7 @@ from pathlib import Path
 
 from blizzard.foundation.config_keys import ConfigView
 from blizzard.foundation.flags import FlagResolution, HeldKey
-from blizzard.foundation.public_origins import PublicOrigins
 from blizzard.foundation.roles import domain_model
-from blizzard.foundation.runner_paths import runner_prefix
 from blizzard.foundation.runner_token_names import hub_token_variable
 from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.foundation.trace_export.settings import TracingSettings
@@ -32,6 +30,8 @@ from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.wiring import HarnessSections, HarnessSettings
 from blizzard.runner.harness.workspace_prompts import PACKAGED, UnknownWorkspacePromptSample
 from blizzard.runner.host_layout import HostLayout
+from blizzard.runner.public_origins import PublicOrigins
+from blizzard.runner.route_paths import runner_prefix
 
 #: Winter's own exporter variables; only the runner sets them, and only under `worker_programs`.
 _WINTER_OTEL_PREFIX = "WINTER_OTEL_"

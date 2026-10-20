@@ -8,14 +8,9 @@ from typing import cast, get_args
 
 import pytest
 
-from blizzard.foundation.event_log import (
-    EVENT_LOG_SEVERITY,
-    HUB_EVENT_SEVERITY,
-    EventLogKind,
-    EventLogSeverity,
-    HubEventKind,
-)
+from blizzard.foundation.event_log import EVENT_LOG_SEVERITY, EventLogKind, EventLogSeverity
 from blizzard.hub.domain.chunk.model import PROJECTED_EVENT_KINDS
+from blizzard.hub.domain.observability.hub_events import HUB_EVENT_SEVERITY, HubEventKind
 from tests.event_log_kind_census import EVENT_LOG_KIND_CENSUS as CENSUS
 from tests.event_log_kind_census import HUB_EVENT_KIND_CENSUS as HUB_CENSUS
 from tests.event_log_kind_census import HubOnly, Projected, Recorded

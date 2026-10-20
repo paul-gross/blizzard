@@ -132,7 +132,7 @@ class SuperuserBootstrap:
 class ResolvedIdentity:
     """The request principal a human-plane edge resolves to — ``src/blizzard/hub/api/auth_session.py``'s
     ``resolve_identity``/``require()`` return this, never a bare ``User``. It carries the
-    expanded permission set (computed once, by :func:`blizzard.auth_core.permissions_for`) and
+    expanded permission set (computed once, by :func:`blizzard.hub.auth.permissions.permissions_for`) and
     ``display_name`` so no call site re-expands the role or re-reads the user row. ``role`` is the
     membership's role in ``tenant`` (``None`` without one); ``tenant`` is ``None`` only on hub-level
     routes."""
