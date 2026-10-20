@@ -1,5 +1,5 @@
 {
-  "head_revision": "20261018_1200_project_color",
+  "head_revision": "20261019_0900_runner_version",
   "store": "hub",
   "tables": {
     "answer_deliveries": {
@@ -6704,6 +6704,12 @@
           "server_default": false,
           "type": "DateTime"
         },
+        "reported_version": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "Text"
+        },
         "runner_id": {
           "deprecated": null,
           "nullable": false,
@@ -6733,6 +6739,18 @@
           "nullable": true,
           "server_default": false,
           "type": "Text"
+        },
+        "version_judged_at": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "DateTime"
+        },
+        "version_refusal": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "String"
         },
         "workspace_id": {
           "deprecated": null,
