@@ -67,13 +67,13 @@ stricter due-flag policy when checking a release cut or tag.
 
 [`.github/workflows/upper-tiers.yml`](../.github/workflows/upper-tiers.yml) is reusable (`workflow_call`) and runs the
 service tier (`blizzard:service-test`) and the kill-9 crash sweep's bounded CI profile (`blizzard:crash-sweep`) over a
-two-repo checkout of `blizzard` + `blizzard-mock`; `pr.yml` and `push.yml` both call it. A leading `mock-ref` job resolves the mock once, and every tier checks out that
-commit. The resolution — which mock tag or branch a tag run, a release-line pull request, and a `master` run each prove
-against, and when it fails — is owned by
+two-repo checkout of `blizzard` + `blizzard-mock`; `pr.yml` and `push.yml` both call it. A leading `mock-ref` job
+resolves the mock once, and every tier checks out that commit. The resolution — which mock tag or branch a tag run, a
+release-line pull request, and a `master` run each prove against, and when it fails — is owned by
 [`.github/actions/resolve-mock-ref/`](../.github/actions/resolve-mock-ref/action.yml) and its script, which
-`release.yml`'s tier jobs call too. The tiers are winter-free: their
-runners use the built-in `basic` provider over a fixture of bare `file://` origins, minted with no winter source. Every
-checkout in a job that runs tests sets `persist-credentials: false`; `tests/test_winter_free_ci.py` pins both.
+`release.yml`'s tier jobs call too. The tiers are winter-free: their runners use the built-in `basic` provider over a
+fixture of bare `file://` origins, minted with no winter source. Every checkout in a job that runs tests sets
+`persist-credentials: false`; `tests/test_winter_free_ci.py` pins both.
 
 Store-migration tests live beside their revisions, in `src/blizzard/{hub,runner}/store/migrations/tests/`. Those whose
 revision is more than 30 days old report as skips in `uv run pytest -n auto`; set
