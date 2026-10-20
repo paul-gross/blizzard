@@ -268,6 +268,9 @@ class TakeoverCommand:
 
     @property
     def wrapped(self) -> str:
+        return self._compose()
+
+    def _compose(self) -> str:
         command = f"blizzard runner takeover {shlex.quote(self.chunk_id)} --dir {shlex.quote(self.runner_dir)}"
         return f"{command} --runner {shlex.quote(self.runner)}" if self.runner else command
 
