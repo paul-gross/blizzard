@@ -230,6 +230,7 @@ class Attempt:
             effort=lease.resolved_effort,
             workspace_root=self.ctx.workspaces.spawn_root(bindings[0].workspace_id if bindings else None),
             runner_dir=self.ctx.config.runner_dir,
+            runner=self.ctx.config.runner_name,
         )
         takeover = commands.resume
         wrapped = commands.wrapped or ""

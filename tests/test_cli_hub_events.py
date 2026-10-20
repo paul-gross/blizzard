@@ -175,3 +175,9 @@ def test_an_event_lacking_runner_chunk_or_node_omits_just_that_token(row: dict[s
     sparse = {k: v for k, v in _EVENT.items() if k not in ("runner_id", "chunk_id", "node_name")} | row
 
     assert FeedListing([sparse]).line(sparse) == line
+
+
+def test_an_escalation_row_keeps_its_detail_on_the_text_line() -> None:
+    row = _EVENT | {"detail": {"cause": "retries-exhausted", "detail": "build failed 3 times"}}
+
+    assert FeedListing([row]).line(row).endswith("retried (build failed 3 times)")

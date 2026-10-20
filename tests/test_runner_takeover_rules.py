@@ -255,3 +255,9 @@ def test_escalation_commands_carry_no_wrapped_form_without_a_runner_dir() -> Non
 
     assert commands.resume
     assert commands.wrapped is None
+
+
+def test_escalation_commands_name_the_runner_in_the_wrapped_form() -> None:
+    commands = _compose(runner="r-claude")
+
+    assert commands.wrapped == "blizzard runner takeover ch_1 --dir /runner --runner r-claude"

@@ -56,6 +56,21 @@ class ChunkDetail:
         if dependents:
             yield f"  dependents: {', '.join(_neighbor_label(n) for n in dependents)}"
         yield f"  cost: {Cost.of(body.get('cost')).rendered}"
+        escalation = body.get("escalation")
+        if escalation:
+            yield from _escalation_lines(escalation)
+
+
+def _escalation_lines(escalation: dict[str, Any]) -> Iterator[str]:
+    """The open escalation's block: why, then the one command to paste — the wrapped form when the
+    runner composed one, else the raw resume command (which an empty ``takeover_command`` omits)."""
+    yield f"  escalated: {escalation.get('cause') or 'unknown cause'}"
+    if escalation.get("detail"):
+        yield f"    detail: {escalation['detail']}"
+    if escalation.get("wrapped_takeover_command"):
+        yield f"    takeover: {escalation['wrapped_takeover_command']}"
+    elif escalation.get("takeover_command"):
+        yield f"    takeover: {escalation['takeover_command']}"
 
 
 def _neighbor_label(neighbor: dict[str, Any]) -> str:

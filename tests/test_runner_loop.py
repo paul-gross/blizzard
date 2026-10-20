@@ -3389,10 +3389,11 @@ def test_retries_exhausted_escalates_and_holds_envs(tmp_path, workspace_root, ex
     # The wrapped, supported entry point — composed under the same guard,
     # alongside the raw fallback above.
     wrapped = payload["wrapped_takeover_command"]
-    assert wrapped == f"blizzard runner takeover ch_1 --dir {shlex.quote(runner_dir)}"
+    assert wrapped == f"blizzard runner takeover ch_1 --dir {shlex.quote(runner_dir)} --runner r1"
     # shlex.quote round-trips: splitting the composed command back out yields the
     # original whitespace-bearing runner_dir verbatim, not a truncated/mangled token.
-    assert shlex.split(wrapped)[-1] == runner_dir
+    argv = shlex.split(wrapped)
+    assert argv[argv.index("--dir") + 1] == runner_dir
 
 
 @pytest.mark.unit
@@ -3702,7 +3703,7 @@ def test_cost_cap_parks_needs_human_at_next_step_boundary(tmp_path):  # type: ig
     assert payload["takeover_command"].startswith("cd /ws/e1 &&") and "--resume sess-a" in payload["takeover_command"]
     # The cap-park caller shares the same composition-root `ctx` as every other
     # `Attempt.escalate` call — with `runner_dir` configured, it composes a real wrapped command.
-    assert payload["wrapped_takeover_command"] == "blizzard runner takeover ch_1 --dir /tmp/runner-dir"
+    assert payload["wrapped_takeover_command"] == "blizzard runner takeover ch_1 --dir /tmp/runner-dir --runner r1"
     # Envs stay held for the takeover; nothing was released on a cap park.
     assert store.held_environment_ids() == ["e1"]
 

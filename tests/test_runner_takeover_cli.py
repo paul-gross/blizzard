@@ -25,7 +25,7 @@ from blizzard.runner.host_layout import HostLayout
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.lifecycle.takeover import TakeoverCommand
 from tests.runner_fakes import SqlAlchemyRunnerStore
-from tests.test_runner_status_cli import _init_runner, _registered_store, _serve_local_api
+from tests.test_runner_status_cli import _TWO_RUNNERS, _host_of, _init_runner, _registered_store, _serve_local_api
 
 _NOW = datetime(2026, 7, 17, 12, 0, 0, tzinfo=UTC)
 
@@ -272,6 +272,31 @@ def test_composed_wrapped_command_parses_through_the_real_takeover_grammar() -> 
         assert click_ctx.params["chunk_id"] == "ch_1"
         # The whitespace-bearing dir round-trips through quote -> shell-split -> parse.
         assert click_ctx.params["directory"] == "/var/lib/blizzard/runner dir"
+        assert click_ctx.params["runner"] is None
+
+
+@pytest.mark.unit
+def test_composed_wrapped_command_names_its_runner_through_the_real_takeover_grammar() -> None:
+    composed = TakeoverCommand("ch_1", "/var/lib/blizzard/runner dir", "r claude").wrapped
+
+    takeover_cmd = runner_group.get_command(click.Context(runner_group), "takeover")
+    assert takeover_cmd is not None
+    with takeover_cmd.make_context("takeover", shlex.split(composed)[3:]) as click_ctx:
+        assert click_ctx.params["runner"] == "r claude"
+
+
+@pytest.mark.component
+def test_pasting_the_composed_command_on_a_host_of_several_runners_reaches_the_named_one(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    paths: list[str] = []
+    _host_of(_TWO_RUNNERS, monkeypatch, paths)
+    argv = shlex.split(TakeoverCommand("ch_1", str(tmp_path), "beta").wrapped)[3:]
+
+    CliRunner().invoke(runner_group, ["takeover", *argv])
+
+    assert "holds several runners" not in paths and paths[0] == "/api/host/runners"
+    assert all(p.startswith("/runners/rn_b/") for p in paths[1:]) and len(paths) > 1
 
 
 def _open_stranded_takeover(store: SqlAlchemyRunnerStore) -> None:

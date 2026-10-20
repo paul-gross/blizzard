@@ -673,7 +673,10 @@ def test_an_escalation_carries_the_wrapped_takeover_command_when_the_runner_dir_
     with runner_client(app) as client:
         item = client.get("/api/escalations").json()["items"][0]
 
-    assert item["wrapped_takeover_command"] == "blizzard runner takeover ch_1 --dir '/opt/runner dir'"
+    assert (
+        item["wrapped_takeover_command"]
+        == "blizzard runner takeover ch_1 --dir '/opt/runner dir' --runner runner-local"
+    )
     assert item["resume_command"] == "cd /ws/e1 && claude --resume sess-a"
     assert "BLIZZARD_LEASE_TOKEN" not in str(item)
 
@@ -813,7 +816,10 @@ def test_an_escalation_composes_its_commands_only_under_a_registered_owner(tmp_p
     assert escalation.harness_id == harness_id
     if harness_id == CLAUDE_CODE_HARNESS_ID:
         assert escalation.resume_command == "cd /ws/e1 && claude --resume sess-a --model stamped-model --effort high"
-        assert escalation.wrapped_takeover_command == "blizzard runner takeover ch_1 --dir /tmp/runner-dir"
+        assert (
+            escalation.wrapped_takeover_command
+            == "blizzard runner takeover ch_1 --dir /tmp/runner-dir --runner runner-local"
+        )
     else:
         assert escalation.resume_command == ""
         assert escalation.wrapped_takeover_command is None
