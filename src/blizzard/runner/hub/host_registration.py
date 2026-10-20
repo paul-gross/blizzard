@@ -213,8 +213,7 @@ class HostRegistration:
             runner.identity_verdict.stand(standing, reason=reason)
 
     def _identity_for(self, answer: HostRecord, now: datetime) -> HostIdentity:
-        """The host's identity as ``answer`` names it, recorded from a first answer. Raises
-        :class:`HostIdentityAlreadyRecorded` when the host holds another."""
+        """The host's identity per ``answer``, from a first answer; raises :class:`HostIdentityAlreadyRecorded`."""
         held = self.identity.current()
         if held is None:
             offered = adopted(None, answer.host_id, answer.tenant_id, now)

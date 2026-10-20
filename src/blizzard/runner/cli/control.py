@@ -499,7 +499,6 @@ def renewal_text(sub: dict[str, object]) -> str | None:
 
 
 def _verdict(view: IdentityVerdictView) -> IdentityVerdict:
-    """The wire's identity verdict as the model renders it."""
     return IdentityVerdict(
         state=view.state,
         store_runner_id=view.store_runner_id,

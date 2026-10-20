@@ -102,7 +102,7 @@ def _serve_local_api(
             token_runner_id=refusing[1],
             checked_at=datetime(2026, 7, 16, 12, 0, tzinfo=UTC),
         )
-    if version_refused is not None:  # the window's refusal the registration step would hold
+    if version_refused is not None:
         runner_seams(app).identity_verdict.refuse_version(version_refused)
     if not trace_status:
         runner_seams(app).trace_status = None  # `GET /api/traces/status` then refuses with a 503

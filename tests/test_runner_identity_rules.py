@@ -1,7 +1,3 @@
-"""The runner's identity rules, by value: the token verdict, what a refusing verdict says and how it is restored, the
-host identity a hub answer adopts, when the host is answered as itself, whether a store is foreign, and how
-much of a tick a verdict lets run."""
-
 from __future__ import annotations
 
 from datetime import UTC, datetime

@@ -31,9 +31,8 @@ class HeldBindingCompletionContext(Protocol):
 
 @dataclass(frozen=True)
 class HeldBindingCompletion:
-    """A row takes the workspace whose provider lists its workdir, and its project from the chunk-status batch read;
-    one the hub cannot answer, or matching no workspace, keeps its gap and its lease until a later tick. Each
-    completion fills only an empty column in one transaction, so a crash re-runs it harmlessly."""
+    """A row takes the workspace listing its workdir and its chunk's project; one neither can answer keeps its gap
+    and lease until a later tick."""
 
     ctx: HeldBindingCompletionContext
 
@@ -54,7 +53,7 @@ class HeldBindingCompletion:
         ctx.stores.environments.complete_bindings(completions)
 
     def _project(self, chunk_id: str) -> str | None:
-        """The chunk's project from the tick's primed batch read; ``None`` when the hub cannot say yet."""
+        """The chunk's project from the primed read; ``None`` when the hub cannot say yet."""
         try:
             return self.ctx.chunk_views.get(chunk_id).project_id
         except HubClientError:  # covers ChunkNotFoundError: an unknown chunk names no project

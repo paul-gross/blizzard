@@ -151,8 +151,7 @@ class IdentityVerdict:
         return self.state in REFUSING_STATES
 
     def refusal(self) -> str | None:
-        """Why this verdict halts the runner, or ``None`` while it does not: for a token naming another runner,
-        both runner ids; otherwise the reason held with the refusal."""
+        """Why this verdict halts the runner, or ``None`` while it does not."""
         if not self.refusing():
             return None
         if self.state is IdentityState.MISMATCHED:
@@ -160,7 +159,7 @@ class IdentityVerdict:
         return self.reason or str(self.state)
 
     def remedy(self) -> str | None:
-        """What restores a refused or mismatched token — ``reset_command`` — or ``None`` for any other state."""
+        """``reset_command`` for a refused or mismatched token, else ``None``."""
         return self.reset_command if self.state in _RESET_STATES else None
 
 
@@ -182,9 +181,8 @@ class IIdentityOnContact(Protocol):
     """The identity verdict a hub contact outside the loop waits on."""
 
     def verdict_on_contact(self, reader: ITokenIdentityReader) -> IdentityVerdict:
-        """The verdict the contact waits on: the loop's once it has checked; before that, one judged from
-        ``reader``'s answer — refused for a token the hub refuses, unchecked for a hub with no identity read.
-        Whatever ``reader`` raises when the hub does not answer propagates."""
+        """The loop's verdict once it has checked; before that, one judged from ``reader``'s answer. Whatever
+        ``reader`` raises when the hub does not answer propagates."""
         ...
 
 

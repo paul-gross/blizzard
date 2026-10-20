@@ -472,8 +472,6 @@ def test_the_hub_proxy_forwards_nothing_while_the_hub_has_no_identity_read(tmp_p
 
 
 def test_the_hub_proxy_names_the_hubs_typed_refusal_of_the_token_and_forwards_nothing(tmp_path: Path) -> None:
-    """The proxy reads the token's identity through the runner's own reader, so the hub's typed 401 is the same
-    refusal the loop holds — and, like an unchecked match, the loop's verdict stays untouched."""
     forwarded: list[str] = []
     refused = httpx.Response(401, json={"reason": "revoked", "runner_id": "r1"})
     resp, verdict, _ = _proxied(tmp_path, forwarded, identity=refused)

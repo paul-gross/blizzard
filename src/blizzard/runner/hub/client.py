@@ -506,8 +506,7 @@ class TokenIdentity:
     fleet_flags: Mapping[str, bool] = field(default_factory=dict)
 
     def serves(self, tenant_id: str | None) -> bool:
-        """Whether this runner serves ``tenant_id`` — a runner serves the tenant it was added in for life. Naming no
-        tenant, or a hub that names none, settles none, so either serves."""
+        """Whether this runner serves ``tenant_id``; naming no tenant, or a hub that names none, settles none."""
         return tenant_id is None or self.tenant_id is None or self.tenant_id == tenant_id
 
 

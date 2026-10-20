@@ -560,8 +560,6 @@ class _Tokens:
 
 @dataclass
 class _SharedStore(_JoinLog):
-    """A store other runners hold too, so it refuses being set aside."""
-
     def set_aside(self) -> None:
         raise StoreShared(("r-two",))
 

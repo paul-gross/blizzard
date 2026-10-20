@@ -128,9 +128,8 @@ def log_transition(holder: IdentityVerdictHolder, was: IdentityState, *, token_f
 
 
 class ForeignStoreKind(StrEnum):
-    """How a store naming a runner none of ours is foreign. ``MIXED`` also names one of ours, so it is the wrong
-    file and a reset would drop the history of the runner it holds; ``ALIEN`` names only foreign runners, so the
-    id configured over it, or the token held for it, is the wrong one."""
+    """How a store naming a runner none of ours is foreign: ``MIXED`` also names one of ours (the wrong file),
+    ``ALIEN`` names only foreign runners (the wrong id or token)."""
 
     MIXED = "mixed"
     ALIEN = "alien"
@@ -139,8 +138,7 @@ class ForeignStoreKind(StrEnum):
 @domain_model
 @dataclass(frozen=True)
 class ForeignStore:
-    """A store that is not ours: how (``kind``), every runner its identity rows ``named``, and the ``foreign``
-    ones among them, in the store's order."""
+    """A store that is not ours: its ``kind``, every runner it ``named``, and the ``foreign`` ones among them."""
 
     kind: ForeignStoreKind
     named: tuple[str, ...]
@@ -148,9 +146,8 @@ class ForeignStore:
 
 
 def foreign_store(named: tuple[str, ...], ours: Collection[str]) -> ForeignStore | None:
-    """Whether a store whose identity rows name ``named`` holds a runner none of ``ours`` is, or ``None`` when it
-    names only ours or none has joined it yet. A runner started over a foreign store would orphan the other's leases
-    and backlog, so it is refused untouched."""
+    """The foreign store ``named`` is when it holds a runner none of ``ours``; ``None`` when it names only ours or
+    none. Started over, it would orphan the other's leases and backlog, so it is refused untouched."""
     foreign = tuple(runner for runner in named if runner not in ours)
     if not foreign:
         return None
@@ -159,8 +156,7 @@ def foreign_store(named: tuple[str, ...], ours: Collection[str]) -> ForeignStore
 
 
 def reset_hazard(reset: str, runner_id: str) -> str:
-    """What ``reset`` costs: it starts ``runner_id`` on a fresh store, dropping every fact below the hub's
-    high-water mark."""
+    """What ``reset`` costs ``runner_id``: a fresh store, dropping every fact below the hub's high-water mark."""
     return (
         f"`{reset}` sets the store aside and starts {runner_id} on a fresh one, dropping every fact below the hub's "
         "high-water mark, so use it only for a runner with no history"
@@ -170,11 +166,9 @@ def reset_hazard(reset: str, runner_id: str) -> str:
 def foreign_store_reason(
     named: tuple[str, ...], configured_id: str, reset: str, *, configured: tuple[str, ...] = ()
 ) -> str | None:
-    """Why a store whose identity rows name ``named`` is not ``configured_id``'s, or ``None`` when it names only
-    runners this host configures — ``configured_id`` and the other ``configured`` ids of its ``[[runner]]``
-    entries. A mixed store is the wrong file, so its remedy is to restore the right store, never ``reset``; an
-    alien one has a wrong configured id, so its remedy is to correct the id, ``reset`` named there with its
-    hazard."""
+    """Why a store naming ``named`` is not ``configured_id``'s, or ``None`` when it names only runners this host
+    configures (``configured_id`` and the other ``configured`` ids). A mixed store is restored, never ``reset``; an
+    alien one is fixed by correcting the id, ``reset`` named there with its hazard."""
     verdict = foreign_store(named, {configured_id, *configured})
     if verdict is None:
         return None

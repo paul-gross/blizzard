@@ -73,7 +73,6 @@ class FakeHubRunnerAdmin:
     host_tenants: dict[str, str] = field(default_factory=dict)
     held: dict[str, list[str]] = field(default_factory=dict)
     adopted: list[tuple[str, ...]] = field(default_factory=list)
-    #: The hosts the hub retired: their token is refused as a retired host's.
     retired_hosts: set[str] = field(default_factory=set)
 
     def add_runner(
