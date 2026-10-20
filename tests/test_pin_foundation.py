@@ -17,12 +17,11 @@ from sqlalchemy import insert, inspect, text, update
 
 import blizzard
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.hub.runtime import init_environment as init_hub
 from blizzard.hub.store import schema as hub
 from blizzard.hub.tenancy import HUB_SCOPED_OPTION, TenantId
-from blizzard.runner.runtime import init_environment as init_runner
 from blizzard.runner.store import schema as runner
 from blizzard.tools.invariants import HubInvariants, OneLiveExecSlot, RunnerInvariants, Violation
+from tests.config_inputs import init_host, init_hub
 from tests.runner_fakes import FIXTURE_RUNNER_ID
 from tests.support import add_tenant, default_tenant, hub_scoped, stamp
 
@@ -31,7 +30,7 @@ _NOW = datetime(2026, 7, 14, tzinfo=UTC)
 
 def _runner_engine(tmp_path: Path):  # type: ignore[no-untyped-def]
     """A head-migrated runner store whose identity names the fixture runner, as a registered runner's does."""
-    engine = create_engine_from_url(init_runner(tmp_path / "runner").db_url)
+    engine = create_engine_from_url(init_host(tmp_path / "runner").db_url)
     with engine.begin() as conn:
         conn.execute(
             insert(runner.runner_identity).values(runner_id=FIXTURE_RUNNER_ID, runner_name="r", registered_at=_NOW)

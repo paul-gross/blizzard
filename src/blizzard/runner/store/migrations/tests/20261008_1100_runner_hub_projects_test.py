@@ -10,6 +10,7 @@ import sqlalchemy as sa
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner import runtime as runner_runtime
 from blizzard.runner.hub.served_projects import ServedProject
+from tests.config_inputs import init_host
 from tests.migration_support_runner_store_migrations import (
     _LATER,
     _columns,
@@ -25,7 +26,7 @@ _TENANT_REVISION = "20261008_1000_runner_identity_tenant"
 def test_hub_projects_migration_adds_the_answer_and_its_marker_and_drops_both_losslessly(tmp_path: Path) -> None:
     """``20261008_1100_runner_hub_projects``: a carried identity row holds no answer until its next
     registration; down drops the table and the marker, and up again restores an empty, unanswered shape."""
-    config = runner_runtime.init_environment(tmp_path)
+    config = init_host(tmp_path)
     migration = runner_runtime.migration_runner(config)
     engine = create_engine_from_url(config.db_url)
     try:

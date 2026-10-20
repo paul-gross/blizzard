@@ -17,9 +17,9 @@ from fastapi import FastAPI
 from blizzard.foundation.tokens import TokenHash
 from blizzard.runner.api.analytics import _ANALYTICS_HUB_TIMEOUT
 from blizzard.runner.api.hub_proxy import _HUB_TIMEOUT
-from blizzard.runner.app import create_app
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.leases.model import NewLease
+from tests.config_inputs import create_runner_app
 from tests.runner_client import runner_client
 from tests.runner_fakes import make_host_stores, make_store, make_stores, no_retry_clock
 
@@ -85,7 +85,7 @@ def _app_with_store(tmp_path: Path, *, hub_url: str = _HUB_URL):  # type: ignore
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}", hub_url=hub_url)
     router = _HubRouter()
-    app = create_app(
+    app = create_runner_app(
         config,
         runner_stores=make_stores(store),
         host_stores=make_host_stores(store),
@@ -124,7 +124,7 @@ def _stub_hub(app: FastAPI, status_code: int, payload: object, seen: list[str] |
 @pytest.mark.parametrize("suffix", _ROUTES)
 def test_503_when_store_unwired(tmp_path: Path, suffix: str) -> None:
     config = RunnerConfig(root=tmp_path, db_url="sqlite://", hub_url=_HUB_URL)
-    with runner_client(create_app(config)) as client:
+    with runner_client(create_runner_app(config)) as client:
         resp = client.get(
             f"/api/leases/lease_1/analytics/{suffix}",
             params={"since": "2020-01-01T00:00:00Z"},

@@ -337,7 +337,7 @@ def create_app(
     token_identity: ITokenIdentityReader | None = None,
     hub_token: ICurrentHubToken | None = None,
     binding: IRunnerBinding | None = None,
-    flags: Flags | None = None,
+    flags: Flags,
 ) -> FastAPI:
     """Build the host's app from resolved config: its own routes at the root, and each of ``runners`` under its
     prefix, keyed by id; ``halted`` are the runners the host holds unbuilt.
@@ -349,8 +349,7 @@ def create_app(
     absent, leaving the stream silent. ``platform_tracing`` is off unless the composition root passes a handle.
     ``telemetry_receiver`` is the host's worker telemetry receiver; absent, the OTLP routes answer 503. ``identity`` is
     the process's holder; absent, the federation routes answer 503. ``host_stores`` are the host-scoped stores;
-    ``jti_cache`` defaults to theirs. ``flags`` is the host's resolved answer, defaulting to the packaged
-    registry's with no overrides."""
+    ``jti_cache`` defaults to theirs. ``flags`` is the host's resolved answer."""
     log = get_logger("blizzard.runner")
     clock = clock or SystemClock()
     process = process or LinuxProcessProbe()
@@ -400,7 +399,7 @@ def create_app(
         else DISABLED_TELEMETRY,
     )
     app.state.config = config
-    app.state.flags = flags or resolve_flags(FlagRegistry.load(), "runner", {}).flags
+    app.state.flags = flags
     app.state.runners = RunnerRegistry(tuple(runners), tuple(halted))
     app.state.workspaces = tuple(workspaces)
     app.state.subscriptions = tuple(subscriptions if subscriptions is not None else config.subscriptions)
@@ -832,6 +831,9 @@ def _served_workspace(workspace: HostWorkspace, registry: IWorkspaces | None) ->
     )
 
 
-def create_app_for_export() -> FastAPI:
-    """Build the app with throwaway config for OpenAPI export (no store, no dirs)."""
-    return create_app(RunnerConfig(root=Path("."), db_url="sqlite://"))
+def create_app_for_export(flag_registry: FlagRegistry) -> FastAPI:
+    """Build the app with throwaway config for OpenAPI export (no store, no dirs), its flags at ``flag_registry``'s
+    defaults."""
+    return create_app(
+        RunnerConfig(root=Path("."), db_url="sqlite://"), flags=resolve_flags(flag_registry, "runner", {}).flags
+    )

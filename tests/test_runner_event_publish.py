@@ -21,7 +21,6 @@ from blizzard.foundation.fact_kinds import (
     USAGE_RECORDED,
 )
 from blizzard.foundation.tokens import TokenHash
-from blizzard.runner.app import create_app
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.events.broker import EventBroker, RunnerEventPublisher
@@ -39,6 +38,7 @@ from blizzard.runner.loop.context import LoopConfig
 from blizzard.runner.loop.steps import Advance, ContextSample, Fill, Pull, SpendCeiling
 from blizzard.runner.node_steps.chunk_state import ChunkPause, ChunkState
 from blizzard.runner.status.view import RunnerStatusService
+from tests.config_inputs import create_runner_app
 from tests.runner_client import runner_client
 from tests.runner_fakes import (
     FIXTURE_RUNNER_ID,
@@ -281,7 +281,9 @@ def test_asks_api_route_publishes_ask_asked(tmp_path: Path) -> None:
     token = "the-lease-token"
     store.record_lease_token("lease_1", TokenHash(token).hex, _NOW)
     config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}")
-    app = create_app(config, runner_stores=make_stores(store), host_stores=make_host_stores(store), events=events)
+    app = create_runner_app(
+        config, runner_stores=make_stores(store), host_stores=make_host_stores(store), events=events
+    )
 
     with runner_client(app) as client:
         resp = client.post(
@@ -713,7 +715,7 @@ def test_patch_runner_route_publishes_fact_changed(tmp_path: Path) -> None:
         workspaces=single_workspace(FakeProvider({})),
         harnesses=HarnessRegistry({}),
     )
-    app = create_app(
+    app = create_runner_app(
         config,
         runner_stores=make_stores(store),
         host_stores=make_host_stores(store),

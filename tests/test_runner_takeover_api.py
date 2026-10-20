@@ -13,13 +13,13 @@ from pathlib import Path
 import pytest
 
 from blizzard.foundation.clock import FixedClock
-from blizzard.runner.app import create_app
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.lifecycle.takeover import TakeoverService
+from tests.config_inputs import create_runner_app
 from tests.runner_client import runner_client
 from tests.runner_fakes import (
     FakeHarness,
@@ -62,7 +62,7 @@ def _app_with_takeover(
         workspaces=single_workspace(FakeProvider({})),
         harnesses=resolved_harnesses,
     )
-    return create_app(
+    return create_runner_app(
         config, runner_stores=make_stores(store), host_stores=make_host_stores(store), takeover=service
     ), store
 
@@ -93,7 +93,7 @@ def _seed_lease(store, **overrides: object) -> None:  # type: ignore[no-untyped-
 @pytest.mark.component
 def test_503_when_takeover_service_unwired(tmp_path: Path) -> None:
     config = RunnerConfig(root=tmp_path, db_url="sqlite://")
-    with runner_client(create_app(config)) as client:
+    with runner_client(create_runner_app(config)) as client:
         assert client.post("/api/chunks/ch_1/takeovers", json={}).status_code == 503
         assert client.patch("/api/chunks/ch_1/takeovers/tko_1").status_code == 503
 

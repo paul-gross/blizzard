@@ -10,6 +10,7 @@ import sqlalchemy as sa
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner import runtime as runner_runtime
+from tests.config_inputs import init_host
 
 pytestmark = [pytest.mark.component]
 
@@ -23,13 +24,13 @@ def _table_names(db_url: str) -> set[str]:
 
 
 def test_selftest_result_table_exists_after_a_fresh_migration_to_head(tmp_path: Path) -> None:
-    config = runner_runtime.init_environment(tmp_path)  # upgrades an empty store to head
+    config = init_host(tmp_path)  # upgrades an empty store to head
     tables = _table_names(config.db_url)
     assert "selftest_results" in tables
 
 
 def test_selftest_result_table_survives_a_downgrade_upgrade_roundtrip(tmp_path: Path) -> None:
-    config = runner_runtime.init_environment(tmp_path)
+    config = init_host(tmp_path)
     runner = runner_runtime.migration_runner(config)
 
     runner.downgrade("20260919_1000_transcript_segment_provenance")

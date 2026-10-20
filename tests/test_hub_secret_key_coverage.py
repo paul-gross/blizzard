@@ -13,7 +13,6 @@ import pytest
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub import app as hub_app
-from blizzard.hub import runtime as hub_runtime
 from blizzard.hub.config import ConfigError, HubConfig
 from blizzard.hub.domain.config.secrets import SecretName
 from blizzard.hub.secrets import (
@@ -23,6 +22,7 @@ from blizzard.hub.secrets import (
     secret_keys_dir,
 )
 from blizzard.hub.store.internal.secret_store import SecretStore
+from tests.config_inputs import init_hub
 from tests.support import OP, config_authoring, hub_store_connections
 
 pytestmark = pytest.mark.component
@@ -53,7 +53,7 @@ def _build(config: HubConfig) -> None:
 
 
 def test_init_mints_the_first_key_generation(tmp_path: Path) -> None:
-    config = hub_runtime.init_environment(tmp_path / "hub")
+    config = init_hub(tmp_path / "hub")
 
     meta = secret_keys_dir(config.data_dir) / "meta.json"
     assert meta.is_file()
@@ -62,20 +62,20 @@ def test_init_mints_the_first_key_generation(tmp_path: Path) -> None:
 def test_init_mints_nothing_under_the_env_key(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv(ENV_SECRET_KEY, _ENV_KEY)
 
-    config = hub_runtime.init_environment(tmp_path / "hub")
+    config = init_hub(tmp_path / "hub")
 
     assert not secret_keys_dir(config.data_dir).exists()
 
 
 def test_the_hub_starts_when_every_row_is_covered(tmp_path: Path) -> None:
-    config = hub_runtime.init_environment(tmp_path / "hub")
+    config = init_hub(tmp_path / "hub")
     _seed_secret(config)
 
     _build(config)
 
 
 def test_the_hub_refuses_to_start_naming_a_missing_generation(tmp_path: Path) -> None:
-    config = hub_runtime.init_environment(tmp_path / "hub")
+    config = init_hub(tmp_path / "hub")
     key_id = _seed_secret(config)
     (secret_keys_dir(config.data_dir) / f"{key_id}.key").rename(tmp_path / "moved-away.key")
 
@@ -84,7 +84,7 @@ def test_the_hub_refuses_to_start_naming_a_missing_generation(tmp_path: Path) ->
 
 
 def test_a_retired_row_still_needs_its_generation(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    config = hub_runtime.init_environment(tmp_path / "hub")
+    config = init_hub(tmp_path / "hub")
     key_id = _seed_secret(config)
     engine = create_engine_from_url(config.db_url)
     try:

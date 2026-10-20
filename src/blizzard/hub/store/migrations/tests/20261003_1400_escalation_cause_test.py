@@ -9,6 +9,7 @@ import sqlalchemy as sa
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub import runtime as hub_runtime
+from tests.config_inputs import init_hub
 from tests.migration_support_store_migrations import (
     assert_frozen_table_lacks_a_later_revisions_columns,
 )
@@ -18,7 +19,7 @@ pytestmark = [pytest.mark.unit]
 
 def test_escalation_cause_columns_survive_migration_roundtrip(tmp_path: Path) -> None:
     """A pre-cause escalation row reads back with no cause or detail: no backfill."""
-    config = hub_runtime.init_environment(tmp_path)
+    config = init_hub(tmp_path)
     runner = hub_runtime.migration_runner(config)
 
     def _columns() -> set[str]:

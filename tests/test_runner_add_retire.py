@@ -14,12 +14,13 @@ from click.testing import Result
 from blizzard.cli.main import blizzard
 from blizzard.runner.cli.runtime import named_runners
 from blizzard.runner.composition import RunnerProcess
-from blizzard.runner.host_config import HOST_TOKEN_VARIABLE, BuiltRunner, HostConfig
+from blizzard.runner.host_config import HOST_TOKEN_VARIABLE, BuiltRunner
 from blizzard.runner.host_layout import HostLayout, HostLock
 from blizzard.runner.hub.client import HostRunnerRetireRefused
 from blizzard.runner.hub.internal.token_file import HubTokenFile
 from blizzard.runner.hub.token_file import ENV_FILENAME
 from blizzard.runner.loop_wiring import LoopWiring
+from tests.config_inputs import load_host_config
 from tests.runner_init_fakes import FakeInitHub, init_runner
 
 pytestmark = pytest.mark.component
@@ -61,7 +62,7 @@ def test_add_mints_the_runner_under_the_host_and_writes_its_token_directory_and_
     assert HubTokenFile.of(root, "BZ_HUB_TOKEN_R2").held() == "init-token-2"
     assert (root / "runners" / "r2").is_dir()
     assert _runner_names(root) == ["runner-local", "r2"]
-    host = HostConfig.load(root)
+    host = load_host_config(root)
     added = host.runners[1]
     assert (added.id, added.subscription) == ("rn_init2", host.runners[0].subscription)
     assert [(b.project, b.workspace, b.agents) for b in added.bindings] == [("default", "workspace-local", 1)]
@@ -92,7 +93,7 @@ def test_add_binds_each_project_to_its_own_workspace_and_agent_count(
 
     assert result.exit_code == 0, result.output
     assert fake_init_hub.admin.declared[-1] == ("p1", "p2")
-    bindings = HostConfig.load(root).runners[1].bindings
+    bindings = load_host_config(root).runners[1].bindings
     assert [(b.project, b.workspace, b.agents) for b in bindings] == [
         ("p1", "workspace-local", 2),
         ("p2", "workspace-local", 3),
@@ -205,12 +206,12 @@ def test_retire_forgets_the_runners_identity_so_init_runs_again_over_the_remaini
     assert _run(fake_init_hub, "add", "r2", "--project", "default", "--dir", str(root)).exit_code == 0
     rerun = _run(fake_init_hub, "init", str(root), "--hub", _HUB)
     assert rerun.exit_code == 0, rerun.output
-    assert set(named_runners(HostConfig.load(root))) == {"rn_init1", "rn_init2"}
+    assert set(named_runners(load_host_config(root))) == {"rn_init1", "rn_init2"}
 
     result = _run(fake_init_hub, "retire", "--runner", "r2", "--dir", str(root))
 
     assert result.exit_code == 0, result.output
-    assert named_runners(HostConfig.load(root)) == ("rn_init1",)
+    assert named_runners(load_host_config(root)) == ("rn_init1",)
     again = _run(fake_init_hub, "init", str(root), "--hub", _HUB)
     assert again.exit_code == 0, again.output
 
@@ -224,13 +225,13 @@ def test_a_readd_of_one_runner_beside_another_refuses_rather_than_set_the_shared
     env = root / ENV_FILENAME
     env.write_text("".join(line for line in env.read_text().splitlines(keepends=True) if "BZ_HUB_TOKEN_R2" not in line))
     store = HostLayout(root).store_path
-    before = (named_runners(HostConfig.load(root)), HostLayout(root).config_path.read_bytes())
+    before = (named_runners(load_host_config(root)), HostLayout(root).config_path.read_bytes())
 
     refused = _run(fake_init_hub, "init", str(root), "--hub", _HUB, "--allow-readd")
 
     assert refused.exit_code != 0
     assert "runner-local" in refused.output and "blizzard runner retire --runner r2" in refused.output
-    assert (named_runners(HostConfig.load(root)), HostLayout(root).config_path.read_bytes()) == before
+    assert (named_runners(load_host_config(root)), HostLayout(root).config_path.read_bytes()) == before
     assert not [path for path in store.parent.iterdir() if path.name.startswith(f"{store.name}.")]
     assert len(fake_init_hub.admin.added) == 2
 

@@ -12,7 +12,8 @@ import pytest
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.claude_code.section import ClaudeCodeSection
 from blizzard.runner.harness.opencode.section import OpenCodeSection
-from blizzard.runner.host_config import RUNNER_PATH_KEYS, HostConfig, RunnerPathKey
+from blizzard.runner.host_config import RUNNER_PATH_KEYS, RunnerPathKey
+from tests.config_inputs import load_host_config
 from tests.host_files import write_minimal_host
 
 pytestmark = pytest.mark.unit
@@ -52,7 +53,7 @@ def test_each_path_key_reaches_the_field_it_declares(tmp_path: Path, path_key: R
     *tables, key = path_key.key
     line = f'{key} = "{marker}"\n'
     write_minimal_host(tmp_path, runner=f"\n[runner.{'.'.join(tables)}]\n{line}" if tables else line)
-    entry = HostConfig.load(tmp_path).sole_runner()
+    entry = load_host_config(tmp_path).sole_runner()
     assert entry.own is not None, entry.errors
     owner, field = path_key.field.split(".")
     parsed: object = {

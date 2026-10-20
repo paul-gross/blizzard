@@ -9,6 +9,7 @@ import sqlalchemy as sa
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub import runtime as hub_runtime
+from tests.config_inputs import init_hub
 
 pytestmark = [pytest.mark.unit]
 
@@ -17,7 +18,7 @@ _SECRETS_PARENT = "20261003_1400_escalation_cause"
 
 def test_secret_tables_survive_migration_roundtrip(tmp_path: Path) -> None:
     """``secrets``/``secret_lifecycle_facts`` — downgraded to the revision's own parent by id."""
-    config = hub_runtime.init_environment(tmp_path)
+    config = init_hub(tmp_path)
     runner = hub_runtime.migration_runner(config)
     tables = {"secrets", "secret_lifecycle_facts"}
 

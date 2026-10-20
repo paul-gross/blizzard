@@ -21,7 +21,7 @@ from blizzard.foundation.runner_token_names import HUB_TOKEN_VARIABLE_PREFIX, hu
 from blizzard.runner.config import DEFAULT_RUNNER_NAME, ENV_HUB_URL
 from blizzard.runner.host_layout import HostLayout, write_runner_id
 from blizzard.runner.hub.internal.token_file import HubTokenFile
-from blizzard.runner.runtime import init_environment
+from tests.config_inputs import init_host
 
 RUNNER_BIN = Path(sys.executable).parent / "blizzard-runner"
 
@@ -117,7 +117,7 @@ def adopt_runner(runner_dir: Path, hub_url: str, token: str) -> JoinedRunner:
     directory, put the token its add printed in ``.env``, and write the id the hub resolves it to into the host file —
     what ``runner init`` keeps for a known token, without the host it would register under the operator's session."""
     joined = _identity_of(token, hub_url)
-    config = init_environment(runner_dir, hub_url=hub_url)
+    config = init_host(runner_dir, hub_url=hub_url)
     write_runner_id(HostLayout(config.root), config.sole_runner().name, joined.runner_id)
     HubTokenFile.of(runner_dir, DEFAULT_TOKEN_ENV).write(token)
     return joined
@@ -130,7 +130,7 @@ def pin_runner(runner_dir: Path, *, runner_id: str, name: str) -> JoinedRunner:
     pair at each such hub."""
     runner_dir.mkdir(parents=True, exist_ok=True)
     pinned = JoinedRunner(runner_id=runner_id, runner_name=name, token=f"tok_{runner_id}")
-    config = init_environment(runner_dir)
+    config = init_host(runner_dir)
     write_runner_id(HostLayout(config.root), config.sole_runner().name, runner_id)
     HubTokenFile.of(runner_dir, DEFAULT_TOKEN_ENV).write(pinned.token)
     return pinned

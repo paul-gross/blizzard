@@ -22,11 +22,12 @@ import httpx
 import pytest
 
 from blizzard.foundation.runner_token_names import hub_token_variable
-from blizzard.hub.config import AuthConfig, HubConfig, OAuthProviderConfig
+from blizzard.hub.config import AuthConfig, OAuthProviderConfig
 from blizzard.runner.auth.session import CookieNames
 from blizzard.runner.host_config import HOST_TOKEN_VARIABLE, RunnerEntry
 from blizzard.runner.host_layout import HostLayout
 from blizzard.runner.hub.internal.token_file import HubTokenFile
+from tests.config_inputs import load_hub_config
 from tests.fleet_launchers import await_http, terminate
 from tests.host_files import (
     host_config_of,
@@ -97,7 +98,7 @@ def _oauth_hub(hub_dir: Path, idp_port: int, port: int) -> Iterator[httpx.Client
         issuer=f"http://127.0.0.1:{idp_port}",
         emails_authoritative=True,
     )
-    config = HubConfig.load(hub_dir)
+    config = load_hub_config(hub_dir)
     # `superuser` (bootstrap) matches the stub IdP profile below, so the
     # first login claims `user:manage` with no separate role-assignment surface.
     config = dataclasses.replace(

@@ -14,10 +14,10 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.trace_export.settings import TracingSettings
 from blizzard.hub import app as hub_app
 from blizzard.hub import runtime as hub_runtime
-from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.observability.hub_events import HubEvent
 from blizzard.hub.secrets import ENV_SECRET_KEY
 from blizzard.hub.store import schema
+from tests.config_inputs import init_hub, load_hub_config, migrate_hub
 from tests.hub_event_rows import hub_event_detail, hub_event_kinds, hub_event_log_of, hub_event_rows, hub_events_of
 from tests.support import build_hub, hub_scoped
 
@@ -88,11 +88,11 @@ def test_each_hosted_start_records_one_hub_started_naming_the_version_and_revisi
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.delenv(ENV_SECRET_KEY, raising=False)
-    config = hub_runtime.init_environment(tmp_path / "hub")
+    config = init_hub(tmp_path / "hub")
     head = hub_runtime.migration_runner(config).script_head()
 
     for _ in range(2):
-        app = hub_app.build_hosted_app(HubConfig.load(config.root))
+        app = hub_app.build_hosted_app(load_hub_config(config.root))
         app.state.engine.dispose()
 
     engine = create_engine_from_url(config.db_url)
@@ -106,9 +106,9 @@ def test_each_hosted_start_records_one_hub_started_naming_the_version_and_revisi
 
 
 def test_a_migrate_with_nothing_to_apply_records_no_hub_migrated(tmp_path: Path) -> None:
-    config = hub_runtime.init_environment(tmp_path)
+    config = init_hub(tmp_path)
 
-    hub_runtime.migrate(tmp_path)
+    migrate_hub(tmp_path)
 
     engine = create_engine_from_url(config.db_url)
     try:
@@ -118,12 +118,12 @@ def test_a_migrate_with_nothing_to_apply_records_no_hub_migrated(tmp_path: Path)
 
 
 def test_a_migrate_from_an_older_store_records_the_revisions_it_moved_between(tmp_path: Path) -> None:
-    config = hub_runtime.init_environment(tmp_path)
+    config = init_hub(tmp_path)
     runner = hub_runtime.migration_runner(config)
     head = runner.script_head()
     runner.downgrade("20261008_1500_scope_surrogate")
 
-    hub_runtime.migrate(tmp_path)
+    migrate_hub(tmp_path)
 
     engine = create_engine_from_url(config.db_url)
     try:
@@ -135,9 +135,9 @@ def test_a_migrate_from_an_older_store_records_the_revisions_it_moved_between(tm
 
 
 def test_a_downgrade_records_no_hub_migrated(tmp_path: Path) -> None:
-    config = hub_runtime.init_environment(tmp_path)
+    config = init_hub(tmp_path)
 
-    hub_runtime.migrate(tmp_path, down="20261008_1600_hub_event_log_move")
+    migrate_hub(tmp_path, down="20261008_1600_hub_event_log_move")
 
     engine = create_engine_from_url(config.db_url)
     try:

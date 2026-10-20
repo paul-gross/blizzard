@@ -14,7 +14,6 @@ import pytest
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.runner_identity_state import IdentityState
-from blizzard.runner.app import create_app
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.claude_code.adapter import ClaudeCodeAdapter
@@ -34,6 +33,7 @@ from blizzard.runner.hub.identity import (
 from blizzard.runner.hub.served_projects import ServedProject
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.status.view import RunnerStatusService
+from tests.config_inputs import create_runner_app
 from tests.runner_client import runner_client
 from tests.runner_fakes import (
     FIXTURE_PROJECT_ID,
@@ -97,7 +97,7 @@ def _app_with_status(
         runner_dir=runner_dir,
         harnesses=HarnessRegistry({CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=_harness)}),
     )
-    return create_app(
+    return create_runner_app(
         config, runner_stores=make_stores(store), host_stores=make_host_stores(store), runner_status=service
     ), store
 
@@ -281,7 +281,7 @@ def test_summary_reports_the_gates_the_service_was_built_with(tmp_path: Path) ->
 @pytest.mark.component
 def test_503_when_status_service_unwired(tmp_path: Path) -> None:
     config = RunnerConfig(root=tmp_path, db_url="sqlite://")
-    with runner_client(create_app(config)) as client:
+    with runner_client(create_runner_app(config)) as client:
         for path in ("/api/runner", "/api/escalations", "/api/takeovers"):
             assert client.get(path).status_code == 503, path
 
@@ -978,7 +978,7 @@ def test_facts_honors_the_limit_query(tmp_path: Path) -> None:
 @pytest.mark.component
 def test_facts_503_when_status_service_unwired(tmp_path: Path) -> None:
     config = RunnerConfig(root=tmp_path, db_url="sqlite://")
-    with runner_client(create_app(config)) as client:
+    with runner_client(create_runner_app(config)) as client:
         assert client.get("/api/facts").status_code == 503
 
 

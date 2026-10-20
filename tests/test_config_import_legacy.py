@@ -13,7 +13,6 @@ from click.testing import CliRunner
 
 from blizzard.cli.main import blizzard
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.hub import runtime as hub_runtime
 from blizzard.hub.app import import_legacy_config
 from blizzard.hub.config import ConfigError, HubConfig
 from blizzard.hub.domain.config.carry_over import ImportStatus, LegacyImportRefused
@@ -29,6 +28,7 @@ from blizzard.hub.store.schema import (
     secrets,
     work_sources,
 )
+from tests.config_inputs import init_hub
 from tests.support import (
     default_project,
     hub_scoped,
@@ -83,7 +83,7 @@ _TABLES = (
 @pytest.fixture
 def hub(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> HubConfig:
     monkeypatch.delenv(ENV_SECRET_KEY, raising=False)
-    config = hub_runtime.init_environment(tmp_path / "hub")
+    config = init_hub(tmp_path / "hub")
     config.config_path.write_text(config.config_path.read_text() + _BLOCKS)
     engine = create_engine_from_url(config.db_url)
     try:
@@ -300,7 +300,7 @@ def test_a_refused_write_rolls_back_every_earlier_write(hub: HubConfig) -> None:
 
 def test_no_legacy_keys_writes_nothing_not_even_a_fact(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv(ENV_SECRET_KEY, raising=False)
-    config = hub_runtime.init_environment(tmp_path / "fresh")
+    config = init_hub(tmp_path / "fresh")
 
     result = import_legacy_config(config, {})
 

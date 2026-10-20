@@ -52,7 +52,6 @@ from blizzard.foundation.trace_export.exporter import ITraceExporter
 from blizzard.foundation.trace_export.settings import TracingSettings
 from blizzard.foundation.trace_spans import FinishedSpan
 from blizzard.hub.api.auth_session import TENANT_HEADER
-from blizzard.hub.app import create_app
 from blizzard.hub.auth.invitations import InvitationToken
 from blizzard.hub.auth.memberships import MEMBERSHIP_ROLES
 from blizzard.hub.auth.models import User
@@ -140,6 +139,7 @@ from blizzard.hub.work_sources.internal.hub_work_source import HubWorkSource
 from blizzard.hub.work_sources.source import IWorkSource, IWorkSourceRegistry, WorkItem, WorkSourceError
 from blizzard.wire.version_window import VersionWindow
 from blizzard.wire.work_source import WorkSourceDocument
+from tests.config_inputs import create_hub_app
 
 _GRAPH_T0 = datetime(2026, 1, 1, tzinfo=UTC)
 
@@ -1397,7 +1397,7 @@ def build_hub(
     )
     hub_services.tenants.open_tenants.refresh()
     services = hub_services.tenants.open_services(default)
-    app = create_app(config, services=hub_services, flags=flags)
+    app = create_hub_app(config, services=hub_services, flags=flags)
     client = RunnerFleetClient(app, services=services, register_claimants=auto_register_claimants)
     # Warm FastAPI's per-router route-resolution cache: it lazily caches routes on first
     # use, which is thread-unsafe under the component tier's OS-thread races.

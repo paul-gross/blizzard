@@ -16,11 +16,11 @@ from blizzard.foundation.clock import SystemClock
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.composition import build_host_stores
-from blizzard.runner.host_config import HostConfig
 from blizzard.runner.hub.host_identity import HostIdentity
 from blizzard.runner.store import schema
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
 from blizzard.tools.invariants import RunnerInvariants
+from tests.config_inputs import load_host_config
 from tests.runner_init_fakes import FakeInitHub, init_runner
 from tests.runner_scope_seeding import T0, reflect, seed_tables
 
@@ -50,7 +50,7 @@ class TwoHosts:
     there: Path
 
     def engine(self, root: Path) -> sa.Engine:
-        return create_engine_from_url(HostConfig.load(root).db_url)
+        return create_engine_from_url(load_host_config(root).db_url)
 
 
 def two_hosts(tmp_path: Path, hub: FakeInitHub, *, adopt: bool = True, identified: bool = True) -> TwoHosts:
@@ -66,7 +66,7 @@ def two_hosts(tmp_path: Path, hub: FakeInitHub, *, adopt: bool = True, identifie
         hub.admin.held[THERE_HOST].remove(MOVING_ID)
         hub.admin.held[HERE_HOST].append(MOVING_ID)
     if identified:
-        engine = create_engine_from_url(HostConfig.load(here).db_url)
+        engine = create_engine_from_url(load_host_config(here).db_url)
         build_host_stores(
             engine, errors=RunnerStoreErrorFactory(get_logger("tests.runner_ingest")), clock=SystemClock()
         ).host_identity.record_host_identity(HostIdentity(HERE_HOST, TENANT, T0))

@@ -11,6 +11,7 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.migrations import MigrationRunner
 from blizzard.hub import runtime as hub_runtime
 from blizzard.hub.store import MIGRATIONS_DIR as HUB_MIGRATIONS_DIR
+from tests.config_inputs import init_hub
 from tests.support import MIGRATION_CLOCK
 
 pytestmark = [pytest.mark.unit]
@@ -24,7 +25,7 @@ def test_routine_scopes_table_survives_migration_roundtrip(tmp_path: Path) -> No
     """``routine_scopes`` — downgrades to this revision's own parent by
     id, so the drop half is asserted rather than inferred from a revision marker a
     no-op ``downgrade()`` would satisfy just as well."""
-    config = hub_runtime.init_environment(tmp_path)  # upgrades to head
+    config = init_hub(tmp_path)  # upgrades to head
     runner = hub_runtime.migration_runner(config)
 
     def _table_names() -> set[str]:

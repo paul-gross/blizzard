@@ -47,7 +47,6 @@ from blizzard.foundation.tokens import TokenHash
 from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.foundation.trace_export.settings import TracingSettings
 from blizzard.foundation.trace_ids import DerivedContext, StepKey, step_root, trace_id
-from blizzard.runner.app import create_app
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.claude_code.section import ClaudeCodeSection
@@ -84,6 +83,7 @@ from blizzard.runner.tracing.receiver_limits import (
 from blizzard.runner.tracing.receiving import TelemetryReceiver
 from blizzard.runner.tracing.status import LeaseTraceStatusReader
 from tests import claude_code_telemetry
+from tests.config_inputs import create_runner_app
 from tests.harness_sections import sections
 from tests.runner_client import runner_client
 from tests.runner_fakes import (
@@ -227,7 +227,7 @@ def _app(  # type: ignore[no-untyped-def]
         harness_telemetry=harness_telemetry,
         mapped_services=services or {},
     )
-    app = create_app(
+    app = create_runner_app(
         config,
         runner_stores=make_stores(store),
         host_stores=make_host_stores(store),
@@ -518,7 +518,7 @@ def test_a_request_without_a_valid_lease_token_is_refused_403(tmp_path: Path, he
 def test_an_app_built_without_a_receiver_refuses_a_valid_token_503_naming_it(tmp_path: Path) -> None:
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     _seed_lease(store)
-    app = create_app(
+    app = create_runner_app(
         RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}"),
         runner_stores=make_stores(store),
         host_stores=make_host_stores(store),
@@ -1473,6 +1473,6 @@ def test_an_app_wires_a_platform_tracing_handle_that_is_falsy(tmp_path: Path) ->
     tracing = _FalsyTracing()
     config = RunnerConfig(root=tmp_path, db_url="sqlite://")
 
-    create_app(config, platform_tracing=cast(IPlatformTracing, tracing))
+    create_runner_app(config, platform_tracing=cast(IPlatformTracing, tracing))
 
     assert tracing.telemetry_requests == 1

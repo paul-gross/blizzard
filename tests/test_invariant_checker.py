@@ -16,14 +16,13 @@ import sqlalchemy as sa
 
 from blizzard.auth_core import Role
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.hub.runtime import init_environment as init_hub
 from blizzard.hub.store import schema as hub
 from blizzard.hub.store.internal.tenant_teardown_store import TenantTeardownStore
 from blizzard.hub.store.scoped import is_tenant_owned
 from blizzard.hub.tenancy import TenantId
-from blizzard.runner.runtime import init_environment as init_runner
 from blizzard.runner.store import schema as runner
 from blizzard.tools.invariants import HubInvariants, RunnerInvariants
+from tests.config_inputs import init_host, init_hub
 from tests.migration_support_invariant_checker import _NOW, _PROJECT_INVARIANTS, insert
 from tests.runner_fakes import FIXTURE_RUNNER_ID, FakeProbe
 from tests.support import (
@@ -44,7 +43,7 @@ pytestmark = [pytest.mark.component]
 
 def _runner_engine(tmp_path: Path):
     """A head-migrated runner store whose identity names the fixture runner, as a registered runner's does."""
-    engine = create_engine_from_url(init_runner(tmp_path / "runner").db_url)
+    engine = create_engine_from_url(init_host(tmp_path / "runner").db_url)
     with engine.begin() as conn:
         conn.execute(
             sa.insert(runner.runner_identity).values(runner_id=FIXTURE_RUNNER_ID, runner_name="r", registered_at=_NOW)

@@ -28,6 +28,7 @@ from blizzard.foundation.store.migrations import MigrationRunner
 from blizzard.runner import runtime as runner_runtime
 from blizzard.runner.store import MIGRATIONS_DIR
 from blizzard.tools.invariants import RunnerInvariants
+from tests.config_inputs import init_host
 from tests.runner_fakes import SqlAlchemyRunnerStore, runner_store_errors
 from tests.runner_scope_seeding import KEYED, T0, reflect, seed_every_keyed_table
 
@@ -43,7 +44,7 @@ _OUTBOXES = {"outbound": "outbound_buffer", "transcript": "transcript_outbound_b
 
 
 def _store_at_parent(tmp_path: Path) -> tuple[MigrationRunner, sa.Engine]:
-    config = runner_runtime.init_environment(tmp_path)
+    config = init_host(tmp_path)
     migration = runner_runtime.migration_runner(config)
     migration.downgrade(_PARENT)
     return migration, create_engine_from_url(config.db_url)
@@ -635,7 +636,7 @@ def test_the_downgrade_restores_the_parent_schema_and_keeps_each_lanes_last_issu
 
 @pytest.mark.component
 def test_the_downgrade_refuses_a_store_of_two_runners_naming_both_and_changes_nothing(tmp_path: Path) -> None:
-    config = runner_runtime.init_environment(tmp_path)
+    config = init_host(tmp_path)
     migration = runner_runtime.migration_runner(config)
     migration.downgrade(_REVISION)
     engine = create_engine_from_url(config.db_url)

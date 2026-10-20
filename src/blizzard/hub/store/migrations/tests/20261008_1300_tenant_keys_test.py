@@ -19,6 +19,7 @@ from blizzard.hub import runtime as hub_runtime
 from blizzard.hub.config import HubConfig
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import MIGRATIONS_DIR
+from tests.config_inputs import init_hub
 from tests.migration_support_tenant_keys_migration import (
     _BACKFILL,
     _SECOND_TENANT,
@@ -80,7 +81,7 @@ def _key_only(engine: sa.Engine, tables: set[str]) -> None:
 def test_legacy_long_derivations_index_is_renamed_on_the_way_to_head(tmp_path: Path) -> None:
     """Hub-only — a store the egress revision once gave a 71-character index name reaches head holding the head name."""
     legacy = "ix_transcript_event_derivations_derived_at_segment_id_extractor_version"
-    config = hub_runtime.init_environment(tmp_path)  # upgrades to head
+    config = init_hub(tmp_path)  # upgrades to head
     runner = hub_runtime.migration_runner(config)
     runner.downgrade("20261004_1300_egress_events")
 

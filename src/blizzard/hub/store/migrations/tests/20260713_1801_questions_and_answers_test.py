@@ -9,6 +9,7 @@ import sqlalchemy as sa
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub import runtime as hub_runtime
+from tests.config_inputs import init_hub
 from tests.support import hub_scoped_engine
 
 pytestmark = [pytest.mark.component]
@@ -16,7 +17,7 @@ pytestmark = [pytest.mark.component]
 
 def test_questions_historical_revision_does_not_create_later_harness_provenance(tmp_path: Path) -> None:
     """The later provenance migration must see a column to add and backfill itself."""
-    config = hub_runtime.init_environment(tmp_path)
+    config = init_hub(tmp_path)
     runner = hub_runtime.migration_runner(config)
     runner.downgrade("20260713_1716_hub_graph_node_produces_checks")
 

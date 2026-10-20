@@ -294,7 +294,7 @@ class RunnerIngest:
         if kind is SourceKind.UNGRADUATED:
             return self._ungraduated(path)
         try:
-            config = HostConfig.load(path)
+            config = HostConfig.load(path, flag_registry=self.host.flag_registry)
             store = sqlite_store_file(config.db_url)
         except (ConfigError, StoreResetRefused) as exc:
             raise SourceUnsupported(f"cannot read the source host at {path}: {exc}") from exc
@@ -329,7 +329,13 @@ class RunnerIngest:
             [runner_id] = named_runners
             view = self.stores.for_runner(runner_id).runner_view(copy.url)
         try:
-            config = HostConfig.graduated(path, legacy, runner_id=runner_id, served=view.served_projects)
+            config = HostConfig.graduated(
+                path,
+                legacy,
+                runner_id=runner_id,
+                served=view.served_projects,
+                flag_registry=self.host.flag_registry,
+            )
         except ConfigError as exc:
             raise SourceUnsupported(f"cannot graduate the runner file {layout.legacy_config_path}: {exc}") from exc
         return _Source(SourceKind.UNGRADUATED, path, store, config, host_text=config.to_toml(), token_env=token_env)

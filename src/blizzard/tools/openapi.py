@@ -11,6 +11,7 @@ from pathlib import Path
 
 import click
 
+from blizzard.cli.config_inputs import packaged_flag_registry
 from blizzard.hub.app import create_app_for_export as build_hub_app
 from blizzard.runner.app import create_app_for_export as build_runner_app
 
@@ -24,8 +25,9 @@ def export(out_dir: Path) -> list[Path]:
     """Write both specs into ``out_dir``; return the written paths."""
     out_dir.mkdir(parents=True, exist_ok=True)
     written: list[Path] = []
+    registry = packaged_flag_registry()
     for name, build in SPECS:
-        spec = build().openapi()
+        spec = build(registry).openapi()
         path = out_dir / f"{name}.openapi.json"
         path.write_text(json.dumps(spec, indent=2, sort_keys=True) + "\n")
         written.append(path)

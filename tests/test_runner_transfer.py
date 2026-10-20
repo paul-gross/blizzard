@@ -17,12 +17,12 @@ import sqlalchemy as sa
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.utc import UtcDateTime
-from blizzard.runner import runtime as runner_runtime
 from blizzard.runner.composition import build_host_read_stores, build_runner_removal, build_runner_transfer
 from blizzard.runner.store import schema
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
 from blizzard.runner.transfer.rows import HostIngest, WorkspacePromptConflict
 from blizzard.tools.invariants import RunnerInvariants
+from tests.config_inputs import init_host
 from tests.runner_scope_seeding import T0, reflect, seed_tables
 
 pytestmark = pytest.mark.component
@@ -67,7 +67,7 @@ def _store(tmp_path: Path, name: str, runner_id: str, *, tag: str) -> sa.Engine:
     """A head store holding ``runner_id``'s identity, one row in every other runner table and every host table, and a
     counter per lane at the seeded seq; keys unique across runners are tagged ``tag``. The transcript outbox row is a
     final marker, as a finalized segment's is."""
-    engine = create_engine_from_url(runner_runtime.init_environment(tmp_path / name).db_url)
+    engine = create_engine_from_url(init_host(tmp_path / name).db_url)
     shapes = reflect(engine)
     unique = {column: f"{column}-{tag}" for column in _global_key_columns(shapes)}
     seed_tables(

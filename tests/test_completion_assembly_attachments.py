@@ -14,7 +14,6 @@ from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.node_steps import ApplyOutcome
 from blizzard.foundation.tokens import TokenHash
-from blizzard.runner.app import create_app
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
@@ -22,6 +21,7 @@ from blizzard.runner.leases.model import NewLease
 from blizzard.runner.loop.steps import Advance, Pull
 from blizzard.runner.node_steps.submissions import ApplyReply
 from blizzard.runner.operator.attachments import AttachmentService
+from tests.config_inputs import create_runner_app
 from tests.runner_client import runner_client
 from tests.runner_fakes import (
     FakeHarness,
@@ -49,7 +49,7 @@ def test_advance_prefers_a_real_attachment_and_falls_back_for_the_rest(tmp_path:
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}")
     attachments = AttachmentService(store, FixedClock(_NOW))
-    app = create_app(
+    app = create_runner_app(
         config, runner_stores=make_stores(store), host_stores=make_host_stores(store), attachments=attachments
     )
 

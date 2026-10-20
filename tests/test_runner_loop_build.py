@@ -23,7 +23,7 @@ import blizzard.runner.loop_wiring as loop_wiring
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.platform_tracing.handle import build_platform_tracing
 from blizzard.foundation.trace_export.config import TracingConfig
-from blizzard.runner.app import build_hosted_app, create_app
+from blizzard.runner.app import build_hosted_app
 from blizzard.runner.composition import build_runner_process
 from blizzard.runner.config import (
     DEFAULT_WORKSPACE_ID,
@@ -56,6 +56,7 @@ from blizzard.runner.subscriptions.internal.openai_credential_renewer import Ope
 from blizzard.runner.subscriptions.internal.openai_subscription_sampler import OpenAISubscriptionSampler
 from blizzard.runner.subscriptions.internal.usage_http_client import LazyUsageHttpClient
 from blizzard.runner.subscriptions.subscription_sampler import PROVIDER_ANTHROPIC, PROVIDER_OPENAI
+from tests.config_inputs import create_runner_app
 from tests.harness_sections import sections
 from tests.host_files import load_runner_config, one_workspace, write_minimal_host
 from tests.runner_client import runner_client, runner_seams
@@ -706,7 +707,7 @@ def test_create_app_for_export_stays_broker_less(tmp_path: Path) -> None:
     stream to feed — unlike the hub, ``create_app`` never conjures a broker on its own."""
     config = RunnerConfig(runner_id=FIXTURE_RUNNER_ID, root=tmp_path, db_url="sqlite://")
 
-    app = create_app(config)
+    app = create_runner_app(config)
 
     assert app.state.event_broker is None
 

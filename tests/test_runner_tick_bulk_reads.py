@@ -22,7 +22,6 @@ from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store import batching as batching_module
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.runner import runtime as runner_runtime
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.claude_code.adapter import ClaudeCodeAdapter
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
@@ -37,6 +36,7 @@ from blizzard.runner.loop.tick import tick
 from blizzard.runner.node_steps.chunk_state import ChunkState
 from blizzard.runner.status.view import RunnerStatusService
 from tests import support
+from tests.config_inputs import init_host
 from tests.runner_fakes import (
     FakeHarness,
     FakeHub,
@@ -57,7 +57,7 @@ _NOW = datetime(2026, 9, 26, 12, 0, 0, tzinfo=UTC)
 
 
 def _migrated_engine(tmp_path: Path) -> Engine:
-    config = runner_runtime.init_environment(tmp_path)
+    config = init_host(tmp_path)
     return create_engine_from_url(config.db_url)
 
 

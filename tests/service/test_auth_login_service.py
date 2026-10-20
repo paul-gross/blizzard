@@ -23,7 +23,8 @@ import pytest
 
 from blizzard.auth_core import Role
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.hub.config import AuthConfig, HubConfig, OAuthProviderConfig
+from blizzard.hub.config import AuthConfig, OAuthProviderConfig
+from tests.config_inputs import load_hub_config
 from tests.fleet_launchers import await_http, terminate
 from tests.service.support import require_stub_idp, service_gate, stub_idp
 from tests.support import daemon_log_sink, default_tenant, free_port, seed_invitation
@@ -46,7 +47,7 @@ def _oauth_hub(
     env = {**os.environ, _SECRET_ENV: _SECRET}
     hub_bin = str(Path(sys.executable).parent / "blizzard-hub")
     subprocess.run([hub_bin, "init", str(hub_dir)], check=True, capture_output=True, text=True)
-    config = HubConfig.load(hub_dir)
+    config = load_hub_config(hub_dir)
     config = dataclasses.replace(config, auth=AuthConfig(mode="oauth", oauth_providers=providers, superuser=superuser))
     config.config_path.write_text(config.to_toml())
     log = hub_dir / "daemon.log"
@@ -69,7 +70,7 @@ def _oauth_hub(
 def invite(hub_dir: Path, email: str, *, role: Role = Role.CONTRIBUTOR) -> str:
     """Invite ``email`` into the running hub's first tenant as ``role``, issued now — the way a person the hub has
     not seen arrives — and return the link's token for ``authorize?invite=``."""
-    engine = create_engine_from_url(HubConfig.load(hub_dir).db_url)
+    engine = create_engine_from_url(load_hub_config(hub_dir).db_url)
     try:
         _invitation_id, token = seed_invitation(engine, default_tenant(engine), email, role, at=datetime.now(UTC))
     finally:

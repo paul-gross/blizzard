@@ -12,10 +12,10 @@ from pathlib import Path
 import pytest
 
 from blizzard.foundation.tokens import TokenHash
-from blizzard.runner.app import create_app
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.leases.model import NewLease
+from tests.config_inputs import create_runner_app
 from tests.runner_client import runner_client
 from tests.runner_fakes import make_host_stores, make_store, make_stores
 
@@ -26,7 +26,7 @@ _TOKEN = "the-lease-token"
 def _app_with_store(tmp_path: Path):  # type: ignore[no-untyped-def]
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}")
-    return create_app(config, runner_stores=make_stores(store), host_stores=make_host_stores(store)), store
+    return create_runner_app(config, runner_stores=make_stores(store), host_stores=make_host_stores(store)), store
 
 
 def _seed_lease(store, **overrides: object) -> None:  # type: ignore[no-untyped-def]
@@ -48,7 +48,7 @@ def _seed_lease(store, **overrides: object) -> None:  # type: ignore[no-untyped-
 @pytest.mark.component
 def test_503_when_store_unwired(tmp_path: Path) -> None:
     config = RunnerConfig(root=tmp_path, db_url="sqlite://")
-    with runner_client(create_app(config)) as client:
+    with runner_client(create_runner_app(config)) as client:
         resp = client.post(
             "/api/leases/lease_1/asks", json={"question": "q?"}, headers={"X-Blizzard-Lease-Token": _TOKEN}
         )

@@ -537,6 +537,9 @@ class HubConfig:
     flag_resolution: FlagResolution | None = None
     #: The guarded keys the file carried while their flag was off.
     held_keys: tuple[HeldKey, ...] = ()
+    #: The flag registry the load resolved against, which later reads take rather than read again; a config built
+    #: in code knows no flags unless given one.
+    flag_registry: FlagRegistry = field(default_factory=FlagRegistry)
 
     @staticmethod
     def parse_public_url(value: object) -> str | None:
@@ -671,7 +674,7 @@ class HubConfig:
         host: str | None = None,
         port: int | None = None,
         allow_external_db: bool = False,
-        flag_registry: FlagRegistry | None = None,
+        flag_registry: FlagRegistry,
         key_registry: ConfigRegistry | None = None,
     ) -> HubConfig:
         """Read a runtime root's config file; overlay CLI host/port when given.
@@ -690,7 +693,7 @@ class HubConfig:
                 host,
                 port,
                 allow_external_db,
-                flag_registry or FlagRegistry.load(),
+                flag_registry,
                 key_registry or HUB_REGISTRY,
             )
         except InvalidConfigValue as exc:
@@ -758,4 +761,5 @@ class HubConfig:
             flags=parse_overrides(raw, ConfigError),
             flag_resolution=resolution,
             held_keys=held_keys(raw),
+            flag_registry=flag_registry,
         )

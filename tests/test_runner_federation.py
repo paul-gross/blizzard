@@ -21,7 +21,6 @@ from structlog.testing import capture_logs
 from blizzard.foundation.clock import SystemClock
 from blizzard.foundation.host_registration_state import HostRegistrationState
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.runner.app import create_app
 from blizzard.runner.auth.session import CookieNames
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.registry import HarnessRegistry
@@ -32,6 +31,7 @@ from blizzard.runner.status.view import RunnerStatusService
 from blizzard.runner.store.internal.host_jti_cache_store import JtiCacheRepository
 from blizzard.runner.store.schema import metadata
 from blizzard.runner.store.scoped import RunnerStoreConnections
+from tests.config_inputs import create_runner_app
 from tests.runner_client import runner_base_url
 from tests.runner_fakes import (
     FakeProvider,
@@ -137,7 +137,7 @@ def _build_app(
         workspaces=single_workspace(FakeProvider({})),
         harnesses=HarnessRegistry({}),  # unused by the two routes this test drives
     )
-    app = create_app(
+    app = create_runner_app(
         config,
         runner_stores=make_stores(store),
         host_stores=make_host_stores(store),

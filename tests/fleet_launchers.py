@@ -22,13 +22,13 @@ import httpx
 import uvicorn
 
 from blizzard.foundation.trace_export.config import TracingConfig
-from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.observability.egress.config import EgressConfig
 from blizzard.runner.app import build_hosted_app
 from blizzard.runner.composition import RunnerProcess
 from blizzard.runner.config import ENV_TRANSCRIPTS_ROOT, RunnerConfig
 from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.loop_wiring import LoopWiring
+from tests.config_inputs import load_hub_config
 from tests.e2e.fleet_traces import PLANT_DIR_VAR, FleetCollector
 from tests.fleet_world import REPO_NAME, basic_workspace
 from tests.harness_sections import claude_code, opencode, sections
@@ -161,7 +161,7 @@ def run_hub(
     ):
         # Flags read once, at `host` startup: set before the
         # daemon starts, not mutable afterward.
-        config = HubConfig.load(hub_dir)
+        config = load_hub_config(hub_dir)
         overrides: dict[str, object] = {}
         if route_token_mode is not None:
             overrides["route_token_mode"] = route_token_mode

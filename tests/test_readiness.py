@@ -65,7 +65,7 @@ def test_readiness_service_composes_reader_and_expected() -> None:
 
 @pytest.mark.component
 def test_ready_probe_true_against_migrated_store(daemon: Daemon, tmp_path: Path) -> None:
-    config = daemon.runtime.init_environment(tmp_path)
+    config = daemon.init(tmp_path)
     app = daemon.build_hosted_app(config)
     with TestClient(app) as client:
         response = client.get("/api/ready")
@@ -78,7 +78,7 @@ def test_ready_probe_true_against_migrated_store(daemon: Daemon, tmp_path: Path)
 
 @pytest.mark.component
 def test_ready_probe_false_on_unmigrated_store(daemon: Daemon, tmp_path: Path) -> None:
-    config = daemon.runtime.init_environment(tmp_path)
+    config = daemon.init(tmp_path)
     # Roll the store behind the code's head — a version skew the probe must surface.
     daemon.runtime.migration_runner(config).downgrade("base")
     app = daemon.build_hosted_app(config)

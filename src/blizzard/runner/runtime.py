@@ -17,11 +17,12 @@ import os
 import sqlite3
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Protocol
 
+from blizzard.foundation.flags import FlagRegistry
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import collaborator, domain_model
 from blizzard.foundation.store.migrations import MigrationConnectionError, MigrationRefused, MigrationRunner
@@ -206,6 +207,8 @@ class Runtime:
     projects: tuple[str, ...] | None = None
     #: What holds a socket path, if anything — the probe for a pre-host daemon on ``runner.sock``.
     holder: Callable[[Path], str | None] = _nothing_answers
+    #: The registry every load of the host file resolves its flags against.
+    flag_registry: FlagRegistry = field(kw_only=True)
 
     def init(self) -> HostConfig:
         """Scaffold the host file + data dir + a migrated store. Idempotent.
@@ -230,7 +233,7 @@ class Runtime:
                 with contextlib.suppress(FileExistsError):
                     write_scaffold(layout, scaffold.to_toml())
                     _log.info("host config scaffolded", path=str(layout.config_path))
-            config = HostConfig.load(root)
+            config = HostConfig.load(root, flag_registry=self.flag_registry)
             self._agree_with_arguments(config)
             layout.data_dir.mkdir(parents=True, exist_ok=True)
             # Every binding's runner-owned files, versioned with the runner, so re-running
@@ -258,7 +261,7 @@ class Runtime:
     def reset_store(self, *, now: datetime) -> SetAsideStore:
         """Move the store aside under a ``now``-stamped name and migrate a fresh one to head in its
         place. Never deletes. Refused while the directory is held."""
-        config = HostConfig.load(self.root)
+        config = HostConfig.load(self.root, flag_registry=self.flag_registry)
         config.refuse_unadopted()
         with self._exclusive(config.layout, "move the runner store aside"):
             moved = set_aside_sqlite(sqlite_store_file(config.db_url), now=now)
@@ -271,7 +274,7 @@ class Runtime:
         id — into an archive store beside the host's, named by the runner and a ``now`` stamp, then delete its rows
         from the host store, keeping its outbox counters. The archive is migrated to head and written whole under a
         temporary name, then renamed, before anything is deleted. Refused while the directory is held."""
-        config = HostConfig.load(self.root)
+        config = HostConfig.load(self.root, flag_registry=self.flag_registry)
         config.refuse_unadopted()
         store = sqlite_store_file(config.db_url)
         runner_id, label = _reset_target(config, runner)
@@ -300,7 +303,7 @@ class Runtime:
     def migrate(self, *, down: str | None = None) -> None:
         """Apply pending revisions — adopting a pre-host store first, when the directory holds one and no host
         store — or reverse to ``down`` when given."""
-        config = HostConfig.load(self.root)
+        config = HostConfig.load(self.root, flag_registry=self.flag_registry)
         if down is not None:
             config.refuse_unadopted()
             with self._exclusive(config.layout, "reverse the store's migrations"):
@@ -440,12 +443,19 @@ def init_environment(
     hub_url: str | None = None,
     projects: tuple[str, ...] | None = None,
     holder: Callable[[Path], str | None] = _nothing_answers,
+    flag_registry: FlagRegistry,
 ) -> HostConfig:
-    return Runtime(root, hub_url=hub_url, projects=projects, holder=holder).init()
+    return Runtime(root, hub_url=hub_url, projects=projects, holder=holder, flag_registry=flag_registry).init()
 
 
-def migrate(root: Path, *, down: str | None = None, holder: Callable[[Path], str | None] = _nothing_answers) -> None:
-    Runtime(root, holder=holder).migrate(down=down)
+def migrate(
+    root: Path,
+    *,
+    down: str | None = None,
+    holder: Callable[[Path], str | None] = _nothing_answers,
+    flag_registry: FlagRegistry,
+) -> None:
+    Runtime(root, holder=holder, flag_registry=flag_registry).migrate(down=down)
 
 
 def ensure_current_revision(location: IStoreLocation) -> None:

@@ -14,7 +14,7 @@ import tempfile
 # and the tenant cache's lock, which guards this process's memory, not a store decision
 # ast-grep-ignore: bzh:store-exclusive-write
 import threading
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import timedelta
 from pathlib import Path
@@ -26,10 +26,7 @@ from sqlalchemy import Engine
 from blizzard import __version__
 from blizzard.foundation.clock import IClock, SystemClock
 from blizzard.foundation.flags import (
-    FlagRegistry,
-    FlagResolution,
     Flags,
-    HeldKey,
     resolve_flags,
     warn_held_keys,
     warn_ignored_flags,
@@ -66,7 +63,7 @@ from blizzard.hub.auth.sessions import IReadSessionRepository
 from blizzard.hub.auth.signing import SigningKeyService
 from blizzard.hub.auth.throttle import IpThrottle
 from blizzard.hub.auth.users import IReadUserRepository
-from blizzard.hub.config import OAuthProviderConfig
+from blizzard.hub.config import HubConfig, OAuthProviderConfig
 from blizzard.hub.delivery.command_runner import IHubCommandRunner
 from blizzard.hub.delivery.hub_node import HubNodeExecutor
 from blizzard.hub.delivery.internal.hub_command_runner import SubprocessHubCommandRunner
@@ -795,24 +792,14 @@ def build_config_authoring(stores: TenantStores, *, cipher: ISecretCipher) -> Co
     )
 
 
-def build_hub_flags(
-    flags: Mapping[str, bool],
-    registry: FlagRegistry | None = None,
-    *,
-    loaded: FlagResolution | None = None,
-    held: tuple[HeldKey, ...] = (),
-) -> Flags:
-    """The hub's resolved flags: every ``hub`` and ``fleet`` flag at its registry default, then the ``[flags]``
-    overrides. Each override the hub ignores, and each guarded key read as absent, is warned of here, once per
-    process. ``loaded`` is the resolution the config load already made, used as is unless ``registry`` is given."""
-    resolution = (
-        loaded
-        if loaded is not None and registry is None
-        else resolve_flags(registry or FlagRegistry.load(), "hub", flags)
-    )
+def build_hub_flags(config: HubConfig) -> Flags:
+    """The hub's resolved flags: the resolution ``config``'s load made, or — for a config built in code — every ``hub``
+    and ``fleet`` flag of the registry it carries at its default, then its ``[flags]`` overrides. Each override the hub
+    ignores, and each guarded key read as absent, is warned of here, once per process."""
+    resolution = config.flag_resolution or resolve_flags(config.flag_registry, "hub", config.flags)
     log = get_logger("blizzard.hub")
     warn_ignored_flags(log, resolution)
-    warn_held_keys(log, held)
+    warn_held_keys(log, config.held_keys)
     return resolution.flags
 
 

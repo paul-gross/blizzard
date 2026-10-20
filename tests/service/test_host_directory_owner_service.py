@@ -24,9 +24,9 @@ import httpx
 import pytest
 
 from blizzard.foundation.store.migrations import MigrationRunner
-from blizzard.runner.host_config import HostConfig
 from blizzard.runner.host_layout import HostLayout
 from blizzard.runner.runtime import migration_runner
+from tests.config_inputs import load_host_config
 from tests.fleet_launchers import await_http, terminate
 from tests.host_files import init_runner_environment, write_host_file
 from tests.runner_join import RUNNER_BIN, run_runner_init, runner_spawn_env
@@ -75,7 +75,7 @@ def _said(done: subprocess.CompletedProcess[str]) -> str:
 
 def _migrations(root: Path) -> MigrationRunner:
     """The migrations of ``root``'s configured store, read without upgrading it."""
-    return migration_runner(HostConfig.load(root))
+    return migration_runner(load_host_config(root))
 
 
 def _host_dir(root: Path) -> Path:

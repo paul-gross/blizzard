@@ -13,13 +13,13 @@ from pathlib import Path
 
 import pytest
 
-from blizzard.runner.app import create_app
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.transcripts.archived_repository import ArchivedTranscript
 from blizzard.runner.transcripts.repository import Transcript, Turn
 from blizzard.runner.transcripts.service import TranscriptService
+from tests.config_inputs import create_runner_app
 from tests.runner_client import runner_client
 from tests.runner_fakes import (
     FakeProvider,
@@ -68,7 +68,7 @@ def _app_with_segments(tmp_path: Path, *, repo: FakeTranscriptRepository | None 
         archived=RaisingArchivedTranscriptRepository(),
         workspaces=single_workspace(FakeProvider({})),
     )
-    return create_app(
+    return create_runner_app(
         config, runner_stores=make_stores(store), host_stores=make_host_stores(store), transcripts=service
     ), store
 

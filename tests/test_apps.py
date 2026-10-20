@@ -47,9 +47,10 @@ _PROVIDERS_AFTER_A_REQUEST = """
 import sys
 from fastapi.testclient import TestClient
 from opentelemetry import _logs, metrics, trace
+from blizzard.cli.config_inputs import packaged_flag_registry
 from blizzard.{daemon}.app import create_app_for_export
 
-with TestClient(create_app_for_export()) as client:
+with TestClient(create_app_for_export(packaged_flag_registry())) as client:
     client.get("/api/health")
 providers = (trace.get_tracer_provider(), metrics.get_meter_provider(), _logs.get_logger_provider())
 print(*(type(provider).__name__ for provider in providers))

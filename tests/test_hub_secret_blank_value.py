@@ -10,14 +10,14 @@ import pytest
 from fastapi.testclient import TestClient
 
 from blizzard.hub import app as hub_app
-from blizzard.hub import runtime as hub_runtime
+from tests.config_inputs import init_hub
 
 pytestmark = pytest.mark.component
 
 
 @pytest.fixture
 def client(tmp_path: Path) -> Iterator[TestClient]:
-    with TestClient(hub_app.build_hosted_app(hub_runtime.init_environment(tmp_path / "hub"))) as c:
+    with TestClient(hub_app.build_hosted_app(init_hub(tmp_path / "hub"))) as c:
         yield c
 
 

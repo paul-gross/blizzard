@@ -12,6 +12,7 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.utc import UtcDateTime
 from blizzard.runner import runtime as runner_runtime
 from blizzard.runner.store import schema as runner_schema
+from tests.config_inputs import init_host
 from tests.migration_support_store_migrations import (
     assert_frozen_table_lacks_a_later_revisions_columns,
 )
@@ -25,7 +26,7 @@ def test_external_usage_samples_miss_reason_and_renewal_columns_survive_migratio
     """``external_usage_samples.miss_reason``/``renewal`` — both nullable,
     no backfill since no historical row carries either fact; downgrading past this
     revision drops both columns again. ``renewal`` is retired again at head."""
-    config = runner_runtime.init_environment(tmp_path)  # upgrades to head
+    config = init_host(tmp_path)  # upgrades to head
     runner = runner_runtime.migration_runner(config)
 
     def _columns() -> set[str]:
@@ -53,7 +54,7 @@ def test_credential_renewal_history_moves_into_typed_facts_and_downgrades_back(t
     """Every legacy ``renewal`` string becomes a claim at its attempt's ``sampled_at`` and a typed
     outcome, and the column is retired; downgrading re-encodes each recorded outcome onto its
     attempt row, and an unrecorded claim — which had no legacy encoding — onto none."""
-    config = runner_runtime.init_environment(tmp_path)
+    config = init_host(tmp_path)
     runner = runner_runtime.migration_runner(config)
     runner.downgrade(_RENEWAL_FACTS_PARENT)
     first, second, third = (datetime(2026, 9, 22, hour, tzinfo=UTC) for hour in (10, 11, 12))

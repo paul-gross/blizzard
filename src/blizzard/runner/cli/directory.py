@@ -6,6 +6,7 @@ from pathlib import Path
 
 import click
 
+from blizzard.cli.config_inputs import packaged_flag_registry
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.config_table import ConfigError
 from blizzard.runner.host_config import HostConfig
@@ -15,7 +16,7 @@ def load_host(directory: str, *, host: str | None = None, port: int | None = Non
     """``directory``'s host file, or the error that refuses it — an ungraduated directory included, which names
     the graduation procedure."""
     try:
-        return HostConfig.load_for_store(Path(directory), host=host, port=port)
+        return HostConfig.load_for_store(Path(directory), host=host, port=port, flag_registry=packaged_flag_registry())
     except ConfigError as exc:
         raise click.ClickException(str(exc)) from exc
 

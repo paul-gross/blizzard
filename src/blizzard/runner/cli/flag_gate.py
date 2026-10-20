@@ -23,15 +23,13 @@ def host_flags(ctx: click.Context) -> Mapping[str, bool]:
     return {} if resp.status_code == httpx.codes.NOT_FOUND else dict(resp.raise_for_status().json()["flags"])
 
 
-def runner_flag_command(
-    flag: str, registry: FlagRegistry | None = None
-) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+def runner_flag_command(flag: str, *, registry: FlagRegistry) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """Hold a runner verb behind ``flag``."""
-    return flag_command(flag, "runner", host_flags, registry)
+    return flag_command(flag, "runner", host_flags, registry=registry)
 
 
 def runner_flag_option(
-    flag: str, *decls: str, registry: FlagRegistry | None = None, **attrs: Any
+    flag: str, *decls: str, registry: FlagRegistry, **attrs: Any
 ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """Hold a runner verb's option behind ``flag``."""
     return flag_option(flag, "runner", host_flags, *decls, registry=registry, **attrs)

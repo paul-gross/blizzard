@@ -19,11 +19,12 @@ from blizzard.foundation.operator_sessions.internal.session_file import SessionF
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.composition import build_host_stores
 from blizzard.runner.config import DEFAULT_WORKSPACE_ID, ProjectBinding
-from blizzard.runner.host_config import HOST_TOKEN_VARIABLE, HostConfig, runner_toml, scaffold_runner
+from blizzard.runner.host_config import HOST_TOKEN_VARIABLE, runner_toml, scaffold_runner
 from blizzard.runner.host_layout import HostLayout, append_runner
 from blizzard.runner.hub.client import TokenIdentity
 from blizzard.runner.hub.token_file import ENV_FILENAME
 from blizzard.runner.runtime import sqlite_store_file
+from tests.config_inputs import load_host_config
 from tests.host_files import load_runner_config
 from tests.runner_fakes import runner_store_errors
 from tests.runner_init_fakes import FakeInitHub, FakeTokenIdentityReader, init_runner
@@ -38,7 +39,7 @@ def _init(hub: FakeInitHub, root: Path, *args: str) -> Result:
 
 
 def _identity_rows(root: Path) -> list[tuple[str, str]]:
-    with closing(sqlite3.connect(sqlite_store_file(HostConfig.load(root).db_url))) as conn:
+    with closing(sqlite3.connect(sqlite_store_file(load_host_config(root).db_url))) as conn:
         return [(row[0], row[1]) for row in conn.execute("SELECT runner_id, runner_name FROM runner_identity")]
 
 
@@ -190,7 +191,7 @@ def _files(root: Path) -> tuple[bytes, bytes, bytes]:
     return (
         HostLayout(root).config_path.read_bytes(),
         (root / ".env").read_bytes(),
-        sqlite_store_file(HostConfig.load(root).db_url).read_bytes(),
+        sqlite_store_file(load_host_config(root).db_url).read_bytes(),
     )
 
 
@@ -315,7 +316,7 @@ def test_init_on_an_open_hub_registers_a_host_named_after_its_first_runner_and_a
     assert fake_init_hub.calls[0].operator_token is None
     assert f"{HOST_TOKEN_VARIABLE}=init-host-token-1\n" in _env(root)
     assert "registered host runner-local (hs_init1)" in result.output
-    assert HostConfig.load(root).host_token.value == "init-host-token-1"
+    assert load_host_config(root).host_token.value == "init-host-token-1"
 
 
 def test_init_registers_the_host_under_the_operator_session_held_for_its_hub(
@@ -402,7 +403,7 @@ def test_init_whose_host_the_hub_forgot_stops_without_allow_readd_and_re_adds_ho
     assert fake_init_hub.admin.adopted[-1] == ()
     assert fake_init_hub.admin.held["hs_init2"] == ["rn_init1", "rn_init2"]
     assert f"{HOST_TOKEN_VARIABLE}=init-host-token-2\n" in _env(root)
-    store = sqlite_store_file(HostConfig.load(root).db_url)
+    store = sqlite_store_file(load_host_config(root).db_url)
     assert len([p for p in store.parent.iterdir() if p.name.startswith("host.db.") and p.suffix != ".lock"]) == 1
     assert sorted(_identity_rows(root)) == [("rn_init1", "runner-local"), ("rn_init2", "r-two")]
 

@@ -7,6 +7,7 @@ from pathlib import Path
 
 import click
 
+from blizzard.cli.config_inputs import packaged_flag_registry
 from blizzard.cli.operator_trace import ITraceHeaders, OperatorTrace
 from blizzard.cli.runtime import click_exception_on
 from blizzard.foundation.clock import SystemClock
@@ -21,7 +22,13 @@ def runtime_of(
     root: Path, trace: ITraceHeaders, *, hub_url: str | None = None, projects: tuple[str, ...] | None = None
 ) -> Runtime:
     """The host directory ``root`` administered with the CLI's probe for a pre-host daemon on its ``runner.sock``."""
-    return Runtime(root, hub_url=hub_url, projects=projects, holder=lambda sock: daemon_holding(sock, trace))
+    return Runtime(
+        root,
+        hub_url=hub_url,
+        projects=projects,
+        holder=lambda sock: daemon_holding(sock, trace),
+        flag_registry=packaged_flag_registry(),
+    )
 
 
 @click.group("store")

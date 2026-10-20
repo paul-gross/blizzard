@@ -23,15 +23,13 @@ def hub_flags(ctx: click.Context) -> Mapping[str, bool]:
     return dict(resp.json()["flags"])
 
 
-def hub_flag_command(
-    flag: str, registry: FlagRegistry | None = None
-) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+def hub_flag_command(flag: str, *, registry: FlagRegistry) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """Hold a hub verb behind ``flag``."""
-    return flag_command(flag, "hub", hub_flags, registry)
+    return flag_command(flag, "hub", hub_flags, registry=registry)
 
 
 def hub_flag_option(
-    flag: str, *decls: str, registry: FlagRegistry | None = None, **attrs: Any
+    flag: str, *decls: str, registry: FlagRegistry, **attrs: Any
 ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """Hold a hub verb's option behind ``flag``."""
     return flag_option(flag, "hub", hub_flags, *decls, registry=registry, **attrs)

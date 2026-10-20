@@ -383,13 +383,12 @@ def create_app(
     readiness: ReadinessService | None = None,
     services: HubServices | None = None,
     platform_tracing: IPlatformTracing | None = None,
-    flags: Flags | None = None,
+    flags: Flags,
 ) -> FastAPI:
-    """Build a fully wired hub app from resolved config.
+    """Build a fully wired hub app from resolved config and the hub's resolved ``flags``.
 
     ``readiness`` and ``services`` are optional so the store-free paths build the app
-    without opening a database. ``platform_tracing`` is off unless the composition root passes one, and ``flags``
-    is the packaged registry's defaults, with no overrides, unless it passes the hub's resolved ones.
+    without opening a database. ``platform_tracing`` is off unless the composition root passes one.
     """
     log = get_logger("blizzard.hub")
 
@@ -404,7 +403,7 @@ def create_app(
     )
     app.state.platform_tracing = platform_tracing
     app.state.config = config
-    app.state.flags = flags or resolve_flags(FlagRegistry.load(), "hub", {}).flags
+    app.state.flags = flags
     app.state.readiness = readiness
     app.state.services = services
     # Set on shutdown by ``_lifespan``; every SSE stream races it.
@@ -496,14 +495,13 @@ def build_hosted_app(
     *,
     platform_tracing: IPlatformTracing | None = None,
     oauth_http_client: httpx.Client | None = None,
-    flag_registry: FlagRegistry | None = None,
     version_window: VersionWindow | None = None,
 ) -> FastAPI:
     """The ``host`` composition root: open the store and wire every fleet seam.
 
     ``platform_tracing`` defaults to the handle ``[tracing]`` and the OTLP environment decide.
     ``oauth_http_client`` replaces the OAuth providers' client. Either way, the engine and every outbound client are
-    instrumented through it. ``flag_registry`` and ``version_window`` default to the packaged ones."""
+    instrumented through it. ``version_window`` defaults to the packaged one."""
     platform_tracing = platform_tracing or build_platform_tracing(
         config.tracing,
         os.environ,
@@ -602,7 +600,7 @@ def build_hosted_app(
         readiness=readiness,
         services=services,
         platform_tracing=platform_tracing,
-        flags=build_hub_flags(config.flags, flag_registry, loaded=config.flag_resolution, held=config.held_keys),
+        flags=build_hub_flags(config),
     )
     # `host` disposes this on `app.state` — carried here.
     app.state.engine = engine
@@ -687,8 +685,11 @@ class OrphanedProviders:
             )
 
 
-def create_app_for_export() -> FastAPI:
-    """Build the app with throwaway config for OpenAPI export (no store, no dirs)."""
+def create_app_for_export(flag_registry: FlagRegistry) -> FastAPI:
+    """Build the app with throwaway config for OpenAPI export (no store, no dirs), its flags at ``flag_registry``'s
+    defaults."""
     from pathlib import Path
 
-    return create_app(HubConfig(root=Path("."), db_url="sqlite://"))
+    return create_app(
+        HubConfig(root=Path("."), db_url="sqlite://"), flags=resolve_flags(flag_registry, "hub", {}).flags
+    )

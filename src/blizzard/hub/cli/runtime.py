@@ -10,6 +10,7 @@ from pathlib import Path
 import click
 
 from blizzard import __version__
+from blizzard.cli.config_inputs import packaged_flag_registry
 from blizzard.cli.host_directory import HostDirectory
 from blizzard.cli.runtime import build_early_shutdown_server, click_exception_on, run_init, run_migrate
 from blizzard.foundation.store.migrations import RevisionMismatchError, StoreBelowFloorError
@@ -37,7 +38,9 @@ def init(directory: str, allow_external_db: bool) -> None:
     run_init(
         Path(directory),
         "hub",
-        init_environment=partial(init_environment, allow_external_db=allow_external_db),
+        init_environment=partial(
+            init_environment, allow_external_db=allow_external_db, flag_registry=packaged_flag_registry()
+        ),
         migration_runner=migration_runner,
         config_error=ConfigError,
     )
@@ -59,7 +62,7 @@ def migrate_cmd(directory: str, down: str | None, head: bool, knows: str | None,
         head=head,
         knows=knows,
         script_location=MIGRATIONS_DIR,
-        migrate=partial(migrate, allow_external_db=allow_external_db),
+        migrate=partial(migrate, allow_external_db=allow_external_db, flag_registry=packaged_flag_registry()),
         config_error=ConfigError,
     )
 
@@ -86,7 +89,13 @@ def host(directory: str | None, dir_option: str, host_: str | None, port: int | 
         window = VersionWindow.load()
         check_own_floor(__version__, window)
     with click_exception_on(ConfigError):
-        config = HubConfig.load(Path(directory), host=host_, port=port, allow_external_db=allow_external_db)
+        config = HubConfig.load(
+            Path(directory),
+            host=host_,
+            port=port,
+            allow_external_db=allow_external_db,
+            flag_registry=packaged_flag_registry(),
+        )
     with click_exception_on(RevisionMismatchError, StoreBelowFloorError):
         ensure_current_revision(config)
     # Composition can still reject the config at boot; surface it as a clean CLI error,

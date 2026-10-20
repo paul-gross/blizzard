@@ -22,7 +22,8 @@ from click.testing import CliRunner
 from blizzard.cli.main import blizzard
 from blizzard.runner.config_table import ConfigError
 from blizzard.runner.host_layout import HostLayout, HostLock
-from blizzard.runner.runtime import Runtime, migration_runner
+from blizzard.runner.runtime import migration_runner
+from tests.config_inputs import host_runtime_of
 from tests.runner_init_fakes import init_runner
 
 pytestmark = pytest.mark.component
@@ -43,7 +44,7 @@ def _tree(root: Path) -> dict[str, str]:
 
 def _host(tmp_path: Path) -> Path:
     root = tmp_path / "host"
-    Runtime(root).init()
+    host_runtime_of(root).init()
     return root
 
 
@@ -156,7 +157,7 @@ def test_migrate_adopts_the_pre_host_store_as_the_host_store_and_upgrades_it(tmp
     assert not list(layout.data_dir.glob("runner.db*"))
     with closing(sqlite3.connect(layout.store_path)) as conn:
         assert conn.execute("SELECT v FROM marker").fetchall() == [("legacy",)]
-    config = Runtime(root).init()
+    config = host_runtime_of(root).init()
     assert migration_runner(config).is_current()
 
 
@@ -206,13 +207,13 @@ def test_migrate_and_check_refuse_a_configured_store_a_pre_host_daemon_still_ser
 
 def test_a_plain_upgrade_of_an_existing_host_store_succeeds_while_a_host_holds_the_lock(tmp_path: Path) -> None:
     root = _host(tmp_path)
-    migration_runner(Runtime(root).init()).downgrade("20261011_1000_runner_scope")
+    migration_runner(host_runtime_of(root).init()).downgrade("20261011_1000_runner_scope")
 
     with HostLock.acquire(HostLayout(root)):
         result = CliRunner().invoke(blizzard, ["runner", "migrate", "--dir", str(root)])
 
     assert result.exit_code == 0, result.output
-    assert migration_runner(Runtime(root).init()).is_current()
+    assert migration_runner(host_runtime_of(root).init()).is_current()
 
 
 # --- one owner ----------------------------------------------------------------------------------
@@ -220,7 +221,7 @@ def test_a_plain_upgrade_of_an_existing_host_store_succeeds_while_a_host_holds_t
 
 def _refusals_while_held(root: Path, holder: Callable[[Path], str | None] | None = None) -> dict[str, str]:
     """What each verb that moves or rewrites the store says while the directory is held, by verb."""
-    runtime = Runtime(root, holder=holder) if holder is not None else Runtime(root)
+    runtime = host_runtime_of(root, holder=holder) if holder is not None else host_runtime_of(root)
     said: dict[str, str] = {}
     for verb, call in (
         ("migrate --down", lambda: runtime.migrate(down="base")),
@@ -242,7 +243,7 @@ def test_every_verb_that_moves_the_store_but_a_plain_upgrade_refuses_while_the_l
     with HostLock.acquire(HostLayout(adopted)):
         said = _refusals_while_held(adopted)
     with HostLock.acquire(HostLayout(pre_host)), pytest.raises(ConfigError) as adoption:
-        Runtime(pre_host).migrate()
+        host_runtime_of(pre_host).migrate()
     said["adoption"] = str(adoption.value)
 
     assert set(said) == {"migrate --down", "store reset", "adoption"}
@@ -257,7 +258,7 @@ def test_the_set_aside_of_a_pre_host_store_refuses_while_the_lock_is_held(tmp_pa
         conn.execute("CREATE TABLE t (v TEXT)")
 
     with HostLock.acquire(HostLayout(root)), pytest.raises(ConfigError, match=f"pid {os.getpid()}"):
-        Runtime(root).set_aside_pre_host_store(now=_NOW)
+        host_runtime_of(root).set_aside_pre_host_store(now=_NOW)
 
     assert (root / "data" / "runner.db").is_file()
 
@@ -271,7 +272,7 @@ def test_every_verb_that_moves_the_store_refuses_while_a_pre_host_daemon_answers
 
     said = _refusals_while_held(adopted, _answered_by(adopted))
     with pytest.raises(ConfigError) as refused:
-        Runtime(root, holder=_answered_by(root)).migrate()
+        host_runtime_of(root, holder=_answered_by(root)).migrate()
     said["adoption"] = str(refused.value)
 
     sockets = {"adoption": HostLayout(root).legacy_socket_path}
@@ -284,11 +285,11 @@ def test_every_verb_that_moves_the_store_refuses_while_a_pre_host_daemon_answers
 def test_a_plain_upgrade_of_an_existing_store_refuses_a_pre_host_daemon_and_nothing_else(tmp_path: Path) -> None:
     root = _host(tmp_path)
     layout = HostLayout(root)
-    migration_runner(Runtime(root).init()).downgrade("20261011_1000_runner_scope")
+    migration_runner(host_runtime_of(root).init()).downgrade("20261011_1000_runner_scope")
     holder = _answered_by(root)
 
     with pytest.raises(ConfigError, match=r"runner\.sock"):
-        Runtime(root, holder=holder).migrate()
+        host_runtime_of(root, holder=holder).migrate()
 
     server = _answering(root)
     try:

@@ -23,6 +23,7 @@ from blizzard.hub.config import HubConfig, parse_egress_config, read_legacy_keys
 from blizzard.hub.domain.config.legacy_keys import LegacyKeys, WorkSourceConfig
 from blizzard.hub.domain.execution.auth.produces import PRODUCES_ENFORCE
 from blizzard.hub.domain.observability.egress.config import EgressConfig
+from tests.config_inputs import init_hub, load_hub_config, migrate_hub
 
 
 @pytest.mark.unit
@@ -38,7 +39,7 @@ def test_postgres_url_round_trips_through_config(tmp_path: Path) -> None:
     root = tmp_path / "hub"
     root.mkdir()
     (root / "blizzard-hub.toml").write_text(f'db_url = "{pg}"\nhost = "0.0.0.0"\nport = 9001\n')
-    config = HubConfig.load(root)
+    config = load_hub_config(root)
     assert config.db_url == pg
     assert config.host == "0.0.0.0"
     assert config.port == 9001
@@ -78,7 +79,7 @@ def test_hub_config_load_ignores_work_source_blocks(tmp_path: Path) -> None:
     root = tmp_path / "hub"
     root.mkdir()
     (root / "blizzard-hub.toml").write_text('db_url = "sqlite:///x"\n\n[[work_source]]\nname = "hub"\n')
-    assert not hasattr(HubConfig.load(root, allow_external_db=True), "work_sources")
+    assert not hasattr(load_hub_config(root, allow_external_db=True), "work_sources")
 
 
 @pytest.mark.unit
@@ -213,7 +214,7 @@ def test_annotation_interval_seconds_round_trips_through_to_toml_and_load(tmp_pa
     edited = dataclasses.replace(config, annotation_interval_seconds=30)
     edited.config_path.write_text(edited.to_toml())
 
-    reloaded = HubConfig.load(edited.root)
+    reloaded = load_hub_config(edited.root)
 
     assert reloaded.annotation_interval_seconds == 30
 
@@ -223,7 +224,7 @@ def test_annotation_interval_seconds_absent_from_toml_defaults_to_120(tmp_path: 
     root = tmp_path / "hub"
     root.mkdir()
     (root / "blizzard-hub.toml").write_text('db_url = "sqlite:///x"\n')
-    assert HubConfig.load(root).annotation_interval_seconds == 120
+    assert load_hub_config(root).annotation_interval_seconds == 120
 
 
 @pytest.mark.unit
@@ -232,7 +233,7 @@ def test_public_url_defaults_to_none_and_is_shown_commented_out(tmp_path: Path) 
     assert config.public_url is None
     assert '# public_url = "' in config.to_toml()
     config.config_path.write_text(config.to_toml())
-    assert HubConfig.load(config.root).public_url is None
+    assert load_hub_config(config.root).public_url is None
 
 
 @pytest.mark.unit
@@ -240,11 +241,11 @@ def test_public_url_round_trips_through_to_toml_and_load_without_a_trailing_slas
     root = tmp_path / "hub"
     root.mkdir()
     (root / "blizzard-hub.toml").write_text('db_url = "sqlite:///x"\npublic_url = "https://blizzard.example.com/"\n')
-    loaded = HubConfig.load(root, allow_external_db=True)
+    loaded = load_hub_config(root, allow_external_db=True)
     assert loaded.public_url == "https://blizzard.example.com"
 
     loaded.config_path.write_text(loaded.to_toml())
-    assert HubConfig.load(root, allow_external_db=True).public_url == "https://blizzard.example.com"
+    assert load_hub_config(root, allow_external_db=True).public_url == "https://blizzard.example.com"
 
 
 @pytest.mark.unit
@@ -254,7 +255,7 @@ def test_a_public_url_that_is_not_an_absolute_http_url_fails_the_load(tmp_path: 
     root.mkdir()
     (root / "blizzard-hub.toml").write_text(f'db_url = "sqlite:///x"\npublic_url = {value}\n')
     with pytest.raises(HubConfigError, match="public_url"):
-        HubConfig.load(root, allow_external_db=True)
+        load_hub_config(root, allow_external_db=True)
 
 
 @pytest.mark.unit
@@ -268,7 +269,7 @@ def test_a_leftover_pm_source_block_fails_the_load_naming_the_new_key(tmp_path: 
         'db_url = "sqlite:///x"\n\n[[pm_source]]\nname = "blizzard"\nprovider = "github"\nrepo = "o/r"\ntoken_env = "T"\n'
     )
     with pytest.raises(HubConfigError, match=r"\[\[work_source\]\]"):
-        HubConfig.load(root)
+        load_hub_config(root)
 
 
 @pytest.mark.unit
@@ -283,7 +284,7 @@ def test_a_leftover_pm_source_block_fails_even_beside_a_valid_work_source(tmp_pa
         '\n[[pm_source]]\nname = "b"\nprovider = "github"\nrepo = "o/r2"\ntoken_env = "T2"\n'
     )
     with pytest.raises(HubConfigError, match=r"\[\[work_source\]\]"):
-        HubConfig.load(root)
+        load_hub_config(root)
 
 
 # --------------------------------------------------------------------------- #
@@ -297,7 +298,7 @@ def test_a_toml_still_setting_runner_auth_mode_loads_with_the_key_ignored(tmp_pa
     root.mkdir()
     (root / "blizzard-hub.toml").write_text(f'db_url = "sqlite:///x"\nrunner_auth_mode = "{value}"\n')
 
-    loaded = HubConfig.load(root)
+    loaded = load_hub_config(root)
 
     assert not hasattr(loaded, "runner_auth_mode")
     assert "runner_auth_mode" not in loaded.to_toml()
@@ -317,12 +318,12 @@ def test_route_token_mode_defaults_to_warn(tmp_path: Path) -> None:
 def test_route_token_mode_round_trips_through_to_toml_and_load(tmp_path: Path) -> None:
     config = _hub_config(tmp_path)
     config.config_path.write_text(config.to_toml())
-    loaded = HubConfig.load(config.root)
+    loaded = load_hub_config(config.root)
     assert loaded.route_token_mode == "warn"
 
     edited = dataclasses.replace(loaded, route_token_mode="enforce")
     edited.config_path.write_text(edited.to_toml())
-    reloaded = HubConfig.load(edited.root)
+    reloaded = load_hub_config(edited.root)
     assert reloaded.route_token_mode == "enforce"
 
 
@@ -331,7 +332,7 @@ def test_route_token_mode_absent_from_toml_defaults_to_warn(tmp_path: Path) -> N
     root = tmp_path / "hub"
     root.mkdir()
     (root / "blizzard-hub.toml").write_text('db_url = "sqlite:///x"\n')
-    assert HubConfig.load(root).route_token_mode == "warn"
+    assert load_hub_config(root).route_token_mode == "warn"
 
 
 @pytest.mark.unit
@@ -340,7 +341,7 @@ def test_route_token_mode_unknown_value_raises(tmp_path: Path) -> None:
     root.mkdir()
     (root / "blizzard-hub.toml").write_text('db_url = "sqlite:///x"\nroute_token_mode = "block"\n')
     with pytest.raises(HubConfigError, match="route_token_mode"):
-        HubConfig.load(root)
+        load_hub_config(root)
 
 
 # --------------------------------------------------------------------------- #
@@ -357,12 +358,12 @@ def test_produces_mode_defaults_to_warn(tmp_path: Path) -> None:
 def test_produces_mode_round_trips_through_to_toml_and_load(tmp_path: Path) -> None:
     config = _hub_config(tmp_path)
     config.config_path.write_text(config.to_toml())
-    loaded = HubConfig.load(config.root)
+    loaded = load_hub_config(config.root)
     assert loaded.produces_mode == "warn"
 
     edited = dataclasses.replace(loaded, produces_mode="enforce")
     edited.config_path.write_text(edited.to_toml())
-    reloaded = HubConfig.load(edited.root)
+    reloaded = load_hub_config(edited.root)
     assert reloaded.produces_mode == "enforce"
 
 
@@ -371,7 +372,7 @@ def test_produces_mode_absent_from_toml_defaults_to_warn(tmp_path: Path) -> None
     root = tmp_path / "hub"
     root.mkdir()
     (root / "blizzard-hub.toml").write_text('db_url = "sqlite:///x"\n')
-    assert HubConfig.load(root).produces_mode == "warn"
+    assert load_hub_config(root).produces_mode == "warn"
 
 
 @pytest.mark.unit
@@ -380,7 +381,7 @@ def test_produces_mode_unknown_value_raises(tmp_path: Path) -> None:
     root.mkdir()
     (root / "blizzard-hub.toml").write_text('db_url = "sqlite:///x"\nproduces_mode = "block"\n')
     with pytest.raises(HubConfigError, match="produces_mode"):
-        HubConfig.load(root)
+        load_hub_config(root)
 
 
 @pytest.mark.unit
@@ -389,7 +390,7 @@ def test_produces_mode_enforces_independently_of_the_other_modes(tmp_path: Path)
     config = _hub_config(tmp_path)
     edited = dataclasses.replace(config, produces_mode=PRODUCES_ENFORCE)
     edited.config_path.write_text(edited.to_toml())
-    reloaded = HubConfig.load(edited.root)
+    reloaded = load_hub_config(edited.root)
     assert reloaded.produces_mode == "enforce"
     assert reloaded.route_token_mode == "warn"
 
@@ -413,7 +414,7 @@ def test_hub_trusted_proxies_round_trip_through_to_toml_and_load(tmp_path: Path)
     root.mkdir()
     edited = dataclasses.replace(HubConfig.scaffold(root), trusted_proxies=("10.0.0.4", "192.168.0.0/16"))
     (root / "blizzard-hub.toml").write_text(edited.to_toml())
-    assert HubConfig.load(root).trusted_proxies == ("10.0.0.4", "192.168.0.0/16")
+    assert load_hub_config(root).trusted_proxies == ("10.0.0.4", "192.168.0.0/16")
 
 
 @pytest.mark.unit
@@ -422,7 +423,7 @@ def test_hub_trusted_proxies_rejects_a_malformed_entry(tmp_path: Path) -> None:
     root.mkdir()
     (root / "blizzard-hub.toml").write_text('db_url = "sqlite:///x"\ntrusted_proxies = ["not-an-ip"]\n')
     with pytest.raises(HubConfigError):
-        HubConfig.load(root)
+        load_hub_config(root)
 
 
 # --------------------------------------------------------------------------- #
@@ -440,12 +441,12 @@ def test_follow_latest_defaults_to_false(tmp_path: Path) -> None:
 def test_follow_latest_round_trips_through_to_toml_and_load(tmp_path: Path) -> None:
     config = _hub_config(tmp_path)
     config.config_path.write_text(config.to_toml())
-    loaded = HubConfig.load(config.root)
+    loaded = load_hub_config(config.root)
     assert loaded.follow_latest is False
 
     edited = dataclasses.replace(loaded, follow_latest=True)
     edited.config_path.write_text(edited.to_toml())
-    reloaded = HubConfig.load(edited.root)
+    reloaded = load_hub_config(edited.root)
     assert reloaded.follow_latest is True
 
 
@@ -464,7 +465,7 @@ def test_follow_latest_absent_from_toml_defaults_to_false(tmp_path: Path) -> Non
     root = tmp_path / "hub"
     root.mkdir()
     (root / "blizzard-hub.toml").write_text('db_url = "sqlite:///x"\n')
-    assert HubConfig.load(root).follow_latest is False
+    assert load_hub_config(root).follow_latest is False
 
 
 @pytest.mark.unit
@@ -476,7 +477,7 @@ def test_follow_latest_non_boolean_raises(tmp_path: Path, value: str) -> None:
     root.mkdir()
     (root / "blizzard-hub.toml").write_text(f'db_url = "sqlite:///x"\nfollow_latest = {value}\n')
     with pytest.raises(HubConfigError, match="follow_latest"):
-        HubConfig.load(root)
+        load_hub_config(root)
 
 
 # --------------------------------------------------------------------------- #
@@ -492,12 +493,12 @@ def test_close_forge_writes_enabled_defaults_to_true(tmp_path: Path) -> None:
 def test_close_forge_writes_enabled_round_trips_through_to_toml_and_load(tmp_path: Path) -> None:
     config = _hub_config(tmp_path)
     config.config_path.write_text(config.to_toml())
-    loaded = HubConfig.load(config.root)
+    loaded = load_hub_config(config.root)
     assert loaded.close_forge_writes_enabled is True
 
     edited = dataclasses.replace(loaded, close_forge_writes_enabled=False)
     edited.config_path.write_text(edited.to_toml())
-    reloaded = HubConfig.load(edited.root)
+    reloaded = load_hub_config(edited.root)
     assert reloaded.close_forge_writes_enabled is False
 
 
@@ -506,7 +507,7 @@ def test_close_forge_writes_enabled_absent_from_toml_defaults_to_true(tmp_path: 
     root = tmp_path / "hub"
     root.mkdir()
     (root / "blizzard-hub.toml").write_text('db_url = "sqlite:///x"\n')
-    assert HubConfig.load(root).close_forge_writes_enabled is True
+    assert load_hub_config(root).close_forge_writes_enabled is True
 
 
 @pytest.mark.unit
@@ -516,7 +517,7 @@ def test_close_forge_writes_enabled_non_boolean_raises(tmp_path: Path, value: st
     root.mkdir()
     (root / "blizzard-hub.toml").write_text(f'db_url = "sqlite:///x"\nclose_forge_writes_enabled = {value}\n')
     with pytest.raises(HubConfigError, match="close_forge_writes_enabled"):
-        HubConfig.load(root)
+        load_hub_config(root)
 
 
 # --------------------------------------------------------------------------- #
@@ -530,7 +531,7 @@ def test_hub_db_url_env_overrides_toml_at_load(tmp_path: Path, monkeypatch: pyte
     (root / "blizzard-hub.toml").write_text('db_url = "sqlite:///toml-value.db"\n')
     override = "postgresql+psycopg://blizzard:secret@localhost:5432/hub"
     monkeypatch.setenv(HUB_ENV_DB_URL, override)
-    assert HubConfig.load(root).db_url == override
+    assert load_hub_config(root).db_url == override
 
 
 @pytest.mark.unit
@@ -548,7 +549,7 @@ def test_hub_host_env_honored_at_load_time(tmp_path: Path, monkeypatch: pytest.M
     root.mkdir()
     (root / "blizzard-hub.toml").write_text('db_url = "sqlite:///x"\nhost = "127.0.0.1"\n')
     monkeypatch.setenv(HUB_ENV_HOST, "0.0.0.0")
-    assert HubConfig.load(root).host == "0.0.0.0"
+    assert load_hub_config(root).host == "0.0.0.0"
 
 
 @pytest.mark.unit
@@ -557,7 +558,7 @@ def test_hub_host_cli_flag_wins_over_env_at_load(tmp_path: Path, monkeypatch: py
     root.mkdir()
     (root / "blizzard-hub.toml").write_text('db_url = "sqlite:///x"\nhost = "127.0.0.1"\n')
     monkeypatch.setenv(HUB_ENV_HOST, "0.0.0.0")
-    assert HubConfig.load(root, host="10.0.0.5").host == "10.0.0.5"
+    assert load_hub_config(root, host="10.0.0.5").host == "10.0.0.5"
 
 
 @pytest.mark.unit
@@ -566,7 +567,7 @@ def test_hub_port_env_honored_at_load_time(tmp_path: Path, monkeypatch: pytest.M
     root.mkdir()
     (root / "blizzard-hub.toml").write_text('db_url = "sqlite:///x"\nport = 8421\n')
     monkeypatch.setenv(HUB_ENV_PORT, "9999")
-    assert HubConfig.load(root).port == 9999
+    assert load_hub_config(root).port == 9999
 
 
 @pytest.mark.unit
@@ -575,7 +576,7 @@ def test_hub_port_cli_flag_wins_over_env_at_load(tmp_path: Path, monkeypatch: py
     root.mkdir()
     (root / "blizzard-hub.toml").write_text('db_url = "sqlite:///x"\nport = 8421\n')
     monkeypatch.setenv(HUB_ENV_PORT, "9999")
-    assert HubConfig.load(root, port=1234).port == 1234
+    assert load_hub_config(root, port=1234).port == 1234
 
 
 @pytest.mark.unit
@@ -587,7 +588,7 @@ def test_hub_config_byte_identical_when_env_unset(tmp_path: Path, monkeypatch: p
     root.mkdir()
     pg = "postgresql+psycopg://blizzard:secret@localhost:5432/hub"
     (root / "blizzard-hub.toml").write_text(f'db_url = "{pg}"\nhost = "0.0.0.0"\nport = 9001\n')
-    config = HubConfig.load(root)
+    config = load_hub_config(root)
     assert config.db_url == pg
     assert config.host == "0.0.0.0"
     assert config.port == 9001
@@ -609,25 +610,25 @@ def test_hub_malformed_port_env_raises_from_load(tmp_path: Path, monkeypatch: py
     (root / "blizzard-hub.toml").write_text('db_url = "sqlite:///x"\n')
     monkeypatch.setenv(HUB_ENV_PORT, "not-a-port")
     with pytest.raises(HubConfigError, match=HUB_ENV_PORT):
-        HubConfig.load(root)
+        load_hub_config(root)
 
 
 @pytest.mark.unit
 def test_hub_db_url_honored_identically_by_host_and_migrate(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """`blizzard hub host` and `blizzard hub migrate` both resolve through
     `HubConfig.load`/`scaffold` — the override needs no per-verb wiring."""
-    from blizzard.hub.runtime import init_environment, migrate, migration_runner
+    from blizzard.hub.runtime import migration_runner
 
     root = tmp_path / "hub"
-    init_environment(root)  # scaffolds + migrates the default sqlite store
+    init_hub(root)  # scaffolds + migrates the default sqlite store
 
     # Inside root: an override pointing elsewhere is exactly what the --dir isolation
     # guard exists to catch — see tests/test_config.py's own guard tests below.
     override_url = f"sqlite:///{root / 'override.db'}"
     monkeypatch.setenv(HUB_ENV_DB_URL, override_url)
 
-    migrate(root)  # resolves through HubConfig.load — migrates the overridden store
-    config = HubConfig.load(root)
+    migrate_hub(root)  # resolves through HubConfig.load — migrates the overridden store
+    config = load_hub_config(root)
     assert config.db_url == override_url
     assert (root / "override.db").exists()
     assert migration_runner(config).current_revision() is not None
@@ -645,7 +646,7 @@ def test_db_url_outside_root_is_refused(tmp_path: Path) -> None:
     (root / "blizzard-hub.toml").write_text(f'db_url = "sqlite:///{live_db}"\n')
 
     with pytest.raises(HubConfigError, match=str(live_db)):
-        HubConfig.load(root)
+        load_hub_config(root)
 
 
 @pytest.mark.unit
@@ -655,7 +656,7 @@ def test_db_url_outside_root_proceeds_with_allow_external_db(tmp_path: Path) -> 
     root.mkdir()
     (root / "blizzard-hub.toml").write_text(f'db_url = "sqlite:///{live_db}"\n')
 
-    config = HubConfig.load(root, allow_external_db=True)
+    config = load_hub_config(root, allow_external_db=True)
     assert config.db_url == f"sqlite:///{live_db}"
 
 
@@ -668,7 +669,7 @@ def test_db_url_absolute_but_inside_root_needs_no_flag(tmp_path: Path) -> None:
     in_dir_db = root / "hub.db"
     (root / "blizzard-hub.toml").write_text(f'db_url = "sqlite:///{in_dir_db}"\n')
 
-    config = HubConfig.load(root)
+    config = load_hub_config(root)
     assert config.db_url == f"sqlite:///{in_dir_db}"
 
 
@@ -682,9 +683,9 @@ def test_db_url_env_override_outside_root_is_also_guarded(tmp_path: Path, monkey
     monkeypatch.setenv(HUB_ENV_DB_URL, f"sqlite:///{outside_db}")
 
     with pytest.raises(HubConfigError, match=str(outside_db)):
-        HubConfig.load(root)
+        load_hub_config(root)
 
-    config = HubConfig.load(root, allow_external_db=True)
+    config = load_hub_config(root, allow_external_db=True)
     assert config.db_url == f"sqlite:///{outside_db}"
 
 
@@ -695,7 +696,7 @@ def test_db_url_relative_sqlite_path_bypasses_the_guard(tmp_path: Path) -> None:
     root = tmp_path / "hub"
     root.mkdir()
     (root / "blizzard-hub.toml").write_text('db_url = "sqlite:///relative.db"\n')
-    assert HubConfig.load(root).db_url == "sqlite:///relative.db"
+    assert load_hub_config(root).db_url == "sqlite:///relative.db"
 
 
 @pytest.mark.unit
@@ -705,7 +706,7 @@ def test_postgres_db_url_bypasses_the_guard(tmp_path: Path) -> None:
     root.mkdir()
     pg = "postgresql+psycopg://blizzard:secret@elsewhere:5432/hub"
     (root / "blizzard-hub.toml").write_text(f'db_url = "{pg}"\n')
-    assert HubConfig.load(root).db_url == pg
+    assert load_hub_config(root).db_url == pg
 
 
 @pytest.mark.unit
@@ -724,7 +725,7 @@ def test_load_falls_back_to_default_db_url_when_key_is_absent(tmp_path: Path) ->
     root = tmp_path / "hub"
     root.mkdir()
     (root / "blizzard-hub.toml").write_text('host = "0.0.0.0"\n')
-    assert HubConfig.load(root).db_url == HubConfig.default_db_url(root)
+    assert load_hub_config(root).db_url == HubConfig.default_db_url(root)
 
 
 @pytest.mark.unit
@@ -734,15 +735,13 @@ def test_a_freshly_scaffolded_dir_copied_elsewhere_re_derives_its_own_db_url(tmp
     `--allow-external-db` needed."""
     import shutil
 
-    from blizzard.hub.runtime import init_environment
-
     original = tmp_path / "original"
-    init_environment(original)
+    init_hub(original)
 
     copy_root = tmp_path / "copy"
     shutil.copytree(original, copy_root)
 
-    copy_config = HubConfig.load(copy_root)
+    copy_config = load_hub_config(copy_root)
     assert copy_config.db_url == HubConfig.default_db_url(copy_root)
     assert Path(copy_config.db_url.removeprefix("sqlite:///")).exists()
 
@@ -777,7 +776,7 @@ def test_hub_transcript_caps_parse_and_round_trip_through_to_toml(tmp_path: Path
     )
     (root / "blizzard-hub.toml").write_text(edited.to_toml())
 
-    reloaded = HubConfig.load(root)
+    reloaded = load_hub_config(root)
 
     assert reloaded.transcripts.runner_daily_rate_max_bytes == 214748364800
     # The two left unset stay unset through the round trip rather than being frozen at
@@ -803,14 +802,14 @@ def test_the_hub_template_shows_each_ingest_ceiling_at_its_domain_default(tmp_pa
 @pytest.mark.parametrize("key", ["record_max_bytes", "chunk_budget_max_bytes", "runner_daily_rate_max_bytes"])
 @pytest.mark.parametrize("value", ["0", '"10485760"', "false"])
 def test_a_hub_ingest_cap_refuses_a_non_positive_or_non_integer_value(tmp_path: Path, key: str, value: str) -> None:
-    from blizzard.hub.config import ConfigError, HubConfig
+    from blizzard.hub.config import ConfigError
 
     root = tmp_path / "hub"
     root.mkdir()
     (root / "blizzard-hub.toml").write_text(f"[transcripts]\n{key} = {value}\n")
 
     with pytest.raises(ConfigError, match=key):
-        HubConfig.load(root)
+        load_hub_config(root)
 
 
 @pytest.mark.unit
@@ -847,7 +846,7 @@ def test_tracing_defaults_apply_when_the_table_is_absent(tmp_path: Path) -> None
     root = tmp_path / "hub"
     root.mkdir()
     (root / "blizzard-hub.toml").write_text(f'db_url = "{HubConfig.default_db_url(root)}"\n')
-    assert HubConfig.load(root).tracing == TracingConfig(
+    assert load_hub_config(root).tracing == TracingConfig(
         sweep_seconds=60, settle_seconds=300, batch_limit=200, max_lag_seconds=86400, replay_max_window=604800
     )
 
@@ -863,7 +862,7 @@ def test_tracing_scaffold_renders_every_knob_commented_at_its_default(tmp_path: 
         if key != "worker_program_services":
             assert f"# {key} = {toml_literal(value)}\n" in text
     (root / "blizzard-hub.toml").write_text(text)
-    assert HubConfig.load(root).tracing == TracingConfig()
+    assert load_hub_config(root).tracing == TracingConfig()
 
 
 @pytest.mark.unit
@@ -881,7 +880,7 @@ def test_tracing_overrides_round_trip_through_to_toml_and_load(tmp_path: Path) -
     )
     config = dataclasses.replace(HubConfig.scaffold(root), tracing=tracing)
     (root / "blizzard-hub.toml").write_text(config.to_toml())
-    assert HubConfig.load(root).tracing == tracing
+    assert load_hub_config(root).tracing == tracing
 
 
 @pytest.mark.unit
@@ -894,12 +893,12 @@ def test_harness_telemetry_round_trips_and_refuses_a_non_boolean(tmp_path: Path)
     text = config.to_toml()
     assert "\nharness_telemetry = true\n" in text
     (root / "blizzard-hub.toml").write_text(text)
-    assert HubConfig.load(root).tracing.harness_telemetry is True
+    assert load_hub_config(root).tracing.harness_telemetry is True
     (root / "blizzard-hub.toml").write_text(
         f'db_url = "{HubConfig.default_db_url(root)}"\n\n[tracing]\nharness_telemetry = "yes"\n'
     )
     with pytest.raises(HubConfigError, match=re.escape("tracing.harness_telemetry must be true or false")):
-        HubConfig.load(root)
+        load_hub_config(root)
 
 
 @pytest.mark.unit
@@ -909,7 +908,7 @@ def test_worker_program_services_round_trip_through_to_toml_and_load(tmp_path: P
     tracing = TracingConfig(worker_program_services={"winter_cli": "winter-blizzard", "a.b": "svc"})
     config = dataclasses.replace(HubConfig.scaffold(root), tracing=tracing)
     (root / "blizzard-hub.toml").write_text(config.to_toml())
-    assert HubConfig.load(root).tracing == tracing
+    assert load_hub_config(root).tracing == tracing
 
 
 @pytest.mark.unit
@@ -932,7 +931,7 @@ def test_worker_program_services_refuses_a_bad_entry(tmp_path: Path, entry: str,
         f'db_url = "{HubConfig.default_db_url(root)}"\n\n[tracing.worker_program_services]\n{entry}\n'
     )
     with pytest.raises(HubConfigError, match=re.escape(complaint)):
-        HubConfig.load(root)
+        load_hub_config(root)
 
 
 @pytest.mark.unit
@@ -943,7 +942,7 @@ def test_worker_program_services_refuses_a_non_table(tmp_path: Path) -> None:
         f'db_url = "{HubConfig.default_db_url(root)}"\n\n[tracing]\nworker_program_services = "x"\n'
     )
     with pytest.raises(HubConfigError, match="must be a table"):
-        HubConfig.load(root)
+        load_hub_config(root)
 
 
 @pytest.mark.unit
@@ -963,7 +962,7 @@ def test_tracing_parses_from_a_hand_written_table(tmp_path: Path) -> None:
     (root / "blizzard-hub.toml").write_text(
         f'db_url = "{HubConfig.default_db_url(root)}"\n\n[tracing]\nsettle_seconds = 0\nbatch_limit = 50\n'
     )
-    tracing = HubConfig.load(root).tracing
+    tracing = load_hub_config(root).tracing
     assert tracing.settle_seconds == 0
     assert tracing.batch_limit == 50
     assert tracing.sweep_seconds == 60
@@ -977,7 +976,7 @@ def test_platform_tracing_parses_from_a_hand_written_table(tmp_path: Path) -> No
     (root / "blizzard-hub.toml").write_text(
         f'db_url = "{HubConfig.default_db_url(root)}"\n\n[tracing]\nplatform = true\nplatform_sample_ratio = 0\n'
     )
-    tracing = HubConfig.load(root).tracing
+    tracing = load_hub_config(root).tracing
     assert tracing.platform is True
     assert tracing.platform_sample_ratio == 0.0
 
@@ -1007,7 +1006,7 @@ def test_tracing_rejects_an_invalid_knob(tmp_path: Path, key: str, value: str) -
         f'db_url = "{HubConfig.default_db_url(root)}"\n\n[tracing]\n{key} = {value}\n'
     )
     with pytest.raises(HubConfigError, match=f"tracing.{key}"):
-        HubConfig.load(root)
+        load_hub_config(root)
 
 
 @pytest.mark.unit
@@ -1037,7 +1036,7 @@ def _hub_egress_root(tmp_path: Path, table: str = "") -> Path:
 
 @pytest.mark.unit
 def test_egress_is_off_with_working_defaults_when_the_table_is_absent(tmp_path: Path) -> None:
-    egress = HubConfig.load(_hub_egress_root(tmp_path)).egress
+    egress = load_hub_config(_hub_egress_root(tmp_path)).egress
     assert egress == EgressConfig()
     assert egress.directory is None
     assert egress.format == "ndjson"
@@ -1070,7 +1069,7 @@ def test_egress_scaffold_leaves_the_switch_off_and_every_other_knob_commented_at
     assert '# file_paths = "relative"\n' in text
     assert '# path_key_env = "BZ_EGRESS_PATH_KEY"\n' in text
     (root / "blizzard-hub.toml").write_text(text)
-    assert HubConfig.load(root).egress == EgressConfig()
+    assert load_hub_config(root).egress == EgressConfig()
 
 
 @pytest.mark.unit
@@ -1091,7 +1090,7 @@ def test_egress_overrides_round_trip_through_to_toml_and_load(tmp_path: Path) ->
     )
     config = dataclasses.replace(HubConfig.scaffold(root), egress=egress)
     (root / "blizzard-hub.toml").write_text(config.to_toml())
-    assert HubConfig.load(root).egress == egress
+    assert load_hub_config(root).egress == egress
 
 
 @pytest.mark.unit
@@ -1101,7 +1100,7 @@ def test_egress_parses_from_a_hand_written_table_and_orders_datasets_as_a_pass_w
         '\n[egress]\ndirectory = "/srv/egress"\ndatasets = ["events", "invocations", "steps"]\nsettle_seconds = 0\n'
         'extractor_versions = "all"\n',
     )
-    egress = HubConfig.load(root).egress
+    egress = load_hub_config(root).egress
     assert egress.directory == Path("/srv/egress")
     assert egress.datasets == ("steps", "invocations", "events")
     assert egress.extractor_versions == "all"
@@ -1113,10 +1112,10 @@ def test_egress_parses_from_a_hand_written_table_and_orders_datasets_as_a_pass_w
 @pytest.mark.parametrize("mode", ["relative", "hashed", "absolute", "omit"])
 def test_egress_file_paths_and_key_variable_parse_and_round_trip(tmp_path: Path, mode: str) -> None:
     root = _hub_egress_root(tmp_path, f'\n[egress]\nfile_paths = "{mode}"\npath_key_env = "MY_KEY"\n')
-    egress = HubConfig.load(root).egress
+    egress = load_hub_config(root).egress
     assert (egress.file_paths, egress.path_key_env) == (mode, "MY_KEY")
     (root / "blizzard-hub.toml").write_text(dataclasses.replace(HubConfig.scaffold(root), egress=egress).to_toml())
-    assert HubConfig.load(root).egress == egress
+    assert load_hub_config(root).egress == egress
 
 
 @pytest.mark.unit
@@ -1154,7 +1153,7 @@ def test_egress_file_paths_default_to_relative_with_the_conventional_key_variabl
 def test_egress_rejects_an_invalid_key(tmp_path: Path, key: str, value: str) -> None:
     root = _hub_egress_root(tmp_path, f"\n[egress]\n{key} = {value}\n")
     with pytest.raises(HubConfigError, match=f"egress.{key}"):
-        HubConfig.load(root)
+        load_hub_config(root)
 
 
 @pytest.mark.unit

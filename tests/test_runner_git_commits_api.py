@@ -14,7 +14,7 @@ import pytest
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.tokens import TokenHash
-from blizzard.runner.app import build_hosted_app, create_app
+from blizzard.runner.app import build_hosted_app
 from blizzard.runner.composition import build_runner_process
 from blizzard.runner.config import DEFAULT_WORKSPACE_ID, RunnerConfig
 from blizzard.runner.environments.internal.winter_provider import WinterWorkspaceProvider
@@ -27,6 +27,7 @@ from blizzard.runner.lifecycle.judgement.git_commit_declaration import (
     GitCommitDeclarationService,
 )
 from blizzard.runner.loop_wiring import LoopWiring
+from tests.config_inputs import create_runner_app
 from tests.host_files import one_workspace
 from tests.runner_client import runner_client
 from tests.runner_fakes import (
@@ -52,7 +53,7 @@ def _app_with_declarations(tmp_path: Path):  # type: ignore[no-untyped-def]
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}")
     service = GitCommitDeclarationService(store, FixedClock(_NOW), _WORKSPACES, environments=store, outbound=store)
-    return create_app(
+    return create_runner_app(
         config, runner_stores=make_stores(store), host_stores=make_host_stores(store), git_commit_declarations=service
     ), store
 
@@ -86,7 +87,7 @@ def _seed_lease(store, **overrides: object) -> None:  # type: ignore[no-untyped-
 @pytest.mark.component
 def test_503_when_declaration_service_unwired(tmp_path: Path) -> None:
     config = RunnerConfig(root=tmp_path, db_url="sqlite://")
-    with runner_client(create_app(config)) as client:
+    with runner_client(create_runner_app(config)) as client:
         resp = client.post("/api/leases/lease_1/git-commits", json=_BODY)
     assert resp.status_code == 503
 
@@ -98,7 +99,7 @@ def test_503_when_store_unwired(tmp_path: Path) -> None:
     service = GitCommitDeclarationService(store, FixedClock(_NOW), _WORKSPACES, environments=store, outbound=store)
     # The service is wired, but ``runner_stores`` — the controller's own read-only
     # resolution seam — is not: the edge must still answer 503, not raise.
-    app = create_app(config, git_commit_declarations=service)
+    app = create_runner_app(config, git_commit_declarations=service)
     with runner_client(app) as client:
         resp = client.post("/api/leases/lease_1/git-commits", json=_BODY)
     assert resp.status_code == 503
@@ -266,7 +267,7 @@ def test_400_when_several_environments_are_held_and_none_is_named(tmp_path: Path
         environments=store,
         outbound=store,
     )
-    app = create_app(
+    app = create_runner_app(
         config, runner_stores=make_stores(store), host_stores=make_host_stores(store), git_commit_declarations=service
     )
     _seed_lease(store)
@@ -303,7 +304,7 @@ def test_the_same_repo_in_two_environments_is_two_declarations(tmp_path: Path) -
         environments=store,
         outbound=store,
     )
-    app = create_app(
+    app = create_runner_app(
         config, runner_stores=make_stores(store), host_stores=make_host_stores(store), git_commit_declarations=service
     )
     _seed_lease(store)
@@ -436,7 +437,7 @@ def test_a_declaration_is_checked_against_the_repos_of_the_workspace_its_environ
         ]
     )
     service = GitCommitDeclarationService(store, FixedClock(_NOW), workspaces, environments=store, outbound=store)
-    app = create_app(
+    app = create_runner_app(
         config, runner_stores=make_stores(store), host_stores=make_host_stores(store), git_commit_declarations=service
     )
     _seed_lease(store)

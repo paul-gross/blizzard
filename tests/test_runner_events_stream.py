@@ -13,7 +13,7 @@ import pytest
 from blizzard.foundation.events.broker import EventBroker
 from blizzard.foundation.events.stream import DEFAULT_KEEPALIVE_SECONDS, Stream
 from blizzard.runner.api.events import _RESERVED_COMMENT, events_stream
-from blizzard.runner.app import create_app_for_export
+from tests.config_inputs import export_runner_app
 
 pytestmark = pytest.mark.component
 
@@ -71,7 +71,7 @@ async def test_stream_endpoint_binds_the_default_keepalive_cadence(monkeypatch: 
 
 
 def test_events_stream_excluded_from_openapi() -> None:
-    app = create_app_for_export()
+    app = export_runner_app()
     paths = app.openapi()["paths"]
     assert "/api/events/stream" not in paths
     # A route this same schema *does* carry — the exclusion is deliberate, not an

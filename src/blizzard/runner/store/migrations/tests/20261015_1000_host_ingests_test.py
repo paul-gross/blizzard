@@ -14,6 +14,7 @@ import sqlalchemy as sa
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.migrations import MigrationRunner
 from blizzard.runner import runtime as runner_runtime
+from tests.config_inputs import init_host
 from tests.runner_scope_seeding import T0, reflect, seed_every_keyed_table
 
 pytestmark = [pytest.mark.component]
@@ -28,7 +29,7 @@ _RUNNER_ID = "runner_id-1"
 
 def _store_at_parent(tmp_path: Path) -> tuple[MigrationRunner, sa.Engine]:
     """A parent-revision store holding one identity and one row in every keyed table."""
-    config = runner_runtime.init_environment(tmp_path)
+    config = init_host(tmp_path)
     migration = runner_runtime.migration_runner(config)
     migration.downgrade(_PARENT)
     engine = create_engine_from_url(config.db_url)

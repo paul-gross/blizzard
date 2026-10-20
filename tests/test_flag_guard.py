@@ -20,12 +20,11 @@ from blizzard.foundation.flags import (
     without_off_fields,
 )
 from blizzard.hub.api.flag_guard import flag_guard as hub_flag_guard
-from blizzard.hub.app import create_app as create_hub_app
 from blizzard.hub.config import HubConfig
 from blizzard.runner.api.flag_guard import flag_guard as runner_flag_guard
-from blizzard.runner.app import create_app as create_runner_app
 from blizzard.runner.config import RunnerConfig
 from blizzard.wire.flags import FlagOff
+from tests.config_inputs import create_hub_app, create_runner_app
 
 _REGISTRY = """
 [flag.hub-thing]

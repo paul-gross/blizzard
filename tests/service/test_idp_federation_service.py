@@ -21,9 +21,10 @@ from urllib.parse import quote, unquote
 import httpx
 import pytest
 
-from blizzard.hub.config import AuthConfig, HubConfig, OAuthProviderConfig
+from blizzard.hub.config import AuthConfig, OAuthProviderConfig
 from blizzard.runner.auth.session import CookieNames
 from blizzard.runner.hub.internal.token_file import HubTokenFile
+from tests.config_inputs import load_hub_config
 from tests.fleet_launchers import await_http, terminate
 from tests.host_files import load_runner_config, sampler_without_credentials, write_host_file
 from tests.runner_join import RUNNER_BIN, adopt_runner, runner_spawn_env
@@ -62,7 +63,7 @@ def _oauth_hub(
     env = {**os.environ, _SECRET_ENV: _SECRET}
     hub_bin = str(Path(sys.executable).parent / "blizzard-hub")
     subprocess.run([hub_bin, "init", str(hub_dir)], check=True, capture_output=True, text=True)
-    config = HubConfig.load(hub_dir)
+    config = load_hub_config(hub_dir)
     config = dataclasses.replace(config, auth=AuthConfig(mode="oauth", oauth_providers=providers, superuser=superuser))
     config.config_path.write_text(config.to_toml())
     log = hub_dir / "daemon.log"

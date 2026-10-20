@@ -7,8 +7,8 @@ from pathlib import Path
 import pytest
 
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.runner import runtime as runner_runtime
 from blizzard.runner.hub.identity import RunnerIdentity
+from tests.config_inputs import init_host
 from tests.migration_support_runner_store_migrations import (
     _LATER,
     _NEW,
@@ -23,9 +23,9 @@ def test_rebuilt_store_holds_no_identity_until_a_registration_records_the_hubs(t
     """A store keeps only the identity a registration answered, so a rebuilt one cannot fork a new
     one: it holds none until the hub answers the runner's token again."""
     identity = RunnerIdentity("rn_01JX0000000000000000000000", "r-claude", _NEW)
-    first = runner_runtime.init_environment(tmp_path / "first")
+    first = init_host(tmp_path / "first")
     first_engine = create_engine_from_url(first.db_url)
-    rebuilt = runner_runtime.init_environment(tmp_path / "rebuilt")
+    rebuilt = init_host(tmp_path / "rebuilt")
     rebuilt_engine = create_engine_from_url(rebuilt.db_url)
     try:
         store = SqlAlchemyRunnerStore(first_engine, runner_store_errors(), identity.runner_id)

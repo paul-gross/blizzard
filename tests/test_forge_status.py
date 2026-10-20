@@ -17,7 +17,6 @@ from fastapi.testclient import TestClient
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.hub import app as hub_app
-from blizzard.hub import runtime as hub_runtime
 from blizzard.hub.composition import HubServices
 from blizzard.hub.domain.chunk.model import WorkRef
 from blizzard.hub.domain.observability.forge_status import AnnotationReconciler, TenantAnnotation
@@ -25,6 +24,7 @@ from blizzard.hub.store.internal.forge_annotation_store import ForgeAnnotationSt
 from blizzard.hub.store.internal.hub_scoped_corpus import SweepCorpusReads
 from blizzard.hub.store.internal.hub_scoped_reads import hub_scoped_read
 from blizzard.hub.work_sources.annotator import IWorkAnnotator, WorkAnnotateError, WorkStatusMarker
+from tests.config_inputs import init_hub
 from tests.support import (
     FakeAnnotator,
     FakeWorkSource,
@@ -324,7 +324,7 @@ def hosted(
     source or its secret through the hub's own routes reaches the very next sweep — beside the
     served forge double its sources talk HTTP to."""
     double, forge_url = request.getfixturevalue("forge")
-    config = hub_runtime.init_environment(tmp_path / "hub")
+    config = init_hub(tmp_path / "hub")
     app = hub_app.build_hosted_app(config)
     # Never entered as a context manager: no lifespan, so no background sweep races the test's own passes.
     client = TestClient(app)

@@ -32,7 +32,7 @@ from blizzard.runner.harness.opencode.section import OPENCODE_WORKER_CONFIG_FILE
 from blizzard.runner.harness.opencode.shapes import OpenCodePermissionRule
 from blizzard.runner.harness.process_launch import LaunchedProcess
 from blizzard.runner.host_layout import HOST_CONFIG_FILENAME
-from blizzard.runner.runtime import Runtime
+from tests.config_inputs import host_runtime_of
 from tests.harness_sections import claude_code
 from tests.host_files import load_runner_config, write_minimal_host
 from tests.runner_fakes import FakeProbe, make_envelope
@@ -387,7 +387,7 @@ def test_an_unknown_autonomy_fails_with_the_value_the_allowed_set_and_the_path(t
 
 
 def test_the_scaffold_writes_dangerous_and_no_legacy_key(tmp_path: Path) -> None:
-    config = Runtime(tmp_path).init()
+    config = host_runtime_of(tmp_path).init()
 
     text = config.layout.config_path.read_text()
     assert '[runner.harness]\nautonomy = "dangerous"\n' in text
@@ -401,11 +401,11 @@ def test_the_scaffold_writes_dangerous_and_no_legacy_key(tmp_path: Path) -> None
 
 @pytest.mark.parametrize("autonomy", _ALL)
 def test_runner_owned_denials_hold_under_every_autonomy(tmp_path: Path, autonomy: Autonomy) -> None:
-    Runtime(tmp_path).init()
+    host_runtime_of(tmp_path).init()
     path = tmp_path / HOST_CONFIG_FILENAME
     path.write_text(path.read_text().replace('autonomy = "dangerous"', f'autonomy = "{autonomy.value}"'))
 
-    config = Runtime(tmp_path).init().runner_config()
+    config = host_runtime_of(tmp_path).init().runner_config()
 
     assert config.autonomy is autonomy
     settings = json.loads((tmp_path / WORKER_SETTINGS_FILENAME).read_text())

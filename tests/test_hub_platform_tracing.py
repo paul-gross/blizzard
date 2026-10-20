@@ -28,7 +28,6 @@ from blizzard.foundation.platform_tracing.handle import IPlatformTracing, build_
 from blizzard.foundation.span_clock import Clock
 from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.hub import app as hub_app
-from blizzard.hub import runtime as hub_runtime
 from blizzard.hub.cli import hub as hub_group
 from blizzard.hub.config import AUTH_MODE_OAUTH, AuthConfig, HubConfig
 from blizzard.hub.domain.observability.tracing.attributes import (
@@ -36,6 +35,7 @@ from blizzard.hub.domain.observability.tracing.attributes import (
     PLATFORM_INSTRUMENTATION_SCOPE_VERSION,
     resource_attributes,
 )
+from tests.config_inputs import init_hub
 from tests.support import RunnerFleetClient, hub_scoped, seed_runner, seed_user, tenant_services_of
 
 pytestmark = pytest.mark.component
@@ -59,7 +59,7 @@ def _handle(config: HubConfig, exporter: InMemorySpanExporter) -> IPlatformTraci
 
 
 def _config(tmp_path: Path) -> HubConfig:
-    return hub_runtime.init_environment(tmp_path / "hub")
+    return init_hub(tmp_path / "hub")
 
 
 def _spans(handle: IPlatformTracing, exporter: InMemorySpanExporter) -> list:  # type: ignore[type-arg]

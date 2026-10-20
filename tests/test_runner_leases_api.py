@@ -13,12 +13,12 @@ from pathlib import Path
 import pytest
 
 from blizzard.foundation.clock import FixedClock
-from blizzard.runner.app import create_app
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.leases.activity import LocalLeaseService
 from blizzard.runner.leases.model import NewLease
 from blizzard.wire.lease import LeaseView
+from tests.config_inputs import create_runner_app
 from tests.runner_client import runner_client
 from tests.runner_fakes import FakeProbe, make_host_stores, make_store, make_stores
 from tests.support import assert_all_timestamps_utc
@@ -41,7 +41,7 @@ def _app_with_leases(tmp_path: Path, *, clock: FixedClock | None = None, probe: 
         takeovers=store,
         escalations=store,
     )
-    return create_app(
+    return create_runner_app(
         config, runner_stores=make_stores(store), host_stores=make_host_stores(store), leases=service
     ), store
 
@@ -74,7 +74,7 @@ def test_empty_store_returns_empty_items_not_an_error(tmp_path: Path) -> None:
 def test_503_when_store_and_leases_unwired(tmp_path: Path) -> None:
     """The store-free app (OpenAPI export / unit boot) refuses to serve rather than pretend."""
     config = RunnerConfig(root=tmp_path, db_url="sqlite://")
-    with runner_client(create_app(config)) as client:
+    with runner_client(create_runner_app(config)) as client:
         resp = client.get("/api/leases")
     assert resp.status_code == 503
 

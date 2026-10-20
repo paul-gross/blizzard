@@ -19,7 +19,6 @@ from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanE
 from blizzard import __version__
 from blizzard.foundation.platform_tracing.handle import build_platform_tracing
 from blizzard.hub import app as hub_app
-from blizzard.hub import runtime as hub_runtime
 from blizzard.hub.cli import hub as hub_group
 from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.observability.tracing.attributes import (
@@ -27,6 +26,7 @@ from blizzard.hub.domain.observability.tracing.attributes import (
     PLATFORM_INSTRUMENTATION_SCOPE_VERSION,
     resource_attributes,
 )
+from tests.config_inputs import init_hub
 
 pytestmark = pytest.mark.component
 
@@ -36,7 +36,7 @@ _HUB = "http://hub.local:8421"
 
 @pytest.fixture
 def config(tmp_path: Path) -> HubConfig:
-    return hub_runtime.init_environment(tmp_path / "hub")
+    return init_hub(tmp_path / "hub")
 
 
 @pytest.fixture

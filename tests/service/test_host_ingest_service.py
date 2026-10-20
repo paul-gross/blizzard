@@ -20,8 +20,9 @@ import sqlalchemy as sa
 
 from blizzard.foundation.runner_token_names import hub_token_variable
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.runner.host_config import HOST_TOKEN_VARIABLE, HostConfig
+from blizzard.runner.host_config import HOST_TOKEN_VARIABLE
 from blizzard.runner.hub.internal.token_file import HubTokenFile
+from tests.config_inputs import load_host_config
 from tests.fleet_launchers import await_http, terminate
 from tests.host_files import init_runner_environment, write_host_file
 from tests.runner_ingest_support import invariant_violations, rows
@@ -75,7 +76,7 @@ def _host_directory(root: Path, runner: JoinedRunner, *, hub_url: str, port: int
 def _relative_prompt_file(root: Path) -> None:
     """``root``'s workspace standing on a prompt file named relative to ``root``, which this host alone can resolve."""
     (root / _PROMPT_FILE).write_text(_PROMPT_FILE_TEXT)
-    config = HostConfig.load(root).config_path
+    config = load_host_config(root).config_path
     config.write_text(config.read_text().replace('prompt_file = ""', f'prompt_file = "{_PROMPT_FILE}"', 1))
 
 
@@ -85,7 +86,7 @@ def _seed(root: Path, runner: JoinedRunner, tag: str) -> None:
     token for ``_ROUTE_CHUNK``, and a ``_GRAPH_ID`` artifact — every key but the leases' and chunks' the same in each
     store."""
     now = datetime.now(UTC)
-    engine = create_engine_from_url(HostConfig.load(root).db_url)
+    engine = create_engine_from_url(load_host_config(root).db_url)
     tables = reflect(engine).tables
 
     def insert(conn: sa.Connection, table: str, **values: object) -> None:
@@ -214,10 +215,10 @@ def test_a_host_that_ingested_a_colliding_runner_resumes_both_and_delivers_each_
             timeout=120,
         )
         assert ingested.returncode == 0, ingested.stdout + ingested.stderr
-        carried = next(w for w in HostConfig.load(here).workspaces if w.id == _NEW_WORKSPACE)
-        assert carried.prompt_file == str(HostConfig.load(there).root / _PROMPT_FILE)
-        assert carried.resolved_prompt(HostConfig.load(here).root) == _PROMPT_FILE_TEXT
-        engine = create_engine_from_url(HostConfig.load(here).db_url)
+        carried = next(w for w in load_host_config(here).workspaces if w.id == _NEW_WORKSPACE)
+        assert carried.prompt_file == str(load_host_config(there).root / _PROMPT_FILE)
+        assert carried.resolved_prompt(load_host_config(here).root) == _PROMPT_FILE_TEXT
+        engine = create_engine_from_url(load_host_config(here).db_url)
         try:
             for table in ("outbound_buffer", "transcript_outbound_buffer"):
                 held = {(r["runner_id"], r["seq"]) for r in rows(engine, table)}

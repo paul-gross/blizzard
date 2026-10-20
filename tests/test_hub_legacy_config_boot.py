@@ -8,10 +8,10 @@ from pathlib import Path
 import pytest
 
 from blizzard.hub import app as hub_app
-from blizzard.hub import runtime as hub_runtime
 from blizzard.hub.config import ConfigError, HubConfig
 from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.secrets import ENV_SECRET_KEY
+from tests.config_inputs import init_hub, load_hub_config
 from tests.support import tenant_services_of
 
 pytestmark = pytest.mark.component
@@ -31,11 +31,11 @@ _SECRET_VALUE = "legacy-token-value"
 def hub(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> HubConfig:
     monkeypatch.delenv(ENV_SECRET_KEY, raising=False)
     monkeypatch.delenv(_TOKEN_ENV, raising=False)
-    return hub_runtime.init_environment(tmp_path / "hub")
+    return init_hub(tmp_path / "hub")
 
 
 def _start(config: HubConfig) -> None:
-    app = hub_app.build_hosted_app(HubConfig.load(config.root))
+    app = hub_app.build_hosted_app(load_hub_config(config.root))
     app.state.engine.dispose()
 
 
@@ -62,7 +62,7 @@ def test_legacy_keys_left_after_an_import_refuse_naming_each_key_and_where(
 ) -> None:
     _start(hub)  # mints the hub key the import requires
     _add_legacy_keys(hub, monkeypatch)
-    hub_app.import_legacy_config(HubConfig.load(hub.root), dict(os.environ))
+    hub_app.import_legacy_config(load_hub_config(hub.root), dict(os.environ))
 
     with pytest.raises(ConfigError) as refused:
         _start(hub)
@@ -80,12 +80,12 @@ def test_an_imported_hub_with_its_legacy_keys_removed_starts(hub: HubConfig, mon
     _start(hub)
     original = hub.config_path.read_text()
     _add_legacy_keys(hub, monkeypatch)
-    hub_app.import_legacy_config(HubConfig.load(hub.root), dict(os.environ))
+    hub_app.import_legacy_config(load_hub_config(hub.root), dict(os.environ))
     hub.config_path.write_text(original)
     monkeypatch.delenv(_TOKEN_ENV)
     monkeypatch.delenv("BZ_FORGE_URL")
 
-    app = hub_app.build_hosted_app(HubConfig.load(hub.root))
+    app = hub_app.build_hosted_app(load_hub_config(hub.root))
     try:
         assert sorted(tenant_services_of(app).work_sources.names()) == sorted([RESERVED_HUB_SOURCE_NAME, "blizzard"])
     finally:
@@ -93,7 +93,7 @@ def test_an_imported_hub_with_its_legacy_keys_removed_starts(hub: HubConfig, mon
 
 
 def test_a_fresh_hub_without_legacy_keys_starts_with_an_empty_store(hub: HubConfig) -> None:
-    app = hub_app.build_hosted_app(HubConfig.load(hub.root))
+    app = hub_app.build_hosted_app(load_hub_config(hub.root))
     try:
         services = tenant_services_of(app)
         assert services.work_sources.names() == [RESERVED_HUB_SOURCE_NAME]

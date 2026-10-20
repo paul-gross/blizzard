@@ -15,12 +15,12 @@ from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.migrations import MigrationClockMissingError, MigrationRunner
 from blizzard.foundation.store.utc import UtcDateTime
-from blizzard.hub import runtime as hub_runtime
 from blizzard.hub.config import HubConfig
 from blizzard.hub.runtime import Migrations, migration_runner
 from blizzard.hub.store import MIGRATIONS_DIR
 from blizzard.hub.store.schema import GLOBAL_TABLES
 from blizzard.runner.hub.internal.http_hub import HttpHubClient
+from tests.config_inputs import init_hub
 from tests.migration_support_carried_config_round_trip import _AT, _BEFORE_TENANTS, _NOW
 from tests.migration_support_carried_config_round_trip import _SEED as _CARRIED_SEED
 from tests.migration_support_tenant_carry_over_migration import (
@@ -173,7 +173,7 @@ def test_a_carried_store_applies_its_own_export_without_a_change(tmp_path: Path)
 
 
 def test_a_fresh_store_starts_with_the_one_default_tenant(tmp_path: Path) -> None:
-    config = hub_runtime.init_environment(tmp_path)
+    config = init_hub(tmp_path)
     engine = create_engine_from_url(config.db_url)
     try:
         _assert_the_first_tenant(engine)

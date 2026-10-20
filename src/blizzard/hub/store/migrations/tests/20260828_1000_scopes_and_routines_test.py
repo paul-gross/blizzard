@@ -9,6 +9,7 @@ import sqlalchemy as sa
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub import runtime as hub_runtime
+from tests.config_inputs import init_hub
 
 pytestmark = [pytest.mark.unit]
 
@@ -17,7 +18,7 @@ def test_scopes_and_routines_tables_survive_migration_roundtrip(tmp_path: Path) 
     """``scopes``, ``scope_lifecycle_facts``, ``routines`` — one
     hand-written revision mints all three; downgrades to its own parent by id, so the
     drop half is asserted rather than inferred from a revision marker."""
-    config = hub_runtime.init_environment(tmp_path)  # upgrades to head
+    config = init_hub(tmp_path)  # upgrades to head
     runner = hub_runtime.migration_runner(config)
     tables = ("scopes", "scope_lifecycle_facts", "routines")
 

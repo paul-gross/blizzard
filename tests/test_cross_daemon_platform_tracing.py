@@ -19,7 +19,6 @@ from blizzard.foundation.tokens import TokenHash
 from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.foundation.trace_ids import StepKey, step_root
 from blizzard.hub import app as hub_app
-from blizzard.hub import runtime as hub_runtime
 from blizzard.hub.domain.observability.tracing.attributes import (
     PLATFORM_INSTRUMENTATION_SCOPE as HUB_SCOPE,
 )
@@ -27,7 +26,6 @@ from blizzard.hub.domain.observability.tracing.attributes import (
     PLATFORM_INSTRUMENTATION_SCOPE_VERSION as HUB_SCOPE_VERSION,
 )
 from blizzard.hub.domain.observability.tracing.attributes import resource_attributes
-from blizzard.runner.app import create_app
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.tracing.platform import (
@@ -36,6 +34,7 @@ from blizzard.runner.tracing.platform import (
 from blizzard.runner.tracing.platform import (
     PLATFORM_INSTRUMENTATION_SCOPE_VERSION as RUNNER_SCOPE_VERSION,
 )
+from tests.config_inputs import create_runner_app, init_hub
 from tests.runner_client import runner_client
 from tests.runner_fakes import make_host_stores, make_store, make_stores, no_retry_clock
 
@@ -69,7 +68,7 @@ def _only(spans: list[ReadableSpan], kind: str, prefix: str) -> ReadableSpan:
 
 def test_a_worker_read_chains_runner_and_hub_spans_under_the_step_root(tmp_path: Path) -> None:
     hub_exporter = InMemorySpanExporter()
-    hub_config = hub_runtime.init_environment(tmp_path / "hub")
+    hub_config = init_hub(tmp_path / "hub")
     hub_handle = build_platform_tracing(
         replace(hub_config.tracing, platform=True, platform_sample_ratio=1.0),
         _ENDPOINT,
@@ -114,7 +113,7 @@ def test_a_worker_read_chains_runner_and_hub_spans_under_the_step_root(tmp_path:
         store.record_lease_token("lease_1", TokenHash(_LEASE_TOKEN).hex, _NOW)
         runner_handle.instrument_engine(store._engine)
         runner_handle.instrument_client(hub)
-        runner = create_app(
+        runner = create_runner_app(
             RunnerConfig(root=tmp_path, db_url=db_url, hub_url=str(hub.base_url)),
             runner_stores=make_stores(store),
             host_stores=make_host_stores(store),

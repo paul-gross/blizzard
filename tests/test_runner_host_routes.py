@@ -19,7 +19,7 @@ from blizzard.foundation.host_registration_state import HostRegistrationState
 from blizzard.foundation.runner_identity_state import IdentityState
 from blizzard.foundation.web import Frontend
 from blizzard.runner.api.wiring import ServedWorkspace
-from blizzard.runner.app import create_app, create_app_for_export, runner_seams
+from blizzard.runner.app import runner_seams
 from blizzard.runner.config import ProjectBinding, RunnerConfig
 from blizzard.runner.harness.registry import HarnessRegistry
 from blizzard.runner.host_config import HaltedRunner
@@ -30,6 +30,7 @@ from blizzard.runner.hub.identity import HostStanding, IdentityVerdictHolder
 from blizzard.runner.route_paths import is_api_path
 from blizzard.runner.status.view import RunnerStatusService
 from blizzard.runner.stores import RunnerStores
+from tests.config_inputs import create_runner_app, export_runner_app
 from tests.host_files import one_workspace
 from tests.runner_client import live_api_routes
 from tests.runner_fakes import (
@@ -112,7 +113,7 @@ def _two_runner_app(
         for config, stores, verdict in ((a_config, a_stores, verdicts[0]), (b_config, b_stores, verdicts[1]))
     )
     host_store = make_store(f"sqlite:///{tmp_path / 'host.db'}", None)
-    app = create_app(
+    app = create_runner_app(
         a_config,
         runners=seams,
         halted=halted,
@@ -126,7 +127,7 @@ def _two_runner_app(
 
 
 def test_every_operation_is_a_root_host_route_or_under_the_runner_prefix() -> None:
-    app = create_app_for_export()
+    app = export_runner_app()
     stray = [
         path
         for path, _route in live_api_routes(app)
@@ -146,7 +147,7 @@ def test_every_operation_is_a_root_host_route_or_under_the_runner_prefix() -> No
     "path", ["/api/dashboard", "/api/leases", "/api/runner", "/api/environments", "/api/subscriptions", "/v1/traces"]
 )
 def test_a_runner_route_at_its_old_root_path_is_404_not_the_panel(path: str) -> None:
-    client = TestClient(create_app(RunnerConfig(root=Path("."), db_url="sqlite://")))
+    client = TestClient(create_runner_app(RunnerConfig(root=Path("."), db_url="sqlite://")))
 
     response = client.post(path) if path.startswith("/v1") else client.get(path)
 

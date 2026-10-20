@@ -11,7 +11,6 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from blizzard.runner.app import create_app
 from blizzard.runner.config import DEFAULT_RUNNER_NAME, RunnerConfig, SubscriptionDeclaration
 from blizzard.runner.subscriptions.credential_renewer import (
     RenewalFailureReason,
@@ -19,6 +18,7 @@ from blizzard.runner.subscriptions.credential_renewer import (
     RenewalOutcomeKind,
 )
 from blizzard.runner.subscriptions.subscription_sampler import PROVIDER_ANTHROPIC, PROVIDER_OPENAI
+from tests.config_inputs import create_runner_app
 from tests.runner_fakes import SqlAlchemyRunnerStore, make_host_stores, make_store, make_stores
 
 pytestmark = pytest.mark.component
@@ -31,7 +31,7 @@ def _client(
 ) -> tuple[TestClient, SqlAlchemyRunnerStore]:
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}", subscriptions=subscriptions)
-    app = create_app(config, runner_stores=make_stores(store), host_stores=make_host_stores(store))
+    app = create_runner_app(config, runner_stores=make_stores(store), host_stores=make_host_stores(store))
     return TestClient(app), store
 
 
@@ -199,7 +199,7 @@ def test_a_host_declared_subscription_no_runner_spends_names_no_spender(tmp_path
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     declared = SubscriptionDeclaration(slug="openai", name="OpenAI", provider=PROVIDER_OPENAI)
     config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}")
-    app = create_app(
+    app = create_runner_app(
         config, subscriptions=(declared,), runner_stores=make_stores(store), host_stores=make_host_stores(store)
     )
 

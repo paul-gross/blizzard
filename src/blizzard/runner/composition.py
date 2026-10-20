@@ -556,7 +556,6 @@ def build_host_process(
     platform_tracing: IPlatformTracing | None = None,
     received_telemetry: IReceivedTelemetryExport | None = None,
     trace_platform: bool = False,
-    flag_registry: FlagRegistry | None = None,
 ) -> HostProcess:
     """Construct the host graph from its file, and one runner over it for each of ``runners`` — each bound to its
     configured id before anything runs. ``halted`` are the runners left unbuilt; the host keeps them to report.
@@ -565,8 +564,7 @@ def build_host_process(
     ``environ`` decides whether tracing is enabled; ``trace_exporter`` replaces the OTLP binding an enabled sweep would
     otherwise build. ``trace_platform`` builds the platform-tracing and received-telemetry handles the config and
     environment decide, stamped from the host's runners; otherwise ``platform_tracing`` and ``received_telemetry`` are
-    used as given. ``bundles`` are the harness-config snapshots each runner published, by runner id. ``flag_registry``
-    is the registry every flag resolves against — the packaged one unless given."""
+    used as given. ``bundles`` are the harness-config snapshots each runner published, by runner id."""
     graph = _build_host_graph(
         runners[0].config if runners else host.host_view(),
         subscriptions=host.subscriptions,
@@ -576,7 +574,6 @@ def build_host_process(
         received_telemetry=received_telemetry,
         trace_platform=trace_platform,
         host_token=host.host_token.value,
-        flag_registry=flag_registry,
     )
     try:
         for built in runners:
@@ -619,7 +616,6 @@ def build_runner_process(
     runner_id: str | None = None,
     token: ResolvedToken | None = None,
     host_token: str = "",
-    flag_registry: FlagRegistry | None = None,
 ) -> RunnerProcess:
     """A host of one and its runner, for the standalone commands and tests that drive one runner: closing the
     returned runner closes the host too. The runner is bound to ``runner_id``, else to the id ``config`` carries;
@@ -634,7 +630,6 @@ def build_runner_process(
         received_telemetry=received_telemetry,
         trace_platform=False,
         host_token=host_token,
-        flag_registry=flag_registry,
     )
     try:
         runner = _build_runner(
@@ -690,12 +685,12 @@ def _build_host_graph(
     received_telemetry: IReceivedTelemetryExport | None,
     trace_platform: bool,
     host_token: str = "",
-    flag_registry: FlagRegistry | None = None,
 ) -> HostProcess:
     """The host's own graph, with no runner on it yet. ``config`` carries the host's keys — listeners, tracing, the
     workspaces, its hub — and ``subscriptions`` are the host's declarations, which its credential renewal covers.
     ``host_token`` is the host's own credential; a host holding one is registered, and reports itself to its hub.
-    ``flag_registry`` is the registry its flags resolve against; each override it ignores is warned of here, once."""
+    Its flags are the resolution ``config``'s load made, or — for a config built in code — the registry it carries
+    at its defaults under its overrides; each override it ignores is warned of here, once."""
     install_runner_guard()
     engine = create_engine_from_url(config.db_url)
     host_hub_http_client: httpx.Client | None = None
@@ -710,12 +705,7 @@ def _build_host_graph(
             received_telemetry = build_runner_received_telemetry(config, environ)
         platform_tracing = platform_tracing or DisabledPlatformTracing()
         received_telemetry = received_telemetry or DisabledReceivedTelemetryExport()
-        registry = flag_registry or FlagRegistry.load()
-        # The load resolved the host's flags against the packaged registry; a registry given here replaces that.
-        loaded = config.flag_resolution
-        resolution = (
-            loaded if loaded is not None and flag_registry is None else resolve_flags(registry, "runner", config.flags)
-        )
+        resolution = config.flag_resolution or resolve_flags(config.flag_registry, "runner", config.flags)
         log = get_logger("blizzard.runner")
         warn_ignored_flags(log, resolution)
         warn_held_keys(log, config.held_keys)
@@ -801,7 +791,7 @@ def _build_host_graph(
                 credential_renewal=_credential_renewal_pass(subscriptions, host_stores, clock),
             ),
             usage_http_client=usage_http_client,
-            flag_registry=registry,
+            flag_registry=config.flag_registry,
             flags=resolution.flags,
             subscriptions=tuple(subscriptions),
             platform_tracing=platform_tracing,

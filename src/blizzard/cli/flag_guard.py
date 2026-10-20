@@ -63,10 +63,9 @@ def _gate(flag: str, ask: AskFlags, option: str | None) -> Callable[[Callable[..
 
 
 def flag_command(
-    flag: str, side: FlagSide, ask: AskFlags, registry: FlagRegistry | None = None
+    flag: str, side: FlagSide, ask: AskFlags, *, registry: FlagRegistry
 ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """Hold a verb's callback behind ``flag``; apply it beneath ``@click.command`` so its docstring takes the marker."""
-    registry = registry or FlagRegistry.load()
     check_declared(flag, side, registry)
 
     def decorate(callback: Callable[..., Any]) -> Callable[..., Any]:
@@ -78,11 +77,10 @@ def flag_command(
 
 
 def flag_option(
-    flag: str, side: FlagSide, ask: AskFlags, *decls: str, registry: FlagRegistry | None = None, **attrs: Any
+    flag: str, side: FlagSide, ask: AskFlags, *decls: str, registry: FlagRegistry, **attrs: Any
 ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """A ``click.option`` held behind ``flag``: present and marked in ``--help``, refused once given while the flag is
     off. ``decls`` and ``attrs`` are ``click.option``'s."""
-    registry = registry or FlagRegistry.load()
     check_declared(flag, side, registry)
     attrs["help"] = _marked(attrs.get("help"), flag, registry)
     name = click.Option(list(decls), **attrs).name

@@ -13,7 +13,6 @@ from sqlalchemy import update
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.hub import runtime as hub_runtime
 from blizzard.hub.cli import hub as hub_group
 from blizzard.hub.config import ConfigError, HubConfig
 from blizzard.hub.domain.config.secrets import SecretName, SecretRotationConflict
@@ -28,6 +27,7 @@ from blizzard.hub.secrets import (
 from blizzard.hub.secrets.rotation import rotate_keys
 from blizzard.hub.store import schema
 from blizzard.hub.store.internal.secret_store import SecretStore
+from tests.config_inputs import init_hub
 from tests.support import OP, config_authoring, hub_scoped, hub_store_connections
 
 pytestmark = pytest.mark.component
@@ -45,7 +45,7 @@ def _no_env_key(monkeypatch: pytest.MonkeyPatch) -> None:
 
 class _World:
     def __init__(self, tmp_path: Path) -> None:
-        self.config: HubConfig = hub_runtime.init_environment(tmp_path / "hub")
+        self.config: HubConfig = init_hub(tmp_path / "hub")
         self.engine = create_engine_from_url(self.config.db_url)
         self.store = SecretStore(hub_store_connections(self.engine))
         self.meta = secret_keys_dir(self.config.data_dir) / "meta.json"

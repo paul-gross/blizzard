@@ -12,8 +12,6 @@ import pytest
 import sqlalchemy as sa
 
 from blizzard.foundation.runner_identity_state import IdentityState
-from blizzard.runner import runtime as runner_runtime
-from blizzard.runner.app import create_app
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID
@@ -23,6 +21,7 @@ from blizzard.runner.loop.tick import tick
 from blizzard.runner.loop_wiring import LoopWiring
 from blizzard.runner.store import schema
 from blizzard.runner.store.scoped import RUNNER_UNSCOPED_OPTION, RunnerAlreadyBound, RunnerUnbound
+from tests.config_inputs import create_runner_app, init_host
 from tests.host_files import load_runner_config, with_workspace
 from tests.runner_client import runner_client
 from tests.runner_fakes import FakeHarness, FakeHub, SqlAlchemyRunnerStore, loop_graph, make_store
@@ -75,7 +74,7 @@ def test_an_unbound_store_refuses_the_identity_write_and_a_bound_one_another_run
 
 def test_patch_runner_answers_503_naming_the_cause_until_bound(tmp_path: Path) -> None:
     config = RunnerConfig(root=tmp_path, db_url="sqlite://")
-    with runner_client(create_app(config, binding=_Binding(None))) as client:
+    with runner_client(create_runner_app(config, binding=_Binding(None))) as client:
         resp = client.patch("/api/runner", json={"paused": True})
 
     assert resp.status_code == 503
@@ -86,7 +85,7 @@ def test_a_selftest_answers_503_until_bound_after_naming_an_unknown_harness(tmp_
     config = RunnerConfig(root=tmp_path, db_url="sqlite://")
     adapter = FakeHarness(handle=WorkerHandle(session_id="s", pid=1, process_start_time="t", pgid=1), verdict=None)
     harnesses = HarnessRegistry({CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=adapter)})
-    with runner_client(create_app(config, harnesses=harnesses, binding=_Binding(None))) as client:
+    with runner_client(create_runner_app(config, harnesses=harnesses, binding=_Binding(None))) as client:
         refused = client.post("/api/selftests", json={"harness": CLAUDE_CODE_HARNESS_ID})
         unknown = client.post("/api/selftests", json={"harness": "codex"})
 
@@ -107,7 +106,7 @@ def _owners(engine: sa.Engine) -> dict[str, set[str]]:
 def test_a_runner_is_bound_from_configuration_before_its_hub_answers_and_registration_adopts_no_id(
     tmp_path: Path,
 ) -> None:
-    runner_runtime.init_environment(tmp_path / "runner")
+    init_host(tmp_path / "runner")
     config = with_workspace(load_runner_config(tmp_path / "runner"), root=str(tmp_path / "workspace"))
     hub = FakeHub(default_runner_id="rn_other")
     hub.down = True

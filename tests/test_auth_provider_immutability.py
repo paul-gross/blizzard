@@ -16,9 +16,9 @@ from sqlalchemy import insert
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub import app as hub_app
-from blizzard.hub import runtime as hub_runtime
 from blizzard.hub.config import AuthConfig, ConfigError, OAuthProviderConfig
 from blizzard.hub.store import schema as s
+from tests.config_inputs import init_hub, load_hub_config
 
 pytestmark = pytest.mark.component
 
@@ -37,7 +37,7 @@ def _seed_orphan_identity(config, *, provider_name: str) -> None:  # type: ignor
 
 
 def test_boot_fails_when_a_stored_identity_names_an_unconfigured_provider(tmp_path: Path) -> None:
-    config = hub_runtime.init_environment(tmp_path / "hub")
+    config = init_hub(tmp_path / "hub")
     _seed_orphan_identity(config, provider_name="old-github")
 
     with pytest.raises(ConfigError, match="old-github"):
@@ -45,7 +45,7 @@ def test_boot_fails_when_a_stored_identity_names_an_unconfigured_provider(tmp_pa
 
 
 def test_boot_succeeds_when_the_stored_provider_is_still_configured(tmp_path: Path) -> None:
-    config = hub_runtime.init_environment(tmp_path / "hub")
+    config = init_hub(tmp_path / "hub")
     _seed_orphan_identity(config, provider_name="github")
     config = replace(
         config,
@@ -62,13 +62,13 @@ def test_boot_succeeds_when_the_stored_provider_is_still_configured(tmp_path: Pa
         ),
     )
     config.config_path.write_text(config.to_toml())
-    config = hub_app.HubConfig.load(config.root)
+    config = load_hub_config(config.root)
 
     app = hub_app.build_hosted_app(config)
     assert app is not None
 
 
 def test_boot_succeeds_with_no_stored_identities_at_all(tmp_path: Path) -> None:
-    config = hub_runtime.init_environment(tmp_path / "hub")
+    config = init_hub(tmp_path / "hub")
     app = hub_app.build_hosted_app(config)
     assert app is not None
