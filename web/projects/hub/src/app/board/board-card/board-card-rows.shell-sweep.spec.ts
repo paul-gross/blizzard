@@ -7,8 +7,8 @@ import { BoardCardComponent } from './board-card';
 
 /**
  * A card's rows stack in one order at their fullest — the title, the blocked marking, the
- * PR links, the step row (step left, id flush right), then the cost row — each inside the
- * card, at 800px and at 390px/320px (`bzh:narrow-viewport-tier-rule`); and the card's own
+ * PR links, the cost row (a done card's completion stamp left, the cost flush right), then
+ * the step row (step left, id flush right) — each inside the card, at 800px and at 390px/320px (`bzh:narrow-viewport-tier-rule`); and the card's own
  * controls sit over the open control stretched beneath it, so a real pointer reaches them. Under a real
  * browser — see `blizzard-context:/verification/blizzard/commands/web/shell-sweep.md` §web:shell-sweep.
  */
@@ -61,11 +61,11 @@ function rectOf(root: HTMLElement, testid: string, width: number): DOMRect {
 
 describe('board card row order shell sweep (web:shell-sweep)', () => {
   for (const width of WIDTHS) {
-    it(`stacks title, blocked marking, PR links, step row, and cost row inside the card at width ${width}`, async () => {
+    it(`stacks title, blocked marking, PR links, cost row, and step row inside the card at width ${width}`, async () => {
       const root = await renderCard(width);
       try {
         const card = rectOf(root, 'chunk-card', width);
-        const order = ['chunk-title', 'chunk-blocked-by', 'card-delivery', 'chunk-node', 'card-cost-row'];
+        const order = ['chunk-title', 'chunk-blocked-by', 'card-delivery', 'card-cost-row', 'chunk-node'];
         const rects = order.map((id) => rectOf(root, id, width));
 
         for (let i = 1; i < rects.length; i++) {
@@ -94,20 +94,22 @@ describe('board card row order shell sweep (web:shell-sweep)', () => {
   }
 
   for (const width of [800, 390]) {
-    it(`leads the step row with the project's swatch and keeps the id flush right at width ${width}`, async () => {
+    it(`tints the card with the project's color in place of a swatch, the step still leading its row, at width ${width}`, async () => {
       const root = await renderCard(width, { ...CARD, projectName: 'Blizzard', projectColor: 'teal' });
       try {
-        const swatch = rectOf(root, 'chunk-project-swatch', width);
+        const cardEl = root.querySelector<HTMLElement>('[data-testid="chunk-card"]')!;
+        expect(cardEl.classList.contains('tinted'), `width ${width}: the card is not tinted`).toBe(true);
+        expect(cardEl.style.getPropertyValue('--project-tint'), `width ${width}: the tint carries no color`).not.toBe('');
+        expect(cardEl.getAttribute('title'), `width ${width}: the tinted card is not named for the project`).toBe('Blizzard');
+        expect(root.querySelector('.swatch'), `width ${width}: a swatch still renders beside the tint`).toBeNull();
+
         const node = rectOf(root, 'chunk-node', width);
         const id = rectOf(root, 'chunk-id', width);
+        const title = rectOf(root, 'chunk-title', width);
         const card = rectOf(root, 'chunk-card', width);
-        expect(swatch.right, `width ${width}: the swatch overlaps the step`).toBeLessThanOrEqual(node.left + 0.5);
+        expect(node.left, `width ${width}: the step does not lead its row`).toBeCloseTo(title.left, 0);
         expect(id.left, `width ${width}: the id overlaps the step`).toBeGreaterThanOrEqual(node.right - 0.5);
         expect(id.right, `width ${width}: the id left the card's right edge`).toBeLessThanOrEqual(card.right + 0.5);
-        expect(
-          root.querySelector('[data-testid="chunk-project-swatch"] .swatch')?.getAttribute('aria-label'),
-          `width ${width}: the swatch is not named for the project`,
-        ).toBe('Blizzard');
       } finally {
         root.remove();
       }

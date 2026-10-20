@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, output, signal } from '@angular/core';
 
-import { type hubApi, type KitAsyncStateValue, asyncState } from 'fleet';
+import { type hubApi, type KitAsyncStateValue, asyncState, injectRunnerHostNames } from 'fleet';
 import { injectQueryFilters } from '../core/route-state';
 import { EventsView } from './events-view';
 import { eventChunkIds, eventRunnerIds, eventRunnerNames } from './events-panel.model';
@@ -35,6 +35,7 @@ export class EventsPanel {
   /** The active runner filter, or `null` for "every runner". */
   protected readonly runnerId = signal<string | null>(null);
   private readonly filters = injectQueryFilters();
+  protected readonly runnerHosts = injectRunnerHostNames();
 
   /** The active chunk filter, or `null` for "every chunk" — read from `?chunk=` and
    * sent to the hub as `chunk_id`, never applied client-side. */

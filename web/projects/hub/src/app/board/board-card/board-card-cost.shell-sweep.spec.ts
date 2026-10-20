@@ -7,7 +7,7 @@ import { BoardCardComponent } from './board-card';
 
 /**
  * The card's cost row at its fullest — a done-lane card's completion stamp at its left, the
- * cost figure flush with the card's right edge — sits below the step row and never
+ * cost figure flush with the card's right edge — sits above the step row and never
  * overlaps, wraps, or overflows the card, at 800px and at 390px/320px
  * (`bzh:narrow-viewport-tier-rule`). Under a real browser — see `blizzard-context:/verification/blizzard/commands/web/shell-sweep.md` §web:shell-sweep.
  */
@@ -90,7 +90,7 @@ describe('board card cost figures shell sweep (web:shell-sweep)', () => {
     { label: 'both', card: CARD, stamp: true, cost: true },
   ];
   for (const { label, card, stamp, cost } of COST_ROW_CASES) {
-    it(`sits the cost row below the step row, the stamp at its left and the cost at its end, with ${label}`, async () => {
+    it(`sits the cost row above the step row, the stamp at its left and the cost at its end, with ${label}`, async () => {
       const root = await renderCard(390, card);
       try {
         const row = root.querySelector<HTMLElement>('[data-testid="card-cost-row"]');
@@ -105,7 +105,7 @@ describe('board card cost figures shell sweep (web:shell-sweep)', () => {
           expect(Math.abs(figure.right - rowRect.right), 'the cost is not flush with the row\'s end').toBeLessThanOrEqual(0.5);
         }
         const id = root.querySelector<HTMLElement>('[data-testid="chunk-id"]')!.getBoundingClientRect();
-        expect(rowRect.top, 'the cost row is not below the step row').toBeGreaterThanOrEqual(id.bottom - 0.5);
+        expect(rowRect.bottom, 'the cost row is not above the step row').toBeLessThanOrEqual(id.top + 0.5);
       } finally {
         root.remove();
       }

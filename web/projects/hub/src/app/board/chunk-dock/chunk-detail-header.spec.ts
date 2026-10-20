@@ -1,9 +1,8 @@
-import { provideZonelessChangeDetection, signal } from '@angular/core';
+import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 
 import type { ChunkDetail } from 'fleet';
-import { RUNNER_HOST_NAMES } from 'fleet/shell';
 import { ChunkDetailHeader } from './chunk-detail-header';
 
 const ISSUE_DETAIL: ChunkDetail = {
@@ -491,11 +490,11 @@ describe('ChunkDetailHeader', () => {
   });
 
   it('names the runner host/runner where the app knows its host, in the fact and the action copy', async () => {
-    TestBed.overrideProvider(RUNNER_HOST_NAMES, { useValue: signal(new Map([['rn_01', 'atlas']])) });
     const fixture = TestBed.createComponent(ChunkDetailHeader);
     fixture.componentRef.setInput('detail', ROUTED_DETAIL);
     fixture.componentRef.setInput('renderedStatus', ROUTED_DETAIL.status);
     fixture.componentRef.setInput('canControl', true);
+    fixture.componentRef.setInput('runnerHosts', new Map([['rn_01', 'atlas']]));
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 

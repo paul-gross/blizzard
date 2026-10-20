@@ -12,8 +12,8 @@ import { ChunkDetailHeader } from './chunk-detail-header';
  * Mounts the header with every in-flow control live at once (a routed, pausable chunk with
  * a long runner identity) and sweeps that nothing overflows the dock's right edge, at 800px
  * and at 390/320px (`bzh:narrow-viewport-tier-rule`); a second case does the same for the
- * open `⋯` menu's items; a third keeps the claim line's compact runner id inside the chip's
- * visible box however much of the name it clips.
+ * open `⋯` menu's items, Pause among them; a third keeps the claim line's compact runner id
+ * inside the chip's visible box however much of the name it clips.
  *
  * The selector list below is asserted against an exact count, not merely non-empty: a
  * hard-coded list that silently misses a newly added control is a sweep that stays green
@@ -44,17 +44,18 @@ const TYPICAL_NAME_DETAIL: ChunkDetail = { ...DETAIL, route: { ...DETAIL.route!,
 
 const WIDTHS = [800, 390, 320];
 
-/** Every in-flow control the fixture above makes live at once — Detach, Complete,
- * and Delete live in the `⋯` trigger's own menu. */
-const SWEPT = ['pause-chunk', 'chunk-actions-menu', 'detail-close'] as const;
+/** Every in-flow control the fixture above makes live at once — Pause, Detach,
+ * Complete, and Delete live in the `⋯` trigger's own menu. */
+const SWEPT = ['chunk-actions-menu', 'detail-close'] as const;
 
 /** The menu panel's own items, once opened — a routed, pausable, deletable chunk
- * (`blocking` gate open) makes all three live at once. */
-const MENU_ITEMS = ['detach-chunk', 'complete-chunk', 'delete-chunk'] as const;
+ * (`blocking` gate open) makes all four live at once. */
+const MENU_ITEMS = ['pause-chunk', 'detach-chunk', 'complete-chunk', 'delete-chunk'] as const;
 
 async function renderHeader(
   width: number,
   detail: ChunkDetail = DETAIL,
+  runnerHosts: ReadonlyMap<string, string> = new Map(),
 ): Promise<{ root: HTMLElement; fixture: ReturnType<typeof TestBed.createComponent<ChunkDetailHeader>> }> {
   TestBed.resetTestingModule();
   await TestBed.configureTestingModule({
@@ -65,6 +66,7 @@ async function renderHeader(
   fixture.componentRef.setInput('detail', detail);
   fixture.componentRef.setInput('renderedStatus', detail.status);
   fixture.componentRef.setInput('canControl', true);
+  fixture.componentRef.setInput('runnerHosts', runnerHosts);
   await fixture.whenStable();
   const root = fixture.nativeElement as HTMLElement;
   document.body.appendChild(root);
@@ -135,7 +137,7 @@ describe('chunk detail header action row shell sweep (web:shell-sweep)', () => {
         const chip = root.querySelector<HTMLElement>('[data-testid="route-info"]')!;
         const text = chip.firstChild as Text;
         // Through the separator: an ellipsis that clips the name lands on it at the earliest.
-        const lead = `Claimed by ${compactRef(DETAIL.route!.runner_id)}${RUNNER_NAME_SEPARATOR}`;
+        const lead = `${compactRef(DETAIL.route!.runner_id)}${RUNNER_NAME_SEPARATOR}`;
         expect(text.data.startsWith(lead), `width ${width}: the chip reads ${JSON.stringify(text.data)}`).toBe(true);
         const range = document.createRange();
         range.setStart(text, 0);
@@ -155,7 +157,18 @@ describe('chunk detail header action row shell sweep (web:shell-sweep)', () => {
     const { root } = await renderHeader(800, TYPICAL_NAME_DETAIL);
     try {
       const chip = root.querySelector<HTMLElement>('[data-testid="route-info"]')!;
-      expect(chip.textContent).toBe('Claimed by R-E4AX.runner-local');
+      expect(chip.textContent).toBe('R-E4AX.runner-local');
+      expect(chip.scrollWidth, `the chip clips ${JSON.stringify(chip.textContent)}`).toBeLessThanOrEqual(chip.clientWidth);
+    } finally {
+      root.remove();
+    }
+  });
+
+  it('names a typical runner by its host whole on the claim line at width 800', async () => {
+    const { root } = await renderHeader(800, TYPICAL_NAME_DETAIL, new Map([[DETAIL.route!.runner_id, 'atlas']]));
+    try {
+      const chip = root.querySelector<HTMLElement>('[data-testid="route-info"]')!;
+      expect(chip.textContent).toBe('atlas/runner-local');
       expect(chip.scrollWidth, `the chip clips ${JSON.stringify(chip.textContent)}`).toBeLessThanOrEqual(chip.clientWidth);
     } finally {
       root.remove();

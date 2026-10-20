@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 
-import { type DecisionView, compactRef, runnerDisplayName, injectRunnerHostNames, KitAsyncState, type KitAsyncStateValue, KitPanel, KitSelectRow } from 'fleet';
+import { type DecisionView, compactRef, runnerDisplayName, KitAsyncState, type KitAsyncStateValue, KitPanel, KitSelectRow } from 'fleet';
 
 /**
  * The open-gates rail's presentational half — one row per open decision,
@@ -19,7 +19,8 @@ import { type DecisionView, compactRef, runnerDisplayName, injectRunnerHostNames
   styleUrl: './gates-view.css',
 })
 export class GatesPanelView {
-  private readonly runnerHosts = injectRunnerHostNames();
+  /** Each runner's host name by runner id — a runner the map omits shows no host. */
+  readonly runnerHosts = input<ReadonlyMap<string, string>>(new Map());
 
   /** Every open gate across the fleet. */
   readonly gates = input.required<readonly DecisionView[]>();

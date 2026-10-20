@@ -29,6 +29,11 @@ export function projectColorValue(color: string): string {
   return isHexColor(color) ? color.toLowerCase() : `var(--project-${color}, var(--label-dim))`;
 }
 
+/** The CSS value a project-tinted card or row paints with ({@link projectColorValue}), or `null` for an untinted one. */
+export function projectTint(color: string | null | undefined): string | null {
+  return color ? projectColorValue(color) : null;
+}
+
 type Rgb = readonly [number, number, number];
 
 const toLinear = (channel: number): number =>

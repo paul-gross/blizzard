@@ -42,6 +42,9 @@ export class ChunkDetailPanel {
   /** The chunk's project's color, forwarded to {@link ChunkDetailHeader}; `null` when unknown. */
   readonly projectColor = input<string | null>(null);
 
+  /** Each runner's host name by runner id — a runner the map omits shows no host. */
+  readonly runnerHosts = input<ReadonlyMap<string, string>>(new Map());
+
   /** The chunk's related work items + fetch state, rendered by the Issue tab.
    * Defaults to `loading`. */
   readonly workItems = input<WorkItemsState>({ status: 'loading', items: [] });

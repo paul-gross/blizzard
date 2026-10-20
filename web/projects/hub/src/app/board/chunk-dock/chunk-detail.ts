@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, input, output, signal } from '@angular/core';
 
-import { type ChunkDetail as ChunkDetailAggregate, type ChunkStatus, injectHubChunkDetailQuery, injectHubChunkWorkItemsQuery, errorMessage, FLEET_CLOCK, KitAsyncState, type KitAsyncStateValue, injectPendingMutationVariables, isPendingFor, asyncState, type WorkItemsState, type AnswerQuestionEvent, type ResolveDecisionEvent } from 'fleet';
+import { type ChunkDetail as ChunkDetailAggregate, type ChunkStatus, injectHubChunkDetailQuery, injectHubChunkWorkItemsQuery, errorMessage, FLEET_CLOCK, injectRunnerHostNames, KitAsyncState, type KitAsyncStateValue, injectPendingMutationVariables, isPendingFor, asyncState, type WorkItemsState, type AnswerQuestionEvent, type ResolveDecisionEvent } from 'fleet';
 import { hasPermission, injectMeQuery } from '../../core/auth/me.query';
 import { injectProjectsQuery } from '../../core/projects.query';
 import { injectCompleteChunkMutation, type CompleteVars } from '../chunks/complete.mutations';
@@ -67,6 +67,7 @@ export class ChunkDetail {
   private readonly meQuery = injectMeQuery();
   private readonly projectsQuery = injectProjectsQuery();
   private readonly clock = inject(FLEET_CLOCK);
+  protected readonly runnerHosts = injectRunnerHostNames();
 
   /** Whether the current identity may pause/resume/detach the chunk
    * (`chunk:control`); `null`/pending resolves to `false`. */

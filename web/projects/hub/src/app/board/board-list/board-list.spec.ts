@@ -7,6 +7,8 @@ import type { BoardCard } from '../board-card/board-card';
 import type { BoardLaneMove, BoardReposition } from '../board-shell/board-column';
 import { BoardList, type BoardListEntry, type BoardListGroups } from './board-list';
 
+const RUNNER_ID = 'rn_01M49GZR9G2S7PT1TB5ZT4E4AX';
+
 const CARD: BoardCard = {
   chunkId: 'ch_01running000000000000000',
   shortId: 'C-0001',
@@ -201,21 +203,44 @@ describe('BoardList', () => {
     });
 
     it('puts its runner over its step and its PRs in one cell', async () => {
-      const el = await render(running(card('a', { runnerName: 'r-claude', openPrs: [{ repo: 'blizzard', number: 7, url: 'https://example.test/pr/7' }] })));
+      const el = await render(running(card('a', { runnerId: RUNNER_ID, runnerName: 'r-claude', openPrs: [{ repo: 'blizzard', number: 7, url: 'https://example.test/pr/7' }] })));
 
       const holder = el.querySelector('.holder')!;
-      expect(holder.firstElementChild?.textContent?.trim()).toBe('r-claude');
+      expect(holder.firstElementChild?.textContent?.trim()).toBe('R-E4AX.r-claude');
       expect(holder.querySelector('.step')).not.toBeNull();
       expect(holder.querySelector('.prs a')?.textContent?.trim()).toBe('#7');
     });
 
     it('names its runner host/runner where the host is known, and no runner where none holds it', async () => {
-      const hosted = await render(running(card('a', { runnerName: 'r-claude', hostName: 'atlas' })));
-      expect(hosted.querySelector('[data-testid="list-row-runner"]')?.textContent?.trim()).toBe('atlas/r-claude');
+      const hosted = await render(running(card('a', { runnerId: RUNNER_ID, runnerName: 'r-claude', hostName: 'atlas' })));
+      const runner = hosted.querySelector('[data-testid="list-row-runner"]');
+      expect(runner?.textContent?.trim()).toBe('atlas/r-claude');
+      expect(runner?.getAttribute('title')).toBe(`atlas/r-claude · ${RUNNER_ID}`);
 
-      fixture.componentRef.setInput('groups', running(card('b', { runnerName: null, hostName: 'atlas' })));
+      fixture.componentRef.setInput('groups', running(card('b', { runnerId: null, runnerName: null, hostName: 'atlas' })));
       await fixture.whenStable();
       expect(hosted.querySelector('[data-testid="list-row-runner"]')).toBeNull();
+    });
+
+    it("names an unnamed runner by its compact id", async () => {
+      const el = await render(running(card('a', { runnerId: RUNNER_ID, runnerName: null })));
+      expect(el.querySelector('[data-testid="list-row-runner"]')?.textContent?.trim()).toBe('R-E4AX');
+    });
+
+    it('shows each landed commit by its short hash, linked where it has a url', async () => {
+      const hash = '9f2c4e1a7b3d5860fedcba9876543210abcdef12';
+      const el = await render(
+        running(
+          card('a', {
+            landedRepos: [
+              { repo: 'blizzard', commit_hash: hash, url: 'https://example.test/c/1' },
+              { repo: 'infra', commit_hash: hash, url: null },
+            ],
+          }),
+        ),
+      );
+      expect(el.querySelector('.prs a')?.textContent?.trim()).toBe('9f2c4e1');
+      expect(el.querySelector('.prs .commit')?.textContent?.trim()).toBe('9f2c4e1');
     });
 
     it("tints the row by its project's color, and leaves a project-less row untinted", async () => {

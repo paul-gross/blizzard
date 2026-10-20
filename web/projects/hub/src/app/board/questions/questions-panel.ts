@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, output } from '@angular/core';
 
-import { type KitAsyncStateValue, asyncState } from 'fleet';
+import { type KitAsyncStateValue, asyncState, injectRunnerHostNames } from 'fleet';
 import { QuestionsPanelView } from './questions-view';
 import { injectHubQuestionsQuery } from './questions.query';
 
@@ -23,6 +23,7 @@ import { injectHubQuestionsQuery } from './questions.query';
 })
 export class QuestionsPanel {
   private readonly query = injectHubQuestionsQuery();
+  protected readonly runnerHosts = injectRunnerHostNames();
 
   /** Emitted with a chunk id when an ask is activated — opens it in the detail panel. */
   readonly selectChunk = output<string>();
