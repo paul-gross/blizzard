@@ -42,6 +42,13 @@ export function connectionState(online: boolean, connection: RunnerConnection): 
     : { label: 'OFFLINE', tone: 'stale' };
 }
 
+/** A runner's connection as its detail title bar states it: a brake on an online runner outranks ONLINE, matching its light. */
+export function runnerTitleState(row: RunnerRow): { readonly label: string; readonly tone: Tone } {
+  if (row.online && row.hub_paused) return { label: 'HUB PAUSED', tone: 'waiting' };
+  if (row.online && row.locally_paused) return { label: 'LOCALLY PAUSED', tone: 'idle' };
+  return connectionState(row.online, row.connection);
+}
+
 /** A runner's State fact, stacked: its connection when not online, each brake that holds it, else WORKING or IDLE. */
 export function runnerStateBadges(row: RunnerRow): readonly StateBadge[] {
   const badges: StateBadge[] = [];

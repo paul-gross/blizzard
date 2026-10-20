@@ -3,7 +3,7 @@ import { ChangeDetectionStrategy, Component, computed, input, output } from '@an
 import { KitAsyncState, KitBadge, KitFactList, KitPanel, KitSlotBar, RunnerConnection, SubscriptionPaceGroup } from 'fleet';
 import type { RunnerDetailVm } from './fleet-page.model';
 import { FleetRunnerRow } from './fleet-runner-row';
-import { connectionState, runnerLight } from './connection-status.model';
+import { runnerLight, runnerTitleState } from './connection-status.model';
 import { runnerSeenLabel, type RunnerRow } from './runner-rows.model';
 import { StatusLight } from './status-light';
 
@@ -34,7 +34,7 @@ export class HostlessRunnerDetail {
 
   protected readonly light = computed(() => runnerLight(this.detail().row));
 
-  protected readonly state = computed(() => connectionState(this.detail().row.online, this.detail().row.connection));
+  protected readonly state = computed(() => runnerTitleState(this.detail().row));
 
   /** "1 / 2 slots" — only when the runner reported a capacity, so one registered by a
    * client that predates the field gets no misleading zero-slot bar. */

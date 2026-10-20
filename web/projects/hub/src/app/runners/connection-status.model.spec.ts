@@ -1,6 +1,6 @@
 import { RunnerConnection } from 'fleet';
 
-import { connectionState, hostLight, runnerLight, runnerStateBadges } from './connection-status.model';
+import { connectionState, hostLight, runnerLight, runnerStateBadges, runnerTitleState } from './connection-status.model';
 import type { RunnerRow } from './runner-rows.model';
 
 const NOW = new Date().toISOString();
@@ -77,5 +77,14 @@ describe('runnerStateBadges', () => {
     expect(badges.map((badge) => badge.label)).toEqual(['LOCALLY PAUSED', 'HUB PAUSED']);
     expect(badges[0].title).toBe('spend cap');
     expect(badges[1].testid).toBe('fleet-runner-hub-paused');
+  });
+});
+
+describe('runnerTitleState', () => {
+  it('lets a brake on an online runner outrank ONLINE, as its light does', () => {
+    expect(runnerTitleState(row())).toEqual({ label: 'ONLINE', tone: 'done' });
+    expect(runnerTitleState(row({ hub_paused: true }))).toEqual({ label: 'HUB PAUSED', tone: 'waiting' });
+    expect(runnerTitleState(row({ locally_paused: true }))).toEqual({ label: 'LOCALLY PAUSED', tone: 'idle' });
+    expect(runnerTitleState(row({ online: false, hub_paused: true, connection: RunnerConnection.OFFLINE }))).toEqual({ label: 'OFFLINE', tone: 'stale' });
   });
 });
