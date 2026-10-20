@@ -80,7 +80,7 @@ describe('hostRunnerRows', () => {
 
     expect(row.tone).toBe('red');
     expect(row.state).toEqual([{ label: 'HUB UNREACHABLE', tone: 'stale', title: 'http://hub' }]);
-    expect(row.hub).toEqual({ endpoint: 'http://hub', reachable: false, lastContactAt: null, buffered: 3, refusal: null });
+    expect(row.hub).toEqual({ endpoint: 'http://hub', reachable: false, lastContactAt: null, buffered: 3, refusal: null, hubVersion: null, window: null });
   });
 
   it('reads a runner whose identity the hub refuses red, naming the refusal', () => {
@@ -91,6 +91,27 @@ describe('hostRunnerRows', () => {
 
     expect(row.tone).toBe('red');
     expect(row.hub?.refusal).toEqual({ label: 'REFUSED', tone: 'needs', title: 'token revoked — set the token' });
+  });
+
+  it('reads a runner the hub\'s version window refuses red, with the hub\'s sentence naming the upgrade', () => {
+    const reason = "runner 0.1.4 is older than this hub's oldest supported line, 0.2; upgrade the runner host to 0.2 or later, up to 0.3";
+    const row = one(RUNNER(), STATUS({ identity: { state: 'version_refused', reason } as runnerApi.IdentityVerdictView }));
+
+    expect(row.tone).toBe('red');
+    expect(row.hub?.refusal).toEqual({ label: 'VERSION REFUSED', tone: 'needs', title: reason });
+  });
+
+  it('carries the hub\'s version and the window it admits once a registration has answered', () => {
+    const answered = one(
+      RUNNER(),
+      STATUS({
+        hub: { endpoint: 'http://hub', reachable: true, last_contact_at: null, buffer_depth: 0, hub_version: '0.3.0', window: { floor: '0.2', ceiling: '0.3' } },
+      }),
+    );
+    expect(answered.hub?.hubVersion).toBe('0.3.0');
+    expect(answered.hub?.window).toBe('admits 0.2 – 0.3');
+
+    expect(one(RUNNER(), STATUS()).hub?.hubVersion).toBeNull();
   });
 
   it('reads either brake amber, badging which side set it', () => {

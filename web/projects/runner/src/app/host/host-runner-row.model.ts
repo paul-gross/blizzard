@@ -42,6 +42,10 @@ export interface HostRunnerHub {
   readonly reachable: boolean;
   readonly lastContactAt: string | null;
   readonly buffered: number;
+  /** The hub's own version, `null` until a registration has answered. */
+  readonly hubVersion: string | null;
+  /** "admits 0.2 – 0.3" — the runner versions the hub's window admits, `null` until it names one. */
+  readonly window: string | null;
   /** Why the hub will not take the runner's work, `null` while its token checks out or goes unchecked. */
   readonly refusal: HostRunnerBadge | null;
 }
@@ -92,6 +96,8 @@ function refusal(identity: runnerApi.IdentityVerdictView | null | undefined): Ho
       return { label: 'NOT HELD', tone: 'needs', title: identity.reason ?? null };
     case 'tenant_differs':
       return { label: 'TENANT DIFFERS', tone: 'needs', title: identity.reason ?? null };
+    case 'version_refused':
+      return { label: 'VERSION REFUSED', tone: 'needs', title: identity.reason ?? null };
     default:
       return null;
   }
@@ -226,6 +232,8 @@ export function hostRunnerRows(runners: readonly runnerApi.HostRunnerView[], rea
             reachable: status.hub.reachable,
             lastContactAt: status.hub.last_contact_at ?? null,
             buffered: status.hub.buffer_depth,
+            hubVersion: status.hub.hub_version ?? null,
+            window: status.hub.window ? `admits ${status.hub.window.floor} – ${status.hub.window.ceiling}` : null,
             refusal: refusal(status.identity),
           }
         : null,

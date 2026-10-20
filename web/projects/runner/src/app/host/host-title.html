@@ -7,9 +7,14 @@
     <span class="ref" [title]="hostId()">{{ ref }}</span>
   }
   @if (registration(); as reg) {
-    <fleet-kit-badge class="state" variant="text" [tone]="reg.tone" data-testid="host-registration-state">{{ reg.label }}</fleet-kit-badge>
+    <fleet-kit-badge class="state" variant="text" [tone]="reg.tone" [title]="reg.lines.join(' · ')" data-testid="host-registration-state">{{
+      reg.label
+    }}</fleet-kit-badge>
     @if (reg.answeredAt; as at) {
       <span class="report" data-testid="host-registration-answered">answered <fleet-when [iso]="at" [relative]="true" /></span>
+    }
+    @if (reg.detail; as detail) {
+      <p class="detail" data-testid="host-registration-detail">{{ detail }}</p>
     }
   }
 </div>

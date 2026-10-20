@@ -9,6 +9,7 @@ const REG = (state: HostRegistrationSummary['state']): HostRegistrationSummary =
   label: state,
   tone: 'idle',
   lines: [],
+  detail: null,
   answeredAt: null,
 });
 
