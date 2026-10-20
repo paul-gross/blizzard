@@ -1,0 +1,47 @@
+<fleet-kit-panel class="sec" label="Workspaces · environments" [count]="inUseLabel()" [bodyScroll]="false" data-testid="host-environments">
+  <fleet-kit-async-state
+    [state]="state()"
+    placement="inline"
+    loadingText="LOADING…"
+    errorText="ENVIRONMENTS UNAVAILABLE"
+    emptyText="NO WORKSPACES DECLARED"
+    emptyTestid="host-environments-empty"
+  >
+    @for (group of groups(); track group.workspaceId) {
+      <div class="ws" data-testid="host-workspace" [attr.data-workspace-id]="group.workspaceId">
+        <span class="ws-id">{{ group.workspaceId }}</span>
+        <span class="ws-use">{{
+          group.capacity === null ? group.inUse + ' in use' : group.inUse + ' / ' + group.capacity + ' in use'
+        }}</span>
+      </div>
+      @for (env of group.envs; track env.environmentId) {
+        @if (env.held) {
+          <div class="env held" [class.elsewhere]="env.elsewhere" data-testid="host-env-held">
+            <fleet-kit-beacon class="env-dot" aria-hidden="true" [active]="true" tone="amber" blink="hold" />
+            <span class="env-id">{{ env.environmentId }}</span>
+            @if (env.chunkId; as chunkId) {
+              <a class="chunk" routerLink="/board" [queryParams]="{ chunk: chunkId }" queryParamsHandling="merge" [title]="chunkId">
+                @if (env.color; as color) {
+                  <fleet-kit-swatch [color]="color" />
+                } @else {
+                  <span class="sw-none" aria-hidden="true"></span>
+                }
+                {{ env.chunkRef }}
+              </a>
+            } @else {
+              <span class="chunk"></span>
+            }
+            <span class="project">{{ env.projectName ?? '' }}</span>
+            <span class="holder">{{ env.holder ?? '' }}</span>
+          </div>
+        } @else {
+          <div class="env free" data-testid="host-env-free">
+            <fleet-kit-beacon class="env-dot" aria-hidden="true" />
+            <span class="env-id">{{ env.environmentId }}</span>
+            <span class="free-lbl">FREE</span>
+          </div>
+        }
+      }
+    }
+  </fleet-kit-async-state>
+</fleet-kit-panel>

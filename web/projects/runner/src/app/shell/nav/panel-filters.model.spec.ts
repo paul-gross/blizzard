@@ -33,6 +33,7 @@ describe('runnerFilterChoices', () => {
       title: 'r1',
       disabled: false,
       brake: null,
+      color: null,
     });
   });
 
@@ -74,21 +75,51 @@ describe('runnerFilterChoices', () => {
       title: 'r-broken is halted',
       disabled: true,
       brake: null,
+      color: null,
     });
   });
 });
 
+describe('runnerFilterChoices with a stale current filter', () => {
+  it('offers a filter naming no runner on the host last, disabled and titled as gone', () => {
+    const choices = runnerFilterChoices([runner('r1')], 'r-removed');
+
+    expect(choices.map((choice) => choice.value)).toEqual([null, 'r1', 'r-removed']);
+    expect(choices[2]).toEqual({
+      value: 'r-removed',
+      label: 'r-removed (gone)',
+      title: 'r-removed is no longer on this host',
+      disabled: true,
+      brake: null,
+      color: null,
+    });
+  });
+
+  it('adds nothing when the current filter names a runner on the host, or is All', () => {
+    expect(runnerFilterChoices([runner('r1')], 'r1')).toHaveLength(2);
+    expect(runnerFilterChoices([runner('r1')], null)).toHaveLength(2);
+  });
+
+  it('calls nothing gone while the runner list is still pending', () => {
+    expect(runnerFilterChoices([], 'r1', true)).toHaveLength(1);
+  });
+
+  it('names a halted runner still on the host as present, not gone', () => {
+    expect(runnerFilterChoices([runner('r1', { runner_id: null, state: 'halted' })], 'r1')).toHaveLength(2);
+  });
+});
+
 describe('projectFilterChoices', () => {
-  it('offers All first, then every project by name, valued by its slug', () => {
+  it('offers All first, then every project by name, valued by its slug and carrying its colour', () => {
     const projects: PanelProject[] = [
       { slug: 'blizzard', name: 'Blizzard', entries: ['ws'], color: 'blue' },
       { slug: 'winter', name: 'Winter', entries: [], color: null },
     ];
 
     expect(projectFilterChoices(projects)).toEqual([
-      { value: null, label: 'All', title: 'every project', disabled: false, brake: null },
-      { value: 'blizzard', label: 'Blizzard', title: 'blizzard', disabled: false, brake: null },
-      { value: 'winter', label: 'Winter', title: 'winter', disabled: false, brake: null },
+      { value: null, label: 'All', title: 'every project', disabled: false, brake: null, color: null },
+      { value: 'blizzard', label: 'Blizzard', title: 'blizzard', disabled: false, brake: null, color: 'blue' },
+      { value: 'winter', label: 'Winter', title: 'winter', disabled: false, brake: null, color: null },
     ]);
   });
 });

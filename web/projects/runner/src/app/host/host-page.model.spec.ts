@@ -1,5 +1,5 @@
 import type { HostEnvGroup } from './host-environments.model';
-import { envsInUseLabel, hostRefLabel, hostRowsInFilter, hostTone } from './host-page.model';
+import { envsInUseLabel, hostRefLabel, hostRowsInFilter, hostRunnersEmptyText, hostTone } from './host-page.model';
 import type { HostRegistrationSummary } from './host-registration.model';
 import type { HostRunnerRow } from './host-runner-row.model';
 import type { PanelProject, RunnerProjects } from '../core/panel-reads.model';
@@ -88,5 +88,15 @@ describe('envsInUseLabel', () => {
 
   it('sums in-use over capacity, counting an undeclared workspace’s environments', () => {
     expect(envsInUseLabel([GROUP(3, 2, 3), GROUP(null, 1, 2)])).toBe('3 / 5 in use');
+  });
+});
+
+describe('hostRunnersEmptyText', () => {
+  it('names a host with no runners', () => {
+    expect(hostRunnersEmptyText(0)).toBe('NO RUNNERS ON THIS HOST');
+  });
+
+  it('names the filters when the host has runners they leave out', () => {
+    expect(hostRunnersEmptyText(2)).toBe('NO RUNNER MATCHES THE FILTERS');
   });
 });

@@ -8,7 +8,7 @@
         [title]="choice.title"
         [testid]="testid() + '-' + (choice.value ?? 'all')"
         (click)="onChoose(choice)"
-        >{{ choice.label }}@if (choice.brake; as glyph) {<fleet-kit-glyph
+        >@if (choice.color; as color) {<fleet-kit-swatch class="swatch" [color]="color" />}{{ choice.label }}@if (choice.brake; as glyph) {<fleet-kit-glyph
             class="brake"
             data-testid="runner-brake"
             [glyph]="glyph"

@@ -31,10 +31,11 @@
     <fleet-kit-fact-list class="facts" [rows]="facts()" />
     @if (!row().halted) {
       <div class="held">
-        <div class="held-hd">Held chunks · {{ row().held.length }}</div>
+        <div class="held-hd">Held chunks{{ row().heldPending ? '' : ' · ' + row().held.length }}</div>
         <fleet-kit-async-state
-          [state]="row().held.length > 0 ? 'ready' : 'empty'"
+          [state]="heldState()"
           placement="inline"
+          loadingText="LOADING…"
           emptyText="HOLDS NO CHUNKS"
           emptyTestid="host-runner-no-chunks"
         >

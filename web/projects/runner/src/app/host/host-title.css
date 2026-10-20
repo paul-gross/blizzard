@@ -1,0 +1,31 @@
+:host {
+  display: block;
+}
+.hd {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  background: var(--overlay-25);
+}
+.dot {
+  display: inline-block;
+  flex: none;
+  width: 8px;
+  height: 8px;
+}
+.name {
+  margin: 0;
+  color: var(--amber);
+  font-size: var(--fs-lg);
+  font-weight: normal;
+  letter-spacing: 0.04em;
+}
+.ref,
+.report {
+  color: var(--label-dim);
+  font-size: var(--fs-xs);
+  letter-spacing: 0.06em;
+}

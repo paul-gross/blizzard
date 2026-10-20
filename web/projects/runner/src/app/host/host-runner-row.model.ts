@@ -77,6 +77,8 @@ export interface HostRunnerRow {
   readonly problems: readonly string[];
   readonly state: readonly HostRunnerBadge[];
   readonly held: readonly HostRunnerChunk[];
+  /** Whether its held chunks are still loading — no count, and no WORKING or IDLE claim, until they land. */
+  readonly heldPending: boolean;
 }
 
 /** Why the hub refuses the runner's work, from its identity verdict; `null` while it checks out or goes unchecked. */
@@ -144,7 +146,7 @@ function problems(status: runnerApi.RunnerStatusView | undefined): readonly stri
 function stateBadges(
   runner: runnerApi.HostRunnerView,
   status: runnerApi.RunnerStatusView | undefined,
-  held: number,
+  held: number | null,
 ): readonly HostRunnerBadge[] {
   if (runner.state !== 'serving') {
     return [{ label: 'HALTED', tone: 'needs', title: (runner.halted_reasons ?? []).join('; ') || null }];
@@ -156,7 +158,9 @@ function stateBadges(
     badges.push({ label: 'PAUSED HERE', tone: 'idle', title: pause.local_reason ?? 'Paused on this runner — no new claims' });
   }
   if (pause?.hub) badges.push({ label: 'HUB PAUSED', tone: 'waiting', title: 'Paused by the hub — no new claims' });
-  if (badges.length === 0) badges.push({ label: held > 0 ? 'WORKING' : 'IDLE', tone: held > 0 ? 'running' : 'idle', title: null });
+  if (badges.length === 0 && held !== null) {
+    badges.push({ label: held > 0 ? 'WORKING' : 'IDLE', tone: held > 0 ? 'running' : 'idle', title: null });
+  }
   return badges;
 }
 
@@ -182,6 +186,8 @@ export interface HostRunnerReads {
   readonly subscriptions: readonly runnerApi.HostSubscriptionView[];
   /** Every chunk across the runners, as the board folds them. */
   readonly chunks: readonly MachineChunkRow[];
+  /** Whether the chunks are still loading, so no runner claims it holds none. */
+  readonly chunksPending: boolean;
 }
 
 /** One {@link HostRunnerRow} per runner the host serves or holds halted, in wire order. */
@@ -224,8 +230,9 @@ export function hostRunnerRows(runners: readonly runnerApi.HostRunnerView[], rea
           }
         : null,
       problems: problems(status),
-      state: stateBadges(runner, status, held.length),
+      state: stateBadges(runner, status, reads.chunksPending ? null : held.length),
       held,
+      heldPending: reads.chunksPending,
     };
   });
 }

@@ -1,0 +1,15 @@
+<div class="hd" data-testid="host-title">
+  @if (registration(); as reg) {
+    <fleet-kit-beacon class="dot" aria-hidden="true" [active]="true" [tone]="tone()" [blink]="tone() === 'green' ? 'pulse' : 'hold'" />
+  }
+  <h2 class="name" data-testid="host-name">{{ name() }}</h2>
+  @if (hostRef(); as ref) {
+    <span class="ref" [title]="hostId()">{{ ref }}</span>
+  }
+  @if (registration(); as reg) {
+    <fleet-kit-badge class="state" variant="text" [tone]="reg.tone" data-testid="host-registration-state">{{ reg.label }}</fleet-kit-badge>
+    @if (reg.answeredAt; as at) {
+      <span class="report" data-testid="host-registration-answered">answered <fleet-when [iso]="at" [relative]="true" /></span>
+    }
+  }
+</div>

@@ -29,6 +29,6 @@ export class PanelFiltersBar {
   private readonly runnersQuery = injectHostRunnersQuery();
   private readonly projects = injectPanelProjects();
 
-  protected readonly runnerChoices = computed(() => runnerFilterChoices(this.runnersQuery.data() ?? []));
+  protected readonly runnerChoices = computed(() => runnerFilterChoices(this.runnersQuery.data() ?? [], this.filters.runner(), this.runnersQuery.isPending()));
   protected readonly projectChoices = computed(() => projectFilterChoices(this.projects()));
 }

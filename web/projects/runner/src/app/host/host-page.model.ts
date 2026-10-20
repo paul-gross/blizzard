@@ -33,6 +33,11 @@ export function hostRowsInFilter(
   );
 }
 
+/** The runners list's empty text: the host reporting no runner at all, or the filters leaving none. */
+export function hostRunnersEmptyText(hostRunnerCount: number): string {
+  return hostRunnerCount === 0 ? 'NO RUNNERS ON THIS HOST' : 'NO RUNNER MATCHES THE FILTERS';
+}
+
 /** "9 / 18 in use" across every workspace — a workspace the host does not declare counts its environments —
  * `null` while none is reported. */
 export function envsInUseLabel(groups: readonly HostEnvGroup[]): string | null {
