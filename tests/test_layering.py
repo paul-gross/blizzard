@@ -260,12 +260,7 @@ def _reaching_sides(src_root: Path) -> tuple[dict[str, set[str]], dict[str, Path
                 tags[name].add(side)
         if name.startswith("blizzard.wire"):
             tags[name].add("wire")
-    passes_on = [
-        n
-        for n in files
-        if n.startswith(("blizzard.wire", "blizzard.foundation", "blizzard.auth_core", "blizzard.cli"))
-        or n in ("blizzard.wire", "blizzard.foundation", "blizzard.auth_core", "blizzard.cli")
-    ]
+    passes_on = {n for n in files if n.split(".")[1:2] in (["wire"], ["foundation"], ["auth_core"], ["cli"])}
     changed = True
     while changed:
         changed = False
