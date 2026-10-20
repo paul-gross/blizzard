@@ -1,5 +1,5 @@
 """blizzard:compat — the supported releases, resolved from tag names and read through git on a
-real throwaway repository, per ``tests/test_wire_compat.py``."""
+real throwaway repository, per ``tests/test_compat_cli.py``."""
 
 from __future__ import annotations
 

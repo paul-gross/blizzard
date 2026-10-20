@@ -49,6 +49,10 @@ class Repository:
         listed = self._git("ls-tree", "--name-only", rev, f"{directory.rstrip('/')}/").splitlines()
         return sorted(line.rsplit("/", 1)[-1] for line in listed)
 
+    def paths(self, rev: str, directory: str) -> list[str]:
+        """Every file path under ``directory``, however deep, as ``rev`` holds it; empty when it has none."""
+        return self._git("ls-tree", "-r", "--name-only", rev, "--", f"{directory.rstrip('/')}/").splitlines()
+
     def previous_tag(self, rev: str) -> str | None:
         """The nearest tag before ``rev``, or ``None`` when no tag precedes it; any other git failure raises."""
         if len(self._git("rev-list", "--parents", "-n", "1", rev).split()) < 2:

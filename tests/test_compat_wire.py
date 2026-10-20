@@ -1,4 +1,4 @@
-"""blizzard:compat (bzh:fleet-wire-additive) — the wire classifier over hand-built fixture
+"""blizzard:compat (bzh:released-surface-additive) — the wire classifier over hand-built fixture
 specs, never the real committed one."""
 
 from __future__ import annotations
