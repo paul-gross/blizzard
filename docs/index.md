@@ -9,6 +9,7 @@ one file that owns it.
 | [`upgrade.md`](./upgrade.md)                                  | You are pulling a new image tag                                                                                              |
 | [`rollback.md`](./rollback.md)                                | You are reversing a release                                                                                                  |
 | [`versioning.md`](./versioning.md)                            | You need to know what a version number promises                                                                              |
+| [`verifying.md`](./verifying.md)                              | You are checking that a release is what blizzard built — its image, files, and bills of materials                            |
 | [`backup.md`](./backup.md)                                    | You are snapshotting or restoring durable state                                                                              |
 | [`remote-runner.md`](./remote-runner.md)                      | You are adding a runner on a machine that is not the hub's                                                                   |
 | [`deployment.md`](./deployment.md)                            | You want the colocated wheel + systemd install instead, or any operator concern that is not specific to one deployment shape |

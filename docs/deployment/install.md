@@ -4,9 +4,31 @@
 
 1. Create a system service account named `blizzard` with home `/var/lib/blizzard`, the shared state root the units
    declare as `StateDirectory`.
-2. Install the single blizzard wheel into a dedicated node-free virtualenv at `/opt/blizzard/venv`, the path the
-   packaged units' `ExecStart` expects. If the wheel lives anywhere else, edit the units' `ExecStart` and `ExecStartPre`
-   to the real binary path — systemd requires an absolute path there.
+2. Install a release into a dedicated node-free virtualenv at `/opt/blizzard/venv`, the path the packaged units'
+   `ExecStart` expects, from that release's hashed requirements file — the only install path; there is no package
+   index. Name the version, fetch the file from the release page, check where it came from, and sync the venv to it
+   ([verifying.md](../verifying.md) owns the checks):
+
+   ```bash
+   v=0.2.0-rc.2
+   curl -fsSLO "https://github.com/paul-gross/blizzard/releases/download/v$v/blizzard-$v-requirements.txt"
+   gh attestation verify "blizzard-$v-requirements.txt" --repo paul-gross/blizzard
+   uv venv /opt/blizzard/venv --python 3.12
+   uv pip sync --python /opt/blizzard/venv --require-hashes "blizzard-$v-requirements.txt"
+   ```
+
+   The file's last line names that release's own wheel by its page address and hash, and every dependency comes at the
+   version and hash the release gate proved, so the one attestation check vouches for the whole install. Without `uv`:
+
+   ```bash
+   python3 -m venv /opt/blizzard/venv
+   /opt/blizzard/venv/bin/pip install --require-hashes -r "blizzard-$v-requirements.txt"
+   ```
+
+   A hub whose store is Postgres and runs under systemd takes `blizzard-$v-requirements-pg.txt` instead. A runner
+   machine takes the same file, at a version [versioning.md](../versioning.md#the-hubrunner-skew-window) allows against
+   its hub. If the venv lives anywhere else, edit the units' `ExecStart` and `ExecStartPre` to the real binary path —
+   systemd requires an absolute path there.
 3. Seed the hub's runtime directory once, as the service account: `blizzard-hub init /var/lib/blizzard/hub` writes the
    config scaffold, the data directory, and a store migrated to head, and is idempotent.
 4. Install the units by copying [packaging/systemd/blizzard-hub.service](../../packaging/systemd/blizzard-hub.service)
@@ -50,10 +72,14 @@ not make one safe to share.
 
 ## Upgrades
 
-To adopt a new wheel, `pip install` it into the venv and `systemctl restart` both units — no manual migration step: each
-unit's `ExecStartPre` runs `migrate` before the daemon opens its store, and the daemon refuses to start on a revision
-mismatch, so a forgotten migration fails loudly instead of corrupting state. A graceful `systemctl restart` preserves
-in-flight work across an upgrade; [recovery.md](./recovery.md) owns that contract.
+To adopt a new release, fetch and verify its requirements file as in step 2 of [First install](#first-install), run
+`uv pip sync` (or `pip install --require-hashes -r`) against it into the same venv, and `systemctl restart` both units.
+`uv pip sync` leaves the venv holding exactly that file's set, so no dependency lingers from the version before. Going
+back is the same with the earlier version's file, subject to the store's own rules ([rollback.md](../rollback.md)).
+There is no manual migration step: each unit's `ExecStartPre` runs `migrate` before the daemon opens its store, and the
+daemon refuses to start on a revision mismatch, so a forgotten migration fails loudly instead of corrupting state. A
+graceful `systemctl restart` preserves in-flight work across an upgrade; [recovery.md](./recovery.md) owns that
+contract.
 
 `migrate` reads `blizzard-hub.toml` before touching the store, so a config the new wheel rejects fails `ExecStartPre`
 and the unit never starts; make any required config edit in the same maintenance window as the wheel, before the

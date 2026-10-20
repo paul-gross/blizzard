@@ -10,12 +10,14 @@ no inbound firewall rule is fine: no port to open, no address the hub needs to k
 
 ## Install
 
+Install the version [`docs/versioning.md`](./versioning.md#the-hubrunner-skew-window)'s skew window allows against the
+hub, from that release's requirements file with the commands in [`docs/deployment/install.md`](./deployment/install.md).
 On a runner-only machine, follow [`docs/deployment/install.md`](./deployment/install.md)'s "First install" for the
-service account, the wheel venv, and the unit — but skip `blizzard-hub init` (a runner machine hosts no hub), install
-only the `blizzard-runner.service` unit, and don't enable it yet. Stop before step 5: its `blizzard-runner init` names
-no hub, so it would try to add the runner at the default `http://127.0.0.1:8421`. [Add](#add) runs init against the real
-hub and starts the unit. Workspace and harness bindings are configured exactly as in the colocated install; distance
-changes none of that.
+service account, the release-pinned venv, and the unit — but skip `blizzard-hub init` (a runner machine hosts no hub),
+install only the `blizzard-runner.service` unit, and don't enable it yet. Stop before step 5: its `blizzard-runner init`
+names no hub, so it would try to add the runner at the default `http://127.0.0.1:8421`. [Add](#add) runs init against
+the real hub and starts the unit. Workspace and harness bindings are configured exactly as in the colocated install;
+distance changes none of that.
 
 ## Point it at the hub
 

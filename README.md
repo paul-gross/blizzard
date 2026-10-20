@@ -44,7 +44,7 @@ unattended and stays *on* it. A team grows its fleet by adding machines rather t
 engineer's agents show up on the same board.
 
 📚 **Operator docs:** [`docs/index.md`](./docs/index.md) · 🐳 **Start here:** [`docs/install.md`](./docs/install.md) ·
-🛡️ **Security policy:** [`SECURITY.md`](./SECURITY.md)
+🔏 **Verify a release:** [`docs/verifying.md`](./docs/verifying.md) · 🛡️ **Security policy:** [`SECURITY.md`](./SECURITY.md)
 
 ## ✨ Features
 
@@ -122,7 +122,9 @@ passing or accepting each proposal on its argument and its evidence.</sub></p>
 ## 🚀 Quickstart
 
 ```bash
-pip install https://github.com/paul-gross/blizzard/releases/download/v0.1.0-rc.1/blizzard-0.1.0rc1-py3-none-any.whl
+v=0.2.0-rc.2
+curl -fsSLO "https://github.com/paul-gross/blizzard/releases/download/v$v/blizzard-$v-requirements.txt"
+uv venv --python 3.12 && uv pip sync --require-hashes "blizzard-$v-requirements.txt" && . .venv/bin/activate
 blizzard hub init .          # scaffold config + data dir + a migrated sqlite store
 blizzard hub host .          # serve the API + the embedded mission-control board
 ```
