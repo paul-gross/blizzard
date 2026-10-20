@@ -1,6 +1,6 @@
 """``blizzard-compat``: hold HEAD's committed surface documents to the supported releases.
 
-    blizzard-compat releases [--json] [--line release/X.Y]   the supported releases themselves
+    blizzard-compat releases [--json] [--line release/X.Y] [--tag VERSION]   the supported releases themselves
     blizzard-compat [--commits BASE..HEAD] [--line release/X.Y] [--json]   HEAD against them
     blizzard-compat --tag VERSION [--json]   HEAD judged as the tag v<VERSION>; writes compat-breaks.json
 
@@ -328,18 +328,28 @@ def _run(commits: str | None, line: str | None, as_json: bool) -> None:
     raise SystemExit(1 if window_findings or any(not v.passes for v in verdicts) else 0)
 
 
+def _candidate(version: str) -> Release:
+    candidate = parse_release(f"v{version}")
+    if candidate is None:
+        raise click.UsageError(f"--tag takes MAJOR.MINOR.PATCH or MAJOR.MINOR.PATCH-rc.N, got {version!r}")
+    return candidate
+
+
+def _without(tags: list[str], candidate: Release | None) -> list[str]:
+    """``tags`` less the candidate's own tag, which a run judging that candidate never holds it to."""
+    return [t for t in tags if candidate is None or t != candidate.tag]
+
+
 def _run_tag(version: str, as_json: bool) -> None:
     """Judge HEAD as the tag ``v<version>`` against each supported release, each read over its own ``R..HEAD``.
 
     A candidate or release above every stable major admits what an open ``master`` admits; any other minor or
     major admits deprecated breaks only; a patch admits nothing. Always writes ``compat-breaks.json``."""
-    candidate = parse_release(f"v{version}")
-    if candidate is None:
-        raise click.UsageError(f"--tag takes MAJOR.MINOR.PATCH or MAJOR.MINOR.PATCH-rc.N, got {version!r}")
+    candidate = _candidate(version)
     repo = Repository(Path.cwd())
     root = repo.toplevel()
     repo = Repository(root)
-    tags = [t for t in repo.tags() if t != candidate.tag]
+    tags = _without(repo.tags(), candidate)
     window = _read_head_window(root)
     releases = _resolve(None, tags, window)
     stable = newest_stable(tags)
@@ -370,12 +380,14 @@ def _run_tag(version: str, as_json: bool) -> None:
 @main.command()
 @click.option("--json", "as_json", is_flag=True, help="The releases as the stable JSON document other checks read.")
 @click.option("--line", default=None, help="release/X.Y: list every release cut on that line instead.")
-def releases(as_json: bool, line: str | None) -> None:
+@click.option("--tag", default=None, help="VERSION: leave out the tag v<VERSION>, the candidate a tag run judges.")
+def releases(as_json: bool, line: str | None, tag: str | None) -> None:
     """The supported releases of HEAD's tree, oldest first."""
+    candidate = _candidate(tag) if tag is not None else None
     with _git_errors():
         root = Repository(Path.cwd()).toplevel()
         window = _read_head_window(root)
-        listed = _resolve(line, Repository(root).tags(), window)
+        listed = _resolve(line, _without(Repository(root).tags(), candidate), window)
     if as_json:
         click.echo(json.dumps(releases_document(window, listed), indent=2))
     elif listed:

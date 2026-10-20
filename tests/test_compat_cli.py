@@ -496,6 +496,23 @@ def test_a_tag_excludes_itself_from_the_supported_releases(tmp_path: Path, monke
     assert json.loads(result.stdout)["releases"] == ["v0.2.0-rc.1"]
 
 
+def test_releases_with_a_tag_leaves_that_tag_out(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    repo = _Repo(tmp_path / "r")
+    _shipped(repo, deprecated_in={"v0.2.0-rc.1": False})
+    repo.commit("feat: more")
+    repo.git("tag", "v0.2.0-rc.2")
+    tagged = _run(repo, monkeypatch, "releases", "--json", "--tag", "0.2.0-rc.2")
+    assert [r["tag"] for r in json.loads(tagged.stdout)["releases"]] == ["v0.2.0-rc.1"]
+    untagged = _run(repo, monkeypatch, "releases", "--json")
+    assert [r["tag"] for r in json.loads(untagged.stdout)["releases"]] == ["v0.2.0-rc.2"]
+
+
+def test_releases_with_a_malformed_tag_is_a_usage_error(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    repo = _Repo(tmp_path / "r")
+    repo.commit("chore: base")
+    assert _run(repo, monkeypatch, "releases", "--tag", "banana").exit_code == 2
+
+
 @pytest.mark.parametrize("extra", [("--commits", "HEAD~1..HEAD"), ("--line", "release/0.2")])
 def test_a_tag_cannot_be_combined_with_a_range_or_a_line(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, extra: tuple[str, ...]
