@@ -1,0 +1,52 @@
+# The store baseline proof (blizzard:store-baseline) as a reusable check.
+#
+# `pr.yml` calls it on a pull request that touches either store's `versions/` directory and
+# `release.yml` on a candidate or patch tag, never on a stable promotion. It builds the store a
+# folded baseline revision builds and the store the floor release's own published history builds,
+# and fails on any difference in schema or rows. What it asserts is owned by the test,
+# `tests/test_store_baseline.py`. Until a tree declares a `BASELINE_FLOOR` it skips and says so.
+# Not a required branch-protection check.
+name: store-baseline
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  store-baseline:
+    name: the baseline against its history (blizzard:store-baseline)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The floor's store contract is read from its tag.
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          python-version: "3.12"
+      - name: provision blizzard (the test process reflects Postgres stores)
+        run: uv sync --extra postgres
+      - name: store baseline proof — `mise run store-baseline`
+        env:
+          BLIZZARD_STORE_BASELINE: "1"
+          BLIZZARD_STORE_BASELINE_PG_URL: postgresql://postgres:postgres@localhost:5432/postgres
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: uv run --extra postgres pytest -m store_baseline tests/test_store_baseline.py -v

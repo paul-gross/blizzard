@@ -44,6 +44,38 @@ jobs:
     with:
       crash_sweep_ci: "1"
 
+  # The proof needs the floor release's wheel and a Postgres service, so it runs only when the pull request
+  # changes a revision; the check sits here, at job level, so no other job is gated on the paths.
+  versions-changed:
+    name: store revisions changed
+    runs-on: ubuntu-latest
+    outputs:
+      changed: ${{ steps.diff.outputs.changed }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: either store's versions/ directory differs from the base
+        id: diff
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if git diff --quiet "$BASE_SHA...$HEAD_SHA" -- \
+            src/blizzard/hub/store/migrations/versions src/blizzard/runner/store/migrations/versions; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  store-baseline:
+    needs: [versions-changed]
+    if: ${{ needs.versions-changed.outputs.changed == 'true' }}
+    permissions:
+      contents: read
+    uses: ./.github/workflows/store-baseline.yml
+
   # Only a pull request into a release line is held to where its commits came from.
   line-provenance:
     name: line provenance

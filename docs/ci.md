@@ -109,6 +109,25 @@ one, else at `master`, through `resolve-mock-ref`'s `baseline` input. A failed l
 Locally the same tier is `mise run rehearsal`, which builds a candidate unless `BLIZZARD_REHEARSAL_CANDIDATE` names
 one; set `BLIZZARD_REHEARSAL_PG_URL` to a Postgres server to run the Postgres backend too.
 
+## The store baseline
+
+[`.github/workflows/store-baseline.yml`](../.github/workflows/store-baseline.yml) is reusable (`workflow_call`) and runs
+the store baseline proof (`blizzard:store-baseline`): once a fold has replaced a store's migration history with one
+baseline revision, the proof builds the store that baseline builds alone and the store the floor release's own
+published wheel builds from its history, and fails on any difference in schema or rows. It runs for the hub on SQLite
+and Postgres and for the runner on SQLite and Postgres, against a `postgres:16` service. The runner's history cannot
+reach head on Postgres from an empty store, so that leg holds the baseline's Postgres store to the floor's committed
+`contracts/store/runner.json` and its rows to the history's SQLite rows. Until a tree declares a `BASELINE_FLOOR` the
+proof skips and says so, which is every run before the first fold.
+
+`pr.yml` calls it when the pull request changes either store's `versions/` directory; a `versions-changed` job makes
+that check, so no other `pr.yml` job is gated on the paths. `release.yml` calls it on a candidate (`-rc.`) or patch tag
+and skips it on a stable promotion `vX.Y.0`, whose tree is its last candidate's; `build` waits on it and runs past it
+when skipped. It is not a required branch-protection check.
+
+Locally the same tier is `mise run store-baseline`; set `BLIZZARD_STORE_BASELINE_PG_URL` to a Postgres server to run the
+Postgres legs, and give `gh` a token (`GH_TOKEN`, plus `GH_REPO` outside a GitHub checkout) to download the floor's wheel.
+
 ## Trigger workflows
 
 [`.github/workflows/pr.yml`](../.github/workflows/pr.yml) (PR to `master` or `release/**`) runs the gate plus the
@@ -116,7 +135,8 @@ service tier and CI-profile crash sweep as real gate jobs. A pull request into a
 `line-provenance`, which has
 [`scripts/check-line-provenance.sh`](../scripts/check-line-provenance.sh) fail any commit the pull request adds that is
 not a cherry-pick of a commit on `master`, a `Line-only:` commit, or a `Release-Cut:` commit. A push to a release branch
-runs nothing: `push.yml` is `master`'s alone.
+runs nothing: `push.yml` is `master`'s alone. A pull request that changes a store's `versions/` directory also runs the
+store baseline proof.
 
 [`.github/workflows/push.yml`](../.github/workflows/push.yml) (push to `master`) runs the gate and upper tiers, then
 uploads a dev-build wheel versioned `X.(Y+1).0.dev<run>+<9-char-sha>` from the most recently cut `X.Y.Z` as a workflow
@@ -146,7 +166,7 @@ are inlined in the `dev-image` job — no branching logic to unit-test — and `
 
 [`.github/workflows/release.yml`](../.github/workflows/release.yml) (tag `v*`) runs the full suite — gate, the `compat` backstop, service tier,
 the **full** crash sweep, and e2e — builds the wheel once in `wheel`, rehearses the upgrade to it on an `-rc.` tag
-alone, then runs three jobs. `compat` (`release / compatibility against supported releases`) runs
+alone, proves the store baseline on a candidate or patch tag, then runs three jobs. `compat` (`release / compatibility against supported releases`) runs
 `blizzard-compat --tag <version>` before any build: it judges the tag's tree against each supported release over that
 release's own `R..HEAD` range, fails a break the version does not admit, and uploads `compat-breaks.json`, which `build`
 fetches to the repository root. `wheel` checks the version against the tag and builds the wheel with the embedded

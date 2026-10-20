@@ -16,5 +16,5 @@ pytestmark = pytest.mark.unit
 
 def test_every_collected_test_carries_a_tier_marker() -> None:
     assert UNMARKED_TEST_NODEIDS == [], (
-        f"these collected tests carry none of unit/component/service/e2e/crash_sweep/journey/rehearsal/winter_binding: {UNMARKED_TEST_NODEIDS}"
+        f"these collected tests carry none of unit/component/service/e2e/crash_sweep/journey/rehearsal/store_baseline/winter_binding: {UNMARKED_TEST_NODEIDS}"
     )
