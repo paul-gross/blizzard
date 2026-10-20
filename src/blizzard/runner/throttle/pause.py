@@ -371,24 +371,11 @@ class PauseService:
     def engage(self, *, by: str, reason: str) -> None:
         """Engage the local brake with a durable reason — once (:meth:`LocalBrake.engage`).
         The operator's clear (:meth:`set_local_pause` with ``paused=False``) is the only lift."""
-        fact = self._brake().engage(by=by, reason=reason, at=self._clock.now())
-        if fact is not None:
-            self._write(fact)
-
-    def _brake(self) -> LocalBrake:
-        paused = self._store.local_paused()
-        return LocalBrake(paused=paused, reason=self._store.local_pause_reason() if paused else None)
-
-    def _write(self, fact: LocalPauseFact) -> None:
-        seq = self._store.record_local_pause(
-            paused=fact.paused,
-            at=fact.at,
-            by=fact.by,
-            report_kind=fact.report_kind,
-            report_payload=_report_payload(fact),
-            reason=fact.reason,
-        )
-        self._publish(seq, fact)
+        with self._store.locked_brakes(()) as locked:
+            fact = self._store.local_brake_locked(locked).engage(by=by, reason=reason, at=self._clock.now())
+            seq = self._write_locked(locked, fact) if fact is not None else None
+        if fact is not None and seq is not None:
+            self._publish(seq, fact)
 
     def _write_locked(self, locked: ILockedBrakes, fact: LocalPauseFact) -> int:
         return self._store.record_local_pause_locked(

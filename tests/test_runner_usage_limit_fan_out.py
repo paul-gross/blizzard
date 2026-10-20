@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import pytest
 
@@ -18,7 +19,7 @@ from blizzard.runner.harness.usage import UsageLimit
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.loop.context import LoopConfig, ResolvedSubscription
 from blizzard.runner.loop.steps import Advance
-from blizzard.runner.throttle.pause import PauseService, SpendingRunner, UsageLimitBrakes
+from blizzard.runner.throttle.pause import ILockedBrakes, LocalBrake, PauseService, SpendingRunner, UsageLimitBrakes
 from tests.runner_fakes import (
     FakeHarness,
     FakeHub,
@@ -224,3 +225,25 @@ def test_the_fallback_reset_reads_only_the_runners_own_subscription(tmp_path) ->
     Advance(ctx).run()
 
     assert host.a.local_pause_reason() == f"usage limit: max via {CLAUDE_CODE_HARNESS_ID}"
+
+
+def test_a_direct_engage_reads_and_writes_under_the_brake_lock(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    host = _Host(tmp_path)
+    seen: list[str] = []
+
+    class _Spy(SqlAlchemyRunnerStore):
+        def local_brake_locked(self, handle: ILockedBrakes) -> LocalBrake:
+            seen.append("read")
+            return super().local_brake_locked(handle)
+
+        def record_local_pause_locked(self, handle: ILockedBrakes, **fact: Any) -> int:
+            seen.append("write")
+            return super().record_local_pause_locked(handle, **fact)
+
+    spy = _Spy(host.engine, runner_store_errors(), "rn_a")
+    service = PauseService(spy, FixedClock(_NOW))
+    service.engage(by="usage-limit", reason=_REASON)
+    service.engage(by="usage-limit", reason=_REASON)
+
+    assert seen == ["read", "write", "read"]
+    assert [r["reason"] for r in _reports(spy)] == [_REASON]

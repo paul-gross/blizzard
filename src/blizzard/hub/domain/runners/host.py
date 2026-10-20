@@ -322,7 +322,8 @@ class IWriteHostRegistry(IReadHostRegistry, Protocol):
     def record_report(self, host_id: str, report: HostReport, *, name: str | None, at: datetime) -> bool:
         """Record a report of the added host ``host_id``, refreshing ``last_seen_at``; returns True on its first one,
         which also stamps ``registered_at``. ``name`` replaces the held name unless ``None``; every other field is
-        written verbatim. A ``host_id`` with no row raises :class:`LookupError`."""
+        written verbatim. A ``host_id`` with no row raises :class:`LookupError`; a ``name`` a live host came to hold
+        first raises :class:`HostNameTaken`, with nothing written."""
         ...
 
     def adopt(self, host_id: str, runner_ids: Sequence[str]) -> None:
