@@ -46,7 +46,7 @@ def mock(tmp_path_factory: pytest.TempPathFactory) -> dict[str, str]:
 
 
 def _resolve(mock: dict[str, str], **context: str) -> subprocess.CompletedProcess[str]:
-    env = {k: v for k, v in os.environ.items() if k not in {"EVENT_NAME", "REF", "BASE_REF", "HEAD_REF"}}
+    env = {k: v for k, v in os.environ.items() if k not in {"BASELINE", "EVENT_NAME", "REF", "BASE_REF", "HEAD_REF"}}
     env.update(MOCK_URL=mock["url"], **context)
     return subprocess.run([str(_SCRIPT)], capture_output=True, text=True, env=env)
 
@@ -96,6 +96,16 @@ def test_a_master_pull_request_falls_back_to_master(mock) -> None:
 
 def test_a_push_to_master_resolves_master(mock) -> None:
     out = _outputs(_resolve(mock, EVENT_NAME="push", REF="refs/heads/master"))
+    assert out == {"ref": "master", "sha": mock["master"]}
+
+
+def test_a_baseline_resolves_to_the_mock_tag_of_that_name(mock) -> None:
+    out = _outputs(_resolve(mock, BASELINE="v0.2.0", EVENT_NAME="push", REF="refs/heads/master"))
+    assert out == {"ref": "v0.2.0", "sha": mock["release/0.2"]}
+
+
+def test_a_baseline_the_mock_never_tagged_falls_back_to_master(mock) -> None:
+    out = _outputs(_resolve(mock, BASELINE="v0.1.0", EVENT_NAME="push", REF="refs/tags/v9.9.9"))
     assert out == {"ref": "master", "sha": mock["master"]}
 
 
