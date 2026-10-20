@@ -5,7 +5,7 @@
     [state]="owner.state()"
     loadingText="LOADING…"
     errorText="CHUNK UNAVAILABLE — RUNNERS UNREACHABLE"
-    [emptyText]="'NO RUNNER ON THIS HOST HOLDS CHUNK ' + (owner.chunkId() ?? '')"
+    emptyText="NO RUNNER ON THIS HOST IS SERVING — NOTHING CAN READ THIS CHUNK"
     emptyTestid="chunk-not-found"
   />
 }

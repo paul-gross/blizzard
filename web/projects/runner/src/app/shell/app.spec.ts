@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { EVENT_SOURCE_FACTORY, ViewportService, runnerClient, type EventSourceFactory, type FleetEventSource } from 'fleet';
-import { type RequestClientStub, settle, stubRequestClient } from 'fleet/testing';
+import { type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
 
 import { App } from './app';
 import { routes } from './app.routes';
@@ -90,6 +90,7 @@ describe('runner App', () => {
       if (method === 'GET' && path === '/api/host/runners') return RUNNERS;
       if (method === 'GET' && path in HOST) return HOST[path];
       if (method === 'GET' && path === '/runners/rn_1/api/dashboard') return DASHBOARD;
+      if (method === 'GET' && path.startsWith('/runners/rn_1/api/chunks/')) return stubError(404, { detail: 'unknown chunk' });
       return { items: [] };
     });
     const factory: EventSourceFactory = () => new FakeEventSource() as unknown as FleetEventSource;
