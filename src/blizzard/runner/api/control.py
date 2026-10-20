@@ -14,6 +14,7 @@ from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.api.wiring import RunnerWiring
 from blizzard.runner.hub.identity import IdentityVerdict
 from blizzard.runner.status.view import RunnerStatusService
+from blizzard.wire.runner import VersionWindowView
 from blizzard.wire.runner_status import (
     BindingCapacityView,
     CapacitiesView,
@@ -114,6 +115,12 @@ def _runner_status_view(service: RunnerStatusService) -> RunnerStatusView:
             reachable=summary.hub.reachable,
             last_contact_at=iso_utc(summary.hub.last_contact_at) if summary.hub.last_contact_at is not None else None,
             buffer_depth=summary.hub.buffer_depth,
+            hub_version=summary.hub.version.hub_version,
+            window=(
+                VersionWindowView(floor=window.floor, ceiling=window.ceiling)
+                if (window := summary.hub.version.window) is not None
+                else None
+            ),
         ),
         last_tick_at=iso_utc(summary.last_tick_at) if summary.last_tick_at is not None else None,
         gates=list(summary.gates),

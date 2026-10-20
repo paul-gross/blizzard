@@ -64,16 +64,19 @@ from blizzard.runner.hub.client import (
     FactPushAck,
     HubClientError,
     HubQuestion,
+    HubVersionWindow,
     IHubClient,
     PushedFact,
     QueueEntry,
     RegistrationReply,
     RouteClaimOutcome,
+    RunnerVersionRefused,
     SubscriptionDeclaration,
     TokenIdentity,
     TokenRefusal,
     TranscriptPush,
     TranscriptPushAck,
+    VersionRefusal,
 )
 from blizzard.runner.hub.held_token import HubTokenHolder
 from blizzard.runner.hub.identity import IdentityVerdictHolder, RunnerIdentity, RunnerIdentityHolder
@@ -492,6 +495,11 @@ class FakeHub:
         self.fleet_flags: dict[str, bool] = {}
         # The served projects every registration answers with; `None` is a hub that predates projects.
         self.served_projects: tuple[ServedProject, ...] | None = None
+        # The hub version and window every registration answers with; `None` is a hub that predates the handshake.
+        self.hub_version: str | None = None
+        self.window: HubVersionWindow | None = None
+        # The window's refusal every registration raises while set — the call is still recorded, as it reached the hub.
+        self.version_refusal: VersionRefusal | None = None
         self.queue: list[QueueEntry] = []
         # A per-call scripted sequence: when set, each `peek_queue`
         # call pops its own response instead of reading the static `queue` above.
@@ -743,6 +751,8 @@ class FakeHub:
         self.registered_projects.append(projects)
         self.registered_bindings.append(bindings)
         self.registered_subscription.append(subscription)
+        if self.version_refusal is not None:
+            raise RunnerVersionRefused(self.version_refusal)
         return RegistrationReply(
             runner_id=runner_id,
             runner_name=name,
@@ -750,6 +760,8 @@ class FakeHub:
             tenant_id=self.tenant_id,
             tenant_name=self.tenant_name,
             projects=self.served_projects,
+            hub_version=self.hub_version,
+            window=self.window,
         )
 
     def identity(self) -> TokenIdentity | TokenRefusal:

@@ -19,6 +19,7 @@ from typing import Any
 import httpx
 from pydantic import BaseModel, TypeAdapter
 
+from blizzard import __version__
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import adapter_model
 from blizzard.runner.harness.capability_snapshot import HarnessCapability
@@ -42,6 +43,7 @@ from blizzard.runner.hub.client import (
     HostRunnerRetireRefused,
     HubClientError,
     HubQuestion,
+    HubVersionWindow,
     IdentityRouteMissing,
     IHostHubClient,
     IHubClient,
@@ -61,12 +63,14 @@ from blizzard.runner.hub.client import (
     RouteClaimOutcome,
     RunnerAddRefusalReason,
     RunnerAddRefused,
+    RunnerVersionRefused,
     SubscriptionDeclaration,
     TerminalDenial,
     TokenIdentity,
     TokenRefusal,
     TranscriptPush,
     TranscriptPushAck,
+    VersionRefusal,
 )
 from blizzard.runner.hub.held_token import ICurrentHubToken
 from blizzard.runner.hub.node_steps import (
@@ -113,6 +117,7 @@ from blizzard.wire.runner import (
     RunnerRetireRequest,
     RunnerRetireResponse,
     RunnerSubscriptionDeclaration,
+    RunnerVersionRefusal,
     RunnerView,
     ServedProjectView,
 )
@@ -198,10 +203,12 @@ class HeldTokenAuth(httpx.Auth):
 
 
 class HttpHubClient:
-    """The runner's hub API client over an injected ``httpx.Client``."""
+    """The runner's hub API client over an injected ``httpx.Client``, registering as ``version`` — the installed
+    blizzard's unless given."""
 
-    def __init__(self, client: httpx.Client) -> None:
+    def __init__(self, client: httpx.Client, *, version: str = __version__) -> None:
         self._client = client
+        self._version = version
 
     def peek_queue(
         self, capabilities: Sequence[HarnessCapability], *, policy: str, project: str | None = None
@@ -345,7 +352,9 @@ class HttpHubClient:
                     else None
                 ),
                 subscription=subscription,
+                version=self._version,
             ).model_dump(mode="json"),
+            refused=_version_refused,
         )
         reply = RunnerRegistrationResponse.model_validate(resp.json())
         return RegistrationReply(
@@ -356,6 +365,12 @@ class HttpHubClient:
             tenant_id=reply.tenant_id,
             tenant_name=reply.tenant_name,
             projects=tuple(_served(p) for p in reply.projects) if reply.projects is not None else None,
+            hub_version=reply.hub_version,
+            window=(
+                HubVersionWindow(floor=reply.window.floor, ceiling=reply.window.ceiling)
+                if reply.window is not None
+                else None
+            ),
         )
 
     def fetch_runner_paused(self, runner_id: str) -> bool:
@@ -417,6 +432,7 @@ class HttpHubClient:
         timeout: float | None = None,
         ended_on_conflict: bool = False,
         ended_on_not_found: bool = False,
+        refused: Callable[[httpx.Response], HubClientError | None] | None = None,
     ) -> httpx.Response:
         try:
             if timeout is not None:
@@ -425,6 +441,9 @@ class HttpHubClient:
                 resp = self._client.post(path, **_body_kwargs(body))
         except httpx.HTTPError as exc:
             raise self._wrap(exc, f"POST {path}") from exc
+        if refused is not None and not resp.is_success and (error := refused(resp)) is not None:
+            _log.info("hub call refused", operation=f"POST {path}", status=resp.status_code)
+            raise error
         self._raise_for_status(
             resp, f"POST {path}", ended_on_conflict=ended_on_conflict, ended_on_not_found=ended_on_not_found
         )
@@ -533,9 +552,10 @@ class HttpHostHubClient:
     """The host's own hub calls over an injected ``httpx.Client``, presenting ``token`` — the host's
     bearer token — on each, whatever credential the client itself carries."""
 
-    def __init__(self, client: httpx.Client, *, token: str) -> None:
+    def __init__(self, client: httpx.Client, *, token: str, version: str = __version__) -> None:
         self._client = client
         self._headers = {"Authorization": f"Bearer {token}"}
+        self._version = version
 
     def report(self, report: HostReport) -> HostRecord | HostRefused:
         body = HostReportRequest(
@@ -548,8 +568,9 @@ class HttpHostHubClient:
                 RunnerSubscriptionDeclaration(slug=d.slug, name=d.name, provider=d.provider)
                 for d in report.subscriptions
             ],
+            version=self._version,
         )
-        resp = self._send("POST", _HOST_API, body.model_dump(mode="json", exclude={"name"}))
+        resp = self._send("POST", _HOST_API, body.model_dump(mode="json", exclude={"name"}), version_checked=True)
         return resp if isinstance(resp, HostRefused) else _host_record(_validated(HostRecordResponse, resp, _HOST_API))
 
     def record(self) -> HostRecord | HostRefused:
@@ -586,9 +607,16 @@ class HttpHostHubClient:
         )
 
     def _send(
-        self, method: str, path: str, body: object = None, *, refused: _Refusal | None = None
+        self,
+        method: str,
+        path: str,
+        body: object = None,
+        *,
+        refused: _Refusal | None = None,
+        version_checked: bool = False,
     ) -> httpx.Response | HostRefused:
-        """The hub's answer, or its typed refusal; an answer ``refused`` types as a call's own refusal raises it."""
+        """The hub's answer, or its typed refusal; an answer ``refused`` types as a call's own refusal raises it.
+        On a ``version_checked`` call, a 409 carrying the window's refusal answers ``VERSION_REFUSED``."""
         operation = f"{method} {path}"
         try:
             kwargs = _body_kwargs(body)
@@ -603,6 +631,9 @@ class HttpHostHubClient:
         if reason is not None:
             _log.info("hub call refused", operation=operation, status=resp.status_code, reason=reason)
             return HostRefused(reason=reason, status=resp.status_code, detail=_detail(resp))
+        if version_checked and (version := _version_refusal(resp)) is not None:
+            _log.info("hub call refused", operation=operation, status=resp.status_code, reason=version.reason)
+            return HostRefused(reason=HostRefusalReason.VERSION_REFUSED, status=resp.status_code, detail=version.detail)
         if refused is not None and (error := refused(operation, resp)) is not None:
             _log.info("hub call refused", operation=operation, status=resp.status_code)
             raise error
@@ -689,6 +720,29 @@ def _identity_refusal(resp: httpx.Response) -> TokenRefusal | None:
 def _malformed(operation: str, exc: ValueError) -> HubClientError:
     _log.error("hub call failed", operation=operation, detail=f"malformed reply: {exc}")
     return HubClientError(f"{operation}: malformed reply: {exc}")
+
+
+def _version_refusal(resp: httpx.Response) -> VersionRefusal | None:
+    """The window's refusal a ``409`` carries, or ``None`` for any other answer."""
+    if resp.status_code != httpx.codes.CONFLICT:
+        return None
+    try:
+        body = RunnerVersionRefusal.model_validate(resp.json())
+    except ValueError:
+        return None
+    return VersionRefusal(
+        reason=body.reason,
+        runner_version=body.runner_version,
+        hub_version=body.hub_version,
+        floor=body.floor,
+        detail=body.detail,
+    )
+
+
+def _version_refused(resp: httpx.Response) -> RunnerVersionRefused | None:
+    """A registration's ``409`` carrying the window's refusal, raised typed."""
+    refusal = _version_refusal(resp)
+    return RunnerVersionRefused(refusal) if refusal is not None else None
 
 
 def _detail(resp: httpx.Response) -> str:

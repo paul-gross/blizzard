@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
 
+from blizzard.foundation.runner_identity_state import IdentityState
 from blizzard.runner.harness.capability_snapshot import HarnessCapability
 from blizzard.runner.hub.client import (
     BindingDeclaration,
@@ -37,7 +38,8 @@ class IdentityNotVerified(HubClientError):
 
 class VerifiedHubClient:
     """An :class:`IHubClient` that forwards to ``inner`` only while ``verdict`` is matched. The
-    registration also forwards while the hub has no identity read, its reply then being the check."""
+    registration also forwards while the hub has no identity read, its reply then being the check, and while the
+    hub's window refuses the runner's version, a later admitted registration being the one way back."""
 
     def __init__(self, inner: IHubClient, verdict: ICurrentIdentityVerdict) -> None:
         self._inner = inner
@@ -95,7 +97,8 @@ class VerifiedHubClient:
         bindings: tuple[BindingDeclaration, ...] | None = None,
         subscription: str | None = None,
     ) -> RegistrationReply:
-        hub = self._inner if self._verdict.registration_checks() else self._verified()
+        retries = self._verdict.registration_checks() or self._verdict.verdict().state is IdentityState.VERSION_REFUSED
+        hub = self._inner if retries else self._verified()
         return hub.register_runner(
             name,
             workspace_id,

@@ -20,3 +20,5 @@ class HostRegistrationState(StrEnum):
     NO_HOSTS = "no_hosts"
     #: The latest report did not reach the hub, or it did not answer.
     UNREACHABLE = "unreachable"
+    #: The hub's compatibility window refuses the host's version; each runner's own standing is left as it stood.
+    VERSION_REFUSED = "version_refused"

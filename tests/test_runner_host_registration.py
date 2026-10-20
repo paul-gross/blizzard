@@ -224,6 +224,44 @@ def test_a_token_refusal_and_a_host_refusal_never_clear_each_other() -> None:
     assert verdict.matched()
 
 
+def test_a_version_refusal_is_cleared_by_neither_a_token_verdict_nor_a_host_standing() -> None:
+    verdict = IdentityVerdictHolder("reset")
+    verdict.record(IdentityState.MATCHED, store_runner_id="rn_a", token_runner_id="rn_a", checked_at=_AT)
+    verdict.refuse_version("upgrade the runner")
+    verdict.stand(HostStanding.HELD)
+    verdict.record(IdentityState.MATCHED, store_runner_id="rn_a", token_runner_id="rn_a", checked_at=_AT)
+    assert verdict.verdict().state is IdentityState.VERSION_REFUSED
+    assert verdict.verdict().reason == "upgrade the runner"
+    verdict.stand(HostStanding.NOT_HELD, reason="not held")
+    assert verdict.verdict().state is IdentityState.VERSION_REFUSED
+    verdict.refuse(store_runner_id="rn_a", reason="revoked", checked_at=_AT)
+    assert verdict.verdict().state is IdentityState.REFUSED  # the token's refusal comes first
+    verdict.record(IdentityState.MATCHED, store_runner_id="rn_a", token_runner_id="rn_a", checked_at=_AT)
+    verdict.stand(HostStanding.HELD)
+    assert verdict.verdict().state is IdentityState.VERSION_REFUSED
+    verdict.admit_version()
+    assert verdict.matched()
+
+
+def test_a_version_refused_report_sets_the_host_state_and_leaves_every_standing_alone(tmp_path: Path) -> None:
+    held, released = _runner("rn_a"), _runner("rn_b")
+    world = _world(tmp_path, held, released)
+    world.hub.report_answer = _held("rn_a")
+    world.step.run()
+    world.hub.report_answer = HostRefused(HostRefusalReason.VERSION_REFUSED, 409, "upgrade the host to 0.2")
+    _buffer(world, 1)
+
+    world.step.run()
+    world.drain.run()
+
+    status = world.status.current()
+    assert (status.state, status.detail) == (HostRegistrationState.VERSION_REFUSED, "upgrade the host to 0.2")
+    assert status.held_runner_ids == ("rn_a",)
+    assert held.identity_verdict.matched()
+    assert released.identity_verdict.verdict().state is IdentityState.NOT_HELD
+    assert world.hub.pushes == []  # the lane drains only while registered
+
+
 @pytest.mark.parametrize(
     ("answer", "state"),
     [

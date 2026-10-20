@@ -22,7 +22,8 @@ from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.internal.process_launcher import ProcessLauncher
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
-from blizzard.runner.hub.client import BindingDeclaration
+from blizzard.runner.hub.client import BindingDeclaration, HubVersionWindow, RegistrationReply
+from blizzard.runner.hub.hub_version import HubVersionHolder, ICurrentHubVersion
 from blizzard.runner.hub.identity import (
     ICurrentIdentityVerdict,
     ICurrentRunnerIdentity,
@@ -64,6 +65,7 @@ def _app_with_status(
     identity: ICurrentRunnerIdentity | None = None,
     identity_verdict: ICurrentIdentityVerdict | None = None,
     bindings: tuple[BindingDeclaration, ...] | None = None,
+    hub_version: ICurrentHubVersion | None = None,
 ):  # type: ignore[no-untyped-def]
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}")
@@ -85,6 +87,7 @@ def _app_with_status(
         served_projects=store,
         identity=identity or registered_identity("rn_status", config.name),
         identity_verdict=identity_verdict,
+        hub_version=hub_version,
         runner_name=config.name,
         workspace_id=TEST_WORKSPACE_ID,
         bindings=serving(agents) if bindings is None else bindings,
@@ -147,12 +150,33 @@ def test_summary_defaults_on_an_empty_store(tmp_path: Path) -> None:
         "reachable": False,
         "last_contact_at": None,
         "buffer_depth": 0,
+        "hub_version": None,
+        "window": None,
     }
     assert body["last_tick_at"] is None
     assert body["gates"] == []
     assert body["identity"] is None
     assert (body["tenant_id"], body["tenant_name"]) == (None, None)
     assert_all_timestamps_utc(body)
+
+
+@pytest.mark.component
+def test_summary_reports_the_hub_version_and_window_the_latest_registration_answered(tmp_path: Path) -> None:
+    held = HubVersionHolder()
+    held.hold(
+        RegistrationReply(
+            runner_id="rn_status",
+            runner_name="runner-local",
+            first_registration=False,
+            hub_version="0.3.0",
+            window=HubVersionWindow(floor="0.2", ceiling="0.3"),
+        )
+    )
+    app, _store = _app_with_status(tmp_path, hub_version=held)
+    with runner_client(app) as client:
+        hub = client.get("/api/runner").json()["hub"]
+
+    assert (hub["hub_version"], hub["window"]) == ("0.3.0", {"floor": "0.2", "ceiling": "0.3"})
 
 
 @pytest.mark.component

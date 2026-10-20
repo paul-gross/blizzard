@@ -717,6 +717,7 @@ def _wire_runner(
         escalations=read_stores.escalations,
         identity=graph.identity,
         identity_verdict=graph.identity_verdict,
+        hub_version=graph.hub_version,
         served_projects=read_stores.served_projects,
         projects=config.projects,
         runner_name=config.name,

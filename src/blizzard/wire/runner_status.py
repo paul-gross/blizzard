@@ -11,6 +11,7 @@ from blizzard.foundation.credential_renewal import RenewalFailureReason, Renewal
 from blizzard.foundation.runner_identity_state import IdentityState
 from blizzard.foundation.subscription_miss import SampleMissReason
 from blizzard.wire.fleet import FleetSummaryView
+from blizzard.wire.runner import VersionWindowView
 
 
 class PauseStateView(BaseModel):
@@ -61,6 +62,10 @@ class HubConnectivityView(BaseModel):
     reachable: bool
     last_contact_at: str | None
     buffer_depth: int
+    #: The hub's own version, as its latest registration reply answered; ``None`` until a hub that names it answers.
+    hub_version: str | None = None
+    #: The window the hub judged this runner's version under, as of the same reply.
+    window: VersionWindowView | None = None
 
 
 class IdentityVerdictView(BaseModel):
@@ -70,7 +75,9 @@ class IdentityVerdictView(BaseModel):
     while the token names another runner, ``refused`` while the hub refuses the token (unknown, revoked,
     retired) — the runner then drives no lease until a check resolves it again. On a registered host,
     ``not_held`` while the hub does not hold the runner under the host and ``tenant_differs`` while it stands
-    in another tenant than the host's halt the runner alone. ``reason`` says why for those last three.
+    in another tenant than the host's halt the runner alone, as does ``version_refused`` while the hub's
+    compatibility window refuses the runner's version. ``reason`` says why for those last four — for
+    ``version_refused``, the hub's sentence naming what to upgrade.
     ``reset_command`` names how to restore the token: the token variable and the configured id."""
 
     state: IdentityState

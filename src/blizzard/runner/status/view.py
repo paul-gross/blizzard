@@ -8,7 +8,7 @@ no fact of its own, so it is derived from how stale ``hub_contact_at`` reads aga
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
 from blizzard.foundation.clock import IClock
@@ -22,6 +22,7 @@ from blizzard.runner.environments.repository import (
 from blizzard.runner.environments.workspaces import IWorkspaces
 from blizzard.runner.harness.registry import IHarnessLifecycleRegistry, UnavailableHarnessError, UnknownHarnessError
 from blizzard.runner.hub.client import BindingDeclaration
+from blizzard.runner.hub.hub_version import HubVersion, ICurrentHubVersion
 from blizzard.runner.hub.identity import ICurrentIdentityVerdict, ICurrentRunnerIdentity, IdentityVerdict
 from blizzard.runner.hub.outbound_buffer import IReadOutboundRepository, OutboundFactEntry
 from blizzard.runner.hub.served_projects import (
@@ -137,12 +138,14 @@ class HubConnectivity:
     """Hub reachability, derived from staleness, plus the outbound backlog depth.
 
     ``endpoint`` is the configured hub base URL — identity config, not a probe result;
-    the local panel's one handle on where the fleet board lives."""
+    the local panel's one handle on where the fleet board lives. ``version`` is the hub's own version and window,
+    as its latest registration reply answered them."""
 
     endpoint: str
     reachable: bool
     last_contact_at: datetime | None
     buffer_depth: int
+    version: HubVersion = field(default_factory=HubVersion)
 
     @classmethod
     def of(
@@ -153,11 +156,18 @@ class HubConnectivity:
         buffer_depth: int,
         now: datetime,
         threshold: timedelta = HUB_CONTACT_STALENESS_THRESHOLD,
+        version: HubVersion | None = None,
     ) -> HubConnectivity:
         """Reachable when the last successful contact is no older than ``threshold`` as of
         ``now``; never reachable before a first contact."""
         reachable = contact_at is not None and (now - contact_at) <= threshold
-        return cls(endpoint=endpoint, reachable=reachable, last_contact_at=contact_at, buffer_depth=buffer_depth)
+        return cls(
+            endpoint=endpoint,
+            reachable=reachable,
+            last_contact_at=contact_at,
+            buffer_depth=buffer_depth,
+            version=version if version is not None else HubVersion(),
+        )
 
 
 @domain_model
@@ -246,6 +256,7 @@ class RunnerStatusService:
         escalations: IReadEscalationRepository,
         identity: ICurrentRunnerIdentity,
         identity_verdict: ICurrentIdentityVerdict | None = None,
+        hub_version: ICurrentHubVersion | None = None,
         served_projects: IReadServedProjectsRepository | None = None,
         projects: tuple[str, ...] | None = None,
         runner_name: str,
@@ -271,6 +282,7 @@ class RunnerStatusService:
         self._harnesses = harnesses
         self._identity = identity
         self._identity_verdict = identity_verdict
+        self._hub_version = hub_version
         self._served_projects = served_projects
         self._projects = projects
         self._runner_name = runner_name
@@ -300,6 +312,7 @@ class RunnerStatusService:
                 buffer_depth=self._outbound.pending_outbound_count(),
                 now=self._clock.now(),
                 threshold=self._contact_staleness,
+                version=self._hub_version.current() if self._hub_version is not None else None,
             ),
             last_tick_at=self._daemon_liveness.last_daemon_liveness(),
             gates=self._gates,

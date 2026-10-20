@@ -22,3 +22,6 @@ class IdentityState(StrEnum):
     NOT_HELD = "not_held"
     #: The runner stands in another tenant than the host's: the runner halts alone.
     TENANT_DIFFERS = "tenant_differs"
+    #: The hub's compatibility window refuses the runner's version: the runner halts alone, and registers again on
+    #: its tick until a registration is admitted.
+    VERSION_REFUSED = "version_refused"

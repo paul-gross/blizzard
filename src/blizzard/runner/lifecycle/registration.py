@@ -9,7 +9,8 @@ token rotated since the tick's identity check, or a hub with no identity read â€
 and mirrors no brake. The registration declares the configured projects, and a reply answering them replaces the
 stored answer whole once the identity row is recorded; a reply answering none, from a hub that predates
 projects, keeps it. A failed registration leaves the row, the answer, the holder and the mirrored brake as they
-stood."""
+stood. One the hub's window refuses over the runner's version halts the runner alone through its identity verdict,
+and the next admitted registration lifts it; each reply's hub version and window are held for the status."""
 
 from __future__ import annotations
 
@@ -22,8 +23,15 @@ from blizzard.foundation.logging import get_logger
 from blizzard.foundation.runner_identity_state import IdentityState
 from blizzard.runner.environments.workspaces import IWorkspaces
 from blizzard.runner.harness.capability_snapshot import HarnessCapability
-from blizzard.runner.hub.client import BindingDeclaration, HubClientError, IHubClient, SubscriptionDeclaration
+from blizzard.runner.hub.client import (
+    BindingDeclaration,
+    HubClientError,
+    IHubClient,
+    RunnerVersionRefused,
+    SubscriptionDeclaration,
+)
 from blizzard.runner.hub.held_token import HubTokenHolder
+from blizzard.runner.hub.hub_version import HubVersionHolder
 from blizzard.runner.hub.identity import (
     ICurrentRunnerIdentity,
     IdentityVerdictHolder,
@@ -105,6 +113,8 @@ class RegistrationContext(Protocol):
     @property
     def hub_token(self) -> HubTokenHolder: ...
     @property
+    def hub_version(self) -> HubVersionHolder: ...
+    @property
     def config(self) -> RegistrationConfig: ...
     @property
     def subscriptions(self) -> Sequence[DeclaredSubscription]: ...
@@ -146,8 +156,16 @@ class Registration:
                 bindings=ctx.config.bindings,
                 subscription=ctx.config.subscription,
             )
+        except RunnerVersionRefused as refused:
+            was = ctx.identity_verdict.refuse_version(refused.refusal.detail)
+            log_transition(ctx.identity_verdict, was, token_fixed=ctx.hub_token.fixed())
+            return  # the window refuses this runner: it halts alone until a registration is admitted
         except HubClientError:
             return  # hub unreachable â€” the last identity and the last-mirrored brake hold
+        ctx.hub_version.hold(reply)
+        if ctx.identity_verdict.version_refused():
+            was = ctx.identity_verdict.admit_version()
+            log_transition(ctx.identity_verdict, was, token_fixed=ctx.hub_token.fixed())
         now = ctx.clock.now()
         stored = ctx.stores.identity.runner_identity()
         if reply.runner_id != ctx.config.runner_id:

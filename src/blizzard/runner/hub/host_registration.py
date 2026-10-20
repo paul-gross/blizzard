@@ -9,9 +9,9 @@ From an answered report whose identity matches, the step judges each of the host
 not held, or standing in another tenant than the host's. It writes that standing into the runner's identity
 verdict, which halts a runner the host does not hold through the same gate a token mismatch takes — alone, so the
 other runners keep working. Any other outcome — a refused credential, a hub from before hosts, an answer naming
-another host — leaves every runner's standing unknown, which never refuses; an unreachable hub leaves the standings
-as they stood. The step holds its latest outcome for the host's own reads and for the host's lane, which drains
-only while the host is registered with a matching identity."""
+another host — leaves every runner's standing unknown, which never refuses; an unreachable hub, or one whose window
+refuses the host's version, leaves the standings as they stood. The step holds its latest outcome for the host's own
+reads and for the host's lane, which drains only while the host is registered with a matching identity."""
 
 from __future__ import annotations
 
@@ -164,6 +164,18 @@ class HostRegistration:
                     host_name=self.status.current().host_name,
                     held_runner_ids=self.status.current().held_runner_ids,
                     detail=str(exc),
+                )
+            )
+            return
+        if isinstance(answer, HostRefused) and answer.reason is HostRefusalReason.VERSION_REFUSED:
+            # A refusal of the host's version, not its credential: each runner's own registration judges its own.
+            self._hold(
+                HostRegistrationStatus(
+                    state=HostRegistrationState.VERSION_REFUSED,
+                    answered_at=self.status.current().answered_at,
+                    host_name=self.status.current().host_name,
+                    held_runner_ids=self.status.current().held_runner_ids,
+                    detail=answer.detail,
                 )
             )
             return
