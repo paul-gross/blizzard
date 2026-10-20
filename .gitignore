@@ -28,3 +28,4 @@ data/
 /src/blizzard/static/hub/*
 /src/blizzard/static/runner/*
 
+compat-breaks.json
