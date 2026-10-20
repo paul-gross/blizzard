@@ -1,5 +1,3 @@
-"""``scripts/verify-release.sh`` driven as a subprocess against stub `gh`, `cosign`, `uv`, and `curl` serving a fixture release."""
-
 from __future__ import annotations
 
 import hashlib
@@ -81,8 +79,6 @@ def _sha(data: bytes) -> str:
 
 
 class _Release:
-    """A fixture release page and the stub toolchain serving it."""
-
     def __init__(self, root: Path, version: str = _VERSION) -> None:
         self.version = version
         self.pep440 = version.replace("-rc.", "rc")
@@ -134,7 +130,6 @@ class _Release:
         }
 
     def sum(self) -> None:
-        """Rewrite SHA256SUMS over every other file, then list the page as it stands."""
         (self.files / "SHA256SUMS").unlink(missing_ok=True)
         lines = [f"{_sha(p.read_bytes())}  {p.name}" for p in sorted(self.files.iterdir())]
         (self.files / "SHA256SUMS").write_text("\n".join(lines) + "\n")
