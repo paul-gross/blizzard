@@ -55,3 +55,7 @@
     display: none;
   }
 }
+/* A project's swatch before its name. */
+.swatch {
+  margin-right: 5px;
+}

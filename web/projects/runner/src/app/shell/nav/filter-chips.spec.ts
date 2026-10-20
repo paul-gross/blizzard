@@ -5,11 +5,11 @@ import { FilterChips } from './filter-chips';
 import type { FilterChoice } from './panel-filters.model';
 
 const CHOICES: readonly FilterChoice[] = [
-  { value: null, label: 'All', title: 'every runner', disabled: false, brake: null },
-  { value: 'r1', label: 'r1', title: 'r1', disabled: false, brake: null },
-  { value: 'r2', label: 'r2', title: 'r2 · paused: usage limit', disabled: false, brake: 'pause' },
-  { value: 'r3', label: 'r3', title: 'r3 · paused by hub', disabled: false, brake: 'stop' },
-  { value: 'r4', label: 'r4', title: 'r4 is halted', disabled: true, brake: null },
+  { value: null, label: 'All', title: 'every runner', disabled: false, brake: null, color: null },
+  { value: 'r1', label: 'r1', title: 'r1', disabled: false, brake: null, color: 'blue' },
+  { value: 'r2', label: 'r2', title: 'r2 · paused: usage limit', disabled: false, brake: 'pause', color: null },
+  { value: 'r3', label: 'r3', title: 'r3 · paused by hub', disabled: false, brake: 'stop', color: null },
+  { value: 'r4', label: 'r4', title: 'r4 is halted', disabled: true, brake: null, color: null },
 ];
 
 @Component({
@@ -112,6 +112,13 @@ describe('FilterChips', () => {
 
     expect(chip('r3').querySelector('[data-testid="runner-brake"]')?.getAttribute('data-glyph')).toBe('stop');
     expect(chip('r1').querySelector('[data-testid="runner-brake"]')).toBeNull();
+  });
+
+  it('shows a choice’s colour as a swatch before its name, and none for a choice without one', async () => {
+    const { chip } = await render();
+    expect(chip('r1').querySelector('fleet-kit-swatch')).not.toBeNull();
+    expect(chip('r1').textContent?.trim()).toBe('r1');
+    expect(chip('r2').querySelector('fleet-kit-swatch')).toBeNull();
   });
 
   it('marks itself compact when it sits as its own row', async () => {

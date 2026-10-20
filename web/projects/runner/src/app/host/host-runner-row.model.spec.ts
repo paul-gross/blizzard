@@ -54,7 +54,7 @@ const CHUNK = (chunkId: string, runnerId: string, lane: MachineChunkRow['lane'])
   }) as MachineChunkRow;
 
 function reads(overrides: Partial<HostRunnerReads> = {}): HostRunnerReads {
-  return { dashboards: new Map(), projects: new Map(), subscriptions: [], chunks: [], ...overrides };
+  return { dashboards: new Map(), projects: new Map(), subscriptions: [], chunks: [], chunksPending: false, ...overrides };
 }
 
 function one(runner: runnerApi.HostRunnerView, status?: runnerApi.RunnerStatusView, extra: Partial<HostRunnerReads> = {}) {
@@ -117,6 +117,15 @@ describe('hostRunnerRows', () => {
 
     const working = one(RUNNER(), STATUS(), { chunks: [CHUNK('ch_a', 'rn_1', 'progress')] });
     expect(working.state).toEqual([{ label: 'WORKING', tone: 'running', title: null }]);
+  });
+
+  it('claims neither WORKING nor IDLE while its chunks load, but still shows its brakes', () => {
+    const loading = one(RUNNER(), STATUS(), { chunksPending: true });
+    expect(loading.state).toEqual([]);
+    expect(loading.heldPending).toBe(true);
+
+    const paused = one(RUNNER(), STATUS({ pause: { local: false, hub: true, effective: true, local_reason: null } }), { chunksPending: true });
+    expect(paused.state.map((badge) => badge.label)).toEqual(['HUB PAUSED']);
   });
 
   it('resolves each binding to its project by entry, with its colour and the agents its capacity says are used', () => {

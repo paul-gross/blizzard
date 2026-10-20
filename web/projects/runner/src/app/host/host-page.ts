@@ -1,14 +1,10 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
-import { RouterLink } from '@angular/router';
 import {
   asyncState,
-  FleetWhen,
+  asyncStateOf,
   injectNowSignal,
   KitAsyncState,
-  KitBadge,
-  KitBeacon,
   KitPanel,
-  KitSwatch,
   runnerSubscriptionPaces,
   SubscriptionPaceGroup,
   type SubscriptionPace,
@@ -27,17 +23,20 @@ import { PanelFilters } from '../core/panel-filters';
 import { injectPanelDashboards, injectPanelLeases, injectPanelProjects, injectRunnerProjects } from '../core/panel-reads';
 import { dashboardsByRunner } from '../core/panel-reads.model';
 import { LocalPauseControl } from '../runners/app-pause-control';
-import { envsInUseLabel, hostRefLabel, hostRowsInFilter, hostTone } from './host-page.model';
+import { envsInUseLabel, hostRefLabel, hostRowsInFilter, hostRunnersEmptyText, hostTone } from './host-page.model';
 import { hostRegistrationSummary } from './host-registration.model';
 import { hostRunnerRows, type HostRunnerRow } from './host-runner-row.model';
 import { HostRunnerRowView } from './host-runner-row';
 import { type HostEnvGroup, hostEnvGroups } from './host-environments.model';
+import { HostEnvironmentsView } from './host-environments';
+import { HostTitle } from './host-title';
 
 /**
  * The `host` route — this host as the hub's Fleet page details one: a title bar naming the host
  * and its registration at its hub, then its subscriptions' usage, then one
  * {@link HostRunnerRowView} per runner it serves or holds halted, then its environments by
- * workspace, each held one naming its chunk and runner.
+ * workspace, each held one naming its chunk and runner — the title bar and the environments
+ * drawn by {@link HostTitle} and {@link HostEnvironmentsView}.
  *
  * The Runner filter leaves the runner it names; the Project filter, the runners serving that
  * project — a halted runner, serving none, shows only while it is All. Subscriptions and
@@ -47,15 +46,12 @@ import { type HostEnvGroup, hostEnvGroups } from './host-environments.model';
   selector: 'app-host-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
-    FleetWhen,
+    HostEnvironmentsView,
     HostRunnerRowView,
+    HostTitle,
     KitAsyncState,
-    KitBadge,
-    KitBeacon,
     KitPanel,
-    KitSwatch,
     LocalPauseControl,
-    RouterLink,
     SubscriptionPaceGroup,
   ],
   templateUrl: './host-page.html',
@@ -94,6 +90,7 @@ export class HostPage {
       projects: this.runnerProjects(),
       subscriptions: this.subscriptionsQuery.data() ?? [],
       chunks: machineChunkRows(this.leases.data(), this.projects()),
+      chunksPending: this.leases.isPending(),
     }),
   );
 
@@ -104,10 +101,14 @@ export class HostPage {
 
   protected readonly triadState = computed(() => asyncState(this.runnersQuery, this.rows().length === 0));
 
+  protected readonly runnersEmptyText = computed(() => hostRunnersEmptyText(this.allRows().length));
+
   /** Each subscription's usage windows as pace bars, naming the runners spending it. */
   protected readonly subscriptions = computed<readonly SubscriptionPace[]>(() =>
     runnerSubscriptionPaces(this.subscriptionsQuery.data() ?? [], this.now(), runnerNameResolver(this.runnersQuery.data() ?? [])),
   );
+
+  protected readonly subscriptionsState = computed(() => asyncState(this.subscriptionsQuery, this.subscriptions().length === 0));
 
   /** The host's environments by workspace, each held one dimmed when a runner the filters leave out holds it. */
   protected readonly environments = computed<readonly HostEnvGroup[]>(() =>
@@ -123,6 +124,10 @@ export class HostPage {
       ),
       this.projects(),
     ),
+  );
+
+  protected readonly environmentsState = computed(() =>
+    asyncStateOf([this.workspacesQuery, this.environmentsQuery], this.environments().length === 0),
   );
 
   /** "9 / 18 in use" across every workspace, `null` while none is reported. */

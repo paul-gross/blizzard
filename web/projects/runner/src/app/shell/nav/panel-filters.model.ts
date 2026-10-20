@@ -22,12 +22,26 @@ export interface FilterChoice {
   /** A runner's brake as a glyph beside its name — `pause` for its own, `stop` for the hub's — `null` while unbraked;
    * the brake's words, its reason among them, ride in {@link title}. */
   readonly brake: 'pause' | 'stop' | null;
+  /** A project's colour as its swatch, `null` for All, a runner, or a project the hub gave none. */
+  readonly color: string | null;
 }
 
-const ALL: FilterChoice = { value: null, label: 'All', title: 'every runner', disabled: false, brake: null };
+const ALL: FilterChoice = { value: null, label: 'All', title: 'every runner', disabled: false, brake: null, color: null };
 
-/** The Runner filter's choices: All, then every runner on the host in wire order, by name. */
-export function runnerFilterChoices(runners: readonly runnerApi.HostRunnerView[]): readonly FilterChoice[] {
+/**
+ * The Runner filter's choices: All, then every runner on the host in wire order, by name.
+ *
+ * A `current` filter naming no runner on the host — a stale link, or a runner since removed —
+ * is offered last, disabled and titled as gone, so the chip strip shows why the panel is
+ * empty and All stays one click away. Nothing is called gone while `pending` — the runner list
+ * not yet landed.
+ */
+export function runnerFilterChoices(
+  runners: readonly runnerApi.HostRunnerView[],
+  current: string | null = null,
+  pending = false,
+): readonly FilterChoice[] {
+  const gone = !pending && current !== null && !runners.some((runner) => runner.name === current);
   return [
     ALL,
     ...runners.map((runner) => {
@@ -39,16 +53,20 @@ export function runnerFilterChoices(runners: readonly runnerApi.HostRunnerView[]
         title: serving ? (words === null ? runner.name : `${runner.name} · ${words}`) : `${runner.name} is halted`,
         disabled: !serving,
         brake: words === null ? null : runner.pause?.hub ? ('stop' as const) : ('pause' as const),
+        color: null,
       };
     }),
+    ...(gone && current !== null
+      ? [{ value: current, label: `${current} (gone)`, title: `${current} is no longer on this host`, disabled: true, brake: null, color: null }]
+      : []),
   ];
 }
 
-/** The Project filter's choices: All, then every project the host serves, by name. The
- * runner reports no project color, so no choice carries a swatch. */
+/** The Project filter's choices: All, then every project the host serves, by name, each
+ * carrying the colour its runner reports for it as a swatch. */
 export function projectFilterChoices(projects: readonly PanelProject[]): readonly FilterChoice[] {
   return [
     { ...ALL, title: 'every project' },
-    ...projects.map((project) => ({ value: project.slug, label: project.name, title: project.slug, disabled: false, brake: null })),
+    ...projects.map((project) => ({ value: project.slug, label: project.name, title: project.slug, disabled: false, brake: null, color: project.color })),
   ];
 }

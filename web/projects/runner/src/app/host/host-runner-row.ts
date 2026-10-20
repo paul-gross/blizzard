@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, type TemplateRef, computed, input, viewChild } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { FleetWhen, KitAsyncState, KitBadge, KitBeacon, type KitFact, KitFactList, KitSwatch } from 'fleet';
+import { FleetWhen, KitAsyncState, KitBadge, KitBeacon, type KitAsyncStateValue, type KitFact, KitFactList, KitSwatch } from 'fleet';
 
 import type { HostRunnerRow } from './host-runner-row.model';
 
@@ -21,6 +21,10 @@ import type { HostRunnerRow } from './host-runner-row.model';
 })
 export class HostRunnerRowView {
   readonly row = input.required<HostRunnerRow>();
+
+  protected readonly heldState = computed<KitAsyncStateValue>(() =>
+    this.row().heldPending ? 'loading' : this.row().held.length > 0 ? 'ready' : 'empty',
+  );
 
   private readonly binds = viewChild.required<TemplateRef<unknown>>('binds');
   private readonly spends = viewChild.required<TemplateRef<unknown>>('spends');

@@ -23,6 +23,7 @@ const ROW = (overrides: Partial<HostRunnerRow> = {}): HostRunnerRow => ({
   hub: { endpoint: 'http://hub', reachable: true, lastContactAt: null, buffered: 2, refusal: null },
   problems: [],
   state: [{ label: 'WORKING', tone: 'running', title: null }],
+  heldPending: false,
   held: [
     {
       chunkId: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9',
@@ -112,5 +113,20 @@ describe('HostRunnerRowView', () => {
     expect(el.textContent).toContain('no hub token');
     expect(el.querySelector('[data-testid="host-runner-binds"]')).toBeNull();
     expect(el.querySelector('[data-testid="host-runner-chunks"]')).toBeNull();
+  });
+
+  it('neither says it holds no chunks nor counts them while the leases load', async () => {
+    const el = await render(ROW({ held: [], state: [], heldPending: true }));
+
+    expect(el.querySelector('[data-testid="host-runner-no-chunks"]')).toBeNull();
+    expect(el.querySelector('.held-hd')?.textContent?.trim()).toBe('Held chunks');
+    expect(el.querySelector('.held')?.textContent).toContain('LOADING');
+  });
+
+  it('says it holds no chunks and is IDLE once the leases land empty', async () => {
+    const el = await render(ROW({ held: [], state: [{ label: 'IDLE', tone: 'idle', title: null }] }));
+
+    expect(el.querySelector('[data-testid="host-runner-no-chunks"]')).not.toBeNull();
+    expect(text(el, 'host-runner-state')).toContain('IDLE');
   });
 });
