@@ -374,6 +374,29 @@ describe('RunnersView (mobile Fleet screen)', () => {
     });
   });
 
+  it('shows each runner\'s version and the hub\'s standing for it, and nothing before a judgement', async () => {
+    const fixture = TestBed.createComponent(RunnersView);
+    fixture.componentRef.setInput('state', 'ready');
+    fixture.componentRef.setInput('rows', [
+      row('rn_ok', { version: '0.2.1', version_standing: 'in_window' }),
+      row('rn_new', { version: '0.4.0', version_standing: 'refused', version_refusal: 'too-new' }),
+      row('rn_bare', { version_standing: 'unversioned' }),
+      row('rn_unjudged'),
+    ]);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+    const standing = (id: string) => el.querySelector(`[data-runner="${id}"] [data-testid="mobile-fleet-runner-version-standing"]`);
+    const version = (id: string) => el.querySelector(`[data-runner="${id}"] [data-testid="mobile-fleet-runner-version"]`);
+
+    expect(version('rn_ok')?.textContent?.trim()).toBe('0.2.1');
+    expect(standing('rn_ok')?.textContent?.trim()).toBe('in window');
+    expect(version('rn_new')?.textContent?.trim()).toBe('0.4.0');
+    expect(standing('rn_new')?.textContent?.trim()).toBe('refused (too-new)');
+    expect(version('rn_bare')).toBeNull();
+    expect(standing('rn_bare')?.textContent?.trim()).toBe('unversioned');
+    expect(standing('rn_unjudged')).toBeNull();
+  });
+
   it('marks a retired runner with when and by whom', async () => {
     const fixture = TestBed.createComponent(RunnersView);
     fixture.componentRef.setInput('state', 'ready');

@@ -17,7 +17,7 @@ import {
 import { CapabilityBadgeGroup } from './capability-badge-group';
 import { GateBadgeGroup } from './gate-badge-group';
 import { busyAgents, declaredAgents } from './host-rows.model';
-import { localPauseHint, runnerSeenLabel, runnerToggleHint, type RunnerRow } from './runner-rows.model';
+import { localPauseHint, runnerSeenLabel, runnerToggleHint, type RunnerRow, versionStandingBadge } from './runner-rows.model';
 import { RunnerSubscription } from './runner-subscription';
 import { ServedProjectGroup } from './served-project-group';
 
@@ -71,8 +71,12 @@ export class FleetRunnerRow {
   private readonly harness = viewChild.required<TemplateRef<unknown>>('harness');
   private readonly gates = viewChild.required<TemplateRef<unknown>>('gates');
   private readonly state = viewChild.required<TemplateRef<unknown>>('state');
+  private readonly version = viewChild.required<TemplateRef<unknown>>('version');
 
   protected readonly ref = computed(() => compactRef(this.row().runner_id));
+
+  /** The hub's judgement of the runner's version, or `null` before it has judged one. */
+  protected readonly standing = computed(() => versionStandingBadge(this.row()));
 
   /** "Claude Code · 4 agents · 2 busy" — its harnesses, and its agents where it binds any. */
   protected readonly summary = computed(() => {
@@ -98,6 +102,7 @@ export class FleetRunnerRow {
       : []),
     { label: 'Harness', template: this.harness() },
     { label: 'Gates', template: this.gates() },
+    { label: 'Version', template: this.version(), testid: 'fleet-runner-version' },
     { label: 'State', template: this.state() },
   ]);
 
