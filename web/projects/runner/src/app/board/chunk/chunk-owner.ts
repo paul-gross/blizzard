@@ -28,13 +28,12 @@ export class ChunkOwner {
     return this.leases.data().find((lease) => lease.chunk_id === chunkId)?.owner ?? null;
   });
 
-  /** The owning runner's sessions for the chunk, keyed by `(node_id, epoch)` — the Node
-   * history rows' enrichment (`CHUNK_STEP_SESSIONS`). */
+  /** The chunk's sessions across every runner that ran it, keyed by `(node_id, epoch)` — the Node history rows'
+   * enrichment (`CHUNK_STEP_SESSIONS`). A chunk that moved runners keeps its earlier steps' sessions on the runner
+   * that ran them, so they are not narrowed to its current owner. */
   readonly stepSessions = computed<ReadonlyMap<string, ChunkStepSession>>(() => {
     const chunkId = this.chunkId();
-    const owner = this.owner();
-    if (owner === null) return new Map();
-    return stepSessions(this.leases.data().filter((lease) => lease.chunk_id === chunkId && lease.owner.runnerId === owner.runnerId));
+    return stepSessions(this.leases.data().filter((lease) => lease.chunk_id === chunkId));
   });
 
   /** The chunk page's daemon target — the runner client under the chunk's runner — or

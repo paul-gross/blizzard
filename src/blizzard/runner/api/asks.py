@@ -15,6 +15,7 @@ from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.api.federation import require_human_api
 from blizzard.runner.api.lease_scope import authorized_worker_lease
 from blizzard.runner.api.wiring import RunnerWiring
+from blizzard.runner.environments.repository import IReadEnvironmentRepository
 from blizzard.runner.leases.asks import AskOnClosedLease, IReadAskRepository, OpenAsk
 from blizzard.wire.runner_status import AskListResponse, AskView
 
@@ -54,7 +55,7 @@ def record_ask(lease_id: str, request_body: AskRequest, request: Request) -> Ask
     return AskResponse(recorded=True, question_id=question_id, lease_id=lease_id)
 
 
-def _ask_view(ask: OpenAsk) -> AskView:
+def _ask_view(ask: OpenAsk, project_id: str | None) -> AskView:
     return AskView(
         question_id=ask.question_id,
         chunk_id=ask.chunk_id,
@@ -64,6 +65,7 @@ def _ask_view(ask: OpenAsk) -> AskView:
         session_id=ask.session_id,
         harness_id=ask.harness_id,
         asked_at=iso_utc(ask.asked_at),
+        project_id=project_id,
     )
 
 
@@ -79,9 +81,11 @@ def list_asks(request: Request, open_only: bool = Query(True, alias="open")) -> 
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="only open asks are queryable — no closed-ask history is kept",
         )
-    asks: IReadAskRepository = RunnerWiring.of(request).read_stores().asks
-    return _ask_list(asks)
+    stores = RunnerWiring.of(request).read_stores()
+    return _ask_list(stores.asks, stores.environments)
 
 
-def _ask_list(asks: IReadAskRepository) -> AskListResponse:
-    return AskListResponse(items=[_ask_view(a) for a in asks.open_asks()])
+def _ask_list(asks: IReadAskRepository, environments: IReadEnvironmentRepository) -> AskListResponse:
+    open_asks = asks.open_asks()
+    projects = environments.chunk_project_ids(sorted({a.chunk_id for a in open_asks}))
+    return AskListResponse(items=[_ask_view(a, projects.get(a.chunk_id)) for a in open_asks])

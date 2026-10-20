@@ -1,4 +1,4 @@
-import { projectColorValue, type runnerApi } from 'fleet';
+import type { runnerApi } from 'fleet';
 
 /** The runner a merged item came from — what its actions and links target. */
 export interface RunnerOwner {
@@ -40,11 +40,6 @@ export interface PanelProject {
  */
 export function projectColorFor(project: PanelProject | null | undefined): string | null {
   return project?.color ?? null;
-}
-
-/** The CSS value a project-tinted card or row paints with, or `null` for an untinted one. */
-export function projectTint(color: string | null): string | null {
-  return color ? projectColorValue(color) : null;
 }
 
 /** The project `slug` names among `projects`, by name — the slug itself for one `projects` does not
@@ -122,31 +117,11 @@ export function servesProject(projects: readonly PanelProject[], slug: string | 
   return slug === null || projects.some((project) => project.slug === slug);
 }
 
-/** The project a runner's item belongs to when nothing on the item says: the runner's only project, else unknown. */
-function soleProject(projects: readonly PanelProject[]): string | null {
-  return projects.length === 1 ? projects[0].slug : null;
-}
-
-/**
- * The project `lease` is attributed to. A lease carries no project, so it is told from the
- * environment it holds — while that environment still holds the lease's own chunk — and
- * otherwise from its runner serving a single project. `null` where neither says.
- */
-export function leaseProject(
-  lease: runnerApi.LeaseView,
-  projects: readonly PanelProject[],
-  environments: ReadonlyMap<string, runnerApi.HostEnvironmentView>,
-): string | null {
-  const env = lease.environment_id ? environments.get(lease.environment_id) : undefined;
-  if (env?.project && env.chunk_id === lease.chunk_id) return slugForEntry(projects, env.project) ?? env.project;
-  return soleProject(projects);
-}
-
-/** The host's environments by id. */
-export function environmentsById(
-  workspaces: readonly runnerApi.HostWorkspaceEnvironmentsView[],
-): ReadonlyMap<string, runnerApi.HostEnvironmentView> {
-  return new Map(workspaces.flatMap((workspace) => (workspace.items ?? []).map((env) => [env.environment_id, env] as const)));
+/** The slug of the project an item's wire `project_id` names among `projects`, the id itself when none resolves it,
+ * `null` when the item names none. */
+export function attributedProject(item: { readonly project_id?: string | null }, projects: readonly PanelProject[]): string | null {
+  const id = item.project_id;
+  return id ? (slugForEntry(projects, id) ?? id) : null;
 }
 
 /** Leases read off several runners as one list: live leases first, then newest first, so
@@ -158,28 +133,14 @@ export function mergeLeases(perRunner: readonly (readonly PanelLease[])[]): read
   });
 }
 
-/** A lookup from a runner's chunk to the project its leases are attributed to. */
-export function chunkProjectLookup(leases: readonly PanelLease[]): (runnerId: string, chunkId: string | null | undefined) => string | null {
-  const projects = new Map<string, string | null>();
-  for (const lease of leases) {
-    const key = `${lease.owner.runnerId} ${lease.chunk_id}`;
-    if (!projects.has(key) || projects.get(key) === null) projects.set(key, lease.projectSlug);
-  }
-  return (runnerId, chunkId) => (chunkId ? (projects.get(`${runnerId} ${chunkId}`) ?? null) : null);
-}
-
-/** Owns each of `items`, read off `owner`, attributing each through its chunk, else the runner's only project. */
-export function ownByChunk<T extends { readonly chunk_id?: string | null }>(
+/** Owns each of `items`, read off `owner`, attributing each by its own wire `project_id` among `owner`'s
+ * `projects` ({@link attributedProject}). */
+export function ownByProject<T extends { readonly project_id?: string | null }>(
   items: readonly T[],
   owner: RunnerOwner,
   projects: readonly PanelProject[],
-  chunkProject: (runnerId: string, chunkId: string | null | undefined) => string | null,
 ): Owned<T>[] {
-  return items.map((item) => ({
-    ...item,
-    owner,
-    projectSlug: chunkProject(owner.runnerId, item.chunk_id) ?? soleProject(projects),
-  }));
+  return items.map((item) => ({ ...item, owner, projectSlug: attributedProject(item, projects) }));
 }
 
 /** `items` narrowed to the project `slug`, every item for `null`. */

@@ -456,6 +456,7 @@ def test_open_asks_lists_an_unforwarded_ask(tmp_path: Path) -> None:
         "session_id": "sess-a",
         "harness_id": "claude_code",
         "asked_at": _NOW.isoformat(),
+        "project_id": None,
     }
 
 
@@ -611,6 +612,7 @@ def test_an_escalated_lease_appears_with_its_resume_command(tmp_path: Path) -> N
         # No runner dir is injected here, so the runner cannot compose the wrapped verb.
         "wrapped_takeover_command": None,
         "cause": None,
+        "project_id": None,
     }
 
 
@@ -954,6 +956,7 @@ def test_facts_lists_recent_outbound_newest_first_including_acked(tmp_path: Path
         "lease_id": "lease_1",
         "created_at": _NOW.isoformat(),
         "acked_at": acked_at.isoformat(),
+        "project_id": None,
     }
     assert items[0]["acked_at"] is None
     assert "payload" not in items[0]
@@ -1035,3 +1038,46 @@ def test_summary_names_each_held_binding_matching_no_workspace(tmp_path: Path) -
             "held_since": "2026-07-16T12:00:00+00:00",
         }
     ]
+
+
+# --- project attribution on facts, asks, escalations ---
+
+
+@pytest.mark.component
+def test_facts_asks_and_escalations_name_their_chunks_project_from_its_binding(tmp_path: Path) -> None:
+    app, store = _app_with_status(tmp_path)
+    for chunk_id, environment_id in (("ch_bound", "e1"), ("ch_esc_bound", "e2")):
+        store.record_binding(
+            chunk_id=chunk_id, environment_id=environment_id, workdir="/ws/x", bound_at=_NOW, project_id="proj_a"
+        )
+    for chunk_id, lease_id in (("ch_esc_bound", "lease_eb"), ("ch_esc_unbound", "lease_eu")):
+        _seed_lease(store, lease_id=lease_id, chunk_id=chunk_id)
+        store.record_closure(
+            lease_id=lease_id, chunk_id=chunk_id, node_id="nd_build", reason="escalated", closed_at=_NOW
+        )
+    for chunk_id, lease_id, question_id in (("ch_bound", "lease_b", "qn_b"), ("ch_unbound", "lease_u", "qn_u")):
+        _seed_lease(store, lease_id=lease_id, chunk_id=chunk_id)
+        store.record_ask(
+            lease_id=lease_id,
+            chunk_id=chunk_id,
+            question_id=question_id,
+            question="?",
+            options=[],
+            session=SessionReference(CLAUDE_CODE_HARNESS_ID, f"sess-{lease_id}"),
+            asked_at=_NOW,
+        )
+    for chunk_id in ("ch_bound", "ch_unbound", None):
+        store.enqueue_outbound(kind="note", chunk_id=chunk_id, lease_id=None, payload="{}", created_at=_NOW)
+
+    with runner_client(app) as client:
+        asks = client.get("/api/asks", params={"open": "true"}).json()["items"]
+        escalations = client.get("/api/escalations").json()["items"]
+        facts = client.get("/api/facts").json()["items"]
+
+    assert {a["chunk_id"]: a["project_id"] for a in asks} == {"ch_bound": "proj_a", "ch_unbound": None}
+    assert {e["chunk_id"]: e["project_id"] for e in escalations} == {
+        "ch_esc_bound": "proj_a",
+        "ch_esc_unbound": None,
+    }
+    fact_projects = {f["chunk_id"]: f["project_id"] for f in facts}
+    assert (fact_projects["ch_bound"], fact_projects["ch_unbound"], fact_projects[None]) == ("proj_a", None, None)

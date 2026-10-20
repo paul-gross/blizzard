@@ -10,6 +10,7 @@ from fastapi import APIRouter, Query, Request
 
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.api.wiring import RunnerWiring
+from blizzard.runner.environments.repository import IReadEnvironmentRepository
 from blizzard.runner.status.view import RunnerStatusService
 from blizzard.wire.runner_status import FactListResponse, FactView
 
@@ -26,10 +27,13 @@ def list_facts(
     limit: int = Query(default=DEFAULT_FACT_LIMIT, ge=1, le=MAX_FACT_LIMIT),
 ) -> FactListResponse:
     """The newest ``limit`` hub-bound facts recorded by this runner, newest first."""
-    return _fact_list(RunnerWiring.of(request).status(), limit)
+    wiring = RunnerWiring.of(request)
+    return _fact_list(wiring.status(), wiring.read_stores().environments, limit)
 
 
-def _fact_list(service: RunnerStatusService, limit: int) -> FactListResponse:
+def _fact_list(service: RunnerStatusService, environments: IReadEnvironmentRepository, limit: int) -> FactListResponse:
+    facts = service.recent_facts(limit)
+    projects = environments.chunk_project_ids(sorted({f.chunk_id for f in facts if f.chunk_id is not None}))
     return FactListResponse(
         items=[
             FactView(
@@ -39,7 +43,8 @@ def _fact_list(service: RunnerStatusService, limit: int) -> FactListResponse:
                 lease_id=fact.lease_id,
                 created_at=iso_utc(fact.created_at),
                 acked_at=iso_utc(fact.acked_at) if fact.acked_at is not None else None,
+                project_id=projects.get(fact.chunk_id) if fact.chunk_id is not None else None,
             )
-            for fact in service.recent_facts(limit)
+            for fact in facts
         ]
     )

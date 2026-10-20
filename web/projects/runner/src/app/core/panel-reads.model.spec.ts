@@ -1,19 +1,16 @@
-import { projectColorValue, type runnerApi } from 'fleet';
+import type { runnerApi } from 'fleet';
 
 import {
   anyHubReachable,
-  chunkProjectLookup,
+  attributedProject,
   dashboardsByRunner,
-  environmentsById,
   inProject,
-  leaseProject,
   mergeLeases,
-  ownByChunk,
+  ownByProject,
   type PanelLease,
   type PanelProject,
   projectCatalog,
   projectNameFor,
-  projectTint,
   type RunnerDashboard,
   type RunnerOwner,
   runnerProjects,
@@ -85,10 +82,6 @@ function lease(overrides: Partial<runnerApi.LeaseView> = {}): runnerApi.LeaseVie
 
 function panelLease(overrides: Partial<runnerApi.LeaseView>, owner: RunnerOwner, projectSlug: string | null): PanelLease {
   return { ...lease(overrides), owner, projectSlug };
-}
-
-function env(overrides: Partial<runnerApi.HostEnvironmentView> & { environment_id: string }): runnerApi.HostEnvironmentView {
-  return { ...overrides };
 }
 
 describe('servingOwners', () => {
@@ -192,42 +185,20 @@ describe('servesProject', () => {
   });
 });
 
-describe('leaseProject', () => {
+describe('attributedProject', () => {
   const projects = [project('blizzard', { entries: ['blizzard', 'proj_1'] }), project('winter')];
 
-  it('tells the project from the environment while it still holds the lease’s own chunk', () => {
-    const envs = environmentsById([{ workspace_id: 'ws', items: [env({ environment_id: 'e1', chunk_id: 'ch_1', project: 'proj_1' })] }]);
-    expect(leaseProject(lease({ environment_id: 'e1' }), projects, envs)).toBe('blizzard');
+  it('resolves the lease’s wire project id to its project’s slug', () => {
+    expect(attributedProject(lease({ project_id: 'proj_1' }), projects)).toBe('blizzard');
   });
 
-  it('keeps the environment’s own entry when no project resolves it', () => {
-    const envs = environmentsById([{ workspace_id: 'ws', items: [env({ environment_id: 'e1', chunk_id: 'ch_1', project: 'proj_9' })] }]);
-    expect(leaseProject(lease({ environment_id: 'e1' }), projects, envs)).toBe('proj_9');
+  it('keeps the wire id when no project resolves it', () => {
+    expect(attributedProject(lease({ project_id: 'proj_9' }), projects)).toBe('proj_9');
   });
 
-  it('ignores an environment since taken by another chunk, falling to the runner’s sole project', () => {
-    const envs = environmentsById([{ workspace_id: 'ws', items: [env({ environment_id: 'e1', chunk_id: 'ch_2', project: 'proj_1' })] }]);
-    expect(leaseProject(lease({ environment_id: 'e1' }), [project('winter')], envs)).toBe('winter');
-    expect(leaseProject(lease({ environment_id: 'e1' }), projects, envs)).toBeNull();
-  });
-
-  it('gives null for an environment-less lease on a runner of several projects', () => {
-    expect(leaseProject(lease(), projects, new Map())).toBeNull();
-  });
-});
-
-describe('environmentsById', () => {
-  it('indexes every workspace’s environments by id, tolerating a workspace with no items', () => {
-    const e1 = env({ environment_id: 'e1' });
-    const e2 = env({ environment_id: 'e2' });
-    const byId = environmentsById([
-      { workspace_id: 'a', items: [e1] },
-      { workspace_id: 'b' },
-      { workspace_id: 'c', items: [e2] },
-    ]);
-
-    expect([...byId.keys()]).toEqual(['e1', 'e2']);
-    expect(byId.get('e2')).toBe(e2);
+  it('gives null for a lease naming no project, even on a runner of one project', () => {
+    expect(attributedProject(lease({ project_id: null }), [project('winter')])).toBeNull();
+    expect(attributedProject(lease(), [project('winter')])).toBeNull();
   });
 });
 
@@ -248,43 +219,26 @@ describe('mergeLeases', () => {
   });
 });
 
-describe('chunkProjectLookup', () => {
-  it('answers a chunk’s project per runner from the first lease that attributes it', () => {
-    const lookup = chunkProjectLookup([
-      panelLease({ chunk_id: 'ch_1' }, R1, null),
-      panelLease({ chunk_id: 'ch_1' }, R1, 'blizzard'),
-      panelLease({ chunk_id: 'ch_1' }, R1, 'winter'),
-      panelLease({ chunk_id: 'ch_1' }, R2, 'ops'),
+describe('ownByProject', () => {
+  it('tags each item with its runner and the project its own wire project id names, null where it names none', () => {
+    const projects = [project('blizzard', { entries: ['blizzard', 'proj_1'] })];
+    const owned = ownByProject(
+      [
+        { id: 'a', chunk_id: 'ch_1', project_id: 'proj_1' },
+        { id: 'b', chunk_id: 'ch_2', project_id: 'proj_9' },
+        { id: 'c', chunk_id: 'ch_3', project_id: null },
+        { id: 'd' },
+      ],
+      R1,
+      projects,
+    );
+
+    expect(owned.map((item) => [item.id, item.owner, item.projectSlug])).toEqual([
+      ['a', R1, 'blizzard'],
+      ['b', R1, 'proj_9'],
+      ['c', R1, null],
+      ['d', R1, null],
     ]);
-
-    expect(lookup('rn_1', 'ch_1')).toBe('blizzard');
-    expect(lookup('rn_2', 'ch_1')).toBe('ops');
-  });
-
-  it('gives null for an unknown chunk, a chunk on another runner, and no chunk', () => {
-    const lookup = chunkProjectLookup([panelLease({ chunk_id: 'ch_1' }, R1, 'blizzard')]);
-
-    expect(lookup('rn_1', 'ch_9')).toBeNull();
-    expect(lookup('rn_2', 'ch_1')).toBeNull();
-    expect(lookup('rn_1', null)).toBeNull();
-  });
-});
-
-describe('ownByChunk', () => {
-  it('tags each item with its runner and its chunk’s project, else the runner’s sole project', () => {
-    const lookup = chunkProjectLookup([panelLease({ chunk_id: 'ch_1' }, R1, 'blizzard')]);
-    const owned = ownByChunk([{ id: 'a', chunk_id: 'ch_1' }, { id: 'b', chunk_id: 'ch_2' }, { id: 'c' }], R1, [project('winter')], lookup);
-
-    expect(owned).toEqual([
-      { id: 'a', chunk_id: 'ch_1', owner: R1, projectSlug: 'blizzard' },
-      { id: 'b', chunk_id: 'ch_2', owner: R1, projectSlug: 'winter' },
-      { id: 'c', owner: R1, projectSlug: 'winter' },
-    ]);
-  });
-
-  it('leaves an unattributable item on a runner of several projects with no project', () => {
-    const owned = ownByChunk([{ chunk_id: 'ch_2' }], R1, [project('a'), project('b')], () => null);
-    expect(owned[0].projectSlug).toBeNull();
   });
 });
 
@@ -297,18 +251,6 @@ describe('inProject', () => {
 
   it('narrows to the slug, dropping unattributed items', () => {
     expect(inProject(items, 'a')).toEqual([{ projectSlug: 'a' }]);
-  });
-});
-
-describe('projectTint', () => {
-  it('paints a named colour through its theme value, and a hex as-is', () => {
-    expect(projectTint('teal')).toBe(projectColorValue('teal'));
-    expect(projectTint('#AABBCC')).toBe('#aabbcc');
-  });
-
-  it('gives null for no colour', () => {
-    expect(projectTint(null)).toBeNull();
-    expect(projectTint('')).toBeNull();
   });
 });
 

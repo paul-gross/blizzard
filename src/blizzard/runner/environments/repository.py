@@ -194,6 +194,11 @@ class IReadEnvironmentRepository(Protocol):
         once its environments may already be given back. ``None`` when the chunk was never bound here."""
         ...
 
+    def chunk_project_ids(self, chunk_ids: Sequence[str]) -> dict[str, str]:
+        """Each of ``chunk_ids``'s project, from its newest binding that names one, released or not — so a closed
+        lease's chunk still reads its project. A chunk no binding names a project for is absent."""
+        ...
+
     def live_tenure_chunk_ids(self) -> list[str]:
         """Chunks still held by this runner — those with an unreleased binding."""
         ...

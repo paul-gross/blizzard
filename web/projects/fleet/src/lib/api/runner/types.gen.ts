@@ -311,6 +311,10 @@ export type AskView = {
      */
     options?: Array<string>;
     /**
+     * Project Id
+     */
+    project_id?: string | null;
+    /**
      * Question
      */
     question: string;
@@ -1221,6 +1225,10 @@ export type EscalationView = {
      */
     node_id: string;
     /**
+     * Project Id
+     */
+    project_id?: string | null;
+    /**
      * Resume Command
      */
     resume_command: string;
@@ -1332,6 +1340,10 @@ export type FactView = {
      * Lease Id
      */
     lease_id: string | null;
+    /**
+     * Project Id
+     */
+    project_id?: string | null;
     /**
      * Seq
      */
@@ -2500,6 +2512,10 @@ export type LeaseView = {
      * Pid
      */
     pid: number | null;
+    /**
+     * Project Id
+     */
+    project_id?: string | null;
     /**
      * Session Id
      */

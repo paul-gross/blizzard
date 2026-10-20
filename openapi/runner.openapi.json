@@ -416,6 +416,17 @@
             "title": "Options",
             "type": "array"
           },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
           "question": {
             "title": "Question",
             "type": "string"
@@ -1964,6 +1975,17 @@
             "title": "Node Id",
             "type": "string"
           },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
           "resume_command": {
             "title": "Resume Command",
             "type": "string"
@@ -2138,6 +2160,17 @@
               }
             ],
             "title": "Lease Id"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
           },
           "seq": {
             "title": "Seq",
@@ -3904,6 +3937,17 @@
               }
             ],
             "title": "Pid"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
           },
           "session_id": {
             "anyOf": [

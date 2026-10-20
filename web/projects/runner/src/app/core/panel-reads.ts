@@ -3,16 +3,14 @@ import type { QueryObserverResult } from '@tanstack/angular-query-experimental';
 import { injectQueries } from '@tanstack/angular-query-experimental/inject-queries-experimental';
 import type { runnerApi } from 'fleet';
 
-import { injectHostEnvironmentsQuery, injectHostRunnersQuery } from './host.query';
+import { injectHostRunnersQuery } from './host.query';
 import { runnerLeasesQueryOptions } from './leases.query';
 import { PanelFilters } from './panel-filters';
 import {
-  chunkProjectLookup,
-  environmentsById,
   inProject,
-  leaseProject,
+  attributedProject,
   mergeLeases,
-  ownByChunk,
+  ownByProject,
   type PanelAsk,
   type PanelFact,
   type PanelLease,
@@ -162,21 +160,19 @@ export interface PanelLeasesOptions {
 }
 
 /** Every covered runner's leases as one list ({@link mergeLeases}), each lease attributed to
- * its project ({@link leaseProject}) and narrowed by the Project filter. */
+ * its project ({@link attributedProject}) and narrowed by the Project filter. */
 export function injectPanelLeases(options: PanelLeasesOptions = {}): MergedRead<readonly PanelLease[]> {
   const filters = inject(PanelFilters);
   const runners = injectPanelRunners();
   const owners = options.scope === 'all' ? runners.all : runners.scoped;
   const fanOut = injectFanOut(owners, runnerLeasesQueryOptions);
   const projects = injectRunnerProjects();
-  const environments = injectHostEnvironmentsQuery();
   const all = computed(() => {
-    const envs = environmentsById(environments.data() ?? []);
     const byRunner = projects();
     return mergeLeases(
       answers(owners(), fanOut()).map(({ owner, value }) => {
         const served = byRunner.get(owner.runnerId) ?? [];
-        return value.map((lease) => ({ ...lease, owner, projectSlug: leaseProject(lease, served, envs) }));
+        return value.map((lease) => ({ ...lease, owner, projectSlug: attributedProject(lease, served) }));
       }),
     );
   });
@@ -187,22 +183,20 @@ export function injectPanelLeases(options: PanelLeasesOptions = {}): MergedRead<
   };
 }
 
-/** A dashboard section's items merged across the covered runners, attributed through their
- * chunks and narrowed by the Project filter. */
-function injectDashboardItems<T extends { readonly chunk_id?: string | null }>(
+/** A dashboard section's items merged across the covered runners, attributed by their own
+ * project and narrowed by the Project filter. */
+function injectDashboardItems<T extends { readonly project_id?: string | null }>(
   section: (dashboard: runnerApi.DashboardView) => readonly T[],
 ): MergedRead<readonly (T & { readonly owner: RunnerOwner; readonly projectSlug: string | null })[]> {
   const filters = inject(PanelFilters);
   const dashboards = injectPanelDashboards();
-  const leases = injectPanelLeases({ byProject: false });
   const projects = injectRunnerProjects();
   return {
     data: computed(() => {
-      const chunkProject = chunkProjectLookup(leases.data());
       const byRunner = projects();
       const items = dashboards
         .data()
-        .flatMap(({ owner, dashboard }) => ownByChunk(section(dashboard), owner, byRunner.get(owner.runnerId) ?? [], chunkProject));
+        .flatMap(({ owner, dashboard }) => ownByProject(section(dashboard), owner, byRunner.get(owner.runnerId) ?? []));
       return inProject(items, filters.project());
     }),
     isPending: dashboards.isPending,

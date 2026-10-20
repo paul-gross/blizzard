@@ -30,6 +30,7 @@ def _view(activity: LeaseActivity | ClosedLeaseActivity) -> LeaseView:
         "pid": lease.pid,
         "created_at": iso_utc(lease.created_at),
         "display_status": activity.display_status,
+        "project_id": activity.project_id,
         "stale_after_seconds": int(HEARTBEAT_STALENESS_THRESHOLD.total_seconds()),
     }
     if isinstance(activity, ClosedLeaseActivity):

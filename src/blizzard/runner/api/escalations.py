@@ -10,6 +10,7 @@ from fastapi import APIRouter, Request
 
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.api.wiring import RunnerWiring
+from blizzard.runner.environments.repository import IReadEnvironmentRepository
 from blizzard.runner.status.view import RunnerStatusService
 from blizzard.wire.runner_status import EscalationListResponse
 from blizzard.wire.runner_status import EscalationView as EscalationViewWire
@@ -20,10 +21,13 @@ router = APIRouter(prefix="/api", tags=["runner"])
 @router.get("/escalations", response_model=EscalationListResponse)
 def list_escalations(request: Request) -> EscalationListResponse:
     """Every escalation still open — no later lease mint, and the hub has not ended the chunk."""
-    return _escalation_list(RunnerWiring.of(request).status())
+    wiring = RunnerWiring.of(request)
+    return _escalation_list(wiring.status(), wiring.read_stores().environments)
 
 
-def _escalation_list(service: RunnerStatusService) -> EscalationListResponse:
+def _escalation_list(service: RunnerStatusService, environments: IReadEnvironmentRepository) -> EscalationListResponse:
+    escalations = service.escalations()
+    projects = environments.chunk_project_ids(sorted({e.chunk_id for e in escalations}))
     return EscalationListResponse(
         items=[
             EscalationViewWire(
@@ -40,7 +44,8 @@ def _escalation_list(service: RunnerStatusService) -> EscalationListResponse:
                 harness_version=e.harness_version,
                 wrapped_takeover_command=e.wrapped_takeover_command,
                 cause=e.cause,
+                project_id=projects.get(e.chunk_id),
             )
-            for e in service.escalations()
+            for e in escalations
         ]
     )

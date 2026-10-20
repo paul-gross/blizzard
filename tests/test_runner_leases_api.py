@@ -119,6 +119,7 @@ def test_running_lease_shape_and_binding_join(tmp_path: Path) -> None:
         "last_heartbeat_at": beat_at.isoformat(),
         "state": "running",
         "display_status": "running",
+        "project_id": None,
         "closure_healthy": False,
         "closed_at": None,
         "closure_reason": None,
@@ -207,6 +208,34 @@ def test_closed_lease_appears_after_active_with_state_and_reason(tmp_path: Path)
     assert closed["display_status"] == "closed"
     assert closed["stale_after_seconds"] == 3600
     assert_all_timestamps_utc({"items": items})
+
+
+@pytest.mark.component
+def test_a_lease_carries_its_chunks_project_open_and_after_its_binding_is_released(tmp_path: Path) -> None:
+    """The project rides the chunk's newest binding that names one; a released binding row is retained, so a
+    closed lease still reads its project, and a chunk no binding names one reads ``None``."""
+    app, store = _app_with_leases(tmp_path)
+    _seed_lease(store, lease_id="lease_open", chunk_id="ch_open")
+    store.record_binding(chunk_id="ch_open", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, project_id="proj_a")
+    _seed_lease(store, lease_id="lease_closed", chunk_id="ch_closed")
+    store.record_binding(chunk_id="ch_closed", environment_id="e2", workdir="/ws/e2", bound_at=_NOW)
+    store.record_binding(
+        chunk_id="ch_closed", environment_id="e3", workdir="/ws/e3", bound_at=_NOW, project_id="proj_b"
+    )
+    store.record_release(chunk_id="ch_closed", environment_id="e2", released_at=_NOW + timedelta(minutes=1))
+    store.record_release(chunk_id="ch_closed", environment_id="e3", released_at=_NOW + timedelta(minutes=1))
+    store.record_closure(
+        lease_id="lease_closed", chunk_id="ch_closed", node_id="nd_build", reason="transitioned", closed_at=_NOW
+    )
+    _seed_lease(store, lease_id="lease_unbound", chunk_id="ch_unbound")
+
+    with runner_client(app) as client:
+        items = client.get("/api/leases").json()["items"]
+
+    by_lease = {item["lease_id"]: item for item in items}
+    assert by_lease["lease_open"]["project_id"] == "proj_a"
+    assert (by_lease["lease_closed"]["state"], by_lease["lease_closed"]["project_id"]) == ("closed", "proj_b")
+    assert by_lease["lease_unbound"]["project_id"] is None
 
 
 @pytest.mark.component
