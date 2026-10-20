@@ -118,25 +118,36 @@ jobs:
           [ -z "$(git ls-files --others --exclude-standard -- contracts/)" ] \
             || { echo "::error::Contract documents under contracts/ are untracked — run 'mise run export-contracts' and commit them."; git ls-files --others --exclude-standard -- contracts/; exit 1; }
 
-  wire-compat:
-    name: hub↔runner wire compatibility
-    # Attributes a break to the change that makes it, before it ever reaches master —
-    # the deployed-mode counterpart in push.yml guards edge itself (docs/versioning.md).
-    if: github.event_name == 'pull_request'
+  compat:
+    name: compatibility against supported releases
+    # Holds HEAD's committed surface documents to every supported release, and attributes a break to the
+    # change that makes it. A tag runs the same check in release.yml, over each release's own range.
+    if: github.ref_type != 'tag'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
-          # The merge-base with origin/master can be arbitrarily far back; a shallow
-          # checkout may not include it.
+          # The tags the supported releases resolve from, and the range's base, may be arbitrarily far back.
           fetch-depth: 0
       - uses: astral-sh/setup-uv@v6
         with:
           enable-cache: true
           python-version: "3.12"
       - run: uv sync
-      - name: wire compatibility (blizzard:wire-compat)
-        run: uv run blizzard-wire-compat --baseline merge-base --against origin/master
+      - name: compatibility against supported releases (blizzard:compat)
+        env:
+          RANGE_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          RANGE_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+          LINE_REF: ${{ github.base_ref || github.ref_name }}
+        run: |
+          # An all-zero or unreachable base would check nothing; fail on it by name.
+          if [[ "$RANGE_BASE" =~ ^0*$ ]] || ! git cat-file -e "${RANGE_BASE}^{commit}"; then
+            echo "::error::no usable base commit for the compatibility range (got '${RANGE_BASE}')"
+            exit 1
+          fi
+          ARGS=(--commits "${RANGE_BASE}..${RANGE_HEAD}")
+          case "$LINE_REF" in release/*) ARGS+=(--line "$LINE_REF") ;; esac
+          uv run blizzard-compat "${ARGS[@]}"
 
   change-notes:
     name: change notes

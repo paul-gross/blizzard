@@ -34,6 +34,33 @@ jobs:
   gate:
     uses: ./.github/workflows/gate.yml
 
+  compat:
+    name: compatibility against supported releases
+    # The backstop: the tag's tree against every supported release, before any build. It writes
+    # compat-breaks.json, which `build` attaches to the release.
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Every tag, and each release's range up to this commit.
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          python-version: "3.12"
+      - run: uv sync
+      - name: compatibility against supported releases (blizzard:compat)
+        run: uv run blizzard-compat --tag "${GITHUB_REF_NAME#v}"
+      - name: hand the report to build
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: compat-breaks
+          path: compat-breaks.json
+          if-no-files-found: error
+
   service-tier:
     name: service tier (blizzard:service-test)
     needs: [gate]
@@ -173,7 +200,7 @@ jobs:
 
   build:
     name: build wheel + image, sign and attest, assemble the inventory
-    needs: [gate, service-tier, crash-sweep, e2e]
+    needs: [gate, compat, service-tier, crash-sweep, e2e]
     runs-on: ubuntu-latest
     outputs:
       prerelease: ${{ steps.ver.outputs.prerelease }}
@@ -232,6 +259,11 @@ jobs:
             > "dist/blizzard-${VERSION}-requirements.txt"
           ./scripts/export-requirements.sh "$VERSION" "$WHEEL" --extra postgres --no-project \
             > "dist/blizzard-${VERSION}-requirements-pg.txt"
+      - name: fetch the compatibility report the compat job wrote
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: compat-breaks
+          path: .
       - name: generate release notes from the tag tree
         run: |
           uv run blizzard-change-notes render "${GITHUB_REF_NAME}" > release-notes.md
