@@ -17,12 +17,11 @@ import pytest
 from sqlalchemy import insert, select
 
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.hub import app as hub_app
 from blizzard.hub.auth.internal.identity_transaction import IdentityTransactions
 from blizzard.hub.auth.models import ProviderIdentity, User
 from blizzard.hub.config import AuthConfig
 from blizzard.hub.store import schema as s
-from tests.config_inputs import init_hub, load_hub_config
+from tests.config_inputs import build_hosted_hub_app, init_hub, load_hub_config
 
 pytestmark = pytest.mark.component
 
@@ -47,7 +46,7 @@ def test_boot_pre_provisions_an_unclaimed_row_when_no_user_matches(tmp_path: Pat
     config = init_hub(tmp_path / "hub")
     config = _with_superuser(config, "alice@example.com")
 
-    app = hub_app.build_hosted_app(config)
+    app = build_hosted_hub_app(config)
 
     services = app.state.services
     bootstrap = services.auth.get_superuser_bootstrap()
@@ -63,8 +62,8 @@ def test_boot_reports_unclaimed_again_on_a_second_boot(tmp_path: Path) -> None:
     config = init_hub(tmp_path / "hub")
     config = _with_superuser(config, "alice@example.com")
 
-    hub_app.build_hosted_app(config)
-    app = hub_app.build_hosted_app(config)
+    build_hosted_hub_app(config)
+    app = build_hosted_hub_app(config)
 
     kinds = [f.kind for f in app.state.services.auth_facts.list_recent()]
     assert kinds.count("superuser_bootstrap_unclaimed") == 2
@@ -88,7 +87,7 @@ def test_boot_promotes_nobody_and_leaves_an_existing_user_to_claim_at_sign_in(tm
     _seed_user(config, user_id="usr_1", email="alice@example.com")
     config = _with_superuser(config, "alice@example.com")
 
-    app = hub_app.build_hosted_app(config)
+    app = build_hosted_hub_app(config)
 
     services = app.state.services
     assert _hub_admins(config) == []
@@ -105,7 +104,7 @@ def test_boot_leaves_a_claimed_target_alone(tmp_path: Path) -> None:
     _claimed(config, user_id="usr_1", email="alice@example.com")
     config = _with_superuser(config, "alice@example.com")
 
-    app = hub_app.build_hosted_app(config)
+    app = build_hosted_hub_app(config)
 
     services = app.state.services
     bootstrap = services.auth.get_superuser_bootstrap()
@@ -121,7 +120,7 @@ def test_changing_auth_superuser_records_a_new_target_and_revokes_nobody(tmp_pat
     _claimed(config, user_id="usr_alice", email="alice@example.com")
 
     config = _with_superuser(config, "bob@example.com")
-    app = hub_app.build_hosted_app(config)
+    app = build_hosted_hub_app(config)
 
     bootstrap = app.state.services.auth.get_superuser_bootstrap()
     assert bootstrap is not None
@@ -151,9 +150,9 @@ def _admin_memberships(config) -> list[str]:  # type: ignore[no-untyped-def]
 
 def test_unsetting_auth_superuser_before_any_claim_cancels_the_intent(tmp_path: Path) -> None:
     config = _with_superuser(init_hub(tmp_path / "hub"), "alice@example.com")
-    hub_app.build_hosted_app(config)
+    build_hosted_hub_app(config)
 
-    services = hub_app.build_hosted_app(_with_superuser(config, None)).state.services
+    services = build_hosted_hub_app(_with_superuser(config, None)).state.services
     _sign_in(services, handle="alice")
 
     assert services.auth.get_superuser_bootstrap() is None
@@ -166,7 +165,7 @@ def test_unsetting_auth_superuser_after_the_claim_keeps_the_administrator(tmp_pa
     _seed_user(config, user_id="usr_alice", email="alice@example.com")
     _claimed(config, user_id="usr_alice", email="alice@example.com")
 
-    app = hub_app.build_hosted_app(_with_superuser(config, None))
+    app = build_hosted_hub_app(_with_superuser(config, None))
 
     bootstrap = app.state.services.auth.get_superuser_bootstrap()
     assert bootstrap is not None
@@ -179,9 +178,9 @@ def test_unsetting_a_changed_target_before_it_signs_in_grants_it_nothing(tmp_pat
     config = init_hub(tmp_path / "hub")
     _seed_user(config, user_id="usr_alice", email="alice@example.com")
     _claimed(config, user_id="usr_alice", email="alice@example.com")
-    hub_app.build_hosted_app(_with_superuser(config, "bob@example.com"))
+    build_hosted_hub_app(_with_superuser(config, "bob@example.com"))
 
-    services = hub_app.build_hosted_app(_with_superuser(config, None)).state.services
+    services = build_hosted_hub_app(_with_superuser(config, None)).state.services
     _sign_in(services, handle="bob")
 
     assert services.auth.get_superuser_bootstrap() is None
@@ -205,7 +204,7 @@ def test_a_claim_finds_nothing_once_the_intent_is_cancelled_ahead_of_its_unit(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     config = _with_superuser(init_hub(tmp_path / "hub"), "alice@example.com")
-    services = hub_app.build_hosted_app(config).state.services
+    services = build_hosted_hub_app(config).state.services
     _before_the_claims_unit(monkeypatch, services.auth.cancel_unclaimed_superuser_bootstrap)
 
     _sign_in(services, handle="alice")
@@ -219,7 +218,7 @@ def test_a_claim_never_takes_an_intent_superseded_ahead_of_its_unit(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     config = _with_superuser(init_hub(tmp_path / "hub"), "alice@example.com")
-    services = hub_app.build_hosted_app(config).state.services
+    services = build_hosted_hub_app(config).state.services
     _before_the_claims_unit(
         monkeypatch, lambda: services.auth.record_superuser_bootstrap(email="bob@example.com", claimed_user_id=None)
     )
@@ -236,7 +235,7 @@ def test_a_claim_never_takes_an_intent_superseded_ahead_of_its_unit(
 def test_boot_with_no_superuser_configured_does_nothing(tmp_path: Path) -> None:
     config = init_hub(tmp_path / "hub")
 
-    app = hub_app.build_hosted_app(config)
+    app = build_hosted_hub_app(config)
 
     assert app.state.services.auth.get_superuser_bootstrap() is None
 
@@ -245,7 +244,7 @@ def test_the_first_sign_in_claims_the_hub_administrator_and_the_first_tenants_ad
     """On a fresh hub, the claim, the hub administrator fact and the admin membership land in one transaction, each
     ``bootstrap``."""
     config = _with_superuser(init_hub(tmp_path / "hub"), "alice@example.com")
-    services = hub_app.build_hosted_app(config).state.services
+    services = build_hosted_hub_app(config).state.services
 
     user = services.auth.link_or_mint(
         ProviderIdentity(

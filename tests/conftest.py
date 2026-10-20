@@ -22,7 +22,15 @@ from blizzard.hub import runtime as hub_runtime
 from blizzard.runner import app as runner_app
 from blizzard.runner import runtime as runner_runtime
 from blizzard.runner.host_config import HostConfig
-from tests.config_inputs import export_hub_app, export_runner_app, init_host, init_hub, migrate_host, migrate_hub
+from tests.config_inputs import (
+    build_hosted_hub_app,
+    export_hub_app,
+    export_runner_app,
+    init_host,
+    init_hub,
+    migrate_host,
+    migrate_hub,
+)
 
 
 @pytest.fixture(scope="session")
@@ -58,7 +66,7 @@ class Daemon:
             # The runner's store is bound from its configured id: a host init scaffolds one that has not joined a hub.
             runner = config.runner_config()
             config = dataclasses.replace(runner, runner_id=runner.runner_id or "rn_fixture")
-        built = self.app.build_hosted_app(config)
+        built = self.app.build_hosted_app(config) if self.name == "runner" else build_hosted_hub_app(config)
         if isinstance(built, runner_app.HostedApp):
             return built.app
         return built

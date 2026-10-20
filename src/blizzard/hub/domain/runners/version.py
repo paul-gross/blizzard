@@ -21,7 +21,7 @@ class VersionRefusal:
 @domain_model
 @dataclass(frozen=True)
 class VersionJudgement:
-    """The window's judgement of one reported version (fields as ``blizzard.wire.version_window.Admission``)."""
+    """The window's judgement of one reported version (fields as ``version_window.Admission``)."""
 
     reported_version: str | None
     refusal: VersionRefusal | None

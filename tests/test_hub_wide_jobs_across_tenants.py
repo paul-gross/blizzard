@@ -44,7 +44,7 @@ from blizzard.hub.secrets.rotation import rotate_keys
 from blizzard.hub.store import schema
 from blizzard.hub.store.internal.chunk_hub_exec_store import ChunkHubExecStore
 from blizzard.hub.tenancy import StoreScope, TenantId
-from tests.config_inputs import init_hub
+from tests.config_inputs import build_hosted_hub_app, init_hub
 from tests.support import (
     OP,
     add_tenant,
@@ -117,7 +117,7 @@ def hub(tmp_path: Path) -> Iterator[_Hub]:
 
 
 def _build(config: HubConfig) -> None:
-    hub_app.build_hosted_app(config).state.engine.dispose()
+    build_hosted_hub_app(config).state.engine.dispose()
 
 
 def _orphan_a_slot(hub: _Hub, tenant: TenantId, suffix: str) -> None:

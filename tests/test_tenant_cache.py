@@ -33,6 +33,7 @@ from blizzard.hub.secrets import hub_key_provider
 from blizzard.hub.store import schema
 from blizzard.hub.tenancy import HUB_SCOPED_OPTION, StoreScope, TenantClosed, TenantId, UnknownTenant
 from blizzard.hub.work_sources.source import IWorkSourceRegistry
+from tests.config_inputs import VERSION_WINDOW
 from tests.support import WorkSourceRegistry, add_tenant, close_tenant, count_queries, default_tenant, migrate_to
 
 pytestmark = pytest.mark.component
@@ -217,6 +218,7 @@ def _served(core: HubCore, tmp_path: Path, brokers: TenantBrokers) -> HubService
         secret_keys=hub_key_provider({}, data_dir=tmp_path),
         brokers=brokers,
         annotation_interval_seconds=120,
+        version_window=VERSION_WINDOW,
     )
 
 

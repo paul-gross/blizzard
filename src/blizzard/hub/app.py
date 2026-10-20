@@ -119,6 +119,7 @@ from blizzard.hub.domain.projects.declarations import ImportLinks
 from blizzard.hub.domain.projects.model import ProjectRequired
 from blizzard.hub.domain.runners.host import HostRetired
 from blizzard.hub.domain.runners.registration import RunnerRetired
+from blizzard.hub.domain.runners.version_window import VersionWindow
 from blizzard.hub.layout import SIGNING_KEYS_PARTS, WORKDIRS_DIRNAME
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.secrets import KeyCoverage, hub_key_provider, require_hub_key, secret_cipher
@@ -128,7 +129,6 @@ from blizzard.hub.tenancy import StoreScope, TenantClosed, TenantId, UnknownTena
 from blizzard.hub.work_sources.internal.factory import WorkSourceEntry
 from blizzard.hub.work_sources.source import IWorkSourceRegistry
 from blizzard.wire.components import HUB_SCHEMA_COMPONENTS
-from blizzard.wire.version_window import VersionWindow
 
 #: The transcript-event derivation sweep's own interval — a module
 #: constant; its own change probe skips the pass when nothing changed.
@@ -495,13 +495,13 @@ def build_hosted_app(
     *,
     platform_tracing: IPlatformTracing | None = None,
     oauth_http_client: httpx.Client | None = None,
-    version_window: VersionWindow | None = None,
+    version_window: VersionWindow,
 ) -> FastAPI:
     """The ``host`` composition root: open the store and wire every fleet seam.
 
     ``platform_tracing`` defaults to the handle ``[tracing]`` and the OTLP environment decide.
     ``oauth_http_client`` replaces the OAuth providers' client. Either way, the engine and every outbound client are
-    instrumented through it. ``version_window`` defaults to the packaged one."""
+    instrumented through it. ``version_window`` judges each registering runner's version."""
     platform_tracing = platform_tracing or build_platform_tracing(
         config.tracing,
         os.environ,

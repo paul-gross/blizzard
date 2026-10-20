@@ -95,6 +95,7 @@ from blizzard.hub.domain.projects.bulk_resolve import BulkProjectResolver
 from blizzard.hub.domain.projects.model import Project, ProjectId
 from blizzard.hub.domain.runners.registration import RunnerAddition, RunnerCapability, RunnerRegistration
 from blizzard.hub.domain.runners.served import resolve_served
+from blizzard.hub.domain.runners.version_window import VersionWindow
 from blizzard.hub.domain.tenancy.administration import DEFAULT_PROJECT_SLUG
 from blizzard.hub.egress.writer import (
     EgressBatch,
@@ -137,9 +138,8 @@ from blizzard.hub.work_sources.closer import IWorkCloser, WorkCloseError, WorkIt
 from blizzard.hub.work_sources.editor import IWorkEditor
 from blizzard.hub.work_sources.internal.hub_work_source import HubWorkSource
 from blizzard.hub.work_sources.source import IWorkSource, IWorkSourceRegistry, WorkItem, WorkSourceError
-from blizzard.wire.version_window import VersionWindow
 from blizzard.wire.work_source import WorkSourceDocument
-from tests.config_inputs import create_hub_app
+from tests.config_inputs import VERSION_WINDOW, create_hub_app
 
 _GRAPH_T0 = datetime(2026, 1, 1, tzinfo=UTC)
 
@@ -1301,7 +1301,7 @@ def build_hub(
     auto_register_claimants: bool = True,
     flags: Flags | None = None,
     hub_version: str | None = None,
-    version_window: VersionWindow | None = None,
+    version_window: VersionWindow = VERSION_WINDOW,
 ) -> HubHarness:
     """A migrated, fully-wired hub over ``tmp_path`` with fake external seams.
 

@@ -13,9 +13,8 @@ import pytest
 from click.testing import CliRunner
 from fastapi.testclient import TestClient
 
-from blizzard.hub import app as hub_app
 from blizzard.hub.cli import hub as hub_group
-from tests.config_inputs import init_hub
+from tests.config_inputs import build_hosted_hub_app, init_hub
 
 pytestmark = pytest.mark.component
 
@@ -39,7 +38,7 @@ nodes:
 @pytest.fixture
 def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
     config = init_hub(tmp_path / "hub")
-    with TestClient(hub_app.build_hosted_app(config)) as c:
+    with TestClient(build_hosted_hub_app(config)) as c:
 
         def route(method: str):  # type: ignore[no-untyped-def]
             def call(url: str, *, timeout: float, **kwargs):  # type: ignore[no-untyped-def]

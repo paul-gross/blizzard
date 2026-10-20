@@ -20,6 +20,7 @@ from typing import Any
 import click
 
 from blizzard.foundation.roles import domain_model
+from blizzard.hub.domain.runners.version_window import VersionWindow, VersionWindowError
 from blizzard.tools.change_notes.contract import Note
 from blizzard.tools.change_notes.tree import CHANGES_DIR, README, read_tree
 from blizzard.tools.compat import gate
@@ -41,7 +42,6 @@ from blizzard.tools.compat.surfaces.store import classify_store
 from blizzard.tools.compat.surfaces.traces import classify_traces
 from blizzard.tools.compat.surfaces.wire import classify_spec_diff
 from blizzard.tools.compat.violation import Violation
-from blizzard.wire.version_window import VersionWindow, VersionWindowError
 
 _WINDOW_PATH = "src/blizzard/wire/window.toml"
 BREAKS_FILE = "compat-breaks.json"
@@ -145,7 +145,12 @@ def _sorted_entries(verdicts: Sequence[gate.Verdict]) -> list[dict[str, Any]]:
 
 def _read_head_window(root: Path) -> Window:
     try:
-        return _window(VersionWindow.load(root / _WINDOW_PATH))
+        source = root / _WINDOW_PATH
+        try:
+            text = source.read_text()
+        except OSError as error:
+            raise VersionWindowError(f"{source}: cannot read the window file: {error}") from error
+        return _window(VersionWindow.parse(text, str(source)))
     except VersionWindowError as error:
         raise click.ClickException(str(error)) from error
 

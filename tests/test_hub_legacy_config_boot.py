@@ -11,7 +11,7 @@ from blizzard.hub import app as hub_app
 from blizzard.hub.config import ConfigError, HubConfig
 from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.secrets import ENV_SECRET_KEY
-from tests.config_inputs import init_hub, load_hub_config
+from tests.config_inputs import build_hosted_hub_app, init_hub, load_hub_config
 from tests.support import tenant_services_of
 
 pytestmark = pytest.mark.component
@@ -35,7 +35,7 @@ def hub(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> HubConfig:
 
 
 def _start(config: HubConfig) -> None:
-    app = hub_app.build_hosted_app(load_hub_config(config.root))
+    app = build_hosted_hub_app(load_hub_config(config.root))
     app.state.engine.dispose()
 
 
@@ -85,7 +85,7 @@ def test_an_imported_hub_with_its_legacy_keys_removed_starts(hub: HubConfig, mon
     monkeypatch.delenv(_TOKEN_ENV)
     monkeypatch.delenv("BZ_FORGE_URL")
 
-    app = hub_app.build_hosted_app(load_hub_config(hub.root))
+    app = build_hosted_hub_app(load_hub_config(hub.root))
     try:
         assert sorted(tenant_services_of(app).work_sources.names()) == sorted([RESERVED_HUB_SOURCE_NAME, "blizzard"])
     finally:
@@ -93,7 +93,7 @@ def test_an_imported_hub_with_its_legacy_keys_removed_starts(hub: HubConfig, mon
 
 
 def test_a_fresh_hub_without_legacy_keys_starts_with_an_empty_store(hub: HubConfig) -> None:
-    app = hub_app.build_hosted_app(load_hub_config(hub.root))
+    app = build_hosted_hub_app(load_hub_config(hub.root))
     try:
         services = tenant_services_of(app)
         assert services.work_sources.names() == [RESERVED_HUB_SOURCE_NAME]

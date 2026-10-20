@@ -12,7 +12,6 @@ import pytest
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.hub import app as hub_app
 from blizzard.hub.config import ConfigError, HubConfig
 from blizzard.hub.domain.config.secrets import SecretName
 from blizzard.hub.secrets import (
@@ -22,7 +21,7 @@ from blizzard.hub.secrets import (
     secret_keys_dir,
 )
 from blizzard.hub.store.internal.secret_store import SecretStore
-from tests.config_inputs import init_hub
+from tests.config_inputs import build_hosted_hub_app, init_hub
 from tests.support import OP, config_authoring, hub_store_connections
 
 pytestmark = pytest.mark.component
@@ -49,7 +48,7 @@ def _seed_secret(config: HubConfig) -> str:
 
 
 def _build(config: HubConfig) -> None:
-    hub_app.build_hosted_app(config).state.engine.dispose()
+    build_hosted_hub_app(config).state.engine.dispose()
 
 
 def test_init_mints_the_first_key_generation(tmp_path: Path) -> None:

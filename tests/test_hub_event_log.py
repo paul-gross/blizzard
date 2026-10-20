@@ -17,7 +17,7 @@ from blizzard.hub import runtime as hub_runtime
 from blizzard.hub.domain.observability.hub_events import HubEvent
 from blizzard.hub.secrets import ENV_SECRET_KEY
 from blizzard.hub.store import schema
-from tests.config_inputs import init_hub, load_hub_config, migrate_hub
+from tests.config_inputs import build_hosted_hub_app, init_hub, load_hub_config, migrate_hub
 from tests.hub_event_rows import hub_event_detail, hub_event_kinds, hub_event_log_of, hub_event_rows, hub_events_of
 from tests.support import build_hub, hub_scoped
 
@@ -92,7 +92,7 @@ def test_each_hosted_start_records_one_hub_started_naming_the_version_and_revisi
     head = hub_runtime.migration_runner(config).script_head()
 
     for _ in range(2):
-        app = hub_app.build_hosted_app(load_hub_config(config.root))
+        app = build_hosted_hub_app(load_hub_config(config.root))
         app.state.engine.dispose()
 
     engine = create_engine_from_url(config.db_url)

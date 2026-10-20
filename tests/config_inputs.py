@@ -16,7 +16,9 @@ from blizzard.foundation.config_keys import ConfigRegistry
 from blizzard.foundation.flags import FlagRegistry, Flags, resolve_flags
 from blizzard.hub import app as hub_app
 from blizzard.hub import runtime as hub_runtime
+from blizzard.hub.cli.runtime import packaged_version_window
 from blizzard.hub.config import HubConfig
+from blizzard.hub.domain.runners.version_window import VersionWindow
 from blizzard.runner import app as runner_app
 from blizzard.runner import runtime as runner_runtime
 from blizzard.runner.host_config import HostConfig
@@ -26,6 +28,8 @@ FLAG_REGISTRY: Final = packaged_flag_registry()
 #: Each daemon's flags at the packaged defaults, with no overrides.
 HUB_FLAGS: Final[Flags] = resolve_flags(FLAG_REGISTRY, "hub", {}).flags
 RUNNER_FLAGS: Final[Flags] = resolve_flags(FLAG_REGISTRY, "runner", {}).flags
+#: The version window packaged with the wheel, as the hub's root reads it.
+VERSION_WINDOW: Final[VersionWindow] = packaged_version_window()
 #: Whether the suite's in-process config reads are strict.
 STRICT: Final = True
 
@@ -146,3 +150,10 @@ def export_hub_app() -> FastAPI:
 def export_runner_app() -> FastAPI:
     """:func:`blizzard.runner.app.create_app_for_export` over the packaged registry."""
     return runner_app.create_app_for_export(FLAG_REGISTRY)
+
+
+def build_hosted_hub_app(config: HubConfig, **kwargs: Any) -> FastAPI:
+    """:func:`blizzard.hub.app.build_hosted_app`, its version window the packaged one unless ``version_window`` is
+    given."""
+    kwargs.setdefault("version_window", VERSION_WINDOW)
+    return hub_app.build_hosted_app(config, **kwargs)

@@ -26,7 +26,7 @@ from blizzard.hub.domain.observability.tracing.cursor import CursorKey
 from blizzard.hub.domain.observability.tracing.repository import TraceCheckpoint
 from blizzard.hub.domain.observability.tracing.sweep import TraceExportSweep
 from blizzard.hub.store import schema
-from tests.config_inputs import init_hub
+from tests.config_inputs import build_hosted_hub_app, init_hub
 from tests.hub_event_rows import hub_event_detail, hub_event_kinds, hub_event_rows
 from tests.support import (
     HubHarness,
@@ -440,7 +440,7 @@ def test_the_hosted_app_builds_no_exporter_without_an_endpoint(tmp_path: Path, m
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setattr(hub_app, "OtlpTraceExporter", _refuse_construction)
 
-    app = hub_app.build_hosted_app(init_hub(tmp_path / "hub"))
+    app = build_hosted_hub_app(init_hub(tmp_path / "hub"))
 
     assert app.state.services.trace_export is None
 
@@ -459,7 +459,7 @@ def test_the_hosted_app_wires_the_sweep_when_an_endpoint_enables_tracing(
 
     monkeypatch.setattr(hub_app, "OtlpTraceExporter", construct)
 
-    app = hub_app.build_hosted_app(init_hub(tmp_path / "hub"))
+    app = build_hosted_hub_app(init_hub(tmp_path / "hub"))
 
     assert len(built) == 1
     assert app.state.services.trace_export is not None

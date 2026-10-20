@@ -177,6 +177,7 @@ from blizzard.hub.domain.runners.host_enrollment import HostEnrollmentService
 from blizzard.hub.domain.runners.host_report import HostReportService
 from blizzard.hub.domain.runners.registration import IReadRunnerRegistry, RetiredRunnerGuard
 from blizzard.hub.domain.runners.version import IVersionWindow
+from blizzard.hub.domain.runners.version_window import VersionWindow
 from blizzard.hub.domain.tenancy.administration import TenantAdministration
 from blizzard.hub.domain.tenancy.teardown import TenantTeardown, TenantTeardownSweep
 from blizzard.hub.domain.work_items.closure import CloseDrainSweep, CloseIntentDrainer
@@ -238,7 +239,6 @@ from blizzard.hub.system_artifacts import PACKAGED as SYSTEM_ARTIFACTS_PACKAGED
 from blizzard.hub.system_artifacts import PackagedSystemArtifacts
 from blizzard.hub.tenancy import StoreScope, TenantClosed, TenantId, UnknownTenant
 from blizzard.hub.work_sources.source import IWorkSourceRegistry
-from blizzard.wire.version_window import VersionWindow
 
 
 @dataclass(frozen=True)
@@ -1253,8 +1253,8 @@ def build_services(
     egress: EgressConfig | None = None,
     egress_path_key: bytes | None = None,
     annotation_interval_seconds: int,
+    version_window: VersionWindow,
     hub_version: str = __version__,
-    version_window: VersionWindow | None = None,
 ) -> HubServices:
     """Construct and wire the hub-level services over the shared :class:`HubCore`, and have its
     tenant cache serve each tenant's services (:func:`build_tenant_services`). The sweeps and exports
@@ -1262,7 +1262,7 @@ def build_services(
     the cache. ``work_sources`` builds a tenant's
     work-source registry; ``hub_command_runner``/``hub_workdir`` are the hub command node's
     mechanism seams, left ``None`` for real adapters; an explicit ``oauth_registry`` wins over
-    ``oauth_providers``; ``hub_version`` and ``version_window`` default to the installed and packaged ones."""
+    ``oauth_providers``; ``hub_version`` defaults to the installed one."""
     clock = core.clock
     store_connections = core.store_connections
     brokers = brokers or TenantBrokers()
@@ -1290,7 +1290,7 @@ def build_services(
         transcript_caps=transcript_caps,
         platform_tracer=platform_tracer,
         color_pick=color_pick,
-        versions=HubVersionWindow(hub_version, version_window or VersionWindow.load()),
+        versions=HubVersionWindow(hub_version, version_window),
     )
     core.tenants.serve(
         TenantServing(build=lambda stores, events: build_tenant_services(stores, parts, events=events), brokers=brokers)

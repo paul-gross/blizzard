@@ -277,6 +277,16 @@ def test_head_missing_a_document_is_an_error(tmp_path: Path, monkeypatch: pytest
     assert "HEAD has no contracts/store/hub.json" in result.output
 
 
+def test_head_missing_its_window_is_an_error_naming_the_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    repo = _Repo(tmp_path / "r")
+    repo.commit("chore: cut")
+    (repo.root / _WINDOW).unlink()
+    result = _run(repo, monkeypatch, "releases", "--json")
+    assert result.exit_code != 0
+    assert "cannot read the window file" in result.output
+    assert _WINDOW in result.output
+
+
 def test_releases_json_emits_the_baseline_shape(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     repo = _Repo(tmp_path / "r")
     _shipped(repo, deprecated_in={"v0.2.0-rc.1": False, "v0.2.0": False})
