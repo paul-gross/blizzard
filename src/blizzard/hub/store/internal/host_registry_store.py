@@ -178,6 +178,10 @@ class HostRegistryStore:
         with self._store.write("record_host_report") as conn:
             if not conn.execute(self._store.update(s.hosts).where(match).values(refreshed)).rowcount:
                 raise LookupError(f"host {host_id!r} was never added")
+            # The tenant-row lock the scoped write takes serializes a rename against an add or another rename, so the
+            # domain's earlier check cannot go stale before this write lands.
+            if name is not None and name in self._live_names(conn, host_id):
+                raise HostNameTaken(name)
             # Stamped only while unset, so of two racing first reports exactly one reads as first.
             first = conn.execute(
                 self._store.update(s.hosts).where(match, s.hosts.c.registered_at.is_(None)).values(registered_at=at)

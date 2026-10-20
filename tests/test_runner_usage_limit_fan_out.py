@@ -224,3 +224,25 @@ def test_the_fallback_reset_reads_only_the_runners_own_subscription(tmp_path) ->
     Advance(ctx).run()
 
     assert host.a.local_pause_reason() == f"usage limit: max via {CLAUDE_CODE_HARNESS_ID}"
+
+
+def test_a_direct_engage_reads_and_writes_under_the_brake_lock(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    host = _Host(tmp_path)
+    seen: list[str] = []
+
+    class _Spy(SqlAlchemyRunnerStore):
+        def local_brake_locked(self, locked):  # type: ignore[no-untyped-def]
+            seen.append("read")
+            return super().local_brake_locked(locked)
+
+        def record_local_pause_locked(self, *a, **k):  # type: ignore[no-untyped-def]
+            seen.append("write")
+            return super().record_local_pause_locked(*a, **k)
+
+    spy = _Spy(host.engine, runner_store_errors(), "rn_a")
+    service = PauseService(spy, FixedClock(_NOW))
+    service.engage(by="usage-limit", reason=_REASON)
+    service.engage(by="usage-limit", reason=_REASON)
+
+    assert seen == ["read", "write", "read"]
+    assert [r["reason"] for r in _reports(spy)] == [_REASON]
