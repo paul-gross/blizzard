@@ -22,13 +22,21 @@ from structlog.testing import capture_logs
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.flags import FlagRegistry, resolve_flags
 from blizzard.foundation.runner_identity_state import IdentityState
+from blizzard.foundation.runner_version import VersionRefusalReason
 from blizzard.runner.app import create_app
 from blizzard.runner.composition import held_hub_token
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.host_config import ResolvedToken, TokenSource
-from blizzard.runner.hub.client import IdentityRouteMissing, TokenIdentity, TokenRefusal
+from blizzard.runner.hub.client import (
+    HubVersionWindow,
+    IdentityRouteMissing,
+    TokenIdentity,
+    TokenRefusal,
+    VersionRefusal,
+)
 from blizzard.runner.hub.flags import FlagsHolder
 from blizzard.runner.hub.held_token import HubTokenHolder
+from blizzard.runner.hub.hub_version import HubVersion
 from blizzard.runner.hub.identity import IdentityVerdictHolder
 from blizzard.runner.hub.internal.http_hub import HeldTokenAuth, HttpHubClient
 from blizzard.runner.hub.internal.token_file import HubTokenFile
@@ -53,6 +61,13 @@ pytestmark = pytest.mark.component
 
 _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
 _RESET = "blizzard runner store reset /runner"
+_REFUSAL = VersionRefusal(
+    reason=VersionRefusalReason.TOO_OLD,
+    runner_version="0.1.4",
+    hub_version="0.3.0",
+    floor="0.2",
+    detail="runner 0.1.4 is below hub 0.3.0's floor 0.2; upgrade it",
+)
 _FLEET_FLAG = """
 [flag.fleet-thing]
 owner = "epic:ui-toolkit"
@@ -319,6 +334,45 @@ def test_a_hub_without_the_identity_read_lets_the_registration_reply_decide(tmp_
     assert [fact.kind for fact in hub.pushed] == ["lease.minted"]
 
 
+def test_a_version_refusal_halts_the_tick_and_registration_retries_until_one_is_admitted(tmp_path: Path) -> None:
+    hub = FakeHub(default_runner_id="r1")
+    hub.version_refusal = _REFUSAL
+    ctx = _ctx(tmp_path, hub)
+    _buffer_a_fact(ctx)
+
+    with capture_logs() as logs:
+        tick(ctx)
+        tick(ctx)
+        tick(ctx)
+
+    verdict = ctx.identity_verdict.verdict()
+    assert (verdict.state, verdict.reason) == (IdentityState.VERSION_REFUSED, _REFUSAL.detail)
+    assert len(hub.registered) == 3  # registered again on every tick while refused
+    assert (hub.push_facts_calls, hub.peek_queue_calls, hub.claims) == ([], 0, [])
+    warnings = [e for e in logs if e["log_level"] == "warning" and e["event"].startswith("runner refuses")]
+    assert [w["reason"] for w in warnings] == [_REFUSAL.detail]
+
+    hub.version_refusal = None
+    hub.hub_version, hub.window = "0.3.0", HubVersionWindow(floor="0.2", ceiling="0.3")
+    tick(ctx)
+
+    assert _state(ctx) is IdentityState.MATCHED
+    assert ctx.hub_version.current() == HubVersion(hub_version="0.3.0", window=hub.window)
+    tick(ctx)
+    assert [fact.kind for fact in hub.pushed] == ["lease.minted"]
+
+
+def test_a_version_refused_runner_is_not_cleared_by_its_token_check(tmp_path: Path) -> None:
+    hub = FakeHub(default_runner_id="r1")
+    ctx = _ctx(tmp_path, hub)
+    ctx.identity_verdict.refuse_version(_REFUSAL.detail)
+
+    IdentityCheck(ctx).run()
+
+    assert _state(ctx) is IdentityState.VERSION_REFUSED
+    assert ctx.identity_verdict.verdict().reason == _REFUSAL.detail
+
+
 @pytest.mark.parametrize(
     ("token_runner", "expected"),
     [("rn_store", IdentityState.MATCHED), ("rn_other", IdentityState.MISMATCHED)],
@@ -440,6 +494,18 @@ def test_the_hub_proxy_names_both_runners_and_the_reset_command_while_refusing(t
     detail = resp.json()["detail"]
     assert detail.startswith("runner_identity_mismatch")
     assert "rn_store" in detail and "rn_other" in detail and _RESET in detail
+    assert (forwarded, asked) == ([], [])
+
+
+def test_the_hub_proxy_names_the_windows_refusal_while_the_version_is_refused(tmp_path: Path) -> None:
+    verdict = IdentityVerdictHolder(_RESET)
+    verdict.record(IdentityState.MATCHED, store_runner_id="r1", token_runner_id="r1", checked_at=_NOW)
+    verdict.refuse_version(_REFUSAL.detail)
+    forwarded: list[str] = []
+    resp, _, asked = _proxied(tmp_path, forwarded, verdict=verdict)
+
+    assert resp.status_code == 503
+    assert resp.json()["detail"] == f"runner_version_refused: {_REFUSAL.detail}"
     assert (forwarded, asked) == ([], [])
 
 

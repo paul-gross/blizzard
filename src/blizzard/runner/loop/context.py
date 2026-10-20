@@ -33,6 +33,7 @@ from blizzard.runner.hub.chunk_status_cache import IChunkViews
 from blizzard.runner.hub.client import BindingDeclaration, IHubClient, ITokenIdentityReader
 from blizzard.runner.hub.flags import FlagsHolder
 from blizzard.runner.hub.held_token import HubTokenHolder
+from blizzard.runner.hub.hub_version import HubVersionHolder
 from blizzard.runner.hub.identity import IdentityVerdictHolder, RunnerIdentityHolder
 from blizzard.runner.leases.worker_stdout import IWorkerStdoutFiles
 from blizzard.runner.lifecycle.env_release import EnvironmentRelease
@@ -202,6 +203,8 @@ class LoopContext:
     #: This runner's flags as they stand — its own resolved answer with its hub's ``fleet`` answer applied, which the
     #: tick's identity check refreshes. The default holds an empty registry's answer.
     flags: FlagsHolder = field(default_factory=lambda: FlagsHolder(resolve_flags(FlagRegistry(), "runner", {}).flags))
+    #: The hub's version and window, as the latest registration reply answered them.
+    hub_version: HubVersionHolder = field(default_factory=HubVersionHolder)
     #: This tick's capability memo (``tick()`` wires it); ``None`` rebuilds it per read.
     capabilities: TickCapabilities | None = None
     #: The loop's own cross-tick harness-version cache — unlike ``capabilities`` above, never rebound per tick.

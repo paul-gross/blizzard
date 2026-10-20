@@ -135,6 +135,19 @@
       }
       <div class="foot">
         <span class="badges">
+          <!-- The version the runner last registered with, and the hub's judgement of it. -->
+          @if (row.version) {
+            <span class="version" data-testid="mobile-fleet-runner-version">{{ row.version }}</span>
+          }
+          @if (standing(row); as badge) {
+            <fleet-kit-badge
+              data-testid="mobile-fleet-runner-version-standing"
+              [attr.data-standing]="row.version_standing"
+              [tone]="badge.tone"
+              variant="soft"
+              >{{ badge.label }}</fleet-kit-badge
+            >
+          }
           <!-- Two brakes, two badges: a runner stopped by both shows both, since
                they are cleared by different people in different places. -->
           @if (row.locally_paused) {

@@ -106,6 +106,9 @@ def log_transition(holder: IdentityVerdictHolder, was: IdentityState, *, token_f
             reason=verdict.reason,
             reset_command=verdict.reset_command,
         )
+    elif verdict.state is IdentityState.VERSION_REFUSED:
+        _log.warning("runner refuses to work: the hub's version window refuses it", reason=verdict.reason)
+        return
     elif verdict.state is IdentityState.MATCHED:
         _log.info(
             "runner identity verified",

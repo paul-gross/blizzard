@@ -35,6 +35,7 @@ from sqlalchemy import Engine, event, make_url
 from sqlalchemy import insert as sa_insert
 from sqlalchemy.sql.base import Executable
 
+from blizzard import __version__
 from blizzard.auth_core import MEMBERSHIP_ROLES, Role
 from blizzard.foundation.clock import FixedClock, IClock
 from blizzard.foundation.flags import Flags
@@ -136,6 +137,7 @@ from blizzard.hub.work_sources.closer import IWorkCloser, WorkCloseError, WorkIt
 from blizzard.hub.work_sources.editor import IWorkEditor
 from blizzard.hub.work_sources.internal.hub_work_source import HubWorkSource
 from blizzard.hub.work_sources.source import IWorkSource, IWorkSourceRegistry, WorkItem, WorkSourceError
+from blizzard.wire.version_window import VersionWindow
 from blizzard.wire.work_source import WorkSourceDocument
 
 _GRAPH_T0 = datetime(2026, 1, 1, tzinfo=UTC)
@@ -1290,6 +1292,8 @@ def build_hub(
     egress_path_key: bytes | None = None,
     auto_register_claimants: bool = True,
     flags: Flags | None = None,
+    hub_version: str | None = None,
+    version_window: VersionWindow | None = None,
 ) -> HubHarness:
     """A migrated, fully-wired hub over ``tmp_path`` with fake external seams.
 
@@ -1298,7 +1302,7 @@ def build_hub(
     each fake source is stored as a configured record linked to the tenant's only project, and each seeded
     repository is linked to it too, while ``link=False`` leaves the sources unstored, serving no project, as a
     file-configured source is, and the repositories stored but unlinked; ``hub_command_runner``/``hub_workdir``
-    left ``None`` wire real adapters."""
+    left ``None`` wire real adapters; ``hub_version`` and ``version_window`` default to the installed and packaged."""
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
     config = HubConfig(
         root=tmp_path,
@@ -1380,6 +1384,8 @@ def build_hub(
         egress=config.egress,
         egress_path_key=egress_path_key,
         annotation_interval_seconds=config.annotation_interval_seconds,
+        hub_version=hub_version or __version__,
+        version_window=version_window,
     )
     hub_services.tenants.open_tenants.refresh()
     services = hub_services.tenants.open_services(default)

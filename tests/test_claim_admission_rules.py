@@ -13,6 +13,7 @@ import pytest
 from blizzard.foundation.chunk_status import TERMINAL_STATUSES, ChunkStatus
 from blizzard.foundation.claim_denials import ClaimDenialReason
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
+from blizzard.foundation.runner_version import VersionRefusalReason
 from blizzard.hub.domain.chunk.model import (
     CHUNK_VERB_LEGALITY,
     Chunk,
@@ -31,6 +32,7 @@ from blizzard.hub.domain.execution.claim import (
     ClaimDeniedPaused,
     ClaimDeniedTerminal,
     ClaimDeniedUnregistered,
+    ClaimDeniedVersionRefused,
     ClaimService,
     RekeyDeniedTerminal,
     first_unmet_prerequisite,
@@ -235,6 +237,33 @@ def test_a_retired_runner_is_refused_before_any_chunk_refusal() -> None:
         _admit(ChunkFacts(minted=True), registration=retired)
     with pytest.raises(RunnerRetired):
         _admit(_READY, unmet="chk_pre", registration=retired)
+
+
+_VERSION_REFUSED = replace(
+    _REGISTERED, reported_version="0.1.4", version_refusal=VersionRefusalReason.TOO_OLD, version_judged_at=_T0
+)
+
+
+def test_a_runner_refused_on_version_is_refused_before_any_chunk_refusal_in_both_gates() -> None:
+    ended = ChunkFacts(minted=True, operator_completed=True, operator_completed_at=_T0)
+    with pytest.raises(ClaimDeniedVersionRefused) as refused:
+        _admit(ended, route=_route(), registration=_VERSION_REFUSED)
+    assert refused.value.reason is VersionRefusalReason.TOO_OLD
+    assert "0.1.4" in str(refused.value) and "too-old" in str(refused.value)
+    with pytest.raises(ClaimDeniedVersionRefused):
+        refuse_paused_runner(replace(_VERSION_REFUSED, hub_paused=True), runner_id="runner-a")
+
+
+def test_unregistered_and_retired_are_judged_before_a_version_refusal() -> None:
+    with pytest.raises(ClaimDeniedUnregistered):
+        _admit(_READY, registration=replace(_VERSION_REFUSED, registered_at=None))
+    with pytest.raises(RunnerRetired):
+        _admit(_READY, registration=replace(_VERSION_REFUSED, retired=True, retired_at=_T0, retired_by="op"))
+
+
+def test_a_runner_admitted_on_version_claims() -> None:
+    admitted = replace(_REGISTERED, reported_version="0.3.0", version_judged_at=_T0)
+    assert _admit(_READY, registration=admitted) == _NODE
 
 
 def test_an_unmet_prerequisite_is_refused_before_a_capability_mismatch() -> None:

@@ -14,8 +14,10 @@ import pytest
 import sqlalchemy as sa
 from fastapi.testclient import TestClient
 
+from blizzard import __version__
 from blizzard.hub.store import schema
 from blizzard.hub.tenancy import TenantId
+from blizzard.wire.version_window import VersionWindow, line_of
 from tests.support import HubHarness, add_tenant, build_hub, default_project, default_tenant, seed_runner
 
 pytestmark = pytest.mark.component
@@ -23,6 +25,10 @@ pytestmark = pytest.mark.component
 
 #: What a registration answers when the runner sent no bindings.
 _NO_BINDINGS = {"bindings": None, "subscription": None, "subscription_unrostered": False}
+_HANDSHAKE = {
+    "hub_version": __version__,
+    "window": {"floor": VersionWindow.load().floor, "ceiling": line_of(__version__)},
+}
 
 
 def _bearer(token: str) -> dict[str, str]:
@@ -78,6 +84,7 @@ def test_an_added_runner_first_registers_under_its_minted_id(tmp_path: Path) -> 
         "runner_id": added.runner_id,
         "projects": _serving_default(hub),
         **_NO_BINDINGS,
+        **_HANDSHAKE,
         "runner_name": "r-claude",
         "first_registration": True,
         **_tenant(hub),
@@ -115,6 +122,7 @@ def test_a_restart_under_a_new_name_renames_the_runner_and_changes_nothing_else(
         "runner_id": added.runner_id,
         "projects": _serving_default(hub),
         **_NO_BINDINGS,
+        **_HANDSHAKE,
         "runner_name": "r-new",
         "first_registration": False,
         **_tenant(hub),
@@ -172,6 +180,7 @@ def test_a_runner_added_in_another_tenant_registers_naming_that_tenant(tmp_path:
         "runner_id": "rn-bravo-1",
         "projects": _serving_default(hub, bravo, entry="default"),
         **_NO_BINDINGS,
+        **_HANDSHAKE,
         "runner_name": "r-bravo",
         "first_registration": True,
         "tenant_id": bravo,

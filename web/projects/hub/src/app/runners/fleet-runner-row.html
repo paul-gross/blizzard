@@ -91,6 +91,20 @@
     <span class="none-inline">none</span>
   }
 </ng-template>
+<ng-template #version>
+  <span class="version">
+    <span data-testid="fleet-runner-version-number">{{ row().version ?? '—' }}</span>
+    @if (standing(); as badge) {
+      <fleet-kit-badge
+        data-testid="fleet-runner-version-standing"
+        [attr.data-standing]="row().version_standing"
+        [tone]="badge.tone"
+        variant="soft"
+        >{{ badge.label }}</fleet-kit-badge
+      >
+    }
+  </span>
+</ng-template>
 <ng-template #state>
   <span class="badges">
     @if (row().connection === connection.NEVER_CONNECTED) {

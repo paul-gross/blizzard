@@ -11,6 +11,7 @@ from collections.abc import Callable
 import httpx
 import pytest
 
+from blizzard import __version__
 from blizzard.runner.hub.client import (
     HostAddRefusalReason,
     HostAddRefused,
@@ -80,7 +81,22 @@ def test_report_sends_the_hosts_facts_and_no_name_and_answers_its_record() -> No
         "redirect_uris": ["https://box.test/auth/callback"],
         "workspaces": [{"workspace_id": "ws_1", "env_capacity": 3}],
         "subscriptions": [{"slug": "anthropic", "name": "Claude", "provider": "anthropic"}],
+        "version": __version__,
     }
+
+
+def test_a_report_the_window_refuses_answers_a_version_refusal_with_the_hubs_detail() -> None:
+    refusal = {
+        "reason": "too-old",
+        "runner_version": "0.1.4",
+        "hub_version": "0.3.0",
+        "floor": "0.2",
+        "detail": "upgrade the host to 0.2 or later",
+    }
+    answer = _host_client(_answering("POST", "/api/fleet/host", 409, refusal, [])).report(HostReport())
+    assert answer == HostRefused(
+        reason=HostRefusalReason.VERSION_REFUSED, status=409, detail="upgrade the host to 0.2 or later"
+    )
 
 
 def test_record_reads_the_hosts_own_record() -> None:

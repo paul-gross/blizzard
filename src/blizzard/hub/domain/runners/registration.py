@@ -16,10 +16,12 @@ from typing import Protocol
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.runner_connection import RunnerConnection
 from blizzard.foundation.runner_tokens import RunnerTokenRefusalReason
+from blizzard.foundation.runner_version import RunnerVersionStanding, VersionRefusalReason
 from blizzard.foundation.store.utc import as_utc, iso_utc
 from blizzard.foundation.subscription_miss import SampleMissReason
 from blizzard.foundation.usage_windows import admit_usage_window
 from blizzard.hub.domain.runners.route import Route
+from blizzard.hub.domain.runners.version import VersionJudgement
 
 #: Liveness staleness threshold — a chosen constant; a runner unheard-from for longer reads offline.
 STALE_AFTER = timedelta(minutes=5)
@@ -206,6 +208,29 @@ class RunnerRegistration:
     bindings: tuple[RunnerBinding, ...] | None = None
     #: The slug of the host subscription the bindings spend, as last sent; ``None`` when it named none.
     subscription: str | None = None
+    #: The version the latest judged registration reported; ``None`` when it reported none.
+    reported_version: str | None = None
+    #: Why the window refused the latest judged registration; ``None`` when it was admitted, or never judged.
+    version_refusal: VersionRefusalReason | None = None
+    #: When the latest registration was judged; ``None`` when none ever was.
+    version_judged_at: datetime | None = None
+
+    def version_standing(self) -> RunnerVersionStanding | None:
+        """``None`` for a runner never registered nor judged."""
+        if self.version_refusal is not None:
+            return RunnerVersionStanding.REFUSED
+        if self.version_judged_at is None and self.never_connected():
+            return None
+        if self.reported_version is None:
+            return RunnerVersionStanding.UNVERSIONED
+        return RunnerVersionStanding.IN_WINDOW
+
+    def version_changed(self, judgement: VersionJudgement) -> bool:
+        return (
+            self.version_judged_at is None
+            or judgement.reported_version != self.reported_version
+            or (None if judgement.refusal is None else judgement.refusal.reason) != self.version_refusal
+        )
 
     def reading_host_usage(
         self,
@@ -650,14 +675,22 @@ class IWriteRunnerRegistry(IReadRunnerRegistry, Protocol):
         projects: tuple[ServedEntry, ...] | None = None,
         bindings: tuple[RunnerBinding, ...] | None = None,
         subscription: str | None = None,
+        version: str | None = None,
         at: datetime,
     ) -> bool:
-        """Record a registration of the added runner ``runner_id``, refreshing ``last_seen_at``; returns
+        """Record a registration of the added runner ``runner_id``, refreshing ``last_seen_at``, as an admitted
+        ``version`` judged ``at`` (its refusal cleared); returns
         True on its first one, which also stamps ``registered_at``. ``name`` replaces the held name
         unless ``None``, and ``projects`` the served declaration unless ``None``; every other field is
         written on **every** registration, absent ones verbatim to null/empty, and ``subscriptions`` and
         ``bindings`` keep ``None`` vs ``()`` distinct. A ``runner_id``
         with no row raises :class:`LookupError` — a registration only ever follows an add."""
+        ...
+
+    def record_version_refusal(
+        self, runner_id: str, *, version: str | None, reason: VersionRefusalReason, at: datetime
+    ) -> None:
+        """Record the window's refusal of ``runner_id`` reporting ``version``, and nothing else it carried."""
         ...
 
     def touch_last_seen(self, runner_id: str, *, at: datetime) -> bool:

@@ -12,19 +12,24 @@ import httpx
 import pytest
 from structlog.testing import capture_logs
 
+from blizzard import __version__
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
 from blizzard.foundation.runner_tokens import RunnerTokenRefusalReason
+from blizzard.foundation.runner_version import VersionRefusalReason
 from blizzard.runner.harness.capability_snapshot import HarnessCapability
 from blizzard.runner.hub.client import (
     ChunkEndedError,
     ChunkNotFoundError,
     ClaimRequest,
     HubClientError,
+    HubVersionWindow,
     RegistrationReply,
+    RunnerVersionRefused,
     TokenIdentity,
     TokenRefusal,
     TranscriptPush,
+    VersionRefusal,
 )
 from blizzard.runner.hub.internal import http_hub as http_hub_module
 from blizzard.runner.hub.internal.http_hub import HttpHubClient
@@ -392,7 +397,53 @@ def test_register_runner_posts_registration() -> None:
         "capabilities": [],
         "subscriptions": [],
         "gates": [],
+        "version": __version__,
     }
+
+
+@pytest.mark.unit
+def test_register_runner_reads_the_hub_version_and_window_it_answers_with() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert json.loads(request.content)["version"] == "0.2.1"
+        return httpx.Response(
+            201,
+            json={
+                "runner_id": "rn_1",
+                "first_registration": True,
+                "hub_version": "0.3.0",
+                "window": {"floor": "0.2", "ceiling": "0.3"},
+            },
+        )
+
+    transport = httpx.MockTransport(handler)
+    client = HttpHubClient(httpx.Client(base_url="http://hub.test", transport=transport), version="0.2.1")
+    reply = client.register_runner("r-claude", "ws1")
+    assert (reply.hub_version, reply.window) == ("0.3.0", HubVersionWindow(floor="0.2", ceiling="0.3"))
+
+
+@pytest.mark.unit
+def test_a_registration_the_window_refuses_raises_the_typed_refusal() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            409,
+            json={
+                "reason": "too-old",
+                "runner_version": "0.1.4",
+                "hub_version": "0.3.0",
+                "floor": "0.2",
+                "detail": "upgrade runner 0.1.4 to 0.2 or later",
+            },
+        )
+
+    with pytest.raises(RunnerVersionRefused) as refused:
+        _client(handler).register_runner("r-claude", "ws1")
+    assert refused.value.refusal == VersionRefusal(
+        reason=VersionRefusalReason.TOO_OLD,
+        runner_version="0.1.4",
+        hub_version="0.3.0",
+        floor="0.2",
+        detail="upgrade runner 0.1.4 to 0.2 or later",
+    )
 
 
 @pytest.mark.unit
@@ -421,6 +472,7 @@ def test_register_runner_sends_null_capacity_when_unset() -> None:
         "capabilities": [],
         "subscriptions": [],
         "gates": [],
+        "version": __version__,
     }
 
 

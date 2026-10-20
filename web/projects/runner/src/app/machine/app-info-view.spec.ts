@@ -28,6 +28,7 @@ async function render(
     routingConflicts: runnerApi.RoutingConflictView[];
     identity: Pick<runnerApi.RunnerStatusView, 'runner_id' | 'runner_name'>;
     verdict: runnerApi.IdentityVerdictView;
+    hub: Partial<runnerApi.HubConnectivityView>;
   }> = {},
 ) {
   await TestBed.configureTestingModule({
@@ -38,6 +39,7 @@ async function render(
   fixture.componentRef.setInput('view', {
     ...RUNNER_STATUS,
     ...overrides.identity,
+    hub: { ...RUNNER_STATUS.hub, ...overrides.hub },
     gates: overrides.gates ?? [],
     capacities: overrides.capacities ?? RUNNER_STATUS.capacities,
     routing_conflicts: overrides.routingConflicts ?? [],
@@ -158,6 +160,7 @@ describe('LocalInfoView', () => {
   it.each([
     ['not_held', 'not held under this host (hs_1) at its hub'],
     ['tenant_differs', 'stands in tenant tn_a, not the host\'s tenant tn_b'],
+    ['version_refused', "runner 0.1.4 is older than this hub's oldest supported line, 0.2; upgrade the runner host to 0.2 or later, up to 0.3"],
   ] as const)('reads halted with its reason and no remedy when %s', async (state, reason) => {
     const { el } = await render({
       verdict: {
@@ -191,6 +194,17 @@ describe('LocalInfoView', () => {
     TestBed.resetTestingModule();
     const absent = await render();
     expect(absent.el.querySelector('[data-testid="runner-verdict"]')).toBeNull();
+  });
+
+  it('shows the hub version and the window it admits once a registration has answered, and no row before', async () => {
+    const answered = await render({ hub: { hub_version: '0.3.0', window: { floor: '0.2', ceiling: '0.3' } } });
+    const row = answered.el.querySelector('[data-testid="hub-version-row"]')!;
+    expect(row.querySelector('[data-testid="hub-version"]')?.textContent?.trim()).toBe('0.3.0');
+    expect(row.querySelector('[data-testid="hub-window"]')?.textContent?.trim()).toBe('· admits 0.2 – 0.3');
+
+    TestBed.resetTestingModule();
+    const unanswered = await render();
+    expect(unanswered.el.querySelector('[data-testid="hub-version-row"]')).toBeNull();
   });
 
   it('shows its configured name as not registered before the first registration', async () => {

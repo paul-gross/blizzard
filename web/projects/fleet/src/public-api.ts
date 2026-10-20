@@ -199,6 +199,8 @@ export {
   ProjectColor,
   RecordKind,
   RunnerConnection,
+  RunnerVersionStanding,
+  VersionRefusalReason,
   createRepositoryApiRepositoriesPost,
   createSecretApiSecretsPost,
   createWorkSourceApiWorkSourcesPost,

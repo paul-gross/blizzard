@@ -1,7 +1,7 @@
 import type { RunnerRegistryView } from 'fleet';
 import type { ChunkSummary } from 'fleet/shell';
 
-import { foldRunnerRows, lensRunners } from './runner-rows.model';
+import { foldRunnerRows, lensRunners, versionStandingBadge } from './runner-rows.model';
 
 const NOW = Date.parse('2026-07-16T12:00:00.000Z');
 
@@ -95,5 +95,27 @@ describe('lensRunners', () => {
 
   it('shows the runners serving the lensed project, and the unassigned ones, under a lens', () => {
     expect(lensRunners(runners, 'alpha').map((r) => r.runner_id)).toEqual(['r_alpha', 'r_both', 'r_none']);
+  });
+});
+
+describe('versionStandingBadge', () => {
+  const judged = (over: Partial<RunnerRegistryView>): RunnerRegistryView => ({ ...runner('rn_a'), ...over });
+
+  it('words each standing the hub judges, naming the reason of a refusal', () => {
+    expect(versionStandingBadge(judged({ version_standing: 'in_window' }))).toEqual({ label: 'in window', tone: 'running' });
+    expect(versionStandingBadge(judged({ version_standing: 'unversioned' }))).toEqual({ label: 'unversioned', tone: 'idle' });
+    expect(versionStandingBadge(judged({ version_standing: 'refused', version_refusal: 'too-old' }))).toEqual({
+      label: 'refused (too-old)',
+      tone: 'needs',
+    });
+    expect(versionStandingBadge(judged({ version_standing: 'refused', version_refusal: 'too-new' }))?.label).toBe('refused (too-new)');
+    expect(versionStandingBadge(judged({ version_standing: 'refused', version_refusal: 'unversioned' }))?.label).toBe(
+      'refused (unversioned)',
+    );
+  });
+
+  it('shows no badge for a runner the hub has not judged', () => {
+    expect(versionStandingBadge(judged({ version_standing: null }))).toBeNull();
+    expect(versionStandingBadge(judged({}))).toBeNull();
   });
 });

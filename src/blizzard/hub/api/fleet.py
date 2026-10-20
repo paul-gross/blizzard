@@ -59,6 +59,7 @@ from blizzard.hub.domain.execution.claim import (
     ClaimDeniedPaused,
     ClaimDeniedTerminal,
     ClaimDeniedUnregistered,
+    ClaimDeniedVersionRefused,
     RekeyDeniedTerminal,
 )
 from blizzard.hub.domain.execution.completion import MigrationTargets
@@ -78,6 +79,7 @@ from blizzard.hub.domain.runners.registration import (
     RunnerNeverConnected,
     RunnerRetired,
 )
+from blizzard.hub.domain.runners.version import RunnerVersionRefused
 from blizzard.hub.tenancy import StoreScope
 from blizzard.wire.analytics import AnalyticsCountsResponse, AnalyticsSpendResponse
 from blizzard.wire.chunk import (
@@ -110,7 +112,13 @@ from blizzard.wire.route import (
     RouteClaimTerminalDenial,
     RouteTokenRekeyResponse,
 )
-from blizzard.wire.runner import RunnerRegistrationRequest, RunnerRegistrationResponse, RunnerView
+from blizzard.wire.runner import (
+    RunnerRegistrationRequest,
+    RunnerRegistrationResponse,
+    RunnerVersionRefusal,
+    RunnerView,
+    VersionWindowView,
+)
 from blizzard.wire.scope import ScopeView
 from blizzard.wire.system_artifact import SystemArtifactView
 from blizzard.wire.transcript_segment import LeaseTranscriptView, TranscriptSegmentAck, TranscriptSegmentBatch
@@ -665,10 +673,10 @@ def claim_route(
     services: Services,
     fleet: Annotated[FleetRequest, Depends(FleetRequest.of_even_if_retired)],
 ) -> object:
-    """Claim a chunk; 403 if the runner is unregistered, paused, or retired at the hub, 409 if already claimed,
-    already terminal ({done, stopped}), not ready, standing on an unmet prerequisite, of a project
-    the runner does not serve, or incompatible with the runner's stored capabilities, else the first
-    node envelope."""
+    """Claim a chunk; 403 if the runner is unregistered, retired, refused on version, or paused at the hub, 409 if
+    already claimed, already terminal ({done, stopped}), not ready, standing on an unmet prerequisite, of a project
+    the runner does not serve, or incompatible with the runner's stored capabilities, else the first node
+    envelope."""
     runner_id = fleet.caller_id()
     chunk = services.chunks.record.get(claim.chunk_id)
     if chunk is None:
@@ -694,6 +702,9 @@ def claim_route(
     except ClaimDeniedUnregistered as exc:
         unregistered = RouteClaimPausedDenial(chunk_id=claim.chunk_id, runner_id=exc.runner_id, detail=str(exc))
         return JSONResponse(status_code=status.HTTP_403_FORBIDDEN, content=unregistered.model_dump())
+    except ClaimDeniedVersionRefused as exc:
+        version_refused = RouteClaimPausedDenial(chunk_id=claim.chunk_id, runner_id=exc.runner_id, detail=str(exc))
+        return JSONResponse(status_code=status.HTTP_403_FORBIDDEN, content=version_refused.model_dump())
     except ClaimDeniedTerminal as exc:
         terminal_denial = RouteClaimTerminalDenial(chunk_id=claim.chunk_id, status=exc.status.value)
         return JSONResponse(status_code=status.HTTP_409_CONFLICT, content=terminal_denial.model_dump())
@@ -895,18 +906,23 @@ def get_lease_transcript_segments(
     return transcripts_api.lease_content_view(chunk_id, node_id, epoch, records)
 
 
-@router.post("/runners", response_model=RunnerRegistrationResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/runners",
+    response_model=RunnerRegistrationResponse,
+    status_code=status.HTTP_201_CREATED,
+    responses={status.HTTP_409_CONFLICT: {"model": RunnerVersionRefusal}},
+)
 def register_runner(
     request: RunnerRegistrationRequest,
     services: Services,
     fleet: Annotated[FleetRequest, Depends(FleetRequest.of)],
-) -> RunnerRegistrationResponse:
+) -> object:
     """Register the calling runner — the one its bearer token names — with its workspace binding
     and the name it declares; idempotent.
 
     The hub never rejects a registration over its roster — it doubles as the heartbeat every tick,
     so the tenant it answers, named as the hub holds it now, carries a rename on the next tick. A
-    body ``runner_id`` from an older runner is ignored. A retired runner is refused 403."""
+    body ``runner_id`` from an older runner is ignored. A retired runner is refused 403, a refused version 409."""
     runner_id = fleet.caller_id()
     registration = services.registry.get_runner(runner_id)
     if registration is None:
@@ -926,24 +942,37 @@ def register_runner(
         if request.subscriptions is not None
         else None
     )
-    registered = services.fleet.register(
-        registration,
-        request.workspace_id,
-        name=request.name,
-        env_capacity=request.env_capacity,
-        public_url=request.url,
-        redirect_uris=tuple(request.redirect_uris),
-        capabilities=capabilities,
-        subscriptions=subscriptions,
-        gates=tuple(request.gates),
-        projects=request.projects,
-        bindings=(
-            None
-            if request.bindings is None
-            else tuple(RunnerBinding(b.project, b.workspace_id, b.agents) for b in request.bindings)
-        ),
-        subscription=request.subscription,
-    )
+    try:
+        registered = services.fleet.register(
+            registration,
+            request.workspace_id,
+            name=request.name,
+            env_capacity=request.env_capacity,
+            public_url=request.url,
+            redirect_uris=tuple(request.redirect_uris),
+            capabilities=capabilities,
+            subscriptions=subscriptions,
+            gates=tuple(request.gates),
+            projects=request.projects,
+            bindings=(
+                None
+                if request.bindings is None
+                else tuple(RunnerBinding(b.project, b.workspace_id, b.agents) for b in request.bindings)
+            ),
+            subscription=request.subscription,
+            version=request.version,
+        )
+    except RunnerVersionRefused as exc:
+        if exc.changed:
+            services.events.publish_runner_changed(runner_id, kind="registered", runner_name=registration.name)
+        refusal = RunnerVersionRefusal(
+            reason=exc.refusal.reason,
+            runner_version=exc.judgement.reported_version,
+            hub_version=exc.judgement.hub_version,
+            floor=exc.judgement.floor,
+            detail=exc.refusal.detail,
+        )
+        return JSONResponse(status_code=status.HTTP_409_CONFLICT, content=refusal.model_dump(mode="json"))
     if registered.changed:
         services.events.publish_runner_changed(runner_id, kind="registered", runner_name=registered.name)
     hosts = runners_api.hosts_of(services, [registration])
@@ -961,6 +990,8 @@ def register_runner(
         bindings=runners_api.binding_views(registered.bindings, flags),
         subscription=registered.subscription,
         subscription_unrostered=flags.subscription_unrostered,
+        hub_version=registered.version.hub_version,
+        window=VersionWindowView(floor=registered.version.floor, ceiling=registered.version.ceiling),
     )
 
 

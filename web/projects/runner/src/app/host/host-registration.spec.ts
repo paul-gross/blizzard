@@ -68,6 +68,20 @@ describe('HostRegistration', () => {
     expect(lines).toEqual(['host hs_1', 'the hub refuses the host token (revoked)']);
   });
 
+  it('reads version refused with the hub\'s sentence naming what to upgrade', async () => {
+    const detail = "runner 0.1.4 is older than this hub's oldest supported line, 0.2; upgrade the runner host to 0.2 or later, up to 0.3";
+    const { state, lines } = await render({
+      state: 'version_refused',
+      host_id: 'hs_1',
+      detail,
+      held_runner_ids: [],
+      buffered_facts: 0,
+    });
+
+    expect(state).toBe('version refused');
+    expect(lines).toEqual(['host hs_1', detail]);
+  });
+
   it('reads a hub without hosts with why and the facts it buffers', async () => {
     const { state, lines } = await render({
       state: 'no_hosts',

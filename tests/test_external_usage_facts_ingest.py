@@ -13,8 +13,10 @@ from pathlib import Path
 import pytest
 import sqlalchemy as sa
 
+from blizzard import __version__
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.fact_kinds import EXTERNAL_SUBSCRIPTION_USAGE_MISSED, EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED
+from blizzard.hub.api.version_window import HubVersionWindow
 from blizzard.hub.domain.chunk.event_log import EventLogService
 from blizzard.hub.domain.execution.detach import DetachService
 from blizzard.hub.domain.execution.facts import FactIngestService, PushedFact
@@ -25,6 +27,7 @@ from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.project_store import ProjectStore
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
+from blizzard.wire.version_window import VersionWindow
 from tests.support import build_hub, chunk_stores, emitted_events, hub_store_connections, migrate_to
 
 pytestmark = pytest.mark.component
@@ -62,6 +65,7 @@ def _service(engine: sa.Engine, clock: FixedClock) -> FactIngestService:
         detach=DetachService(route=chunks.route, exclusive=chunks.exclusive, clock=clock),
         retired=retired,
         served_projects=BulkProjectResolver(ProjectStore(store)),
+        versions=HubVersionWindow(__version__, VersionWindow.load()),
         clock=clock,
     )
     event_log = EventLogService(events=chunks.events, publisher=EventBroker(), chunks=chunks.record)

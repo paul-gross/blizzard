@@ -7431,6 +7431,17 @@
             ],
             "title": "Url"
           },
+          "version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          },
           "workspaces": {
             "default": [],
             "items": {
@@ -11841,6 +11852,17 @@
             ],
             "title": "Url"
           },
+          "version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          },
           "workspace_id": {
             "title": "Workspace Id",
             "type": "string"
@@ -11872,6 +11894,17 @@
           "first_registration": {
             "title": "First Registration",
             "type": "boolean"
+          },
+          "hub_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hub Version"
           },
           "projects": {
             "anyOf": [
@@ -11939,6 +11972,16 @@
               }
             ],
             "title": "Tenant Name"
+          },
+          "window": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VersionWindowView"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -12160,6 +12203,37 @@
             "title": "Subscriptions",
             "type": "array"
           },
+          "version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          },
+          "version_refusal": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VersionRefusalReason"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "version_standing": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RunnerVersionStanding"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "workspace_id": {
             "anyOf": [
               {
@@ -12268,6 +12342,54 @@
         ],
         "title": "RunnerTokenRevocationResponse",
         "type": "object"
+      },
+      "RunnerVersionRefusal": {
+        "description": "The hub's window refusing a runner's version.",
+        "properties": {
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "floor": {
+            "title": "Floor",
+            "type": "string"
+          },
+          "hub_version": {
+            "title": "Hub Version",
+            "type": "string"
+          },
+          "reason": {
+            "$ref": "#/components/schemas/VersionRefusalReason"
+          },
+          "runner_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Runner Version"
+          }
+        },
+        "required": [
+          "reason",
+          "hub_version",
+          "floor",
+          "detail"
+        ],
+        "title": "RunnerVersionRefusal",
+        "type": "object"
+      },
+      "RunnerVersionStanding": {
+        "enum": [
+          "in_window",
+          "unversioned",
+          "refused"
+        ],
+        "title": "RunnerVersionStanding",
+        "type": "string"
       },
       "RunnerView": {
         "description": "A registered runner's own view of its registration.\n\nThe two brakes stay separate: ``hub_paused`` is claims-only, while\n``locally_paused`` answers \"is it spawning at all?\". Subscription usage is advisory.",
@@ -14463,6 +14585,34 @@
           "type"
         ],
         "title": "ValidationError",
+        "type": "object"
+      },
+      "VersionRefusalReason": {
+        "enum": [
+          "too-old",
+          "too-new",
+          "unversioned"
+        ],
+        "title": "VersionRefusalReason",
+        "type": "string"
+      },
+      "VersionWindowView": {
+        "description": "The hub's compatibility window: the oldest major.minor line it admits, and the newest, which is its own.",
+        "properties": {
+          "ceiling": {
+            "title": "Ceiling",
+            "type": "string"
+          },
+          "floor": {
+            "title": "Floor",
+            "type": "string"
+          }
+        },
+        "required": [
+          "floor",
+          "ceiling"
+        ],
+        "title": "VersionWindowView",
         "type": "object"
       },
       "WorkItemAuthorView": {
@@ -23066,7 +23216,7 @@
     },
     "/api/fleet/routes": {
       "post": {
-        "description": "Claim a chunk; 403 if the runner is unregistered, paused, or retired at the hub, 409 if already claimed,\nalready terminal ({done, stopped}), not ready, standing on an unmet prerequisite, of a project\nthe runner does not serve, or incompatible with the runner's stored capabilities, else the first\nnode envelope.",
+        "description": "Claim a chunk; 403 if the runner is unregistered, retired, refused on version, or paused at the hub, 409 if\nalready claimed, already terminal ({done, stopped}), not ready, standing on an unmet prerequisite, of a project\nthe runner does not serve, or incompatible with the runner's stored capabilities, else the first node\nenvelope.",
         "operationId": "claim_route_api_fleet_routes_post",
         "requestBody": {
           "content": {
@@ -23108,7 +23258,7 @@
     },
     "/api/fleet/runners": {
       "post": {
-        "description": "Register the calling runner \u2014 the one its bearer token names \u2014 with its workspace binding\nand the name it declares; idempotent.\n\nThe hub never rejects a registration over its roster \u2014 it doubles as the heartbeat every tick,\nso the tenant it answers, named as the hub holds it now, carries a rename on the next tick. A\nbody ``runner_id`` from an older runner is ignored. A retired runner is refused 403.",
+        "description": "Register the calling runner \u2014 the one its bearer token names \u2014 with its workspace binding\nand the name it declares; idempotent.\n\nThe hub never rejects a registration over its roster \u2014 it doubles as the heartbeat every tick,\nso the tenant it answers, named as the hub holds it now, carries a rename on the next tick. A\nbody ``runner_id`` from an older runner is ignored. A retired runner is refused 403, a refused version 409.",
         "operationId": "register_runner_api_fleet_runners_post",
         "requestBody": {
           "content": {
@@ -23130,6 +23280,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerVersionRefusal"
+                }
+              }
+            },
+            "description": "Conflict"
           },
           "422": {
             "content": {

@@ -31,6 +31,8 @@ class HostReportRequest(BaseModel):
     redirect_uris: list[str] = []
     workspaces: list[HostWorkspace] = []
     subscriptions: list[RunnerSubscriptionDeclaration] = []
+    #: The blizzard version the host runs; ``None`` from a host that predates the handshake.
+    version: str | None = None
 
 
 class HostRunnerView(BaseModel):

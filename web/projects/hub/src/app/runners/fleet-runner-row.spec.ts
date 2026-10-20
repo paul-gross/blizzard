@@ -165,4 +165,22 @@ describe('FleetRunnerRow', () => {
     const locked = await render(r);
     expect(locked.el.querySelector('[data-testid="fleet-runner-toggle"]')).toBeNull();
   });
+
+  it('shows the runner’s version beside the hub’s standing for it, and a dash with no badge before a judgement', async () => {
+    const { el } = await render(row('rn_a', { version: '0.1.4', version_standing: 'refused', version_refusal: 'too-old' }));
+    expect(el.querySelector('[data-testid="fleet-runner-version-number"]')?.textContent?.trim()).toBe('0.1.4');
+    const badge = el.querySelector('[data-testid="fleet-runner-version-standing"]');
+    expect(badge?.textContent?.trim()).toBe('refused (too-old)');
+    expect(badge?.getAttribute('data-standing')).toBe('refused');
+
+    const { el: inWindow } = await render(row('rn_b', { version: '0.2.1', version_standing: 'in_window' }));
+    expect(inWindow.querySelector('[data-testid="fleet-runner-version-standing"]')?.textContent?.trim()).toBe('in window');
+
+    const { el: unversioned } = await render(row('rn_c', { version_standing: 'unversioned' }));
+    expect(unversioned.querySelector('[data-testid="fleet-runner-version-number"]')?.textContent?.trim()).toBe('—');
+    expect(unversioned.querySelector('[data-testid="fleet-runner-version-standing"]')?.textContent?.trim()).toBe('unversioned');
+
+    const { el: unjudged } = await render(row('rn_d'));
+    expect(unjudged.querySelector('[data-testid="fleet-runner-version-standing"]')).toBeNull();
+  });
 });

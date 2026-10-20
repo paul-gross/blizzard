@@ -128,6 +128,7 @@ from blizzard.hub.tenancy import StoreScope, TenantClosed, TenantId, UnknownTena
 from blizzard.hub.work_sources.internal.factory import WorkSourceEntry
 from blizzard.hub.work_sources.source import IWorkSourceRegistry
 from blizzard.wire.components import HUB_SCHEMA_COMPONENTS
+from blizzard.wire.version_window import VersionWindow
 
 #: The transcript-event derivation sweep's own interval — a module
 #: constant; its own change probe skips the pass when nothing changed.
@@ -496,13 +497,13 @@ def build_hosted_app(
     platform_tracing: IPlatformTracing | None = None,
     oauth_http_client: httpx.Client | None = None,
     flag_registry: FlagRegistry | None = None,
+    version_window: VersionWindow | None = None,
 ) -> FastAPI:
     """The ``host`` composition root: open the store and wire every fleet seam.
 
     ``platform_tracing`` defaults to the handle ``[tracing]`` and the OTLP environment decide.
-    ``oauth_http_client`` replaces the OAuth
-    providers' client. Either way, the engine and every outbound client are instrumented through it.
-    ``flag_registry`` is the registry the hub's flags resolve against — the packaged one unless given."""
+    ``oauth_http_client`` replaces the OAuth providers' client. Either way, the engine and every outbound client are
+    instrumented through it. ``flag_registry`` and ``version_window`` default to the packaged ones."""
     platform_tracing = platform_tracing or build_platform_tracing(
         config.tracing,
         os.environ,
@@ -575,6 +576,7 @@ def build_hosted_app(
         egress=config.egress,
         egress_path_key=_egress_path_key(config.egress),
         annotation_interval_seconds=config.annotation_interval_seconds,
+        version_window=version_window,
     )
     # Only once the store is at the expected schema head: a store mid-migration must
     # fail *readiness*, not *boot* (pinned: `test_ready_probe_false_on_unmigrated_store`).

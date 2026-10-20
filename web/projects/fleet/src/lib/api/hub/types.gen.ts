@@ -4628,6 +4628,10 @@ export type HostReportRequest = {
      */
     url?: string | null;
     /**
+     * Version
+     */
+    version?: string | null;
+    /**
      * Workspaces
      */
     workspaces?: Array<HostWorkspace>;
@@ -7571,6 +7575,10 @@ export type RunnerRegistrationRequest = {
      */
     url?: string | null;
     /**
+     * Version
+     */
+    version?: string | null;
+    /**
      * Workspace Id
      */
     workspace_id: string;
@@ -7592,6 +7600,10 @@ export type RunnerRegistrationResponse = {
      * First Registration
      */
     first_registration: boolean;
+    /**
+     * Hub Version
+     */
+    hub_version?: string | null;
     /**
      * Projects
      */
@@ -7620,6 +7632,7 @@ export type RunnerRegistrationResponse = {
      * Tenant Name
      */
     tenant_name?: string | null;
+    window?: VersionWindowView | null;
 };
 
 /**
@@ -7738,6 +7751,12 @@ export type RunnerRegistryView = {
      */
     subscriptions?: Array<SubscriptionUsageView>;
     /**
+     * Version
+     */
+    version?: string | null;
+    version_refusal?: VersionRefusalReason | null;
+    version_standing?: RunnerVersionStanding | null;
+    /**
      * Workspace Id
      */
     workspace_id?: string | null;
@@ -7826,6 +7845,45 @@ export type RunnerTokenRefusalReason = typeof RunnerTokenRefusalReason[keyof typ
 export type RunnerTokenRevocationResponse = {
     runner: RunnerRegistryView;
 };
+
+/**
+ * RunnerVersionRefusal
+ *
+ * The hub's window refusing a runner's version.
+ */
+export type RunnerVersionRefusal = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Floor
+     */
+    floor: string;
+    /**
+     * Hub Version
+     */
+    hub_version: string;
+    reason: VersionRefusalReason;
+    /**
+     * Runner Version
+     */
+    runner_version?: string | null;
+};
+
+/**
+ * RunnerVersionStanding
+ */
+export const RunnerVersionStanding = {
+    IN_WINDOW: 'in_window',
+    UNVERSIONED: 'unversioned',
+    REFUSED: 'refused'
+} as const;
+
+/**
+ * RunnerVersionStanding
+ */
+export type RunnerVersionStanding = typeof RunnerVersionStanding[keyof typeof RunnerVersionStanding];
 
 /**
  * RunnerView
@@ -9191,6 +9249,36 @@ export type ValidationError = {
      * Error Type
      */
     type: string;
+};
+
+/**
+ * VersionRefusalReason
+ */
+export const VersionRefusalReason = {
+    TOO_OLD: 'too-old',
+    TOO_NEW: 'too-new',
+    UNVERSIONED: 'unversioned'
+} as const;
+
+/**
+ * VersionRefusalReason
+ */
+export type VersionRefusalReason = typeof VersionRefusalReason[keyof typeof VersionRefusalReason];
+
+/**
+ * VersionWindowView
+ *
+ * The hub's compatibility window: the oldest major.minor line it admits, and the newest, which is its own.
+ */
+export type VersionWindowView = {
+    /**
+     * Ceiling
+     */
+    ceiling: string;
+    /**
+     * Floor
+     */
+    floor: string;
 };
 
 /**
@@ -13685,6 +13773,10 @@ export type RegisterRunnerApiFleetRunnersPostData = {
 };
 
 export type RegisterRunnerApiFleetRunnersPostErrors = {
+    /**
+     * Conflict
+     */
+    409: RunnerVersionRefusal;
     /**
      * Validation Error
      */

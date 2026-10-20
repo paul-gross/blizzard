@@ -11,6 +11,7 @@ import dataclasses
 from typing import Protocol
 
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.runner_identity_state import IdentityState
 from blizzard.runner.harness.capability_snapshot import TickCapabilities
 from blizzard.runner.hub.chunk_status_cache import MemoizingChunkViewCache
 from blizzard.runner.lifecycle.identity_check import IdentityCheck
@@ -74,15 +75,15 @@ def _tick(ctx: LoopContext) -> None:
     # Before any other hub call: until the token is verified to name the configured runner, `ctx.hub`
     # answers every call as an outage, so nothing below can read another runner's chunks as its own.
     _traced(ctx, IdentityCheck)
-    # A token naming another runner or refused by the hub, or a runner its host's hub does not hold under the
-    # host, drives no lease and delivers nothing; liveness, retention and the observation samples below stay
-    # local and keep running, so the status stays readable.
-    refusing = ctx.identity_verdict.verdict().refusing()
+    # A refusing verdict drives no lease and delivers nothing; the local steps below keep running, so the status
+    # stays readable.
+    verdict = ctx.identity_verdict.verdict()
+    refusing = verdict.refusing()
     if not refusing:
         ctx.chunk_views.prime(_primed_chunk_ids(ctx))
-    elif ctx.identity_verdict.registration_checks():
-        # A hub with no identity read: the registration reply is the only check, so it alone keeps
-        # running while refusing, or a restored token could never be seen.
+    elif ctx.identity_verdict.registration_checks() or verdict.state is IdentityState.VERSION_REFUSED:
+        # The registration alone lifts these, so it keeps running: on a hub with no identity read its reply is the
+        # only check, and a refused version lifts only on an admitted registration.
         _traced(ctx, Registration)
     # The spend-ceiling kill-switch — first, so it brakes the same tick it fires in.
     _traced(ctx, SpendCeiling)

@@ -13,6 +13,7 @@ from pydantic import BaseModel, StringConstraints
 
 from blizzard.foundation.runner_connection import RunnerConnection
 from blizzard.foundation.runner_tokens import RunnerTokenRefusalReason
+from blizzard.foundation.runner_version import RunnerVersionStanding, VersionRefusalReason
 from blizzard.foundation.subscription_miss import SampleMissReason
 
 
@@ -99,6 +100,27 @@ class RunnerRegistrationRequest(BaseModel):
     bindings: list[RunnerBinding] | None = None
     #: The slug of the host subscription every binding spends; ``None`` names none.
     subscription: str | None = None
+    #: The blizzard version this runner runs; ``None`` from a runner that predates the handshake.
+    version: str | None = None
+
+
+class VersionWindowView(BaseModel):
+    """The hub's compatibility window: the oldest major.minor line it admits, and the newest, which is its own."""
+
+    floor: str
+    ceiling: str
+
+
+class RunnerVersionRefusal(BaseModel):
+    """The hub's window refusing a runner's version."""
+
+    reason: VersionRefusalReason
+    #: The version the runner reported; ``None`` when it reported none, or one that does not parse.
+    runner_version: str | None = None
+    hub_version: str
+    floor: str
+    #: A sentence naming what to upgrade, and to which range.
+    detail: str
 
 
 class RunnerRegistrationResponse(BaseModel):
@@ -123,6 +145,10 @@ class RunnerRegistrationResponse(BaseModel):
     subscription: str | None = None
     #: Whether the host's roster lacks ``subscription`` — the hub then offers the runner no work.
     subscription_unrostered: bool = False
+    #: The hub's own version; ``None`` from a hub that predates the handshake.
+    hub_version: str | None = None
+    #: The window the hub judged this runner's version under; ``None`` from a hub that predates the handshake.
+    window: VersionWindowView | None = None
 
 
 class RunnerEnrollmentResponse(BaseModel):
@@ -296,6 +322,12 @@ class RunnerRegistryView(BaseModel):
     subscription_unrostered: bool = False
     # The host the runner stands under; `None` for a runner that stands alone.
     host_id: str | None = None
+    # The version the runner's latest registration reported; `None` when it reported none.
+    version: str | None = None
+    # Where that registration stands against the hub's window; `None` for a runner never registered.
+    version_standing: RunnerVersionStanding | None = None
+    # Why the window refused it, alongside a `refused` standing only.
+    version_refusal: VersionRefusalReason | None = None
 
 
 class RunnerRegistryListResponse(BaseModel):

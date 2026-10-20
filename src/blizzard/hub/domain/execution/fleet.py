@@ -29,6 +29,7 @@ from blizzard.hub.domain.runners.registration import (
 )
 from blizzard.hub.domain.runners.route import Route
 from blizzard.hub.domain.runners.served import IServedProjects, declaration_at_registration
+from blizzard.hub.domain.runners.version import IVersionWindow, RunnerVersionRefused, VersionJudgement
 
 _log = get_logger("blizzard.hub.registry")
 
@@ -54,6 +55,8 @@ class Registered:
     name: str
     projects: tuple[ServedEntry, ...]
     changed: bool
+    #: The window's judgement of the version it reported.
+    version: VersionJudgement
     #: The bindings and subscription the runner now holds — what it sent, ``None`` included.
     bindings: tuple[RunnerBinding, ...] | None = None
     subscription: str | None = None
@@ -83,6 +86,7 @@ class FleetService:
         detach: DetachService,
         retired: RetiredRunnerGuard,
         served_projects: IServedProjects,
+        versions: IVersionWindow,
         clock: IClock,
         stale_after: timedelta = STALE_AFTER,
     ) -> None:
@@ -95,6 +99,7 @@ class FleetService:
         self._facts = facts
         self._detach = detach
         self._retired = retired
+        self._versions = versions
         self._clock = clock
         self._stale_after = stale_after
 
@@ -113,6 +118,7 @@ class FleetService:
         projects: Sequence[str] | None = None,
         bindings: tuple[RunnerBinding, ...] | None = None,
         subscription: str | None = None,
+        version: str | None = None,
     ) -> Registered:
         """Register (or refresh) ``held``, a runner the hub added — the one its bearer token names.
 
@@ -122,15 +128,33 @@ class FleetService:
         only its unresolved entries. Sent ``bindings`` replace ``projects`` as the declaration, each binding's project
         in binding order; ``bindings`` and ``subscription`` are stored as sent. No entry is refused: a registration is
         also the runner's heartbeat. A retired runner raises
-        :class:`~blizzard.hub.domain.runners.registration.RunnerRetired` before any write."""
+        :class:`~blizzard.hub.domain.runners.registration.RunnerRetired` before any write. A ``version`` the window
+        refuses records only the judgement, then raises :class:`RunnerVersionRefused`."""
         held.refuse_if_retired(action="registration")
         runner_id = held.runner_id
+        now = self._clock.now()
+        judgement = self._versions.judge(version)
+        version_changed = held.version_changed(judgement)
+        refusal = judgement.refusal
+        if refusal is not None:
+            self._registry.record_version_refusal(
+                runner_id, version=judgement.reported_version, reason=refusal.reason, at=now
+            )
+            _log.info(
+                "runner registration refused on version",
+                runner_id=runner_id,
+                version=version,
+                reason=refusal.reason,
+                hub_version=judgement.hub_version,
+                floor=judgement.floor,
+            )
+            raise RunnerVersionRefused(runner_id, judgement, refusal, changed=version_changed)
         recorded_name = declared_name(name)
         declared = projects if bindings is None else [b.project for b in bindings]
         served = declaration_at_registration(held.served, declared, self._served_projects)
-        now = self._clock.now()
         changed = (
-            not RunnerLiveness.of(held, now=now, threshold=self._stale_after).online
+            version_changed
+            or not RunnerLiveness.of(held, now=now, threshold=self._stale_after).online
             or (recorded_name is not None and recorded_name != held.name)
             or workspace_id != held.workspace_id
             or env_capacity != held.env_capacity
@@ -156,6 +180,7 @@ class FleetService:
             projects=served,
             bindings=bindings,
             subscription=subscription,
+            version=judgement.reported_version,
             at=now,
         )
         _log.info(
@@ -175,6 +200,7 @@ class FleetService:
             name=recorded_name or held.name,
             projects=held.served if served is None else served,
             changed=changed or created,
+            version=judgement,
             bindings=bindings,
             subscription=subscription,
         )

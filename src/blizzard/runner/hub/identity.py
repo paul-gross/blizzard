@@ -102,7 +102,13 @@ def _conforms_current_runner_identity(x: RunnerIdentityHolder) -> ICurrentRunner
 
 #: The states in which the runner drives no lease and delivers nothing.
 REFUSING_STATES = frozenset(
-    {IdentityState.MISMATCHED, IdentityState.REFUSED, IdentityState.NOT_HELD, IdentityState.TENANT_DIFFERS}
+    {
+        IdentityState.MISMATCHED,
+        IdentityState.REFUSED,
+        IdentityState.NOT_HELD,
+        IdentityState.TENANT_DIFFERS,
+        IdentityState.VERSION_REFUSED,
+    }
 )
 
 
@@ -122,7 +128,7 @@ class HostStanding(StrEnum):
 class IdentityVerdict:
     """The latest identity check: its ``state``, the configured runner, the runner the token
     resolved to, when the hub last answered the check, the remedy that restores the token or the id, and —
-    for a refused token or a host standing that halts the runner — why."""
+    for a refused token or version, or a host standing that halts the runner — why."""
 
     state: IdentityState
     store_runner_id: str | None
@@ -171,16 +177,16 @@ class IdentityVerdictHolder:
     checks it, the host tick that judges its standing, the hub client and proxy it gates, and the status that
     reports it.
 
-    Two inputs held apart: the token's own verdict, which only the identity check and the registration write, and
-    the runner's standing under its host, which only the host tick writes. The verdict refuses when either one
-    refuses — the token's refusal first — so a check never clears a host refusal and a host answer never clears a
-    token's."""
+    Three inputs held apart, each with its sole writer — the token's verdict (identity check, registration), the
+    version refusal (registration), the host standing (host tick) — so no writer clears another's refusal; the
+    verdict refuses on any, token first, then version."""
 
     def __init__(self, reset_command: str, *, state: IdentityState = IdentityState.UNCHECKED) -> None:
         self._lock = threading.Lock()
         self._token = IdentityVerdict(
             state=state, store_runner_id=None, token_runner_id=None, checked_at=None, reset_command=reset_command
         )
+        self._version_refusal: str | None = None
         self._standing = HostStanding.UNKNOWN
         self._standing_reason: str | None = None
         self._registration_checks = False
@@ -193,6 +199,8 @@ class IdentityVerdictHolder:
         token = self._token
         if token.refusing():
             return token
+        if self._version_refusal is not None:
+            return replace(token, state=IdentityState.VERSION_REFUSED, reason=self._version_refusal)
         if self._standing is HostStanding.NOT_HELD:
             return replace(token, state=IdentityState.NOT_HELD, reason=self._standing_reason)
         if self._standing is HostStanding.TENANT_DIFFERS:
@@ -247,6 +255,23 @@ class IdentityVerdictHolder:
                 reset_command=self._token.reset_command,
                 reason=reason,
             )
+        return was
+
+    def version_refused(self) -> bool:
+        with self._lock:
+            return self._version_refusal is not None
+
+    def refuse_version(self, detail: str) -> IdentityState:
+        """Hold the window's refusal, ``detail`` naming what to upgrade; returns the composed state it replaced."""
+        with self._lock:
+            was = self._composed().state
+            self._version_refusal = detail
+        return was
+
+    def admit_version(self) -> IdentityState:
+        with self._lock:
+            was = self._composed().state
+            self._version_refusal = None
         return was
 
     def stand(self, standing: HostStanding, *, reason: str | None = None) -> None:

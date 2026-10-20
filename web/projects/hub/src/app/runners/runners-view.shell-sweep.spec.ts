@@ -41,6 +41,8 @@ const ROWS: readonly RunnerRow[] = [
     runner_id: 'rn_online',
     runner_name: 'online',
     added_at: NOW,
+    version: '0.2.1',
+    version_standing: 'in_window',
     connection: 'online',
     workspace_id: 'ws_a',
     registered_at: NOW,
@@ -79,6 +81,9 @@ const ROWS: readonly RunnerRow[] = [
     runner_id: 'rn_paused',
     runner_name: 'paused',
     added_at: NOW,
+    version: '0.1.4',
+    version_standing: 'refused',
+    version_refusal: 'too-old',
     connection: 'offline',
     workspace_id: 'ws_a',
     registered_at: NOW,
@@ -303,6 +308,18 @@ describe('mobile Fleet screen layout shell sweep (web:shell-sweep)', () => {
 
       const claim = root.querySelector<HTMLElement>('[data-runner="rn_online"] [data-testid="mobile-fleet-runner-claim"]')!;
       expect(claim.getBoundingClientRect().right).toBeLessThanOrEqual(cards[0].getBoundingClientRect().right + 1);
+
+      // The version and its standing badge sit in the card's foot beside the brake badges, and must
+      // wrap inside the card rather than widen it.
+      for (const id of ['rn_online', 'rn_paused']) {
+        const versionCard = root.querySelector<HTMLElement>(`[data-runner="${id}"]`)!;
+        const badge = versionCard.querySelector<HTMLElement>('[data-testid="mobile-fleet-runner-version-standing"]')!;
+        expect(badge, `${id} shows no version standing`).not.toBeNull();
+        expect(badge.getBoundingClientRect().width).toBeGreaterThan(0);
+        expect(badge.getBoundingClientRect().right).toBeLessThanOrEqual(versionCard.getBoundingClientRect().right + 1);
+      }
+      const refused = root.querySelector<HTMLElement>('[data-runner="rn_paused"] [data-testid="mobile-fleet-runner-version-standing"]')!;
+      expect(refused.textContent?.trim()).toBe('refused (too-old)');
 
       // A retired row's marker carries the operator's name, which can be long: it must stay
       // inside its own card rather than widening it.

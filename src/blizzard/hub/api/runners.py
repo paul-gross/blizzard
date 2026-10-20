@@ -186,6 +186,9 @@ def registry_view(
         bindings=binding_views(r.bindings, flags),
         subscription=r.subscription,
         subscription_unrostered=flags.subscription_unrostered,
+        version=r.reported_version,
+        version_standing=r.version_standing(),
+        version_refusal=r.version_refusal,
     )
 
 

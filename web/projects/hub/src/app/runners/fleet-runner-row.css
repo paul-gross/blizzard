@@ -67,6 +67,12 @@
   flex-wrap: wrap;
   gap: 4px;
 }
+.version {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
 .none-inline {
   color: var(--label-dim);
   font-size: var(--fs-xs);

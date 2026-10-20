@@ -16,6 +16,7 @@ from blizzard.foundation.claim_denials import ClaimDenialReason
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.roles import domain_model
+from blizzard.foundation.runner_version import VersionRefusalReason
 from blizzard.foundation.tokens import TokenHash
 from blizzard.hub.domain.chunk.model import (
     Chunk,
@@ -72,6 +73,16 @@ class ClaimDeniedUnregistered(Exception):
     def __init__(self, *, runner_id: str) -> None:
         super().__init__(f"runner {runner_id} is not registered at the hub")
         self.runner_id = runner_id
+
+
+class ClaimDeniedVersionRefused(Exception):
+    """The window refused the claiming runner's latest registration — refused before any race."""
+
+    def __init__(self, *, runner_id: str, reason: VersionRefusalReason, version: str | None) -> None:
+        reported = "no version" if version is None else f"version {version}"
+        super().__init__(f"runner {runner_id} reporting {reported} is refused by the hub's window: {reason.value}")
+        self.runner_id = runner_id
+        self.reason = reason
 
 
 class ClaimDeniedTerminal(Exception):
@@ -144,14 +155,24 @@ class RekeyDeniedTerminal(Exception):
 
 
 def refuse_paused_runner(registration: RunnerRegistration | None, *, runner_id: str) -> RunnerRegistration:
-    """Refuse a claim from a runner unregistered (never connected included), retired, or paused at
-    the hub registry, ahead of any race; the registration the claim stands on otherwise."""
+    """Refuse, in order, an unregistered, retired, version-refused, or paused runner; return its registration."""
     if registration is None or registration.never_connected():
         raise ClaimDeniedUnregistered(runner_id=runner_id)
     registration.refuse_if_retired(action="claim")
+    refuse_version_refused(registration)
     if registration.hub_paused:
         raise ClaimDeniedPaused(runner_id=runner_id)
     return registration
+
+
+def refuse_version_refused(registration: RunnerRegistration) -> None:
+    """Refuse a claim by a runner whose latest registration the hub's window refused."""
+    if registration.version_refusal is not None:
+        raise ClaimDeniedVersionRefused(
+            runner_id=registration.runner_id,
+            reason=registration.version_refusal,
+            version=registration.reported_version,
+        )
 
 
 def refuse_unserved_project(registration: RunnerRegistration, *, chunk_id: str, project_id: str) -> None:
@@ -193,9 +214,9 @@ def first_unmet_prerequisite(
 @dataclass(frozen=True)
 class ClaimAdmission:
     """Whether a runner may claim a chunk, judged on what the claim lock read. Refusals run in a fixed order,
-    each its own error: unregistered (never connected included), retired, ended, held route, not ``ready``,
-    unmet prerequisite, a project the runner does not serve, then incapable runner (a registration reporting no
-    capabilities is incapable of everything). The runner-paused brake is judged before the lock
+    each its own error: unregistered (never connected included), retired, refused on version, ended, held route, not
+    ``ready``, unmet prerequisite, a project the runner does not serve, then incapable runner (a registration
+    reporting no capabilities is incapable of everything). The runner-paused brake is judged before the lock
     (:func:`refuse_paused_runner`)."""
 
     chunk: Chunk
@@ -214,6 +235,7 @@ class ClaimAdmission:
         if registration is None or registration.never_connected():
             raise ClaimDeniedUnregistered(runner_id=runner_id)
         registration.refuse_if_retired(action="claim")
+        refuse_version_refused(registration)
         chunk_id = self.chunk.chunk_id
         facts = ChunkFacts.or_default(self.facts)
         status = facts.status() if self.facts is not None else ChunkStatus.NOT_READY

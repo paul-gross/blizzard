@@ -3051,7 +3051,8 @@
           "registered",
           "refused",
           "no_hosts",
-          "unreachable"
+          "unreachable",
+          "version_refused"
         ],
         "title": "HostRegistrationState",
         "type": "string"
@@ -3456,6 +3457,17 @@
             "title": "Endpoint",
             "type": "string"
           },
+          "hub_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hub Version"
+          },
           "last_contact_at": {
             "anyOf": [
               {
@@ -3470,6 +3482,16 @@
           "reachable": {
             "title": "Reachable",
             "type": "boolean"
+          },
+          "window": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VersionWindowView"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -3489,13 +3511,14 @@
           "mismatched",
           "refused",
           "not_held",
-          "tenant_differs"
+          "tenant_differs",
+          "version_refused"
         ],
         "title": "IdentityState",
         "type": "string"
       },
       "IdentityVerdictView": {
-        "description": "Whether the runner's token resolves to the runner its host file configures (``store_runner_id``).\n\n``unchecked`` until the hub first answers the check, ``matched`` while it does, ``mismatched``\nwhile the token names another runner, ``refused`` while the hub refuses the token (unknown, revoked,\nretired) \u2014 the runner then drives no lease until a check resolves it again. On a registered host,\n``not_held`` while the hub does not hold the runner under the host and ``tenant_differs`` while it stands\nin another tenant than the host's halt the runner alone. ``reason`` says why for those last three.\n``reset_command`` names how to restore the token: the token variable and the configured id.",
+        "description": "Whether the runner's token resolves to the runner its host file configures (``store_runner_id``).\n\n``unchecked`` until the hub first answers the check, ``matched`` while it does, ``mismatched``\nwhile the token names another runner, ``refused`` while the hub refuses the token (unknown, revoked,\nretired) \u2014 the runner then drives no lease until a check resolves it again. On a registered host,\n``not_held`` while the hub does not hold the runner under the host and ``tenant_differs`` while it stands\nin another tenant than the host's halt the runner alone, as does ``version_refused`` while the hub's\nversion window refuses it. ``reason`` says why for those last four.\n``reset_command`` names how to restore the token: the token variable and the configured id.",
         "properties": {
           "checked_at": {
             "anyOf": [
@@ -6091,6 +6114,25 @@
           "type"
         ],
         "title": "ValidationError",
+        "type": "object"
+      },
+      "VersionWindowView": {
+        "description": "The hub's compatibility window: the oldest major.minor line it admits, and the newest, which is its own.",
+        "properties": {
+          "ceiling": {
+            "title": "Ceiling",
+            "type": "string"
+          },
+          "floor": {
+            "title": "Floor",
+            "type": "string"
+          }
+        },
+        "required": [
+          "floor",
+          "ceiling"
+        ],
+        "title": "VersionWindowView",
         "type": "object"
       },
       "WorkItemAuthorView": {

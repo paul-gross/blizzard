@@ -43,19 +43,24 @@ export class LocalInfoView {
   } as const;
 
   /** The hub-link facts table's rows — a method, not a stored computed, since the
-   * identity/verdict/endpoint/link/loop rows need the `<ng-template>`s this template declares for them
+   * identity/verdict/endpoint/link/hub-version/loop rows need the `<ng-template>`s this template declares for them
    * (`KitFactList`'s own templated-row contract). */
   protected factRows(
     identityValue: TemplateRef<unknown>,
     verdictValue: TemplateRef<unknown>,
     endpointValue: TemplateRef<unknown>,
     linkValue: TemplateRef<unknown>,
+    hubVersionValue: TemplateRef<unknown>,
     loopValue: TemplateRef<unknown>,
   ): readonly KitFact[] {
     const v = this.view();
     // A runner with no loop checking its token reports no verdict, so the row is left out.
     const verdict: readonly KitFact[] = v.identity
       ? [{ label: 'identity', template: verdictValue, testid: 'runner-verdict' }]
+      : [];
+    // The hub names its version only in answer to a registration, so the row waits for the first one.
+    const hubVersion: readonly KitFact[] = v.hub.hub_version
+      ? [{ label: 'hub version', template: hubVersionValue, testid: 'hub-version-row' }]
       : [];
     const bindings = v.capacities.bindings ?? [];
     const slots = bindings.reduce((sum, binding) => sum + binding.agents, 0);
@@ -75,6 +80,7 @@ export class LocalInfoView {
       ...verdict,
       { label: 'endpoint', template: endpointValue },
       { label: 'link', template: linkValue },
+      ...hubVersion,
       { label: 'last flush', value: this.lastFlushLabel(), testid: 'hub-last-flush' },
       { label: 'buffered', value: `${v.hub.buffer_depth} events`, testid: 'hub-buffered' },
       { label: 'agents', value: `${v.capacities.used}/${slots} slots`, testid: 'agents-total' },

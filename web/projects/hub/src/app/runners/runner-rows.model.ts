@@ -3,11 +3,13 @@ import {
   type HostRegistryView,
   RunnerConnection,
   type RunnerRegistryView,
+  RunnerVersionStanding,
   type SubscriptionPace,
   compactRef,
   formatSeenAgo,
   formatSeenTag,
   hubSubscriptionPaces,
+  type Tone,
 } from 'fleet';
 import type { ChunkSummary } from 'fleet/shell';
 
@@ -40,6 +42,30 @@ export function runnerSeenLabel(row: RunnerRow): string {
 export function runnerSeenTag(row: RunnerRow): string {
   if (row.connection === RunnerConnection.NEVER_CONNECTED) return '[never]';
   return formatSeenTag(row.last_seen_at, row.nowMs);
+}
+
+/** A runner's version standing as its badge shows it: the label and the tone it renders in. */
+export interface VersionStandingBadge {
+  readonly label: string;
+  readonly tone: Tone;
+}
+
+/**
+ * The hub's latest judgement of a runner's version against its window, as a badge — `in window`,
+ * `unversioned`, or `refused (<reason>)`; `null` for a runner the hub has not judged yet. The hub
+ * decides the standing; this only words it.
+ */
+export function versionStandingBadge(row: RunnerRegistryView): VersionStandingBadge | null {
+  switch (row.version_standing) {
+    case RunnerVersionStanding.IN_WINDOW:
+      return { label: 'in window', tone: 'running' };
+    case RunnerVersionStanding.UNVERSIONED:
+      return { label: 'unversioned', tone: 'idle' };
+    case RunnerVersionStanding.REFUSED:
+      return { label: row.version_refusal ? `refused (${row.version_refusal})` : 'refused', tone: 'needs' };
+    default:
+      return null;
+  }
 }
 
 /** A registry row: the runner plus its claims and subscription pace groups, pre-folded
