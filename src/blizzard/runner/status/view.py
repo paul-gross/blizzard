@@ -361,6 +361,7 @@ class RunnerStatusService:
                 effort=escalation.resolved_effort,
                 workspace_root=self._workspaces.spawn_root(bindings[0].workspace_id if bindings else None),
                 runner_dir=self._runner_dir,
+                runner=self._runner_name,
             )
             views.append(
                 EscalationView(

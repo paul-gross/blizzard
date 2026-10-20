@@ -256,23 +256,28 @@ class IWriteTakeoverRepository(IReadTakeoverRepository, Protocol):
 class TakeoverCommand:
     """The ``blizzard runner takeover`` CLI invocation an escalation composes when it can —
     composed here so the form lives beside the concept it names rather than inline at each
-    call site. Both operands are shell-quoted: a hub-minted chunk id never needs it
-    (``src/blizzard/foundation/ids.py`` grammar), but the composed string is pasted into a shell."""
+    call site. Every operand is shell-quoted: a hub-minted chunk id never needs it
+    (``src/blizzard/foundation/ids.py`` grammar), but the composed string is pasted into a shell.
+
+    ``runner`` names the runner holding the chunk: a host serving several refuses an omitted
+    ``--runner``, so the pasted command must carry it. Empty omits the flag."""
 
     chunk_id: str
     runner_dir: str
+    runner: str = ""
 
     @property
     def wrapped(self) -> str:
-        return f"blizzard runner takeover {shlex.quote(self.chunk_id)} --dir {shlex.quote(self.runner_dir)}"
+        command = f"blizzard runner takeover {shlex.quote(self.chunk_id)} --dir {shlex.quote(self.runner_dir)}"
+        return f"{command} --runner {shlex.quote(self.runner)}" if self.runner else command
 
     @classmethod
-    def wrapped_for(cls, chunk_id: str, *, resume_command: str, runner_dir: str) -> str | None:
+    def wrapped_for(cls, chunk_id: str, *, resume_command: str, runner_dir: str, runner: str = "") -> str | None:
         """The wrapped command an escalation carries beside ``resume_command``, or ``None``
         when it can carry none: no raw resume command to wrap, or no known runner dir."""
         if not resume_command or not runner_dir:
             return None
-        return cls(chunk_id, runner_dir).wrapped
+        return cls(chunk_id, runner_dir, runner).wrapped
 
 
 @domain_model
@@ -300,6 +305,7 @@ class EscalationCommands:
         effort: str | None,
         workspace_root: str,
         runner_dir: str,
+        runner: str = "",
     ) -> EscalationCommands:
         """Composed from the escalation's own stamps (``model``, ``effort``), so a takeover
         lands in exactly the configuration the parked session ran with, never a fresh
@@ -312,7 +318,8 @@ class EscalationCommands:
             SpawnCwd.of_session(workspace_root, workdir), session.session_id, model=model, effort=effort
         )
         return cls(
-            resume=resume, wrapped=TakeoverCommand.wrapped_for(chunk_id, resume_command=resume, runner_dir=runner_dir)
+            resume=resume,
+            wrapped=TakeoverCommand.wrapped_for(chunk_id, resume_command=resume, runner_dir=runner_dir, runner=runner),
         )
 
 

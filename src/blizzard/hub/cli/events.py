@@ -22,7 +22,11 @@ class FeedListing(Listing):
         runner = f" runner={row['runner_id']}" if row.get("runner_id") else ""
         chunk = f" chunk={row['chunk_id']}" if row.get("chunk_id") else ""
         node = f" node={row['node_name']}" if row.get("node_name") else ""
-        return f"{row['recorded_at']}  {row['severity']:<8} {row['kind']}{runner}{chunk}{node}  {row['message']}"
+        # An escalation row carries its explanation as `detail.detail`; other rows' payloads stay JSON-only.
+        payload = row.get("detail")
+        explained = payload.get("detail") if isinstance(payload, dict) else None
+        why = f" ({explained})" if isinstance(explained, str) and explained else ""
+        return f"{row['recorded_at']}  {row['severity']:<8} {row['kind']}{runner}{chunk}{node}  {row['message']}{why}"
 
 
 @click.command("events", cls=FleetCommand)
