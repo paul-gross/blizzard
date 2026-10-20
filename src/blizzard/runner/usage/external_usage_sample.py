@@ -2,7 +2,7 @@
 whichever runners spend it, off any runner's tick.
 
 Directly callable (``bzh:steppable-loop``); ``runner host`` runs it on the host tick's own
-:class:`~blizzard.runner.usage.periodic_pass_driver.PeriodicPassDriver`, so a sample blocked on the vendor's endpoint
+:class:`~blizzard.runner.loop.periodic_pass_driver.PeriodicPassDriver`, so a sample blocked on the vendor's endpoint
 never holds a runner's tick (``bzh:lane-contract`` clause 5)."""
 
 from __future__ import annotations

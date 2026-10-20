@@ -76,8 +76,8 @@ from blizzard.runner.hub.internal.token_file import HubTokenFile
 from blizzard.runner.hub.served_projects import ServedProjectsAnswer
 from blizzard.runner.ingest import IIngestStores, ITokenFiles, RunnerIngest
 from blizzard.runner.lifecycle.host_lane_drain import HostLaneDrain
-from blizzard.runner.lifecycle.host_tick import HostTick
 from blizzard.runner.listeners import Listeners
+from blizzard.runner.loop.host_tick import HostTick
 from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
 from blizzard.runner.runtime import migration_runner
 from blizzard.runner.store.errors import RunnerStoreErrorFactory

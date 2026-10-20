@@ -7714,7 +7714,7 @@
    "over_cap": 2,
    "total": 66
   },
-  "blizzard/runner/lifecycle/host_tick.py": {
+  "blizzard/runner/loop/host_tick.py": {
    "comments": 0,
    "docstrings": 9,
    "over_cap": 0,
@@ -9274,7 +9274,7 @@
    "over_cap": 0,
    "total": 149
   },
-  "blizzard/runner/usage/periodic_pass_driver.py": {
+  "blizzard/runner/loop/periodic_pass_driver.py": {
    "comments": 2,
    "docstrings": 7,
    "over_cap": 0,

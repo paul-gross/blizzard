@@ -260,6 +260,7 @@ if TYPE_CHECKING:
     from blizzard.runner.lifecycle.dormant import DormantContext
     from blizzard.runner.lifecycle.drain import DrainContext
     from blizzard.runner.lifecycle.fill import FillContext
+    from blizzard.runner.lifecycle.held_binding_completion import HeldBindingCompletionContext
     from blizzard.runner.lifecycle.held_chunk import HeldChunkContext
     from blizzard.runner.lifecycle.identity_check import IdentityCheckContext
     from blizzard.runner.lifecycle.judgement.git_commits import GitCommitsContext
@@ -306,6 +307,9 @@ if TYPE_CHECKING:
         return ctx
 
     def _conforms_to_fill(ctx: LoopContext) -> FillContext:
+        return ctx
+
+    def _conforms_to_held_binding_completion(ctx: LoopContext) -> HeldBindingCompletionContext:
         return ctx
 
     def _conforms_to_usage_limit(ctx: LoopContext) -> UsageLimitContext:

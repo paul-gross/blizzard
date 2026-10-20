@@ -225,6 +225,24 @@ def check_token(
     return answer
 
 
+class TickScope(StrEnum):
+    """How much of a tick runs after the identity check; the local steps run in every scope."""
+
+    RUN_ALL = "run_all"
+    REGISTRATION_ONLY = "registration_only"
+    SKIP = "skip"
+
+
+def tick_scope(verdict: IdentityVerdict, *, registration_checks: bool) -> TickScope:
+    """A refusing verdict drives no lease and delivers nothing; the registration still runs where only its reply can
+    lift the refusal — a hub with no identity read (``registration_checks``), or a refused version."""
+    if not verdict.refusing():
+        return TickScope.RUN_ALL
+    if registration_checks or verdict.state is IdentityState.VERSION_REFUSED:
+        return TickScope.REGISTRATION_ONLY
+    return TickScope.SKIP
+
+
 @dataclass(frozen=True)
 class IdentityCheck:
     """Verify that the token resolves to the configured runner, filling in the tenant a matching answer names and

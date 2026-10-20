@@ -15,10 +15,10 @@ from blizzard.foundation.credential_renewal import RenewalFailureReason, Renewal
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.loop.context import LoopConfig
+from blizzard.runner.loop.periodic_pass_driver import PeriodicPassDriver
 from blizzard.runner.loop.tick import tick
 from blizzard.runner.subscriptions.credential_renewer import RenewalOutcome, RenewalOutcomeKind
 from blizzard.runner.usage.credential_renewal import CredentialRenewalPass, RenewableSubscription
-from blizzard.runner.usage.periodic_pass_driver import PeriodicPassDriver
 from tests.runner_fakes import (
     FIXTURE_RUNNER_ID,
     FakeCredentialRenewer,

@@ -101,6 +101,7 @@ from blizzard.runner.lifecycle.identity_check import (
     reset_hazard,
 )
 from blizzard.runner.listeners import ListenerError, Uds
+from blizzard.runner.loop.periodic_pass_driver import PeriodicPassDriver
 from blizzard.runner.loop_wiring import LoopWiring, PeriodicDriver
 from blizzard.runner.runtime import (
     IStoreLocation,
@@ -114,7 +115,6 @@ from blizzard.runner.store import MIGRATIONS_DIR
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
 from blizzard.runner.stores import HostReadStores, RunnerReadStores
 from blizzard.runner.tracing.sweep import announce_rejected_tracing
-from blizzard.runner.usage.periodic_pass_driver import PeriodicPassDriver
 
 ENV_TICK_SECONDS = "BZ_RUNNER_TICK_SECONDS"
 DEFAULT_TICK_SECONDS = 30.0

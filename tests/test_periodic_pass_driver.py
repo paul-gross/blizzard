@@ -10,7 +10,7 @@ import time
 import pytest
 
 from blizzard.foundation.logging import get_logger
-from blizzard.runner.usage.periodic_pass_driver import PeriodicPassDriver
+from blizzard.runner.loop.periodic_pass_driver import PeriodicPassDriver
 
 pytestmark = pytest.mark.unit
 

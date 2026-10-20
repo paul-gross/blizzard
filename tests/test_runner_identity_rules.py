@@ -1,5 +1,6 @@
 """The runner's identity rules, by value: the token verdict, what a refusing verdict says and how it is restored, the
-host identity a hub answer adopts, when the host is answered as itself, and whether a store is foreign."""
+host identity a hub answer adopts, when the host is answered as itself, whether a store is foreign, and how
+much of a tick a verdict lets run."""
 
 from __future__ import annotations
 
@@ -12,7 +13,13 @@ from blizzard.foundation.runner_identity_state import IdentityState
 from blizzard.runner.hub.host_identity import HostIdentity, HostIdentityAlreadyRecorded, adopted
 from blizzard.runner.hub.host_registration import HostRegistrationStatus
 from blizzard.runner.hub.identity import IdentityVerdict, judged
-from blizzard.runner.lifecycle.identity_check import ForeignStore, ForeignStoreKind, foreign_store
+from blizzard.runner.lifecycle.identity_check import (
+    ForeignStore,
+    ForeignStoreKind,
+    TickScope,
+    foreign_store,
+    tick_scope,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -94,3 +101,21 @@ def test_a_store_naming_ours_beside_a_foreign_runner_is_mixed_and_one_naming_onl
     assert foreign_store(("rn_x", "rn_y"), {"rn_1"}) == ForeignStore(
         kind=ForeignStoreKind.ALIEN, named=("rn_x", "rn_y"), foreign=("rn_x", "rn_y")
     )
+
+
+@pytest.mark.parametrize(
+    ("state", "registration_checks", "scope"),
+    [
+        (IdentityState.MATCHED, False, TickScope.RUN_ALL),
+        (IdentityState.UNCHECKED, True, TickScope.RUN_ALL),
+        (IdentityState.MISMATCHED, False, TickScope.SKIP),
+        (IdentityState.REFUSED, False, TickScope.SKIP),
+        (IdentityState.NOT_HELD, False, TickScope.SKIP),
+        (IdentityState.REFUSED, True, TickScope.REGISTRATION_ONLY),
+        (IdentityState.VERSION_REFUSED, False, TickScope.REGISTRATION_ONLY),
+    ],
+)
+def test_a_tick_runs_every_step_unless_refusing_and_the_registration_alone_when_it_can_lift_the_refusal(
+    state: IdentityState, registration_checks: bool, scope: TickScope
+) -> None:
+    assert tick_scope(_verdict(state), registration_checks=registration_checks) is scope
