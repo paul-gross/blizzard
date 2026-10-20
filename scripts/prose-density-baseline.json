@@ -10672,7 +10672,7 @@
    "comments": 10,
    "docstrings": 35,
    "over_cap": 5,
-   "total": 195
+   "total": 197
   },
   "support.py": {
    "comments": 62,
@@ -13618,7 +13618,7 @@
    "comments": 0,
    "docstrings": 17,
    "over_cap": 0,
-   "total": 203
+   "total": 212
   },
   "test_question_decision_project_api.py": {
    "comments": 2,
@@ -13704,6 +13704,12 @@
    "over_cap": 0,
    "total": 370
   },
+  "test_rehearsal_workflow.py": {
+   "comments": 0,
+   "docstrings": 1,
+   "over_cap": 0,
+   "total": 79
+  },
   "test_release_inventory.py": {
    "comments": 0,
    "docstrings": 4,
@@ -13720,7 +13726,7 @@
    "comments": 2,
    "docstrings": 19,
    "over_cap": 0,
-   "total": 363
+   "total": 417
   },
   "test_repo_files.py": {
    "comments": 1,
@@ -13756,7 +13762,7 @@
    "comments": 0,
    "docstrings": 0,
    "over_cap": 0,
-   "total": 114
+   "total": 124
   },
   "test_restart_claim_race.py": {
    "comments": 4,

@@ -19,7 +19,7 @@
 # than the FULL sweep, and where the wall-time figures live) is owned by
 # upper-tiers.yml, not restated here. The e2e acceptance loop (`mise run e2e`, incl. the
 # Playwright board scenario) remains a local + tag-only tier, not a `push` gate
-# (build.md).
+# (build.md). The upgrade rehearsal (rehearsal.yml) runs here and on `-rc.` tags only.
 name: push
 
 on:
@@ -136,13 +136,20 @@ jobs:
             dist/*-requirements*.txt
           if-no-files-found: error
 
+  rehearsal:
+    # Each supported release upgraded to this commit's dev wheel; the dev channel waits on it.
+    needs: [gate, dev-build]
+    uses: ./.github/workflows/rehearsal.yml
+    with:
+      candidate_artifact: blizzard-dev-wheel-${{ needs.dev-build.outputs.version }}
+
   dev-image:
     name: build + publish dev hub image (edge + sha)
     # Needs dev-build (not just gate + upper-tiers) solely for its computed dev
     # version string (outputs.version, above) — do not "simplify" this away by
     # recomputing the version inline here, or the wheel and the image can drift
     # apart on what "the dev version" means for the same commit.
-    needs: [gate, upper-tiers, dev-build]
+    needs: [gate, upper-tiers, dev-build, rehearsal]
     runs-on: ubuntu-latest
     permissions:
       contents: read

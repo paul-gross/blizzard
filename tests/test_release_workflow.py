@@ -38,6 +38,10 @@ def _verify_job() -> dict:
     return _job("verify")
 
 
+def _wheel_job() -> dict:
+    return _job("wheel")
+
+
 def _uses(step: dict, action: str) -> bool:
     return step.get("uses", "").startswith(f"{action}@")
 
@@ -81,12 +85,14 @@ def test_each_job_holds_exactly_its_own_scopes() -> None:
     }
     assert _publish_job()["permissions"] == {"contents": "write"}
     assert _verify_job()["permissions"] == {"contents": "read"}
+    assert _wheel_job()["permissions"] == {"contents": "read"}
+    assert _job("rehearsal")["permissions"] == {"contents": "read"}
 
 
 def test_version_tag_check_runs_before_anything_is_built() -> None:
     """The version/tag agreement check must fail fast, before the
     wheel or image build spends any CI time on a release that can't publish."""
-    steps = _build_job()["steps"]
+    steps = _wheel_job()["steps"]
     check_idx = _step_index(steps, lambda s: "check-version-tag.sh" in str(s.get("run", "")))
     wheel_build_idx = _step_index(steps, lambda s: "build-wheel.sh" in str(s.get("run", "")))
     assert check_idx < wheel_build_idx
@@ -94,7 +100,7 @@ def test_version_tag_check_runs_before_anything_is_built() -> None:
 
 @pytest.mark.parametrize("tag", ["v0.2.0-rc.1", "v0.2.0"])
 def test_release_wheel_stamps_the_full_tag_version(tmp_path, tag: str) -> None:
-    steps = _build_job()["steps"]
+    steps = _wheel_job()["steps"]
     derive = steps[_step_index(steps, lambda s: s.get("id") == "ver")]
     wheel = steps[_step_index(steps, lambda s: str(s.get("run", "")).strip() == "./scripts/build-wheel.sh")]
     assert wheel["env"]["BLIZZARD_VERSION"] == "${{ steps.ver.outputs.version }}"
@@ -107,6 +113,50 @@ def test_release_wheel_stamps_the_full_tag_version(tmp_path, tag: str) -> None:
     )
     assert result.returncode == 0, result.stderr
     assert f"version={tag[1:]}" in output.read_text().splitlines()
+    assert f"prerelease={'true' if '-rc.' in tag else 'false'}" in output.read_text().splitlines()
+
+
+def test_the_prerelease_flag_publish_reads_comes_from_the_wheel_job() -> None:
+    assert _wheel_job()["outputs"]["prerelease"] == "${{ steps.ver.outputs.prerelease }}"
+    assert _build_job()["outputs"]["prerelease"] == "${{ needs.wheel.outputs.prerelease }}"
+    publish_env = next(s for s in _publish_job()["steps"] if "run" in s)["env"]
+    assert publish_env["PRERELEASE"] == "${{ needs.build.outputs.prerelease }}"
+
+
+def test_wheel_hands_the_wheel_and_its_requirements_to_rehearsal_and_build() -> None:
+    steps = _wheel_job()["steps"]
+    upload = steps[_step_index(steps, lambda s: _uses(s, "actions/upload-artifact"))]
+    assert upload["with"]["name"] == "release-wheel"
+    assert upload["with"]["path"].split() == ["dist/*.whl", "dist/*-requirements*.txt"]
+    assert _step_index(steps, lambda s: "build-wheel.sh" in str(s.get("run", ""))) < steps.index(upload)
+
+
+def test_build_publishes_the_rehearsed_wheel_rather_than_building_another() -> None:
+    steps = _build_job()["steps"]
+    assert not any("build-wheel.sh" in str(s.get("run", "")) for s in steps)
+    fetch = _step_index(steps, lambda s: _uses(s, "actions/download-artifact") and s["with"]["name"] == "release-wheel")
+    push = _step_index(steps, lambda s: "build-push-action" in str(s.get("uses", "")))
+    assert steps[fetch]["with"]["path"] == "dist"
+    assert fetch < push
+
+
+def test_the_rehearsal_runs_on_a_candidate_tag_after_the_wheel_against_the_releases_before_it() -> None:
+    job = _job("rehearsal")
+    assert job["uses"] == "./.github/workflows/rehearsal.yml"
+    assert job["if"] == "contains(github.ref_name, '-rc.')"
+    assert job["needs"] == ["wheel"]
+    assert job["with"] == {"candidate_artifact": "release-wheel", "tag": "${{ github.ref_name }}"}
+
+
+def test_build_waits_for_the_rehearsal_and_runs_past_it_only_when_skipped() -> None:
+    build = _build_job()
+    assert build["needs"] == ["gate", "compat", "service-tier", "crash-sweep", "e2e", "wheel", "rehearsal"]
+    assert build["if"] == "${{ !cancelled() && !failure() }}"
+
+
+def test_publish_and_verify_follow_only_a_successful_predecessor() -> None:
+    assert _publish_job()["if"] == "${{ !cancelled() && needs.build.result == 'success' }}"
+    assert _verify_job()["if"] == "${{ !cancelled() && needs.publish.result == 'success' }}"
 
 
 def test_release_notes_are_generated_not_auto_generated() -> None:
@@ -233,7 +283,9 @@ def test_the_compat_job_runs_before_any_build_with_read_only_scope() -> None:
 
 def test_build_fetches_the_compat_report_to_the_root_before_the_notes() -> None:
     steps = _build_job()["steps"]
-    download = _step_index(steps, lambda s: _uses(s, "actions/download-artifact"))
+    download = _step_index(
+        steps, lambda s: _uses(s, "actions/download-artifact") and s["with"]["name"] == "compat-breaks"
+    )
     notes = _step_index(steps, lambda s: "change-notes render" in str(s.get("run", "")))
     inventory = _step_index(steps, lambda s: "release-inventory.sh" in str(s.get("run", "")))
     assert steps[download]["with"] == {"name": "compat-breaks", "path": "."}
@@ -299,7 +351,9 @@ def test_verify_holds_only_the_script_not_a_checkout() -> None:
     ],
 )
 def test_signing_and_artifact_actions_are_pinned_by_commit_sha(action: str) -> None:
-    uses = [step["uses"] for name in ("build", "publish") for step in _job(name)["steps"] if _uses(step, action)]
+    uses = [
+        step["uses"] for name in ("wheel", "build", "publish") for step in _job(name)["steps"] if _uses(step, action)
+    ]
     assert uses, f"no step uses {action}"
     for ref in uses:
         assert re.fullmatch(rf"{re.escape(action)}@[0-9a-f]{{40}}", ref), ref

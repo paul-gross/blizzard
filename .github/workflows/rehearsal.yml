@@ -1,0 +1,139 @@
+# The upgrade rehearsal (blizzard:rehearsal) as a reusable check suite.
+#
+# `push.yml` calls it on every `master` push and `release.yml` on every `-rc.` tag, before
+# the image push; a pull request never runs it. Each leg installs one supported release's
+# published wheel, seeds it, and upgrades it to the caller's candidate wheel on one store
+# backend. What a leg asserts is owned by the tier itself, `tests/rehearsal/`.
+#
+# The matrix is never empty: with no supported release, `releases` emits one leg with an
+# empty baseline, which reports that there is nothing to rehearse and passes, so a
+# caller's `needs` always sees a real result.
+name: rehearsal
+
+on:
+  workflow_call:
+    inputs:
+      candidate_artifact:
+        description: >-
+          The workflow artifact holding the candidate wheel and its -requirements-pg.txt.
+        type: string
+        required: true
+      tag:
+        description: >-
+          The v* tag under test on a tag run, left out of the supported releases so a
+          candidate never rehearses against itself. Empty on a branch run.
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  releases:
+    name: list the supported releases
+    runs-on: ubuntu-latest
+    outputs:
+      baselines: ${{ steps.list.outputs.baselines }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Every tag: the supported set is read from them.
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          python-version: "3.12"
+      - run: uv sync
+      - name: emit one baseline per supported release, or one empty baseline
+        id: list
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          args=(releases --json)
+          [ -z "$TAG" ] || args+=(--tag "${TAG#v}")
+          baselines="$(uv run blizzard-compat "${args[@]}" | jq -c '[.releases[].tag] | if . == [] then [""] else . end')"
+          echo "baselines=$baselines" >> "$GITHUB_OUTPUT"
+          echo "Rehearsing from: $baselines"
+
+  leg:
+    name: rehearse ${{ matrix.baseline || 'no release' }} on ${{ matrix.backend }} (blizzard:rehearsal)
+    needs: [releases]
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        baseline: ${{ fromJSON(needs.releases.outputs.baselines) }}
+        backend: [sqlite, postgres]
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # Short: each daemon's unix socket lives under it, and a socket path is capped near 100 bytes.
+      BLIZZARD_REHEARSAL_ROOT: /tmp/rr-${{ matrix.backend }}
+    steps:
+      - name: checkout blizzard
+        uses: actions/checkout@v4
+        with:
+          path: blizzard
+          # The baseline's store contract and OpenAPI document are read from its tag.
+          fetch-depth: 0
+          persist-credentials: false
+      - name: resolve and checkout blizzard-mock (the baseline's own, else master)
+        uses: ./blizzard/.github/actions/resolve-mock-ref
+        with:
+          baseline: ${{ matrix.baseline }}
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          python-version: "3.12"
+          working-directory: blizzard
+          cache-dependency-glob: |
+            uv.lock
+            ../blizzard-mock/uv.lock
+      - name: git identity for fixture/forge git operations
+        run: |
+          git config --global user.email "ci@blizzard.local"
+          git config --global user.name "blizzard CI"
+      - name: provision blizzard (the test process reflects Postgres stores)
+        run: cd blizzard && uv sync --extra postgres
+      - name: provision blizzard-mock (mock forge + mock-data CLI + mock-claude-code)
+        run: cd blizzard-mock && uv sync
+      - name: fetch the candidate wheel
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: ${{ inputs.candidate_artifact }}
+          path: ${{ runner.temp }}/candidate
+      - name: upgrade rehearsal — `mise run rehearsal` against the fetched candidate
+        env:
+          BLIZZARD_REHEARSAL: "1"
+          BLIZZARD_REHEARSAL_BASELINE: ${{ matrix.baseline }}
+          BLIZZARD_REHEARSAL_CANDIDATE: ${{ runner.temp }}/candidate
+          BLIZZARD_REHEARSAL_PG_URL: ${{ matrix.backend == 'postgres' && 'postgresql://postgres:postgres@localhost:5432/postgres' || '' }}
+          BACKEND: ${{ matrix.backend }}
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          if [ -z "$BLIZZARD_REHEARSAL_BASELINE" ]; then
+            echo "::notice::no release is supported, so there is no upgrade to rehearse"
+            exit 0
+          fi
+          cd blizzard && uv run --extra postgres pytest -m rehearsal tests/rehearsal/ -k "$BACKEND" -v
+      - name: upload both daemons' logs
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: rehearsal-logs-${{ matrix.baseline || 'none' }}-${{ matrix.backend }}
+          path: ${{ env.BLIZZARD_REHEARSAL_ROOT }}/**/*.log
+          if-no-files-found: warn

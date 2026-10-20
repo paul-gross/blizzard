@@ -196,6 +196,7 @@ also_copy = [
     ".github/workflows/gate.yml",
     ".github/workflows/pr.yml",
     ".github/workflows/push.yml",
+    ".github/workflows/rehearsal.yml",
     ".github/workflows/release.yml",
     ".github/workflows/upper-tiers.yml",
     ".github/actions/resolve-mock-ref",
