@@ -216,6 +216,7 @@ also_copy = [
     "scripts/release-inventory.sh",
     "scripts/release-notes.sh",
     "scripts/restated-invariants.json",
+    "scripts/verify-release.sh",
     "src/blizzard/foundation/flags/registry.toml",
     "src/blizzard/wire/window.toml",
     "tests/fixtures/claude_code_telemetry",

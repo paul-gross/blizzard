@@ -127,25 +127,31 @@ the last successful baseline is clean again, `wire-compat-deployed` passes and `
 history rewrite required.
 
 [`.github/workflows/release.yml`](../.github/workflows/release.yml) (tag `v*`) runs the full suite — gate, service tier,
-the **full** crash sweep, and e2e — then two jobs. `build` builds the wheel with the embedded frontend, pushes a
+the **full** crash sweep, and e2e — then three jobs. `build` builds the wheel with the embedded frontend, pushes a
 multi-arch (`linux/amd64` + `linux/arm64`) hub image to GHCR, signs it keylessly by its manifest-list digest
 (`cosign sign --yes --recursive`), attests its build provenance, assembles the release's attached files with
 [`scripts/release-inventory.sh`](../scripts/release-inventory.sh) — the wheel, both hashed requirements files with their
 project lines, the image file naming the digest, `compat-breaks.json` when the build produced it, and `SHA256SUMS` over
 all of them — attests the provenance of every attached file, and uploads them as one workflow artifact. `publish` then
 downloads that artifact and makes one `gh release create` call with every file attached; there is no external
-package-index publish.
+package-index publish. `verify` runs last, once the release page exists, holding only `contents: read` and a copy of
+[`scripts/verify-release.sh`](../scripts/verify-release.sh) taken from the tag's tree: it proves the image's signature
+and attestations, the attached files, and an install from the release page, so a red `verify` is a red run on a release
+that already exists. Anyone can run the same check as `scripts/verify-release.sh <tag>` with `gh` (with its
+`attestation` command), `cosign`, and `uv`, and no checkout; it refuses a release cut before `v0.2.0-rc.2`, the first
+one it can verify.
 
 The release tag fan-out (`vX.Y.Z` → exact + minor + `latest`; `vX.Y.Z-rc.*` → exact only) lives in
 [`scripts/image-tags.sh`](../scripts/image-tags.sh), unit-tested by `tests/test_image_tags.py`, and the attached set's
-assembly in `scripts/release-inventory.sh`, unit-tested by `tests/test_release_inventory.py` — never inline in workflow
-YAML.
+assembly in `scripts/release-inventory.sh`, unit-tested by `tests/test_release_inventory.py`, and its post-publish proof
+in `scripts/verify-release.sh`, unit-tested by `tests/test_verify_release.py` — never inline in workflow YAML.
 
 The workflow-level `permissions:` is `contents: read`, so the release workflow's test jobs hold no write scope. Job-level
 blocks replace the workflow-level one: `build` declares `contents: read`, `packages: write` (the GHCR push),
 `id-token: write` (the OIDC identity), and `attestations: write`; `publish` declares only `contents: write`
-(`gh release create`). The image push runs in `build`, before `publish`, so a failed image build cannot leave a Release
-advertising a missing image; `tests/test_release_workflow.py` pins each job's scopes and the read-only workflow level.
+(`gh release create`); `verify` declares only `contents: read`. The image push runs in `build`, before `publish`, so a
+failed image build cannot leave a Release advertising a missing image; `tests/test_release_workflow.py` pins each job's
+scopes and the read-only workflow level.
 
 Every signature and attestation carries the identity
 `https://github.com/paul-gross/blizzard/.github/workflows/release.yml@refs/tags/v<version>`, issued by
