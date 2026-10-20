@@ -5,7 +5,7 @@
 # so an agent or human can reproduce the gate before pushing:
 #   ruff format --check · ruff check · pyright · Vale prose lint ·
 #   structural gate (ast-grep scan + test) · pytest (unit + component) · OpenAPI
-#   spec drift · hub↔runner wire compatibility · change notes · flag lifecycle · eslint · vitest · web
+#   spec drift · compatibility against supported releases · change notes · flag lifecycle · eslint · vitest · web
 #   structural gate · bundle composition · story render · generated-client drift
 #
 # Invoke as `mise run gate` or `./scripts/ci-gate.sh`. Frontend steps run live
@@ -76,9 +76,9 @@ if [ -n "$(git ls-files --others --exclude-standard -- contracts/)" ]; then
 fi
 echo "OK: committed contract documents match the exporter."
 
-# --- hub↔runner wire compatibility (bzh:fleet-wire-additive) ---------------
-step "wire compatibility: mise run wire-compat"
-mise run wire-compat
+# --- compatibility against the supported releases (bzh:released-surface-additive) ---
+step "compatibility: mise run compat"
+mise run compat
 
 # --- change notes: changes/ holds only well-formed notes --------------------
 step "change notes: mise run change-notes"

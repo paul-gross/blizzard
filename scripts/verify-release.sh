@@ -28,8 +28,8 @@ SPDX_PREDICATE="https://spdx.dev/Document/v2.3"
 # The first release signed, attested, and inventoried as the contract describes; an earlier
 # tag is refused by name rather than failed on its first missing file.
 FIRST_VERIFIABLE="0.2.0-rc.2"
-# The first release whose workflow also writes `compat-breaks.json`; unset until one does.
-COMPAT_BREAKS_SINCE=""
+# The first release whose workflow also writes `compat-breaks.json`.
+COMPAT_BREAKS_SINCE="0.2.0-rc.3"
 
 usage() {
   echo "usage: $0 <tag>   (vX.Y.Z or vX.Y.Z-rc.N)" >&2

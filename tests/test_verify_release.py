@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import stat
 import subprocess
 import sys
@@ -113,6 +114,8 @@ class _Release:
         (self.files / f"blizzard-hub-{version}-image.txt").write_text(
             f"ghcr.io/paul-gross/blizzard-hub@{self.digest}\n"
         )
+        if version != "0.2.0-rc.2":  # the one verifiable release cut before the report existed
+            (self.files / "compat-breaks.json").write_text("{}")
         self.sum()
 
         for name, body in {"gh": _GH, "cosign": _COSIGN, "uv": _UV, "curl": _CURL}.items():
@@ -156,7 +159,8 @@ def release(tmp_path: Path) -> _Release:
 
 def _with_compat_breaks_since(release: _Release, since: str) -> Path:
     copy = release.dir / "verify-release.sh"
-    copy.write_text(_SCRIPT.read_text().replace('COMPAT_BREAKS_SINCE=""', f'COMPAT_BREAKS_SINCE="{since}"'))
+    text = re.sub(r'COMPAT_BREAKS_SINCE="[^"]*"', f'COMPAT_BREAKS_SINCE="{since}"', _SCRIPT.read_text())
+    copy.write_text(text)
     copy.chmod(copy.stat().st_mode | stat.S_IEXEC)
     return copy
 
@@ -179,7 +183,7 @@ def test_every_signature_and_attestation_uses_the_release_identity(release: _Rel
     calls = [
         c for c in release.calls() if c.startswith(("cosign verify", "gh attestation verify")) and "--help" not in c
     ]
-    assert len(calls) == 1 + 1 + 2 + 8 + 1, "image signature, image provenance, two SBOMs, each file, the wheel SBOM"
+    assert len(calls) == 1 + 1 + 2 + 9 + 1, "image signature, image provenance, two SBOMs, each file, the wheel SBOM"
     for call in calls:
         assert "https://token.actions.githubusercontent.com" in call
         assert r"^https://github\.com/paul-gross/blizzard/\.github/workflows/release\.yml@refs/tags/v" in call
@@ -244,16 +248,19 @@ def test_an_extra_file_fails_naming_the_attached_files_check(release: _Release) 
     assert "notes.txt" in result.stderr
 
 
-def test_compat_breaks_is_an_extra_file_while_the_constant_is_unset(release: _Release) -> None:
-    (release.files / "compat-breaks.json").write_text("{}")
-    release.sum()
-    result = release.run(_TAG)
+def test_compat_breaks_is_an_extra_file_before_the_release_the_constant_names(release: _Release) -> None:
+    earlier = _Release(release.dir.parent / "rc2", "0.2.0-rc.2")
+    (earlier.files / "compat-breaks.json").write_text("{}")
+    earlier.sum()
+    result = earlier.run("v0.2.0-rc.2")
     assert result.returncode == 1
     assert "compat-breaks.json" in result.stderr
 
 
 def test_compat_breaks_is_required_from_the_release_the_constant_names(release: _Release) -> None:
     script = _with_compat_breaks_since(release, "0.2.0")
+    (release.files / "compat-breaks.json").unlink()
+    release.sum()
     missing = release.run(_TAG, script=script)
     assert missing.returncode == 1
     assert "[attached files]" in missing.stderr

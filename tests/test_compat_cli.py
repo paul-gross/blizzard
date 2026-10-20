@@ -55,9 +55,20 @@ class _Repo:
         ).stdout.strip()
 
     def commit(
-        self, message: str, *, floor: str = "0.2", hub: dict | None = None, drop: tuple[str, ...] = (), **extra
+        self,
+        message: str,
+        *,
+        floor: str = "0.2",
+        opening: str | None = None,
+        hub: dict | None = None,
+        drop: tuple[str, ...] = (),
+        notes: dict[str, str] | None = None,
+        store: dict | None = None,
+        **extra,
     ) -> str:
         documents = {**_EMPTY, "openapi/hub.openapi.json": hub or _EMPTY["openapi/hub.openapi.json"], **extra}
+        if store is not None:
+            documents["contracts/store/hub.json"] = store
         for path, document in documents.items():
             target = self.root / path
             target.parent.mkdir(parents=True, exist_ok=True)
@@ -66,10 +77,23 @@ class _Repo:
             (self.root / path).unlink(missing_ok=True)
         window = self.root / _WINDOW
         window.parent.mkdir(parents=True, exist_ok=True)
-        window.write_text(f'floor = "{floor}"\n')
+        window.write_text(f'floor = "{floor}"\n' + (f'opening = "{opening}"\n' if opening else ""))
+        for path, text in (notes or {}).items():
+            (self.root / path).parent.mkdir(parents=True, exist_ok=True)
+            (self.root / path).write_text(text)
         self.git("add", "-A")
         self.git("commit", "--allow-empty", "-m", message)
         return self.git("rev-parse", "HEAD")
+
+
+def _note(*, surfaces: str = "wire", breaks: str = _ROUTE) -> str:
+    return (
+        f"---\nkind: changed\nsurfaces: [{surfaces}]\nbreaking: true\nbreaks: [{breaks}]\n---\n\n"
+        "The widgets route is gone.\n\n## Upgrade\n\nStop calling it.\n"
+    )
+
+
+_NOTE_PATH = "changes/unreleased/drop-widgets.md"
 
 
 def _run(repo: _Repo, monkeypatch: pytest.MonkeyPatch, *args: str) -> Result:
@@ -303,3 +327,243 @@ def test_outside_a_git_repository_the_command_ends_with_a_one_line_error(
     assert result.exit_code == 1
     assert result.output.startswith("Error: git rev-parse --show-toplevel failed")
     assert "Traceback" not in result.output
+
+
+# --- inherited findings ---------------------------------------------------------------------------
+
+
+def test_a_finding_the_base_already_carries_is_inherited_and_passes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _Repo(tmp_path / "r")
+    _shipped(repo, deprecated_in={"v0.2.0": False})
+    repo.commit("feat: remove the widgets route")
+    base = repo.git("rev-parse", "HEAD")
+    repo.commit("feat: unrelated")
+    result = _run(repo, monkeypatch, "--commits", f"{base}..HEAD")
+    assert result.exit_code == 0, result.output
+    assert "[inherited]" in result.output
+
+
+def test_a_new_finding_beside_an_inherited_one_still_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    repo = _Repo(tmp_path / "r")
+    table = {"tables": {"t": {"columns": {}}}}
+    repo.commit("chore: cut", hub=_spec(route=True), store=table)
+    repo.git("tag", "v0.2.0")
+    repo.commit("feat: remove the widgets route", store=table)
+    base = repo.git("rev-parse", "HEAD")
+    repo.commit("feat: drop the table")
+    result = _run(repo, monkeypatch, "--commits", f"{base}..HEAD")
+    assert result.exit_code == 1
+    assert "[inherited] wire" in result.output and "[BREAK] store" in result.output
+
+
+# --- a declared break on an open master ---------------------------------------------------------
+
+
+def test_with_an_opening_a_marked_commit_and_a_matching_note_admit_an_undeprecated_break(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _Repo(tmp_path / "r")
+    base = _shipped(repo, deprecated_in={"v0.2.0": False})
+    repo.commit("feat!: remove the widgets route", opening="1", notes={_NOTE_PATH: _note()})
+    result = _run(repo, monkeypatch, "--commits", f"{base}..HEAD")
+    assert result.exit_code == 0, result.output
+    assert "[allowed]" in result.output
+
+
+@pytest.mark.parametrize(
+    ("message", "opening", "notes"),
+    [
+        ("feat!: remove the widgets route", "1", {}),
+        ("feat: remove the widgets route", "1", {_NOTE_PATH: _note()}),
+        ("feat!: remove the widgets route", None, {_NOTE_PATH: _note()}),
+        ("feat!: remove the widgets route", "1", {_NOTE_PATH: _note(breaks="/api/fleet/other")}),
+        ("feat!: remove the widgets route", "1", {_NOTE_PATH: _note(surfaces="http-api")}),
+    ],
+    ids=["no-note", "no-marker", "no-opening", "other-name", "other-surface"],
+)
+def test_an_undeprecated_break_fails_unless_opening_marker_and_note_all_agree(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, message: str, opening: str | None, notes: dict[str, str]
+) -> None:
+    repo = _Repo(tmp_path / "r")
+    base = _shipped(repo, deprecated_in={"v0.2.0": False})
+    repo.commit(message, opening=opening, notes=notes)
+    assert _run(repo, monkeypatch, "--commits", f"{base}..HEAD").exit_code == 1
+
+
+def test_a_note_already_at_the_base_declares_nothing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    repo = _Repo(tmp_path / "r")
+    _shipped(repo, deprecated_in={"v0.2.0": False})
+    repo.commit("docs: note", opening="1", hub=_spec(route=True), notes={_NOTE_PATH: _note()})
+    base = repo.git("rev-parse", "HEAD")
+    repo.commit("feat!: remove the widgets route", opening="1")
+    assert _run(repo, monkeypatch, "--commits", f"{base}..HEAD").exit_code == 1
+
+
+# --- tag mode -----------------------------------------------------------------------------------
+
+
+def _breaks_file(repo: _Repo) -> dict:
+    return json.loads((repo.root / "compat-breaks.json").read_text())
+
+
+def test_a_tag_with_nothing_let_through_writes_an_empty_breaks_list(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _Repo(tmp_path / "r")
+    _shipped(repo, deprecated_in={"v0.2.0-rc.1": False})
+    repo.commit("feat: add things", hub=_spec(route=True))
+    result = _run(repo, monkeypatch, "--tag", "0.2.0-rc.2")
+    assert result.exit_code == 0, result.output
+    assert _breaks_file(repo) == {"tag": "v0.2.0-rc.2", "breaks": []}
+
+
+def test_a_candidate_above_every_stable_major_admits_a_declared_break_and_names_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _Repo(tmp_path / "r")
+    _shipped(repo, deprecated_in={"v0.2.0-rc.1": False})
+    repo.commit("feat!: remove the widgets route", notes={_NOTE_PATH: _note()})
+    result = _run(repo, monkeypatch, "--tag", "0.2.0-rc.2")
+    assert result.exit_code == 0, result.output
+    assert _breaks_file(repo)["breaks"] == [
+        {
+            "release": "v0.2.0-rc.1",
+            "surface": "wire",
+            "where": _ROUTE,
+            "reason": "surface path removed",
+        }
+    ]
+
+
+def test_a_tag_fails_the_same_break_without_its_note_and_still_writes_the_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _Repo(tmp_path / "r")
+    _shipped(repo, deprecated_in={"v0.2.0-rc.1": False})
+    repo.commit("feat!: remove the widgets route")
+    assert _run(repo, monkeypatch, "--tag", "0.2.0-rc.2").exit_code == 1
+    assert _breaks_file(repo)["breaks"] == []
+
+
+def test_a_tag_reads_the_marker_and_note_over_each_releases_own_range(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _Repo(tmp_path / "r")
+    _shipped(repo, deprecated_in={"v0.2.0-rc.1": False})
+    repo.commit("feat!: remove the widgets route", notes={_NOTE_PATH: _note()})
+    repo.git("tag", "v0.2.0-rc.2")
+    repo.commit("feat: more")
+    result = _run(repo, monkeypatch, "--tag", "0.2.0-rc.3", "--json")
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.stdout)["releases"] == ["v0.2.0-rc.2"]
+
+
+def test_a_minor_at_or_below_a_stable_major_admits_only_a_deprecated_break(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _Repo(tmp_path / "r")
+    _shipped(repo, deprecated_in={"v0.2.0": False, "v0.3.0": True})
+    repo.git("tag", "v1.0.0")
+    repo.commit("feat!: remove the widgets route", notes={_NOTE_PATH: _note()})
+    assert _run(repo, monkeypatch, "--tag", "1.1.0").exit_code == 1
+
+
+def test_a_major_above_the_newest_stable_admits_a_declared_break(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _Repo(tmp_path / "r")
+    _shipped(repo, deprecated_in={"v0.2.0": False})
+    repo.git("tag", "v1.0.0")
+    repo.commit("feat!: remove the widgets route", notes={_NOTE_PATH: _note()})
+    assert _run(repo, monkeypatch, "--tag", "2.0.0").exit_code == 0
+
+
+def test_a_patch_admits_nothing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    repo = _Repo(tmp_path / "r")
+    _shipped(repo, deprecated_in={"v0.2.0": True})
+    repo.commit("feat!: remove the widgets route", notes={_NOTE_PATH: _note()})
+    assert _run(repo, monkeypatch, "--tag", "0.2.1").exit_code == 1
+
+
+def test_a_tag_excludes_itself_from_the_supported_releases(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    repo = _Repo(tmp_path / "r")
+    _shipped(repo, deprecated_in={"v0.2.0-rc.1": False})
+    repo.commit("feat: more")
+    repo.git("tag", "v0.2.0-rc.2")
+    result = _run(repo, monkeypatch, "--tag", "0.2.0-rc.2", "--json")
+    assert json.loads(result.stdout)["releases"] == ["v0.2.0-rc.1"]
+
+
+@pytest.mark.parametrize("extra", [("--commits", "HEAD~1..HEAD"), ("--line", "release/0.2")])
+def test_a_tag_cannot_be_combined_with_a_range_or_a_line(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, extra: tuple[str, ...]
+) -> None:
+    repo = _Repo(tmp_path / "r")
+    repo.commit("chore: base")
+    result = _run(repo, monkeypatch, "--tag", "0.2.0", *extra)
+    assert result.exit_code == 2 and "--tag cannot be combined" in result.output
+
+
+def test_a_malformed_tag_is_a_usage_error(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    repo = _Repo(tmp_path / "r")
+    repo.commit("chore: base")
+    assert _run(repo, monkeypatch, "--tag", "banana").exit_code == 2
+
+
+# --- --json -------------------------------------------------------------------------------------
+
+
+def test_json_emits_every_finding_with_its_verdict(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    repo = _Repo(tmp_path / "r")
+    base = _shipped(repo, deprecated_in={"v0.2.0": True})
+    repo.commit("feat: remove the widgets route")
+    result = _run(repo, monkeypatch, "--commits", f"{base}..HEAD", "--json")
+    assert result.exit_code == 1
+    assert json.loads(result.stdout) == {
+        "releases": ["v0.2.0"],
+        "findings": [
+            {
+                "release": "v0.2.0",
+                "surface": "wire",
+                "where": _ROUTE,
+                "reason": "surface path removed",
+                "deprecated": True,
+                "inherited": False,
+                "passes": False,
+            }
+        ],
+        "window": [],
+    }
+
+
+# --- the pure decision, with inheritance and declaration -----------------------------------------
+
+
+def test_a_declared_break_passes_only_when_declarable_and_acknowledged() -> None:
+    findings = {"v0.2.0": [_finding(deprecated=False)]}
+    declared = {("wire", _ROUTE)}
+
+    def passes(**kwargs: bool) -> bool:
+        return gate.judge(findings, line=False, declared=declared, **kwargs)[0].passes  # type: ignore[arg-type]
+
+    assert passes(acknowledged=True, declarable=True)
+    assert not passes(acknowledged=True, declarable=False)
+    assert not passes(acknowledged=False, declarable=True)
+
+
+def test_an_inherited_finding_passes_even_on_a_line() -> None:
+    inherited = {("v0.2.0", "wire", _ROUTE, "surface path removed")}
+    verdict = gate.judge({"v0.2.0": [_finding(deprecated=False)]}, acknowledged=False, line=True, inherited=inherited)[
+        0
+    ]
+    assert verdict.passes and verdict.inherited
+
+
+def test_a_new_kind_of_break_on_an_inherited_name_is_not_inherited() -> None:
+    inherited = {("v0.2.0", "wire", _ROUTE, "an earlier reason")}
+    verdict = gate.judge({"v0.2.0": [_finding(deprecated=False)]}, acknowledged=False, line=False, inherited=inherited)[
+        0
+    ]
+    assert not verdict.passes and not verdict.inherited

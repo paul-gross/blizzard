@@ -1,14 +1,14 @@
 """The pass/fail decision over classifier findings, pure over their results.
 
-On ``master`` before 1.0 a finding passes against a release only when that release's baseline
-marked the removed surface deprecated and the change carries a ``!`` commit. On a release line
-nothing passes. The window's own moves are judged here too: the floor moves only for a break that
-needs it, and an ``opening`` cannot reopen a shipped major."""
+A finding the base already carried is inherited and never fails. A new one passes against a release
+only with a ``!`` commit and either a baseline that marked it deprecated or, on an open ``master``, a
+breaking note declaring it; on a release line nothing new passes. The window's own moves are judged
+here too: the floor moves only for a break that needs it, and an ``opening`` cannot reopen a major."""
 
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
 
 from blizzard.foundation.roles import domain_model
@@ -29,19 +29,38 @@ class Verdict:
     release: str
     violation: Violation
     passes: bool
+    inherited: bool = False
 
 
 def is_acknowledged(subjects: Sequence[str]) -> bool:
     return any(BREAKING_COMMIT_MARKER.match(subject) for subject in subjects)
 
 
-def judge(findings: Mapping[str, Sequence[Violation]], *, acknowledged: bool, line: bool) -> list[Verdict]:
+def judge(
+    findings: Mapping[str, Sequence[Violation]],
+    *,
+    acknowledged: bool,
+    line: bool,
+    declarable: bool = False,
+    declared: Collection[tuple[str, str]] = (),
+    inherited: Collection[tuple[str, str, str, str]] = (),
+) -> list[Verdict]:
     """A verdict per finding per release (``findings`` is keyed by release tag).
 
-    A pair passes only if the finding is deprecated against that release and the change acknowledges a
-    break. Under ``line`` nothing passes: a patch adds or it is not a patch."""
+    ``inherited`` holds the base's ``(release, surface, where, reason)``; ``declared`` the ``(surface, where)`` an added
+    note declares, admitted only when ``declarable``. Under ``line`` no new pair passes."""
     return [
-        Verdict(release, violation, not line and acknowledged and violation.deprecated)
+        Verdict(
+            release,
+            violation,
+            (release, *_key(violation)) in inherited
+            or (
+                not line
+                and acknowledged
+                and (violation.deprecated or (declarable and (violation.surface, violation.where) in declared))
+            ),
+            (release, *_key(violation)) in inherited,
+        )
         for release, violations in findings.items()
         for violation in violations
     ]
@@ -52,7 +71,8 @@ def _key(violation: Violation) -> tuple[str, str, str]:
 
 
 def _failing(verdicts: Sequence[Verdict]) -> set[tuple[str, str, str]]:
-    return {_key(v.violation) for v in verdicts if not v.passes}
+    """The findings a floor raise would retire: an inherited one still needs it."""
+    return {_key(v.violation) for v in verdicts if not v.passes or v.inherited}
 
 
 def judge_window(

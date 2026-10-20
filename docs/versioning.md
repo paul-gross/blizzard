@@ -87,14 +87,9 @@ At runtime, every registration carries the runner's version and the hub judges i
 it is refused `409 RunnerVersionRefusal`, whose `detail` names the runner's version, the hub's, and the range to upgrade
 to, and is denied every claim until a later registration is admitted. The refused runner halts alone while its host's
 other runners carry on, and retries registration on its tick; a hub whose own line is below `floor` refuses to start.
-What is checked is the per-commit unit the window actually depends on: `blizzard:wire-compat`
-(`bzh:fleet-wire-additive`) diffs the declared hub↔runner surface — every `/api/fleet/...` route, the
-`POST /api/runners` call `runner init` adds its runner through, and the auth federation routes the runner calls —
-between consecutive commits, and fails on a breaking change unless a commit the step lands carries a Conventional
-Commits `!` marker, in which case it reports the break rather than failing. A merge-base-mode run gates every pull
-request against its own merge-base; a deployed-mode run gates every push to `master` against the last commit `edge` was
-published from, so a hand-redeployed runner from any earlier commit keeps working until the next acknowledged break.
-[`docs/ci.md`](./ci.md) owns where each mode runs.
+What is checked is every committed surface document against every supported release: `blizzard:compat`
+(`bzh:released-surface-additive`) fails a pull request or a push that breaks one unless the break is one the window
+admits, and `release.yml` runs it again at a tag. [`docs/ci.md`](./ci.md) owns where each run happens.
 
 Most string-valued wire fields stay open strings, so a value the receiver does not recognize round-trips instead of
 failing. `TurnSegmentView.kind` (`src/blizzard/wire/transcript_segment.py`) is the exception: it is typed as a closed

@@ -87,10 +87,6 @@ run = "uv run blizzard-export-contracts --out-dir contracts"
 description = "blizzard:process-ref-lint — Vale prose gate for process references and change-history narration"
 run = "vale --output=line ."
 
-[tasks.wire-compat]
-description = "blizzard:wire-compat — fail on a breaking change to the hub↔runner wire surface (bzh:fleet-wire-additive), diffed against this branch's merge-base with origin/master"
-run = "uv run blizzard-wire-compat --baseline merge-base --against origin/master"
-
 [tasks.compat]
 description = "blizzard:compat — hold HEAD's committed surface documents to the supported releases, with this branch's commits since origin/master as the range a `!` may sit in"
 run = "uv run blizzard-compat --commits origin/master..HEAD"

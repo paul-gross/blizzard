@@ -10,8 +10,8 @@ file is the in-repo operator reference for running it.
 [`.github/workflows/gate.yml`](../.github/workflows/gate.yml) is the reusable (`workflow_call`) merge gate, called by
 every trigger workflow: ruff format+check, pyright, the `blizzard:structural-gate` ast-grep scan
 (`contracts/ast-grep/`), pytest (unit + component), OpenAPI spec drift, contract document drift
-(`gate / contract drift`), hub↔runner wire compatibility against the PR's merge-base
-(`gate / hub↔runner wire compatibility`, PR-only — see below), the change notes under `changes/`
+(`gate / contract drift`), compatibility against the supported releases
+(`gate / compatibility against supported releases`, every trigger but a tag — see below), the change notes under `changes/`
 (`gate / change notes`, every trigger — see below), flag lifecycle (`gate / flag lifecycle`, PR-only), the `web/` frontend
 checks (eslint, vitest, structural gate, bundle composition, story render, generated-client drift), and the Vale prose lint
 (`gate / process-reference and change-history lint`,
@@ -42,17 +42,20 @@ uv run ast-grep scan --error=unused-suppression .
 uv run pytest -n auto
 uv run blizzard-export-openapi --out-dir openapi && git diff --exit-code -- openapi/
 uv run blizzard-export-contracts --out-dir contracts && git diff --exit-code -- contracts/ && test -z "$(git ls-files --others --exclude-standard -- contracts/)"
-uv run blizzard-wire-compat --baseline merge-base --against origin/master
+uv run blizzard-compat --commits origin/master..HEAD
 uv run blizzard-change-notes check
 uv run blizzard-flag-lifecycle pr
 cd web && npm ci && npm run lint && npm run test && npm run structural-gate && npm run bundle-check && npm run story-render && npm run generate:client && cd .. && git diff --exit-code -- web/
 ```
 
-`blizzard:wire-compat` (`src/blizzard/tools/wire_compat.py`) fails on a breaking change to the declared hub↔runner wire
-surface — `bzh:fleet-wire-additive` owns what counts as breaking. The `gate.yml` job runs only when the triggering event
-is `pull_request` (`if: github.event_name == 'pull_request'`), diffing `HEAD` against its merge-base with
-`origin/master` so a break is attributed to the PR that makes it. `mise run wire-compat` reproduces it locally against
-the current branch's own merge-base.
+`blizzard:compat` (`src/blizzard/tools/compat/`) holds `HEAD`'s committed surface documents to the supported releases
+`docs/versioning.md` defines — `bzh:released-surface-additive` owns what counts as breaking. The `gate.yml` job runs on
+every trigger but a tag, with full history, over the event's own range: a pull request's base and head, a push's
+`before` and `sha`, and `--line` when the target is a `release/*` branch. A finding the range's base already carries is
+reported as inherited and does not fail; a new one fails unless a `!`-marked commit in the range acknowledges it and
+the release's baseline marked it deprecated or, with `opening` set in the window, an added breaking change note
+declares it. `mise run compat` reproduces it locally against `origin/master`; `--json` prints every finding with its
+verdict.
 
 `blizzard-change-notes check` (`src/blizzard/tools/change_notes/`) fails on a file under `changes/` that breaks the format
 [`changes/README.md`](../changes/README.md) documents, naming the file and the rule for every failure. The `gate.yml`
@@ -120,34 +123,20 @@ The dev-build wheel is downloaded from its run with:
 gh run download --repo paul-gross/blizzard <run-id>
 ```
 
-The `dev-image` job needs `[gate, upper-tiers, dev-build, wire-compat-deployed]` — the tiers so the channel advances
-only on proven commits, `dev-build` solely to reuse its computed dev version for the image's
-`org.opencontainers.image.version` annotation rather than recomputing it, and `wire-compat-deployed` so `edge` never
-advances past an unacknowledged hub↔runner wire break. Unlike the release fan-out, the dev tags and OCI annotations
+The `dev-image` job needs `[gate, upper-tiers, dev-build]` — the tiers so the channel advances
+only on proven commits, and `dev-build` solely to reuse its computed dev version for the image's
+`org.opencontainers.image.version` annotation rather than recomputing it. Unlike the release fan-out, the dev tags and OCI annotations
 are inlined in the `dev-image` job — no branching logic to unit-test — and `tests/test_push_workflow.py` pins the job.
 
-`wire-compat-deployed` diffs every commit since the newest successful `push.yml` run — the first `success` among
-`gh run list --workflow push.yml --branch master`'s newest runs, since that run's commit is what `edge` currently runs;
-never `--status success` alongside `--branch`, which GitHub answers from a stale index — against `HEAD`, one first-parent step at a time, failing on any step whose break is not acknowledged
-by a `!`-marked Conventional Commit subject on the commits that land it (`bzh:fleet-wire-additive`). It needs job-level
-`permissions: actions: read` to call `gh run list` with the workflow's own `GITHUB_TOKEN`; the job fails outright if no
-successful run is found. Its local equivalent is `uv run blizzard-wire-compat --baseline deployed`, run with the
-operator's own `gh` auth.
-
-It checks the net diff from the resolved baseline to `HEAD` first, and skips the per-step walk entirely when that net
-diff is additive — the per-step walk exists only to attribute a *surviving* break to the landing that must acknowledge
-it. This is the recovery path if an unacknowledged break ever lands on `master` outright (bypassing or predating the PR
-gate): since that landing is already pushed, its subject can't be marked `!` after the fact, and rewriting pushed
-`master` history is not an option. Push a following commit that reverts the break instead — once the net diff back to
-the last successful baseline is clean again, `wire-compat-deployed` passes and `edge` resumes advancing, with no
-history rewrite required.
-
-[`.github/workflows/release.yml`](../.github/workflows/release.yml) (tag `v*`) runs the full suite — gate, service tier,
-the **full** crash sweep, and e2e — then three jobs. `build` builds the wheel with the embedded frontend, pushes a
+[`.github/workflows/release.yml`](../.github/workflows/release.yml) (tag `v*`) runs the full suite — gate, the `compat` backstop, service tier,
+the **full** crash sweep, and e2e — then three jobs. `compat` (`release / compatibility against supported releases`) runs
+`blizzard-compat --tag <version>` before any build: it judges the tag's tree against each supported release over that
+release's own `R..HEAD` range, fails a break the version does not admit, and uploads `compat-breaks.json`, which `build`
+fetches to the repository root. `build` builds the wheel with the embedded frontend, pushes a
 multi-arch (`linux/amd64` + `linux/arm64`) hub image to GHCR, signs it keylessly by its manifest-list digest
 (`cosign sign --yes --recursive`), attests its build provenance, assembles the release's attached files with
 [`scripts/release-inventory.sh`](../scripts/release-inventory.sh) — the wheel, both hashed requirements files with their
-project lines, the image file naming the digest, `compat-breaks.json` when the build produced it, and `SHA256SUMS` over
+project lines, the image file naming the digest, `compat-breaks.json` (always attached, from the first release `verify-release.sh` names), and `SHA256SUMS` over
 all of them — attests the provenance of every attached file, and uploads them as one workflow artifact. `publish` then
 downloads that artifact and makes one `gh release create` call with every file attached; there is no external
 package-index publish. `verify` runs last, once the release page exists, holding only `contents: read` and a copy of

@@ -219,6 +219,27 @@ def test_the_wheel_bill_of_materials_scans_a_hashed_venv_and_the_board_lockfile(
     assert "web/package-lock.json" in stage
 
 
+def test_the_compat_job_runs_before_any_build_with_read_only_scope() -> None:
+    job = _job("compat")
+    assert job["name"] == "compatibility against supported releases"
+    assert job["permissions"] == {"contents": "read"}
+    assert job["steps"][0]["with"]["fetch-depth"] == 0
+    assert any(s.get("run") == 'uv run blizzard-compat --tag "${GITHUB_REF_NAME#v}"' for s in job["steps"])
+    upload = next(s for s in job["steps"] if _uses(s, "actions/upload-artifact"))
+    assert re.fullmatch(r".+@[0-9a-f]{40}", upload["uses"])
+    assert upload["with"]["path"] == "compat-breaks.json"
+    assert "compat" in _build_job()["needs"]
+
+
+def test_build_fetches_the_compat_report_to_the_root_before_the_notes() -> None:
+    steps = _build_job()["steps"]
+    download = _step_index(steps, lambda s: _uses(s, "actions/download-artifact"))
+    notes = _step_index(steps, lambda s: "change-notes render" in str(s.get("run", "")))
+    inventory = _step_index(steps, lambda s: "release-inventory.sh" in str(s.get("run", "")))
+    assert steps[download]["with"] == {"name": "compat-breaks", "path": "."}
+    assert download < notes < inventory
+
+
 def test_the_compat_breaks_path_is_always_passed_to_the_inventory_script() -> None:
     steps = _build_job()["steps"]
     run = str(steps[_step_index(steps, lambda s: "release-inventory.sh" in str(s.get("run", "")))]["run"])

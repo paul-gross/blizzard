@@ -56,6 +56,11 @@ def test_dev_image_job_needs_dev_build_for_the_shared_version_string() -> None:
     assert "dev-build" in _dev_image_job()["needs"]
 
 
+def test_dev_image_needs_exactly_the_gate_the_upper_tiers_and_the_dev_build() -> None:
+    assert _dev_image_job()["needs"] == ["gate", "upper-tiers", "dev-build"]
+    assert not [name for name in _jobs() if "compat" in name]
+
+
 def test_dev_build_job_exposes_its_version_as_an_output() -> None:
     dev_build = _jobs()["dev-build"]
     assert dev_build.get("outputs", {}).get("version")

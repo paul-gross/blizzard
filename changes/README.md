@@ -57,7 +57,7 @@ The file opens with a `---` delimited YAML block. A repeated key and an unknown 
 | `kind`          | Required: `added`, `changed`, `deprecated`, `removed`, `fixed` or `security`.                                                   |
 | `surfaces`      | Distinct values from `http-api`, `wire`, `config`, `store`, `trace`, `egress`, `cli`, `board`.                                  |
 | `breaking`      | `true` or `false`, default `false`. `true` only on `changed` or `removed`.                                                      |
-| `breaks`        | A list of strings naming what breaks. Only on a note with `breaking: true`.                                                     |
+| `breaks`        | A list of strings naming what breaks; `blizzard-compat` matches one equal to a finding's name. Only on `breaking: true`.         |
 | `removes-in`    | A quoted major (`"2"`) or pre-1.0 minor (`"0.12"`). Required on `deprecated` and on a note that `postpones`; refused elsewhere. |
 | `postpones`     | The id of a deprecation note. Only on `changed`.                                                                                |
 | `retires`       | The id of a deprecation note. Only on `removed`.                                                                                |
