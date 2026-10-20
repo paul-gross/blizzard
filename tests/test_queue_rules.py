@@ -13,10 +13,12 @@ from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, DependencyEdge, P
 from blizzard.hub.domain.kernel.pagination import encode_cursor
 from blizzard.hub.domain.operations.queue import (
     ChunkNotGroupable,
+    ContradictoryPlacement,
     DuplicateReorderIds,
     FoldWouldCloseCycle,
     Landing,
     NotInList,
+    Placement,
     QueueList,
     QueueRanking,
     SelfAnchoredMove,
@@ -170,10 +172,20 @@ def _land(ranking: QueueRanking, *, after: str | None = None, to_top: bool = Fal
         QueueList.READY,
         [_A, _B, _C],
         chunk_id="chk_n",
-        after_chunk_id=after,
-        to_top=to_top,
+        placement=Placement(after_chunk_id=after, to_top=to_top),
         statuses=_STATUSES,
     )
+
+
+def test_a_placement_admits_an_anchor_or_the_top_alone() -> None:
+    assert Placement(after_chunk_id="chk_a").to_top is False
+    assert Placement(to_top=True).after_chunk_id is None
+    assert Placement() == Placement(after_chunk_id=None, to_top=False)
+
+
+def test_a_placement_refuses_an_anchor_together_with_the_top() -> None:
+    with pytest.raises(ContradictoryPlacement):
+        Placement(after_chunk_id="chk_a", to_top=True)
 
 
 def test_a_landing_defaults_to_the_tail() -> None:
@@ -203,8 +215,7 @@ def test_a_landing_refuses_a_self_anchor_before_an_anchor_outside_the_list() -> 
             QueueList.READY,
             [_A],
             chunk_id="chk_n",
-            after_chunk_id="chk_n",
-            to_top=False,
+            placement=Placement(after_chunk_id="chk_n"),
             statuses=_STATUSES,
         )
 

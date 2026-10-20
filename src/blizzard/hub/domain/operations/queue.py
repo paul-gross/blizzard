@@ -230,6 +230,31 @@ class SelfAnchoredMove(ValueError):
         super().__init__("after_chunk_id must not equal chunk_id")
 
 
+class ContradictoryPlacement(ValueError):
+    """A placement named both an anchor and the top."""
+
+    def __init__(self) -> None:
+        super().__init__("after_chunk_id and to_top name contradictory placements")
+
+
+@domain_model
+@dataclass(frozen=True)
+class Placement:
+    """Where a chunk lands in the list it enters: right after ``after_chunk_id``, at the head when
+    ``to_top``, else at the tail. Naming both is contradictory and cannot be constructed
+    (:class:`ContradictoryPlacement`)."""
+
+    after_chunk_id: str | None = None
+    to_top: bool = False
+
+    def __post_init__(self) -> None:
+        if self.to_top and self.after_chunk_id is not None:
+            raise ContradictoryPlacement()
+
+
+TAIL_PLACEMENT = Placement()
+
+
 class NotInList(Exception):
     """A reorder named a chunk outside the list it ranks (``bzh:ranking-is-per-list``).
     ``actual`` is the other list when the chunk stands there, else ``None``."""
@@ -401,18 +426,17 @@ def resolve_landing(
     candidates: Sequence[Chunk],
     *,
     chunk_id: str,
-    after_chunk_id: str | None,
-    to_top: bool,
+    placement: Placement,
     statuses: Mapping[str, ChunkStatus],
 ) -> Landing:
     """The :class:`Landing` of a chunk entering ``list_`` from the other list, among ``candidates``
-    (the members it joins, ranked by ``ranking``): the top when ``to_top``, right after ``after_chunk_id``
-    when named, else the tail. A self-anchor is refused (:class:`SelfAnchoredMove`) before an anchor
-    outside ``candidates`` (:class:`NotInList`)."""
-    if after_chunk_id == chunk_id:
+    (the members it joins, ranked by ``ranking``): the top when ``placement.to_top``, right after
+    ``placement.after_chunk_id`` when named, else the tail. A self-anchor is refused
+    (:class:`SelfAnchoredMove`) before an anchor outside ``candidates`` (:class:`NotInList`)."""
+    if placement.after_chunk_id == chunk_id:
         raise SelfAnchoredMove()
-    after = None if to_top else require_anchor_among(list_, candidates, after_chunk_id, statuses)
-    if after_chunk_id is None and not to_top:
+    after = require_anchor_among(list_, candidates, placement.after_chunk_id, statuses)
+    if after is None and not placement.to_top:
         return Landing(ranking.tail(candidates))
     return ranking.land_after(ranking.ordered(candidates), after)
 

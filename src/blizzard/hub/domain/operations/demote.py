@@ -16,7 +16,14 @@ from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.queue import IWriteChunkQueueRepository
 from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
-from blizzard.hub.domain.operations.queue import QueueList, read_ranking, resolve_landing, write_positions_fn
+from blizzard.hub.domain.operations.queue import (
+    TAIL_PLACEMENT,
+    Placement,
+    QueueList,
+    read_ranking,
+    resolve_landing,
+    write_positions_fn,
+)
 
 
 class ChunkNotDemotable(Exception):
@@ -67,15 +74,14 @@ class DemoteService:
         chunk: Chunk,
         *,
         statuses: Mapping[str, ChunkStatus],
-        after_chunk_id: str | None = None,
-        to_top: bool = False,
+        placement: Placement = TAIL_PLACEMENT,
     ) -> int | None:
         """Append the ``chunk.demoted`` fact and stamp an explicit backlog position, in one
         transaction, as :func:`demotion_writes` decides over facts read under the row lock:
         ``None`` for a replay on a chunk not currently promoted, :class:`ChunkNotDemotable` for one
         outside the window, :class:`ChunkNotFound` for a chunk gone under the lock; otherwise stamps the
         landing :func:`~blizzard.hub.domain.operations.queue.resolve_landing` resolves — the tail, the
-        top, or right after ``after_chunk_id`` — and returns the fresh ``chunk_demoted.id``.
+        top, or right after ``placement``'s anchor — and returns the fresh ``chunk_demoted.id``.
 
         The landing ranks other chunks — a different aggregate — so it is resolved before the lock
         from ``statuses``; the chunk's own demotability is not."""
@@ -89,8 +95,7 @@ class DemoteService:
             QueueList.NOT_READY,
             candidates,
             chunk_id=chunk.chunk_id,
-            after_chunk_id=after_chunk_id,
-            to_top=to_top,
+            placement=placement,
             statuses=statuses,
         )
         if landing.renormalized:
