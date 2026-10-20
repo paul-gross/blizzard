@@ -15,6 +15,7 @@ from blizzard.hub.domain.operations.queue import (
     ChunkNotGroupable,
     DuplicateReorderIds,
     FoldWouldCloseCycle,
+    Landing,
     NotInList,
     QueueList,
     QueueRanking,
@@ -24,6 +25,7 @@ from blizzard.hub.domain.operations.queue import (
     replacement_order,
     require_anchor_among,
     require_groupable,
+    resolve_landing,
     resolve_move,
 )
 
@@ -145,14 +147,72 @@ def test_a_move_refuses_an_anchor_outside_the_list() -> None:
 
 def test_a_reposition_admits_a_top_anchor_or_one_among_the_other_members() -> None:
     require_anchor_among(QueueList.READY, [_A, _B], None, _STATUSES)
-    require_anchor_among(QueueList.READY, [_A, _B], _B, _STATUSES)
+    require_anchor_among(QueueList.READY, [_A, _B], _B.chunk_id, _STATUSES)
 
 
 def test_a_reposition_refuses_an_anchor_outside_the_other_members() -> None:
     with pytest.raises(NotInList) as excinfo:
-        require_anchor_among(QueueList.READY, [_A], _C, _STATUSES)
+        require_anchor_among(QueueList.READY, [_A], _C.chunk_id, _STATUSES)
     assert excinfo.value.chunk_id == "chk_c"
     assert excinfo.value.expected is QueueList.READY
+
+
+# --- Landing ------------------------------------------------------------------
+
+
+def _ranked(**positions: float) -> QueueRanking:
+    return QueueRanking(positions={f"chk_{k}": v for k, v in positions.items()}, promoted_ats={})
+
+
+def _land(ranking: QueueRanking, *, after: str | None = None, to_top: bool = False) -> Landing:
+    return resolve_landing(
+        ranking,
+        QueueList.READY,
+        [_A, _B, _C],
+        chunk_id="chk_n",
+        after_chunk_id=after,
+        to_top=to_top,
+        statuses=_STATUSES,
+    )
+
+
+def test_a_landing_defaults_to_the_tail() -> None:
+    assert _land(_ranked(a=1.0, b=2.0, c=3.0)) == Landing(4.0)
+
+
+def test_a_landing_to_the_top_precedes_the_head() -> None:
+    assert _land(_ranked(a=1.0, b=2.0, c=3.0), to_top=True) == Landing(0.0)
+
+
+def test_a_landing_after_an_anchor_bisects_the_gap() -> None:
+    assert _land(_ranked(a=1.0, b=2.0, c=3.0), after="chk_a") == Landing(1.5)
+
+
+def test_a_landing_whose_gap_is_exhausted_carries_the_renormalized_positions() -> None:
+    low = 1.0
+    high = math.nextafter(low, 2.0)
+    landing = _land(_ranked(a=low, b=high, c=3.0), after="chk_a")
+    assert landing.renormalized == (("chk_a", 0.0), ("chk_b", 1.0), ("chk_c", 2.0))
+    assert landing.position == 0.5
+
+
+def test_a_landing_refuses_a_self_anchor_before_an_anchor_outside_the_list() -> None:
+    with pytest.raises(SelfAnchoredMove):
+        resolve_landing(
+            _ranked(),
+            QueueList.READY,
+            [_A],
+            chunk_id="chk_n",
+            after_chunk_id="chk_n",
+            to_top=False,
+            statuses=_STATUSES,
+        )
+
+
+def test_a_landing_refuses_an_anchor_outside_the_list() -> None:
+    with pytest.raises(NotInList) as excinfo:
+        _land(_ranked(), after="chk_r")
+    assert excinfo.value.chunk_id == "chk_r"
 
 
 # --- Grouping -----------------------------------------------------------------

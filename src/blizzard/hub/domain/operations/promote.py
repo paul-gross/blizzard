@@ -17,7 +17,7 @@ from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.queue import IWriteChunkQueueRepository
 from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
-from blizzard.hub.domain.operations.queue import QueueList, resolve_landing
+from blizzard.hub.domain.operations.queue import QueueList, read_ranking, resolve_landing, write_positions_fn
 
 
 class ChunkNotPromotable(Exception):
@@ -107,20 +107,24 @@ class PromoteService:
         if pre_lock is not None and pre_lock.promoted:
             return None  # a replay needs no lock
         now = self._clock.now()
-        position = resolve_landing(
-            self._queue,
+        candidates = ready_members(self._record, self._facts, statuses=statuses)
+        landing = resolve_landing(
+            read_ranking(self._queue, candidates),
             QueueList.READY,
-            ready_members(self._record, self._facts, statuses=statuses),
+            candidates,
             chunk_id=chunk.chunk_id,
             after_chunk_id=after_chunk_id,
             to_top=to_top,
             statuses=statuses,
-            at=now,
         )
+        if landing.renormalized:
+            write_positions_fn(self._queue, QueueList.READY)(list(landing.renormalized), at=now)
         with self._exclusive.locked([chunk.chunk_id]) as handle:
             facts = handle.facts(chunk.chunk_id)
             if facts is None:
                 raise ChunkNotFound(chunk.chunk_id)
             if not promotion_writes(chunk.chunk_id, facts):
                 return None
-            return self._queue.record_promote_with_position_locked(handle, chunk.chunk_id, position=position, at=now)
+            return self._queue.record_promote_with_position_locked(
+                handle, chunk.chunk_id, position=landing.position, at=now
+            )
