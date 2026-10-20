@@ -6,20 +6,20 @@ import {
   harnessName,
   KitAsyncState,
   KitBadge,
-  KitBeacon,
   KitButton,
   type KitFact,
   KitFactList,
-  RunnerConnection,
   STATUS_TONE,
   type Tone,
 } from 'fleet';
 import { CapabilityBadgeGroup } from './capability-badge-group';
 import { GateBadgeGroup } from './gate-badge-group';
+import { runnerLight, runnerStateBadges } from './connection-status.model';
 import { busyAgents, declaredAgents } from './host-rows.model';
-import { localPauseHint, runnerSeenLabel, runnerToggleHint, type RunnerRow, versionStandingBadge } from './runner-rows.model';
+import { runnerSeenLabel, runnerToggleHint, type RunnerRow, versionStandingBadge } from './runner-rows.model';
 import { RunnerSubscription } from './runner-subscription';
 import { ServedProjectGroup } from './served-project-group';
+import { StatusLight } from './status-light';
 
 /**
  * One runner as a wide row on the Fleet tab's detail pane: a header line (its light, name,
@@ -37,11 +37,11 @@ import { ServedProjectGroup } from './served-project-group';
     GateBadgeGroup,
     KitAsyncState,
     KitBadge,
-    KitBeacon,
     KitButton,
     KitFactList,
     RunnerSubscription,
     ServedProjectGroup,
+    StatusLight,
   ],
   templateUrl: './fleet-runner-row.html',
   styleUrl: './fleet-runner-row.css',
@@ -61,9 +61,7 @@ export class FleetRunnerRow {
   /** The row to flip the hub brake on; the container reads `hub_paused` off it. */
   readonly togglePause = output<RunnerRow>();
 
-  protected readonly connection = RunnerConnection;
   protected readonly seenLabel = runnerSeenLabel;
-  protected readonly localPauseHint = localPauseHint;
   protected readonly toggleHint = runnerToggleHint;
 
   private readonly serves = viewChild.required<TemplateRef<unknown>>('serves');
@@ -72,6 +70,10 @@ export class FleetRunnerRow {
   private readonly gates = viewChild.required<TemplateRef<unknown>>('gates');
   private readonly state = viewChild.required<TemplateRef<unknown>>('state');
   private readonly version = viewChild.required<TemplateRef<unknown>>('version');
+
+  protected readonly light = computed(() => runnerLight(this.row()));
+
+  protected readonly stateBadges = computed(() => runnerStateBadges(this.row()));
 
   protected readonly ref = computed(() => compactRef(this.row().runner_id));
 

@@ -24,9 +24,6 @@
   width: 10px;
   height: 10px;
 }
-.hd .dot.never {
-  border: 1px solid var(--label-dim);
-}
 .hd .name {
   margin: 0;
   color: var(--amber-hi);

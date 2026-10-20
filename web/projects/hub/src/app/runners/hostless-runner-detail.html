@@ -1,15 +1,5 @@
 <div class="hd" data-testid="fleet-detail-title">
-  @if (detail().row.connection === connection.NEVER_CONNECTED) {
-    <span class="dot never" aria-hidden="true"></span>
-  } @else {
-    <fleet-kit-beacon
-      class="dot"
-      aria-hidden="true"
-      [active]="detail().row.online || detail().row.connection === connection.OFFLINE"
-      [tone]="detail().row.online ? 'green' : 'red'"
-      [blink]="detail().row.online ? 'pulse' : 'step'"
-    />
-  }
+  <app-status-light class="dot" [light]="light()" />
   <h2 class="name" data-testid="fleet-detail-name">{{ detail().row.runner_name }}</h2>
   <span class="ref" data-testid="fleet-detail-ref" [title]="detail().row.runner_id">{{ detail().ref }}</span>
   <fleet-kit-badge class="state" data-testid="fleet-detail-state" variant="text" [tone]="state().tone">{{

@@ -65,7 +65,7 @@ describe('FleetRunnerRow', () => {
 
     expect(el.textContent).toContain('NEVER CONNECTED');
     expect(el.querySelector('[data-testid="fleet-runner-seen"]')?.textContent).toBe('never connected');
-    expect(el.querySelector('.dot.never')).not.toBeNull();
+    expect(el.querySelector('.dot .hollow')).not.toBeNull();
     expect(el.querySelector('fleet-kit-beacon')).toBeNull();
   });
 

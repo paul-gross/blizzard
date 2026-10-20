@@ -1,10 +1,11 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 
-import { KitAsyncState, KitBadge, KitBeacon, KitFactList, KitPanel, KitSlotBar, RunnerConnection, SubscriptionPaceGroup } from 'fleet';
+import { KitAsyncState, KitBadge, KitFactList, KitPanel, KitSlotBar, RunnerConnection, SubscriptionPaceGroup } from 'fleet';
 import type { RunnerDetailVm } from './fleet-page.model';
 import { FleetRunnerRow } from './fleet-runner-row';
-import { connectionState } from './host-rows.model';
+import { runnerLight, runnerTitleState } from './connection-status.model';
 import { runnerSeenLabel, type RunnerRow } from './runner-rows.model';
+import { StatusLight } from './status-light';
 
 /**
  * The Fleet tab's right pane for a runner standing under no host — the host detail's shape
@@ -17,7 +18,7 @@ import { runnerSeenLabel, type RunnerRow } from './runner-rows.model';
 @Component({
   selector: 'app-hostless-runner-detail',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FleetRunnerRow, KitAsyncState, KitBadge, KitBeacon, KitFactList, KitPanel, KitSlotBar, SubscriptionPaceGroup],
+  imports: [FleetRunnerRow, KitAsyncState, KitBadge, KitFactList, KitPanel, KitSlotBar, StatusLight, SubscriptionPaceGroup],
   templateUrl: './hostless-runner-detail.html',
   styleUrls: ['./fleet-detail.css', './hostless-runner-detail.css'],
 })
@@ -31,7 +32,9 @@ export class HostlessRunnerDetail {
   protected readonly connection = RunnerConnection;
   protected readonly seenLabel = runnerSeenLabel;
 
-  protected readonly state = computed(() => connectionState(this.detail().row.online, this.detail().row.connection));
+  protected readonly light = computed(() => runnerLight(this.detail().row));
+
+  protected readonly state = computed(() => runnerTitleState(this.detail().row));
 
   /** "1 / 2 slots" — only when the runner reported a capacity, so one registered by a
    * client that predates the field gets no misleading zero-slot bar. */

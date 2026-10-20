@@ -9,17 +9,7 @@
   [attr.data-hub-paused]="row().hub_paused"
 >
   <div class="r1">
-    @if (row().connection === connection.NEVER_CONNECTED) {
-      <span class="dot never" aria-hidden="true"></span>
-    } @else {
-      <fleet-kit-beacon
-        class="dot"
-        aria-hidden="true"
-        [active]="row().online || row().connection === connection.OFFLINE"
-        [tone]="row().online ? 'green' : 'red'"
-        [blink]="row().online ? 'pulse' : 'step'"
-      />
-    }
+    <app-status-light class="dot" [light]="light()" />
     <span class="name" data-testid="fleet-runner-name">{{ row().runner_name }}</span>
     <span class="ref" [title]="row().runner_id">{{ ref() }}</span>
     @if (summary(); as text) {
@@ -107,20 +97,9 @@
 </ng-template>
 <ng-template #state>
   <span class="badges">
-    @if (row().connection === connection.NEVER_CONNECTED) {
-      <fleet-kit-badge tone="idle" variant="soft">NEVER CONNECTED</fleet-kit-badge>
-    } @else if (!row().online) {
-      <fleet-kit-badge tone="stale" variant="soft">OFFLINE</fleet-kit-badge>
-    }
-    @if (row().locally_paused) {
-      <fleet-kit-badge tone="idle" variant="soft" [title]="localPauseHint(row())">LOCALLY PAUSED</fleet-kit-badge>
-    }
-    @if (row().hub_paused) {
-      <fleet-kit-badge data-testid="fleet-runner-hub-paused" tone="waiting" variant="soft">HUB PAUSED</fleet-kit-badge>
-    }
-    @if (row().online && !row().hub_paused && !row().locally_paused) {
-      <fleet-kit-badge [tone]="row().claims.length > 0 ? 'running' : 'idle'" variant="soft">{{
-        row().claims.length > 0 ? 'WORKING' : 'IDLE'
+    @for (badge of stateBadges(); track badge.label) {
+      <fleet-kit-badge variant="soft" [tone]="badge.tone" [attr.title]="badge.title ?? null" [attr.data-testid]="badge.testid ?? null">{{
+        badge.label
       }}</fleet-kit-badge>
     }
   </span>

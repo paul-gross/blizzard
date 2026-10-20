@@ -41,11 +41,7 @@
             <span class="name" data-testid="runner-name">
               <!-- A fixed-width light: green online, yellow held by a brake, blinking red offline. -->
               <span class="light" data-testid="runner-light" [attr.data-tone]="entry.light.kind === 'lit' ? entry.light.tone : 'never'">
-                @if (entry.light.kind === 'lit') {
-                  <fleet-kit-beacon aria-hidden="true" [active]="true" [tone]="entry.light.tone" [blink]="entry.light.blink" />
-                } @else {
-                  <span class="hollow" aria-hidden="true"></span>
-                }
+                <app-status-light [light]="entry.light" />
               </span>
               <!-- The name opens this runner on the Fleet tab — its host's detail, or its own when it has none. -->
               <a class="name-link" data-testid="runner-fleet-link" [routerLink]="['/fleet', entry.fleetId] | lensLink">{{

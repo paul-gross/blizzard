@@ -53,6 +53,19 @@ describe('fleetList', () => {
     ]);
     expect(list.hostless.map((c) => [c.id, c.agents, c.ref])).toEqual([['rn_SOLO0001', null, 'R-0001']]);
   });
+
+  it('lights a host on the host ladder and a host-less runner with its pause', () => {
+    const list = fleetList({
+      cards: [
+        { card: card('hs_UP', { online: true }), rows: [] },
+        { card: card('hs_NEW', { online: false, connection: RunnerConnection.NEVER_CONNECTED }), rows: [] },
+      ],
+      hostless: [{ ...row('rn_SOLO0001'), hub_paused: true }],
+    });
+
+    expect(list.hosts.map((c) => c.light)).toEqual([{ kind: 'lit', tone: 'green', blink: 'hold' }, { kind: 'never' }]);
+    expect(list.hostless[0].light).toEqual({ kind: 'lit', tone: 'amber', blink: 'hold' });
+  });
 });
 
 describe('resolveSelection', () => {

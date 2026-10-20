@@ -1,4 +1,4 @@
-import type { GardenProposalView, ProjectView, RoutineView, RunRowView, ScopeView } from 'fleet';
+import { hubApi, type GardenProposalView, type ProjectView, type RoutineView, type RunRowView, type ScopeView } from 'fleet';
 
 import { lensLink } from '../../core/project-lens';
 import { GARDENING_DOORWAY_URL, GARDENING_LANDING_TAB } from '../core/garden-project';
@@ -7,7 +7,7 @@ import { isGardenProposalWaiting, waitingLabel } from '../proposals/gardening-pr
 export { waitingLabel };
 
 /** The outcomes of a run still sweeping: the card counts these as in progress. */
-const IN_PROGRESS: ReadonlySet<string> = new Set(['running', 'delivering']);
+const IN_PROGRESS: ReadonlySet<string> = new Set([hubApi.ChunkStatus.RUNNING, hubApi.ChunkStatus.DELIVERING]);
 
 /** One project's card on the gardening doorway — its garden's standing at a glance, and the way in. */
 export interface DoorwayCard {
@@ -54,7 +54,7 @@ export function doorwayCards(reads: DoorwayReads): readonly DoorwayCard[] {
       const routines = ownedBy(reads.routines, id).filter((routine) => routine.retired !== true);
       const scopes = ownedBy(reads.scopes, id).filter((scope) => scope.retired !== true);
       const runs = ownedBy(reads.runs, id);
-      const finished = runs.filter((run) => run.outcome === 'done');
+      const finished = runs.filter((run) => run.outcome === hubApi.ChunkStatus.DONE);
       return {
         projectId: id,
         slug: project.slug,

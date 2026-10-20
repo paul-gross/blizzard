@@ -51,9 +51,6 @@ export class BoardList {
   readonly groups = input<BoardListGroups>(NO_GROUPS);
   readonly selectedChunkId = input<string | null>(null);
   readonly gatedChunkIds = input<ReadonlySet<string>>(new Set());
-  /** Whether the chunk read has answered — until then an empty list says nothing. */
-  readonly loaded = input(false);
-
   /** How many row skeletons stand in for the rows while the chunk read is loading — 0 once it
    * has answered. */
   readonly skeletonRows = input(0);

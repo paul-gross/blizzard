@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { hubClient } from 'fleet';
-import { type FlagsView, flagGuard, provideFlags } from 'fleet/shell';
+import { type FlagsResponse, flagGuard, provideFlags } from 'fleet/shell';
 import { type RequestClientStub, stubRequestClient } from 'fleet/testing';
 
 import { hubFlagsRead } from '../core/flags.query';
@@ -16,7 +16,7 @@ describe('the flag guard on the hub', () => {
   let stub: RequestClientStub;
 
   /** Opens `url` after landing on `from`, the way a person moves inside the board: the lens is the page they are on. */
-  async function open(url: string, answer: FlagsView, from = '/') {
+  async function open(url: string, answer: FlagsResponse, from = '/') {
     stub = stubRequestClient(hubClient, (_method, path) => (path === '/api/flags' ? answer : {}));
     TestBed.configureTestingModule({
       providers: [

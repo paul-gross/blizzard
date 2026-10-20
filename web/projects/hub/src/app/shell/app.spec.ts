@@ -25,7 +25,7 @@ import { App } from './app';
 import { routes } from './app.routes';
 import { BoardPage } from '../board/board-page';
 import { startOfLocalDayIso, startOfPreviousLocalDayIso } from '../core/local-day';
-import { type FlagsView, provideFlags } from 'fleet/shell';
+import { type FlagsResponse, provideFlags } from 'fleet/shell';
 import { hubFlagsRead } from '../core/flags.query';
 
 /** A do-nothing EventSource so the live-update spine can open without a real stream. */
@@ -49,7 +49,7 @@ class FakeEventSource {
 function stubAuth(
   me: MeResponse | null = OPERATOR_ME_RESPONSE,
   providers: readonly ProviderSummary[] = [],
-  flags: FlagsView = { flags: {}, overridden: [] },
+  flags: FlagsResponse = { flags: {}, overridden: [] },
 ): RequestClientStub {
   return stubRequestClient(hubClient, (method, path) => {
     if (path === '/api/me') return me === null ? stubError(401, { detail: 'not authenticated' }) : me;

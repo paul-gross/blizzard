@@ -84,13 +84,6 @@
   justify-content: center;
   width: 7px;
 }
-/* Added at the hub but never started: no contact yet, so no lit beacon — a hollow mark. */
-.hollow {
-  box-sizing: border-box;
-  width: 7px;
-  height: 7px;
-  border: 1px solid var(--label-dim);
-}
 /* The runner's own pause reads in the paused yellow its light wears; the hub's stop sign in red. */
 .brake {
   color: var(--amber);

@@ -1,7 +1,7 @@
 import { hubApi, type RunnerConnection, type SubscriptionPace } from 'fleet';
 
 import type { HostCard, HostGroups } from './host-rows.model';
-import { agentGauges, envGauges, railLight, railVm, subscriptionLines } from './runner-rail.model';
+import { agentGauges, envGauges, railVm, subscriptionLines } from './runner-rail.model';
 import type { RunnerRow } from './runner-rows.model';
 
 const card = (id: string, workspaces: { capacity: number | null; inUse: number }[]): HostCard =>
@@ -202,19 +202,5 @@ describe('subscriptionLines', () => {
       ['unsampled', 0],
       ['unsampled', 0],
     ]);
-  });
-});
-
-describe('railLight', () => {
-  it('reads offline over a pause, a pause over online, and a never-connected runner as unlit', () => {
-    expect(railLight(row('r'))).toEqual({ kind: 'lit', tone: 'green', blink: 'hold' });
-    expect(railLight(row('r', { locally_paused: true }))).toEqual({ kind: 'lit', tone: 'amber', blink: 'hold' });
-    expect(railLight(row('r', { hub_paused: true }))).toEqual({ kind: 'lit', tone: 'amber', blink: 'hold' });
-    expect(railLight(row('r', { online: false, hub_paused: true, connection: 'offline' as RunnerConnection }))).toEqual({
-      kind: 'lit',
-      tone: 'red',
-      blink: 'step',
-    });
-    expect(railLight(row('r', { online: false, connection: 'never_connected' as RunnerConnection }))).toEqual({ kind: 'never' });
   });
 });

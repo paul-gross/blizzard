@@ -27,9 +27,6 @@
   width: 7px;
   height: 7px;
 }
-.dot.never {
-  border: 1px solid var(--label-dim);
-}
 .name {
   color: var(--amber);
   font-size: var(--fs-md);

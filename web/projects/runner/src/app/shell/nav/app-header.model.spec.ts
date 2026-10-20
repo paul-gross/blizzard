@@ -20,7 +20,7 @@ describe('headerConnectionLabel', () => {
 });
 
 describe('headerStatCells', () => {
-  it('withholds every cell while the host read is pending', () => {
+  it('withholds every cell while either of the host’s reads is pending', () => {
     expect(headerStatCells(true, undefined, undefined)).toEqual([]);
   });
 

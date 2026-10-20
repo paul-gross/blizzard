@@ -3,10 +3,11 @@ import { ChangeDetectionStrategy, Component, type TemplateRef, computed, input, 
 import { KitAsyncState, KitBadge, KitBeacon, type KitFact, KitFactList, KitPanel, RunnerConnection, SubscriptionPaceGroup } from 'fleet';
 import { FleetRunnerRow } from './fleet-runner-row';
 import type { HostDetailVm } from './fleet-page.model';
-import { connectionState } from './host-rows.model';
+import { connectionState, hostLight } from './connection-status.model';
 import { HostVerbBar } from './host-verb-bar';
 import { type HostVerbEvent, type HostVerbsVm, NO_HOST_VERBS } from './host-verbs.model';
 import type { RunnerRow } from './runner-rows.model';
+import { StatusLight } from './status-light';
 
 /**
  * The Fleet tab's right pane for one host: the title bar (light, name, short ref, state,
@@ -19,7 +20,7 @@ import type { RunnerRow } from './runner-rows.model';
 @Component({
   selector: 'app-host-detail',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FleetRunnerRow, HostVerbBar, KitAsyncState, KitBadge, KitBeacon, KitFactList, KitPanel, SubscriptionPaceGroup],
+  imports: [FleetRunnerRow, HostVerbBar, KitAsyncState, KitBadge, KitBeacon, KitFactList, KitPanel, StatusLight, SubscriptionPaceGroup],
   templateUrl: './host-detail.html',
   styleUrls: ['./fleet-detail.css', './host-detail.css'],
 })
@@ -31,8 +32,6 @@ export class HostDetail {
 
   readonly hostVerb = output<HostVerbEvent>();
   readonly togglePause = output<RunnerRow>();
-
-  protected readonly connection = RunnerConnection;
 
   private readonly lastReport = viewChild.required<TemplateRef<unknown>>('lastReport');
   private readonly token = viewChild.required<TemplateRef<unknown>>('token');
@@ -50,6 +49,8 @@ export class HostDetail {
     { label: 'Token', template: this.token(), testid: 'fleet-fact-token' },
     { label: 'Agents', template: this.agents(), testid: 'fleet-fact-agents' },
   ]);
+
+  protected readonly light = computed(() => hostLight(this.detail().card.online, this.detail().card.connection));
 
   protected readonly state = computed(() => connectionState(this.detail().card.online, this.detail().card.connection));
 

@@ -16,4 +16,4 @@ export { ChunkTimeline } from './chunk-timeline';
 export { ChunkTimelineSelection } from './chunk-timeline-selection';
 export { CHUNK_STEP_SESSIONS, injectChunkStepSessions, type ChunkStepSession } from './chunk-step-sessions';
 export { ChunkTokenBreakdown } from './chunk-token-breakdown';
-export type { TransitionView, ArtifactView, DecisionView, ChunkEscalationView, ChunkUsageTotalView, ChunkUsageView } from '../../api/hub';
+export type { TransitionView, ArtifactView, DecisionView, ChunkUsageTotalView } from '../../api/hub';

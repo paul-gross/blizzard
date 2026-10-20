@@ -1,13 +1,14 @@
 import { NgTemplateOutlet } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 
-import { KitAsyncState, type KitAsyncStateValue, KitBeacon, KitMasterDetail, KitPanel, KitSelectRow, RunnerConnection } from 'fleet';
+import { KitAsyncState, type KitAsyncStateValue, KitMasterDetail, KitPanel, KitSelectRow } from 'fleet';
 import type { FleetList, FleetSelection } from './fleet-page.model';
 import { HostDetail } from './host-detail';
 import { HostlessRunnerDetail } from './hostless-runner-detail';
 import type { HostVerbEvent, HostVerbsVm } from './host-verbs.model';
 import { NO_HOST_VERBS } from './host-verbs.model';
 import type { RunnerRow } from './runner-rows.model';
+import { StatusLight } from './status-light';
 
 /**
  * The desktop Fleet tab's presentational half: host cards (then a "No host" group) beside
@@ -17,7 +18,7 @@ import type { RunnerRow } from './runner-rows.model';
 @Component({
   selector: 'app-fleet-view',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [HostDetail, HostlessRunnerDetail, KitAsyncState, KitBeacon, KitMasterDetail, KitPanel, KitSelectRow, NgTemplateOutlet],
+  imports: [HostDetail, HostlessRunnerDetail, KitAsyncState, KitMasterDetail, KitPanel, KitSelectRow, NgTemplateOutlet, StatusLight],
   templateUrl: './fleet-view.html',
   styleUrl: './fleet-view.css',
 })
@@ -34,8 +35,6 @@ export class FleetView {
   readonly pick = output<string>();
   readonly hostVerb = output<HostVerbEvent>();
   readonly togglePause = output<RunnerRow>();
-
-  protected readonly connection = RunnerConnection;
 
   /** The detail panel's header: what kind of thing is open. */
   protected readonly detailLabel = computed(() => {

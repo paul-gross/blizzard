@@ -22,7 +22,7 @@ const CHUNK_ID = 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9';
 })
 class TestHost {
   chunkId = CHUNK_ID;
-  linkBase: readonly string[] = ['/runners', 'rn_1', 'board', 'chunk'];
+  linkBase: readonly string[] = ['/board', 'chunk'];
   status = 'running';
   tone: 'running' | 'needs' = 'running';
   pointers: readonly WorkRefView[] = [];
@@ -104,10 +104,10 @@ describe('ChunkPageHeader', () => {
     // The phrase itself is not the target — only the ref inside it is.
     expect(blockedBy.tagName).toBe('SPAN');
     const link = blockedBy.querySelector<HTMLAnchorElement>('a.edge-ref')!;
-    expect(link.getAttribute('href')).toBe('/runners/rn_1/board/chunk/ch_01prereq00000000000000000');
+    expect(link.getAttribute('href')).toBe('/board/chunk/ch_01prereq00000000000000000');
     expect(link.textContent?.trim()).toBe('C-0000');
     expect(blocking.querySelector('a.edge-ref')?.getAttribute('href')).toBe(
-      '/runners/rn_1/board/chunk/ch_01dependent000000000000aa',
+      '/board/chunk/ch_01dependent000000000000aa',
     );
   });
 });

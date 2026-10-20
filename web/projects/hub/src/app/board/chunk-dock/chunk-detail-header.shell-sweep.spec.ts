@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { page } from 'vitest/browser';
 
-import { type ChunkDetail, RUNNER_NAME_SEPARATOR, compactRef } from 'fleet';
+import { type ChunkDetail, runnerDisplayName } from 'fleet';
 import { ChunkDetailHeader } from './chunk-detail-header';
 
 /**
@@ -137,7 +137,8 @@ describe('chunk detail header action row shell sweep (web:shell-sweep)', () => {
         const chip = root.querySelector<HTMLElement>('[data-testid="route-info"]')!;
         const text = chip.firstChild as Text;
         // Through the separator: an ellipsis that clips the name lands on it at the earliest.
-        const lead = `${compactRef(DETAIL.route!.runner_id)}${RUNNER_NAME_SEPARATOR}`;
+        const named = runnerDisplayName(DETAIL.route!.runner_id, 'n');
+        const lead = named.slice(0, -1);
         expect(text.data.startsWith(lead), `width ${width}: the chip reads ${JSON.stringify(text.data)}`).toBe(true);
         const range = document.createRange();
         range.setStart(text, 0);

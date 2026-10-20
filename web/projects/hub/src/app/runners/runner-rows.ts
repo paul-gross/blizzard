@@ -1,7 +1,7 @@
 import { computed } from '@angular/core';
 import { injectQuery } from '@tanstack/angular-query-experimental';
 
-import { type KitAsyncStateValue, injectNowSignal, asyncState, LIVE_COVERED_POLL_BACKSTOP_MS } from 'fleet';
+import { type KitAsyncStateValue, injectNowSignal, asyncStateOf, LIVE_COVERED_POLL_BACKSTOP_MS } from 'fleet';
 import { injectProjectFilter } from 'fleet/shell';
 import { boardChunksQueryOptions } from '../core/chunks.query';
 import { foldRunnerRows, lensRunners, type RunnerRow } from './runner-rows.model';
@@ -19,6 +19,10 @@ import { injectHubRunnersQuery } from '../core/runners.query';
  * tenant's board list on every lens: a runner busy on another project's chunk still reads as busy.
  *
  * Under a lens a card holding no lensed runner is hidden ({@link foldHostCards}).
+ *
+ * `state` waits on and fails with both the runners and the hosts reads — the cards fold the hosts, so an empty
+ * frame before they land, or over a failed one, would claim a fleet that was never read. Chunks only fold claims and
+ * never decide emptiness.
  *
  * Retired runners and hosts are folded in only while `includeRetired()` is true. Returns only
  * the shared reads and their fold; permission reads and pause mutations are left to
@@ -63,7 +67,7 @@ export function injectRunnerRows(includeRetired: () => boolean = () => false): {
   );
 
   const state = computed<KitAsyncStateValue>(() =>
-    asyncState(runnersQuery, rows().length === 0 && cards().length === 0),
+    asyncStateOf([runnersQuery, hostsQuery], rows().length === 0 && cards().length === 0),
   );
 
   return { rows, cards, state };

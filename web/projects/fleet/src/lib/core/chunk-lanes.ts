@@ -23,9 +23,10 @@ export const LANES: readonly Lane[] = [
 export const DONE_LANE = 'done';
 
 /**
- * Every chunk status folded onto its board lane. It places the live statuses only:
- * DONE membership is the hub's `terminal` flag, read by {@link chunkLane} and
- * {@link laneCounts}, never decided from a status here.
+ * Every chunk status folded onto its board lane. DONE membership is the hub's `terminal`
+ * flag, read by {@link chunkLane} and {@link laneCounts}; the `stopped` and `done` entries
+ * only place a summary that omits the optional `terminal` wire field. The map stays total
+ * over the generated `ChunkStatus` so a new status fails to compile here until it is placed.
  *
  * The transient `delivering` shows under RUNNING. `paused` shares WAIT/HUMAN with
  * `waiting_on_human`: that is the lane for work stopped pending a human, which is what
@@ -45,15 +46,16 @@ export const STATUS_LANE: Record<ChunkStatus, string> = {
 };
 
 /** The board lane a chunk sits in: DONE when the hub flags it `terminal`, else its
- * status's {@link STATUS_LANE} placement. */
+ * status's {@link STATUS_LANE} placement — which is how a summary that omits `terminal`
+ * still lands a `stopped` or `done` chunk in DONE. */
 export function chunkLane(chunk: Pick<ChunkSummary, 'status' | 'terminal'>): string {
   return chunk.terminal === true ? DONE_LANE : STATUS_LANE[chunk.status];
 }
 
 /**
  * The all-time per-lane counts. DONE is the hub's own `terminal` count; every other
- * lane sums the per-status counts {@link STATUS_LANE} places there. Every lane is
- * keyed, zero when empty.
+ * lane sums the per-status counts {@link STATUS_LANE} places there, skipping the
+ * statuses it places in DONE. Every lane is keyed, zero when empty.
  */
 export function laneCounts(counts: ChunkCountsView): ReadonlyMap<string, number> {
   const perLane = new Map<string, number>(LANES.map((lane) => [lane.key, 0]));

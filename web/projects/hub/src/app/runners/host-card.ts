@@ -1,9 +1,11 @@
-import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 
-import { KitBeacon, RunnerConnection, SubscriptionPaceGroup, WorkspaceTable } from 'fleet';
+import { SubscriptionPaceGroup, WorkspaceTable } from 'fleet';
+import { hostLight } from './connection-status.model';
 import type { HostCard } from './host-rows.model';
 import { HostVerbBar } from './host-verb-bar';
 import { type HostVerbEvent, type HostVerbsVm, NO_HOST_VERBS } from './host-verbs.model';
+import { StatusLight } from './status-light';
 
 /**
  * One host's card on the runners view — its name and last report, its workspaces with
@@ -20,7 +22,7 @@ import { type HostVerbEvent, type HostVerbsVm, NO_HOST_VERBS } from './host-verb
 @Component({
   selector: 'app-host-card',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [HostVerbBar, KitBeacon, SubscriptionPaceGroup, WorkspaceTable],
+  imports: [HostVerbBar, StatusLight, SubscriptionPaceGroup, WorkspaceTable],
   templateUrl: './host-card.html',
   styleUrl: './host-card.css',
 })
@@ -34,6 +36,5 @@ export class HostCardView {
   /** A confirmed gesture on this card. */
   readonly verb = output<HostVerbEvent>();
 
-  /** The wire's connection vocabulary, for the host's liveness square. */
-  protected readonly connection = RunnerConnection;
+  protected readonly light = computed(() => hostLight(this.card().online, this.card().connection));
 }

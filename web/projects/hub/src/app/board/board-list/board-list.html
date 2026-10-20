@@ -64,13 +64,10 @@
     <ng-container *ngTemplateOutlet="row; context: { $implicit: entry }" />
   }
   @if (!hasRows()) {
-    <!-- Only a read that has answered can say the list is empty; while it loads, skeleton rows
-         stand in, and after it fails the board's own async state speaks instead. -->
+    <!-- While the read loads, skeleton rows stand in; the board's own async state speaks for an
+         empty or failed one. -->
     @for (i of skeletonIndexes(); track i) {
       <app-board-list-row-skeleton />
-    }
-    @if (loaded()) {
-      <p class="empty" data-testid="list-empty">Nothing here</p>
     }
   }
 </div>

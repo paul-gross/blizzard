@@ -1,0 +1,14 @@
+:host {
+  display: inline-block;
+  flex: none;
+  width: 7px;
+  height: 7px;
+}
+/* Added at the hub but never started: no contact yet, so no lit beacon — a hollow mark. */
+.hollow {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  border: 1px solid var(--label-dim);
+}

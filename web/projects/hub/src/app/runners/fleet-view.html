@@ -75,13 +75,7 @@
     (picked)="pick.emit(card.id)"
   >
     <span class="line1">
-      <fleet-kit-beacon
-        class="dot"
-        aria-hidden="true"
-        [active]="card.online || card.connection === connection.OFFLINE"
-        [tone]="card.online ? 'green' : 'red'"
-        [blink]="card.online ? 'pulse' : 'step'"
-      />
+      <app-status-light class="dot" [light]="card.light" />
       <span class="name" data-testid="fleet-card-name">{{ card.name }}</span>
       <span class="agents" data-testid="fleet-card-agents">
         @if (card.agents !== null) {

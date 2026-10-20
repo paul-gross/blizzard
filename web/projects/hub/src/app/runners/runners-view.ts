@@ -1,10 +1,12 @@
 import { NgTemplateOutlet } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
-import { type ChunkStatus, KitAsyncState, type KitAsyncStateValue, KitBadge, KitBeacon, KitButton, KitChip, KitPanel, KitSlotBar, RunnerConnection, STATUS_TONE, SubscriptionPaceGroup, type Tone } from 'fleet';
+import { type ChunkStatus, KitAsyncState, type KitAsyncStateValue, KitBadge, KitButton, KitChip, KitPanel, KitSlotBar, RunnerConnection, STATUS_TONE, SubscriptionPaceGroup, type Tone } from 'fleet';
+import { runnerLight } from './connection-status.model';
 import { HostCardView } from './host-card';
 import { NO_HOST_VERBS, type HostVerbEvent, type HostVerbsVm } from './host-verbs.model';
 import { groupHostRows, type HostCard, type HostGroups } from './host-rows.model';
 import { ServedProjectGroup } from './served-project-group';
+import { StatusLight } from './status-light';
 import { localPauseHint, runnerSeenLabel, runnerToggleHint, type RunnerRow, versionStandingBadge } from './runner-rows.model';
 
 /**
@@ -17,7 +19,7 @@ import { localPauseHint, runnerSeenLabel, runnerToggleHint, type RunnerRow, vers
 @Component({
   selector: 'app-runners-view',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [HostCardView, KitAsyncState, KitBadge, KitBeacon, KitButton, KitChip, KitPanel, KitSlotBar, NgTemplateOutlet, ServedProjectGroup, SubscriptionPaceGroup],
+  imports: [HostCardView, KitAsyncState, KitBadge, KitButton, KitChip, KitPanel, KitSlotBar, NgTemplateOutlet, ServedProjectGroup, StatusLight, SubscriptionPaceGroup],
   templateUrl: './runners-view.html',
   styleUrl: './runners-view.css',
 })
@@ -73,6 +75,7 @@ export class RunnersView {
 
   /** The wire's connection vocabulary, for the row's connection classes and badge. */
   protected readonly connection = RunnerConnection;
+  protected readonly runnerLight = runnerLight;
 
   /** A claim's badge tone, read straight off `chunk-lanes.ts`'s `STATUS_TONE`
    * (`bzh:frontend-formatters`). */

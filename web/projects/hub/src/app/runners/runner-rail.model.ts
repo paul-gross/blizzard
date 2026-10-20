@@ -1,5 +1,6 @@
-import { type BeaconBlink, type BeaconTone, isLapsedSubscription as isLapsed, RunnerConnection, type SubscriptionLine, subscriptionLine, type SubscriptionPace } from 'fleet';
+import { isLapsedSubscription as isLapsed, type SubscriptionLine, subscriptionLine, type SubscriptionPace } from 'fleet';
 
+import { type ConnectionLight, runnerLight } from './connection-status.model';
 import type { HostGroups } from './host-rows.model';
 import type { RunnerRow } from './runner-rows.model';
 
@@ -10,14 +11,11 @@ export interface Gauge {
   readonly total: number;
 }
 
-/** A runner's status light: a hollow mark for one never connected, else a lit beacon. */
-export type RailLight = { readonly kind: 'never' } | { readonly kind: 'lit'; readonly tone: BeaconTone; readonly blink: BeaconBlink };
-
 /** One runner on the rail: the row, its light, the Fleet tab selection that opens it, and one
  * agent gauge per project it binds. */
 export interface RailRow {
   readonly row: RunnerRow;
-  readonly light: RailLight;
+  readonly light: ConnectionLight;
   /** Its host's id when it sits under a host card, else its own — the Fleet tab selects hosts and host-less runners. */
   readonly fleetId: string;
   /** The host it runs on; `null` for a host-less runner. */
@@ -77,17 +75,6 @@ export function subscriptionLines(groups: HostGroups<RunnerRow>): readonly Subsc
   return [...chosen.values()].map(subscriptionLine);
 }
 
-/**
- * A runner's status light: blinking red when offline — the worst news outranks a pause — steady
- * yellow while either brake holds it, else steady green; a hollow mark for one never connected.
- */
-export function railLight(row: RunnerRow): RailLight {
-  if (row.connection === RunnerConnection.NEVER_CONNECTED) return { kind: 'never' };
-  if (!row.online) return { kind: 'lit', tone: 'red', blink: 'step' };
-  if (row.hub_paused || row.locally_paused) return { kind: 'lit', tone: 'amber', blink: 'hold' };
-  return { kind: 'lit', tone: 'green', blink: 'hold' };
-}
-
 /** A runner's agents, one gauge per binding: its project's agents busy of those it allows. */
 export function agentGauges(row: RunnerRow): readonly Gauge[] {
   return row.bindingLines.map((line) => ({ name: line.project, used: line.agentsInUse, total: line.agents }));
@@ -100,6 +87,6 @@ export function railVm(groups: HostGroups<RunnerRow>): RailVm {
   return {
     envs: envGauges(groups),
     subscriptions: subscriptionLines(groups),
-    rows: [...hosted, ...hostless].map((entry) => ({ ...entry, light: railLight(entry.row), agents: agentGauges(entry.row) })),
+    rows: [...hosted, ...hostless].map((entry) => ({ ...entry, light: runnerLight(entry.row), agents: agentGauges(entry.row) })),
   };
 }
