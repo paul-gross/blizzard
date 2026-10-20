@@ -4,14 +4,16 @@ import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-exper
 import { vi } from 'vitest';
 
 import { FRESHNESS_AGING_AFTER_MS, hubClient } from 'fleet';
-import { settle, type RequestClientStub, stubRequestClient } from 'fleet/testing';
+import { settle, type RequestClientStub, stubError, stubRequestClient } from 'fleet/testing';
 import { injectRunnerRows } from './runner-rows';
 
 
 @Component({ selector: 'app-test-runner-rows-host', template: `` })
 class TestHost {
   readonly showRetired = signal(false);
-  readonly rows = injectRunnerRows(() => this.showRetired()).rows;
+  private readonly folded = injectRunnerRows(() => this.showRetired());
+  readonly rows = this.folded.rows;
+  readonly state = this.folded.state;
 }
 
 describe('injectRunnerRows subscription freshness fold', () => {
@@ -159,5 +161,53 @@ describe('injectRunnerRows retired runners', () => {
     const rows = fixture.componentInstance.rows();
     expect(rows.map((r) => r.runner_id)).toEqual(['rn_live', 'rn_gone']);
     expect(rows[1]).toMatchObject({ retired: true, retired_at: AT, retired_by: 'op' });
+  });
+});
+
+describe('injectRunnerRows state', () => {
+  let stub: RequestClientStub;
+  let releaseHosts: () => void;
+
+  async function configure(hosts: () => unknown | Promise<unknown>) {
+    stub = stubRequestClient(hubClient, async (method, path) => {
+      if (method === 'GET' && path === '/api/runners') return { runners: [] };
+      if (method === 'GET' && path === '/api/hosts') return hosts();
+      if (method === 'GET' && path === '/api/chunks') return { chunks: [], next_cursor: null };
+      return {};
+    });
+    await TestBed.configureTestingModule({
+      imports: [TestHost],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
+      ],
+    }).compileComponents();
+  }
+
+  afterEach(() => stub.restore());
+
+  it('stays loading while the hosts read is pending, though the runners read has landed', async () => {
+    const held = new Promise<void>((resolve) => (releaseHosts = resolve));
+    await configure(async () => {
+      await held;
+      return { hosts: [] };
+    });
+    const fixture = TestBed.createComponent(TestHost);
+    await settle(fixture);
+
+    expect(fixture.componentInstance.state()).toBe('loading');
+
+    releaseHosts();
+    await settle(fixture);
+
+    expect(fixture.componentInstance.state()).toBe('empty');
+  });
+
+  it('reads a failed hosts read as an error, not as an empty fleet', async () => {
+    await configure(() => stubError(500, { detail: 'boom' }));
+    const fixture = TestBed.createComponent(TestHost);
+    await settle(fixture);
+
+    expect(fixture.componentInstance.state()).toBe('error');
   });
 });

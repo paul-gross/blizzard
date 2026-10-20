@@ -171,7 +171,7 @@ describe('FleetPage', () => {
         : undefined,
     );
 
-    expect(el.querySelector('[data-testid="fleet-runner"] .dot.never')).not.toBeNull();
+    expect(el.querySelector('[data-testid="fleet-runner"] .dot .hollow')).not.toBeNull();
     expect(el.querySelector('[data-testid="fleet-runner"] fleet-kit-beacon')).toBeNull();
   });
 

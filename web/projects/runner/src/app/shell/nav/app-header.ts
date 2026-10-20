@@ -75,12 +75,12 @@ export class AppHeader {
 
   /** The header's live stat cells across the host, or across the runner the Runner
    * filter names — environments in use over the environments, agents in use over every
-   * serving runner's ceiling. Withheld (`[]`) until the host's runner read has resolved at
+   * serving runner's ceiling. Withheld (`[]`) until the host's runner and environment reads have resolved at
    * least once, the same stance the hub header's own `spendToday` cell takes
     * rather than show a misleading `Envs 0/0`. */
   protected readonly headerStats = computed<readonly StatCell[]>(() =>
     headerStatCells(
-      this.runnersQuery.isPending(),
+      this.runnersQuery.isPending() || this.environmentsQuery.isPending(),
       this.runnersQuery.data(),
       this.environmentsQuery.data(),
       this.filters.runner(),

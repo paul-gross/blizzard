@@ -81,9 +81,3 @@
   height: 0;
   border-top: 1px dashed var(--cyan-dim);
 }
-.empty {
-  margin: 0;
-  padding: 8px 14px;
-  font-size: var(--fs-xs);
-  color: var(--label-dim);
-}

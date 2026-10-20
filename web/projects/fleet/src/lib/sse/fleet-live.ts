@@ -219,10 +219,10 @@ const EVENT_INVALIDATION_REGISTRY: Record<HubEventType, (data: HubEventPayload) 
 };
 
 /**
- * One event recorded for the Activity feed: its stream arrival order
- * (`seq` — a stable, monotonic client key), its board vocabulary `type`, the parsed
- * `data`, and the client-side arrival time `at` (ms epoch; the hub frames carry no
- * timestamp of their own). `type` is a plain string, so a type this client does not know still fits.
+ * One event recorded for the Activity feed: its stream arrival order (`seq` — a stable, monotonic client
+ * key), its board vocabulary `type`, the parsed `data`, and the client-side arrival time `at` (ms epoch;
+ * the hub frames carry no timestamp of their own). `type` is a plain string, so a type this client does
+ * not know still fits.
  *
  * `key` is `data.key` ({@link KeyedEvent}), lifted to the top level. Absent on a frame
  * from a hub that predates this stamp.

@@ -117,7 +117,7 @@ export function injectFindingsBucketFilters(): FindingsBucketFilters {
   }
 
   const classFilter = computed<string | null>(() => url.read('class'));
-  const stateFilter = computed<string>(() => url.read('state') ?? 'live');
+  const stateFilter = computed<string>(() => url.read('state') ?? hubApi.FindingState.LIVE);
   const bucketQuery = injectHubFindingsBucketQuery(selectedRoutine, selectedScope, classFilter, () => stateFilter() === ALL_STATES ? null : stateFilter());
   const classesQuery = injectHubFindingClassesQuery(selectedRoutine, selectedScope);
   const bucketRows = computed<readonly FindingView[]>(() => bucketQuery.data()?.pages.flatMap((page) => page.findings ?? []) ?? []);
@@ -153,7 +153,7 @@ export function injectFindingsBucketFilters(): FindingsBucketFilters {
       { findingIds: wontFixPending().flatMap((v) => v.findingIds), resultingState: 'wont-fix' },
       { findingIds: notAFindingPending().flatMap((v) => v.findingIds), resultingState: 'not-a-finding' },
       { findingIds: supersedePending().flatMap((v) => v.findingIds), resultingState: 'superseded' },
-      { findingIds: reopenPending().flatMap((v) => v.findingIds), resultingState: 'live' },
+      { findingIds: reopenPending().flatMap((v) => v.findingIds), resultingState: hubApi.FindingState.LIVE },
     ],
   );
 

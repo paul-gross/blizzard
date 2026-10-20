@@ -1,11 +1,5 @@
 <div class="hd" data-testid="fleet-detail-title">
-  <fleet-kit-beacon
-    class="dot"
-    aria-hidden="true"
-    [active]="detail().card.online || detail().card.connection === connection.OFFLINE"
-    [tone]="detail().card.online ? 'green' : 'red'"
-    [blink]="detail().card.online ? 'pulse' : 'step'"
-  />
+  <app-status-light class="dot" [light]="light()" />
   <h2 class="name" data-testid="fleet-detail-name">{{ detail().card.hostName }}</h2>
   <span class="ref" data-testid="fleet-detail-ref" [title]="detail().card.hostId">{{ detail().ref }}</span>
   <fleet-kit-badge class="state" data-testid="fleet-detail-state" variant="text" [tone]="state().tone">{{

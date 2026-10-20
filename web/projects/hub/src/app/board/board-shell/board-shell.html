@@ -9,7 +9,6 @@
         [groups]="listGroups()"
         [selectedChunkId]="selectedChunkId()"
         [gatedChunkIds]="gatedChunkIds()"
-        [loaded]="state() === 'ready'"
         [skeletonRows]="state() === 'loading' ? listSkeletons() : 0"
         [canControl]="canControl()"
         [canReorder]="canReorder()"

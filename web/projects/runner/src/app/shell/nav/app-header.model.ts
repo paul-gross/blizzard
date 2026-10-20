@@ -17,8 +17,8 @@ export function headerConnectionLabel(
 
 /** The header's live stat cells, across the whole host — environments in use over every workspace's environments,
  * agents in use over every serving runner's `max_agents` — or, with `runnerName` set, across that runner: the
- * environments it holds over every environment, and its own agents. Withheld (`[]`) while the host's runner read is
- * still pending. */
+ * environments it holds over every environment, and its own agents. Withheld (`[]`) while either of the host's reads —
+ * the runners or the environments — is still pending, so a half-landed fold never reads as `Envs 0/0`. */
 export function headerStatCells(
   hostPending: boolean,
   runners: readonly runnerApi.HostRunnerView[] | undefined,

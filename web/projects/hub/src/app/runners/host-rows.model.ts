@@ -3,7 +3,6 @@ import {
   RunnerConnection,
   type RunnerRegistryView,
   type SubscriptionPace,
-  type Tone,
   type WorkspaceRow,
   ageMs,
   compactRef,
@@ -180,14 +179,6 @@ function workspaceHeld(
     }
   }
   return held;
-}
-
-/** A host's or runner's connection as a detail title bar states it, in its tone. */
-export function connectionState(online: boolean, connection: RunnerConnection): { readonly label: string; readonly tone: Tone } {
-  if (online) return { label: 'ONLINE', tone: 'done' };
-  return connection === RunnerConnection.NEVER_CONNECTED
-    ? { label: 'NEVER CONNECTED', tone: 'idle' }
-    : { label: 'OFFLINE', tone: 'stale' };
 }
 
 function reportedAgo(lastSeenAt: string | null | undefined, nowMs: number): string | null {

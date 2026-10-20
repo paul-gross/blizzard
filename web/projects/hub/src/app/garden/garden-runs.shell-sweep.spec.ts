@@ -182,7 +182,7 @@ describe('FleetRunDelta stacking shell sweep (web:shell-sweep, blizzard#401 Phas
  * at from the hub's mobile bottom tab bar (`bzh:narrow-viewport-tier-rule`).
  *
  * They live in this file deliberately. A *second* `*.shell-sweep.spec.ts` in the
- * fleet project leaves `ng test hub` hanging after its suite passes — every test
+ * hub project leaves `ng test hub` hanging after its suite passes — every test
  * green, the process never exiting — which reads in CI as a job that runs until it
  * is killed rather than as a failure. Adding these cases to a sweep file the
  * project already has costs nothing and avoids that entirely.

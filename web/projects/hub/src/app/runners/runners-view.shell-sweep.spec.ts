@@ -486,25 +486,31 @@ describe('mobile Fleet screen host card layout shell sweep (web:shell-sweep)', (
     }
   });
 
-  it('animates an online light with the beacon fade and an offline light with the red step blink at 390px', async () => {
+  it('holds an online light steady green, a paused one steady amber, an offline one in the red step blink, and a never-connected one hollow at 390px', async () => {
     await loadDesignTokens();
     await page.viewport(390, 800);
     const fixture = await render();
+    fixture.componentRef.setInput('rows', [...ROWS, { ...ROWS[0], runner_id: 'rn_held', runner_name: 'held', hub_paused: true }]);
+    await fixture.whenStable();
     const root = fixture.nativeElement as HTMLElement;
     document.body.appendChild(root);
     try {
       const beaconOf = (id: string) =>
         root.querySelector<HTMLElement>(`[data-testid="mobile-fleet-runner"][data-runner="${id}"] fleet-kit-beacon .beacon`)!;
       const online = getComputedStyle(beaconOf('rn_online'));
-      expect(online.animationName).toMatch(/beacon-blink$/);
+      expect(online.animationName, 'an online light holds steady').toBe('none');
+      const held = getComputedStyle(beaconOf('rn_held'));
+      expect(held.animationName, 'a paused light holds steady').toBe('none');
       const offline = getComputedStyle(beaconOf('rn_paused'));
       expect(offline.animationName).toMatch(/beacon-step$/);
       expect(offline.animationDuration).toBe('1.2s');
-      expect(online.backgroundColor, 'online is green, offline red').not.toBe(offline.backgroundColor);
+      const colors = new Set([online.backgroundColor, held.backgroundColor, offline.backgroundColor]);
+      expect(colors.size, 'online green, paused amber and offline red are three colours').toBe(3);
       expect(
         root.querySelector('[data-runner="rn_01KXKVVF1J3D6H6VYZ3XYNNEW1"] fleet-kit-beacon'),
         'a never-connected runner keeps its hollow mark, not a beacon',
       ).toBeNull();
+      expect(root.querySelector('[data-runner="rn_01KXKVVF1J3D6H6VYZ3XYNNEW1"] .dot .hollow')).not.toBeNull();
     } finally {
       root.remove();
     }

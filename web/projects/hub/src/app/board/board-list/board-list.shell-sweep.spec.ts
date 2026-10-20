@@ -65,7 +65,6 @@ async function render(width: number): Promise<HTMLElement> {
   }).compileComponents();
   const fixture = TestBed.createComponent(BoardList);
   fixture.componentRef.setInput('groups', GROUPS);
-  fixture.componentRef.setInput('loaded', true);
   fixture.componentRef.setInput('canReorder', true);
   fixture.componentRef.setInput('canControl', true);
   await fixture.whenStable();

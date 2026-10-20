@@ -1,11 +1,12 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
-import { KitAsyncState, type KitAsyncStateValue, KitBeacon, KitGlyph, KitPanel, KitSlotBar, RunnerConnection, SubscriptionBlocks } from 'fleet';
+import { KitAsyncState, type KitAsyncStateValue, KitGlyph, KitPanel, KitSlotBar, RunnerConnection, SubscriptionBlocks } from 'fleet';
 import { LensLink } from 'fleet/shell';
 import { groupHostRows, type HostCard } from './host-rows.model';
 import { railVm } from './runner-rail.model';
 import { localPauseHint, runnerSeenLabel, runnerSeenTag, type RunnerRow } from './runner-rows.model';
+import { StatusLight } from './status-light';
 
 /**
  * The board rail's runner panel — the presentational half, most important first: a pace line per
@@ -17,7 +18,7 @@ import { localPauseHint, runnerSeenLabel, runnerSeenTag, type RunnerRow } from '
 @Component({
   selector: 'app-runner-view',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitAsyncState, KitBeacon, KitGlyph, KitPanel, KitSlotBar, LensLink, RouterLink, SubscriptionBlocks],
+  imports: [KitAsyncState, KitGlyph, KitPanel, KitSlotBar, LensLink, RouterLink, StatusLight, SubscriptionBlocks],
   templateUrl: './runner-view.html',
   styleUrl: './runner-view.css',
 })

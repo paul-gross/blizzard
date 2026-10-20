@@ -1,0 +1,6 @@
+@let l = light();
+@if (l.kind === 'lit') {
+  <fleet-kit-beacon aria-hidden="true" [active]="true" [tone]="l.tone" [blink]="l.blink" />
+} @else {
+  <span class="hollow" aria-hidden="true"></span>
+}

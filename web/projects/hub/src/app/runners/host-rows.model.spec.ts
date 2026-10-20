@@ -1,7 +1,7 @@
-import { type HostRegistryView, RunnerConnection, type RunnerRegistryView } from 'fleet';
+import { type HostRegistryView, type RunnerRegistryView } from 'fleet';
 import type { ChunkSummary } from 'fleet/shell';
 
-import { bindingLines, connectionState, foldHostCards, groupHostRows, subscriptionName } from './host-rows.model';
+import { bindingLines, foldHostCards, groupHostRows, subscriptionName } from './host-rows.model';
 
 const NOW = Date.parse('2026-07-16T12:00:00.000Z');
 const SEEN = '2026-07-16T11:59:48.000Z';
@@ -129,14 +129,6 @@ describe('foldHostCards', () => {
     expect(foldHostCards([H1, empty], RUNNERS, null, CHUNKS, NOW).map((card) => card.hostId)).toEqual(['h1', 'h_empty']);
     expect(foldHostCards([H1, empty], RUNNERS, [RUNNERS[0]], CHUNKS, NOW).map((card) => card.hostId)).toEqual(['h1']);
     expect(foldHostCards([H1, empty], RUNNERS, [RUNNERS[2]], CHUNKS, NOW)).toEqual([]);
-  });
-});
-
-describe('connectionState', () => {
-  it('reads online, offline and never connected, each in its tone', () => {
-    expect(connectionState(true, RunnerConnection.ONLINE)).toEqual({ label: 'ONLINE', tone: 'done' });
-    expect(connectionState(false, RunnerConnection.OFFLINE)).toEqual({ label: 'OFFLINE', tone: 'stale' });
-    expect(connectionState(false, RunnerConnection.NEVER_CONNECTED)).toEqual({ label: 'NEVER CONNECTED', tone: 'idle' });
   });
 });
 

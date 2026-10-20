@@ -1,6 +1,7 @@
 import { type KitFact, type RunnerConnection, compactRef, formatAbsolute } from 'fleet';
 
 import { busyAgents, declaredAgents, type HeldChunk, type HostCard, type HostGroups } from './host-rows.model';
+import { type ConnectionLight, hostLight, runnerLight } from './connection-status.model';
 import type { RunnerRow } from './runner-rows.model';
 
 /** One card on the Fleet tab's list — a host, or a runner standing under no host. */
@@ -10,6 +11,8 @@ export interface FleetListCard {
   readonly name: string;
   readonly online: boolean;
   readonly connection: RunnerConnection;
+  /** The card's status light — a host's, or a host-less runner's with its pause. */
+  readonly light: ConnectionLight;
   /** Agents declared across the card's bindings; `null` where none are declared. */
   readonly agents: number | null;
   /** The short ref shown right-aligned on the card's second line. */
@@ -30,6 +33,7 @@ export function fleetList(groups: HostGroups<RunnerRow>): FleetList {
       name: card.hostName,
       online: card.online,
       connection: card.connection,
+      light: hostLight(card.online, card.connection),
       agents: declaredAgents(rows),
       ref: compactRef(card.hostId),
     })),
@@ -38,6 +42,7 @@ export function fleetList(groups: HostGroups<RunnerRow>): FleetList {
       name: row.runner_name,
       online: row.online,
       connection: row.connection,
+      light: runnerLight(row),
       agents: declaredAgents([row]),
       ref: compactRef(row.runner_id),
     })),

@@ -202,6 +202,37 @@ describe('AppHeader', () => {
     expect(el.querySelector('[data-testid="stat-agents"]')).not.toBeNull();
   });
 
+  it('keeps the stat cells withheld while the environments read is still pending, though the runners have landed', async () => {
+    let releaseEnvironments!: () => void;
+    const environmentsHeld = new Promise<void>((resolve) => (releaseEnvironments = resolve));
+    stub = stubRequestClient(runnerClient, async (_method, path) => {
+      if (path === '/api/host/environments') {
+        await environmentsHeld;
+        return { workspaces: [] };
+      }
+      return { items: [] };
+    });
+    await TestBed.configureTestingModule({
+      imports: [AppHeader],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
+        provideFlags(runnerFlagsRead),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(AppHeader);
+    await settle(fixture);
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="stat-envs"]')).toBeNull();
+
+    releaseEnvironments();
+    await settle(fixture);
+
+    expect(el.querySelector('[data-testid="stat-envs"]')).not.toBeNull();
+  });
+
   it('renders the shared 48px board header, not a bespoke local one', async () => {
     stub = stubRequestClient(runnerClient, () => ({ items: [] }));
     const fixture = await render();

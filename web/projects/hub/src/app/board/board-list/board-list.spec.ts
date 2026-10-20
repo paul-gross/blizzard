@@ -44,7 +44,7 @@ describe('BoardList', () => {
   let fixture: ComponentFixture<BoardList>;
   let selected: string[];
 
-  const render = async (rendered: BoardListGroups, loaded = true, permissions: { canReorder?: boolean; canControl?: boolean } = {}) => {
+  const render = async (rendered: BoardListGroups, permissions: { canReorder?: boolean; canControl?: boolean } = {}) => {
     await TestBed.configureTestingModule({
       imports: [BoardList],
       providers: [provideZonelessChangeDetection()],
@@ -53,7 +53,6 @@ describe('BoardList', () => {
     fixture.componentRef.setInput('groups', rendered);
     fixture.componentRef.setInput('canReorder', permissions.canReorder ?? false);
     fixture.componentRef.setInput('canControl', permissions.canControl ?? false);
-    fixture.componentRef.setInput('loaded', loaded);
     selected = [];
     fixture.componentInstance.selectChunk.subscribe((id) => selected.push(id));
     await fixture.whenStable();
@@ -105,7 +104,7 @@ describe('BoardList', () => {
     });
 
     it('arms READY and BACKLOG rows alone, each with the grip', async () => {
-      const el = await render(LISTED, true, { canReorder: true });
+      const el = await render(LISTED, { canReorder: true });
 
       const gripped = [...el.querySelectorAll('[data-testid="list-reorder-grip"]')].map((grip) =>
         grip.parentElement!.querySelector('[data-testid="list-row"]')!.getAttribute('data-chunk'),
@@ -114,7 +113,7 @@ describe('BoardList', () => {
     });
 
     it('resolves a drop within READY to the anchor it landed after', async () => {
-      await render(LISTED, true, { canReorder: true });
+      await render(LISTED, { canReorder: true });
       const moves: BoardReposition[] = [];
       fixture.componentInstance.reposition.subscribe((move) => moves.push(move));
 
@@ -124,7 +123,7 @@ describe('BoardList', () => {
     });
 
     it('turns a drop across the line into a lane move — above it a promote, below it a demote', async () => {
-      await render(LISTED, true, { canReorder: true, canControl: true });
+      await render(LISTED, { canReorder: true, canControl: true });
       const moves: BoardLaneMove[] = [];
       fixture.componentInstance.laneMove.subscribe((move) => moves.push(move));
       const other = {} as CdkDropList;
@@ -139,7 +138,7 @@ describe('BoardList', () => {
     });
 
     it('connects the two lists only when a row may cross them (chunk:control too)', async () => {
-      await render(LISTED, true, { canReorder: true });
+      await render(LISTED, { canReorder: true });
       const connected = () =>
         fixture.debugElement.queryAll(By.directive(CdkDropList)).map((list) => list.injector.get(CdkDropList).connectedTo);
       expect(connected()).toEqual([[], []]);
@@ -151,20 +150,11 @@ describe('BoardList', () => {
   });
 
   it('stands skeleton rows in for the rows while the chunk read loads', async () => {
-    const el = await render(groups({}), false);
+    const el = await render(groups({}));
     fixture.componentRef.setInput('skeletonRows', 3);
     await fixture.whenStable();
 
     expect(el.querySelectorAll('[data-testid="list-row-skeleton"]')).toHaveLength(3);
-  });
-
-  it('says the list is empty only once the chunk read has answered', async () => {
-    const unloaded = await render(groups({}), false);
-    expect(unloaded.querySelector('[data-testid="list-empty"]')).toBeNull();
-
-    fixture.componentRef.setInput('loaded', true);
-    await fixture.whenStable();
-    expect(unloaded.querySelector('[data-testid="list-empty"]')?.textContent?.trim()).toBe('Nothing here');
   });
 
   describe('a row', () => {
