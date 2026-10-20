@@ -34,6 +34,10 @@ def _publish_job() -> dict:
     return _job("publish")
 
 
+def _verify_job() -> dict:
+    return _job("verify")
+
+
 def _uses(step: dict, action: str) -> bool:
     return step.get("uses", "").startswith(f"{action}@")
 
@@ -76,6 +80,7 @@ def test_each_job_holds_exactly_its_own_scopes() -> None:
         "attestations": "write",
     }
     assert _publish_job()["permissions"] == {"contents": "write"}
+    assert _verify_job()["permissions"] == {"contents": "read"}
 
 
 def test_version_tag_check_runs_before_anything_is_built() -> None:
@@ -243,6 +248,24 @@ def test_publish_attaches_the_inventory_in_one_call_with_the_notes_file() -> Non
     assert not any(s.get("uses", "").startswith("actions/checkout@") for s in steps)
 
 
+def test_verify_runs_last_and_proves_the_tag_it_just_published() -> None:
+    job = _verify_job()
+    assert job["needs"] == ["publish"]
+    assert not job.get("outputs")
+    assert job["env"]["GH_TOKEN"] == "${{ github.token }}"
+    runs = [str(s.get("run", "")) for s in job["steps"] if "verify-release.sh" in str(s.get("run", ""))]
+    assert any('./verify-release.sh "${GITHUB_REF_NAME}"' in run for run in runs)
+
+
+def test_verify_holds_only_the_script_not_a_checkout() -> None:
+    steps = _verify_job()["steps"]
+    checkout = steps[_step_index(steps, lambda s: _uses(s, "actions/checkout"))]["with"]
+    assert checkout["sparse-checkout"] == "scripts/verify-release.sh"
+    assert checkout["persist-credentials"] is False
+    run = steps[_step_index(steps, lambda s: './verify-release.sh "${GITHUB_REF_NAME}"' in str(s.get("run", "")))]
+    assert run["working-directory"] == "${{ runner.temp }}"
+
+
 @pytest.mark.parametrize(
     "action",
     [
@@ -259,3 +282,10 @@ def test_signing_and_artifact_actions_are_pinned_by_commit_sha(action: str) -> N
     assert uses, f"no step uses {action}"
     for ref in uses:
         assert re.fullmatch(rf"{re.escape(action)}@[0-9a-f]{{40}}", ref), ref
+
+
+def test_every_action_in_verify_is_pinned_by_commit_sha() -> None:
+    uses = [step["uses"] for step in _verify_job()["steps"] if "uses" in step]
+    assert len(uses) == 3
+    for ref in uses:
+        assert re.fullmatch(r"[\w.-]+/[\w.-]+@[0-9a-f]{40}", ref), ref
