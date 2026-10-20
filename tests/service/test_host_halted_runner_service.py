@@ -396,6 +396,36 @@ def test_a_refused_and_a_not_held_runner_halt_alone_while_the_held_runner_works(
                 assert not _rows(root, "SELECT 1 FROM leases WHERE runner_id = ?", halted.runner_id)
 
 
+def test_a_version_refused_runner_halts_alone_while_its_sibling_keeps_leasing(tmp_path: Path) -> None:
+    bin_dir, workspace = _fixture(tmp_path)
+    hub_port = free_port()
+    root = tmp_path / "host"
+    detail = "runner 0.1.4 is below hub 0.3.0's floor 0.2; upgrade it"
+    with mock_hub(bin_dir, hub_port) as hub:
+        host_id, host_token = _add_host(hub)
+        project_a = _add_project(hub, "p-a")
+        _add_project(hub, "p-b")
+        working = _add(hub, "runner-a", "p-a", host_id=host_id)
+        refused = _add(hub, "runner-b", "p-b", host_id=host_id)
+        lever = hub.post(
+            "/_levers/version_refused",
+            json={"payload": {"runner_id": refused.runner_id, "reason": "too-old", "detail": detail}},
+        )
+        assert lever.is_success, lever.text
+        first = _seed_chunk(hub, project_a)
+        with _token_host(root, bin_dir, hub_port, workspace, host_token, (working, refused)) as local:
+            log = root / "daemon.log"
+            assert poll_until(lambda: _runner_identity(local, refused.runner_id) == "version_refused", timeout=30.0), (
+                _runner_identity(local, refused.runner_id),
+                read_daemon_log(log),
+            )
+            view = _host_runner(local, refused.runner_id)
+            assert view["state"] == "halted" and view["halted_reasons"] == [detail], view
+            assert poll_until(lambda: _leased(root, working.runner_id, first), timeout=60.0), read_daemon_log(log)
+            assert _runner_identity(local, refused.runner_id) == "version_refused"
+            assert not _rows(root, "SELECT 1 FROM leases WHERE runner_id = ?", refused.runner_id)
+
+
 def test_against_a_hub_with_no_hosts_both_runners_work_and_the_host_buffers_its_facts(tmp_path: Path) -> None:
     bin_dir, workspace = _fixture(tmp_path)
     hub_port = free_port()
