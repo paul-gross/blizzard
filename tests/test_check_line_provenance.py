@@ -1,5 +1,3 @@
-"""scripts/check-line-provenance.sh, driven against a scratch repository with an origin."""
-
 from __future__ import annotations
 
 import os
@@ -35,7 +33,6 @@ def _commit(repo: Path, message: str) -> str:
 
 @pytest.fixture
 def line(tmp_path: Path) -> dict:
-    """A clone whose origin/master carries `on_master`, with `release/0.2` forked from it and `off_master` unmerged."""
     origin = tmp_path / "origin.git"
     seed = tmp_path / "seed"
     seed.mkdir()

@@ -50,10 +50,6 @@ def test_a_workflow_names_no_winter_source(workflow: Path) -> None:
 
 
 def _local_action_steps(step: dict) -> list[dict]:
-    """The steps of a composite action a job reaches by a local ``uses: ./…`` path.
-
-    The job checks blizzard out under ``path: blizzard``, so a local action is addressed from that checkout.
-    """
     uses = str(step.get("uses", ""))
     if not uses.startswith("./"):
         return []

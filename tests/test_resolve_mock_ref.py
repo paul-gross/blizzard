@@ -1,5 +1,3 @@
-"""The mock-ref resolution script, driven against a scratch blizzard-mock repository."""
-
 from __future__ import annotations
 
 import os
@@ -30,7 +28,6 @@ def _git(cwd: Path, *args: str) -> str:
 
 @pytest.fixture(scope="module")
 def mock(tmp_path_factory: pytest.TempPathFactory) -> dict[str, str]:
-    """A scratch mock with master, release/0.2, a feature branch, and an annotated v0.2.0 tag; shas by name."""
     root = tmp_path_factory.mktemp("mock")
     work = root / "work"
     work.mkdir()

@@ -1,5 +1,3 @@
-"""``.github/workflows/pr.yml``'s triggers and its release-line provenance job."""
-
 from __future__ import annotations
 
 import pytest
