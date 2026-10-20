@@ -1684,7 +1684,7 @@
    "over_cap": 0,
    "total": 74
   },
-  "blizzard/foundation/operator_sessions/service.py": {
+  "blizzard/hub/cli/session_service.py": {
    "comments": 0,
    "docstrings": 4,
    "over_cap": 0,

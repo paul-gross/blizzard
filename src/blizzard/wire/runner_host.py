@@ -4,17 +4,12 @@ an explicit UTC offset (``bzh:utc-instants``)."""
 
 from __future__ import annotations
 
-from typing import Literal
-
 from pydantic import BaseModel, Field
 
 from blizzard.foundation.host_registration_state import HostRegistrationState
+from blizzard.foundation.host_runner_state import HostRunnerState
 from blizzard.wire.runner import ExternalSubscriptionUsageWindowView
 from blizzard.wire.runner_status import EnvironmentView, PauseStateView, SubscriptionView
-
-#: Whether the host serves a runner, or holds it halted — by its own configuration errors, or, while served, by a hub
-#: that refuses its token or does not hold it under the host.
-HostRunnerState = Literal["serving", "halted"]
 
 
 class HostRunnerStateView(BaseModel):

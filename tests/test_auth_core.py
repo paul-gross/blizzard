@@ -4,15 +4,9 @@ from __future__ import annotations
 
 import pytest
 
-from blizzard.auth_core import (
-    HUB_PERMISSIONS,
-    MEMBERSHIP_ROLES,
-    ROLE_PERMISSIONS,
-    Permission,
-    Role,
-    expand,
-    permissions_for,
-)
+from blizzard.auth_core import ROLE_PERMISSIONS, Permission, Role, expand
+from blizzard.hub.auth.memberships import MEMBERSHIP_ROLES
+from blizzard.hub.auth.permissions import HUB_PERMISSIONS, permissions_for
 
 pytestmark = pytest.mark.unit
 

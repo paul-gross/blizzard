@@ -27,7 +27,7 @@ from fastapi import Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 from fastapi.routing import APIRoute
 
-from blizzard.auth_core import HUB_PERMISSIONS, Permission, Role, permissions_for
+from blizzard.auth_core import Permission, Role
 from blizzard.foundation.platform_tracing.attributes import Caller, annotate_caller, annotate_tenant
 from blizzard.foundation.roles import collaborator
 from blizzard.hub.api.auth import (
@@ -42,6 +42,7 @@ from blizzard.hub.api.bearer import presented_bearer
 from blizzard.hub.api.hub_level import Hub, hub_services
 from blizzard.hub.auth.hashing import SessionId
 from blizzard.hub.auth.models import ResolvedIdentity
+from blizzard.hub.auth.permissions import HUB_PERMISSIONS, permissions_for
 from blizzard.hub.composition import HubServices, TenantServices
 from blizzard.hub.config import AUTH_MODE_NONE
 from blizzard.hub.delivery.marker_auth import MarkerPrincipal

@@ -13334,12 +13334,7 @@
             "title": "Rows Removed"
           },
           "state": {
-            "enum": [
-              "deleted",
-              "deleting"
-            ],
-            "title": "State",
-            "type": "string"
+            "$ref": "#/components/schemas/TenantDeletionState"
           },
           "tenant_id": {
             "title": "Tenant Id",
@@ -13352,6 +13347,15 @@
         ],
         "title": "TenantDeletionResponse",
         "type": "object"
+      },
+      "TenantDeletionState": {
+        "description": "Where a tenant's deletion stands: ``deleting`` while rows remain to drain, ``deleted`` once none do.",
+        "enum": [
+          "deleted",
+          "deleting"
+        ],
+        "title": "TenantDeletionState",
+        "type": "string"
       },
       "TenantGraphSync": {
         "description": "One tenant's packaged-graph reconciliation: ``ok`` is false iff any of its entries failed.",
@@ -13402,6 +13406,15 @@
         "title": "TenantRenameRequest",
         "type": "object"
       },
+      "TenantState": {
+        "description": "Whether a tenant is open, or closed with its deletion underway.",
+        "enum": [
+          "open",
+          "deleting"
+        ],
+        "title": "TenantState",
+        "type": "string"
+      },
       "TenantView": {
         "description": "One tenant: its id, its name, when and by whom it was created, whether it is ``open`` or ``deleting``, and \u2014\nwhile it is ``deleting`` \u2014 when its deletion began.",
         "properties": {
@@ -13429,12 +13442,7 @@
             "type": "string"
           },
           "state": {
-            "enum": [
-              "open",
-              "deleting"
-            ],
-            "title": "State",
-            "type": "string"
+            "$ref": "#/components/schemas/TenantState"
           },
           "tenant_id": {
             "title": "Tenant Id",

@@ -15,24 +15,17 @@ from collections.abc import Callable
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from datetime import datetime
-from enum import StrEnum
 from typing import Protocol
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.roles import domain_model
+from blizzard.foundation.tenants import TENANT_NAME_MAX_LENGTH, TenantState, is_tenant_name
 from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.domain.graph.model import IWriteGraphRepository
 from blizzard.hub.domain.projects.color import ColorPick, least_used
 from blizzard.hub.domain.projects.model import IWriteProjectRepository, Project
 from blizzard.hub.tenancy import TenantId, UnknownTenant
-
-
-class TenantState(StrEnum):
-    """Whether a tenant is open, or closed with its deletion underway."""
-
-    OPEN = "open"
-    DELETING = "deleting"
 
 
 @domain_model
@@ -49,11 +42,6 @@ class Tenant:
     closed_at: datetime | None = None
 
 
-#: The most characters a tenant's name holds (``blizzard-product:/plans/multi-tenancy/hub/spec/store.md`` §The tenant
-#: record).
-TENANT_NAME_MAX_LENGTH = 64
-
-
 class TenantNameRefused(ValueError):
     """Raised when a tenant's name is not 1 to 64 characters with no leading or trailing whitespace; nothing is
     written."""
@@ -68,7 +56,7 @@ class TenantNameRefused(ValueError):
 def tenant_name(name: str) -> str:
     """``name``, when it has a tenant name's shape — 1 to 64 characters, no leading or trailing whitespace; else
     :class:`TenantNameRefused`. Inner whitespace is kept, and two tenants may share a name."""
-    if not name or len(name) > TENANT_NAME_MAX_LENGTH or name != name.strip():
+    if not is_tenant_name(name):
         raise TenantNameRefused(name)
     return name
 
@@ -194,7 +182,6 @@ class TenantAdministration:
 __all__ = [
     "DEFAULT_PROJECT_NAME",
     "DEFAULT_PROJECT_SLUG",
-    "TENANT_NAME_MAX_LENGTH",
     "IReadTenantDirectory",
     "ITenantCreation",
     "IWriteTenantDirectory",
@@ -202,6 +189,5 @@ __all__ = [
     "TenantAdminUnknown",
     "TenantAdministration",
     "TenantNameRefused",
-    "TenantState",
     "tenant_name",
 ]

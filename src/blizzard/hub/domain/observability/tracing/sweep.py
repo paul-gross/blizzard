@@ -10,7 +10,6 @@ from datetime import datetime, timedelta
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.crash import crashpoint
-from blizzard.foundation.event_log import HubEventKind
 from blizzard.foundation.lane_retry import OutageLatch
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import iso_utc
@@ -18,7 +17,7 @@ from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.foundation.trace_export.cursor import CursorJump, first_pass_jump, lag_cap_jump
 from blizzard.foundation.trace_export.exporter import ITraceExporter
 from blizzard.foundation.trace_spans import FinishedSpan
-from blizzard.hub.domain.observability.hub_events import HubEventLogService
+from blizzard.hub.domain.observability.hub_events import HubEventKind, HubEventLogService
 from blizzard.hub.domain.observability.tracing.cursor import CursorKey
 from blizzard.hub.domain.observability.tracing.repository import IWriteTraceCursor, TraceCheckpoint
 from blizzard.hub.domain.observability.tracing.window import assemble_window, oldest_unsent, read_window

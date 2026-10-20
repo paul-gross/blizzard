@@ -12,7 +12,6 @@ from datetime import datetime
 
 from sqlalchemy import insert, select
 
-from blizzard.foundation.event_log import HubEventKind
 from blizzard.hub.domain.observability.egress.config import EGRESS_DATASETS
 from blizzard.hub.domain.observability.egress.repository import (
     EgressCheckpoint,
@@ -23,7 +22,7 @@ from blizzard.hub.domain.observability.egress.repository import (
     UsagePosition,
 )
 from blizzard.hub.domain.observability.egress.rows import AttributedUsage
-from blizzard.hub.domain.observability.hub_events import IReadHubEventLog
+from blizzard.hub.domain.observability.hub_events import HubEventKind, IReadHubEventLog
 from blizzard.hub.domain.observability.tracing.cursor import CursorKey
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections

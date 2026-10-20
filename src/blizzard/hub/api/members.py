@@ -15,12 +15,13 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 
-from blizzard.auth_core import MEMBERSHIP_ROLES, Permission, Role
+from blizzard.auth_core import Permission, Role
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import TenantBoundAdmitting, require, require_either, tenant_bound
 from blizzard.hub.api.hub_level import Hub
 from blizzard.hub.auth.memberships import (
+    MEMBERSHIP_ROLES,
     LastAdminKept,
     Member,
     MembershipChangeRefused,

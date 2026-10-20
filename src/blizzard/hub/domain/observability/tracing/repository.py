@@ -7,10 +7,10 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
 
-from blizzard.foundation.event_log import HubEventKind
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.chunk.model import WorkRefLabel
 from blizzard.hub.domain.graph.model import IReadManyGraphs
+from blizzard.hub.domain.observability.hub_events import HubEventKind
 from blizzard.hub.domain.observability.tracing.cursor import CursorKey
 from blizzard.hub.domain.observability.tracing.facts import StepFacts
 from blizzard.hub.tenancy import TenantId

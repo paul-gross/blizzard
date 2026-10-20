@@ -17,6 +17,7 @@ from typing import Any
 from sqlalchemy import exists, select, update
 
 from blizzard.auth_core import Role
+from blizzard.foundation.tenants import TenantState
 from blizzard.hub.auth.identity_transaction import IdentityWrites, IIdentityTransactions
 from blizzard.hub.auth.memberships import MembershipFact
 from blizzard.hub.domain.graph.model import IWriteGraphRepository
@@ -27,7 +28,6 @@ from blizzard.hub.domain.tenancy.administration import (
     IWriteTenantDirectory,
     Tenant,
     TenantAdminUnknown,
-    TenantState,
 )
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections

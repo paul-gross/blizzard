@@ -8467,15 +8467,26 @@ export type TenantDeletionResponse = {
      * Rows Removed
      */
     rows_removed?: number | null;
-    /**
-     * State
-     */
-    state: 'deleted' | 'deleting';
+    state: TenantDeletionState;
     /**
      * Tenant Id
      */
     tenant_id: string;
 };
+
+/**
+ * TenantDeletionState
+ *
+ * Where a tenant's deletion stands: ``deleting`` while rows remain to drain, ``deleted`` once none do.
+ */
+export const TenantDeletionState = { DELETED: 'deleted', DELETING: 'deleting' } as const;
+
+/**
+ * TenantDeletionState
+ *
+ * Where a tenant's deletion stands: ``deleting`` while rows remain to drain, ``deleted`` once none do.
+ */
+export type TenantDeletionState = typeof TenantDeletionState[keyof typeof TenantDeletionState];
 
 /**
  * TenantGraphSync
@@ -8514,6 +8525,20 @@ export type TenantRenameRequest = {
 };
 
 /**
+ * TenantState
+ *
+ * Whether a tenant is open, or closed with its deletion underway.
+ */
+export const TenantState = { OPEN: 'open', DELETING: 'deleting' } as const;
+
+/**
+ * TenantState
+ *
+ * Whether a tenant is open, or closed with its deletion underway.
+ */
+export type TenantState = typeof TenantState[keyof typeof TenantState];
+
+/**
  * TenantView
  *
  * One tenant: its id, its name, when and by whom it was created, whether it is ``open`` or ``deleting``, and —
@@ -8536,10 +8561,7 @@ export type TenantView = {
      * Name
      */
     name: string;
-    /**
-     * State
-     */
-    state: 'open' | 'deleting';
+    state: TenantState;
     /**
      * Tenant Id
      */

@@ -6,8 +6,8 @@ from typing import Any
 
 import click
 
-from blizzard.auth_core import MEMBERSHIP_ROLES
 from blizzard.foundation.invitations import DEFAULT_LIFETIME_DAYS, MAX_LIFETIME_DAYS, MIN_LIFETIME_DAYS
+from blizzard.hub.auth.memberships import MEMBERSHIP_ROLES
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
 from blizzard.hub.cli.views import Listing

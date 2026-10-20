@@ -10,6 +10,7 @@ from collections.abc import Sequence
 
 from fastapi import APIRouter, Request
 
+from blizzard.foundation.host_runner_state import HostRunnerState
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.foundation.subscription_miss import SampleMissReason
 from blizzard.runner.api.wiring import RunnerWiring, ServedWorkspace
@@ -26,7 +27,6 @@ from blizzard.wire.runner_host import (
     HostRegistrationView,
     HostRunnerBindingView,
     HostRunnerListResponse,
-    HostRunnerState,
     HostRunnerView,
     HostSubscriptionListResponse,
     HostSubscriptionView,

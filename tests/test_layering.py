@@ -54,6 +54,18 @@ _MOVED_HOMES = {
     "EgressState": "blizzard.foundation.egress_state",
     "IdentityState": "blizzard.foundation.runner_identity_state",
     "HostRegistrationState": "blizzard.foundation.host_registration_state",
+    "HostRunnerState": "blizzard.foundation.host_runner_state",
+    "TenantState": "blizzard.foundation.tenants",
+    "TenantDeletionState": "blizzard.foundation.tenants",
+    "TENANT_NAME_MAX_LENGTH": "blizzard.foundation.tenants",
+    "TENANT_NAME_PATTERN": "blizzard.foundation.tenants",
+    "is_tenant_name": "blizzard.foundation.tenants",
+    "HUB_PERMISSIONS": "blizzard.hub.auth.permissions",
+    "permissions_for": "blizzard.hub.auth.permissions",
+    "MEMBERSHIP_ROLES": "blizzard.hub.auth.memberships",
+    "HubEventKind": "blizzard.hub.domain.observability.hub_events",
+    "HUB_EVENT_SEVERITY": "blizzard.hub.domain.observability.hub_events",
+    "narrow_hub_event_kind": "blizzard.hub.domain.observability.hub_events",
     "RESERVED_HUB_SOURCE_NAME": "blizzard.hub.domain.kernel.hub_source",
     "KNOWN_WORK_SOURCE_PROVIDERS": "blizzard.hub.domain.config.work_sources",
     "ROUTE_TOKEN_WARN": "blizzard.hub.domain.execution.auth.route",
@@ -1045,14 +1057,14 @@ def _write_session_store_accesses(root: Path, *, exempt: frozenset[Path]) -> lis
 
 
 def test_iwritesessionstore_is_named_only_inside_sessions_or_the_composition_root() -> None:
-    """Only `foundation/operator_sessions/` (the Protocol's own package) may name `IWriteSessionStore` — every
-    CLI module, the hub's login/logout included, takes the `SessionService` application service instead, never
-    the raw write seam (``bzh:controller-read-only``)."""
+    """Only `foundation/operator_sessions/` (the Protocol's own package) and the hub's `SessionService` module may
+    name `IWriteSessionStore` — every CLI module, the hub's login/logout included, takes the `SessionService`
+    application service instead, never the raw write seam (``bzh:controller-read-only``)."""
     sessions_dir = _FOUNDATION_DIR / "operator_sessions"
-    exempt = _COMPOSITION_ROOTS | set(sessions_dir.rglob("*.py"))
+    exempt = _COMPOSITION_ROOTS | set(sessions_dir.rglob("*.py")) | {_HUB_DIR / "cli" / "session_service.py"}
     violations = _write_session_store_accesses(_SRC_DIR, exempt=exempt)
     assert not violations, (
-        f"D4 — IWriteSessionStore must be named only inside foundation/operator_sessions/: {violations}"
+        f"D4 — IWriteSessionStore must be named only inside foundation/operator_sessions/ and hub/cli/session_service.py: {violations}"
     )
 
 
@@ -1737,7 +1749,7 @@ _DOMAIN_PACKAGE_LAYERS: dict[str, frozenset[str]] = {
     "work_items": frozenset({"operations", "chunk", "graph", "projects"}),
     "garden": frozenset({"work_items", "chunk", "graph", "config", "projects"}),
     "observability": frozenset({"chunk", "graph", "runners"}),
-    "tenancy": frozenset({"graph", "config", "projects"}),
+    "tenancy": frozenset({"graph", "config", "projects", "observability"}),
 }
 _DOMAIN_SHARED_KERNEL = "kernel"
 

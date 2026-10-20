@@ -8,8 +8,8 @@ from pathlib import Path
 
 import pytest
 
-from blizzard.foundation.event_log import HubEventKind
 from blizzard.hub.domain.observability.egress.rows import step_row
+from blizzard.hub.domain.observability.hub_events import HubEventKind
 from blizzard.hub.domain.observability.tracing.assembly import assemble_step
 from blizzard.hub.domain.observability.tracing.attributes import RUNNER_ID, RUNNER_NAME
 from blizzard.hub.domain.observability.tracing.cursor import CursorKey

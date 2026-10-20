@@ -1,7 +1,7 @@
 """The event-log kind census — every member of
 :data:`~blizzard.foundation.event_log.EventLogKind` mapped to where it is emitted and
 whether it lands as a stored ``event_log`` row, a synthetic projection, or a row of the hub's own
-event log alone; and every member of :data:`~blizzard.foundation.event_log.HubEventKind` mapped to
+event log alone; and every member of :data:`~blizzard.hub.domain.observability.hub_events.HubEventKind` mapped to
 the sites recording it in ``hub_event_log``. It borrows only
 ``tests/runner_event_census.py``'s dataclass-disposition shape over an unrelated
 vocabulary: this census's subject is the event kinds, not
@@ -74,7 +74,7 @@ EVENT_LOG_KIND_CENSUS: dict[str, Disposition] = {
     "egress-cursor-reset": HubOnly("hub/domain/observability/egress/reset.py:EgressReset.reset", "info"),
 }
 
-#: One entry per :data:`~blizzard.foundation.event_log.HubEventKind` member: every site that records it in
+#: One entry per :data:`~blizzard.hub.domain.observability.hub_events.HubEventKind` member: every site that records it in
 #: ``hub_event_log`` through the hub's event log service. A tenant teardown's kinds have no writer in this hub.
 HUB_EVENT_KIND_CENSUS: dict[str, tuple[str, ...]] = {
     "trace-export-failed": ("hub/domain/observability/tracing/sweep.py:TraceExportSweep.sweep",),

@@ -11,8 +11,14 @@ from datetime import datetime
 
 from sqlalchemy import insert, select
 
-from blizzard.foundation.event_log import EventLogSeverity, HubEventKind, narrow_hub_event_kind
-from blizzard.hub.domain.observability.hub_events import HubEvent, HubEventEntry, IWriteHubEventLog
+from blizzard.foundation.event_log import EventLogSeverity
+from blizzard.hub.domain.observability.hub_events import (
+    HubEvent,
+    HubEventEntry,
+    HubEventKind,
+    IWriteHubEventLog,
+    narrow_hub_event_kind,
+)
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
 

@@ -9,10 +9,10 @@ from datetime import datetime
 from functools import total_ordering
 from typing import TYPE_CHECKING, Protocol
 
-from blizzard.foundation.event_log import HubEventKind
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.observability.analytics.events import DerivationMarker, DropFact
 from blizzard.hub.domain.observability.egress.rows import AttributedUsage
+from blizzard.hub.domain.observability.hub_events import HubEventKind
 from blizzard.hub.domain.observability.tracing.cursor import CursorKey
 from blizzard.hub.tenancy import TenantId
 
