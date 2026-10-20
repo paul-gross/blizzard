@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
 
-import { projectColorValue, type ChunkStatus, type LandedRepoView, type PrView, STATUS_LANE, formatCost, hasCostFigure, FleetWhen, KitBadge, KitButton, KitSelectRow, KitSkeleton } from 'fleet';
+import { projectTint, type ChunkStatus, type LandedRepoView, type PrView, STATUS_LANE, formatCost, hasCostFigure, FleetWhen, KitBadge, KitButton, KitSelectRow, KitSkeleton } from 'fleet';
 import { blockedLabel, cardShowsStatus, foldTitles, stepLabel, type WorkLine } from './board-card.model';
 
 /** One rendered board card — the derived-status view of a chunk. */
@@ -50,7 +50,9 @@ export interface BoardCard {
   /** The chunk's project's palette color, joined from the projects list by `ChunkSummary.project_id` — `null` until
    * that list is read or when the project is unknown. */
   readonly projectColor?: string | null;
-  /** The runner holding the chunk, from `ChunkSummary.runner_name` — null when none does. */
+  /** The runner holding the chunk, from `ChunkSummary.runner_id` — null when none does. */
+  readonly runnerId?: string | null;
+  /** The runner holding the chunk's name, from `ChunkSummary.runner_name` — null when none holds it or it is unnamed. */
   readonly runnerName?: string | null;
   /** The host the holding runner runs on, joined from the host registry by `ChunkSummary.runner_id` — null when no
    * runner holds the chunk or its host is unknown. */
@@ -102,10 +104,7 @@ export class BoardCardComponent {
   readonly promote = output<string>();
 
   /** The chunk's project color the card's background is tinted with, or `null` for an untinted card. */
-  protected readonly projectTint = computed(() => {
-    const color = this.card().projectColor;
-    return color ? projectColorValue(color) : null;
-  });
+  protected readonly projectTint = computed(() => projectTint(this.card().projectColor));
 
   /** Whether the card's work items are still unread — each title slot then holds a skeleton. */
   protected readonly titlesPending = computed(() => !this.card().itemsRead);

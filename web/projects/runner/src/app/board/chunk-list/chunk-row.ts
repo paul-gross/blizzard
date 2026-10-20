@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
+import { projectTint } from 'fleet';
 
 import type { MachineChunkRow } from '../../core/chunk-rows.model';
-import { projectTint } from '../../core/panel-reads.model';
 import { injectChunkTitleQuery } from './chunk-title.query';
 import { ChunkListRowView } from './chunk-list-row-view';
 import { ChunkRowView } from './chunk-row-view';

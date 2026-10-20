@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, output } from '@angular/core';
 
-import { type KitAsyncStateValue, asyncState } from 'fleet';
+import { type KitAsyncStateValue, asyncState, injectRunnerHostNames } from 'fleet';
 import { GatesPanelView } from './gates-view';
 import { injectHubDecisionsQuery } from './gates.query';
 
@@ -18,6 +18,7 @@ import { injectHubDecisionsQuery } from './gates.query';
 })
 export class GatesPanel {
   private readonly query = injectHubDecisionsQuery();
+  protected readonly runnerHosts = injectRunnerHostNames();
 
   /** Emitted with the gate's chunk id when a gate is activated. */
   readonly selectChunk = output<string>();

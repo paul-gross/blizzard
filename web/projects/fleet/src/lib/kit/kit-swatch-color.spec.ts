@@ -1,4 +1,4 @@
-import { isHexColor, legibleOnDark, projectColorValue } from './kit-swatch-color';
+import { isHexColor, legibleOnDark, projectColorValue, projectTint } from './kit-swatch-color';
 
 function luminance(hex: string): number {
   const n = parseInt(hex.slice(1), 16);
@@ -60,5 +60,18 @@ describe('projectColorValue', () => {
   it('passes a custom color through lowercased, unlifted however dark', () => {
     expect(projectColorValue('#0A0B0C')).toBe('#0a0b0c');
     expect(projectColorValue('#0a0b0c')).not.toBe(legibleOnDark('#0a0b0c'));
+  });
+});
+
+describe('projectTint', () => {
+  it('paints a named colour through its project token, and a hex as its value', () => {
+    expect(projectTint('teal')).toBe(projectColorValue('teal'));
+    expect(projectTint('#AABBCC')).toBe('#aabbcc');
+  });
+
+  it('gives null for no colour', () => {
+    expect(projectTint(null)).toBeNull();
+    expect(projectTint(undefined)).toBeNull();
+    expect(projectTint('')).toBeNull();
   });
 });

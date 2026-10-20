@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 
-import { type QuestionView, compactRef, runnerDisplayName, injectRunnerHostNames, KitAsyncState, type KitAsyncStateValue, KitPanel, KitSelectRow } from 'fleet';
+import { type QuestionView, compactRef, runnerDisplayName, KitAsyncState, type KitAsyncStateValue, KitPanel, KitSelectRow } from 'fleet';
 
 /**
  * The open-questions rail's presentational half — the ask list
@@ -20,7 +20,8 @@ import { type QuestionView, compactRef, runnerDisplayName, injectRunnerHostNames
   styleUrl: './questions-view.css',
 })
 export class QuestionsPanelView {
-  private readonly runnerHosts = injectRunnerHostNames();
+  /** Each runner's host name by runner id — a runner the map omits shows no host. */
+  readonly runnerHosts = input<ReadonlyMap<string, string>>(new Map());
 
   /** Every open ask across the fleet. */
   readonly questions = input.required<readonly QuestionView[]>();

@@ -171,6 +171,7 @@ export class BoardShell {
         awaitingExternalMerge: chunk.awaiting_external_merge ?? false,
         projectName: chunk.project_name ?? null,
         projectColor: this.projectColors().get(chunk.project_id ?? '') ?? null,
+        runnerId: chunk.runner_id ?? null,
         runnerName: chunk.runner_name ?? null,
         hostName: this.runnerHosts().get(chunk.runner_id ?? '') ?? null,
         workLines: workLines(chunk.work_refs ?? [], workItems),

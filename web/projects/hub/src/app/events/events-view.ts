@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 
-import { type EventView, hubApi, compactRef, runnerDisplayName, runnerTitle, injectRunnerHostNames, KitAsyncState, type KitAsyncStateValue, KitBadge, KitButton, KitChips, type KitChipOption, KitSelect, KitPanel, type Tone, FleetWhen } from 'fleet';
+import { type EventView, hubApi, compactRef, runnerDisplayName, runnerTitle, KitAsyncState, type KitAsyncStateValue, KitBadge, KitButton, KitChips, type KitChipOption, KitSelect, KitPanel, type Tone, FleetWhen } from 'fleet';
 
 /** Each severity's chip label. */
 const SEVERITY_LABEL: Readonly<Record<hubApi.EventLogSeverity, string>> = {
@@ -57,7 +57,8 @@ export class EventsView {
   /** The event feed to render, in the order given (server-sorted). */
   readonly events = input.required<readonly EventView[]>();
 
-  private readonly runnerHosts = injectRunnerHostNames();
+  /** Each runner's host name by runner id — a runner the map omits shows no host. */
+  readonly runnerHosts = input<ReadonlyMap<string, string>>(new Map());
 
   /** The active severity filter, or `null` for "all" — highlights the matching chip. */
   readonly severity = input<string | null>(null);

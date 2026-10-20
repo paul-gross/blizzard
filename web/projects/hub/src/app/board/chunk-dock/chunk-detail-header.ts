@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
-import { WorkRefLink, ChunkDeleteRefusal, type ChunkDetail, type ChunkStatus, type PauseView, type WorkRefView, type RouteView, compactRef, injectRunnerHostNames, runnerDisplayName, runnerTitle, KitButton, KitSwatch, KitConfirmDialog, type KitConfirmDialogPrompt, KitMenu, KitMenuPanel, KitMenuItem, KitMenuItemSubtitle, completeCopy, deleteCopy, detachCopy, pauseCopy, resumeCopy } from 'fleet';
+import { WorkRefLink, ChunkDeleteRefusal, type ChunkDetail, type ChunkStatus, type PauseView, type WorkRefView, type RouteView, compactRef, runnerDisplayName, runnerTitle, KitButton, KitSwatch, KitConfirmDialog, type KitConfirmDialogPrompt, KitMenu, KitMenuPanel, KitMenuItem, KitMenuItemSubtitle, completeCopy, deleteCopy, detachCopy, pauseCopy, resumeCopy } from 'fleet';
 import { LensLink } from 'fleet/shell';
 
 /**
@@ -105,7 +105,8 @@ export class ChunkDetailHeader {
    * a chunk with no live route has nothing to release. */
   protected readonly route = computed<RouteView | null>(() => this.detail().route ?? null);
 
-  private readonly runnerHosts = injectRunnerHostNames();
+  /** Each runner's host name by runner id — a runner the map omits shows no host. */
+  readonly runnerHosts = input<ReadonlyMap<string, string>>(new Map());
 
   /** The display name of the runner holding the route, as `host/runner`, or `null` while none
    * does — the runner fact's and the Pause/Resume/Detach copy's `<runner>` slot. */

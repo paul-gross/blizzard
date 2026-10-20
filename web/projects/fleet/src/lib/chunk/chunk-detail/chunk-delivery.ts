@@ -1,9 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 
 import type { ChunkDetail, LandedRepoView, PrView } from '../../api/hub';
-
-/** How many leading characters of a landed commit's sha the delivery row shows. */
-const SHA_LENGTH = 7;
+import { shortCommitHash } from '../../core/commit-hash';
 
 /** One repo's delivery: its PR (open or closed) and its landed commit, either of which may be absent. */
 interface DeliveryRow {
@@ -41,7 +39,7 @@ export class ChunkDelivery {
     return [...byRepo].map(([repo, e]) => ({
       repo,
       ...e,
-      sha: e.landed === null ? null : e.landed.commit_hash.slice(0, SHA_LENGTH),
+      sha: e.landed === null ? null : shortCommitHash(e.landed.commit_hash),
     }));
   });
 }

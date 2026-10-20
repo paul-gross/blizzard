@@ -30,6 +30,7 @@ const CARD: BoardCard = {
   blockedOn: null,
   blockedCount: 0,
   blockedOnStatus: null,
+  runnerId: 'rn_01M49GZR9G2S7PT1TB5ZT4E4AX',
   runnerName: 'runner-with-a-long-display-name',
   openPrs: [{ repo: 'owner/repo', number: 7, url: 'https://example.test/pr/7' }],
 };

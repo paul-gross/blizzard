@@ -297,6 +297,13 @@ def test_board_browser_live_group_reorder_answer_and_pause(tmp_path: Path, chrom
                 for retired_control in ("queue-select", "group-selected", "queue-move-top", "backlog-move-top"):
                     expect(page.get_by_test_id(retired_control)).to_have_count(0)
 
+                # Settle the board before the first click: the cards' titles land from a later read than
+                # the cards (each holds a skeleton until then), and Promote renders only once the session's
+                # permissions are read — a click while either is pending lands on a card still reflowing.
+                expect(col("notready").get_by_test_id("chunk-title-skeleton")).to_have_count(0)
+                expect(col("notready").get_by_test_id("chunk-title")).to_have_count(3)
+                expect(col("notready").get_by_test_id("promote-chunk")).to_have_count(3)
+
                 # Promote each chunk by data-chunk, not `.first`: promote order is queue
                 # order, and the queue this scenario reshapes has to start known.
                 for promoted, (chunk_id, remaining) in enumerate(((chunk_a, 2), (chunk_b, 1), (chunk_c, 0)), start=1):

@@ -62,7 +62,7 @@
        delivered — its open PRs and landed commits. -->
   <span class="cell holder">
     @if (holder(); as holder) {
-      <span class="runner" data-testid="list-row-runner" [title]="holder">{{ holder }}</span>
+      <span class="runner" data-testid="list-row-runner" [title]="holder.title">{{ holder.name }}</span>
     }
     <span class="step">
       <span class="step-name" [title]="step()">{{ step() }}</span>
@@ -83,9 +83,9 @@
         }
         @for (landed of card().landedRepos ?? []; track landed.repo) {
           @if (landed.url; as url) {
-            <a [href]="url" target="_blank" rel="noopener noreferrer" [title]="landed.repo + ' @ ' + landed.commit_hash">{{ landed.commit_hash.slice(0, 7) }}</a>
+            <a [href]="url" target="_blank" rel="noopener noreferrer" [title]="landed.repo + ' @ ' + landed.commit_hash">{{ shortCommitHash(landed.commit_hash) }}</a>
           } @else {
-            <span class="commit" [title]="landed.repo + ' @ ' + landed.commit_hash">{{ landed.commit_hash.slice(0, 7) }}</span>
+            <span class="commit" [title]="landed.repo + ' @ ' + landed.commit_hash">{{ shortCommitHash(landed.commit_hash) }}</span>
           }
         }
       </span>
