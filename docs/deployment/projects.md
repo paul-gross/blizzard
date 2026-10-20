@@ -29,7 +29,8 @@ survive any slug change, such as a runner's, names projects by id.
 
 A project carries a `color`: one of twelve palette names, in order `red`, `orange`, `amber`, `lime`, `green`, `teal`,
 `cyan`, `blue`, `indigo`, `violet`, `pink` and `slate`. The board draws each name in its own shade; the name, not the
-shade, is what the hub stores and the API carries.
+shade, is what the hub stores and the API carries. The board's cards and list rows take their project's color as their
+background, and a runner's panel, reading each served project's color from its hub, tints its chunks the same way.
 
 A color may instead be a custom `#rrggbb` hex. The hub lowercases it, so `#14B8A6` is stored as `#14b8a6`, and the board
 draws it adjusted for legibility on its dark surfaces, so a very dark shade shows lighter than stated. Alpha, `rgb()`,
