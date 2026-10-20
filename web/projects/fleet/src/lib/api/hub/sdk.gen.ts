@@ -1292,10 +1292,10 @@ export const peekMatchedQueueApiFleetQueuePeekPost = <ThrowOnError extends boole
 /**
  * Claim Route
  *
- * Claim a chunk; 403 if the runner is unregistered, paused, or retired at the hub, 409 if already claimed,
- * already terminal ({done, stopped}), not ready, standing on an unmet prerequisite, of a project
- * the runner does not serve, or incompatible with the runner's stored capabilities, else the first
- * node envelope.
+ * Claim a chunk; 403 if the runner is unregistered, retired, refused on version, or paused at the hub, 409 if
+ * already claimed, already terminal ({done, stopped}), not ready, standing on an unmet prerequisite, of a project
+ * the runner does not serve, or incompatible with the runner's stored capabilities, else the first node
+ * envelope.
  */
 export const claimRouteApiFleetRoutesPost = <ThrowOnError extends boolean = false>(options: Options<ClaimRouteApiFleetRoutesPostData, ThrowOnError>): RequestResult<ClaimRouteApiFleetRoutesPostResponses, ClaimRouteApiFleetRoutesPostErrors, ThrowOnError> => (options.client ?? client).post<ClaimRouteApiFleetRoutesPostResponses, ClaimRouteApiFleetRoutesPostErrors, ThrowOnError>({
     url: '/api/fleet/routes',
@@ -1314,7 +1314,8 @@ export const claimRouteApiFleetRoutesPost = <ThrowOnError extends boolean = fals
  *
  * The hub never rejects a registration over its roster — it doubles as the heartbeat every tick,
  * so the tenant it answers, named as the hub holds it now, carries a rename on the next tick. A
- * body ``runner_id`` from an older runner is ignored. A retired runner is refused 403.
+ * body ``runner_id`` from an older runner is ignored. A retired runner is refused 403; a ``version`` the hub's
+ * window does not admit is refused 409, and the runner claims nothing until a later registration is admitted.
  */
 export const registerRunnerApiFleetRunnersPost = <ThrowOnError extends boolean = false>(options: Options<RegisterRunnerApiFleetRunnersPostData, ThrowOnError>): RequestResult<RegisterRunnerApiFleetRunnersPostResponses, RegisterRunnerApiFleetRunnersPostErrors, ThrowOnError> => (options.client ?? client).post<RegisterRunnerApiFleetRunnersPostResponses, RegisterRunnerApiFleetRunnersPostErrors, ThrowOnError>({
     url: '/api/fleet/runners',

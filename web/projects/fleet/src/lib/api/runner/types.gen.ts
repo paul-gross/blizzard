@@ -1934,7 +1934,8 @@ export const HostRegistrationState = {
     REGISTERED: 'registered',
     REFUSED: 'refused',
     NO_HOSTS: 'no_hosts',
-    UNREACHABLE: 'unreachable'
+    UNREACHABLE: 'unreachable',
+    VERSION_REFUSED: 'version_refused'
 } as const;
 
 /**
@@ -2182,6 +2183,10 @@ export type HubConnectivityView = {
      */
     endpoint: string;
     /**
+     * Hub Version
+     */
+    hub_version?: string | null;
+    /**
      * Last Contact At
      */
     last_contact_at: string | null;
@@ -2189,6 +2194,7 @@ export type HubConnectivityView = {
      * Reachable
      */
     reachable: boolean;
+    window?: VersionWindowView | null;
 };
 
 /**
@@ -2203,7 +2209,8 @@ export const IdentityState = {
     MISMATCHED: 'mismatched',
     REFUSED: 'refused',
     NOT_HELD: 'not_held',
-    TENANT_DIFFERS: 'tenant_differs'
+    TENANT_DIFFERS: 'tenant_differs',
+    VERSION_REFUSED: 'version_refused'
 } as const;
 
 /**
@@ -2223,7 +2230,9 @@ export type IdentityState = typeof IdentityState[keyof typeof IdentityState];
  * while the token names another runner, ``refused`` while the hub refuses the token (unknown, revoked,
  * retired) — the runner then drives no lease until a check resolves it again. On a registered host,
  * ``not_held`` while the hub does not hold the runner under the host and ``tenant_differs`` while it stands
- * in another tenant than the host's halt the runner alone. ``reason`` says why for those last three.
+ * in another tenant than the host's halt the runner alone, as does ``version_refused`` while the hub's
+ * compatibility window refuses the runner's version. ``reason`` says why for those last four — for
+ * ``version_refused``, the hub's sentence naming what to upgrade.
  * ``reset_command`` names how to restore the token: the token variable and the configured id.
  */
 export type IdentityVerdictView = {
@@ -3900,6 +3909,22 @@ export type ValidationError = {
      * Error Type
      */
     type: string;
+};
+
+/**
+ * VersionWindowView
+ *
+ * The hub's compatibility window: the oldest major.minor line it admits, and the newest, which is its own.
+ */
+export type VersionWindowView = {
+    /**
+     * Ceiling
+     */
+    ceiling: string;
+    /**
+     * Floor
+     */
+    floor: string;
 };
 
 /**
