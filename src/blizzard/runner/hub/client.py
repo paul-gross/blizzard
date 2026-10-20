@@ -505,6 +505,11 @@ class TokenIdentity:
     tenant_name: str | None = None
     fleet_flags: Mapping[str, bool] = field(default_factory=dict)
 
+    def serves(self, tenant_id: str | None) -> bool:
+        """Whether this runner serves ``tenant_id`` — a runner serves the tenant it was added in for life. Naming no
+        tenant, or a hub that names none, settles none, so either serves."""
+        return tenant_id is None or self.tenant_id is None or self.tenant_id == tenant_id
+
 
 @domain_model
 @dataclass(frozen=True)

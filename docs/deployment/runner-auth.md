@@ -101,6 +101,12 @@ refuses, naming `blizzard runner retire` and `blizzard runner add`, which replac
 as it is; a host re-added sets the store aside once and adds every runner again over it. A runner holding no token whose store still belongs to a runner stops
 the same way an unknown token does: put that runner's token back, or re-run init with `--allow-readd`.
 
+A kept runner whose store names a runner that neither it nor another `[[runner]]` of the host is stops before init
+writes anything. When the store also names one of the host's runners, it is the wrong file: stop and restore the right
+store, since a reset would drop the history of the runner it holds. When it names only other runners, restore that
+runner's token, or reset the store with `blizzard runner store reset <dir>`, which drops every fact below the hub's
+high-water mark, so only for a runner with no history.
+
 A runner's token variable is derived from its `name`, as above; the host file has no key to rename it. Every runner verb
 resolves a runner's token from the first of the process environment's `BZ_HUB_TOKEN_<NAME>`, the host file's
 `[hub_tokens]` table keyed by the runner's name (`[hub_tokens] r-claude = "…"`), and `BZ_HUB_TOKEN_<NAME>` in the host

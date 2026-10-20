@@ -21,6 +21,7 @@ from blizzard.foundation.clock import SystemClock
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.operator_sessions.internal.session_file import SessionFile
 from blizzard.foundation.roles import collaborator, dto
+from blizzard.foundation.runner_identity_state import IdentityState
 from blizzard.foundation.runner_token_names import hub_token_variable
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.migrations import MigrationConnectionError, RevisionMismatchError, StoreBelowFloorError
@@ -64,7 +65,9 @@ from blizzard.runner.hub.bootstrap import (
     IRunnerStoreAside,
     JoinedRunner,
     RunnerBootstrap,
+    StoreShared,
     TokenNotWritten,
+    refuse_tokenless,
 )
 from blizzard.runner.hub.client import (
     HostAddRefusalReason,
@@ -88,10 +91,15 @@ from blizzard.runner.hub.host_bootstrap import (
     HostTokenNotWritten,
     JoinedHost,
 )
-from blizzard.runner.hub.identity import RunnerIdentity
+from blizzard.runner.hub.identity import RunnerIdentity, judged
 from blizzard.runner.hub.internal.http_hub import HttpHostHubClient, HttpHubClient, HttpHubRunnerAdmin
 from blizzard.runner.hub.internal.token_file import HubTokenFile
-from blizzard.runner.lifecycle.identity_check import foreign_store_reason
+from blizzard.runner.lifecycle.identity_check import (
+    ForeignStoreKind,
+    foreign_store,
+    foreign_store_reason,
+    reset_hazard,
+)
 from blizzard.runner.listeners import ListenerError, Uds
 from blizzard.runner.loop_wiring import LoopWiring, PeriodicDriver
 from blizzard.runner.runtime import (
@@ -289,6 +297,8 @@ def register_host(
             raise click.ClickException(_host_add_refused(exc, name, hub, rerun)) from exc
         except HubClientError as exc:
             raise click.ClickException(f"cannot register this host at the hub at {hub}: {exc}") from exc
+        except (ConfigError, StoreResetRefused) as exc:
+            raise click.ClickException(str(exc)) from exc
     record = host.record
     where = f"host {record.host_name} ({record.host_id}) in tenant {record.tenant_id}"
     if host.added:
@@ -314,9 +324,7 @@ def _adoptable(config: HostConfig, collaborators: InitCollaborators, rerun: _Rer
                 answer = identity.identity()
         except HubClientError:
             continue
-        if isinstance(answer, TokenIdentity) and (
-            rerun.tenant_id is None or answer.tenant_id in (None, rerun.tenant_id)
-        ):
+        if isinstance(answer, TokenIdentity) and answer.serves(rerun.tenant_id):
             adopt.append(answer.runner_id)
     return tuple(dict.fromkeys(adopt))
 
@@ -394,15 +402,20 @@ def _host_add_refused(exc: HostAddRefused, name: str, hub: str, rerun: _Rerun) -
 
 
 def _refuse_tokenless(config: HostConfig, entry: RunnerEntry, store: _RuntimeStore, rerun: _Rerun) -> None:
-    """Stop before reaching the hub when ``entry`` is configured with an id but holds no token over a store naming
-    no runner of its own: init would add another runner in its place."""
-    if entry.id is None or rerun.allow_readd or config.token_for(entry).value:
-        return
-    if store.stored_runner_id(sibling_of=entry) is None:
-        raise click.ClickException(
-            f"runner {entry.name} is configured as {entry.id} but holds no token, so init would add another runner "
-            f"in its place; restore its token, or re-run `{rerun.readding()}` to set its store aside and add a new one"
+    """Stop before reaching the hub when ``entry`` holds no token and init would add another runner in place of
+    the one it may not replace."""
+    token = config.token_for(entry)
+    held = _held(token)
+    try:
+        refuse_tokenless(
+            held,
+            entry.id,
+            None if held is not None else store.stored_runner_id(sibling_of=entry),
+            allow_readd=rerun.allow_readd,
         )
+    except BootstrapStopped as exc:
+        joining, token_file = _joining_of(config, entry, token)
+        raise click.ClickException(_stopped(exc, joining, token_file, rerun)) from exc
 
 
 def _join_runner(
@@ -417,8 +430,6 @@ def _join_runner(
     row into the store."""
     token = config.token_for(entry)
     with collaborators.join_with(config.hub_url, token.value) as (identity, _admin):
-        if entry.id is not None and token.value and not rerun.allow_readd:
-            _refuse_other_runner(entry, identity)
         joined = _join_hub(config, entry, token, identity, HostRunnerAdmin(host.client), store.for_runner(entry), rerun)
     if not joined.added and not host.joined.holds(joined.runner_id):
         raise click.ClickException(_stands_elsewhere(config, entry, joined, host.joined, rerun))
@@ -444,42 +455,26 @@ def _stands_elsewhere(
     )
 
 
-def _refuse_other_runner(entry: RunnerEntry, identity: ITokenIdentityReader) -> None:
-    """Stop when the held token belongs to a runner other than the one ``entry`` configures, before anything is
-    written: the configured id is the runner's, and only a re-add replaces it. A hub that cannot answer is left to
-    the join, which reports it."""
-    try:
-        answer = identity.identity()
-    except HubClientError:
+def _refuse_unsettled(config: HostConfig, entry: RunnerEntry, joined: JoinedRunner) -> None:
+    """Stop a kept runner whose store holds a runner neither it nor a sibling ``[[runner]]`` is, before anything is
+    written. The configured id is not counted as ours: a store naming a stale one under a re-add is foreign too."""
+    siblings = tuple(other.id for other in config.runners if other.name != entry.name and other.id is not None)
+    verdict = foreign_store(named_runners(config), (joined.runner_id, *siblings))
+    if verdict is None:
         return
-    if isinstance(answer, TokenIdentity) and answer.runner_id != entry.id:
+    held = f"runner {entry.name}'s token belongs to runner {joined.runner_id}"
+    unwritten = "No token, host-file id or identity row was written"
+    if verdict.kind is ForeignStoreKind.MIXED:
         raise click.ClickException(
-            f"runner {entry.name} is configured as {entry.id}, but its token belongs to runner {answer.runner_id}; "
-            f"restore the token of {entry.id} (or correct the `id` in the host file), or add a new runner in its "
-            "place with --allow-readd. No token, host-file id or identity row was written"
+            f"{held}, but the store here names runners {', '.join(verdict.named)}, and "
+            f"{', '.join(verdict.foreign)} is configured by no [[runner]] of this host; it cannot be told apart from "
+            f"{joined.runner_id}'s, so it is left untouched — stop and restore the right store. {unwritten}"
         )
-
-
-def _refuse_unsettled(config: HostConfig, entry: RunnerEntry, joined: JoinedRunner, rerun: _Rerun) -> None:
-    """Stop a kept runner whose token does not settle into this directory, before anything is written: its store
-    names another runner, or the host file configures another id and no re-add was asked for. A kept runner joins
-    a store set aside for it or one naming only itself, and a configured id differing from its own is completed
-    only under a re-add — the state a crash between the token and the id leaves."""
-    siblings = {other.id for other in config.runners if other.name != entry.name}
-    others = [named for named in named_runners(config) if named != joined.runner_id and named not in siblings]
-    if others:
-        raise click.ClickException(
-            f"runner {entry.name}'s token belongs to runner {joined.runner_id}, but the store here names runner "
-            f"{', '.join(others)}; restore the token of {others[0]}, or set the store aside with "
-            f"`{reset_command(config.root)}` to start the token's runner on a fresh "
-            "one. No token, host-file id or identity row was written"
-        )
-    if entry.id is not None and entry.id != joined.runner_id and not rerun.allow_readd:
-        raise click.ClickException(
-            f"runner {entry.name} is configured as {entry.id}, but its token belongs to runner {joined.runner_id}; "
-            f"restore the token of {entry.id}, or re-run `{rerun.readding()}` to take the token's runner in its "
-            "place. No token, host-file id or identity row was written"
-        )
+    hazard = reset_hazard(reset_command(config.root), joined.runner_id)
+    raise click.ClickException(
+        f"{held}, but the store here names runner {', '.join(verdict.foreign)}; restore the token of "
+        f"{verdict.foreign[0]}. {hazard}. {unwritten}"
+    )
 
 
 @dto
@@ -566,8 +561,7 @@ class _RuntimeStore:
     def set_aside(self) -> None:
         if self._set_aside:
             return
-        with click_exception_on(ConfigError, StoreResetRefused):
-            aside = runtime_of(self.config.root, self.trace).reset_store(now=SystemClock().now())
+        aside = runtime_of(self.config.root, self.trace).reset_store(now=SystemClock().now())
         self._set_aside = True
         for path in aside.moved:
             click.echo(f"set the old store aside as {path}")
@@ -592,16 +586,9 @@ class _RunnerStoreView:
         backlog and rewind its sequences below the hub's high-water marks."""
         if self.store.is_set_aside():
             return
-        config = self.store.config
-        siblings = [other.name for other in config.runners if other.name != self.entry.name]
+        siblings = tuple(other.name for other in self.store.config.runners if other.name != self.entry.name)
         if siblings:
-            name = self.entry.name
-            raise click.ClickException(
-                f"runner {name} cannot be added again in place: the store it would set aside also holds runner "
-                f"{', '.join(siblings)}, whose backlog it would drop. Retire it with `blizzard runner retire --runner "
-                f"{name} --dir {config.root}` and add a fresh one with `blizzard runner add {name} --project "
-                f"<project> --dir {config.root}`. Nothing was added"
-            )
+            raise StoreShared(siblings)
         self.store.set_aside()
 
 
@@ -662,20 +649,16 @@ def _join_hub(
 ) -> JoinedRunner:
     """Keep the runner the held token names, or add one and write its token; any stop exits
     non-zero with nothing added."""
-    token_env = hub_token_variable(entry.name)
-    token_file = HubTokenFile.of(config.root, token_env)
-    held = HeldToken(token.value, from_process_env=not token.rereads_dotenv()) if token.value else None
-    joining = _Joining(
-        root=config.root,
-        hub_url=config.hub_url,
-        name=entry.name,
-        token_env=token_env,
-        overridden_by=None if token.rereads_dotenv() else _source_words(token, token_env),
-    )
+    joining, token_file = _joining_of(config, entry, token)
     hub = config.hub_url
     try:
         joined = RunnerBootstrap(identity, admin, token_file, store).join(
-            entry.name, held=held, allow_readd=rerun.allow_readd, tenant_id=rerun.tenant_id, projects=rerun.projects
+            entry.name,
+            held=_held(token),
+            allow_readd=rerun.allow_readd,
+            tenant_id=rerun.tenant_id,
+            projects=rerun.projects,
+            configured_id=entry.id,
         )
     except BootstrapStopped as exc:
         raise click.ClickException(_stopped(exc, joining, token_file, rerun)) from exc
@@ -688,8 +671,10 @@ def _join_hub(
         raise click.ClickException(_add_refused(exc, hub, rerun)) from exc
     except HubClientError as exc:
         raise click.ClickException(f"cannot join the hub at {hub}, so nothing was added: {exc}") from exc
+    except (ConfigError, StoreResetRefused) as exc:
+        raise click.ClickException(str(exc)) from exc
     if not joined.added:
-        _refuse_unsettled(config, entry, joined, rerun)
+        _refuse_unsettled(config, entry, joined)
     tenant = _in_tenant(joined.tenant_id, joined.tenant_name)
     if joined.added:
         click.echo(
@@ -700,6 +685,24 @@ def _join_hub(
     click.echo(f"runner {joined.runner_name} ({joined.runner_id}){tenant} keeps its token for {hub}")
     _restrict(token_file)
     return joined
+
+
+def _held(token: ResolvedToken) -> HeldToken | None:
+    """The token ``token`` resolves to, as joining holds it, or ``None`` when it resolves to none."""
+    return HeldToken(token.value, from_process_env=not token.rereads_dotenv()) if token.value else None
+
+
+def _joining_of(config: HostConfig, entry: RunnerEntry, token: ResolvedToken) -> tuple[_Joining, HubTokenFile]:
+    """What ``init`` joins for ``entry``, and the ``.env`` file its token is written to."""
+    token_env = hub_token_variable(entry.name)
+    joining = _Joining(
+        root=config.root,
+        hub_url=config.hub_url,
+        name=entry.name,
+        token_env=token_env,
+        overridden_by=None if token.rereads_dotenv() else _source_words(token, token_env),
+    )
+    return joining, HubTokenFile.of(config.root, token_env)
 
 
 def _source_words(token: ResolvedToken, token_env: str) -> str:
@@ -780,6 +783,27 @@ def _stopped(exc: BootstrapStopped, joining: _Joining, token_file: HubTokenFile,
             )
         case BootstrapStop.ANOTHER_TENANT:
             return _another_tenant(exc.held, joining, token_file, rerun)
+        case BootstrapStop.ANOTHER_RUNNER:
+            assert exc.held is not None, "the another-runner stop carries the held token's runner"
+            return (
+                f"runner {joining.name} is configured as {runner_id}, but its token belongs to runner "
+                f"{exc.held.runner_id}; restore the token of {runner_id} (or correct the `id` in the host file), or "
+                "add a new runner in its place with --allow-readd. No token, host-file id or identity row was written"
+            )
+        case BootstrapStop.TOKENLESS_CONFIGURED:
+            return (
+                f"runner {joining.name} is configured as {runner_id} but holds no token, so init would add another "
+                f"runner in its place; restore its token, or re-run `{rerun.readding()}` to set its store aside and "
+                "add a new one"
+            )
+        case BootstrapStop.STORE_SHARED:
+            name, root = joining.name, joining.root
+            return (
+                f"runner {name} cannot be added again in place: the store it would set aside also holds runner "
+                f"{', '.join(exc.sharing)}, whose backlog it would drop. Retire it with `blizzard runner retire "
+                f"--runner {name} --dir {root}` and add a fresh one with `blizzard runner add {name} --project "
+                f"<project> --dir {root}`. Nothing was added"
+            )
 
 
 def _another_tenant(held: TokenIdentity | None, joining: _Joining, token_file: HubTokenFile, rerun: _Rerun) -> str:
@@ -984,7 +1008,7 @@ def _resolve_token(collaborators: InitCollaborators, hub_url: str, built: BuiltR
         return f"cannot resolve its token at the hub {hub_url}: {exc}"
     if isinstance(answer, TokenRefusal):
         return f"the hub at {hub_url} refuses its token ({answer.reason})"
-    if answer.runner_id != built.id:
+    if judged(built.id, answer.runner_id) is IdentityState.MISMATCHED:
         return f"its token resolves to runner {answer.runner_id}, not the configured {built.id}"
     return None
 

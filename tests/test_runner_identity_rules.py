@@ -1,5 +1,5 @@
 """The runner's identity rules, by value: the token verdict, what a refusing verdict says and how it is restored, the
-host identity a hub answer adopts, and when the host is answered as itself."""
+host identity a hub answer adopts, when the host is answered as itself, and whether a store is foreign."""
 
 from __future__ import annotations
 
@@ -12,6 +12,7 @@ from blizzard.foundation.runner_identity_state import IdentityState
 from blizzard.runner.hub.host_identity import HostIdentity, HostIdentityAlreadyRecorded, adopted
 from blizzard.runner.hub.host_registration import HostRegistrationStatus
 from blizzard.runner.hub.identity import IdentityVerdict, judged
+from blizzard.runner.lifecycle.identity_check import ForeignStore, ForeignStoreKind, foreign_store
 
 pytestmark = pytest.mark.unit
 
@@ -79,3 +80,17 @@ def test_only_a_registered_host_is_answered_as_itself_and_drains(state: HostRegi
     status = HostRegistrationStatus(state=state)
     assert status.answered_as_this_host() is (state is HostRegistrationState.REGISTERED)
     assert status.drains() is status.answered_as_this_host()
+
+
+def test_a_store_naming_only_our_runners_or_none_is_not_foreign() -> None:
+    assert foreign_store((), {"rn_1"}) is None
+    assert foreign_store(("rn_1", "rn_2"), {"rn_1", "rn_2"}) is None
+
+
+def test_a_store_naming_ours_beside_a_foreign_runner_is_mixed_and_one_naming_only_foreign_runners_alien() -> None:
+    assert foreign_store(("rn_1", "rn_x"), {"rn_1"}) == ForeignStore(
+        kind=ForeignStoreKind.MIXED, named=("rn_1", "rn_x"), foreign=("rn_x",)
+    )
+    assert foreign_store(("rn_x", "rn_y"), {"rn_1"}) == ForeignStore(
+        kind=ForeignStoreKind.ALIEN, named=("rn_x", "rn_y"), foreign=("rn_x", "rn_y")
+    )

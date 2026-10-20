@@ -25,12 +25,15 @@ checked yet, it judges the hub's answer the same way first (:class:`ProxyIdentit
 from __future__ import annotations
 
 import threading
+from collections.abc import Collection
 from dataclasses import dataclass, replace
 from datetime import datetime
+from enum import StrEnum
 from typing import Protocol
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.roles import domain_model
 from blizzard.foundation.runner_identity_state import IdentityState
 from blizzard.runner.hub.client import (
     HubClientError,
@@ -124,30 +127,66 @@ def log_transition(holder: IdentityVerdictHolder, was: IdentityState, *, token_f
         )
 
 
+class ForeignStoreKind(StrEnum):
+    """How a store naming a runner none of ours is foreign. ``MIXED`` also names one of ours, so it is the wrong
+    file and a reset would drop the history of the runner it holds; ``ALIEN`` names only foreign runners, so the
+    id configured over it, or the token held for it, is the wrong one."""
+
+    MIXED = "mixed"
+    ALIEN = "alien"
+
+
+@domain_model
+@dataclass(frozen=True)
+class ForeignStore:
+    """A store that is not ours: how (``kind``), every runner its identity rows ``named``, and the ``foreign``
+    ones among them, in the store's order."""
+
+    kind: ForeignStoreKind
+    named: tuple[str, ...]
+    foreign: tuple[str, ...]
+
+
+def foreign_store(named: tuple[str, ...], ours: Collection[str]) -> ForeignStore | None:
+    """Whether a store whose identity rows name ``named`` holds a runner none of ``ours`` is, or ``None`` when it
+    names only ours or none has joined it yet. A runner started over a foreign store would orphan the other's leases
+    and backlog, so it is refused untouched."""
+    foreign = tuple(runner for runner in named if runner not in ours)
+    if not foreign:
+        return None
+    kind = ForeignStoreKind.MIXED if len(foreign) < len(named) else ForeignStoreKind.ALIEN
+    return ForeignStore(kind=kind, named=named, foreign=foreign)
+
+
+def reset_hazard(reset: str, runner_id: str) -> str:
+    """What ``reset`` costs: it starts ``runner_id`` on a fresh store, dropping every fact below the hub's
+    high-water mark."""
+    return (
+        f"`{reset}` sets the store aside and starts {runner_id} on a fresh one, dropping every fact below the hub's "
+        "high-water mark, so use it only for a runner with no history"
+    )
+
+
 def foreign_store_reason(
     named: tuple[str, ...], configured_id: str, reset: str, *, configured: tuple[str, ...] = ()
 ) -> str | None:
     """Why a store whose identity rows name ``named`` is not ``configured_id``'s, or ``None`` when it names only
     runners this host configures — ``configured_id`` and the other ``configured`` ids of its ``[[runner]]``
-    entries — or none has joined it yet. A store naming a runner no entry configures beside the configured one is
-    foreign: a runner started over it would orphan the other's leases and backlog, so it is refused untouched,
-    and since it already names the configured runner it is the wrong file, so its remedy is to restore the right
-    store, never ``reset``. A store naming only runners no entry configures has a wrong configured id, so its
-    remedy is to correct the id; ``reset`` is named there with its hazard."""
-    ours = {configured_id, *configured}
-    if not named or set(named) <= ours:
+    entries. A mixed store is the wrong file, so its remedy is to restore the right store, never ``reset``; an
+    alien one has a wrong configured id, so its remedy is to correct the id, ``reset`` named there with its
+    hazard."""
+    verdict = foreign_store(named, {configured_id, *configured})
+    if verdict is None:
         return None
-    foreign = [runner for runner in named if runner not in ours]
-    if any(runner in ours for runner in named):
+    if verdict.kind is ForeignStoreKind.MIXED:
         return (
-            f"the store names runners {', '.join(named)}, and {', '.join(foreign)} is configured by no [[runner]] "
-            f"of this host; it cannot be told apart from {configured_id}'s, so it is left untouched — stop and "
-            "restore the right store"
+            f"the store names runners {', '.join(named)}, and {', '.join(verdict.foreign)} is configured by no "
+            f"[[runner]] of this host; it cannot be told apart from {configured_id}'s, so it is left untouched — "
+            "stop and restore the right store"
         )
     return (
         f"the store belongs to runner {', '.join(named)}, not the configured {configured_id}; correct the `id` in "
-        f"the host file to {named[0]}. `{reset}` sets the store aside and starts {configured_id} on a fresh one, "
-        f"dropping every fact below the hub's high-water mark, so use it only for a runner with no history"
+        f"the host file to {named[0]}. {reset_hazard(reset, configured_id)}"
     )
 
 
