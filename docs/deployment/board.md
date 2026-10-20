@@ -9,7 +9,8 @@ The switch in the board's header picks a layout. **Board** is the lane grid. **L
 full-width row, top to bottom: needs human, waiting, and running, each lane newest first; then ready and backlog in the
 hub's dispatch and backlog order, split by a `▲ Ready · Backlog ▼` line; then done, newest finished first. Each row
 leads with an icon for its lane — paused and stopped have icons of their own — then the chunk's id over its work items,
-its step, its runner over its open PRs, and its cost. PRs show by number alone, a blocked chunk's marking is plain text,
+one cell naming its runner, its step and its open PRs, and its cost. Each card and row takes its project's color as its
+background. PRs show by number alone, a blocked chunk's marking is plain text,
 and a finished row closes on a check with the time it completed or stopped.
 
 With the `queue:reorder` permission ([tenants.md](./tenants.md)), each ready and backlog row carries a grip and drags to

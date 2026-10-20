@@ -12,7 +12,7 @@ cross-verb distinctions the help text does not draw.
 
 ## Pause and resume
 
-`chunk pause`, or the board's Pause control in the chunk detail dock, targets one chunk: on a live claim the runner
+`chunk pause`, or Pause in the ⋯ actions menu of the board's chunk detail, targets one chunk: on a live claim the runner
 interrupts that chunk's worker but keeps the claim — lease, route, epoch, held environments, and retry budget all
 survive; only the process ends. The worker gets a brief grace period to wind down on its own, the same one a graceful
 restart's drain gives, so it can still write its own usage record before exiting; only a survivor past that grace period
@@ -210,7 +210,7 @@ to route or claim.
 The runner reports its gates on every registration, so they show in two places:
 
 - the Fleet tab's runner rows, as a "Gates:" badge row beside the harness badges;
-- the runner panel's info section.
+- the runner's row on the runner panel's host page.
 
 An open gate decision shows wherever a waiting chunk does, derived from the decision rather than from the registration:
 

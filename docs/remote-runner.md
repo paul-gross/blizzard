@@ -143,10 +143,15 @@ An unreachable hub is routine, not an incident — the runner rides it out; what
 Two machines upgrade at two times, so version skew becomes possible; the supported window is
 [`docs/versioning.md`](./versioning.md)'s.
 
-The host's panel opens at its root, `/`, on the host page: each runner the host serves with its brake and agents in
-use, the environments of each workspace and who holds them, and the subscriptions with the runners spending them. Each
-runner's own pages sit under `/runners/<id>/` — its board at `/runners/<id>/board`, then `events` and `machine` — and the
-switcher in the panel's navigation moves between runners.
+The host's panel is one app across every runner the host serves, opening at its root, `/`, on the board. Its tabs are
+fixed — `board`, `events` and `host` — and a Runner and a Project filter narrow every page, the chosen runner carried in
+the URL as `?runner=`. Beside the board, a rail shows the hub link, the host's subscriptions and environments, and the
+open asks. The host page, `/host`, shows the subscriptions' usage first, then one row per runner with its bindings,
+spend, harness health, hub link, gates, problems and state, the chunks it holds, and its pause and stop controls, then
+the environments of each workspace and who holds them. A runner the hub's version window refuses reads `VERSION REFUSED`
+on its hub link, which also names the hub's version and the window it admits, and the host page's title spells out the
+hub's sentence naming what to upgrade. An older per-runner link under `/runners/<id>/` redirects to the same page
+filtered to that runner — a bare `/runners/<id>` to the board — and `/machine` to `/host`.
 
 A runner whose machine-local panel is opened from a browser on another machine needs the runner-side federation
 configuration owned by [`docs/deployment/human-auth.md`](./deployment/human-auth.md)'s "Federating a runner's web

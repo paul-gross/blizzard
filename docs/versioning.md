@@ -86,7 +86,8 @@ which is then the `floor`.
 At runtime, every registration carries the runner's version and the hub judges it against the window: a runner outside
 it is refused `409 RunnerVersionRefusal`, whose `detail` names the runner's version, the hub's, and the range to upgrade
 to, and is denied every claim until a later registration is admitted. The refused runner halts alone while its host's
-other runners carry on, and retries registration on its tick; a hub whose own line is below `floor` refuses to start.
+other runners carry on, and retries registration on its tick; its panel's host page shows the refusal
+([`docs/remote-runner.md`](./remote-runner.md)); a hub whose own line is below `floor` refuses to start.
 What is checked is every committed surface document against every supported release: `blizzard:compat`
 (`bzh:released-surface-additive`) fails a pull request or a push that breaks one unless the break is one the window
 admits, and `release.yml` runs it again at a tag. [`docs/ci.md`](./ci.md) owns where each run happens.
