@@ -7,6 +7,8 @@ export interface HostRegistrationSummary {
   readonly tone: Tone;
   /** One line per fact the state carries: identity, held runners, detail, buffered facts. */
   readonly lines: readonly string[];
+  /** The hub's own sentence on the state — why it refused, or what to upgrade — `null` when it gave none. */
+  readonly detail: string | null;
   /** When the hub last answered the host's report, `null` before any answer. */
   readonly answeredAt: string | null;
 }
@@ -43,5 +45,5 @@ export function hostRegistrationSummary(view: runnerApi.HostRegistrationView | u
     const buffered = view.buffered_facts ?? 0;
     lines.push(`${buffered} fact${buffered === 1 ? '' : 's'} buffered`);
   }
-  return { state: view.state, label, tone, lines, answeredAt: view.answered_at ?? null };
+  return { state: view.state, label, tone, lines, detail: view.detail ?? null, answeredAt: view.answered_at ?? null };
 }

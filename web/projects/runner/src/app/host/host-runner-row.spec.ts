@@ -20,7 +20,7 @@ const ROW = (overrides: Partial<HostRunnerRow> = {}): HostRunnerRow => ({
     { harnessId: 'claude_code', name: 'claude code', version: '2.1.0', available: true, admitted: null, cause: null, degradations: [] },
   ],
   gates: [],
-  hub: { endpoint: 'http://hub', reachable: true, lastContactAt: null, buffered: 2, refusal: null },
+  hub: { endpoint: 'http://hub', reachable: true, lastContactAt: null, buffered: 2, refusal: null, hubVersion: null, window: null },
   problems: [],
   state: [{ label: 'WORKING', tone: 'running', title: null }],
   heldPending: false,
@@ -94,6 +94,8 @@ describe('HostRunnerRowView', () => {
           lastContactAt: null,
           buffered: 2,
           refusal: { label: 'REFUSED', tone: 'needs', title: null },
+          hubVersion: null,
+          window: null,
         },
       }),
     );
@@ -102,6 +104,16 @@ describe('HostRunnerRowView', () => {
     expect(hub).toContain('UNREACHABLE');
     expect(hub).toContain('REFUSED');
     expect(hub).toContain('2 buffered');
+  });
+
+  it('names the hub\'s version and the window it admits, and nothing before a registration answers', async () => {
+    const hub = { endpoint: 'http://hub', reachable: true, lastContactAt: null, buffered: 0, refusal: null };
+    const answered = await render(ROW({ hub: { ...hub, hubVersion: '0.3.0', window: 'admits 0.2 – 0.3' } }));
+    expect(text(answered, 'host-runner-hub-version')).toBe('· hub 0.3.0 admits 0.2 – 0.3');
+
+    TestBed.resetTestingModule();
+    const unanswered = await render(ROW({ hub: { ...hub, hubVersion: null, window: null } }));
+    expect(unanswered.querySelector('[data-testid="host-runner-hub-version"]')).toBeNull();
   });
 
   it('shows a halted runner’s state and reasons only', async () => {

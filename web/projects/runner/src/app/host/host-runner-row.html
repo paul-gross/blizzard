@@ -143,6 +143,9 @@
       @if (hub.buffered > 0) {
         <span class="mut">· {{ hub.buffered }} buffered</span>
       }
+      @if (hub.hubVersion; as version) {
+        <span class="mut" data-testid="host-runner-hub-version">· hub {{ version }}{{ hub.window ? ' ' + hub.window : '' }}</span>
+      }
     </span>
   }
 </ng-template>
