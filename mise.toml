@@ -37,16 +37,7 @@ run = "BLIZZARD_JOURNEY=1 uv run pytest -m journey tests/journey/"
 
 [tasks.rehearsal]
 description = "Run the upgrade rehearsal (blizzard:rehearsal) — each supported release's own published hub and runner, seeded through the mock-data CLI, upgraded hub first to the candidate while the old runner keeps landing work, then the runner, then both stores walked down to the release and forward again. Inputs: BLIZZARD_REHEARSAL_BASELINE (one tag; default every supported release), BLIZZARD_REHEARSAL_CANDIDATE (a directory holding the wheel and its -requirements-pg.txt; default a fresh build), BLIZZARD_REHEARSAL_PG_URL (a Postgres server; unset skips the Postgres backend), BLIZZARD_REHEARSAL_ROOT (where each leg's daemon dirs and logs go). Needs `gh` access and the sibling blizzard-mock worktree provisioned (winter provision <env>)"
-run = """
-set -eu
-if [ -z "${BLIZZARD_REHEARSAL_CANDIDATE:-}" ]; then
-  ./scripts/build-wheel.sh
-  ./scripts/export-requirements.sh candidate "$(ls dist/blizzard-*.whl)" --extra postgres --no-project \
-    > dist/blizzard-candidate-requirements-pg.txt
-  export BLIZZARD_REHEARSAL_CANDIDATE="$PWD/dist"
-fi
-BLIZZARD_REHEARSAL=1 uv run --extra postgres pytest -m rehearsal tests/rehearsal/
-"""
+run = "scripts/rehearsal.sh"
 
 [tasks.winter-binding]
 description = "Run the winter-binding tier (blizzard:winter-binding) — the winter workspace provider against the real winter CLI, plus one chunk landed end to end over provider=\"winter\". Local-only, never run in CI: it needs BLIZZARD_WINTER_BINDING=1 (set by this task), a winter source (BLIZZARD_MOCK_WINTER_SOURCE, else the enclosing winter workspace), and the sibling blizzard-mock worktree provisioned (winter provision <env>)"
