@@ -8,7 +8,7 @@ from datetime import timedelta
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import domain_model
-from blizzard.hub.domain.runners.host import Host, HostReport, IWriteHostRegistry
+from blizzard.hub.domain.runners.host import Host, HostNameTaken, HostReport, IWriteHostRegistry
 from blizzard.hub.domain.runners.registration import STALE_AFTER
 
 _log = get_logger("blizzard.hub.host_report")
@@ -43,7 +43,13 @@ class HostReportService:
             now=now,
             threshold=self._stale_after,
         )
-        first = self._hosts.record_report(held.host_id, reported, name=decision.name, at=now)
-        name = decision.name or held.name
+        name = decision.name
+        try:
+            first = self._hosts.record_report(held.host_id, reported, name=name, at=now)
+        except HostNameTaken:
+            # A rename that lost a race for the name is not recorded; the report still lands as the heartbeat.
+            name = None
+            first = self._hosts.record_report(held.host_id, reported, name=None, at=now)
+        name = name or held.name
         _log.info("host reported", host_id=held.host_id, name=name, first_time=first, changed=decision.changed or first)
         return Reported(first=first, name=name, changed=decision.changed or first)
