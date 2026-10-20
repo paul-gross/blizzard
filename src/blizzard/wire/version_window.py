@@ -3,10 +3,7 @@
 ``floor`` is the oldest ``MAJOR.MINOR`` a peer may still speak; ``opening`` is the major
 number master is opening, absent while no major is open. Both are TOML strings, so
 ``0.10`` never collapses to the float ``0.1``, and an unknown key is refused so a
-misspelled ``opening`` cannot read as "master not open".
-
-``admits`` is the window's one statement in code: a runner is admitted when its ``MAJOR.MINOR``
-line is at or above ``floor`` and at or below the hub's own line."""
+misspelled ``opening`` cannot read as "master not open"."""
 
 from __future__ import annotations
 
@@ -101,7 +98,6 @@ class Admission:
     ceiling: str
 
     def admitted(self) -> bool:
-        """Whether the window admits the runner."""
         return self.reason is None
 
     def detail(self) -> str | None:
@@ -112,7 +108,7 @@ class Admission:
 
 
 def admits(hub: str, runner: str | None, window: VersionWindow) -> Admission:
-    """Judge a runner reporting ``runner`` against a hub at ``hub`` under ``window``."""
+    """Admit a runner whose ``MAJOR.MINOR`` line is between ``window``'s floor and the hub's own, inclusive."""
     ceiling = line_of(hub)
     runner_line = _parsed_line(runner) if runner is not None else None
     reported = runner if runner_line is not None else None
@@ -131,7 +127,6 @@ def admits(hub: str, runner: str | None, window: VersionWindow) -> Admission:
 def refusal_detail(
     reason: VersionRefusalReason, runner_version: str | None, hub_version: str, floor: str, ceiling: str
 ) -> str:
-    """The sentence an operator acts on for a refusal of ``reason``."""
     if reason is VersionRefusalReason.TOO_NEW:
         return f"runner {runner_version} is newer than this hub, {hub_version}; upgrade the hub first"
     upgrade = f"upgrade the runner host to {floor} or later, up to {ceiling}"

@@ -82,7 +82,6 @@ def host(directory: str | None, dir_option: str, host_: str | None, port: int | 
     DIRECTORY (positional) and --dir are equivalent — pass one; giving both requires
     they agree. Defaults to $BZ_HUB_DIR, then the cwd."""
     directory = HostDirectory(directory, dir_option).path
-    # A hub below its own window's floor would refuse every runner, so it refuses to start instead.
     with click_exception_on(VersionWindowError):
         window = VersionWindow.load()
         check_own_floor(__version__, window)

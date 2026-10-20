@@ -2231,8 +2231,7 @@ export type IdentityState = typeof IdentityState[keyof typeof IdentityState];
  * retired) — the runner then drives no lease until a check resolves it again. On a registered host,
  * ``not_held`` while the hub does not hold the runner under the host and ``tenant_differs`` while it stands
  * in another tenant than the host's halt the runner alone, as does ``version_refused`` while the hub's
- * compatibility window refuses the runner's version. ``reason`` says why for those last four — for
- * ``version_refused``, the hub's sentence naming what to upgrade.
+ * version window refuses it. ``reason`` says why for those last four.
  * ``reset_command`` names how to restore the token: the token variable and the configured id.
  */
 export type IdentityVerdictView = {

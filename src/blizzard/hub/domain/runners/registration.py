@@ -216,8 +216,7 @@ class RunnerRegistration:
     version_judged_at: datetime | None = None
 
     def version_standing(self) -> RunnerVersionStanding | None:
-        """Where the latest registration stands against the window; ``None`` for a runner never registered nor
-        judged."""
+        """``None`` for a runner never registered nor judged."""
         if self.version_refusal is not None:
             return RunnerVersionStanding.REFUSED
         if self.version_judged_at is None and self.never_connected():
@@ -227,7 +226,6 @@ class RunnerRegistration:
         return RunnerVersionStanding.IN_WINDOW
 
     def version_changed(self, judgement: VersionJudgement) -> bool:
-        """Whether ``judgement`` differs from the one this row holds."""
         return (
             self.version_judged_at is None
             or judgement.reported_version != self.reported_version
@@ -692,8 +690,7 @@ class IWriteRunnerRegistry(IReadRunnerRegistry, Protocol):
     def record_version_refusal(
         self, runner_id: str, *, version: str | None, reason: VersionRefusalReason, at: datetime
     ) -> None:
-        """Record that the window refused a registration of ``runner_id`` reporting ``version`` — the version, the
-        reason, and when, and nothing else the registration carried."""
+        """Record the window's refusal of ``runner_id`` reporting ``version``, and nothing else it carried."""
         ...
 
     def touch_last_seen(self, runner_id: str, *, at: datetime) -> bool:

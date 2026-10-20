@@ -922,8 +922,7 @@ def register_runner(
 
     The hub never rejects a registration over its roster — it doubles as the heartbeat every tick,
     so the tenant it answers, named as the hub holds it now, carries a rename on the next tick. A
-    body ``runner_id`` from an older runner is ignored. A retired runner is refused 403; a ``version`` the hub's
-    window does not admit is refused 409, and the runner claims nothing until a later registration is admitted."""
+    body ``runner_id`` from an older runner is ignored. A retired runner is refused 403, a refused version 409."""
     runner_id = fleet.caller_id()
     registration = services.registry.get_runner(runner_id)
     if registration is None:

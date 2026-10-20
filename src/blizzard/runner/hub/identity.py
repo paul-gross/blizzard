@@ -177,11 +177,9 @@ class IdentityVerdictHolder:
     checks it, the host tick that judges its standing, the hub client and proxy it gates, and the status that
     reports it.
 
-    Three inputs held apart: the token's own verdict, which only the identity check and the registration write; the
-    hub window's refusal of the runner's version, which only the registration writes, and only an admitted
-    registration clears; and the runner's standing under its host, which only the host tick writes. The verdict
-    refuses when any one refuses — the token's refusal first, then the version's — so no input's writer ever clears
-    another's refusal."""
+    Three inputs held apart, each with its sole writer — the token's verdict (identity check, registration), the
+    version refusal (registration), the host standing (host tick) — so no writer clears another's refusal; the
+    verdict refuses on any, token first, then version."""
 
     def __init__(self, reset_command: str, *, state: IdentityState = IdentityState.UNCHECKED) -> None:
         self._lock = threading.Lock()
@@ -260,20 +258,17 @@ class IdentityVerdictHolder:
         return was
 
     def version_refused(self) -> bool:
-        """Whether the hub's window refuses the runner's version — the halt only a later registration can lift."""
         with self._lock:
             return self._version_refusal is not None
 
     def refuse_version(self, detail: str) -> IdentityState:
-        """Hold that the hub's window refused the runner's version, ``detail`` saying what to upgrade, returning
-        the composed state it replaced."""
+        """Hold the window's refusal, ``detail`` naming what to upgrade; returns the composed state it replaced."""
         with self._lock:
             was = self._composed().state
             self._version_refusal = detail
         return was
 
     def admit_version(self) -> IdentityState:
-        """Clear a version refusal once a registration is admitted, returning the composed state it replaced."""
         with self._lock:
             was = self._composed().state
             self._version_refusal = None

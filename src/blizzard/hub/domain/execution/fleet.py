@@ -99,7 +99,6 @@ class FleetService:
         self._facts = facts
         self._detach = detach
         self._retired = retired
-        # The hub's own version and window, which judge each registration's reported version.
         self._versions = versions
         self._clock = clock
         self._stale_after = stale_after

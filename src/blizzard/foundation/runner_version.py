@@ -6,8 +6,6 @@ from enum import StrEnum
 
 
 class VersionRefusalReason(StrEnum):
-    """Why the hub's compatibility window refuses a runner's version."""
-
     #: The runner's line is below the window's floor.
     TOO_OLD = "too-old"
     #: The runner's line is above the hub's own.
@@ -17,9 +15,6 @@ class VersionRefusalReason(StrEnum):
 
 
 class RunnerVersionStanding(StrEnum):
-    """Where a runner's latest registration stands against the hub's window."""
-
-    #: It reported a version the window admits.
     IN_WINDOW = "in_window"
     #: It reported no version, and the window admitted it anyway.
     UNVERSIONED = "unversioned"

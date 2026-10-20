@@ -502,10 +502,8 @@ def build_hosted_app(
     """The ``host`` composition root: open the store and wire every fleet seam.
 
     ``platform_tracing`` defaults to the handle ``[tracing]`` and the OTLP environment decide.
-    ``oauth_http_client`` replaces the OAuth
-    providers' client. Either way, the engine and every outbound client are instrumented through it.
-    ``flag_registry`` is the registry the hub's flags resolve against — the packaged one unless given, and
-    ``version_window`` the window runner versions are judged under, likewise."""
+    ``oauth_http_client`` replaces the OAuth providers' client. Either way, the engine and every outbound client are
+    instrumented through it. ``flag_registry`` and ``version_window`` default to the packaged ones."""
     platform_tracing = platform_tracing or build_platform_tracing(
         config.tracing,
         os.environ,

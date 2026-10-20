@@ -1,7 +1,4 @@
-"""The version handshake at the hub (component tier): a hub at ``0.3`` under ``floor = "0.2"`` judges each
-registration's reported version, refuses one outside the window ``409`` with a body naming both versions and the
-floor, records the judgement on the runner's row, denies a refused runner's claim, and reports every runner's version
-and standing on ``GET /api/runners``."""
+"""The version handshake at the hub (component tier), a hub at ``0.3`` under ``floor = "0.2"``."""
 
 from __future__ import annotations
 

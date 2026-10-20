@@ -62,7 +62,7 @@ class HubConnectivityView(BaseModel):
     reachable: bool
     last_contact_at: str | None
     buffer_depth: int
-    #: The hub's own version, as its latest registration reply answered; ``None`` until a hub that names it answers.
+    #: The hub's own version, as of its latest registration reply.
     hub_version: str | None = None
     #: The window the hub judged this runner's version under, as of the same reply.
     window: VersionWindowView | None = None
@@ -76,8 +76,7 @@ class IdentityVerdictView(BaseModel):
     retired) — the runner then drives no lease until a check resolves it again. On a registered host,
     ``not_held`` while the hub does not hold the runner under the host and ``tenant_differs`` while it stands
     in another tenant than the host's halt the runner alone, as does ``version_refused`` while the hub's
-    compatibility window refuses the runner's version. ``reason`` says why for those last four — for
-    ``version_refused``, the hub's sentence naming what to upgrade.
+    version window refuses it. ``reason`` says why for those last four.
     ``reset_command`` names how to restore the token: the token variable and the configured id."""
 
     state: IdentityState

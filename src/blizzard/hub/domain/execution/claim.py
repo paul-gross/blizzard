@@ -76,8 +76,7 @@ class ClaimDeniedUnregistered(Exception):
 
 
 class ClaimDeniedVersionRefused(Exception):
-    """The hub's window refused the claiming runner's latest registration on its version — refused before any race,
-    in the runner-refusal shape of :class:`ClaimDeniedPaused`, until a later registration is admitted."""
+    """The window refused the claiming runner's latest registration — refused before any race."""
 
     def __init__(self, *, runner_id: str, reason: VersionRefusalReason, version: str | None) -> None:
         reported = "no version" if version is None else f"version {version}"
@@ -156,8 +155,6 @@ class RekeyDeniedTerminal(Exception):
 
 
 def refuse_paused_runner(registration: RunnerRegistration | None, *, runner_id: str) -> RunnerRegistration:
-    """Refuse a claim from a runner unregistered (never connected included), retired, refused on version, or paused
-    at the hub registry, in that order, ahead of any race; the registration the claim stands on otherwise."""
     if registration is None or registration.never_connected():
         raise ClaimDeniedUnregistered(runner_id=runner_id)
     registration.refuse_if_retired(action="claim")
@@ -168,8 +165,6 @@ def refuse_paused_runner(registration: RunnerRegistration | None, *, runner_id: 
 
 
 def refuse_version_refused(registration: RunnerRegistration) -> None:
-    """Refuse a claim from a runner whose latest registration the window refused
-    (:class:`ClaimDeniedVersionRefused`)."""
     if registration.version_refusal is not None:
         raise ClaimDeniedVersionRefused(
             runner_id=registration.runner_id,

@@ -42,8 +42,6 @@ def _backoff(retries_so_far: int) -> float:
 
 
 def _unverified(verdict: IdentityVerdict) -> str:
-    """Why the proxy forwards nothing: the runner's token is unverified or names another runner, or the runner is
-    halted by its host or by the hub's version window."""
     if verdict.state is IdentityState.MISMATCHED:
         return (
             f"runner_identity_mismatch: this runner's token belongs to runner {verdict.token_runner_id}, but the "

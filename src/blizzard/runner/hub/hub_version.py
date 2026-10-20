@@ -1,8 +1,5 @@
-"""The hub's own version and the compatibility window it judges this runner under, as its latest registration
-reply answered them.
-
-Held for the process alone, never stored: every registration answers them afresh, and a hub that predates the
-handshake answers neither."""
+"""The hub's version and window, as the latest registration reply answered them — held for the process alone,
+never stored, since every registration answers them afresh."""
 
 from __future__ import annotations
 
@@ -24,8 +21,6 @@ class HubVersion:
 
 
 class ICurrentHubVersion(Protocol):
-    """The hub version the latest registration reply answered."""
-
     def current(self) -> HubVersion: ...
 
 
@@ -41,7 +36,6 @@ class HubVersionHolder:
             return self._current
 
     def hold(self, reply: RegistrationReply) -> None:
-        """Answer the version and window ``reply`` names from now on."""
         with self._lock:
             self._current = HubVersion(hub_version=reply.hub_version, window=reply.window)
 

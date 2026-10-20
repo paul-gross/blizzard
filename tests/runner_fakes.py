@@ -495,10 +495,9 @@ class FakeHub:
         self.fleet_flags: dict[str, bool] = {}
         # The served projects every registration answers with; `None` is a hub that predates projects.
         self.served_projects: tuple[ServedProject, ...] | None = None
-        # The hub version and window every registration answers with; `None` is a hub that predates the handshake.
         self.hub_version: str | None = None
         self.window: HubVersionWindow | None = None
-        # The window's refusal every registration raises while set — the call is still recorded, as it reached the hub.
+        # Raised by every registration while set; the call is still recorded.
         self.version_refusal: VersionRefusal | None = None
         self.queue: list[QueueEntry] = []
         # A per-call scripted sequence: when set, each `peek_queue`

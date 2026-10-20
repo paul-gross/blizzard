@@ -112,7 +112,7 @@ class VersionWindowView(BaseModel):
 
 
 class RunnerVersionRefusal(BaseModel):
-    """A runner whose version the hub's window does not admit, naming both versions and the window."""
+    """The hub's window refusing a runner's version."""
 
     reason: VersionRefusalReason
     #: The version the runner reported; ``None`` when it reported none, or one that does not parse.

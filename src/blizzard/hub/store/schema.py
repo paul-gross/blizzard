@@ -1950,8 +1950,7 @@ runner_registrations = Table(
     Column("bindings", Text, nullable=True),
     # The slug of the host subscription the bindings spend; null when the runner named none.
     Column("subscription", Text, nullable=True),
-    # The latest judged registration's reported version, the window's refusal reason (null when admitted), and when
-    # it was judged — all null until a registration is judged. A refused registration writes only these three.
+    # The latest judged registration's version, refusal (null when admitted) and time; a refusal writes only these.
     Column("reported_version", Text, nullable=True),
     Column("version_refusal", String, nullable=True),
     Column("version_judged_at", UtcDateTime, nullable=True),

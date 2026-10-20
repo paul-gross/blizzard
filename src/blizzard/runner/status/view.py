@@ -138,8 +138,7 @@ class HubConnectivity:
     """Hub reachability, derived from staleness, plus the outbound backlog depth.
 
     ``endpoint`` is the configured hub base URL — identity config, not a probe result;
-    the local panel's one handle on where the fleet board lives. ``version`` is the hub's own version and window,
-    as its latest registration reply answered them."""
+    the local panel's one handle on where the fleet board lives. ``version`` is the latest registration reply's."""
 
     endpoint: str
     reachable: bool

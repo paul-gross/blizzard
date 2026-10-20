@@ -1,6 +1,4 @@
-"""The runner-version revision: ``runner_registrations`` gains nullable ``reported_version``, ``version_refusal`` and
-``version_judged_at`` columns, every existing runner reading as never judged; a re-run changes nothing; and the
-downgrade restores the store exactly."""
+"""The runner-version revision adds the nullable judgement columns, re-runs idempotently, and downgrades exactly."""
 
 from __future__ import annotations
 

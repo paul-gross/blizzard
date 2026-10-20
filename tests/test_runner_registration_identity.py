@@ -25,7 +25,6 @@ pytestmark = pytest.mark.component
 
 #: What a registration answers when the runner sent no bindings.
 _NO_BINDINGS = {"bindings": None, "subscription": None, "subscription_unrostered": False}
-#: The hub's own version and window, answered on every admitted registration.
 _HANDSHAKE = {
     "hub_version": __version__,
     "window": {"floor": VersionWindow.load().floor, "ceiling": line_of(__version__)},

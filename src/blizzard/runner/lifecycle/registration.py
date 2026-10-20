@@ -9,8 +9,7 @@ token rotated since the tick's identity check, or a hub with no identity read â€
 and mirrors no brake. The registration declares the configured projects, and a reply answering them replaces the
 stored answer whole once the identity row is recorded; a reply answering none, from a hub that predates
 projects, keeps it. A failed registration leaves the row, the answer, the holder and the mirrored brake as they
-stood. One the hub's window refuses over the runner's version halts the runner alone through its identity verdict,
-and the next admitted registration lifts it; each reply's hub version and window are held for the status."""
+stood. A refused version halts the runner alone until an admitted registration lifts it."""
 
 from __future__ import annotations
 
@@ -159,7 +158,7 @@ class Registration:
         except RunnerVersionRefused as refused:
             was = ctx.identity_verdict.refuse_version(refused.refusal.detail)
             log_transition(ctx.identity_verdict, was, token_fixed=ctx.hub_token.fixed())
-            return  # the window refuses this runner: it halts alone until a registration is admitted
+            return
         except HubClientError:
             return  # hub unreachable â€” the last identity and the last-mirrored brake hold
         ctx.hub_version.hold(reply)

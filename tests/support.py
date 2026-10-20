@@ -1302,8 +1302,7 @@ def build_hub(
     each fake source is stored as a configured record linked to the tenant's only project, and each seeded
     repository is linked to it too, while ``link=False`` leaves the sources unstored, serving no project, as a
     file-configured source is, and the repositories stored but unlinked; ``hub_command_runner``/``hub_workdir``
-    left ``None`` wire real adapters. ``hub_version`` and ``version_window`` judge runner registrations — the
-    installed version and the packaged window unless given."""
+    left ``None`` wire real adapters; ``hub_version`` and ``version_window`` default to the installed and packaged."""
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
     config = HubConfig(
         root=tmp_path,

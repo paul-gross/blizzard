@@ -38,8 +38,8 @@ class IdentityNotVerified(HubClientError):
 
 class VerifiedHubClient:
     """An :class:`IHubClient` that forwards to ``inner`` only while ``verdict`` is matched. The
-    registration also forwards while the hub has no identity read, its reply then being the check, and while the
-    hub's window refuses the runner's version, a later admitted registration being the one way back."""
+    registration also forwards while the hub has no identity read, its reply then being the check, or refuses the
+    runner's version."""
 
     def __init__(self, inner: IHubClient, verdict: ICurrentIdentityVerdict) -> None:
         self._inner = inner

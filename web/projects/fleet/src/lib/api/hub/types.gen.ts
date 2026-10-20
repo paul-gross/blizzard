@@ -7849,7 +7849,7 @@ export type RunnerTokenRevocationResponse = {
 /**
  * RunnerVersionRefusal
  *
- * A runner whose version the hub's window does not admit, naming both versions and the window.
+ * The hub's window refusing a runner's version.
  */
 export type RunnerVersionRefusal = {
     /**
@@ -7873,8 +7873,6 @@ export type RunnerVersionRefusal = {
 
 /**
  * RunnerVersionStanding
- *
- * Where a runner's latest registration stands against the hub's window.
  */
 export const RunnerVersionStanding = {
     IN_WINDOW: 'in_window',
@@ -7884,8 +7882,6 @@ export const RunnerVersionStanding = {
 
 /**
  * RunnerVersionStanding
- *
- * Where a runner's latest registration stands against the hub's window.
  */
 export type RunnerVersionStanding = typeof RunnerVersionStanding[keyof typeof RunnerVersionStanding];
 
@@ -9257,8 +9253,6 @@ export type ValidationError = {
 
 /**
  * VersionRefusalReason
- *
- * Why the hub's compatibility window refuses a runner's version.
  */
 export const VersionRefusalReason = {
     TOO_OLD: 'too-old',
@@ -9268,8 +9262,6 @@ export const VersionRefusalReason = {
 
 /**
  * VersionRefusalReason
- *
- * Why the hub's compatibility window refuses a runner's version.
  */
 export type VersionRefusalReason = typeof VersionRefusalReason[keyof typeof VersionRefusalReason];
 

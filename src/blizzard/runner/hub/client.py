@@ -56,8 +56,7 @@ class IdentityRouteMissing(HubClientError):
 @domain_model
 @dataclass(frozen=True)
 class VersionRefusal:
-    """The hub's refusal of this runner's version: why, the version the runner reported (``None`` when it reported
-    none), the hub's own version and the window's floor, and ``detail``, the sentence naming what to upgrade."""
+    """The hub's refusal of this runner's version; ``detail`` names what to upgrade."""
 
     reason: VersionRefusalReason
     runner_version: str | None
@@ -67,9 +66,7 @@ class VersionRefusal:
 
 
 class RunnerVersionRefused(HubClientError):
-    """The hub refused a registration because its window does not admit the runner's version (409) — the
-    runner halts alone and registers again on its tick until one is admitted. Still a
-    :class:`HubClientError`, so an unaware caller treats it as an outage."""
+    """The hub's window refused a registration (409); a :class:`HubClientError`, read as an outage if unhandled."""
 
     def __init__(self, refusal: VersionRefusal) -> None:
         super().__init__(refusal.detail)
@@ -134,8 +131,7 @@ class HostRefusalReason(StrEnum):
     """Why the hub refused a call under the host's own token: ``CREDENTIAL_REFUSED``, the token is
     missing, unknown, revoked, or its host retired (401 or 403); ``NOT_FOUND``, the hub answered 404 —
     on every host route but retire, a hub that predates hosts; on retire, also a runner that does not
-    stand under the host; ``VERSION_REFUSED``, the hub's window does not admit the host's version (409 on a
-    report)."""
+    stand under the host; ``VERSION_REFUSED``, the window refuses the host's version (409)."""
 
     CREDENTIAL_REFUSED = "credential_refused"
     NOT_FOUND = "not_found"
@@ -482,11 +478,8 @@ class HubVersionWindow:
 @domain_model
 @dataclass(frozen=True)
 class RegistrationReply:
-    """The hub's reply to a successful registration: the runner's hub-minted id, the name the hub
-    now holds for it, whether this was its first registration since it was added, the tenant the
-    runner serves — ``None`` from a hub that predates tenants — the projects it serves, one per
-    declared entry as the hub resolved it — ``None`` from a hub that predates projects — and the hub's own version
-    and the window it admitted the runner under — ``None`` from a hub that predates the handshake."""
+    """The hub's reply to a successful registration. ``tenant_*``, ``projects`` (one per declared entry as the hub
+    resolved it), ``hub_version`` and ``window`` are ``None`` from a hub that predates them."""
 
     runner_id: str
     runner_name: str
@@ -634,9 +627,8 @@ class IHubClient(IChunkStatusReader, ITranscriptPusher, Protocol):
         given, ``None`` as null — never ``[]`` — so the hub keeps the declaration it holds, where
         ``()`` declares that the runner serves none. ``bindings`` is the same declaration by workspace and agent count,
         which a hub that reads it takes over ``projects`` for; ``subscription`` is the slug of the declared
-        subscription the runner spends, ``None`` naming none. The registration carries the runner's own version; a
-        hub whose window does not admit it raises :class:`RunnerVersionRefused`. A refused token raises
-        :class:`HubClientError`."""
+        subscription the runner spends, ``None`` naming none. A refused version raises
+        :class:`RunnerVersionRefused`, a refused token :class:`HubClientError`."""
         ...
 
     def fetch_runner_paused(self, runner_id: str) -> bool:
@@ -700,9 +692,8 @@ class IHostHubClient(Protocol):
     :class:`HubClientError`."""
 
     def report(self, report: HostReport) -> HostRecord | HostRefused:
-        """``POST /api/fleet/host`` — report the host, carrying its own version, and read its record back. The
-        hub never refuses a report over its content; it doubles as the host's heartbeat. A hub whose window
-        refuses the version answers :class:`HostRefused` with ``VERSION_REFUSED``."""
+        """``POST /api/fleet/host`` — report the host and its version, and read its record back. Never refused
+        over its content — it doubles as the heartbeat — but a refused version answers ``VERSION_REFUSED``."""
         ...
 
     def record(self) -> HostRecord | HostRefused:

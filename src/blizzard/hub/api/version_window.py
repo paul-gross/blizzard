@@ -1,6 +1,4 @@
-"""The hub's compatibility window bound at the app boundary: the kernel's rule judges a reported version and the
-result maps to the runners domain's own judgement
-(:class:`~blizzard.hub.domain.runners.version.IVersionWindow`, ``bzh:data-roles``)."""
+"""The hub's version window bound at the app boundary, as the runners domain's ``IVersionWindow``."""
 
 from __future__ import annotations
 

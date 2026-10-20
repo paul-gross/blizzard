@@ -1,6 +1,5 @@
 """runner version — the window's judgement of a runner's latest registration.
 
-Adds nullable `runner_registrations.reported_version`, `version_refusal` and `version_judged_at`; downgrade drops them.
 Revision ID: 20261019_0900_runner_version
 Revises: 20261018_1200_project_color
 """
@@ -33,8 +32,7 @@ def _columns(bind: sa.Connection) -> set[str]:
 
 
 def _clear_stale_copy(bind: sa.Connection) -> None:
-    """Drop the copy a batch left behind when its run stopped part way (SQLite makes it outside the batch's
-    transaction); the name is the one Alembic's batch gives it."""
+    """Drop the copy an interrupted batch left (SQLite makes it outside the batch's transaction)."""
     copy = f"_alembic_tmp_{_RUNNERS}"[:50]
     if sa.inspect(bind).has_table(copy):
         op.drop_table(copy)

@@ -203,9 +203,6 @@ class HeldTokenAuth(httpx.Auth):
 
 
 class HttpHubClient:
-    """The runner's hub API client over an injected ``httpx.Client``, registering as ``version`` — the installed
-    blizzard's unless given."""
-
     def __init__(self, client: httpx.Client, *, version: str = __version__) -> None:
         self._client = client
         self._version = version
@@ -615,8 +612,6 @@ class HttpHostHubClient:
         refused: _Refusal | None = None,
         version_checked: bool = False,
     ) -> httpx.Response | HostRefused:
-        """The hub's answer, or its typed refusal; an answer ``refused`` types as a call's own refusal raises it.
-        On a ``version_checked`` call, a 409 carrying the window's refusal answers ``VERSION_REFUSED``."""
         operation = f"{method} {path}"
         try:
             kwargs = _body_kwargs(body)
@@ -740,7 +735,6 @@ def _version_refusal(resp: httpx.Response) -> VersionRefusal | None:
 
 
 def _version_refused(resp: httpx.Response) -> RunnerVersionRefused | None:
-    """A registration's ``409`` carrying the window's refusal, raised typed."""
     refusal = _version_refusal(resp)
     return RunnerVersionRefused(refusal) if refusal is not None else None
 

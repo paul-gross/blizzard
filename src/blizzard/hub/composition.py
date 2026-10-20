@@ -1275,8 +1275,7 @@ def build_services(
     the cache. ``work_sources`` builds a tenant's
     work-source registry; ``hub_command_runner``/``hub_workdir`` are the hub command node's
     mechanism seams, left ``None`` for real adapters; an explicit ``oauth_registry`` wins over
-    ``oauth_providers``. ``hub_version`` and ``version_window`` judge each runner registration — the installed
-    version and the packaged window unless given."""
+    ``oauth_providers``; ``hub_version`` and ``version_window`` default to the installed and packaged ones."""
     clock = core.clock
     store_connections = core.store_connections
     brokers = brokers or TenantBrokers()

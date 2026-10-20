@@ -341,7 +341,7 @@ def test_a_version_refusal_halts_the_tick_and_registration_retries_until_one_is_
     _buffer_a_fact(ctx)
 
     with capture_logs() as logs:
-        tick(ctx)  # matched, then the registration is refused mid-tick
+        tick(ctx)
         tick(ctx)
         tick(ctx)
 
@@ -350,11 +350,11 @@ def test_a_version_refusal_halts_the_tick_and_registration_retries_until_one_is_
     assert len(hub.registered) == 3  # registered again on every tick while refused
     assert (hub.push_facts_calls, hub.peek_queue_calls, hub.claims) == ([], 0, [])
     warnings = [e for e in logs if e["log_level"] == "warning" and e["event"].startswith("runner refuses")]
-    assert [w["reason"] for w in warnings] == [_REFUSAL.detail]  # once per transition
+    assert [w["reason"] for w in warnings] == [_REFUSAL.detail]
 
     hub.version_refusal = None
     hub.hub_version, hub.window = "0.3.0", HubVersionWindow(floor="0.2", ceiling="0.3")
-    tick(ctx)  # admitted mid-tick; the steps after it resume next tick
+    tick(ctx)
 
     assert _state(ctx) is IdentityState.MATCHED
     assert ctx.hub_version.current() == HubVersion(hub_version="0.3.0", window=hub.window)

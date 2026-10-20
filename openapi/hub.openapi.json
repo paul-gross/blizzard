@@ -12344,7 +12344,7 @@
         "type": "object"
       },
       "RunnerVersionRefusal": {
-        "description": "A runner whose version the hub's window does not admit, naming both versions and the window.",
+        "description": "The hub's window refusing a runner's version.",
         "properties": {
           "detail": {
             "title": "Detail",
@@ -12383,7 +12383,6 @@
         "type": "object"
       },
       "RunnerVersionStanding": {
-        "description": "Where a runner's latest registration stands against the hub's window.",
         "enum": [
           "in_window",
           "unversioned",
@@ -14589,7 +14588,6 @@
         "type": "object"
       },
       "VersionRefusalReason": {
-        "description": "Why the hub's compatibility window refuses a runner's version.",
         "enum": [
           "too-old",
           "too-new",
@@ -23260,7 +23258,7 @@
     },
     "/api/fleet/runners": {
       "post": {
-        "description": "Register the calling runner \u2014 the one its bearer token names \u2014 with its workspace binding\nand the name it declares; idempotent.\n\nThe hub never rejects a registration over its roster \u2014 it doubles as the heartbeat every tick,\nso the tenant it answers, named as the hub holds it now, carries a rename on the next tick. A\nbody ``runner_id`` from an older runner is ignored. A retired runner is refused 403; a ``version`` the hub's\nwindow does not admit is refused 409, and the runner claims nothing until a later registration is admitted.",
+        "description": "Register the calling runner \u2014 the one its bearer token names \u2014 with its workspace binding\nand the name it declares; idempotent.\n\nThe hub never rejects a registration over its roster \u2014 it doubles as the heartbeat every tick,\nso the tenant it answers, named as the hub holds it now, carries a rename on the next tick. A\nbody ``runner_id`` from an older runner is ignored. A retired runner is refused 403, a refused version 409.",
         "operationId": "register_runner_api_fleet_runners_post",
         "requestBody": {
           "content": {
