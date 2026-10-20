@@ -134,8 +134,7 @@ class ConfigView:
     checked: bool = True
     #: Whether reading an undeclared key raises, rather than reading it plainly; set at the root.
     strict: bool = False
-    #: The flags guarded keys read against, set by a loader once it has resolved them; a view without them reads every
-    #: key plainly.
+    #: The flags a loader resolved, which guarded keys read against; without them every key reads plainly.
     flags: Flags | None = None
 
     @classmethod
