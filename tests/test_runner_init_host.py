@@ -400,6 +400,22 @@ def test_an_unknown_host_token_from_the_process_environment_stops_init_even_with
     assert len(fake_init_hub.admin.hosts) == 1
 
 
+def test_init_whose_host_the_hub_retired_stops_even_with_allow_readd(
+    tmp_path: Path, fake_init_hub: FakeInitHub
+) -> None:
+    root = tmp_path / "host"
+    assert _init(fake_init_hub, root).exit_code == 0
+    fake_init_hub.admin.retired_hosts.add("hs_init1")
+    before = _files(root)
+
+    refused = _init(fake_init_hub, root, "--allow-readd")
+
+    assert refused.exit_code != 0
+    assert "refuses this host's token as a retired host's" in refused.output
+    assert _files(root) == before
+    assert len(fake_init_hub.admin.hosts) == 1
+
+
 def test_init_whose_host_serves_another_tenant_than_named_stops(tmp_path: Path, fake_init_hub: FakeInitHub) -> None:
     root = tmp_path / "host"
     assert _init(fake_init_hub, root, "--tenant", "ten_alpha").exit_code == 0

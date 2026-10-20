@@ -38,6 +38,7 @@ from blizzard.runner.hub.host_identity import (
     HostIdentityAlreadyRecorded,
     HostIdentityHolder,
     IWriteHostIdentityRepository,
+    adopted,
 )
 from blizzard.runner.hub.identity import HostStanding, ICurrentRunnerIdentity, IHostStandingSink
 
@@ -60,9 +61,13 @@ class HostRegistrationStatus:
         """Whether the host holds a host token — every state but unregistered, whatever the hub last answered."""
         return self.state is not HostRegistrationState.UNREGISTERED
 
-    def drains(self) -> bool:
-        """Whether the host's lane may push: only while the latest report was answered with a matching identity."""
+    def answered_as_this_host(self) -> bool:
+        """Whether the latest report was answered with the identity the host holds."""
         return self.state is HostRegistrationState.REGISTERED
+
+    def drains(self) -> bool:
+        """Whether the host's lane may push: only while the hub answers as this host."""
+        return self.answered_as_this_host()
 
 
 class ICurrentHostRegistration(Protocol):
@@ -188,20 +193,11 @@ class HostRegistration:
             self._hold(HostRegistrationStatus(state=state, detail=f"{answer.status}: {answer.detail}"))
             return
         now = self.clock.now()
-        identity, held = self._identity_for(answer, now)
-        if identity is None:
+        try:
+            identity = self._identity_for(answer, now)
+        except HostIdentityAlreadyRecorded as exc:
             self._unknown_standings()
-            self._hold(
-                HostRegistrationStatus(
-                    state=HostRegistrationState.REFUSED,
-                    detail=(
-                        f"the hub answered as host {answer.host_id} in tenant {answer.tenant_id}, but this host is "
-                        f"recorded as {held.host_id} in {held.tenant_id}"
-                        if held is not None
-                        else None
-                    ),
-                )
-            )
+            self._hold(HostRegistrationStatus(state=HostRegistrationState.REFUSED, detail=exc.refusal()))
             return
         self._hold(
             HostRegistrationStatus(
@@ -216,12 +212,12 @@ class HostRegistration:
             standing, reason = standing_of(runner.runner_id, own.tenant_id if own else None, answer, identity)
             runner.identity_verdict.stand(standing, reason=reason)
 
-    def _identity_for(self, answer: HostRecord, now: datetime) -> tuple[HostIdentity | None, HostIdentity | None]:
-        """The host's identity when ``answer`` names it — recording it from a first answer — else ``None``, beside
-        the identity the host holds."""
+    def _identity_for(self, answer: HostRecord, now: datetime) -> HostIdentity:
+        """The host's identity as ``answer`` names it, recorded from a first answer. Raises
+        :class:`HostIdentityAlreadyRecorded` when the host holds another."""
         held = self.identity.current()
         if held is None:
-            offered = HostIdentity(host_id=answer.host_id, tenant_id=answer.tenant_id, registered_at=now)
+            offered = adopted(None, answer.host_id, answer.tenant_id, now)
             try:
                 # The row first, then the holder: a crash between them leaves the holder rebuilt from the row.
                 self.identities.record_host_identity(offered)
@@ -229,9 +225,7 @@ class HostRegistration:
             except HostIdentityAlreadyRecorded as exc:
                 held = exc.held
             self.identity.hold(held)
-        if held.same_host(answer.host_id, answer.tenant_id):
-            return held, held
-        return None, held
+        return adopted(held, answer.host_id, answer.tenant_id, now)
 
     def _unknown_standings(self) -> None:
         for runner in self.runners():

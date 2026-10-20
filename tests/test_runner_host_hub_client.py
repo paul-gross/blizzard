@@ -174,11 +174,11 @@ _CALLS: list[Callable[[HttpHostHubClient], object]] = [
     ("status", "reason"),
     [
         (401, HostRefusalReason.CREDENTIAL_REFUSED),
-        (403, HostRefusalReason.CREDENTIAL_REFUSED),
+        (403, HostRefusalReason.RETIRED),
         (404, HostRefusalReason.NOT_FOUND),
     ],
 )
-def test_every_host_call_types_a_refused_credential_and_a_not_found(
+def test_every_host_call_types_a_refused_credential_a_retired_host_and_a_not_found(
     call: Callable[[HttpHostHubClient], object], status: int, reason: HostRefusalReason
 ) -> None:
     answer = call(_host_client(lambda _r: httpx.Response(status, json={"detail": "no"})))

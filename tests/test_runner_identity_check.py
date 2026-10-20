@@ -419,12 +419,14 @@ def _proxied(
     ctx = _ctx(tmp_path, FakeHub(default_runner_id="r1"))
     held = verdict or ctx.identity_verdict
     config = RunnerConfig(root=tmp_path, db_url="sqlite://", hub_url="http://hub.local:8421")
+    transport = httpx.MockTransport(handler)
     app = create_app(
         config,
-        hub_proxy_client=httpx.Client(transport=httpx.MockTransport(handler)),
+        hub_proxy_client=httpx.Client(transport=transport),
         hub_retry_clock=no_retry_clock(),
         identity_verdict=held,
         identity_check=ProxyIdentityCheck("r1", held, ctx.clock),
+        token_identity=HttpHubClient(httpx.Client(base_url=config.hub_url, transport=transport)),
     )
     client = runner_client(app)
     resp = client.get("/api/fleet-summary")
@@ -460,16 +462,34 @@ def test_an_unchecked_hub_proxy_fails_as_an_outage_does_while_the_hub_does_not_a
     assert forwarded == []
 
 
-@pytest.mark.parametrize("status_code", [401, 404], ids=["token-refused", "no-identity-read"])
-def test_the_hub_proxy_forwards_nothing_while_the_hub_names_no_runner_for_the_token(
-    tmp_path: Path, status_code: int
-) -> None:
+def test_the_hub_proxy_forwards_nothing_while_the_hub_has_no_identity_read(tmp_path: Path) -> None:
     forwarded: list[str] = []
-    refused = httpx.Response(status_code, json={"reason": "unknown", "runner_id": None})
-    resp, _, _ = _proxied(tmp_path, forwarded, identity=refused)
+    resp, _, _ = _proxied(tmp_path, forwarded, identity=httpx.Response(404, json={"detail": "Not Found"}))
 
     assert resp.status_code == 503
     assert resp.json()["detail"].startswith("runner_identity_unverified")
+    assert forwarded == []
+
+
+def test_the_hub_proxy_names_the_hubs_typed_refusal_of_the_token_and_forwards_nothing(tmp_path: Path) -> None:
+    """The proxy reads the token's identity through the runner's own reader, so the hub's typed 401 is the same
+    refusal the loop holds — and, like an unchecked match, the loop's verdict stays untouched."""
+    forwarded: list[str] = []
+    refused = httpx.Response(401, json={"reason": "revoked", "runner_id": "r1"})
+    resp, verdict, _ = _proxied(tmp_path, forwarded, identity=refused)
+
+    assert resp.status_code == 503
+    assert resp.json()["detail"] == f"runner_token_refused: the hub refuses this runner's token (revoked); {_RESET}"
+    assert forwarded == []
+    assert verdict.verdict().state is IdentityState.UNCHECKED
+
+
+def test_the_hub_proxy_takes_an_untyped_401_for_an_outage(tmp_path: Path) -> None:
+    forwarded: list[str] = []
+    resp, _, _ = _proxied(tmp_path, forwarded, identity=httpx.Response(401, text="proxy auth required"))
+
+    assert resp.status_code == 503
+    assert resp.json()["detail"] == "the hub is unreachable"
     assert forwarded == []
 
 
@@ -492,8 +512,9 @@ def test_the_hub_proxy_names_both_runners_and_the_reset_command_while_refusing(t
 
     assert resp.status_code == 503
     detail = resp.json()["detail"]
-    assert detail.startswith("runner_identity_mismatch")
-    assert "rn_store" in detail and "rn_other" in detail and _RESET in detail
+    assert (
+        detail == f"runner_identity_mismatch: token belongs to runner rn_other, not the configured rn_store; {_RESET}"
+    )
     assert (forwarded, asked) == ([], [])
 
 

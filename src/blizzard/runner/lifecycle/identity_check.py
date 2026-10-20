@@ -25,7 +25,6 @@ checked yet, it judges the hub's answer the same way first (:class:`ProxyIdentit
 from __future__ import annotations
 
 import threading
-from collections.abc import Callable
 from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import Protocol
@@ -50,6 +49,7 @@ from blizzard.runner.hub.identity import (
     RunnerIdentity,
     RunnerIdentityHolder,
     answered_tenant,
+    judged,
 )
 
 _log = get_logger("blizzard.runner.loop")
@@ -151,11 +151,6 @@ def foreign_store_reason(
     )
 
 
-def judged(configured_id: str, token_runner_id: str) -> IdentityState:
-    """The verdict on a token the hub resolved to ``token_runner_id``: matched when it is the configured runner."""
-    return IdentityState.MATCHED if configured_id == token_runner_id else IdentityState.MISMATCHED
-
-
 def check_token(
     reader: ITokenIdentityReader,
     configured_id: str,
@@ -176,7 +171,7 @@ def check_token(
     if isinstance(answer, TokenRefusal):
         was = verdict.refuse(
             store_runner_id=configured_id,
-            reason=f"the hub refuses this runner's token ({answer.reason})",
+            reason=_refused(answer),
             checked_at=now,
         )
         log_transition(verdict, was, token_fixed=token_fixed)
@@ -238,27 +233,40 @@ class ProxyIdentityCheck:
         self._lock = threading.Lock()
         self._matched: IdentityVerdict | None = None
 
-    def verdict_on_contact(self, ask: Callable[[], str | None]) -> IdentityVerdict:
+    def verdict_on_contact(self, reader: ITokenIdentityReader) -> IdentityVerdict:
         current = self._verdict.verdict()
         if current.state is not IdentityState.UNCHECKED or self._verdict.registration_checks():
             return current
         with self._lock:
             if self._matched is not None:
                 return self._matched
-        token_runner_id = ask()
-        if token_runner_id is None:
+        try:
+            answer = reader.identity()
+        except IdentityRouteMissing:
             return current
-        judged_now = IdentityVerdict(
-            state=judged(self._configured_id, token_runner_id),
+        if isinstance(answer, TokenRefusal):
+            return replace(
+                current,
+                state=IdentityState.REFUSED,
+                store_runner_id=self._configured_id,
+                checked_at=self._clock.now(),
+                reason=_refused(answer),
+            )
+        judged_now = replace(
+            current,
+            state=judged(self._configured_id, answer.runner_id),
             store_runner_id=self._configured_id,
-            token_runner_id=token_runner_id,
+            token_runner_id=answer.runner_id,
             checked_at=self._clock.now(),
-            reset_command=current.reset_command,
         )
         if judged_now.state is IdentityState.MATCHED:
             with self._lock:
                 self._matched = judged_now
         return judged_now
+
+
+def _refused(refusal: TokenRefusal) -> str:
+    return f"the hub refuses this runner's token ({refusal.reason})"
 
 
 def _record(ctx: IdentityCheckContext, identity: RunnerIdentity) -> None:

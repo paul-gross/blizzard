@@ -178,7 +178,7 @@ def _no_such_project(operation: str, resp: httpx.Response) -> HubClientError | N
 #: The statuses a call under the host's own token is refused with, typed for the caller to branch on.
 _HOST_REFUSALS: dict[int, HostRefusalReason] = {
     httpx.codes.UNAUTHORIZED: HostRefusalReason.CREDENTIAL_REFUSED,
-    httpx.codes.FORBIDDEN: HostRefusalReason.CREDENTIAL_REFUSED,
+    httpx.codes.FORBIDDEN: HostRefusalReason.RETIRED,
     httpx.codes.NOT_FOUND: HostRefusalReason.NOT_FOUND,
 }
 

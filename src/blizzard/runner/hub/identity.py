@@ -10,7 +10,6 @@ replaced at each successful one."""
 from __future__ import annotations
 
 import threading
-from collections.abc import Callable
 from dataclasses import dataclass, replace
 from datetime import datetime
 from enum import StrEnum
@@ -18,6 +17,7 @@ from typing import Protocol
 
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.runner_identity_state import IdentityState
+from blizzard.runner.hub.client import ITokenIdentityReader
 
 
 @domain_model
@@ -112,6 +112,15 @@ REFUSING_STATES = frozenset(
 )
 
 
+#: The refusing states whose remedy is to restore the runner's token or correct its configured id.
+_RESET_STATES = frozenset({IdentityState.MISMATCHED, IdentityState.REFUSED})
+
+
+def judged(configured_id: str, token_runner_id: str) -> IdentityState:
+    """The verdict on a token the hub resolved to ``token_runner_id``: matched when it is the configured runner."""
+    return IdentityState.MATCHED if configured_id == token_runner_id else IdentityState.MISMATCHED
+
+
 class HostStanding(StrEnum):
     """Whether the host's hub holds a runner under the host, judged only from an answered report whose identity
     matches the host's. ``UNKNOWN`` never refuses: an unregistered host, a hub that has not answered, or one
@@ -141,6 +150,19 @@ class IdentityVerdict:
         """Whether this verdict halts the runner."""
         return self.state in REFUSING_STATES
 
+    def refusal(self) -> str | None:
+        """Why this verdict halts the runner, or ``None`` while it does not: for a token naming another runner,
+        both runner ids; otherwise the reason held with the refusal."""
+        if not self.refusing():
+            return None
+        if self.state is IdentityState.MISMATCHED:
+            return f"token belongs to runner {self.token_runner_id}, not the configured {self.store_runner_id}"
+        return self.reason or str(self.state)
+
+    def remedy(self) -> str | None:
+        """What restores a refused or mismatched token — ``reset_command`` — or ``None`` for any other state."""
+        return self.reset_command if self.state in _RESET_STATES else None
+
 
 class ICurrentIdentityVerdict(Protocol):
     """The process's latest identity verdict."""
@@ -159,10 +181,10 @@ class ICurrentIdentityVerdict(Protocol):
 class IIdentityOnContact(Protocol):
     """The identity verdict a hub contact outside the loop waits on."""
 
-    def verdict_on_contact(self, ask: Callable[[], str | None]) -> IdentityVerdict:
+    def verdict_on_contact(self, reader: ITokenIdentityReader) -> IdentityVerdict:
         """The verdict the contact waits on: the loop's once it has checked; before that, one judged from
-        ``ask`` — the runner the hub resolves the token to, or ``None`` when the hub refuses the token or
-        has no identity read. Whatever ``ask`` raises when the hub does not answer propagates."""
+        ``reader``'s answer — refused for a token the hub refuses, unchecked for a hub with no identity read.
+        Whatever ``reader`` raises when the hub does not answer propagates."""
         ...
 
 

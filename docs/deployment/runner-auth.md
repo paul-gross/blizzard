@@ -307,11 +307,15 @@ and checked again each tick the same way. A hub that cannot be reached leaves th
 reads as a mismatch.
 
 The runner logs the refusal once, at warning severity, naming both runner ids and what restores it, and
-`blizzard runner status` shows it:
+`blizzard runner status` shows it. The host's runner listing (`GET /api/host/runners`) and the runner's hub forwards
+name the same sentence:
 
 ```text
-REFUSING: token belongs to runner rn_…, the configured runner is rn_… — set BZ_HUB_TOKEN_<NAME> to the token of runner rn_…, or correct `[[runner]] id` in <dir>/blizzard-host.toml
+REFUSING: token belongs to runner rn_…, not the configured rn_… — set BZ_HUB_TOKEN_<NAME> to the token of runner rn_…, or correct `[[runner]] id` in <dir>/blizzard-host.toml
 ```
+
+A runner whose version the hub's version window refuses is shown as `REFUSING:` with what to upgrade, and one its host's
+hub does not hold, or holds in another tenant, as `HALTED:` with why.
 
 While refusing, each check first re-reads the token from the runtime dir's `.env`, so correcting the token there resumes
 the runner in-process, with no restart. A token from the process environment — `BZ_HUB_TOKEN_<NAME>` — or from the host

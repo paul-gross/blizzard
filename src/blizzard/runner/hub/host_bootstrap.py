@@ -35,9 +35,6 @@ from blizzard.runner.hub.client import (
     RunnerAddRefused,
 )
 
-#: The status the hub refuses a retired host's token with; any other credential refusal is a token it does not know.
-_RETIRED_HOST_STATUS = 403
-
 
 class HostBootstrapStop(StrEnum):
     """Why registering stops with no host added and the held host token left as it was."""
@@ -160,7 +157,7 @@ class HostBootstrap:
         token can be replaced where the host reads it."""
         if answer.reason is HostRefusalReason.NOT_FOUND:
             raise HostBootstrapStopped(HostBootstrapStop.HUB_WITHOUT_HOSTS)
-        if answer.status == _RETIRED_HOST_STATUS:
+        if answer.reason is HostRefusalReason.RETIRED:
             raise HostBootstrapStopped(HostBootstrapStop.HOST_RETIRED)
         if held.from_process_env:
             raise HostBootstrapStopped(HostBootstrapStop.HOST_TOKEN_OVERRIDDEN)

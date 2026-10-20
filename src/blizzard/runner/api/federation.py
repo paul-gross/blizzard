@@ -16,7 +16,6 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response,
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 
-from blizzard.foundation.host_registration_state import HostRegistrationState
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.origin import Origin
 from blizzard.foundation.platform_tracing.attributes import annotate_caller
@@ -77,7 +76,7 @@ class HostSignInClient:
     identity: ICurrentHostIdentity
 
     def client_id(self) -> str | None:
-        if self.registration.current().state is not HostRegistrationState.REGISTERED:
+        if not self.registration.current().answered_as_this_host():
             return None
         current = self.identity.current()
         return current.host_id if current is not None else None

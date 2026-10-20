@@ -6,6 +6,7 @@ import os
 import subprocess
 import time
 from dataclasses import dataclass
+from datetime import datetime
 
 import click
 
@@ -13,12 +14,15 @@ from blizzard.cli.operator_trace import ITraceHeaders, OperatorTrace
 from blizzard.foundation.credential_renewal import RenewalFailureReason, RenewalResult
 from blizzard.foundation.escalation_causes import EscalationCause
 from blizzard.foundation.roles import dto
+from blizzard.foundation.runner_identity_state import IdentityState
 from blizzard.foundation.subscription_miss import SampleMissReason
 from blizzard.runner.cli.daemon import RunnerDaemon, runner_option
 from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
 from blizzard.runner.cli.traces import harness_telemetry_lines
+from blizzard.runner.hub.identity import IdentityVerdict
 from blizzard.runner.subscriptions.credential_renewer import RENEWAL_FAILURE_TEXT
 from blizzard.runner.subscriptions.subscription_sampler import MISS_REASON_TEXT
+from blizzard.wire.runner_status import IdentityVerdictView
 
 # The operator's TCP door onto the local API — the override for when the socket is not
 # the right address. `BZ_*` is the operator's config namespace, distinct from the worker's
@@ -149,17 +153,8 @@ def status(ctx: click.Context, directory: str, runner_url: str | None, runner: s
         f"  workspace={view['workspace_id']}"
     )
     identity = view.get("identity")
-    if identity is not None and identity["state"] == "mismatched":
-        click.echo(
-            f"  REFUSING: token belongs to runner {identity['token_runner_id']}, the configured runner is "
-            f"{identity['store_runner_id']} — {identity['reset_command']}"
-        )
-    elif identity is not None and identity["state"] == "refused":
-        click.echo(f"  REFUSING: {identity.get('reason')} — {identity['reset_command']}")
-    elif identity is not None and identity["state"] in ("not_held", "tenant_differs"):
-        click.echo(f"  HALTED: {identity.get('reason')}")
-    elif identity is not None and identity["state"] == "unchecked":
-        click.echo("  identity: unchecked — waiting for the hub to answer which runner the token belongs to")
+    if identity is not None:
+        _echo_identity(_verdict(IdentityVerdictView.model_validate(identity)))
     pause = view["pause"]
     brakes = [name for name, on in (("local", pause["local"]), ("hub", pause["hub"])) if on]
     brake_state = f"paused [{'+'.join(brakes)}]" if pause["effective"] else "running"
@@ -501,3 +496,27 @@ def renewal_text(sub: dict[str, object]) -> str | None:
         cause = RENEWAL_FAILURE_TEXT[reason] if reason is not None else "unknown cause"
         return f"failed ({cause}) at {attempted_at}"
     return f"attempted at {attempted_at}, outcome not recorded"
+
+
+def _verdict(view: IdentityVerdictView) -> IdentityVerdict:
+    """The wire's identity verdict as the model renders it."""
+    return IdentityVerdict(
+        state=view.state,
+        store_runner_id=view.store_runner_id,
+        token_runner_id=view.token_runner_id,
+        checked_at=datetime.fromisoformat(view.checked_at) if view.checked_at is not None else None,
+        reset_command=view.reset_command,
+        reason=view.reason,
+    )
+
+
+def _echo_identity(verdict: IdentityVerdict) -> None:
+    if verdict.state is IdentityState.UNCHECKED:
+        click.echo("  identity: unchecked — waiting for the hub to answer which runner the token belongs to")
+        return
+    refusal = verdict.refusal()
+    if refusal is None:
+        return
+    label = "HALTED" if verdict.state in (IdentityState.NOT_HELD, IdentityState.TENANT_DIFFERS) else "REFUSING"
+    remedy = verdict.remedy()
+    click.echo(f"  {label}: {refusal}" + (f" — {remedy}" if remedy is not None else ""))

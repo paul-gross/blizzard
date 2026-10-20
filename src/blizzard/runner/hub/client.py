@@ -129,11 +129,12 @@ class HostRunnerRetireRefused(HubClientError):
 
 class HostRefusalReason(StrEnum):
     """Why the hub refused a call under the host's own token: ``CREDENTIAL_REFUSED``, the token is
-    missing, unknown, revoked, or its host retired (401 or 403); ``NOT_FOUND``, the hub answered 404 —
+    missing, unknown, or revoked (401); ``RETIRED``, its host is retired (403); ``NOT_FOUND``, the hub answered 404 —
     on every host route but retire, a hub that predates hosts; on retire, also a runner that does not
     stand under the host; ``VERSION_REFUSED``, the window refuses the host's version (409)."""
 
     CREDENTIAL_REFUSED = "credential_refused"
+    RETIRED = "retired"
     NOT_FOUND = "not_found"
     VERSION_REFUSED = "version_refused"
 

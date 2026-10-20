@@ -31,6 +31,7 @@ from blizzard.runner.harness.health_cache import IReadHarnessHealth
 from blizzard.runner.harness.registry import IHarnessRegistry
 from blizzard.runner.harness.workspace_prompts import WorkspacePromptService
 from blizzard.runner.host_config import HaltedRunner
+from blizzard.runner.hub.client import ITokenIdentityReader
 from blizzard.runner.hub.held_token import ICurrentHubToken
 from blizzard.runner.hub.host_identity import HostIdentityHolder, ICurrentHostIdentity
 from blizzard.runner.hub.host_registration import HostRegistrationHolder, ICurrentHostRegistration
@@ -347,6 +348,9 @@ class RunnerWiring:
 
     def maybe_identity_check(self) -> IIdentityOnContact | None:
         return self._seam("identity_check")
+
+    def maybe_token_identity(self) -> ITokenIdentityReader | None:
+        return self._seam("token_identity")
 
     def maybe_hub_token(self) -> ICurrentHubToken | None:
         return self._seam("hub_token")

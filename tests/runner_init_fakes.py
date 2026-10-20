@@ -73,6 +73,8 @@ class FakeHubRunnerAdmin:
     host_tenants: dict[str, str] = field(default_factory=dict)
     held: dict[str, list[str]] = field(default_factory=dict)
     adopted: list[tuple[str, ...]] = field(default_factory=list)
+    #: The hosts the hub retired: their token is refused as a retired host's.
+    retired_hosts: set[str] = field(default_factory=set)
 
     def add_runner(
         self, name: str, *, tenant_id: str | None = None, projects: tuple[str, ...] | None = None
@@ -133,6 +135,8 @@ class FakeHostHubClient:
             return self.record_answer
         if host is None:
             return _UNKNOWN_HOST
+        if host.host_id in self.admin.retired_hosts:
+            return HostRefused(HostRefusalReason.RETIRED, 403, "host retired")
         names = {issued.runner_id: issued.runner_name for issued in self.admin.added}
         return HostRecord(
             host_id=host.host_id,

@@ -10,7 +10,6 @@ from collections.abc import Sequence
 
 from fastapi import APIRouter, Request
 
-from blizzard.foundation.runner_identity_state import IdentityState
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.foundation.subscription_miss import SampleMissReason
 from blizzard.runner.api.wiring import RunnerWiring, ServedWorkspace
@@ -120,12 +119,8 @@ def _refusal(identity: ICurrentIdentityVerdict | None) -> list[str]:
     """Why a served runner's identity verdict halts it, or nothing while it does not."""
     if identity is None:
         return []
-    verdict = identity.verdict()
-    if not verdict.refusing():
-        return []
-    if verdict.state is IdentityState.MISMATCHED:
-        return [f"its token belongs to runner {verdict.token_runner_id}, not the configured {verdict.store_runner_id}"]
-    return [verdict.reason or str(verdict.state)]
+    refusal = identity.verdict().refusal()
+    return [] if refusal is None else [refusal]
 
 
 @router.get("/workspaces", response_model=HostWorkspaceListResponse)

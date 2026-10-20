@@ -1094,10 +1094,6 @@ class RunnerStoreFiles:
                 ).environments.held_bindings()
             )
 
-    def record_host_identity(self, url: str, identity: HostIdentity) -> None:
-        with _engine(url) as engine:
-            build_host_stores(engine, errors=self.errors, clock=self.clock).host_identity.record_host_identity(identity)
-
 
 @dataclass(frozen=True)
 class RunnerBoundStoreFiles:
