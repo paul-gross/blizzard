@@ -1,4 +1,4 @@
-# PR to master — the merge gate.
+# PR to master or a release line — the merge gate.
 #
 # ruff + pyright + eslint + client-drift check + the unit and component tiers,
 # with the SERVICE tier and the kill-9 CRASH SWEEP running alongside as REAL gates too
@@ -26,7 +26,7 @@ name: pr
 
 on:
   pull_request:
-    branches: [master]
+    branches: [master, "release/**"]
 
 permissions:
   contents: read
@@ -43,3 +43,19 @@ jobs:
     uses: ./.github/workflows/upper-tiers.yml
     with:
       crash_sweep_ci: "1"
+
+  # Only a pull request into a release line is held to where its commits came from.
+  line-provenance:
+    name: line provenance
+    if: ${{ startsWith(github.base_ref, 'release/') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: every commit is a cherry-pick of master, line-only, or a cut
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: ./scripts/check-line-provenance.sh "$BASE_SHA" "$HEAD_SHA"

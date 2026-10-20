@@ -42,6 +42,29 @@ jobs:
     with:
       crash_sweep_ci: "1"
 
+  proven-against:
+    name: record the commits that proved this one
+    # A cut reads the mock commit its candidate was proven with from here, not from the
+    # mock's moving master: the mock sha is the one commit every upper tier checked out.
+    needs: [gate, upper-tiers]
+    runs-on: ubuntu-latest
+    steps:
+      - name: write the proven-against record
+        env:
+          BLIZZARD_SHA: ${{ github.sha }}
+          MOCK_SHA: ${{ needs.upper-tiers.outputs.mock_sha }}
+        run: |
+          mkdir proven-against
+          jq -n --arg blizzard "$BLIZZARD_SHA" --arg mock "$MOCK_SHA" \
+            '{blizzard: $blizzard, "blizzard-mock": $mock}' > proven-against/proven-against.json
+          cat proven-against/proven-against.json
+      - name: upload the proven-against record
+        uses: actions/upload-artifact@v4
+        with:
+          name: proven-against
+          path: proven-against/proven-against.json
+          if-no-files-found: error
+
   wire-compat-deployed:
     name: hub↔runner wire compatibility (deployed baseline)
     # Diffs every undeployed commit's openapi/hub.openapi.json against the spec the
