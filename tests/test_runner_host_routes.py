@@ -240,6 +240,31 @@ def test_a_served_runner_its_hub_halts_is_listed_halted_naming_why_and_still_ser
     assert client.get("/runners/rn_b/api/runner").status_code == 200
 
 
+def test_a_served_runner_whose_token_names_another_runner_is_listed_halted_naming_both(tmp_path: Path) -> None:
+    mismatched = IdentityVerdictHolder("reset")
+    mismatched.record(IdentityState.MISMATCHED, store_runner_id="rn_b", token_runner_id="rn_x", checked_at=_NOW)
+    held = IdentityVerdictHolder("reset")
+    held.record(IdentityState.MATCHED, store_runner_id="rn_a", token_runner_id="rn_a", checked_at=_NOW)
+    app, _a, _b = _two_runner_app(tmp_path, verdicts=(held, mismatched))
+
+    items = TestClient(app).get("/api/host/runners").json()["items"]
+
+    assert items[1]["halted_reasons"] == ["token belongs to runner rn_x, not the configured rn_b"]
+
+
+def test_a_served_runner_whose_version_is_refused_is_listed_halted_naming_the_windows_refusal(tmp_path: Path) -> None:
+    refused = IdentityVerdictHolder("reset")
+    refused.record(IdentityState.MATCHED, store_runner_id="rn_b", token_runner_id="rn_b", checked_at=_NOW)
+    refused.refuse_version("upgrade the runner to 0.9 or later")
+    held = IdentityVerdictHolder("reset")
+    held.record(IdentityState.MATCHED, store_runner_id="rn_a", token_runner_id="rn_a", checked_at=_NOW)
+    app, _a, _b = _two_runner_app(tmp_path, verdicts=(held, refused))
+
+    items = TestClient(app).get("/api/host/runners").json()["items"]
+
+    assert (items[1]["state"], items[1]["halted_reasons"]) == ("halted", ["upgrade the runner to 0.9 or later"])
+
+
 def test_the_host_registration_read_names_where_the_host_stands(tmp_path: Path) -> None:
     unregistered, _a, _b = _two_runner_app(tmp_path)
     assert TestClient(unregistered).get("/api/host/registration").json() == {

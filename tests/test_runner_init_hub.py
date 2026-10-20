@@ -20,7 +20,15 @@ from blizzard.foundation.operator_sessions.internal.session_file import SessionF
 from blizzard.foundation.runner_tokens import RunnerTokenRefusalReason
 from blizzard.runner.host_config import HOST_TOKEN_VARIABLE
 from blizzard.runner.host_layout import HostLayout
-from blizzard.runner.hub.bootstrap import BootstrapStop, BootstrapStopped, HeldToken, RunnerBootstrap, kept_identity
+from blizzard.runner.hub.bootstrap import (
+    BootstrapStop,
+    BootstrapStopped,
+    HeldToken,
+    RunnerBootstrap,
+    StoreShared,
+    kept_identity,
+    refuse_tokenless,
+)
 from blizzard.runner.hub.client import (
     HostAddRefusalReason,
     HostAddRefused,
@@ -103,6 +111,41 @@ def test_a_token_the_hub_never_received_stops() -> None:
     with pytest.raises(BootstrapStopped) as stopped:
         kept_identity(TokenRefusal(reason=RunnerTokenRefusalReason.MISSING), held=_FROM_FILE, allow_readd=True)
     assert stopped.value.stop is BootstrapStop.TOKEN_NOT_RECEIVED
+
+
+@pytest.mark.unit
+def test_a_token_naming_another_runner_than_the_configured_one_stops_unless_a_readd_is_allowed() -> None:
+    other = TokenIdentity(runner_id="rn_2", runner_name="r-claude", tenant_id="tn_b")
+    with pytest.raises(BootstrapStopped) as stopped:
+        kept_identity(other, held=_FROM_FILE, allow_readd=False, tenant_id="tn_a", configured_id="rn_1")
+    assert (stopped.value.stop, stopped.value.runner_id, stopped.value.held) == (
+        BootstrapStop.ANOTHER_RUNNER,
+        "rn_1",
+        other,
+    )
+    assert kept_identity(other, held=_FROM_FILE, allow_readd=True, configured_id="rn_1") == other
+    assert kept_identity(other, held=_FROM_FILE, allow_readd=False, configured_id="rn_2") == other
+
+
+@pytest.mark.unit
+def test_a_runner_serves_the_tenant_named_and_any_when_either_names_none() -> None:
+    runner = TokenIdentity(runner_id="rn_1", runner_name="r", tenant_id="tn_a")
+    assert runner.serves("tn_a") and runner.serves(None)
+    assert not runner.serves("tn_b")
+    assert TokenIdentity(runner_id="rn_1", runner_name="r").serves("tn_b")
+
+
+@pytest.mark.unit
+def test_no_token_stops_for_the_runner_the_store_names_then_the_configured_one_unless_a_readd_is_allowed() -> None:
+    with pytest.raises(BootstrapStopped) as stored:
+        refuse_tokenless(None, "rn_1", "rn_old", allow_readd=False)
+    assert (stored.value.stop, stored.value.runner_id) == (BootstrapStop.STORE_NAMES_A_RUNNER, "rn_old")
+    with pytest.raises(BootstrapStopped) as configured:
+        refuse_tokenless(None, "rn_1", None, allow_readd=False)
+    assert (configured.value.stop, configured.value.runner_id) == (BootstrapStop.TOKENLESS_CONFIGURED, "rn_1")
+    refuse_tokenless(None, "rn_1", "rn_old", allow_readd=True)
+    refuse_tokenless(_FROM_FILE, "rn_1", "rn_old", allow_readd=False)
+    refuse_tokenless(None, None, None, allow_readd=False)
 
 
 # --- the token file ------------------------------------------------------------------------------
@@ -515,10 +558,62 @@ class _Tokens:
         pass
 
 
-def _join(log: _JoinLog, answer: TokenIdentity | TokenRefusal, *, held: HeldToken | None, allow_readd: bool) -> None:
+@dataclass
+class _SharedStore(_JoinLog):
+    def set_aside(self) -> None:
+        raise StoreShared(("r-two",))
+
+
+def _join(
+    log: _JoinLog,
+    answer: TokenIdentity | TokenRefusal,
+    *,
+    held: HeldToken | None,
+    allow_readd: bool,
+    configured_id: str | None = None,
+) -> None:
     RunnerBootstrap(FakeTokenIdentityReader(answer), _LoggedAdmin(log=log), _Tokens(), log).join(
-        "r", held=held, allow_readd=allow_readd
+        "r", held=held, allow_readd=allow_readd, configured_id=configured_id
     )
+
+
+@pytest.mark.unit
+def test_a_join_holding_another_runners_token_stops_with_nothing_set_aside_or_added() -> None:
+    log = _JoinLog(stored="rn_1")
+    with pytest.raises(BootstrapStopped) as stopped:
+        _join(
+            log,
+            TokenIdentity(runner_id="rn_2", runner_name="r"),
+            held=_FROM_FILE,
+            allow_readd=False,
+            configured_id="rn_1",
+        )
+    assert (stopped.value.stop, stopped.value.runner_id) == (BootstrapStop.ANOTHER_RUNNER, "rn_1")
+    assert log.calls == []
+
+
+@pytest.mark.unit
+def test_a_join_of_a_configured_runner_holding_no_token_stops_with_nothing_added() -> None:
+    log = _JoinLog()
+    with pytest.raises(BootstrapStopped) as stopped:
+        _join(
+            log,
+            TokenRefusal(reason=RunnerTokenRefusalReason.UNKNOWN),
+            held=None,
+            allow_readd=False,
+            configured_id="rn_1",
+        )
+    assert (stopped.value.stop, stopped.value.runner_id) == (BootstrapStop.TOKENLESS_CONFIGURED, "rn_1")
+    assert log.calls == []
+
+
+@pytest.mark.unit
+def test_a_re_add_over_a_store_other_runners_hold_stops_naming_them_with_nothing_added() -> None:
+    log = _SharedStore(stored="rn_old")
+    with pytest.raises(BootstrapStopped) as stopped:
+        _join(log, TokenRefusal(reason=RunnerTokenRefusalReason.UNKNOWN), held=_FROM_FILE, allow_readd=True)
+    assert (stopped.value.stop, stopped.value.sharing) == (BootstrapStop.STORE_SHARED, ("r-two",))
+    assert log.calls == []
 
 
 @pytest.mark.unit

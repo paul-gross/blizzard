@@ -41,6 +41,24 @@ class HostIdentityAlreadyRecorded(RuntimeError):
         self.held = held
         self.offered = offered
 
+    def refusal(self) -> str:
+        """Why the host is refused."""
+        return (
+            f"this host is recorded as {self.held.host_id} in {self.held.tenant_id}, but its hub answers as "
+            f"{self.offered.host_id} in {self.offered.tenant_id}"
+        )
+
+
+def adopted(held: HostIdentity | None, host_id: str, tenant_id: str, now: datetime) -> HostIdentity:
+    """The identity to hold once the hub answers as ``host_id`` in ``tenant_id``: ``held``, or a first one at
+    ``now``. Raises :class:`HostIdentityAlreadyRecorded` for another host or tenant; it is never edited."""
+    offered = HostIdentity(host_id=host_id, tenant_id=tenant_id, registered_at=now)
+    if held is None:
+        return offered
+    if not held.same_host(host_id, tenant_id):
+        raise HostIdentityAlreadyRecorded(held, offered)
+    return held
+
 
 class IReadHostIdentityRepository(Protocol):
     """Read the host store's single identity row."""

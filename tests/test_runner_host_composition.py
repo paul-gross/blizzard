@@ -27,8 +27,8 @@ from blizzard.runner.host_layout import HostLayout
 from blizzard.runner.hub.held_token import HubTokenHolder
 from blizzard.runner.hub.host_identity import HostIdentity
 from blizzard.runner.hub.identity import IdentityVerdictHolder, RunnerIdentity, RunnerIdentityHolder
-from blizzard.runner.lifecycle.host_tick import HostTick
 from blizzard.runner.loop.context import LoopContext
+from blizzard.runner.loop.host_tick import HostTick
 from blizzard.runner.loop_wiring import PeriodicDriver
 from blizzard.runner.store.schema import host_outbound_buffer
 from blizzard.runner.stores import RunnerStores

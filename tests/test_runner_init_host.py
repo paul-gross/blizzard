@@ -210,8 +210,31 @@ def test_init_holding_another_runners_token_over_a_store_naming_one_refuses_when
     assert refused.exit_code != 0
     assert "rn_init1" in refused.output and "rn_other" in refused.output
     assert f"`blizzard runner store reset {root}`" in refused.output
+    assert "restore the token of rn_init1" in refused.output
+    assert "dropping every fact below the hub's high-water mark" in refused.output
     assert _files(root) == before
     assert _identity_rows(root) == [("rn_init1", "runner-local")]
+
+
+def test_init_over_a_store_naming_its_runner_and_a_foreign_one_refuses_advising_the_right_store_and_no_reset(
+    tmp_path: Path, fake_init_hub: FakeInitHub
+) -> None:
+    root = tmp_path / "host"
+    assert _init(fake_init_hub, root).exit_code == 0
+    with closing(sqlite3.connect(sqlite_store_file(HostConfig.load(root).db_url))) as conn, conn:
+        conn.execute(
+            "INSERT INTO runner_identity (runner_id, runner_name, registered_at) "
+            "SELECT 'rn_ghost', runner_name, registered_at FROM runner_identity"
+        )
+    before = _files(root)
+
+    refused = _init(fake_init_hub, root)
+
+    assert refused.exit_code != 0
+    assert "rn_ghost is configured by no [[runner]]" in refused.output
+    assert "stop and restore the right store" in refused.output
+    assert "store reset" not in refused.output
+    assert _files(root) == before
 
 
 def test_init_holding_another_runners_token_with_a_readd_that_set_nothing_aside_refuses_leaving_every_file(
@@ -396,6 +419,22 @@ def test_an_unknown_host_token_from_the_process_environment_stops_init_even_with
 
     assert refused.exit_code != 0
     assert f"${HOST_TOKEN_VARIABLE}" in refused.output and "would go unread" in refused.output
+    assert _files(root) == before
+    assert len(fake_init_hub.admin.hosts) == 1
+
+
+def test_init_whose_host_the_hub_retired_stops_even_with_allow_readd(
+    tmp_path: Path, fake_init_hub: FakeInitHub
+) -> None:
+    root = tmp_path / "host"
+    assert _init(fake_init_hub, root).exit_code == 0
+    fake_init_hub.admin.retired_hosts.add("hs_init1")
+    before = _files(root)
+
+    refused = _init(fake_init_hub, root, "--allow-readd")
+
+    assert refused.exit_code != 0
+    assert "refuses this host's token as a retired host's" in refused.output
     assert _files(root) == before
     assert len(fake_init_hub.admin.hosts) == 1
 

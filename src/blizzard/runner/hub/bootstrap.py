@@ -22,6 +22,7 @@ from enum import StrEnum
 from typing import Protocol
 
 from blizzard.foundation.roles import domain_model
+from blizzard.foundation.runner_identity_state import IdentityState
 from blizzard.foundation.runner_tokens import RunnerTokenRefusalReason
 from blizzard.runner.hub.client import (
     IRunnerAdder,
@@ -29,6 +30,7 @@ from blizzard.runner.hub.client import (
     TokenIdentity,
     TokenRefusal,
 )
+from blizzard.runner.hub.identity import judged
 
 
 class BootstrapStop(StrEnum):
@@ -48,12 +50,15 @@ class BootstrapStop(StrEnum):
     STORE_NAMES_A_RUNNER = "store_names_a_runner"
     #: The held token's runner, ``held``, belongs to another tenant than the one named.
     ANOTHER_TENANT = "another_tenant"
+    ANOTHER_RUNNER = "another_runner"
+    TOKENLESS_CONFIGURED = "tokenless_configured"
+    STORE_SHARED = "store_shared"
 
 
 class BootstrapStopped(Exception):
     """Joining stopped with nothing added; ``stop`` says why. ``runner_id`` names the runner a
-    revoked token, a retired runner, or a store belongs to; ``held`` is the held token's runner
-    when it belongs to another tenant."""
+    revoked token, a retired runner, or a store belongs to, or the one configured; ``held`` is the held token's
+    runner when it is another tenant's or not the configured one; ``sharing`` names a shared store's runners."""
 
     def __init__(
         self,
@@ -61,11 +66,21 @@ class BootstrapStopped(Exception):
         *,
         runner_id: str | None = None,
         held: TokenIdentity | None = None,
+        sharing: tuple[str, ...] = (),
     ) -> None:
         super().__init__(stop.value)
         self.stop = stop
         self.runner_id = runner_id
         self.held = held
+        self.sharing = sharing
+
+
+class StoreShared(Exception):
+    """The store cannot be set aside: the runners ``sharing`` also hold it, and their backlog would be dropped."""
+
+    def __init__(self, sharing: tuple[str, ...]) -> None:
+        super().__init__(f"the store is shared with runner {', '.join(sharing)}")
+        self.sharing = sharing
 
 
 class TokenNotWritten(Exception):
@@ -101,13 +116,25 @@ class JoinedRunner:
 
 
 def kept_identity(
-    answer: TokenIdentity | TokenRefusal, *, held: HeldToken, allow_readd: bool, tenant_id: str | None = None
+    answer: TokenIdentity | TokenRefusal,
+    *,
+    held: HeldToken,
+    allow_readd: bool,
+    tenant_id: str | None = None,
+    configured_id: str | None = None,
 ) -> TokenIdentity | None:
     """The runner the hub's ``answer`` about the held token keeps, or ``None`` when a runner is to be
     added in its place. Raises :class:`BootstrapStopped` when neither is allowed — among them a
-    runner in another tenant than ``tenant_id`` names. A hub that names no tenant settles none."""
+    runner other than ``configured_id`` while no re-add was asked for, since the configured id is the runner's
+    and only a re-add replaces it, and then a runner that does not serve ``tenant_id``."""
     if isinstance(answer, TokenIdentity):
-        if tenant_id is not None and answer.tenant_id is not None and answer.tenant_id != tenant_id:
+        if (
+            configured_id is not None
+            and not allow_readd
+            and judged(configured_id, answer.runner_id) is IdentityState.MISMATCHED
+        ):
+            raise BootstrapStopped(BootstrapStop.ANOTHER_RUNNER, runner_id=configured_id, held=answer)
+        if not answer.serves(tenant_id):
             raise BootstrapStopped(BootstrapStop.ANOTHER_TENANT, runner_id=answer.runner_id, held=answer)
         return answer
     if answer.reason is RunnerTokenRefusalReason.UNKNOWN:
@@ -121,6 +148,19 @@ def kept_identity(
     if answer.reason is RunnerTokenRefusalReason.RETIRED:
         raise BootstrapStopped(BootstrapStop.RETIRED_RUNNER, runner_id=answer.runner_id)
     raise BootstrapStopped(BootstrapStop.TOKEN_NOT_RECEIVED)
+
+
+def refuse_tokenless(
+    held: HeldToken | None, configured_id: str | None, stored: str | None, *, allow_readd: bool
+) -> None:
+    """Raise :class:`BootstrapStopped` when a tokenless runner would be added in place of the ``stored`` runner its
+    store names, else the ``configured_id``. Holding a token, or a re-add asked for, stops nothing."""
+    if held is not None or allow_readd:
+        return
+    if stored is not None:
+        raise BootstrapStopped(BootstrapStop.STORE_NAMES_A_RUNNER, runner_id=stored)
+    if configured_id is not None:
+        raise BootstrapStopped(BootstrapStop.TOKENLESS_CONFIGURED, runner_id=configured_id)
 
 
 class ITokenWriter(Protocol):
@@ -139,7 +179,7 @@ class IRunnerStoreAside(Protocol):
         ...
 
     def set_aside(self) -> None:
-        """Move the store aside under a timestamped name and start a fresh one; never deletes."""
+        """Move the store aside, timestamped, and start a fresh one; never deletes. Raises :class:`StoreShared`."""
         ...
 
 
@@ -164,15 +204,18 @@ class RunnerBootstrap:
         allow_readd: bool,
         tenant_id: str | None = None,
         projects: tuple[str, ...] | None = None,
+        configured_id: str | None = None,
     ) -> JoinedRunner:
         """Keep the runner ``held`` names, or add one under ``name`` in its host's tenant, serving
         the projects ``projects`` names, else the tenant's only one — and write its token. A kept
-        runner whose tenant is not ``tenant_id`` stops; a kept runner keeps the declaration the hub
-        holds for it. An unreachable hub, a server error, or a refused add raises
+        runner other than ``configured_id``, or whose tenant is not ``tenant_id``, stops; a kept runner keeps the
+        declaration the hub holds for it. An unreachable hub, a server error, or a refused add raises
         :class:`~blizzard.runner.hub.client.HubClientError` with nothing added."""
         if held is not None:
             answer = self._identity.identity()
-            kept = kept_identity(answer, held=held, allow_readd=allow_readd, tenant_id=tenant_id)
+            kept = kept_identity(
+                answer, held=held, allow_readd=allow_readd, tenant_id=tenant_id, configured_id=configured_id
+            )
             if kept is not None:
                 return JoinedRunner(
                     runner_id=kept.runner_id,
@@ -181,14 +224,21 @@ class RunnerBootstrap:
                     tenant_id=kept.tenant_id,
                     tenant_name=kept.tenant_name,
                 )
-            self._store.set_aside()
-        elif (stored := self._store.stored_runner_id()) is not None:
-            if not allow_readd:
-                raise BootstrapStopped(BootstrapStop.STORE_NAMES_A_RUNNER, runner_id=stored)
-            self._store.set_aside()
+            self._set_aside()
+        else:
+            stored = self._store.stored_runner_id()
+            refuse_tokenless(held, configured_id, stored, allow_readd=allow_readd)
+            if stored is not None:
+                self._set_aside()
         issued = self._admin.add_runner(name, projects=projects)
         try:
             self._tokens.write(issued.token)
         except OSError as exc:
             raise TokenNotWritten(issued.runner_id, exc) from exc
         return JoinedRunner(runner_id=issued.runner_id, runner_name=issued.runner_name, added=True, tenant_id=tenant_id)
+
+    def _set_aside(self) -> None:
+        try:
+            self._store.set_aside()
+        except StoreShared as exc:
+            raise BootstrapStopped(BootstrapStop.STORE_SHARED, sharing=exc.sharing) from exc

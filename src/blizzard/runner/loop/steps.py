@@ -19,9 +19,7 @@ from blizzard.foundation.leases import LeaseClosureReason
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import as_utc, iso_utc
 from blizzard.runner.environments.repository import (
-    BindingCompletion,
     EnvBinding,
-    binding_completion,
     group_bindings_by_chunk,
 )
 from blizzard.runner.harness.registry import UnavailableHarnessError, UnknownHarnessError
@@ -37,6 +35,7 @@ from blizzard.runner.lifecycle.daemon_liveness import IReadDaemonLivenessReposit
 from blizzard.runner.lifecycle.dormant import DormantSession
 from blizzard.runner.lifecycle.drain import OutboundDrain
 from blizzard.runner.lifecycle.fill import BindingFill
+from blizzard.runner.lifecycle.held_binding_completion import HeldBindingCompletion
 from blizzard.runner.lifecycle.held_chunk import HeldChunk
 from blizzard.runner.lifecycle.judgement.judgement import Judgement, KnownElicitation, elicitation_still_pending
 from blizzard.runner.lifecycle.model import (
@@ -424,39 +423,7 @@ class Pull(Step):
 
 class CompleteHeldBindings(Step):
     def run(self) -> None:
-        """Give each held binding lacking them its workspace and its chunk's project — ahead of FILL.
-
-        One read finds the incomplete held rows; with none, nothing else runs. A row takes the
-        host workspace whose provider lists its workdir, and its project from
-        the chunk-status batch read. A row the hub cannot answer, or whose workdir matches no
-        workspace, keeps its gap and its lease — it is retried next tick and named in status.
-        Each completion fills only an empty column in one transaction, so a crash re-runs it
-        harmlessly."""
-        ctx = self.ctx
-        rows = ctx.stores.environments.incomplete_held_bindings()
-        if not rows:
-            return
-        listed = ctx.workspaces.environment_workdirs()
-        lacking_project = {row.chunk_id for row in rows if row.project_id is None}
-        ctx.chunk_views.prime(lacking_project)
-        projects = {chunk_id: self._project(chunk_id) for chunk_id in lacking_project}
-        completions: list[BindingCompletion] = []
-        for row in rows:
-            completion = binding_completion(
-                row,
-                listed_workdirs=listed,
-                project_id=projects.get(row.chunk_id),
-            )
-            if completion is not None:
-                completions.append(completion)
-        ctx.stores.environments.complete_bindings(completions)
-
-    def _project(self, chunk_id: str) -> str | None:
-        """The chunk's project from the tick's primed batch read; ``None`` when the hub cannot say yet."""
-        try:
-            return self.ctx.chunk_views.get(chunk_id).project_id
-        except HubClientError:  # covers ChunkNotFoundError: an unknown chunk names no project
-            return None
+        HeldBindingCompletion(self.ctx).complete()
 
 
 class Fill(Step):

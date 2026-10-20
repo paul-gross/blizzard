@@ -14,7 +14,6 @@ import tomllib
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass, replace
-from datetime import datetime
 from enum import StrEnum
 from pathlib import Path
 from typing import Protocol
@@ -47,7 +46,7 @@ from blizzard.runner.host_layout import (
     with_runner_values,
 )
 from blizzard.runner.hub.client import HostRecord, HostRefused, HubClientError, IHostHubClient
-from blizzard.runner.hub.host_identity import HostIdentity
+from blizzard.runner.hub.host_identity import HostIdentity, HostIdentityAlreadyRecorded, adopted
 from blizzard.runner.hub.host_registration import standing_of
 from blizzard.runner.hub.identity import HostStanding
 from blizzard.runner.runtime import (
@@ -177,10 +176,6 @@ class IIngestStores(IRunnerBoundStoresFactory, Protocol):
 
     def held_bindings(self, url: str) -> tuple[HeldBinding, ...]:
         """Every held binding of every runner the store at ``url`` names."""
-        ...
-
-    def record_host_identity(self, url: str, identity: HostIdentity) -> None:
-        """Record ``identity`` as the host identity of the store at ``url``."""
         ...
 
 
@@ -504,13 +499,13 @@ class RunnerIngest:
         return answer
 
     def _host_identity(self, record: HostRecord) -> HostIdentity:
-        """This host's recorded identity — recorded from ``record`` when it holds none yet — refused when it names
-        another host or tenant than the hub answered."""
+        """This host's identity as the hub's ``record`` names it, refused when the host holds another. Only the host's
+        own registration records it."""
         held = self.stores.host_identity(self.host.db_url)
-        identity = _identity_against(held, record, now=self.clock.now())
-        if held is None:
-            self.stores.record_host_identity(self.host.db_url, identity)
-        return identity
+        try:
+            return adopted(held, record.host_id, record.tenant_id, self.clock.now())
+        except HostIdentityAlreadyRecorded as exc:
+            raise HostNotHolding(exc.refusal()) from exc
 
     def _plan(self, source: _Source, entry: RunnerEntry, workspace_id: str | None) -> _ConfigPlan:
         """The configuration edits the runner brings; an archive's are all made already."""
@@ -655,19 +650,6 @@ class RunnerIngest:
 def _shape(workspace: HostWorkspace, root: Path) -> WorkspaceShape:
     """``workspace``'s shape, its root resolved against ``root``, the host that declared it."""
     return WorkspaceShape(workspace.settings(root).effective_workspace_root, frozenset(workspace.envs))
-
-
-def _identity_against(held: HostIdentity | None, record: HostRecord, *, now: datetime) -> HostIdentity:
-    """This host's identity against the hub's ``record``: the ``held`` one, or the one ``record`` names when none is
-    held. Raises :class:`HostNotHolding` when ``held`` names another host or tenant than the hub answered."""
-    if held is None:
-        return HostIdentity(host_id=record.host_id, tenant_id=record.tenant_id, registered_at=now)
-    if not held.same_host(record.host_id, record.tenant_id):
-        raise HostNotHolding(
-            f"this host is recorded as {held.host_id} in {held.tenant_id}, but its hub answers as "
-            f"{record.host_id} in {record.tenant_id}"
-        )
-    return held
 
 
 def _absolute(prompt_file: str, root: Path) -> str:

@@ -11,10 +11,9 @@ import dataclasses
 from typing import Protocol
 
 from blizzard.foundation.logging import get_logger
-from blizzard.foundation.runner_identity_state import IdentityState
 from blizzard.runner.harness.capability_snapshot import TickCapabilities
 from blizzard.runner.hub.chunk_status_cache import MemoizingChunkViewCache
-from blizzard.runner.lifecycle.identity_check import IdentityCheck
+from blizzard.runner.lifecycle.identity_check import IdentityCheck, TickScope, tick_scope
 from blizzard.runner.lifecycle.registration import Registration
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.steps import (
@@ -75,19 +74,15 @@ def _tick(ctx: LoopContext) -> None:
     # Before any other hub call: until the token is verified to name the configured runner, `ctx.hub`
     # answers every call as an outage, so nothing below can read another runner's chunks as its own.
     _traced(ctx, IdentityCheck)
-    # A refusing verdict drives no lease and delivers nothing; the local steps below keep running, so the status
-    # stays readable.
-    verdict = ctx.identity_verdict.verdict()
-    refusing = verdict.refusing()
-    if not refusing:
+    # The local steps below run whatever the scope, so the status stays readable.
+    scope = tick_scope(ctx.identity_verdict.verdict(), registration_checks=ctx.identity_verdict.registration_checks())
+    if scope is TickScope.RUN_ALL:
         ctx.chunk_views.prime(_primed_chunk_ids(ctx))
-    elif ctx.identity_verdict.registration_checks() or verdict.state is IdentityState.VERSION_REFUSED:
-        # The registration alone lifts these, so it keeps running: on a hub with no identity read its reply is the
-        # only check, and a refused version lifts only on an admitted registration.
+    elif scope is TickScope.REGISTRATION_ONLY:
         _traced(ctx, Registration)
     # The spend-ceiling kill-switch — first, so it brakes the same tick it fires in.
     _traced(ctx, SpendCeiling)
-    if not refusing:
+    if scope is TickScope.RUN_ALL:
         _traced(ctx, Reap)  # startup recovery IS reap running early
         _traced(ctx, Resume)  # before ADVANCE — else a killed-mid-work worker reads as done
         _traced(ctx, Pull)

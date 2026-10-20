@@ -90,12 +90,12 @@ from blizzard.runner.harness.health_cache import HarnessHealthCache, IReadHarnes
 from blizzard.runner.harness.registry import HarnessRegistry, IHarnessRegistry
 from blizzard.runner.harness.workspace_prompts import WorkspacePromptService
 from blizzard.runner.host_config import HaltedRunner
-from blizzard.runner.hub.client import BindingDeclaration
+from blizzard.runner.hub.client import BindingDeclaration, ITokenIdentityReader
 from blizzard.runner.hub.held_token import ICurrentHubToken
 from blizzard.runner.hub.host_identity import HostIdentityHolder, ICurrentHostIdentity
 from blizzard.runner.hub.host_registration import HostRegistrationHolder, ICurrentHostRegistration
 from blizzard.runner.hub.identity import ICurrentIdentityVerdict, ICurrentRunnerIdentity, IIdentityOnContact
-from blizzard.runner.hub.internal.http_hub import HeldTokenAuth
+from blizzard.runner.hub.internal.http_hub import HeldTokenAuth, HttpHubClient
 from blizzard.runner.leases.activity import LocalLeaseService
 from blizzard.runner.leases.asks import AskService
 from blizzard.runner.leases.liveness import LeaseLivenessService
@@ -225,17 +225,18 @@ def runner_seams(
     hub_proxy_client: httpx.Client | None = None,
     identity_verdict: ICurrentIdentityVerdict | None = None,
     identity_check: IIdentityOnContact | None = None,
+    token_identity: ITokenIdentityReader | None = None,
     hub_token: ICurrentHubToken | None = None,
     binding: IRunnerBinding | None = None,
     identity: ICurrentRunnerIdentity | None = None,
 ) -> ServedRunner:
     """One runner's seams, served under :attr:`RunnerConfig.served_id()`. Every store-backed seam is optional, so a
     store-free runner is possible; its routes then answer 503. ``selftests`` is always wired. ``identity_check`` gates
-    the hub proxy, which forwards only once it verifies the token names the configured runner; absent, the proxy
-    forwards ungated. ``hub_token`` is the token the proxy presents; absent, the proxy presents ``config``'s.
-    ``binding`` is the store's runner binding; should it name no runner, the routes that write runner-scoped rows
-    answer 503. ``identity`` is the runner's own holder, which every platform span its requests open is stamped
-    from."""
+    the hub proxy, which forwards only once it verifies — asking ``token_identity`` — that the token names the
+    configured runner; absent either, the proxy forwards ungated. ``hub_token`` is the token the proxy presents;
+    absent, the proxy presents ``config``'s. ``binding`` is the store's runner binding; should it name no runner, the
+    routes that write runner-scoped rows answer 503. ``identity`` is the runner's own holder, which every platform
+    span its requests open is stamped from."""
     runner_id = config.served_id()
     publisher = RunnerEventPublisher.over(events, runner_id)
     seams = State()
@@ -243,6 +244,7 @@ def runner_seams(
     seams.identity = identity
     seams.identity_verdict = identity_verdict
     seams.identity_check = identity_check
+    seams.token_identity = token_identity
     seams.hub_token = hub_token
     seams.binding = binding
     seams.harnesses = harnesses if harnesses is not None else HarnessRegistry({})
@@ -332,6 +334,7 @@ def create_app(
     identity: ICurrentRunnerIdentity | None = None,
     identity_verdict: ICurrentIdentityVerdict | None = None,
     identity_check: IIdentityOnContact | None = None,
+    token_identity: ITokenIdentityReader | None = None,
     hub_token: ICurrentHubToken | None = None,
     binding: IRunnerBinding | None = None,
     flags: Flags | None = None,
@@ -378,6 +381,7 @@ def create_app(
                 hub_proxy_client=hub_proxy_client,
                 identity_verdict=identity_verdict,
                 identity_check=identity_check,
+                token_identity=token_identity,
                 hub_token=hub_token,
                 binding=binding,
                 identity=identity,
@@ -762,6 +766,7 @@ def _wire_runner(
         identity_verdict=graph.identity_verdict,
         # The proxy's forward is a first contact with the hub: it asks which runner its token names.
         identity_check=ProxyIdentityCheck(graph.runner_id, graph.identity_verdict, clock),
+        token_identity=HttpHubClient(hub_proxy_client),
         hub_token=graph.hub_token,
         harnesses=harnesses,
         runner_stores=runner_stores,

@@ -87,7 +87,11 @@ def _init_runner(tmp_path: Path) -> Path:
 
 @contextmanager
 def _serve_local_api(
-    root: Path, *, trace_status: bool = True, refusing: tuple[str, str] | None = None
+    root: Path,
+    *,
+    trace_status: bool = True,
+    refusing: tuple[str, str] | None = None,
+    version_refused: str | None = None,
 ) -> Iterator[tuple[Path, str]]:
     config = load_runner_config(root, port=0)
     app = build_hosted_app(config).app
@@ -98,6 +102,8 @@ def _serve_local_api(
             token_runner_id=refusing[1],
             checked_at=datetime(2026, 7, 16, 12, 0, tzinfo=UTC),
         )
+    if version_refused is not None:
+        runner_seams(app).identity_verdict.refuse_version(version_refused)
     if not trace_status:
         runner_seams(app).trace_status = None  # `GET /api/traces/status` then refuses with a 503
     sockets = Listeners.of(config).bound()
@@ -386,9 +392,22 @@ def test_status_names_both_runners_and_the_reset_command_while_refusing(
     assert result.exit_code == 0, result.output
     refusing = next(line for line in result.output.splitlines() if "REFUSING" in line)
     assert "token belongs to runner rn_other" in refusing
-    assert "the configured runner is rn_store" in refusing
+    assert "not the configured rn_store" in refusing
     assert "BZ_HUB_TOKEN_RUNNER_LOCAL" in refusing and "`[[runner]] id`" in refusing
     assert "store reset" not in refusing
+
+
+@pytest.mark.component
+def test_status_names_the_windows_refusal_while_the_version_is_refused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _init_runner(tmp_path)
+    _no_hub(monkeypatch)
+    with _serve_local_api(root, version_refused="upgrade the runner to 0.9 or later"):
+        result = CliRunner().invoke(runner_group, ["status", "--dir", str(root)])
+
+    assert result.exit_code == 0, result.output
+    assert "  REFUSING: upgrade the runner to 0.9 or later" in result.output.splitlines()
 
 
 @pytest.mark.component

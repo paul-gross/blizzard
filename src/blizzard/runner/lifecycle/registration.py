@@ -38,6 +38,7 @@ from blizzard.runner.hub.identity import (
     RunnerIdentity,
     RunnerIdentityHolder,
     answered_tenant,
+    judged,
 )
 from blizzard.runner.hub.served_projects import IWriteServedProjectsRepository
 from blizzard.runner.lifecycle.identity_check import log_transition
@@ -167,9 +168,10 @@ class Registration:
             log_transition(ctx.identity_verdict, was, token_fixed=ctx.hub_token.fixed())
         now = ctx.clock.now()
         stored = ctx.stores.identity.runner_identity()
-        if reply.runner_id != ctx.config.runner_id:
+        state = judged(ctx.config.runner_id, reply.runner_id)
+        if state is IdentityState.MISMATCHED:
             was = ctx.identity_verdict.record(
-                IdentityState.MISMATCHED,
+                state,
                 store_runner_id=ctx.config.runner_id,
                 token_runner_id=reply.runner_id,
                 checked_at=now,
@@ -200,7 +202,7 @@ class Registration:
             )
         if not ctx.identity_verdict.matched():
             was = ctx.identity_verdict.record(
-                IdentityState.MATCHED,
+                state,
                 store_runner_id=identity.runner_id,
                 token_runner_id=reply.runner_id,
                 checked_at=now,

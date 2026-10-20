@@ -101,6 +101,12 @@ refuses, naming `blizzard runner retire` and `blizzard runner add`, which replac
 as it is; a host re-added sets the store aside once and adds every runner again over it. A runner holding no token whose store still belongs to a runner stops
 the same way an unknown token does: put that runner's token back, or re-run init with `--allow-readd`.
 
+A kept runner whose store names a runner that neither it nor another `[[runner]]` of the host is stops before init
+writes anything. When the store also names one of the host's runners, it is the wrong file: stop and restore the right
+store, since a reset would drop the history of the runner it holds. When it names only other runners, restore that
+runner's token, or reset the store with `blizzard runner store reset <dir>`, which drops every fact below the hub's
+high-water mark, so only for a runner with no history.
+
 A runner's token variable is derived from its `name`, as above; the host file has no key to rename it. Every runner verb
 resolves a runner's token from the first of the process environment's `BZ_HUB_TOKEN_<NAME>`, the host file's
 `[hub_tokens]` table keyed by the runner's name (`[hub_tokens] r-claude = "…"`), and `BZ_HUB_TOKEN_<NAME>` in the host
@@ -307,11 +313,15 @@ and checked again each tick the same way. A hub that cannot be reached leaves th
 reads as a mismatch.
 
 The runner logs the refusal once, at warning severity, naming both runner ids and what restores it, and
-`blizzard runner status` shows it:
+`blizzard runner status` shows it. The host's runner listing (`GET /api/host/runners`) and the runner's hub forwards
+name the same sentence:
 
 ```text
-REFUSING: token belongs to runner rn_…, the configured runner is rn_… — set BZ_HUB_TOKEN_<NAME> to the token of runner rn_…, or correct `[[runner]] id` in <dir>/blizzard-host.toml
+REFUSING: token belongs to runner rn_…, not the configured rn_… — set BZ_HUB_TOKEN_<NAME> to the token of runner rn_…, or correct `[[runner]] id` in <dir>/blizzard-host.toml
 ```
+
+A runner whose version the hub's version window refuses is shown as `REFUSING:` with what to upgrade, and one its host's
+hub does not hold, or holds in another tenant, as `HALTED:` with why.
 
 While refusing, each check first re-reads the token from the runtime dir's `.env`, so correcting the token there resumes
 the runner in-process, with no restart. A token from the process environment — `BZ_HUB_TOKEN_<NAME>` — or from the host

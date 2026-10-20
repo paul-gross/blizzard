@@ -176,8 +176,7 @@ def test_ingest_moves_a_colliding_runner_under_a_new_workspace_id_and_reads_the_
     assert HubTokenFile.of(hosts.here, _VARIABLE).held() == _TOKEN
     assert HubTokenFile.of(hosts.there, _VARIABLE).held() == ""
     assert HostLayout(hosts.there).store_path.exists(), "a source still holding a runner stays in place"
-    [identity] = rows(here, "host_identity")
-    assert (identity["host_id"], identity["tenant_id"]) == (HERE_HOST, TENANT)
+    assert rows(here, "host_identity") == [], "only the host's own registration records its identity"
     source.dispose()
     here.dispose()
 

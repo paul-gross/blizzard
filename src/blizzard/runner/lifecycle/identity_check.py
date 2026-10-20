@@ -25,13 +25,15 @@ checked yet, it judges the hub's answer the same way first (:class:`ProxyIdentit
 from __future__ import annotations
 
 import threading
-from collections.abc import Callable
+from collections.abc import Collection
 from dataclasses import dataclass, replace
 from datetime import datetime
+from enum import StrEnum
 from typing import Protocol
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.roles import domain_model
 from blizzard.foundation.runner_identity_state import IdentityState
 from blizzard.runner.hub.client import (
     HubClientError,
@@ -50,6 +52,7 @@ from blizzard.runner.hub.identity import (
     RunnerIdentity,
     RunnerIdentityHolder,
     answered_tenant,
+    judged,
 )
 
 _log = get_logger("blizzard.runner.loop")
@@ -124,36 +127,61 @@ def log_transition(holder: IdentityVerdictHolder, was: IdentityState, *, token_f
         )
 
 
-def foreign_store_reason(
-    named: tuple[str, ...], configured_id: str, reset: str, *, configured: tuple[str, ...] = ()
-) -> str | None:
-    """Why a store whose identity rows name ``named`` is not ``configured_id``'s, or ``None`` when it names only
-    runners this host configures — ``configured_id`` and the other ``configured`` ids of its ``[[runner]]``
-    entries — or none has joined it yet. A store naming a runner no entry configures beside the configured one is
-    foreign: a runner started over it would orphan the other's leases and backlog, so it is refused untouched,
-    and since it already names the configured runner it is the wrong file, so its remedy is to restore the right
-    store, never ``reset``. A store naming only runners no entry configures has a wrong configured id, so its
-    remedy is to correct the id; ``reset`` is named there with its hazard."""
-    ours = {configured_id, *configured}
-    if not named or set(named) <= ours:
+class ForeignStoreKind(StrEnum):
+    """How a store naming a runner none of ours is foreign: ``MIXED`` also names one of ours (the wrong file),
+    ``ALIEN`` names only foreign runners (the wrong id or token)."""
+
+    MIXED = "mixed"
+    ALIEN = "alien"
+
+
+@domain_model
+@dataclass(frozen=True)
+class ForeignStore:
+    """A store that is not ours: its ``kind``, every runner it ``named``, and the ``foreign`` ones among them."""
+
+    kind: ForeignStoreKind
+    named: tuple[str, ...]
+    foreign: tuple[str, ...]
+
+
+def foreign_store(named: tuple[str, ...], ours: Collection[str]) -> ForeignStore | None:
+    """The foreign store ``named`` is when it holds a runner none of ``ours``; ``None`` when it names only ours or
+    none. Started over, it would orphan the other's leases and backlog, so it is refused untouched."""
+    foreign = tuple(runner for runner in named if runner not in ours)
+    if not foreign:
         return None
-    foreign = [runner for runner in named if runner not in ours]
-    if any(runner in ours for runner in named):
-        return (
-            f"the store names runners {', '.join(named)}, and {', '.join(foreign)} is configured by no [[runner]] "
-            f"of this host; it cannot be told apart from {configured_id}'s, so it is left untouched — stop and "
-            "restore the right store"
-        )
+    kind = ForeignStoreKind.MIXED if len(foreign) < len(named) else ForeignStoreKind.ALIEN
+    return ForeignStore(kind=kind, named=named, foreign=foreign)
+
+
+def reset_hazard(reset: str, runner_id: str) -> str:
+    """What ``reset`` costs ``runner_id``: a fresh store, dropping every fact below the hub's high-water mark."""
     return (
-        f"the store belongs to runner {', '.join(named)}, not the configured {configured_id}; correct the `id` in "
-        f"the host file to {named[0]}. `{reset}` sets the store aside and starts {configured_id} on a fresh one, "
-        f"dropping every fact below the hub's high-water mark, so use it only for a runner with no history"
+        f"`{reset}` sets the store aside and starts {runner_id} on a fresh one, dropping every fact below the hub's "
+        "high-water mark, so use it only for a runner with no history"
     )
 
 
-def judged(configured_id: str, token_runner_id: str) -> IdentityState:
-    """The verdict on a token the hub resolved to ``token_runner_id``: matched when it is the configured runner."""
-    return IdentityState.MATCHED if configured_id == token_runner_id else IdentityState.MISMATCHED
+def foreign_store_reason(
+    named: tuple[str, ...], configured_id: str, reset: str, *, configured: tuple[str, ...] = ()
+) -> str | None:
+    """Why a store naming ``named`` is not ``configured_id``'s, or ``None`` when it names only runners this host
+    configures (``configured_id`` and the other ``configured`` ids). A mixed store is restored, never ``reset``; an
+    alien one is fixed by correcting the id, ``reset`` named there with its hazard."""
+    verdict = foreign_store(named, {configured_id, *configured})
+    if verdict is None:
+        return None
+    if verdict.kind is ForeignStoreKind.MIXED:
+        return (
+            f"the store names runners {', '.join(named)}, and {', '.join(verdict.foreign)} is configured by no "
+            f"[[runner]] of this host; it cannot be told apart from {configured_id}'s, so it is left untouched — "
+            "stop and restore the right store"
+        )
+    return (
+        f"the store belongs to runner {', '.join(named)}, not the configured {configured_id}; correct the `id` in "
+        f"the host file to {named[0]}. {reset_hazard(reset, configured_id)}"
+    )
 
 
 def check_token(
@@ -176,7 +204,7 @@ def check_token(
     if isinstance(answer, TokenRefusal):
         was = verdict.refuse(
             store_runner_id=configured_id,
-            reason=f"the hub refuses this runner's token ({answer.reason})",
+            reason=_refused(answer),
             checked_at=now,
         )
         log_transition(verdict, was, token_fixed=token_fixed)
@@ -189,6 +217,24 @@ def check_token(
     )
     log_transition(verdict, was, token_fixed=token_fixed)
     return answer
+
+
+class TickScope(StrEnum):
+    """How much of a tick runs after the identity check; the local steps run in every scope."""
+
+    RUN_ALL = "run_all"
+    REGISTRATION_ONLY = "registration_only"
+    SKIP = "skip"
+
+
+def tick_scope(verdict: IdentityVerdict, *, registration_checks: bool) -> TickScope:
+    """A refusing verdict drives no lease and delivers nothing; the registration still runs where only its reply can
+    lift the refusal — a hub with no identity read (``registration_checks``), or a refused version."""
+    if not verdict.refusing():
+        return TickScope.RUN_ALL
+    if registration_checks or verdict.state is IdentityState.VERSION_REFUSED:
+        return TickScope.REGISTRATION_ONLY
+    return TickScope.SKIP
 
 
 @dataclass(frozen=True)
@@ -238,27 +284,40 @@ class ProxyIdentityCheck:
         self._lock = threading.Lock()
         self._matched: IdentityVerdict | None = None
 
-    def verdict_on_contact(self, ask: Callable[[], str | None]) -> IdentityVerdict:
+    def verdict_on_contact(self, reader: ITokenIdentityReader) -> IdentityVerdict:
         current = self._verdict.verdict()
         if current.state is not IdentityState.UNCHECKED or self._verdict.registration_checks():
             return current
         with self._lock:
             if self._matched is not None:
                 return self._matched
-        token_runner_id = ask()
-        if token_runner_id is None:
+        try:
+            answer = reader.identity()
+        except IdentityRouteMissing:
             return current
-        judged_now = IdentityVerdict(
-            state=judged(self._configured_id, token_runner_id),
+        if isinstance(answer, TokenRefusal):
+            return replace(
+                current,
+                state=IdentityState.REFUSED,
+                store_runner_id=self._configured_id,
+                checked_at=self._clock.now(),
+                reason=_refused(answer),
+            )
+        judged_now = replace(
+            current,
+            state=judged(self._configured_id, answer.runner_id),
             store_runner_id=self._configured_id,
-            token_runner_id=token_runner_id,
+            token_runner_id=answer.runner_id,
             checked_at=self._clock.now(),
-            reset_command=current.reset_command,
         )
         if judged_now.state is IdentityState.MATCHED:
             with self._lock:
                 self._matched = judged_now
         return judged_now
+
+
+def _refused(refusal: TokenRefusal) -> str:
+    return f"the hub refuses this runner's token ({refusal.reason})"
 
 
 def _record(ctx: IdentityCheckContext, identity: RunnerIdentity) -> None:
