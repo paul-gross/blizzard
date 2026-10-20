@@ -55,6 +55,16 @@ _MOVED_HOMES = {
     "IdentityState": "blizzard.foundation.runner_identity_state",
     "HostRegistrationState": "blizzard.foundation.host_registration_state",
     "HostRunnerState": "blizzard.foundation.host_runner_state",
+    "runner_prefix": "blizzard.runner.route_paths",
+    "is_api_path": "blizzard.runner.route_paths",
+    "within_runner": "blizzard.runner.route_paths",
+    "RUNNER_ROUTE_PREFIX": "blizzard.runner.route_paths",
+    "RUNNERS_SEGMENT": "blizzard.runner.route_paths",
+    "OTLP_PATHS": "blizzard.runner.route_paths",
+    "PublicOrigins": "blizzard.runner.public_origins",
+    "RedactingExporter": "blizzard.foundation.platform_tracing.redaction",
+    "redacted": "blizzard.foundation.platform_tracing.redaction",
+    "EnabledReceivedTelemetryExport": "blizzard.runner.tracing.internal.received_pipeline",
     "TenantState": "blizzard.foundation.tenants",
     "TenantDeletionState": "blizzard.foundation.tenants",
     "TENANT_NAME_MAX_LENGTH": "blizzard.foundation.tenants",
@@ -2176,6 +2186,7 @@ _RUNNER_PACKAGE_LAYERS: dict[str, frozenset[str]] = {
     "config_table": frozenset(),
     "node_steps": frozenset(),
     "process": frozenset(),
+    "route_paths": frozenset(),
     "events": frozenset(),
     "environments": frozenset(),
     "harness": frozenset({"config_table", "environments", "node_steps", "process"}),
@@ -2203,7 +2214,7 @@ _RUNNER_PACKAGE_LAYERS: dict[str, frozenset[str]] = {
         }
     ),
     "operator": frozenset({"leases", "lifecycle"}),
-    "tracing": frozenset({"harness", "hub", "leases", "transcripts"}),
+    "tracing": frozenset({"harness", "hub", "leases", "route_paths", "transcripts"}),
     "selftest": frozenset({"environments", "harness", "lifecycle", "node_steps", "process"}),
     "status": frozenset({"environments", "harness", "hub", "leases", "lifecycle", "throttle"}),
     "harness/claude_code": frozenset({"config_table", "harness", "node_steps", "process", "subscriptions"}),
@@ -2255,6 +2266,7 @@ _RUNNER_EDGE_MODULES = frozenset(
         "ingest",
         "listeners",
         "loop_wiring",
+        "public_origins",
         "runtime",
     }
 )
@@ -2806,7 +2818,11 @@ def test_only_the_trace_bindings_import_opentelemetry() -> None:
     platform tracing, which hands one per-process provider to each instrumentation explicitly."""
     homes = tuple(
         str(path.relative_to(_REPO_ROOT))
-        for path in (_FOUNDATION_DIR / "trace_export" / "internal", _FOUNDATION_DIR / "platform_tracing")
+        for path in (
+            _FOUNDATION_DIR / "trace_export" / "internal",
+            _FOUNDATION_DIR / "platform_tracing",
+            _RUNNER_DIR / "tracing" / "internal",
+        )
     )
     violations = [v for v in _violations(_SRC_DIR, ("opentelemetry",)) if not v.startswith(homes)]
     assert not violations, violations

@@ -440,7 +440,7 @@ def test_the_metrics_queue_drops_its_oldest_batch_when_full() -> None:
 
     from opentelemetry.sdk.metrics.export import MetricExporter, MetricExportResult, MetricsData
 
-    from blizzard.foundation.platform_tracing.internal.received_pipeline import _MetricQueue
+    from blizzard.runner.tracing.internal.received_pipeline import _MetricQueue
 
     release = threading.Event()
     entered = threading.Event()
@@ -479,7 +479,7 @@ def test_the_metrics_queue_shutdown_discards_what_is_queued_and_leaves_an_in_fli
 
     from opentelemetry.sdk.metrics.export import MetricExporter, MetricExportResult, MetricsData
 
-    from blizzard.foundation.platform_tracing.internal.received_pipeline import _MetricQueue
+    from blizzard.runner.tracing.internal.received_pipeline import _MetricQueue
 
     release = threading.Event()
     entered = threading.Event()

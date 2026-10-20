@@ -24,6 +24,7 @@ from blizzard.runner.leases.activity import (
     Liveness,
     LocalLeaseService,
     OpenHumanFacts,
+    is_healthy_closure,
     lease_display_status,
 )
 from blizzard.runner.leases.model import Lease, NewLease
@@ -651,11 +652,11 @@ def test_display_status_falls_through_to_every_lease_state() -> None:
 
 @pytest.mark.unit
 def test_only_a_transitioned_closure_is_healthy() -> None:
-    assert [r for r in LeaseClosureReason if r.healthy()] == [LeaseClosureReason.TRANSITIONED]
-    assert LeaseClosureReason.is_healthy("transitioned") is True
-    assert LeaseClosureReason.is_healthy("failed") is False
-    assert LeaseClosureReason.is_healthy("a-store-only-reason") is False
-    assert LeaseClosureReason.is_healthy(None) is False
+    assert [r for r in LeaseClosureReason if is_healthy_closure(r.value)] == [LeaseClosureReason.TRANSITIONED]
+    assert is_healthy_closure("transitioned") is True
+    assert is_healthy_closure("failed") is False
+    assert is_healthy_closure("a-store-only-reason") is False
+    assert is_healthy_closure(None) is False
 
 
 @pytest.mark.unit

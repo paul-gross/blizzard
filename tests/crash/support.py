@@ -19,8 +19,8 @@ from pathlib import Path
 
 import httpx
 
-from blizzard.foundation.runner_paths import runner_prefix
 from blizzard.runner.config import RunnerConfig
+from blizzard.runner.route_paths import runner_prefix
 from blizzard.wire.work_source import WorkSourceDocument
 from tests.fleet_world import REPO_NAME, basic_workspace, scripted_build
 from tests.harness_sections import claude_code, opencode, sections

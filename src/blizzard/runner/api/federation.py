@@ -19,7 +19,6 @@ from pydantic import BaseModel
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.origin import Origin
 from blizzard.foundation.platform_tracing.attributes import annotate_caller
-from blizzard.foundation.public_origins import PublicOrigins
 from blizzard.foundation.return_to import ReturnTo
 from blizzard.runner.api.wiring import RunnerWiring
 from blizzard.runner.auth.roles import LocalRole, RolePolicy
@@ -35,6 +34,7 @@ from blizzard.runner.auth.validate import FederationToken, FederationTokenError
 from blizzard.runner.hub.host_identity import ICurrentHostIdentity
 from blizzard.runner.hub.host_registration import ICurrentHostRegistration
 from blizzard.runner.hub.identity import ICurrentRunnerIdentity
+from blizzard.runner.public_origins import PublicOrigins
 
 _log = get_logger("blizzard.runner.auth")
 

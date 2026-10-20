@@ -25,10 +25,10 @@ from opentelemetry.trace import SpanContext, SpanKind, Status, StatusCode, Trace
 from sqlalchemy import Engine
 
 from blizzard.foundation.platform_tracing.handle import ScopeFilter, SpanStamp
-from blizzard.foundation.platform_tracing.internal.redaction import RedactingExporter
 from blizzard.foundation.platform_tracing.internal.sampling import sampler
 from blizzard.foundation.platform_tracing.internal.semconv import pin_stable_semconv
 from blizzard.foundation.platform_tracing.received import ReceivedSpan
+from blizzard.foundation.platform_tracing.redaction import RedactingExporter
 from blizzard.foundation.platform_tracing.semconv import DATABASE_SEMCONV_VERSION
 from blizzard.foundation.platform_tracing.span_context import span_context
 from blizzard.foundation.platform_tracing.tracer import IPlatformTracer

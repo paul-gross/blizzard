@@ -9,8 +9,8 @@ from fastapi import FastAPI
 from fastapi.routing import APIRoute, _IncludedRouter
 from fastapi.testclient import TestClient
 
-from blizzard.foundation.runner_paths import runner_prefix
 from blizzard.runner.api.wiring import RunnerRegistry
+from blizzard.runner.route_paths import runner_prefix
 
 
 def sole_runner_id(app: FastAPI) -> str:

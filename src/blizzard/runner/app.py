@@ -30,7 +30,6 @@ from blizzard.foundation.logging import get_logger
 from blizzard.foundation.platform_tracing.attributes import annotate
 from blizzard.foundation.platform_tracing.handle import DISABLED_TELEMETRY, IPlatformTracing
 from blizzard.foundation.roles import collaborator
-from blizzard.foundation.runner_paths import RUNNER_ROUTE_PREFIX, RUNNERS_SEGMENT, is_api_path
 from blizzard.foundation.store.readiness import ReadinessService
 from blizzard.foundation.web import Frontend, install_schema_components
 from blizzard.runner.api.analytics import router as analytics_router
@@ -108,6 +107,7 @@ from blizzard.runner.loop_wiring import ResumeMarking
 from blizzard.runner.operator.attachments import AttachmentService
 from blizzard.runner.operator.requeue import RequeueService
 from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
+from blizzard.runner.route_paths import RUNNER_ROUTE_PREFIX, RUNNERS_SEGMENT, is_api_path
 from blizzard.runner.selftest.internal.subprocess_scratch_git import SubprocessScratchGit
 from blizzard.runner.selftest.service import SelfTestService
 from blizzard.runner.status.view import RunnerStatusService

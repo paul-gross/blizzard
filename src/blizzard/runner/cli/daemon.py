@@ -12,8 +12,8 @@ import httpx
 
 from blizzard.cli.operator_trace import ITraceHeaders
 from blizzard.cli.param_rank import ParamSource
-from blizzard.foundation.runner_paths import runner_prefix
 from blizzard.runner.host_layout import HostLayout
+from blizzard.runner.route_paths import runner_prefix
 
 # A machine-local round trip, so a hook-scale budget rather than the hub-client one.
 LOCAL_CLIENT_TIMEOUT = 5.0

@@ -15,10 +15,7 @@ from typing import Literal, Protocol, cast, get_args
 from blizzard.foundation.event_log import EventLogSeverity
 from blizzard.foundation.roles import domain_model
 
-#: The kinds of the hub's own occurrences — its exports', its startup and migration, and a tenant teardown's close and
-#: completion. Each concerns no tenant, chunk or runner, so it is recorded in ``hub_event_log`` alone; the export kinds
-#: stay in :data:`~blizzard.foundation.event_log.EventLogKind` too, since a runner reports its own trace export's into
-#: its tenant's log.
+#: The kinds of the hub's own occurrences; the export kinds stay in ``EventLogKind`` too, for a runner's own exports.
 HubEventKind = Literal[
     "trace-export-failed",
     "trace-export-recovered",
@@ -34,8 +31,7 @@ HubEventKind = Literal[
     "tenant-deleted",
 ]
 
-#: Each hub kind's one severity — an export kind's is the one it carries in
-#: :data:`~blizzard.foundation.event_log.EVENT_LOG_SEVERITY`.
+#: Each hub kind's one severity — an export kind's is the one ``EVENT_LOG_SEVERITY`` gives it.
 HUB_EVENT_SEVERITY: Mapping[HubEventKind, EventLogSeverity] = {
     "trace-export-failed": EventLogSeverity.WARNING,
     "trace-export-recovered": EventLogSeverity.INFO,

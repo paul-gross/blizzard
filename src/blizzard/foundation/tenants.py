@@ -5,11 +5,9 @@ from __future__ import annotations
 
 from enum import StrEnum
 
-#: The most characters a tenant's name holds (``blizzard-product:/plans/multi-tenancy/hub/spec/store.md`` §The tenant
-#: record).
+#: The most characters a tenant's name holds.
 TENANT_NAME_MAX_LENGTH = 64
-#: The shape a tenant's name takes, as the wire carries it: no leading or trailing whitespace; inner whitespace, line
-#: breaks included, is kept. The pattern stays ECMAScript-compatible, since the OpenAPI carries it.
+#: A tenant's name without leading or trailing whitespace — ECMAScript-compatible, since the OpenAPI carries it.
 TENANT_NAME_PATTERN = r"^\S(?:[\s\S]*\S)?$"
 
 

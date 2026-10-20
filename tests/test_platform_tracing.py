@@ -33,8 +33,8 @@ from blizzard.foundation.platform_tracing.handle import (
     build_platform_tracing,
     platform_tracing_enabled,
 )
-from blizzard.foundation.platform_tracing.internal.redaction import RedactingExporter
 from blizzard.foundation.platform_tracing.internal.sampling import sampler
+from blizzard.foundation.platform_tracing.redaction import RedactingExporter
 from blizzard.foundation.platform_tracing.tracer import NoopPlatformTracer
 from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.foundation.trace_ids import DerivedContext, SpanRole, StepKey
