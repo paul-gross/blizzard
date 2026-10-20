@@ -981,7 +981,7 @@ def test_hosted_app_composes_the_escalation_takeover_command_over_the_runner_roo
         with runner_client(hosted.app) as client:
             (escalation,) = client.get("/api/escalations").json()["items"]
         assert escalation["wrapped_takeover_command"] == (
-            f"blizzard runner takeover ch_1 --dir {shlex.quote(str(config.root))}"
+            f"blizzard runner takeover ch_1 --dir {shlex.quote(str(config.root))} --runner {config.name}"
         )
     finally:
         hosted.close()
