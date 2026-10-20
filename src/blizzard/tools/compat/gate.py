@@ -43,23 +43,23 @@ def judge(
     line: bool,
     declarable: bool = False,
     declared: Collection[tuple[str, str]] = (),
-    inherited: Collection[tuple[str, str, str]] = (),
+    inherited: Collection[tuple[str, str, str, str]] = (),
 ) -> list[Verdict]:
     """A verdict per finding per release (``findings`` is keyed by release tag).
 
-    ``inherited`` holds the base's ``(release, surface, where)``; ``declared`` the ``(surface, where)`` an added
+    ``inherited`` holds the base's ``(release, surface, where, reason)``; ``declared`` the ``(surface, where)`` an added
     note declares, admitted only when ``declarable``. Under ``line`` no new pair passes."""
     return [
         Verdict(
             release,
             violation,
-            (release, violation.surface, violation.where) in inherited
+            (release, *_key(violation)) in inherited
             or (
                 not line
                 and acknowledged
                 and (violation.deprecated or (declarable and (violation.surface, violation.where) in declared))
             ),
-            (release, violation.surface, violation.where) in inherited,
+            (release, *_key(violation)) in inherited,
         )
         for release, violations in findings.items()
         for violation in violations

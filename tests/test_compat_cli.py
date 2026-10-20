@@ -554,8 +554,16 @@ def test_a_declared_break_passes_only_when_declarable_and_acknowledged() -> None
 
 
 def test_an_inherited_finding_passes_even_on_a_line() -> None:
-    inherited = {("v0.2.0", "wire", _ROUTE)}
+    inherited = {("v0.2.0", "wire", _ROUTE, "surface path removed")}
     verdict = gate.judge({"v0.2.0": [_finding(deprecated=False)]}, acknowledged=False, line=True, inherited=inherited)[
         0
     ]
     assert verdict.passes and verdict.inherited
+
+
+def test_a_new_kind_of_break_on_an_inherited_name_is_not_inherited() -> None:
+    inherited = {("v0.2.0", "wire", _ROUTE, "an earlier reason")}
+    verdict = gate.judge({"v0.2.0": [_finding(deprecated=False)]}, acknowledged=False, line=False, inherited=inherited)[
+        0
+    ]
+    assert not verdict.passes and not verdict.inherited

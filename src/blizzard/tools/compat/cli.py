@@ -201,10 +201,10 @@ def _declared(repo: Repository, root: Path, base: str) -> frozenset[tuple[str, s
 
 def _inherited(
     repo: Repository, base: str, releases: Sequence[Release], base_documents: dict[str, dict[str, Any]]
-) -> set[tuple[str, str, str]]:
-    """The ``(release, surface, where)`` of every finding the base tree already carries against ``releases``."""
+) -> set[tuple[str, str, str, str]]:
+    """The ``(release, surface, where, reason)`` of every finding the base tree already carries against ``releases``."""
     return {
-        (release.tag, finding.surface, finding.where)
+        (release.tag, finding.surface, finding.where, finding.reason)
         for release in releases
         for finding in _findings(_check_release(repo, release.tag, base_documents))
     }
