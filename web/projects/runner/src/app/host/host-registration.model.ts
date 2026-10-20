@@ -18,6 +18,7 @@ const LABEL: Record<runnerApi.HostRegistrationView['state'], readonly [string, T
   refused: ['refused', 'needs'],
   no_hosts: ['hub without hosts', 'waiting'],
   unreachable: ['unreachable', 'stale'],
+  version_refused: ['version refused', 'needs'],
 };
 
 /** Folds the host's registration read into its display summary — `null` before the read lands. */
