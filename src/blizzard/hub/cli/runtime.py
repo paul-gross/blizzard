@@ -9,6 +9,7 @@ from pathlib import Path
 
 import click
 
+from blizzard import __version__
 from blizzard.cli.host_directory import HostDirectory
 from blizzard.cli.runtime import build_early_shutdown_server, click_exception_on, run_init, run_migrate
 from blizzard.foundation.store.migrations import RevisionMismatchError, StoreBelowFloorError
@@ -16,6 +17,7 @@ from blizzard.hub.app import PLATFORM_TRACING_SHUTDOWN_SECONDS, build_hosted_app
 from blizzard.hub.config import ConfigError, HubConfig
 from blizzard.hub.runtime import ensure_current_revision, init_environment, migrate, migration_runner
 from blizzard.hub.store import MIGRATIONS_DIR
+from blizzard.wire.version_window import VersionWindow, VersionWindowError, check_own_floor
 
 # The runtime root the dir-taking verbs resolve, highest to lowest: explicit ``--dir``,
 # then ``BZ_HUB_DIR``, then the cwd. Selectable, not shareable: the store is single-writer.
@@ -80,6 +82,10 @@ def host(directory: str | None, dir_option: str, host_: str | None, port: int | 
     DIRECTORY (positional) and --dir are equivalent — pass one; giving both requires
     they agree. Defaults to $BZ_HUB_DIR, then the cwd."""
     directory = HostDirectory(directory, dir_option).path
+    # A hub below its own window's floor would refuse every runner, so it refuses to start instead.
+    with click_exception_on(VersionWindowError):
+        window = VersionWindow.load()
+        check_own_floor(__version__, window)
     with click_exception_on(ConfigError):
         config = HubConfig.load(Path(directory), host=host_, port=port, allow_external_db=allow_external_db)
     with click_exception_on(RevisionMismatchError, StoreBelowFloorError):
@@ -87,7 +93,7 @@ def host(directory: str | None, dir_option: str, host_: str | None, port: int | 
     # Composition can still reject the config at boot; surface it as a clean CLI error,
     # and build before announcing so we never claim to serve and then die.
     with click_exception_on(ConfigError):
-        app = build_hosted_app(config)
+        app = build_hosted_app(config, version_window=window)
     click.echo(f"serving blizzard-hub on {config.host}:{config.port}")
     server = build_early_shutdown_server(app, host=config.host, port=config.port, shutdown_signal=app.state.shutdown)
 
