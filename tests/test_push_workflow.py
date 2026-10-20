@@ -56,9 +56,18 @@ def test_dev_image_job_needs_dev_build_for_the_shared_version_string() -> None:
     assert "dev-build" in _dev_image_job()["needs"]
 
 
-def test_dev_image_needs_exactly_the_gate_the_upper_tiers_and_the_dev_build() -> None:
-    assert _dev_image_job()["needs"] == ["gate", "upper-tiers", "dev-build"]
+def test_dev_image_needs_exactly_the_gate_the_upper_tiers_the_dev_build_and_the_rehearsal() -> None:
+    assert _dev_image_job()["needs"] == ["gate", "upper-tiers", "dev-build", "rehearsal"]
     assert not [name for name in _jobs() if "compat" in name]
+
+
+def test_the_rehearsal_upgrades_to_the_wheel_dev_build_uploaded() -> None:
+    job = _jobs()["rehearsal"]
+    assert job["uses"] == "./.github/workflows/rehearsal.yml"
+    assert job["needs"] == ["gate", "dev-build"]
+    upload = next(s for s in _jobs()["dev-build"]["steps"] if "upload-artifact" in str(s.get("uses", "")))
+    assert job["with"] == {"candidate_artifact": "blizzard-dev-wheel-${{ needs.dev-build.outputs.version }}"}
+    assert upload["with"]["name"] == "blizzard-dev-wheel-${{ steps.ver.outputs.version }}"
 
 
 def test_dev_build_job_exposes_its_version_as_an_output() -> None:

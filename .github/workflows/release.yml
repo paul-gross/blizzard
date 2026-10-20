@@ -2,7 +2,9 @@
 #
 # Pushing a `v*` tag builds a release: the full suite runs, the
 # wheel is built with the embedded frontend, and a GitHub Release is published
-# from the tag. Prerelease candidates are `v*-rc.*` tags.
+# from the tag. Prerelease candidates are `v*-rc.*` tags; on those alone, the
+# upgrade rehearsal (rehearsal.yml) upgrades each supported release to the wheel
+# before the image is built from it.
 #
 # The full suite at a tag is the merge gate (unit + component) PLUS the three upper
 # tiers, each its own parallel job — the service tier, the FULL kill-9 crash sweep
@@ -25,7 +27,7 @@ on:
     tags:
       - "v*"
 
-# Read-only by default: the test jobs hold no write scope. `build` and `publish` each declare
+# Read-only by default: the test jobs hold no write scope. Every job past the tiers declares
 # their own scopes at job level; only `publish` holds `contents: write`, and `verify` reads only.
 permissions:
   contents: read
@@ -198,29 +200,20 @@ jobs:
           MISE_TRUSTED_CONFIG_PATHS: ${{ github.workspace }}/blizzard
         run: cd blizzard && mise run e2e
 
-  build:
-    name: build wheel + image, sign and attest, assemble the inventory
-    needs: [gate, compat, service-tier, crash-sweep, e2e]
+  wheel:
+    name: build the release wheel
+    # Built once: `rehearsal` upgrades the supported releases to this wheel, and `build`
+    # publishes this same wheel and builds the image from it.
     runs-on: ubuntu-latest
-    outputs:
-      prerelease: ${{ steps.ver.outputs.prerelease }}
-    # A job-level `permissions:` block REPLACES the workflow-level one rather than
-    # merging with it — every unlisted scope becomes `none`. This job pushes to GHCR,
-    # mints the OIDC identity the signature and attestations carry, and stores them;
-    # it cannot write the Release, which `publish` alone does.
-    # tests/test_release_workflow.py pins the exact scopes.
     permissions:
       contents: read
-      packages: write
-      id-token: write
-      attestations: write
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+      prerelease: ${{ steps.ver.outputs.prerelease }}
     steps:
       - uses: actions/checkout@v4
         with:
-          # The release-note renderer needs the commit range since the previous tag, and
-          # `git describe` needs every tag reachable — a shallow (depth-1)
-          # checkout would see neither.
-          fetch-depth: 0
+          persist-credentials: false
       - uses: astral-sh/setup-uv@v6
         with:
           enable-cache: true
@@ -259,6 +252,62 @@ jobs:
             > "dist/blizzard-${VERSION}-requirements.txt"
           ./scripts/export-requirements.sh "$VERSION" "$WHEEL" --extra postgres --no-project \
             > "dist/blizzard-${VERSION}-requirements-pg.txt"
+      - name: hand the wheel and its requirements to rehearsal and build
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: release-wheel
+          path: |
+            dist/*.whl
+            dist/*-requirements*.txt
+          if-no-files-found: error
+
+  rehearsal:
+    # A candidate only: a stable tag's tree is its last candidate's, already rehearsed.
+    if: contains(github.ref_name, '-rc.')
+    needs: [wheel]
+    permissions:
+      contents: read
+    uses: ./.github/workflows/rehearsal.yml
+    with:
+      candidate_artifact: release-wheel
+      tag: ${{ github.ref_name }}
+
+  build:
+    name: build the image, sign and attest, assemble the inventory
+    needs: [gate, compat, service-tier, crash-sweep, e2e, wheel, rehearsal]
+    # Runs when `rehearsal` was skipped on a stable tag, never when any need failed.
+    if: ${{ !cancelled() && !failure() }}
+    runs-on: ubuntu-latest
+    outputs:
+      prerelease: ${{ needs.wheel.outputs.prerelease }}
+    # A job-level `permissions:` block REPLACES the workflow-level one rather than
+    # merging with it — every unlisted scope becomes `none`. This job pushes to GHCR,
+    # mints the OIDC identity the signature and attestations carry, and stores them;
+    # it cannot write the Release, which `publish` alone does.
+    # tests/test_release_workflow.py pins the exact scopes.
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    env:
+      VERSION: ${{ needs.wheel.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The release-note renderer needs the commit range since the previous tag, and
+          # `git describe` needs every tag reachable — a shallow (depth-1)
+          # checkout would see neither.
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          python-version: "3.12"
+      - name: fetch the wheel `wheel` built (the image's build context and the released wheel)
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: release-wheel
+          path: dist
       - name: fetch the compatibility report the compat job wrote
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
@@ -281,7 +330,7 @@ jobs:
           {
             echo "annotations<<IMAGE_ANNOTATIONS_EOF"
             echo "org.opencontainers.image.source=https://github.com/${GITHUB_REPOSITORY}"
-            echo "org.opencontainers.image.version=${{ steps.ver.outputs.version }}"
+            echo "org.opencontainers.image.version=${{ needs.wheel.outputs.version }}"
             echo "org.opencontainers.image.revision=${GITHUB_SHA}"
             echo "org.opencontainers.image.created=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
             echo "IMAGE_ANNOTATIONS_EOF"
@@ -342,7 +391,7 @@ jobs:
           registry-username: ${{ github.actor }}
           registry-password: ${{ secrets.GITHUB_TOKEN }}
           format: spdx-json
-          output-file: inventory/blizzard-hub-${{ steps.ver.outputs.version }}-linux-amd64.spdx.json
+          output-file: inventory/blizzard-hub-${{ needs.wheel.outputs.version }}-linux-amd64.spdx.json
           upload-artifact: false
           upload-release-assets: false
       - name: attest the linux/amd64 image bill of materials against its platform digest
@@ -350,7 +399,7 @@ jobs:
         with:
           subject-name: ghcr.io/paul-gross/blizzard-hub
           subject-digest: ${{ steps.platform_digests.outputs.amd64 }}
-          sbom-path: inventory/blizzard-hub-${{ steps.ver.outputs.version }}-linux-amd64.spdx.json
+          sbom-path: inventory/blizzard-hub-${{ needs.wheel.outputs.version }}-linux-amd64.spdx.json
           push-to-registry: true
       - name: bill of materials for the linux/arm64 image (Syft, SPDX 2.3 JSON)
         uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
@@ -359,7 +408,7 @@ jobs:
           registry-username: ${{ github.actor }}
           registry-password: ${{ secrets.GITHUB_TOKEN }}
           format: spdx-json
-          output-file: inventory/blizzard-hub-${{ steps.ver.outputs.version }}-linux-arm64.spdx.json
+          output-file: inventory/blizzard-hub-${{ needs.wheel.outputs.version }}-linux-arm64.spdx.json
           upload-artifact: false
           upload-release-assets: false
       - name: attest the linux/arm64 image bill of materials against its platform digest
@@ -367,11 +416,9 @@ jobs:
         with:
           subject-name: ghcr.io/paul-gross/blizzard-hub
           subject-digest: ${{ steps.platform_digests.outputs.arm64 }}
-          sbom-path: inventory/blizzard-hub-${{ steps.ver.outputs.version }}-linux-arm64.spdx.json
+          sbom-path: inventory/blizzard-hub-${{ needs.wheel.outputs.version }}-linux-arm64.spdx.json
           push-to-registry: true
       - name: stage the wheel's runtime for its bill of materials (clean venv + the board's lockfile)
-        env:
-          VERSION: ${{ steps.ver.outputs.version }}
         run: |
           # The venv holds exactly the hashed base requirements plus the wheel; the board's
           # JavaScript ships compiled inside the wheel, so its lockfile stands in for the
@@ -385,17 +432,16 @@ jobs:
         with:
           path: sbom-wheel
           format: spdx-json
-          output-file: inventory/blizzard-${{ steps.ver.outputs.version }}.spdx.json
+          output-file: inventory/blizzard-${{ needs.wheel.outputs.version }}.spdx.json
           upload-artifact: false
           upload-release-assets: false
       - name: attest the wheel bill of materials against the wheel
         uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e # v4.1.0
         with:
           subject-path: dist/blizzard-*.whl
-          sbom-path: inventory/blizzard-${{ steps.ver.outputs.version }}.spdx.json
+          sbom-path: inventory/blizzard-${{ needs.wheel.outputs.version }}.spdx.json
       - name: assemble the attached files and their checksums (scripts/release-inventory.sh)
         env:
-          VERSION: ${{ steps.ver.outputs.version }}
           IMAGE_DIGEST: ${{ steps.build_push.outputs.digest }}
         run: |
           ./scripts/release-inventory.sh "$VERSION" "$(ls dist/blizzard-*.whl)" "$IMAGE_DIGEST" inventory \
@@ -419,6 +465,8 @@ jobs:
   publish:
     name: publish GitHub Release with every file attached
     needs: [build]
+    # `build` itself may run past a skipped `rehearsal`; publish follows only its success.
+    if: ${{ !cancelled() && needs.build.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -442,6 +490,7 @@ jobs:
   verify:
     name: verify the published release from outside (scripts/verify-release.sh)
     needs: [publish]
+    if: ${{ !cancelled() && needs.publish.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read

@@ -3,12 +3,17 @@ description: >-
   Resolve the blizzard-mock ref this run proves against and check it out by commit.
   A v* tag uses the mock's same-named tag; a pull request uses the mock's branch of
   the head's name if it exists, else the mock's line branch (release/X.Y or master);
-  a push to master uses the mock's master. The rules live in resolve-mock-ref.sh.
+  a push to master uses the mock's master. A `baseline` release tag overrides all of
+  these with the mock's tag of that name, else its master. The rules live in resolve-mock-ref.sh.
 
 inputs:
   path:
     description: Where to check the mock out, relative to the workspace.
     default: blizzard-mock
+  baseline:
+    description: >-
+      A release tag a rehearsal leg seeds; the mock's tag of that name, else its master.
+    default: ""
   sha:
     description: >-
       A mock commit to check out as-is, skipping resolution — how every job of one
@@ -31,6 +36,7 @@ runs:
       shell: bash
       env:
         PINNED_SHA: ${{ inputs.sha }}
+        BASELINE: ${{ inputs.baseline }}
         EVENT_NAME: ${{ github.event_name }}
         REF: ${{ github.ref }}
         BASE_REF: ${{ github.base_ref }}

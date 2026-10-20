@@ -33,9 +33,11 @@ install_head_replay_guard()
 
 
 #: The seven verification tiers declared in ``pyproject.toml``'s ``markers`` list.
-_TIER_MARKERS = frozenset({"unit", "component", "service", "e2e", "crash_sweep", "journey", "winter_binding"})
+_TIER_MARKERS = frozenset(
+    {"unit", "component", "service", "e2e", "crash_sweep", "journey", "rehearsal", "winter_binding"}
+)
 
-#: Every collected item's nodeid missing all seven tier markers, populated by
+#: Every collected item's nodeid missing every tier marker, populated by
 #: ``pytest_collection_modifyitems`` below. A normal test can't see its siblings'
 #: markers on its own, so ``tests/test_default_suite_markers.py`` reads this back instead.
 UNMARKED_TEST_NODEIDS: list[str] = []
@@ -47,7 +49,7 @@ SHARD_ENV = "BLIZZARD_TEST_SHARD"
 
 
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
-    """Record every collected test that carries none of the seven tier markers, then keep only
+    """Record every collected test that carries none of the tier markers, then keep only
     this run's shard.
 
     An unmarked test still runs in the default suite but is invisible to both ``-m

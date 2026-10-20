@@ -93,6 +93,22 @@ enclosing winter workspace, and never in CI.
 
 The e2e tier runs only locally and in the tag `release` workflow — it is never a `pr`/`push` gate job.
 
+## The upgrade rehearsal
+
+[`.github/workflows/rehearsal.yml`](../.github/workflows/rehearsal.yml) is reusable (`workflow_call`) and runs the
+upgrade rehearsal (`blizzard:rehearsal`): each supported release's own published wheel seeds a hub and a runner host,
+the hub and then the runner are upgraded to a candidate wheel the caller names, and both stores are walked down to the
+release and forward again. `push.yml` calls it on every `master` push with the dev-build wheel, and `release.yml` on
+every `-rc.` tag with the wheel it is about to release; a pull request never runs it. A leading `releases` job lists the
+supported set with `blizzard-compat releases --json`, leaving a tag run's own tag out with `--tag`, and each release
+runs as two legs, SQLite and Postgres, against a `postgres:16` service. With no supported release, one leg reports that
+there is nothing to rehearse and passes. Each leg checks the mock out at the release's own tag where the mock carries
+one, else at `master`, through `resolve-mock-ref`'s `baseline` input. A failed leg uploads its daemons' logs as
+`rehearsal-logs-<release>-<backend>`.
+
+Locally the same tier is `mise run rehearsal`, which builds a candidate unless `BLIZZARD_REHEARSAL_CANDIDATE` names
+one; set `BLIZZARD_REHEARSAL_PG_URL` to a Postgres server to run the Postgres backend too.
+
 ## Trigger workflows
 
 [`.github/workflows/pr.yml`](../.github/workflows/pr.yml) (PR to `master` or `release/**`) runs the gate plus the
@@ -123,16 +139,19 @@ The dev-build wheel is downloaded from its run with:
 gh run download --repo paul-gross/blizzard <run-id>
 ```
 
-The `dev-image` job needs `[gate, upper-tiers, dev-build]` — the tiers so the channel advances
-only on proven commits, and `dev-build` solely to reuse its computed dev version for the image's
+The `dev-image` job needs `[gate, upper-tiers, dev-build, rehearsal]` — the tiers and the upgrade rehearsal so the
+channel advances only on proven commits, and `dev-build` solely to reuse its computed dev version for the image's
 `org.opencontainers.image.version` annotation rather than recomputing it. Unlike the release fan-out, the dev tags and OCI annotations
 are inlined in the `dev-image` job — no branching logic to unit-test — and `tests/test_push_workflow.py` pins the job.
 
 [`.github/workflows/release.yml`](../.github/workflows/release.yml) (tag `v*`) runs the full suite — gate, the `compat` backstop, service tier,
-the **full** crash sweep, and e2e — then three jobs. `compat` (`release / compatibility against supported releases`) runs
+the **full** crash sweep, and e2e — builds the wheel once in `wheel`, rehearses the upgrade to it on an `-rc.` tag
+alone, then runs three jobs. `compat` (`release / compatibility against supported releases`) runs
 `blizzard-compat --tag <version>` before any build: it judges the tag's tree against each supported release over that
 release's own `R..HEAD` range, fails a break the version does not admit, and uploads `compat-breaks.json`, which `build`
-fetches to the repository root. `build` builds the wheel with the embedded frontend, pushes a
+fetches to the repository root. `wheel` checks the version against the tag and builds the wheel with the embedded
+frontend and its hashed requirements; `rehearsal` upgrades each supported release to that wheel and is skipped on a
+stable tag. `build`, which waits on both and runs only when nothing it needs failed, takes that same wheel, pushes a
 multi-arch (`linux/amd64` + `linux/arm64`) hub image to GHCR, signs it keylessly by its manifest-list digest
 (`cosign sign --yes --recursive`), attests its build provenance, assembles the release's attached files with
 [`scripts/release-inventory.sh`](../scripts/release-inventory.sh) — the wheel, both hashed requirements files with their
