@@ -46,7 +46,7 @@ def _body(ops: Any, context: MigrationContext) -> str:
 
 def _encode(value: Any) -> Any:
     if isinstance(value, datetime):
-        return {"$datetime": value.isoformat()}
+        return {"$datetime": str(value)}
     if isinstance(value, bytes):
         return {"$bytes": base64.b64encode(value).decode()}
     return value
