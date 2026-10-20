@@ -37,6 +37,8 @@ class LeaseView(BaseModel):
     closure_healthy: bool
     closed_at: str | None
     closure_reason: str | None
+    #: The chunk's project, as the hub names it — for a closed lease too; ``None`` until a binding names one.
+    project_id: str | None = None
     #: How long a running lease may go without a heartbeat before it reads ``stale``.
     stale_after_seconds: int
 

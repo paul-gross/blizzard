@@ -4,7 +4,8 @@ with no fresh sample or renewal of its own."""
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+import json
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -205,3 +206,47 @@ def test_a_host_declared_subscription_no_runner_spends_names_no_spender(tmp_path
     (item,) = TestClient(app).get("/api/host/subscriptions").json()["items"]
 
     assert (item["slug"], item["spenders"]) == ("openai", [])
+
+
+def test_the_newest_successful_samples_windows_are_served_past_a_later_miss(tmp_path: Path) -> None:
+    client, store = _client(
+        tmp_path,
+        subscriptions=(SubscriptionDeclaration(slug="anthropic", name="Anthropic", provider=PROVIDER_ANTHROPIC),),
+    )
+    windows = [
+        {
+            "window": "five_hour",
+            "utilization_pct": 42.5,
+            "resets_at": "2026-09-22T15:00:00+00:00",
+            "window_seconds": 18000,
+        },
+        {
+            "window": "seven_day",
+            "utilization_pct": 100.0,
+            "resets_at": "2026-09-25T00:00:00+00:00",
+            "window_seconds": 604800,
+        },
+    ]
+    store.record_external_usage_attempt(
+        slug="anthropic",
+        sampled_at=_NOW,
+        payload=json.dumps({"windows": windows}),
+        report_kind="external_subscription_usage.sampled",
+        report_payload="{}",
+    )
+    store.record_external_usage_attempt(
+        slug="anthropic",
+        sampled_at=_NOW + timedelta(minutes=5),
+        payload=None,
+        report_kind="",
+        report_payload="",
+        miss_reason="endpoint_unreachable",
+    )
+
+    resp = client.get("/api/host/subscriptions")
+
+    assert resp.status_code == 200, resp.text
+    item = resp.json()["items"][0]
+    assert (item["ok"], item["sampled_at"]) == (False, "2026-09-22T12:05:00+00:00")
+    assert item["windows_sampled_at"] == "2026-09-22T12:00:00+00:00"
+    assert item["windows"] == windows

@@ -164,6 +164,8 @@ class AskView(BaseModel):
     session_id: str | None
     harness_id: str | None = None
     asked_at: str
+    #: The chunk's project, as the hub names it; ``None`` until a binding names one.
+    project_id: str | None = None
 
 
 class AskListResponse(BaseModel):
@@ -194,6 +196,8 @@ class EscalationView(BaseModel):
     #: Holds only the chunk id and runner dir.
     wrapped_takeover_command: str | None = None
     cause: str | None = None
+    #: The chunk's project, as the hub names it; ``None`` until a binding names one.
+    project_id: str | None = None
 
 
 class EscalationListResponse(BaseModel):
@@ -231,6 +235,8 @@ class FactView(BaseModel):
     lease_id: str | None
     created_at: str
     acked_at: str | None
+    #: The fact's chunk's project, as the hub names it; ``None`` for a chunkless fact or until a binding names one.
+    project_id: str | None = None
 
 
 class FactListResponse(BaseModel):

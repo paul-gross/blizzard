@@ -5,7 +5,7 @@ import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-exper
 import { runnerClient, type runnerApi } from 'fleet';
 import { type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
 
-import { injectPanelAsks, injectPanelDashboards, injectPanelLeases } from './panel-reads';
+import { injectPanelAsks, injectPanelDashboards, injectPanelFacts, injectPanelLeases } from './panel-reads';
 
 /** The panel's fan-out reads as the board mounts them: the Runner filter scopes each. */
 @Component({
@@ -17,6 +17,7 @@ class PanelReadsHost {
   readonly dashboards = injectPanelDashboards();
   readonly leases = injectPanelLeases();
   readonly asks = injectPanelAsks();
+  readonly facts = injectPanelFacts();
 }
 
 function hostRunner(runnerId: string, name: string, overrides: Partial<runnerApi.HostRunnerView> = {}): runnerApi.HostRunnerView {
@@ -35,11 +36,13 @@ function hostRunner(runnerId: string, name: string, overrides: Partial<runnerApi
 }
 
 function dashboard(runnerId: string): unknown {
+  const project_id = `proj-of-r${runnerId.slice('rn_'.length)}`;
   return {
     runner: { runner_id: runnerId },
-    asks: { items: [{ question_id: `q-of-${runnerId}`, chunk_id: 'ch_1', lease_id: null, session_id: null, question: '?', asked_at: '2026-07-16T11:00:00+00:00' }] },
+    asks: { items: [{ question_id: `q-of-${runnerId}`, chunk_id: 'ch_1', project_id, lease_id: null, session_id: null, question: '?', asked_at: '2026-07-16T11:00:00+00:00' }] },
     escalations: { items: [] },
-    facts: { items: [] },
+    // A fact on a chunk no lease in the window names — attributed by its own project all the same.
+    facts: { items: [{ seq: 1, kind: 'note', chunk_id: 'ch_unleased', project_id, lease_id: null, created_at: '2026-07-16T11:00:00+00:00', acked_at: null }] },
   };
 }
 
@@ -57,7 +60,10 @@ function routeFor(failing: string | null) {
     const [, runnerId, rest] = match;
     if (runnerId === failing) return stubError(503, { detail: 'runner unreachable' });
     if (rest === 'dashboard') return dashboard(runnerId);
-    if (rest === 'leases') return { items: [{ lease_id: `lease-of-${runnerId}`, chunk_id: 'ch_1', state: 'running', created_at: '2026-07-16T11:00:00+00:00' }] };
+    if (rest === 'leases') {
+      const project_id = `proj-of-r${runnerId.slice('rn_'.length)}`;
+      return { items: [{ lease_id: `lease-of-${runnerId}`, chunk_id: 'ch_1', project_id, state: 'running', created_at: '2026-07-16T11:00:00+00:00' }] };
+    }
     return {};
   };
 }
@@ -102,11 +108,12 @@ describe('the panel’s fan-out reads', () => {
     expect(stub.forRoute('/runners/rn_1/api/dashboard', 'GET')).toHaveLength(1);
   });
 
-  it('narrow merged items to the project under ?project=, attributing each through its runner’s only project', async () => {
+  it('narrow merged items to the project under ?project=, attributing leases, asks and facts by their own wire project', async () => {
     const host = await mount(null, '/?project=proj-of-r1');
 
     expect(host.leases.data().map((lease) => [lease.lease_id, lease.projectSlug])).toEqual([['lease-of-rn_1', 'proj-of-r1']]);
     expect(host.asks.data().map((ask) => ask.question_id)).toEqual(['q-of-rn_1']);
+    expect(host.facts.data().map((fact) => [fact.owner.runnerId, fact.chunk_id, fact.projectSlug])).toEqual([['rn_1', 'ch_unleased', 'proj-of-r1']]);
   });
 
   it('keep the other runners’ items when one runner’s reads fail — no error until every runner’s does', async () => {

@@ -228,7 +228,9 @@ describe('LocalPanel', () => {
   });
 
   describe('the filters narrow the board', () => {
-    const BOTH = { leases: { rn_1: [LEASE()], rn_2: [LEASE({ lease_id: 'lease_r2', chunk_id: R2_CHUNK })] } };
+    const BOTH = {
+      leases: { rn_1: [LEASE({ project_id: 'p' })], rn_2: [LEASE({ lease_id: 'lease_r2', chunk_id: R2_CHUNK, project_id: 'q' })] },
+    };
 
     it("reads only the runner the Runner filter names, and shows only its chunks", async () => {
       stub = stubRequestClient(runnerClient, routes(BOTH));

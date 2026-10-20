@@ -55,6 +55,18 @@ class EnvironmentStore:
         rows = self._store.all(stmt)
         return self._row_to_binding(rows[0]) if rows else None
 
+    def chunk_project_ids(self, chunk_ids: Sequence[str]) -> dict[str, str]:
+        if not chunk_ids:
+            return {}
+        stmt = (
+            self._store.select(env_bindings, env_bindings.c.chunk_id, env_bindings.c.project_id)
+            .where(env_bindings.c.chunk_id.in_(list(chunk_ids)))
+            .where(env_bindings.c.project_id.is_not(None))
+            .order_by(env_bindings.c.id)
+        )
+        # Ascending ids, so the newest binding's project is the one left standing.
+        return {str(r.chunk_id): str(r.project_id) for r in self._store.all(stmt)}
+
     def live_tenure_chunk_ids(self) -> list[str]:
         stmt = (
             self._store.select(env_bindings, env_bindings.c.chunk_id).where(HELD_BINDING.clause(self._store)).distinct()

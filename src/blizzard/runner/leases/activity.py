@@ -120,6 +120,8 @@ class LeaseActivity:
     workdir: str | None = None
     last_heartbeat_at: datetime | None = None
     human: OpenHumanFacts = NO_HUMAN_FACTS
+    #: The chunk's project, as the hub names it; ``None`` until a binding of the chunk names one.
+    project_id: str | None = None
 
     @classmethod
     def of(
@@ -134,6 +136,7 @@ class LeaseActivity:
         now: datetime,
         stale_after: timedelta = HEARTBEAT_STALENESS_THRESHOLD,
         human: OpenHumanFacts = NO_HUMAN_FACTS,
+        project_id: str | None = None,
     ) -> LeaseActivity:
         """Assemble ``lease``'s activity from facts already read: its liveness facts (``None``
         when it has none yet), the parked and backing-off lease ids, its chunk's held bindings,
@@ -151,6 +154,7 @@ class LeaseActivity:
             workdir=binding.workdir if binding else None,
             last_heartbeat_at=heartbeat,
             human=human,
+            project_id=project_id,
         )
 
     @property
@@ -189,6 +193,8 @@ class ClosedLeaseActivity:
     closed_at: datetime
     closure_reason: str
     human: OpenHumanFacts = NO_HUMAN_FACTS
+    #: The chunk's project, read off its retained (released) bindings; ``None`` when none named one.
+    project_id: str | None = None
 
     @property
     def state(self) -> LeaseState:
@@ -273,6 +279,7 @@ class LocalLeaseService:
         leases = self._lease_record.list_active_leases()
         facts_by_lease = self._liveness.liveness_facts([lease.lease_id for lease in leases])
         bindings_by_chunk = group_bindings_by_chunk(self._environments.held_bindings())
+        projects = self._environments.chunk_project_ids(sorted({lease.chunk_id for lease in leases}))
         return [
             LeaseActivity.of(
                 lease,
@@ -284,6 +291,7 @@ class LocalLeaseService:
                 now=now,
                 stale_after=self._stale_after,
                 human=human.of_chunk(lease.chunk_id),
+                project_id=projects.get(lease.chunk_id),
             )
             for lease in leases
         ]
@@ -299,16 +307,19 @@ class LocalLeaseService:
         """The recent-closed half of :meth:`list_recent` — no probe, no heartbeat read.
 
         A closed lease's pid may have been reused, so a pid read here would be actively
-        misleading. Bindings are already released."""
+        misleading. Bindings are already released; their retained rows still name the chunk's project."""
         human = self._human_facts()
+        records = self._lease_record.list_closed_leases(self._recent_limit)
+        projects = self._environments.chunk_project_ids(sorted({record.lease.chunk_id for record in records}))
         return [
             ClosedLeaseActivity(
                 lease=record.lease,
                 closed_at=record.closed_at,
                 closure_reason=record.reason,
                 human=human.of_chunk(record.lease.chunk_id),
+                project_id=projects.get(record.lease.chunk_id),
             )
-            for record in self._lease_record.list_closed_leases(self._recent_limit)
+            for record in records
         ]
 
     def _human_facts(self) -> ChunkHumanFacts:
