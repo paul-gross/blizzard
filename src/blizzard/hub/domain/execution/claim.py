@@ -155,6 +155,7 @@ class RekeyDeniedTerminal(Exception):
 
 
 def refuse_paused_runner(registration: RunnerRegistration | None, *, runner_id: str) -> RunnerRegistration:
+    """Refuse, in order, an unregistered, retired, version-refused, or paused runner; return its registration."""
     if registration is None or registration.never_connected():
         raise ClaimDeniedUnregistered(runner_id=runner_id)
     registration.refuse_if_retired(action="claim")
@@ -165,6 +166,7 @@ def refuse_paused_runner(registration: RunnerRegistration | None, *, runner_id: 
 
 
 def refuse_version_refused(registration: RunnerRegistration) -> None:
+    """Refuse a claim by a runner whose latest registration the hub's window refused."""
     if registration.version_refusal is not None:
         raise ClaimDeniedVersionRefused(
             runner_id=registration.runner_id,
