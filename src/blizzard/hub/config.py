@@ -232,10 +232,11 @@ def _work_sources(document: ConfigView) -> tuple[WorkSourceConfig, ...]:
     return tuple(sources)
 
 
-def read_legacy_keys(config_path: Path, environ: Mapping[str, str]) -> LegacyKeys:
-    """The legacy keys ``config_path`` and ``environ`` still carry; a malformed block raises :class:`ConfigError`."""
+def read_legacy_keys(config_path: Path, environ: Mapping[str, str], *, strict: bool) -> LegacyKeys:
+    """The legacy keys ``config_path`` and ``environ`` still carry, read strictly when ``strict``; a malformed block
+    raises :class:`ConfigError`."""
     raw = tomllib.loads(config_path.read_text()) if config_path.exists() else {}
-    sources = _work_sources(ConfigView.root(HUB_REGISTRY, raw))
+    sources = _work_sources(ConfigView.root(HUB_REGISTRY, raw, strict=strict))
     named = [*LEGACY_FORGE_VARIABLES, *(source.token_env for source in sources)]
     variables = tuple(dict.fromkeys(name for name in named if name in environ))
     return LegacyKeys(config_path=config_path, sources=sources, variables=variables)
@@ -537,9 +538,10 @@ class HubConfig:
     flag_resolution: FlagResolution | None = None
     #: The guarded keys the file carried while their flag was off.
     held_keys: tuple[HeldKey, ...] = ()
-    #: The flag registry the load resolved against, which later reads take rather than read again; a config built
-    #: in code knows no flags unless given one.
+    #: The flag registry the load resolved against; one built in code knows no flags unless given one.
     flag_registry: FlagRegistry = field(default_factory=FlagRegistry)
+    #: Whether the load read the file strictly, which later reads of it in the same process repeat.
+    strict: bool = False
 
     @staticmethod
     def parse_public_url(value: object) -> str | None:
@@ -675,9 +677,10 @@ class HubConfig:
         port: int | None = None,
         allow_external_db: bool = False,
         flag_registry: FlagRegistry,
+        strict: bool,
         key_registry: ConfigRegistry | None = None,
     ) -> HubConfig:
-        """Read a runtime root's config file; overlay CLI host/port when given.
+        """Read a runtime root's config file, strictly when ``strict``; overlay CLI host/port when given.
 
         ``db_url``/``host``/``port`` each resolve **CLI flag > environment > toml >
         default** (no CLI flag exists for ``db_url``). The resolved ``db_url`` is guarded
@@ -694,6 +697,7 @@ class HubConfig:
                 port,
                 allow_external_db,
                 flag_registry,
+                strict,
                 key_registry or HUB_REGISTRY,
             )
         except InvalidConfigValue as exc:
@@ -708,10 +712,12 @@ class HubConfig:
         port: int | None,
         allow_external_db: bool,
         flag_registry: FlagRegistry,
+        strict: bool,
         key_registry: ConfigRegistry,
     ) -> HubConfig:
+        document = tomllib.loads(path.read_text())
         raw, resolution = resolve_for_keys(
-            ConfigView.root(key_registry, tomllib.loads(path.read_text())), "hub", flag_registry, ConfigError
+            ConfigView.root(key_registry, document, strict=strict), "hub", flag_registry, ConfigError
         )
         route_token_mode = str(raw.get("route_token_mode", ROUTE_TOKEN_WARN))
         if route_token_mode not in _KNOWN_ROUTE_TOKEN_MODES:
@@ -760,6 +766,7 @@ class HubConfig:
             public_url=cls.parse_public_url(raw.get("public_url")),
             flags=parse_overrides(raw, ConfigError),
             flag_resolution=resolution,
-            held_keys=held_keys(raw),
+            held_keys=held_keys(key_registry, document, resolution.flags),
             flag_registry=flag_registry,
+            strict=strict,
         )

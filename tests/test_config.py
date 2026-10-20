@@ -23,7 +23,7 @@ from blizzard.hub.config import HubConfig, parse_egress_config, read_legacy_keys
 from blizzard.hub.domain.config.legacy_keys import LegacyKeys, WorkSourceConfig
 from blizzard.hub.domain.execution.auth.produces import PRODUCES_ENFORCE
 from blizzard.hub.domain.observability.egress.config import EgressConfig
-from tests.config_inputs import init_hub, load_hub_config, migrate_hub
+from tests.config_inputs import STRICT, init_hub, load_hub_config, migrate_hub
 
 
 @pytest.mark.unit
@@ -61,14 +61,14 @@ _BLOCK = '\n[[work_source]]\nname = "blizzard"\nprovider = "github"\nrepo = "o/r
 def _legacy(tmp_path: Path, body: str, environ: dict[str, str] | None = None) -> LegacyKeys:
     path = tmp_path / "blizzard-hub.toml"
     path.write_text('db_url = "sqlite:///x"\n' + body)
-    return read_legacy_keys(path, environ or {})
+    return read_legacy_keys(path, environ or {}, strict=STRICT)
 
 
 @pytest.mark.unit
 def test_a_scaffolded_config_carries_no_legacy_keys(tmp_path: Path) -> None:
     config = _hub_config(tmp_path)
     config.config_path.write_text(config.to_toml())
-    legacy = read_legacy_keys(config.config_path, {})
+    legacy = read_legacy_keys(config.config_path, {}, strict=STRICT)
     assert not legacy.present()
     assert "[[work_source]]" not in config.to_toml()
 

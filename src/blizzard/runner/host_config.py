@@ -306,9 +306,10 @@ class HostConfig:
     flag_resolution: FlagResolution | None = None
     #: The guarded keys the file carried while their flag was off.
     held_keys: tuple[HeldKey, ...] = ()
-    #: The flag registry the load resolved against, which later loads and composition take rather than read again; a
-    #: config built in code knows no flags unless given one.
+    #: The flag registry the load resolved against; one built in code knows no flags unless given one.
     flag_registry: FlagRegistry = field(default_factory=FlagRegistry)
+    #: Whether the load read the file strictly, which later loads in the same process repeat.
+    strict: bool = False
     transcripts: Transcripts = field(default_factory=lambda: Transcripts.of(None))
     worker_stdout: WorkerStdout = field(default_factory=lambda: WorkerStdout.of(None))
     #: The host's own credential, resolved from the environment, then the host file, then ``.env``.
@@ -473,6 +474,7 @@ class HostConfig:
             flag_resolution=self.flag_resolution,
             held_keys=self.held_keys,
             flag_registry=self.flag_registry,
+            strict=self.strict,
             workspaces=self.workspaces or base.workspaces,
         )
         return shared
@@ -485,6 +487,7 @@ class HostConfig:
         host: str | None = None,
         port: int | None = None,
         flag_registry: FlagRegistry,
+        strict: bool,
         key_registry: ConfigRegistry | None = None,
     ) -> HostConfig:
         """Read a host directory's ``blizzard-host.toml``; overlay CLI host/port when given. A directory
@@ -515,6 +518,7 @@ class HostConfig:
                 host=host,
                 port=port,
                 flag_registry=flag_registry,
+                strict=strict,
                 key_registry=key_registry,
             )
         except InvalidConfigValue as exc:
@@ -522,12 +526,18 @@ class HostConfig:
 
     @classmethod
     def load_for_store(
-        cls, root: Path, *, host: str | None = None, port: int | None = None, flag_registry: FlagRegistry
+        cls,
+        root: Path,
+        *,
+        host: str | None = None,
+        port: int | None = None,
+        flag_registry: FlagRegistry,
+        strict: bool,
     ) -> HostConfig:
         """:meth:`load`, for a verb that opens the store without creating it: where the store is the default SQLite
         file and that file is absent, the directory is refused, naming ``migrate`` — which alone creates it, and
         adopts a pre-host ``runner.db`` first. A store named by ``db_url`` is left to the engine."""
-        config = cls.load(root, host=host, port=port, flag_registry=flag_registry)
+        config = cls.load(root, host=host, port=port, flag_registry=flag_registry, strict=strict)
         layout = config.layout
         if config.db_url != layout.default_db_url or layout.store_path.exists():
             return config
@@ -563,6 +573,7 @@ class HostConfig:
         runner_id: str,
         served: tuple[str, ...],
         flag_registry: FlagRegistry,
+        strict: bool,
     ) -> HostConfig:
         """The host a pre-host runner directory at ``root`` graduates to, from its ``blizzard-runner.toml`` as
         ``legacy`` holds it — by graduation's key placement (``GRADUATION_PROCEDURE``): its ``[[runner]]`` takes the
@@ -575,6 +586,7 @@ class HostConfig:
             host=None,
             port=None,
             flag_registry=flag_registry,
+            strict=strict,
         )
 
     @classmethod
@@ -737,12 +749,14 @@ def _parse(
     host: str | None,
     port: int | None,
     flag_registry: FlagRegistry,
+    strict: bool,
     key_registry: ConfigRegistry | None = None,
 ) -> HostConfig:
     errors = _Errors()
     root = layout.root
     path = layout.config_path
-    document = ConfigView.root(key_registry or HOST_REGISTRY, raw)
+    registry = key_registry or HOST_REGISTRY
+    document = ConfigView.root(registry, raw, strict=strict)
     # Resolved first: every key read below that a flag guards reads against it.
     resolved = errors.attempt("[flags]", lambda: resolve_for_keys(document, "runner", flag_registry, ConfigError), None)
     resolution: FlagResolution | None = None
@@ -790,6 +804,7 @@ def _parse(
     _check_runner_uniqueness(entries, has_host_token=bool(host_token.value), errors=errors)
     if errors.found:
         raise HostConfigError(tuple(errors.found))
+    held = held_keys(registry, raw, resolution.flags) if resolution is not None else ()
     return HostConfig(
         root=root,
         db_url=db_url,
@@ -804,8 +819,9 @@ def _parse(
         tracing=tracing,
         flags=flags,
         flag_resolution=resolution,
-        held_keys=held_keys(document),
+        held_keys=held,
         flag_registry=flag_registry,
+        strict=strict,
         transcripts=transcripts,
         worker_stdout=worker_stdout,
         host_token=host_token,
@@ -815,7 +831,7 @@ def _parse(
         runners=entries,
         warnings=(
             *_permission_warnings(path, holds_credentials="host_token" in document or bool(hub_tokens)),
-            *(f"{entry.key} is ignored while the flag {entry.flag} is off" for entry in held_keys(document)),
+            *(f"{entry.key} is ignored while the flag {entry.flag} is off" for entry in held),
         ),
     )
 

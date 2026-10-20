@@ -294,7 +294,7 @@ class RunnerIngest:
         if kind is SourceKind.UNGRADUATED:
             return self._ungraduated(path)
         try:
-            config = HostConfig.load(path, flag_registry=self.host.flag_registry)
+            config = HostConfig.load(path, flag_registry=self.host.flag_registry, strict=self.host.strict)
             store = sqlite_store_file(config.db_url)
         except (ConfigError, StoreResetRefused) as exc:
             raise SourceUnsupported(f"cannot read the source host at {path}: {exc}") from exc
@@ -335,6 +335,7 @@ class RunnerIngest:
                 runner_id=runner_id,
                 served=view.served_projects,
                 flag_registry=self.host.flag_registry,
+                strict=self.host.strict,
             )
         except ConfigError as exc:
             raise SourceUnsupported(f"cannot graduate the runner file {layout.legacy_config_path}: {exc}") from exc

@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from blizzard.foundation.config_keys import STRICT_CONFIG_ENVIRONMENT_VARIABLE
+from blizzard.cli.config_inputs import STRICT_CONFIG_ENVIRONMENT_VARIABLE
 from blizzard.foundation.operator_sessions.internal import session_file
 from blizzard.foundation.runner_token_names import HUB_TOKEN_VARIABLE_PREFIX
 from blizzard.hub.domain.config.legacy_keys import LEGACY_FORGE_VARIABLES

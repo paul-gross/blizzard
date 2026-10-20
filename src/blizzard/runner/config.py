@@ -597,6 +597,8 @@ class RunnerConfig:
     held_keys: tuple[HeldKey, ...] = ()
     #: The flag registry the host's load resolved against; a config built in code knows no flags unless given one.
     flag_registry: FlagRegistry = field(default_factory=FlagRegistry)
+    #: Whether the host's load read its file strictly, which later loads in the same process repeat.
+    strict: bool = False
 
     def worker_env(self, tracing: TracingSettings) -> AllowlistedEnv:
         """The one allowlisted env every runner-spawned child is built from

@@ -15,7 +15,6 @@ from blizzard.foundation.config_keys import (
     INTEGER,
     NUMBER,
     OPEN_TABLE,
-    STRICT_CONFIG_ENVIRONMENT_VARIABLE,
     STRING_LIST,
     STRING_OR_LIST,
     TABLE,
@@ -355,6 +354,7 @@ def test_every_declared_host_key_is_read_by_a_load_that_carries_it(
         host=None,
         port=None,
         flag_registry=FLAG_REGISTRY,
+        strict=True,
     )
     loaded.host_view()  # the lazily read tables — [auth] — are read when projected
 
@@ -373,9 +373,6 @@ def test_an_undeclared_host_key_read_names_the_key_and_the_host_registry(
     assert (raised.value.path, raised.value.registry) == ("port", "host")
 
 
-def test_a_host_file_carrying_an_undeclared_key_loads_when_the_switch_is_off(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.delenv(STRICT_CONFIG_ENVIRONMENT_VARIABLE)
+def test_a_host_file_carrying_an_undeclared_key_loads_when_read_leniently(tmp_path: Path) -> None:
     write_minimal_host(tmp_path, top="undeclared_probe = 1\n[flags]\nprobe = true\n")
-    assert load_host_config(tmp_path).runner_config(_TOKEN).name == "runner-local"
+    assert load_host_config(tmp_path, strict=False).runner_config(_TOKEN).name == "runner-local"

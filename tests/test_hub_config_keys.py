@@ -1,5 +1,5 @@
-"""The hub's config registry against the loader: every declared key is read, an undeclared read raises under the
-switch and is ignored without it."""
+"""The hub's config registry against the loader: every declared key is read, an undeclared read raises when the load is
+strict and is ignored when it is lenient."""
 
 from __future__ import annotations
 
@@ -10,7 +10,6 @@ import pytest
 
 from blizzard.foundation.config_keys import (
     OPEN_TABLE,
-    STRICT_CONFIG_ENVIRONMENT_VARIABLE,
     ConfigRegistry,
     ConfigView,
     UndeclaredConfigKey,
@@ -62,7 +61,9 @@ def test_every_declared_hub_key_is_read_by_a_load_that_carries_it(
     # Replaces the module's parser alone: the flag registry is parsed with the real one.
     monkeypatch.setattr(hub_config, "tomllib", SimpleNamespace(loads=lambda _text: document))
     load_hub_config(root, allow_external_db=True)
-    hub_config.read_legacy_keys(root / hub_config.CONFIG_FILENAME, {})  # [[work_source]] is read apart from the load
+    hub_config.read_legacy_keys(
+        root / hub_config.CONFIG_FILENAME, {}, strict=True
+    )  # [[work_source]] is read apart from the load
 
     unread = [key.path for key in HUB_REGISTRY.keys if key.type != OPEN_TABLE and key.path not in read]
     assert unread == []
@@ -78,11 +79,8 @@ def test_an_undeclared_hub_key_read_names_the_key_and_the_hub_registry(
     assert (raised.value.path, raised.value.registry) == ("port", "hub")
 
 
-def test_a_hub_file_carrying_an_undeclared_key_loads_when_the_switch_is_off(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.delenv(STRICT_CONFIG_ENVIRONMENT_VARIABLE)
+def test_a_hub_file_carrying_an_undeclared_key_loads_when_read_leniently(tmp_path: Path) -> None:
     root = _initialised(tmp_path)
     path = root / hub_config.CONFIG_FILENAME
     path.write_text("undeclared_probe = 1\n" + path.read_text() + "\n[flags]\nprobe = true\n")
-    assert load_hub_config(root).root == root.resolve()
+    assert load_hub_config(root, strict=False).root == root.resolve()

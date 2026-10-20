@@ -311,7 +311,7 @@ def import_legacy_config(
     built, then the store and key source opened directly, no app. The import writes into ``tenant``,
     or into the hub's only open tenant when none is named, linking what it creates to that tenant's only project."""
     require_hub_key(environ, data_dir=config.data_dir)
-    legacy = read_legacy_keys(config.config_path, environ)
+    legacy = read_legacy_keys(config.config_path, environ, strict=config.strict)
     engine = open_hub_engine(config.db_url)
     try:
         core = build_process_core(engine)
@@ -582,7 +582,8 @@ def build_hosted_app(
         tenants = core.every_open()
         try:
             LegacyStart.of(
-                [stores.config_import for stores in tenants], read_legacy_keys(config.config_path, os.environ)
+                [stores.config_import for stores in tenants],
+                read_legacy_keys(config.config_path, os.environ, strict=config.strict),
             ).check()
         except LegacyStartRefused as refusal:
             raise ConfigError(str(refusal)) from refusal

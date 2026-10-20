@@ -23,7 +23,7 @@ from blizzard.runner.host_config import (
 )
 from blizzard.runner.host_layout import HostLayout
 from blizzard.runner.hub.held_token import HubTokenHolder, TokenReread
-from tests.config_inputs import FLAG_REGISTRY, load_host_config
+from tests.config_inputs import FLAG_REGISTRY, STRICT, load_host_config
 
 pytestmark = pytest.mark.unit
 
@@ -580,7 +580,9 @@ def test_a_hub_token_never_appears_in_the_repr_of_a_host_or_runner_config() -> N
 
 
 def _graduated(tmp_path: Path, legacy: dict[str, object], served: tuple[str, ...] = ()) -> HostConfig:
-    return HostConfig.graduated(tmp_path, legacy, runner_id="rn_graduated", served=served, flag_registry=FLAG_REGISTRY)
+    return HostConfig.graduated(
+        tmp_path, legacy, runner_id="rn_graduated", served=served, flag_registry=FLAG_REGISTRY, strict=STRICT
+    )
 
 
 def test_a_flat_runner_file_graduates_to_one_workspace_and_one_runner_under_the_stores_id(tmp_path: Path) -> None:

@@ -1,5 +1,6 @@
 """The inputs a production root reads and hands to each daemon's config loader, read once for the suite, and the
-loaders, runtimes, and apps built over them — so no test reads the packaged registry itself."""
+loaders, runtimes, and apps built over them — so no test reads the packaged registry itself. Every in-process read is
+strict, as the suite's spawned daemons are through the environment."""
 
 from __future__ import annotations
 
@@ -25,6 +26,8 @@ FLAG_REGISTRY: Final = packaged_flag_registry()
 #: Each daemon's flags at the packaged defaults, with no overrides.
 HUB_FLAGS: Final[Flags] = resolve_flags(FLAG_REGISTRY, "hub", {}).flags
 RUNNER_FLAGS: Final[Flags] = resolve_flags(FLAG_REGISTRY, "runner", {}).flags
+#: Whether the suite's in-process config reads are strict.
+STRICT: Final = True
 
 
 def load_hub_config(
@@ -34,6 +37,7 @@ def load_hub_config(
     port: int | None = None,
     allow_external_db: bool = False,
     flag_registry: FlagRegistry = FLAG_REGISTRY,
+    strict: bool = STRICT,
     key_registry: ConfigRegistry | None = None,
 ) -> HubConfig:
     """:meth:`HubConfig.load` with the suite's inputs."""
@@ -43,6 +47,7 @@ def load_hub_config(
         port=port,
         allow_external_db=allow_external_db,
         flag_registry=flag_registry,
+        strict=strict,
         key_registry=key_registry,
     )
 
@@ -53,30 +58,37 @@ def load_host_config(
     host: str | None = None,
     port: int | None = None,
     flag_registry: FlagRegistry = FLAG_REGISTRY,
+    strict: bool = STRICT,
     key_registry: ConfigRegistry | None = None,
 ) -> HostConfig:
     """:meth:`HostConfig.load` with the suite's inputs."""
-    return HostConfig.load(root, host=host, port=port, flag_registry=flag_registry, key_registry=key_registry)
+    return HostConfig.load(
+        root, host=host, port=port, flag_registry=flag_registry, strict=strict, key_registry=key_registry
+    )
 
 
 def load_host_config_for_store(root: Path, *, host: str | None = None, port: int | None = None) -> HostConfig:
     """:meth:`HostConfig.load_for_store` with the suite's inputs."""
-    return HostConfig.load_for_store(root, host=host, port=port, flag_registry=FLAG_REGISTRY)
+    return HostConfig.load_for_store(root, host=host, port=port, flag_registry=FLAG_REGISTRY, strict=STRICT)
 
 
 def hub_runtime_of(root: Path, *, allow_external_db: bool = False) -> hub_runtime.Runtime:
     """The hub runtime at ``root`` with the suite's inputs."""
-    return hub_runtime.Runtime(root, SystemClock(), allow_external_db, flag_registry=FLAG_REGISTRY)
+    return hub_runtime.Runtime(root, SystemClock(), allow_external_db, flag_registry=FLAG_REGISTRY, strict=STRICT)
 
 
 def init_hub(root: Path, *, allow_external_db: bool = False) -> HubConfig:
     """:func:`blizzard.hub.runtime.init_environment` with the suite's inputs."""
-    return hub_runtime.init_environment(root, allow_external_db=allow_external_db, flag_registry=FLAG_REGISTRY)
+    return hub_runtime.init_environment(
+        root, allow_external_db=allow_external_db, flag_registry=FLAG_REGISTRY, strict=STRICT
+    )
 
 
 def migrate_hub(root: Path, *, down: str | None = None, allow_external_db: bool = False) -> None:
     """:func:`blizzard.hub.runtime.migrate` with the suite's inputs."""
-    hub_runtime.migrate(root, down=down, allow_external_db=allow_external_db, flag_registry=FLAG_REGISTRY)
+    hub_runtime.migrate(
+        root, down=down, allow_external_db=allow_external_db, flag_registry=FLAG_REGISTRY, strict=STRICT
+    )
 
 
 def host_runtime_of(
@@ -88,8 +100,12 @@ def host_runtime_of(
 ) -> runner_runtime.Runtime:
     """The host runtime at ``root`` with the suite's inputs; ``holder`` defaults to the runtime's own."""
     if holder is None:
-        return runner_runtime.Runtime(root, hub_url=hub_url, projects=projects, flag_registry=FLAG_REGISTRY)
-    return runner_runtime.Runtime(root, hub_url=hub_url, projects=projects, holder=holder, flag_registry=FLAG_REGISTRY)
+        return runner_runtime.Runtime(
+            root, hub_url=hub_url, projects=projects, flag_registry=FLAG_REGISTRY, strict=STRICT
+        )
+    return runner_runtime.Runtime(
+        root, hub_url=hub_url, projects=projects, holder=holder, flag_registry=FLAG_REGISTRY, strict=STRICT
+    )
 
 
 def init_host(

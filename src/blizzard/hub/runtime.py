@@ -54,9 +54,13 @@ class Runtime:
     allow_external_db: bool = False
     #: The registry every load of the root's config resolves its flags against.
     flag_registry: FlagRegistry = field(kw_only=True)
+    #: Whether every load of the root's config reads it strictly.
+    strict: bool = field(kw_only=True)
 
     def loaded(self, root: Path) -> HubConfig:
-        return HubConfig.load(root, allow_external_db=self.allow_external_db, flag_registry=self.flag_registry)
+        return HubConfig.load(
+            root, allow_external_db=self.allow_external_db, flag_registry=self.flag_registry, strict=self.strict
+        )
 
     def init(self) -> HubConfig:
         """Scaffold config + data dir + a migrated store + the secret key. Idempotent.
@@ -119,14 +123,16 @@ def migration_runner(config: HubConfig) -> MigrationRunner:
     return Migrations(config, SystemClock()).runner
 
 
-def init_environment(root: Path, *, allow_external_db: bool = False, flag_registry: FlagRegistry) -> HubConfig:
-    return Runtime(root, SystemClock(), allow_external_db, flag_registry=flag_registry).init()
+def init_environment(
+    root: Path, *, allow_external_db: bool = False, flag_registry: FlagRegistry, strict: bool
+) -> HubConfig:
+    return Runtime(root, SystemClock(), allow_external_db, flag_registry=flag_registry, strict=strict).init()
 
 
 def migrate(
-    root: Path, *, down: str | None = None, allow_external_db: bool = False, flag_registry: FlagRegistry
+    root: Path, *, down: str | None = None, allow_external_db: bool = False, flag_registry: FlagRegistry, strict: bool
 ) -> None:
-    Runtime(root, SystemClock(), allow_external_db, flag_registry=flag_registry).migrate(down=down)
+    Runtime(root, SystemClock(), allow_external_db, flag_registry=flag_registry, strict=strict).migrate(down=down)
 
 
 def ensure_current_revision(config: HubConfig) -> None:

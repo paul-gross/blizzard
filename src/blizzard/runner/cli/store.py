@@ -7,7 +7,7 @@ from pathlib import Path
 
 import click
 
-from blizzard.cli.config_inputs import packaged_flag_registry
+from blizzard.cli.config_inputs import packaged_flag_registry, strict_config
 from blizzard.cli.operator_trace import ITraceHeaders, OperatorTrace
 from blizzard.cli.runtime import click_exception_on
 from blizzard.foundation.clock import SystemClock
@@ -28,6 +28,7 @@ def runtime_of(
         projects=projects,
         holder=lambda sock: daemon_holding(sock, trace),
         flag_registry=packaged_flag_registry(),
+        strict=strict_config(),
     )
 
 
