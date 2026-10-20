@@ -23,7 +23,7 @@ from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.domain.garden.routines import Routine
 from blizzard.hub.domain.garden.scopes import ScopeSlug
 from blizzard.hub.domain.graph.model import Graph
-from tests.support import HubHarness, build_hub, default_project
+from tests.support import HubHarness, build_hub, default_project, project_record
 
 _CTX = ChangeContext(actor="operator", door=Door.API)
 
@@ -275,7 +275,7 @@ def _routine(hub: HubHarness) -> Routine:
         default_scope_slug=ScopeSlug.parse("blizzard"),
         default_model=None,
         default_effort=None,
-        project_id=default_project(hub.engine),
+        project=project_record(hub, default_project(hub.engine)),
     )
 
 

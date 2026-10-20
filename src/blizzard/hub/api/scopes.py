@@ -86,7 +86,7 @@ def _create(
     except ScopeSlugError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
     scope = services.scope_registry.ensure(
-        project.project_id, slug, change_context(identity, door), description=request.description
+        project, slug, change_context(identity, door), description=request.description
     )
     return _labelled(scope, project)
 

@@ -33,6 +33,7 @@ from blizzard.hub.domain.garden.scopes import Scope, ScopeMint, ScopeRegistry, S
 from blizzard.hub.domain.graph.harnesses import validated_harnesses
 from blizzard.hub.domain.graph.model import Graph, IReadGraphRepository
 from blizzard.hub.domain.kernel.unset import UNSET, UnsetType
+from blizzard.hub.domain.projects.model import Project
 
 #: The mutable fields, in the order a diff lists them.
 _FIELDS = ("graph_name", "default_scope_slug", "default_model", "default_effort", "default_harnesses")
@@ -424,7 +425,7 @@ class RoutineAuthoring:
     def create(
         self,
         *,
-        project_id: str,
+        project: Project,
         name: str,
         graph_name: str,
         default_scope_slug: ScopeSlug,
@@ -433,8 +434,9 @@ class RoutineAuthoring:
         default_effort: str | None = None,
         default_harnesses: list[str] | None = None,
     ) -> Routine:
-        """Create a routine in ``project_id``; its name is free and its default scope resolves (or mints) within
+        """Create a routine in ``project``; its name is free and its default scope resolves (or mints) within
         that project."""
+        project_id = project.project_id
         harnesses = validated_harnesses(default_harnesses or [])
         require_name_free(self._routines.get_by_name(project_id, name), name)
         require_graph_change_resolves(None, graph_name, self._resolves)

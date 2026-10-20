@@ -12,6 +12,7 @@ from typing import Protocol
 
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.garden.findings.model import EXIT_KINDS, OUTFLOW_KINDS, WITHDRAWN_KINDS
+from blizzard.hub.domain.garden.routines import Routine
 from blizzard.hub.domain.garden.runs.window import InvalidWindowError, require_until_after_since
 
 #: A finding's birth, every way it leaves the live set, and its own undo — `observed`/
@@ -181,18 +182,17 @@ def compute_trend(
 
 class GardenTrendService:
     """Reads a routine's trend over a window, delegating the fold to `compute_trend` —
-    the store hands over rows, this hands back the shape. `routine_name` is a query
-    filter, like `list_for`'s own, not an entity resolved and passed by the caller; the
-    route resolves existence at the edge before this is ever invoked."""
+    the store hands over rows, this hands back the shape. The caller passes the `Routine` it
+    resolved, whose project and name key the read."""
 
     def __init__(self, *, repo: IReadGardenTrendRepository) -> None:
         self._repo = repo
 
-    def trend(self, project_id: str, routine_name: str, window: TrendWindow) -> Trend:
-        facts = self._repo.facts_for_trend(project_id, routine_name, since=window.since, until=window.until)
+    def trend(self, routine: Routine, window: TrendWindow) -> Trend:
+        facts = self._repo.facts_for_trend(routine.project_id, routine.name, since=window.since, until=window.until)
         return compute_trend(
             facts,
-            routine_name=routine_name,
+            routine_name=routine.name,
             since=window.since,
             until=window.until,
             period_days=window.period_days,

@@ -93,7 +93,7 @@ from blizzard.hub.domain.observability.egress.config import EgressConfig
 from blizzard.hub.domain.observability.transcripts import TranscriptCaps
 from blizzard.hub.domain.projects.authoring import ProjectAuthoring
 from blizzard.hub.domain.projects.bulk_resolve import BulkProjectResolver
-from blizzard.hub.domain.projects.model import ProjectId
+from blizzard.hub.domain.projects.model import Project, ProjectId
 from blizzard.hub.domain.runners.registration import RunnerAddition, RunnerCapability, RunnerRegistration
 from blizzard.hub.domain.runners.served import resolve_served
 from blizzard.hub.domain.tenancy.administration import DEFAULT_PROJECT_SLUG
@@ -322,6 +322,13 @@ def default_project(engine: Engine, tenant: TenantId | None = None) -> str:
     if len(ids) != 1:
         raise AssertionError(f"default_project needs a tenant holding exactly one project; {tenant} holds {len(ids)}")
     return ids[0]
+
+
+def project_record(hub: HubHarness, project_id: str) -> Project:
+    """The stored ``Project`` ``project_id`` names — the loaded object a domain write takes in place of the id."""
+    project = hub.services.projects.get(ProjectId(project_id))
+    assert project is not None, f"project_record needs {project_id} stored"
+    return project
 
 
 _SEEDER = ChangeContext(actor="test", door=Door.API)

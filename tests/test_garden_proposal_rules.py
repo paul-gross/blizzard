@@ -35,6 +35,7 @@ from blizzard.hub.domain.garden.proposals.model import (
     GardenProposalFindingExitedError,
     GardenProposalFindingNotLinkedError,
     GardenProposalNoFindingsError,
+    GardenProposalRoutineOtherProjectError,
     GardenProposalState,
     GardenProposalVerb,
     RoutineProposalState,
@@ -44,6 +45,7 @@ from blizzard.hub.domain.garden.proposals.model import (
     require_text,
 )
 from blizzard.hub.domain.garden.proposals.resolution import DeliveryClosure, delivery_closure, ordered_findings
+from blizzard.hub.domain.garden.routines import Routine
 from blizzard.hub.domain.kernel.unset import UNSET
 
 _PROJECT = "proj_test"
@@ -65,6 +67,17 @@ def _proposal(*, findings: list[str] | None = None) -> GardenProposal:
         body="the case",
         created_at=_T0,
         findings=["fin_1"] if findings is None else findings,
+    )
+
+
+def _routine(*, project_id: str = _PROJECT) -> Routine:
+    return Routine(
+        routine_id="routine_1",
+        name="nightly",
+        graph_name="g",
+        default_scope_slug="blizzard",
+        created_at=_T0,
+        project_id=project_id,
     )
 
 
@@ -213,7 +226,7 @@ def test_operator_proposal_carries_its_stripped_fields_and_cited_ids() -> None:
         "gprop_9",
         project_id=_PROJECT,
         created_by="u1",
-        routine_name="nightly",
+        routine=_routine(),
         class_=" c ",
         title=" t ",
         body=" b ",
@@ -245,7 +258,7 @@ def test_operator_refuses_blank_title_then_class_then_body(title: str, class_: s
             "gprop_9",
             project_id=_PROJECT,
             created_by="u1",
-            routine_name=None,
+            routine=None,
             class_=class_,
             title=title,
             body=body,
@@ -261,11 +274,26 @@ def test_operator_refuses_an_exited_finding_once_the_text_is_valid() -> None:
             "gprop_9",
             project_id=_PROJECT,
             created_by="u1",
-            routine_name=None,
+            routine=None,
             class_="c",
             title="t",
             body="b",
             findings=[_finding("fin_1", state="superseded")],
+            at=_T1,
+        )
+
+
+def test_operator_refuses_a_routine_of_another_project_after_the_findings() -> None:
+    with pytest.raises(GardenProposalRoutineOtherProjectError, match="nightly"):
+        GardenProposal.operator(
+            "gprop_9",
+            project_id=_PROJECT,
+            created_by="u1",
+            routine=_routine(project_id="proj_other"),
+            class_="c",
+            title="t",
+            body="b",
+            findings=[_finding("fin_1")],
             at=_T1,
         )
 

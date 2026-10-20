@@ -32,6 +32,7 @@ from blizzard.hub.domain.config.changes import (
 from blizzard.hub.domain.config.work_sources import ConfigFieldError, ConfigRevisionConflict
 from blizzard.hub.domain.garden.brake import ANY_STATE, ENABLED_ONLY, BrakeState, BrakeVerb
 from blizzard.hub.domain.kernel.unset import UNSET, UnsetType
+from blizzard.hub.domain.projects.model import Project
 
 _SLUG_PATTERN = re.compile(r"^[a-z0-9-]+$")
 _DESCRIPTION = "description"
@@ -242,10 +243,10 @@ class ScopeRegistry:
         self._scopes = scopes
         self._clock = clock
 
-    def ensure(self, project_id: str, slug: ScopeSlug, ctx: ChangeContext, *, description: str = "") -> Scope:
-        """Mint ``slug`` in ``project_id`` if unseen there, else return the existing scope unchanged — the one
+    def ensure(self, project: Project, slug: ScopeSlug, ctx: ChangeContext, *, description: str = "") -> Scope:
+        """Mint ``slug`` in ``project`` if unseen there, else return the existing scope unchanged — the one
         mint path ``scope create`` takes."""
-        existing, mint = self.resolve(project_id, slug, ctx, description=description)
+        existing, mint = self.resolve(project.project_id, slug, ctx, description=description)
         if mint is None:
             return existing
         record, change = mint

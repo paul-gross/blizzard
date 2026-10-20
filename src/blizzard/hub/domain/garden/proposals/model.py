@@ -28,6 +28,7 @@ if TYPE_CHECKING:
     # `GardenProposal` and `GardenProposalAlreadyClosed` from this module.
     from blizzard.hub.domain.garden.proposals.closure import GardenProposalClosure, IReadGardenProposalClosureRepository
     from blizzard.hub.domain.garden.routines import Routine
+    from blizzard.hub.domain.projects.model import Project
 
 
 class DuplicateProposalFindingError(ValueError):
@@ -54,6 +55,15 @@ class GardenProposalFindingOtherProjectError(ValueError):
     def __init__(self, finding_id: str) -> None:
         super().__init__(f"finding {finding_id!r} belongs to another project than the proposal")
         self.finding_id = finding_id
+
+
+class GardenProposalRoutineOtherProjectError(ValueError):
+    """`create_operator` named a routine of a project other than the proposal's — the whole
+    call is refused."""
+
+    def __init__(self, routine_name: str) -> None:
+        super().__init__(f"routine {routine_name!r} belongs to another project than the proposal")
+        self.routine_name = routine_name
 
 
 class GardenProposalFindingAlreadyLinkedError(ValueError):
@@ -239,7 +249,7 @@ class GardenProposal:
         *,
         project_id: str,
         created_by: str,
-        routine_name: str | None,
+        routine: Routine | None,
         class_: str,
         title: str,
         body: str,
@@ -248,16 +258,19 @@ class GardenProposal:
     ) -> GardenProposal:
         """An operator-authored proposal, its text stored stripped. Refuses a blank title,
         then class, then body, then a repeated or exited finding, then one of another
-        project than `project_id` — the whole proposal, nothing linked."""
+        project than `project_id`, then a `routine` of another project than `project_id` — the whole
+        proposal, nothing linked. `routine` is the one the caller resolved, or none."""
         title = require_text(title, "title")
         class_ = require_text(class_, "class")
         body = require_text(body, "body")
         finding_ids = citable_finding_ids(findings, require_unexited=True)
         require_own_project(findings, project_id)
+        if routine is not None and routine.project_id != project_id:
+            raise GardenProposalRoutineOtherProjectError(routine.name)
         return cls(
             proposal_id=proposal_id,
             origin=GardenProposalOrigin.OPERATOR,
-            routine_name=routine_name,
+            routine_name=routine.name if routine is not None else None,
             class_=class_,
             title=title,
             body=body,
@@ -504,7 +517,7 @@ class GardenProposalAuthoring:
     def create_operator(
         self,
         *,
-        project_id: str,
+        project: Project,
         created_by: str,
         routine: Routine | None,
         class_: str,
@@ -512,15 +525,14 @@ class GardenProposalAuthoring:
         body: str,
         findings: Sequence[Finding],
     ) -> GardenProposal:
-        """Mint an operator-authored proposal (:meth:`GardenProposal.operator`), naming
-        `routine.name` when the caller resolved one, else none, in `project_id` — `routine`'s own
-        existence is the caller's own resolution, not checked here."""
+        """Mint an operator-authored proposal (:meth:`GardenProposal.operator`) in `project`, naming
+        `routine.name` when the caller resolved one, else none. `routine` must belong to `project`."""
         at = self._clock.now()
         draft = GardenProposal.operator(
             Id.mint_at(IdPrefix.GARDEN_PROPOSAL, at).value,
-            project_id=project_id,
+            project_id=project.project_id,
             created_by=created_by,
-            routine_name=routine.name if routine is not None else None,
+            routine=routine,
             class_=class_,
             title=title,
             body=body,

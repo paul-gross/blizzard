@@ -22,7 +22,15 @@ from blizzard.hub.domain.garden.scopes import Scope, ScopeSlug
 from blizzard.hub.domain.graph.model import Graph
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.finding_store import FindingSetStore
-from tests.support import HubHarness, build_hub, default_project, hub_scoped, hub_store_connections, stamp
+from tests.support import (
+    HubHarness,
+    build_hub,
+    default_project,
+    hub_scoped,
+    hub_store_connections,
+    project_record,
+    stamp,
+)
 
 pytestmark = pytest.mark.component
 
@@ -55,7 +63,7 @@ def _routine(
         default_model=model,
         default_effort=effort,
         default_harnesses=harnesses,
-        project_id=default_project(hub.engine),
+        project=project_record(hub, default_project(hub.engine)),
     )
     return routine, graph
 
@@ -173,7 +181,9 @@ def test_the_routines_harnesses_default_reaches_the_minted_chunk(tmp_path: Path)
 def test_a_scope_override_outside_the_routines_related_set_is_refused_never_minted(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     routine, _graph = _routine(hub)
-    unrelated = hub.services.scope_registry.ensure(routine.project_id, ScopeSlug.parse("unrelated"), _CTX)
+    unrelated = hub.services.scope_registry.ensure(
+        project_record(hub, routine.project_id), ScopeSlug.parse("unrelated"), _CTX
+    )
 
     with pytest.raises(ScopeNotRelatedError):
         hub.services.routine_run.run(
@@ -188,7 +198,9 @@ def test_a_scope_override_outside_the_routines_related_set_is_refused_never_mint
 def test_a_scope_override_naming_a_related_scope_runs_against_it(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     routine, _graph = _routine(hub)
-    related = hub.services.scope_registry.ensure(routine.project_id, ScopeSlug.parse("related"), _CTX)
+    related = hub.services.scope_registry.ensure(
+        project_record(hub, routine.project_id), ScopeSlug.parse("related"), _CTX
+    )
     hub.services.routine_scope_membership.link(routine, related, _CTX)
 
     result = hub.services.routine_run.run(

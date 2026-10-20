@@ -14,6 +14,7 @@ from typing import Any, cast
 import pytest
 
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.project_colors import ProjectColor
 from blizzard.hub.domain.config.changes import ChangeContext, ChangeOp, ConfigChange, Door, FieldChange, RecordKind
 from blizzard.hub.domain.config.work_sources import ConfigFieldError, ConfigRevisionConflict
 from blizzard.hub.domain.garden.routines import (
@@ -33,10 +34,25 @@ from blizzard.hub.domain.garden.routines import (
 from blizzard.hub.domain.garden.scopes import IWriteScopeRepository, Scope, ScopeMint, ScopeRegistry, ScopeSlug
 from blizzard.hub.domain.graph.harnesses import InvalidHarnesses
 from blizzard.hub.domain.graph.model import Graph, IReadGraphRepository
+from blizzard.hub.domain.projects.model import Project, ProjectId
 
 pytestmark = pytest.mark.unit
 
 _PROJECT = "proj_test"
+
+
+def _project() -> Project:
+    return Project(
+        project_id=ProjectId(_PROJECT),
+        slug="test",
+        name="test",
+        description="",
+        color=ProjectColor.TEAL,
+        revision=1,
+        created_at=datetime(2026, 1, 1, tzinfo=UTC),
+    )
+
+
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 _GRAPH = Graph(graph_id="gr_1", name="alpha", entry_node_id="nd_1", nodes=[], edges=[], created_at=_T0)
 
@@ -177,7 +193,7 @@ def _create(authoring: RoutineAuthoring, **overrides: Any) -> Routine:
         "graph_name": "alpha",
         "default_scope_slug": ScopeSlug.parse("blizzard"),
         "ctx": _CTX,
-        "project_id": _PROJECT,
+        "project": _project(),
     }
     fields.update(overrides)
     return authoring.create(**fields)

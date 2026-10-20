@@ -58,3 +58,32 @@ snapshots:
       style: secondary
       start: 83
       end: 115
+  ? |
+    class RoutineAuthoring:
+        def create(self, *, project_id: str, name: str) -> Routine:
+            existing = self._routines.get_by_name(project_id, name)
+            return existing
+  : labels:
+    - source: |-
+        def create(self, *, project_id: str, name: str) -> Routine:
+                existing = self._routines.get_by_name(project_id, name)
+                return existing
+      style: primary
+      start: 28
+      end: 175
+    - source: 'project_id: str'
+      style: secondary
+      start: 48
+      end: 63
+    - source: 'project_id: str'
+      style: secondary
+      start: 48
+      end: 63
+    - source: self._routines.get_by_name(project_id, name)
+      style: secondary
+      start: 107
+      end: 151
+    - source: self._routines.get_by_name(project_id, name)
+      style: secondary
+      start: 107
+      end: 151

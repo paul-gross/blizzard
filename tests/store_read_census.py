@@ -225,6 +225,7 @@ from tests.support import (
     default_tenant,
     hub_level_connections,
     hub_store_connections,
+    project_record,
     seed_chunk_record,
     seed_runner,
     seed_work_item,
@@ -1297,14 +1298,15 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
     # --- scopes and routines ---------------------------------------------------------------
     operator = ChangeContext(actor="operator", door=Door.API)
     garden_project = default_project(hub.engine)
+    garden_project_record = project_record(hub, garden_project)
     scope_a = hub.services.scope_registry.ensure(
-        garden_project, ScopeSlug.parse("blizzard"), operator, description="core"
+        garden_project_record, ScopeSlug.parse("blizzard"), operator, description="core"
     )
     scope_b = hub.services.scope_registry.ensure(
-        garden_project, ScopeSlug.parse("runner-scope"), operator, description="runner side"
+        garden_project_record, ScopeSlug.parse("runner-scope"), operator, description="runner side"
     )
     scope_c = hub.services.scope_registry.ensure(
-        garden_project, ScopeSlug.parse("legacy"), operator, description="retired"
+        garden_project_record, ScopeSlug.parse("legacy"), operator, description="retired"
     )
     hub.services.scope_lifecycle.retire(scope_c, operator, by="operator")
 
@@ -1344,7 +1346,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
     )
 
     routine = hub.services.routine_authoring.create(
-        project_id=garden_project,
+        project=garden_project_record,
         ctx=operator,
         name="gardening",
         graph_name=default_graph.name,
@@ -1354,7 +1356,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
     )
     hub.services.routine_scope_membership.link(routine, scope_b, operator)
     routine_2 = hub.services.routine_authoring.create(
-        project_id=garden_project,
+        project=garden_project_record,
         ctx=operator,
         name="nightly",
         graph_name=default_graph.name,

@@ -12,6 +12,7 @@ from typing import Any, cast
 import pytest
 
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.project_colors import ProjectColor
 from blizzard.hub.domain.config.changes import ChangeContext, ChangeOp, ConfigChange, Door, FieldChange, RecordKind
 from blizzard.hub.domain.config.work_sources import ConfigFieldError, ConfigRevisionConflict
 from blizzard.hub.domain.garden.scopes import (
@@ -23,6 +24,7 @@ from blizzard.hub.domain.garden.scopes import (
     ScopeSlug,
     ScopeSlugError,
 )
+from blizzard.hub.domain.projects.model import Project, ProjectId
 
 pytestmark = pytest.mark.unit
 
@@ -46,6 +48,20 @@ def test_parse_accepts_lowercase_alnum_and_hyphen() -> None:
 
 
 _PROJECT = "proj_test"
+
+
+def _project() -> Project:
+    return Project(
+        project_id=ProjectId(_PROJECT),
+        slug="test",
+        name="test",
+        description="",
+        color=ProjectColor.TEAL,
+        revision=1,
+        created_at=_T0,
+    )
+
+
 _CTX = ChangeContext(actor="usr_1", door=Door.CLI)
 
 
@@ -161,7 +177,7 @@ def test_registry_ensure_mints_an_unseen_slug_with_its_create_change() -> None:
     repo = _FakeScopeRepo()
     registry = ScopeRegistry(scopes=_as_write_repo(repo), clock=FixedClock(instant=_T0))
 
-    registry.ensure(_PROJECT, ScopeSlug.parse("blizzard"), _CTX, description="the repo")
+    registry.ensure(_project(), ScopeSlug.parse("blizzard"), _CTX, description="the repo")
 
     [(record, change)] = repo.ensured
     assert (record.slug, record.description, record.created_at) == ("blizzard", "the repo", _T0)
@@ -172,7 +188,7 @@ def test_registry_ensure_defaults_description_to_empty() -> None:
     repo = _FakeScopeRepo()
     registry = ScopeRegistry(scopes=_as_write_repo(repo), clock=FixedClock(instant=_T0))
 
-    registry.ensure(_PROJECT, ScopeSlug.parse("blizzard"), _CTX)
+    registry.ensure(_project(), ScopeSlug.parse("blizzard"), _CTX)
 
     assert repo.ensured[0][0].description == ""
 
@@ -182,7 +198,7 @@ def test_registry_ensure_returns_a_stored_scope_and_writes_nothing() -> None:
     repo = _FakeScopeRepo(stored={"blizzard": stored})
     registry = ScopeRegistry(scopes=_as_write_repo(repo), clock=FixedClock(instant=_T0))
 
-    assert registry.ensure(_PROJECT, ScopeSlug.parse("blizzard"), _CTX, description="other") is stored
+    assert registry.ensure(_project(), ScopeSlug.parse("blizzard"), _CTX, description="other") is stored
     assert repo.ensured == []
 
 

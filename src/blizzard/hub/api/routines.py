@@ -126,7 +126,7 @@ def _create(
     try:
         slug = ScopeSlug.parse(request.default_scope_slug)
         routine = services.routine_authoring.create(
-            project_id=project.project_id,
+            project=project,
             name=request.name,
             graph_name=request.graph_name,
             default_scope_slug=slug,
@@ -251,7 +251,8 @@ def routine_trend(
     unknown routine name in that project; 422 on a malformed instant, a non-positive `period_days`, a
     non-positive span, or a span/`period_days` pair bucketing past the period cap."""
     project_id = project if project is not None else project_of_call(services).project_id
-    if services.routines.get_by_name(project_id, routine) is None:
+    found = services.routines.get_by_name(project_id, routine)
+    if found is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown routine {routine!r}")
     parsed_since = _parse_instant(since, field="since")
     parsed_until = _parse_instant(until, field="until")
@@ -262,7 +263,7 @@ def routine_trend(
         )
     except InvalidWindowError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
-    return _trend_view(services.garden_trend.trend(project_id, routine, window))
+    return _trend_view(services.garden_trend.trend(found, window))
 
 
 def _proposal_counts_row_view(counts: GardenProposalCounts, labels: ProjectLabelFields) -> GardenProposalCountsRowView:
