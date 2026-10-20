@@ -26,6 +26,9 @@ HTTP, with no domain needed.
 override that points the deployment at a locally built image instead of the published GHCR tag. The image's full mount
 and environment-variable reference lives in [`packaging/docker/README.md`](../packaging/docker/README.md).
 
+`blizzard-hub.toml` is bind-mounted read-only from `packaging/docker/` and is declarative rather than scaffolded. Its
+`trusted_proxies` names this compose network's subnet, which is what makes Caddy's forwarded headers trusted.
+
 ## Pin and verify the image
 
 Every release publishes `blizzard-hub-<version>-image.txt`, one line naming the image by digest. Set
@@ -35,8 +38,8 @@ Every release publishes `blizzard-hub-<version>-image.txt`, one line naming the 
 BLIZZARD_HUB_IMAGE=ghcr.io/paul-gross/blizzard-hub@sha256:<digest>
 ```
 
-An exact version tag, `ghcr.io/paul-gross/blizzard-hub:<version>`, is the readable pin; `latest` is neither, and follows
-each stable release. Before running the image, verify its signature against the release identity:
+An exact version tag, `ghcr.io/paul-gross/blizzard-hub:<version>`, is the readable pin; `latest` is neither — it follows
+each stable release, and is the evaluation default `.env.example` ships. Before running the image, verify its signature against the release identity:
 
 ```bash
 cosign verify ghcr.io/paul-gross/blizzard-hub@sha256:<digest> \
@@ -45,9 +48,6 @@ cosign verify ghcr.io/paul-gross/blizzard-hub@sha256:<digest> \
 ```
 
 [`docs/verifying.md`](./verifying.md) owns the rest of the checks.
-
-`blizzard-hub.toml` is bind-mounted read-only from `packaging/docker/` and is declarative rather than scaffolded. Its
-`trusted_proxies` names this compose network's subnet, which is what makes Caddy's forwarded headers trusted.
 
 ## Bring it up
 
