@@ -43,12 +43,8 @@ jobs:
         with:
           path: blizzard
           persist-credentials: false
-      - name: checkout blizzard-mock (the mock fleet + fixture scaffold)
-        uses: actions/checkout@v4
-        with:
-          repository: paul-gross/blizzard-mock
-          path: blizzard-mock
-          persist-credentials: false
+      - name: resolve and checkout blizzard-mock (the tag's own, the mock fleet + fixture scaffold)
+        uses: ./blizzard/.github/actions/resolve-mock-ref
       - uses: astral-sh/setup-uv@v6
         with:
           enable-cache: true
@@ -83,12 +79,8 @@ jobs:
         with:
           path: blizzard
           persist-credentials: false
-      - name: checkout blizzard-mock (the mock fleet + fixture scaffold)
-        uses: actions/checkout@v4
-        with:
-          repository: paul-gross/blizzard-mock
-          path: blizzard-mock
-          persist-credentials: false
+      - name: resolve and checkout blizzard-mock (the tag's own, the mock fleet + fixture scaffold)
+        uses: ./blizzard/.github/actions/resolve-mock-ref
       - uses: astral-sh/setup-uv@v6
         with:
           enable-cache: true
@@ -123,12 +115,8 @@ jobs:
         with:
           path: blizzard
           persist-credentials: false
-      - name: checkout blizzard-mock (the mock fleet + fixture scaffold)
-        uses: actions/checkout@v4
-        with:
-          repository: paul-gross/blizzard-mock
-          path: blizzard-mock
-          persist-credentials: false
+      - name: resolve and checkout blizzard-mock (the tag's own, the mock fleet + fixture scaffold)
+        uses: ./blizzard/.github/actions/resolve-mock-ref
       - uses: astral-sh/setup-uv@v6
         with:
           enable-cache: true

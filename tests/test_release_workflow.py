@@ -289,3 +289,54 @@ def test_every_action_in_verify_is_pinned_by_commit_sha() -> None:
     assert len(uses) == 3
     for ref in uses:
         assert re.fullmatch(r"[\w.-]+/[\w.-]+@[0-9a-f]{40}", ref), ref
+
+
+_WORKFLOWS_DIR = _REPO_ROOT / ".github" / "workflows"
+_MOCK_ACTION = "./blizzard/.github/actions/resolve-mock-ref"
+_TIER_JOBS = {
+    "upper-tiers.yml": ("service-tier", "crash-sweep"),
+    "release.yml": ("service-tier", "crash-sweep", "e2e"),
+}
+
+
+def _tier_job(workflow: str, name: str) -> dict:
+    return yaml.safe_load((_WORKFLOWS_DIR / workflow).read_text())["jobs"][name]
+
+
+def _tier_jobs():
+    return [(workflow, job) for workflow, jobs in _TIER_JOBS.items() for job in jobs]
+
+
+@pytest.mark.parametrize(("workflow", "job"), _tier_jobs())
+def test_a_tier_job_resolves_the_mock_through_the_action_after_checking_blizzard_out(workflow: str, job: str) -> None:
+    steps = _tier_job(workflow, job)["steps"]
+    checkout = _step_index(steps, lambda s: _uses(s, "actions/checkout") and s["with"].get("path") == "blizzard")
+    resolve = _step_index(steps, lambda s: s.get("uses") == _MOCK_ACTION)
+    assert checkout < resolve
+
+
+@pytest.mark.parametrize("workflow", sorted(p.name for p in _WORKFLOWS_DIR.glob("*.yml")))
+def test_no_step_checks_the_mock_out_directly(workflow: str) -> None:
+    for job in yaml.safe_load((_WORKFLOWS_DIR / workflow).read_text())["jobs"].values():
+        for step in job.get("steps") or []:
+            assert (step.get("with") or {}).get("repository") != "paul-gross/blizzard-mock", step
+
+
+@pytest.mark.parametrize("job", _TIER_JOBS["upper-tiers.yml"])
+def test_the_upper_tier_jobs_check_out_the_commit_mock_ref_resolved(job: str) -> None:
+    spec = _tier_job("upper-tiers.yml", job)
+    assert "mock-ref" in spec["needs"]
+    step = next(s for s in spec["steps"] if s.get("uses") == _MOCK_ACTION)
+    assert step["with"]["sha"] == "${{ needs.mock-ref.outputs.sha }}"
+
+
+def test_upper_tiers_exposes_the_resolved_mock_commit() -> None:
+    workflow = yaml.safe_load((_WORKFLOWS_DIR / "upper-tiers.yml").read_text())
+    assert workflow[True]["workflow_call"]["outputs"]["mock_sha"]["value"] == "${{ jobs.mock-ref.outputs.sha }}"
+    assert workflow["jobs"]["mock-ref"]["outputs"]["sha"] == "${{ steps.mock.outputs.sha }}"
+
+
+@pytest.mark.parametrize("job", _TIER_JOBS["release.yml"])
+def test_a_tag_run_resolves_the_tag_itself(job: str) -> None:
+    step = next(s for s in _tier_job("release.yml", job)["steps"] if s.get("uses") == _MOCK_ACTION)
+    assert "sha" not in (step.get("with") or {})
