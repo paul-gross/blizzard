@@ -33,7 +33,9 @@ def test_the_rehearsal_is_only_ever_called() -> None:
 
 def _matrix_filter() -> str:
     run = _step("releases", lambda s: s.get("id") == "list")["run"]
-    return re.search(r"jq -c '([^']+)'", run).group(1)
+    found = re.search(r"jq -c '([^']+)'", run)
+    assert found is not None
+    return found.group(1)
 
 
 @pytest.mark.skipif(shutil.which("jq") is None, reason="jq is not installed")
