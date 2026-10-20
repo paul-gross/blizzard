@@ -32,9 +32,9 @@ install_repo_read_guard()
 install_head_replay_guard()
 
 
-#: The seven verification tiers declared in ``pyproject.toml``'s ``markers`` list.
+#: The verification tiers declared in ``pyproject.toml``'s ``markers`` list.
 _TIER_MARKERS = frozenset(
-    {"unit", "component", "service", "e2e", "crash_sweep", "journey", "rehearsal", "winter_binding"}
+    {"unit", "component", "service", "e2e", "crash_sweep", "journey", "rehearsal", "store_baseline", "winter_binding"}
 )
 
 #: Every collected item's nodeid missing every tier marker, populated by

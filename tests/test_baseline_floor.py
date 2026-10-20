@@ -6,6 +6,7 @@ import sqlite3
 from pathlib import Path
 
 import pytest
+from alembic.script import ScriptDirectory
 from alembic.util import CommandError
 
 from blizzard.foundation.store.migrations import MigrationRunner, RevisionMismatchError, StoreBelowFloorError
@@ -118,7 +119,11 @@ def test_known_and_unknown_revisions_keep_their_paths(tree: Path, tmp_path: Path
 
 
 @pytest.mark.parametrize("scripts", [MIGRATIONS_DIR, HUB_MIGRATIONS_DIR])
-def test_shipped_trees_have_no_floor(scripts: Path, tmp_path: Path) -> None:
+def test_shipped_trees_hold_a_consistent_baseline_declaration(scripts: Path, tmp_path: Path) -> None:
+    """Holds for a tree before and after a fold: the declaration is whole, and the tree has one base."""
     runner = MigrationRunner(scripts, f"sqlite:///{tmp_path / 'store.db'}")
-    assert runner.baseline_floor is None
-    assert runner.absorbed == frozenset()
+    script = ScriptDirectory(str(scripts))
+    assert (runner.baseline_floor is None) == (runner.absorbed == frozenset())
+    assert runner.absorbed.isdisjoint({step.revision for step in script.walk_revisions()})
+    (base,) = script.get_bases()
+    assert script.get_revision(base).down_revision is None

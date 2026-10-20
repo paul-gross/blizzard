@@ -148,9 +148,39 @@ def test_the_rehearsal_runs_on_a_candidate_tag_after_the_wheel_against_the_relea
     assert job["with"] == {"candidate_artifact": "release-wheel", "tag": "${{ github.ref_name }}"}
 
 
+@pytest.mark.parametrize(
+    ("tag", "runs"),
+    [
+        ("v0.2.0-rc.1", True),
+        ("v0.2.1", True),
+        ("v0.2.10", True),
+        ("v0.2.1-rc.1", True),
+        ("v0.2.0", False),
+        ("v1.0.0", False),
+    ],
+)
+def test_the_store_baseline_runs_on_candidates_and_patches_and_not_on_a_stable_promotion(tag: str, runs: bool) -> None:
+    job = _job("store-baseline")
+    assert job["uses"] == "./.github/workflows/store-baseline.yml"
+    assert job["permissions"] == {"contents": "read"}
+    assert "needs" not in job
+    condition = job["if"]
+    assert condition == "${{ contains(github.ref_name, '-rc.') || !endsWith(github.ref_name, '.0') }}"
+    assert (("-rc." in tag) or not tag.endswith(".0")) is runs
+
+
 def test_build_waits_for_the_rehearsal_and_runs_past_it_only_when_skipped() -> None:
     build = _build_job()
-    assert build["needs"] == ["gate", "compat", "service-tier", "crash-sweep", "e2e", "wheel", "rehearsal"]
+    assert build["needs"] == [
+        "gate",
+        "compat",
+        "service-tier",
+        "crash-sweep",
+        "e2e",
+        "wheel",
+        "rehearsal",
+        "store-baseline",
+    ]
     assert build["if"] == "${{ !cancelled() && !failure() }}"
 
 

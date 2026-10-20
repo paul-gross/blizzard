@@ -167,6 +167,7 @@ markers = [
     "crash_sweep: the kill-9 crash sweep — real subprocesses SIGKILLed at each registry point; skipped without BLIZZARD_CRASH_SWEEP=1",
     "service: a running daemon's HTTP API exercised from outside with the counterpart mocked; skipped when the mock fleet is absent",
     "journey: the capstone MVP acceptance-journey rehearsal — real host daemons, a mid-run reboot, and the human loop, end to end; skipped without BLIZZARD_JOURNEY=1",
+    "store_baseline: the store-baseline proof — a folded baseline revision against the history it replaced, built by the floor release's own published wheel; skipped without BLIZZARD_STORE_BASELINE=1",
     "rehearsal: the upgrade rehearsal — a supported release's own hub and runner upgraded to the candidate and its stores walked back; skipped without BLIZZARD_REHEARSAL=1",
     "winter_binding: the winter workspace binding against the real winter CLI — local-only, never run in CI; skipped without BLIZZARD_WINTER_BINDING=1",
 ]
@@ -197,6 +198,7 @@ also_copy = [
     ".github/workflows/pr.yml",
     ".github/workflows/push.yml",
     ".github/workflows/rehearsal.yml",
+    ".github/workflows/store-baseline.yml",
     ".github/workflows/release.yml",
     ".github/workflows/upper-tiers.yml",
     ".github/actions/resolve-mock-ref",

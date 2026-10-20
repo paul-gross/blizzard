@@ -21,6 +21,7 @@ import httpx
 import pytest
 import yaml
 
+from blizzard.tools.release_install import Installation, download_release, install
 from tests.fleet_launchers import REPO, mock_bin_dir, run_forge
 from tests.fleet_world import REPO_NAME, mint_world
 from tests.rehearsal.comparison import (
@@ -31,7 +32,7 @@ from tests.rehearsal.comparison import (
     row_losses,
     view_mismatches,
 )
-from tests.rehearsal.installation import Host, Hub, Installation, Leg, download_release, install, shape_host_file
+from tests.rehearsal.installation import Host, Hub, Leg, shape_host_file
 from tests.rehearsal.stores import (
     baseline_contract,
     baseline_openapi,
