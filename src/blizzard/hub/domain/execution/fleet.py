@@ -24,6 +24,7 @@ from blizzard.hub.domain.runners.registration import (
     RunnerLiveness,
     RunnerNotEnrolled,
     RunnerRegistration,
+    RunnerReport,
     ServedEntry,
     declared_name,
 )
@@ -152,20 +153,23 @@ class FleetService:
         recorded_name = declared_name(name)
         declared = projects if bindings is None else [b.project for b in bindings]
         served = declaration_at_registration(held.served, declared, self._served_projects)
-        changed = (
-            version_changed
-            or not RunnerLiveness.of(held, now=now, threshold=self._stale_after).online
-            or (recorded_name is not None and recorded_name != held.name)
-            or workspace_id != held.workspace_id
-            or env_capacity != held.env_capacity
-            or public_url != held.public_url
-            or redirect_uris != held.redirect_uris
-            or capabilities != held.capabilities
-            or subscriptions != held.declared_subscriptions
-            or gates != held.gates
-            or bindings != held.bindings
-            or subscription != held.subscription
-            or (served is not None and served != held.served)
+        changed = held.registration_changes(
+            RunnerReport(
+                name=recorded_name,
+                workspace_id=workspace_id,
+                env_capacity=env_capacity,
+                public_url=public_url,
+                redirect_uris=redirect_uris,
+                capabilities=capabilities,
+                subscriptions=subscriptions,
+                gates=gates,
+                bindings=bindings,
+                subscription=subscription,
+            ),
+            served=served,
+            judgement=judgement,
+            now=now,
+            threshold=self._stale_after,
         )
         created = self._registry.record_registration(
             runner_id,

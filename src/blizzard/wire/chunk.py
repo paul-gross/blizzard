@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.chunk_migration import MigrationMode
@@ -445,12 +445,6 @@ class ChunkPlacementRequest(BaseModel):
 
     after_chunk_id: str | None = None
     to_top: bool = False
-
-    @model_validator(mode="after")
-    def _one_placement(self) -> ChunkPlacementRequest:
-        if self.to_top and self.after_chunk_id is not None:
-            raise ValueError("after_chunk_id and to_top name contradictory placements")
-        return self
 
 
 class ChunkCompleteRequest(BaseModel):

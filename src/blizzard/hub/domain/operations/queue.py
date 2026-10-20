@@ -26,7 +26,7 @@ from blizzard.hub.domain.chunk.errors import ChunkNotFound
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, ChunkVerb, DependencyEdge, verb_legal_from
 from blizzard.hub.domain.chunk.ports.dependencies import FoldTarget, IWriteChunkDependenciesRepository
 from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites, ILockedChunkRead
-from blizzard.hub.domain.chunk.ports.queue import IWriteChunkQueueRepository
+from blizzard.hub.domain.chunk.ports.queue import IReadChunkQueueRepository, IWriteChunkQueueRepository
 from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.hub.domain.chunk.ports.work_refs import IWriteChunkWorkRefsRepository
 from blizzard.hub.domain.execution.eligibility import EligibilityCheck
@@ -230,6 +230,31 @@ class SelfAnchoredMove(ValueError):
         super().__init__("after_chunk_id must not equal chunk_id")
 
 
+class ContradictoryPlacement(ValueError):
+    """A placement named both an anchor and the top."""
+
+    def __init__(self) -> None:
+        super().__init__("after_chunk_id and to_top name contradictory placements")
+
+
+@domain_model
+@dataclass(frozen=True)
+class Placement:
+    """Where a chunk lands in the list it enters: right after ``after_chunk_id``, at the head when
+    ``to_top``, else at the tail. Naming both is contradictory and cannot be constructed
+    (:class:`ContradictoryPlacement`)."""
+
+    after_chunk_id: str | None = None
+    to_top: bool = False
+
+    def __post_init__(self) -> None:
+        if self.to_top and self.after_chunk_id is not None:
+            raise ContradictoryPlacement()
+
+
+TAIL_PLACEMENT = Placement()
+
+
 class NotInList(Exception):
     """A reorder named a chunk outside the list it ranks (``bzh:ranking-is-per-list``).
     ``actual`` is the other list when the chunk stands there, else ``None``."""
@@ -291,12 +316,28 @@ def resolve_move(
 
 
 def require_anchor_among(
-    list_: QueueList, candidates: Sequence[Chunk], after: Chunk | None, statuses: Mapping[str, ChunkStatus]
-) -> None:
-    """Refuse an ``after`` anchor that is not among ``candidates`` — the members of ``list_``
-    other than the chunk being moved (:class:`NotInList`). ``None`` anchors at the top."""
-    if after is not None and all(c.chunk_id != after.chunk_id for c in candidates):
-        raise NotInList.of(after.chunk_id, list_, statuses)
+    list_: QueueList, candidates: Sequence[Chunk], after_id: str | None, statuses: Mapping[str, ChunkStatus]
+) -> Chunk | None:
+    """The member of ``candidates`` — the members of ``list_`` other than the chunk being moved —
+    that ``after_id`` names, ``None`` for the top. An anchor outside ``candidates`` is refused
+    (:class:`NotInList`). The one anchor lookup a single-chunk reposition and a list-entering landing share."""
+    if after_id is None:
+        return None
+    anchor = next((c for c in candidates if c.chunk_id == after_id), None)
+    if anchor is None:
+        raise NotInList.of(after_id, list_, statuses)
+    return anchor
+
+
+@domain_model
+@dataclass(frozen=True)
+class Landing:
+    """Where a chunk lands in a list: its explicit ``position``, and ``renormalized`` — the whole-number
+    positions to write to the list's members first when bisection exhausted the representable doubles
+    (empty when the gap held)."""
+
+    position: float
+    renormalized: tuple[tuple[str, float], ...] = ()
 
 
 @domain_model
@@ -366,47 +407,56 @@ class QueueRanking:
             return None
         return (after_pos + next_pos) / 2
 
+    def land_after(self, ordered: Sequence[Chunk], after: Chunk | None) -> Landing:
+        """The :class:`Landing` right after ``after`` in ``ordered`` (the list without the moving chunk) —
+        at the top when ``after`` is ``None``. An exhausted gap renormalizes ``ordered`` to whole numbers
+        and lands in the gap that leaves."""
+        position = self.slot_after(ordered, after)
+        if position is not None:
+            return Landing(position)
+        renormalized = tuple((c.chunk_id, float(i)) for i, c in enumerate(ordered))
+        position = QueueRanking(positions=dict(renormalized), promoted_ats=self.promoted_ats).slot_after(ordered, after)
+        assert position is not None  # whole-number positions always leave a gap
+        return Landing(position, renormalized)
+
 
 def resolve_landing(
-    queue: IWriteChunkQueueRepository,
+    ranking: QueueRanking,
     list_: QueueList,
     candidates: Sequence[Chunk],
     *,
     chunk_id: str,
-    after_chunk_id: str | None,
-    to_top: bool,
+    placement: Placement,
     statuses: Mapping[str, ChunkStatus],
-    at: datetime,
-) -> float:
-    """The explicit position a chunk entering ``list_`` from the other list lands at, among
-    ``candidates`` (the members it joins): the top when ``to_top``, right after ``after_chunk_id``
-    when named, else the tail. A self-anchor is refused (:class:`SelfAnchoredMove`) before an anchor
-    outside ``candidates`` (:class:`NotInList`). Bisection exhausting the representable doubles
-    renormalizes ``candidates`` through ``list_``'s own write before the slot is taken."""
-    if after_chunk_id == chunk_id:
+) -> Landing:
+    """The :class:`Landing` of a chunk entering ``list_`` from the other list, among ``candidates``
+    (the members it joins, ranked by ``ranking``): the top when ``placement.to_top``, right after
+    ``placement.after_chunk_id`` when named, else the tail. A self-anchor is refused
+    (:class:`SelfAnchoredMove`) before an anchor outside ``candidates`` (:class:`NotInList`)."""
+    if placement.after_chunk_id == chunk_id:
         raise SelfAnchoredMove()
-    after = None
-    if after_chunk_id is not None and not to_top:
-        after = next((c for c in candidates if c.chunk_id == after_chunk_id), None)
-        if after is None:
-            raise NotInList.of(after_chunk_id, list_, statuses)
-    candidate_ids = [c.chunk_id for c in candidates]
-    ranking = QueueRanking(
-        positions=queue.queue_positions(candidate_ids), promoted_ats=queue.promoted_ats(candidate_ids)
-    )
-    ordered = ranking.ordered(candidates)
-    if after_chunk_id is None and not to_top:
-        return ranking.tail(candidates)
-    position = ranking.slot_after(ordered, after)
-    if position is None:
-        write = queue.record_backlog_positions if list_ is QueueList.NOT_READY else queue.record_queue_positions
-        write([(c.chunk_id, float(i)) for i, c in enumerate(ordered)], at=at)
-        renormalized = QueueRanking(
-            positions={c.chunk_id: float(i) for i, c in enumerate(ordered)}, promoted_ats=ranking.promoted_ats
-        )
-        position = renormalized.slot_after(ordered, after)
-        assert position is not None  # whole-number positions always leave a gap
-    return position
+    after = require_anchor_among(list_, candidates, placement.after_chunk_id, statuses)
+    if after is None and not placement.to_top:
+        return Landing(ranking.tail(candidates))
+    return ranking.land_after(ranking.ordered(candidates), after)
+
+
+def write_positions_fn(queue: IWriteChunkQueueRepository, list_: QueueList) -> Callable[..., None]:
+    """The one place that picks which store write routes a batch of positions for ``list_`` —
+    ``not_ready`` through the promoted-guarded
+    :meth:`~blizzard.hub.domain.chunk.ports.queue.IWriteChunkQueueRepository.record_backlog_positions`,
+    ``ready`` through
+    :meth:`~blizzard.hub.domain.chunk.ports.queue.IWriteChunkQueueRepository.record_queue_positions`."""
+    if list_ is QueueList.NOT_READY:
+        return queue.record_backlog_positions
+    return queue.record_queue_positions
+
+
+def read_ranking(queue: IReadChunkQueueRepository, candidates: Sequence[Chunk]) -> QueueRanking:
+    """The explicit positions and promotion instants of ``candidates`` alone — the
+    ranking inputs, read bounded by the candidate set (``bzh:live-set-read``)."""
+    chunk_ids = [c.chunk_id for c in candidates]
+    return QueueRanking(positions=queue.queue_positions(chunk_ids), promoted_ats=queue.promoted_ats(chunk_ids))
 
 
 class QueueService:
@@ -423,7 +473,7 @@ class QueueService:
         breaking a same-instant tie. ``statuses`` is the caller's own
         already-derived live fleet statuses (``load_live_statuses()``), never re-derived here."""
         candidates = self._candidates(list_, statuses=statuses)
-        return self._ranking(candidates).ordered(candidates)
+        return read_ranking(self._queue, candidates).ordered(candidates)
 
     def page(
         self,
@@ -440,7 +490,7 @@ class QueueService:
         ``cursor`` is a prior :attr:`QueuePage.next_cursor`, else raising
         :class:`~blizzard.hub.domain.kernel.pagination.MalformedCursor`."""
         candidates = self._candidates(list_, statuses=statuses)
-        return self._ranking(candidates).page(candidates, cursor=cursor, limit=limit, project=project)
+        return read_ranking(self._queue, candidates).page(candidates, cursor=cursor, limit=limit, project=project)
 
     def ordered_ready(self, *, statuses: Mapping[str, ChunkStatus]) -> list[Chunk]:
         """Ready chunks in queue order — ascending by effective position."""
@@ -468,7 +518,7 @@ class QueueService:
         chunk in ``ordered``, front to back, in one write transaction. Takes
         already-resolved ``Chunk`` objects, never ids (``bzh:domain-takes-objects``), and
         trusts the order it is handed — :meth:`reorder` resolves it against the list."""
-        write = self._write_fn(list_)
+        write = write_positions_fn(self._queue, list_)
         write([(chunk.chunk_id, float(position)) for position, chunk in enumerate(ordered)], at=self._clock.now())
         _log.info("queue order replaced", list=list_.value, chunk_ids=[c.chunk_id for c in ordered])
 
@@ -478,19 +528,15 @@ class QueueService:
         """Single-chunk fractional reorder within ``list_``: stamp ``chunk`` a new explicit position
         immediately after ``after`` (top when ``after is None``) without restamping every other chunk.
         An ``after`` outside ``list_`` is refused (:class:`NotInList`). Bisection exhausting the
-        representable doubles renormalizes via :meth:`replace_order`."""
-        write = self._write_fn(list_)
+        representable doubles renormalizes the list first (:meth:`QueueRanking.land_after`)."""
+        write = write_positions_fn(self._queue, list_)
         candidates = [c for c in self._candidates(list_, statuses=statuses) if c.chunk_id != chunk.chunk_id]
-        require_anchor_among(list_, candidates, after, statuses)
-        ranking = self._ranking(candidates)
-        ordered = ranking.ordered(candidates)
-        new_position = ranking.slot_after(ordered, after)
-        if new_position is None:
-            assert after is not None  # the top slot is never exhausted
-            after_index = next(i for i, c in enumerate(ordered) if c.chunk_id == after.chunk_id)
-            self.replace_order(list_, [*ordered[: after_index + 1], chunk, *ordered[after_index + 1 :]])
-            new_position = self._ranking(candidates).slot_after(ordered, after)
-            assert new_position is not None  # whole-number positions always leave a gap
+        anchor = require_anchor_among(list_, candidates, after.chunk_id if after is not None else None, statuses)
+        ranking = read_ranking(self._queue, candidates)
+        landing = ranking.land_after(ranking.ordered(candidates), anchor)
+        if landing.renormalized:
+            write(list(landing.renormalized), at=self._clock.now())
+        new_position = landing.position
         write([(chunk.chunk_id, new_position)], at=self._clock.now())
         _log.info(
             "queue chunk repositioned",
@@ -500,16 +546,6 @@ class QueueService:
             position=new_position,
         )
 
-    def _write_fn(self, list_: QueueList) -> Callable[..., None]:
-        """The one place :meth:`replace_order`/:meth:`reposition` pick which store write
-        routes a batch of positions — ``not_ready`` through the promoted-guarded
-        :meth:`~blizzard.hub.domain.chunk.ports.queue.IWriteChunkQueueRepository.record_backlog_positions`,
-        ``ready`` through
-        :meth:`~blizzard.hub.domain.chunk.ports.queue.IWriteChunkQueueRepository.record_queue_positions`."""
-        if list_ is QueueList.NOT_READY:
-            return self._queue.record_backlog_positions
-        return self._queue.record_queue_positions
-
     def _candidates(self, list_: QueueList, *, statuses: Mapping[str, ChunkStatus]) -> list[Chunk]:
         """``list_``'s repository read — the one place :meth:`ordered`/:meth:`reposition`
         pick which of the two independently-ranked lists (``bzh:ranking-is-per-list``)
@@ -517,14 +553,6 @@ class QueueService:
         if list_ is QueueList.READY:
             return self._record.list_ready(statuses=statuses)
         return self._record.list_not_ready(statuses=statuses)
-
-    def _ranking(self, candidates: Sequence[Chunk]) -> QueueRanking:
-        """The explicit positions and promotion instants of ``candidates`` alone — the
-        ranking inputs, read bounded by the candidate set (``bzh:live-set-read``)."""
-        chunk_ids = [c.chunk_id for c in candidates]
-        return QueueRanking(
-            positions=self._queue.queue_positions(chunk_ids), promoted_ats=self._queue.promoted_ats(chunk_ids)
-        )
 
 
 @domain_model

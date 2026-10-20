@@ -73,7 +73,7 @@ from blizzard.hub.domain.operations.edit import (
 )
 from blizzard.hub.domain.operations.pause import ChunkNotPausable
 from blizzard.hub.domain.operations.promote import ChunkNotPromotable
-from blizzard.hub.domain.operations.queue import NotInList, SelfAnchoredMove
+from blizzard.hub.domain.operations.queue import ContradictoryPlacement, NotInList, Placement, SelfAnchoredMove
 from blizzard.hub.domain.operations.restart import (
     ChunkNotRestartable,
     RestartCurrentNodeUnknown,
@@ -734,6 +734,16 @@ def complete_chunk(chunk_id: str, request: ChunkCompleteRequest, services: Servi
     return ChunkView.of(services, chunk, facts=facts).summary()
 
 
+def _placement_of(request: ChunkPlacementRequest | None) -> Placement:
+    """The :class:`Placement` a promote or demote body names — ``422`` when it names contradictory ones."""
+    if request is None:
+        return Placement()
+    try:
+        return Placement(after_chunk_id=request.after_chunk_id, to_top=request.to_top)
+    except ContradictoryPlacement as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
+
+
 @router.post(
     "/chunks/{chunk_id}/promote",
     response_model=ChunkSummary,
@@ -747,16 +757,14 @@ def promote_chunk(chunk_id: str, services: Services, request: ChunkPlacementRequ
     Idempotent: promoting a currently promoted chunk is a harmless no-op. 404 when the chunk
     is unknown; 409 when a not-currently-promoted chunk is already ``done`` or ``stopped``, or the
     anchor is not in the ready queue; 422 for a self-anchor."""
+    placement = _placement_of(request)
     chunk = services.chunks.record.get(chunk_id)
     if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
-    placement = request or ChunkPlacementRequest()
     change = chunk_events.ChunkChanged.before(services, chunk_id)
     statuses = services.chunks.facts.load_live_statuses()
     try:
-        promoted_id = services.promote.promote(
-            chunk, statuses=statuses, after_chunk_id=placement.after_chunk_id, to_top=placement.to_top
-        )
+        promoted_id = services.promote.promote(chunk, statuses=statuses, placement=placement)
     except ChunkNotFound as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except (ChunkNotPromotable, NotInList) as exc:
@@ -782,16 +790,14 @@ def demote_chunk(chunk_id: str, services: Services, request: ChunkPlacementReque
     Idempotent: demoting a chunk that is not currently promoted is a harmless no-op. 404 when the
     chunk is unknown; 409 naming the status when the chunk is claimed, delivering, gated on a human,
     or ended, or the anchor is not in the backlog; 422 for a self-anchor."""
+    placement = _placement_of(request)
     chunk = services.chunks.record.get(chunk_id)
     if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
-    placement = request or ChunkPlacementRequest()
     change = chunk_events.ChunkChanged.before(services, chunk_id)
     statuses = services.chunks.facts.load_live_statuses()
     try:
-        demoted_id = services.demote.demote(
-            chunk, statuses=statuses, after_chunk_id=placement.after_chunk_id, to_top=placement.to_top
-        )
+        demoted_id = services.demote.demote(chunk, statuses=statuses, placement=placement)
     except ChunkNotFound as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except (ChunkNotDemotable, NotInList) as exc:
