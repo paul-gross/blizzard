@@ -1,0 +1,52 @@
+name: resolve-mock-ref
+description: >-
+  Resolve the blizzard-mock ref this run proves against and check it out by commit.
+  A v* tag uses the mock's same-named tag; a pull request uses the mock's branch of
+  the head's name if it exists, else the mock's line branch (release/X.Y or master);
+  a push to master uses the mock's master. The rules live in resolve-mock-ref.sh.
+
+inputs:
+  path:
+    description: Where to check the mock out, relative to the workspace.
+    default: blizzard-mock
+  sha:
+    description: >-
+      A mock commit to check out as-is, skipping resolution — how every job of one
+      run shares the commit the first resolved.
+    default: ""
+
+outputs:
+  ref:
+    description: The mock ref resolved (the sha itself when `sha` was given).
+    value: ${{ steps.resolve.outputs.ref }}
+  sha:
+    description: The mock commit checked out.
+    value: ${{ steps.resolve.outputs.sha }}
+
+runs:
+  using: composite
+  steps:
+    - name: resolve the blizzard-mock ref
+      id: resolve
+      shell: bash
+      env:
+        PINNED_SHA: ${{ inputs.sha }}
+        EVENT_NAME: ${{ github.event_name }}
+        REF: ${{ github.ref }}
+        BASE_REF: ${{ github.base_ref }}
+        HEAD_REF: ${{ github.head_ref }}
+        MOCK_URL: https://github.com/paul-gross/blizzard-mock
+      run: |
+        if [ -n "$PINNED_SHA" ]; then
+          printf 'ref=%s\nsha=%s\n' "$PINNED_SHA" "$PINNED_SHA" >> "$GITHUB_OUTPUT"
+        else
+          "$GITHUB_ACTION_PATH/resolve-mock-ref.sh" >> "$GITHUB_OUTPUT"
+        fi
+        sed 's/^/resolved blizzard-mock: /' "$GITHUB_OUTPUT" | tail -2
+    - name: checkout blizzard-mock (the mock fleet + fixture scaffold)
+      uses: actions/checkout@v4
+      with:
+        repository: paul-gross/blizzard-mock
+        path: ${{ inputs.path }}
+        ref: ${{ steps.resolve.outputs.sha }}
+        persist-credentials: false

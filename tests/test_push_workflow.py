@@ -174,3 +174,25 @@ def test_dev_image_signing_actions_are_pinned_by_sha() -> None:
     for fragment in ("cosign-installer", "attest-build-provenance"):
         uses = steps[_step_index(steps, lambda s, f=fragment: f in str(s.get("uses", "")))]["uses"]
         assert re.fullmatch(r".+@[0-9a-f]{40}", uses), uses
+
+
+def test_push_triggers_on_master_alone() -> None:
+    workflow = yaml.safe_load(_WORKFLOW_PATH.read_text())
+    assert workflow[True] == {"push": {"branches": ["master"]}}
+
+
+def test_proven_against_records_both_shas_after_the_gate_and_upper_tiers() -> None:
+    job = _jobs()["proven-against"]
+    assert set(job["needs"]) == {"gate", "upper-tiers"}
+    record = next(s for s in job["steps"] if "run" in s)
+    assert record["env"]["BLIZZARD_SHA"] == "${{ github.sha }}"
+    assert record["env"]["MOCK_SHA"] == "${{ needs.upper-tiers.outputs.mock_sha }}"
+    assert '"blizzard-mock"' in record["run"] and "blizzard:" in record["run"]
+
+
+def test_proven_against_uploads_the_record_under_its_name() -> None:
+    upload = next(
+        s for s in _jobs()["proven-against"]["steps"] if str(s.get("uses", "")).startswith("actions/upload-artifact@")
+    )
+    assert upload["with"]["name"] == "proven-against"
+    assert upload["with"]["if-no-files-found"] == "error"

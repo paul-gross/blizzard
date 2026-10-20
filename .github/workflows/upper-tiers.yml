@@ -7,7 +7,8 @@
 # service tier, a structurally different shape from the bounded CI profile below.
 #
 # Both tiers need what a single-repo checkout does not carry: the sibling
-# `blizzard-mock` worktree (the mock fleet + fixture scaffold). The tiers are winter-free:
+# `blizzard-mock` worktree (the mock fleet + fixture scaffold), which the `mock-ref` job
+# resolves once through .github/actions/resolve-mock-ref. The tiers are winter-free:
 # their runners run on the built-in `basic` provider over a fixture of bare `file://`
 # origins the scaffold mints with no winter source — no tokens, no forge, no network
 # beyond package installs. This workflow provides the sibling with a two-repo checkout:
@@ -37,11 +38,34 @@ on:
           subset, empty/unset for the FULL kill-9 sweep.
         type: string
         default: "1"
+    outputs:
+      mock_sha:
+        description: The blizzard-mock commit every tier of this run proved against.
+        value: ${{ jobs.mock-ref.outputs.sha }}
 
 jobs:
+  # Resolves the mock once so every tier, and the `proven-against` record `push.yml`
+  # uploads, name one commit even if the mock lands mid-run. The resolution rules are
+  # owned by the action, .github/actions/resolve-mock-ref.
+  mock-ref:
+    name: resolve blizzard-mock ref
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.mock.outputs.sha }}
+    steps:
+      - name: checkout blizzard (the resolution action lives here)
+        uses: actions/checkout@v4
+        with:
+          path: blizzard
+          persist-credentials: false
+      - name: resolve blizzard-mock
+        id: mock
+        uses: ./blizzard/.github/actions/resolve-mock-ref
+
   # Sharded like gate.yml's pytest tier: disjoint `BLIZZARD_TEST_SHARD` slices in parallel,
   # reported under the single check name by `service-tier-result`.
   service-tier:
+    needs: [mock-ref]
     name: service tier (blizzard:service-test) — shard ${{ matrix.shard }}/${{ matrix.shards }}
     runs-on: ubuntu-latest
     strategy:
@@ -55,30 +79,10 @@ jobs:
         with:
           path: blizzard
           persist-credentials: false
-      # Coordinated changes can span blizzard + blizzard-mock (the mutual-mock design:
-      # a new hub wire verb needs a matching mock verb). When a same-named feature
-      # branch exists on blizzard-mock, build against it so the pair is tested
-      # branch-vs-branch; otherwise — a push to master (empty head_ref) or a
-      # blizzard-only change — fall back to master, the normal flow.
-      - name: resolve blizzard-mock ref (matching feature branch, else master)
-        id: mock_ref
-        env:
-          HEAD_REF: ${{ github.head_ref }}
-        run: |
-          ref=master
-          if [ -n "$HEAD_REF" ] && git ls-remote --exit-code --heads \
-              https://github.com/paul-gross/blizzard-mock "$HEAD_REF" >/dev/null 2>&1; then
-            ref="$HEAD_REF"
-          fi
-          echo "ref=$ref" >> "$GITHUB_OUTPUT"
-          echo "resolved blizzard-mock ref: $ref"
-      - name: checkout blizzard-mock (the mock fleet + fixture scaffold)
-        uses: actions/checkout@v4
+      - name: resolve and checkout blizzard-mock (the mock fleet + fixture scaffold)
+        uses: ./blizzard/.github/actions/resolve-mock-ref
         with:
-          repository: paul-gross/blizzard-mock
-          path: blizzard-mock
-          persist-credentials: false
-          ref: ${{ steps.mock_ref.outputs.ref }}
+          sha: ${{ needs.mock-ref.outputs.sha }}
       - uses: astral-sh/setup-uv@v6
         with:
           enable-cache: true
@@ -117,6 +121,7 @@ jobs:
         run: test "$RESULT" = success || { echo "::error::a service-tier shard finished '$RESULT'"; exit 1; }
 
   crash-sweep:
+    needs: [mock-ref]
     name: kill-9 crash sweep — CI profile (blizzard:crash-sweep)
     runs-on: ubuntu-latest
     steps:
@@ -125,30 +130,10 @@ jobs:
         with:
           path: blizzard
           persist-credentials: false
-      # Coordinated changes can span blizzard + blizzard-mock (the mutual-mock design:
-      # a new hub wire verb needs a matching mock verb). When a same-named feature
-      # branch exists on blizzard-mock, build against it so the pair is tested
-      # branch-vs-branch; otherwise — a push to master (empty head_ref) or a
-      # blizzard-only change — fall back to master, the normal flow.
-      - name: resolve blizzard-mock ref (matching feature branch, else master)
-        id: mock_ref
-        env:
-          HEAD_REF: ${{ github.head_ref }}
-        run: |
-          ref=master
-          if [ -n "$HEAD_REF" ] && git ls-remote --exit-code --heads \
-              https://github.com/paul-gross/blizzard-mock "$HEAD_REF" >/dev/null 2>&1; then
-            ref="$HEAD_REF"
-          fi
-          echo "ref=$ref" >> "$GITHUB_OUTPUT"
-          echo "resolved blizzard-mock ref: $ref"
-      - name: checkout blizzard-mock (the mock fleet + fixture scaffold)
-        uses: actions/checkout@v4
+      - name: resolve and checkout blizzard-mock (the mock fleet + fixture scaffold)
+        uses: ./blizzard/.github/actions/resolve-mock-ref
         with:
-          repository: paul-gross/blizzard-mock
-          path: blizzard-mock
-          persist-credentials: false
-          ref: ${{ steps.mock_ref.outputs.ref }}
+          sha: ${{ needs.mock-ref.outputs.sha }}
       - uses: astral-sh/setup-uv@v6
         with:
           enable-cache: true

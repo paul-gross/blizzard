@@ -67,9 +67,13 @@ stricter due-flag policy when checking a release cut or tag.
 
 [`.github/workflows/upper-tiers.yml`](../.github/workflows/upper-tiers.yml) is reusable (`workflow_call`) and runs the
 service tier (`blizzard:service-test`) and the kill-9 crash sweep's bounded CI profile (`blizzard:crash-sweep`) over a
-two-repo checkout of `blizzard` + `blizzard-mock`; `pr.yml` and `push.yml` both call it. The tiers are winter-free: their
-runners use the built-in `basic` provider over a fixture of bare `file://` origins, minted with no winter source. Every
-checkout in a job that runs tests sets `persist-credentials: false`; `tests/test_winter_free_ci.py` pins both.
+two-repo checkout of `blizzard` + `blizzard-mock`; `pr.yml` and `push.yml` both call it. A leading `mock-ref` job
+resolves the mock once, and every tier checks out that commit. The resolution — which mock tag or branch a tag run, a
+release-line pull request, and a `master` run each prove against, and when it fails — is owned by
+[`.github/actions/resolve-mock-ref/`](../.github/actions/resolve-mock-ref/action.yml) and its script, which
+`release.yml`'s tier jobs call too. The tiers are winter-free: their runners use the built-in `basic` provider over a
+fixture of bare `file://` origins, minted with no winter source. Every checkout in a job that runs tests sets
+`persist-credentials: false`; `tests/test_winter_free_ci.py` pins both.
 
 Store-migration tests live beside their revisions, in `src/blizzard/{hub,runner}/store/migrations/tests/`. Those whose
 revision is more than 30 days old report as skips in `uv run pytest -n auto`; set
@@ -88,8 +92,12 @@ The e2e tier runs only locally and in the tag `release` workflow — it is never
 
 ## Trigger workflows
 
-[`.github/workflows/pr.yml`](../.github/workflows/pr.yml) (PR to `master`) runs the gate plus the service tier and
-CI-profile crash sweep as real gate jobs.
+[`.github/workflows/pr.yml`](../.github/workflows/pr.yml) (PR to `master` or `release/**`) runs the gate plus the
+service tier and CI-profile crash sweep as real gate jobs. A pull request into a release branch also runs
+`line-provenance`, which has
+[`scripts/check-line-provenance.sh`](../scripts/check-line-provenance.sh) fail any commit the pull request adds that is
+not a cherry-pick of a commit on `master`, a `Line-only:` commit, or a `Release-Cut:` commit. A push to a release branch
+runs nothing: `push.yml` is `master`'s alone.
 
 [`.github/workflows/push.yml`](../.github/workflows/push.yml) (push to `master`) runs the gate and upper tiers, then
 uploads a dev-build wheel versioned `X.(Y+1).0.dev<run>+<9-char-sha>` from the most recently cut `X.Y.Z` as a workflow
@@ -97,6 +105,14 @@ artifact and publishes `ghcr.io/paul-gross/blizzard-hub` under two dev tags, mul
 mutable — the newest proven `master` image — and `sha-<full-git-sha>`, immutable. `edge` is the dogfooding pointer;
 `latest` never follows `master` and moves only on a stable release cut — [`docs/versioning.md`](./versioning.md) owns the
 channel semantics.
+
+The `proven-against` job, after the gate and upper tiers, uploads a `proven-against` artifact holding one JSON file that
+names the `blizzard` commit and the `blizzard-mock` commit the upper tiers ran against. A cut reads the mock commit its
+candidate was proven with from the candidate's own run:
+
+```bash
+gh run download <run-id> --repo paul-gross/blizzard --name proven-against
+```
 
 The dev-build wheel is downloaded from its run with:
 
