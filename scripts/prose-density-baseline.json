@@ -9378,9 +9378,9 @@
   },
   "blizzard/tools/compat/cli.py": {
    "comments": 1,
-   "docstrings": 21,
+   "docstrings": 22,
    "over_cap": 1,
-   "total": 389
+   "total": 401
   },
   "blizzard/tools/compat/gate.py": {
    "comments": 2,
@@ -10241,6 +10241,42 @@
    "docstrings": 6,
    "over_cap": 0,
    "total": 83
+  },
+  "rehearsal/__init__.py": {
+   "comments": 0,
+   "docstrings": 0,
+   "over_cap": 0,
+   "total": 0
+  },
+  "rehearsal/comparison.py": {
+   "comments": 1,
+   "docstrings": 12,
+   "over_cap": 0,
+   "total": 127
+  },
+  "rehearsal/installation.py": {
+   "comments": 4,
+   "docstrings": 18,
+   "over_cap": 0,
+   "total": 223
+  },
+  "rehearsal/stores.py": {
+   "comments": 0,
+   "docstrings": 9,
+   "over_cap": 0,
+   "total": 89
+  },
+  "rehearsal/test_comparison.py": {
+   "comments": 4,
+   "docstrings": 1,
+   "over_cap": 0,
+   "total": 105
+  },
+  "rehearsal/test_upgrade_rehearsal.py": {
+   "comments": 8,
+   "docstrings": 11,
+   "over_cap": 0,
+   "total": 397
   },
   "repo_files.py": {
    "comments": 6,
@@ -11356,7 +11392,7 @@
    "comments": 8,
    "docstrings": 3,
    "over_cap": 0,
-   "total": 561
+   "total": 586
   },
   "test_compat_releases.py": {
    "comments": 2,
