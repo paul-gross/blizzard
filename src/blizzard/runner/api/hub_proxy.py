@@ -128,7 +128,8 @@ class HubProxy:
         """Forward ``method path``, or raise ``502`` unreachable / the upstream status verbatim.
 
         While the loop has not checked the runner's identity, the forward first asks the hub which runner
-        its token belongs to — a hub that does not answer fails it as an outage, ``503``. A token not verified
+        its token belongs to, retrying a hub that does not answer within the same budget as a ``GET`` and
+        failing it as an outage, ``503``, once that is spent. A token not verified
         to name the configured runner answers ``503`` with the reason, forwarding nothing.
 
         A ``GET`` retries a transport error or a ``502``/``503``/``504`` with bounded backoff,
@@ -141,7 +142,7 @@ class HubProxy:
         structlog level the exhausted-forward line logs at — every route keeps ``error``
         unless it opts into a lower one for a tolerated failure. ``fields`` add a structured
         subject to that line."""
-        self._verify_identity()
+        self._verify_identity(timeout)
         return self._forward(method, path, expect=expect, timeout=timeout, severity=severity, params=params, **fields)
 
     def _forward(
@@ -197,9 +198,9 @@ class HubProxy:
                 continue
             raise HTTPException(status_code=upstream.status_code, detail=self._detail(upstream))
 
-    def _verify_identity(self) -> None:
+    def _verify_identity(self, timeout: float | None) -> None:
         """Return once the token is verified to name the configured runner; raise ``503`` with the reason
-        when it is not, or when the hub does not answer the identity read."""
+        when it is not, or when the hub stays silent through the identity read's retry budget."""
         if self.identity is None:
             return
         if self.token_identity is None:
@@ -207,13 +208,22 @@ class HubProxy:
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="runner wired an identity check without a way to read the token's identity",
             )
-        try:
-            verdict = self.identity.verdict_on_contact(self.token_identity)
-        except HubClientError as exc:
-            self._log().error(f"{self.what} proxy could not verify its token with the hub", error=str(exc))
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="the hub is unreachable"
-            ) from exc
+        budget = timeout if timeout is not None else _HUB_RETRY_CEILING
+        started = self.clock.monotonic()
+        retries = 0
+        while True:
+            try:
+                verdict = self.identity.verdict_on_contact(self.token_identity)
+                break
+            except HubClientError as exc:
+                if self._may_retry(retries, budget, started):
+                    self.clock.sleep(_backoff(retries))
+                    retries += 1
+                    continue
+                self._log().error(f"{self.what} proxy could not verify its token with the hub", error=str(exc))
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="the hub is unreachable"
+                ) from exc
         if verdict.state is not IdentityState.MATCHED:
             raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_unverified(verdict))
 

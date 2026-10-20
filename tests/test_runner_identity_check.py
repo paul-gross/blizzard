@@ -402,16 +402,19 @@ def _proxied(
     *,
     identity: httpx.Response | None = None,
     verdict: IdentityVerdictHolder | None = None,
+    silent_reads: int = 0,
 ) -> tuple[httpx.Response, IdentityVerdictHolder, list[str]]:
     """A fleet-summary read through the hub proxy of a runner whose store names ``r1``; the hub answers the
     identity read with ``identity`` (the token naming ``r1`` unless a test says otherwise), or is
-    unreachable when it is a ``503``. Returns the response, the loop's verdict, and the identity reads."""
+    unreachable when it is a ``503``, or for its first ``silent_reads`` reads. Returns the response, the loop's verdict, and the identity reads."""
     asked: list[str] = []
     answer = identity if identity is not None else _identity("r1")
 
     def handler(request: httpx.Request) -> httpx.Response:
         if request.url.path == "/api/fleet/identity":
             asked.append(str(request.url))
+            if len(asked) <= silent_reads:
+                return httpx.Response(503, json={"detail": "the hub is unreachable"})
             return answer
         forwarded.append(str(request.url))
         return httpx.Response(200, json={"ready": 1, "running": 0, "waiting": 0, "needs": 0})
@@ -448,6 +451,15 @@ def test_an_unchecked_hub_proxy_checks_the_token_first_and_forwards_once_it_name
     assert forwarded == ["http://hub.local:8421/api/fleet/summary"] * 2
     assert asked == ["http://hub.local:8421/api/fleet/identity"]
     assert verdict.verdict().state is IdentityState.UNCHECKED
+
+
+def test_an_unchecked_hub_proxy_rides_out_a_hub_restart_before_it_forwards(tmp_path: Path) -> None:
+    forwarded: list[str] = []
+    resp, _, asked = _proxied(tmp_path, forwarded, silent_reads=2)
+
+    assert resp.status_code == 200, resp.text
+    assert len(asked) == 3
+    assert forwarded == ["http://hub.local:8421/api/fleet/summary"] * 2
 
 
 def test_an_unchecked_hub_proxy_fails_as_an_outage_does_while_the_hub_does_not_answer(tmp_path: Path) -> None:
