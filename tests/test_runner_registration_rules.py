@@ -12,16 +12,21 @@ from blizzard.foundation.runner_tokens import RunnerTokenRefusalReason
 from blizzard.hub.domain.runners.registration import (
     RUNNER_VERBS,
     STALE_AFTER,
+    DeclaredSubscription,
     LifecycleFact,
+    RunnerBinding,
+    RunnerCapability,
     RunnerHoldsRoutes,
     RunnerLiveness,
     RunnerNotEnrolled,
     RunnerNotRetired,
     RunnerRegistration,
+    RunnerReport,
     RunnerRetired,
     RunnerState,
     RunnerTokenRefused,
     RunnerVerb,
+    ServedEntry,
     TokenRevocation,
     TokenRotation,
     UnregisteredRedirect,
@@ -29,6 +34,7 @@ from blizzard.hub.domain.runners.registration import (
     refuse_runner_token,
 )
 from blizzard.hub.domain.runners.route import Route
+from blizzard.hub.domain.runners.version import VersionJudgement
 
 pytestmark = pytest.mark.unit
 
@@ -251,3 +257,78 @@ def test_a_never_connected_runner_is_offline_even_with_a_last_seen_instant() -> 
 def test_a_registered_runner_is_online_or_offline_by_its_liveness(seen: datetime, connection: RunnerConnection) -> None:
     liveness = RunnerLiveness.of(replace(_ENROLLED, last_seen_at=seen), now=_AT, threshold=STALE_AFTER)
     assert liveness.connection() is connection
+
+
+# registration changes
+
+_JUDGED = VersionJudgement(reported_version="1.0.0", refusal=None, hub_version="1.0.0", floor="1.0.0", ceiling="1.0.0")
+_SEEN = replace(
+    _ENROLLED,
+    last_seen_at=_AT,
+    version_judged_at=_AT,
+    reported_version="1.0.0",
+    env_capacity=2,
+    public_url="https://runner-a.example",
+    gates=("review",),
+    subscription="sub",
+    served=(ServedEntry(entry="p", project_id="prj_1"),),
+)
+_SAME = RunnerReport(
+    name=None,
+    workspace_id="ws-a",
+    env_capacity=2,
+    public_url="https://runner-a.example",
+    redirect_uris=("https://runner-a.example/callback",),
+    capabilities=(),
+    subscriptions=None,
+    gates=("review",),
+    bindings=None,
+    subscription="sub",
+)
+
+
+def _changes(report: RunnerReport, *, held: RunnerRegistration = _SEEN, served=None, judgement=_JUDGED) -> bool:  # type: ignore[no-untyped-def]
+    return held.registration_changes(report, served=served, judgement=judgement, now=_AT, threshold=STALE_AFTER)
+
+
+def test_a_registration_repeating_what_is_held_changes_nothing() -> None:
+    assert not _changes(_SAME)
+    assert not _changes(_SAME, served=_SEEN.served)
+
+
+@pytest.mark.parametrize(
+    "report",
+    [
+        replace(_SAME, name="renamed"),
+        replace(_SAME, workspace_id="ws-b"),
+        replace(_SAME, env_capacity=3),
+        replace(_SAME, public_url="https://elsewhere.example"),
+        replace(_SAME, redirect_uris=()),
+        replace(_SAME, capabilities=(RunnerCapability(harness_id="claude"),)),
+        replace(_SAME, subscriptions=(DeclaredSubscription(slug="s", name="S", provider="p"),)),
+        replace(_SAME, gates=()),
+        replace(_SAME, bindings=(RunnerBinding(project="p", workspace_id="ws-a", agents=1),)),
+        replace(_SAME, subscription=None),
+    ],
+)
+def test_a_registration_reporting_a_different_fact_changes_it(report: RunnerReport) -> None:
+    assert _changes(report)
+
+
+def test_a_blank_name_keeps_the_held_one_and_changes_nothing() -> None:
+    assert not _changes(replace(_SAME, name=None))
+    assert not _changes(replace(_SAME, name=_SEEN.name))
+
+
+def test_a_differently_served_declaration_changes_it_and_none_keeps_the_held_one() -> None:
+    assert _changes(_SAME, served=())
+    assert not _changes(_SAME, served=None)
+
+
+def test_a_new_version_judgement_changes_it() -> None:
+    assert _changes(_SAME, judgement=replace(_JUDGED, reported_version="1.1.0"))
+    assert _changes(_SAME, held=replace(_SEEN, version_judged_at=None))
+
+
+def test_a_registration_from_a_stale_runner_changes_it() -> None:
+    assert _changes(_SAME, held=replace(_SEEN, last_seen_at=_T0))

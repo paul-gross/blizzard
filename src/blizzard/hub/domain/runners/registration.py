@@ -232,6 +232,34 @@ class RunnerRegistration:
             or (None if judgement.refusal is None else judgement.refusal.reason) != self.version_refusal
         )
 
+    def registration_changes(
+        self,
+        report: RunnerReport,
+        *,
+        served: tuple[ServedEntry, ...] | None,
+        judgement: VersionJudgement,
+        now: datetime,
+        threshold: timedelta,
+    ) -> bool:
+        """Whether registering ``report`` changes what the hub holds — or finds the runner offline at ``now``
+        (stale beyond ``threshold``), so a reconnect surfaces. ``served`` is the resolved served declaration,
+        ``None`` keeping the held one; a blank ``report.name`` keeps the held name."""
+        return (
+            self.version_changed(judgement)
+            or not RunnerLiveness.of(self, now=now, threshold=threshold).online
+            or (report.name is not None and report.name != self.name)
+            or report.workspace_id != self.workspace_id
+            or report.env_capacity != self.env_capacity
+            or report.public_url != self.public_url
+            or report.redirect_uris != self.redirect_uris
+            or report.capabilities != self.capabilities
+            or report.subscriptions != self.declared_subscriptions
+            or report.gates != self.gates
+            or report.bindings != self.bindings
+            or report.subscription != self.subscription
+            or (served is not None and served != self.served)
+        )
+
     def reading_host_usage(
         self,
         samples: Iterable[SubscriptionUsageSample],
@@ -326,6 +354,26 @@ class RunnerRegistration:
         """Whether the IdP may bounce to ``redirect_uri`` for this runner — the URI must be one
         it registered."""
         return redirect_uri in self.redirect_uris
+
+
+@domain_model
+@dataclass(frozen=True)
+class RunnerReport:
+    """What a runner reports about itself on each registration, as it sent it — the runner analogue of
+    :class:`~blizzard.hub.domain.runners.host.HostReport`. ``name`` is the recorded one
+    (:func:`declared_name`): ``None`` keeps the held name. ``subscriptions`` and ``bindings`` are ``None``
+    when the runner sent none."""
+
+    name: str | None
+    workspace_id: str
+    env_capacity: int | None
+    public_url: str | None
+    redirect_uris: tuple[str, ...]
+    capabilities: tuple[RunnerCapability, ...]
+    subscriptions: tuple[DeclaredSubscription, ...] | None
+    gates: tuple[str, ...]
+    bindings: tuple[RunnerBinding, ...] | None
+    subscription: str | None
 
 
 @domain_model
