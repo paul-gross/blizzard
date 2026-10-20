@@ -200,8 +200,13 @@ class HubProxy:
     def _verify_identity(self) -> None:
         """Return once the token is verified to name the configured runner; raise ``503`` with the reason
         when it is not, or when the hub does not answer the identity read."""
-        if self.identity is None or self.token_identity is None:
+        if self.identity is None:
             return
+        if self.token_identity is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="runner wired an identity check without a way to read the token's identity",
+            )
         try:
             verdict = self.identity.verdict_on_contact(self.token_identity)
         except HubClientError as exc:

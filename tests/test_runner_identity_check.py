@@ -462,6 +462,28 @@ def test_an_unchecked_hub_proxy_fails_as_an_outage_does_while_the_hub_does_not_a
     assert forwarded == []
 
 
+def test_a_hub_proxy_wired_with_an_identity_check_but_no_token_reader_forwards_nothing(tmp_path: Path) -> None:
+    forwarded: list[str] = []
+    ctx = _ctx(tmp_path, FakeHub(default_runner_id="r1"))
+    config = RunnerConfig(root=tmp_path, db_url="sqlite://", hub_url="http://hub.local:8421")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        forwarded.append(str(request.url))
+        return httpx.Response(200, json={})
+
+    app = create_app(
+        config,
+        hub_proxy_client=httpx.Client(transport=httpx.MockTransport(handler)),
+        hub_retry_clock=no_retry_clock(),
+        identity_verdict=ctx.identity_verdict,
+        identity_check=ProxyIdentityCheck("r1", ctx.identity_verdict, ctx.clock),
+    )
+    resp = runner_client(app).get("/api/fleet-summary")
+
+    assert resp.status_code == 503
+    assert forwarded == []
+
+
 def test_the_hub_proxy_forwards_nothing_while_the_hub_has_no_identity_read(tmp_path: Path) -> None:
     forwarded: list[str] = []
     resp, _, _ = _proxied(tmp_path, forwarded, identity=httpx.Response(404, json={"detail": "Not Found"}))
