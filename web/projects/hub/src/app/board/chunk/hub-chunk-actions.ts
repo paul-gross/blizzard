@@ -61,7 +61,7 @@ export function injectHubChunkActions(): ChunkPageActions {
     resolve(event: ResolveDecisionEvent): void {
       beginAction();
       resolveMutation.mutate(
-        { decisionId: event.decisionId, choice: event.choice, chunkId: event.chunkId },
+        { decisionId: event.decisionId, choice: event.choice, chunkId: event.chunkId, note: event.note },
         {
           onError: (error) => {
             const failure = readDecisionFailure(error, new Date(clock()));

@@ -40,6 +40,18 @@ describe('injectResolveDecisionMutation', () => {
     expect(keys).toContainEqual(hubDecisionsKey);
   });
 
+  it('sends the note in the resolve body when one is given, and leaves it out otherwise', async () => {
+    const mutation = TestBed.runInInjectionContext(() => injectResolveDecisionMutation());
+    await mutation.mutateAsync({ decisionId: 'dc_1', choice: 'approve', chunkId: 'ch_1', note: 'fix the flaky test only' });
+    await mutation.mutateAsync({ decisionId: 'dc_1', choice: 'approve', chunkId: 'ch_1' });
+
+    const bodies = stub.forRoute('/api/decisions/dc_1/resolutions', 'POST').map((r) => r.body);
+    expect(bodies).toEqual([
+      { choice: 'approve', resolved_by: 'operator', note: 'fix the flaky test only' },
+      { choice: 'approve', resolved_by: 'operator' },
+    ]);
+  });
+
   it('re-reads the same keys after a lost race — someone else’s resolution landed', async () => {
     resolveResponse = stubError(409, {
       decision_id: 'dc_1',
