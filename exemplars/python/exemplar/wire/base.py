@@ -1,4 +1,4 @@
-"""The exemplar package's response-model base — the shape ``blizzard.wire.base.WireModel`` takes for blizzard's own wire."""
+"""The exemplar package's response-model base — what ``blizzard.wire.base.WireModel`` is for blizzard's own wire."""
 
 from __future__ import annotations
 
