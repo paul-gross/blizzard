@@ -80,6 +80,8 @@ _CLOCK_COMPOSITION_ROOTS: dict[Path, str] = {
     _RUNNER_DIR / "cli" / "runtime.py": "a short-lived CLI process's own composition root",
     _RUNNER_DIR / "cli" / "store.py": "a short-lived CLI process's own composition root",
     _RUNNER_DIR / "cli" / "external_usage.py": "a short-lived CLI process's own composition root",
+    _RUNNER_DIR / "cli" / "store_guard.py": "a short-lived CLI process's own composition root",
+    _SRC_DIR / "cli" / "collaborators.py": "CliCollaborators.production — every CLI process's collaborator root",
 }
 
 
