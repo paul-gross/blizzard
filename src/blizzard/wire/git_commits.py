@@ -8,8 +8,6 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
-from blizzard.wire.base import WireModel
-
 
 class GitCommitDeclarationRequest(BaseModel):
     """A worker's explicit git-commit declaration for one repo it touched.
@@ -23,7 +21,7 @@ class GitCommitDeclarationRequest(BaseModel):
     environment_id: str | None = None
 
 
-class GitCommitDeclarationResponse(WireModel):
+class GitCommitDeclarationResponse(BaseModel):
     """``POST /api/leases/{lease_id}/git-commits`` — the declaration landed durably.
     ``note`` is set when it lands but rides no completion — declared against the closed
     reference lease an open takeover names."""

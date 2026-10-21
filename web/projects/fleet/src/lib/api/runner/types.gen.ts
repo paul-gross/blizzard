@@ -1732,7 +1732,7 @@ export type GitCommitDeclarationResponse = {
     /**
      * Note
      */
-    note: string | null;
+    note?: string | null;
     /**
      * Recorded
      */

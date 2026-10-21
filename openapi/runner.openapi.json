@@ -2894,8 +2894,7 @@
           "recorded",
           "lease_id",
           "repo",
-          "environment_id",
-          "note"
+          "environment_id"
         ],
         "title": "GitCommitDeclarationResponse",
         "type": "object"

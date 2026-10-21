@@ -4,7 +4,7 @@ built apps and their specs, so a model added later without the wire base fails h
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 
 import pytest
 from fastapi import FastAPI
@@ -13,6 +13,7 @@ from fastapi.routing import APIRoute
 from blizzard.cli.config_inputs import packaged_flag_registry
 from blizzard.hub.app import create_app_for_export as build_hub_app
 from blizzard.runner.app import create_app_for_export as build_runner_app
+from blizzard.wire.base import WireModel
 from blizzard.wire.sse import SseFramePayload
 from blizzard.wire.sse_runner import RunnerScopedPayload
 
@@ -75,21 +76,29 @@ def _request_reached(spec: dict) -> set[str]:
     return _closure(bodies, schemas)
 
 
+def _api_routes(routes: Iterable[object]) -> Iterator[APIRoute]:
+    """Every route under ``routes``, through the lazily included routers and mounts."""
+    for route in routes:
+        if isinstance(route, APIRoute):
+            yield route
+            continue
+        nested = getattr(getattr(route, "original_router", route), "routes", None)
+        if nested:
+            yield from _api_routes(nested)
+
+
 def _exclude_flagged(app: FastAPI, spec: dict) -> set[str]:
     """Schemas served by a route that drops fields from its reply (``response_model_exclude_*``)."""
-    flagged: set[str] = set()
-    for route in app.routes:
-        if not isinstance(route, APIRoute):
-            continue
-        if not (
+    flagged = {
+        route.response_model.__name__
+        for route in _api_routes(app.routes)
+        if (
             route.response_model_exclude_none
             or route.response_model_exclude_unset
             or route.response_model_exclude_defaults
-        ):
-            continue
-        for method in route.methods or ():
-            operation = spec["paths"][route.path_format][method.lower()]
-            flagged |= set(_refs(operation.get("responses", {})))
+        )
+        and isinstance(route.response_model, type)
+    }
     return _closure(flagged, spec["components"]["schemas"])
 
 
@@ -137,3 +146,17 @@ def test_a_route_that_drops_fields_keeps_its_schema_unsplit(name: str, app: Fast
     }
 
     assert not split, f"{name}: a split mints a component the released surface never had: {split}"
+
+
+@pytest.mark.parametrize(("name", "app"), _apps(), ids=lambda value: value if isinstance(value, str) else "")
+def test_a_model_that_is_sometimes_sent_without_a_field_does_not_subclass_the_wire_base(
+    name: str, app: FastAPI
+) -> None:
+    flagged = _exclude_flagged(app, app.openapi())
+    sometimes_partial = [
+        cls
+        for cls in _subclasses(WireModel)
+        if issubclass(cls, SseFramePayload) or (cls.__module__.startswith("blizzard") and cls.__name__ in flagged)
+    ]
+
+    assert not sometimes_partial, f"{name}: required fields the server can omit mislead the client: {sometimes_partial}"
