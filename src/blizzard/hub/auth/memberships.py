@@ -145,10 +145,13 @@ class LastAdminKept(Exception):
 
 def membership_change_refusal(
     *, actor: ResolvedIdentity, subject: Member, to_role: Role | None, admins: int
-) -> NotAMember | MembershipChangeRefused | LastAdminKept | None:
+) -> MembershipRoleRefused | NotAMember | MembershipChangeRefused | LastAdminKept | None:
     """Why ``actor`` may not move ``subject`` to ``to_role`` (``None`` revokes) in a tenant holding ``admins``
-    ``admin`` members, or ``None`` when the rules admit it. A non-member is changed only under
-    ``MEMBERSHIP_GRANT_ANY``; nobody changes their own role; the last ``admin`` is neither demoted nor revoked."""
+    ``admin`` members, or ``None`` when the rules admit it. Only a membership role is granted; a non-member is changed
+    only under ``MEMBERSHIP_GRANT_ANY``; nobody changes their own role; the last ``admin`` is neither demoted nor
+    revoked."""
+    if to_role is not None and to_role not in MEMBERSHIP_ROLES:
+        return MembershipRoleRefused(to_role)
     if subject.role is None and Permission.MEMBERSHIP_GRANT_ANY not in actor.permissions:
         return NotAMember(subject.user.user_id)
     if actor.user_id == subject.user.user_id:
@@ -224,8 +227,8 @@ class TenantMembers:
         are read again inside the unit of work and the rules judge that read. The unit first takes the tenant's lock
         on the condition that it is open, so no close or deletion commits between that read and the change: a tenant
         closed or deleted since ``subject`` was named raises :class:`~blizzard.hub.tenancy.TenantClosed` or
-        :class:`~blizzard.hub.tenancy.UnknownTenant` and nothing is written. Raises :class:`NotAMember`,
-        :class:`MembershipChangeRefused` or :class:`LastAdminKept`. A change to the role already in force writes
+        :class:`~blizzard.hub.tenancy.UnknownTenant` and nothing is written. Raises :class:`MembershipRoleRefused`,
+        :class:`NotAMember`, :class:`MembershipChangeRefused` or :class:`LastAdminKept`. A change to the role already in force writes
         nothing and returns the subject as read."""
         with self._transactions.begin() as writes:
             with writes.tenant_connections(StoreScope(subject.tenant)).write("lock_open_tenant"):

@@ -13,7 +13,8 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi.responses import JSONResponse
 
 from blizzard.auth_core import Permission, Role
 from blizzard.foundation.store.utc import iso_utc
@@ -21,10 +22,10 @@ from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import TenantBoundAdmitting, require, require_either, tenant_bound
 from blizzard.hub.api.hub_level import Hub
 from blizzard.hub.auth.memberships import (
-    MEMBERSHIP_ROLES,
     LastAdminKept,
     Member,
     MembershipChangeRefused,
+    MembershipRoleRefused,
     NotAMember,
     assignable_roles,
     revocable,
@@ -62,7 +63,7 @@ def identity_views(identities: list[Identity]) -> list[UserIdentityView]:
 
 def change_membership(services: HubServices, actor: ResolvedIdentity, user_id: str, to_role: Role | None) -> Member:
     """Move ``user_id`` to ``to_role`` (``None`` revokes) in the actor's tenant, answering each refusal: ``404`` for a
-    user that does not exist or is no member, alike; ``403`` for changing your own role; ``409`` for the tenant's last
+    user that does not exist or is no member, alike; ``422`` for a role no membership holds; ``403`` for changing your own role; ``409`` for the tenant's last
     admin. A revocation ends the user's open event streams in the tenant."""
     subject = services.users.get(user_id)
     if subject is None:
@@ -82,6 +83,12 @@ def change_membership(services: HubServices, actor: ResolvedIdentity, user_id: s
         # holds the stream's permission, so a role change ends none.
         services.tenants.open_services(StoreScope(member.tenant)).events.end_subscriber(user_id)
     return member
+
+
+def refuse_membership_role(request: Request, exc: Exception) -> JSONResponse:
+    """Answer a membership change or invitation naming a role no membership holds: ``422``."""
+    assert isinstance(exc, MembershipRoleRefused)
+    return JSONResponse(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, content={"detail": str(exc)})
 
 
 def _unknown(exc: NotAMember) -> HTTPException:
@@ -120,13 +127,9 @@ def list_members(
 @grants_router.put("/members/{user_id}", response_model=MemberView)
 def grant_membership(user_id: str, body: MemberRoleRequest, services: Hub, actor: _Granter) -> MemberView:
     """Grant ``user_id`` ``role`` in the request's tenant, or change the role they hold there. A role equal to the one
-    in force writes nothing. Refused: a role that is no membership role (``422``), a user that does not exist or —
-    without ``membership:grant-any`` — is no member (``404``, alike), your own role (``403``), and demoting the
-    tenant's last admin (``409``)."""
-    if body.role not in MEMBERSHIP_ROLES:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=f"{body.role.value} is not a membership role"
-        )
+    in force writes nothing. Refused: a user that does not exist or — without ``membership:grant-any`` — is no member
+    (``404``, alike), a role that is no membership role (``422``, after the user is found), your own role (``403``),
+    and demoting the tenant's last admin (``409``)."""
     member = change_membership(services, actor, user_id, body.role)
     return _member_view(
         member,

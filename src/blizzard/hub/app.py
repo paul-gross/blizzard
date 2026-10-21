@@ -73,6 +73,7 @@ from blizzard.hub.api.idp import router as idp_router
 from blizzard.hub.api.invitations import router as invitations_router
 from blizzard.hub.api.me import router as me_router
 from blizzard.hub.api.members import grants_router as member_grants_router
+from blizzard.hub.api.members import refuse_membership_role
 from blizzard.hub.api.members import router as members_router
 from blizzard.hub.api.project_params import refuse_project_required
 from blizzard.hub.api.projects import router as projects_router
@@ -92,8 +93,10 @@ from blizzard.hub.api.trace_continuation import TraceGatedFastAPI
 from blizzard.hub.api.traces import router as traces_router
 from blizzard.hub.api.transcripts import router as transcripts_router
 from blizzard.hub.api.users import router as users_router
+from blizzard.hub.api.work_source_params import refuse_built_in_work_source
 from blizzard.hub.api.work_sources import router as work_sources_router
 from blizzard.hub.auth.bootstrap import Superuser
+from blizzard.hub.auth.memberships import MembershipRoleRefused
 from blizzard.hub.composition import (
     HubServices,
     LiveConfig,
@@ -104,6 +107,7 @@ from blizzard.hub.composition import (
     build_services,
 )
 from blizzard.hub.config import AUTH_MODE_OAUTH, ConfigError, HubConfig, read_legacy_keys
+from blizzard.hub.domain.config.work_sources import BuiltInWorkSource
 from blizzard.hub.domain.config.carry_over import ExistingConfig, ImportResult, LegacyStart, LegacyStartRefused
 from blizzard.hub.domain.observability.egress.config import EgressConfig
 from blizzard.hub.domain.observability.egress.event_rows import missing_key_reason
@@ -415,6 +419,8 @@ def create_app(
     app.add_exception_handler(TenantClosed, refuse_closed_tenant)
     app.add_exception_handler(UnknownTenant, refuse_closed_tenant)
     app.add_exception_handler(ProjectRequired, refuse_project_required)
+    app.add_exception_handler(MembershipRoleRefused, refuse_membership_role)
+    app.add_exception_handler(BuiltInWorkSource, refuse_built_in_work_source)
     app.add_exception_handler(FlagOffError, refuse_flag_off)
 
     # API routers first, so /api/* always wins over the web mount at /.
