@@ -8345,8 +8345,8 @@ export type SecretView = {
  * One entry of the projects a runner serves: the ``entry`` as declared — a project id or slug — and the project
  * it resolves to in the runner's tenant, with its palette ``color`` — a palette name or a ``#rrggbb``.
  * ``project_id``, ``slug``, ``name`` and ``color`` are ``None`` for an entry that resolves to no project, which
- * serves nothing until a project answers to it. ``claimable`` is the hub's judgment, set on the runners read, that
- * the runner can take a claim on the project now: no runner-level bar stands and the work peek offers the project.
+ * serves nothing until a project answers to it. ``claimable``, set on the runners read, is the hub's judgment that the
+ * runner can claim the project now.
  */
 export type ServedProjectView = {
     /**
@@ -8452,7 +8452,7 @@ export type SidechainSegmentViewOutput = {
 /**
  * SignInRefusal
  *
- * Why a sign-in admitted nobody — the code the board's login page shows its text for. Every refusal writes
+ * Why a sign-in admitted nobody — the code the login page shows its text for. Every refusal writes
  * nothing: no user, identity link, membership, invitation fact or session.
  */
 export const SignInRefusal = {
@@ -8464,7 +8464,7 @@ export const SignInRefusal = {
 /**
  * SignInRefusal
  *
- * Why a sign-in admitted nobody — the code the board's login page shows its text for. Every refusal writes
+ * Why a sign-in admitted nobody — the code the login page shows its text for. Every refusal writes
  * nothing: no user, identity link, membership, invitation fact or session.
  */
 export type SignInRefusal = typeof SignInRefusal[keyof typeof SignInRefusal];

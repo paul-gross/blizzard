@@ -13065,7 +13065,7 @@
         "type": "object"
       },
       "ServedProjectView": {
-        "description": "One entry of the projects a runner serves: the ``entry`` as declared \u2014 a project id or slug \u2014 and the project\nit resolves to in the runner's tenant, with its palette ``color`` \u2014 a palette name or a ``#rrggbb``.\n``project_id``, ``slug``, ``name`` and ``color`` are ``None`` for an entry that resolves to no project, which\nserves nothing until a project answers to it. ``claimable`` is the hub's judgment, set on the runners read, that\nthe runner can take a claim on the project now: no runner-level bar stands and the work peek offers the project.",
+        "description": "One entry of the projects a runner serves: the ``entry`` as declared \u2014 a project id or slug \u2014 and the project\nit resolves to in the runner's tenant, with its palette ``color`` \u2014 a palette name or a ``#rrggbb``.\n``project_id``, ``slug``, ``name`` and ``color`` are ``None`` for an entry that resolves to no project, which\nserves nothing until a project answers to it. ``claimable``, set on the runners read, is the hub's judgment that the\nrunner can claim the project now.",
         "properties": {
           "claimable": {
             "default": false,
@@ -13251,7 +13251,7 @@
         "type": "object"
       },
       "SignInRefusal": {
-        "description": "Why a sign-in admitted nobody \u2014 the code the board's login page shows its text for. Every refusal writes\nnothing: no user, identity link, membership, invitation fact or session.",
+        "description": "Why a sign-in admitted nobody \u2014 the code the login page shows its text for. Every refusal writes\nnothing: no user, identity link, membership, invitation fact or session.",
         "enum": [
           "invite_only",
           "invitation_unusable",
