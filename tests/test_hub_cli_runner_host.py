@@ -279,5 +279,6 @@ def test_runner_add_under_a_retired_host_is_refused(tmp_path: Path, monkeypatch:
     assert "retired" in result.output
 
 
+@pytest.mark.unit
 def test_the_printed_env_line_names_the_host_token_variable() -> None:
     assert _token_lines("t")[1] == f"{HOST_TOKEN_VARIABLE}=t"
