@@ -175,7 +175,7 @@ stable tag. `build`, which waits on both and runs only when nothing it needs fai
 multi-arch (`linux/amd64` + `linux/arm64`) hub image to GHCR, signs it keylessly by its manifest-list digest
 (`cosign sign --yes --recursive`), attests its build provenance, assembles the release's attached files with
 [`scripts/release-inventory.sh`](../scripts/release-inventory.sh) — the wheel, both hashed requirements files with their
-project lines, the image file naming the digest, `compat-breaks.json` (always attached, from the first release `verify-release.sh` names), and `SHA256SUMS` over
+project lines, the image file naming the digest, `compat-breaks.json` (attached by every release built from a commit at or after the one that added it, so not `v0.2.0` or a patch on `release/0.2`), and `SHA256SUMS` over
 all of them — attests the provenance of every attached file, and uploads them as one workflow artifact. `publish` then
 downloads that artifact and makes one `gh release create` call with every file attached; there is no external
 package-index publish. `verify` runs last, once the release page exists, holding only `contents: read` and a copy of

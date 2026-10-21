@@ -19,7 +19,7 @@ carries exactly these files; `<v>` is the version without its `v`, and the wheel
 | `blizzard-hub-<v>-image.txt`                 | one line: `ghcr.io/paul-gross/blizzard-hub@sha256:<digest>`             |
 | `blizzard-hub-<v>-linux-amd64.spdx.json`     | the image's bill of materials, `linux/amd64`                            |
 | `blizzard-hub-<v>-linux-arm64.spdx.json`     | the image's bill of materials, `linux/arm64`                            |
-| `compat-breaks.json`                         | the compatibility report (from `v0.2.0-rc.3`)                           |
+| `compat-breaks.json`                         | the compatibility report (not `v0.2.0` or `release/0.2`)                |
 | `SHA256SUMS`                                 | the checksum of every other file                                        |
 
 The hub image is the multi-arch manifest list at the digest in `blizzard-hub-<v>-image.txt`; its tag `<v>` resolves to

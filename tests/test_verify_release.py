@@ -3,7 +3,6 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import re
 import stat
 import subprocess
 import sys
@@ -29,6 +28,9 @@ case "$1 $2" in
     [ -z "${STUB_NO_ATTESTATION:-}" ] || exit 1
     [ "$3" != "--help" ] || exit 0
     [ -z "${STUB_FAIL_ATTEST:-}" ] || [[ "$*" != *"$STUB_FAIL_ATTEST"* ]] || exit 1 ;;
+  "api repos/"*)
+    [ -z "${STUB_FAIL_COMPARE:-}" ] || exit 1
+    echo "${STUB_COMPARE_STATUS:-ahead}" ;;
   "release view") cat "$STUB_DIR/page.txt" ;;
   "release download")
     pattern=""; dir=""
@@ -114,8 +116,7 @@ class _Release:
         (self.files / f"blizzard-hub-{version}-image.txt").write_text(
             f"ghcr.io/paul-gross/blizzard-hub@{self.digest}\n"
         )
-        if version != "0.2.0-rc.2":  # the one verifiable release cut before the report existed
-            (self.files / "compat-breaks.json").write_text("{}")
+        (self.files / "compat-breaks.json").write_text("{}")
         self.sum()
 
         for name, body in {"gh": _GH, "cosign": _COSIGN, "uv": _UV, "curl": _CURL}.items():
@@ -155,14 +156,6 @@ class _Release:
 @pytest.fixture
 def release(tmp_path: Path) -> _Release:
     return _Release(tmp_path)
-
-
-def _with_compat_breaks_since(release: _Release, since: str) -> Path:
-    copy = release.dir / "verify-release.sh"
-    text = re.sub(r'COMPAT_BREAKS_SINCE="[^"]*"', f'COMPAT_BREAKS_SINCE="{since}"', _SCRIPT.read_text())
-    copy.write_text(text)
-    copy.chmod(copy.stat().st_mode | stat.S_IEXEC)
-    return copy
 
 
 @pytest.mark.parametrize("tag", [_TAG, "v0.2.0-rc.2", "v0.2.0-rc.3", "v1.0.0"])
@@ -217,17 +210,12 @@ def test_a_tag_below_the_floor_is_refused_by_name_before_any_tool_runs(release: 
     assert release.calls() == []
 
 
-def test_a_release_candidate_orders_below_its_stable_release(release: _Release) -> None:
-    script = _with_compat_breaks_since(release, "0.2.0")
-    (release.files / "compat-breaks.json").write_text("{}")
+def test_a_release_cut_before_the_report_passes_without_it_whatever_its_version(release: _Release) -> None:
+    (release.files / "compat-breaks.json").unlink()
     release.sum()
-    result = release.run(_TAG, script=script)
+    result = release.run(_TAG, env={"STUB_COMPARE_STATUS": "behind"})
     assert result.returncode == 0, result.stderr
-
-    rc = _Release(release.dir.parent / "rc", "0.2.0-rc.2")
-    assert rc.run("v0.2.0-rc.2", script=_with_compat_breaks_since(rc, "0.2.0")).returncode == 0, (
-        "the candidate sits below the stable release the file is owed from, so it is an extra file"
-    )
+    assert f"compare/c46927dcb5850580e02668da6d16d09aabd74f9d...{_TAG}" in "\n".join(release.calls())
 
 
 def test_a_missing_file_fails_naming_the_attached_files_check(release: _Release) -> None:
@@ -248,27 +236,29 @@ def test_an_extra_file_fails_naming_the_attached_files_check(release: _Release) 
     assert "notes.txt" in result.stderr
 
 
-def test_compat_breaks_is_an_extra_file_before_the_release_the_constant_names(release: _Release) -> None:
-    earlier = _Release(release.dir.parent / "rc2", "0.2.0-rc.2")
-    (earlier.files / "compat-breaks.json").write_text("{}")
-    earlier.sum()
-    result = earlier.run("v0.2.0-rc.2")
+@pytest.mark.parametrize("status", ["behind", "diverged"])
+def test_compat_breaks_is_an_extra_file_off_the_line_of_the_commit_that_added_it(
+    release: _Release, status: str
+) -> None:
+    result = release.run(_TAG, env={"STUB_COMPARE_STATUS": status})
     assert result.returncode == 1
     assert "compat-breaks.json" in result.stderr
 
 
-def test_compat_breaks_is_required_from_the_release_the_constant_names(release: _Release) -> None:
-    script = _with_compat_breaks_since(release, "0.2.0")
+@pytest.mark.parametrize("status", ["ahead", "identical"])
+def test_compat_breaks_is_required_from_the_commit_that_added_it(release: _Release, status: str) -> None:
     (release.files / "compat-breaks.json").unlink()
     release.sum()
-    missing = release.run(_TAG, script=script)
+    missing = release.run(_TAG, env={"STUB_COMPARE_STATUS": status})
     assert missing.returncode == 1
     assert "[attached files]" in missing.stderr
     assert "compat-breaks.json" in missing.stderr
 
-    (release.files / "compat-breaks.json").write_text("{}")
-    release.sum()
-    assert release.run(_TAG, script=script).returncode == 0
+
+def test_a_failed_comparison_fails_naming_the_attached_files_check(release: _Release) -> None:
+    result = release.run(_TAG, env={"STUB_FAIL_COMPARE": "1"})
+    assert result.returncode == 1
+    assert "[attached files]" in result.stderr
 
 
 def test_a_checksum_mismatch_fails_naming_the_attached_files_check(release: _Release) -> None:

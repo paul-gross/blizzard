@@ -28,8 +28,9 @@ SPDX_PREDICATE="https://spdx.dev/Document/v2.3"
 # The first release signed, attested, and inventoried as the contract describes; an earlier
 # tag is refused by name rather than failed on its first missing file.
 FIRST_VERIFIABLE="0.2.0-rc.2"
-# The first release whose workflow also writes `compat-breaks.json`.
-COMPAT_BREAKS_SINCE="0.2.0-rc.3"
+# The commit that first made release.yml write `compat-breaks.json`: a tag carries the file
+# exactly when its commit descends from this one, whatever its version number.
+COMPAT_BREAKS_COMMIT="c46927dcb5850580e02668da6d16d09aabd74f9d"
 
 usage() {
   echo "usage: $0 <tag>   (vX.Y.Z or vX.Y.Z-rc.N)" >&2
@@ -156,9 +157,9 @@ done
 echo "== 3. attached files"
 EXPECTED=("$WHEEL" "$REQ" "$REQ_PG" "blizzard-$VERSION.spdx.json" "$IMAGE_FILE" "SHA256SUMS"
   "blizzard-hub-$VERSION-linux-amd64.spdx.json" "blizzard-hub-$VERSION-linux-arm64.spdx.json")
-if [ -n "$COMPAT_BREAKS_SINCE" ] && at_or_after "$VERSION" "$COMPAT_BREAKS_SINCE"; then
-  EXPECTED+=("compat-breaks.json")
-fi
+STATUS="$(gh api "repos/$REPO/compare/$COMPAT_BREAKS_COMMIT...$TAG" --jq .status)" \
+  || fail "attached files" "cannot compare $TAG against $COMPAT_BREAKS_COMMIT"
+case "$STATUS" in ahead | identical) EXPECTED+=("compat-breaks.json") ;; esac
 
 PAGE="$(gh release view "$TAG" --repo "$REPO" --json assets --jq '.assets[].name' | LC_ALL=C sort)" \
   || fail "attached files" "the release page for $TAG cannot be read"
