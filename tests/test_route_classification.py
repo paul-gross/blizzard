@@ -252,6 +252,7 @@ _HUMAN: dict[tuple[str, str], Permission] = {
     ("GET", "/api/analytics/durations/graphs"): Permission.TRANSCRIPT_READ,
     ("GET", "/api/analytics/spend/nodes"): Permission.TRANSCRIPT_READ,
     ("GET", "/api/analytics/spend/graphs"): Permission.TRANSCRIPT_READ,
+    ("GET", "/api/analytics/spend/models"): Permission.TRANSCRIPT_READ,
     ("GET", "/api/analytics/spend/chunks"): Permission.TRANSCRIPT_READ,
     ("GET", "/api/analytics/spend/chunks/ndjson"): Permission.TRANSCRIPT_READ,
     ("GET", "/api/analytics/outcomes/nodes"): Permission.TRANSCRIPT_READ,

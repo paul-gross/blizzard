@@ -672,6 +672,7 @@ HUB_ALLOWED_SCANS: list[Allowance] = [
     ),
     IndexWalkAllowance(IReadOperationalAnalytics, "spend_by_chunk", ("usage_facts",), _ANALYTICS_REASON),
     IndexWalkAllowance(IReadOperationalAnalytics, "spend_by_graph", ("usage_facts",), _ANALYTICS_REASON),
+    IndexWalkAllowance(IReadOperationalAnalytics, "spend_by_model", ("usage_facts",), _ANALYTICS_REASON),
     IndexWalkAllowance(IReadOperationalAnalytics, "spend_by_node", ("usage_facts",), _ANALYTICS_REASON),
     IndexWalkAllowance(IReadTraceStatus, "newest_export_cursor", ("trace_cursor",), _NEWEST_ROW_REASON),
     IndexWalkAllowance(IReadTraceSteps, "newest_cursor", ("trace_cursor",), _NEWEST_ROW_REASON),

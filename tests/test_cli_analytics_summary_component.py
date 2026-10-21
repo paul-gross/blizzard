@@ -129,6 +129,27 @@ def test_each_counts_datasets_applicable_filters_round_trip(tmp_path: Path, monk
     assert json.loads(by_stale_version.stdout)["counts"] == []
 
 
+# --- filter round-trip: the operational datasets' provenance filters, and spend-models ----
+
+
+def test_spend_models_and_the_provenance_filters_round_trip(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    hub, token, _graph_id, nodes = _seeded_spend_hub(tmp_path)
+    _relay(hub, token, monkeypatch)
+    chunk_id = _mint_chunk(hub, token)
+    _push_usage(hub, chunk_id=chunk_id, node_id=nodes["build"], epoch=1, seq=1, cost_usd=0.1)
+
+    by_model = _invoke("spend-models", "--json")
+    assert [r["key"] for r in json.loads(by_model.stdout)["spend"]] == ["claude-opus-4-8"]
+
+    kept = _invoke("spend-nodes", "--model", "claude-opus-4-8", "--json")
+    assert [r["input_tokens"] for r in json.loads(kept.stdout)["spend"]] == [100]
+
+    dropped = _invoke("spend-nodes", "--model", "other", "--json")
+    assert json.loads(dropped.stdout)["spend"] == []
+    for dataset in ("durations-nodes", "outcomes-nodes"):
+        assert _invoke(dataset, "--harness-id", "claude_code", "--json").exit_code == 0
+
+
 # --- filter round-trip + --ndjson: spend-chunks, the one paginated/streamable dataset --
 
 

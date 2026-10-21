@@ -66,7 +66,7 @@ class AnalyticsDurationView(BaseModel):
     """One grouping key's step-duration rollup — ``key`` is a node
     id or a graph id. Hub-observed wall-clock, not runner-measured: a parked gate
     stretches it, a delayed store-and-forward mint-report *flush* compresses it toward
-    zero instead."""
+    zero instead. Provenance filters: see ``docs/deployment/analytics.md``."""
 
     key: str
     completed_steps: int
@@ -82,14 +82,14 @@ class AnalyticsDurationsResponse(BaseModel):
 
 
 class AnalyticsSpendView(BaseModel):
-    """One grouping key's usage/cost rollup — ``key`` is a node id or a graph id, whichever dataset
-    served it. The same contract ``GET /api/spend`` publishes: ``cost_partial`` is ``True`` iff some summed
-    row carried neither a billed nor an estimated amount, and ``estimated_cost_usd`` is ``None`` unless some
-    summed row carried one. ``graph_name`` and ``node_name`` name what the row sums, null where an
+    """One grouping key's usage/cost rollup — ``key`` is a node id, a graph id or a model name,
+    whichever dataset served it. The same contract ``GET /api/spend`` publishes: ``cost_partial`` is ``True``
+    iff some summed row carried neither a billed nor an estimated amount, and ``estimated_cost_usd`` is ``None``
+    unless some summed row carried one. ``graph_name`` and ``node_name`` name what the row sums, null where an
     id no longer resolves and ``node_name`` always null on a graph row: a node row names the node's
     own graph, a graph row names the chunk's *current* pin, so a migrated chunk's two rows can
     disagree. Under ``by_name`` the row rolls up every minted id sharing the name, and ``key`` is
-    ``<graph_name>/<node_name>`` for a node and ``graph_name`` for a graph."""
+    ``<graph_name>/<node_name>`` for a node and ``graph_name`` for a graph. A model row carries neither name."""
 
     key: str
     input_tokens: int

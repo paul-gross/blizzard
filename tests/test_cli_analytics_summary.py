@@ -1,4 +1,4 @@
-"""``blizzard hub analytics summary`` — a pure client of the ten
+"""``blizzard hub analytics summary`` — a pure client of the eleven
 read rollup routes driven with ``httpx`` stubbed (unit tier): each response shape's
 rendering, ``--json``, the per-dataset filter-applicability guards, and
 ``--ndjson``'s spend-chunks-only guard plus its incompatible-flag guards (mirroring
@@ -248,6 +248,72 @@ def test_extractor_version_is_refused_for_an_operational_dataset(monkeypatch: py
 
     assert result.exit_code != 0
     assert "--extractor-version does not apply to dataset 'durations-nodes'" in result.output
+
+
+def test_effort_is_refused_for_every_operational_dataset(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Effort lives on transcript events alone, so no usage-backed dataset can filter by it."""
+    monkeypatch.setattr(httpx, "get", lambda *a, **k: pytest.fail("must not reach the hub"))
+
+    for dataset in ["durations-nodes", "durations-graphs", "spend-nodes", "spend-graphs", "spend-chunks"]:
+        result = CliRunner().invoke(hub_group, ["analytics", "summary", dataset, "--effort", "high"])
+        assert result.exit_code != 0, dataset
+        assert f"--effort does not apply to dataset {dataset!r}" in result.output
+    for dataset in ["spend-models", "outcomes-nodes"]:
+        result = CliRunner().invoke(hub_group, ["analytics", "summary", dataset, "--effort", "high"])
+        assert f"--effort does not apply to dataset {dataset!r}" in result.output
+
+
+@pytest.mark.parametrize(
+    "dataset",
+    [
+        "durations-nodes",
+        "durations-graphs",
+        "spend-nodes",
+        "spend-graphs",
+        "spend-models",
+        "spend-chunks",
+        "outcomes-nodes",
+    ],
+)
+def test_the_usage_provenance_filters_apply_to_every_operational_dataset(
+    monkeypatch: pytest.MonkeyPatch, dataset: str
+) -> None:
+    fake_get, calls = _get_returning({"spend": [], "durations": [], "outcomes": [], "next_cursor": None})
+    monkeypatch.setattr(httpx, "get", fake_get)
+
+    result = CliRunner().invoke(
+        hub_group,
+        ["analytics", "summary", dataset, "--model", "m-a", "--harness-id", "claude_code", "--harness-version", "1.0"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert (calls[0]["model"], calls[0]["harness_id"], calls[0]["harness_version"]) == ("m-a", "claude_code", "1.0")
+
+
+def test_spend_models_renders_a_model_row_and_takes_no_paging_flags(monkeypatch: pytest.MonkeyPatch) -> None:
+    row = {
+        "key": "m-a",
+        "input_tokens": 3,
+        "output_tokens": 2,
+        "cache_read_tokens": 1,
+        "cache_create_tokens": 0,
+        "cost_usd": 0.5,
+        "cost_partial": False,
+        "estimated_cost_usd": None,
+        "graph_name": None,
+        "node_name": None,
+    }
+    fake_get, calls = _get_returning({"spend": [row]})
+    monkeypatch.setattr(httpx, "get", fake_get)
+
+    result = CliRunner().invoke(hub_group, ["analytics", "summary", "spend-models"])
+
+    assert result.exit_code == 0, result.output
+    assert result.output.startswith("m-a  ") and "in=3 out=2" in result.output
+    assert "limit" not in calls[0]
+    for flag in (["--cursor", "c"], ["--limit", "5"], ["--ndjson"]):
+        refused = CliRunner().invoke(hub_group, ["analytics", "summary", "spend-models", *flag])
+        assert f"{flag[0]} does not apply to dataset 'spend-models'" in refused.output
 
 
 def test_cursor_is_refused_outside_spend_chunks(monkeypatch: pytest.MonkeyPatch) -> None:

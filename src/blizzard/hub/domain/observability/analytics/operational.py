@@ -20,9 +20,10 @@ from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
 @domain_model
 @dataclass(frozen=True)
 class OperationalCriteria:
-    """Every filter the operational datasets owe — the scope shared
-    with events and counts, narrowed to the four fields that mean something outside the
-    derived-event projection: no ``extractor_version``, no event-shape filter."""
+    """Every filter the operational datasets owe: the scope's four fields plus the
+    usage-recorded provenance. A provenance filter keeps the rows whose lease attempt
+    ``(chunk_id, epoch)`` has a usage fact matching every dimension given; see
+    ``docs/deployment/analytics.md`` for the rule."""
 
     graph_id: str | None = None
     source: str | None = None
@@ -30,6 +31,9 @@ class OperationalCriteria:
     project: str | None = None
     since: datetime | None = None
     until: datetime | None = None
+    model: str | None = None
+    harness_id: str | None = None
+    harness_version: str | None = None
 
 
 @domain_model
@@ -50,7 +54,7 @@ class DurationStats:
 @dataclass(frozen=True)
 class SpendStats:
     """One grouping key's usage/cost rollup — ``key`` is a node, graph, or chunk
-    id (one shape for all three). Holds a
+    id, or a model name (one shape for all four). Holds a
     :class:`~blizzard.hub.domain.chunk.model.UsageTotal`, not its fields flattened apart, so the
     lower-bound + PARTIAL contract keeps its one owner (``canon:one-owner``)."""
 
@@ -397,6 +401,11 @@ class IReadOperationalAnalytics(Protocol):
         two identical calls agree on. ``cursor`` is a prior
         :attr:`ChunkSpendPage.next_cursor`: any other value raises
         :class:`~blizzard.hub.domain.kernel.pagination.MalformedCursor`."""
+        ...
+
+    def spend_by_model(self, criteria: OperationalCriteria) -> list[SpendStats]:
+        """The same rollup grouped by ``usage_facts.model``, ordered by ``key`` ascending —
+        the key is the model name, both names ``None``."""
         ...
 
     def outcomes_by_node(self, criteria: OperationalCriteria) -> list[OutcomeStats]:

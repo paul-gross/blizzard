@@ -198,6 +198,7 @@ _PROBES: dict[tuple[str, str], _Probe] = {
     ("GET", "/api/analytics/spend/chunks"): _LIST,
     ("GET", "/api/analytics/spend/chunks/ndjson"): _LIST,
     ("GET", "/api/analytics/spend/graphs"): _LIST,
+    ("GET", "/api/analytics/spend/models"): _LIST,
     ("GET", "/api/analytics/spend/nodes"): _LIST,
     ("POST", "/api/analytics/re-derive"): _own({}),
     ("GET", "/api/spend"): _list(**_SINCE),

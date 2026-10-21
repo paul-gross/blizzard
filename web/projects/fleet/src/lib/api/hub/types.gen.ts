@@ -320,7 +320,7 @@ export type AnalyticsCountsResponse = {
  * One grouping key's step-duration rollup — ``key`` is a node
  * id or a graph id. Hub-observed wall-clock, not runner-measured: a parked gate
  * stretches it, a delayed store-and-forward mint-report *flush* compresses it toward
- * zero instead.
+ * zero instead. Provenance filters: see ``docs/deployment/analytics.md``.
  */
 export type AnalyticsDurationView = {
     /**
@@ -505,14 +505,14 @@ export type AnalyticsSpendResponse = {
 /**
  * AnalyticsSpendView
  *
- * One grouping key's usage/cost rollup — ``key`` is a node id or a graph id, whichever dataset
- * served it. The same contract ``GET /api/spend`` publishes: ``cost_partial`` is ``True`` iff some summed
- * row carried neither a billed nor an estimated amount, and ``estimated_cost_usd`` is ``None`` unless some
- * summed row carried one. ``graph_name`` and ``node_name`` name what the row sums, null where an
+ * One grouping key's usage/cost rollup — ``key`` is a node id, a graph id or a model name,
+ * whichever dataset served it. The same contract ``GET /api/spend`` publishes: ``cost_partial`` is ``True``
+ * iff some summed row carried neither a billed nor an estimated amount, and ``estimated_cost_usd`` is ``None``
+ * unless some summed row carried one. ``graph_name`` and ``node_name`` name what the row sums, null where an
  * id no longer resolves and ``node_name`` always null on a graph row: a node row names the node's
  * own graph, a graph row names the chunk's *current* pin, so a migrated chunk's two rows can
  * disagree. Under ``by_name`` the row rolls up every minted id sharing the name, and ``key`` is
- * ``<graph_name>/<node_name>`` for a node and ``graph_name`` for a graph.
+ * ``<graph_name>/<node_name>`` for a node and ``graph_name`` for a graph. A model row carries neither name.
  */
 export type AnalyticsSpendView = {
     /**
@@ -10640,6 +10640,18 @@ export type DurationsByGraphApiAnalyticsDurationsGraphsGetData = {
          */
         until?: string | null;
         /**
+         * Harness Id
+         */
+        harness_id?: string | null;
+        /**
+         * Harness Version
+         */
+        harness_version?: string | null;
+        /**
+         * Model
+         */
+        model?: string | null;
+        /**
          * Source
          */
         source?: string | null;
@@ -10685,6 +10697,18 @@ export type DurationsByNodeApiAnalyticsDurationsNodesGetData = {
          * Until
          */
         until?: string | null;
+        /**
+         * Harness Id
+         */
+        harness_id?: string | null;
+        /**
+         * Harness Version
+         */
+        harness_version?: string | null;
+        /**
+         * Model
+         */
+        model?: string | null;
         /**
          * Source
          */
@@ -10904,6 +10928,18 @@ export type OutcomesByNodeApiAnalyticsOutcomesNodesGetData = {
          */
         until?: string | null;
         /**
+         * Harness Id
+         */
+        harness_id?: string | null;
+        /**
+         * Harness Version
+         */
+        harness_version?: string | null;
+        /**
+         * Model
+         */
+        model?: string | null;
+        /**
          * Source
          */
         source?: string | null;
@@ -10983,6 +11019,18 @@ export type SpendByChunkApiAnalyticsSpendChunksGetData = {
          */
         until?: string | null;
         /**
+         * Harness Id
+         */
+        harness_id?: string | null;
+        /**
+         * Harness Version
+         */
+        harness_version?: string | null;
+        /**
+         * Model
+         */
+        model?: string | null;
+        /**
          * Source
          */
         source?: string | null;
@@ -11028,6 +11076,18 @@ export type StreamChunkSpendApiAnalyticsSpendChunksNdjsonGetData = {
          * Until
          */
         until?: string | null;
+        /**
+         * Harness Id
+         */
+        harness_id?: string | null;
+        /**
+         * Harness Version
+         */
+        harness_version?: string | null;
+        /**
+         * Model
+         */
+        model?: string | null;
         /**
          * Source
          */
@@ -11079,6 +11139,18 @@ export type SpendByGraphApiAnalyticsSpendGraphsGetData = {
          */
         until?: string | null;
         /**
+         * Harness Id
+         */
+        harness_id?: string | null;
+        /**
+         * Harness Version
+         */
+        harness_version?: string | null;
+        /**
+         * Model
+         */
+        model?: string | null;
+        /**
          * Source
          */
         source?: string | null;
@@ -11108,6 +11180,64 @@ export type SpendByGraphApiAnalyticsSpendGraphsGetResponses = {
 
 export type SpendByGraphApiAnalyticsSpendGraphsGetResponse = SpendByGraphApiAnalyticsSpendGraphsGetResponses[keyof SpendByGraphApiAnalyticsSpendGraphsGetResponses];
 
+export type SpendByModelApiAnalyticsSpendModelsGetData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Graph Id
+         */
+        graph_id?: string | null;
+        /**
+         * Since
+         */
+        since?: string | null;
+        /**
+         * Until
+         */
+        until?: string | null;
+        /**
+         * Harness Id
+         */
+        harness_id?: string | null;
+        /**
+         * Harness Version
+         */
+        harness_version?: string | null;
+        /**
+         * Model
+         */
+        model?: string | null;
+        /**
+         * Source
+         */
+        source?: string | null;
+        /**
+         * Project
+         */
+        project?: string | null;
+    };
+    url: '/api/analytics/spend/models';
+};
+
+export type SpendByModelApiAnalyticsSpendModelsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type SpendByModelApiAnalyticsSpendModelsGetError = SpendByModelApiAnalyticsSpendModelsGetErrors[keyof SpendByModelApiAnalyticsSpendModelsGetErrors];
+
+export type SpendByModelApiAnalyticsSpendModelsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: AnalyticsSpendResponse;
+};
+
+export type SpendByModelApiAnalyticsSpendModelsGetResponse = SpendByModelApiAnalyticsSpendModelsGetResponses[keyof SpendByModelApiAnalyticsSpendModelsGetResponses];
+
 export type SpendByNodeApiAnalyticsSpendNodesGetData = {
     body?: never;
     path?: never;
@@ -11128,6 +11258,18 @@ export type SpendByNodeApiAnalyticsSpendNodesGetData = {
          * Until
          */
         until?: string | null;
+        /**
+         * Harness Id
+         */
+        harness_id?: string | null;
+        /**
+         * Harness Version
+         */
+        harness_version?: string | null;
+        /**
+         * Model
+         */
+        model?: string | null;
         /**
          * Source
          */

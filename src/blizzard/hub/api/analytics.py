@@ -150,6 +150,41 @@ def operational_criteria(scope: ScopeFilters) -> OperationalCriteria:
 
 @dto
 @dataclass(frozen=True)
+class OperationalScopeFilters:
+    """:class:`ScopeFilters` plus the usage-recorded provenance dimensions (no ``effort``,
+    which only transcript events carry) — the operational routes' query parameters, flat."""
+
+    scope: ScopeFilters
+    model: str | None
+    harness_id: str | None
+    harness_version: str | None
+
+    @classmethod
+    def of(
+        cls,
+        graph_id: Annotated[str | None, Query()] = None,
+        source: QuerySource = None,
+        since: Annotated[datetime | None, Query()] = None,
+        until: Annotated[datetime | None, Query()] = None,
+        harness_id: Annotated[str | None, Query()] = None,
+        harness_version: Annotated[str | None, Query()] = None,
+        model: Annotated[str | None, Query()] = None,
+        project: QueryProject = None,
+    ) -> OperationalScopeFilters:
+        return cls(ScopeFilters(graph_id, source, since, until, project), model, harness_id, harness_version)
+
+    @property
+    def criteria(self) -> OperationalCriteria:
+        return replace(
+            operational_criteria(self.scope),
+            model=self.model,
+            harness_id=self.harness_id,
+            harness_version=self.harness_version,
+        )
+
+
+@dto
+@dataclass(frozen=True)
 class EventScopeFilters:
     """:class:`ScopeFilters` plus ``extractor_version`` and four provenance dimensions —
     used by the derived-event projection. Declares its query parameters flat."""
@@ -431,11 +466,11 @@ def _durations_response(stats: list[DurationStats]) -> AnalyticsDurationsRespons
     dependencies=[Depends(require(Permission.TRANSCRIPT_READ))],
 )
 def durations_by_node(
-    services: Services, scope: Annotated[ScopeFilters, Depends(ScopeFilters.of)]
+    services: Services, scope: Annotated[OperationalScopeFilters, Depends(OperationalScopeFilters.of)]
 ) -> AnalyticsDurationsResponse:
     """Completed-step duration rollups grouped by node — see
     ``AnalyticsDurationView`` for the wall-clock semantics."""
-    return _durations_response(services.operational_analytics.durations_by_node(operational_criteria(scope)))
+    return _durations_response(services.operational_analytics.durations_by_node(scope.criteria))
 
 
 @router.get(
@@ -444,11 +479,11 @@ def durations_by_node(
     dependencies=[Depends(require(Permission.TRANSCRIPT_READ))],
 )
 def durations_by_graph(
-    services: Services, scope: Annotated[ScopeFilters, Depends(ScopeFilters.of)]
+    services: Services, scope: Annotated[OperationalScopeFilters, Depends(OperationalScopeFilters.of)]
 ) -> AnalyticsDurationsResponse:
     """The same rollup grouped by the graph the step happened in — the transition's
     own ``graph_id``, never the chunk's current pin."""
-    return _durations_response(services.operational_analytics.durations_by_graph(operational_criteria(scope)))
+    return _durations_response(services.operational_analytics.durations_by_graph(scope.criteria))
 
 
 def spend_response(stats: list[SpendStats]) -> AnalyticsSpendResponse:
@@ -486,15 +521,13 @@ def named_spend(stats: list[SpendStats], by_name: bool) -> list[SpendStats]:
 )
 def spend_by_node(
     services: Services,
-    scope: Annotated[ScopeFilters, Depends(ScopeFilters.of)],
+    scope: Annotated[OperationalScopeFilters, Depends(OperationalScopeFilters.of)],
     by_name: Annotated[bool, Query()] = False,
 ) -> AnalyticsSpendResponse:
     """Usage/cost rollups grouped by node — the same lower-bound + PARTIAL contract
     ``GET /api/spend`` publishes. ``by_name`` folds the per-mint rows into one per
     ``<graph_name>/<node_name>``."""
-    return spend_response(
-        named_spend(services.operational_analytics.spend_by_node(operational_criteria(scope)), by_name)
-    )
+    return spend_response(named_spend(services.operational_analytics.spend_by_node(scope.criteria), by_name))
 
 
 @router.get(
@@ -502,15 +535,23 @@ def spend_by_node(
 )
 def spend_by_graph(
     services: Services,
-    scope: Annotated[ScopeFilters, Depends(ScopeFilters.of)],
+    scope: Annotated[OperationalScopeFilters, Depends(OperationalScopeFilters.of)],
     by_name: Annotated[bool, Query()] = False,
 ) -> AnalyticsSpendResponse:
     """The same rollup grouped by each usage fact's chunk's *current* graph pin — a
     chunk that migrated attributes every usage fact it ever recorded to where it lives
     today. ``by_name`` folds the per-mint rows into one per graph name."""
-    return spend_response(
-        named_spend(services.operational_analytics.spend_by_graph(operational_criteria(scope)), by_name)
-    )
+    return spend_response(named_spend(services.operational_analytics.spend_by_graph(scope.criteria), by_name))
+
+
+@router.get(
+    "/spend/models", response_model=AnalyticsSpendResponse, dependencies=[Depends(require(Permission.TRANSCRIPT_READ))]
+)
+def spend_by_model(
+    services: Services, scope: Annotated[OperationalScopeFilters, Depends(OperationalScopeFilters.of)]
+) -> AnalyticsSpendResponse:
+    """The same rollup grouped by the model each usage fact recorded."""
+    return spend_response(services.operational_analytics.spend_by_model(scope.criteria))
 
 
 def _chunk_spend_view(record: SpendStats) -> AnalyticsChunkSpendView:
@@ -552,7 +593,7 @@ def chunk_spend_ndjson_lines(
 )
 def spend_by_chunk(
     services: Services,
-    scope: Annotated[ScopeFilters, Depends(ScopeFilters.of)],
+    scope: Annotated[OperationalScopeFilters, Depends(OperationalScopeFilters.of)],
     cursor: Annotated[str | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=1000)] = 200,
 ) -> AnalyticsChunkSpendResponse:
@@ -560,7 +601,7 @@ def spend_by_chunk(
     wide window, unlike the per-node/per-graph groupings, so this takes a cursor rather
     than a single envelope."""
     try:
-        page = services.operational_analytics.spend_by_chunk(operational_criteria(scope), cursor=cursor, limit=limit)
+        page = services.operational_analytics.spend_by_chunk(scope.criteria, cursor=cursor, limit=limit)
     except MalformedCursor as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="malformed cursor") from exc
     return AnalyticsChunkSpendResponse(spend=[_chunk_spend_view(r) for r in page.records], next_cursor=page.next_cursor)
@@ -575,12 +616,12 @@ def spend_by_chunk(
     responses={200: {"content": {"application/x-ndjson": {"schema": {"type": "string"}}}}},
 )
 def stream_chunk_spend(
-    services: Services, scope: Annotated[ScopeFilters, Depends(ScopeFilters.of)]
+    services: Services, scope: Annotated[OperationalScopeFilters, Depends(OperationalScopeFilters.of)]
 ) -> StreamingResponse:
     """Every chunk's spend rollup matching the same filters as the paginated route,
     streamed one JSON object per line in the same order."""
     return StreamingResponse(
-        chunk_spend_ndjson_lines(services.operational_analytics, operational_criteria(scope)),
+        chunk_spend_ndjson_lines(services.operational_analytics, scope.criteria),
         media_type="application/x-ndjson",
     )
 
@@ -600,10 +641,10 @@ def _outcomes_response(stats: list[OutcomeStats]) -> AnalyticsOutcomesResponse:
     dependencies=[Depends(require(Permission.TRANSCRIPT_READ))],
 )
 def outcomes_by_node(
-    services: Services, scope: Annotated[ScopeFilters, Depends(ScopeFilters.of)]
+    services: Services, scope: Annotated[OperationalScopeFilters, Depends(OperationalScopeFilters.of)]
 ) -> AnalyticsOutcomesResponse:
     """Judged-choice distribution and attempt-failure counts grouped by node —
     a judged failure edge and a retry-consuming attempt failure reported separately,
     never blended into one rate. A delivery kick-back (``chunk_bounces``) counts as
     neither."""
-    return _outcomes_response(services.operational_analytics.outcomes_by_node(operational_criteria(scope)))
+    return _outcomes_response(services.operational_analytics.outcomes_by_node(scope.criteria))

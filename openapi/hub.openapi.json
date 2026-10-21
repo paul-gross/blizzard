@@ -506,7 +506,7 @@
         "type": "object"
       },
       "AnalyticsDurationView": {
-        "description": "One grouping key's step-duration rollup \u2014 ``key`` is a node\nid or a graph id. Hub-observed wall-clock, not runner-measured: a parked gate\nstretches it, a delayed store-and-forward mint-report *flush* compresses it toward\nzero instead.",
+        "description": "One grouping key's step-duration rollup \u2014 ``key`` is a node\nid or a graph id. Hub-observed wall-clock, not runner-measured: a parked gate\nstretches it, a delayed store-and-forward mint-report *flush* compresses it toward\nzero instead. Provenance filters: see ``docs/deployment/analytics.md``.",
         "properties": {
           "avg_seconds": {
             "title": "Avg Seconds",
@@ -793,7 +793,7 @@
         "type": "object"
       },
       "AnalyticsSpendView": {
-        "description": "One grouping key's usage/cost rollup \u2014 ``key`` is a node id or a graph id, whichever dataset\nserved it. The same contract ``GET /api/spend`` publishes: ``cost_partial`` is ``True`` iff some summed\nrow carried neither a billed nor an estimated amount, and ``estimated_cost_usd`` is ``None`` unless some\nsummed row carried one. ``graph_name`` and ``node_name`` name what the row sums, null where an\nid no longer resolves and ``node_name`` always null on a graph row: a node row names the node's\nown graph, a graph row names the chunk's *current* pin, so a migrated chunk's two rows can\ndisagree. Under ``by_name`` the row rolls up every minted id sharing the name, and ``key`` is\n``<graph_name>/<node_name>`` for a node and ``graph_name`` for a graph.",
+        "description": "One grouping key's usage/cost rollup \u2014 ``key`` is a node id, a graph id or a model name,\nwhichever dataset served it. The same contract ``GET /api/spend`` publishes: ``cost_partial`` is ``True``\niff some summed row carried neither a billed nor an estimated amount, and ``estimated_cost_usd`` is ``None``\nunless some summed row carried one. ``graph_name`` and ``node_name`` name what the row sums, null where an\nid no longer resolves and ``node_name`` always null on a graph row: a node row names the node's\nown graph, a graph row names the chunk's *current* pin, so a migrated chunk's two rows can\ndisagree. Under ``by_name`` the row rolls up every minted id sharing the name, and ``key`` is\n``<graph_name>/<node_name>`` for a node and ``graph_name`` for a graph. A model row carries neither name.",
         "properties": {
           "cache_create_tokens": {
             "title": "Cache Create Tokens",
@@ -17266,6 +17266,54 @@
           },
           {
             "in": "query",
+            "name": "harness_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Harness Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "harness_version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Harness Version"
+            }
+          },
+          {
+            "in": "query",
+            "name": "model",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Model"
+            }
+          },
+          {
+            "in": "query",
             "name": "source",
             "required": false,
             "schema": {
@@ -17378,6 +17426,54 @@
                 }
               ],
               "title": "Until"
+            }
+          },
+          {
+            "in": "query",
+            "name": "harness_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Harness Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "harness_version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Harness Version"
+            }
+          },
+          {
+            "in": "query",
+            "name": "model",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Model"
             }
           },
           {
@@ -18046,6 +18142,54 @@
           },
           {
             "in": "query",
+            "name": "harness_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Harness Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "harness_version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Harness Version"
+            }
+          },
+          {
+            "in": "query",
+            "name": "model",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Model"
+            }
+          },
+          {
+            "in": "query",
             "name": "source",
             "required": false,
             "schema": {
@@ -18232,6 +18376,54 @@
           },
           {
             "in": "query",
+            "name": "harness_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Harness Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "harness_version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Harness Version"
+            }
+          },
+          {
+            "in": "query",
+            "name": "model",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Model"
+            }
+          },
+          {
+            "in": "query",
             "name": "source",
             "required": false,
             "schema": {
@@ -18344,6 +18536,54 @@
                 }
               ],
               "title": "Until"
+            }
+          },
+          {
+            "in": "query",
+            "name": "harness_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Harness Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "harness_version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Harness Version"
+            }
+          },
+          {
+            "in": "query",
+            "name": "model",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Model"
             }
           },
           {
@@ -18474,6 +18714,54 @@
           },
           {
             "in": "query",
+            "name": "harness_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Harness Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "harness_version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Harness Version"
+            }
+          },
+          {
+            "in": "query",
+            "name": "model",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Model"
+            }
+          },
+          {
+            "in": "query",
             "name": "source",
             "required": false,
             "schema": {
@@ -18528,6 +18816,170 @@
           }
         },
         "summary": "Spend By Graph",
+        "tags": [
+          "analytics"
+        ]
+      }
+    },
+    "/api/analytics/spend/models": {
+      "get": {
+        "description": "The same rollup grouped by the model each usage fact recorded.",
+        "operationId": "spend_by_model_api_analytics_spend_models_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "graph_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Graph Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "since",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Since"
+            }
+          },
+          {
+            "in": "query",
+            "name": "until",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Until"
+            }
+          },
+          {
+            "in": "query",
+            "name": "harness_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Harness Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "harness_version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Harness Version"
+            }
+          },
+          {
+            "in": "query",
+            "name": "model",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Model"
+            }
+          },
+          {
+            "in": "query",
+            "name": "source",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Source"
+            }
+          },
+          {
+            "in": "query",
+            "name": "project",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Project"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalyticsSpendResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Spend By Model",
         "tags": [
           "analytics"
         ]
@@ -18596,6 +19048,54 @@
                 }
               ],
               "title": "Until"
+            }
+          },
+          {
+            "in": "query",
+            "name": "harness_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Harness Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "harness_version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Harness Version"
+            }
+          },
+          {
+            "in": "query",
+            "name": "model",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Model"
             }
           },
           {
