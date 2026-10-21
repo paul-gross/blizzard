@@ -10,7 +10,7 @@ from blizzard.runner.environments.repository import (
     IWriteEnvironmentRepository,
     binding_completion,
 )
-from blizzard.runner.environments.workspaces import IWorkspaces
+from blizzard.runner.environments.workspaces import IWorkspaceEnvironmentWorkdirs
 from blizzard.runner.hub.chunk_status_cache import IChunkViews
 from blizzard.runner.hub.client import HubClientError
 
@@ -24,7 +24,7 @@ class HeldBindingCompletionContext(Protocol):
     @property
     def stores(self) -> HeldBindingCompletionStores: ...
     @property
-    def workspaces(self) -> IWorkspaces: ...
+    def workspaces(self) -> IWorkspaceEnvironmentWorkdirs: ...
     @property
     def chunk_views(self) -> IChunkViews: ...
 

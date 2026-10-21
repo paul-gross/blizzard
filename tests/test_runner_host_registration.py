@@ -22,9 +22,7 @@ from blizzard.runner.hub.client import (
     HostRefused,
     HostReport,
     HubClientError,
-    IssuedIdentity,
     PushedFact,
-    RetiredHostRunner,
 )
 from blizzard.runner.hub.host_identity import HostIdentity, HostIdentityHolder
 from blizzard.runner.hub.host_registration import HostRegistration, HostRegistrationHolder
@@ -42,7 +40,7 @@ _TENANT = "tn_1"
 
 @dataclass
 class _FakeHostHub:
-    """An :class:`IHostHubClient` answering each call from what a test set."""
+    """The host report and fact push, answering each call from what a test set."""
 
     report_answer: HostRecord | HostRefused | HubClientError = field(
         default_factory=lambda: HostRecord(host_id=_HOST, tenant_id=_TENANT, host_name="host-a")
@@ -57,9 +55,6 @@ class _FakeHostHub:
             raise self.report_answer
         return self.report_answer
 
-    def record(self) -> HostRecord | HostRefused:
-        raise AssertionError("the registration step reports; it never reads the record alone")
-
     def push_facts(self, facts: Sequence[PushedFact]) -> HostFactPushAck | HostRefused:
         self.pushes.append(list(facts))
         if isinstance(self.push_answer, HubClientError):
@@ -68,12 +63,6 @@ class _FakeHostHub:
             return self.push_answer
         seqs = [fact.seq for fact in facts]
         return HostFactPushAck(high_water=max(seqs), applied=seqs, already_applied=[], rejected=[])
-
-    def add_runner(self, name: str, *, projects: tuple[str, ...] | None = None) -> IssuedIdentity | HostRefused:
-        raise AssertionError("not called")
-
-    def retire_runner(self, runner_id: str, *, force: bool = False) -> RetiredHostRunner | HostRefused:
-        raise AssertionError("not called")
 
 
 @dataclass(frozen=True)

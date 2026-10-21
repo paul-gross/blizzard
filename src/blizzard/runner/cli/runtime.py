@@ -81,6 +81,7 @@ from blizzard.runner.hub.client import (
     HostAddRefused,
     HubClientError,
     IHostHubClient,
+    IHostRunnerAdder,
     IHubRunnerAdmin,
     IRunnerAdder,
     ITokenIdentityReader,
@@ -271,7 +272,7 @@ class HostJoin:
     """The host init registered, and its own hub calls under the token it holds."""
 
     joined: JoinedHost
-    client: IHostHubClient
+    client: IHostRunnerAdder
 
 
 def register_host(

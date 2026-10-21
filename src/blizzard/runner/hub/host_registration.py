@@ -31,7 +31,7 @@ from blizzard.runner.hub.client import (
     HostRefused,
     HostReport,
     HubClientError,
-    IHostHubClient,
+    IHostReporter,
 )
 from blizzard.runner.hub.host_identity import (
     HostIdentity,
@@ -137,7 +137,7 @@ class HostRegistration:
 
     ``client`` is ``None`` on a host with no host token, and the step then does nothing."""
 
-    client: IHostHubClient | None
+    client: IHostReporter | None
     report: Callable[[], HostReport]
     identities: IWriteHostIdentityRepository
     identity: HostIdentityHolder
@@ -157,7 +157,7 @@ class HostRegistration:
                 # A raise must not reach the host tick's other steps.
                 _log.exception("host registration failed — continuing the host tick")
 
-    def _run(self, client: IHostHubClient) -> None:
+    def _run(self, client: IHostReporter) -> None:
         try:
             answer = client.report(self.report())
         except HubClientError as exc:

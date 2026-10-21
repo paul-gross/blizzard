@@ -14,9 +14,9 @@ from dataclasses import dataclass
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.logging import get_logger
-from blizzard.runner.hub.client import HostRefused, HubClientError, IHostHubClient, PushedFact
+from blizzard.runner.hub.client import HostRefused, HubClientError, IHostFactPusher, PushedFact
 from blizzard.runner.hub.host_registration import ICurrentHostRegistration
-from blizzard.runner.usage.repository import IWriteHostLaneRepository
+from blizzard.runner.usage.repository import IWriteHostLaneMarkRepository
 
 _log = get_logger("blizzard.runner.host")
 
@@ -32,8 +32,8 @@ _CP_AFTER_PUSH = crashpoint("hostlane.after-push.before-mark", "hub applied the 
 class HostLaneDrain:
     """Push the host's buffered facts while the host is registered, and clear what the hub answered."""
 
-    client: IHostHubClient
-    lane: IWriteHostLaneRepository
+    client: IHostFactPusher
+    lane: IWriteHostLaneMarkRepository
     registration: ICurrentHostRegistration
     clock: IClock
 

@@ -11,6 +11,7 @@ from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.environments.repository import EnvBinding
+from blizzard.runner.environments.workspaces import IWorkspaceSessions
 from blizzard.runner.harness.adapter import IHarnessWorkerLifecycle
 from blizzard.runner.harness.registry import UnavailableHarnessError, UnknownHarnessError
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
@@ -90,6 +91,8 @@ class DormantContext(UsageLimitContext, GitCommitsContext, OverloadContext, Prot
     def stores(self) -> DormantStores: ...
     @property
     def config(self) -> DormantConfig: ...
+    @property
+    def workspaces(self) -> IWorkspaceSessions: ...
     @property
     def usage(self) -> UsageRecorder: ...
     @property

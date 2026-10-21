@@ -23,7 +23,7 @@ from blizzard.runner.environments.repository import (
     IReadEnvironmentRepository,
     group_bindings_by_chunk,
 )
-from blizzard.runner.environments.workspaces import IWorkspaces
+from blizzard.runner.environments.workspaces import IWorkspaceSpawnRoots
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.registry import UnavailableHarnessError, UnknownHarnessError
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
@@ -74,7 +74,7 @@ class TranscriptPumpContext(OutboundContext, Protocol):
     @property
     def transcripts_wired(self) -> bool: ...
     @property
-    def workspaces(self) -> IWorkspaces: ...
+    def workspaces(self) -> IWorkspaceSpawnRoots: ...
     def transcript_source_for(self, session: SessionReference) -> IHarnessTranscriptSource: ...
 
 

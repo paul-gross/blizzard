@@ -67,7 +67,8 @@ from blizzard.runner.transfer.rows import IWriteHostIngestRepository
 from blizzard.runner.usage.repository import (
     IWriteCredentialRenewalRepository,
     IWriteExternalUsageRepository,
-    IWriteHostLaneRepository,
+    IWriteHostLaneAppendRepository,
+    IWriteHostLaneMarkRepository,
     IWriteUsageRepository,
 )
 from tests.runner_fakes import record_usage, runner_migration_prototype
@@ -526,13 +527,13 @@ WRITE_EXEMPTIONS: dict[tuple[type, str], str] = {
     (IWriteWorkspacePromptRepository, "set_workspace_prompt"): _HOST_ONLY + " (workspace_prompt)",
     (IWriteWorkspacePromptRepository, "clear_workspace_prompt"): _HOST_ONLY + " (workspace_prompt)",
     (IWriteExternalUsageRepository, "prune_external_usage_samples"): _HOST_ONLY + " (external_usage_samples)",
-    (IWriteHostLaneRepository, "record_host_external_usage_attempt"): _HOST_ONLY
+    (IWriteHostLaneAppendRepository, "record_host_external_usage_attempt"): _HOST_ONLY
     + " (external_usage_samples, host_outbound_buffer)",
     (IWriteHostIdentityRepository, "record_host_identity"): _HOST_ONLY + " (host_identity)",
     (IWriteHostIngestRepository, "merge_host_rows_locked"): _HOST_ONLY + " (every carried host table)",
     (IWriteHostIngestRepository, "record_host_ingest_locked"): _HOST_ONLY + " (host_ingests)",
-    (IWriteHostLaneRepository, "pending_host_facts"): _HOST_ONLY + " (host_outbound_buffer, read only)",
-    (IWriteHostLaneRepository, "record_host_high_water"): _HOST_ONLY + " (host_high_water_seen, host_outbound_buffer)",
+    (IWriteHostLaneMarkRepository, "record_host_high_water"): _HOST_ONLY
+    + " (host_high_water_seen, host_outbound_buffer)",
     (IWriteCredentialRenewalRepository, "claim_credential_renewal"): _HOST_ONLY + " (credential_renewal_claims)",
     (IWriteCredentialRenewalRepository, "record_credential_renewal_outcome"): _HOST_ONLY
     + " (credential_renewal_outcomes)",

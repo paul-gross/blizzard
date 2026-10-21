@@ -46,7 +46,7 @@ from blizzard.runner.host_layout import (
     HostLayout,
     hold_host,
 )
-from blizzard.runner.hub.client import HostRecord, HostRefused, HubClientError, IHostHubClient
+from blizzard.runner.hub.client import HostRecord, HostRefused, HubClientError, IHostRecordReader
 from blizzard.runner.hub.host_identity import HostIdentity, HostIdentityAlreadyRecorded, adopted
 from blizzard.runner.hub.host_registration import standing_of
 from blizzard.runner.hub.identity import HostStanding
@@ -76,7 +76,12 @@ from blizzard.runner.transfer.rules import (
     refuse_token_conflict,
     resumes,
 )
-from blizzard.runner.transfer.runner_stores import HeldBinding, IRunnerBoundStoresFactory, RunnerStoreView
+from blizzard.runner.transfer.runner_stores import (
+    HeldBinding,
+    IRunnerBoundReadsFactory,
+    IRunnerBoundStoresFactory,
+    RunnerStoreView,
+)
 
 __all__ = [
     "INGEST_COMMAND",
@@ -162,9 +167,9 @@ class IngestOutcome:
     set_aside: tuple[Path, ...] = ()
 
 
-class IIngestStores(IRunnerBoundStoresFactory, Protocol):
+class IIngestStores(IRunnerBoundReadsFactory, IRunnerBoundStoresFactory, Protocol):
     """The stores an ingest reads and writes, each named by its URL: the store-wide reads here, and one runner's
-    through the stores :meth:`for_runner` binds."""
+    through the reads :meth:`reads_for` binds, or the stores :meth:`for_runner` binds to move its rows."""
 
     def named_runners(self, url: str) -> tuple[str, ...]:
         """The runners the identity rows of the store at ``url`` name."""
@@ -247,7 +252,7 @@ class RunnerIngest:
     stores: IIngestStores
     host_file: IHostFileEditor
     tokens: ITokenFiles
-    hub: IHostHubClient
+    hub: IHostRecordReader
     #: What answers on a socket path, if anything.
     holder: Callable[[Path], str | None]
     clock: IClock
@@ -327,7 +332,7 @@ class RunnerIngest:
                     f"({', '.join(named_runners) or 'none'}), not the one a runner before hosts holds"
                 )
             [runner_id] = named_runners
-            view = self.stores.for_runner(runner_id).runner_view(copy.url)
+            view = self.stores.reads_for(runner_id).runner_view(copy.url)
         try:
             config = HostConfig.graduated(
                 path,

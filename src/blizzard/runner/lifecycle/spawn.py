@@ -17,6 +17,7 @@ from blizzard.foundation.trace_ids import step_traceparent
 from blizzard.runner.auth.tokens import IWriteTokenRepository
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.environments.repository import EnvBinding
+from blizzard.runner.environments.workspaces import IWorkspaceSpawnSettings
 from blizzard.runner.harness.adapter import (
     DEFAULT_IDENTITY_AWAIT_TIMEOUT_SECONDS,
     HarnessSpawnError,
@@ -166,6 +167,8 @@ class SpawnConfig(TranscriptPumpConfig, Protocol):
 class SpawnContext(TranscriptPumpContext, Protocol):
     """What a spawn and an attempt read."""
 
+    @property
+    def workspaces(self) -> IWorkspaceSpawnSettings: ...
     @property
     def process(self) -> IProcessProbe: ...
     @property

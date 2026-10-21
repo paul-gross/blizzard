@@ -40,7 +40,13 @@ from blizzard.foundation.trace_export.settings import TracingSettings
 from blizzard.runner.config import HostWorkspace, RunnerConfig, SubscriptionDeclaration
 from blizzard.runner.config_table import ConfigError
 from blizzard.runner.environments.factory import build_workspace_provider
-from blizzard.runner.environments.workspaces import IWorkspaces, WorkspaceEntry, WorkspaceRegistry
+from blizzard.runner.environments.workspaces import (
+    IWorkspaceProviders,
+    IWorkspaces,
+    IWorkspaceSpawnRoots,
+    WorkspaceEntry,
+    WorkspaceRegistry,
+)
 from blizzard.runner.events.broker import EventBroker, RunnerEventPublisher
 from blizzard.runner.events.publisher import IRunnerEventPublisher
 from blizzard.runner.harness.bundle import BundleSnapshot
@@ -150,7 +156,7 @@ from blizzard.runner.transfer.rows import HostIngest, IRunnerRowRemoval, IRunner
 from blizzard.runner.transfer.runner_stores import HeldBinding, IRunnerBoundStores, RunnerStoreView
 from blizzard.runner.usage.credential_renewal import CredentialRenewalPass, RenewableSubscription
 from blizzard.runner.usage.external_usage_sample import ExternalUsageSamplePass, SampledSubscription
-from blizzard.runner.usage.repository import IWriteHostLaneRepository
+from blizzard.runner.usage.repository import IWriteHostLaneAppendRepository
 
 
 @dataclass
@@ -396,7 +402,7 @@ def build_workspaces(
     return WorkspaceRegistry(entries)
 
 
-def bound_spawn_roots(config: RunnerConfig, workspaces: IWorkspaces) -> tuple[str, ...]:
+def bound_spawn_roots(config: RunnerConfig, workspaces: IWorkspaceSpawnRoots) -> tuple[str, ...]:
     """The distinct spawn roots of the workspaces ``config``'s runner binds — what its health probes and
     ambient-conflict checks run over."""
     return tuple(dict.fromkeys(workspaces.spawn_root(workspace.id) for workspace in config.bound_workspaces))
@@ -432,7 +438,7 @@ class _HostAttemptSink:
 
     def __init__(
         self,
-        host_lane: IWriteHostLaneRepository,
+        host_lane: IWriteHostLaneAppendRepository,
         runners: Callable[[], tuple[RunnerProcess, ...]],
         *,
         registration: ICurrentHostRegistration,
@@ -820,7 +826,7 @@ _HOST_HUB_TIMEOUT_SECONDS = 10.0
 
 
 def host_report(
-    config: RunnerConfig, workspaces: IWorkspaces, subscriptions: Sequence[SubscriptionDeclaration]
+    config: RunnerConfig, workspaces: IWorkspaceProviders, subscriptions: Sequence[SubscriptionDeclaration]
 ) -> HostReport:
     """What the host reports about itself: its first public URL, the panel's sign-in callback URIs, each workspace
     with the environments it holds, and the subscriptions it declares."""
@@ -1066,6 +1072,9 @@ class RunnerStoreFiles:
 
     errors: RunnerStoreErrorFactory
     clock: IClock
+
+    def reads_for(self, runner_id: str) -> RunnerBoundStoreFiles:
+        return RunnerBoundStoreFiles(self, runner_id)
 
     def for_runner(self, runner_id: str) -> RunnerBoundStoreFiles:
         return RunnerBoundStoreFiles(self, runner_id)

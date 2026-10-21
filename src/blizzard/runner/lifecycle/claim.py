@@ -23,6 +23,7 @@ from blizzard.runner.environments.repository import (
     releasable_after_refusal,
     require_unheld,
 )
+from blizzard.runner.environments.workspaces import IWorkspaceAcquisition
 from blizzard.runner.harness.capability_snapshot import HarnessCapability
 from blizzard.runner.hub.client import ChunkEndedError, ChunkNotFoundError, ClaimRequest, HubClientError, QueueEntry
 from blizzard.runner.hub.outbound import OutboundFacts
@@ -110,6 +111,8 @@ class ClaimContext(SpawnContext, Protocol):
     def host_stores(self) -> ClaimHostStores: ...
     @property
     def config(self) -> ClaimConfig: ...
+    @property
+    def workspaces(self) -> IWorkspaceAcquisition: ...
     def capability_snapshot(self) -> tuple[HarnessCapability, ...]: ...
 
 

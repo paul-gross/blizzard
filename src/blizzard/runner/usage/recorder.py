@@ -8,7 +8,7 @@ from blizzard.foundation.clock import IClock
 from blizzard.foundation.fact_kinds import USAGE_RECORDED
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.environments.repository import EnvBinding
-from blizzard.runner.environments.workspaces import IWorkspaces
+from blizzard.runner.environments.workspaces import IWorkspaceSpawnRoots
 from blizzard.runner.events.publisher import IRunnerEventPublisher
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.registry import IHarnessRegistry, UnavailableHarnessError, UnknownHarnessError
@@ -46,7 +46,7 @@ class UsageRecorder:
     clock: IClock
     worker_files: IWorkerStdoutReader
     #: The host's workspaces; a range is read in the spawn cwd of the workspace the lease's binding names.
-    workspaces: IWorkspaces
+    workspaces: IWorkspaceSpawnRoots
     #: Required; every recorded session's owner resolves through this registry, with no single-harness fallback.
     harnesses: IHarnessRegistry
     #: The generation's own boundary — the range-read fallback's start.

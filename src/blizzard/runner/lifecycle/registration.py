@@ -20,7 +20,7 @@ from typing import Protocol
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.runner_identity_state import IdentityState
-from blizzard.runner.environments.workspaces import IWorkspaces
+from blizzard.runner.environments.workspaces import IWorkspaceHomes
 from blizzard.runner.harness.capability_snapshot import HarnessCapability
 from blizzard.runner.hub.client import (
     BindingDeclaration,
@@ -119,7 +119,7 @@ class RegistrationContext(Protocol):
     @property
     def subscriptions(self) -> Sequence[DeclaredSubscription]: ...
     @property
-    def workspaces(self) -> IWorkspaces: ...
+    def workspaces(self) -> IWorkspaceHomes: ...
     def capability_snapshot(self) -> tuple[HarnessCapability, ...]: ...
 
 

@@ -34,6 +34,8 @@ __all__ = [
     "IReadUsageRepository",
     "IWriteCredentialRenewalRepository",
     "IWriteExternalUsageRepository",
+    "IWriteHostLaneAppendRepository",
+    "IWriteHostLaneMarkRepository",
     "IWriteHostLaneRepository",
     "IWriteUsageRepository",
     "InvocationCost",
@@ -457,19 +459,22 @@ class IReadHostLaneRepository(Protocol):
         """The greatest seq the hub answered applied on the host's lane, or ``None`` before its first answer."""
         ...
 
-
-class IWriteHostLaneRepository(IReadHostLaneRepository, Protocol):
-    """Read-write host lane — held by the sampling pass, which appends, and the host's lane drain, which sends and
-    clears."""
-
     def pending_host_facts(self, *, limit: int) -> list[HostBufferedFact]:
         """The oldest ``limit`` facts waiting on the host's lane, in seq order."""
         ...
+
+
+class IWriteHostLaneMarkRepository(IReadHostLaneRepository, Protocol):
+    """The host's lane drain: reads what waits, and clears what its hub answered."""
 
     def record_host_high_water(self, *, seq: int, at: datetime) -> None:
         """Record the hub's answered mark ``seq`` and delete every buffered fact at or below it, in one
         transaction. A mark below the recorded one moves nothing back."""
         ...
+
+
+class IWriteHostLaneAppendRepository(Protocol):
+    """The sampling pass's append to the host's lane."""
 
     def record_host_external_usage_attempt(
         self,
@@ -486,3 +491,8 @@ class IWriteHostLaneRepository(IReadHostLaneRepository, Protocol):
         :meth:`~IWriteExternalUsageRepository.record_external_usage_attempt`'s; the report carries the same kind
         and payload."""
         ...
+
+
+class IWriteHostLaneRepository(IWriteHostLaneMarkRepository, IWriteHostLaneAppendRepository, Protocol):
+    """Read-write host lane — the drain's mark-write and the sampling pass's append, composed for
+    :class:`~blizzard.runner.stores.HostStores`."""

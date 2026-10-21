@@ -874,6 +874,7 @@ RUNNER_CENSUS: dict[tuple[type, str], RunnerRecipe] = {
     (IReadHostIngestRepository, "latest_host_ingest"): lambda w: w.host_read.host_ingests.latest_host_ingest("rn_x"),
     (IReadHostLaneRepository, "host_buffered_count"): lambda w: w.host_read.host_lane.host_buffered_count(),
     (IReadHostLaneRepository, "host_high_water_seen"): lambda w: w.host_read.host_lane.host_high_water_seen(),
+    (IReadHostLaneRepository, "pending_host_facts"): lambda w: w.host_read.host_lane.pending_host_facts(limit=10),
     (IReadCredentialRenewalRepository, "last_credential_renewal_claim_at"): lambda w: (
         w.host_read.external_usage.last_credential_renewal_claim_at(w.usage_slug)
     ),

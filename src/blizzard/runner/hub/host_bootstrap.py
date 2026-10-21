@@ -25,7 +25,8 @@ from blizzard.runner.hub.client import (
     HostRefusalReason,
     HostRefused,
     HubClientError,
-    IHostHubClient,
+    IHostRecordReader,
+    IHostRunnerAdder,
     IHubRunnerAdmin,
     IRunnerAdder,
     IssuedHost,
@@ -107,7 +108,7 @@ class HostBootstrap:
 
     def __init__(
         self,
-        host_client: Callable[[str], IHostHubClient],
+        host_client: Callable[[str], IHostRecordReader],
         admin: IHubRunnerAdmin,
         tokens: ITokenWriter,
         store: IRunnerStoreAside,
@@ -184,7 +185,7 @@ class HostRunnerAdmin:
     """The runner add taken under the host's own credential: a runner added through it stands under the
     host, in the host's tenant."""
 
-    def __init__(self, host: IHostHubClient) -> None:
+    def __init__(self, host: IHostRunnerAdder) -> None:
         self._host = host
 
     def add_runner(self, name: str, *, projects: tuple[str, ...] | None = None) -> IssuedIdentity:

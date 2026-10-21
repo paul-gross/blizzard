@@ -27,33 +27,59 @@ def held_workspace_id(held: str | None, bound: Sequence[str], declared: Sequence
     return held if held is not None and held in declared else home_workspace_id(bound, declared)
 
 
-class IWorkspaces(Protocol):
-    """The host's workspaces, each looked up by its id."""
-
-    def ids(self) -> tuple[str, ...]:
-        """Every declared workspace id, in declaration order — never empty."""
-        ...
-
-    def home(self, bound: Sequence[str]) -> str:
-        """:func:`home_workspace_id` over this host's declared workspaces."""
-        ...
-
-    def held(self, workspace_id: str | None, bound: Sequence[str]) -> str:
-        """:func:`held_workspace_id` over this host's declared workspaces."""
-        ...
-
-    def provider(self, workspace_id: str | None) -> IWorkspaceProvider | None:
-        """The workspace's provider, or ``None`` for no workspace or one the host does not declare."""
-        ...
+class IWorkspaceSpawnRoots(Protocol):
+    """Where a workspace's workers spawn, narrowed from :class:`IWorkspaces` (``bzh:seam-size-ceiling``)."""
 
     def spawn_root(self, workspace_id: str | None) -> str:
         """The directory the workspace's workers spawn in; ``""`` when each spawns in its own environment's workdir,
         or for no workspace or an undeclared one."""
         ...
 
+
+class IWorkspaceSpawnSettings(IWorkspaceSpawnRoots, Protocol):
+    """A spawn's reads of its workspace: where it spawns, and the standing prompt it carries."""
+
     def prompt(self, workspace_id: str | None) -> str:
         """The workspace's configured standing prompt, resolved once at build; ``""`` for no workspace or an
         undeclared one."""
+        ...
+
+
+class IWorkspaceProviders(Protocol):
+    """Each workspace's provider, narrowed from :class:`IWorkspaces` (``bzh:seam-size-ceiling``)."""
+
+    def provider(self, workspace_id: str | None) -> IWorkspaceProvider | None:
+        """The workspace's provider, or ``None`` for no workspace or one the host does not declare."""
+        ...
+
+
+class IWorkspaceHomes(IWorkspaceProviders, Protocol):
+    """A runner's home workspace, and its provider."""
+
+    def home(self, bound: Sequence[str]) -> str:
+        """:func:`home_workspace_id` over this host's declared workspaces."""
+        ...
+
+
+class IWorkspaceEnvironmentWorkdirs(Protocol):
+    """Every workspace's listed environments, narrowed from :class:`IWorkspaces` (``bzh:seam-size-ceiling``)."""
+
+    def environment_workdirs(self) -> dict[str, dict[str, str]]:
+        """Each workspace's listed environments mapped to their workdirs, by workspace id."""
+        ...
+
+
+class IWorkspaceSessions(IWorkspaceSpawnSettings, IWorkspaceProviders, Protocol):
+    """A worker session's reads of its workspace: where and with what prompt it spawns, and the provider its
+    environments are read through."""
+
+
+class IWorkspaceAcquisition(IWorkspaceSessions, Protocol):
+    """A claim's reach into a workspace: the lock serialising acquisition from its pool and the workspace a held row is
+    claimed under, beside the session reads of the spawn it starts."""
+
+    def held(self, workspace_id: str | None, bound: Sequence[str]) -> str:
+        """:func:`held_workspace_id` over this host's declared workspaces."""
         ...
 
     def try_acquisition_lock(self, workspace_id: str) -> AbstractContextManager[bool]:
@@ -61,9 +87,9 @@ class IWorkspaces(Protocol):
         yields whether it was taken, and releases only a lock it took. Reentrant on the owning thread."""
         ...
 
-    def environment_workdirs(self) -> dict[str, dict[str, str]]:
-        """Each workspace's listed environments mapped to their workdirs, by workspace id."""
-        ...
+
+class IWorkspaces(IWorkspaceAcquisition, IWorkspaceHomes, IWorkspaceEnvironmentWorkdirs, Protocol):
+    """The host's workspaces, each looked up by its id — every slice composed, for the bundles that hand them on."""
 
 
 class _Workspace:
