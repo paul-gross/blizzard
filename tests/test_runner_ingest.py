@@ -16,6 +16,7 @@ import sqlalchemy as sa
 
 from blizzard.foundation.crash import CrashPoint
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.runner_token_names import HOST_TOKEN_VARIABLE
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.cli import runners as runners_cli
 from blizzard.runner.composition import (
@@ -24,7 +25,7 @@ from blizzard.runner.composition import (
     build_host_stores,
     build_identity_writer,
 )
-from blizzard.runner.host_config import HOST_TOKEN_VARIABLE, BuiltRunner
+from blizzard.runner.host_config import BuiltRunner
 from blizzard.runner.host_file import HostFileEditor, append_workspace
 from blizzard.runner.host_layout import HostLayout, HostLock
 from blizzard.runner.hub.client import HostRefusalReason, HostRefused, HubClientError

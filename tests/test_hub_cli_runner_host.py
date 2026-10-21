@@ -12,7 +12,9 @@ import httpx
 import pytest
 from click.testing import CliRunner
 
+from blizzard.foundation.runner_token_names import HOST_TOKEN_VARIABLE
 from blizzard.hub.cli import hub as hub_group
+from blizzard.hub.cli.runner_host import _token_lines
 from tests.support import HubHarness, build_hub, seed_runner
 
 _HUB_URL = "http://hub.local:8421"
@@ -275,3 +277,7 @@ def test_runner_add_under_a_retired_host_is_refused(tmp_path: Path, monkeypatch:
 
     assert result.exit_code != 0
     assert "retired" in result.output
+
+
+def test_the_printed_env_line_names_the_host_token_variable() -> None:
+    assert _token_lines("t")[1] == f"{HOST_TOKEN_VARIABLE}=t"

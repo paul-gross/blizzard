@@ -12,9 +12,10 @@ import pytest
 from click.testing import Result
 
 from blizzard.cli.main import blizzard
+from blizzard.foundation.runner_token_names import HOST_TOKEN_VARIABLE
 from blizzard.runner.cli.runtime import named_runners
 from blizzard.runner.composition import RunnerProcess
-from blizzard.runner.host_config import HOST_TOKEN_VARIABLE, BuiltRunner
+from blizzard.runner.host_config import BuiltRunner
 from blizzard.runner.host_layout import HostLayout, HostLock
 from blizzard.runner.hub.client import HostRunnerRetireRefused
 from blizzard.runner.hub.internal.token_file import HubTokenFile

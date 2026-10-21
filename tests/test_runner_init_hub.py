@@ -17,8 +17,8 @@ from click.testing import Result
 
 from blizzard.cli.main import blizzard
 from blizzard.foundation.operator_sessions.internal.session_file import SessionFile
+from blizzard.foundation.runner_token_names import HOST_TOKEN_VARIABLE
 from blizzard.foundation.runner_tokens import RunnerTokenRefusalReason
-from blizzard.runner.host_config import HOST_TOKEN_VARIABLE
 from blizzard.runner.host_layout import HostLayout
 from blizzard.runner.hub.bootstrap import (
     BootstrapStop,

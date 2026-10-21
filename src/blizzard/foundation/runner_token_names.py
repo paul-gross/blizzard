@@ -8,6 +8,9 @@ import re
 #: What every runner's token variable starts with; the runner's normalised name follows.
 HUB_TOKEN_VARIABLE_PREFIX = "BZ_HUB_TOKEN_"
 
+#: The variable a host reads its one host token from; the hub CLI prints the same name in the `.env` line it mints.
+HOST_TOKEN_VARIABLE = "BZ_HOST_TOKEN"
+
 _OUTSIDE_NAME_ALPHABET = re.compile(r"[^A-Z0-9]")
 
 

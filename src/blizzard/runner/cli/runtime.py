@@ -23,7 +23,7 @@ from blizzard.foundation.logging import get_logger
 from blizzard.foundation.operator_sessions.internal.session_file import SessionFile
 from blizzard.foundation.roles import collaborator, dto
 from blizzard.foundation.runner_identity_state import IdentityState
-from blizzard.foundation.runner_token_names import hub_token_variable
+from blizzard.foundation.runner_token_names import HOST_TOKEN_VARIABLE, hub_token_variable
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.migrations import MigrationConnectionError, RevisionMismatchError, StoreBelowFloorError
 from blizzard.foundation.trace_export.settings import TracingSettings
@@ -49,7 +49,6 @@ from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.harness.bundle import BundleSnapshot
 from blizzard.runner.harness.wiring import publish_harness_bundle
 from blizzard.runner.host_config import (
-    HOST_TOKEN_VARIABLE,
     BuiltRunner,
     HaltedRunner,
     HostConfig,

@@ -55,6 +55,7 @@ _MOVED_HOMES = {
     "IdentityState": "blizzard.foundation.runner_identity_state",
     "HostRegistrationState": "blizzard.foundation.host_registration_state",
     "HostRunnerState": "blizzard.foundation.host_runner_state",
+    "HOST_TOKEN_VARIABLE": "blizzard.foundation.runner_token_names",
     "runner_prefix": "blizzard.runner.route_paths",
     "is_api_path": "blizzard.runner.route_paths",
     "within_runner": "blizzard.runner.route_paths",

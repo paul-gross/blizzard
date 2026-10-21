@@ -16,10 +16,11 @@ from click.testing import Result
 from blizzard.cli.main import blizzard
 from blizzard.foundation.clock import SystemClock
 from blizzard.foundation.operator_sessions.internal.session_file import SessionFile
+from blizzard.foundation.runner_token_names import HOST_TOKEN_VARIABLE
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.composition import build_host_stores
 from blizzard.runner.config import DEFAULT_WORKSPACE_ID, ProjectBinding
-from blizzard.runner.host_config import HOST_TOKEN_VARIABLE, runner_toml, scaffold_runner
+from blizzard.runner.host_config import runner_toml, scaffold_runner
 from blizzard.runner.host_file import append_runner
 from blizzard.runner.host_layout import HostLayout
 from blizzard.runner.hub.client import TokenIdentity

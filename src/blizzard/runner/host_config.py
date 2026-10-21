@@ -29,7 +29,7 @@ from blizzard.foundation.flags import (
 )
 from blizzard.foundation.forwarded import TrustedProxies
 from blizzard.foundation.roles import collaborator, domain_model
-from blizzard.foundation.runner_token_names import hub_token_variable
+from blizzard.foundation.runner_token_names import HOST_TOKEN_VARIABLE, hub_token_variable
 from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.runner.config import (
     DEFAULT_AUTH_HUB_ROLE,
@@ -91,7 +91,6 @@ from blizzard.runner.public_origins import PublicOrigins
 from blizzard.runner.subscriptions.subscription_sampler import PROVIDER_ANTHROPIC
 from blizzard.runner.transcripts.caps import CHUNK_TRANSCRIPT_MAX_BYTES, TRANSCRIPT_RECORD_MAX_BYTES
 
-HOST_TOKEN_VARIABLE = "BZ_HOST_TOKEN"
 #: The name a pre-host runner read its one token under; a host reads ``BZ_HUB_TOKEN_<NAME>`` per runner.
 UNSUFFIXED_TOKEN_VARIABLE = "BZ_HUB_TOKEN"
 #: The graduation procedure a directory that has not graduated is pointed at.
@@ -415,6 +414,24 @@ class HostConfig:
                 (f"{self.layout.config_path} declares several runners ({held}); name one with --runner",)
             )
         return first
+
+    def check_new_runner(self, name: str) -> None:
+        """Raises :class:`HostConfigError` when a runner called ``name`` could not join the ``[[runner]]`` entries this
+        host holds — its name, or the token variable it reads, is already taken. It carries no id until the hub
+        assigns one, so the id is not judged."""
+        candidate = RunnerEntry(name=name)
+        clashes = _repeats((*self.runners, candidate))
+        if any(kind == "name" for kind, _ in clashes):
+            raise HostConfigError((f"{self.config_path} already holds a runner named {name!r}; pick another name",))
+        if clashes:
+            variable = hub_token_variable(name)
+            holder = next(entry.name for entry in self.runners if hub_token_variable(entry.name) == variable)
+            raise HostConfigError(
+                (
+                    f"runner {name!r} would read its token from {variable}, which runner {holder!r} already reads; "
+                    "pick another name",
+                )
+            )
 
     def runner_config(self, environ: Mapping[str, str] | None = None, *, runner: str | None = None) -> RunnerConfig:
         """The config of the runner :meth:`sole_runner` picks, for an offline verb: projected whether or not it has
@@ -1092,15 +1109,21 @@ def _own_tables(raw: ConfigView, *, root: Path, db_url: str, path: Path) -> Runn
 def _check_runner_uniqueness(entries: tuple[RunnerEntry, ...], *, has_host_token: bool, errors: _Errors) -> None:
     """The host errors only the whole set of runners shows: a repeated id, name, or token variable, and more
     than one runner on a host with no host token."""
+    errors.found.extend(f"two [[runner]] entries share the {kind} {key!r}" for kind, key in _repeats(entries))
+    if len(entries) > 1 and not has_host_token:
+        errors.add(f"more than one [[runner]] needs a host token ({HOST_TOKEN_VARIABLE}), and none is set")
+
+
+def _repeats(entries: tuple[RunnerEntry, ...]) -> list[tuple[str, str]]:
+    """Each ``(kind, key)`` two entries share, over the keys that decide whether runners clash."""
+    repeats: list[tuple[str, str]] = []
     for kind, keys in (
         ("id", [entry.id for entry in entries]),
         ("name", [entry.name for entry in entries]),
         ("token variable", [hub_token_variable(entry.name) for entry in entries]),
     ):
-        repeated = sorted({key for key in keys if key is not None and keys.count(key) > 1})
-        errors.found.extend(f"two [[runner]] entries share the {kind} {key!r}" for key in repeated)
-    if len(entries) > 1 and not has_host_token:
-        errors.add(f"more than one [[runner]] needs a host token ({HOST_TOKEN_VARIABLE}), and none is set")
+        repeats.extend((kind, key) for key in sorted({key for key in keys if key is not None and keys.count(key) > 1}))
+    return repeats
 
 
 def _permission_warnings(path: Path, *, holds_credentials: bool) -> tuple[str, ...]:

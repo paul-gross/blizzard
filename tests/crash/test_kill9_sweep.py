@@ -26,7 +26,7 @@ from sqlalchemy import Engine, Row, insert, select
 
 from blizzard.foundation.clock import SystemClock
 from blizzard.foundation.node_steps import Executor
-from blizzard.foundation.runner_token_names import hub_token_variable
+from blizzard.foundation.runner_token_names import HOST_TOKEN_VARIABLE, hub_token_variable
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.tokens import TokenHash
 from blizzard.hub.app import CLOSE_DRAIN_INTERVAL_SECONDS
@@ -38,7 +38,6 @@ from blizzard.runner.composition import build_host_stores
 from blizzard.runner.config import DEFAULT_WORKSPACE_ID
 from blizzard.runner.environments.internal.basic_provider import BasicWorkspaceProvider
 from blizzard.runner.harness.identity import OPENCODE_HARNESS_ID
-from blizzard.runner.host_config import HOST_TOKEN_VARIABLE
 from blizzard.runner.host_layout import HostLayout
 from blizzard.runner.hub.internal.token_file import HubTokenFile
 from blizzard.runner.hub.token_file import assigned_token
