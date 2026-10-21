@@ -82,6 +82,7 @@ from blizzard.hub.domain.config.changes import IReadConfigChanges, ISecretRefere
 from blizzard.hub.domain.config.repositories import IReadRepositoryRecordRepository
 from blizzard.hub.domain.config.secrets import IHubKeyProvider, ISecretCatalog, ISecretCipher, ISecretReader
 from blizzard.hub.domain.config.work_sources import IReadWorkSourceRepository
+from blizzard.hub.domain.config_apply.service import ConfigApplication
 from blizzard.hub.domain.execution.apply import ApplyService
 from blizzard.hub.domain.execution.claim import ClaimService
 from blizzard.hub.domain.execution.decisions import DecisionService, RequeueService
@@ -334,6 +335,8 @@ class TenantServices:
     secret_references: ISecretReferences
     #: The one writer of configured records — work sources, repositories and secrets, each write with its change row.
     config_authoring: ConfigAuthoring
+    #: The use case behind ``POST /api/config/apply``: loads what a document names, mints, plans, and applies it.
+    config_application: ConfigApplication
     #: Stored work-source records (the read half).
     work_source_records: IReadWorkSourceRepository
     #: Stored repository records (the read half).
@@ -975,6 +978,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
     scope_registry = ScopeRegistry(scopes=scope_store, clock=clock)
     routine_store = RoutineStore(tenant_connections)
     routine_scope_store = RoutineScopeStore(tenant_connections)
+    config_authoring = build_config_authoring(stores, cipher=parts.secret_cipher)
     finding_set_store = FindingSetStore(tenant_connections)
     run_context_store = RunContextStore(tenant_connections)
     garden_delivery_store = GardenDeliveryStore(tenant_connections)
@@ -1125,7 +1129,21 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         scope_lifecycle=ScopeLifecycle(scopes=scope_store, clock=clock),
         secret_catalog=stores.secrets,
         secret_references=stores.secret_referrers,
-        config_authoring=build_config_authoring(stores, cipher=parts.secret_cipher),
+        config_authoring=config_authoring,
+        config_application=ConfigApplication(
+            authoring=config_authoring,
+            repositories=stores.repository_records,
+            work_sources=stores.work_source_records,
+            projects=stores.projects,
+            links=stores.project_links,
+            scopes=scope_store,
+            routines=routine_store,
+            routine_scopes=routine_scope_store,
+            graphs=graph_store,
+            secrets=stores.secrets,
+            pick=parts.color_pick,
+            clock=clock,
+        ),
         work_source_records=stores.work_source_records,
         repository_records=stores.repository_records,
         config_changes=stores.config_changes,
