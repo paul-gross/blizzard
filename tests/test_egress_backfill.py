@@ -4,6 +4,7 @@ through the live sweep's own row assembly, with the cursors untouched."""
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -11,6 +12,7 @@ import httpx
 import pytest
 from click.testing import CliRunner
 
+from blizzard.cli.collaborators import CliCollaborators
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.cli import hub as hub_group
 from blizzard.hub.domain.observability.analytics.extraction import EXTRACTOR_VERSION
@@ -364,7 +366,7 @@ def test_the_cli_refuses_a_future_until_before_sending(tmp_path: Path, monkeypat
     sent: list[object] = []
     monkeypatch.setattr(httpx, "post", lambda *a, **k: sent.append(a))
     now = hub.clock.now()
-    monkeypatch.setattr("blizzard.hub.cli.egress.SystemClock", lambda: hub.clock)
+    collaborators = replace(CliCollaborators.production(), wall_clock=hub.clock)
 
     result = CliRunner().invoke(
         hub_group,
@@ -377,6 +379,7 @@ def test_the_cli_refuses_a_future_until_before_sending(tmp_path: Path, monkeypat
             (now + timedelta(seconds=1)).astimezone().replace(tzinfo=None).isoformat(),
         ],
         env=_ENV,
+        obj=collaborators,
     )
 
     assert result.exit_code != 0

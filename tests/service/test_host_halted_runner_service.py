@@ -16,9 +16,9 @@ from pathlib import Path
 import httpx
 import pytest
 
-from blizzard.foundation.runner_token_names import hub_token_variable
+from blizzard.foundation.runner_token_names import HOST_TOKEN_VARIABLE, hub_token_variable
 from blizzard.runner.config import DEFAULT_WORKSPACE_ID, ProjectBinding
-from blizzard.runner.host_config import HOST_TOKEN_VARIABLE, RunnerEntry
+from blizzard.runner.host_config import RunnerEntry
 from blizzard.runner.host_layout import HostLayout
 from blizzard.runner.hub.internal.token_file import HubTokenFile
 from blizzard.runner.runtime import sqlite_store_file

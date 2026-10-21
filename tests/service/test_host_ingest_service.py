@@ -18,9 +18,8 @@ import httpx
 import pytest
 import sqlalchemy as sa
 
-from blizzard.foundation.runner_token_names import hub_token_variable
+from blizzard.foundation.runner_token_names import HOST_TOKEN_VARIABLE, hub_token_variable
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.runner.host_config import HOST_TOKEN_VARIABLE
 from blizzard.runner.hub.internal.token_file import HubTokenFile
 from tests.config_inputs import load_host_config
 from tests.fleet_launchers import await_http, terminate

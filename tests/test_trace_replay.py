@@ -4,6 +4,7 @@ sweep's assembly, with the live cursor untouched."""
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import cast
@@ -13,6 +14,7 @@ import pytest
 import sqlalchemy as sa
 from click.testing import CliRunner
 
+from blizzard.cli.collaborators import CliCollaborators
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.foundation.trace_export.settings import TracingSettings
@@ -405,13 +407,14 @@ def test_the_cli_refuses_a_future_until_before_sending_any_window(
     hub, _ = _hub(tmp_path)
     bodies = _relay(hub, monkeypatch)
     now = hub.clock.now()
-    monkeypatch.setattr("blizzard.hub.cli.traces.SystemClock", lambda: hub.clock)
+    collaborators = replace(CliCollaborators.production(), wall_clock=hub.clock)
     start = now - timedelta(seconds=3600 * 3)
 
     result = CliRunner().invoke(
         hub_group,
         ["traces", "replay", "--since", _local(start), "--until", _local(now + timedelta(seconds=1))],
         env=_ENV,
+        obj=collaborators,
     )
 
     assert result.exit_code != 0

@@ -8,11 +8,10 @@ from pathlib import Path
 
 import pytest
 
-from blizzard.foundation.runner_token_names import hub_token_variable
+from blizzard.foundation.runner_token_names import HOST_TOKEN_VARIABLE, hub_token_variable
 from blizzard.runner import config as runner_config
 from blizzard.runner.config import ConfigError
 from blizzard.runner.host_config import (
-    HOST_TOKEN_VARIABLE,
     BuiltRunner,
     HaltedRunner,
     HostConfig,
@@ -342,6 +341,15 @@ def test_more_than_one_runner_under_a_host_token_loads_and_an_offline_verb_names
         config.sole_runner()
     with pytest.raises(HostConfigError, match="declares no runner 'c'"):
         config.sole_runner("c")
+
+
+def test_a_candidate_runner_is_refused_for_a_repeated_name_or_a_clashing_token_variable(tmp_path: Path) -> None:
+    config = load_host_config(_write(tmp_path / "host", _runner("")))
+    config.check_new_runner("r-two")
+    with pytest.raises(HostConfigError, match="already holds a runner named 'r-one'"):
+        config.check_new_runner("r-one")
+    with pytest.raises(HostConfigError, match=f"{hub_token_variable('r-one')}, which runner 'r-one' already reads"):
+        config.check_new_runner("R_ONE")
 
 
 def test_a_malformed_file_is_a_host_error(tmp_path: Path) -> None:

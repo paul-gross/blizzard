@@ -7,6 +7,7 @@ not the daemon runtime (``host`` blocks on a server and is not driven here).
 
 from __future__ import annotations
 
+import os
 import shutil
 import socket
 import threading
@@ -25,7 +26,7 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.migrations import MigrationRunner
 from blizzard.hub.store import MIGRATIONS_DIR as HUB_MIGRATIONS_DIR
 from blizzard.runner.cli.daemon import LOCAL_CLIENT_TIMEOUT, daemon_holding
-from blizzard.runner.host_layout import HostLayout
+from blizzard.runner.host_layout import HostLayout, HostLock
 from blizzard.runner.store import MIGRATIONS_DIR as RUNNER_MIGRATIONS_DIR
 from blizzard.runner.store import schema as runner_schema
 from tests.host_files import load_runner_config
@@ -548,7 +549,7 @@ def test_runner_transcript_reship_refuses_while_a_daemon_holds_the_store(tmp_pat
         server.close()
 
     assert result.exit_code != 0
-    assert "single-owner" in result.output
+    assert "so this cannot" in result.output
 
 
 def test_runner_transcript_backfill_refuses_while_a_daemon_holds_the_store(tmp_path: Path) -> None:
@@ -564,7 +565,45 @@ def test_runner_transcript_backfill_refuses_while_a_daemon_holds_the_store(tmp_p
         server.close()
 
     assert result.exit_code != 0
-    assert "single-owner" in result.output
+    assert "so this cannot" in result.output
+
+
+_STORE_WRITERS = {
+    "reship": (["transcript", "reship", "seg_x"], "reship a transcript"),
+    "tick": (["tick"], "run a tick"),
+    "host": (["host"], "start the host"),
+}
+
+
+@pytest.mark.parametrize("verb", _STORE_WRITERS)
+@pytest.mark.parametrize("held_by", ["lock", "socket"])
+def test_every_store_writing_verb_refuses_a_held_directory_in_one_wording(
+    verb: str, held_by: str, tmp_path: Path
+) -> None:
+    """One guard stands in front of `transcript`, `tick` and `host`: the lock holder's pid or the answering socket
+    is named, the action it stops is named, and the store is left as it was."""
+    root = tmp_path / "runner"
+    assert init_runner().invoke(blizzard, ["runner", "init", str(root)]).exit_code == 0
+    _enable_transcript_shipping(root)
+    layout = HostLayout(root)
+    store_before = layout.store_path.read_bytes() if layout.store_path.exists() else None
+    args, action = _STORE_WRITERS[verb]
+    server = _serve_on(layout.legacy_socket_path, _OK) if held_by == "socket" else None
+    lock = HostLock.acquire(layout) if held_by == "lock" else None
+
+    try:
+        result = init_runner().invoke(blizzard, ["runner", *args, "--dir", str(root)])
+    finally:
+        if server is not None:
+            server.close()
+        if lock is not None:
+            lock.release()
+
+    assert result.exit_code != 0
+    cause = f"pid {os.getpid()}" if held_by == "lock" else str(layout.legacy_socket_path)
+    assert f"{cause}" in result.output
+    assert f"so this cannot {action} — stop it first" in result.output
+    assert (layout.store_path.read_bytes() if layout.store_path.exists() else None) == store_before
 
 
 def test_runner_takeover_errors_cleanly_with_no_daemon_serving(tmp_path: Path) -> None:

@@ -14,7 +14,7 @@ from pathlib import Path
 import click
 
 from blizzard.cli.operator_trace import OperatorTrace
-from blizzard.foundation.runner_token_names import hub_token_variable
+from blizzard.foundation.runner_token_names import HOST_TOKEN_VARIABLE, hub_token_variable
 from blizzard.foundation.store.migrations import StoreBelowFloorError
 from blizzard.runner.cli.daemon import daemon_holding
 from blizzard.runner.cli.directory import load_host
@@ -24,14 +24,13 @@ from blizzard.runner.composition import build_runner_ingest
 from blizzard.runner.config import SCAFFOLD_AGENTS, ProjectBinding
 from blizzard.runner.config_table import ConfigError
 from blizzard.runner.host_config import (
-    HOST_TOKEN_VARIABLE,
     SCAFFOLD_SUBSCRIPTION,
     HostConfig,
     runner_toml,
     scaffold_runner,
 )
 from blizzard.runner.host_file import append_runner, remove_runner
-from blizzard.runner.host_layout import RUNNERS_DIRNAME, HostHeld, HostLayout, HostLock
+from blizzard.runner.host_layout import RUNNERS_DIRNAME, HostHeld, HostLayout, hold_host
 from blizzard.runner.hub.client import (
     HostRefusalReason,
     HostRefused,
@@ -96,14 +95,11 @@ def add(
     file allows."""
     config = load_host(directory)
     token = _host_token(config)
-    if any(entry.name == name for entry in config.runners):
-        raise click.ClickException(f"{config.config_path} already holds a runner named {name!r}; pick another name")
+    try:
+        config.check_new_runner(name)
+    except ConfigError as exc:
+        raise click.ClickException(str(exc)) from exc
     token_env = hub_token_variable(name)
-    if clash := next((e.name for e in config.runners if hub_token_variable(e.name) == token_env), None):
-        raise click.ClickException(
-            f"runner {name!r} would read its token from {token_env}, which runner {clash!r} already reads; "
-            "pick another name"
-        )
     bindings = _bindings(config, projects, workspaces, agents)
     hub = config.hub_url
     collaborators = InitCollaborators.of(ctx)
@@ -294,10 +290,9 @@ def _host_refused(answer: HostRefused, hub: str, act: str) -> str:
 
 def _running(ctx: click.Context, layout: HostLayout) -> str | None:
     """Whether a host is running in ``layout``'s directory — its lock held, or its socket answering — in words."""
+    trace = OperatorTrace.source(ctx)
     try:
-        lock = HostLock.acquire(layout)
+        with hold_host(layout, (layout.socket_path,), lambda sock: daemon_holding(sock, trace)):
+            return None
     except HostHeld as exc:
         return f"a running host holds {layout.root} ({exc})"
-    lock.release()
-    held = daemon_holding(layout.socket_path, OperatorTrace.source(ctx))
-    return f"a running host answers at {layout.socket_path}" if held is not None else None

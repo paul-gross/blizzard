@@ -35,9 +35,8 @@ from blizzard.runner.host_layout import (
     LEGACY_STORE_FILENAME,
     MIGRATE_COMMAND,
     Graduation,
-    HostHeld,
     HostLayout,
-    HostLock,
+    hold_host,
     migrate_remedy,
 )
 from blizzard.runner.store import MIGRATIONS_DIR, STORE_NAME
@@ -394,13 +393,12 @@ class Runtime:
     @contextmanager
     def _exclusive(self, layout: HostLayout, action: str) -> Iterator[None]:
         """The host directory held for a write: its lock taken, and no pre-host daemon answering on ``runner.sock``."""
-        try:
-            lock = HostLock.acquire(layout)
-        except HostHeld as exc:
-            raise ConfigError(f"{exc}, so this cannot {action} — stop it first, then re-run") from exc
-        with lock:
-            if (held := self.holder(layout.legacy_socket_path)) is not None:
-                raise ConfigError(f"{held}, so this cannot {action} — stop it first, then re-run")
+        with hold_host(
+            layout,
+            (layout.legacy_socket_path,),
+            self.holder,
+            lambda held: ConfigError(f"{held}, so this cannot {action} — stop it first, then re-run"),
+        ):
             yield
 
 

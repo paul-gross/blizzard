@@ -12,6 +12,7 @@ import httpx
 from click.testing import CliRunner
 
 from blizzard.cli.collaborators import CliCollaborators
+from blizzard.foundation.clock import SystemClock
 from blizzard.foundation.span_clock import Clock
 
 
@@ -75,7 +76,7 @@ class Bound:
 def bind_stubs(*, get: Callable[..., Any] | None = None, post: Callable[..., Any] | None = None) -> Bound:
     """Answer worker commands' requests with ``get``/``post``."""
     factory = _StubFactory(get, post)
-    collaborators = CliCollaborators(client_factory=factory, clock=Clock())  # type: ignore[arg-type]
+    collaborators = CliCollaborators(client_factory=factory, clock=Clock(), wall_clock=SystemClock())  # type: ignore[arg-type]
     return Bound(collaborators, _BoundRunner(collaborators), factory.built)
 
 
@@ -88,5 +89,5 @@ def bind_transport(handler: Callable[[httpx.Request], httpx.Response], *, clock:
         built.append(client)
         return client
 
-    collaborators = CliCollaborators(client_factory=factory, clock=clock or Clock())
+    collaborators = CliCollaborators(client_factory=factory, clock=clock or Clock(), wall_clock=SystemClock())
     return Bound(collaborators, _BoundRunner(collaborators), built)

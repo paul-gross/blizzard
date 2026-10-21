@@ -18,6 +18,7 @@ from click.testing import CliRunner, Result
 from blizzard.cli import operator_trace
 from blizzard.cli.collaborators import CliCollaborators
 from blizzard.foundation import cli_spans
+from blizzard.foundation.clock import SystemClock
 from blizzard.foundation.otlp_destination import OtlpDestination, parse_headers
 from blizzard.foundation.span_clock import Clock
 from blizzard.foundation.trace_ids import parse_traceparent
@@ -50,7 +51,9 @@ class _Collector:
 
 def _bind(collector: _Collector) -> CliCollaborators:
     return CliCollaborators(
-        client_factory=lambda: httpx.Client(transport=httpx.MockTransport(collector)), clock=Clock()
+        client_factory=lambda: httpx.Client(transport=httpx.MockTransport(collector)),
+        clock=Clock(),
+        wall_clock=SystemClock(),
     )
 
 
@@ -189,7 +192,9 @@ def test_a_runner_operator_verb_is_a_span_and_its_requests_carry_the_context(mon
 
     real = httpx.Client
     monkeypatch.setattr(runner_daemon.httpx, "Client", lambda **kw: real(transport=httpx.MockTransport(answer), **kw))
-    bound = CliCollaborators(client_factory=lambda: real(transport=httpx.MockTransport(answer)), clock=Clock())
+    bound = CliCollaborators(
+        client_factory=lambda: real(transport=httpx.MockTransport(answer)), clock=Clock(), wall_clock=SystemClock()
+    )
 
     CliRunner().invoke(runner_group, ["status", "--runner-url", "http://127.0.0.1:1"], env=_OPERATOR_ENV, obj=bound)
 
