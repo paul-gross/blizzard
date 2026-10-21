@@ -1,13 +1,11 @@
 """The configuration keys a daemon reads, declared once, and the strict accessor every read goes through.
 
 A registry names each key of a daemon's toml file and each durable path under its runtime root; the loader passes it to
-the root :class:`ConfigView`, so no section parser imports it. With ``BLIZZARD_STRICT_CONFIG=1`` — the suite sets it,
-spawned daemons included — reading an undeclared key raises; unset, a read is a plain mapping
-read and the key is ignored."""
+the root :class:`ConfigView`, so no section parser imports it. The loader also says whether the view is strict: a strict
+view raises on reading an undeclared key; a lenient one reads it as a plain mapping read and the key is ignored."""
 
 from __future__ import annotations
 
-import os
 from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Any, Final
@@ -16,9 +14,6 @@ from blizzard.foundation.roles import domain_model
 
 if TYPE_CHECKING:
     from blizzard.foundation.flags import Flags
-
-#: Set to ``1`` and an undeclared read raises; the test suite sets it for itself and every daemon it spawns.
-STRICT_CONFIG_ENVIRONMENT_VARIABLE: Final = "BLIZZARD_STRICT_CONFIG"
 
 #: The ``type`` of a table whose children are free-form: a read beneath it is always allowed.
 OPEN_TABLE: Final = "open table"
@@ -113,16 +108,6 @@ class ConfigRegistry:
         return ConfigRegistry(name, (*self.keys, *keys), (*self.paths, *paths))
 
 
-class HeldKeys:
-    """The flags a file's guarded keys read against, and each guarded key that was present while its flag was off —
-    shared by a root view and every table beneath it."""
-
-    def __init__(self, flags: Flags) -> None:
-        self.flags = flags
-        #: Key path to the flag holding it, for each present key read as absent.
-        self.held: dict[str, str] = {}
-
-
 SCALAR_TYPES: Final = (STRING, INTEGER, NUMBER, BOOLEAN, STRING_LIST, STRING_OR_LIST)
 
 _TYPE_CHECKS: Final[Mapping[str, Callable[[object], bool]]] = {
@@ -147,12 +132,14 @@ class ConfigView:
     body: Mapping[str, Any]
     #: ``False`` for a :meth:`blank` view, which no file fed and so has nothing to check.
     checked: bool = True
-    #: Set by a loader once it has resolved the flags; a view without it reads every key plainly.
-    held: HeldKeys | None = None
+    #: Whether reading an undeclared key raises, rather than reading it plainly; set at the root.
+    strict: bool = False
+    #: The flags a loader resolved, which guarded keys read against; without them every key reads plainly.
+    flags: Flags | None = None
 
     @classmethod
-    def root(cls, registry: ConfigRegistry, document: Mapping[str, Any]) -> ConfigView:
-        return cls(registry, "", document)
+    def root(cls, registry: ConfigRegistry, document: Mapping[str, Any], *, strict: bool) -> ConfigView:
+        return cls(registry, "", document, strict=strict)
 
     @classmethod
     def blank(cls) -> ConfigView:
@@ -178,15 +165,11 @@ class ConfigView:
     def table(self, key: str) -> ConfigView:
         """The sub-table at ``key``; empty when absent or not a table."""
         value = self.get(key)
-        return ConfigView(
-            self.registry, self._join(key), value if isinstance(value, dict) else {}, self.checked, self.held
-        )
+        return replace(self, path=self._join(key), body=value if isinstance(value, dict) else {})
 
     def element(self, key: str, value: object) -> ConfigView:
         """One entry of the array of tables at ``key``, its path marked ``key[]``; empty when not a table."""
-        return ConfigView(
-            self.registry, f"{self._join(key)}[]", value if isinstance(value, dict) else {}, self.checked, self.held
-        )
+        return replace(self, path=f"{self._join(key)}[]", body=value if isinstance(value, dict) else {})
 
     def entries(self, key: str) -> Iterator[ConfigView]:
         """Each table of the array at ``key``; none when absent or not an array."""
@@ -202,21 +185,18 @@ class ConfigView:
 
     def holding(self, flags: Flags) -> ConfigView:
         """This view with its guarded keys read against ``flags``."""
-        return replace(self, held=HeldKeys(flags))
+        return replace(self, flags=flags)
 
     def _held(self, key: str) -> bool:
         """Whether ``key`` is present, guarded, and its flag off — after its value passed the declared type, so a
         malformed value fails whatever the flag says."""
-        declared = self.registry.key(self._join(key)) if self.checked and self.held is not None else None
+        declared = self.registry.key(self._join(key)) if self.checked and self.flags is not None else None
         if declared is None or declared.flag is None or key not in self.body:
             return False
-        assert self.held is not None
+        assert self.flags is not None
         if not _TYPE_CHECKS[declared.type](self.body[key]):
             raise InvalidConfigValue(f"{declared.path} must be a {declared.type}, got {self.body[key]!r}")
-        if self.held.flags.on(declared.flag):
-            return False
-        self.held.held[declared.path] = declared.flag
-        return True
+        return not self.flags.on(declared.flag)
 
     def _join(self, key: str) -> str:
         return f"{self.path}.{key}" if self.path else key
@@ -227,5 +207,5 @@ class ConfigView:
             self._undeclared(path)
 
     def _undeclared(self, path: str) -> None:
-        if os.environ.get(STRICT_CONFIG_ENVIRONMENT_VARIABLE) == "1":
+        if self.strict:
             raise UndeclaredConfigKey(path, self.registry.name)

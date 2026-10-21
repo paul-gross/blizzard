@@ -9,6 +9,7 @@ import sqlalchemy as sa
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub import runtime as hub_runtime
+from tests.config_inputs import init_hub
 
 pytestmark = [pytest.mark.unit]
 
@@ -17,7 +18,7 @@ _WORK_SOURCE_RECORDS_PARENT = "20261004_1000_hub_secrets"
 
 def test_work_source_record_tables_survive_migration_roundtrip(tmp_path: Path) -> None:
     """``work_sources``/``work_source_lifecycle_facts``/``config_changes`` — downgraded to the revision's parent."""
-    config = hub_runtime.init_environment(tmp_path)
+    config = init_hub(tmp_path)
     runner = hub_runtime.migration_runner(config)
     tables = {"work_sources", "work_source_lifecycle_facts", "config_changes"}
 

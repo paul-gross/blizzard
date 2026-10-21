@@ -14,12 +14,10 @@ import sqlalchemy as sa
 from fastapi.testclient import TestClient
 
 from blizzard.foundation.flags import FlagRegistry, resolve_flags
-from blizzard.hub import app as hub_app
-from blizzard.hub import runtime as hub_runtime
-from blizzard.hub.config import HubConfig
 from blizzard.hub.secrets import ENV_SECRET_KEY
 from blizzard.hub.store import schema as s
 from blizzard.hub.tenancy import TenantId
+from tests.config_inputs import build_hosted_hub_app, init_hub, load_hub_config
 from tests.support import HubHarness, add_tenant, build_hub, default_tenant, hub_scoped, seed_runner
 
 pytestmark = pytest.mark.component
@@ -197,11 +195,11 @@ def test_a_hub_whose_toml_still_sets_runner_auth_mode_boots_and_refuses_a_tokenl
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, value: str
 ) -> None:
     monkeypatch.delenv(ENV_SECRET_KEY, raising=False)
-    config = hub_runtime.init_environment(tmp_path / "hub")
+    config = init_hub(tmp_path / "hub")
     # Top-level, ahead of the generated tables, where a deployed hub toml carries it.
     config.config_path.write_text(f'runner_auth_mode = "{value}"\n' + config.config_path.read_text())
 
-    app = hub_app.build_hosted_app(HubConfig.load(config.root))
+    app = build_hosted_hub_app(load_hub_config(config.root))
     try:
         client = TestClient(app)
         assert client.post("/api/fleet/runners", json={"workspace_id": "w1"}).status_code == 401

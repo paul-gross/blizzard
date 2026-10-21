@@ -11,6 +11,7 @@ from click.testing import CliRunner
 from blizzard.cli.main import blizzard
 from blizzard.hub import runtime as hub_runtime
 from blizzard.runner import runtime as runner_runtime
+from tests.config_inputs import init_host, init_hub
 from tests.test_baseline_floor import make_tree
 
 pytestmark = pytest.mark.component
@@ -22,7 +23,7 @@ def test_operator_entry_points_refuse_absorbed_store(
 ) -> None:
     root = tmp_path / daemon
     runtime = hub_runtime if daemon == "hub" else runner_runtime
-    runtime.init_environment(root)
+    (init_hub if daemon == "hub" else init_host)(root)
     db = root / "data" / ("hub.db" if daemon == "hub" else "host.db")
     with sqlite3.connect(db) as conn:
         conn.execute("UPDATE alembic_version SET version_num = 'old_rev'")

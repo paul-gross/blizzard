@@ -7,7 +7,7 @@ from pathlib import Path
 import httpx
 import pytest
 
-from blizzard.wire.version_window import VersionWindow
+from blizzard.hub.domain.runners.version_window import VersionWindow
 from tests.support import HubHarness, build_hub, seed_runner
 
 pytestmark = pytest.mark.component

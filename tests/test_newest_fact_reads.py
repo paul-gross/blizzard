@@ -32,9 +32,9 @@ from blizzard.hub.store.internal.trace_store import TraceStore
 from blizzard.hub.store.internal.work_source_record_store import _retired_ids
 from blizzard.hub.store.scoped import ScopedConnections
 from blizzard.hub.tenancy import StoreScope, TenantId
-from blizzard.runner import runtime as runner_runtime
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.leases.model import NewLease
+from tests.config_inputs import init_host
 from tests.hub_event_rows import hub_events_of
 from tests.runner_fakes import SqlAlchemyRunnerStore, runner_store_errors
 from tests.support import (
@@ -308,7 +308,7 @@ def test_the_newest_fact_read_answers_only_from_its_scope_facts(tmp_path: Path, 
 
 def _runner_history(tmp_path: Path, *, depth: int) -> tuple[SqlAlchemyRunnerStore, Engine]:
     """Chunks ``k1``..``k3``, each with ``depth`` open takeovers and ``depth`` escalated leases, epoch by epoch."""
-    engine = create_engine_from_url(runner_runtime.init_environment(tmp_path).db_url)
+    engine = create_engine_from_url(init_host(tmp_path).db_url)
     store = SqlAlchemyRunnerStore(engine, runner_store_errors())
     for key in _KEYS:
         for n in range(depth):

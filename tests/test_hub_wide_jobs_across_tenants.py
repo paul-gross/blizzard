@@ -20,7 +20,6 @@ from blizzard.cli.main import blizzard
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub import app as hub_app
-from blizzard.hub import runtime as hub_runtime
 from blizzard.hub.composition import TenantStores, build_config_authoring, build_hub_core
 from blizzard.hub.config import ConfigError, HubConfig
 from blizzard.hub.domain.config.authoring import ConfigAuthoring
@@ -45,6 +44,7 @@ from blizzard.hub.secrets.rotation import rotate_keys
 from blizzard.hub.store import schema
 from blizzard.hub.store.internal.chunk_hub_exec_store import ChunkHubExecStore
 from blizzard.hub.tenancy import StoreScope, TenantId
+from tests.config_inputs import build_hosted_hub_app, init_hub
 from tests.support import (
     OP,
     add_tenant,
@@ -108,7 +108,7 @@ class _Hub:
 @pytest.fixture
 def hub(tmp_path: Path) -> Iterator[_Hub]:
     """An initialized hub runtime whose store holds its carried-over tenant and a second one."""
-    config = hub_runtime.init_environment(tmp_path / "hub")
+    config = init_hub(tmp_path / "hub")
     engine = create_engine_from_url(config.db_url)
     first = default_tenant(engine)
     second = add_tenant(engine, "second")
@@ -117,7 +117,7 @@ def hub(tmp_path: Path) -> Iterator[_Hub]:
 
 
 def _build(config: HubConfig) -> None:
-    hub_app.build_hosted_app(config).state.engine.dispose()
+    build_hosted_hub_app(config).state.engine.dispose()
 
 
 def _orphan_a_slot(hub: _Hub, tenant: TenantId, suffix: str) -> None:

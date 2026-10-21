@@ -119,6 +119,7 @@ from blizzard.hub.domain.projects.declarations import ImportLinks
 from blizzard.hub.domain.projects.model import ProjectRequired
 from blizzard.hub.domain.runners.host import HostRetired
 from blizzard.hub.domain.runners.registration import RunnerRetired
+from blizzard.hub.domain.runners.version_window import VersionWindow
 from blizzard.hub.layout import SIGNING_KEYS_PARTS, WORKDIRS_DIRNAME
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.secrets import KeyCoverage, hub_key_provider, require_hub_key, secret_cipher
@@ -128,7 +129,6 @@ from blizzard.hub.tenancy import StoreScope, TenantClosed, TenantId, UnknownTena
 from blizzard.hub.work_sources.internal.factory import WorkSourceEntry
 from blizzard.hub.work_sources.source import IWorkSourceRegistry
 from blizzard.wire.components import HUB_SCHEMA_COMPONENTS
-from blizzard.wire.version_window import VersionWindow
 
 #: The transcript-event derivation sweep's own interval — a module
 #: constant; its own change probe skips the pass when nothing changed.
@@ -311,7 +311,7 @@ def import_legacy_config(
     built, then the store and key source opened directly, no app. The import writes into ``tenant``,
     or into the hub's only open tenant when none is named, linking what it creates to that tenant's only project."""
     require_hub_key(environ, data_dir=config.data_dir)
-    legacy = read_legacy_keys(config.config_path, environ)
+    legacy = read_legacy_keys(config.config_path, environ, strict=config.strict)
     engine = open_hub_engine(config.db_url)
     try:
         core = build_process_core(engine)
@@ -383,13 +383,12 @@ def create_app(
     readiness: ReadinessService | None = None,
     services: HubServices | None = None,
     platform_tracing: IPlatformTracing | None = None,
-    flags: Flags | None = None,
+    flags: Flags,
 ) -> FastAPI:
-    """Build a fully wired hub app from resolved config.
+    """Build a fully wired hub app from resolved config and the hub's resolved ``flags``.
 
     ``readiness`` and ``services`` are optional so the store-free paths build the app
-    without opening a database. ``platform_tracing`` is off unless the composition root passes one, and ``flags``
-    is the packaged registry's defaults, with no overrides, unless it passes the hub's resolved ones.
+    without opening a database. ``platform_tracing`` is off unless the composition root passes one.
     """
     log = get_logger("blizzard.hub")
 
@@ -404,7 +403,7 @@ def create_app(
     )
     app.state.platform_tracing = platform_tracing
     app.state.config = config
-    app.state.flags = flags or resolve_flags(FlagRegistry.load(), "hub", {}).flags
+    app.state.flags = flags
     app.state.readiness = readiness
     app.state.services = services
     # Set on shutdown by ``_lifespan``; every SSE stream races it.
@@ -496,14 +495,13 @@ def build_hosted_app(
     *,
     platform_tracing: IPlatformTracing | None = None,
     oauth_http_client: httpx.Client | None = None,
-    flag_registry: FlagRegistry | None = None,
-    version_window: VersionWindow | None = None,
+    version_window: VersionWindow,
 ) -> FastAPI:
     """The ``host`` composition root: open the store and wire every fleet seam.
 
     ``platform_tracing`` defaults to the handle ``[tracing]`` and the OTLP environment decide.
     ``oauth_http_client`` replaces the OAuth providers' client. Either way, the engine and every outbound client are
-    instrumented through it. ``flag_registry`` and ``version_window`` default to the packaged ones."""
+    instrumented through it. ``version_window`` judges each registering runner's version."""
     platform_tracing = platform_tracing or build_platform_tracing(
         config.tracing,
         os.environ,
@@ -584,7 +582,8 @@ def build_hosted_app(
         tenants = core.every_open()
         try:
             LegacyStart.of(
-                [stores.config_import for stores in tenants], read_legacy_keys(config.config_path, os.environ)
+                [stores.config_import for stores in tenants],
+                read_legacy_keys(config.config_path, os.environ, strict=config.strict),
             ).check()
         except LegacyStartRefused as refusal:
             raise ConfigError(str(refusal)) from refusal
@@ -602,7 +601,7 @@ def build_hosted_app(
         readiness=readiness,
         services=services,
         platform_tracing=platform_tracing,
-        flags=build_hub_flags(config.flags, flag_registry, loaded=config.flag_resolution, held=config.held_keys),
+        flags=build_hub_flags(config),
     )
     # `host` disposes this on `app.state` — carried here.
     app.state.engine = engine
@@ -687,8 +686,11 @@ class OrphanedProviders:
             )
 
 
-def create_app_for_export() -> FastAPI:
-    """Build the app with throwaway config for OpenAPI export (no store, no dirs)."""
+def create_app_for_export(flag_registry: FlagRegistry) -> FastAPI:
+    """Build the app with throwaway config for OpenAPI export (no store, no dirs), its flags at ``flag_registry``'s
+    defaults."""
     from pathlib import Path
 
-    return create_app(HubConfig(root=Path("."), db_url="sqlite://"))
+    return create_app(
+        HubConfig(root=Path("."), db_url="sqlite://"), flags=resolve_flags(flag_registry, "hub", {}).flags
+    )

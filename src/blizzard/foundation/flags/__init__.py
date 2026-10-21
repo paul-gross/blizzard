@@ -1,4 +1,4 @@
-"""Feature flags: the registry file's loader, and the resolved :class:`Flags` code reads a flag through."""
+"""Feature flags: the registry file's parser, and the resolved :class:`Flags` code reads a flag through."""
 
 from blizzard.foundation.flags.flags import (
     FlagNotReadable,

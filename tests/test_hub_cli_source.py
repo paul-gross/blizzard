@@ -14,9 +14,8 @@ import pytest
 from click.testing import CliRunner
 from fastapi.testclient import TestClient
 
-from blizzard.hub import app as hub_app
-from blizzard.hub import runtime as hub_runtime
 from blizzard.hub.cli import hub as hub_group
+from tests.config_inputs import build_hosted_hub_app, init_hub
 
 pytestmark = pytest.mark.component
 
@@ -26,8 +25,8 @@ _SENTINEL = "tok-planted-840"
 
 @pytest.fixture
 def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
-    config = hub_runtime.init_environment(tmp_path / "hub")
-    with TestClient(hub_app.build_hosted_app(config)) as c:
+    config = init_hub(tmp_path / "hub")
+    with TestClient(build_hosted_hub_app(config)) as c:
 
         def route(method: str):  # type: ignore[no-untyped-def]
             def call(url: str, *, timeout: float, **kwargs):  # type: ignore[no-untyped-def]

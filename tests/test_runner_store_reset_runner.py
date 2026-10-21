@@ -13,10 +13,10 @@ import pytest
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.migrations import MigrationRunner
 from blizzard.runner.cli import store as store_cli
-from blizzard.runner.host_config import HostConfig
 from blizzard.runner.host_layout import HostLayout, HostLock
 from blizzard.runner.runtime import sqlite_url
 from blizzard.runner.store import MIGRATIONS_DIR
+from tests.config_inputs import load_host_config
 from tests.runner_ingest_support import (
     HUB,
     RUNNER_TABLES,
@@ -58,7 +58,7 @@ def test_reset_of_one_runner_archives_exactly_its_rows_and_keeps_its_counters(
     tmp_path: Path, fake_init_hub: FakeInitHub
 ) -> None:
     root = _host(tmp_path, fake_init_hub)
-    url = HostConfig.load(root).db_url
+    url = load_host_config(root).db_url
     host = create_engine_from_url(url)
     staying = {name: contents(host, name, runner_id=_STAYING) for name in RUNNER_TABLES}
     leaving = {name: contents(host, name, runner_id=_RESET) for name in RUNNER_TABLES}
@@ -125,13 +125,13 @@ def test_reset_names_a_runner_the_host_file_no_longer_declares_by_its_id(
     config = HostLayout(root).config_path
     declared = config.read_text()
     config.write_text(declared[: declared.rindex("[[runner]]")])
-    assert [r.name for r in HostConfig.load(root).runners] == ["runner-local"]
+    assert [r.name for r in load_host_config(root).runners] == ["runner-local"]
 
     result = ok(fake_init_hub, "store", "reset", str(root), "--runner", _RESET)
 
     [archive] = sorted(p for p in HostLayout(root).data_dir.iterdir() if p.name.startswith(f"host.db.{_RESET}."))
     assert f"archived runner {_RESET} ({_RESET}) to {archive}" in result.output
-    host = create_engine_from_url(HostConfig.load(root).db_url)
+    host = create_engine_from_url(load_host_config(root).db_url)
     assert rows(host, "runner_identity", runner_id=_RESET) == []
     host.dispose()
 
@@ -140,7 +140,7 @@ def test_reset_of_a_declared_runner_without_an_id_is_refused(tmp_path: Path, fak
     root = _host(tmp_path, fake_init_hub)
     config = HostLayout(root).config_path
     config.write_text(config.read_text().replace(f'id = "{_RESET}"\n', "", 1))
-    assert [r.id for r in HostConfig.load(root).runners if r.name == "r2"] == [None]
+    assert [r.id for r in load_host_config(root).runners if r.name == "r2"] == [None]
 
     result = run(fake_init_hub, "store", "reset", str(root), "--runner", "r2")
 

@@ -11,6 +11,7 @@ from pathlib import Path
 
 import click
 
+from blizzard.cli.config_inputs import packaged_flag_registry, strict_config
 from blizzard.hub.config import ConfigError, HubConfig
 from blizzard.runner.config_table import ConfigError as RunnerConfigError
 from blizzard.runner.host_config import HostConfig
@@ -40,13 +41,23 @@ def check_invariants_cmd(runner_dir: str | None, hub_dir: str | None, allow_exte
     """
     if runner_dir is None and hub_dir is None:
         raise click.UsageError("pass --runner-dir and/or --hub-dir")
+    registry = packaged_flag_registry()
+    strict = strict_config()
 
     try:
-        runner_db = HostConfig.load_for_store(Path(runner_dir)).db_url if runner_dir is not None else None
+        runner_db = (
+            HostConfig.load_for_store(Path(runner_dir), flag_registry=registry, strict=strict).db_url
+            if runner_dir is not None
+            else None
+        )
     except RunnerConfigError as exc:
         raise click.ClickException(str(exc)) from exc
     try:
-        hub_config = HubConfig.load(Path(hub_dir), allow_external_db=allow_external_db) if hub_dir is not None else None
+        hub_config = (
+            HubConfig.load(Path(hub_dir), allow_external_db=allow_external_db, flag_registry=registry, strict=strict)
+            if hub_dir is not None
+            else None
+        )
     except ConfigError as exc:
         raise click.ClickException(str(exc)) from exc
     hub_db = hub_config.db_url if hub_config is not None else None

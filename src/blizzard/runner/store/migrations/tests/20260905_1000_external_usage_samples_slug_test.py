@@ -9,6 +9,7 @@ import sqlalchemy as sa
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner import runtime as runner_runtime
+from tests.config_inputs import init_host
 from tests.migration_support_store_migrations import (
     assert_frozen_table_lacks_a_later_revisions_columns,
 )
@@ -19,7 +20,7 @@ pytestmark = [pytest.mark.unit]
 def test_external_usage_samples_slug_backfills_the_legacy_anthropic_slug(tmp_path: Path) -> None:
     """``external_usage_samples.slug`` backfills a pre-existing row
     to the legacy Anthropic slug, and downgrading past it drops the column again."""
-    config = runner_runtime.init_environment(tmp_path)  # upgrades to head
+    config = init_host(tmp_path)  # upgrades to head
     runner = runner_runtime.migration_runner(config)
 
     def _columns() -> set[str]:

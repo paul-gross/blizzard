@@ -17,9 +17,9 @@ from pathlib import Path
 import httpx
 import pytest
 
-from blizzard.hub.config import HubConfig
 from blizzard.tools.invariants import Invariants
 from blizzard.wire.work_source import WorkSourceDocument
+from tests.config_inputs import load_hub_config
 from tests.crash.support import (
     OWNER,
     await_http,
@@ -305,7 +305,7 @@ def _restart_daemons(*, hub_dir: Path, forge_port: int, hub_port: int, hub: http
 def _assert_invariants(runner_dir: Path, hub_dir: Path, *, when: str) -> None:
     violations = Invariants(
         runner_db_url=load_runner_config(runner_dir).db_url,
-        hub_db_url=HubConfig.load(hub_dir).db_url,
+        hub_db_url=load_hub_config(hub_dir).db_url,
     ).run()
     assert not violations, f"invariant violations {when}:\n" + "\n".join(str(v) for v in violations)
 

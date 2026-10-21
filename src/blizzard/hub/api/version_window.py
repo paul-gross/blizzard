@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 from blizzard.foundation.roles import collaborator
 from blizzard.hub.domain.runners.version import VersionJudgement, VersionRefusal
-from blizzard.wire.version_window import VersionWindow, admits
+from blizzard.hub.domain.runners.version_window import VersionWindow, admits
 
 
 @collaborator

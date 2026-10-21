@@ -20,6 +20,7 @@ from blizzard.runner.store import MIGRATIONS_DIR
 from blizzard.runner.tracing.attributes import RUNNER_ID, RUNNER_NAME
 from blizzard.runner.tracing.replay import LeaseTraceReplay, ReplayUnavailable
 from blizzard.runner.tracing.sweep import LeaseTraceSweep
+from tests.config_inputs import init_host
 from tests.migration_support_runner_store_migrations import (
     _LATER,
     _NEW,
@@ -74,7 +75,7 @@ _liveness_unscoped = sa.table("daemon_liveness", sa.column("alive_at", UtcDateTi
 
 
 def _store_at_parent(tmp_path: Path) -> tuple[MigrationRunner, sa.Engine]:
-    config = runner_runtime.init_environment(tmp_path)
+    config = init_host(tmp_path)
     migration = runner_runtime.migration_runner(config)
     migration.downgrade(_IDENTITY_PARENT)
     return migration, create_engine_from_url(config.db_url)

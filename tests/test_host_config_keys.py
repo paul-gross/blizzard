@@ -15,7 +15,6 @@ from blizzard.foundation.config_keys import (
     INTEGER,
     NUMBER,
     OPEN_TABLE,
-    STRICT_CONFIG_ENVIRONMENT_VARIABLE,
     STRING_LIST,
     STRING_OR_LIST,
     TABLE,
@@ -36,12 +35,12 @@ from blizzard.runner.host_config import (
     _GRADUATED_WORKSPACE_KEYS,
     _RETIRED_KEYS,
     HaltedRunner,
-    HostConfig,
     HostConfigError,
     _graduated_raw,
     _parse,
 )
 from blizzard.runner.host_layout import HostLayout
+from tests.config_inputs import FLAG_REGISTRY, load_host_config
 from tests.harness_sections import claude_code, opencode
 from tests.host_files import write_minimal_host
 from tests.runner_fakes import NO_TRACING
@@ -53,13 +52,13 @@ _TOKEN = {"BZ_HUB_TOKEN_RUNNER_LOCAL": "tok"}
 
 def _config(root: Path, **kwargs: str) -> RunnerConfig:
     write_minimal_host(root, **kwargs)
-    return HostConfig.load(root).runner_config(_TOKEN)
+    return load_host_config(root).runner_config(_TOKEN)
 
 
 def _refused_runner(root: Path, **kwargs: str) -> str:
     """The runner errors a host file with these keys leaves its one runner halted by."""
     write_minimal_host(root, **kwargs)
-    (halted,) = HostConfig.load(root).projections(_TOKEN)
+    (halted,) = load_host_config(root).projections(_TOKEN)
     assert isinstance(halted, HaltedRunner), "the file was accepted"
     return "; ".join(halted.errors)
 
@@ -67,16 +66,16 @@ def _refused_runner(root: Path, **kwargs: str) -> str:
 def _refused_host(root: Path, **kwargs: str) -> str:
     write_minimal_host(root, **kwargs)
     with pytest.raises(HostConfigError) as raised:
-        HostConfig.load(root)
+        load_host_config(root)
     return str(raised.value)
 
 
 def _round_tripped(root: Path) -> RunnerConfig:
     """The runner the host file projects after being written out again from what it loaded. The written file always
     names the autonomy posture, so where it came from is the one thing a round trip is allowed to change."""
-    loaded = HostConfig.load(root)
+    loaded = load_host_config(root)
     (root / "blizzard-host.toml").write_text(loaded.to_toml())
-    return replace(HostConfig.load(root).runner_config(_TOKEN), autonomy_source="")
+    return replace(load_host_config(root).runner_config(_TOKEN), autonomy_source="")
 
 
 def test_every_knob_defaults_when_its_key_is_absent(tmp_path: Path) -> None:
@@ -258,16 +257,16 @@ def test_the_session_secret_variable_round_trips_by_name_and_resolves_the_secret
     monkeypatch.setenv("MY_SESSION", secret)
     config = _config(tmp_path, top='session_secret_env = "MY_SESSION"\n')
     assert (config.session_secret_env, config.session_secret) == ("MY_SESSION", b"s" * 48)
-    assert secret not in HostConfig.load(tmp_path).to_toml()
+    assert secret not in load_host_config(tmp_path).to_toml()
 
 
 def test_the_default_store_is_omitted_from_the_written_file_and_a_custom_one_is_kept(tmp_path: Path) -> None:
     default = _config(tmp_path / "a")
-    assert "db_url" not in HostConfig.load(tmp_path / "a").to_toml()
+    assert "db_url" not in load_host_config(tmp_path / "a").to_toml()
     assert default.db_url.endswith("/data/host.db")
     custom: Any = _config(tmp_path / "b", top='db_url = "postgresql://runner@db.test/runner"\n')
     assert custom.db_url == "postgresql://runner@db.test/runner"
-    assert 'db_url = "postgresql://runner@db.test/runner"' in HostConfig.load(tmp_path / "b").to_toml()
+    assert 'db_url = "postgresql://runner@db.test/runner"' in load_host_config(tmp_path / "b").to_toml()
 
 
 def test_every_retired_key_graduates_to_its_placement_and_never_into_the_runner() -> None:
@@ -349,7 +348,14 @@ def test_every_declared_host_key_is_read_by_a_load_that_carries_it(
         checked(view, key)
 
     monkeypatch.setattr(ConfigView, "_check", recording)
-    loaded = _parse(_document_carrying_every_key(HOST_REGISTRY), layout=HostLayout(tmp_path), host=None, port=None)
+    loaded = _parse(
+        _document_carrying_every_key(HOST_REGISTRY),
+        layout=HostLayout(tmp_path),
+        host=None,
+        port=None,
+        flag_registry=FLAG_REGISTRY,
+        strict=True,
+    )
     loaded.host_view()  # the lazily read tables — [auth] — are read when projected
 
     unread = [key.path for key in HOST_REGISTRY.keys if key.type != OPEN_TABLE and key.path not in read]
@@ -363,13 +369,10 @@ def test_an_undeclared_host_key_read_names_the_key_and_the_host_registry(
     monkeypatch.setattr(host_config, "HOST_REGISTRY", without_port)
     write_minimal_host(tmp_path)
     with pytest.raises(UndeclaredConfigKey, match=r"'port'.*host") as raised:
-        HostConfig.load(tmp_path)
+        load_host_config(tmp_path)
     assert (raised.value.path, raised.value.registry) == ("port", "host")
 
 
-def test_a_host_file_carrying_an_undeclared_key_loads_when_the_switch_is_off(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.delenv(STRICT_CONFIG_ENVIRONMENT_VARIABLE)
+def test_a_host_file_carrying_an_undeclared_key_loads_when_read_leniently(tmp_path: Path) -> None:
     write_minimal_host(tmp_path, top="undeclared_probe = 1\n[flags]\nprobe = true\n")
-    assert HostConfig.load(tmp_path).runner_config(_TOKEN).name == "runner-local"
+    assert load_host_config(tmp_path, strict=False).runner_config(_TOKEN).name == "runner-local"

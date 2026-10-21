@@ -12,6 +12,7 @@ from typing import Any
 import click
 import httpx
 
+from blizzard.cli.config_inputs import packaged_flag_registry, strict_config
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
 from blizzard.hub.cli.views import Listing
@@ -90,7 +91,9 @@ def secret_rotate_key(directory: str) -> None:
     from blizzard.hub.domain.config.secrets import SecretRotationConflict
 
     try:
-        result = rotate_secret_keys(HubConfig.load(Path(directory)), os.environ)
+        result = rotate_secret_keys(
+            HubConfig.load(Path(directory), flag_registry=packaged_flag_registry(), strict=strict_config()), os.environ
+        )
     except (ConfigError, SecretRotationConflict) as exc:
         raise click.ClickException(str(exc)) from exc
     click.echo(f"re-sealed {result.resealed} secret(s) under key generation {result.key_id}")

@@ -12,11 +12,7 @@ import pytest
 
 from blizzard.foundation.runner_token_names import HUB_TOKEN_VARIABLE_PREFIX, hub_token_variable
 from blizzard.runner.config_table import ConfigError
-from blizzard.runner.host_layout import (
-    Graduation,
-    HostHeld,
-    HostLayout,
-    HostLock,
+from blizzard.runner.host_file import (
     append_runner,
     append_subscription,
     append_workspace,
@@ -27,6 +23,8 @@ from blizzard.runner.host_layout import (
     write_runner_id,
     write_scaffold,
 )
+from blizzard.runner.host_layout import Graduation, HostHeld, HostLayout, HostLock
+from tests.config_inputs import STRICT
 
 pytestmark = pytest.mark.unit
 
@@ -131,15 +129,15 @@ def test_a_scaffold_is_written_whole_and_never_over_an_existing_file(tmp_path: P
 def test_a_runner_id_lands_in_the_named_runner_and_a_rerun_changes_nothing(tmp_path: Path) -> None:
     layout = HostLayout(tmp_path)
     layout.config_path.write_text(_FILE)
-    write_runner_id(layout, "r-one", "rn_new")
+    write_runner_id(layout, "r-one", "rn_new", strict=STRICT)
     document = tomllib.loads(layout.config_path.read_text())
     assert [r.get("id") for r in document["runner"]] == ["rn_new", "rn_old"]
     assert layout.config_path.read_text().startswith("# kept comment\n")
     assert "# second" in layout.config_path.read_text()
     once = layout.config_path.read_text()
-    write_runner_id(layout, "r-one", "rn_new")
+    write_runner_id(layout, "r-one", "rn_new", strict=STRICT)
     assert layout.config_path.read_text() == once
-    write_runner_id(layout, "r-two", "rn_other")
+    write_runner_id(layout, "r-two", "rn_other", strict=STRICT)
     assert tomllib.loads(layout.config_path.read_text())["runner"][1]["id"] == "rn_other"
 
 
@@ -147,21 +145,21 @@ def test_a_runner_id_for_an_unnamed_runner_is_refused(tmp_path: Path) -> None:
     layout = HostLayout(tmp_path)
     layout.config_path.write_text(_FILE)
     with pytest.raises(ConfigError, match="r-none"):
-        write_runner_id(layout, "r-none", "rn_x")
+        write_runner_id(layout, "r-none", "rn_x", strict=STRICT)
     assert layout.config_path.read_text() == _FILE
 
 
 def test_a_runner_id_lands_in_a_file_without_a_trailing_newline(tmp_path: Path) -> None:
     layout = HostLayout(tmp_path)
     layout.config_path.write_text('[[runner]]\nname = "r"')
-    write_runner_id(layout, "r", "rn_1")
+    write_runner_id(layout, "r", "rn_1", strict=STRICT)
     assert tomllib.loads(layout.config_path.read_text())["runner"][0] == {"name": "r", "id": "rn_1"}
 
 
 def test_a_prompt_install_repoints_the_workspace_prompt_keys_only(tmp_path: Path) -> None:
     layout = HostLayout(tmp_path)
     layout.config_path.write_text(_FILE)
-    repoint_workspace_prompt(layout, "ws", file_path="/tmp/workspace-prompt.md")
+    repoint_workspace_prompt(layout, "ws", file_path="/tmp/workspace-prompt.md", strict=STRICT)
     document = tomllib.loads(layout.config_path.read_text())
     assert document["workspace"][0] == {
         "id": "ws",
@@ -203,7 +201,7 @@ projects = [
 def test_a_runner_id_lands_in_the_runner_beside_a_bracket_led_line_in_a_multi_line_string(tmp_path: Path) -> None:
     layout = HostLayout(tmp_path)
     layout.config_path.write_text(_MULTILINE)
-    write_runner_id(layout, "r-one", "rn_new")
+    write_runner_id(layout, "r-one", "rn_new", strict=STRICT)
     after = tomllib.loads(layout.config_path.read_text())
     assert after["runner"][0]["id"] == "rn_new"
     assert after["runner"][0]["runner_prompt"] == "[also not a header]\n"
@@ -214,7 +212,7 @@ def test_a_runner_id_lands_in_the_runner_beside_a_bracket_led_line_in_a_multi_li
 def test_a_prompt_install_repoints_a_workspace_whose_prompt_holds_a_bracket_led_line(tmp_path: Path) -> None:
     layout = HostLayout(tmp_path)
     layout.config_path.write_text(_MULTILINE)
-    repoint_workspace_prompt(layout, "ws", file_path="/tmp/p.md")
+    repoint_workspace_prompt(layout, "ws", file_path="/tmp/p.md", strict=STRICT)
     after = tomllib.loads(layout.config_path.read_text())
     before = tomllib.loads(_MULTILINE)
     assert after["workspace"][0] == {**before["workspace"][0], "prompt_file": "/tmp/p.md", "prompt_package": ""}
@@ -224,7 +222,7 @@ def test_a_prompt_install_repoints_a_workspace_whose_prompt_holds_a_bracket_led_
 def test_a_replaced_multi_line_value_is_replaced_whole(tmp_path: Path) -> None:
     layout = HostLayout(tmp_path)
     layout.config_path.write_text('[[workspace]]\nid = "ws"\nprompt_file = [\n  "x",\n  "[y]",\n]\nroot = "/w"\n')
-    repoint_workspace_prompt(layout, "ws", file_path="/tmp/p.md")
+    repoint_workspace_prompt(layout, "ws", file_path="/tmp/p.md", strict=STRICT)
     assert tomllib.loads(layout.config_path.read_text())["workspace"][0] == {
         "id": "ws",
         "root": "/w",
@@ -237,7 +235,7 @@ def test_a_file_that_is_not_toml_is_refused_and_left_as_it_was(tmp_path: Path) -
     layout = HostLayout(tmp_path)
     layout.config_path.write_text('[[runner]]\nname = "r"\nbroken = \n')
     with pytest.raises(ConfigError):
-        write_runner_id(layout, "r", "rn_1")
+        write_runner_id(layout, "r", "rn_1", strict=STRICT)
     assert layout.config_path.read_text() == '[[runner]]\nname = "r"\nbroken = \n'
 
 
@@ -255,7 +253,7 @@ autonomy = "full"
 def test_an_appended_runner_lands_whole_after_everything_and_keeps_every_comment(tmp_path: Path) -> None:
     layout = HostLayout(tmp_path)
     layout.config_path.write_text(_FILE)
-    append_runner(layout, _THIRD)
+    append_runner(layout, _THIRD, strict=STRICT)
     text = layout.config_path.read_text()
     assert text == _FILE + _THIRD
     runners = tomllib.loads(text)["runner"]
@@ -267,7 +265,7 @@ def test_an_appended_runner_lands_whole_after_everything_and_keeps_every_comment
 def test_a_runner_appended_to_a_file_without_a_trailing_newline_is_set_on_its_own_line(tmp_path: Path) -> None:
     layout = HostLayout(tmp_path)
     layout.config_path.write_text(_FILE.rstrip("\n"))
-    append_runner(layout, _THIRD)
+    append_runner(layout, _THIRD, strict=STRICT)
     assert [r["name"] for r in tomllib.loads(layout.config_path.read_text())["runner"]] == ["r-one", "r-two", "r-three"]
 
 
@@ -275,22 +273,22 @@ def test_an_append_that_is_not_one_runner_table_is_refused_leaving_the_file(tmp_
     layout = HostLayout(tmp_path)
     layout.config_path.write_text(_FILE)
     with pytest.raises(ConfigError):
-        append_runner(layout, '\n[[workspace]]\nid = "other"\n')
+        append_runner(layout, '\n[[workspace]]\nid = "other"\n', strict=STRICT)
     with pytest.raises(ConfigError):
-        append_runner(layout, '\n[runner]\nname = "x"\n')
+        append_runner(layout, '\n[runner]\nname = "x"\n', strict=STRICT)
     assert layout.config_path.read_text() == _FILE
 
 
 def test_a_removed_runner_goes_whole_with_its_sub_tables_and_the_others_stay_as_they_were(tmp_path: Path) -> None:
     layout = HostLayout(tmp_path)
     layout.config_path.write_text(_FILE + _THIRD)
-    remove_runner(layout, "r-one")
+    remove_runner(layout, "r-one", strict=STRICT)
     text = layout.config_path.read_text()
     runners = tomllib.loads(text)["runner"]
     assert [r["name"] for r in runners] == ["r-two", "r-three"]
     assert all("worker" not in r for r in runners)
     assert text.startswith("# kept comment\n") and "# second" in text
-    remove_runner(layout, "r-three")
+    remove_runner(layout, "r-three", strict=STRICT)
     assert layout.config_path.read_text() == _FILE.replace(
         '[[runner]]\nname = "r-one"\nprojects = []\n\n[runner.worker]\nenv_passthrough = []\n\n', ""
     )
@@ -299,8 +297,8 @@ def test_a_removed_runner_goes_whole_with_its_sub_tables_and_the_others_stay_as_
 def test_removing_the_last_runner_leaves_the_host_tables(tmp_path: Path) -> None:
     layout = HostLayout(tmp_path)
     layout.config_path.write_text(_FILE)
-    remove_runner(layout, "r-two")
-    remove_runner(layout, "r-one")
+    remove_runner(layout, "r-two", strict=STRICT)
+    remove_runner(layout, "r-one", strict=STRICT)
     document = tomllib.loads(layout.config_path.read_text())
     assert "runner" not in document
     assert document["workspace"][0]["id"] == "ws"
@@ -310,7 +308,7 @@ def test_removing_a_runner_the_file_does_not_name_is_refused(tmp_path: Path) -> 
     layout = HostLayout(tmp_path)
     layout.config_path.write_text(_FILE)
     with pytest.raises(ConfigError, match="r-none"):
-        remove_runner(layout, "r-none")
+        remove_runner(layout, "r-none", strict=STRICT)
     assert layout.config_path.read_text() == _FILE
 
 
@@ -319,8 +317,8 @@ def test_an_appended_workspace_and_subscription_land_whole_after_everything(tmp_
     layout.config_path.write_text(_FILE)
     workspace = '\n[[workspace]]\nid = "ws-two"\nroot = "/w2"\n\n[[workspace.repo]]\nname = "a"\nurl = "u"\n'
     subscription = '\n[[subscription]]\nslug = "s"\nname = "S"\nprovider = "anthropic"\n'
-    append_workspace(layout, workspace)
-    append_subscription(layout, subscription)
+    append_workspace(layout, workspace, strict=STRICT)
+    append_subscription(layout, subscription, strict=STRICT)
     parsed = tomllib.loads(layout.config_path.read_text())
     assert layout.config_path.read_text() == _FILE + workspace + subscription
     assert [w["id"] for w in parsed["workspace"]] == ["ws", "ws-two"]
@@ -332,9 +330,9 @@ def test_an_append_of_another_kind_of_table_is_refused_leaving_the_file(tmp_path
     layout = HostLayout(tmp_path)
     layout.config_path.write_text(_FILE)
     with pytest.raises(ConfigError):
-        append_workspace(layout, '\n[[runner]]\nname = "x"\n')
+        append_workspace(layout, '\n[[runner]]\nname = "x"\n', strict=STRICT)
     with pytest.raises(ConfigError):
-        append_subscription(layout, '\n[[subscription]]\nslug = "a"\n\n[[subscription]]\nslug = "b"\n')
+        append_subscription(layout, '\n[[subscription]]\nslug = "a"\n\n[[subscription]]\nslug = "b"\n', strict=STRICT)
     assert layout.config_path.read_text() == _FILE
 
 
@@ -344,7 +342,7 @@ def test_a_runners_table_is_read_whole_and_appends_to_another_file_as_it_was(tmp
         layout.root.mkdir()
     source.config_path.write_text(_FILE)
     destination.config_path.write_text('hub_url = "https://hub.example"\n')
-    append_runner(destination, runner_table(source, "r-one"))
+    append_runner(destination, runner_table(source, "r-one", strict=STRICT), strict=STRICT)
     [runner] = tomllib.loads(destination.config_path.read_text())["runner"]
     assert runner == tomllib.loads(_FILE)["runner"][0]
 
@@ -362,6 +360,7 @@ def test_runner_values_replace_the_keys_they_name_in_the_runner_and_its_sub_tabl
             ("opencode", "worker_config_path"): '"/new/o.json"',
             ("projects",): '[{ project = "p", workspace = "w", agents = 1 }]',
         },
+        strict=STRICT,
     )
     [runner] = tomllib.loads(edited)["runner"]
     assert runner["worker_settings_path"] == "/new/w.json"
@@ -369,4 +368,4 @@ def test_runner_values_replace_the_keys_they_name_in_the_runner_and_its_sub_tabl
     assert runner["opencode"] == {"worker_config_path": "/new/o.json"}
     assert runner["projects"] == [{"project": "p", "workspace": "w", "agents": 1}]
     with pytest.raises(ConfigError, match="sets none of"):
-        with_runner_values(table, {("opencode", "auth_path"): '"/x"'})
+        with_runner_values(table, {("opencode", "auth_path"): '"/x"'}, strict=STRICT)

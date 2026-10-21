@@ -1,0 +1,23 @@
+id: bzh:config-key-declared
+snapshots:
+  ? |
+    from tomllib import loads
+  : labels:
+    - source: from tomllib import loads
+      style: primary
+      start: 0
+      end: 25
+  ? |
+    import tomllib
+  : labels:
+    - source: import tomllib
+      style: primary
+      start: 0
+      end: 14
+  ? |
+    import tomllib as toml
+  : labels:
+    - source: import tomllib as toml
+      style: primary
+      start: 0
+      end: 22

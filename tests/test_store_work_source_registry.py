@@ -17,8 +17,6 @@ import pytest
 import uvicorn
 from fastapi.testclient import TestClient
 
-from blizzard.hub import app as hub_app
-from blizzard.hub import runtime as hub_runtime
 from blizzard.hub.composition import HubServices, TenantServices
 from blizzard.hub.domain.chunk.model import WorkRef
 from blizzard.hub.domain.config.work_sources import ConfigFieldError, WorkSourceEdit, WorkSourceSlug
@@ -26,6 +24,7 @@ from blizzard.hub.tenancy import StoreScope
 from blizzard.hub.work_sources.annotator import WorkStatusMarker
 from blizzard.hub.work_sources.internal.github_work_source import GitHubWorkSource
 from blizzard.hub.work_sources.source import IWorkSourceRegistry
+from tests.config_inputs import build_hosted_hub_app, init_hub
 from tests.support import OP, forge_state, free_port, github_double
 
 pytestmark = pytest.mark.component
@@ -55,8 +54,8 @@ def forge() -> Iterator[tuple[TestClient, str]]:
 
 @pytest.fixture
 def hub(tmp_path: Path) -> Iterator[tuple[TestClient, HubServices]]:
-    config = hub_runtime.init_environment(tmp_path / "hub")
-    app = hub_app.build_hosted_app(config)
+    config = init_hub(tmp_path / "hub")
+    app = build_hosted_hub_app(config)
     # Never entered as a context manager: no lifespan, so no background sweep races the test's own passes.
     client = TestClient(app)
     yield client, app.state.services

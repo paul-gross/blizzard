@@ -24,16 +24,18 @@ from blizzard.runner.composition import (
     build_host_stores,
     build_identity_writer,
 )
-from blizzard.runner.host_config import HOST_TOKEN_VARIABLE, BuiltRunner, HostConfig
-from blizzard.runner.host_layout import HostFileEditor, HostLayout, HostLock, append_workspace
+from blizzard.runner.host_config import HOST_TOKEN_VARIABLE, BuiltRunner
+from blizzard.runner.host_file import HostFileEditor, append_workspace
+from blizzard.runner.host_layout import HostLayout, HostLock
 from blizzard.runner.hub.client import HostRefusalReason, HostRefused, HubClientError
 from blizzard.runner.hub.host_identity import HostIdentity
 from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.hub.internal.token_file import HubTokenFile
 from blizzard.runner.hub.token_file import ENV_FILENAME
 from blizzard.runner.ingest import RunnerIngest
-from blizzard.runner.runtime import init_environment, migration_runner
+from blizzard.runner.runtime import migration_runner
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
+from tests.config_inputs import STRICT, init_host, load_host_config
 from tests.runner_ingest_support import (
     HERE_HOST,
     MOVING,
@@ -67,7 +69,7 @@ def _errors() -> RunnerStoreErrorFactory:
 
 
 def _engine(root: Path) -> sa.Engine:
-    return create_engine_from_url(HostConfig.load(root).db_url)
+    return create_engine_from_url(load_host_config(root).db_url)
 
 
 def _ingest(hub: FakeInitHub, hosts: TwoHosts, *extra: str, source: Path | None = None):  # type: ignore[no-untyped-def]
@@ -165,7 +167,7 @@ def test_ingest_moves_a_colliding_runner_under_a_new_workspace_id_and_reads_the_
         assert [r["seq"] for r in rows(here, name, runner_id=MOVING_ID)] == [1]
     assert invariant_violations(here) == []
     assert invariant_violations(source) == []
-    host = HostConfig.load(hosts.here)
+    host = load_host_config(hosts.here)
     assert [w.id for w in host.workspaces] == ["workspace-local", _NEW_WORKSPACE]
     added = host.sole_runner(MOVING)
     assert (added.id, [b.workspace for b in added.bindings]) == (MOVING_ID, [_NEW_WORKSPACE])
@@ -305,6 +307,7 @@ def test_ingest_is_refused_for_a_new_workspace_id_this_host_gives_to_another_roo
     append_workspace(
         HostLayout(hosts.here),
         f'\n[[workspace]]\nid = "{_NEW_WORKSPACE}"\nroot = "{tmp_path / "elsewhere"}"\nenvs = ["e1"]\n',
+        strict=STRICT,
     )
     _refuse(
         fake_init_hub,
@@ -329,7 +332,7 @@ def test_ingest_is_refused_for_a_new_workspace_id_on_a_runner_bound_to_several(
 ) -> None:
     hosts = two_hosts(tmp_path, fake_init_hub)
     layout = HostLayout(hosts.there)
-    append_workspace(layout, '\n[[workspace]]\nid = "second"\nroot = "/srv/second"\nenvs = ["s1"]\n')
+    append_workspace(layout, '\n[[workspace]]\nid = "second"\nroot = "/srv/second"\nenvs = ["s1"]\n', strict=STRICT)
     text = layout.config_path.read_text()
     bound = '{ project = "default", workspace = "workspace-local", agents = 1 }'
     head, _, tail = text.rpartition(bound)
@@ -470,7 +473,7 @@ def test_an_ingest_failing_at_any_configuration_edit_completes_on_a_rerun(
     for name in RUNNER_TABLES:
         assert contents(here, name, runner_id=MOVING_ID) == _renamed(name, moving[name]), name
         assert contents(source, name, runner_id=MOVING_ID) == [], name
-    host = HostConfig.load(hosts.here)
+    host = load_host_config(hosts.here)
     assert [w.id for w in host.workspaces] == ["workspace-local", _NEW_WORKSPACE]
     assert [s.slug for s in host.subscriptions] == ["anthropic", "anthropic-there"]
     assert _runner_names(hosts.here) == ["runner-local", MOVING]
@@ -492,8 +495,8 @@ def test_a_rerun_after_the_source_ran_is_refused_naming_both_stores(
         alive_at=T0 + timedelta(hours=1)
     )
     engine.dispose()
-    there = HostConfig.load(hosts.there).db_url.removeprefix("sqlite:///")
-    here = HostConfig.load(hosts.here).db_url.removeprefix("sqlite:///")
+    there = load_host_config(hosts.there).db_url.removeprefix("sqlite:///")
+    here = load_host_config(hosts.here).db_url.removeprefix("sqlite:///")
 
     _refuse(fake_init_hub, hosts, "has run since", "--workspace-id", _NEW_WORKSPACE)
 
@@ -512,7 +515,7 @@ def _pre_host_directory(root: Path) -> None:
     """``root`` as a runner before hosts left it, running ``r2``: ``data/runner.db`` at the revision before the
     tightening, holding the runner's identity, a lease, and an outbound backlog; its flat ``blizzard-runner.toml``;
     and its token under the unsuffixed variable."""
-    config = init_environment(root)
+    config = init_host(root)
     migration_runner(config).downgrade(_PRE_HOST_REVISION)
     engine = create_engine_from_url(config.db_url)
     tables = reflect(engine).tables
@@ -574,7 +577,7 @@ def test_ingest_of_a_directory_that_has_not_graduated_takes_its_runner_and_moves
     assert not store.exists()
     [aside] = [p for p in HostLayout(legacy).data_dir.iterdir() if p.name.startswith("runner.db.")]
     assert aside.read_bytes() == untouched, "the source store was written"
-    host = HostConfig.load(hosts.here)
+    host = load_host_config(hosts.here)
     added = host.sole_runner(MOVING)
     assert added.id == MOVING_ID
     assert [(b.project, b.workspace, b.agents) for b in added.bindings] == [("default", "ws-pre-host", 2)]
@@ -651,14 +654,14 @@ def test_ingest_carries_a_relative_prompt_file_as_a_path_into_the_source_host(
     theirs = HostLayout(hosts.there).config_path
     (hosts.there / "standing.md").write_text("standing prompt\n")
     theirs.write_text(theirs.read_text().replace('prompt_file = ""', 'prompt_file = "standing.md"', 1))
-    assert HostConfig.load(hosts.there).workspaces[0].prompt_file == "standing.md"
+    assert load_host_config(hosts.there).workspaces[0].prompt_file == "standing.md"
 
     result = _ingest(fake_init_hub, hosts, "--workspace-id", _NEW_WORKSPACE)
 
     assert result.exit_code == 0, result.output
-    carried = next(w for w in HostConfig.load(hosts.here).workspaces if w.id == _NEW_WORKSPACE)
-    assert carried.prompt_file == str(HostConfig.load(hosts.there).root / "standing.md")
-    assert carried.resolved_prompt(HostConfig.load(hosts.here).root) == "standing prompt\n"
+    carried = next(w for w in load_host_config(hosts.here).workspaces if w.id == _NEW_WORKSPACE)
+    assert carried.prompt_file == str(load_host_config(hosts.there).root / "standing.md")
+    assert carried.resolved_prompt(load_host_config(hosts.here).root) == "standing prompt\n"
 
 
 def _downgraded(root: Path, revision: str) -> None:
@@ -668,7 +671,7 @@ def _downgraded(root: Path, revision: str) -> None:
         shape = reflect(engine).tables["runner_identity"]
         conn.execute(sa.delete(shape).where(shape.c.runner_id != MOVING_ID))
     engine.dispose()
-    migration_runner(HostConfig.load(root)).downgrade(revision)
+    migration_runner(load_host_config(root)).downgrade(revision)
 
 
 def test_ingest_removes_a_runner_from_a_source_store_behind_head(tmp_path: Path, fake_init_hub: FakeInitHub) -> None:

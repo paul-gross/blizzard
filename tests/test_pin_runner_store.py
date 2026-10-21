@@ -11,7 +11,6 @@ import pytest
 import sqlalchemy as sa
 
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.runner import runtime as runner_runtime
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.store.errors import RunnerStoreError, RunnerStoreErrorFactory
@@ -24,6 +23,7 @@ from blizzard.runner.store.schema import (
     pause_parks,
 )
 from blizzard.runner.store.scoped import RUNNER_UNSCOPED_OPTION
+from tests.config_inputs import init_host
 from tests.runner_fakes import FIXTURE_RUNNER_ID, SqlAlchemyRunnerStore, make_store, runner_store_errors
 
 _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
@@ -249,7 +249,7 @@ def test_a_migrated_transcript_outbound_seq_is_never_reissued_after_a_prune(tmp_
     """The lane's ``seq`` comes from its durable counter, not the table: pruning the table's only, and highest, row
     leaves the counter on it, so the next delta takes the next ``seq``. Production migrates
     (`bzh:gating-tier-pins-production-paths`), so the pin runs on a migrated store."""
-    config = runner_runtime.init_environment(tmp_path)
+    config = init_host(tmp_path)
     engine = create_engine_from_url(config.db_url)
     try:
         store = SqlAlchemyRunnerStore(engine, runner_store_errors())
@@ -288,7 +288,7 @@ def test_a_migrated_outbound_seq_is_never_reissued_after_a_prune(tmp_path: Path)
     """``outbound_buffer`` counts the same way, and retention prunes it too: with every issued ``seq`` acked and pruned,
     the counter still holds the highest, and the next fact takes the one after it. Production migrates
     (`bzh:gating-tier-pins-production-paths`), so the pin runs on a migrated store."""
-    config = runner_runtime.init_environment(tmp_path)
+    config = init_host(tmp_path)
     engine = create_engine_from_url(config.db_url)
     try:
         store = SqlAlchemyRunnerStore(engine, runner_store_errors())
@@ -317,7 +317,7 @@ def test_a_migrated_outbound_seq_is_never_reissued_after_a_prune(tmp_path: Path)
 @pytest.mark.component
 def test_each_runner_counts_its_own_outbound_seq_in_one_store(tmp_path: Path) -> None:
     """Two runners over one file each take ``seq`` 1, 2, ... from a counter of their own."""
-    config = runner_runtime.init_environment(tmp_path)
+    config = init_host(tmp_path)
     engine = create_engine_from_url(config.db_url)
     try:
         first = SqlAlchemyRunnerStore(engine, runner_store_errors(), "rn_first")

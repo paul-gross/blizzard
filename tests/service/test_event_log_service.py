@@ -15,7 +15,7 @@ import httpx
 import pytest
 
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.hub.config import HubConfig
+from tests.config_inputs import load_hub_config
 from tests.fleet_launchers import run_forge, run_hub
 from tests.hub_event_rows import hub_event_detail, hub_event_rows
 from tests.runner_join import fleet_headers
@@ -221,7 +221,7 @@ def test_a_grpc_tracing_protocol_leaves_the_hub_serving_with_one_rejection(tmp_p
     ):
         assert hub.get("/api/health").status_code == 200
         assert [e for e in _events(hub) if e["kind"] == "trace-config-rejected"] == []
-        engine = create_engine_from_url(HubConfig.load(tmp_path / "hub").db_url)
+        engine = create_engine_from_url(load_hub_config(tmp_path / "hub").db_url)
         try:
             [rejected] = hub_event_rows(engine, "trace-config-rejected")
         finally:

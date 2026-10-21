@@ -22,7 +22,8 @@ import httpx
 import pytest
 
 from blizzard.auth_core import Role
-from blizzard.hub.config import AuthConfig, HubConfig, OAuthProviderConfig
+from blizzard.hub.config import AuthConfig, OAuthProviderConfig
+from tests.config_inputs import load_hub_config
 from tests.fleet_launchers import await_http, terminate
 from tests.service.support import require_stub_idp, stub_idp
 from tests.service.test_auth_login_service import invite
@@ -60,7 +61,7 @@ def _init_oauth_hub(hub_dir: Path, idp_port: int) -> None:
         issuer=f"http://127.0.0.1:{idp_port}",
         emails_authoritative=True,
     )
-    config = HubConfig.load(hub_dir)
+    config = load_hub_config(hub_dir)
     config = dataclasses.replace(config, auth=AuthConfig(mode="oauth", oauth_providers=(provider,)))
     config.config_path.write_text(config.to_toml())
 

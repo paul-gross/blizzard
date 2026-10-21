@@ -12,9 +12,9 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from blizzard.runner.app import create_app
 from blizzard.runner.composition import build_workspaces
 from blizzard.runner.config import DEFAULT_WORKSPACE_ID, RunnerConfig
+from tests.config_inputs import create_runner_app
 from tests.host_files import one_workspace
 from tests.runner_fakes import make_host_stores, make_store, make_stores
 
@@ -28,7 +28,7 @@ def _app_with_store(tmp_path: Path, *, workspace_prompt: str = ""):  # type: ign
         db_url=f"sqlite:///{tmp_path / 'runner.db'}",
         workspaces=one_workspace(prompt=workspace_prompt),
     )
-    app = create_app(
+    app = create_runner_app(
         config,
         runner_stores=make_stores(store),
         host_stores=make_host_stores(store),
@@ -96,7 +96,7 @@ def test_put_503_when_store_unwired(tmp_path: Path) -> None:
         db_url="sqlite://",
         workspaces=one_workspace(prompt="STATIC"),
     )
-    with TestClient(create_app(config)) as client:
+    with TestClient(create_runner_app(config)) as client:
         resp = client.put(_PROMPT, json={"prompt": "x"})
     assert resp.status_code == 503
 

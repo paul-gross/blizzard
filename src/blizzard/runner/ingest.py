@@ -10,7 +10,6 @@ from __future__ import annotations
 import json
 import shutil
 import tempfile
-import tomllib
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass, replace
@@ -19,12 +18,14 @@ from pathlib import Path
 from typing import Protocol
 
 from blizzard.foundation.clock import IClock
+from blizzard.foundation.config_keys import ConfigView
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.runner_token_names import hub_token_variable
 from blizzard.foundation.store.migrations import MigrationConnectionError, MigrationRefused, MigrationRunner
 from blizzard.runner.config import HostWorkspace, ProjectBinding, SubscriptionDeclaration
+from blizzard.runner.config_keys import HOST_REGISTRY
 from blizzard.runner.config_table import ConfigError
 from blizzard.runner.host_config import (
     GRADUATION_PROCEDURE,
@@ -32,9 +33,12 @@ from blizzard.runner.host_config import (
     UNSUFFIXED_TOKEN_VARIABLE,
     HostConfig,
     RunnerEntry,
+    decode_host_text,
+    read_legacy_document,
     subscription_toml,
     workspace_toml,
 )
+from blizzard.runner.host_file import runner_table, with_runner_values
 from blizzard.runner.host_layout import (
     HOST_CONFIG_FILENAME,
     RUNNERS_DIRNAME,
@@ -42,8 +46,6 @@ from blizzard.runner.host_layout import (
     HostHeld,
     HostLayout,
     HostLock,
-    runner_table,
-    with_runner_values,
 )
 from blizzard.runner.hub.client import HostRecord, HostRefused, HubClientError, IHostHubClient
 from blizzard.runner.hub.host_identity import HostIdentity, HostIdentityAlreadyRecorded, adopted
@@ -294,7 +296,7 @@ class RunnerIngest:
         if kind is SourceKind.UNGRADUATED:
             return self._ungraduated(path)
         try:
-            config = HostConfig.load(path)
+            config = HostConfig.load(path, flag_registry=self.host.flag_registry, strict=self.host.strict)
             store = sqlite_store_file(config.db_url)
         except (ConfigError, StoreResetRefused) as exc:
             raise SourceUnsupported(f"cannot read the source host at {path}: {exc}") from exc
@@ -307,9 +309,9 @@ class RunnerIngest:
         layout = HostLayout(path)
         store = layout.legacy_store_path
         try:
-            legacy = tomllib.loads(layout.legacy_config_path.read_text())
-        except (OSError, tomllib.TOMLDecodeError) as exc:
-            raise SourceUnsupported(f"cannot read {layout.legacy_config_path}: {exc}") from exc
+            legacy = read_legacy_document(layout)
+        except ConfigError as exc:
+            raise SourceUnsupported(str(exc)) from exc
         named = legacy.get("db_url")
         if named is not None and sqlite_url(store) != named and f"sqlite:///{store}" != named:
             raise SourceUnsupported(
@@ -329,7 +331,14 @@ class RunnerIngest:
             [runner_id] = named_runners
             view = self.stores.for_runner(runner_id).runner_view(copy.url)
         try:
-            config = HostConfig.graduated(path, legacy, runner_id=runner_id, served=view.served_projects)
+            config = HostConfig.graduated(
+                path,
+                legacy,
+                runner_id=runner_id,
+                served=view.served_projects,
+                flag_registry=self.host.flag_registry,
+                strict=self.host.strict,
+            )
         except ConfigError as exc:
             raise SourceUnsupported(f"cannot graduate the runner file {layout.legacy_config_path}: {exc}") from exc
         return _Source(SourceKind.UNGRADUATED, path, store, config, host_text=config.to_toml(), token_env=token_env)
@@ -564,7 +573,7 @@ class RunnerIngest:
         """The source's ``[[runner]]`` text with its bindings renamed and every path key pointing into the source
         rewritten to its copy under this host's ``runners/<name>/``, and the copies to make."""
         try:
-            table = runner_table(config.layout, entry.name, text=text)
+            table = runner_table(config.layout, entry.name, strict=self.host.strict, text=text)
         except ConfigError as exc:
             raise SourceUnsupported(str(exc)) from exc
         values: dict[tuple[str, ...], str] = {}
@@ -574,9 +583,9 @@ class RunnerIngest:
             )
         files: list[tuple[Path, Path]] = []
         runner_dir = self.host.root / RUNNERS_DIRNAME / entry.name
-        raw = _parsed_table(table)
+        runner = _runner_of(table, strict=self.host.strict)
         for path_key in RUNNER_PATH_KEYS:
-            value = _lookup(raw, path_key.key)
+            value = _lookup(runner, path_key.key)
             if not isinstance(value, str) or not value:
                 continue
             located = Path(value).expanduser()
@@ -590,7 +599,7 @@ class RunnerIngest:
             files.append((located, copied))
             values[path_key.key] = _string_literal(str(copied))
         try:
-            return with_runner_values(table, values), tuple(files)
+            return with_runner_values(table, values, strict=self.host.strict), tuple(files)
         except ConfigError as exc:
             raise SourceUnsupported(f"runner {entry.name}'s [[runner]] cannot be carried: {exc}") from exc
 
@@ -618,11 +627,13 @@ class RunnerIngest:
 
     def _configure(self, source: _Source, entry: RunnerEntry, plan: _ConfigPlan) -> None:
         """Make each configuration edit not yet made, in the order a crash between any two leaves resumable."""
-        layout = self.host.layout
+        layout, strict = self.host.layout, self.host.strict
         for workspace in plan.workspaces:
-            if workspace.id not in _declared(layout, "workspace", "id"):
+            if workspace.id not in _declared(layout, "workspace", "id", strict=strict):
                 self.host_file.append_workspace(layout, workspace_toml(workspace))
-        if plan.subscription is not None and plan.subscription.slug not in _declared(layout, "subscription", "slug"):
+        if plan.subscription is not None and plan.subscription.slug not in _declared(
+            layout, "subscription", "slug", strict=strict
+        ):
             self.host_file.append_subscription(layout, subscription_toml(plan.subscription))
         if plan.runner_table is not None:
             for located, copied in plan.files:
@@ -632,7 +643,7 @@ class RunnerIngest:
                     copied.parent.mkdir(parents=True, exist_ok=True)
                     shutil.copy2(located, copied)
             (self.host.root / RUNNERS_DIRNAME / entry.name).mkdir(parents=True, exist_ok=True)
-            if entry.name not in _declared(layout, "runner", "name"):
+            if entry.name not in _declared(layout, "runner", "name", strict=strict):
                 self.host_file.append_runner(layout, plan.runner_table)
         variable = hub_token_variable(entry.name)
         if plan.token and self.tokens.held(self.host.root, variable) != plan.token:
@@ -661,23 +672,24 @@ def _absolute(prompt_file: str, root: Path) -> str:
     return str(located if located.is_absolute() else root / located)
 
 
-def _declared(layout: HostLayout, table: str, key: str) -> set[str]:
+def _declared(layout: HostLayout, table: str, key: str, *, strict: bool) -> set[str]:
     """The ``key`` of every ``[[table]]`` the host file holds now."""
-    entries = tomllib.loads(layout.config_path.read_text()).get(table, [])
-    return {str(entry.get(key)) for entry in entries if isinstance(entry, dict)}
+    document = decode_host_text(layout.config_path.read_text(), what=str(layout.config_path))
+    view = ConfigView.root(HOST_REGISTRY, document, strict=strict)
+    return {str(entry.get(key)) for entry in view.entries(table) if entry.body}
 
 
-def _parsed_table(table: str) -> dict[str, object]:
-    return tomllib.loads(table)["runner"][0]
+def _runner_of(table: str, *, strict: bool) -> ConfigView:
+    """The one ``[[runner]]`` a runner table holds, as a view over the host registry."""
+    view = ConfigView.root(HOST_REGISTRY, decode_host_text(table, what="the [[runner]]"), strict=strict)
+    return next(view.entries("runner"))
 
 
-def _lookup(raw: Mapping[str, object], key: tuple[str, ...]) -> object:
-    node: object = raw
-    for part in key:
-        if not isinstance(node, Mapping):
-            return None
-        node = node.get(part)
-    return node
+def _lookup(runner: ConfigView, key: tuple[str, ...]) -> object:
+    node = runner
+    for part in key[:-1]:
+        node = node.table(part)
+    return node.get(key[-1])
 
 
 def _string_literal(value: str) -> str:

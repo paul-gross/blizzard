@@ -9,6 +9,7 @@ import sqlalchemy as sa
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner import runtime as runner_runtime
+from tests.config_inputs import init_host
 from tests.migration_support_store_migrations import (
     assert_frozen_table_lacks_a_later_revisions_columns,
 )
@@ -21,7 +22,7 @@ def test_usage_facts_reported_cost_backfills_every_historical_row_from_its_cost(
     """``usage_facts.reported_cost_usd`` starts as a copy of ``cost_usd``: before the
     split every recorded cost *was* the harness's own figure, and a row that predates it
     must not read as though no figure was ever reported. An absent cost stays absent."""
-    config = runner_runtime.init_environment(tmp_path)  # upgrades to head
+    config = init_host(tmp_path)  # upgrades to head
     runner = runner_runtime.migration_runner(config)
 
     def _rows() -> list[tuple[float | None, float | None]]:

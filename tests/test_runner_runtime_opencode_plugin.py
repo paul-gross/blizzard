@@ -11,7 +11,7 @@ import pytest
 
 from blizzard.runner.harness.opencode.plugin import PLUGIN_DIRNAME, PLUGIN_FILENAME, render_plugin_source
 from blizzard.runner.harness.opencode.shapes import parse_worker_config
-from blizzard.runner.runtime import Runtime, init_environment
+from tests.config_inputs import host_runtime_of, init_host
 from tests.harness_sections import opencode, with_opencode
 from tests.host_files import init_runner_environment, load_runner_config, write_host_file
 
@@ -39,7 +39,7 @@ def test_init_scaffolds_a_repointed_worker_config_path_not_the_default(tmp_path:
     custom_path.parent.mkdir(parents=True)
     write_host_file(with_opencode(default_config, worker_config_path=str(custom_path)))
 
-    Runtime(tmp_path).init()
+    host_runtime_of(tmp_path).init()
     config = load_runner_config(tmp_path)
 
     assert opencode(config).worker_config_path == str(custom_path)
@@ -50,10 +50,10 @@ def test_init_scaffolds_a_repointed_worker_config_path_not_the_default(tmp_path:
 
 
 def test_init_is_idempotent_for_the_scaffolded_plugin(tmp_path: Path) -> None:
-    init_environment(tmp_path)
+    init_host(tmp_path)
     first = (tmp_path / PLUGIN_DIRNAME / PLUGIN_FILENAME).read_text(encoding="utf-8")
 
-    init_environment(tmp_path)
+    init_host(tmp_path)
     second = (tmp_path / PLUGIN_DIRNAME / PLUGIN_FILENAME).read_text(encoding="utf-8")
 
     assert first == second

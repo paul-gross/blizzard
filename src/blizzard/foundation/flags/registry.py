@@ -1,8 +1,8 @@
-"""The flag registry file, ``registry.toml``, and its loader.
+"""The flag registry file, ``registry.toml``, and its parser.
 
-Every flag is declared in that one data file, packaged with the wheel and read by the hub, every runner, and the
-lifecycle check alike. The loader is strict: any malformed entry fails the whole load, so a bad declaration is found at
-start rather than read as off."""
+Every flag is declared in that one data file, packaged with the wheel; each process's root reads it and hands the parsed
+registry down. The parser is strict: any malformed entry fails the whole parse, so a bad declaration is found at start
+rather than read as off."""
 
 from __future__ import annotations
 
@@ -10,8 +10,6 @@ import re
 import tomllib
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from importlib.resources import files
-from pathlib import Path
 from types import MappingProxyType
 from typing import Any, Final, Literal, Self
 
@@ -19,7 +17,6 @@ from blizzard.foundation.roles import domain_model
 
 type FlagScope = Literal["hub", "runner", "fleet"]
 
-_PACKAGED: Final = "registry.toml"
 _NAME: Final = re.compile(r"[a-z0-9]+(-[a-z0-9]+)*")
 _MAX_NAME: Final = 48
 _OWNER: Final = re.compile(r"(epic|initiative):[a-z0-9]+(-[a-z0-9]+)*(/[a-z0-9]+(-[a-z0-9]+)*)*")
@@ -57,19 +54,8 @@ class FlagRegistry:
         object.__setattr__(self, "retired", MappingProxyType(dict(self.retired)))
 
     @classmethod
-    def load(cls, source: Path | None = None) -> Self:
-        """Parse ``source``, or the packaged ``registry.toml`` when none is given."""
-        if source is None:
-            source = Path(str(files("blizzard.foundation.flags").joinpath(_PACKAGED)))
-        try:
-            text = source.read_text()
-        except OSError as error:
-            raise FlagRegistryError(f"{source}: cannot read the flag registry: {error}") from error
-        return cls.parse(text, str(source))
-
-    @classmethod
     def parse(cls, text: str, source: str) -> Self:
-        """Parse registry ``text`` read from ``source``, which labels every refusal — the same rule as ``load``."""
+        """Parse registry ``text`` read from ``source``, which labels every refusal."""
         try:
             document = tomllib.loads(text)
         except tomllib.TOMLDecodeError as error:

@@ -17,12 +17,12 @@ from fastapi.testclient import TestClient
 
 from blizzard.auth_core import Role
 from blizzard.runner.api.hub_proxy import _HUB_RETRY_CEILING
-from blizzard.runner.app import create_app
 from blizzard.runner.auth.session import RunnerSession, SessionCookie
 from blizzard.runner.cli import runner as runner_group
 from blizzard.runner.cli.worker_call import READ_TIMEOUT
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.environments.internal.git import SubprocessEnvGit
+from tests.config_inputs import create_runner_app
 from tests.worker_http import bind_stubs
 
 # --- src/blizzard/runner/auth/session.py: the stateless, per-process-secret session ---------------
@@ -51,7 +51,7 @@ def test_a_configured_session_secret_survives_a_restart_and_the_fallback_does_no
     session = RunnerSession(username="alice", role=Role.ADMIN, issued_at=now, expires_at=now + timedelta(hours=8))
 
     def secret_of(config: RunnerConfig) -> bytes:
-        app = create_app(config)
+        app = create_runner_app(config)
         with TestClient(app):
             return app.state.session_secret
 
@@ -159,7 +159,7 @@ def test_the_default_hub_client_never_reaches_the_configured_hub_url(tmp_path: P
             public_urls=("http://runner-hermetic.example",),
         )
         # No hub_http_client, no hub_proxy_client: both defaults are under test.
-        client = TestClient(create_app(config))
+        client = TestClient(create_runner_app(config))
 
         status = client.get("/api/runner").status_code
         proxy_status = client.get("/api/chunks/ch_hermetic").status_code

@@ -51,7 +51,7 @@ def _constraint_names(engine: sa.engine.Engine) -> set[tuple[str, str]]:
 
 
 def test_init_creates_config_data_dir_and_migrates_to_head(daemon: Daemon, tmp_path: Path) -> None:
-    config = daemon.runtime.init_environment(tmp_path)
+    config = daemon.init(tmp_path)
 
     assert config.config_path.exists()
     assert config.data_dir.is_dir()
@@ -61,32 +61,32 @@ def test_init_creates_config_data_dir_and_migrates_to_head(daemon: Daemon, tmp_p
 
 
 def test_init_is_idempotent(daemon: Daemon, tmp_path: Path) -> None:
-    first = daemon.runtime.init_environment(tmp_path)
+    first = daemon.init(tmp_path)
     written = first.config_path.read_text()
 
     # Re-running reconciles and no-ops: no error, config untouched, still at head.
-    second = daemon.runtime.init_environment(tmp_path)
+    second = daemon.init(tmp_path)
 
     assert second.config_path.read_text() == written
     assert daemon.runtime.migration_runner(second).is_current()
 
 
 def test_migrate_up_and_down(daemon: Daemon, tmp_path: Path) -> None:
-    config = daemon.runtime.init_environment(tmp_path)
+    config = daemon.init(tmp_path)
     runner = daemon.runtime.migration_runner(config)
     head = runner.script_head()
     assert head is not None
     assert runner.current_revision() == head
 
-    daemon.runtime.migrate(tmp_path, down="base")
+    daemon.migrate(tmp_path, down="base")
     assert runner.current_revision() is None
 
-    daemon.runtime.migrate(tmp_path)
+    daemon.migrate(tmp_path)
     assert runner.current_revision() == head
 
 
 def test_daemon_refuses_on_revision_mismatch(daemon: Daemon, tmp_path: Path) -> None:
-    config = daemon.runtime.init_environment(tmp_path)
+    config = daemon.init(tmp_path)
     # Roll the store behind the code's head to simulate a version skew.
     daemon.runtime.migration_runner(config).downgrade("base")
 
@@ -99,7 +99,7 @@ def test_daemon_refuses_on_revision_mismatch(daemon: Daemon, tmp_path: Path) -> 
 
 
 def test_ensure_current_revision_passes_at_head(daemon: Daemon, tmp_path: Path) -> None:
-    config = daemon.runtime.init_environment(tmp_path)
+    config = daemon.init(tmp_path)
     # No exception when the store is migrated exactly to head.
     daemon.runtime.ensure_current_revision(config)
 
@@ -108,7 +108,7 @@ def test_migrated_store_matches_declared_schema(daemon: Daemon, tmp_path: Path) 
     """Head equivalence (``bzh:frozen-revisions``) — a fresh ``base -> head`` store is
     schema-identical to ``metadata.create_all()``, under the normalization above. This is
     what keeps ``tests/runner_fakes.py`` and friends valid stand-ins for the real store."""
-    config = daemon.runtime.init_environment(tmp_path)
+    config = daemon.init(tmp_path)
     migrated = create_engine_from_url(config.db_url)
     declared = create_engine_from_url(f"sqlite:///{tmp_path / f'{daemon.name}-declared.db'}")
     try:

@@ -1,4 +1,4 @@
-"""The compatibility window file, ``window.toml``, and its parser.
+"""The compatibility window, parsed from ``window.toml`` text, and the admission rule it sets.
 
 ``floor`` is the oldest ``MAJOR.MINOR`` a peer may still speak; ``opening`` is the major
 number master is opening, absent while no major is open. Both are TOML strings, so
@@ -10,19 +10,16 @@ from __future__ import annotations
 import re
 import tomllib
 from dataclasses import dataclass
-from importlib.resources import files
-from pathlib import Path
 from typing import Any, Self
 
 from packaging.version import InvalidVersion, Version
 
-from blizzard.foundation.roles import dto
+from blizzard.foundation.roles import domain_model
 from blizzard.foundation.runner_version import VersionRefusalReason
 
 _FLOOR = re.compile(r"\d+\.\d+")
 _MAJOR = re.compile(r"\d+")
 _KEYS = frozenset({"floor", "opening"})
-_PACKAGED = "window.toml"
 
 #: The first line whose runners report a version; a floor at or above it refuses a runner that reports none.
 HANDSHAKE_SINCE = "0.3"
@@ -32,7 +29,7 @@ class VersionWindowError(ValueError):
     """The window file is missing, unparseable, or malformed; the message names the file."""
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class VersionWindow:
     """The parsed window: the floor (a major and minor number) and, while a major is opening, its number."""
@@ -41,24 +38,10 @@ class VersionWindow:
     opening: str | None = None
 
     @classmethod
-    def load(cls, source: Path | None = None) -> Self:
-        """Parse ``source``, or the packaged ``window.toml`` when none is given."""
-        if source is None:
-            source = Path(str(files("blizzard.wire").joinpath(_PACKAGED)))
-        return cls.parse(_read(source), str(source))
-
-    @classmethod
     def parse(cls, text: str, source: str) -> Self:
-        """Parse window ``text`` read from ``source``, which labels every refusal — the same rule as ``load``."""
+        """Parse window ``text`` read from ``source``, which labels every refusal."""
         floor, opening = _parse(text, source)
         return cls(floor=floor, opening=opening)
-
-
-def _read(source: Path) -> str:
-    try:
-        return source.read_text()
-    except OSError as error:
-        raise VersionWindowError(f"{source}: cannot read the window file: {error}") from error
 
 
 def _parse(text: str, source: str) -> tuple[str, str | None]:
@@ -84,7 +67,7 @@ def _text(source: str, raw: dict[str, Any], key: str, shape: re.Pattern[str], de
     return value
 
 
-@dto
+@domain_model
 @dataclass(frozen=True)
 class Admission:
     """The window's judgement of one runner's version: ``reason`` is ``None`` when it is admitted."""

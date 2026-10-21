@@ -11,6 +11,7 @@ import sqlalchemy as sa
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.utc import UtcDateTime
 from blizzard.runner import runtime as runner_runtime
+from tests.config_inputs import init_host
 from tests.migration_support_runner_store_migrations import (
     _RUNNER,
     _leases,
@@ -36,7 +37,7 @@ _binding_releases_at_floor = sa.table(
 
 
 def test_release_floor_backfill_does_not_include_a_later_equal_instant_mint(tmp_path: Path) -> None:
-    config = runner_runtime.init_environment(tmp_path)
+    config = init_host(tmp_path)
     migration = runner_runtime.migration_runner(config)
     migration.downgrade("20261003_1000_runner_transcript_segment_spawn_cwd")
     engine = create_engine_from_url(config.db_url)

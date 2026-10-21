@@ -18,13 +18,13 @@ from structlog.testing import capture_logs
 from blizzard.foundation.clock import FixedClock
 from blizzard.runner.api.dashboard import _DASHBOARD_HUB_TIMEOUT
 from blizzard.runner.api.hub_proxy import _HUB_TIMEOUT
-from blizzard.runner.app import create_app
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.status.view import RunnerStatusService
+from tests.config_inputs import create_runner_app
 from tests.runner_client import runner_client
 from tests.runner_fakes import (
     FakeHarness,
@@ -68,7 +68,7 @@ def _app_with_status(
         workspaces=single_workspace(FakeProvider({})),
         harnesses=HarnessRegistry({CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=harness)}),
     )
-    app = create_app(
+    app = create_runner_app(
         config,
         runner_stores=make_stores(store),
         host_stores=make_host_stores(store),

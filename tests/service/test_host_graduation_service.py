@@ -19,7 +19,8 @@ import sqlalchemy as sa
 from blizzard.foundation.runner_token_names import hub_token_variable
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.host_layout import HostLayout
-from blizzard.runner.runtime import init_environment, migration_runner
+from blizzard.runner.runtime import migration_runner
+from tests.config_inputs import init_host
 from tests.fleet_launchers import await_http, terminate
 from tests.runner_join import RUNNER_BIN, JoinedRunner, runner_spawn_env, seed_pinned_runner
 from tests.runner_scope_seeding import reflect
@@ -39,7 +40,7 @@ _BACKLOG = 3
 def _pre_host_directory(root: Path, *, hub_url: str, port: int) -> None:
     """Leave ``root`` as a pre-host runner left it: its store at ``data/runner.db`` at the revision before the
     tightening, its flat ``blizzard-runner.toml``, and its token under the unsuffixed variable."""
-    config = init_environment(root)
+    config = init_host(root)
     migration_runner(config).downgrade(_PARENT)
     engine = create_engine_from_url(config.db_url)
     try:

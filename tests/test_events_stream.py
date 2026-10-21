@@ -19,10 +19,10 @@ import pytest
 from blizzard.foundation.events.stream import DEFAULT_KEEPALIVE_SECONDS
 from blizzard.hub.api.auth_session import TENANT_HEADER
 from blizzard.hub.api.events import _RESERVED_COMMENT, Cursor, Stream, events_stream
-from blizzard.hub.app import create_app_for_export
 from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.events.brokers import TenantBrokers
 from blizzard.hub.tenancy import TenantId
+from tests.config_inputs import export_hub_app
 from tests.support import add_tenant, build_hub, default_tenant, parse_sse_frames, runner_token, seed_runner
 
 pytestmark = pytest.mark.component
@@ -77,7 +77,7 @@ async def test_stream_endpoint_binds_the_default_keepalive_cadence(monkeypatch: 
 
 
 def test_events_stream_excluded_from_openapi() -> None:
-    app = create_app_for_export()
+    app = export_hub_app()
     assert "/api/events/stream" not in app.openapi()["paths"]
 
 

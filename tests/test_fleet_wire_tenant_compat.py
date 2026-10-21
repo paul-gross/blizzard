@@ -13,10 +13,10 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
-from blizzard.hub.app import create_app_for_export
 from blizzard.runner.hub.client import TokenIdentity
 from blizzard.runner.hub.internal.http_hub import HttpHubClient
 from blizzard.tools.compat.surfaces.wire import classify_spec_diff
+from tests.config_inputs import export_hub_app
 from tests.support import add_tenant, build_hub, seed_runner
 
 pytestmark = pytest.mark.component
@@ -37,7 +37,7 @@ def _committed() -> dict[str, Any]:
 
 
 def _live() -> dict[str, Any]:
-    return create_app_for_export().openapi()
+    return export_hub_app().openapi()
 
 
 def _fleet_operations(spec: dict[str, Any]) -> dict[tuple[str, str], dict[str, Any]]:

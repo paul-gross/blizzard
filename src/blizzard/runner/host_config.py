@@ -306,6 +306,10 @@ class HostConfig:
     flag_resolution: FlagResolution | None = None
     #: The guarded keys the file carried while their flag was off.
     held_keys: tuple[HeldKey, ...] = ()
+    #: The flag registry the load resolved against; one built in code knows no flags unless given one.
+    flag_registry: FlagRegistry = field(default_factory=FlagRegistry)
+    #: Whether the load read the file strictly, which later loads in the same process repeat.
+    strict: bool = False
     transcripts: Transcripts = field(default_factory=lambda: Transcripts.of(None))
     worker_stdout: WorkerStdout = field(default_factory=lambda: WorkerStdout.of(None))
     #: The host's own credential, resolved from the environment, then the host file, then ``.env``.
@@ -469,6 +473,8 @@ class HostConfig:
             flags=self.flags,
             flag_resolution=self.flag_resolution,
             held_keys=self.held_keys,
+            flag_registry=self.flag_registry,
+            strict=self.strict,
             workspaces=self.workspaces or base.workspaces,
         )
         return shared
@@ -480,7 +486,8 @@ class HostConfig:
         *,
         host: str | None = None,
         port: int | None = None,
-        flag_registry: FlagRegistry | None = None,
+        flag_registry: FlagRegistry,
+        strict: bool,
         key_registry: ConfigRegistry | None = None,
     ) -> HostConfig:
         """Read a host directory's ``blizzard-host.toml``; overlay CLI host/port when given. A directory
@@ -501,8 +508,8 @@ class HostConfig:
                 pass
         path = layout.config_path
         try:
-            raw = tomllib.loads(path.read_text())
-        except (OSError, tomllib.TOMLDecodeError) as exc:
+            raw = decode_host_text(path.read_text(), what=str(path))
+        except (OSError, ConfigError) as exc:
             raise HostConfigError((f"{path} cannot be read: {exc}",)) from exc
         try:
             return _parse(
@@ -510,18 +517,27 @@ class HostConfig:
                 layout=layout,
                 host=host,
                 port=port,
-                flag_registry=flag_registry or FlagRegistry.load(),
+                flag_registry=flag_registry,
+                strict=strict,
                 key_registry=key_registry,
             )
         except InvalidConfigValue as exc:
             raise HostConfigError((str(exc),)) from exc
 
     @classmethod
-    def load_for_store(cls, root: Path, *, host: str | None = None, port: int | None = None) -> HostConfig:
+    def load_for_store(
+        cls,
+        root: Path,
+        *,
+        host: str | None = None,
+        port: int | None = None,
+        flag_registry: FlagRegistry,
+        strict: bool,
+    ) -> HostConfig:
         """:meth:`load`, for a verb that opens the store without creating it: where the store is the default SQLite
         file and that file is absent, the directory is refused, naming ``migrate`` — which alone creates it, and
         adopts a pre-host ``runner.db`` first. A store named by ``db_url`` is left to the engine."""
-        config = cls.load(root, host=host, port=port)
+        config = cls.load(root, host=host, port=port, flag_registry=flag_registry, strict=strict)
         layout = config.layout
         if config.db_url != layout.default_db_url or layout.store_path.exists():
             return config
@@ -549,13 +565,29 @@ class HostConfig:
         )
 
     @classmethod
-    def graduated(cls, root: Path, legacy: Mapping[str, Any], *, runner_id: str, served: tuple[str, ...]) -> HostConfig:
+    def graduated(
+        cls,
+        root: Path,
+        legacy: Mapping[str, Any],
+        *,
+        runner_id: str,
+        served: tuple[str, ...],
+        flag_registry: FlagRegistry,
+        strict: bool,
+    ) -> HostConfig:
         """The host a pre-host runner directory at ``root`` graduates to, from its ``blizzard-runner.toml`` as
         ``legacy`` holds it — by graduation's key placement (``GRADUATION_PROCEDURE``): its ``[[runner]]`` takes the
         hub id its store records, ``runner_id``, and binds each project ``served`` when the file names none. Every
         host error is refused."""
         layout = HostLayout(root.resolve())
-        return _parse(_graduated_raw(legacy, runner_id=runner_id, served=served), layout=layout, host=None, port=None)
+        return _parse(
+            _graduated_raw(legacy, runner_id=runner_id, served=served),
+            layout=layout,
+            host=None,
+            port=None,
+            flag_registry=flag_registry,
+            strict=strict,
+        )
 
     @classmethod
     def scaffold(cls, root: Path, *, hub_url: str | None = None, projects: tuple[str, ...] | None = None) -> HostConfig:
@@ -716,17 +748,17 @@ def _parse(
     layout: HostLayout,
     host: str | None,
     port: int | None,
-    flag_registry: FlagRegistry | None = None,
+    flag_registry: FlagRegistry,
+    strict: bool,
     key_registry: ConfigRegistry | None = None,
 ) -> HostConfig:
     errors = _Errors()
     root = layout.root
     path = layout.config_path
-    document = ConfigView.root(key_registry or HOST_REGISTRY, raw)
+    registry = key_registry or HOST_REGISTRY
+    document = ConfigView.root(registry, raw, strict=strict)
     # Resolved first: every key read below that a flag guards reads against it.
-    resolved = errors.attempt(
-        "[flags]", lambda: resolve_for_keys(document, "runner", flag_registry or FlagRegistry.load(), ConfigError), None
-    )
+    resolved = errors.attempt("[flags]", lambda: resolve_for_keys(document, "runner", flag_registry, ConfigError), None)
     resolution: FlagResolution | None = None
     if resolved is not None:
         document, resolution = resolved
@@ -772,6 +804,7 @@ def _parse(
     _check_runner_uniqueness(entries, has_host_token=bool(host_token.value), errors=errors)
     if errors.found:
         raise HostConfigError(tuple(errors.found))
+    held = held_keys(registry, raw, resolution.flags) if resolution is not None else ()
     return HostConfig(
         root=root,
         db_url=db_url,
@@ -786,7 +819,9 @@ def _parse(
         tracing=tracing,
         flags=flags,
         flag_resolution=resolution,
-        held_keys=held_keys(document),
+        held_keys=held,
+        flag_registry=flag_registry,
+        strict=strict,
         transcripts=transcripts,
         worker_stdout=worker_stdout,
         host_token=host_token,
@@ -796,13 +831,34 @@ def _parse(
         runners=entries,
         warnings=(
             *_permission_warnings(path, holds_credentials="host_token" in document or bool(hub_tokens)),
-            *(f"{entry.key} is ignored while the flag {entry.flag} is off" for entry in held_keys(document)),
+            *(f"{entry.key} is ignored while the flag {entry.flag} is off" for entry in held),
         ),
     )
 
 
 #: The agent count a flat runner file declaring no ``max_agents`` ran with.
 _LEGACY_MAX_AGENTS = 1
+
+
+def decode_host_text(text: str, *, what: str) -> dict[str, Any]:
+    """``text`` — a host file, a table to append to one, or a TOML literal — decoded to the mapping it holds: the one
+    decode step every read of host-file text goes through. :class:`ConfigError`, naming ``what``, when it is not
+    TOML."""
+    try:
+        return tomllib.loads(text)
+    except tomllib.TOMLDecodeError as error:
+        raise ConfigError(f"{what} is not valid TOML: {error}") from error
+
+
+def read_legacy_document(layout: HostLayout) -> dict[str, Any]:
+    """The pre-host ``blizzard-runner.toml`` of the runner directory ``layout`` names, decoded — the document
+    :meth:`HostConfig.graduated` takes. :class:`ConfigError` when it cannot be read or is not TOML."""
+    path = layout.legacy_config_path
+    try:
+        text = path.read_text()
+    except OSError as error:
+        raise ConfigError(f"cannot read {path}: {error}") from error
+    return decode_host_text(text, what=str(path))
 
 
 def _graduated_raw(legacy: Mapping[str, Any], *, runner_id: str, served: tuple[str, ...]) -> dict[str, Any]:

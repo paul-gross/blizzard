@@ -30,7 +30,6 @@ from blizzard.foundation.runner_token_names import hub_token_variable
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.tokens import TokenHash
 from blizzard.hub.app import CLOSE_DRAIN_INTERVAL_SECONDS
-from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.tenancy.teardown import DRAIN_BATCH_ROWS
 from blizzard.hub.store import schema as hub_schema
 from blizzard.hub.store.scoped import is_tenant_owned
@@ -39,14 +38,14 @@ from blizzard.runner.composition import build_host_stores
 from blizzard.runner.config import DEFAULT_WORKSPACE_ID
 from blizzard.runner.environments.internal.basic_provider import BasicWorkspaceProvider
 from blizzard.runner.harness.identity import OPENCODE_HARNESS_ID
-from blizzard.runner.host_config import HOST_TOKEN_VARIABLE, HostConfig
+from blizzard.runner.host_config import HOST_TOKEN_VARIABLE
 from blizzard.runner.host_layout import HostLayout
 from blizzard.runner.hub.internal.token_file import HubTokenFile
 from blizzard.runner.hub.token_file import assigned_token
 from blizzard.runner.leases.model import NewLease
-from blizzard.runner.runtime import init_environment
 from blizzard.runner.store import schema as runner_schema
 from blizzard.tools.invariants import Invariants
+from tests.config_inputs import init_host, load_host_config, load_hub_config
 from tests.crash.support import (
     ENV_CRASH_FENCE,
     ENV_CRASH_POINT,
@@ -402,7 +401,7 @@ def _assert_invariants(runner_dir: Path, hub_dir: Path, *, when: str, after_reco
     there by construction. A checkpoint reached only once REAP/RESUME reconciled it passes
     ``True``, so that check is asked for there."""
     runner_db = load_runner_config(runner_dir).db_url
-    hub_db = HubConfig.load(hub_dir).db_url
+    hub_db = load_hub_config(hub_dir).db_url
     violations = Invariants(runner_db_url=runner_db, hub_db_url=hub_db).run(after_recovery=after_recovery)
     assert not violations, f"invariant violations {when}:\n" + "\n".join(str(v) for v in violations)
 
@@ -526,7 +525,7 @@ def test_kill9_at_migrate_crash_point(crash_env: CrashEnv, tmp_path: Path, point
         _assert_invariants(runner_dir, hub_dir, when=f"immediately after kill at {point}", after_recovery=False)
 
         # The migration is durable even though the MIGRATED response never returned.
-        hub_engine = create_engine_from_url(HubConfig.load(hub_dir).db_url)
+        hub_engine = create_engine_from_url(load_hub_config(hub_dir).db_url)
         with hub_engine.connect() as conn:
             migrations = conn.execute(
                 hub_scoped(
@@ -620,7 +619,7 @@ def test_kill9_at_migrate_crash_point_for_an_intended_migration(
 
         # The intent must be cleared in the SAME transaction as the migration fact — a
         # crash that recorded one but not the other would re-fire the migration on recovery.
-        hub_engine = create_engine_from_url(HubConfig.load(hub_dir).db_url)
+        hub_engine = create_engine_from_url(load_hub_config(hub_dir).db_url)
         with hub_engine.connect() as conn:
             migrations = conn.execute(
                 hub_scoped(
@@ -710,7 +709,7 @@ def test_kill9_at_migrate_crash_point_landing_on_a_hub_node(crash_env: CrashEnv,
 
         # The migration is durable even though the response never returned — and it landed on
         # the hub-executed node, so the chunk derives `delivering`, never `ready`.
-        hub_engine = create_engine_from_url(HubConfig.load(hub_dir).db_url)
+        hub_engine = create_engine_from_url(load_hub_config(hub_dir).db_url)
         with hub_engine.connect() as conn:
             migrations = conn.execute(
                 hub_scoped(
@@ -2452,7 +2451,7 @@ def _live_exec_slots(hub_dir: Path) -> int:
     """The number of un-released ``hub_exec_slot`` rows — the ``hub:one-live-exec-slot``
     invariant's own quantity, read straight off the hub store so a leaked slot is caught
     directly, not only through the aggregate invariant checker."""
-    engine = create_engine_from_url(HubConfig.load(hub_dir).db_url)
+    engine = create_engine_from_url(load_hub_config(hub_dir).db_url)
     try:
         with engine.connect() as conn:
             rows = conn.execute(
@@ -3279,7 +3278,7 @@ def test_kill9_at_close_crash_point(crash_env: CrashEnv, tmp_path: Path, point: 
         )
 
         # Exactly-once: the drain never double-closes a ref it already retired.
-        hub_engine = create_engine_from_url(HubConfig.load(hub_dir).db_url)
+        hub_engine = create_engine_from_url(load_hub_config(hub_dir).db_url)
         with hub_engine.connect() as conn:
             outcomes = conn.execute(
                 hub_scoped(
@@ -3322,7 +3321,7 @@ def _scaffold_traced_hub(hub_dir: Path) -> None:
 
 def _trace_cursor_rows(hub_dir: Path) -> list[tuple[int, int]]:
     """Every ``trace_cursor`` row as ``(id, span_count)``, oldest first."""
-    engine = create_engine_from_url(HubConfig.load(hub_dir).db_url)
+    engine = create_engine_from_url(load_hub_config(hub_dir).db_url)
     try:
         with engine.connect() as conn:
             rows = conn.execute(
@@ -3448,7 +3447,7 @@ def _scaffold_egress_hub(hub_dir: Path, directory: Path) -> None:
 
 def _egress_cursor_rows(hub_dir: Path) -> list[tuple[str, int, list[str]]]:
     """Every ``egress_cursor`` row as ``(dataset, row_count, files)``, oldest first."""
-    engine = create_engine_from_url(HubConfig.load(hub_dir).db_url)
+    engine = create_engine_from_url(load_hub_config(hub_dir).db_url)
     try:
         with engine.connect() as conn:
             rows = conn.execute(
@@ -3675,7 +3674,7 @@ def _host_lane(runner_dir: Path) -> tuple[list[int], int | None]:
 
 def _hub_host_mark(hub_dir: Path, host_id: str) -> int | None:
     """The per-host mark the hub holds for ``host_id``."""
-    engine = create_engine_from_url(HubConfig.load(hub_dir).db_url)
+    engine = create_engine_from_url(load_hub_config(hub_dir).db_url)
     try:
         with engine.connect() as conn:
             return conn.execute(
@@ -3766,7 +3765,7 @@ _TEARDOWN_TABLES = [t for t in hub_schema.metadata.sorted_tables if is_tenant_ow
 
 def _fill_keyed_locks(hub_dir: Path, tenant: str, count: int) -> None:
     """Give ``tenant`` ``count`` lock rows of its own — rows of a table no other row depends on."""
-    engine = create_engine_from_url(HubConfig.load(hub_dir).db_url)
+    engine = create_engine_from_url(load_hub_config(hub_dir).db_url)
     try:
         with engine.begin() as conn:
             conn.execute(
@@ -3779,7 +3778,7 @@ def _fill_keyed_locks(hub_dir: Path, tenant: str, count: int) -> None:
 
 def _seed_doomed_history(hub_dir: Path, tenant: str) -> None:
     """Give ``tenant`` a chunk history, pinned to one of its packaged graphs, that its drain takes apart table by table."""
-    engine = create_engine_from_url(HubConfig.load(hub_dir).db_url)
+    engine = create_engine_from_url(load_hub_config(hub_dir).db_url)
     try:
         with engine.begin() as conn:
             nodes = hub_schema.graph_nodes.c
@@ -3805,7 +3804,7 @@ def _seed_doomed_history(hub_dir: Path, tenant: str) -> None:
 
 def _tenant_rows(hub_dir: Path, tenant: str) -> dict[str, set[tuple[object, ...]]]:
     """Every row naming ``tenant``, by table — only tables holding any."""
-    engine = create_engine_from_url(HubConfig.load(hub_dir).db_url)
+    engine = create_engine_from_url(load_hub_config(hub_dir).db_url)
     try:
         with engine.connect() as conn:
             rows = {
@@ -3823,7 +3822,7 @@ def _drained_rows(rows: dict[str, set[tuple[object, ...]]]) -> int:
 
 
 def _deletion_fact(hub_dir: Path, tenant: str) -> Row[tuple[object, ...]] | None:
-    engine = create_engine_from_url(HubConfig.load(hub_dir).db_url)
+    engine = create_engine_from_url(load_hub_config(hub_dir).db_url)
     try:
         with engine.connect() as conn:
             table = hub_schema.tenant_deletions
@@ -3843,7 +3842,7 @@ def _wait_deleted(hub_dir: Path, tenant: str, *, timeout: float) -> Row[tuple[ob
 
 
 def _assert_hub_invariants(hub_dir: Path, *, when: str) -> None:
-    violations = Invariants(hub_db_url=HubConfig.load(hub_dir).db_url).run()
+    violations = Invariants(hub_db_url=load_hub_config(hub_dir).db_url).run()
     assert not violations, f"invariant violations {when}:\n" + "\n".join(str(v) for v in violations)
 
 
@@ -3949,20 +3948,20 @@ def _ingest_world(hub: httpx.Client, hub_url: str, here: Path, there: Path) -> s
     then `adopt` leave it. Answers ``r2``'s id."""
     _cli_ok(hub_url, "init", str(here), "--hub", hub_url)
     # A host is named after its first runner, and two live hosts cannot share a name.
-    layout = HostLayout(init_environment(there, hub_url=hub_url).root)
+    layout = HostLayout(init_host(there, hub_url=hub_url).root)
     layout.config_path.write_text(layout.config_path.read_text().replace('"runner-local"', '"runner-there"', 1))
     _cli_ok(hub_url, "init", str(there), "--hub", hub_url)
     _cli_ok(hub_url, "add", _INGEST_MOVING, "--project", "default", "--dir", str(there))
     # Its identity is recorded in the store as `init` keeps a runner the hub holds.
     _cli_ok(hub_url, "init", str(there), "--hub", hub_url)
-    moving_id = HostConfig.load(there).sole_runner(_INGEST_MOVING).id
+    moving_id = load_host_config(there).sole_runner(_INGEST_MOVING).id
     assert moving_id is not None
     for verb, root in (("releases", there), ("adoptions", here)):
         moved = hub.post(
             f"/api/hosts/{_host_id(hub, root)}/{verb}", json={"by": "crash-sweep", "runner_ids": [moving_id]}
         )
         assert moved.status_code == 200, moved.text
-    engine = create_engine_from_url(HostConfig.load(there).db_url)
+    engine = create_engine_from_url(load_host_config(there).db_url)
     try:
         seed_runner(engine, moving_id, tag="b", workspace_id="workspace-local")
     finally:
@@ -3974,8 +3973,8 @@ def _ingest_end_state(here: Path, there: Path, moving_id: str) -> dict[str, obje
     """What an ingest leaves: the runner's rows here and in the source, both host files' runners and workspaces, and
     where its token is."""
     variable = hub_token_variable(_INGEST_MOVING)
-    here_engine = create_engine_from_url(HostConfig.load(here).db_url)
-    there_engine = create_engine_from_url(HostConfig.load(there).db_url)
+    here_engine = create_engine_from_url(load_host_config(here).db_url)
+    there_engine = create_engine_from_url(load_host_config(there).db_url)
     try:
         state: dict[str, object] = {
             "here": {name: contents(here_engine, name, runner_id=moving_id) for name in RUNNER_TABLES},
@@ -3987,7 +3986,7 @@ def _ingest_end_state(here: Path, there: Path, moving_id: str) -> dict[str, obje
         here_engine.dispose()
         there_engine.dispose()
     for name, root in (("here", here), ("there", there)):
-        config = HostConfig.load(root)
+        config = load_host_config(root)
         state[f"{name} runners"] = sorted((r.name, r.id) for r in config.runners)
         state[f"{name} workspaces"] = sorted(w.id for w in config.workspaces)
         state[f"{name} token"] = bool(HubTokenFile.of(root, variable).held())
@@ -4017,7 +4016,7 @@ def test_kill9_at_ingest_crash_point(crash_env: CrashEnv, tmp_path: Path, point:
     try:
         await_http(hub, "/api/health", proc=hub_proc)
         moving_id = _ingest_world(hub, hub_url, here, there)
-        engine = create_engine_from_url(HostConfig.load(there).db_url)
+        engine = create_engine_from_url(load_host_config(there).db_url)
         try:
             moving = {name: contents(engine, name, runner_id=moving_id) for name in RUNNER_TABLES}
         finally:
@@ -4040,7 +4039,7 @@ def test_kill9_at_ingest_crash_point(crash_env: CrashEnv, tmp_path: Path, point:
         assert "completed the ingest of runner r2" in resumed.stdout, resumed.stdout
         for root in (here, there):
             violations = Invariants(
-                runner_db_url=HostConfig.load(root).db_url, hub_db_url=HubConfig.load(hub_dir).db_url
+                runner_db_url=load_host_config(root).db_url, hub_db_url=load_hub_config(hub_dir).db_url
             ).run(after_recovery=False)
             assert not violations, f"invariant violations in {root.name} after the re-run past {point}:\n" + "\n".join(
                 str(v) for v in violations

@@ -9,6 +9,7 @@ import sqlalchemy as sa
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub import runtime as hub_runtime
+from tests.config_inputs import init_hub
 
 pytestmark = [pytest.mark.unit]
 
@@ -22,7 +23,7 @@ _DROPS_BY_CHUNK = {"ix_transcript_event_drops_chunk_id_epoch", "ix_transcript_ev
 
 def test_egress_events_indexes_and_cursor_columns_survive_migration_roundtrip(tmp_path: Path) -> None:
     """Hub-only — downgrades to the revision's own parent, so each index and cursor column is asserted."""
-    config = hub_runtime.init_environment(tmp_path)  # upgrades to head
+    config = init_hub(tmp_path)  # upgrades to head
     runner = hub_runtime.migration_runner(config)
 
     def _shape() -> tuple[bool, bool, bool, set[str]]:

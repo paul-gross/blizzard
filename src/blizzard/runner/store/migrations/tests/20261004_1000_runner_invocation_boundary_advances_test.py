@@ -9,6 +9,7 @@ import sqlalchemy as sa
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner import runtime as runner_runtime
+from tests.config_inputs import init_host
 
 pytestmark = [pytest.mark.unit]
 
@@ -16,7 +17,7 @@ pytestmark = [pytest.mark.unit]
 def test_runner_invocation_boundary_advances_table_survives_migration_roundtrip(tmp_path: Path) -> None:
     """``invocation_boundary_advances`` — downgrades to its own parent by id, so the drop half
     is asserted rather than inferred from a revision marker."""
-    config = runner_runtime.init_environment(tmp_path)  # upgrades to head
+    config = init_host(tmp_path)  # upgrades to head
     runner = runner_runtime.migration_runner(config)
 
     def _shape() -> tuple[bool, bool]:

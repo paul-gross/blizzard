@@ -21,6 +21,7 @@ from blizzard.runner.composition import build_host_process
 from blizzard.runner.config import DEFAULT_HUB_URL
 from blizzard.runner.config_keys import HOST_REGISTRY
 from blizzard.runner.host_config import BuiltRunner, HostConfig, HostConfigError
+from tests.config_inputs import load_host_config, load_hub_config
 from tests.host_files import write_minimal_host
 
 _FLAGS = FlagRegistry.parse(
@@ -57,12 +58,12 @@ _HOST_KEYS = _guard(HOST_REGISTRY, "hub_url", "runner-thing")
 
 def _hub(tmp_path: Path, text: str, keys: ConfigRegistry = _HUB_KEYS) -> HubConfig:
     (tmp_path / CONFIG_FILENAME).write_text(text)
-    return HubConfig.load(tmp_path, flag_registry=_FLAGS, key_registry=keys)
+    return load_hub_config(tmp_path, flag_registry=_FLAGS, key_registry=keys)
 
 
 def _host(tmp_path: Path, top: str, keys: ConfigRegistry = _HOST_KEYS) -> HostConfig:
     write_minimal_host(tmp_path, top=top)
-    return HostConfig.load(tmp_path, flag_registry=_FLAGS, key_registry=keys)
+    return load_host_config(tmp_path, flag_registry=_FLAGS, key_registry=keys)
 
 
 @pytest.mark.unit
@@ -73,10 +74,21 @@ def test_a_hub_key_with_its_flag_off_loads_as_its_default_and_composition_warns_
     assert config.annotation_interval_seconds == DEFAULT_ANNOTATION_INTERVAL_SECONDS
     assert [(h.key, h.flag) for h in config.held_keys] == [("annotation_interval_seconds", "hub-thing")]
     with structlog.testing.capture_logs() as logs:
-        flags = build_hub_flags(config.flags, loaded=config.flag_resolution, held=config.held_keys)
+        flags = build_hub_flags(config)
     assert flags.on("hub-thing") is False
     warned = [e for e in logs if e["log_level"] == "warning"]
     assert [(e["key"], e["flag"]) for e in warned] == [("annotation_interval_seconds", "hub-thing")]
+
+
+@pytest.mark.unit
+def test_a_loaded_config_carries_the_registry_and_resolution_composition_applies(tmp_path: Path) -> None:
+    hub = _hub(tmp_path, "[flags]\nhub-thing = true\n")
+    assert hub.flag_registry is _FLAGS
+    assert hub.flag_resolution is not None and hub.flag_resolution.flags.on("hub-thing")
+    assert build_hub_flags(hub).on("hub-thing") is True
+    host = _host(tmp_path, "[flags]\nrunner-thing = false\n").host_view()
+    assert host.flag_registry is _FLAGS
+    assert host.flag_resolution is not None and host.flag_resolution.flags.on("runner-thing") is False
 
 
 @pytest.mark.unit
@@ -132,7 +144,7 @@ def test_a_hub_key_naming_a_flag_a_hub_cannot_read_at_load_is_refused(tmp_path: 
 def test_a_host_key_naming_anything_but_a_runner_flag_is_refused(tmp_path: Path, flag: str) -> None:
     write_minimal_host(tmp_path)
     with pytest.raises(HostConfigError, match="flag"):
-        HostConfig.load(tmp_path, flag_registry=_FLAGS, key_registry=_guard(HOST_REGISTRY, "hub_url", flag))
+        load_host_config(tmp_path, flag_registry=_FLAGS, key_registry=_guard(HOST_REGISTRY, "hub_url", flag))
 
 
 @pytest.mark.unit

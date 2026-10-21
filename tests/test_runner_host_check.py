@@ -14,7 +14,8 @@ from blizzard.cli.main import blizzard
 from blizzard.foundation.runner_tokens import RunnerTokenRefusalReason
 from blizzard.runner.host_layout import HostLayout, migrate_remedy
 from blizzard.runner.hub.client import HubClientError, TokenIdentity, TokenRefusal
-from blizzard.runner.runtime import Runtime, migration_runner, sqlite_store_file
+from blizzard.runner.runtime import migration_runner, sqlite_store_file
+from tests.config_inputs import host_runtime_of
 from tests.host_files import load_runner_config
 from tests.runner_init_fakes import FakeInitHub, FakeTokenIdentityReader, InitRunner, init_runner
 
@@ -93,7 +94,7 @@ def test_a_store_not_at_the_expected_revision_is_an_error_naming_the_migrate_com
     tmp_path: Path, fake_init_hub: FakeInitHub
 ) -> None:
     root = _joined(tmp_path, fake_init_hub)
-    migration_runner(Runtime(root).init()).downgrade("20261011_1000_runner_scope")
+    migration_runner(host_runtime_of(root).init()).downgrade("20261011_1000_runner_scope")
 
     result = _check(fake_init_hub, root)
 
@@ -110,7 +111,7 @@ def test_every_runner_error_and_the_store_revision_are_reported_together(
     layout.config_path.write_text(
         layout.config_path.read_text().replace('subscription = "anthropic"', 'subscription = "nope"')
     )
-    migration_runner(Runtime(root).init()).downgrade("20261011_1000_runner_scope")
+    migration_runner(host_runtime_of(root).init()).downgrade("20261011_1000_runner_scope")
 
     result = _check(fake_init_hub, root)
 

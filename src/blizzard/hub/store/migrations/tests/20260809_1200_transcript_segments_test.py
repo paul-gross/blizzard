@@ -9,6 +9,7 @@ import sqlalchemy as sa
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub import runtime as hub_runtime
+from tests.config_inputs import init_hub
 from tests.support import hub_scoped_engine
 
 pytestmark = [pytest.mark.component]
@@ -23,14 +24,14 @@ def _table_names(db_url: str) -> set[str]:
 
 
 def test_transcript_tables_exist_after_a_fresh_migration_to_head(tmp_path: Path) -> None:
-    config = hub_runtime.init_environment(tmp_path)  # upgrades an empty store to head
+    config = init_hub(tmp_path)  # upgrades an empty store to head
     tables = _table_names(config.db_url)
     assert "transcript_segments" in tables
     assert "transcript_high_water" in tables
 
 
 def test_transcript_tables_survive_a_downgrade_upgrade_roundtrip(tmp_path: Path) -> None:
-    config = hub_runtime.init_environment(tmp_path)
+    config = init_hub(tmp_path)
     runner = hub_runtime.migration_runner(config)
 
     runner.downgrade("20260803_1000_hub_escalation_wrapped_takeover")

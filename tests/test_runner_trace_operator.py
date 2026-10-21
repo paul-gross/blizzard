@@ -16,7 +16,6 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.harness_telemetry_outcome import HarnessTelemetryOutcome
 from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.foundation.trace_export.settings import TracingSettings
-from blizzard.runner.app import create_app
 from blizzard.runner.cli.traces import harness_telemetry_lines, traces_group
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.harness_telemetry_plan import HarnessTelemetryPlan
@@ -26,6 +25,7 @@ from blizzard.runner.tracing.replay import LeaseTraceReplay, ReplayUnavailable, 
 from blizzard.runner.tracing.status import LeaseTraceStatusReader
 from blizzard.runner.tracing.sweep import LeaseTraceSweep
 from tests import runner_trace_fixtures as fx
+from tests.config_inputs import create_runner_app
 from tests.runner_client import runner_client
 from tests.runner_fakes import SqlAlchemyRunnerStore, make_store
 from tests.runner_trace_leases import closed_lease
@@ -86,7 +86,9 @@ class _Runner:
 
 
 def _app(runner: _Runner, tmp_path: Path) -> FastAPI:
-    return create_app(_config(tmp_path), runner_stores=None, trace_status=runner.status, trace_replay=runner.replayer)
+    return create_runner_app(
+        _config(tmp_path), runner_stores=None, trace_status=runner.status, trace_replay=runner.replayer
+    )
 
 
 def _client(runner: _Runner, tmp_path: Path) -> TestClient:
@@ -234,7 +236,7 @@ def test_the_routes_serve_and_refuse_an_unwired_runner(tmp_path: Path) -> None:
     assert bad.status_code == 422
     assert future.status_code == 422 and "future" in future.json()["detail"]
     assert runner.exporter.batches == []
-    unwired = runner_client(create_app(_config(tmp_path)))
+    unwired = runner_client(create_runner_app(_config(tmp_path)))
     assert unwired.get("/api/traces/status").status_code == 503
     assert unwired.post("/api/traces/replay", json=body).status_code == 503
 

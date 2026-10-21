@@ -23,6 +23,7 @@ from blizzard.runner.host_config import (
 )
 from blizzard.runner.host_layout import HostLayout
 from blizzard.runner.hub.held_token import HubTokenHolder, TokenReread
+from tests.config_inputs import FLAG_REGISTRY, STRICT, load_host_config
 
 pytestmark = pytest.mark.unit
 
@@ -120,7 +121,7 @@ def _runner(body: str, extra: str = "") -> str:
 
 def _refusal(tmp_path: Path, text: str) -> str:
     with pytest.raises(HostConfigError) as raised:
-        HostConfig.load(_write(tmp_path / "host", text))
+        load_host_config(_write(tmp_path / "host", text))
     return str(raised.value)
 
 
@@ -132,7 +133,7 @@ def _built(config: HostConfig, environ: dict[str, str]) -> BuiltRunner:
 
 def test_a_valid_file_projects_each_key_to_its_runner_field(tmp_path: Path) -> None:
     root = _write(tmp_path / "host", _VALID.replace('[[workspace]]\nid = "ws-b"', '[[workspace]]\nid = "ws-b"\n'))
-    config = HostConfig.load(root, host="127.0.0.1")
+    config = load_host_config(root, host="127.0.0.1")
     built = _built(config, _TOKEN)
     projected = built.config
     assert built.id == "rn_ONE"
@@ -181,15 +182,15 @@ def test_a_valid_file_projects_each_key_to_its_runner_field(tmp_path: Path) -> N
 
 
 def test_a_runner_naming_no_subscription_projects_none(tmp_path: Path) -> None:
-    config = HostConfig.load(_write(tmp_path / "host", _runner('id = "x"')))
+    config = load_host_config(_write(tmp_path / "host", _runner('id = "x"')))
     assert _built(config, _TOKEN).config.subscriptions == ()
 
 
 def test_the_store_url_defaults_and_overrides(tmp_path: Path) -> None:
-    default = HostConfig.load(_write(tmp_path / "a", _runner("")))
+    default = load_host_config(_write(tmp_path / "a", _runner("")))
     assert default.db_url == f"sqlite:///{(tmp_path / 'a' / 'data' / 'host.db').resolve()}"
     assert "db_url" not in default.to_toml()
-    overridden = HostConfig.load(_write(tmp_path / "b", 'db_url = "postgresql://h/db"\n' + _runner('id = "x"')))
+    overridden = load_host_config(_write(tmp_path / "b", 'db_url = "postgresql://h/db"\n' + _runner('id = "x"')))
     assert overridden.db_url == "postgresql://h/db"
     assert 'db_url = "postgresql://h/db"' in overridden.to_toml()
     assert _built(overridden, _TOKEN).config.db_url == "postgresql://h/db"
@@ -207,7 +208,7 @@ def clean_seeds(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_a_scaffold_round_trips_through_load(tmp_path: Path) -> None:
     scaffold = HostConfig.scaffold(tmp_path / "host", hub_url="https://hub.example", projects=("alpha", "beta"))
     text = scaffold.to_toml()
-    reloaded = HostConfig.load(_write(tmp_path / "host", text))
+    reloaded = load_host_config(_write(tmp_path / "host", text))
     (entry,) = reloaded.runners
     assert entry.id is None
     assert (entry.name, entry.subscription) == (runner_config.DEFAULT_RUNNER_NAME, "anthropic")
@@ -233,7 +234,7 @@ def test_a_scaffold_round_trips_through_load(tmp_path: Path) -> None:
 @pytest.mark.parametrize("held_in", ["environment", "dotenv"])
 def test_a_runner_with_only_an_unsuffixed_hub_token_halts_naming_the_rename(tmp_path: Path, held_in: str) -> None:
     root = tmp_path / "host"
-    reloaded = HostConfig.load(_write(root, HostConfig.scaffold(root).to_toml()))
+    reloaded = load_host_config(_write(root, HostConfig.scaffold(root).to_toml()))
     variable = hub_token_variable(reloaded.sole_runner().name)
     environ = {"BZ_HUB_TOKEN": "tok"} if held_in == "environment" else {}
     if held_in == "dotenv":
@@ -249,7 +250,7 @@ def test_a_runner_with_only_an_unsuffixed_hub_token_halts_naming_the_rename(tmp_
 @pytest.mark.usefixtures("clean_seeds")
 def test_a_runner_with_no_hub_token_at_all_names_no_rename(tmp_path: Path) -> None:
     root = tmp_path / "host"
-    reloaded = HostConfig.load(_write(root, HostConfig.scaffold(root).to_toml()))
+    reloaded = load_host_config(_write(root, HostConfig.scaffold(root).to_toml()))
 
     (halted,) = reloaded.projections({})
 
@@ -266,7 +267,7 @@ def test_a_scaffold_seeds_its_workspace_and_runner_from_the_environment(
     monkeypatch.setenv(runner_config.ENV_GATES, "review")
     monkeypatch.setenv(runner_config.ENV_PORT, "8500")
     scaffold = HostConfig.scaffold(tmp_path / "host")
-    reloaded = HostConfig.load(_write(tmp_path / "host", scaffold.to_toml()))
+    reloaded = load_host_config(_write(tmp_path / "host", scaffold.to_toml()))
     (workspace,) = reloaded.workspaces
     assert (workspace.root, workspace.provider, workspace.envs) == ("/ws", "winter", ("x1", "x2"))
     assert reloaded.port == 8500
@@ -328,7 +329,7 @@ def test_more_than_one_runner_under_a_host_token_loads_and_an_offline_verb_names
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv(HOST_TOKEN_VARIABLE, "host-token")
-    config = HostConfig.load(
+    config = load_host_config(
         _write(
             tmp_path / "host",
             '[[runner]]\nname = "a"\nid = "rn_a"\nprojects = []\n[[runner]]\nname = "b"\nprojects = []\n',
@@ -354,8 +355,8 @@ def test_a_host_error_names_every_offending_entry_at_once(tmp_path: Path) -> Non
 
 
 def test_a_runner_error_halts_that_runner_and_leaves_its_sibling_intact(tmp_path: Path) -> None:
-    broken = HostConfig.load(_write(tmp_path / "host", _runner('id = "rn_1"\nsubscription = "missing"')))
-    healthy = HostConfig.load(_write(tmp_path / "h2", _runner('id = "rn_2"').replace('"r-one"', '"r-two"')))
+    broken = load_host_config(_write(tmp_path / "host", _runner('id = "rn_1"\nsubscription = "missing"')))
+    healthy = load_host_config(_write(tmp_path / "h2", _runner('id = "rn_2"').replace('"r-one"', '"r-two"')))
     environ = {**_TOKEN, "BZ_HUB_TOKEN_R_TWO": "tok-two"}
     (alone,) = healthy.projections(environ)
     halted, sibling = replace(healthy, runners=broken.runners + healthy.runners).projections(environ)
@@ -392,17 +393,17 @@ def test_each_runner_error_halts_only_that_runner(tmp_path: Path, body: str, err
         'projects = [{ project = "p", workspace = "ws", agents = 1 }]\n',
         "" if "projects" in body else 'projects = [{ project = "p", workspace = "ws", agents = 1 }]\n',
     )
-    (halted,) = HostConfig.load(_write(tmp_path / "host", text)).projections(_TOKEN)
+    (halted,) = load_host_config(_write(tmp_path / "host", text)).projections(_TOKEN)
     assert isinstance(halted, HaltedRunner)
     assert any(error in message for message in halted.errors), halted.errors
 
 
 def test_a_runner_with_no_projects_key_is_a_runner_error_and_an_empty_list_serves_none(tmp_path: Path) -> None:
     absent = _runner("").replace('projects = [{ project = "p", workspace = "ws", agents = 1 }]\n', "")
-    (halted,) = HostConfig.load(_write(tmp_path / "a", absent)).projections(_TOKEN)
+    (halted,) = load_host_config(_write(tmp_path / "a", absent)).projections(_TOKEN)
     assert isinstance(halted, HaltedRunner) and any("has no projects" in e for e in halted.errors)
     empty = absent.replace('name = "r-one"\n', 'name = "r-one"\nid = "x"\nprojects = []\n')
-    built = _built(HostConfig.load(_write(tmp_path / "b", empty)), _TOKEN)
+    built = _built(load_host_config(_write(tmp_path / "b", empty)), _TOKEN)
     assert built.config.projects == () and built.config.bindings == ()
     assert (built.config.home_workspace.id, built.config.home_workspace.root) == ("ws", "/w")
 
@@ -412,7 +413,7 @@ def test_a_runner_may_bind_projects_to_several_workspaces(tmp_path: Path) -> Non
         '[[workspace]]\nid = "a"\nenvs = ["e1"]\n[[workspace]]\nid = "b"\nenvs = ["e2"]\n[[runner]]\nname = "r-one"\nid = "x"\n'
         'projects = [{ project = "p", workspace = "a", agents = 1 }, { project = "q", workspace = "b", agents = 1 }]\n'
     )
-    built = _built(HostConfig.load(_write(tmp_path / "host", text)), _TOKEN)
+    built = _built(load_host_config(_write(tmp_path / "host", text)), _TOKEN)
     assert [(b.project, b.workspace, b.agents) for b in built.config.bindings or ()] == [("p", "a", 1), ("q", "b", 1)]
 
 
@@ -460,7 +461,7 @@ def test_a_runner_or_workspace_key_at_the_top_level_is_a_host_error_naming_its_h
 
 
 def test_other_unknown_keys_keep_their_tolerance(tmp_path: Path) -> None:
-    config = HostConfig.load(_write(tmp_path / "host", "something_new = 1\n" + _runner('id = "x"')))
+    config = load_host_config(_write(tmp_path / "host", "something_new = 1\n" + _runner('id = "x"')))
     assert config.runners[0].id == "x"
 
 
@@ -470,13 +471,13 @@ def test_a_directory_with_only_the_flat_file_is_refused_naming_graduation_and_ch
     (root / "blizzard-runner.toml").write_text('db_url = "sqlite://"\n')
     before = sorted(p.name for p in root.iterdir())
     with pytest.raises(HostConfigError, match=r"docs/upgrade\.md"):
-        HostConfig.load(root)
+        load_host_config(root)
     assert sorted(p.name for p in root.iterdir()) == before
 
 
 def test_an_uninitialised_directory_is_refused(tmp_path: Path) -> None:
     with pytest.raises(ConfigError, match="not an initialized host"):
-        HostConfig.load(tmp_path)
+        load_host_config(tmp_path)
 
 
 def test_token_precedence_follows_the_specs_order_and_names_normalise(tmp_path: Path) -> None:
@@ -496,11 +497,11 @@ def test_token_precedence_follows_the_specs_order_and_names_normalise(tmp_path: 
 
 def test_each_runner_resolves_its_own_token_and_never_the_unsuffixed_one(tmp_path: Path) -> None:
     root = _write(tmp_path / "host", '[hub_tokens]\nr-one = "from-file"\n' + _runner('id = "x"'))
-    config = HostConfig.load(root)
+    config = load_host_config(root)
     assert _built(config, {}).config.hub_token == "from-file"
     assert _built(config, {"BZ_HUB_TOKEN_R_ONE": "env"}).config.hub_token == "env"
     (root / ".env").write_text("BZ_HUB_TOKEN_R_ONE=dot\n")
-    plain = HostConfig.load(_write(tmp_path / "plain", _runner('id = "x"')))
+    plain = load_host_config(_write(tmp_path / "plain", _runner('id = "x"')))
     (halted,) = plain.projections({"BZ_HUB_TOKEN": "unsuffixed"})
     assert isinstance(halted, HaltedRunner) and any("no hub token" in e for e in halted.errors)
 
@@ -508,7 +509,7 @@ def test_each_runner_resolves_its_own_token_and_never_the_unsuffixed_one(tmp_pat
 def test_the_host_token_resolves_in_the_same_order(tmp_path: Path) -> None:
     root = _write(tmp_path / "host", 'host_token = "file-token"\n' + _runner('id = "x"'))
     (root / ".env").write_text(f"{HOST_TOKEN_VARIABLE}=dot\n")
-    assert HostConfig.load(root).host_token == ResolvedToken("file-token", TokenSource.HOST_FILE)
+    assert load_host_config(root).host_token == ResolvedToken("file-token", TokenSource.HOST_FILE)
 
 
 class _DotenvFile:
@@ -532,7 +533,7 @@ def test_the_holder_rereads_the_dotenv_only_when_it_was_the_source(
 ) -> None:
     root = _write(tmp_path / "host", hub_tokens + _runner('id = "x"'))
     (root / ".env").write_text("BZ_HUB_TOKEN_R_ONE=old\n")
-    built = _built(HostConfig.load(root), environ)
+    built = _built(load_host_config(root), environ)
     assert built.token == ResolvedToken("old", source)
     holder = HubTokenHolder(built.config.hub_token, file=_DotenvFile("new") if built.token.rereads_dotenv() else None)
     assert holder.reread() is reread
@@ -542,19 +543,19 @@ def test_a_credential_file_others_can_read_earns_a_warning_and_a_private_one_doe
     text = 'host_token = "t"\n' + _runner('id = "x"')
     root = _write(tmp_path / "open", text)
     root.joinpath("blizzard-host.toml").chmod(0o644)
-    assert len(HostConfig.load(root).warnings) == 1
+    assert len(load_host_config(root).warnings) == 1
     private = _write(tmp_path / "private", text)
     private.joinpath("blizzard-host.toml").chmod(0o600)
-    assert HostConfig.load(private).warnings == ()
+    assert load_host_config(private).warnings == ()
     tokens = _write(tmp_path / "tokens", '[hub_tokens]\nr-one = "t"\n' + _runner('id = "x"'))
     tokens.joinpath("blizzard-host.toml").chmod(0o640)
-    assert len(HostConfig.load(tokens).warnings) == 1
+    assert len(load_host_config(tokens).warnings) == 1
     plain = _write(tmp_path / "plain", _runner('id = "x"'))
     plain.joinpath("blizzard-host.toml").chmod(0o644)
-    assert HostConfig.load(plain).warnings == ()
+    assert load_host_config(plain).warnings == ()
     unreadable = _write(tmp_path / "unreadable", text)
     unreadable.joinpath("blizzard-host.toml").chmod(0o620)
-    assert HostConfig.load(unreadable).warnings == ()
+    assert load_host_config(unreadable).warnings == ()
 
 
 def test_the_session_secret_resolves_from_the_environment(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -564,9 +565,9 @@ def test_the_session_secret_resolves_from_the_environment(tmp_path: Path, monkey
 
 
 def test_tracing_transcripts_and_worker_stdout_are_host_tables(tmp_path: Path) -> None:
-    config = HostConfig.load(_write(tmp_path / "host", _VALID))
+    config = load_host_config(_write(tmp_path / "host", _VALID))
     assert config.transcripts.ship and config.worker_stdout.retention_days == 3
-    assert config.tracing == HostConfig.load(_write(tmp_path / "plain", _runner('id = "x"'))).tracing
+    assert config.tracing == load_host_config(_write(tmp_path / "plain", _runner('id = "x"'))).tracing
     assert config.runners[0].own is not None
 
 
@@ -579,7 +580,9 @@ def test_a_hub_token_never_appears_in_the_repr_of_a_host_or_runner_config() -> N
 
 
 def _graduated(tmp_path: Path, legacy: dict[str, object], served: tuple[str, ...] = ()) -> HostConfig:
-    return HostConfig.graduated(tmp_path, legacy, runner_id="rn_graduated", served=served)
+    return HostConfig.graduated(
+        tmp_path, legacy, runner_id="rn_graduated", served=served, flag_registry=FLAG_REGISTRY, strict=STRICT
+    )
 
 
 def test_a_flat_runner_file_graduates_to_one_workspace_and_one_runner_under_the_stores_id(tmp_path: Path) -> None:
@@ -639,7 +642,7 @@ def test_winter_workspaces_on_one_root_naming_disjoint_environments_load(tmp_pat
     )
     _write(tmp_path, text)
 
-    assert [w.id for w in HostConfig.load(tmp_path).workspaces] == ["w1", "w2"]
+    assert [w.id for w in load_host_config(tmp_path).workspaces] == ["w1", "w2"]
 
 
 def test_a_flat_runner_file_naming_no_projects_graduates_bound_to_what_the_hub_last_served(tmp_path: Path) -> None:

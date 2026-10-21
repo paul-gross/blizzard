@@ -13,8 +13,8 @@ import pytest
 from fastapi.testclient import TestClient
 from structlog.testing import capture_logs
 
-from blizzard.runner.app import create_app
 from blizzard.runner.config import RunnerConfig
+from tests.config_inputs import create_runner_app
 from tests.runner_client import runner_client
 from tests.runner_fakes import no_retry_clock
 
@@ -26,7 +26,7 @@ def _runner_app(
     tmp_path: Path, *, hub_url: str | None = _HUB_URL, hub_token: str = "", hub_proxy_client: httpx.Client | None = None
 ) -> TestClient:
     config = RunnerConfig(root=tmp_path, db_url="sqlite://", hub_url=hub_url or "", hub_token=hub_token)
-    return runner_client(create_app(config, hub_proxy_client=hub_proxy_client, hub_retry_clock=no_retry_clock()))
+    return runner_client(create_runner_app(config, hub_proxy_client=hub_proxy_client, hub_retry_clock=no_retry_clock()))
 
 
 @pytest.mark.component

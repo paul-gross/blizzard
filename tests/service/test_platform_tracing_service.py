@@ -17,10 +17,10 @@ import pytest
 from blizzard.foundation.tokens import TokenHash
 from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.foundation.trace_ids import StepKey, trace_id
-from blizzard.hub.config import HubConfig
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.leases.model import NewLease
 from tests import claude_code_telemetry
+from tests.config_inputs import load_hub_config
 from tests.fleet_launchers import await_http, runner_config
 from tests.fleet_world import mint_world
 from tests.host_files import write_host_file
@@ -61,7 +61,7 @@ def _stop(proc: subprocess.Popen[str]) -> None:
 def _hub(hub_dir: Path, port: int, env: dict[str, str], *, platform: bool) -> subprocess.Popen[str]:
     hub_bin = str(Path(sys.executable).parent / "blizzard-hub")
     subprocess.run([hub_bin, "init", str(hub_dir)], check=True, capture_output=True, text=True)
-    config = HubConfig.load(hub_dir)
+    config = load_hub_config(hub_dir)
     tracing = TracingConfig(platform=platform, platform_sample_ratio=1.0)
     config = dataclasses.replace(config, tracing=tracing)
     config.config_path.write_text(config.to_toml())

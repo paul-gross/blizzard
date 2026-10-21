@@ -35,11 +35,11 @@ from sqlalchemy import Engine, and_, select
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.trace_export.config import TracingConfig
-from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.observability.analytics.events import KIND_AGENT_SPAWN, KIND_SKILL_INVOCATION
 from blizzard.runner.config import ENV_TRANSCRIPTS_ROOT
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, OPENCODE_HARNESS_ID
 from blizzard.runner.store import schema as runner_schema
+from tests.config_inputs import load_hub_config
 from tests.crash.support import (
     ENV_HARNESS_FENCE,
     LAND_STEP,
@@ -145,7 +145,7 @@ def _scaffold_traced_hub(hub_dir: Path) -> None:
     """Init the hub with the trace sweep tuned; its work source is seeded once it answers."""
     hub_bin = str(Path(sys.executable).parent / "blizzard-hub")
     subprocess.run([hub_bin, "init", str(hub_dir)], check=True, capture_output=True, text=True)
-    config = dataclasses.replace(HubConfig.load(hub_dir), tracing=_TRACING)
+    config = dataclasses.replace(load_hub_config(hub_dir), tracing=_TRACING)
     config.config_path.write_text(config.to_toml())
 
 

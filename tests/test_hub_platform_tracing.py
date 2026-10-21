@@ -28,7 +28,6 @@ from blizzard.foundation.platform_tracing.handle import IPlatformTracing, build_
 from blizzard.foundation.span_clock import Clock
 from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.hub import app as hub_app
-from blizzard.hub import runtime as hub_runtime
 from blizzard.hub.cli import hub as hub_group
 from blizzard.hub.config import AUTH_MODE_OAUTH, AuthConfig, HubConfig
 from blizzard.hub.domain.observability.tracing.attributes import (
@@ -36,6 +35,7 @@ from blizzard.hub.domain.observability.tracing.attributes import (
     PLATFORM_INSTRUMENTATION_SCOPE_VERSION,
     resource_attributes,
 )
+from tests.config_inputs import build_hosted_hub_app, init_hub
 from tests.support import RunnerFleetClient, hub_scoped, seed_runner, seed_user, tenant_services_of
 
 pytestmark = pytest.mark.component
@@ -59,7 +59,7 @@ def _handle(config: HubConfig, exporter: InMemorySpanExporter) -> IPlatformTraci
 
 
 def _config(tmp_path: Path) -> HubConfig:
-    return hub_runtime.init_environment(tmp_path / "hub")
+    return init_hub(tmp_path / "hub")
 
 
 def _spans(handle: IPlatformTracing, exporter: InMemorySpanExporter) -> list:  # type: ignore[type-arg]
@@ -71,7 +71,7 @@ def test_a_request_yields_a_route_template_server_span_with_parameterized_querie
     exporter = InMemorySpanExporter()
     config = _config(tmp_path)
     handle = _handle(config, exporter)
-    app = hub_app.build_hosted_app(config, platform_tracing=handle)
+    app = build_hosted_hub_app(config, platform_tracing=handle)
     with TestClient(app) as client:
         client.get("/api/chunks/ch_abc?token=tok-secret-9")
     spans = _spans(handle, exporter)
@@ -87,7 +87,7 @@ def test_a_sweep_pass_opens_its_own_root(tmp_path: Path) -> None:
     exporter = InMemorySpanExporter()
     config = _config(tmp_path)
     handle = _handle(config, exporter)
-    app = hub_app.build_hosted_app(config, platform_tracing=handle)
+    app = build_hosted_hub_app(config, platform_tracing=handle)
     app.state.shutdown = asyncio.Event()
     sweeps = list(hub_app.Sweep.all(app))
     assert {sweep.name for sweep in sweeps} >= {"transcript_events", "work_closure"}
@@ -109,7 +109,7 @@ def test_sweep_spans_carry_no_tenant_and_a_tenant_routes_request_span_carries_it
     exporter = InMemorySpanExporter()
     config = _config(tmp_path)
     handle = _handle(config, exporter)
-    app = hub_app.build_hosted_app(config, platform_tracing=handle)
+    app = build_hosted_hub_app(config, platform_tracing=handle)
     app.state.shutdown = asyncio.Event()
     sweeps = list(hub_app.Sweep.all(app))
     with TestClient(app) as client:
@@ -141,7 +141,7 @@ def test_a_runner_bearer_stamps_caller_runner_id_and_name_and_a_forged_caller_he
     token = _registered_runner_token(config, "rn_01JRUNNERA", name="runner-a")
     exporter = InMemorySpanExporter()
     handle = _handle(config, exporter)
-    app = hub_app.build_hosted_app(config, platform_tracing=handle)
+    app = build_hosted_hub_app(config, platform_tracing=handle)
     with TestClient(app) as client:
         resp = client.get(
             "/api/fleet/queue/peek", headers={"Authorization": f"Bearer {token}", "blizzard.caller": "operator"}
@@ -159,7 +159,7 @@ def test_an_outbound_call_through_an_injected_oauth_client_is_an_httpx_client_sp
     config = _config(tmp_path)
     handle = _handle(config, exporter)
     oauth = httpx.Client(transport=httpx.MockTransport(lambda request: httpx.Response(200, json={})))
-    hub_app.build_hosted_app(config, platform_tracing=handle, oauth_http_client=oauth)
+    build_hosted_hub_app(config, platform_tracing=handle, oauth_http_client=oauth)
     oauth.get("https://idp.example/token?code=tok-secret-9")
     spans = _spans(handle, exporter)
     client_spans = [s for s in spans if s.kind.name == "CLIENT" and "idp.example" in repr(dict(s.attributes or {}))]
@@ -171,7 +171,7 @@ def test_platform_off_with_an_endpoint_set_builds_no_provider(tmp_path: Path, mo
     monkeypatch.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://127.0.0.1:4318")
     config = _config(tmp_path)
     assert config.tracing == TracingConfig()
-    app = hub_app.build_hosted_app(config)
+    app = build_hosted_hub_app(config)
     with TestClient(app) as client:
         client.get("/api/chunks/ch_x")
     from opentelemetry import trace
@@ -183,7 +183,7 @@ def test_a_route_without_a_chunk_id_carries_no_chunk_attribute(tmp_path: Path) -
     exporter = InMemorySpanExporter()
     config = _config(tmp_path)
     handle = _handle(config, exporter)
-    app = hub_app.build_hosted_app(config, platform_tracing=handle)
+    app = build_hosted_hub_app(config, platform_tracing=handle)
     with TestClient(app) as client:
         client.get("/api/health")
     server = [s for s in _spans(handle, exporter) if s.name == "GET /api/health"]
@@ -199,7 +199,7 @@ _TRACEPARENT = {"traceparent": f"00-{_PLANTED_TRACE:032x}-{_PLANTED_SPAN:016x}-0
 def _registered_runner_token(config: HubConfig, runner_id: str, *, name: str | None = None) -> str:
     """Add and register ``runner_id`` through an untraced app over the same store, so the seeding
     leaves no spans behind."""
-    return seed_runner(tenant_services_of(hub_app.build_hosted_app(config)), runner_id, name=name, workspace_id="ws-a")
+    return seed_runner(tenant_services_of(build_hosted_hub_app(config)), runner_id, name=name, workspace_id="ws-a")
 
 
 def _server_span(spans: list, prefix: str):  # type: ignore[no-untyped-def,type-arg]
@@ -216,7 +216,7 @@ def test_a_registered_runner_bearer_continues_an_incoming_trace(tmp_path: Path) 
     exporter = InMemorySpanExporter()
     config = _config(tmp_path)
     handle = _handle(config, exporter)
-    with TestClient(hub_app.build_hosted_app(config, platform_tracing=handle)) as client:
+    with TestClient(build_hosted_hub_app(config, platform_tracing=handle)) as client:
         token = _registered_runner_token(config, "runner-a")
         client.get("/api/fleet/queue/peek", headers={"Authorization": f"Bearer {token}", **_TRACEPARENT})
     spans = _spans(handle, exporter)
@@ -233,7 +233,7 @@ def test_a_traced_runner_request_resolves_its_token_once(tmp_path: Path) -> None
     exporter = InMemorySpanExporter()
     config = _config(tmp_path)
     handle = _handle(config, exporter)
-    with TestClient(hub_app.build_hosted_app(config, platform_tracing=handle)) as client:
+    with TestClient(build_hosted_hub_app(config, platform_tracing=handle)) as client:
         token = _registered_runner_token(config, "runner-a")
         credentials = client.app.state.services.hub_scoped_reads.credentials  # type: ignore[attr-defined]
         resolutions: list[str] = []
@@ -254,7 +254,7 @@ def test_an_unresolved_runner_credential_starts_a_fresh_root(tmp_path: Path, cre
     exporter = InMemorySpanExporter()
     config = _config(tmp_path)
     handle = _handle(config, exporter)
-    with TestClient(hub_app.build_hosted_app(config, platform_tracing=handle)) as client:
+    with TestClient(build_hosted_hub_app(config, platform_tracing=handle)) as client:
         token = _registered_runner_token(config, "runner-a")
         if credential == "revoked":
             assert client.post("/api/runners/runner-a/token-revocations", json={}).status_code == 201
@@ -272,7 +272,7 @@ def test_a_human_route_under_auth_mode_none_starts_a_fresh_root(tmp_path: Path) 
     config = _config(tmp_path)
     assert config.auth.mode == "none"
     handle = _handle(config, exporter)
-    with TestClient(hub_app.build_hosted_app(config, platform_tracing=handle)) as client:
+    with TestClient(build_hosted_hub_app(config, platform_tracing=handle)) as client:
         client.get("/api/chunks", headers=_TRACEPARENT)
     server = _server_span(_spans(handle, exporter), "GET /api/chunks")
     assert server.parent is None
@@ -329,7 +329,7 @@ def test_hub_run_steps_parent_on_the_derived_hub_exec_span_and_the_driving_reque
     exporter = InMemorySpanExporter()
     config = _config(tmp_path)
     handle = _handle(config, exporter)
-    app = hub_app.build_hosted_app(config, platform_tracing=handle)
+    app = build_hosted_hub_app(config, platform_tracing=handle)
     with RunnerFleetClient(app, services=tenant_services_of(app)) as client:
         assert client.post("/api/graphs", json={"definition_yaml": _POLLING_GRAPH_YAML}).status_code == 201
         chunk_id = client.post("/api/work-sources/hub/items", json={"title": "t", "body": "b"}).json()["chunk_id"]
@@ -412,7 +412,7 @@ def test_an_operator_command_span_parents_the_hubs_server_span_for_an_authentica
     exporter = InMemorySpanExporter()
     config = replace(_config(tmp_path), auth=AuthConfig(mode=AUTH_MODE_OAUTH))
     handle = _handle(config, exporter)
-    app = hub_app.build_hosted_app(config, platform_tracing=handle)
+    app = build_hosted_hub_app(config, platform_tracing=handle)
     posted: list[httpx.Request] = []
     cli_exporter = httpx.Client(transport=httpx.MockTransport(lambda r: posted.append(r) or httpx.Response(200)))
     with TestClient(app) as client:
@@ -446,7 +446,7 @@ def test_a_traced_session_request_resolves_its_session_once(tmp_path: Path, monk
     exporter = InMemorySpanExporter()
     config = replace(_config(tmp_path), auth=AuthConfig(mode=AUTH_MODE_OAUTH))
     handle = _handle(config, exporter)
-    app = hub_app.build_hosted_app(config, platform_tracing=handle)
+    app = build_hosted_hub_app(config, platform_tracing=handle)
     with TestClient(app) as client:
         services = app.state.services
         harness = SimpleNamespace(engine=app.state.engine, clock=FixedClock(datetime(2026, 7, 13, tzinfo=UTC)))

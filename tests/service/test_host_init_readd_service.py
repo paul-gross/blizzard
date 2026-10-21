@@ -23,10 +23,11 @@ import sqlalchemy as sa
 
 from blizzard.foundation.runner_token_names import hub_token_variable
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.runner.host_config import HOST_TOKEN_VARIABLE, HostConfig
+from blizzard.runner.host_config import HOST_TOKEN_VARIABLE
 from blizzard.runner.host_layout import HostLayout
 from blizzard.runner.hub.internal.token_file import HubTokenFile
-from blizzard.runner.runtime import init_environment, migration_runner
+from blizzard.runner.runtime import migration_runner
+from tests.config_inputs import init_host, load_host_config
 from tests.fleet_launchers import await_http, terminate
 from tests.host_files import sampler_without_credentials, write_host_file
 from tests.runner_fakes import make_store
@@ -45,7 +46,7 @@ _PRE_HOST_TOKEN = "tok_pre_host"
 def _left_behind(root: Path) -> None:
     """A pre-host runner's store at ``data/runner.db``, its identity row naming the pre-host runner, and its token
     under the unsuffixed variable — the config that named them both cleared away."""
-    config = init_environment(root)
+    config = init_host(root)
     migration_runner(config).downgrade(_PARENT)
     engine = create_engine_from_url(config.db_url)
     try:
@@ -92,7 +93,7 @@ def test_init_with_allow_readd_sets_a_pre_host_store_aside_adds_a_runner_and_the
 
         assert not layout.legacy_store_path.exists()
         assert [path.name for path in layout.data_dir.glob("runner.db.*")] != []
-        config = HostConfig.load(root).runner_config()
+        config = load_host_config(root).runner_config()
         assert config.runner_id is not None and config.runner_id != _PRE_HOST_RUNNER_ID
         assert config.token_env == hub_token_variable(config.name)
         token = HubTokenFile.of(root, config.token_env).held()
@@ -171,7 +172,7 @@ def test_runner_add_with_no_session_runs_after_a_restart_and_retire_halts_it_wit
         host_token = HubTokenFile.of(root, HOST_TOKEN_VARIABLE).held()
         assert host_token
         bearer = {"Authorization": f"Bearer {host_token}"}
-        config = HostConfig.load(root)
+        config = load_host_config(root)
         HostLayout(root).config_path.write_text(
             dataclasses.replace(
                 config, host="127.0.0.1", port=port, subscriptions=sampler_without_credentials(root)
@@ -182,7 +183,7 @@ def test_runner_add_with_no_session_runs_after_a_restart_and_retire_halts_it_wit
             added = _runner_verb(root, hub_url, "add", "r2", "--project", "default")
             assert added.returncode == 0, added.stdout + added.stderr
             assert "it starts runner r2 at its next start" in added.stdout, added.stdout
-        r2 = HostConfig.load(root).sole_runner("r2").id
+        r2 = load_host_config(root).sole_runner("r2").id
         assert r2 is not None
         record = hub.get("/api/fleet/host", headers=bearer)
         assert record.status_code == 200, record.text
@@ -200,7 +201,7 @@ def test_runner_add_with_no_session_runs_after_a_restart_and_retire_halts_it_wit
             retired = _runner_verb(root, hub_url, "retire", "--runner", "r2")
             assert retired.returncode == 0, retired.stdout + retired.stderr
             assert "it halts runner r2 at its next tick" in retired.stdout, retired.stdout
-            assert [entry.name for entry in HostConfig.load(root).runners] == [config.runners[0].name]
+            assert [entry.name for entry in load_host_config(root).runners] == [config.runners[0].name]
 
             def halted() -> bool:
                 listed = local.get("/api/host/runners").json()["items"]

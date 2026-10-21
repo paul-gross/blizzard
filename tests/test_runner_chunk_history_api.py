@@ -18,12 +18,12 @@ from fastapi import FastAPI
 from blizzard.foundation.migration_source import MigrationSource
 from blizzard.foundation.tokens import TokenHash
 from blizzard.runner.api.history import _rows
-from blizzard.runner.app import create_app
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.leases.model import NewLease
 from blizzard.wire.chunk import BounceView, MigrationView, TransitionView
 from blizzard.wire.history import ChunkHistoryView
+from tests.config_inputs import create_runner_app
 from tests.runner_client import runner_client
 from tests.runner_fakes import make_host_stores, make_store, make_stores, no_retry_clock
 from tests.support import build_hub, make_ready, pointer_token, report_lease
@@ -206,7 +206,7 @@ def _app_with_store(tmp_path: Path, *, hub_url: str = _HUB_URL):  # type: ignore
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}", hub_url=hub_url)
     router = _HubRouter()
-    app = create_app(
+    app = create_runner_app(
         config,
         runner_stores=make_stores(store),
         host_stores=make_host_stores(store),
@@ -245,7 +245,7 @@ def _stub_hub(app: FastAPI, status_code: int, payload: object, seen: list[str] |
 @pytest.mark.component
 def test_503_when_store_unwired(tmp_path: Path) -> None:
     config = RunnerConfig(root=tmp_path, db_url="sqlite://", hub_url=_HUB_URL)
-    with runner_client(create_app(config)) as client:
+    with runner_client(create_runner_app(config)) as client:
         resp = client.get("/api/leases/lease_1/history", headers={"X-Blizzard-Lease-Token": _TOKEN})
     assert resp.status_code == 503
 
@@ -356,7 +356,7 @@ def test_forwards_the_runner_bearer_when_a_token_is_configured(tmp_path: Path) -
 
     hub_proxy_client = httpx.Client(transport=httpx.MockTransport(handler))
     with runner_client(
-        create_app(
+        create_runner_app(
             config,
             runner_stores=make_stores(store),
             host_stores=make_host_stores(store),
@@ -500,7 +500,7 @@ def test_a_workers_history_read_matches_the_transitions_the_hub_recorded(tmp_pat
     runner_store.record_lease_token("lease_1", TokenHash(_TOKEN).hex, _NOW)
     runner_config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}", hub_url=_HUB_URL)
     with runner_client(
-        create_app(
+        create_runner_app(
             runner_config,
             runner_stores=make_stores(runner_store),
             host_stores=make_host_stores(runner_store),

@@ -26,7 +26,7 @@ from blizzard.runner.cli import runner as runner_group
 from blizzard.runner.cli.daemon import RunnerDaemon
 from blizzard.runner.composition import build_host_process
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
-from blizzard.runner.host_config import BuiltRunner, HaltedRunner, HostConfig
+from blizzard.runner.host_config import BuiltRunner, HaltedRunner
 from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.hub.served_projects import ServedProject
 from blizzard.runner.leases.model import NewLease
@@ -36,6 +36,7 @@ from blizzard.runner.subscriptions.credential_renewer import (
     RenewalOutcome,
     RenewalOutcomeKind,
 )
+from tests.config_inputs import load_host_config
 from tests.host_files import load_runner_config
 from tests.runner_client import runner_seams
 from tests.runner_fakes import SqlAlchemyRunnerStore, runner_store_errors
@@ -654,7 +655,7 @@ def test_status_names_a_held_binding_matching_no_workspace(tmp_path: Path, monke
 def _serve_host_of_halted_runners(root: Path) -> Iterator[Path]:
     """The real host composition over ``root``: each runner its file declares is built or left halted, and the app
     is the one a host with none built serves."""
-    config = HostConfig.load(root, port=0)
+    config = load_host_config(root, port=0)
     projections = config.projections()
     halted = [p for p in projections if isinstance(p, HaltedRunner)]
     built = [p for p in projections if isinstance(p, BuiltRunner)]

@@ -14,6 +14,8 @@ import structlog
 from fastapi.testclient import TestClient
 from structlog.typing import EventDict
 
+from blizzard.cli import config_inputs
+from blizzard.cli.config_inputs import packaged_flag_registry
 from blizzard.foundation.flags import (
     FlagNotReadable,
     FlagRegistry,
@@ -21,17 +23,22 @@ from blizzard.foundation.flags import (
     UnknownFlag,
     resolve_flags,
 )
-from blizzard.hub.app import create_app as create_hub_app
-from blizzard.hub.app import create_app_for_export as export_hub_app
 from blizzard.hub.composition import build_hub_flags
 from blizzard.hub.config import ConfigError, HubConfig
 from blizzard.hub.layout import CONFIG_FILENAME
 from blizzard.runner.app import build_hosted_app
-from blizzard.runner.app import create_app as create_runner_app
-from blizzard.runner.app import create_app_for_export as export_runner_app
 from blizzard.runner.composition import build_host_process
 from blizzard.runner.config import RunnerConfig
-from blizzard.runner.host_config import BuiltRunner, HostConfig, HostConfigError
+from blizzard.runner.host_config import BuiltRunner, HostConfigError
+from tests.config_inputs import (
+    FLAG_REGISTRY,
+    create_hub_app,
+    create_runner_app,
+    export_hub_app,
+    export_runner_app,
+    load_host_config,
+    load_hub_config,
+)
 from tests.host_files import write_minimal_host
 from tests.support import build_hub
 
@@ -79,7 +86,7 @@ def _flag(**fields: str) -> str:
 
 @pytest.mark.unit
 def test_the_packaged_registry_loads_and_is_empty() -> None:
-    registry = FlagRegistry.load()
+    registry = packaged_flag_registry()
     assert dict(registry.live) == {}
     assert dict(registry.retired) == {}
 
@@ -120,9 +127,10 @@ def test_a_malformed_registry_fails_the_load(text: str) -> None:
 
 
 @pytest.mark.unit
-def test_a_missing_registry_file_fails_the_load(tmp_path: Path) -> None:
+def test_a_missing_registry_file_fails_the_load(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(config_inputs, "files", lambda _package: tmp_path)
     with pytest.raises(FlagRegistryError, match="cannot read"):
-        FlagRegistry.load(tmp_path / "absent.toml")
+        packaged_flag_registry()
 
 
 # --- reading and resolving -----------------------------------------------------------------------------------------
@@ -312,7 +320,7 @@ def _python_sources() -> dict[str, str]:
 
 @pytest.mark.unit
 def test_the_packaged_registry_agrees_with_every_flag_read_in_source() -> None:
-    assert _lint(FlagRegistry.load(), {**_python_sources(), **_web_sources()}) == []
+    assert _lint(FLAG_REGISTRY, {**_python_sources(), **_web_sources()}) == []
 
 
 @pytest.mark.unit
@@ -398,7 +406,7 @@ def _hub_root(tmp_path: Path, flags_text: str) -> Path:
 
 @pytest.mark.unit
 def test_the_hub_loads_a_flags_table_of_booleans(tmp_path: Path) -> None:
-    config = HubConfig.load(_hub_root(tmp_path, "[flags]\nhub-thing = true\nother = false\n"))
+    config = load_hub_config(_hub_root(tmp_path, "[flags]\nhub-thing = true\nother = false\n"))
     assert dict(config.flags) == {"hub-thing": True, "other": False}
 
 
@@ -406,13 +414,13 @@ def test_the_hub_loads_a_flags_table_of_booleans(tmp_path: Path) -> None:
 @pytest.mark.parametrize("text", ['[flags]\nhub-thing = "yes"\n', "flags = 1\n", "[flags]\nhub-thing = 1\n"])
 def test_the_hub_refuses_a_flags_table_that_is_not_booleans(tmp_path: Path, text: str) -> None:
     with pytest.raises(ConfigError, match="flags"):
-        HubConfig.load(_hub_root(tmp_path, text))
+        load_hub_config(_hub_root(tmp_path, text))
 
 
 @pytest.mark.unit
 def test_a_host_lays_its_flags_onto_every_runner(tmp_path: Path) -> None:
     write_minimal_host(tmp_path, top="[flags]\nrunner-thing = false\n")
-    host = HostConfig.load(tmp_path)
+    host = load_host_config(tmp_path)
     assert dict(host.flags) == {"runner-thing": False}
     assert dict(host.runner_config(_TOKEN).flags) == {"runner-thing": False}
 
@@ -422,7 +430,7 @@ def test_a_host_lays_its_flags_onto_every_runner(tmp_path: Path) -> None:
 def test_a_host_refuses_a_flags_table_that_is_not_booleans(tmp_path: Path, top: str) -> None:
     write_minimal_host(tmp_path, top=top)
     with pytest.raises(HostConfigError, match="flags"):
-        HostConfig.load(tmp_path)
+        load_host_config(tmp_path)
 
 
 # --- the composition roots and the two answers ---------------------------------------------------------------------
@@ -453,7 +461,7 @@ def test_a_hub_answers_its_own_scopes_and_lists_the_applied_overrides(
     tmp_path: Path, warnings: list[EventDict]
 ) -> None:
     overrides = {"hub-thing": True, "fleet-thing": False, "runner-thing": True, "old-thing": True, "mistyped": True}
-    flags = build_hub_flags(overrides, _fixture())
+    flags = build_hub_flags(HubConfig(root=tmp_path, db_url="sqlite://", flags=overrides, flag_registry=_fixture()))
     hub = build_hub(tmp_path, flags=flags)
     answer = hub.client.get("/api/flags").json()
     assert answer == {"flags": {"fleet-thing": False, "hub-thing": True}, "overridden": ["fleet-thing", "hub-thing"]}
@@ -464,7 +472,7 @@ def test_a_hub_answers_its_own_scopes_and_lists_the_applied_overrides(
 @pytest.mark.component
 def test_a_host_over_the_packaged_registry_answers_an_empty_map_and_keeps_its_health(tmp_path: Path) -> None:
     write_minimal_host(tmp_path)
-    config = HostConfig.load(tmp_path, port=0)
+    config = load_host_config(tmp_path, port=0)
     built = [p for p in config.projections(_TOKEN) if isinstance(p, BuiltRunner)]
     host = build_host_process(config, built)
     hosted = build_hosted_app(config.host_view(), host)
@@ -483,9 +491,9 @@ def test_a_host_answers_its_runner_flags_and_warns_once_per_ignored_key(
 ) -> None:
     flags = "[flags]\nrunner-thing = false\nhub-thing = true\nfleet-thing = true\nold-thing = true\nmistyped = true\n"
     write_minimal_host(tmp_path, top=flags)
-    config = HostConfig.load(tmp_path, port=0)
+    config = load_host_config(tmp_path, port=0, flag_registry=_fixture())
     built = [p for p in config.projections(_TOKEN) if isinstance(p, BuiltRunner)]
-    host = build_host_process(config, built, flag_registry=_fixture())
+    host = build_host_process(config, built)
     hosted = build_hosted_app(config.host_view(), host)
     try:
         with TestClient(hosted.app) as client:

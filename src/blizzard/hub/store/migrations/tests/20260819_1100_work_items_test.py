@@ -9,6 +9,7 @@ import sqlalchemy as sa
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub import runtime as hub_runtime
+from tests.config_inputs import init_hub
 
 pytestmark = [pytest.mark.unit]
 
@@ -17,7 +18,7 @@ def test_work_items_tables_survive_migration_roundtrip(tmp_path: Path) -> None:
     """``work_items`` + ``work_item_sequence`` — downgrades to this
     revision's own parent by id, so the drop half is asserted rather than inferred from
     a revision marker a no-op ``downgrade()`` would satisfy just as well."""
-    config = hub_runtime.init_environment(tmp_path)  # upgrades to head
+    config = init_hub(tmp_path)  # upgrades to head
     runner = hub_runtime.migration_runner(config)
 
     def _has_tables() -> bool:

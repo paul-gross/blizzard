@@ -14,6 +14,7 @@ from pathlib import Path
 import click
 import httpx
 
+from blizzard.cli.config_inputs import packaged_flag_registry, strict_config
 from blizzard.cli.host_directory import HostDirectory
 from blizzard.cli.operator_trace import ITraceHeaders, OperatorTrace
 from blizzard.cli.runtime import build_early_shutdown_server, click_exception_on, run_init, run_migrate
@@ -57,7 +58,8 @@ from blizzard.runner.host_config import (
     RunnerEntry,
     TokenSource,
 )
-from blizzard.runner.host_layout import HOST_CONFIG_FILENAME, HostHeld, HostLock, write_runner_id
+from blizzard.runner.host_file import write_runner_id
+from blizzard.runner.host_layout import HOST_CONFIG_FILENAME, HostHeld, HostLock
 from blizzard.runner.hub.bootstrap import (
     BootstrapStop,
     BootstrapStopped,
@@ -438,7 +440,7 @@ def _join_runner(
     # left stale. A configured id differing from the joined runner's reaches here only by a re-add.
     if entry.id != joined.runner_id:
         with click_exception_on(ConfigError):
-            write_runner_id(config.layout, entry.name, joined.runner_id)
+            write_runner_id(config.layout, entry.name, joined.runner_id, strict=config.strict)
     _record_identity(config, joined)
 
 
@@ -533,7 +535,7 @@ def named_runners(config: IStoreLocation) -> tuple[str, ...]:
 def configured_ids(config: RunnerConfig) -> tuple[str, ...]:
     """The ids every ``[[runner]]`` of ``config``'s host file configures — the runners a store it opens may name."""
     try:
-        host = HostConfig.load(config.root)
+        host = HostConfig.load(config.root, flag_registry=config.flag_registry, strict=config.strict)
     except ConfigError:
         return ()
     return tuple(entry.id for entry in host.runners if entry.id is not None)
@@ -955,7 +957,9 @@ def _start(config: HostConfig, runners: Sequence[BuiltRunner], halted: Sequence[
 def _check(ctx: click.Context, root: Path, *, host: str | None, port: int | None) -> None:
     """``host --check``: every error a start would meet, reported together; starts nothing and holds nothing."""
     try:
-        config = HostConfig.load_for_store(root, host=host, port=port)
+        config = HostConfig.load_for_store(
+            root, host=host, port=port, flag_registry=packaged_flag_registry(), strict=strict_config()
+        )
     except HostConfigError as exc:
         raise click.ClickException("\n".join(f"host: {error}" for error in exc.errors)) from exc
     except ConfigError as exc:

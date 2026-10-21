@@ -10,6 +10,7 @@ from typing import Any
 import click
 import httpx
 
+from blizzard.cli.config_inputs import packaged_flag_registry, strict_config
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext, RawBody
 from blizzard.hub.cli.project_option import project_option, project_query
@@ -166,7 +167,9 @@ def config_import_legacy(directory: str, tenant: str | None) -> None:
 
     try:
         result = import_legacy_config(
-            HubConfig.load(Path(directory)), os.environ, tenant=TenantId(tenant) if tenant is not None else None
+            HubConfig.load(Path(directory), flag_registry=packaged_flag_registry(), strict=strict_config()),
+            os.environ,
+            tenant=TenantId(tenant) if tenant is not None else None,
         )
     except (ConfigError, LegacyImportRefused) as exc:
         raise click.ClickException(str(exc)) from exc

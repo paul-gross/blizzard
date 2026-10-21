@@ -9,6 +9,7 @@ import sqlalchemy as sa
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub import runtime as hub_runtime
+from tests.config_inputs import init_hub
 from tests.migration_support_store_migrations import (
     assert_frozen_table_lacks_a_later_revisions_columns,
 )
@@ -20,7 +21,7 @@ def test_wrapped_takeover_command_column_survives_migration_roundtrip(tmp_path: 
     """Hub-only (``escalations.wrapped_takeover_command`` has no runner counterpart) —
     downgrades to this revision's own parent by id, not ``"-1"``, so a future revision
     landing between them can't silently break this test's premise."""
-    config = hub_runtime.init_environment(tmp_path)  # upgrades to head
+    config = init_hub(tmp_path)  # upgrades to head
     runner = hub_runtime.migration_runner(config)
 
     def _has_column() -> bool:

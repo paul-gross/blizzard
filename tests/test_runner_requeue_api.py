@@ -12,11 +12,11 @@ from pathlib import Path
 import pytest
 
 from blizzard.foundation.clock import FixedClock
-from blizzard.runner.app import create_app
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.operator.requeue import RequeueService
+from tests.config_inputs import create_runner_app
 from tests.runner_client import runner_client
 from tests.runner_fakes import make_host_stores, make_store, make_stores
 
@@ -28,7 +28,7 @@ def _app_with_requeue(tmp_path: Path, *, clock: FixedClock | None = None):  # ty
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}")
     service = RequeueService(store, clock or FixedClock(_LATER))
-    return create_app(
+    return create_runner_app(
         config, runner_stores=make_stores(store), host_stores=make_host_stores(store), requeue=service
     ), store
 
@@ -60,7 +60,7 @@ def _seed_escalated_chunk(store) -> None:  # type: ignore[no-untyped-def]
 @pytest.mark.component
 def test_503_when_requeue_service_unwired(tmp_path: Path) -> None:
     config = RunnerConfig(root=tmp_path, db_url="sqlite://")
-    with runner_client(create_app(config)) as client:
+    with runner_client(create_runner_app(config)) as client:
         assert client.post("/api/chunks/ch_1/requeues").status_code == 503
 
 

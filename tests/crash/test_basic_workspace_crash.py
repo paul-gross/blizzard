@@ -9,9 +9,9 @@ import pytest
 import yaml
 
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.hub.config import HubConfig
 from blizzard.runner.environments.factory import build_workspace_provider
 from blizzard.tools.invariants import Invariants
+from tests.config_inputs import load_hub_config
 from tests.crash.support import start_runner, terminate, wait_death, wait_status
 from tests.crash.test_kill9_sweep import _abandon_graph_yaml, _await_marker, _leases_for_chunk, _wait_for_closure
 from tests.e2e.test_basic_workspace import bare_origin, basic_config, basic_graph_yaml, trap_winter
@@ -53,7 +53,7 @@ def test_basic_runner_recovers_from_fill_kill9(tmp_path: Path, monkeypatch: pyte
         try:
             assert wait_death(runner_proc) == -9, f"runner did not reach {point}"
             violations = Invariants(
-                runner_db_url=config.db_url, hub_db_url=HubConfig.load(tmp_path / "hub").db_url
+                runner_db_url=config.db_url, hub_db_url=load_hub_config(tmp_path / "hub").db_url
             ).run(after_recovery=False)
             assert not violations, violations
             # The unbound directory remains on disk at the earlier FILL point; the
@@ -63,7 +63,7 @@ def test_basic_runner_recovers_from_fill_kill9(tmp_path: Path, monkeypatch: pyte
             status = wait_status(hub, chunk_id, {"done", "stopped", "needs_human"}, timeout=120)
             assert status == "done", f"basic runner did not recover from {point}: {status}"
             violations = Invariants(
-                runner_db_url=config.db_url, hub_db_url=HubConfig.load(tmp_path / "hub").db_url
+                runner_db_url=config.db_url, hub_db_url=load_hub_config(tmp_path / "hub").db_url
             ).run(after_recovery=True)
             assert not violations, violations
         finally:
@@ -134,7 +134,7 @@ def test_basic_runner_releases_and_reclaims_after_abandon_kill9(
             assert status == "done", f"basic runner did not recover from release: {status}"
             assert len(_leases_for_chunk(runner_dir, chunk_id)) == 2
             violations = Invariants(
-                runner_db_url=config.db_url, hub_db_url=HubConfig.load(tmp_path / "hub").db_url
+                runner_db_url=config.db_url, hub_db_url=load_hub_config(tmp_path / "hub").db_url
             ).run(after_recovery=True)
             assert not violations, violations
         finally:

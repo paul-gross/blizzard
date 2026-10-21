@@ -9,6 +9,7 @@ import sqlalchemy as sa
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner import runtime as runner_runtime
+from tests.config_inputs import init_host
 from tests.migration_support_store_migrations import assert_frozen_table_lacks_a_later_revisions_columns
 
 
@@ -17,7 +18,7 @@ def test_declaration_environment_id_migration_discards_the_pre_revision_rows(tmp
     """``20260726_1000`` drops and recreates ``git_commit_declarations`` — no
     back-fill; a row seeded at the parent revision must not survive the upgrade."""
     parent = "20260725_1200_runner_check_results"
-    config = runner_runtime.init_environment(tmp_path)
+    config = init_host(tmp_path)
     migrations = runner_runtime.migration_runner(config)
     migrations.downgrade(parent)
 

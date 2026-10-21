@@ -33,6 +33,7 @@ from blizzard.runner.loop.steps import Advance
 from blizzard.runner.store import MIGRATIONS_DIR
 from blizzard.runner.transcripts.internal.harness_transcript_repositories import HarnessTranscriptRepositories
 from blizzard.runner.transcripts.service import TranscriptService
+from tests.config_inputs import init_host
 from tests.runner_fakes import (
     FIXTURE_RUNNER_ID,
     FakeArchivedTranscriptRepository,
@@ -142,7 +143,7 @@ _HEARTBEATS = 2500  # spans several of the backfill's bounded batches
 
 
 def _store_at_parent(tmp_path: Path) -> tuple[MigrationRunner, sa.Engine]:
-    config = runner_runtime.init_environment(tmp_path)
+    config = init_host(tmp_path)
     migration = runner_runtime.migration_runner(config)
     migration.downgrade(_PARENT)
     return migration, create_engine_from_url(config.db_url)
@@ -211,7 +212,7 @@ def _fixture_at_parent(root: Path, *, registered: bool, seeded: bool) -> str:
     """A runner runtime dir whose store the previous release wrote: at the parent revision, with or without an identity,
     and with a row in every runner-scoped table or none. Each table is shaped as live, an open transcript segment
     included; answers the dir's store url."""
-    config = runner_runtime.init_environment(root)
+    config = init_host(root)
     runner_runtime.migration_runner(config).downgrade(_PARENT)
     engine = create_engine_from_url(config.db_url)
     try:
@@ -571,7 +572,7 @@ def test_the_previous_releases_statements_write_to_the_migrated_store_with_no_ru
 
 def test_the_cli_migrates_a_copied_store_down_to_the_parent_and_back(tmp_path: Path) -> None:
     original = tmp_path / "original"
-    config = runner_runtime.init_environment(original)
+    config = init_host(original)
     runner_runtime.migration_runner(config).downgrade(_PARENT)
     engine = create_engine_from_url(config.db_url)
     try:

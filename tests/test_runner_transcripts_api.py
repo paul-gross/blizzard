@@ -12,7 +12,6 @@ from pathlib import Path
 
 import pytest
 
-from blizzard.runner.app import create_app
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.registry import HarnessRegistry
@@ -21,6 +20,7 @@ from blizzard.runner.transcripts.archived_repository import ArchivedTranscript
 from blizzard.runner.transcripts.internal.harness_transcript_repositories import HarnessTranscriptRepositories
 from blizzard.runner.transcripts.repository import Transcript, Turn
 from blizzard.runner.transcripts.service import TranscriptService
+from tests.config_inputs import create_runner_app
 from tests.runner_client import runner_client
 from tests.runner_fakes import (
     FakeArchivedTranscriptRepository,
@@ -77,7 +77,9 @@ def _app_with_transcripts(
         workspaces=single_workspace(FakeProvider({}), spawn_root=workspace_root),
     )
     return (
-        create_app(config, runner_stores=make_stores(store), host_stores=make_host_stores(store), transcripts=service),
+        create_runner_app(
+            config, runner_stores=make_stores(store), host_stores=make_host_stores(store), transcripts=service
+        ),
         store,
         repo,
     )
@@ -309,6 +311,6 @@ def test_404_for_a_lease_that_never_existed(tmp_path: Path) -> None:
 @pytest.mark.component
 def test_503_when_transcript_service_unwired(tmp_path: Path) -> None:
     config = RunnerConfig(root=tmp_path, db_url="sqlite://")
-    with runner_client(create_app(config)) as client:
+    with runner_client(create_runner_app(config)) as client:
         resp = client.get("/api/leases/lease_1/transcript")
     assert resp.status_code == 503

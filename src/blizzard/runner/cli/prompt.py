@@ -19,7 +19,8 @@ from blizzard.runner.harness.workspace_prompts import (
     WORKSPACE_PROMPT_FILENAME,
     UnknownWorkspacePromptSample,
 )
-from blizzard.runner.host_layout import HostLayout, repoint_workspace_prompt
+from blizzard.runner.host_file import repoint_workspace_prompt
+from blizzard.runner.host_layout import HostLayout
 from blizzard.runner.store.errors import RunnerStoreError
 
 
@@ -84,7 +85,9 @@ def prompt_install(name: str, directory: str, force: bool, runner: str | None) -
         raise click.ClickException(f"{destination} already exists — pass --force to overwrite it")
     destination.write_text(text)
     with click_exception_on(ConfigError):
-        repoint_workspace_prompt(HostLayout(config.root), config.home_workspace.id, file_path=str(destination))
+        repoint_workspace_prompt(
+            HostLayout(config.root), config.home_workspace.id, file_path=str(destination), strict=config.strict
+        )
     click.echo(f"installed sample {name} to {destination} and set the workspace's prompt_file")
     if _stored_override(config) is not None:
         click.echo("a store override stands and wins over this file — clear it first: `blizzard runner prompt clear`")

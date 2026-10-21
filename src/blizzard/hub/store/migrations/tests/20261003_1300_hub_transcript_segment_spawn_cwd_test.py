@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from blizzard.hub import runtime as hub_runtime
+from tests.config_inputs import init_hub
 from tests.migration_support_store_migrations import (
     _spawn_cwd_round_trip,
 )
@@ -16,7 +17,7 @@ pytestmark = [pytest.mark.unit]
 
 
 def test_hub_transcript_segments_spawn_cwd_leaves_a_preexisting_row_null(tmp_path: Path) -> None:
-    config = hub_runtime.init_environment(tmp_path)
+    config = init_hub(tmp_path)
     row: dict[str, object] = {
         "segment_id": "sg_1",
         "chunk_id": "ch_1",

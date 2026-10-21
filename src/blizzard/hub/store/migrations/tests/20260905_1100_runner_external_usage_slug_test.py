@@ -9,6 +9,7 @@ import sqlalchemy as sa
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub import runtime as hub_runtime
+from tests.config_inputs import init_hub
 from tests.migration_support_store_migrations import (
     assert_frozen_table_lacks_a_later_revisions_columns,
 )
@@ -20,7 +21,7 @@ def test_runner_external_usage_slug_widens_the_primary_key_and_backfills_the_leg
     """``runner_external_usage``'s join key backfills a pre-existing
     row to the legacy slug/name, widens the primary key to ``(runner_id, slug)``, and
     downgrading past it restores the single-column key."""
-    config = hub_runtime.init_environment(tmp_path)  # upgrades to head
+    config = init_hub(tmp_path)  # upgrades to head
     runner = hub_runtime.migration_runner(config)
 
     def _pk() -> set[str]:

@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 
+from blizzard.hub.domain.runners.version_window import VersionWindow, VersionWindowError
 from blizzard.tools.compat.git import GitError, Repository
 from blizzard.tools.compat.releases import (
     Window,
@@ -19,7 +20,6 @@ from blizzard.tools.compat.releases import (
     releases_document,
     supported,
 )
-from blizzard.wire.version_window import VersionWindow, VersionWindowError
 
 pytestmark = pytest.mark.unit
 

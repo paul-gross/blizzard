@@ -18,7 +18,6 @@ from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.node_steps import ApplyOutcome
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.runner import runtime as runner_runtime
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.hub.client import QueueEntry
 from blizzard.runner.leases.model import NewLease
@@ -26,6 +25,7 @@ from blizzard.runner.loop.tick import tick
 from blizzard.runner.node_steps.chunk_state import ChunkState
 from blizzard.runner.node_steps.submissions import ApplyReply
 from tests import support
+from tests.config_inputs import init_host
 from tests.runner_fakes import (
     FakeHarness,
     FakeHub,
@@ -48,7 +48,7 @@ _CHOICES = [("pass", "meets criteria"), ("fail", "does not")]
 
 
 def _migrated_engine(tmp_path: Path) -> Engine:
-    config = runner_runtime.init_environment(tmp_path)
+    config = init_host(tmp_path)
     return create_engine_from_url(config.db_url)
 
 

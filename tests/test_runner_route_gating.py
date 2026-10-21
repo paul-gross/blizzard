@@ -21,9 +21,9 @@ from blizzard.auth_core import Role
 from blizzard.foundation.clock import FixedClock
 from blizzard.runner.api.federation import HumanLane
 from blizzard.runner.api.wiring import RunnerWiring
-from blizzard.runner.app import create_app
 from blizzard.runner.auth.session import CookieNames, RunnerSession, SessionCookie
 from blizzard.runner.config import RunnerConfig
+from tests.config_inputs import create_runner_app
 from tests.runner_client import live_api_routes
 from tests.runner_fakes import registered_identity
 
@@ -131,7 +131,7 @@ def _oauth_app() -> TestClient:
         hub_url="http://hub.example",
         public_urls=("https://runner-guard.example",),
     )
-    return TestClient(create_app(config, hub_http_client=_oauth_hub_client(), identity=registered_identity()))
+    return TestClient(create_runner_app(config, hub_http_client=_oauth_hub_client(), identity=registered_identity()))
 
 
 def _request(client: TestClient, method: str, path_template: str) -> int:
@@ -193,7 +193,7 @@ def test_a_worker_heartbeat_under_the_runner_prefix_is_never_redirected_to_the_l
 
 def test_a_gated_served_shell_request_to_an_app_with_no_federation_settings_is_503() -> None:
     config = RunnerConfig(root=Path("/tmp/runner-gating-guard"), db_url="sqlite://", hub_url="http://hub.example")
-    client = TestClient(create_app(config, hub_http_client=_oauth_hub_client()))
+    client = TestClient(create_runner_app(config, hub_http_client=_oauth_hub_client()))
     refused = client.get("/some-page", follow_redirects=False)
     assert refused.status_code == 503
     assert "federation settings" in refused.json()["detail"]
@@ -201,7 +201,7 @@ def test_a_gated_served_shell_request_to_an_app_with_no_federation_settings_is_5
 
 def test_a_store_free_apps_auth_callback_is_503_naming_the_jti_cache() -> None:
     config = RunnerConfig(root=Path("/tmp/runner-gating-guard"), db_url="sqlite://", hub_url="http://hub.example")
-    client = TestClient(create_app(config, hub_http_client=_oauth_hub_client(), identity=registered_identity()))
+    client = TestClient(create_runner_app(config, hub_http_client=_oauth_hub_client(), identity=registered_identity()))
     refused = client.post("/api/auth/callback", content="token=t&state=s")
     assert refused.status_code == 503
     assert "JTI cache" in refused.json()["detail"]

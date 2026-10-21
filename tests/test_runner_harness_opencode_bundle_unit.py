@@ -30,7 +30,7 @@ from blizzard.runner.harness.opencode.bundle import (
 from blizzard.runner.harness.opencode.declaration import OPENCODE_DECLARATION
 from blizzard.runner.harness.opencode.section import OpenCodeSection
 from blizzard.runner.harness.wiring import HarnessSections, publish_harness_bundle, shared_inputs
-from blizzard.runner.runtime import init_environment
+from tests.config_inputs import init_host
 from tests.harness_sections import opencode, sections, with_claude_code
 from tests.runner_fakes import NO_TRACING, FakeProbe
 
@@ -84,7 +84,7 @@ def test_content_rewrites_only_relative_companions(tmp_path: Path) -> None:
 def test_registry_binds_published_config_and_generated_config_without_bundle(
     tmp_path: Path, spawn_executor: Executor
 ) -> None:
-    config = init_environment(tmp_path / "runtime").runner_config()
+    config = init_host(tmp_path / "runtime").runner_config()
     assert opencode(config).worker_config_path is not None
     worker = opencode(config).worker_config_at(config.root)
     assert worker.is_file()

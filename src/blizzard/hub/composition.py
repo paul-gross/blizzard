@@ -14,7 +14,7 @@ import tempfile
 # and the tenant cache's lock, which guards this process's memory, not a store decision
 # ast-grep-ignore: bzh:store-exclusive-write
 import threading
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import timedelta
 from pathlib import Path
@@ -26,10 +26,7 @@ from sqlalchemy import Engine
 from blizzard import __version__
 from blizzard.foundation.clock import IClock, SystemClock
 from blizzard.foundation.flags import (
-    FlagRegistry,
-    FlagResolution,
     Flags,
-    HeldKey,
     resolve_flags,
     warn_held_keys,
     warn_ignored_flags,
@@ -66,7 +63,7 @@ from blizzard.hub.auth.sessions import IReadSessionRepository
 from blizzard.hub.auth.signing import SigningKeyService
 from blizzard.hub.auth.throttle import IpThrottle
 from blizzard.hub.auth.users import IReadUserRepository
-from blizzard.hub.config import OAuthProviderConfig
+from blizzard.hub.config import HubConfig, OAuthProviderConfig
 from blizzard.hub.delivery.command_runner import IHubCommandRunner
 from blizzard.hub.delivery.hub_node import HubNodeExecutor
 from blizzard.hub.delivery.internal.hub_command_runner import SubprocessHubCommandRunner
@@ -180,6 +177,7 @@ from blizzard.hub.domain.runners.host_enrollment import HostEnrollmentService
 from blizzard.hub.domain.runners.host_report import HostReportService
 from blizzard.hub.domain.runners.registration import IReadRunnerRegistry, RetiredRunnerGuard
 from blizzard.hub.domain.runners.version import IVersionWindow
+from blizzard.hub.domain.runners.version_window import VersionWindow
 from blizzard.hub.domain.tenancy.administration import TenantAdministration
 from blizzard.hub.domain.tenancy.teardown import TenantTeardown, TenantTeardownSweep
 from blizzard.hub.domain.work_items.closure import CloseDrainSweep, CloseIntentDrainer
@@ -241,7 +239,6 @@ from blizzard.hub.system_artifacts import PACKAGED as SYSTEM_ARTIFACTS_PACKAGED
 from blizzard.hub.system_artifacts import PackagedSystemArtifacts
 from blizzard.hub.tenancy import StoreScope, TenantClosed, TenantId, UnknownTenant
 from blizzard.hub.work_sources.source import IWorkSourceRegistry
-from blizzard.wire.version_window import VersionWindow
 
 
 @dataclass(frozen=True)
@@ -795,24 +792,14 @@ def build_config_authoring(stores: TenantStores, *, cipher: ISecretCipher) -> Co
     )
 
 
-def build_hub_flags(
-    flags: Mapping[str, bool],
-    registry: FlagRegistry | None = None,
-    *,
-    loaded: FlagResolution | None = None,
-    held: tuple[HeldKey, ...] = (),
-) -> Flags:
-    """The hub's resolved flags: every ``hub`` and ``fleet`` flag at its registry default, then the ``[flags]``
-    overrides. Each override the hub ignores, and each guarded key read as absent, is warned of here, once per
-    process. ``loaded`` is the resolution the config load already made, used as is unless ``registry`` is given."""
-    resolution = (
-        loaded
-        if loaded is not None and registry is None
-        else resolve_flags(registry or FlagRegistry.load(), "hub", flags)
-    )
+def build_hub_flags(config: HubConfig) -> Flags:
+    """The hub's resolved flags: the resolution ``config``'s load made, or — for a config built in code — every ``hub``
+    and ``fleet`` flag of the registry it carries at its default, then its ``[flags]`` overrides. Each override the hub
+    ignores, and each guarded key read as absent, is warned of here, once per process."""
+    resolution = config.flag_resolution or resolve_flags(config.flag_registry, "hub", config.flags)
     log = get_logger("blizzard.hub")
     warn_ignored_flags(log, resolution)
-    warn_held_keys(log, held)
+    warn_held_keys(log, config.held_keys)
     return resolution.flags
 
 
@@ -1266,8 +1253,8 @@ def build_services(
     egress: EgressConfig | None = None,
     egress_path_key: bytes | None = None,
     annotation_interval_seconds: int,
+    version_window: VersionWindow,
     hub_version: str = __version__,
-    version_window: VersionWindow | None = None,
 ) -> HubServices:
     """Construct and wire the hub-level services over the shared :class:`HubCore`, and have its
     tenant cache serve each tenant's services (:func:`build_tenant_services`). The sweeps and exports
@@ -1275,7 +1262,7 @@ def build_services(
     the cache. ``work_sources`` builds a tenant's
     work-source registry; ``hub_command_runner``/``hub_workdir`` are the hub command node's
     mechanism seams, left ``None`` for real adapters; an explicit ``oauth_registry`` wins over
-    ``oauth_providers``; ``hub_version`` and ``version_window`` default to the installed and packaged ones."""
+    ``oauth_providers``; ``hub_version`` defaults to the installed one."""
     clock = core.clock
     store_connections = core.store_connections
     brokers = brokers or TenantBrokers()
@@ -1303,7 +1290,7 @@ def build_services(
         transcript_caps=transcript_caps,
         platform_tracer=platform_tracer,
         color_pick=color_pick,
-        versions=HubVersionWindow(hub_version, version_window or VersionWindow.load()),
+        versions=HubVersionWindow(hub_version, version_window),
     )
     core.tenants.serve(
         TenantServing(build=lambda stores, events: build_tenant_services(stores, parts, events=events), brokers=brokers)

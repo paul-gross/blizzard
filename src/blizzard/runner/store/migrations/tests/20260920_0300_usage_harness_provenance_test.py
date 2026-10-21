@@ -9,6 +9,7 @@ import sqlalchemy as sa
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner import runtime as runner_runtime
+from tests.config_inputs import init_host
 
 pytestmark = [pytest.mark.unit]
 
@@ -17,7 +18,7 @@ def test_runner_usage_facts_harness_columns_survive_migration_roundtrip(tmp_path
     """``usage_facts.harness_id``/``harness_version``, the runner's own
     durable row — downgrades to this revision's own parent by id, so the drop half is
     asserted rather than inferred from a revision marker."""
-    config = runner_runtime.init_environment(tmp_path)  # upgrades to head
+    config = init_host(tmp_path)  # upgrades to head
     runner = runner_runtime.migration_runner(config)
 
     def _columns() -> set[str]:

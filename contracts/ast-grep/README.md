@@ -33,6 +33,13 @@ load-bearing: without it a stale `# ast-grep-ignore` comment goes unreported ins
   - Scoped to `src/blizzard/**`, except `src/blizzard/hub/documents/internal/**`.
   - Matches `import yaml`, `import yaml as …`, `from yaml import …`, and `from yaml.<module> import …`.
 
+- **`bzh:config-key-declared`** (`rules/config-key-declared.yml`) — a daemon reads a config document's keys only through
+  its declared registry. The rule's own prose home is `blizzard-context:/architecture/system-shape/configuration.md`;
+  this file states none of that prose, only what the rule mechanically checks.
+  - Scoped to `src/blizzard/runner/**` and `src/blizzard/hub/**`, except `src/blizzard/runner/host_config.py`,
+    `src/blizzard/hub/config.py` and `src/blizzard/hub/domain/runners/version_window.py`.
+  - Matches `import tomllib`, `import tomllib as …` and `from tomllib import …`.
+
 - **`bzh:property-delegates`** (`rules/property-delegates.yml`) — a property body only delegates. The rule's own prose
   home is `blizzard-context:/standards/python.md#a-property-body-only-delegates-bzhproperty-delegates`; this file states
   none of that prose, only what the rule mechanically checks.

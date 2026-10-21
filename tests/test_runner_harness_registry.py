@@ -8,7 +8,6 @@ from typing import cast
 
 import pytest
 
-from blizzard.runner.app import create_app_for_export
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.capability_snapshot import capability_snapshot, default_harness_id
@@ -29,6 +28,7 @@ from blizzard.runner.harness.wiring import (
     build_production_harness_registry,
 )
 from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
+from tests.config_inputs import export_runner_app
 from tests.harness_sections import with_claude_code, with_opencode
 from tests.runner_client import runner_seams
 from tests.runner_fakes import NO_TRACING, FakeHarness, FakeTranscriptSource
@@ -141,7 +141,7 @@ def test_registry_distinguishes_a_known_unavailable_capability() -> None:
 
 @pytest.mark.unit
 def test_export_app_has_an_empty_hermetic_harness_registry() -> None:
-    app = create_app_for_export()
+    app = export_runner_app()
 
     assert runner_seams(app).harnesses.known_harnesses == ()
 

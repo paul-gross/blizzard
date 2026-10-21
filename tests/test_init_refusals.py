@@ -6,13 +6,12 @@ from pathlib import Path
 import pytest
 
 from blizzard.hub.config import ConfigError as HubConfigError
-from blizzard.hub.runtime import init_environment as hub_init
 from blizzard.runner.config import ConfigError as RunnerConfigError
-from blizzard.runner.runtime import init_environment as runner_init
+from tests.config_inputs import init_host, init_hub
 
 DAEMONS = [
-    pytest.param(hub_init, HubConfigError, id="hub"),
-    pytest.param(runner_init, RunnerConfigError, id="runner"),
+    pytest.param(init_hub, HubConfigError, id="hub"),
+    pytest.param(init_host, RunnerConfigError, id="runner"),
 ]
 
 skip_as_root = pytest.mark.skipif(os.geteuid() == 0, reason="root ignores the mode bits")

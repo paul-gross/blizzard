@@ -24,7 +24,7 @@ from click.testing import CliRunner
 from fastapi.testclient import TestClient
 
 from blizzard.foundation.clock import SystemClock
-from blizzard.runner.app import build_hosted_app, create_app
+from blizzard.runner.app import build_hosted_app
 from blizzard.runner.cli import runner as runner_group
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.adapter import ResumeHandle, WorkerHandle, WorkerPreamble
@@ -46,6 +46,7 @@ from blizzard.runner.selftest.checks import SelfTest
 from blizzard.runner.selftest.internal.subprocess_scratch_git import SubprocessScratchGit
 from blizzard.runner.selftest.scratch_git import ScratchRepo
 from blizzard.runner.selftest.service import SelfTestService
+from tests.config_inputs import create_runner_app
 from tests.harness_sections import sections
 from tests.host_files import load_runner_config
 from tests.runner_client import runner_client
@@ -170,7 +171,7 @@ def _app_with_harness(spawn_executor: Executor, tmp_path: Path, binary: str) -> 
         launcher=ProcessLauncher(probe, executor=spawn_executor),
     )
     harnesses = HarnessRegistry({CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=adapter)})
-    return runner_client(create_app(config, harnesses=harnesses))
+    return runner_client(create_runner_app(config, harnesses=harnesses))
 
 
 def _poll_until_done(client: TestClient, selftest_id: str, timeout: float = 20.0) -> dict:
@@ -271,7 +272,7 @@ def test_unknown_harness_is_rejected_naming_the_configured_ones(tmp_path: Path, 
 def test_unknown_harness_on_the_store_free_app_names_no_configured_harnesses(tmp_path: Path) -> None:
     # No `harness` bound at all (the store-free app shape) — the registry is empty,
     # so even the one real name is unknown, and the message says so honestly.
-    client = runner_client(create_app(RunnerConfig(root=tmp_path, db_url="sqlite://")))
+    client = runner_client(create_runner_app(RunnerConfig(root=tmp_path, db_url="sqlite://")))
 
     resp = client.post("/api/selftests", json={"harness": "claude_code"})
 
@@ -476,7 +477,9 @@ def test_selftest_run_that_exceeds_its_budget_fails_loudly_instead_of_hanging(tm
     )
     registry = HarnessRegistry({"claude_code": HarnessBinding(adapter=_HangingAdapter())})
     client = runner_client(
-        create_app(RunnerConfig(root=tmp_path / "runner", db_url="sqlite://"), harnesses=registry, selftests=service)
+        create_runner_app(
+            RunnerConfig(root=tmp_path / "runner", db_url="sqlite://"), harnesses=registry, selftests=service
+        )
     )
 
     start = client.post("/api/selftests", json={"harness": "claude_code"})
@@ -501,7 +504,9 @@ def test_unavailable_harness_adapter_is_rejected_as_service_unavailable(tmp_path
         clock=SystemClock(),
     )
     client = runner_client(
-        create_app(RunnerConfig(root=tmp_path / "runner", db_url="sqlite://"), harnesses=registry, selftests=service)
+        create_runner_app(
+            RunnerConfig(root=tmp_path / "runner", db_url="sqlite://"), harnesses=registry, selftests=service
+        )
     )
 
     resp = client.post("/api/selftests", json={"harness": "claude_code"})
@@ -804,7 +809,7 @@ def test_both_production_bindings_pass_every_selftest_check(tmp_path: Path, spaw
     harnesses = build_production_harness_registry(
         config.harness_settings(NO_TRACING), process=LinuxProcessProbe(), executor=spawn_executor
     )
-    client = runner_client(create_app(config, harnesses=harnesses))
+    client = runner_client(create_runner_app(config, harnesses=harnesses))
 
     for harness_id in (CLAUDE_CODE_HARNESS_ID, OPENCODE_HARNESS_ID):
         start = client.post("/api/selftests", json={"harness": harness_id})

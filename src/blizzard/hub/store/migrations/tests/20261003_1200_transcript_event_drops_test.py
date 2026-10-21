@@ -9,6 +9,7 @@ import sqlalchemy as sa
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub import runtime as hub_runtime
+from tests.config_inputs import init_hub
 
 pytestmark = [pytest.mark.unit]
 
@@ -18,7 +19,7 @@ _DROPS_EGRESS_ORDER = "ix_transcript_event_drops_egress_order"
 def test_transcript_event_drops_table_survives_migration_roundtrip(tmp_path: Path) -> None:
     """Hub-only — downgrades to the revision's own parent, so the dropped table is asserted
     rather than inferred from a revision marker."""
-    config = hub_runtime.init_environment(tmp_path)  # upgrades to head
+    config = init_hub(tmp_path)  # upgrades to head
     runner = hub_runtime.migration_runner(config)
 
     def _shape() -> tuple[bool, bool]:

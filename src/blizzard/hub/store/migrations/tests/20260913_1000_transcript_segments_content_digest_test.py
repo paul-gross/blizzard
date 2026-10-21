@@ -13,6 +13,7 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.migrations import MigrationRunner
 from blizzard.hub import runtime as hub_runtime
 from blizzard.hub.store import MIGRATIONS_DIR as HUB_MIGRATIONS_DIR
+from tests.config_inputs import init_hub
 from tests.migration_support_store_migrations import (
     assert_frozen_table_lacks_a_later_revisions_columns,
 )
@@ -232,7 +233,7 @@ def test_transcript_segments_content_digest_resumes_after_an_interrupted_first_p
 
 @pytest.mark.component
 def test_harness_provenance_backfills_concrete_session_rows_without_versions(tmp_path: Path) -> None:
-    config = hub_runtime.init_environment(tmp_path)
+    config = init_hub(tmp_path)
     runner = hub_runtime.migration_runner(config)
     runner.downgrade("20260907_1000_event_log_runner_id_nullable")
     engine = hub_scoped_engine(create_engine_from_url(config.db_url))

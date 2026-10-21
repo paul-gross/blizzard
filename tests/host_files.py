@@ -23,10 +23,11 @@ from blizzard.runner.config import (
     WorkerStdout,
 )
 from blizzard.runner.host_config import HostConfig, RunnerEntry
-from blizzard.runner.host_layout import HostLayout, write_runner_id
+from blizzard.runner.host_file import write_runner_id
+from blizzard.runner.host_layout import HostLayout
 from blizzard.runner.hub.internal.token_file import HubTokenFile
-from blizzard.runner.runtime import init_environment
 from blizzard.runner.subscriptions.subscription_sampler import PROVIDER_ANTHROPIC
+from tests.config_inputs import init_host, load_host_config
 from tests.runner_fakes import FIXTURE_RUNNER_ID
 
 #: The id of the runner a test host file declares.
@@ -66,12 +67,12 @@ def init_runner_environment(root: Path | str, **kwargs: Any) -> RunnerConfig:
 
     A runner no hub has been joined to yet is given the fixture runner's id and a placeholder token — a host starts a
     runner only when it holds both — so a scenario whose hub is not up still serves its local API."""
-    config = init_environment(Path(root), **kwargs)
+    config = init_host(Path(root), **kwargs)
     runner = config.runner_config()
     if runner.runner_id is None:
-        write_runner_id(config.layout, runner.name, FIXTURE_RUNNER_ID)
+        write_runner_id(config.layout, runner.name, FIXTURE_RUNNER_ID, strict=config.strict)
         HubTokenFile.of(config.root, runner.token_env).write(f"tok_{FIXTURE_RUNNER_ID}")
-        runner = HostConfig.load(config.root).runner_config()
+        runner = load_host_config(config.root).runner_config()
     return runner
 
 
@@ -90,7 +91,7 @@ def sampler_without_credentials(root: Path | str) -> tuple[SubscriptionDeclarati
 
 def load_runner_config(root: Path | str, *, host: str | None = None, port: int | None = None) -> RunnerConfig:
     """The sole runner of the host directory ``root``, as every downstream reader takes it."""
-    return HostConfig.load(Path(root), host=host, port=port).runner_config()
+    return load_host_config(Path(root), host=host, port=port).runner_config()
 
 
 def host_config_of(config: RunnerConfig) -> HostConfig:

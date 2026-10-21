@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from blizzard.hub.app import create_app_for_export
+from tests.config_inputs import export_hub_app
 from tests.support import FakeWorkSource, build_hub, pointer_token
 
 pytestmark = pytest.mark.component
@@ -76,18 +76,18 @@ _SANCTIONED_DEPRECATED_OPERATIONS = {f"GET {alias}" for _, alias in _DEPRECATED_
 
 
 def test_all_new_paths_are_in_the_openapi_schema() -> None:
-    paths = create_app_for_export().openapi()["paths"]
+    paths = export_hub_app().openapi()["paths"]
     for path in _NEW_PATHS:
         assert path in paths, f"{path} missing from OpenAPI schema"
 
 
 def test_events_stream_excluded_from_openapi() -> None:
-    assert "/api/events/stream" not in create_app_for_export().openapi()["paths"]
+    assert "/api/events/stream" not in export_hub_app().openapi()["paths"]
 
 
 def test_the_only_deprecated_operations_are_the_sanctioned_aliases() -> None:
     # An allow-list, not a relaxation — a *new* deprecated route fails until named.
-    paths = create_app_for_export().openapi()["paths"]
+    paths = export_hub_app().openapi()["paths"]
     deprecated = {
         f"{method.upper()} {path}"
         for path, operations in paths.items()
@@ -121,7 +121,7 @@ def test_each_deprecated_alias_returns_the_same_view_as_its_canonical_route(tmp_
 def test_store_free_app_reports_fleet_routes_unwired() -> None:
     # Built without a store, the fleet routes report the store is unwired (503),
     # never a 500 — the dependency guards before the handler runs.
-    client = TestClient(create_app_for_export())
+    client = TestClient(export_hub_app())
     assert client.get("/api/chunks").status_code == 503
     assert client.get("/api/queue").status_code == 503
 

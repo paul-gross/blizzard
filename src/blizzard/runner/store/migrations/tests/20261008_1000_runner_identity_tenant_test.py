@@ -14,6 +14,7 @@ from blizzard.foundation.store.utc import UtcDateTime
 from blizzard.runner import runtime as runner_runtime
 from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.lifecycle.identity_check import IdentityCheck
+from tests.config_inputs import init_host
 from tests.migration_support_runner_identity_tenant import _REGISTERED, _RUNNER, _ctx, _tenant_hub
 from tests.runner_fakes import (
     SqlAlchemyRunnerStore,
@@ -40,7 +41,7 @@ _identity_at_parent = sa.Table(
 
 
 def _store_at_parent(tmp_path: Path) -> tuple[MigrationRunner, sa.Engine]:
-    config = runner_runtime.init_environment(tmp_path)
+    config = init_host(tmp_path)
     migration = runner_runtime.migration_runner(config)
     migration.downgrade(_PARENT)
     return migration, create_engine_from_url(config.db_url)

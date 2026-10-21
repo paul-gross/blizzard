@@ -23,7 +23,6 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.flags import FlagRegistry, resolve_flags
 from blizzard.foundation.runner_identity_state import IdentityState
 from blizzard.foundation.runner_version import VersionRefusalReason
-from blizzard.runner.app import create_app
 from blizzard.runner.composition import held_hub_token
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.host_config import ResolvedToken, TokenSource
@@ -44,6 +43,7 @@ from blizzard.runner.lifecycle.identity_check import IdentityCheck, ProxyIdentit
 from blizzard.runner.lifecycle.registration import Registration
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.tick import tick
+from tests.config_inputs import create_runner_app
 from tests.runner_client import runner_client
 from tests.runner_fakes import (
     FakeHarness,
@@ -423,7 +423,7 @@ def _proxied(
     held = verdict or ctx.identity_verdict
     config = RunnerConfig(root=tmp_path, db_url="sqlite://", hub_url="http://hub.local:8421")
     transport = httpx.MockTransport(handler)
-    app = create_app(
+    app = create_runner_app(
         config,
         hub_proxy_client=httpx.Client(transport=transport),
         hub_retry_clock=no_retry_clock(),
@@ -483,7 +483,7 @@ def test_a_hub_proxy_wired_with_an_identity_check_but_no_token_reader_forwards_n
         forwarded.append(str(request.url))
         return httpx.Response(200, json={})
 
-    app = create_app(
+    app = create_runner_app(
         config,
         hub_proxy_client=httpx.Client(transport=httpx.MockTransport(handler)),
         hub_retry_clock=no_retry_clock(),
@@ -680,7 +680,7 @@ def test_the_hub_clients_present_the_token_taken_up_from_env(tmp_path: Path, mon
 
     transport = httpx.MockTransport(handler)
     loop_client = HttpHubClient(httpx.Client(base_url=config.hub_url, transport=transport, auth=HeldTokenAuth(held)))
-    app = create_app(
+    app = create_runner_app(
         config,
         hub_proxy_client=httpx.Client(transport=transport),
         hub_retry_clock=no_retry_clock(),

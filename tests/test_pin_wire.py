@@ -12,14 +12,13 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
-from blizzard.hub.app import create_app_for_export as create_hub_app_for_export
-from blizzard.runner.app import create_app_for_export
 from blizzard.wire.attachments import AttachmentRequest
 from blizzard.wire.chunk import ChunkDetail, ChunkIngestRequest
 from blizzard.wire.git_commits import GitCommitDeclarationRequest
 from blizzard.wire.graph import GraphPolicyRequest
 from blizzard.wire.history import ChunkHistoryView
 from blizzard.wire.transcript_segment import ToolCallSegmentView
+from tests.config_inputs import export_hub_app, export_runner_app
 
 pytestmark = pytest.mark.unit
 
@@ -27,13 +26,13 @@ pytestmark = pytest.mark.unit
 def _runner_schemas() -> dict[str, Any]:
     """The component schemas of the runner's exported OpenAPI spec — the same build the
     exporter (``blizzard.tools.openapi.export``) dumps for the generated TS client."""
-    return create_app_for_export().openapi()["components"]["schemas"]
+    return export_runner_app().openapi()["components"]["schemas"]
 
 
 def _hub_schemas() -> dict[str, Any]:
     """The component schemas of the hub's exported OpenAPI spec — the same build the
     exporter (``blizzard.tools.openapi.export``) dumps for the generated TS client."""
-    return create_hub_app_for_export().openapi()["components"]["schemas"]
+    return export_hub_app().openapi()["components"]["schemas"]
 
 
 def test_git_commit_declaration_carries_no_forge_field() -> None:
@@ -94,7 +93,7 @@ def test_chunk_detail_carries_no_transcript_field() -> None:
 def test_the_lease_history_route_still_answers_a_flat_history_row_view() -> None:
     """The lease-scoped history route still answers a flat, fresh ``HistoryRowView`` — unwidened by
     the chunk-detail proxy's own ``history`` field, which legitimately carries the board's own views."""
-    spec = create_app_for_export().openapi()
+    spec = export_runner_app().openapi()
     schemas = spec["components"]["schemas"]
     route = spec["paths"]["/runners/{runner_id}/api/leases/{lease_id}/history"]["get"]
     response_schema = route["responses"]["200"]["content"]["application/json"]["schema"]

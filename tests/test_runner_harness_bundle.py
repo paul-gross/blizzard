@@ -22,8 +22,8 @@ from blizzard.runner.harness.internal.bundle_publisher import published_snapshot
 from blizzard.runner.harness.opencode.bundle import check_ambient_plugins, plugin_identity
 from blizzard.runner.harness.opencode.section import OpenCodeSection
 from blizzard.runner.harness.wiring import publish_harness_bundle
-from blizzard.runner.host_config import HostConfig
 from blizzard.runner.host_layout import HOST_CONFIG_FILENAME
+from tests.config_inputs import load_host_config
 from tests.harness_sections import sections
 from tests.host_files import load_runner_config
 from tests.runner_init_fakes import FakeInitHub, init_runner
@@ -256,14 +256,14 @@ def test_scaffold_round_trip_has_no_bundle(tmp_path: Path) -> None:
     assert "config_dir" not in (runtime / HOST_CONFIG_FILENAME).read_text()
     config = load_runner_config(runtime)
     assert config.harness_config_dir is None
-    written = HostConfig.load(runtime).to_toml()
+    written = load_host_config(runtime).to_toml()
     (runtime / HOST_CONFIG_FILENAME).write_text(written)
-    assert HostConfig.load(runtime).to_toml() == written
+    assert load_host_config(runtime).to_toml() == written
 
 
 def test_to_toml_writes_a_set_config_dir(tmp_path: Path) -> None:
     runtime = _runtime(tmp_path, tmp_path / "b")
-    assert f'config_dir = "{tmp_path / "b"}"' in HostConfig.load(runtime).to_toml()
+    assert f'config_dir = "{tmp_path / "b"}"' in load_host_config(runtime).to_toml()
 
 
 # --------------------------------------------------------------------------- #

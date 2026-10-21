@@ -1246,7 +1246,9 @@ def test_the_runner_reads_a_fleet_flag_as_its_hub_answers_it_each_tick(tmp_path:
     hub_port = free_port()
     with mock_hub(bin_dir, hub_port) as hub:
         config = runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
-        process = build_runner_process(config, flag_registry=FlagRegistry.parse(_FLEET_FLAG_REGISTRY, "fixture"))
+        process = build_runner_process(
+            dataclasses.replace(config, flag_registry=FlagRegistry.parse(_FLEET_FLAG_REGISTRY, "fixture"))
+        )
         try:
 
             def tick_then_read() -> bool:

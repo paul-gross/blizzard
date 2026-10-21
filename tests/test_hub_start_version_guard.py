@@ -8,8 +8,8 @@ import pytest
 from click.testing import CliRunner
 
 from blizzard.cli.main import blizzard
-from blizzard.hub import runtime as hub_runtime
 from blizzard.hub.cli import runtime as hub_cli_runtime
+from tests.config_inputs import init_hub
 
 pytestmark = pytest.mark.component
 
@@ -18,7 +18,7 @@ def test_a_hub_below_its_floor_exits_naming_its_version_and_the_floor(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     root = tmp_path / "hub"
-    hub_runtime.init_environment(root)
+    init_hub(root)
     monkeypatch.setattr(hub_cli_runtime, "__version__", "0.1.9")
 
     result = CliRunner().invoke(blizzard, ["hub", "host", "--dir", str(root)])

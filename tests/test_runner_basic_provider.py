@@ -12,7 +12,7 @@ from blizzard.runner.environments.internal import basic_provider
 from blizzard.runner.environments.internal.basic_provider import BasicWorkspaceProvider
 from blizzard.runner.environments.internal.git import EnvGitError
 from blizzard.runner.environments.provider import EnvironmentPreparationError, WorkspaceAcquisitionError, WorkspaceRepo
-from blizzard.runner.runtime import init_environment
+from tests.config_inputs import init_host
 from tests.host_files import load_runner_config
 
 
@@ -40,8 +40,8 @@ def origin(tmp_path: Path) -> WorkspaceRepo:
 def test_scaffolded_runner_uses_an_ordinary_directory_without_winter(tmp_path: Path) -> None:
     repo = origin(tmp_path)
     runtime = tmp_path / "runner"
-    init_environment(runtime)
-    init_environment(runtime)  # the unedited scaffold is safe to reconcile
+    init_host(runtime)
+    init_host(runtime)  # the unedited scaffold is safe to reconcile
     config_file = runtime / "blizzard-host.toml"
     config_file.write_text(config_file.read_text() + f'\n[[workspace.repo]]\nname = "toy"\nurl = "{repo.url}"\n')
     config = load_runner_config(runtime)

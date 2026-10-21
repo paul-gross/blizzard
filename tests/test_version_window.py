@@ -1,35 +1,31 @@
 from __future__ import annotations
 
 import re
-from pathlib import Path
 
 import pytest
 
 from blizzard.foundation.runner_version import VersionRefusalReason
-from blizzard.wire.version_window import HANDSHAKE_SINCE, VersionWindow, VersionWindowError, admits, check_own_floor
+from blizzard.hub.cli.runtime import packaged_version_window
+from blizzard.hub.domain.runners.version_window import (
+    HANDSHAKE_SINCE,
+    VersionWindow,
+    VersionWindowError,
+    admits,
+    check_own_floor,
+)
 
 pytestmark = pytest.mark.unit
 
-
-def _window(tmp_path: Path, text: str) -> Path:
-    path = tmp_path / "window.toml"
-    path.write_text(text)
-    return path
+_SOURCE = "window.toml"
 
 
 def test_the_packaged_window_is_the_committed_one() -> None:
-    assert VersionWindow.load() == VersionWindow(floor="0.2", opening=None)
+    assert packaged_version_window() == VersionWindow(floor="0.2", opening=None)
 
 
-def test_opening_is_read_when_present(tmp_path: Path) -> None:
-    window = VersionWindow.load(_window(tmp_path, 'floor = "0.10"\nopening = "1"\n'))
+def test_opening_is_read_when_present() -> None:
+    window = VersionWindow.parse('floor = "0.10"\nopening = "1"\n', _SOURCE)
     assert window == VersionWindow(floor="0.10", opening="1")
-
-
-def test_a_missing_file_is_refused_by_name(tmp_path: Path) -> None:
-    missing = tmp_path / "absent.toml"
-    with pytest.raises(VersionWindowError, match=re.escape("absent.toml")):
-        VersionWindow.load(missing)
 
 
 @pytest.mark.parametrize(
@@ -46,10 +42,9 @@ def test_a_missing_file_is_refused_by_name(tmp_path: Path) -> None:
         "floor = [",
     ],
 )
-def test_a_malformed_window_is_refused_by_name(tmp_path: Path, text: str) -> None:
-    path = _window(tmp_path, text)
-    with pytest.raises(VersionWindowError, match=re.escape(path.name)):
-        VersionWindow.load(path)
+def test_a_malformed_window_is_refused_by_name(text: str) -> None:
+    with pytest.raises(VersionWindowError, match=re.escape(_SOURCE)):
+        VersionWindow.parse(text, _SOURCE)
 
 
 @pytest.mark.parametrize(
@@ -61,13 +56,13 @@ def test_a_malformed_window_is_refused_by_name(tmp_path: Path, text: str) -> Non
         ("", "`floor` is required"),
     ],
 )
-def test_a_refusal_states_what_the_key_must_be(tmp_path: Path, text: str, wording: str) -> None:
+def test_a_refusal_states_what_the_key_must_be(text: str, wording: str) -> None:
     with pytest.raises(VersionWindowError, match=re.escape(wording)):
-        VersionWindow.load(_window(tmp_path, text))
+        VersionWindow.parse(text, _SOURCE)
 
 
-def test_loading_with_no_source_reads_the_packaged_file() -> None:
-    packaged = VersionWindow.load()
+def test_the_packaged_window_is_well_formed() -> None:
+    packaged = packaged_version_window()
     assert re.fullmatch(r"\d+\.\d+", packaged.floor)
     assert packaged.opening is None or packaged.opening.isdigit()
 
