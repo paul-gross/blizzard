@@ -1612,6 +1612,18 @@
               "type": "text"
             },
             {
+              "help": "A note binding every later session on the chunk, as an answer does.",
+              "hidden": false,
+              "kind": "option",
+              "name": "note",
+              "opts": [
+                "--note"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
               "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
@@ -1696,6 +1708,18 @@
               "name": "by",
               "opts": [
                 "--by"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "A note binding every later session on the chunk, as an answer does.",
+              "hidden": false,
+              "kind": "option",
+              "name": "note",
+              "opts": [
+                "--note"
               ],
               "required": false,
               "secondary_opts": [],
@@ -2429,6 +2453,18 @@
               "name": "resolved_by",
               "opts": [
                 "--by"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "A note binding every later session on the chunk, as an answer does.",
+              "hidden": false,
+              "kind": "option",
+              "name": "note",
+              "opts": [
+                "--note"
               ],
               "required": false,
               "secondary_opts": [],

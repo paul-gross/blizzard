@@ -615,9 +615,17 @@ export const promoteChunkApiChunksChunkIdPromotePost = <ThrowOnError extends boo
 /**
  * Requeue Chunk
  *
- * Close an escalation by supersession: requeue at the current node.
+ * Close an escalation by supersession: requeue at the current node, recording who requeued and the
+ * optional body's note.
  */
-export const requeueChunkApiChunksChunkIdRequeuesPost = <ThrowOnError extends boolean = false>(options: Options<RequeueChunkApiChunksChunkIdRequeuesPostData, ThrowOnError>): RequestResult<RequeueChunkApiChunksChunkIdRequeuesPostResponses, RequeueChunkApiChunksChunkIdRequeuesPostErrors, ThrowOnError> => (options.client ?? client).post<RequeueChunkApiChunksChunkIdRequeuesPostResponses, RequeueChunkApiChunksChunkIdRequeuesPostErrors, ThrowOnError>({ url: '/api/chunks/{chunk_id}/requeues', ...options });
+export const requeueChunkApiChunksChunkIdRequeuesPost = <ThrowOnError extends boolean = false>(options: Options<RequeueChunkApiChunksChunkIdRequeuesPostData, ThrowOnError>): RequestResult<RequeueChunkApiChunksChunkIdRequeuesPostResponses, RequeueChunkApiChunksChunkIdRequeuesPostErrors, ThrowOnError> => (options.client ?? client).post<RequeueChunkApiChunksChunkIdRequeuesPostResponses, RequeueChunkApiChunksChunkIdRequeuesPostErrors, ThrowOnError>({
+    url: '/api/chunks/{chunk_id}/requeues',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
 
 /**
  * Restart Chunk

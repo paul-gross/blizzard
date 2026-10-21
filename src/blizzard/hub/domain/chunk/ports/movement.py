@@ -141,6 +141,7 @@ class IWriteChunkMovementRepository(IReadChunkMovementRepository, Protocol):
         answered_question_ids: Sequence[str] = (),
         answer: str = "",
         to_graph_id: str | None = None,
+        note: str | None = None,
     ) -> int:
         """Record a ``chunk.restarted`` fact — an operator forced the chunk onto ``to_node_id``,
         at a fence epoch this call derives one above the chunk's newest — on ``handle``'s
@@ -150,7 +151,9 @@ class IWriteChunkMovementRepository(IReadChunkMovementRepository, Protocol):
         with it, so no crash leaves the move half-applied. Returns the ``chunk_restarts.id``."""
         ...
 
-    def record_requeue_locked(self, handle: ILockedChunkRead, chunk_id: str, *, at: datetime) -> int:
+    def record_requeue_locked(
+        self, handle: ILockedChunkRead, chunk_id: str, *, at: datetime, by: str | None = None, note: str | None = None
+    ) -> int:
         """Record a ``requeue.recorded`` fact — supersedes an open escalation — on
         ``handle``'s already-locked connection (``bzh:store-exclusive-write``), atomically
         with the route release it always accompanies.

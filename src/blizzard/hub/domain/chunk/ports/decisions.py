@@ -10,7 +10,7 @@ from typing import Protocol
 
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.artifact.model import StoredArtifact
-from blizzard.hub.domain.chunk.model import DecisionCheck, DecisionChoice, GateDecision
+from blizzard.hub.domain.chunk.model import DecisionCheck, DecisionChoice, GateDecision, GateResolution
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, FenceRefusal
 from blizzard.hub.domain.projects.model import ProjectId
@@ -42,6 +42,10 @@ class IReadChunkDecisionsRepository(Protocol):
 
     def decision_for_chunk(self, chunk_id: str) -> GateDecision | None:
         """The chunk's newest not-yet-transitioned decision."""
+        ...
+
+    def resolutions_for_chunk(self, chunk_id: str) -> list[GateResolution]:
+        """Every resolution of a gate decision on the chunk, oldest first."""
         ...
 
     def list_open_decisions(self, *, project: ProjectId | None = None) -> list[GateDecision]:
@@ -105,7 +109,14 @@ class IWriteChunkDecisionsRepository(IReadChunkDecisionsRepository, Protocol):
         ...
 
     def record_decision_resolution(
-        self, decision_id: str, *, choice: str, resolved_by: str, at: datetime, overrode_red_checks: bool = False
+        self,
+        decision_id: str,
+        *,
+        choice: str,
+        resolved_by: str,
+        at: datetime,
+        overrode_red_checks: bool = False,
+        note: str | None = None,
     ) -> bool:
         """First-write-wins CAS: record the person's choice — and whether it took a
         ``requires_checks`` choice over a red check — or return ``False`` if the

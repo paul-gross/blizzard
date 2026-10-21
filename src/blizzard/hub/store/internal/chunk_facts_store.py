@@ -436,7 +436,9 @@ class ChunkFactsStore:
         requeues: dict[str, list[RequeueFact]] = defaultdict(list)
         if "requeues" in families:
             for r in _rows(stmts, conn, s.requeues, batch):
-                requeues[r.chunk_id].append(RequeueFact(requeued_at=r.requeued_at))
+                requeues[r.chunk_id].append(
+                    RequeueFact(requeued_at=r.requeued_at, requeued_by=r.requeued_by, note=r.note)
+                )
 
         migrations: dict[str, list[MigrationFact]] = defaultdict(list)
         for m in migration_rows:
@@ -469,6 +471,7 @@ class ChunkFactsStore:
                     from_graph_id=r.from_graph_id,
                     to_node_executor=executors.get((r.graph_id, r.to_node_id), Executor.RUNNER),
                     restarted_by=r.restarted_by,
+                    note=r.note,
                     decision_id=r.decision_id,
                 )
             )

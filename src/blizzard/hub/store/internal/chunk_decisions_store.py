@@ -15,7 +15,7 @@ from sqlalchemy import ColumnElement, Connection, Select, and_
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.artifact.model import StoredArtifact
-from blizzard.hub.domain.chunk.model import DecisionCheck, DecisionChoice, GateDecision
+from blizzard.hub.domain.chunk.model import DecisionCheck, DecisionChoice, GateDecision, GateResolution
 from blizzard.hub.domain.chunk.ports.decisions import IWriteChunkDecisionsRepository, LiveDecisionStatus
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, FenceRefusal
@@ -73,6 +73,43 @@ class ChunkDecisionsStore:
         with self._store.read("decision_for_chunk") as conn:
             row = conn.execute(self._newest_live_decisions_select([chunk_id])).one_or_none()
             return self._decision_row(conn, row) if row is not None else None
+
+    def resolutions_for_chunk(self, chunk_id: str) -> list[GateResolution]:
+        """One join of the chunk's decisions to their resolutions — never a lookup per decision."""
+        d, r = s.decisions, s.decision_resolutions
+        with self._store.read("resolutions_for_chunk") as conn:
+            stmts = statements_of(conn)
+            rows = conn.execute(
+                stmts.select(
+                    stmts.scope_join(d, r, r.c.decision_id == d.c.decision_id),
+                    d.c.decision_id,
+                    d.c.node_id,
+                    d.c.node_name,
+                    d.c.epoch,
+                    r.c.choice,
+                    r.c.resolved_by,
+                    r.c.resolved_at,
+                    r.c.overrode_red_checks,
+                    r.c.note,
+                ).where(d.c.chunk_id == chunk_id)
+            ).all()
+        # Ordered here, not in SQL: an ORDER BY on the resolution's instant would drive the read off the
+        # tenant-wide resolutions index instead of the chunk's own decisions.
+        rows = sorted(rows, key=lambda row: (row.resolved_at, row.decision_id))
+        return [
+            GateResolution(
+                decision_id=row.decision_id,
+                node_id=row.node_id,
+                node_name=row.node_name,
+                epoch=row.epoch,
+                choice=row.choice,
+                resolved_by=row.resolved_by,
+                resolved_at=row.resolved_at,
+                overrode_red_checks=row.overrode_red_checks,
+                note=row.note,
+            )
+            for row in rows
+        ]
 
     @staticmethod
     def _not_closed_clause(stmts: ScopedStatements, decision_id: ColumnElement[str]) -> ColumnElement[bool]:
@@ -319,7 +356,14 @@ class ChunkDecisionsStore:
         )
 
     def record_decision_resolution(
-        self, decision_id: str, *, choice: str, resolved_by: str, at: datetime, overrode_red_checks: bool = False
+        self,
+        decision_id: str,
+        *,
+        choice: str,
+        resolved_by: str,
+        at: datetime,
+        overrode_red_checks: bool = False,
+        note: str | None = None,
     ) -> bool:
         with self._store.write("record_decision_resolution") as conn:
             existing = conn.execute(
@@ -336,6 +380,7 @@ class ChunkDecisionsStore:
                     resolved_by=resolved_by,
                     resolved_at=at,
                     overrode_red_checks=overrode_red_checks,
+                    note=note,
                 )
             )
             return True
@@ -405,6 +450,7 @@ class ChunkDecisionsStore:
             project_id=row.project_id,
             check_results=check_results,
             overrode_red_checks=resolution.overrode_red_checks if resolution is not None else False,
+            note=resolution.note if resolution is not None else None,
         )
 
 

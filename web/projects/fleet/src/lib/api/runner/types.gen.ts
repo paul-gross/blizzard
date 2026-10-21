@@ -676,6 +676,14 @@ export type ChunkDetail = {
      */
     questions: Array<QuestionView>;
     /**
+     * Requeues
+     */
+    requeues?: Array<RequeueView>;
+    /**
+     * Resolutions
+     */
+    resolutions?: Array<ResolutionView>;
+    /**
      * Restarts
      */
     restarts: Array<RestartView>;
@@ -1085,6 +1093,10 @@ export type DecisionView = {
      * Node Name
      */
     node_name: string;
+    /**
+     * Note
+     */
+    note?: string | null;
     /**
      * Overrode Red Checks
      */
@@ -2967,6 +2979,70 @@ export type RequeueResponse = {
 };
 
 /**
+ * RequeueView
+ *
+ * One hub requeue on the chunk. ``requeued_by`` is null on a requeue recorded before it was kept.
+ */
+export type RequeueView = {
+    /**
+     * Note
+     */
+    note?: string | null;
+    /**
+     * Requeued At
+     */
+    requeued_at: string;
+    /**
+     * Requeued By
+     */
+    requeued_by?: string | null;
+};
+
+/**
+ * ResolutionView
+ *
+ * One gate resolution on the chunk: who chose what at the gate on ``node`` at ``epoch``, and their note.
+ */
+export type ResolutionView = {
+    /**
+     * Choice
+     */
+    choice: string;
+    /**
+     * Decision Id
+     */
+    decision_id: string;
+    /**
+     * Epoch
+     */
+    epoch: number;
+    /**
+     * Node Id
+     */
+    node_id: string;
+    /**
+     * Node Name
+     */
+    node_name: string;
+    /**
+     * Note
+     */
+    note?: string | null;
+    /**
+     * Overrode Red Checks
+     */
+    overrode_red_checks?: boolean;
+    /**
+     * Resolved At
+     */
+    resolved_at: string;
+    /**
+     * Resolved By
+     */
+    resolved_by: string;
+};
+
+/**
  * RestartView
  *
  * One operator restart (#370, #371): the chunk was forced from ``from_node`` onto ``to_node`` at
@@ -3007,6 +3083,10 @@ export type RestartView = {
      * Graph Name
      */
     graph_name: string | null;
+    /**
+     * Note
+     */
+    note?: string | null;
     /**
      * Recorded At
      */

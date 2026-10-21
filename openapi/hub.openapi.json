@@ -2241,6 +2241,22 @@
             "title": "Questions",
             "type": "array"
           },
+          "requeues": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/RequeueView"
+            },
+            "title": "Requeues",
+            "type": "array"
+          },
+          "resolutions": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ResolutionView"
+            },
+            "title": "Resolutions",
+            "type": "array"
+          },
           "restarts": {
             "default": [],
             "items": {
@@ -2773,6 +2789,24 @@
         "title": "ChunkPlacementRequest",
         "type": "object"
       },
+      "ChunkRequeueRequest": {
+        "description": "The optional body of ``POST /api/chunks/{id}/requeues`` \u2014 a ``note`` binding every later session on\nthe chunk. No body, or a blank note, is no note.",
+        "properties": {
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "title": "ChunkRequeueRequest",
+        "type": "object"
+      },
       "ChunkRestartRequest": {
         "description": "Force a chunk onto a node now, on a freshly minted session (#370, #371). ``to_graph`` \u2014 a graph\nid or name \u2014 moves the chunk onto another graph in the same write; ``node`` names a node on that\ngraph, or on the chunk's own when there is none, and omitted means its current node's own name.\nRecords who moved it.",
         "properties": {
@@ -2791,6 +2825,17 @@
               }
             ],
             "title": "Node"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
           },
           "to_graph": {
             "anyOf": [
@@ -3862,11 +3907,22 @@
         "type": "object"
       },
       "DecisionResolutionRequest": {
-        "description": "A person's choice for an open decision \u2014 first-write-wins CAS.",
+        "description": "A person's choice for an open decision \u2014 first-write-wins CAS \u2014 with an optional ``note`` binding\nevery later session on the chunk; a blank note is no note.",
         "properties": {
           "choice": {
             "title": "Choice",
             "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
           },
           "resolved_by": {
             "default": "operator",
@@ -3890,6 +3946,17 @@
           "decision_id": {
             "title": "Decision Id",
             "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
           },
           "overrode_red_checks": {
             "default": false,
@@ -4075,6 +4142,17 @@
           "node_name": {
             "title": "Node Name",
             "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
           },
           "overrode_red_checks": {
             "default": false,
@@ -10792,6 +10870,102 @@
         "title": "RepositorySummary",
         "type": "object"
       },
+      "RequeueView": {
+        "description": "One hub requeue on the chunk. ``requeued_by`` is null on a requeue recorded before it was kept.",
+        "properties": {
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "requeued_at": {
+            "title": "Requeued At",
+            "type": "string"
+          },
+          "requeued_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requeued By"
+          }
+        },
+        "required": [
+          "requeued_at"
+        ],
+        "title": "RequeueView",
+        "type": "object"
+      },
+      "ResolutionView": {
+        "description": "One gate resolution on the chunk: who chose what at the gate on ``node`` at ``epoch``, and their note.",
+        "properties": {
+          "choice": {
+            "title": "Choice",
+            "type": "string"
+          },
+          "decision_id": {
+            "title": "Decision Id",
+            "type": "string"
+          },
+          "epoch": {
+            "title": "Epoch",
+            "type": "integer"
+          },
+          "node_id": {
+            "title": "Node Id",
+            "type": "string"
+          },
+          "node_name": {
+            "title": "Node Name",
+            "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "overrode_red_checks": {
+            "default": false,
+            "title": "Overrode Red Checks",
+            "type": "boolean"
+          },
+          "resolved_at": {
+            "title": "Resolved At",
+            "type": "string"
+          },
+          "resolved_by": {
+            "title": "Resolved By",
+            "type": "string"
+          }
+        },
+        "required": [
+          "decision_id",
+          "node_id",
+          "node_name",
+          "epoch",
+          "choice",
+          "resolved_by",
+          "resolved_at"
+        ],
+        "title": "ResolutionView",
+        "type": "object"
+      },
       "RestartView": {
         "description": "One operator restart (#370, #371): the chunk was forced from ``from_node`` onto ``to_node`` at\n``epoch``, tearing down whatever attempt was running. Its own step, never a transition \u2014 nothing\njudged it. ``graph_id`` is where it landed, a cross-graph move's target, and ``from_graph`` the graph\nit departed, null when it crossed none; ``decision_id`` names the gate decision it closed, or null.",
         "properties": {
@@ -10868,6 +11042,17 @@
               }
             ],
             "title": "Graph Name"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
           },
           "recorded_at": {
             "title": "Recorded At",
@@ -21198,7 +21383,7 @@
     },
     "/api/chunks/{chunk_id}/requeues": {
       "post": {
-        "description": "Close an escalation by supersession: requeue at the current node.",
+        "description": "Close an escalation by supersession: requeue at the current node, recording who requeued and the\noptional body's note.",
         "operationId": "requeue_chunk_api_chunks__chunk_id__requeues_post",
         "parameters": [
           {
@@ -21211,6 +21396,23 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/ChunkRequeueRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Request"
+              }
+            }
+          }
+        },
         "responses": {
           "202": {
             "content": {

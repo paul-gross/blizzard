@@ -379,6 +379,7 @@ class ChunkMovementStore:
         answered_question_ids: Sequence[str] = (),
         answer: str = "",
         to_graph_id: str | None = None,
+        note: str | None = None,
     ) -> int:
         """Record the forced move and everything it consumes (``bzh:store-exclusive-write``) —
         the restart's own write, on ``handle``'s already-locked connection."""
@@ -393,6 +394,7 @@ class ChunkMovementStore:
             answered_question_ids=answered_question_ids,
             answer=answer,
             to_graph_id=to_graph_id,
+            note=note,
         )
 
     def _record_restart_conn(  # type: ignore[no-untyped-def]
@@ -408,6 +410,7 @@ class ChunkMovementStore:
         answered_question_ids: Sequence[str],
         answer: str,
         to_graph_id: str | None,
+        note: str | None,
     ) -> int:
         epoch = latest_epoch(conn, chunk_id) + 1
         for question_id in answered_question_ids:
@@ -445,15 +448,20 @@ class ChunkMovementStore:
                 decision_id=decision_id,
                 restarted_by=by,
                 recorded_at=at,
+                note=note,
             )
         )
         record_epoch_owner(conn, chunk_id, epoch, EpochOwner.hub(), at=at)
         key = result.inserted_primary_key
         return int(key[0]) if key is not None else 0
 
-    def record_requeue_locked(self, handle: ILockedChunkRead, chunk_id: str, *, at: datetime) -> int:
+    def record_requeue_locked(
+        self, handle: ILockedChunkRead, chunk_id: str, *, at: datetime, by: str | None = None, note: str | None = None
+    ) -> int:
         conn = conn_of(handle)
-        result = conn.execute(self._store.insert(s.requeues).values(chunk_id=chunk_id, requeued_at=at))
+        result = conn.execute(
+            self._store.insert(s.requeues).values(chunk_id=chunk_id, requeued_at=at, requeued_by=by, note=note)
+        )
         key = result.inserted_primary_key
         return int(key[0]) if key is not None else 0
 

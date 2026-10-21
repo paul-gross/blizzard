@@ -67,6 +67,8 @@ class DecisionView(WireModel):
     check_results: list[CheckResult] = []
     #: Whether the resolution took a `requires_checks` choice over a red check.
     overrode_red_checks: bool = False
+    #: The resolver's note to every later session; null when none was left.
+    note: str | None = None
 
 
 class OpenDecisionsResponse(WireModel):
@@ -76,10 +78,12 @@ class OpenDecisionsResponse(WireModel):
 
 
 class DecisionResolutionRequest(BaseModel):
-    """A person's choice for an open decision — first-write-wins CAS."""
+    """A person's choice for an open decision — first-write-wins CAS — with an optional ``note`` binding
+    every later session on the chunk; a blank note is no note."""
 
     choice: str
     resolved_by: str = "operator"
+    note: str | None = None
 
 
 class DecisionResolutionResponse(WireModel):
@@ -91,6 +95,7 @@ class DecisionResolutionResponse(WireModel):
     resolved_at: str
     #: Whether this resolution took a `requires_checks` choice over a red check.
     overrode_red_checks: bool = False
+    note: str | None = None
 
 
 class DecisionResolutionConflict(WireModel):

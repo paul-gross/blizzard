@@ -2248,6 +2248,9 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadChunkDecisionsRepository, "decision_for_chunk"): lambda w: w.read.decisions.decision_for_chunk(
         w.chunk_decision_1
     ),
+    (IReadChunkDecisionsRepository, "resolutions_for_chunk"): lambda w: w.read.decisions.resolutions_for_chunk(
+        w.chunk_decision_1
+    ),
     (IReadChunkDecisionsRepository, "list_open_decisions"): lambda w: w.read.decisions.list_open_decisions(),
     (IReadChunkDecisionsRepository, "live_decisions_for"): lambda w: w.read.decisions.live_decisions_for(
         [w.chunk_decision_1, w.chunk_decision_2]

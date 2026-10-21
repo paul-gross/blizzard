@@ -67,6 +67,7 @@ def to_decision_view(row: GateDecision, runner_names: Mapping[str, str], project
         else None,
         check_results=[CheckResult(command=c.command, passed=c.passed) for c in row.check_results],
         overrode_red_checks=row.overrode_red_checks,
+        note=row.note,
         **project,
     )
 
@@ -110,7 +111,9 @@ def resolve_decision(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown decision {decision_id}")
     change = chunk_events.ChunkChanged.before(services, pre_decision.chunk_id)
     try:
-        result = services.decisions.resolve(pre_decision, choice=request.choice, resolved_by=identity.username)
+        result = services.decisions.resolve(
+            pre_decision, choice=request.choice, resolved_by=identity.username, note=request.note
+        )
     except NotADecisionChoice as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     except DecisionClosed as exc:
@@ -145,4 +148,5 @@ def resolve_decision(
         resolved_by=result.resolved_by,
         resolved_at=(iso_utc(decision.resolved_at) if decision is not None and decision.resolved_at else ""),
         overrode_red_checks=decision.overrode_red_checks if decision is not None else False,
+        note=decision.note if decision is not None else None,
     )
