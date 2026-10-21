@@ -24949,7 +24949,7 @@
         ]
       },
       "put": {
-        "description": "Grant ``user_id`` ``role`` in the request's tenant, or change the role they hold there. A role equal to the one\nin force writes nothing. Refused: a role that is no membership role (``422``), a user that does not exist or \u2014\nwithout ``membership:grant-any`` \u2014 is no member (``404``, alike), your own role (``403``), and demoting the\ntenant's last admin (``409``).",
+        "description": "Grant ``user_id`` ``role`` in the request's tenant, or change the role they hold there. A role equal to the one\nin force writes nothing. Refused: a user that does not exist or \u2014 without ``membership:grant-any`` \u2014 is no member\n(``404``, alike), a role that is no membership role (``422``, after the user is found), your own role (``403``),\nand demoting the tenant's last admin (``409``).",
         "operationId": "grant_membership_api_members__user_id__put",
         "parameters": [
           {
@@ -26691,7 +26691,7 @@
     },
     "/api/projects/{project}/source-links/{source}/retire": {
       "post": {
-        "description": "Unlink the project from a work source, named by its id or slug, by retiring the link; unlinking an unlinked\nlink changes nothing. 422 for the built-in ``hub`` source; 404 for an unknown project or source, or a source it\nnever linked; 409 for a stale `If-Match`.",
+        "description": "Unlink the project from a work source, named by its id or slug, by retiring the link; unlinking an unlinked\nlink changes nothing. 404 for an unknown project or source, or a source it never linked; 409 for the built-in\n``hub`` source, which every project draws from, and for a stale `If-Match`.",
         "operationId": "unlink_source_api_projects__project__source_links__source__retire_post",
         "parameters": [
           {
