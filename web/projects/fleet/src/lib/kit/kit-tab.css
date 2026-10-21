@@ -40,3 +40,21 @@
   background: var(--overlay-30);
   box-shadow: inset 0 -2px 0 var(--cyan-dim);
 }
+/* A tab's count, beside its label. The tab owns it so the button-based KitTabs and the routed anchor strips read the
+   same. */
+.cnt {
+  margin-left: 6px;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+/* A sub strip's count reads bright beside its dimmer labels. */
+:host(.sub) .cnt {
+  margin-left: 8px;
+  color: var(--snow);
+  letter-spacing: 0.06em;
+}
+/* A count of things waiting on a person. */
+.cnt.hot,
+:host(.sub) .cnt.hot {
+  color: var(--amber-hi);
+}

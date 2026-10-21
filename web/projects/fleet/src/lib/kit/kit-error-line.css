@@ -1,0 +1,9 @@
+:host {
+  display: block;
+}
+.line {
+  margin: 0;
+  color: var(--red);
+  font-size: var(--fs-sm);
+  overflow-wrap: anywhere;
+}

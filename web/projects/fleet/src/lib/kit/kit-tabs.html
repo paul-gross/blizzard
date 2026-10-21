@@ -9,12 +9,10 @@
       [class.active]="option.value === activeValue()"
       [attr.aria-selected]="option.value === activeValue()"
       [attr.data-testid]="option.testid ?? null"
+      [count]="option.count ?? null"
       (click)="choose.emit(option.value)"
     >
       {{ option.label }}
-      @if (option.count !== undefined && option.count !== null) {
-        <span class="cnt">{{ option.count }}</span>
-      }
     </button>
   }
 </div>

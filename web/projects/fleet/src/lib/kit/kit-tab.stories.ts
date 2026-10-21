@@ -33,10 +33,34 @@ export const WithCount: Story = {
     props: args,
     template: `
       <nav fleetKitTabStrip [variant]="variant">
-        <button type="button" fleetKitTab [variant]="variant" class="active">Artifacts <span class="cnt">12</span></button>
-        <button type="button" fleetKitTab [variant]="variant">Transcripts <span class="cnt">3</span></button>
+        <button type="button" fleetKitTab [variant]="variant" [count]="12" class="active">Artifacts</button>
+        <button type="button" fleetKitTab [variant]="variant" [count]="3">Transcripts</button>
       </nav>`,
   }),
+};
+export const ZeroCount: Story = {
+  render: (args) => ({
+    props: args,
+    template: `
+      <nav fleetKitTabStrip [variant]="variant">
+        <button type="button" fleetKitTab [variant]="variant" [count]="0" class="active">Artifacts</button>
+        <button type="button" fleetKitTab [variant]="variant" [count]="null">No count</button>
+      </nav>`,
+  }),
+};
+export const HotCount: Story = {
+  render: (args) => ({
+    props: args,
+    template: `
+      <nav fleetKitTabStrip [variant]="variant">
+        <button type="button" fleetKitTab [variant]="variant" [count]="4" [countHot]="true" class="active">Proposals</button>
+        <button type="button" fleetKitTab [variant]="variant" [count]="2" [countHot]="true">Findings</button>
+      </nav>`,
+  }),
+};
+export const SubWithCount: Story = {
+  args: { variant: 'sub' },
+  render: WithCount.render,
 };
 export const NarrowPhone: Story = {
   globals: { viewport: { value: 'phone', isRotated: false } },

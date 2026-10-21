@@ -1,1 +1,4 @@
 <ng-content />
+@if (count() !== null) {
+  <span class="cnt" [class.hot]="countHot()" [attr.data-testid]="countTestid()">{{ count() }}</span>
+}

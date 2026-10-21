@@ -31,6 +31,9 @@ export class KitColorInput {
 
   readonly testid = input<string | null>(null);
 
+  /** Locks both controls, e.g. while the caller is saving the color. */
+  readonly disabled = input(false);
+
   /** A well-formed lowercase `#rrggbb`, on each commit from either control. */
   readonly valueChange = output<string>();
 
