@@ -39,6 +39,15 @@ class IPlatformTracing(Protocol):
     @property
     def tracer(self) -> IPlatformTracer: ...
 
+    def stamping(self, stamp: SpanStamp) -> AbstractContextManager[None]:
+        """Every span opened inside — and every span opened under one of them, wherever it opens — carries what
+        ``stamp`` answers as it starts, in place of the process's own stamp; opens no span itself."""
+        ...
+
+    def stamped(self, stamp: SpanStamp) -> IPlatformTracer:
+        """:attr:`tracer`, with each span it opens, and its descendants, stamped as :meth:`stamping` stamps."""
+        ...
+
     def fastapi_telemetry(self, *, exclude: ScopeFilter | None = None) -> TelemetryConfig:
         """The ``FastAPI(telemetry=...)`` config for one app; ``exclude`` skips a request's server span."""
         ...
@@ -75,6 +84,12 @@ class DisabledPlatformTracing:
 
     @property
     def tracer(self) -> IPlatformTracer:
+        return self._tracer
+
+    def stamping(self, stamp: SpanStamp) -> AbstractContextManager[None]:
+        return nullcontext()
+
+    def stamped(self, stamp: SpanStamp) -> IPlatformTracer:
         return self._tracer
 
     def fastapi_telemetry(self, *, exclude: ScopeFilter | None = None) -> TelemetryConfig:

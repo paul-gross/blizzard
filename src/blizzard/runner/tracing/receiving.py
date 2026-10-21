@@ -56,8 +56,8 @@ class RateExceeded(Exception):
 
 @dataclass(frozen=True)
 class TelemetryReceiver:
-    """One worker telemetry export's orchestration, over the process's limiters and tallies.
-    ``identity`` answers who every kept item says sent it: the runner's latest registration."""
+    """One worker telemetry export's orchestration, over the host's limiters and tallies. Each call names its
+    ``sender``, the runner the export arrived under: its latest registration is who every kept item says sent it."""
 
     platform_tracing: IPlatformTracing
     received_telemetry: IReceivedTelemetryExport
@@ -68,32 +68,31 @@ class TelemetryReceiver:
     metric_bounds: ReceiverBounds
     log_bounds: ReceiverBounds
     clock: IClock
-    identity: ICurrentRunnerIdentity
     worker_programs: bool = False
     harness_telemetry: bool = False
     mapped_services: Mapping[str, str] = field(default_factory=dict)
 
-    def require_traces(self) -> None:
-        """Refuse while platform tracing is off, or before the runner's first registration."""
+    def require_traces(self, sender: ICurrentRunnerIdentity) -> None:
+        """Refuse while platform tracing is off, or before ``sender``'s first registration."""
         if not self.platform_tracing.enabled:
             raise ReceiverOff("platform tracing is off")
-        self._runner()
+        _registered(sender)
 
-    def require_harness_telemetry(self) -> None:
-        """Refuse unless platform tracing and ``harness_telemetry`` are both on, or before the runner's
+    def require_harness_telemetry(self, sender: ICurrentRunnerIdentity) -> None:
+        """Refuse unless platform tracing and ``harness_telemetry`` are both on, or before ``sender``'s
         first registration."""
         if not (self.platform_tracing.enabled and self.harness_telemetry):
             raise ReceiverOff("harness telemetry is off")
-        self._runner()
+        _registered(sender)
 
-    def receive_spans(self, lease: Lease, spans: list[ReceivedSpan]) -> int:
+    def receive_spans(self, sender: ICurrentRunnerIdentity, lease: Lease, spans: list[ReceivedSpan]) -> int:
         """Route, charge, forward and count one trace export; return how many spans it refused.
         Raises :class:`RateExceeded` — counting every span as dropped — when the kept spans
         exceed the lease's span rate."""
         routing = route_spans(
             spans,
             lease,
-            runner=self._runner(),
+            runner=_registered(sender),
             programs=self.worker_programs,
             harness=self.harness_telemetry,
             names=self.telemetry_names,
@@ -112,11 +111,11 @@ class TelemetryReceiver:
         self.span_counter.record(accepted=routing.accepted, dropped=routing.dropped)
         return routing.refused
 
-    def receive_metrics(self, lease: Lease, decoded: ReceivedMetrics) -> int:
+    def receive_metrics(self, sender: ICurrentRunnerIdentity, lease: Lease, decoded: ReceivedMetrics) -> int:
         """Keep the bindings' metrics scopes (a summary point is refused), charge, forward, count;
         return how many data points it refused."""
         scopes = frozenset(n.metrics_scope for n in self.telemetry_names)
-        admitted = admit_data_points(decoded.points, lease, scopes, runner=self._runner())
+        admitted = admit_data_points(decoded.points, lease, scopes, runner=_registered(sender))
         admission = Admission(kept=admitted.kept, dropped=admitted.dropped + decoded.unsupported)
         self._forward(
             self.metric_bounds,
@@ -128,10 +127,10 @@ class TelemetryReceiver:
         )
         return admission.dropped
 
-    def receive_logs(self, lease: Lease, records: list[ReceivedLogRecord]) -> int:
+    def receive_logs(self, sender: ICurrentRunnerIdentity, lease: Lease, records: list[ReceivedLogRecord]) -> int:
         """Keep the bindings' logs scopes, charge, forward, count; return how many log records it refused."""
         scopes = frozenset(n.logs_scope for n in self.telemetry_names)
-        admission = admit_log_records(records, lease, scopes, runner=self._runner())
+        admission = admit_log_records(records, lease, scopes, runner=_registered(sender))
         self._forward(
             self.log_bounds,
             lease,
@@ -144,12 +143,6 @@ class TelemetryReceiver:
 
     def _now(self) -> datetime:
         return self.clock.now()
-
-    def _runner(self) -> RunnerIdentity:
-        runner = self.identity.current()
-        if runner is None:
-            raise ReceiverOff("the runner has not registered with its hub yet")
-        return runner
 
     def _forward[T: (ReceivedDataPoint, ReceivedLogRecord)](
         self,
@@ -172,3 +165,10 @@ class TelemetryReceiver:
         for service_name, group in groups.items():
             forward(group, service_name)
         bounds.counter.record(accepted=len(admission.kept), dropped=admission.dropped)
+
+
+def _registered(sender: ICurrentRunnerIdentity) -> RunnerIdentity:
+    runner = sender.current()
+    if runner is None:
+        raise ReceiverOff("the runner has not registered with its hub yet")
+    return runner

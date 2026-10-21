@@ -1,17 +1,15 @@
 """The runner's platform-span names: the scope its tick spans are opened under and the tick-step attribute, and the
-per-runner context the host's spans are stamped from.
+stamps a runner's and its host's spans carry.
 
 Contract: ``blizzard-product:/delivered/tracing/platform-spans/spec/instrumentation.md`` §Attributes. Kept apart from
 ``attributes`` so the fleet-span dictionary's declared set does not absorb them."""
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Mapping
-from contextlib import contextmanager
-from contextvars import ContextVar
+from collections.abc import Mapping
 
 from blizzard.foundation.platform_tracing.handle import SpanStamp
-from blizzard.runner.hub.identity import ICurrentRunnerIdentity, RunnerIdentity
+from blizzard.runner.hub.identity import ICurrentRunnerIdentity
 from blizzard.runner.tracing.attributes import RUNNER_ID, RUNNER_NAME, TENANT, TENANT_NAME
 
 PLATFORM_INSTRUMENTATION_SCOPE = "blizzard.runner.platform"
@@ -37,38 +35,13 @@ def identity_stamp(identity: ICurrentRunnerIdentity) -> SpanStamp:
     return stamp
 
 
-#: The runner whose work the current thread or request does — unset outside any runner's.
-_CURRENT_RUNNER: ContextVar[ICurrentRunnerIdentity | None] = ContextVar("blizzard_current_runner", default=None)
-
-
-@contextmanager
-def stamping_as(identity: ICurrentRunnerIdentity) -> Iterator[None]:
-    """Stamp the platform spans opened inside as the runner ``identity`` answers for — a runner's tick thread and a
-    request under its prefix."""
-    token = _CURRENT_RUNNER.set(identity)
-    try:
-        yield
-    finally:
-        _CURRENT_RUNNER.reset(token)
-
-
-class CurrentRunnerIdentity:
-    """The :class:`ICurrentRunnerIdentity` of whichever runner's context the caller runs in, ``None`` outside any."""
-
-    def current(self) -> RunnerIdentity | None:
-        identity = _CURRENT_RUNNER.get()
-        return identity.current() if identity is not None else None
-
-
-def runner_context_stamp() -> SpanStamp:
-    """What each of the host's platform spans carries, by the runner whose context opened it: inside a runner's,
-    :func:`identity_stamp`'s answer for it — nothing exported before its first registration; outside any (the host
-    tick, the host's own routes), no runner identity at all, and the span is exported."""
+def host_stamp() -> SpanStamp:
+    """What each of a host's platform spans carries unless what opened it stamps it as one of its runners — a
+    runner's tick through :meth:`~blizzard.foundation.platform_tracing.handle.IPlatformTracing.stamped`, a request
+    under a runner's prefix through ``stamping`` — or it inherits such a stamp from its parent: no runner identity,
+    and the span is exported."""
 
     def stamp() -> Mapping[str, str] | None:
-        identity = _CURRENT_RUNNER.get()
-        if identity is None:
-            return {}
-        return identity_stamp(identity)()
+        return {}
 
     return stamp

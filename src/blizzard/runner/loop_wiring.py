@@ -44,7 +44,6 @@ from blizzard.runner.process.internal.worker_scratch_dirs import WorkerScratchDi
 from blizzard.runner.process.probe import IProcessProbe
 from blizzard.runner.stores import HostStores, RunnerStores
 from blizzard.runner.throttle.pause import SpendingRunner
-from blizzard.runner.tracing.platform import stamping_as
 from blizzard.runner.transcripts.transcript_backfill import (
     TranscriptBackfill,
     TranscriptBackfillReport,
@@ -167,7 +166,7 @@ class LoopWiring:
         verified = VerifiedHubClient(hub, graph.identity_verdict)
         return LoopContext(
             stores=stores,
-            host_stores=graph.host_stores,
+            host_stores=graph.host.host_stores,
             clock=clock,
             hub=verified,
             identity=graph.identity,
@@ -244,7 +243,7 @@ class LoopWiring:
                 base_url=config.hub_url, timeout=_HTTP_TIMEOUT, auth=HeldTokenAuth(graph.hub_token)
             ) as client:
                 graph.platform_tracing.instrument_client(client)
-                ctx = self.context(HttpHubClient(client), graph, tracer=graph.platform_tracing.tracer)
+                ctx = self.context(HttpHubClient(client), graph, tracer=graph.tracer)
                 return use(ctx)
         finally:
             if process is None:
@@ -358,11 +357,6 @@ class PeriodicDriver:
         self._thread.join()
 
     def _run(self) -> None:
-        # Every platform span this thread opens is this runner's.
-        with stamping_as(self._graph.identity):
-            self._run_loop()
-
-    def _run_loop(self) -> None:
         config = self._wiring.config
         self._client = httpx.Client(
             base_url=config.hub_url, timeout=_HTTP_TIMEOUT, auth=HeldTokenAuth(self._graph.hub_token)
@@ -373,7 +367,7 @@ class PeriodicDriver:
                 HttpHubClient(self._client),
                 self._graph,
                 sweep_worker_scratch=True,
-                tracer=self._graph.platform_tracing.tracer,
+                tracer=self._graph.tracer,
             )
             _log.info("reconciliation loop started", runner_name=config.name, interval=self._interval)
             while not self._stop.is_set():

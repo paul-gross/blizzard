@@ -35,7 +35,7 @@ from blizzard.runner.hub.client import ITokenIdentityReader
 from blizzard.runner.hub.held_token import ICurrentHubToken
 from blizzard.runner.hub.host_identity import HostIdentityHolder, ICurrentHostIdentity
 from blizzard.runner.hub.host_registration import HostRegistrationHolder, ICurrentHostRegistration
-from blizzard.runner.hub.identity import ICurrentIdentityVerdict, IIdentityOnContact
+from blizzard.runner.hub.identity import ICurrentIdentityVerdict, ICurrentRunnerIdentity, IIdentityOnContact
 from blizzard.runner.leases.activity import LocalLeaseService
 from blizzard.runner.leases.asks import AskService
 from blizzard.runner.leases.liveness import LeaseLivenessService
@@ -248,6 +248,11 @@ class RunnerWiring:
     def telemetry_receiver(self) -> TelemetryReceiver:
         receiver: TelemetryReceiver | None = self._seam("telemetry_receiver")
         return receiver if receiver is not None else self._refuse("telemetry receiver")
+
+    def identity(self) -> ICurrentRunnerIdentity:
+        """Who the bound runner is at its hub — what a worker export under its prefix is stamped as."""
+        identity: ICurrentRunnerIdentity | None = self._seam("identity")
+        return identity if identity is not None else self._refuse("runner identity")
 
     def leases(self) -> LocalLeaseService:
         service: LocalLeaseService | None = self._seam("leases")

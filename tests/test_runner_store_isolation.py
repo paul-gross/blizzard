@@ -66,6 +66,7 @@ from blizzard.runner.transcripts.ledger import IWriteTranscriptLedgerRepository
 from blizzard.runner.transfer.rows import IWriteHostIngestRepository
 from blizzard.runner.usage.repository import (
     IWriteCredentialRenewalRepository,
+    IWriteExternalUsageAttemptRepository,
     IWriteExternalUsageRepository,
     IWriteHostLaneAppendRepository,
     IWriteHostLaneMarkRepository,
@@ -502,7 +503,7 @@ WRITE_CENSUS: dict[tuple[type, str], WriteRecipe] = {
         report_kind="context.sampled",
         report_payload="{}",
     ),
-    (IWriteExternalUsageRepository, "record_external_usage_attempt"): lambda w: (
+    (IWriteExternalUsageAttemptRepository, "record_external_usage_attempt"): lambda w: (
         w.host.external_usage.record_external_usage_attempt(
             slug=w.usage_slug, sampled_at=_at(51), payload="{}", report_kind="usage.sampled", report_payload="{}"
         )

@@ -33,6 +33,7 @@ __all__ = [
     "IReadHostLaneRepository",
     "IReadUsageRepository",
     "IWriteCredentialRenewalRepository",
+    "IWriteExternalUsageAttemptRepository",
     "IWriteExternalUsageRepository",
     "IWriteHostLaneAppendRepository",
     "IWriteHostLaneMarkRepository",
@@ -409,9 +410,9 @@ class IReadExternalUsageRepository(IReadCredentialRenewalRepository, Protocol):
         ...
 
 
-class IWriteExternalUsageRepository(IReadExternalUsageRepository, IWriteCredentialRenewalRepository, Protocol):
-    """Read-write external-usage samples and credential renewals — held only by the sampling step, the renewal pass
-    and retention."""
+class IWriteExternalUsageAttemptRepository(Protocol):
+    """The one external-usage write a runner holds: the attempt an unregistered host records through its first
+    registered runner, whose outbound report is a row of that runner's."""
 
     def record_external_usage_attempt(
         self,
@@ -428,6 +429,13 @@ class IWriteExternalUsageRepository(IReadExternalUsageRepository, IWriteCredenti
         ``slug`` is the cadence's join key. ``miss_reason`` is a
         ``SampleMissReason`` value on a miss, ``None`` on success."""
         ...
+
+
+class IWriteExternalUsageRepository(
+    IReadExternalUsageRepository, IWriteCredentialRenewalRepository, IWriteExternalUsageAttemptRepository, Protocol
+):
+    """Read-write external-usage samples and credential renewals — held only by the sampling step, the renewal pass
+    and retention."""
 
     def prune_external_usage_samples(self, *, now: datetime) -> int:
         """Compact external-usage-sample attempts older than the store's own retention
