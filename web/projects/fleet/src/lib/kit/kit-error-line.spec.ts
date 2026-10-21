@@ -27,6 +27,9 @@ describe('KitErrorLine', () => {
 
     expect(el.querySelector('.line')).toBeNull();
     expect(el.querySelector('[role="alert"]')).toBeNull();
+    const host = el.querySelector('fleet-kit-error-line') as HTMLElement;
+    expect(host.matches(':empty')).toBe(true);
+    expect(getComputedStyle(host).display).toBe('none');
   });
 
   it('renders the message as an alert carrying the testid once there is one', async () => {
