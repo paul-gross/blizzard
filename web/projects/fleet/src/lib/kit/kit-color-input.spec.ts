@@ -12,11 +12,13 @@ import { KitColorInput } from './kit-color-input';
   imports: [KitColorInput],
   template: `<fleet-kit-color-input
     [value]="value()"
+    [disabled]="disabled()"
     (valueChange)="committed.push($event)"
   />`,
 })
 class TestHost {
   readonly value = signal('#14b8a6');
+  readonly disabled = signal(false);
   readonly committed: string[] = [];
 }
 
@@ -93,5 +95,14 @@ describe('KitColorInput', () => {
     fixture.detectChanges();
     expect(text.value).toBe('');
     expect(text.getAttribute('aria-invalid')).toBeNull();
+  });
+
+  it('disables both controls while disabled', () => {
+    const { fixture, host, text, picker } = render();
+    expect(text.disabled).toBe(false);
+    host.disabled.set(true);
+    fixture.detectChanges();
+    expect(text.disabled).toBe(true);
+    expect(picker.disabled).toBe(true);
   });
 });

@@ -13,6 +13,7 @@ import {
   KitAsyncState,
   type KitAsyncStateValue,
   KitBadge,
+  KitErrorLine,
   KitButton,
   type KitFact,
   KitFactList,
@@ -63,7 +64,7 @@ export interface ConfigRecordVm {
 @Component({
   selector: 'app-config-record-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ConfigRevisions, FleetWhen, KitAsyncState, KitBadge, KitButton, KitFactList, RouterLink, LensLink],
+  imports: [ConfigRevisions, FleetWhen, KitAsyncState, KitBadge, KitButton, KitErrorLine, KitFactList, RouterLink, LensLink],
   templateUrl: './config-record-panel.html',
   styleUrl: './config-record-panel.css',
 })

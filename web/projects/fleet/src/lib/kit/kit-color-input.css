@@ -35,3 +35,8 @@
   outline: 1px solid var(--cyan);
   outline-offset: 0;
 }
+.picker:disabled,
+.text:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

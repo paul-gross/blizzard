@@ -1,5 +1,5 @@
-import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
-import { KitBadge, KitButton } from 'fleet';
+import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
+import { KitAsyncState, type KitAsyncStateValue, KitBadge, KitButton, KitErrorLine, KitPanel, KitPanelHeader } from 'fleet';
 
 import type { ProjectLinkRowVm } from './projects.model';
 
@@ -11,7 +11,7 @@ import type { ProjectLinkRowVm } from './projects.model';
 @Component({
   selector: 'app-project-link-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitBadge, KitButton],
+  imports: [KitAsyncState, KitBadge, KitButton, KitErrorLine, KitPanel, KitPanelHeader],
   templateUrl: './project-link-panel.html',
   styleUrl: './project-link-panel.css',
 })
@@ -23,11 +23,16 @@ export class ProjectLinkPanel {
   readonly linkLabel = input.required<string>();
   /** Whether the viewer may link and unlink here. */
   readonly canEdit = input(false);
-  /** The key of the link a write is in flight for, whose Unlink waits. */
-  readonly pendingKey = input<string | null>(null);
+  /** What the rows rest on: they render once it is ready, and the empty copy only once the reads settled empty. */
+  readonly state = input<KitAsyncStateValue>('ready');
+  /** The keys of the links an unlink is in flight for, whose Unlink waits. */
+  readonly pendingKeys = input<ReadonlySet<string>>(new Set());
   readonly error = input<string | null>(null);
   readonly testid = input.required<string>();
 
   readonly link = output<void>();
   readonly unlink = output<ProjectLinkRowVm>();
+
+  /** The count waits for the reads, so a still-loading panel does not claim none. */
+  protected readonly countShown = computed(() => this.state() === 'ready' || this.state() === 'empty');
 }

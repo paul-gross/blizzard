@@ -95,6 +95,14 @@ function lensOn(project: ProjectView | null) {
   };
 }
 
+/** Render what has arrived without waiting for the app to be stable, for a read held open on purpose. */
+async function pump(fixture: { detectChanges: () => void }): Promise<void> {
+  for (let i = 0; i < 8; i += 1) {
+    fixture.detectChanges();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+}
+
 describe('ProjectDetail', () => {
   let stub: RequestClientStub;
   afterEach(() => {
@@ -102,8 +110,16 @@ describe('ProjectDetail', () => {
     document.querySelectorAll('dialog').forEach((d) => d.remove());
   });
 
-  async function open(url: string, runners: unknown[] = [], patched?: () => unknown) {
+  async function open(
+    url: string,
+    runners: unknown[] = [],
+    patched?: () => unknown,
+    override?: (method: string, path: string) => unknown,
+    holding = false,
+  ) {
     stub = stubRequestClient(hubClient, (method, path) => {
+      const overridden = override?.(method, path);
+      if (overridden !== undefined) return overridden;
       if (path === '/api/me') return EDITOR;
       if (path === '/api/projects/proj_b' || path === '/api/projects/default') {
         if (method === 'PATCH' && patched) return patched();
@@ -130,8 +146,14 @@ describe('ProjectDetail', () => {
       ],
     });
     const harness = await RouterTestingHarness.create();
-    await harness.navigateByUrl(url);
-    await settle(harness.fixture);
+    if (holding) {
+      // A read held open keeps the app unstable, so stability can never be awaited.
+      void harness.navigateByUrl(url);
+      await pump(harness.fixture);
+    } else {
+      await harness.navigateByUrl(url);
+      await settle(harness.fixture);
+    }
     return { harness, el: harness.routeNativeElement as HTMLElement, router: TestBed.inject(Router) };
   }
 
@@ -290,5 +312,62 @@ describe('ProjectDetail', () => {
     const retire = stub.forRoute('/api/projects/proj_b/source-links/wsrc_j/retire', 'POST');
     expect(retire).toHaveLength(1);
     expect(retire[0].headers['if-match']).toBe('2');
+  });
+
+  it('shows loading, not the empty copy, while the link and runner reads are pending', async () => {
+    const never = new Promise<never>(() => undefined);
+    const { el } = await open('/admin/projects/proj_b', [], undefined, (_method, path) =>
+      path === '/api/projects/proj_b/source-links' ||
+      path === '/api/projects/proj_b/repository-links' ||
+      path === '/api/runners'
+        ? never
+        : undefined,
+      true,
+    );
+    for (const card of ['admin-projects-draws', 'admin-projects-lands', 'admin-projects-served-by']) {
+      expect(text(el, card)).toContain('Loading…');
+    }
+    expect(el.textContent).not.toContain('No work source is linked.');
+    expect(el.textContent).not.toContain('No runner serves this project.');
+    expect(el.textContent).not.toContain('No repository is linked');
+  });
+
+  it('keeps every row with an unlink in flight disabled, and shows the first failure after a second unlink starts', async () => {
+    const retires = new Map<string, { resolve: () => void; reject: () => void }>();
+    const links = {
+      source_links: [
+        ...SOURCE_LINKS.source_links,
+        { project_id: 'proj_b', name: 'wsrc_g', slug: 'gh', linked: true, revision: 5 },
+      ],
+    };
+    const { harness, el } = await open('/admin/projects/proj_b', [], undefined, (method, path) => {
+      if (path === '/api/projects/proj_b/source-links') return links;
+      const retire = /source-links\/(\w+)\/retire$/.exec(path);
+      if (method === 'POST' && retire) {
+        return new Promise((resolve) => {
+          retires.set(retire[1], {
+            resolve: () => resolve({}),
+            reject: () => resolve(stubError(409, { detail: 'stale revision' })),
+          });
+        });
+      }
+      return undefined;
+    });
+    await click(harness, el, 'admin-projects-tab-sources');
+    const unlink = (name: string) => el.querySelector<HTMLButtonElement>(`[data-testid="admin-projects-sources-unlink-${name}"]`)!;
+
+    el.querySelector<HTMLElement>('[data-testid="admin-projects-sources-unlink-jira"]')!.click();
+    await pump(harness.fixture);
+    expect(unlink('jira').disabled).toBe(true);
+    expect(unlink('gh').disabled).toBe(false);
+    el.querySelector<HTMLElement>('[data-testid="admin-projects-sources-unlink-gh"]')!.click();
+    await pump(harness.fixture);
+    expect(unlink('jira').disabled).toBe(true);
+    expect(unlink('gh').disabled).toBe(true);
+
+    retires.get('wsrc_j')!.reject();
+    await pump(harness.fixture);
+    expect(text(el, 'admin-projects-sources-error')).toContain('stale revision');
+    expect(unlink('gh').disabled).toBe(true);
   });
 });

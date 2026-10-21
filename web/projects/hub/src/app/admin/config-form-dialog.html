@@ -43,9 +43,7 @@
   }
 
   <div fleetKitDialogFooter class="footer">
-    @if (submitError(); as error) {
-      <p class="submit-error" [attr.data-testid]="testidPrefix() + '-submit-error'">{{ error }}</p>
-    }
+    <fleet-kit-error-line class="submit-error" [message]="submitError()" [testid]="testidPrefix() + '-submit-error'" />
     <fleet-kit-button size="cta" [disabled]="submitting()" [testid]="testidPrefix() + '-cancel'" (click)="onClosed()">
       Cancel
     </fleet-kit-button>

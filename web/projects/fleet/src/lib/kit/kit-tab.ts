@@ -49,4 +49,13 @@ export class KitTabStrip {
 export class KitTab {
   /** Must match the enclosing {@link KitTabStrip}'s `variant`. */
   readonly variant = input<KitTabVariant>('top');
+
+  /** How many the tab holds, shown after its label; nothing renders while `null`, but `0` does. */
+  readonly count = input<number | null>(null);
+
+  /** The count span's `data-testid`, or `null` for none (the name {@link KitPanel} gives the same input). */
+  readonly countTestid = input<string | null>(null);
+
+  /** Reads the count in the amber-hi attention color, for a count of things waiting on a person. */
+  readonly countHot = input(false);
 }

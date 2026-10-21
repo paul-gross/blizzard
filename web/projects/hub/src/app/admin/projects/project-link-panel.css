@@ -2,33 +2,16 @@
   display: block;
   min-width: 0;
 }
-.hdr {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  flex-wrap: wrap;
+.body {
+  padding: 4px 10px 6px;
 }
-.section {
-  margin: 12px 0 4px;
-  font-size: var(--fs-label);
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--label);
-}
-.count {
-  color: var(--text);
-}
-.explainer,
-.empty {
+.explainer {
   margin: 4px 0 8px;
   color: var(--label);
   font-size: var(--fs-sm);
 }
 .error {
   margin: 4px 0;
-  color: var(--red);
-  font-size: var(--fs-sm);
 }
 .rows {
   list-style: none;

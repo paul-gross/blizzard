@@ -9,6 +9,8 @@ import {
   linkChoices,
   linkedKeys,
   missingWiring,
+  pendingUnlinkNames,
+  projectLightTone,
   projectCreate,
   projectPatch,
   projectRows,
@@ -265,5 +267,32 @@ describe('projects model', () => {
       true,
     );
     expect(wiringCallout(wired)).toBeNull();
+  });
+
+  it("tones a project's light by its wiring", () => {
+    expect(projectLightTone({ wired: true, needs: null })).toBe('done');
+    expect(projectLightTone({ wired: false, needs: 'needs a runner' })).toBe('needs');
+    expect(projectLightTone({ wired: false, needs: null })).toBe('idle');
+  });
+
+  it("names the links of one project and kind an unlink is in flight for", () => {
+    const vars = (projectId: string, kind: 'source' | 'repository', name: string, linked: boolean) => ({
+      projectId,
+      kind,
+      name,
+      linked,
+      revision: linked ? null : 1,
+    });
+    const pending = [
+      vars('proj_b', 'source', 'wsrc_j', false),
+      vars('proj_b', 'source', 'wsrc_g', false),
+      vars('proj_b', 'source', 'wsrc_n', true),
+      vars('proj_b', 'repository', 'repo_c', false),
+      vars('proj_w', 'source', 'wsrc_x', false),
+    ];
+    expect(pendingUnlinkNames(pending, 'proj_b', 'source')).toEqual(new Set(['wsrc_j', 'wsrc_g']));
+    expect(pendingUnlinkNames(pending, 'proj_b', 'repository')).toEqual(new Set(['repo_c']));
+    expect(pendingUnlinkNames([], 'proj_b', 'source').size).toBe(0);
+    expect(pendingUnlinkNames(pending, null, 'source').size).toBe(0);
   });
 });

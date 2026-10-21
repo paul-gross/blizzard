@@ -6,25 +6,21 @@ import {
   inject,
   linkedSignal,
   signal,
-  type TemplateRef,
-  viewChild,
 } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
 import {
   asyncState,
+  asyncStateOf,
   errorMessage,
-  FleetWhen,
   injectNowSignal,
+  injectPendingMutationVariables,
   type KitAsyncStateValue,
   KitAsyncState,
   KitButton,
   KitDialog,
-  type KitFact,
-  KitFactList,
+  KitErrorLine,
   type KitTabOption,
-  KitSwatch,
-  KitTabs,
   ProjectColor,
   RecordKind,
   restingAsyncState,
@@ -33,6 +29,7 @@ import {
 import { map } from 'rxjs';
 
 import { hasPermission, injectMeQuery } from '../../core/auth/me.query';
+import { projectLinkMutationKey } from '../../core/mutation-keys';
 import { startOfLocalDayIso } from '../../core/local-day';
 import { ProjectLens, lensLink } from '../../core/project-lens';
 import { injectHubRunnersQuery } from '../../core/runners.query';
@@ -40,21 +37,24 @@ import { type ConfigFormValues, configEdit } from '../config-edit.model';
 import { ConfigFormDialog } from '../config-form-dialog';
 import { lastChange, revisionRows } from '../config-history.model';
 import { injectConfigHistoryQuery } from '../config-history.query';
-import { ConfigRevisions } from '../config-revisions';
 import { injectRepositoriesQuery } from '../repositories/repositories.query';
 import { injectWorkSourcesQuery } from '../work-sources/work-sources.query';
 import { ProjectColorPicker } from './project-color-picker';
 import { ProjectLinkDialog } from './project-link-dialog';
-import { ProjectLinkPanel } from './project-link-panel';
-import { ProjectOverviewCard } from './project-overview-card';
-import { injectEditProjectMutation, injectProjectLinkMutation, type ProjectLinkKind } from './projects.mutations';
+import { ProjectRecordPanel, type ProjectTab, type ProjectUnlinkEvent } from './project-record-panel';
+import {
+  injectEditProjectMutation,
+  injectProjectLinkMutation,
+  type ProjectLinkKind,
+  type ProjectLinkVars,
+} from './projects.mutations';
 import {
   failureFor,
   formerSlugs,
   overviewCallout,
+  pendingUnlinkNames,
   type PanelFailure,
   PROJECT_FIELDS,
-  type ProjectLinkRowVm,
   projectFormValues,
   projectPatch,
   projectServedBy,
@@ -64,16 +64,13 @@ import {
   sourceChoices,
   sourceLinkRows,
 } from './projects.model';
-import { linkCount, projectFacts, projectTabs, servedByLines } from './project-overview.model';
+import { linkCount, projectTabs, servedByLines } from './project-overview.model';
 import {
   injectProjectChunkCountsQuery,
   injectProjectQuery,
   injectProjectRepositoryLinksQuery,
   injectProjectSourceLinksQuery,
 } from './projects.query';
-
-/** The project page's tabs: what it is and who serves it, then each kind of link it holds. */
-export type ProjectTab = 'overview' | 'sources' | 'repositories';
 
 /**
  * The selected project — the right-hand child of `/admin/projects`, mounted by both its bare
@@ -88,18 +85,13 @@ export type ProjectTab = 'overview' | 'sources' | 'repositories';
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     ConfigFormDialog,
-    ConfigRevisions,
-    FleetWhen,
     KitAsyncState,
     KitButton,
     KitDialog,
-    KitFactList,
-    KitSwatch,
-    KitTabs,
+    KitErrorLine,
     ProjectColorPicker,
     ProjectLinkDialog,
-    ProjectLinkPanel,
-    ProjectOverviewCard,
+    ProjectRecordPanel,
   ],
   templateUrl: './project-detail.html',
   styleUrl: './project-detail.css',
@@ -126,7 +118,7 @@ export class ProjectDetail {
   private readonly now = injectNowSignal();
   /** Today's boundary, cut from the shared clock; string equality stops the tick here, so the key changes only when the local day does. */
   private readonly dayStart = computed(() => startOfLocalDayIso(this.now()));
-  private readonly countsQuery = injectProjectChunkCountsQuery(
+  protected readonly countsQuery = injectProjectChunkCountsQuery(
     () => this.project()?.slug ?? null,
     () => this.dayStart(),
   );
@@ -151,6 +143,16 @@ export class ProjectDetail {
     projectServedBy(this.projectId(), this.runnersQuery.data()),
   );
   protected readonly servedLines = computed(() => servedByLines(this.servedBy()));
+  /** Each list rests on its own links read and its catalogue; the empty copy waits for both. */
+  protected readonly sourcesState = computed<KitAsyncStateValue>(() =>
+    asyncStateOf([this.sourceLinksQuery, this.sourcesQuery], this.sourceRows().length === 0),
+  );
+  protected readonly repositoriesState = computed<KitAsyncStateValue>(() =>
+    asyncStateOf([this.repositoryLinksQuery, this.repositoriesQuery], this.repositoryRows().length === 0),
+  );
+  protected readonly servedState = computed<KitAsyncStateValue>(() =>
+    asyncState(this.runnersQuery, this.servedLines().length === 0),
+  );
   protected readonly tabs = computed<readonly KitTabOption[]>(() =>
     projectTabs(linkCount(this.sourceLinksQuery.data()), linkCount(this.repositoryLinksQuery.data())),
   );
@@ -165,7 +167,7 @@ export class ProjectDetail {
       this.countsQuery.data()?.ready ?? null,
     ),
   );
-  private readonly formerSlugs = computed(() => formerSlugs(this.historyQuery.data(), this.project()));
+  protected readonly formerSlugs = computed(() => formerSlugs(this.historyQuery.data(), this.project()));
   protected readonly lastChange = computed(() => lastChange(this.historyQuery.data()));
   protected readonly revisions = computed(() => revisionRows(this.historyQuery.data()));
   protected readonly revisionsState = computed<KitAsyncStateValue>(() =>
@@ -173,18 +175,6 @@ export class ProjectDetail {
   );
 
   private readonly meQuery = injectMeQuery();
-  private readonly createdTemplate = viewChild<TemplateRef<unknown>>('createdFact');
-  private readonly colorTemplate = viewChild<TemplateRef<unknown>>('colorFact');
-  private readonly revisionTemplate = viewChild<TemplateRef<unknown>>('revisionFact');
-  protected readonly facts = computed<readonly KitFact[]>(() =>
-    projectFacts(this.project(), {
-      former: this.formerSlugs(),
-      counts: this.countsQuery.data(),
-      color: this.colorTemplate(),
-      created: this.createdTemplate(),
-      revision: this.revisionTemplate(),
-    }),
-  );
 
   /** Writes are a desktop with `config:edit`. */
   protected readonly canEdit = computed(
@@ -206,7 +196,14 @@ export class ProjectDetail {
   protected readonly linkOpen = signal<ProjectLinkKind | null>(null);
   protected readonly linkError = signal<string | null>(null);
   private readonly linkFailure = signal<PanelFailure<ProjectLinkKind> | null>(null);
-  protected readonly pendingUnlink = signal<string | null>(null);
+  private readonly pendingLinks = injectPendingMutationVariables<ProjectLinkVars>(projectLinkMutationKey);
+  /** Every unlink in flight, per kind, so concurrent unlinks each keep their row waiting. */
+  protected readonly pendingSourceKeys = computed(() =>
+    pendingUnlinkNames(this.pendingLinks(), this.projectId(), 'source'),
+  );
+  protected readonly pendingRepositoryKeys = computed(() =>
+    pendingUnlinkNames(this.pendingLinks(), this.projectId(), 'repository'),
+  );
   protected readonly sourceError = computed(() => failureFor(this.linkFailure(), 'source'));
   protected readonly repositoryError = computed(() => failureFor(this.linkFailure(), 'repository'));
 
@@ -301,17 +298,15 @@ export class ProjectDetail {
     );
   }
 
-  protected onUnlink(kind: ProjectLinkKind, row: ProjectLinkRowVm): void {
+  /** Each unlink settles on its own promise: a per-call `mutate` callback fires only for the observer's latest call. */
+  protected async onUnlink({ kind, row }: ProjectUnlinkEvent): Promise<void> {
     const projectId = this.projectId();
     if (projectId === null) return;
     this.linkFailure.set(null);
-    this.pendingUnlink.set(row.key);
-    this.linkMutation.mutate(
-      { projectId, kind, name: row.key, linked: false, revision: row.revision },
-      {
-        onError: (error) => this.linkFailure.set({ kind, message: errorMessage(error, 'Unlink failed.') }),
-        onSettled: () => this.pendingUnlink.set(null),
-      },
-    );
+    try {
+      await this.linkMutation.mutateAsync({ projectId, kind, name: row.key, linked: false, revision: row.revision });
+    } catch (error) {
+      this.linkFailure.set({ kind, message: errorMessage(error, 'Unlink failed.') });
+    }
   }
 }

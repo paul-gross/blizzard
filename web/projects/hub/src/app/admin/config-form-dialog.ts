@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
-import { KitButton, KitCheckbox, KitDialog, KitTextInput } from 'fleet';
+import { KitButton, KitCheckbox, KitDialog, KitErrorLine, KitTextInput } from 'fleet';
 
 import { ConfigFieldDiff } from './config-field-diff';
 import {
@@ -25,7 +25,7 @@ export type ConfigFormMode = 'create' | 'edit' | 'replace';
 @Component({
   selector: 'app-config-form-dialog',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ConfigFieldDiff, KitButton, KitCheckbox, KitDialog, KitTextInput],
+  imports: [ConfigFieldDiff, KitButton, KitCheckbox, KitDialog, KitErrorLine, KitTextInput],
   templateUrl: './config-form-dialog.html',
   styleUrl: './config-form-dialog.css',
 })

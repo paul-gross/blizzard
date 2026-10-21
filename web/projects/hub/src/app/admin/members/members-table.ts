@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 
-import { type hubApi, type KitChipOption, type MemberView, FleetWhen, KitAsyncState, KitButton, KitPanel, KitSelect } from 'fleet';
+import { type hubApi, type KitChipOption, type MemberView, FleetWhen, KitAsyncState, KitBadge, KitButton, KitPanel, KitSelect } from 'fleet';
 import { canChangeRole, canRevoke, roleChoices } from './members-page.model';
 
 /**
@@ -16,7 +16,7 @@ import { canChangeRole, canRevoke, roleChoices } from './members-page.model';
 @Component({
   selector: 'app-members-table',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitAsyncState, KitButton, KitPanel, KitSelect, FleetWhen],
+  imports: [KitAsyncState, KitBadge, KitButton, KitPanel, KitSelect, FleetWhen],
   templateUrl: './members-table.html',
   styleUrl: './members-table.css',
 })

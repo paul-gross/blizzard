@@ -14,9 +14,3 @@
   flex-direction: column;
   padding: 6px;
 }
-.cnt {
-  margin-left: 8px;
-  color: var(--snow);
-  letter-spacing: 0.06em;
-  font-variant-numeric: tabular-nums;
-}

@@ -6,9 +6,7 @@
   errorText="Failed to load members."
   errorTestid="members-page-error"
 >
-  @if (changeError(); as message) {
-    <p class="change-error" role="alert" data-testid="members-page-change-error">{{ message }}</p>
-  }
+  <fleet-kit-error-line class="change-error" [message]="changeError()" testid="members-page-change-error" />
   <app-members-table
     [members]="membersQuery.data() ?? []"
     label="Members"

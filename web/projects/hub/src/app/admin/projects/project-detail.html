@@ -1,21 +1,3 @@
-<ng-template #createdFact>
-  @if (project(); as p) {
-    <fleet-when [iso]="p.created_at" [relative]="true" />
-  }
-</ng-template>
-<ng-template #colorFact>
-  @if (project(); as p) {
-    <fleet-kit-swatch class="fact-swatch" [color]="p.color" />{{ p.color }}
-  }
-</ng-template>
-<ng-template #revisionFact>
-  r{{ project()?.revision }}
-  @if (lastChange(); as last) {
-    <span class="dim" data-testid="admin-projects-last-change">
-      · <fleet-when [iso]="last.at" [relative]="true" /> by {{ last.actor }} via {{ last.door }}
-    </span>
-  }
-</ng-template>
 <fleet-kit-async-state
   [state]="state()"
   placement="inline"
@@ -26,90 +8,33 @@
   errorTestid="admin-projects-detail-error"
 >
   @if (project(); as p) {
-    <article class="record" data-testid="admin-projects-detail">
-      <header class="hdr">
-        <fleet-kit-swatch class="name-swatch" [color]="p.color" />
-        <h2 class="name">{{ p.name }}</h2>
-        @if (p.description) {
-          <span class="desc" data-testid="admin-projects-description">{{ p.description }}</span>
-        }
-        <span class="grow"></span>
-        @if (canEdit()) {
-          <fleet-kit-button testid="admin-projects-color-open" (click)="onColorOpen()">Color</fleet-kit-button>
-          <fleet-kit-button testid="admin-projects-edit" (click)="onEdit()">Edit</fleet-kit-button>
-        }
-      </header>
-      <fleet-kit-tabs variant="sub" [options]="tabs()" [activeValue]="tab()" (choose)="onTab($event)" />
-
-      <div class="body">
-        @switch (tab()) {
-          @case ('overview') {
-            @if (callout(); as text) {
-              <p class="callout" role="status" data-testid="admin-projects-callout">{{ text }}</p>
-            }
-            <fleet-kit-fact-list [rows]="facts()" testid="admin-projects-facts" />
-
-            <div class="cards">
-              <app-project-overview-card
-                heading="Draws work from"
-                [lines]="sourceRows()"
-                none="No work source is linked."
-                testid="admin-projects-draws"
-                [opens]="true"
-                (open)="onTab('sources')"
-              />
-              <app-project-overview-card
-                heading="May land in"
-                [lines]="repositoryRows()"
-                none="No repository is linked, so nothing this project does can land."
-                testid="admin-projects-lands"
-                [opens]="true"
-                (open)="onTab('repositories')"
-              />
-              <app-project-overview-card
-                heading="Served by"
-                [lines]="servedLines()"
-                none="No runner serves this project."
-                testid="admin-projects-served-by"
-              />
-            </div>
-
-            <h3 class="section">Revisions</h3>
-            <app-config-revisions [rows]="revisions()" [state]="revisionsState()" [relative]="true" testidPrefix="admin-projects" />
-          }
-          @case ('sources') {
-            <app-project-link-panel
-              heading="Linked"
-              explainer="Work sources belong to the tenant and are shared. Unlinking stops new ingest into this project from that source; nothing already ingested moves."
-              [rows]="sourceRows()"
-              emptyText="No work source is linked."
-              linkLabel="+ Link a source"
-              [canEdit]="canEdit()"
-              [pendingKey]="pendingUnlink()"
-              [error]="sourceError()"
-              testid="admin-projects-sources"
-              (link)="onLinkOpen('source')"
-              (unlink)="onUnlink('source', $event)"
-            />
-          }
-          @case ('repositories') {
-            <app-project-link-panel
-              heading="Linked"
-              explainer="Repositories belong to the tenant. A chunk of this project may land only in the repositories linked here. Unlinking stops landings from the next step; nothing already landed moves."
-              [rows]="repositoryRows()"
-              emptyText="No repository is linked, so nothing this project does can land."
-              linkLabel="+ Link a repository"
-              [canEdit]="canEdit()"
-              [pendingKey]="pendingUnlink()"
-              [error]="repositoryError()"
-              testid="admin-projects-repositories"
-              (link)="onLinkOpen('repository')"
-              (unlink)="onUnlink('repository', $event)"
-            />
-          }
-        }
-      </div>
-    </article>
+    <app-project-record-panel
+      [project]="p"
+      [canEdit]="canEdit()"
+      [tabs]="tabs()"
+      [tab]="tab()"
+      [formerSlugs]="formerSlugs()"
+      [counts]="countsQuery.data()"
+      [lastChange]="lastChange()"
+      [callout]="callout()"
+      [sourceRows]="sourceRows()"
+      [repositoryRows]="repositoryRows()"
+      [servedLines]="servedLines()"
+      [sourcesState]="sourcesState()"
+      [repositoriesState]="repositoriesState()"
+      [servedState]="servedState()"
+      [revisions]="revisions()"
+      [revisionsState]="revisionsState()"
+      [pendingSourceKeys]="pendingSourceKeys()"
+      [pendingRepositoryKeys]="pendingRepositoryKeys()"
+      [sourceError]="sourceError()"
+      [repositoryError]="repositoryError()"
+      (edit)="onEdit()"
+      (color)="onColorOpen()"
+      (tabChange)="onTab($event)"
+      (link)="onLinkOpen($event)"
+      (unlink)="onUnlink($event)"
+    />
 
     @if (editOpen()) {
       <app-config-form-dialog
@@ -136,9 +61,7 @@
           (choose)="onColor($event)"
         />
         <div fleetKitDialogFooter class="color-footer">
-          @if (colorError(); as error) {
-            <p class="color-error" data-testid="admin-projects-color-error">{{ error }}</p>
-          }
+          <fleet-kit-error-line class="color-error" [message]="colorError()" testid="admin-projects-color-error" />
           <fleet-kit-button size="cta" [disabled]="editMutation.isPending()" testid="admin-projects-color-close" (click)="onColorClose()">
             Close
           </fleet-kit-button>

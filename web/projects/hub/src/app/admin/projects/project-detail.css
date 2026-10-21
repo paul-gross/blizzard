@@ -2,89 +2,6 @@
   display: block;
   min-width: 0;
 }
-.record {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-.hdr {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px 10px;
-  min-width: 0;
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--line);
-}
-.body {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  min-width: 0;
-  padding: 8px 12px 14px;
-}
-.name {
-  margin: 0;
-  font-size: var(--fs-lg);
-  font-weight: 600;
-  overflow-wrap: anywhere;
-  min-width: 0;
-}
-.grow {
-  flex: 1;
-}
-.callout {
-  margin: 0;
-  padding: 6px 8px;
-  border: 1px solid var(--amber-dim);
-  color: var(--amber);
-  font-size: var(--fs-sm);
-  overflow-wrap: anywhere;
-}
-.desc {
-  color: var(--label);
-  font-size: var(--fs-sm);
-  overflow-wrap: anywhere;
-  min-width: 0;
-}
-.cards {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-.section {
-  margin: 8px 0 0;
-  font-size: var(--fs-label);
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--label);
-  font-weight: normal;
-}
-.dim,
-.note {
-  color: var(--label);
-}
-.note {
-  margin: 0;
-  font-size: var(--fs-sm);
-}
-.note a {
-  color: var(--cyan);
-  text-decoration: none;
-}
-.note a:hover,
-.note a:focus-visible {
-  text-decoration: underline;
-}
-
-/* The swatch leads the project's name in the header. */
-.name-swatch {
-  align-self: center;
-}
-.fact-swatch {
-  margin-right: 6px;
-  vertical-align: middle;
-}
 .color-footer {
   display: flex;
   align-items: center;
@@ -92,7 +9,6 @@
   gap: 8px;
 }
 .color-error {
-  margin: 0;
-  color: var(--red);
-  font-size: var(--fs-xs);
+  flex: 1;
+  min-width: 0;
 }

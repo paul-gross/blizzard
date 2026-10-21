@@ -67,6 +67,18 @@ async function sweep(width: number) {
     expect(swatch.width, 'the swatch has no width').toBeGreaterThan(0);
     expect(swatch.left, `the swatch is not beside the light at ${width}px`).toBeGreaterThanOrEqual(light.right - 0.5);
 
+    const painted = (testid: string) => getComputedStyle(root.querySelector<HTMLElement>(`[data-testid="${testid}"]`)!).backgroundColor;
+    const token = (name: string) => {
+      const probe = document.createElement('span');
+      probe.style.background = `var(${name})`;
+      root.appendChild(probe);
+      const color = getComputedStyle(probe).backgroundColor;
+      probe.remove();
+      return color;
+    };
+    expect(painted('projects-table-light-proj_b'), 'a wired light is not green').toBe(token('--green'));
+    expect(painted('projects-table-light-proj_long'), 'a wanting light is not red').toBe(token('--red'));
+
     const badge = root.querySelector<HTMLElement>('[data-testid="projects-table-needs-proj_long"]')!;
     const box = badge.getBoundingClientRect();
     expect(box.width, 'the badge has no width').toBeGreaterThan(0);

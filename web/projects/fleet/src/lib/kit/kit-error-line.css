@@ -1,0 +1,13 @@
+:host {
+  display: block;
+}
+/* No message, no box: the host's own margin from the caller's layout must not reserve space for an absent line. */
+:host(:empty) {
+  display: none;
+}
+.line {
+  margin: 0;
+  color: var(--red);
+  font-size: var(--fs-sm);
+  overflow-wrap: anywhere;
+}

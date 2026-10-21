@@ -7,15 +7,6 @@
 .subnav {
   flex: none;
 }
-/* A tab's count: its list's length, beside its label; Proposals' turns amber while any wait on a person. */
-.cnt {
-  margin-left: 8px;
-  color: var(--snow);
-  letter-spacing: 0.06em;
-}
-.cnt.hot {
-  color: var(--amber-hi);
-}
 /* Whose records these are, at the strip's right end. It gives way first on a narrow screen, where the crumb above
  * already names the project. */
 /* No longer the scroller (each tab's own two-column grid owns that split,

@@ -10,11 +10,12 @@ const meta: Meta<KitColorInput> = {
     value: '#14b8a6',
     ariaLabel: 'Custom color, as #rrggbb',
     testid: null,
+    disabled: false,
     valueChange: fn(),
   },
   render: (args) => ({
     props: args,
-    template: `<fleet-kit-color-input [value]="value" [ariaLabel]="ariaLabel" [testid]="testid" (valueChange)="valueChange($event)" />`,
+    template: `<fleet-kit-color-input [value]="value" [ariaLabel]="ariaLabel" [testid]="testid" [disabled]="disabled" (valueChange)="valueChange($event)" />`,
   }),
 };
 export default meta;
@@ -23,3 +24,4 @@ type Story = StoryObj<KitColorInput>;
 
 export const Seeded: Story = {};
 export const Empty: Story = { args: { value: '' } };
+export const Disabled: Story = { args: { disabled: true } };
