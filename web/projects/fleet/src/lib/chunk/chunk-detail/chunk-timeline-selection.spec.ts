@@ -140,6 +140,7 @@ const FORENSICS_DETAIL: ChunkDetail = chunkDetail({
       restarted_by: 'ops@example.test',
       recorded_at: '2026-07-13T00:00:03Z',
       decision_id: null,
+      note: null,
       from_graph_id: null,
       from_graph_name: null,
       graph_name: null,

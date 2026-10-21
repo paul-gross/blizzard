@@ -45,6 +45,7 @@ const BASE: ChunkDetail = chunkDetail({
       restarted_by: 'operator@example.test',
       recorded_at: '2026-07-13T00:00:04Z',
       decision_id: null,
+      note: null,
       from_graph_id: null,
       from_graph_name: null,
     },

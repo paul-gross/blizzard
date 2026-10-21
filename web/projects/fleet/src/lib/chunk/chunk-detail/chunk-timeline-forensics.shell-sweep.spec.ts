@@ -52,6 +52,7 @@ const DETAIL: ChunkDetail = chunkDetail({
       to_node_name: 'plan',
       restarted_by: 'a-rather-long-operator-name@example.test',
       recorded_at: '2026-08-09T00:00:03Z',
+      note: null,
       decision_id: null,
     },
   ],
