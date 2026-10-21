@@ -26,10 +26,13 @@ hub never stopped — and requires admin and above (`analytics:admin`) since it 
 ## Reading the datasets
 
 `blizzard hub analytics events` reads the raw per-occurrence rows, `analytics summary` canned counts — thin wrappers
-over the `/api/analytics` routes, gated on the same `transcript:read` as the segment routes. `summary`'s six operational
-datasets (durations and spend by node and graph, spend by chunk, outcomes by node) take only the shared four filters —
-they group over transitions and usage facts, not the event projection — and the same `transcript:read` gate, strictly
-narrower than the board's `fleet:view` gate over the same spend numbers.
+over the `/api/analytics` routes, gated on the same `transcript:read` as the segment routes. `summary`'s seven operational
+datasets (durations and spend by node and graph, spend by model, spend by chunk, outcomes by node) take the shared four
+filters plus `--model`, `--harness-id` and `--harness-version` — they group over transitions and usage facts, not the
+event projection, and only a usage fact records those three — and the same `transcript:read` gate, strictly narrower
+than the board's `fleet:view` gate over the same spend numbers. `--effort` stays events-only: `usage_facts` carries no
+effort, so an operational dataset refuses it. `spend-models` groups spend by the model each usage fact recorded, one row
+per model, key ascending; it neither pages nor streams.
 
 `events` outputs a human table, `--json` (the raw single-page envelope with its `next_cursor`), or `--ndjson` (streaming
 every match unbounded and unpaged); `--ndjson` is incompatible with `--json`, `--cursor`, and `--limit`, which the
@@ -37,7 +40,7 @@ streaming route does not take. `spend-chunks` is the one operational dataset tha
 (default 200) page the human and `--json` output, `--ndjson` streams the whole filtered set, with the same
 incompatibility as `events`' own.
 
-Each `summary` counts dataset takes only the filter subset its route exposes — the verb's `--help` is the contract — and
+Each `summary` dataset takes only the filter subset its route exposes — the verb's `--help` is the contract — and
 an inapplicable flag is refused with a does-not-apply error, never silently dropped.
 
 ## Filters
@@ -45,13 +48,15 @@ an inapplicable flag is refused with a does-not-apply error, never silently drop
 Every dataset shares `--graph`, `--source` (a work source's id or slug, or `hub`), `--since`, `--until`;
 `--extractor-version` defaults to the sweep's current version — an older one reads that version's rows alone, since
 mixing would double-count — and the event projection adds `--kind`, `--tool`, `--subject-prefix`, `--node`.
+`--harness-id`, `--harness-version` and `--model` narrow the counts and the operational datasets alike
+([how](#interpreting-the-numbers)); `--effort` narrows the counts alone.
 `--since`/`--until` are read in the operator's local wall clock and converted to UTC before the wire — a bare 10:00
 means the operator's 10am, whatever timezone the hub runs in. A time ending `Z` or `±hh:mm` is that instant instead.
 
 Every analytics read takes `?project=<id|slug>` to read one project's chunks; without it, it reads the whole tenant
 ([projects.md](./projects.md#--project-on-the-cli)).
 
-None of the seven routes defaults or requires a since/until window (unlike `/api/spend`, requiring `since`, or
+None of the eight operational routes defaults or requires a since/until window (unlike `/api/spend`, requiring `since`, or
 `/api/activity`, defaulting to 24h): an unfiltered call costs a full scan — acceptable at today's volumes, a deliberate
 open deferral.
 
@@ -60,6 +65,12 @@ open deferral.
 - What `--graph` narrows by differs per dataset — the transition's own graph for durations and outcomes' judged half,
   the chunk's current pin for spend, the failed attempt's derived graph for outcomes' failure half — so two datasets'
   numbers for one graph are not comparable for a migrated chunk; each wire model states its resolution.
+- The provenance flags narrow by lease attempt. A durations, outcomes or spend row matches when its attempt
+  `(chunk, epoch)` has at least one usage fact, judge facts included, matching every flag given; spend filters the
+  usage facts directly. So an attempt that ran on two models counts under each, and per-model numbers do not partition
+  the unfiltered total; an attempt with no usage fact — a crash before the first report, any hub-executed step — matches
+  no filter; and a harness id or version recorded as unknown matches no value. Outcomes' failure half narrows only which
+  attempts it counts: a failed attempt's node is still inferred from the chunk's whole movement history.
 - Outcomes reports a judged-choice distribution and a retry-consuming attempt-failure count separately, never one
   blended failure rate; a delivery kick-back counts as neither, its routing transition sharing the bounce's epoch.
 - Outcomes' two counts window on different instants — the judging transition versus the failed attempt's lease mint — so

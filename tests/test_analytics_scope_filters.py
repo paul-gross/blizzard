@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from blizzard.hub.api.analytics import EventScopeFilters, ScopeFilters
+from blizzard.hub.api.analytics import EventScopeFilters, OperationalScopeFilters, ScopeFilters, operational_criteria
 from blizzard.hub.domain.projects.model import ProjectId
 
 pytestmark = pytest.mark.unit
@@ -33,3 +33,22 @@ def test_event_criteria_normalizes_non_default_scope_instants() -> None:
         "model-a",
         "high",
     )
+
+
+def test_operational_criteria_carry_the_scope_and_the_usage_provenance_but_not_effort() -> None:
+    since = datetime(2026, 8, 12, 9, 30)
+    scope = ScopeFilters("gr_1", "ws_1", since, None, ProjectId("pj_1"))
+    filters = OperationalScopeFilters(scope, "model-a", "claude_code", "1.0")
+
+    criteria = filters.criteria
+
+    assert (criteria.graph_id, criteria.source, criteria.project) == ("gr_1", "ws_1", "pj_1")
+    assert criteria.since == since.replace(tzinfo=UTC)
+    assert (criteria.model, criteria.harness_id, criteria.harness_version) == ("model-a", "claude_code", "1.0")
+    assert not hasattr(criteria, "effort")
+
+
+def test_the_shared_scope_reading_names_no_provenance() -> None:
+    criteria = operational_criteria(ScopeFilters(None, None, None, None))
+
+    assert (criteria.model, criteria.harness_id, criteria.harness_version) == (None, None, None)

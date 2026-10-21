@@ -28,7 +28,13 @@ _STMTS = ScopedStatements(StoreScope(TenantId("ten_analytics")))
 
 #: Every filter set at once, so no branch of the statement builder goes uncompiled.
 _CRITERIA = OperationalCriteria(
-    graph_id="gr_1", source="github", since=datetime(2026, 8, 12, tzinfo=UTC), until=datetime(2026, 8, 13, tzinfo=UTC)
+    graph_id="gr_1",
+    source="github",
+    since=datetime(2026, 8, 12, tzinfo=UTC),
+    until=datetime(2026, 8, 13, tzinfo=UTC),
+    model="m-a",
+    harness_id="claude_code",
+    harness_version="1.0",
 )
 
 
@@ -46,6 +52,7 @@ def _executed_statements() -> dict[str, ClauseElement]:
         "_spend_group_stmt": m._spend_group_stmt(_STMTS, _CRITERIA, group_col=s.usage_facts.c.node_id),
         "_spend_by_node_stmt": m._spend_by_node_stmt(_STMTS, _CRITERIA),
         "_spend_by_graph_stmt": m._spend_by_graph_stmt(_STMTS, _CRITERIA),
+        "_spend_by_model_stmt": m._spend_by_model_stmt(_STMTS, _CRITERIA),
         "_spend_by_chunk_stmt": m._spend_by_chunk_stmt(
             _STMTS, _CRITERIA, cursor=encode_cursor("ch_01J9Z3M0P8QK7V2S4W6X8Y0A1B"), limit=200
         ),
@@ -112,10 +119,49 @@ def test_the_compile_sweep_reaches_every_statement_the_store_can_execute() -> No
         if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "execute"
     ]
     # 2 durations (rows, lease min — review round 4: no separate group-existence
-    # probe) + 3 spend + outcomes' own 8-query fan-out — one `.execute()` site each.
-    assert len(executed) == 13
+    # probe) + 4 spend + outcomes' own 8-query fan-out — one `.execute()` site each.
+    assert len(executed) == 14
     for arg in executed:
         built_by_a_builder = (
             isinstance(arg, ast.Call) and isinstance(arg.func, ast.Name) and arg.func.id.endswith("_stmt")
         )
         assert built_by_a_builder, ast.unparse(arg)
+
+
+#: Statements whose rows are narrowed by a lease attempt's usage facts, not by a usage fact directly.
+_ATTEMPT_NARROWED = [
+    "_duration_window_groups_stmt",
+    "_judged_distribution_stmt",
+    "_candidate_lease_epochs_stmt",
+]
+
+#: The statements the failure half must leave whole, because the failed node is inferred from earlier movement.
+_LEFT_WHOLE = ["_chunk_transitions_stmt", "_chunk_migrations_stmt", "_chunk_bounces_stmt"]
+
+
+@pytest.mark.parametrize("builder_name", _ATTEMPT_NARROWED)
+def test_an_attempt_statement_carries_a_tenant_scoped_exists_over_usage_facts(builder_name: str) -> None:
+    sql = str(getattr(store_module, builder_name)(_STMTS, _CRITERIA).compile(dialect=sqlite.dialect()))
+    exists = sql[sql.index("EXISTS") :]
+    assert "usage_facts.chunk_id =" in exists and "usage_facts.epoch =" in exists, sql
+    assert "usage_facts.tenant_id" in exists, sql
+    for column in ("model", "harness_id", "harness_version"):
+        assert f"usage_facts.{column} =" in exists, (column, sql)
+
+
+@pytest.mark.parametrize("builder_name", _ATTEMPT_NARROWED)
+def test_no_provenance_leaves_an_attempt_statement_without_the_exists(builder_name: str) -> None:
+    sql = str(getattr(store_module, builder_name)(_STMTS, OperationalCriteria()).compile(dialect=sqlite.dialect()))
+    assert "EXISTS" not in sql, sql
+
+
+@pytest.mark.parametrize("builder_name", _LEFT_WHOLE)
+def test_a_provenance_filter_never_narrows_the_failure_halfs_whole_history_fetches(builder_name: str) -> None:
+    """Their chunk narrowing arrives only through the candidate lease epochs subquery."""
+    sql = str(getattr(store_module, builder_name)(_STMTS, _CRITERIA).compile(dialect=sqlite.dialect()))
+    assert sql.count("usage_facts.model") == 1 and "usage_facts.epoch" in sql, sql
+
+
+def test_spend_filters_the_usage_facts_directly_not_by_exists() -> None:
+    sql = str(store_module._spend_by_model_stmt(_STMTS, _CRITERIA).compile(dialect=sqlite.dialect()))
+    assert "EXISTS" not in sql and "usage_facts.model = " in sql and "GROUP BY usage_facts.model" in sql, sql

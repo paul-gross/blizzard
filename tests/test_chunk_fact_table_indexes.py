@@ -22,7 +22,11 @@ from sqlalchemy.dialects import sqlite
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.domain.observability.analytics.operational import OperationalCriteria
 from blizzard.hub.store import schema as s
-from blizzard.hub.store.internal.analytics_operational_store import _spend_by_node_stmt
+from blizzard.hub.store.internal.analytics_operational_store import (
+    _duration_window_groups_stmt,
+    _spend_by_model_stmt,
+    _spend_by_node_stmt,
+)
 from blizzard.hub.store.internal.chunk_events_store import (
     _bounded_stmt,
     _chunk_completed_activity_stmt,
@@ -241,6 +245,31 @@ def _spend_by_node_plan(tmp_path: Path, criteria: OperationalCriteria) -> Sequen
     engine = _engine(tmp_path)
     compiled = str(
         _spend_by_node_stmt(hub_store_connections(engine), criteria).compile(
+            dialect=sqlite.dialect(), compile_kwargs={"literal_binds": True}
+        )
+    )
+    with engine.connect() as conn:
+        return conn.execute(sa.text(f"EXPLAIN QUERY PLAN {compiled}")).all()
+
+
+def test_spend_by_model_groups_the_tenants_usage_facts_with_a_sort(tmp_path: Path) -> None:
+    """No index leads with `model`, so the tenant's rows are read through a tenant-leading index and the
+    `GROUP BY` sorts them — a tenant-wide aggregate, like every unwindowed spend rollup."""
+    plan = _plan_of(tmp_path, _spend_by_model_stmt, OperationalCriteria())
+    assert any("USING INDEX ix_usage_facts_tenant" in str(row) for row in plan), plan
+
+
+def test_a_provenance_filter_probes_usage_facts_per_attempt_through_the_chunk_index(tmp_path: Path) -> None:
+    """The attempt `EXISTS` is a correlated probe of `usage_facts` on `(tenant, chunk)`, never a scan per row."""
+    plan = _plan_of(tmp_path, _duration_window_groups_stmt, OperationalCriteria(model="m-a"))
+    assert any("ix_usage_facts_tenant_chunk_id" in str(row) for row in plan), plan
+    assert not any("SCAN usage_facts" in str(row) for row in plan), plan
+
+
+def _plan_of(tmp_path: Path, builder: Any, criteria: OperationalCriteria) -> Sequence[Row[Any]]:
+    engine = _engine(tmp_path)
+    compiled = str(
+        builder(hub_store_connections(engine), criteria).compile(
             dialect=sqlite.dialect(), compile_kwargs={"literal_binds": True}
         )
     )

@@ -22,7 +22,19 @@ from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
 class OperationalCriteria:
     """Every filter the operational datasets owe — the scope shared
     with events and counts, narrowed to the four fields that mean something outside the
-    derived-event projection: no ``extractor_version``, no event-shape filter."""
+    derived-event projection (no ``extractor_version``, no event-shape filter), plus the
+    three provenance dimensions a ``usage_facts`` row records: ``model``, ``harness_id``,
+    ``harness_version``. ``effort`` is not among them — only transcript events carry it.
+
+    **Attribution rule.** Durations, outcomes and spend carry no provenance of their own
+    except spend's usage facts, so a provenance filter attributes by lease attempt: a row
+    matches when its attempt ``(chunk_id, epoch)`` has at least one usage fact (judge facts
+    included) matching *every* dimension given. Consequences: an attempt that ran on two
+    models counts under each, so per-model numbers do not partition the unfiltered total;
+    an attempt that recorded no usage fact (a crash before the first report, any
+    hub-executed step) matches no filter; a NULL ``harness_id``/``harness_version``
+    (declared unknown) never matches a value. Spend filters the usage facts directly,
+    which is the same rule applied per fact."""
 
     graph_id: str | None = None
     source: str | None = None
@@ -30,6 +42,9 @@ class OperationalCriteria:
     project: str | None = None
     since: datetime | None = None
     until: datetime | None = None
+    model: str | None = None
+    harness_id: str | None = None
+    harness_version: str | None = None
 
 
 @domain_model
@@ -50,7 +65,7 @@ class DurationStats:
 @dataclass(frozen=True)
 class SpendStats:
     """One grouping key's usage/cost rollup — ``key`` is a node, graph, or chunk
-    id (one shape for all three). Holds a
+    id, or a model name (one shape for all four). Holds a
     :class:`~blizzard.hub.domain.chunk.model.UsageTotal`, not its fields flattened apart, so the
     lower-bound + PARTIAL contract keeps its one owner (``canon:one-owner``)."""
 
@@ -397,6 +412,11 @@ class IReadOperationalAnalytics(Protocol):
         two identical calls agree on. ``cursor`` is a prior
         :attr:`ChunkSpendPage.next_cursor`: any other value raises
         :class:`~blizzard.hub.domain.kernel.pagination.MalformedCursor`."""
+        ...
+
+    def spend_by_model(self, criteria: OperationalCriteria) -> list[SpendStats]:
+        """The same rollup grouped by ``usage_facts.model``, ordered by ``key`` ascending —
+        the key is the model name, both names ``None``."""
         ...
 
     def outcomes_by_node(self, criteria: OperationalCriteria) -> list[OutcomeStats]:

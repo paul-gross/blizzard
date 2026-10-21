@@ -300,7 +300,7 @@ def analytics_events(
     cli.show(body, EventListing(body["events"]))
 
 
-# `blizzard hub analytics summary` — one verb over the ten read
+# `blizzard hub analytics summary` — one verb over the eleven read
 # rollup routes, an explicit dataset→route table (a `-`↔`/` rule would 404 on
 # `agent-types`), and an explicit per-dataset filter-applicability table — a filter
 # inapplicable to the chosen dataset is refused, never silently dropped.
@@ -309,8 +309,15 @@ def analytics_events(
 #: dataset's own applicable set builds on top of.
 _SCOPE_FILTERS = frozenset({"graph_id", "source", "since", "until"})
 
-#: The four provenance filters the counts routes honor.
-_PROVENANCE_FILTERS = frozenset({"harness_id", "harness_version", "model", "effort"})
+#: The three provenance filters a usage fact records, so the operational datasets honor them too.
+_USAGE_PROVENANCE_FILTERS = frozenset({"harness_id", "harness_version", "model"})
+
+#: The four provenance filters the counts routes honor — ``effort`` lives on transcript
+#: events alone, so it is theirs only.
+_PROVENANCE_FILTERS = _USAGE_PROVENANCE_FILTERS | {"effort"}
+
+#: What the operational datasets take: the scope plus the usage-recorded provenance.
+_OPERATIONAL_FILTERS = _SCOPE_FILTERS | _USAGE_PROVENANCE_FILTERS
 
 #: The flag each filter's dest name renders as, for a per-dataset applicability error.
 _FLAG_NAMES = {
@@ -345,7 +352,7 @@ class _Dataset:
     streamable: bool = False
 
 
-#: Mints the ten read rollup routes' own criteria types, mirroring each route's own
+#: Mints the eleven read rollup routes' own criteria types, mirroring each route's own
 #: declared query params (``src/blizzard/hub/api/analytics.py``).
 _DATASETS: dict[str, _Dataset] = {
     "counts-files": _Dataset(
@@ -372,19 +379,22 @@ _DATASETS: dict[str, _Dataset] = {
         CountsListing,
         _SCOPE_FILTERS | _PROVENANCE_FILTERS | {"extractor_version", "kind", "tool", "subject_prefix"},
     ),
-    "durations-nodes": _Dataset("/api/analytics/durations/nodes", "durations", DurationsListing, _SCOPE_FILTERS),
-    "durations-graphs": _Dataset("/api/analytics/durations/graphs", "durations", DurationsListing, _SCOPE_FILTERS),
-    "spend-nodes": _Dataset("/api/analytics/spend/nodes", "spend", SpendListing, _SCOPE_FILTERS),
-    "spend-graphs": _Dataset("/api/analytics/spend/graphs", "spend", SpendListing, _SCOPE_FILTERS),
+    "durations-nodes": _Dataset("/api/analytics/durations/nodes", "durations", DurationsListing, _OPERATIONAL_FILTERS),
+    "durations-graphs": _Dataset(
+        "/api/analytics/durations/graphs", "durations", DurationsListing, _OPERATIONAL_FILTERS
+    ),
+    "spend-nodes": _Dataset("/api/analytics/spend/nodes", "spend", SpendListing, _OPERATIONAL_FILTERS),
+    "spend-graphs": _Dataset("/api/analytics/spend/graphs", "spend", SpendListing, _OPERATIONAL_FILTERS),
+    "spend-models": _Dataset("/api/analytics/spend/models", "spend", SpendListing, _OPERATIONAL_FILTERS),
     "spend-chunks": _Dataset(
         "/api/analytics/spend/chunks",
         "spend",
         ChunkSpendListing,
-        _SCOPE_FILTERS,
+        _OPERATIONAL_FILTERS,
         paginated=True,
         streamable=True,
     ),
-    "outcomes-nodes": _Dataset("/api/analytics/outcomes/nodes", "outcomes", OutcomesListing, _SCOPE_FILTERS),
+    "outcomes-nodes": _Dataset("/api/analytics/outcomes/nodes", "outcomes", OutcomesListing, _OPERATIONAL_FILTERS),
 }
 
 _SPEND_CHUNKS_NDJSON_PATH = "/api/analytics/spend/chunks/ndjson"

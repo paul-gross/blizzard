@@ -2185,6 +2185,10 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
         w.hub.services.operational_analytics.spend_by_graph(OperationalCriteria()),
         w.hub.services.operational_analytics.spend_by_graph(OperationalCriteria(project=w.project_id)),
     ),
+    (IReadOperationalAnalytics, "spend_by_model"): lambda w: (
+        w.hub.services.operational_analytics.spend_by_model(OperationalCriteria()),
+        w.hub.services.operational_analytics.spend_by_model(OperationalCriteria(project=w.project_id)),
+    ),
     (IReadOperationalAnalytics, "spend_by_chunk"): lambda w: (
         w.hub.services.operational_analytics.spend_by_chunk(OperationalCriteria(), limit=50),
         w.hub.services.operational_analytics.spend_by_chunk(OperationalCriteria(project=w.project_id), limit=50),

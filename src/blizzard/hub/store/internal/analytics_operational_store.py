@@ -102,6 +102,7 @@ def _duration_window_groups_stmt(stmts: ScopedStatements, criteria: OperationalC
     if criteria.graph_id is not None:
         stmt = stmt.where(t.c.graph_id == criteria.graph_id)
     stmt = _of_criteria_chunks(stmts, stmt, t.c.chunk_id, criteria)
+    stmt = _of_criteria_attempts(stmts, stmt, t.c.chunk_id, t.c.epoch, criteria)
     if criteria.since is not None:  # the half-open [since, until) bound `steps_in_window` owns, in SQL form
         stmt = stmt.where(t.c.recorded_at >= criteria.since)
     if criteria.until is not None:
@@ -151,6 +152,38 @@ def _decode_chunk_cursor(cursor: str) -> str:
     return parts[0]
 
 
+def _provenance_clauses(criteria: OperationalCriteria) -> list[Any]:
+    """The ``usage_facts`` predicates the criteria's provenance dimensions name — one place
+    both spend (a direct WHERE) and the attempt EXISTS below draw them from. A NULL
+    ``harness_id``/``harness_version`` never equals a value, so it matches no filter."""
+    u = s.usage_facts
+    given = (
+        (u.c.model, criteria.model),
+        (u.c.harness_id, criteria.harness_id),
+        (u.c.harness_version, criteria.harness_version),
+    )
+    return [col == value for col, value in given if value is not None]
+
+
+def _attempt_has_usage(stmts: ScopedStatements, criteria: OperationalCriteria, chunk_id: Any, epoch: Any) -> Any:
+    """A correlated ``EXISTS``: the lease attempt ``(chunk_id, epoch)`` recorded a usage fact
+    matching every provenance dimension of ``criteria`` (its attribution rule). Seeks
+    ``ix_usage_facts_tenant_chunk_id``; carries the tenant predicate through ``stmts``."""
+    u = s.usage_facts
+    inner = stmts.select(u, u.c.chunk_id).where(u.c.chunk_id == chunk_id, u.c.epoch == epoch)
+    return inner.where(*_provenance_clauses(criteria)).exists()
+
+
+def _of_criteria_attempts(
+    stmts: ScopedStatements, stmt: Select[Any], chunk_id: Any, epoch: Any, criteria: OperationalCriteria
+) -> Select[Any]:
+    """``stmt`` narrowed to the rows of lease attempts ``criteria``'s provenance admits;
+    unchanged when it names no provenance dimension."""
+    if not _provenance_clauses(criteria):
+        return stmt
+    return stmt.where(_attempt_has_usage(stmts, criteria, chunk_id, epoch))
+
+
 def _spend_filtered_stmt(stmts: ScopedStatements, criteria: OperationalCriteria, *cols: Any) -> Select[Any]:
     """``cols`` over ``usage_facts`` joined to its chunk — every grouping needs the join, since the
     graph filter narrows by the chunk's current graph pin, ``usage_facts`` carrying
@@ -161,6 +194,7 @@ def _spend_filtered_stmt(stmts: ScopedStatements, criteria: OperationalCriteria,
     if criteria.graph_id is not None:
         stmt = stmt.where(c.c.graph_id == criteria.graph_id)
     stmt = _of_criteria_chunks(stmts, stmt, u.c.chunk_id, criteria)
+    stmt = stmt.where(*_provenance_clauses(criteria))
     if criteria.since is not None:
         stmt = stmt.where(u.c.recorded_at >= criteria.since)
     if criteria.until is not None:
@@ -212,6 +246,11 @@ def _spend_by_graph_stmt(stmts: ScopedStatements, criteria: OperationalCriteria)
     return stmt.group_by(c.c.graph_id).order_by(c.c.graph_id.asc())
 
 
+def _spend_by_model_stmt(stmts: ScopedStatements, criteria: OperationalCriteria) -> Select[Any]:
+    """Each model row sums the usage facts recorded under that model name."""
+    return _spend_group_stmt(stmts, criteria, group_col=s.usage_facts.c.model)
+
+
 def _spend_by_chunk_stmt(
     stmts: ScopedStatements, criteria: OperationalCriteria, *, cursor: str | None, limit: int
 ) -> Select[Any]:
@@ -255,6 +294,7 @@ def _judged_distribution_stmt(stmts: ScopedStatements, criteria: OperationalCrit
     if criteria.graph_id is not None:
         stmt = stmt.where(t.c.graph_id == criteria.graph_id)
     stmt = _of_criteria_chunks(stmts, stmt, t.c.chunk_id, criteria)
+    stmt = _of_criteria_attempts(stmts, stmt, t.c.chunk_id, t.c.epoch, criteria)
     if criteria.since is not None:
         stmt = stmt.where(t.c.recorded_at >= criteria.since)
     if criteria.until is not None:
@@ -267,10 +307,13 @@ def _candidate_lease_epochs_stmt(stmts: ScopedStatements, criteria: OperationalC
     and whose *deduped* mint falls in the window — filtered after the A7 dedup via the
     subquery wrap below, not before it, so the window can't pick a different duplicate as
     "earliest mint" than the dedupe alone would. The graph filter is not pushed here: it
-    applies once ``resolve_attempt_failures`` has derived a failed attempt's own graph."""
+    applies once ``resolve_attempt_failures`` has derived a failed attempt's own graph. A
+    provenance filter narrows only these candidates: the transitions and migrations fetched
+    for their chunks stay whole, since the failed node is inferred from earlier movement."""
     sub = _lease_min_stmt(stmts).subquery()
     stmt = select(sub.c.chunk_id, sub.c.epoch, sub.c.minted_at)
     stmt = _of_criteria_chunks(stmts, stmt, sub.c.chunk_id, criteria)
+    stmt = _of_criteria_attempts(stmts, stmt, sub.c.chunk_id, sub.c.epoch, criteria)
     if criteria.since is not None:
         stmt = stmt.where(sub.c.minted_at >= criteria.since)
     if criteria.until is not None:
@@ -387,6 +430,11 @@ class AnalyticsOperationalStore:
     def spend_by_graph(self, criteria: OperationalCriteria) -> list[SpendStats]:
         with self._store.read("spend_by_graph") as conn:
             rows = conn.execute(_spend_by_graph_stmt(self._store, criteria)).all()
+        return [_to_spend_stats(row) for row in rows]
+
+    def spend_by_model(self, criteria: OperationalCriteria) -> list[SpendStats]:
+        with self._store.read("spend_by_model") as conn:
+            rows = conn.execute(_spend_by_model_stmt(self._store, criteria)).all()
         return [_to_spend_stats(row) for row in rows]
 
     def spend_by_chunk(self, criteria: OperationalCriteria, *, cursor: str | None = None, limit: int) -> ChunkSpendPage:

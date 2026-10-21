@@ -1,5 +1,5 @@
 """The analytics operational-datasets routes against a real hub:
-durations, spend, and outcomes each reflect a real completed step over the packaged
+durations, spend (by node and by model), and outcomes each reflect a real completed step over the packaged
 default graph's own entry node. Run with ``BLIZZARD_SERVICE=1``."""
 
 from __future__ import annotations
@@ -110,6 +110,15 @@ def test_the_three_datasets_reflect_a_real_completed_step_over_a_live_hub(tmp_pa
         spend_by_node = {row["key"]: row for row in spend.json()["spend"]}
         assert spend_by_node[node_id]["input_tokens"] == 100
         assert spend_by_node[node_id]["cost_partial"] is False
+
+        by_model = hub.get("/api/analytics/spend/models")
+        assert by_model.status_code == 200, by_model.text
+        assert {row["key"]: row["input_tokens"] for row in by_model.json()["spend"]} == {"claude-opus-4-8": 100}
+        other_model = hub.get("/api/analytics/durations/nodes", params={"model": "no-such-model"})
+        assert other_model.status_code == 200, other_model.text
+        assert other_model.json()["durations"] == []
+        same_model = hub.get("/api/analytics/durations/nodes", params={"model": "claude-opus-4-8"})
+        assert [row["key"] for row in same_model.json()["durations"]] == [node_id]
 
         outcomes = hub.get("/api/analytics/outcomes/nodes")
         assert outcomes.status_code == 200, outcomes.text
