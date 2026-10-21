@@ -29,6 +29,7 @@ from pathlib import Path
 import pytest
 from click.testing import CliRunner
 
+import blizzard.runner.process.internal.subprocess_child_processes as child_driver
 from blizzard.runner.cli import runner as runner_group
 from blizzard.runner.harness.compatibility import (
     PROBE_ROSTER,
@@ -70,6 +71,7 @@ from blizzard.runner.harness.opencode.compatibility.scratch_config import (
 from blizzard.runner.harness.opencode.compatibility.scratch_git import SubprocessOpenCodeScratchGit
 from blizzard.runner.harness.opencode.compatibility.transcript import TranscriptExportSample
 from blizzard.runner.harness.opencode.shapes import OpenCodeShapeError, parse_run_jsonl
+from tests.support_child_launch import CHILDREN, tool_env
 
 pytestmark = pytest.mark.component
 
@@ -124,8 +126,8 @@ def _probe(
         binary=_stub_binary(tmp_path / "bin"),
         model=MODEL,
         variant=VARIANT,
-        scratch_git=SubprocessOpenCodeScratchGit(),
-        process=process or SubprocessOpenCodeProcess(),
+        scratch_git=SubprocessOpenCodeScratchGit(children=CHILDREN, env=tool_env()),
+        process=process or SubprocessOpenCodeProcess(children=CHILDREN),
         compactor=_UnreachedCompactor(),
         transport=transport,
         attach_proxy_factory=LoopbackAttachProxyFactory(transport),
@@ -143,8 +145,8 @@ def test_compatibility_probe_requires_an_injected_compactor(tmp_path: Path) -> N
             binary=binary,
             model=MODEL,
             variant=VARIANT,
-            scratch_git=SubprocessOpenCodeScratchGit(),
-            process=SubprocessOpenCodeProcess(),
+            scratch_git=SubprocessOpenCodeScratchGit(children=CHILDREN, env=tool_env()),
+            process=SubprocessOpenCodeProcess(children=CHILDREN),
             transport=UrllibLoopbackTransport(),
             attach_proxy_factory=LoopbackAttachProxyFactory(UrllibLoopbackTransport()),
             auth_source=None,
@@ -289,7 +291,7 @@ def test_interactive_start_reaps_process_group_when_setup_is_interrupted(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     spawned: list[int] = []
-    real_fork = opencode_process.pty.fork
+    real_fork = child_driver.pty.fork
 
     def recording_fork() -> tuple[int, int]:
         child_pid, master_fd = real_fork()
@@ -300,11 +302,11 @@ def test_interactive_start_reaps_process_group_when_setup_is_interrupted(
         del fd
         raise KeyboardInterrupt
 
-    monkeypatch.setattr(opencode_process.pty, "fork", recording_fork)
+    monkeypatch.setattr(child_driver.pty, "fork", recording_fork)
     monkeypatch.setattr(opencode_process, "_set_interactive_terminal_size", interrupt_setup)
 
     with pytest.raises(KeyboardInterrupt):
-        SubprocessOpenCodeProcess().start_interactive(
+        SubprocessOpenCodeProcess(children=CHILDREN).start_interactive(
             [sys.executable, "-c", "import time; time.sleep(30)"],
             cwd=tmp_path,
             env=os.environ,
@@ -318,7 +320,7 @@ def test_interactive_start_reaps_process_group_when_setup_is_interrupted(
 
 @requires_landlock
 def test_interactive_start_gives_the_child_a_real_controlling_terminal(tmp_path: Path) -> None:
-    started = SubprocessOpenCodeProcess().start_interactive(
+    started = SubprocessOpenCodeProcess(children=CHILDREN).start_interactive(
         [
             sys.executable,
             "-c",
@@ -488,7 +490,7 @@ def test_model_tool_wrapper_cannot_read_disposable_auth(tmp_path: Path) -> None:
     scratch.chmod(0o777)
     marker = scratch / "auth-copy"
 
-    result = SubprocessOpenCodeProcess().run(
+    result = SubprocessOpenCodeProcess(children=CHILDREN).run(
         [str(roots.model_tool_shell), "-c", f"cat {auth_path} > {marker}"],
         cwd=scratch,
         env=child_env(None, roots),
@@ -499,7 +501,7 @@ def test_model_tool_wrapper_cannot_read_disposable_auth(tmp_path: Path) -> None:
     assert marker.read_bytes() == b""
 
     outside = tmp_path / "outside-write"
-    result = SubprocessOpenCodeProcess().run(
+    result = SubprocessOpenCodeProcess(children=CHILDREN).run(
         [str(roots.model_tool_shell), "-c", f"printf outside > {outside}"],
         cwd=scratch,
         env=child_env(None, roots),
@@ -522,7 +524,7 @@ def test_timeout_kills_and_reaps_an_opencode_descendant(tmp_path: Path) -> None:
         "time.sleep(30)\n"
     )
 
-    result = SubprocessOpenCodeProcess().run(
+    result = SubprocessOpenCodeProcess(children=CHILDREN).run(
         [sys.executable, str(launcher), str(marker)],
         cwd=tmp_path,
         env={},
@@ -536,7 +538,7 @@ def test_timeout_kills_and_reaps_an_opencode_descendant(tmp_path: Path) -> None:
 
 @requires_landlock
 def test_process_drains_both_pipes_without_unbounded_capture(tmp_path: Path) -> None:
-    result = SubprocessOpenCodeProcess().run(
+    result = SubprocessOpenCodeProcess(children=CHILDREN).run(
         [sys.executable, "-c", "import sys; sys.stdout.write('out' * 2000000); sys.stderr.write('err' * 2000000)"],
         cwd=tmp_path,
         env={},
@@ -562,7 +564,7 @@ def test_successful_run_rejects_and_reaps_a_pipe_closing_descendant(tmp_path: Pa
         "time.sleep(0.05)\n"
     )
 
-    result = SubprocessOpenCodeProcess().run(
+    result = SubprocessOpenCodeProcess(children=CHILDREN).run(
         [sys.executable, str(launcher), str(marker)],
         cwd=tmp_path,
         env={},

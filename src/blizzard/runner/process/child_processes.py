@@ -22,6 +22,8 @@ class Stream(enum.Enum):
 
     DEVNULL = enum.auto()
     PIPE = enum.auto()
+    #: The runner's own stream, for a stdout or stderr the caller leaves undirected.
+    INHERIT = enum.auto()
     #: Valid for stderr only: merge it into stdout.
     STDOUT = enum.auto()
 
@@ -98,9 +100,14 @@ class IChildProcesses(Protocol):
         env: ChildEnv,
         timeout: float,
         input: str | None = None,
+        input_settle: float = 0.0,
+        stdout: IO[bytes] | None = None,
     ) -> ChildRun:
         """Run to completion within ``timeout`` seconds; a timeout kills the whole group and is a result, never a
-        raise. Raises :class:`OSError` only when the child cannot be started."""
+        raise. ``input`` is written at once and stdin closed ``input_settle`` seconds later (within ``timeout``), so
+        a reply still in flight when EOF would drop it can land first. A ``stdout`` file receives the child's
+        stdout in place of the result's, which is then empty. Raises :class:`OSError` only when the child cannot
+        be started."""
         ...
 
     def spawn(

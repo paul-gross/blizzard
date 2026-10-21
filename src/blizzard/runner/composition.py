@@ -39,7 +39,7 @@ from blizzard.foundation.trace_export.internal.otlp import OtlpTraceExporter
 from blizzard.foundation.trace_export.settings import TracingSettings
 from blizzard.runner.config import HostWorkspace, RunnerConfig, SubscriptionDeclaration
 from blizzard.runner.config_table import ConfigError
-from blizzard.runner.environments.factory import build_workspace_provider
+from blizzard.runner.environments.factory import WorkspaceLaunch, build_workspace_provider
 from blizzard.runner.environments.workspaces import (
     IWorkspaceProviders,
     IWorkspaces,
@@ -86,7 +86,10 @@ from blizzard.runner.ingest import IIngestStores, ITokenFiles, RunnerIngest
 from blizzard.runner.lifecycle.host_lane_drain import HostLaneDrain
 from blizzard.runner.listeners import Listeners
 from blizzard.runner.loop.host_tick import HostTick
+from blizzard.runner.process.child_env import ChildEnv
+from blizzard.runner.process.child_processes import IChildProcesses
 from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
+from blizzard.runner.process.internal.subprocess_child_processes import SubprocessChildProcesses
 from blizzard.runner.runtime import migration_runner
 from blizzard.runner.store import MIGRATIONS_DIR
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
@@ -182,6 +185,8 @@ class HostProcess:
     events: EventBroker | None
     clock: SystemClock
     process: LinuxProcessProbe
+    #: The one launch seam every child of the host and its runners goes through.
+    children: IChildProcesses
     #: The worker telemetry receiver over the host's limiters, tallies and export — one per host, so every reader and
     #: writer of those counters shares them; each export names the runner it arrived under.
     telemetry_receiver: TelemetryReceiver
@@ -314,6 +319,10 @@ class RunnerProcess:
         return self.host.process
 
     @property
+    def children(self) -> IChildProcesses:
+        return self.host.children
+
+    @property
     def platform_tracing(self) -> IPlatformTracing:
         return self.host.platform_tracing
 
@@ -392,15 +401,20 @@ def _pool_held_ids(audit: IRunnerAudit, workspace_id: str) -> Callable[[], list[
 
 
 def build_workspaces(
-    declared: Sequence[HostWorkspace], host_root: Path, *, audit: IRunnerAudit | None = None
+    declared: Sequence[HostWorkspace],
+    host_root: Path,
+    *,
+    launch: WorkspaceLaunch,
+    audit: IRunnerAudit | None = None,
 ) -> WorkspaceRegistry:
     """The host's workspace registry: one provider per declared workspace, each with its spawn root and its standing
-    prompt resolved now — a missing prompt file or an unknown packaged sample is a start-up error. With ``audit``,
-    each provider reads its own pool's held set host-wide."""
+    prompt resolved now — a missing prompt file or an unknown packaged sample is a start-up error. Each provider
+    launches its ``git`` and ``winter`` children through ``launch``. With ``audit``, each provider reads its own
+    pool's held set host-wide."""
     entries = []
     for workspace in declared:
         held_ids = _pool_held_ids(audit, workspace.id) if audit is not None else None
-        provider = build_workspace_provider(workspace.settings(host_root), held_ids=held_ids)
+        provider = build_workspace_provider(workspace.settings(host_root), launch=launch, held_ids=held_ids)
         entries.append(
             WorkspaceEntry(
                 workspace.id, provider, spawn_root=provider.spawn_root(), prompt=workspace.resolved_prompt(host_root)
@@ -416,17 +430,23 @@ def bound_spawn_roots(config: RunnerConfig, workspaces: IWorkspaceSpawnRoots) ->
 
 
 def _credential_renewal_pass(
-    declarations: Sequence[SubscriptionDeclaration], host_stores: HostStores, clock: SystemClock
+    declarations: Sequence[SubscriptionDeclaration],
+    host_stores: HostStores,
+    clock: SystemClock,
+    *,
+    children: IChildProcesses,
+    env: ChildEnv,
 ) -> CredentialRenewalPass | None:
     """Every subscription the host declares paired with its provider's renewer binding, sharing one
-    one-shot subprocess seam; ``None`` when no provider binds one."""
-    subprocess = SubprocessOneShotProcess()
+    one-shot subprocess seam over ``children`` under the tool profile ``env``; ``None`` when no provider binds
+    one."""
+    subprocess = SubprocessOneShotProcess(children)
     renewable = [
         RenewableSubscription(
             slug=declaration.slug, sample_interval_seconds=declaration.sample_interval_seconds, renewer=renewer
         )
         for declaration in declarations
-        if (renewer := select_renewer(declaration, clock=clock, subprocess=subprocess)) is not None
+        if (renewer := select_renewer(declaration, clock=clock, subprocess=subprocess, env=env)) is not None
     ]
     if not renewable:
         return None
@@ -682,7 +702,14 @@ def _build_host_graph(
         metric_bounds = ReceiverBounds.fresh(clock)
         log_bounds = ReceiverBounds.fresh(clock)
         telemetry_names = declared_telemetry_names()
-        workspaces = build_workspaces(config.workspaces, config.root, audit=host_stores.runner_audit)
+        children = SubprocessChildProcesses()
+        tool_env = config.tool_env(TracingSettings.of(os.environ if environ is None else environ))
+        workspaces = build_workspaces(
+            config.workspaces,
+            config.root,
+            launch=WorkspaceLaunch(children=children, env=tool_env),
+            audit=host_stores.runner_audit,
+        )
         host_identity = HostIdentityHolder()
         # The one place a host's registration is derived: everything after reads it from the holder.
         host_registration = HostRegistrationHolder.for_host(registered=bool(host_token))
@@ -701,6 +728,7 @@ def _build_host_graph(
             events=events,
             clock=clock,
             process=LinuxProcessProbe(),
+            children=children,
             telemetry_receiver=TelemetryReceiver(
                 platform_tracing=platform_tracing,
                 received_telemetry=received_telemetry,
@@ -745,7 +773,9 @@ def _build_host_graph(
                     if host_hub is not None
                     else None
                 ),
-                credential_renewal=_credential_renewal_pass(subscriptions, host_stores, clock),
+                credential_renewal=_credential_renewal_pass(
+                    subscriptions, host_stores, clock, children=children, env=tool_env
+                ),
             ),
             usage_http_client=usage_http_client,
             flag_registry=config.flag_registry,
@@ -847,6 +877,7 @@ def _build_runner(
             harness_settings,
             executor=executor,
             process=host.process,
+            children=host.children,
             bundle=bundle,
             harness_telemetry_enabled=telemetry_enabled,
             runner_environ=runner_environ,
@@ -859,7 +890,10 @@ def _build_runner(
         health = HarnessHealthCache(
             clock=clock,
             probes=build_production_harness_health_probes(
-                harness_settings, spawn_roots=bound_spawn_roots(config, host.workspaces), corpus=corpus
+                harness_settings,
+                spawn_roots=bound_spawn_roots(config, host.workspaces),
+                corpus=corpus,
+                children=host.children,
             ),
             corpus=corpus,
             selftest_results=stores.selftest_results,

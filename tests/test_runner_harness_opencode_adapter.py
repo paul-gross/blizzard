@@ -47,6 +47,7 @@ from blizzard.runner.process.internal.linux_process_probe import LinuxProcessPro
 from tests.opencode_usage_limit_fixture import USAGE_LIMIT_EVENT
 from tests.repo_files import repo_root
 from tests.runner_fakes import FakeProbe, make_envelope
+from tests.support_child_launch import CHILDREN, version_probe
 from tests.support_opencode_binary import worker_binary
 
 # The oldest committed corpus inside the admitted range — stays correct as corpora are added.
@@ -84,9 +85,9 @@ def _opencode_resolves_on_path(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def _adapter(spawn_executor: Executor, **kwargs: Any) -> OpenCodeAdapter:
     process = kwargs.setdefault("process", FakeProbe())
-    kwargs.setdefault("launcher", ProcessLauncher(process, executor=spawn_executor))
+    kwargs.setdefault("launcher", ProcessLauncher(process, executor=spawn_executor, children=CHILDREN))
     kwargs.setdefault("worker_env", AllowlistedEnv.of(()))
-    return OpenCodeAdapter(**kwargs)
+    return OpenCodeAdapter(**kwargs, versions=version_probe())
 
 
 def _preamble(workdir: str, *, stdout_path: str = "", stderr_path: str = "") -> WorkerPreamble:
@@ -929,7 +930,8 @@ def test_resume_with_message_stamps_process_start_time_and_a_real_confirm_durabl
         worker_env=AllowlistedEnv.of(()),
         binary="opencode",
         process=probe,
-        launcher=ProcessLauncher(probe, executor=spawn_executor),
+        launcher=ProcessLauncher(probe, executor=spawn_executor, children=CHILDREN),
+        versions=version_probe(),
     )
 
     resumed = adapter.resume_with_message("/ws", "ses_recorded", "continue")

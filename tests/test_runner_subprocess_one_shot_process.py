@@ -11,15 +11,17 @@ import time
 
 import pytest
 
+from blizzard.runner.process.child_env import ChildEnv
 from blizzard.runner.subscriptions.internal.subprocess_one_shot_process import SubprocessOneShotProcess
+from tests.support_child_launch import CHILDREN
 
 pytestmark = pytest.mark.unit
 
-_INHERITED_ENV = dict(os.environ)
+_INHERITED_ENV = ChildEnv(tuple(os.environ.items()))
 
 
 def test_stdin_is_fed_to_the_child_and_its_stdout_is_captured() -> None:
-    result = SubprocessOneShotProcess().run(
+    result = SubprocessOneShotProcess(CHILDREN).run(
         [sys.executable, "-c", "import sys; sys.stdout.write(sys.stdin.read().upper())"],
         stdin="hello\n",
         timeout=5.0,
@@ -32,7 +34,7 @@ def test_stdin_is_fed_to_the_child_and_its_stdout_is_captured() -> None:
 
 
 def test_a_nonzero_exit_is_reported_without_raising() -> None:
-    result = SubprocessOneShotProcess().run(
+    result = SubprocessOneShotProcess(CHILDREN).run(
         [sys.executable, "-c", "import sys; sys.exit(3)"], stdin="", timeout=5.0, env=_INHERITED_ENV
     )
 
@@ -41,7 +43,7 @@ def test_a_nonzero_exit_is_reported_without_raising() -> None:
 
 
 def test_a_hung_child_is_killed_and_reported_as_a_timeout() -> None:
-    result = SubprocessOneShotProcess().run(
+    result = SubprocessOneShotProcess(CHILDREN).run(
         [sys.executable, "-c", "import time; time.sleep(60)"], stdin="", timeout=0.2, env=_INHERITED_ENV
     )
 
@@ -59,7 +61,9 @@ def test_a_timeout_terminates_the_whole_process_group_gracefully(tmp_path) -> No
         "time.sleep(60)\n"
     )
 
-    result = SubprocessOneShotProcess().run([sys.executable, "-c", script], stdin="", timeout=1.0, env=_INHERITED_ENV)
+    result = SubprocessOneShotProcess(CHILDREN).run(
+        [sys.executable, "-c", script], stdin="", timeout=1.0, env=_INHERITED_ENV
+    )
 
     assert result.timed_out is True
     grandchild = int(marker.read_text())
@@ -74,7 +78,9 @@ def test_a_timeout_terminates_the_whole_process_group_gracefully(tmp_path) -> No
 
 
 def test_a_missing_binary_is_reported_without_raising() -> None:
-    result = SubprocessOneShotProcess().run(["no-such-binary-anywhere"], stdin="", timeout=5.0, env=_INHERITED_ENV)
+    result = SubprocessOneShotProcess(CHILDREN).run(
+        ["no-such-binary-anywhere"], stdin="", timeout=5.0, env=_INHERITED_ENV
+    )
 
     assert result.exit_code is None
     assert result.timed_out is False
@@ -82,11 +88,11 @@ def test_a_missing_binary_is_reported_without_raising() -> None:
 
 
 def test_env_fully_replaces_the_childs_environment() -> None:
-    result = SubprocessOneShotProcess().run(
+    result = SubprocessOneShotProcess(CHILDREN).run(
         [sys.executable, "-c", "import os, sys; sys.stdout.write(repr(sorted(os.environ.keys())))"],
         stdin="",
         timeout=5.0,
-        env={"ONLY_THIS": "1"},
+        env=ChildEnv((("ONLY_THIS", "1"),)),
     )
 
     assert result.exit_code == 0
@@ -108,7 +114,7 @@ def test_settle_seconds_delays_closing_stdin_past_the_write() -> None:
         "sys.stdin.read()\n"
         "sys.stdout.write(str(time.monotonic() - start))\n"
     )
-    result = SubprocessOneShotProcess().run(
+    result = SubprocessOneShotProcess(CHILDREN).run(
         [sys.executable, "-c", script], stdin="", timeout=5.0, env=_INHERITED_ENV, settle_seconds=0.3
     )
 
@@ -118,7 +124,7 @@ def test_settle_seconds_delays_closing_stdin_past_the_write() -> None:
 
 def test_settle_seconds_zero_closes_immediately() -> None:
     start = time.monotonic()
-    result = SubprocessOneShotProcess().run(
+    result = SubprocessOneShotProcess(CHILDREN).run(
         [sys.executable, "-c", "import sys; sys.stdin.read()"], stdin="", timeout=5.0, env=_INHERITED_ENV
     )
     elapsed = time.monotonic() - start

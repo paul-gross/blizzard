@@ -21,6 +21,8 @@ from blizzard.runner.harness.opencode.compatibility.probe import (
 from blizzard.runner.harness.opencode.compatibility.process import SubprocessOpenCodeProcess, stop_started_process
 from blizzard.runner.harness.opencode.compatibility.scratch_git import SubprocessOpenCodeScratchGit
 from blizzard.runner.harness.opencode.paths import resolve_opencode_auth_path
+from blizzard.runner.process.child_env import AllowlistedEnv
+from blizzard.runner.process.internal.subprocess_child_processes import SubprocessChildProcesses
 
 
 @click.group("opencode")
@@ -62,13 +64,15 @@ def opencode_compatibility(
 ) -> None:
     """Prove an admitted OpenCode version in a disposable git repository and retain sanitized evidence."""
     try:
-        process = SubprocessOpenCodeProcess()
+        children = SubprocessChildProcesses()
+        process = SubprocessOpenCodeProcess(children)
         transport = UrllibLoopbackTransport()
         probe = OpenCodeCompatibilityProbe(
             binary=str(binary),
             model=model,
             variant=variant,
-            scratch_git=SubprocessOpenCodeScratchGit(),
+            # No operator passthrough: the scratch repository needs nothing beyond the base allowlist.
+            scratch_git=SubprocessOpenCodeScratchGit(children, AllowlistedEnv.of(()).tool()),
             process=process,
             compactor=SubprocessOpenCodeCompactor(
                 process,

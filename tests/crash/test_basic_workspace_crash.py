@@ -19,6 +19,7 @@ from tests.fleet_launchers import REPO, git_bare, mock_bin_dir, run_forge, run_h
 from tests.fleet_world import REPO_NAME
 from tests.runner_fakes import daemon_store
 from tests.support import free_port
+from tests.support_child_launch import workspace_launch
 
 pytestmark = pytest.mark.crash_sweep
 
@@ -122,7 +123,9 @@ def test_basic_runner_releases_and_reclaims_after_abandon_kill9(
                 store = daemon_store(engine)
                 assert chunk_id not in store.held_environment_ids()
                 provider = build_workspace_provider(
-                    config.home_workspace.settings(config.root), held_ids=store.held_environment_ids
+                    config.home_workspace.settings(config.root),
+                    launch=workspace_launch(),
+                    held_ids=store.held_environment_ids,
                 )
                 assert provider.repos(chunk_id) == [], "released worktree remained authorized after process death"
             finally:

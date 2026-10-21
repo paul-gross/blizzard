@@ -1,22 +1,27 @@
-"""Subprocess-git adapter for the selftest scratch-repo seam (package-private).
+"""Git adapter for the selftest scratch-repo seam (package-private).
 
-All ``subprocess``/filesystem usage for the selftest's scratch repo is confined here
-(``bzh:pluggable-seams``): a real ``tempfile`` directory, ``git init``-ed and seeded with
-one baseline commit, torn down on context-manager exit.
+All git and filesystem usage for the selftest's scratch repo is confined here
+(``bzh:pluggable-seams``), each ``git`` launched through the seam under the tool profile: a real
+``tempfile`` directory, ``git init``-ed and seeded with one baseline commit, torn down on
+context-manager exit.
 """
 
 from __future__ import annotations
 
-import subprocess
 import tempfile
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
 from blizzard.foundation.logging import get_logger
+from blizzard.runner.process.child_env import ChildEnv
+from blizzard.runner.process.child_processes import IChildProcesses
 from blizzard.runner.selftest.scratch_git import IScratchGit, ScratchRepo
 
 _log = get_logger("blizzard.runner.selftest")
+
+# Bounds each scratch git call: a wedged git fails the selftest rather than hanging it.
+_SCRATCH_GIT_TIMEOUT_SECONDS = 30.0
 
 
 class ScratchGitError(RuntimeError):
@@ -25,6 +30,10 @@ class ScratchGitError(RuntimeError):
 
 class SubprocessScratchGit:
     """Mint a throwaway, single-commit git repo under a real temp dir, via the ``git`` CLI."""
+
+    def __init__(self, children: IChildProcesses, env: ChildEnv) -> None:
+        self._children = children
+        self._env = env
 
     @contextmanager
     def new_scratch_repo(self) -> Iterator[ScratchRepo]:
@@ -46,8 +55,13 @@ class SubprocessScratchGit:
             return 0
 
     def _git(self, cwd: Path, *args: str) -> str:
-        result = subprocess.run(["git", "-C", str(cwd), *args], capture_output=True, text=True)
-        if result.returncode != 0:
+        result = self._children.run(
+            ["git", "-C", str(cwd), *args], cwd=None, env=self._env, timeout=_SCRATCH_GIT_TIMEOUT_SECONDS
+        )
+        if result.timed_out:
+            _log.error("git timed out", args=list(args), cwd=str(cwd), timeout=_SCRATCH_GIT_TIMEOUT_SECONDS)
+            raise ScratchGitError(f"git {' '.join(args)} timed out in {cwd} after {_SCRATCH_GIT_TIMEOUT_SECONDS}s")
+        if result.exit_code != 0:
             detail = (result.stderr or result.stdout).strip()
             _log.error("git failed", args=list(args), cwd=str(cwd), detail=detail)
             raise ScratchGitError(f"git {' '.join(args)} failed in {cwd}: {detail}")

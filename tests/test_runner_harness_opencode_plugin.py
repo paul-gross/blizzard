@@ -32,6 +32,7 @@ from blizzard.runner.harness.worker_hooks import HEARTBEAT_HOOK_COMMAND
 from blizzard.runner.process.child_env import AllowlistedEnv
 from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
 from tests.runner_fakes import make_envelope
+from tests.support_child_launch import CHILDREN, version_probe
 from tests.support_opencode_binary import worker_binary
 
 _BLIZZARD_ENV_NAME = re.compile(r"BLIZZARD_[A-Z_]+")
@@ -138,8 +139,9 @@ def test_a_plugin_reference_does_not_change_fake_binary_output_parsing(
             worker_env=AllowlistedEnv.of(()),
             binary=binary,
             process=probe,
-            launcher=ProcessLauncher(probe, executor=spawn_executor),
+            launcher=ProcessLauncher(probe, executor=spawn_executor, children=CHILDREN),
             worker_config_path=worker_config_path,
+            versions=version_probe(),
         )
         pending = adapter.spawn(envelope, _preamble(str(workdir), stdout_path=str(stdout_path)), session_hint="hint")
         pending.confirm_durable()  # stands in for `Spawner.spawn`'s own call

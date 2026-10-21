@@ -18,6 +18,7 @@ from blizzard.runner.harness.offline_compatibility import admitted_corpus_versio
 from blizzard.runner.harness.opencode.compatibility.probe import ADMITTED_OPENCODE_RANGE
 from blizzard.runner.harness.opencode.health import OpenCodeHealthProbe
 from tests.repo_files import repo_root
+from tests.support_child_launch import version_probe
 
 pytestmark = pytest.mark.component
 
@@ -33,7 +34,7 @@ def _manifest() -> dict:
 
 
 def test_opencode_health_probe_declares_the_pinned_versions_absences() -> None:
-    probe = OpenCodeHealthProbe("opencode", auth_path=None, corpus=CommittedCorpus())
+    probe = OpenCodeHealthProbe("opencode", auth_path=None, corpus=CommittedCorpus(), versions=version_probe())
 
     manifest = _manifest()
     assert probe.supported_version() == ADMITTED_OPENCODE_RANGE
@@ -56,7 +57,7 @@ def test_opencode_health_probe_declares_the_pinned_versions_absences() -> None:
 
 
 def test_claude_code_health_probe_declares_an_admitted_range_and_no_degradations() -> None:
-    probe = ClaudeCodeHealthProbe("claude")
+    probe = ClaudeCodeHealthProbe("claude", versions=version_probe())
 
     assert probe.supported_version() == ADMITTED_CLAUDE_CODE_RANGE
     assert probe.classifies_offline() is False
@@ -67,7 +68,7 @@ def test_opencode_health_probe_construction_survives_a_missing_corpus_manifest(t
     """Construction over a corpus root with no manifest does not raise.
     ``supported_version`` still reports the declared range; ``declared_degradations`` is
     empty since there is no manifest to read one from."""
-    probe = OpenCodeHealthProbe("opencode", auth_path=None, corpus=CommittedCorpus(tmp_path))
+    probe = OpenCodeHealthProbe("opencode", auth_path=None, corpus=CommittedCorpus(tmp_path), versions=version_probe())
 
     assert probe.supported_version() == ADMITTED_OPENCODE_RANGE
     assert probe.declared_degradations() == ()
@@ -76,7 +77,9 @@ def test_opencode_health_probe_construction_survives_a_missing_corpus_manifest(t
 def test_opencode_health_probe_declared_degradations_come_from_the_corpus_manifest() -> None:
     """``declared_degradations`` equals the committed corpus manifest's entries, read from
     ``DEFAULT_CORPUS_ROOT``."""
-    probe = OpenCodeHealthProbe("opencode", auth_path=None, corpus=CommittedCorpus(DEFAULT_CORPUS_ROOT))
+    probe = OpenCodeHealthProbe(
+        "opencode", auth_path=None, corpus=CommittedCorpus(DEFAULT_CORPUS_ROOT), versions=version_probe()
+    )
 
     manifest = _manifest()
     manifest_degradations = {(entry["probe"], entry["summary"]) for entry in manifest["declared_degradations"]}

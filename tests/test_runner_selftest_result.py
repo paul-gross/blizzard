@@ -21,6 +21,7 @@ from blizzard.runner.lifecycle.judgement.internal.elicitation_files import Elici
 from blizzard.runner.selftest.internal.subprocess_scratch_git import SubprocessScratchGit
 from blizzard.runner.selftest.service import SelfTestService
 from tests.runner_fakes import make_store
+from tests.support_child_launch import CHILDREN, tool_env
 from tests.test_runner_selftest import _FixedPidAdapter, _RecordingProcessProbe
 
 pytestmark = pytest.mark.component
@@ -86,7 +87,7 @@ def test_selftest_service_persists_a_completed_runs_outcome_through_a_wired_repo
     clock = FixedClock(instant=datetime(2026, 1, 1, tzinfo=UTC))
     adapter = _FixedPidAdapter(spawn_pid=111, resume_pid=222)
     service = SelfTestService(
-        scratch_git=SubprocessScratchGit(),
+        scratch_git=SubprocessScratchGit(children=CHILDREN, env=tool_env()),
         process=_RecordingProcessProbe(),
         elicitation_replies=ElicitationFiles(root=""),
         clock=clock,

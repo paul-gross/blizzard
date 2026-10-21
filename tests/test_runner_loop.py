@@ -93,6 +93,7 @@ from tests.runner_fakes import (
     runner_store_errors,
     serving,
 )
+from tests.support_child_launch import CHILDREN, version_probe
 
 _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
 _ALIVE = (100, "start-100")  # (pid, start_time) for a running worker
@@ -578,7 +579,8 @@ def test_harness_selection_single_member_selects_regardless_of_model_resolvabili
         binary="claude",
         model="claude-opus-5",
         process=FakeProbe(),
-        launcher=ProcessLauncher(FakeProbe(), executor=spawn_executor),
+        launcher=ProcessLauncher(FakeProbe(), executor=spawn_executor, children=CHILDREN),
+        versions=version_probe(),
     )
     registry = HarnessRegistry({"h1": HarnessBinding(adapter=adapter, transcript_source=NullTranscriptSource())})
     envelope = make_envelope(
@@ -620,7 +622,8 @@ def test_harness_selection_native_name_in_a_two_member_set_does_not_match_the_ot
         binary="claude",
         model="claude-opus-5",
         process=FakeProbe(),
-        launcher=ProcessLauncher(FakeProbe(), executor=spawn_executor),
+        launcher=ProcessLauncher(FakeProbe(), executor=spawn_executor, children=CHILDREN),
+        versions=version_probe(),
     )
     foreign = FakeHarness(handle=WorkerHandle(session_id="s", pid=1, process_start_time="t", pgid=1), verdict=None)
     foreign.resolved_model_strict = None  # "sonnet" means nothing to a harness that isn't claude_code

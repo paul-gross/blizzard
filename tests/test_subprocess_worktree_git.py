@@ -13,13 +13,13 @@ from pathlib import Path
 
 import pytest
 
-from blizzard.runner.environments.internal.git import SubprocessEnvGit
 from blizzard.runner.environments.internal.subprocess_worktree_git import WORKTREE_GIT_TIMEOUT, SubprocessWorktreeGit
 from blizzard.runner.environments.worktree import IWorktreeGit
+from tests.support_child_launch import env_git
 
 
 def _adapter() -> SubprocessWorktreeGit:
-    return SubprocessWorktreeGit(SubprocessEnvGit(WORKTREE_GIT_TIMEOUT))
+    return SubprocessWorktreeGit(env_git(WORKTREE_GIT_TIMEOUT))
 
 
 def _git(cwd: Path, *args: str) -> str:

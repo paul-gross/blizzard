@@ -1,56 +1,76 @@
-"""``src/blizzard/runner/harness/opencode/transcript/export.py`` — the ``opencode export`` subprocess seam (unit).
+"""``src/blizzard/runner/harness/opencode/transcript/export.py`` — the ``opencode export`` child seam (unit).
 
 Mirrors ``tests/test_runner_harness_adapter.py``'s own ``observe_version`` coverage: a scripted
-``subprocess.run``, never a real ``opencode`` binary."""
+launch seam, never a real ``opencode`` binary."""
 
 from __future__ import annotations
 
-import subprocess
+from collections.abc import Callable, Sequence
+from pathlib import Path
+from typing import IO, Any
 
 import pytest
 
 from blizzard.runner.harness.opencode.transcript.export import OpenCodeExportError, SubprocessOpenCodeExporter
-from blizzard.runner.process.child_env import AllowlistedEnv
+from blizzard.runner.process.child_env import AllowlistedEnv, ChildEnv
+from blizzard.runner.process.child_processes import ChildRun, ShellCommand
 
-_EMPTY = AllowlistedEnv.of(())
+
+class _ScriptedChildren:
+    """A launch seam whose ``run`` records its call and answers through ``reply``."""
+
+    def __init__(self, reply: Callable[[IO[bytes] | None], ChildRun]) -> None:
+        self.reply = reply
+        self.calls: list[dict[str, Any]] = []
+
+    def run(
+        self,
+        command: Sequence[str] | ShellCommand,
+        *,
+        cwd: Path | str | None,
+        env: ChildEnv,
+        timeout: float,
+        input: str | None = None,
+        input_settle: float = 0.0,
+        stdout: IO[bytes] | None = None,
+    ) -> ChildRun:
+        self.calls.append({"command": command, "cwd": cwd, "env": env.variables, "input": input, "stdout": stdout})
+        return self.reply(stdout)
+
+
+def _writes(text: str, *, exit_code: int = 0, stderr: str = "") -> Callable[[IO[bytes] | None], ChildRun]:
+    def reply(stdout: IO[bytes] | None) -> ChildRun:
+        assert stdout is not None
+        stdout.write(text.encode())
+        return ChildRun(exit_code=exit_code, stdout="", stderr=stderr, timed_out=False)
+
+    return reply
+
+
+def _exporter(children: _ScriptedChildren, worker_env: AllowlistedEnv | None = None, **kw: Any) -> Any:
+    env = (worker_env or AllowlistedEnv.of(())).tool()
+    return SubprocessOpenCodeExporter(binary="opencode", children=children, env=env, **kw)  # type: ignore[arg-type]
 
 
 @pytest.mark.unit
-def test_export_returns_stdout_on_success(monkeypatch: pytest.MonkeyPatch) -> None:
-    captured: dict[str, object] = {}
+def test_export_returns_stdout_on_success() -> None:
+    children = _ScriptedChildren(_writes('{"info": {}}'))
 
-    def _run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
-        captured["cmd"] = cmd
-        captured["kwargs"] = kwargs
-        kwargs["stdout"].write('{"info": {}}')  # type: ignore[union-attr]  # a real file, per the export seam
-        return subprocess.CompletedProcess(cmd, 0, stdout=None, stderr="")
-
-    monkeypatch.setattr(subprocess, "run", _run)
-    exporter = SubprocessOpenCodeExporter(binary="opencode", worker_env=_EMPTY)
-
-    assert exporter.export("sess-1") == '{"info": {}}'
-    assert captured["cmd"] == ["opencode", "export", "sess-1"]
-    assert "cwd" not in captured["kwargs"]  # type: ignore[operator]  # no cwd — export resolves by id alone
-    assert captured["kwargs"]["stdin"] is subprocess.DEVNULL  # type: ignore[index]  # never the daemon's own stdin
+    assert _exporter(children).export("sess-1") == '{"info": {}}'
+    call = children.calls[0]
+    assert call["command"] == ["opencode", "export", "sess-1"]
+    assert call["cwd"] is None  # no cwd — export resolves by id alone
+    assert call["input"] is None  # stdin closed, never the daemon's own
 
 
 @pytest.mark.unit
-def test_export_captures_stdout_through_a_file_never_a_pipe(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_export_captures_stdout_through_a_file_never_a_pipe() -> None:
     """The regression this seam exists to prevent: a piped capture silently truncates a real
     ``opencode export``'s output past the kernel pipe buffer (64 KiB on Linux)."""
-    captured: dict[str, object] = {}
+    children = _ScriptedChildren(_writes("x" * 200_000))
 
-    def _run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
-        captured["kwargs"] = kwargs
-        kwargs["stdout"].write("x" * 200_000)  # type: ignore[union-attr]  # past one pipe buffer
-        return subprocess.CompletedProcess(cmd, 0, stdout=None, stderr="")
-
-    monkeypatch.setattr(subprocess, "run", _run)
-    exporter = SubprocessOpenCodeExporter(binary="opencode", worker_env=_EMPTY)
-
-    assert len(exporter.export("sess-1")) == 200_000
-    assert "capture_output" not in captured["kwargs"]  # type: ignore[operator]
-    assert captured["kwargs"]["stdout"] is not subprocess.PIPE  # type: ignore[index]
+    assert len(_exporter(children).export("sess-1")) == 200_000
+    assert children.calls[0]["stdout"] is not None
 
 
 @pytest.mark.unit
@@ -61,20 +81,11 @@ def test_export_env_excludes_the_hub_token_and_an_unlisted_sentinel(monkeypatch:
     monkeypatch.setenv("BZ_HUB_TOKEN", "super-secret-token")
     monkeypatch.setenv("MY_UNLISTED_SENTINEL_VAR", "should-not-leak")
     monkeypatch.setenv("PATH", "/usr/bin:/bin")
-    captured: dict[str, object] = {}
+    children = _ScriptedChildren(_writes("{}"))
 
-    def _run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
-        captured["kwargs"] = kwargs
-        kwargs["stdout"].write("{}")  # type: ignore[union-attr]
-        return subprocess.CompletedProcess(cmd, 0, stdout=None, stderr="")
+    _exporter(children).export("sess-1")
 
-    monkeypatch.setattr(subprocess, "run", _run)
-    exporter = SubprocessOpenCodeExporter(binary="opencode", worker_env=_EMPTY)
-
-    exporter.export("sess-1")
-
-    env = captured["kwargs"]["env"]  # type: ignore[index]
-    assert env is not None
+    env = children.calls[0]["env"]
     assert "BZ_HUB_TOKEN" not in env
     assert "MY_UNLISTED_SENTINEL_VAR" not in env
     assert env["PATH"] == "/usr/bin:/bin"
@@ -83,52 +94,33 @@ def test_export_env_excludes_the_hub_token_and_an_unlisted_sentinel(monkeypatch:
 @pytest.mark.unit
 def test_export_env_passthrough_admits_an_operator_named_var(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("MY_HARNESS_QUIRK", "needed-by-the-real-binary")
-    captured: dict[str, object] = {}
+    children = _ScriptedChildren(_writes("{}"))
 
-    def _run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
-        captured["kwargs"] = kwargs
-        kwargs["stdout"].write("{}")  # type: ignore[union-attr]
-        return subprocess.CompletedProcess(cmd, 0, stdout=None, stderr="")
+    _exporter(children, AllowlistedEnv.of(("MY_HARNESS_QUIRK",))).export("sess-1")
 
-    monkeypatch.setattr(subprocess, "run", _run)
-    exporter = SubprocessOpenCodeExporter(binary="opencode", worker_env=AllowlistedEnv.of(("MY_HARNESS_QUIRK",)))
-
-    exporter.export("sess-1")
-
-    env = captured["kwargs"]["env"]  # type: ignore[index]
-    assert env["MY_HARNESS_QUIRK"] == "needed-by-the-real-binary"
+    assert children.calls[0]["env"]["MY_HARNESS_QUIRK"] == "needed-by-the-real-binary"
 
 
 @pytest.mark.unit
-def test_export_nonzero_exit_raises_with_a_stderr_tail(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        subprocess, "run", lambda *a, **kw: subprocess.CompletedProcess(a[0], 1, stdout=None, stderr="session gone")
-    )
-    exporter = SubprocessOpenCodeExporter(binary="opencode", worker_env=_EMPTY)
+def test_export_nonzero_exit_raises_with_a_stderr_tail() -> None:
+    children = _ScriptedChildren(_writes("", exit_code=1, stderr="session gone"))
 
     with pytest.raises(OpenCodeExportError, match="session gone"):
-        exporter.export("sess-1")
+        _exporter(children).export("sess-1")
 
 
 @pytest.mark.unit
-def test_export_timeout_raises(monkeypatch: pytest.MonkeyPatch) -> None:
-    def _hung(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
-        raise subprocess.TimeoutExpired(cmd="opencode", timeout=5)
+def test_export_timeout_raises() -> None:
+    children = _ScriptedChildren(lambda _stdout: ChildRun(exit_code=None, stdout="", stderr="", timed_out=True))
 
-    monkeypatch.setattr(subprocess, "run", _hung)
-    exporter = SubprocessOpenCodeExporter(binary="opencode", worker_env=_EMPTY, timeout=5)
-
-    with pytest.raises(OpenCodeExportError):
-        exporter.export("sess-1")
+    with pytest.raises(OpenCodeExportError, match="timed out"):
+        _exporter(children, timeout=5).export("sess-1")
 
 
 @pytest.mark.unit
-def test_export_missing_binary_raises(monkeypatch: pytest.MonkeyPatch) -> None:
-    def _missing(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
+def test_export_missing_binary_raises() -> None:
+    def _missing(_stdout: IO[bytes] | None) -> ChildRun:
         raise OSError("no such file or directory: 'opencode'")
 
-    monkeypatch.setattr(subprocess, "run", _missing)
-    exporter = SubprocessOpenCodeExporter(binary="opencode", worker_env=_EMPTY)
-
     with pytest.raises(OpenCodeExportError):
-        exporter.export("sess-1")
+        _exporter(_ScriptedChildren(_missing)).export("sess-1")

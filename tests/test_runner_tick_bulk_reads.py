@@ -50,6 +50,7 @@ from tests.runner_fakes import (
     serving,
     single_workspace,
 )
+from tests.support_child_launch import CHILDREN, version_probe
 
 pytestmark = pytest.mark.component
 
@@ -392,7 +393,8 @@ def _status_service(spawn_executor: Executor, store: SqlAlchemyRunnerStore) -> R
                         binary="claude",
                         permission_mode="bypassPermissions",
                         process=probe,
-                        launcher=ProcessLauncher(probe, executor=spawn_executor),
+                        launcher=ProcessLauncher(probe, executor=spawn_executor, children=CHILDREN),
+                        versions=version_probe(),
                     )
                 )
             }

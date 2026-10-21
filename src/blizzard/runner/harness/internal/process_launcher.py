@@ -1,4 +1,4 @@
-"""The ``subprocess``-backed driver behind ``IProcessLauncher``: every adapter's worker, judge, or
+"""The launch-seam driver behind ``IProcessLauncher``: every adapter's worker, judge, or
 resume child is launched through :class:`ProcessLauncher`, so it always gets its own group and a
 parent-death signal (``bzh:deterministic-shell``). ``defer_disarm=True`` holds the real binary behind
 a trampoline until ``confirm_durable()`` receives its disarm acknowledgement."""
@@ -11,13 +11,13 @@ import os
 import select
 import shutil
 import signal
-import subprocess
 import sys
 from collections.abc import Callable
 from concurrent.futures import Executor
-from typing import IO
 
 from blizzard.runner.harness.process_launch import IProcessLauncher, LaunchedProcess
+from blizzard.runner.process.child_env import ChildEnv
+from blizzard.runner.process.child_processes import IChildProcesses, ISpawnedChild, Stream, StreamTarget
 from blizzard.runner.process.probe import IProcessProbe
 
 # ``man 2 prctl`` — arms the child's own death signal (the trampoline clears it with a literal 0).
@@ -30,7 +30,7 @@ _PRCTL = _LIBC.prctl
 
 
 def _die_with_parent() -> None:
-    """``preexec_fn``: runs in the forked child, after ``fork()`` and before ``exec()``.
+    """``child_setup``: runs in the forked child, after ``fork()`` and before ``exec()``.
     Arms ``PR_SET_PDEATHSIG`` so a launcher crash — not a graceful exit — still reaps
     every child it owns. The "parent" ``prctl`` tracks is the OS *thread* that called it
     (this launcher, on its ``executor``'s worker — see :class:`ProcessLauncher`), unaffected
@@ -63,26 +63,27 @@ os.execvp(argv[0], argv)
 
 class ProcessLauncher:
     """The one production :class:`IProcessLauncher` — every adapter launches through this.
-    ``executor`` is required: the composition root injects the one it owns, so both
-    bindings share it."""
+    ``executor`` and ``children`` are required: the composition root injects the ones it owns, so both
+    bindings share them."""
 
-    def __init__(self, process: IProcessProbe, *, executor: Executor) -> None:
+    def __init__(self, process: IProcessProbe, *, executor: Executor, children: IChildProcesses) -> None:
         self._process = process
         self._executor = executor
+        self._children = children
 
     def launch(
         self,
         argv: list[str],
         *,
         cwd: str | None,
-        env: dict[str, str],
-        stdout: IO[bytes] | int | None,
-        stderr: IO[bytes] | int | None,
+        env: ChildEnv,
+        stdout: StreamTarget,
+        stderr: StreamTarget,
         defer_disarm: bool = False,
     ) -> LaunchedProcess:
         if not defer_disarm:
             return self._launch(argv, cwd=cwd, env=env, stdout=stdout, stderr=stderr)
-        # The deferred `exec()` runs inside the trampoline, so `Popen`'s own errpipe never
+        # The deferred `exec()` runs inside the trampoline, so the spawn's own exec error never
         # sees a bad `argv[0]` — reproduce that one guarantee synchronously, up front.
         _ensure_executable(argv[0], cwd=cwd, env=env)
         # `pass_fds` inherits only the trampoline's own read end — `argv` never sees it.
@@ -118,9 +119,9 @@ class ProcessLauncher:
         argv: list[str],
         *,
         cwd: str | None,
-        env: dict[str, str],
-        stdout: IO[bytes] | int | None,
-        stderr: IO[bytes] | int | None,
+        env: ChildEnv,
+        stdout: StreamTarget,
+        stderr: StreamTarget,
     ) -> LaunchedProcess:
         """The plain, non-deferred launch: the real binary directly, armed for its whole life —
         the right one for a caller with no durable-record milestone of its own to defer a
@@ -135,29 +136,28 @@ class ProcessLauncher:
         argv: list[str],
         *,
         cwd: str | None,
-        env: dict[str, str],
-        stdout: IO[bytes] | int | None,
-        stderr: IO[bytes] | int | None,
+        env: ChildEnv,
+        stdout: StreamTarget,
+        stderr: StreamTarget,
         pass_fds: tuple[int, ...] = (),
-    ) -> subprocess.Popen[bytes]:
+    ) -> ISpawnedChild:
         # fork()/exec() runs on `self._executor`'s worker thread, not the caller's;
         # this call blocks for it, so the caller's own timing is unchanged.
         return self._executor.submit(
-            subprocess.Popen,  # argv is adapter-composed, never shell-interpreted
+            self._children.spawn,  # argv is adapter-composed, never shell-interpreted
             argv,
             cwd=cwd,
             env=env,
             # pinned by `test_a_worker_never_inherits_the_daemons_open_stdin`
-            stdin=subprocess.DEVNULL,
+            stdin=Stream.DEVNULL,
             stdout=stdout,
             stderr=stderr,
-            start_new_session=True,
-            preexec_fn=_die_with_parent,
+            child_setup=_die_with_parent,
             pass_fds=pass_fds,
         ).result()
 
 
-def _ensure_executable(argv0: str, *, cwd: str | None, env: dict[str, str]) -> None:
+def _ensure_executable(argv0: str, *, cwd: str | None, env: ChildEnv) -> None:
     """Raise exactly where ``execvp(argv0, ...)`` would later fail inside the trampoline:
     a path-shaped ``argv0`` resolves relative to ``cwd``; a bare name searches the child's
     own ``PATH``, never the launcher's ambient one. Missing raises :class:`FileNotFoundError`
@@ -169,7 +169,7 @@ def _ensure_executable(argv0: str, *, cwd: str | None, env: dict[str, str]) -> N
             if os.access(candidate, os.X_OK):
                 return
             raise PermissionError(errno.EACCES, "Permission denied", argv0)
-    elif shutil.which(argv0, path=env.get("PATH")) is not None:
+    elif shutil.which(argv0, path=env.variables.get("PATH")) is not None:
         return
     raise FileNotFoundError(errno.ENOENT, "No such file or directory", argv0)
 

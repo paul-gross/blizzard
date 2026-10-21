@@ -3,11 +3,12 @@ for a vendor CLI that reads its request off stdin and exits on EOF (``bzh:plugga
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Protocol
 
 from blizzard.foundation.roles import domain_model
+from blizzard.runner.process.child_env import ChildEnv
 
 __all__ = ["IOneShotProcess", "OneShotResult"]
 
@@ -30,11 +31,11 @@ class IOneShotProcess(Protocol):
     """Run one bounded, argv-based child process to completion, capturing its output."""
 
     def run(
-        self, argv: Sequence[str], *, stdin: str, timeout: float, env: Mapping[str, str], settle_seconds: float = 0.0
+        self, argv: Sequence[str], *, stdin: str, timeout: float, env: ChildEnv, settle_seconds: float = 0.0
     ) -> OneShotResult:
         """Run ``argv`` with ``stdin`` written to its standard input, under a ``timeout`` in
-        seconds. ``env`` replaces the child's environment entirely — no "inherit the caller's
-        own" default, so every caller states what a vendor CLI needs to see. ``stdin`` is closed
+        seconds. ``env`` is the child's whole environment — an allowlist profile with any
+        per-launch addition stated, never the caller's own. ``stdin`` is closed
         (EOF) ``settle_seconds`` after it is written, not at once, so a reply still being produced
         is never cut off; 0 closes right away. A timeout kills the child; a launch failure is caught."""
         ...

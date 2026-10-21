@@ -7,13 +7,16 @@ from pathlib import Path
 
 import pytest
 
+from blizzard.runner.config import HostWorkspace
 from blizzard.runner.environments.factory import build_workspace_provider
 from blizzard.runner.environments.internal import basic_provider
+from blizzard.runner.environments.internal import git as env_git_module
 from blizzard.runner.environments.internal.basic_provider import BasicWorkspaceProvider
 from blizzard.runner.environments.internal.git import EnvGitError
 from blizzard.runner.environments.provider import EnvironmentPreparationError, WorkspaceAcquisitionError, WorkspaceRepo
 from tests.config_inputs import init_host
 from tests.host_files import load_runner_config
+from tests.support_child_launch import env_git, workspace_launch
 
 
 def git(cwd: Path, *args: str) -> None:
@@ -45,7 +48,7 @@ def test_scaffolded_runner_uses_an_ordinary_directory_without_winter(tmp_path: P
     config_file = runtime / "blizzard-host.toml"
     config_file.write_text(config_file.read_text() + f'\n[[workspace.repo]]\nname = "toy"\nurl = "{repo.url}"\n')
     config = load_runner_config(runtime)
-    provider = build_workspace_provider(config.home_workspace.settings(config.root))
+    provider = build_workspace_provider(config.home_workspace.settings(config.root), launch=workspace_launch())
 
     assert config.home_workspace.provider == "basic"
     assert isinstance(provider, BasicWorkspaceProvider)
@@ -58,7 +61,7 @@ def test_scaffolded_runner_uses_an_ordinary_directory_without_winter(tmp_path: P
 def test_acquire_release_and_reacquire_are_clean_and_manifest_scoped(tmp_path: Path) -> None:
     repo = origin(tmp_path)
     workspace = tmp_path / "ordinary"
-    provider = BasicWorkspaceProvider(str(workspace), repos=(repo,))
+    provider = BasicWorkspaceProvider(str(workspace), repos=(repo,), git=env_git())
     first, second = provider.acquire("01JFULLCHUNK", 2, [])
     assert first.environment_id == "01JFULLCHUNK"
     assert second.environment_id == "01JFULLCHUNK--2"
@@ -73,13 +76,17 @@ def test_acquire_release_and_reacquire_are_clean_and_manifest_scoped(tmp_path: P
     (Path(first.workdir) / "toy" / "README.md").write_text("dirty\n")
     (Path(first.workdir) / "toy" / "untracked").write_text("dirt")
     # The other environment survives and its path is never reallocated.
-    again = BasicWorkspaceProvider(str(workspace), repos=(repo,)).acquire("01JFULLCHUNK", 1, [second.environment_id])
+    again = BasicWorkspaceProvider(str(workspace), repos=(repo,), git=env_git()).acquire(
+        "01JFULLCHUNK", 1, [second.environment_id]
+    )
     assert again[0].environment_id == first.environment_id
     assert (Path(first.workdir) / "toy" / "README.md").read_text() == "base\n"
     assert not (Path(first.workdir) / "toy" / "untracked").exists()
 
     provider.release(second.environment_id)
-    survivor = BasicWorkspaceProvider(str(workspace), repos=(repo,)).acquire("01JFULLCHUNK", 1, [first.environment_id])
+    survivor = BasicWorkspaceProvider(str(workspace), repos=(repo,), git=env_git()).acquire(
+        "01JFULLCHUNK", 1, [first.environment_id]
+    )
     assert survivor[0].environment_id == second.environment_id
 
 
@@ -88,12 +95,12 @@ def test_reacquire_removes_worktrees_no_longer_configured(tmp_path: Path) -> Non
     repo = origin(tmp_path)
     old_repo = WorkspaceRepo("old", repo.url)
     workspace = tmp_path / "ordinary"
-    first = BasicWorkspaceProvider(str(workspace), repos=(repo, old_repo))
+    first = BasicWorkspaceProvider(str(workspace), repos=(repo, old_repo), git=env_git())
     env = first.acquire("chunk", 1, [])[0]
     assert (Path(env.workdir) / "old" / "README.md").exists()
     first.release(env.environment_id)
 
-    current = BasicWorkspaceProvider(str(workspace), repos=(repo,))
+    current = BasicWorkspaceProvider(str(workspace), repos=(repo,), git=env_git())
     current.acquire("chunk", 1, [])
 
     assert not (Path(env.workdir) / "old").exists()
@@ -115,13 +122,13 @@ def test_held_manifest_survives_a_repo_config_change(tmp_path: Path) -> None:
     old_repo = WorkspaceRepo("old", repo.url)
     held: list[str] = []
     workspace = tmp_path / "ordinary"
-    provider = BasicWorkspaceProvider(str(workspace), repos=(repo, old_repo), held_ids=lambda: held)
+    provider = BasicWorkspaceProvider(str(workspace), repos=(repo, old_repo), held_ids=lambda: held, git=env_git())
     env = provider.acquire("chunk", 1, [])[0]
     held.append(env.environment_id)
     assert not (Path(env.workdir) / ".blizzard-manifests").exists()
     assert (workspace / ".blizzard-manifests" / "chunk.json").is_file()
 
-    restarted = BasicWorkspaceProvider(str(workspace), repos=(repo,), held_ids=lambda: held)
+    restarted = BasicWorkspaceProvider(str(workspace), repos=(repo,), held_ids=lambda: held, git=env_git())
     (Path(env.workdir) / ".blizzard-repos.json").write_text('[{"name": "old", "url": "file:///forged"}]')
 
     assert {binding.name: binding.origin_url for binding in restarted.repos(env.environment_id)} == {
@@ -136,7 +143,7 @@ def test_held_manifest_survives_a_repo_config_change(tmp_path: Path) -> None:
 def test_reacquire_replaces_unregistered_worktree_directory(tmp_path: Path) -> None:
     repo = origin(tmp_path)
     workspace = tmp_path / "ordinary"
-    provider = BasicWorkspaceProvider(str(workspace), repos=(repo,))
+    provider = BasicWorkspaceProvider(str(workspace), repos=(repo,), git=env_git())
     env = provider.acquire("chunk", 1, [])[0]
     provider.release(env.environment_id)
     worktree = Path(env.workdir) / "toy"
@@ -155,7 +162,7 @@ def test_reacquire_replaces_unregistered_worktree_directory(tmp_path: Path) -> N
 def test_cap_evicts_only_released_and_refuses_without_partial_allocation(tmp_path: Path) -> None:
     repo = origin(tmp_path)
     workspace = tmp_path / "ordinary"
-    provider = BasicWorkspaceProvider(str(workspace), repos=(repo,), max_environments=2)
+    provider = BasicWorkspaceProvider(str(workspace), repos=(repo,), max_environments=2, git=env_git())
     first, second = provider.acquire("chunk", 2, [])
     with pytest.raises(WorkspaceAcquisitionError, match="cap 2"):
         provider.acquire("other", 1, [first.environment_id, second.environment_id])
@@ -172,7 +179,7 @@ def test_manifest_follows_store_fact_across_both_interrupted_release_orders(tmp_
     repo = origin(tmp_path)
     held: list[str] = []
     workspace = tmp_path / "ordinary"
-    provider = BasicWorkspaceProvider(str(workspace), repos=(repo,), held_ids=lambda: held)
+    provider = BasicWorkspaceProvider(str(workspace), repos=(repo,), held_ids=lambda: held, git=env_git())
     env = provider.acquire("chunk", 1, [])[0]
     held.append(env.environment_id)
     provider.release(env.environment_id)  # provider-side release precedes the store write
@@ -181,7 +188,7 @@ def test_manifest_follows_store_fact_across_both_interrupted_release_orders(tmp_
     assert provider.repos(env.environment_id) == []
 
     held.append(env.environment_id)
-    restarted = BasicWorkspaceProvider(str(workspace), repos=(repo,), held_ids=lambda: held)
+    restarted = BasicWorkspaceProvider(str(workspace), repos=(repo,), held_ids=lambda: held, git=env_git())
     assert restarted.repos(env.environment_id)
     held.clear()  # store-side release precedes provider.release
     assert restarted.repos(env.environment_id) == []
@@ -190,7 +197,7 @@ def test_manifest_follows_store_fact_across_both_interrupted_release_orders(tmp_
 @pytest.mark.component
 def test_suffix_cannot_take_another_chunks_full_identifier(tmp_path: Path) -> None:
     repo = origin(tmp_path)
-    provider = BasicWorkspaceProvider(str(tmp_path / "ordinary"), repos=(repo,))
+    provider = BasicWorkspaceProvider(str(tmp_path / "ordinary"), repos=(repo,), git=env_git())
     other = provider.acquire("chunk--2", 1, [])[0]
     first, second = provider.acquire("chunk", 2, [other.environment_id])
     assert first.environment_id == "chunk"
@@ -202,7 +209,7 @@ def test_suffix_cannot_take_another_chunks_full_identifier(tmp_path: Path) -> No
 def test_failed_clone_does_not_leave_a_partial_environment(tmp_path: Path) -> None:
     workspace = tmp_path / "ordinary"
     provider = BasicWorkspaceProvider(
-        str(workspace), repos=(origin(tmp_path), WorkspaceRepo("missing", str(tmp_path / "missing.git")))
+        str(workspace), repos=(origin(tmp_path), WorkspaceRepo("missing", str(tmp_path / "missing.git"))), git=env_git()
     )
     with pytest.raises(EnvironmentPreparationError) as caught:
         provider.acquire("chunk", 2, [])
@@ -249,34 +256,34 @@ class _RecordingGit:
 
 
 @pytest.mark.unit
-def test_without_a_supplied_git_the_provider_drives_a_subprocess_git_bounded_by_the_clone_timeout(
+def test_the_basic_binding_drives_a_seam_git_bounded_by_the_clone_timeout(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     constructed: list[_RecordingGit] = []
 
-    def default_git(**kwargs: object) -> _RecordingGit:
+    def built_git(**kwargs: object) -> _RecordingGit:
         constructed.append(_RecordingGit(**kwargs))
         return constructed[-1]
 
-    monkeypatch.setattr(basic_provider, "SubprocessEnvGit", default_git)
-    provider = BasicWorkspaceProvider(str(tmp_path / "ws"), repos=(WorkspaceRepo("toy", "file:///toy.git"),))
-    provider.acquire("01JCHUNK", 1, [])
+    monkeypatch.setattr(env_git_module, "SubprocessEnvGit", built_git)
+    launch = workspace_launch()
+    settings = HostWorkspace(
+        "ws", provider="basic", root=str(tmp_path / "ws"), repos=(WorkspaceRepo("toy", "file:///toy.git"),)
+    ).settings(tmp_path)
+    build_workspace_provider(settings, launch=launch).acquire("01JCHUNK", 1, [])
 
-    assert [git.kwargs for git in constructed] == [{"timeout": 300}]
+    assert [git.kwargs for git in constructed] == [
+        {"children": launch.children, "env": launch.env, "timeout": basic_provider.CLONE_TIMEOUT}
+    ]
     assert ("fetch", "origin", "main") in constructed[0].calls
 
 
 @pytest.mark.unit
-def test_a_supplied_git_receives_the_calls_and_no_default_git_is_constructed(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    constructed: list[dict[str, object]] = []
-    monkeypatch.setattr(basic_provider, "SubprocessEnvGit", lambda **kwargs: constructed.append(kwargs))
+def test_a_supplied_git_receives_the_calls(tmp_path: Path) -> None:
     injected = _RecordingGit()
     provider = BasicWorkspaceProvider(
         str(tmp_path / "ws"), repos=(WorkspaceRepo("toy", "file:///toy.git"),), git=injected
     )
     provider.acquire("01JCHUNK", 1, [])
 
-    assert constructed == []
     assert ("fetch", "origin", "main") in injected.calls

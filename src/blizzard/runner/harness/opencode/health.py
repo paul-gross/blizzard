@@ -11,6 +11,7 @@ from blizzard.runner.harness.adapter import IHarnessHealthProbe
 from blizzard.runner.harness.compatibility import CompatibilityProbe
 from blizzard.runner.harness.health import DeclaredDegradation
 from blizzard.runner.harness.internal import version_probe
+from blizzard.runner.harness.internal.version_probe import VersionProbe
 from blizzard.runner.harness.offline_compatibility import (
     CorpusConfigurationError,
     ICompatibilityCorpus,
@@ -58,8 +59,11 @@ class OpenCodeHealthProbe:
     """The OpenCode binding's :class:`~blizzard.runner.harness.adapter.IHarnessHealthProbe`.
     Dumb, like the adapter it stands beside: reports evidence, never decides availability."""
 
-    def __init__(self, binary: str = "opencode", *, auth_path: Path | None, corpus: ICompatibilityCorpus) -> None:
+    def __init__(
+        self, binary: str = "opencode", *, auth_path: Path | None, corpus: ICompatibilityCorpus, versions: VersionProbe
+    ) -> None:
         self._binary = binary
+        self._versions = versions
         # `None` reads as no credential.
         self._auth_path = auth_path
         self._corpus = corpus
@@ -79,7 +83,7 @@ class OpenCodeHealthProbe:
         environment, not merely resolves on ``PATH``), and its credential-discovery path
         must hold a non-empty document. Neither reaches a provider, so neither proves a
         held credential is still valid."""
-        if version_probe.observe_version(self._binary) is None:
+        if self._versions.observe_version(self._binary) is None:
             return False
         if self._auth_path is None:
             return False

@@ -11,7 +11,7 @@ from blizzard.runner.cli.daemon import runner_option
 from blizzard.runner.cli.directory import load_runner
 from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
 from blizzard.runner.config_table import ConfigError
-from blizzard.runner.environments.factory import build_workspace_provider
+from blizzard.runner.environments.factory import WorkspaceLaunch, build_workspace_provider
 from blizzard.runner.harness.bundle import HarnessBundleNotPublished, require_published
 from blizzard.runner.harness.wiring import (
     declared,
@@ -20,6 +20,7 @@ from blizzard.runner.harness.wiring import (
     published_harness_snapshot,
     shared_inputs,
 )
+from blizzard.runner.process.internal.subprocess_child_processes import SubprocessChildProcesses
 
 
 @click.group("harness")
@@ -44,9 +45,11 @@ def harness_status(directory: str, runner: str | None) -> None:
     config = load_runner(directory, runner=runner)
     try:
         click.echo(f"autonomy: {config.autonomy} (from {config.autonomy_source})")
-        shared = shared_inputs(config.harness_settings(TracingSettings.of(os.environ)))
+        tracing = TracingSettings.of(os.environ)
+        shared = shared_inputs(config.harness_settings(tracing))
+        launch = WorkspaceLaunch(children=SubprocessChildProcesses(), env=config.tool_env(tracing))
         spawn_roots = dict.fromkeys(
-            build_workspace_provider(workspace.settings(config.root)).spawn_root()
+            build_workspace_provider(workspace.settings(config.root), launch=launch).spawn_root()
             for workspace in config.bound_workspaces
         )
         for declaration, section in declared(config.harness_sections):

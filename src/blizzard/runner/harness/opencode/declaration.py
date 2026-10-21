@@ -15,6 +15,7 @@ from blizzard.runner.harness.declaration import SharedHarnessInputs
 from blizzard.runner.harness.harness_telemetry_plan import HarnessTelemetryNames, HarnessTelemetryPlan
 from blizzard.runner.harness.identity import OPENCODE_HARNESS_ID
 from blizzard.runner.harness.internal.bundle_publisher import published_snapshot
+from blizzard.runner.harness.internal.version_probe import VersionProbe
 from blizzard.runner.harness.offline_compatibility import ICompatibilityCorpus
 from blizzard.runner.harness.opencode.adapter import OpenCodeAdapter
 from blizzard.runner.harness.opencode.bundle import OPENCODE_BUNDLE_LAYOUT, opencode_bundle_layout
@@ -37,6 +38,7 @@ from blizzard.runner.harness.opencode.worker_config import write_worker_config
 from blizzard.runner.harness.process_launch import IProcessLauncher
 from blizzard.runner.harness.registry import HarnessBinding
 from blizzard.runner.harness.transcript import TranscriptErrorFactory
+from blizzard.runner.process.child_processes import IChildProcesses
 from blizzard.runner.process.probe import IProcessProbe
 
 
@@ -71,11 +73,13 @@ class OpenCodeDeclaration:
         *,
         process: IProcessProbe,
         launcher: IProcessLauncher,
+        children: IChildProcesses,
     ) -> HarnessBinding:
         """Build the adapter over the one runner-owned ``process``/``launcher`` pair every binding
         receives."""
         worker_env = shared.worker_env
-        exporter = SubprocessOpenCodeExporter(binary=section.binary, worker_env=worker_env)
+        tool_env = worker_env.tool()
+        exporter = SubprocessOpenCodeExporter(binary=section.binary, children=children, env=tool_env)
         transcript_source = OpenCodeTranscriptSource(
             exporter,
             TranscriptErrorFactory(get_logger("blizzard.runner.harness.transcript")),
@@ -99,14 +103,21 @@ class OpenCodeDeclaration:
             transcript_source=transcript_source,
             price_catalog=price_catalog,
             descendant_usage=OpenCodeDescendantUsage(exporter),
-            permission_resolver=SubprocessOpenCodePermissionResolver(binary=section.binary),
+            permission_resolver=SubprocessOpenCodePermissionResolver(binary=section.binary, children=children),
             process=process,
             launcher=launcher,
+            versions=VersionProbe(children, tool_env),
         )
         return HarnessBinding(adapter=adapter, transcript_source=transcript_source)
 
     def health_probe(
-        self, section: OpenCodeSection, shared: SharedHarnessInputs, *, spawn_root: str, corpus: ICompatibilityCorpus
+        self,
+        section: OpenCodeSection,
+        shared: SharedHarnessInputs,
+        *,
+        spawn_root: str,
+        corpus: ICompatibilityCorpus,
+        children: IChildProcesses,
     ) -> IHarnessHealthProbe:
         # The file a spawned worker would read: its allowlisted env, not the daemon's own.
         auth_path = (
@@ -114,7 +125,12 @@ class OpenCodeDeclaration:
             if section.auth_path is not None
             else resolve_opencode_auth_path(shared.worker_env.variables)
         )
-        return OpenCodeHealthProbe(binary=section.binary, auth_path=auth_path, corpus=corpus)
+        return OpenCodeHealthProbe(
+            binary=section.binary,
+            auth_path=auth_path,
+            corpus=corpus,
+            versions=VersionProbe(children, shared.worker_env.tool()),
+        )
 
     def publish_layout(self, section: OpenCodeSection, *, autonomy: Autonomy, runtime_root: Path) -> HarnessLayout:
         return opencode_bundle_layout(section.worker_config_at(runtime_root))

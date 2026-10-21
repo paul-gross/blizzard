@@ -94,6 +94,7 @@ from tests.runner_fakes import (
 from tests.runner_ingest_support import RUNNER_TABLES, contents, invariant_violations, seed_runner
 from tests.runner_join import RUNNER_BIN, runner_spawn_env
 from tests.support import create_repositories, fixture_repository, free_port, hub_scoped, seed_drainable_history
+from tests.support_child_launch import env_git
 
 pytestmark = pytest.mark.crash_sweep
 
@@ -871,7 +872,7 @@ def test_kill9_at_declare_commit_crash_point(crash_env: CrashEnv, tmp_path: Path
     # Materialize the env's worktrees directly (this scenario seeds its lease + binding,
     # skipping FILL's acquire), through the same basic provider the daemon uses.
     [acquired] = BasicWorkspaceProvider(
-        str(crash_env.workspace), repos=world_repos(crash_env.workspace), max_environments=1
+        str(crash_env.workspace), repos=world_repos(crash_env.workspace), max_environments=1, git=env_git()
     ).acquire("ch_declare_commit", 1, [])
     # Nothing listens on ``hub_port`` — the declare path never calls the hub; the loop's
     # hub polls just fail and are swallowed, and the local API serves regardless.

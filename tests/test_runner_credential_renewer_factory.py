@@ -5,17 +5,19 @@ binding, which keeps today's read-only behaviour exactly."""
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from datetime import UTC, datetime
 
 import pytest
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.runner.config import SubscriptionDeclaration
+from blizzard.runner.process.child_env import ChildEnv
 from blizzard.runner.subscriptions.internal.credential_renewer_factory import select_renewer
 from blizzard.runner.subscriptions.internal.openai_credential_renewer import OpenAICredentialRenewer
 from blizzard.runner.subscriptions.one_shot_process import OneShotResult
 from blizzard.runner.subscriptions.subscription_sampler import PROVIDER_ANTHROPIC, PROVIDER_OPENAI
+from tests.support_child_launch import tool_env
 
 pytestmark = pytest.mark.unit
 
@@ -24,7 +26,7 @@ _NOW = datetime(2026, 9, 22, 12, 0, tzinfo=UTC)
 
 class _UnreachableSubprocess:
     def run(
-        self, argv: Sequence[str], *, stdin: str, timeout: float, env: Mapping[str, str], settle_seconds: float = 0.0
+        self, argv: Sequence[str], *, stdin: str, timeout: float, env: ChildEnv, settle_seconds: float = 0.0
     ) -> OneShotResult:
         raise AssertionError("no subprocess should have been run")
 
@@ -32,13 +34,17 @@ class _UnreachableSubprocess:
 def test_anthropic_selects_no_renewer() -> None:
     declaration = SubscriptionDeclaration(slug="anthropic", name="Anthropic", provider=PROVIDER_ANTHROPIC)
 
-    assert select_renewer(declaration, clock=FixedClock(_NOW), subprocess=_UnreachableSubprocess()) is None
+    assert (
+        select_renewer(declaration, clock=FixedClock(_NOW), subprocess=_UnreachableSubprocess(), env=tool_env()) is None
+    )
 
 
 def test_an_unknown_provider_selects_no_renewer() -> None:
     declaration = SubscriptionDeclaration(slug="mystery", name="Mystery Plan", provider="some-unshipped-provider")
 
-    assert select_renewer(declaration, clock=FixedClock(_NOW), subprocess=_UnreachableSubprocess()) is None
+    assert (
+        select_renewer(declaration, clock=FixedClock(_NOW), subprocess=_UnreachableSubprocess(), env=tool_env()) is None
+    )
 
 
 def test_the_openai_provider_selects_an_openai_renewer_carrying_its_credentials_path() -> None:
@@ -46,5 +52,5 @@ def test_the_openai_provider_selects_an_openai_renewer_carrying_its_credentials_
         slug="codex", name="Codex", provider=PROVIDER_OPENAI, credentials_path="/tmp/some-auth.json"
     )
 
-    renewer = select_renewer(declaration, clock=FixedClock(_NOW), subprocess=_UnreachableSubprocess())
+    renewer = select_renewer(declaration, clock=FixedClock(_NOW), subprocess=_UnreachableSubprocess(), env=tool_env())
     assert isinstance(renewer, OpenAICredentialRenewer)

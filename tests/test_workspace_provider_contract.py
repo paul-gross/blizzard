@@ -14,9 +14,10 @@ import pytest
 
 from blizzard.runner.config import HostWorkspace
 from blizzard.runner.environments.factory import WORKSPACE_PROVIDERS, WorkspaceSettings, build_workspace_provider
-from blizzard.runner.environments.internal import basic_provider
+from blizzard.runner.environments.internal import git as env_git_module
 from blizzard.runner.environments.provider import IWorkspaceProvider, WorkspaceRepo
 from tests.runner_fakes import FakeProvider
+from tests.support_child_launch import workspace_launch
 
 
 @dataclass(frozen=True)
@@ -40,7 +41,8 @@ _CASES = {
                 root="scratch",
                 repos=(WorkspaceRepo("toy", "file:///tmp/toy.git"),),
                 max_environments=4,
-            )
+            ),
+            launch=workspace_launch(),
         ),
         spawn_root=lambda _tmp: "",
         capacity=4,
@@ -48,7 +50,7 @@ _CASES = {
     ),
     "winter": _Case(
         build=lambda tmp: build_workspace_provider(
-            _settings(tmp, provider="winter", root=str(tmp / "ws"), envs=("a", "b", "c"))
+            _settings(tmp, provider="winter", root=str(tmp / "ws"), envs=("a", "b", "c")), launch=workspace_launch()
         ),
         spawn_root=lambda tmp: str(tmp / "ws"),
         capacity=3,
@@ -56,7 +58,9 @@ _CASES = {
     ),
     # Unset, winter's spawn root stays unset rather than falling back to its working root.
     "winter-unset-root": _Case(
-        build=lambda tmp: build_workspace_provider(_settings(tmp, provider="winter", root="", envs=("a",))),
+        build=lambda tmp: build_workspace_provider(
+            _settings(tmp, provider="winter", root="", envs=("a",)), launch=workspace_launch()
+        ),
         spawn_root=lambda _tmp: "",
         capacity=1,
         pool=("a",),
@@ -116,7 +120,7 @@ def test_a_basic_binding_built_by_the_factory_honors_the_passed_held_ids_and_con
                 Path(args[-2]).mkdir(parents=True)
             return ""
 
-    monkeypatch.setattr(basic_provider, "SubprocessEnvGit", _FetchRecordingGit)
+    monkeypatch.setattr(env_git_module, "SubprocessEnvGit", _FetchRecordingGit)
     settings = _settings(
         tmp_path,
         provider="basic",
@@ -125,7 +129,7 @@ def test_a_basic_binding_built_by_the_factory_honors_the_passed_held_ids_and_con
         base_branch="trunk",
     )
     held: list[str] = []
-    provider = build_workspace_provider(settings, held_ids=lambda: held)
+    provider = build_workspace_provider(settings, launch=workspace_launch(), held_ids=lambda: held)
 
     (acquired,) = provider.acquire("01JCHUNK", 1, [])
 

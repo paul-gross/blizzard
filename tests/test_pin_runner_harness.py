@@ -15,6 +15,7 @@ from blizzard.runner.harness.claude_code.adapter import ClaudeCodeAdapter
 from blizzard.runner.harness.internal.process_launcher import ProcessLauncher
 from blizzard.runner.process.child_env import AllowlistedEnv
 from tests.runner_fakes import FakeProbe
+from tests.support_child_launch import CHILDREN, version_probe
 
 
 @pytest.mark.unit
@@ -30,7 +31,8 @@ def test_an_unmapped_tier_alias_never_substitutes_downward(
         binary="claude",
         model="claude-opus-5",
         process=probe,
-        launcher=ProcessLauncher(probe, executor=spawn_executor),
+        launcher=ProcessLauncher(probe, executor=spawn_executor, children=CHILDREN),
+        versions=version_probe(),
     )
 
     assert adapter.resolve_model(["blizzard:frontier"]) == "claude-opus-5"

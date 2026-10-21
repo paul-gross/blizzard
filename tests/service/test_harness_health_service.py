@@ -23,6 +23,7 @@ from blizzard.runner.harness.opencode.health import OpenCodeHealthProbe
 from blizzard.runner.process.child_env import AllowlistedEnv
 from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
 from tests.service.support import require_mock_fleet, require_opencode_cli_surface, service_gate
+from tests.support_child_launch import CHILDREN, version_probe
 
 pytestmark = [pytest.mark.service, service_gate]
 
@@ -34,14 +35,18 @@ def test_opencode_probe_authentication_shells_out_to_the_real_binary_and_reads_i
     mock_opencode = require_opencode_cli_surface(bin_dir)
     auth_path = tmp_path / "opencode" / "auth.json"
 
-    probe = OpenCodeHealthProbe(str(mock_opencode), auth_path=auth_path, corpus=CommittedCorpus())
+    probe = OpenCodeHealthProbe(
+        str(mock_opencode), auth_path=auth_path, corpus=CommittedCorpus(), versions=version_probe()
+    )
     assert probe.probe_authentication() is False  # the binary responds, but no credential file exists yet
 
     auth_path.parent.mkdir(parents=True, exist_ok=True)
     auth_path.write_text(json.dumps({"anthropic": {"type": "oauth"}}))
     assert probe.probe_authentication() is True
 
-    unreachable = OpenCodeHealthProbe(str(tmp_path / "no-such-binary"), auth_path=auth_path, corpus=CommittedCorpus())
+    unreachable = OpenCodeHealthProbe(
+        str(tmp_path / "no-such-binary"), auth_path=auth_path, corpus=CommittedCorpus(), versions=version_probe()
+    )
     assert unreachable.probe_authentication() is False  # a credential file alone is not enough
 
 
@@ -52,13 +57,17 @@ def test_claude_code_probe_authentication_shells_out_to_the_real_binary_and_read
     mock_claude_code = bin_dir / "mock-claude-code"
     credentials_path = tmp_path / ".credentials.json"
 
-    probe = ClaudeCodeHealthProbe(str(mock_claude_code), credentials_path=str(credentials_path))
+    probe = ClaudeCodeHealthProbe(
+        str(mock_claude_code), credentials_path=str(credentials_path), versions=version_probe()
+    )
     assert probe.probe_authentication() is False  # the binary responds, but no credentials file exists yet
 
     credentials_path.write_text(json.dumps({"claudeAiOauth": {"accessToken": "tok"}}))
     assert probe.probe_authentication() is True
 
-    unreachable = ClaudeCodeHealthProbe(str(tmp_path / "no-such-binary"), credentials_path=str(credentials_path))
+    unreachable = ClaudeCodeHealthProbe(
+        str(tmp_path / "no-such-binary"), credentials_path=str(credentials_path), versions=version_probe()
+    )
     assert unreachable.probe_authentication() is False  # a credential file alone is not enough
 
 
@@ -73,13 +82,16 @@ def test_claude_code_probe_and_cache_read_available_against_the_real_mock_binary
     credentials_path = tmp_path / ".credentials.json"
     credentials_path.write_text(json.dumps({"claudeAiOauth": {"accessToken": "tok"}}))
 
-    probe = ClaudeCodeHealthProbe(str(mock_claude_code), credentials_path=str(credentials_path))
+    probe = ClaudeCodeHealthProbe(
+        str(mock_claude_code), credentials_path=str(credentials_path), versions=version_probe()
+    )
     process = LinuxProcessProbe()
     adapter = ClaudeCodeAdapter(
         worker_env=AllowlistedEnv.of(()),
         binary=str(mock_claude_code),
         process=process,
-        launcher=ProcessLauncher(process, executor=spawn_executor),
+        launcher=ProcessLauncher(process, executor=spawn_executor, children=CHILDREN),
+        versions=version_probe(),
     )
     cache = HarnessHealthCache(
         corpus=CommittedCorpus(),

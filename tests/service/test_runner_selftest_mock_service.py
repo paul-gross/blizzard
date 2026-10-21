@@ -22,6 +22,7 @@ from blizzard.runner.process.internal.linux_process_probe import LinuxProcessPro
 from blizzard.runner.selftest.checks import SelfTest
 from blizzard.runner.selftest.internal.subprocess_scratch_git import SubprocessScratchGit
 from tests.service.support import require_mock_fleet, service_gate
+from tests.support_child_launch import CHILDREN, tool_env, version_probe
 
 pytestmark = [pytest.mark.service, service_gate]
 
@@ -53,9 +54,12 @@ def _selftest(bin_dir: Path, passthrough: tuple[str, ...], executor: ThreadPoolE
         binary=str(bin_dir / "mock-claude-code"),
         model="claude-opus-5",
         process=process,
-        launcher=ProcessLauncher(process, executor=executor),
+        launcher=ProcessLauncher(process, executor=executor, children=CHILDREN),
+        versions=version_probe(),
     )
-    return SelfTest(adapter, SubprocessScratchGit(), process, ElicitationFiles(root=""))
+    return SelfTest(
+        adapter, SubprocessScratchGit(children=CHILDREN, env=tool_env()), process, ElicitationFiles(root="")
+    )
 
 
 def test_a_fenced_selftest_passes_every_check_against_the_mock(

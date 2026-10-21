@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import json
 import re
-import subprocess
 import time
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
@@ -30,7 +29,7 @@ from blizzard.runner.harness.adapter import (
     WorkerPreamble,
 )
 from blizzard.runner.harness.autonomy import Autonomy
-from blizzard.runner.harness.internal import version_probe
+from blizzard.runner.harness.internal.version_probe import VersionProbe
 from blizzard.runner.harness.opencode.bundle import check_ambient_plugins, content_with_snapshot_references
 from blizzard.runner.harness.opencode.command import OpenCodeCommand, OpenCodeInvocationKind
 from blizzard.runner.harness.opencode.permissions.permission_compose import (
@@ -63,6 +62,7 @@ from blizzard.runner.harness.transcript import IHarnessTranscriptSource, NullTra
 from blizzard.runner.harness.usage import UsageKind, UsageLimit, UsageSample
 from blizzard.runner.node_steps.envelope import Envelope
 from blizzard.runner.process.child_env import AllowlistedEnv
+from blizzard.runner.process.child_processes import Stream
 from blizzard.runner.process.probe import IProcessProbe
 
 _log = get_logger("blizzard.runner.harness")
@@ -234,8 +234,10 @@ class OpenCodeAdapter:
         permission_resolver: IOpenCodePermissionResolver | None = None,
         process: IProcessProbe,
         launcher: IProcessLauncher,
+        versions: VersionProbe,
     ) -> None:
         self._binary = binary
+        self._versions = versions
         self._command = OpenCodeCommand(binary)
         # Empty is a legitimate default: OpenCode resolves its own configured model.
         self._model = model
@@ -264,9 +266,9 @@ class OpenCodeAdapter:
         self._launcher: IProcessLauncher = launcher
 
     def observe_version(self) -> str | None:
-        """Shared verbatim with Claude Code (``version_probe.observe_version``); only
+        """Shared verbatim with Claude Code (:class:`VersionProbe`); only
         ``self._binary`` differs between the two."""
-        return version_probe.observe_version(self._binary)
+        return self._versions.observe_version(self._binary)
 
     def resolve_model(self, preferences: Sequence[str]) -> str:
         return harness_shared.resolve_model(
@@ -372,9 +374,9 @@ class OpenCodeAdapter:
                 launched = self._launcher.launch(
                     cmd,
                     cwd=workdir,
-                    env=env,
-                    stdout=stdout_file,
-                    stderr=stderr_file if stderr_file is not None else subprocess.DEVNULL,
+                    env=self._worker_env.worker(env),
+                    stdout=stdout_file if stdout_file is not None else Stream.INHERIT,
+                    stderr=stderr_file if stderr_file is not None else Stream.DEVNULL,
                     defer_disarm=True,
                 )
             except OSError as exc:
@@ -440,7 +442,12 @@ class OpenCodeAdapter:
                 # Deferred — the caller's own `confirm_durable()` (right after ITS durable
                 # `record_elicitation_started`/`record_elicitation_relaunch` lands) disarms it.
                 launched = self._launcher.launch(
-                    cmd, cwd=session_cwd, env=env, stdout=stdout_file, stderr=subprocess.DEVNULL, defer_disarm=True
+                    cmd,
+                    cwd=session_cwd,
+                    env=self._worker_env.worker(env),
+                    stdout=stdout_file if stdout_file is not None else Stream.INHERIT,
+                    stderr=Stream.DEVNULL,
+                    defer_disarm=True,
                 )
         except OSError as exc:
             _log.error("elicitation launch failed", binary=self._binary, cwd=session_cwd, detail=str(exc))
@@ -483,7 +490,12 @@ class OpenCodeAdapter:
         # Deferred: a resume gets spawn/judge's ownership.
         with harness_shared.stdout_target(stdout_path) as stdout_file:
             launched = self._launcher.launch(
-                cmd, cwd=session_cwd, env=env, stdout=stdout_file, stderr=None, defer_disarm=True
+                cmd,
+                cwd=session_cwd,
+                env=self._worker_env.worker(env),
+                stdout=stdout_file if stdout_file is not None else Stream.INHERIT,
+                stderr=Stream.INHERIT,
+                defer_disarm=True,
             )
         # `launched.pgid` is the launcher's own recorded group — carried to the
         # caller rather than left for it to assume `pgid == pid`.
@@ -554,14 +566,14 @@ class OpenCodeAdapter:
         if resolver is None:
             raise HarnessSpawnError("no OpenCode permission resolver is wired; refusing an unproven `normal` launch")
         try:
-            resolved = resolver.resolve(cwd=cwd, env=env)
+            resolved = resolver.resolve(cwd=cwd, env=self._worker_env.worker(env))
             overrides = compose_ask_denials(resolved.merged_config, resolved.agent_rulesets)
             if not overrides:
                 return env
             content = env.get("OPENCODE_CONFIG_CONTENT")
             document = merge_overrides(json.loads(content) if content else {}, overrides)
             composed = {**env, "OPENCODE_CONFIG_CONTENT": json.dumps(document, indent=2) + "\n"}
-            remaining = residual_asks(resolver.resolve(cwd=cwd, env=composed).agent_rulesets)
+            remaining = residual_asks(resolver.resolve(cwd=cwd, env=self._worker_env.worker(composed)).agent_rulesets)
         except (OpenCodePermissionResolveError, json.JSONDecodeError) as exc:
             raise HarnessSpawnError(f"cannot establish that an unattended OpenCode launch never asks: {exc}") from exc
         if remaining:

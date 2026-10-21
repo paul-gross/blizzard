@@ -56,6 +56,7 @@ from tests.runner_fakes import (
     make_store,
     single_workspace,
 )
+from tests.support_child_launch import CHILDREN, version_probe
 
 pytestmark = pytest.mark.component
 
@@ -809,7 +810,8 @@ def test_takeover_path_carries_the_workers_path_prepend(tmp_path, monkeypatch, s
     adapter = ClaudeCodeAdapter(
         worker_env=AllowlistedEnv.of((), path_prepend=("/opt/mise/shims",)),
         process=process,
-        launcher=ProcessLauncher(process, executor=spawn_executor),
+        launcher=ProcessLauncher(process, executor=spawn_executor, children=CHILDREN),
+        versions=version_probe(),
     )
 
     opened = _service(store, harness=adapter).open(_open_scope(store), force=False)
@@ -828,8 +830,9 @@ def test_takeover_env_withholds_a_capturing_bindings_telemetry_variables(tmp_pat
     adapter = ClaudeCodeAdapter(
         worker_env=AllowlistedEnv.of(()),
         process=process,
-        launcher=ProcessLauncher(process, executor=spawn_executor),
+        launcher=ProcessLauncher(process, executor=spawn_executor, children=CHILDREN),
         harness_telemetry=HarnessTelemetryPlan(traces=captured, metrics=captured, logs=captured),
+        versions=version_probe(),
     )
 
     opened = _service(store, harness=adapter).open(_open_scope(store), force=False)

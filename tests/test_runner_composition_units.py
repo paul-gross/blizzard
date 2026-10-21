@@ -14,6 +14,7 @@ from blizzard.runner.composition import _credential_renewal_pass, _pool_held_ids
 from blizzard.runner.config import SubscriptionDeclaration
 from blizzard.runner.subscriptions.internal.openai_credential_renewer import OpenAICredentialRenewer
 from blizzard.runner.subscriptions.subscription_sampler import PROVIDER_ANTHROPIC, PROVIDER_OPENAI
+from tests.support_child_launch import CHILDREN, tool_env
 
 pytestmark = pytest.mark.unit
 
@@ -34,7 +35,7 @@ def test_the_renewal_pass_pairs_each_renewable_subscription_with_its_slug_cadenc
         ),
     )
 
-    built = _credential_renewal_pass(declarations, stores, clock)  # type: ignore[arg-type]
+    built = _credential_renewal_pass(declarations, stores, clock, children=CHILDREN, env=tool_env())  # type: ignore[arg-type]
 
     assert built is not None
     [renewable] = built._subscriptions
@@ -48,7 +49,14 @@ def test_a_host_whose_providers_bind_no_renewer_builds_no_renewal_pass() -> None
     stores: Any = SimpleNamespace(external_usage=object())
     declarations = (SubscriptionDeclaration(slug="claude", name="Claude", provider=PROVIDER_ANTHROPIC),)
 
-    assert _credential_renewal_pass(declarations, stores, FixedClock(_NOW)) is None  # type: ignore[arg-type]
+    built = _credential_renewal_pass(
+        declarations,
+        stores,
+        FixedClock(_NOW),  # type: ignore[arg-type]
+        children=CHILDREN,
+        env=tool_env(),
+    )
+    assert built is None
 
 
 class _Audit:

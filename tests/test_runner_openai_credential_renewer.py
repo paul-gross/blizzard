@@ -8,16 +8,18 @@ from __future__ import annotations
 
 import base64
 import json
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
 
 from blizzard.foundation.clock import FixedClock
+from blizzard.runner.process.child_env import ChildEnv
 from blizzard.runner.subscriptions.credential_renewer import RenewalFailureReason, RenewalOutcomeKind
 from blizzard.runner.subscriptions.internal.openai_credential_renewer import OpenAICredentialRenewer
 from blizzard.runner.subscriptions.one_shot_process import OneShotResult
+from tests.support_child_launch import tool_env
 
 pytestmark = pytest.mark.unit
 
@@ -48,10 +50,10 @@ class _ScriptedSubprocess:
     def __init__(self, result: OneShotResult, *, rotates: Path | None = None) -> None:
         self.result = result
         self.rotates = rotates
-        self.calls: list[tuple[Sequence[str], str, float, Mapping[str, str], float]] = []
+        self.calls: list[tuple[Sequence[str], str, float, ChildEnv, float]] = []
 
     def run(
-        self, argv: Sequence[str], *, stdin: str, timeout: float, env: Mapping[str, str], settle_seconds: float = 0.0
+        self, argv: Sequence[str], *, stdin: str, timeout: float, env: ChildEnv, settle_seconds: float = 0.0
     ) -> OneShotResult:
         self.calls.append((argv, stdin, timeout, env, settle_seconds))
         if self.rotates is not None:
@@ -83,7 +85,10 @@ def _renewed_result() -> OneShotResult:
 def test_no_credentials_file_is_not_due_and_never_runs_the_subprocess(tmp_path: Path) -> None:
     subprocess = _ScriptedSubprocess(_renewed_result())
     renewer = OpenAICredentialRenewer(
-        credentials_path=str(tmp_path / "absent-auth.json"), subprocess=subprocess, clock=FixedClock(_NOW)
+        credentials_path=str(tmp_path / "absent-auth.json"),
+        subprocess=subprocess,
+        env=tool_env(),
+        clock=FixedClock(_NOW),
     )
 
     assert renewer.renewal_due() is False
@@ -93,7 +98,9 @@ def test_no_credentials_file_is_not_due_and_never_runs_the_subprocess(tmp_path: 
 def test_a_token_far_from_expiry_is_not_due(tmp_path: Path) -> None:
     creds = _write_credentials(tmp_path / "auth.json", access_token=_jwt(expires_at=_NOW + timedelta(days=5)))
     subprocess = _ScriptedSubprocess(_renewed_result())
-    renewer = OpenAICredentialRenewer(credentials_path=str(creds), subprocess=subprocess, clock=FixedClock(_NOW))
+    renewer = OpenAICredentialRenewer(
+        credentials_path=str(creds), subprocess=subprocess, env=tool_env(), clock=FixedClock(_NOW)
+    )
 
     assert renewer.renewal_due() is False
     assert subprocess.calls == []
@@ -102,7 +109,9 @@ def test_a_token_far_from_expiry_is_not_due(tmp_path: Path) -> None:
 def test_a_token_inside_the_lead_window_is_due(tmp_path: Path) -> None:
     creds = _write_credentials(tmp_path / "auth.json", access_token=_jwt(expires_at=_NOW + timedelta(minutes=5)))
     subprocess = _ScriptedSubprocess(_renewed_result(), rotates=creds)
-    renewer = OpenAICredentialRenewer(credentials_path=str(creds), subprocess=subprocess, clock=FixedClock(_NOW))
+    renewer = OpenAICredentialRenewer(
+        credentials_path=str(creds), subprocess=subprocess, env=tool_env(), clock=FixedClock(_NOW)
+    )
 
     assert renewer.renewal_due()
     assert subprocess.calls == []  # the due check never runs the vendor CLI
@@ -116,7 +125,9 @@ def test_a_token_inside_the_lead_window_is_due(tmp_path: Path) -> None:
 def test_an_already_expired_token_is_due(tmp_path: Path) -> None:
     creds = _write_credentials(tmp_path / "auth.json", access_token=_jwt(expires_at=_NOW - timedelta(minutes=1)))
     subprocess = _ScriptedSubprocess(_renewed_result(), rotates=creds)
-    renewer = OpenAICredentialRenewer(credentials_path=str(creds), subprocess=subprocess, clock=FixedClock(_NOW))
+    renewer = OpenAICredentialRenewer(
+        credentials_path=str(creds), subprocess=subprocess, env=tool_env(), clock=FixedClock(_NOW)
+    )
 
     assert renewer.renewal_due()
     assert subprocess.calls == []  # the due check never runs the vendor CLI
@@ -134,7 +145,7 @@ def test_a_due_renewal_sends_initialize_then_account_read_with_refresh_token_tru
     creds = _write_credentials(tmp_path / "auth.json", access_token=_jwt(expires_at=_NOW + timedelta(minutes=1)))
     subprocess = _ScriptedSubprocess(_renewed_result(), rotates=creds)
     renewer = OpenAICredentialRenewer(
-        credentials_path=str(creds), codex_binary="codex", subprocess=subprocess, clock=FixedClock(_NOW)
+        credentials_path=str(creds), codex_binary="codex", subprocess=subprocess, env=tool_env(), clock=FixedClock(_NOW)
     )
 
     renewer.renew()
@@ -147,9 +158,12 @@ def test_a_due_renewal_sends_initialize_then_account_read_with_refresh_token_tru
     assert lines[0]["params"]["clientInfo"]["name"]
     assert lines[1]["method"] == "account/read"
     assert lines[1]["params"] == {"refreshToken": True}
-    assert env["CODEX_HOME"] == str(tmp_path)
+    # The tool profile, with the credential home the vendor CLI refreshes added explicitly.
+    variables = env.variables
+    assert variables["CODEX_HOME"] == str(tmp_path)
+    assert variables["HOME"] == str(Path.home())
     # A bare binary name (the common case) resolves only if PATH survives into the child.
-    assert env["PATH"]
+    assert variables["PATH"]
     # Closing stdin right away can drop a reply still in flight against the real vendor CLI.
     assert settle_seconds > 0
 
@@ -161,7 +175,9 @@ def test_a_due_renewal_sends_initialize_then_account_read_with_refresh_token_tru
 def test_a_timeout_is_failed_timed_out(tmp_path: Path) -> None:
     creds = _write_credentials(tmp_path / "auth.json", access_token=_jwt(expires_at=_NOW + timedelta(minutes=1)))
     subprocess = _ScriptedSubprocess(OneShotResult(exit_code=None, stdout="", stderr="", timed_out=True))
-    renewer = OpenAICredentialRenewer(credentials_path=str(creds), subprocess=subprocess, clock=FixedClock(_NOW))
+    renewer = OpenAICredentialRenewer(
+        credentials_path=str(creds), subprocess=subprocess, env=tool_env(), clock=FixedClock(_NOW)
+    )
 
     outcome = renewer.renew()
 
@@ -174,7 +190,9 @@ def test_a_launch_failure_is_failed_renewer_unavailable(tmp_path: Path) -> None:
     subprocess = _ScriptedSubprocess(
         OneShotResult(exit_code=None, stdout="", stderr="codex: command not found", timed_out=False)
     )
-    renewer = OpenAICredentialRenewer(credentials_path=str(creds), subprocess=subprocess, clock=FixedClock(_NOW))
+    renewer = OpenAICredentialRenewer(
+        credentials_path=str(creds), subprocess=subprocess, env=tool_env(), clock=FixedClock(_NOW)
+    )
 
     outcome = renewer.renew()
 
@@ -185,7 +203,9 @@ def test_a_launch_failure_is_failed_renewer_unavailable(tmp_path: Path) -> None:
 def test_a_nonzero_exit_is_failed_vendor_refused(tmp_path: Path) -> None:
     creds = _write_credentials(tmp_path / "auth.json", access_token=_jwt(expires_at=_NOW + timedelta(minutes=1)))
     subprocess = _ScriptedSubprocess(OneShotResult(exit_code=1, stdout="", stderr="boom", timed_out=False))
-    renewer = OpenAICredentialRenewer(credentials_path=str(creds), subprocess=subprocess, clock=FixedClock(_NOW))
+    renewer = OpenAICredentialRenewer(
+        credentials_path=str(creds), subprocess=subprocess, env=tool_env(), clock=FixedClock(_NOW)
+    )
 
     outcome = renewer.renew()
 
@@ -197,7 +217,9 @@ def test_no_matching_response_is_failed_protocol_error(tmp_path: Path) -> None:
     creds = _write_credentials(tmp_path / "auth.json", access_token=_jwt(expires_at=_NOW + timedelta(minutes=1)))
     stdout = json.dumps({"jsonrpc": "2.0", "id": 1, "result": {}})
     subprocess = _ScriptedSubprocess(OneShotResult(exit_code=0, stdout=stdout, stderr="", timed_out=False))
-    renewer = OpenAICredentialRenewer(credentials_path=str(creds), subprocess=subprocess, clock=FixedClock(_NOW))
+    renewer = OpenAICredentialRenewer(
+        credentials_path=str(creds), subprocess=subprocess, env=tool_env(), clock=FixedClock(_NOW)
+    )
 
     outcome = renewer.renew()
 
@@ -209,7 +231,9 @@ def test_a_json_rpc_error_is_failed_vendor_refused(tmp_path: Path) -> None:
     creds = _write_credentials(tmp_path / "auth.json", access_token=_jwt(expires_at=_NOW + timedelta(minutes=1)))
     stdout = json.dumps({"jsonrpc": "2.0", "id": 2, "error": {"code": -32000, "message": "not logged in"}})
     subprocess = _ScriptedSubprocess(OneShotResult(exit_code=0, stdout=stdout, stderr="", timed_out=False))
-    renewer = OpenAICredentialRenewer(credentials_path=str(creds), subprocess=subprocess, clock=FixedClock(_NOW))
+    renewer = OpenAICredentialRenewer(
+        credentials_path=str(creds), subprocess=subprocess, env=tool_env(), clock=FixedClock(_NOW)
+    )
 
     outcome = renewer.renew()
 
@@ -221,7 +245,9 @@ def test_a_null_account_is_failed_vendor_refused(tmp_path: Path) -> None:
     creds = _write_credentials(tmp_path / "auth.json", access_token=_jwt(expires_at=_NOW + timedelta(minutes=1)))
     stdout = _account_read_response(logged_in=False)
     subprocess = _ScriptedSubprocess(OneShotResult(exit_code=0, stdout=stdout, stderr="", timed_out=False))
-    renewer = OpenAICredentialRenewer(credentials_path=str(creds), subprocess=subprocess, clock=FixedClock(_NOW))
+    renewer = OpenAICredentialRenewer(
+        credentials_path=str(creds), subprocess=subprocess, env=tool_env(), clock=FixedClock(_NOW)
+    )
 
     outcome = renewer.renew()
 
@@ -233,7 +259,9 @@ def test_a_reply_that_leaves_the_expiry_unchanged_is_failed_vendor_refused(tmp_p
     """A live login answers, but the file's own expiry is the proof of a refresh — not the reply."""
     creds = _write_credentials(tmp_path / "auth.json", access_token=_jwt(expires_at=_NOW + timedelta(minutes=1)))
     subprocess = _ScriptedSubprocess(_renewed_result())
-    renewer = OpenAICredentialRenewer(credentials_path=str(creds), subprocess=subprocess, clock=FixedClock(_NOW))
+    renewer = OpenAICredentialRenewer(
+        credentials_path=str(creds), subprocess=subprocess, env=tool_env(), clock=FixedClock(_NOW)
+    )
 
     outcome = renewer.renew()
 
@@ -256,7 +284,9 @@ def test_an_interleaved_notification_before_the_matching_response_is_skipped(tmp
     subprocess = _ScriptedSubprocess(
         OneShotResult(exit_code=0, stdout=stdout, stderr="", timed_out=False), rotates=creds
     )
-    renewer = OpenAICredentialRenewer(credentials_path=str(creds), subprocess=subprocess, clock=FixedClock(_NOW))
+    renewer = OpenAICredentialRenewer(
+        credentials_path=str(creds), subprocess=subprocess, env=tool_env(), clock=FixedClock(_NOW)
+    )
 
     outcome = renewer.renew()
 

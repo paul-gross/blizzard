@@ -49,6 +49,7 @@ from tests.runner_fakes import (
     single_workspace,
 )
 from tests.support import assert_all_timestamps_utc
+from tests.support_child_launch import CHILDREN, version_probe
 
 _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
 
@@ -746,7 +747,8 @@ def test_the_escalation_paste_string_carries_no_permission_mode_even_when_config
                         binary="claude",
                         permission_mode="bypassPermissions",
                         process=probe,
-                        launcher=ProcessLauncher(probe, executor=spawn_executor),
+                        launcher=ProcessLauncher(probe, executor=spawn_executor, children=CHILDREN),
+                        versions=version_probe(),
                     )
                 )
             }

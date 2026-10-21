@@ -6,6 +6,7 @@ from __future__ import annotations
 import os
 import pty
 import subprocess
+import time
 from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import IO
@@ -26,10 +27,15 @@ from blizzard.runner.process.groups import terminate_group
 # A timed-out child's group gets this long after SIGTERM before SIGKILL.
 _TIMEOUT_GRACE_SECONDS = 2.0
 
-_STREAMS = {Stream.DEVNULL: subprocess.DEVNULL, Stream.PIPE: subprocess.PIPE, Stream.STDOUT: subprocess.STDOUT}
+_STREAMS = {
+    Stream.DEVNULL: subprocess.DEVNULL,
+    Stream.PIPE: subprocess.PIPE,
+    Stream.STDOUT: subprocess.STDOUT,
+    Stream.INHERIT: None,
+}
 
 
-def _target(stream: StreamTarget) -> int | IO[bytes]:
+def _target(stream: StreamTarget) -> int | IO[bytes] | None:
     return _STREAMS[stream] if isinstance(stream, Stream) else stream
 
 
@@ -65,6 +71,29 @@ class _PopenChild:
             return None
 
 
+def _write_unclosed(process: subprocess.Popen[str], text: str) -> None:
+    """Write ``text`` to the child's stdin and leave it open; a child that already exited or closed its own stdin
+    is not an error. ``text`` is small enough to fit the pipe buffer with no concurrent reader."""
+    assert process.stdin is not None
+    try:
+        process.stdin.write(text)
+        process.stdin.flush()
+    except OSError:
+        pass
+
+
+def _communicated(process: subprocess.Popen[str]) -> Callable[[float], tuple[str, str] | None]:
+    """The grace wait :func:`terminate_group` bounds: the child's output once it exits, ``None`` when it ran out."""
+
+    def wait(grace: float) -> tuple[str, str] | None:
+        try:
+            return process.communicate(timeout=grace)
+        except subprocess.TimeoutExpired:
+            return None
+
+    return wait
+
+
 class SubprocessChildProcesses:
     """Every launch starts a new session, so the child's pid is its pgid and a group kill reaches its descendants."""
 
@@ -76,28 +105,33 @@ class SubprocessChildProcesses:
         env: ChildEnv,
         timeout: float,
         input: str | None = None,
+        input_settle: float = 0.0,
+        stdout: IO[bytes] | None = None,
     ) -> ChildRun:
+        deadline = time.monotonic() + timeout
         process = subprocess.Popen(
             command.script if isinstance(command, ShellCommand) else list(command),
             shell=isinstance(command, ShellCommand),
             cwd=cwd,
             env=env.variables,
             stdin=subprocess.PIPE if input is not None else subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
+            stdout=subprocess.PIPE if stdout is None else stdout,
             stderr=subprocess.PIPE,
             text=True,
             errors="replace",
             start_new_session=True,
         )
+        if input is not None and input_settle > 0:
+            _write_unclosed(process, input)
+            time.sleep(max(0.0, min(input_settle, deadline - time.monotonic())))
+            input = None
         try:
-            stdout, stderr = process.communicate(input, timeout=timeout)
+            out, err = process.communicate(input, timeout=max(0.0, deadline - time.monotonic()))
         except subprocess.TimeoutExpired:
-            output = terminate_group(
-                process.pid, grace=_TIMEOUT_GRACE_SECONDS, wait=lambda grace: process.communicate(timeout=grace)
-            )
-            stdout, stderr = output if output is not None else process.communicate()
-            return ChildRun(exit_code=None, stdout=stdout, stderr=stderr, timed_out=True)
-        return ChildRun(exit_code=process.returncode, stdout=stdout, stderr=stderr, timed_out=False)
+            output = terminate_group(process.pid, grace=_TIMEOUT_GRACE_SECONDS, wait=_communicated(process))
+            out, err = output if output is not None else process.communicate()
+            return ChildRun(exit_code=None, stdout=out or "", stderr=err or "", timed_out=True)
+        return ChildRun(exit_code=process.returncode, stdout=out or "", stderr=err or "", timed_out=False)
 
     def spawn(
         self,

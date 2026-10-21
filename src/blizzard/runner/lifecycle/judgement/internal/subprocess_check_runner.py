@@ -2,18 +2,19 @@
 :class:`~blizzard.runner.lifecycle.judgement.check_runner.ICheckRunner` binding, running a node's authored ``checks:``
 command in a leased worktree under a timeout and capturing a bounded output tail.
 
-The child environment is built from the worker-env allowlist (``bzh:worker-env-allowlist``): a check
-runs arbitrary repo tooling, so a daemon credential must be absent by construction, not filtered."""
+The child environment is the allowlist's tool profile (``bzh:worker-env-allowlist``): a check runs arbitrary repo
+tooling, so a daemon credential must be absent by construction, not filtered. The check leads its own group through the
+launch seam, so a timeout kills every descendant it forked, not just the shell."""
 
 from __future__ import annotations
 
-import subprocess
 from dataclasses import dataclass
 
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import domain_model
 from blizzard.runner.lifecycle.judgement.check_runner import CheckOutcome, ICheckRunner
-from blizzard.runner.process.child_env import AllowlistedEnv
+from blizzard.runner.process.child_env import ChildEnv
+from blizzard.runner.process.child_processes import IChildProcesses, ShellCommand
 
 _log = get_logger("blizzard.runner.checks")
 
@@ -30,8 +31,8 @@ class CheckOutput:
     text: str
 
     @classmethod
-    def of(cls, stdout: bytes | str | None, stderr: bytes | str | None, *, note: str = "") -> CheckOutput:
-        return cls(cls._decoded(stdout) + cls._decoded(stderr) + note)
+    def of(cls, stdout: str, stderr: str, *, note: str = "") -> CheckOutput:
+        return cls(stdout + stderr + note)
 
     @property
     def tail(self) -> str:  # ast-grep-ignore: bzh:property-delegates
@@ -41,43 +42,25 @@ class CheckOutput:
             return self.text
         return "…(output truncated)…\n" + self.text[-_TAIL_MAX_CHARS:]
 
-    @staticmethod
-    def _decoded(stream: bytes | str | None) -> str:
-        """``subprocess.TimeoutExpired`` carries the partial output as ``bytes`` (or ``None``)
-        even under ``text=True``; normalize either to ``str``."""
-        if stream is None:
-            return ""
-        if isinstance(stream, bytes):
-            return stream.decode("utf-8", errors="replace")
-        return stream
-
 
 class SubprocessCheckRunner:
     """Run a node's ``checks:`` command in a leased worktree, via the shell."""
 
-    def __init__(self, *, worker_env: AllowlistedEnv) -> None:
-        self._worker_env = worker_env
+    def __init__(self, *, children: IChildProcesses, env: ChildEnv) -> None:
+        self._children = children
+        self._env = env
 
     def run(self, command: str, cwd: str, timeout: int) -> CheckOutcome:
-        env = self._worker_env.variables
-        try:
-            result = subprocess.run(
-                command,
-                shell=True,  # a check is an authored shell string (`mise run lint`), not an argv
-                cwd=cwd,
-                env=env,
-                capture_output=True,
-                text=True,
-                timeout=timeout,
-            )
-        except subprocess.TimeoutExpired as exc:
+        # A check is an authored shell string (`mise run lint`), not an argv.
+        result = self._children.run(ShellCommand(command), cwd=cwd, env=self._env, timeout=timeout)
+        if result.timed_out:
             # A timeout is a red check, never a raise — a hung check cannot wedge the tick.
-            captured = CheckOutput.of(exc.stdout, exc.stderr, note=f"\n[timed out after {timeout}s]")
+            captured = CheckOutput.of(result.stdout, result.stderr, note=f"\n[timed out after {timeout}s]")
             _log.warning("check timed out", command=command, cwd=cwd, timeout=timeout)
             return CheckOutcome(passed=False, output_tail=captured.tail)
-        passed = result.returncode == 0
+        passed = result.exit_code == 0
         if not passed:
-            _log.info("check failed", command=command, cwd=cwd, returncode=result.returncode)
+            _log.info("check failed", command=command, cwd=cwd, returncode=result.exit_code)
         return CheckOutcome(passed=passed, output_tail=CheckOutput.of(result.stdout, result.stderr).tail)
 
 

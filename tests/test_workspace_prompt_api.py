@@ -17,6 +17,7 @@ from blizzard.runner.config import DEFAULT_WORKSPACE_ID, RunnerConfig
 from tests.config_inputs import create_runner_app
 from tests.host_files import one_workspace
 from tests.runner_fakes import make_host_stores, make_store, make_stores
+from tests.support_child_launch import workspace_launch
 
 _PROMPT = f"/api/host/workspaces/{DEFAULT_WORKSPACE_ID}/prompt"
 
@@ -32,7 +33,7 @@ def _app_with_store(tmp_path: Path, *, workspace_prompt: str = ""):  # type: ign
         config,
         runner_stores=make_stores(store),
         host_stores=make_host_stores(store),
-        workspace_registry=build_workspaces(config.workspaces, tmp_path),
+        workspace_registry=build_workspaces(config.workspaces, tmp_path, launch=workspace_launch()),
     )
     return app, store, config
 

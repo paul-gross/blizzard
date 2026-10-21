@@ -1,6 +1,6 @@
 """The seam for the one runner-owned launch of a worker, judge, or resume child: every adapter's
 ``spawn``/``resume_with_message``/``judge`` goes through :class:`IProcessLauncher`, never a bare
-``subprocess.Popen``, so a child always gets its own group and a parent-death signal
+launch, so a child always gets its own group and a parent-death signal
 (``bzh:deterministic-shell``). ``defer_disarm=True`` holds the real binary behind a
 trampoline until ``confirm_durable()`` receives its disarm acknowledgement. The driver is
 ``src/blizzard/runner/harness/internal/process_launcher.py``."""
@@ -9,9 +9,11 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import IO, Protocol
+from typing import Protocol
 
 from blizzard.foundation.roles import domain_model
+from blizzard.runner.process.child_env import ChildEnv
+from blizzard.runner.process.child_processes import StreamTarget
 
 
 @domain_model
@@ -38,15 +40,14 @@ class IProcessLauncher(Protocol):
         argv: list[str],
         *,
         cwd: str | None,
-        env: dict[str, str],
-        stdout: IO[bytes] | int | None,
-        stderr: IO[bytes] | int | None,
+        env: ChildEnv,
+        stdout: StreamTarget,
+        stderr: StreamTarget,
         defer_disarm: bool = False,
     ) -> LaunchedProcess:
-        """Start ``argv`` under its own process group and a parent-death signal. ``cwd``/
-        ``stdout``/``stderr`` of ``None`` inherit bare ``subprocess.Popen``'s own defaults;
-        stdin is always ``/dev/null``, never the launcher's own, so a child that drains stdin
-        before its turn sees EOF at once.
+        """Start ``argv`` under its own process group and a parent-death signal, with the worker profile ``env``.
+        A ``cwd`` of ``None`` inherits the launcher's own; stdin is always ``/dev/null``, never the launcher's own,
+        so a child that drains stdin before its turn sees EOF at once.
         Raises ``OSError`` on a launch failure — each adapter translates it into its own
         ``HarnessSpawnError``. ``defer_disarm=True`` holds the real binary's ``exec()``
         behind a trampoline until the returned handle's ``confirm_durable()`` is called."""

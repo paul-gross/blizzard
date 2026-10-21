@@ -31,10 +31,12 @@ from blizzard.runner.harness.claude_code.worker_settings import WorkerSettings
 from blizzard.runner.harness.declaration import SharedHarnessInputs
 from blizzard.runner.harness.harness_telemetry_plan import HarnessTelemetryNames, HarnessTelemetryPlan
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID
+from blizzard.runner.harness.internal.version_probe import VersionProbe
 from blizzard.runner.harness.offline_compatibility import ICompatibilityCorpus
 from blizzard.runner.harness.process_launch import IProcessLauncher
 from blizzard.runner.harness.registry import HarnessBinding
 from blizzard.runner.harness.transcript import TranscriptErrorFactory
+from blizzard.runner.process.child_processes import IChildProcesses
 from blizzard.runner.process.probe import IProcessProbe
 
 
@@ -75,6 +77,7 @@ class ClaudeCodeDeclaration:
         *,
         process: IProcessProbe,
         launcher: IProcessLauncher,
+        children: IChildProcesses,
     ) -> HarnessBinding:
         projects_root = shared.transcripts_root or str(Path.home() / ".claude" / "projects")
         transcript_source = ClaudeCodeTranscriptSource(
@@ -92,12 +95,19 @@ class ClaudeCodeDeclaration:
             transcript_source=transcript_source,
             process=process,
             launcher=launcher,
+            versions=VersionProbe(children, shared.worker_env.tool()),
             harness_telemetry=self.telemetry_plan(section, shared),
         )
         return HarnessBinding(adapter=adapter, transcript_source=transcript_source)
 
     def health_probe(
-        self, section: ClaudeCodeSection, shared: SharedHarnessInputs, *, spawn_root: str, corpus: ICompatibilityCorpus
+        self,
+        section: ClaudeCodeSection,
+        shared: SharedHarnessInputs,
+        *,
+        spawn_root: str,
+        corpus: ICompatibilityCorpus,
+        children: IChildProcesses,
     ) -> IHarnessHealthProbe:
         # Claude Code admits by its own version range, not a committed corpus — `corpus` goes unread.
         return ClaudeCodeHealthProbe(
@@ -105,6 +115,7 @@ class ClaudeCodeDeclaration:
             credentials_path=section.credentials_path,
             ambient_sources=claude_code_ambient_sources(shared.worker_env, spawn_root=spawn_root),
             permission_mode=claude_code_permission_mode(shared.autonomy, section.permission_mode),
+            versions=VersionProbe(children, shared.worker_env.tool()),
         )
 
     def publish_layout(self, section: ClaudeCodeSection, *, autonomy: Autonomy, runtime_root: Path) -> HarnessLayout:

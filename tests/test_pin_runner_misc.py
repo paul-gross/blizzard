@@ -21,8 +21,8 @@ from blizzard.runner.auth.session import RunnerSession, SessionCookie
 from blizzard.runner.cli import runner as runner_group
 from blizzard.runner.cli.worker_call import READ_TIMEOUT
 from blizzard.runner.config import RunnerConfig
-from blizzard.runner.environments.internal.git import SubprocessEnvGit
 from tests.config_inputs import create_runner_app
+from tests.support_child_launch import env_git
 from tests.worker_http import bind_stubs
 
 # --- src/blizzard/runner/auth/session.py: the stateless, per-process-secret session ---------------
@@ -99,7 +99,7 @@ def test_the_clean_sweeps_untracked_scratch_but_leaves_the_ignored_dependency_tr
     (repo / "build" / "artifact.o").write_text("previous tenant's build output")
     (repo / "junk.txt").write_text("previous tenant's untracked scratch file")
 
-    SubprocessEnvGit().clean_environment(env_workdir)
+    env_git().clean_environment(env_workdir)
 
     assert not (repo / "junk.txt").exists()
     assert (repo / "node_modules" / "dep.js").exists()
@@ -118,7 +118,7 @@ def test_origin_url_reads_the_named_worktree_not_the_process_cwd(
     elsewhere = _repo(tmp_path, "toy-b", origin="file:///origins/toy-b.git")
     monkeypatch.chdir(elsewhere)
 
-    assert SubprocessEnvGit().origin_url(target) == "file:///origins/toy-a.git"
+    assert env_git().origin_url(target) == "file:///origins/toy-a.git"
 
 
 # --- src/blizzard/runner/app.py: the hermetic default hub client ----------------------------------

@@ -9,7 +9,7 @@ import json
 from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
-from typing import IO, Any
+from typing import Any
 
 import pytest
 
@@ -31,11 +31,13 @@ from blizzard.runner.harness.opencode.section import OPENCODE_WORKER_CONFIG_FILE
 from blizzard.runner.harness.opencode.shapes import OpenCodePermissionRule
 from blizzard.runner.harness.process_launch import LaunchedProcess
 from blizzard.runner.host_layout import HOST_CONFIG_FILENAME
-from blizzard.runner.process.child_env import AllowlistedEnv
+from blizzard.runner.process.child_env import AllowlistedEnv, ChildEnv
+from blizzard.runner.process.child_processes import StreamTarget
 from tests.config_inputs import host_runtime_of
 from tests.harness_sections import claude_code
 from tests.host_files import load_runner_config, write_minimal_host
 from tests.runner_fakes import FakeProbe, make_envelope
+from tests.support_child_launch import version_probe
 
 pytestmark = pytest.mark.unit
 
@@ -54,13 +56,13 @@ class _RecordingLauncher:
         argv: list[str],
         *,
         cwd: str | None,
-        env: dict[str, str],
-        stdout: IO[bytes] | int | None,
-        stderr: IO[bytes] | int | None,
+        env: ChildEnv,
+        stdout: StreamTarget,
+        stderr: StreamTarget,
         defer_disarm: bool = False,
     ) -> LaunchedProcess:
         self.argvs.append(list(argv))
-        self.envs.append(dict(env))
+        self.envs.append(env.variables)
         return LaunchedProcess(pid=4242, pgid=4242, process_start_time="1", confirm_durable=lambda: None)
 
 
@@ -76,7 +78,12 @@ def _preamble(workdir: Path) -> WorkerPreamble:
 
 def _claude(launcher: _RecordingLauncher, **kwargs: Any) -> ClaudeCodeAdapter:
     return ClaudeCodeAdapter(
-        "claude", worker_env=AllowlistedEnv.of(()), process=FakeProbe(), launcher=launcher, **kwargs
+        "claude",
+        worker_env=AllowlistedEnv.of(()),
+        process=FakeProbe(),
+        launcher=launcher,
+        **kwargs,
+        versions=version_probe(),
     )
 
 
@@ -95,12 +102,13 @@ class _FakeResolver:
         self._stuck = stuck
         self._error = error
 
-    def resolve(self, *, cwd: str, env: Any) -> OpenCodeEffectivePermissions:
-        self.calls.append(dict(env))
+    def resolve(self, *, cwd: str, env: ChildEnv) -> OpenCodeEffectivePermissions:
+        variables = env.variables
+        self.calls.append(variables)
         self.cwds.append(cwd)
         if self._error is not None:
             raise self._error
-        composed = '"bash": "deny"' in env.get("OPENCODE_CONFIG_CONTENT", "")
+        composed = '"bash": "deny"' in variables.get("OPENCODE_CONFIG_CONTENT", "")
         asking = self._ask and (self._stuck or not composed)
         rules = (_rule("*", "*", "allow"), _rule("bash", "*", "ask" if asking else "deny"))
         return OpenCodeEffectivePermissions(
@@ -111,7 +119,12 @@ class _FakeResolver:
 def _opencode(launcher: _RecordingLauncher, **kwargs: Any) -> OpenCodeAdapter:
     kwargs.setdefault("permission_resolver", _FakeResolver(ask=False))
     return OpenCodeAdapter(
-        "opencode", worker_env=AllowlistedEnv.of(()), process=FakeProbe(), launcher=launcher, **kwargs
+        "opencode",
+        worker_env=AllowlistedEnv.of(()),
+        process=FakeProbe(),
+        launcher=launcher,
+        **kwargs,
+        versions=version_probe(),
     )
 
 
@@ -312,6 +325,7 @@ def test_opencode_normal_refuses_to_launch_what_it_cannot_prove(tmp_path: Path, 
         launcher=launcher,
         autonomy=Autonomy.Normal,
         permission_resolver=resolver,
+        versions=version_probe(),
     )
 
     with pytest.raises(HarnessSpawnError) as caught:
@@ -519,6 +533,7 @@ def test_opencode_checks_ambient_plugins_on_every_unattended_kind(tmp_path: Path
         launcher=launcher,
         effective_config_dir=str(effective),
         worker_config_path=str(worker),
+        versions=version_probe(),
     )
     preamble = _preamble(tmp_path)
     envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
