@@ -320,8 +320,7 @@ export type AnalyticsCountsResponse = {
  * One grouping key's step-duration rollup — ``key`` is a node
  * id or a graph id. Hub-observed wall-clock, not runner-measured: a parked gate
  * stretches it, a delayed store-and-forward mint-report *flush* compresses it toward
- * zero instead. A ``model``/``harness_id``/``harness_version`` filter counts the steps of lease attempts
- * with a matching usage fact (``docs/deployment/analytics.md`` states the attribution rule).
+ * zero instead. Provenance filters: see ``docs/deployment/analytics.md``.
  */
 export type AnalyticsDurationView = {
     /**
@@ -458,8 +457,7 @@ export type AnalyticsEventsResponse = {
  * One node's judged-choice distribution and attempt-failure count,
  * never blended — a judged failure consumes no retry budget, an ended (superseded by a
  * strictly newer lease) attempt does; a still-open final attempt counts as neither, nor
- * does a kick-back. The two counts' differing time windows are in ``docs/deployment/analytics.md``. A
- * provenance filter keeps the attempts with a matching usage fact (the same rule).
+ * does a kick-back. The two counts' differing time windows are in ``docs/deployment/analytics.md``.
  */
 export type AnalyticsOutcomeView = {
     /**
@@ -515,7 +513,6 @@ export type AnalyticsSpendResponse = {
  * own graph, a graph row names the chunk's *current* pin, so a migrated chunk's two rows can
  * disagree. Under ``by_name`` the row rolls up every minted id sharing the name, and ``key`` is
  * ``<graph_name>/<node_name>`` for a node and ``graph_name`` for a graph. A model row carries neither name.
- * A ``model``/``harness_id``/``harness_version`` filter keeps the usage facts matching every dimension given.
  */
 export type AnalyticsSpendView = {
     /**

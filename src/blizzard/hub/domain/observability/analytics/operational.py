@@ -20,21 +20,10 @@ from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
 @domain_model
 @dataclass(frozen=True)
 class OperationalCriteria:
-    """Every filter the operational datasets owe — the scope shared
-    with events and counts, narrowed to the four fields that mean something outside the
-    derived-event projection (no ``extractor_version``, no event-shape filter), plus the
-    three provenance dimensions a ``usage_facts`` row records: ``model``, ``harness_id``,
-    ``harness_version``. ``effort`` is not among them — only transcript events carry it.
-
-    **Attribution rule.** Durations, outcomes and spend carry no provenance of their own
-    except spend's usage facts, so a provenance filter attributes by lease attempt: a row
-    matches when its attempt ``(chunk_id, epoch)`` has at least one usage fact (judge facts
-    included) matching *every* dimension given. Consequences: an attempt that ran on two
-    models counts under each, so per-model numbers do not partition the unfiltered total;
-    an attempt that recorded no usage fact (a crash before the first report, any
-    hub-executed step) matches no filter; a NULL ``harness_id``/``harness_version``
-    (declared unknown) never matches a value. Spend filters the usage facts directly,
-    which is the same rule applied per fact."""
+    """Every filter the operational datasets owe: the scope's four fields plus the
+    usage-recorded provenance. A provenance filter keeps the rows whose lease attempt
+    ``(chunk_id, epoch)`` has a usage fact matching every dimension given; see
+    ``docs/deployment/analytics.md`` for the rule."""
 
     graph_id: str | None = None
     source: str | None = None

@@ -506,7 +506,7 @@
         "type": "object"
       },
       "AnalyticsDurationView": {
-        "description": "One grouping key's step-duration rollup \u2014 ``key`` is a node\nid or a graph id. Hub-observed wall-clock, not runner-measured: a parked gate\nstretches it, a delayed store-and-forward mint-report *flush* compresses it toward\nzero instead. A ``model``/``harness_id``/``harness_version`` filter counts the steps of lease attempts\nwith a matching usage fact (``docs/deployment/analytics.md`` states the attribution rule).",
+        "description": "One grouping key's step-duration rollup \u2014 ``key`` is a node\nid or a graph id. Hub-observed wall-clock, not runner-measured: a parked gate\nstretches it, a delayed store-and-forward mint-report *flush* compresses it toward\nzero instead. Provenance filters: see ``docs/deployment/analytics.md``.",
         "properties": {
           "avg_seconds": {
             "title": "Avg Seconds",
@@ -732,7 +732,7 @@
         "type": "object"
       },
       "AnalyticsOutcomeView": {
-        "description": "One node's judged-choice distribution and attempt-failure count,\nnever blended \u2014 a judged failure consumes no retry budget, an ended (superseded by a\nstrictly newer lease) attempt does; a still-open final attempt counts as neither, nor\ndoes a kick-back. The two counts' differing time windows are in ``docs/deployment/analytics.md``. A\nprovenance filter keeps the attempts with a matching usage fact (the same rule).",
+        "description": "One node's judged-choice distribution and attempt-failure count,\nnever blended \u2014 a judged failure consumes no retry budget, an ended (superseded by a\nstrictly newer lease) attempt does; a still-open final attempt counts as neither, nor\ndoes a kick-back. The two counts' differing time windows are in ``docs/deployment/analytics.md``.",
         "properties": {
           "attempt_failures": {
             "title": "Attempt Failures",
@@ -793,7 +793,7 @@
         "type": "object"
       },
       "AnalyticsSpendView": {
-        "description": "One grouping key's usage/cost rollup \u2014 ``key`` is a node id, a graph id or a model name,\nwhichever dataset served it. The same contract ``GET /api/spend`` publishes: ``cost_partial`` is ``True``\niff some summed row carried neither a billed nor an estimated amount, and ``estimated_cost_usd`` is ``None``\nunless some summed row carried one. ``graph_name`` and ``node_name`` name what the row sums, null where an\nid no longer resolves and ``node_name`` always null on a graph row: a node row names the node's\nown graph, a graph row names the chunk's *current* pin, so a migrated chunk's two rows can\ndisagree. Under ``by_name`` the row rolls up every minted id sharing the name, and ``key`` is\n``<graph_name>/<node_name>`` for a node and ``graph_name`` for a graph. A model row carries neither name.\nA ``model``/``harness_id``/``harness_version`` filter keeps the usage facts matching every dimension given.",
+        "description": "One grouping key's usage/cost rollup \u2014 ``key`` is a node id, a graph id or a model name,\nwhichever dataset served it. The same contract ``GET /api/spend`` publishes: ``cost_partial`` is ``True``\niff some summed row carried neither a billed nor an estimated amount, and ``estimated_cost_usd`` is ``None``\nunless some summed row carried one. ``graph_name`` and ``node_name`` name what the row sums, null where an\nid no longer resolves and ``node_name`` always null on a graph row: a node row names the node's\nown graph, a graph row names the chunk's *current* pin, so a migrated chunk's two rows can\ndisagree. Under ``by_name`` the row rolls up every minted id sharing the name, and ``key`` is\n``<graph_name>/<node_name>`` for a node and ``graph_name`` for a graph. A model row carries neither name.",
         "properties": {
           "cache_create_tokens": {
             "title": "Cache Create Tokens",
@@ -18823,7 +18823,7 @@
     },
     "/api/analytics/spend/models": {
       "get": {
-        "description": "The same rollup grouped by the model each usage fact recorded \u2014 the graph filter\nnarrows by each fact's chunk's *current* pin, like the other spend groupings.",
+        "description": "The same rollup grouped by the model each usage fact recorded.",
         "operationId": "spend_by_model_api_analytics_spend_models_get",
         "parameters": [
           {

@@ -241,8 +241,7 @@ export const spendByGraphApiAnalyticsSpendGraphsGet = <ThrowOnError extends bool
 /**
  * Spend By Model
  *
- * The same rollup grouped by the model each usage fact recorded — the graph filter
- * narrows by each fact's chunk's *current* pin, like the other spend groupings.
+ * The same rollup grouped by the model each usage fact recorded.
  */
 export const spendByModelApiAnalyticsSpendModelsGet = <ThrowOnError extends boolean = false>(options?: Options<SpendByModelApiAnalyticsSpendModelsGetData, ThrowOnError>): RequestResult<SpendByModelApiAnalyticsSpendModelsGetResponses, SpendByModelApiAnalyticsSpendModelsGetErrors, ThrowOnError> => (options?.client ?? client).get<SpendByModelApiAnalyticsSpendModelsGetResponses, SpendByModelApiAnalyticsSpendModelsGetErrors, ThrowOnError>({ url: '/api/analytics/spend/models', ...options });
 

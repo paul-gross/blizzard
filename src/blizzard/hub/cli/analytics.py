@@ -309,14 +309,13 @@ def analytics_events(
 #: dataset's own applicable set builds on top of.
 _SCOPE_FILTERS = frozenset({"graph_id", "source", "since", "until"})
 
-#: The three provenance filters a usage fact records, so the operational datasets honor them too.
+#: The provenance filters a usage fact records.
 _USAGE_PROVENANCE_FILTERS = frozenset({"harness_id", "harness_version", "model"})
 
-#: The four provenance filters the counts routes honor — ``effort`` lives on transcript
-#: events alone, so it is theirs only.
+#: The counts routes' provenance filters; ``effort`` lives on transcript events alone.
 _PROVENANCE_FILTERS = _USAGE_PROVENANCE_FILTERS | {"effort"}
 
-#: What the operational datasets take: the scope plus the usage-recorded provenance.
+#: What the operational datasets take.
 _OPERATIONAL_FILTERS = _SCOPE_FILTERS | _USAGE_PROVENANCE_FILTERS
 
 #: The flag each filter's dest name renders as, for a per-dataset applicability error.

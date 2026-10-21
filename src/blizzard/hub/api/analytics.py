@@ -151,10 +151,8 @@ def operational_criteria(scope: ScopeFilters) -> OperationalCriteria:
 @dto
 @dataclass(frozen=True)
 class OperationalScopeFilters:
-    """:class:`ScopeFilters` plus the three provenance dimensions a usage fact records —
-    ``effort`` is absent, only transcript events carry it. Used by the operational
-    dataset routes; the fleet router's windowed reads stay on plain :class:`ScopeFilters`.
-    Declares its query parameters flat."""
+    """:class:`ScopeFilters` plus the usage-recorded provenance dimensions (no ``effort``,
+    which only transcript events carry) — the operational routes' query parameters, flat."""
 
     scope: ScopeFilters
     model: str | None
@@ -552,8 +550,7 @@ def spend_by_graph(
 def spend_by_model(
     services: Services, scope: Annotated[OperationalScopeFilters, Depends(OperationalScopeFilters.of)]
 ) -> AnalyticsSpendResponse:
-    """The same rollup grouped by the model each usage fact recorded — the graph filter
-    narrows by each fact's chunk's *current* pin, like the other spend groupings."""
+    """The same rollup grouped by the model each usage fact recorded."""
     return spend_response(services.operational_analytics.spend_by_model(scope.criteria))
 
 

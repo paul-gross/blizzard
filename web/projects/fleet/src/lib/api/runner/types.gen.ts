@@ -70,7 +70,6 @@ export type AnalyticsSpendResponse = {
  * own graph, a graph row names the chunk's *current* pin, so a migrated chunk's two rows can
  * disagree. Under ``by_name`` the row rolls up every minted id sharing the name, and ``key`` is
  * ``<graph_name>/<node_name>`` for a node and ``graph_name`` for a graph. A model row carries neither name.
- * A ``model``/``harness_id``/``harness_version`` filter keeps the usage facts matching every dimension given.
  */
 export type AnalyticsSpendView = {
     /**

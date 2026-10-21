@@ -2070,9 +2070,9 @@
   },
   "blizzard/hub/api/analytics.py": {
    "comments": 12,
-   "docstrings": 79,
+   "docstrings": 82,
    "over_cap": 0,
-   "total": 609
+   "total": 650
   },
   "blizzard/hub/api/auth.py": {
    "comments": 12,
@@ -2681,10 +2681,10 @@
    "total": 55
   },
   "blizzard/hub/cli/analytics.py": {
-   "comments": 13,
+   "comments": 15,
    "docstrings": 21,
    "over_cap": 3,
-   "total": 501
+   "total": 510
   },
   "blizzard/hub/cli/auth.py": {
    "comments": 0,
@@ -3678,9 +3678,9 @@
   },
   "blizzard/hub/domain/observability/analytics/operational.py": {
    "comments": 7,
-   "docstrings": 90,
+   "docstrings": 93,
    "over_cap": 0,
-   "total": 406
+   "total": 415
   },
   "blizzard/hub/domain/observability/analytics/queries.py": {
    "comments": 4,
@@ -4349,10 +4349,10 @@
    "total": 187
   },
   "blizzard/hub/store/internal/analytics_operational_store.py": {
-   "comments": 4,
-   "docstrings": 74,
+   "comments": 5,
+   "docstrings": 77,
    "over_cap": 1,
-   "total": 443
+   "total": 484
   },
   "blizzard/hub/store/internal/chunk_artifacts_store.py": {
    "comments": 10,
@@ -10510,7 +10510,7 @@
    "comments": 8,
    "docstrings": 3,
    "over_cap": 0,
-   "total": 118
+   "total": 127
   },
   "service/test_analytics_service.py": {
    "comments": 2,
@@ -10804,13 +10804,13 @@
    "comments": 55,
    "docstrings": 31,
    "over_cap": 2,
-   "total": 2709
+   "total": 2713
   },
   "store_scan_allowlist.py": {
    "comments": 37,
    "docstrings": 19,
    "over_cap": 1,
-   "total": 722
+   "total": 723
   },
   "suite_plugin.py": {
    "comments": 10,
@@ -10915,10 +10915,10 @@
    "total": 590
   },
   "test_analytics_operational_statements.py": {
-   "comments": 4,
-   "docstrings": 12,
+   "comments": 6,
+   "docstrings": 13,
    "over_cap": 0,
-   "total": 121
+   "total": 167
   },
   "test_analytics_outcomes_api.py": {
    "comments": 34,
@@ -10926,11 +10926,17 @@
    "over_cap": 1,
    "total": 436
   },
+  "test_analytics_provenance_api.py": {
+   "comments": 12,
+   "docstrings": 9,
+   "over_cap": 0,
+   "total": 196
+  },
   "test_analytics_scope_filters.py": {
    "comments": 0,
    "docstrings": 2,
    "over_cap": 0,
-   "total": 35
+   "total": 54
   },
   "test_analytics_spend_api.py": {
    "comments": 14,
@@ -11228,9 +11234,9 @@
   },
   "test_chunk_fact_table_indexes.py": {
    "comments": 17,
-   "docstrings": 29,
+   "docstrings": 32,
    "over_cap": 6,
-   "total": 415
+   "total": 444
   },
   "test_chunk_latest_movement.py": {
    "comments": 0,
@@ -11432,15 +11438,15 @@
   },
   "test_cli_analytics_summary.py": {
    "comments": 6,
-   "docstrings": 5,
+   "docstrings": 6,
    "over_cap": 0,
-   "total": 358
+   "total": 424
   },
   "test_cli_analytics_summary_component.py": {
-   "comments": 11,
+   "comments": 12,
    "docstrings": 5,
    "over_cap": 2,
-   "total": 156
+   "total": 177
   },
   "test_cli_context.py": {
    "comments": 9,
@@ -14020,7 +14026,7 @@
    "comments": 82,
    "docstrings": 54,
    "over_cap": 9,
-   "total": 633
+   "total": 634
   },
   "test_route_permission_matrix.py": {
    "comments": 21,
@@ -15736,7 +15742,7 @@
    "comments": 32,
    "docstrings": 53,
    "over_cap": 3,
-   "total": 1087
+   "total": 1088
   },
   "test_tenant_isolation_adapters.py": {
    "comments": 1,
