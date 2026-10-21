@@ -25,8 +25,15 @@ entry: plan
 #                 authoring a plan against the project's declared verification methods
 #                 and architecture guidance is the judgement-heaviest work this graph
 #                 does.
-#   code          the build lineage — build -> pre-push -> resolve — on the basic tier
-#                 and BOUNDED, since it accumulates across every review-fail loop.
+#   code          the build lineage — `build` alone — on the basic tier and BOUNDED,
+#                 since it accumulates across every review-fail loop.
+#   integration   the integration lineage — pre-push -> resolve — on the basic tier and
+#                 bounded with `code`'s numbers. Held apart from `code` because every
+#                 resume re-reads the whole lineage: pre-push read ~281 cache tokens per
+#                 output token resuming the build conversation, against far less on the
+#                 cold-started `prepush` pool of basic-harness-workflow. What the cold
+#                 lineage needs reaches it through the reviewed-plan, the commit messages,
+#                 and the diff rather than through the build conversation.
 #   verification  the verify finale's own lineage, on the basic tier and bounded the same
 #                 way. Held apart from `code` because `build` is always the later node in
 #                 the build/verify/review cycle: on one shared id every build resume
@@ -74,8 +81,7 @@ sessions:
       # plus a judge, plus an occasional resume), so this is roughly five node-steps, not twelve.
       # Observed p99 is 10 and the most any session ever reached is 21, so this bounds the
       # tail without touching the body — but it IS the bound that rotates a real lineage
-      # first, since `code` spans build -> pre-push -> resolve and accumulates across
-      # every review-fail loop.
+      # first, since `code` is `build` alone and accumulates across every review-fail loop.
       max_invocations: 12
       # The context the next resume starts from, in tokens — measured off the pool head's
       # last main-chain turn, so it is the conversation's SIZE, not spend accumulated
@@ -86,6 +92,14 @@ sessions:
       # measures, since a resume re-reads neither a subagent's context nor its bytes. A
       # backstop under the context bound rather than a peer of it: bytes track context only
       # loosely, and the largest main file ever observed is 5.2MB, so this is ~2x the tail.
+      max_transcript_bytes: 10000000
+  integration:
+    model: ["blizzard:basic"]
+    compaction_window: "450000"
+    # `code`'s three numbers, unchanged: only the context differs, not the tier.
+    rotate:
+      max_invocations: 12
+      max_context_tokens: 300000
       max_transcript_bytes: 10000000
   verification:
     model: ["blizzard:basic"]
@@ -285,9 +299,9 @@ nodes:
   pre-push:
     executor: runner
     prompt: ./prompts/pre-push.md
-    session: resume:code  # integration is mechanical (rebase, lint, targeted
-      # tests), not a judgement call — the `code` lineage already carries the build
-      # context the rebase is resolving against
+    session: resume:integration  # integration is mechanical (rebase, lint, targeted
+      # tests), not a judgement call — it works from the branch and the reviewed-plan,
+      # so it keeps its own lineage rather than re-reading the build conversation
     produces:
       - pre-push-summary
       - retrospective
@@ -341,9 +355,10 @@ nodes:
   resolve:
     executor: runner
     prompt: ./prompts/resolve.md
-    session: resume:code  # mechanical (base-merge, transient CI/forge blip),
+    session: resume:integration  # mechanical (base-merge, transient CI/forge blip),
       # not a judgement call — deliver is a script node with no session, so the
-      # `code` lineage is the closest context holding the branch/rebase history
+      # `integration` lineage, pre-push's, is the closest context holding the
+      # branch/rebase history
     produces:
       - resolve-report
       - retrospective
