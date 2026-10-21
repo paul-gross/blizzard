@@ -8,6 +8,7 @@ Controllers stay read-only over the store (``bzh:controller-read-only``);
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Set as AbstractSet
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Annotated, ClassVar
@@ -26,7 +27,7 @@ from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.composition import TenantServices
 from blizzard.hub.domain.execution.fleet import RetireOutcome
 from blizzard.hub.domain.projects.model import Project, ProjectId
-from blizzard.hub.domain.runners.bindings import BindingFlags, flag_bindings
+from blizzard.hub.domain.runners.bindings import BindingFlags, claimable_projects, flag_bindings
 from blizzard.hub.domain.runners.host import Host, HostRetired
 from blizzard.hub.domain.runners.registration import (
     PerSubscriptionUsageView,
@@ -181,7 +182,7 @@ def registry_view(
         retired_at=_iso_or_none(r.retired_at),
         retired_by=r.retired_by,
         gates=list(r.gates),
-        projects=served_views(r.served, projects),
+        projects=served_views(r.served, projects, claimable_projects(r, host_of(r, hosts))),
         host_id=r.host_id,
         bindings=binding_views(r.bindings, flags),
         subscription=r.subscription,
@@ -205,10 +206,14 @@ def hosts_of(services: TenantServices, registrations: Sequence[RunnerRegistratio
     return {h.host_id: h for h in services.hosts.list_hosts(include_retired=True) if h.host_id in ids}
 
 
+def host_of(registration: RunnerRegistration, hosts: Mapping[str, Host]) -> Host | None:
+    """The host the runner stands under, ``None`` for a runner that stands alone."""
+    return hosts.get(registration.host_id) if registration.host_id is not None else None
+
+
 def flags_of(registration: RunnerRegistration, hosts: Mapping[str, Host]) -> BindingFlags:
     """The flags the runner's host raises against its declaration — none for a runner that stands alone."""
-    host = hosts.get(registration.host_id) if registration.host_id is not None else None
-    return flag_bindings(registration.bindings, registration.subscription, host)
+    return flag_bindings(registration.bindings, registration.subscription, host_of(registration, hosts))
 
 
 def binding_views(bindings: Iterable[RunnerBinding] | None, flags: BindingFlags) -> list[RunnerBindingView] | None:
@@ -232,8 +237,13 @@ def served_projects(services: TenantServices, served: Iterable[ServedEntry]) -> 
     return services.projects.get_many(ids) if ids else {}
 
 
-def served_views(served: Iterable[ServedEntry], projects: Mapping[ProjectId, Project]) -> list[ServedProjectView]:
-    """Each served entry as declared, with the project it resolved to named by its slug and name as they stand."""
+def served_views(
+    served: Iterable[ServedEntry],
+    projects: Mapping[ProjectId, Project],
+    claimable: AbstractSet[str] = frozenset(),
+) -> list[ServedProjectView]:
+    """Each served entry as declared, with the project it resolved to named by its slug and name as they stand, and
+    flagged claimable where its project is among ``claimable``."""
     views: list[ServedProjectView] = []
     for entry in served:
         project = projects.get(ProjectId(entry.project_id)) if entry.project_id is not None else None
@@ -244,6 +254,7 @@ def served_views(served: Iterable[ServedEntry], projects: Mapping[ProjectId, Pro
                 slug=None if project is None else project.slug,
                 name=None if project is None else project.name,
                 color=None if project is None else str(project.color),
+                claimable=entry.project_id in claimable,
             )
         )
     return views

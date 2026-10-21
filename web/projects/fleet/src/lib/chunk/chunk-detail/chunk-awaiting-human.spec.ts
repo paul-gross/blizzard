@@ -240,13 +240,14 @@ describe('ChunkAwaitingHuman', () => {
   });
 
   describe('the step\'s checks on a gate decision', () => {
+    // The hub's judgment rides each choice, so a red check marks the gated choice and a green one marks none.
     function withChecks(passed: boolean, overrides: Partial<DecisionView> = {}): ChunkDetail {
       return {
         ...WAITING_DECISION_DETAIL,
         decision: {
           ...WAITING_DECISION_DETAIL.decision!,
           choices: [
-            { name: 'approve', description: 'Ship it.', requires_checks: true },
+            { name: 'approve', description: 'Ship it.', requires_checks: true, would_override_red_checks: !passed },
             { name: 'reject', description: 'Send it back.' },
           ],
           check_results: [{ command: 'make test', passed }],

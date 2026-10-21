@@ -26,11 +26,11 @@ import sqlalchemy as sa
 import structlog
 
 from blizzard.auth_core import Role
+from blizzard.foundation.sign_in_refusal import SignInRefusal
 from blizzard.hub.auth.errors import RepoErrorFactory
 from blizzard.hub.auth.internal.identity_repository import IdentityRepository
 from blizzard.hub.auth.invitations import InvitationRecord, InvitationToken, TenantInvitation
 from blizzard.hub.auth.models import Identity, ProviderIdentity
-from blizzard.hub.auth.service import SignInRefusal
 from blizzard.hub.store import schema
 from blizzard.hub.store.internal.invitation_store import InvitationStore
 from blizzard.hub.tenancy import TenantClosed, TenantId

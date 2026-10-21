@@ -57,7 +57,16 @@ def _serving_default(hub: HubHarness, tenant: TenantId | None = None, *, entry: 
         color = conn.execute(
             sa.select(projects.c.color).where(projects.c.tenant_id == tenant, projects.c.project_id == project_id)
         ).scalar_one()
-    return [{"entry": declared, "project_id": project_id, "slug": "default", "name": "Default", "color": color}]
+    return [
+        {
+            "entry": declared,
+            "project_id": project_id,
+            "slug": "default",
+            "name": "Default",
+            "color": color,
+            "claimable": False,
+        }
+    ]
 
 
 def _rename(hub: HubHarness, tenant: TenantId, name: str) -> None:

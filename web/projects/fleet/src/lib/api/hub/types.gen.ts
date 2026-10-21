@@ -30,6 +30,14 @@ export const ActivityChunkChangeCause = {
 
 export type ActivityChunkChangeCause = typeof ActivityChunkChangeCause[keyof typeof ActivityChunkChangeCause];
 
+export const ActivityHubEventType = {
+    CHUNK_CHANGED: 'chunk-changed',
+    EVENT_LOGGED: 'event-logged',
+    RUNNER_CHANGED: 'runner-changed'
+} as const;
+
+export type ActivityHubEventType = typeof ActivityHubEventType[keyof typeof ActivityHubEventType];
+
 /**
  * ActivityResponse
  *
@@ -823,6 +831,90 @@ export type BlockedView = {
      * The count of unmet prerequisites, never below 1.
      */
     unmet_count?: number;
+};
+
+/**
+ * BounceEnvelope
+ *
+ * Why delivery did not complete: the ``cause``, a readable ``detail``, the repositories not yet landed, and the
+ * failed ``step`` when a ``run:`` step caused the bounce.
+ */
+export type BounceEnvelope = {
+    /**
+     * Cause
+     */
+    cause: string;
+    /**
+     * Detail
+     */
+    detail: string;
+    step: BounceFailedStep | null;
+    /**
+     * Unlanded
+     */
+    unlanded: Array<BounceUnlandedRepo>;
+};
+
+/**
+ * BounceFailedStep
+ *
+ * The ``run:`` step the bounce is attributed to — one that exited non-zero. ``output_tail`` is bounded;
+ * ``log_artifact`` names the asset holding the full log.
+ */
+export type BounceFailedStep = {
+    /**
+     * Exit Code
+     */
+    exit_code: number;
+    /**
+     * Log Artifact
+     */
+    log_artifact: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Output Tail
+     */
+    output_tail: string;
+};
+
+/**
+ * BouncePullRequest
+ *
+ * The pull request an unlanded repository's branch is open or closed under.
+ */
+export type BouncePullRequest = {
+    /**
+     * Number
+     */
+    number: number;
+    /**
+     * Url
+     */
+    url: string;
+};
+
+/**
+ * BounceUnlandedRepo
+ *
+ * A repository whose branch had not landed when delivery bounced; ``pr`` is ``null`` where none was raised.
+ */
+export type BounceUnlandedRepo = {
+    /**
+     * Branch
+     */
+    branch: string;
+    /**
+     * Commit
+     */
+    commit: string;
+    pr: BouncePullRequest | null;
+    /**
+     * Repo
+     */
+    repo: string;
 };
 
 /**
@@ -2143,7 +2235,8 @@ export type ConfigDocument = {
  * DecisionChoiceModel
  *
  * One selectable gate outcome; ``requires_checks`` marks a choice that overrides red checks
- * when a person resolves to it while one is red.
+ * when a person resolves to it while one is red. ``would_override_red_checks`` is the hub's judgment that
+ * resolving to this choice now would be that override.
  */
 export type DecisionChoiceModel = {
     /**
@@ -2158,6 +2251,10 @@ export type DecisionChoiceModel = {
      * Requires Checks
      */
     requires_checks?: boolean;
+    /**
+     * Would Override Red Checks
+     */
+    would_override_red_checks?: boolean;
 };
 
 /**
@@ -5798,6 +5895,47 @@ export type ProjectPatchRequest = {
 };
 
 /**
+ * ProjectRef
+ *
+ * A project as a refusal names it — its id, current slug and display name.
+ */
+export type ProjectRef = {
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Project Id
+     */
+    project_id: string;
+    /**
+     * Slug
+     */
+    slug: string;
+};
+
+/**
+ * ProjectRequiredBody
+ *
+ * The ``detail`` of a ``422``: the call needs a project, named none, and the tenant does not hold exactly one —
+ * or the project could not be inferred. ``projects`` lists the ones to choose from.
+ */
+export type ProjectRequiredBody = {
+    /**
+     * Code
+     */
+    code?: 'project_required';
+    /**
+     * Message
+     */
+    message: string;
+    /**
+     * Projects
+     */
+    projects: Array<ProjectRef>;
+};
+
+/**
  * ProjectView
  *
  * One project — the ``GET /api/projects`` listing row and every project verb's view.
@@ -8207,9 +8345,14 @@ export type SecretView = {
  * One entry of the projects a runner serves: the ``entry`` as declared — a project id or slug — and the project
  * it resolves to in the runner's tenant, with its palette ``color`` — a palette name or a ``#rrggbb``.
  * ``project_id``, ``slug``, ``name`` and ``color`` are ``None`` for an entry that resolves to no project, which
- * serves nothing until a project answers to it.
+ * serves nothing until a project answers to it. ``claimable``, set on the runners read, is the hub's judgment that the
+ * runner can claim the project now.
  */
 export type ServedProjectView = {
+    /**
+     * Claimable
+     */
+    claimable?: boolean;
     /**
      * Color
      */
@@ -8305,6 +8448,26 @@ export type SidechainSegmentViewOutput = {
      */
     turns: Array<TurnSegmentViewOutput>;
 };
+
+/**
+ * SignInRefusal
+ *
+ * Why a sign-in admitted nobody — the code the login page shows its text for. Every refusal writes
+ * nothing: no user, identity link, membership, invitation fact or session.
+ */
+export const SignInRefusal = {
+    INVITE_ONLY: 'invite_only',
+    INVITATION_UNUSABLE: 'invitation_unusable',
+    INVITATION_EMAIL_MISMATCH: 'invitation_email_mismatch'
+} as const;
+
+/**
+ * SignInRefusal
+ *
+ * Why a sign-in admitted nobody — the code the login page shows its text for. Every refusal writes
+ * nothing: no user, identity link, membership, invitation fact or session.
+ */
+export type SignInRefusal = typeof SignInRefusal[keyof typeof SignInRefusal];
 
 /**
  * SourceLinkView

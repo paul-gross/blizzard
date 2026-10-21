@@ -1,4 +1,4 @@
-import type { HttpValidationError } from '../api/hub';
+import type { HttpValidationError, ProjectRequiredBody } from '../api/hub';
 
 /** FastAPI's list-shaped 422 `detail` as one message per entry, each named by the field
  * its `loc` points at (the leading `body`/`query` segment dropped), or `null` when
@@ -16,21 +16,15 @@ function validationMessage(detail: unknown): string | null {
   return messages.join('; ');
 }
 
-/** A project a refusal names — the `projects` list of a `project_required` body. */
-interface RefusalProject {
-  readonly slug: string;
-  readonly name: string;
-}
-
-/** A coded refusal's `detail` object — `{code, message}`, and for `project_required` the
+/** A coded refusal's `detail` object — a `message`, and for a `ProjectRequiredBody` the
  * tenant's projects to choose from — as its message, or `null` when `detail` isn't that
- * shape. A `project_required` message names each project so the caller can name one. */
+ * shape. A message that comes with projects names each so the caller can name one. */
 function refusalMessage(detail: unknown): string | null {
   if (!detail || typeof detail !== 'object' || Array.isArray(detail)) return null;
-  const { code, message, projects } = detail as { code?: unknown; message?: unknown; projects?: unknown };
+  const { message, projects } = detail as Partial<ProjectRequiredBody>;
   if (typeof message !== 'string' || message === '') return null;
-  if (code !== 'project_required' || !Array.isArray(projects) || projects.length === 0) return message;
-  const named = (projects as RefusalProject[])
+  if (!Array.isArray(projects) || projects.length === 0) return message;
+  const named = projects
     .filter((project) => project && typeof project.slug === 'string')
     .map((project) => (project.name && project.name !== project.slug ? `${project.name} (${project.slug})` : project.slug));
   return named.length > 0 ? `${message} Projects: ${named.join(', ')}.` : message;

@@ -48,7 +48,12 @@ def to_decision_view(row: GateDecision, runner_names: Mapping[str, str], project
         node_name=row.node_name,
         epoch=row.epoch,
         choices=[
-            DecisionChoiceModel(name=c.name, description=c.description, requires_checks=c.requires_checks)
+            DecisionChoiceModel(
+                name=c.name,
+                description=c.description,
+                requires_checks=c.requires_checks,
+                would_override_red_checks=row.overrides_red_checks(c.name),
+            )
             for c in row.choices
         ],
         submitted_at=iso_utc(row.submitted_at),

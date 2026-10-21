@@ -13,6 +13,7 @@ from blizzard.foundation.escalation_causes import EscalationCause
 from blizzard.foundation.findings import FindingExit, FindingFactKind, FindingSeverity, FindingSource, FindingState
 from blizzard.foundation.hub_event_types import (
     ActivityChunkChangeCause,
+    ActivityHubEventType,
     ActivityRunnerChangeKind,
     ChunkChangeCause,
     HubEventType,
@@ -28,6 +29,8 @@ from blizzard.foundation.runner_event_types import (
     RunnerEventType,
     TakeoverChangeCause,
 )
+from blizzard.foundation.sign_in_refusal import SignInRefusal
+from blizzard.wire.bounce import BounceEnvelope, BounceFailedStep, BouncePullRequest, BounceUnlandedRepo
 from blizzard.wire.finding import (
     AddFindingOp,
     FindingCandidate,
@@ -36,6 +39,7 @@ from blizzard.wire.finding import (
     GoneFindingOp,
     ObservedFindingOp,
 )
+from blizzard.wire.project import ProjectRef, ProjectRequiredBody
 from blizzard.wire.sse import (
     ChunkChangedPayload,
     DecisionOpenedPayload,
@@ -73,6 +77,12 @@ HUB_SCHEMA_COMPONENTS = SchemaComponents(
         GoneFindingOp,
         FindingSurvey,
         FindingCandidate,
+        BounceEnvelope,
+        BounceFailedStep,
+        BounceUnlandedRepo,
+        BouncePullRequest,
+        ProjectRequiredBody,
+        ProjectRef,
         ChunkChangedPayload,
         QuestionAskedPayload,
         QuestionAnsweredPayload,
@@ -86,6 +96,7 @@ HUB_SCHEMA_COMPONENTS = SchemaComponents(
     enums={
         "HubEventType": HubEventType,
         "ChunkChangeCause": ChunkChangeCause,
+        "ActivityHubEventType": ActivityHubEventType,
         "ActivityChunkChangeCause": ActivityChunkChangeCause,
         "ActivityRunnerChangeKind": ActivityRunnerChangeKind,
         "RunnerChangeKind": RunnerChangeKind,
@@ -96,6 +107,7 @@ HUB_SCHEMA_COMPONENTS = SchemaComponents(
         "FindingSeverity": FindingSeverity,
         "FindingSource": FindingSource,
         "EscalationCause": EscalationCause,
+        "SignInRefusal": SignInRefusal,
     },
 )
 

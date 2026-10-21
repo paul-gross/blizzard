@@ -40,6 +40,15 @@ def _usage_stale(sampled_at: datetime, *, now: datetime) -> bool:
 CREDENTIAL_LAPSED_CONDITION = SampleMissReason.CREDENTIAL_LAPSED
 
 
+class ClaimBar(StrEnum):
+    """The runner-level reasons the hub refuses a runner any claim, in the order it checks them."""
+
+    UNREGISTERED = "unregistered"
+    RETIRED = "retired"
+    VERSION_REFUSED = "version_refused"
+    PAUSED = "paused"
+
+
 class RunnerState(StrEnum):
     """A registration's lifecycle state, derived from its row. A runner the hub never added has no
     row and so no state: every operator verb on it is an unknown id. An added runner that has never
@@ -280,6 +289,19 @@ class RunnerRegistration:
     def serves(self, project_id: str) -> bool:
         """Whether some entry of the served declaration resolved to ``project_id``."""
         return any(entry.project_id == project_id for entry in self.served)
+
+    def claim_bar(self) -> ClaimBar | None:
+        """The first runner-level bar to a new claim, or ``None``: never connected, retired, refused on version, or
+        paused by the hub."""
+        if self.never_connected():
+            return ClaimBar.UNREGISTERED
+        if not self.permits(RunnerVerb.CONTACT):
+            return ClaimBar.RETIRED
+        if self.version_refusal is not None:
+            return ClaimBar.VERSION_REFUSED
+        if self.hub_paused:
+            return ClaimBar.PAUSED
+        return None
 
     def never_connected(self) -> bool:
         """Whether the runner was added but has never registered — no workspace, capabilities,

@@ -219,7 +219,7 @@ describe('ProjectDetail', () => {
       connection: 'online',
       hub_paused: false,
       online: true,
-      projects: [{ entry: 'blizzard', project_id: 'proj_b' }],
+      projects: [{ entry: 'blizzard', project_id: 'proj_b', claimable: true }],
     };
     const { el } = await open('/admin/projects/proj_b', [serving]);
     expect(text(el, 'admin-projects-served-by')).toContain('desk');

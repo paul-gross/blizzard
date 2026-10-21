@@ -54,18 +54,14 @@ export class ChunkAwaitingHuman {
     return options.map((value) => ({ value, label: value, testid: 'question-option' }));
   }
 
-  /** A choice that requires green checks is marked as an override while any check is red. */
+  /** A choice the hub judges would override a red check is marked as one. */
   protected decisionOptions(decision: DecisionView): readonly KitChipOption[] {
-    const red = (decision.check_results ?? []).some((check) => !check.passed);
-    return (decision.choices ?? []).map((choice) => {
-      const overrides = red && !!choice.requires_checks;
-      return {
-        value: choice.name,
-        label: overrides ? `${choice.name} · overrides red checks` : choice.name,
-        title: choice.description,
-        testid: 'decision-choice',
-      };
-    });
+    return (decision.choices ?? []).map((choice) => ({
+      value: choice.name,
+      label: choice.would_override_red_checks ? `${choice.name} · overrides red checks` : choice.name,
+      title: choice.description,
+      testid: 'decision-choice',
+    }));
   }
   /** The chunk aggregate to render (open questions, gate decision, escalation). */
   readonly detail = input.required<ChunkDetail>();

@@ -29,7 +29,7 @@ const SERVING = {
   connection: 'online',
   hub_paused: false,
   online: true,
-  projects: [{ entry: 'blizzard', project_id: 'proj_b', slug: 'blizzard', name: 'Blizzard' }],
+  projects: [{ entry: 'blizzard', project_id: 'proj_b', slug: 'blizzard', name: 'Blizzard', claimable: true }],
 };
 
 /** An operator who may change configuration. */

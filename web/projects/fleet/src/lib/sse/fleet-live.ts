@@ -3,6 +3,7 @@ import { QueryClient } from '@tanstack/angular-query-experimental';
 
 import {
   ActivityChunkChangeCause,
+  ActivityHubEventType,
   ActivityRunnerChangeKind,
   type ActivityView,
   type ChunkChangedPayload,
@@ -103,22 +104,16 @@ export type LoggedEventData = Omit<ActivityView, 'at' | 'type' | 'key'> & { read
 
 /**
  * The general rule behind every Activity feed drop: a frame belongs in the ring only when
- * its kind carries a durable fact behind it. `queue-changed` reports a reorder with no
- * per-chunk row behind it (`bzh:ranking-is-per-list`) — never a fact, so it is dropped
- * whole, unconditionally, whichever hub sent it. {@link ACTIVITY_RUNNER_KINDS} is the same
- * rule applied within `runner-changed`, whose frames are factual only for the pause kinds.
+ * its type has a row of its own type on reload — the wire's {@link ActivityHubEventType}.
+ * `queue-changed` reports a reorder with no per-chunk row behind it (`bzh:ranking-is-per-list`),
+ * and `question-*` and `decision-*` frames reach the feed as the `chunk-changed` cause they
+ * also raise, so each is dropped whole, whichever hub sent it. {@link ACTIVITY_RUNNER_KINDS}
+ * is the same rule applied within `runner-changed`, whose frames are factual only for the pause kinds.
  *
- * The test is "this kind has no durable fact", never "this frame has no `key`" — `key`'s
- * absence is ambiguous (it also marks a frame from a hub older than this stamp,
- * which the ring deliberately keeps) and is evidence only, not the predicate itself.
  * Dropping is scoped to the feed either way: {@link LiveInvalidationSpine.dispatch}
  * still invalidates on every dropped frame, keyed off `type` alone.
  */
-const NO_DURABLE_FACT_TYPES: ReadonlySet<string> = new Set<HubEventType>([
-  HubEventType.QUEUE_CHANGED,
-  // A host's frame re-reads the host cards it changes, but carries no news the Activity feed shows.
-  HubEventType.HOST_CHANGED,
-]);
+const ACTIVITY_FRAME_TYPES: ReadonlySet<string> = new Set<string>(Object.values(ActivityHubEventType));
 
 /** The `runner-changed` kinds the hub's activity read backfills from a durable pause fact —
  * the wire's own {@link ActivityRunnerChangeKind}. Every other kind (a liveness `registered`
@@ -132,10 +127,10 @@ const ACTIVITY_RUNNER_KINDS: ReadonlySet<string> = new Set<string>(Object.values
  * transition's status and key; neither makes that fact another activity occurrence. */
 const ACTIVITY_CHUNK_CAUSES: ReadonlySet<string> = new Set<string>(Object.values(ActivityChunkChangeCause));
 
-/** Whether a frame belongs in the Activity feed — see {@link NO_DURABLE_FACT_TYPES} and
+/** Whether a frame belongs in the Activity feed — see {@link ACTIVITY_FRAME_TYPES} and
  * {@link ACTIVITY_RUNNER_KINDS}. */
 function isLoggable(type: string, data: LoggedEventData): boolean {
-  if (NO_DURABLE_FACT_TYPES.has(type)) return false;
+  if (!ACTIVITY_FRAME_TYPES.has(type)) return false;
   if (type === HubEventType.CHUNK_CHANGED) return ACTIVITY_CHUNK_CAUSES.has(data.cause ?? '');
   return type !== HubEventType.RUNNER_CHANGED || ACTIVITY_RUNNER_KINDS.has(data.kind ?? '');
 }

@@ -38,6 +38,14 @@
         ],
         "type": "string"
       },
+      "ActivityHubEventType": {
+        "enum": [
+          "chunk-changed",
+          "event-logged",
+          "runner-changed"
+        ],
+        "type": "string"
+      },
       "ActivityResponse": {
         "description": "The activity feed, newest-first (bounded).",
         "properties": {
@@ -1251,6 +1259,127 @@
           "prerequisite_chunk_id"
         ],
         "title": "BlockedView",
+        "type": "object"
+      },
+      "BounceEnvelope": {
+        "description": "Why delivery did not complete: the ``cause``, a readable ``detail``, the repositories not yet landed, and the\nfailed ``step`` when a ``run:`` step caused the bounce.",
+        "properties": {
+          "cause": {
+            "title": "Cause",
+            "type": "string"
+          },
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "step": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BounceFailedStep"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "unlanded": {
+            "items": {
+              "$ref": "#/components/schemas/BounceUnlandedRepo"
+            },
+            "title": "Unlanded",
+            "type": "array"
+          }
+        },
+        "required": [
+          "cause",
+          "detail",
+          "unlanded",
+          "step"
+        ],
+        "title": "BounceEnvelope",
+        "type": "object"
+      },
+      "BounceFailedStep": {
+        "description": "The ``run:`` step the bounce is attributed to \u2014 one that exited non-zero. ``output_tail`` is bounded;\n``log_artifact`` names the asset holding the full log.",
+        "properties": {
+          "exit_code": {
+            "title": "Exit Code",
+            "type": "integer"
+          },
+          "log_artifact": {
+            "title": "Log Artifact",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "output_tail": {
+            "title": "Output Tail",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "exit_code",
+          "output_tail",
+          "log_artifact"
+        ],
+        "title": "BounceFailedStep",
+        "type": "object"
+      },
+      "BouncePullRequest": {
+        "description": "The pull request an unlanded repository's branch is open or closed under.",
+        "properties": {
+          "number": {
+            "title": "Number",
+            "type": "integer"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "number",
+          "url"
+        ],
+        "title": "BouncePullRequest",
+        "type": "object"
+      },
+      "BounceUnlandedRepo": {
+        "description": "A repository whose branch had not landed when delivery bounced; ``pr`` is ``null`` where none was raised.",
+        "properties": {
+          "branch": {
+            "title": "Branch",
+            "type": "string"
+          },
+          "commit": {
+            "title": "Commit",
+            "type": "string"
+          },
+          "pr": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BouncePullRequest"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "repo": {
+            "title": "Repo",
+            "type": "string"
+          }
+        },
+        "required": [
+          "repo",
+          "branch",
+          "commit",
+          "pr"
+        ],
+        "title": "BounceUnlandedRepo",
         "type": "object"
       },
       "BounceView": {
@@ -3469,7 +3598,7 @@
         "type": "object"
       },
       "DecisionChoiceModel": {
-        "description": "One selectable gate outcome; ``requires_checks`` marks a choice that overrides red checks\nwhen a person resolves to it while one is red.",
+        "description": "One selectable gate outcome; ``requires_checks`` marks a choice that overrides red checks\nwhen a person resolves to it while one is red. ``would_override_red_checks`` is the hub's judgment that\nresolving to this choice now would be that override.",
         "properties": {
           "description": {
             "title": "Description",
@@ -3482,6 +3611,11 @@
           "requires_checks": {
             "default": false,
             "title": "Requires Checks",
+            "type": "boolean"
+          },
+          "would_override_red_checks": {
+            "default": false,
+            "title": "Would Override Red Checks",
             "type": "boolean"
           }
         },
@@ -9124,6 +9258,58 @@
         "title": "ProjectPatchRequest",
         "type": "object"
       },
+      "ProjectRef": {
+        "description": "A project as a refusal names it \u2014 its id, current slug and display name.",
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_id",
+          "slug",
+          "name"
+        ],
+        "title": "ProjectRef",
+        "type": "object"
+      },
+      "ProjectRequiredBody": {
+        "description": "The ``detail`` of a ``422``: the call needs a project, named none, and the tenant does not hold exactly one \u2014\nor the project could not be inferred. ``projects`` lists the ones to choose from.",
+        "properties": {
+          "code": {
+            "const": "project_required",
+            "default": "project_required",
+            "title": "Code",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "projects": {
+            "items": {
+              "$ref": "#/components/schemas/ProjectRef"
+            },
+            "title": "Projects",
+            "type": "array"
+          }
+        },
+        "required": [
+          "message",
+          "projects"
+        ],
+        "title": "ProjectRequiredBody",
+        "type": "object"
+      },
       "ProjectView": {
         "description": "One project \u2014 the ``GET /api/projects`` listing row and every project verb's view.",
         "properties": {
@@ -12879,8 +13065,13 @@
         "type": "object"
       },
       "ServedProjectView": {
-        "description": "One entry of the projects a runner serves: the ``entry`` as declared \u2014 a project id or slug \u2014 and the project\nit resolves to in the runner's tenant, with its palette ``color`` \u2014 a palette name or a ``#rrggbb``.\n``project_id``, ``slug``, ``name`` and ``color`` are ``None`` for an entry that resolves to no project, which\nserves nothing until a project answers to it.",
+        "description": "One entry of the projects a runner serves: the ``entry`` as declared \u2014 a project id or slug \u2014 and the project\nit resolves to in the runner's tenant, with its palette ``color`` \u2014 a palette name or a ``#rrggbb``.\n``project_id``, ``slug``, ``name`` and ``color`` are ``None`` for an entry that resolves to no project, which\nserves nothing until a project answers to it. ``claimable``, set on the runners read, is the hub's judgment that the\nrunner can claim the project now.",
         "properties": {
+          "claimable": {
+            "default": false,
+            "title": "Claimable",
+            "type": "boolean"
+          },
           "color": {
             "anyOf": [
               {
@@ -13058,6 +13249,16 @@
         ],
         "title": "SidechainSegmentView",
         "type": "object"
+      },
+      "SignInRefusal": {
+        "description": "Why a sign-in admitted nobody \u2014 the code the login page shows its text for. Every refusal writes\nnothing: no user, identity link, membership, invitation fact or session.",
+        "enum": [
+          "invite_only",
+          "invitation_unusable",
+          "invitation_email_mismatch"
+        ],
+        "title": "SignInRefusal",
+        "type": "string"
       },
       "SourceLinkView": {
         "description": "A project's link to a work source: ``name`` is the source's key \u2014 its id, or ``hub`` \u2014 and ``slug`` its current\nslug. ``linked`` is false once the link is retired (unlinked). The built-in ``hub`` source is linked to every\nproject: it has no stored link, so no ``revision``, and cannot be unlinked.",

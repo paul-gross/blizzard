@@ -42,7 +42,13 @@ from blizzard.hub.domain.execution.claim import (
 )
 from blizzard.hub.domain.graph.model import Choice, Edge, Node
 from blizzard.hub.domain.projects.model import ProjectId
-from blizzard.hub.domain.runners.registration import RunnerCapability, RunnerRegistration, RunnerRetired, ServedEntry
+from blizzard.hub.domain.runners.registration import (
+    ClaimBar,
+    RunnerCapability,
+    RunnerRegistration,
+    RunnerRetired,
+    ServedEntry,
+)
 from blizzard.hub.domain.runners.route import Route
 from tests.support import make_graph
 
@@ -343,6 +349,34 @@ def test_a_paused_retired_or_unregistered_runner_is_refused_before_the_race() ->
         refuse_paused_runner(None, runner_id="runner-a")
     assert refused.value.runner_id == "runner-a"
     assert refuse_paused_runner(_REGISTERED, runner_id="runner-a") is _REGISTERED
+
+
+def test_the_claim_bar_names_the_first_bar_in_the_order_the_claim_refuses_them() -> None:
+    """Every bar stacked on one registration, then peeled off in the claim's order: the bar the predicate names is
+    the refusal ``refuse_paused_runner`` raises."""
+    stacked = replace(
+        _VERSION_REFUSED,
+        hub_paused=True,
+        retired=True,
+        retired_at=_T0,
+        retired_by="op",
+        registered_at=None,
+    )
+    order = [
+        (ClaimBar.UNREGISTERED, ClaimDeniedUnregistered, stacked),
+        (ClaimBar.RETIRED, RunnerRetired, replace(stacked, registered_at=_T0)),
+        (ClaimBar.VERSION_REFUSED, ClaimDeniedVersionRefused, replace(stacked, registered_at=_T0, retired=False)),
+        (
+            ClaimBar.PAUSED,
+            ClaimDeniedPaused,
+            replace(stacked, registered_at=_T0, retired=False, version_refusal=None),
+        ),
+    ]
+    for bar, refusal, registration in order:
+        assert registration.claim_bar() is bar
+        with pytest.raises(refusal):
+            refuse_paused_runner(registration, runner_id="runner-a")
+    assert _REGISTERED.claim_bar() is None
 
 
 # --- Prerequisites -----------------------------------------------------------

@@ -151,7 +151,7 @@ export function decisionView(overrides: Partial<DecisionView> = {}): DecisionVie
     node_name: 'review',
     epoch: 1,
     choices: [
-      { name: 'approve', description: 'Accept the change and move on.', requires_checks: true },
+      { name: 'approve', description: 'Accept the change and move on.', requires_checks: true, would_override_red_checks: true },
       { name: 'rework', description: 'Send the change back to build.' },
     ],
     check_results: [

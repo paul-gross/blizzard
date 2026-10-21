@@ -418,17 +418,30 @@ describe('FleetLiveUpdates', () => {
     const source = FakeEventSource.instances[0];
     source.open();
     source.emitNamed('chunk-changed', JSON.stringify({ chunk_id: 'ch_a', status: 'running', cause: 'node-completed' }), '1');
-    // queue-changed carries no durable fact and is dropped from the ring entirely — see
+    // queue-changed has no row of its own type and is dropped from the ring entirely — see
     // 'drops queue-changed from the ring, but still invalidates on it' below.
-    source.emitNamed('question-asked', JSON.stringify({ chunk_id: 'ch_a' }), '2');
+    source.emitNamed('event-logged', JSON.stringify({ kind: 'worker-lost', chunk_id: 'ch_a' }), '2');
 
     const log = live.log();
     expect(log).toHaveLength(2);
     expect(log[0].type).toBe('chunk-changed');
     expect(log[0].data.chunk_id).toBe('ch_a');
-    expect(log[1].type).toBe('question-asked');
+    expect(log[1].type).toBe('event-logged');
     // Monotonic client keys for a stable render track.
     expect(log[1].seq).toBeGreaterThan(log[0].seq);
+  });
+
+  it('keeps a decision-opened frame out of the ring and a chunk-changed one in', () => {
+    TestBed.runInInjectionContext(() => TestBed.inject(FleetLiveUpdates).start());
+    const live = TestBed.inject(FleetLiveUpdates);
+    const source = FakeEventSource.instances[0];
+    source.open();
+
+    source.emitNamed('decision-opened', JSON.stringify({ chunk_id: 'ch_a', decision_id: 'dc_1' }));
+    expect(live.log()).toEqual([]);
+
+    source.emitNamed('chunk-changed', JSON.stringify({ chunk_id: 'ch_a', status: 'waiting_on_human', cause: 'decision-submitted' }));
+    expect(live.log().map((event) => event.type)).toEqual(['chunk-changed']);
   });
 
   it('drops queue-changed from the ring, but still invalidates on it', () => {

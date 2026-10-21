@@ -33,7 +33,12 @@ from blizzard.hub.domain.chunk.ports.route import IWriteChunkRouteRepository
 from blizzard.hub.domain.execution.eligibility import EligibilityCheck
 from blizzard.hub.domain.execution.envelope import Envelope
 from blizzard.hub.domain.graph.model import Graph, IReadGraphRepository, Node
-from blizzard.hub.domain.runners.registration import IReadRunnerRegistry, RetiredRunnerGuard, RunnerRegistration
+from blizzard.hub.domain.runners.registration import (
+    ClaimBar,
+    IReadRunnerRegistry,
+    RetiredRunnerGuard,
+    RunnerRegistration,
+)
 from blizzard.hub.domain.runners.route import Route
 
 #: `secrets.token_urlsafe` byte count for the route capability token (43 URL-safe chars).
@@ -156,12 +161,16 @@ class RekeyDeniedTerminal(Exception):
 
 def refuse_paused_runner(registration: RunnerRegistration | None, *, runner_id: str) -> RunnerRegistration:
     """Refuse, in order, an unregistered, retired, version-refused, or paused runner; return its registration."""
-    if registration is None or registration.never_connected():
+    bar = ClaimBar.UNREGISTERED if registration is None else registration.claim_bar()
+    if registration is None or bar is ClaimBar.UNREGISTERED:
         raise ClaimDeniedUnregistered(runner_id=runner_id)
-    registration.refuse_if_retired(action="claim")
-    refuse_version_refused(registration)
-    if registration.hub_paused:
-        raise ClaimDeniedPaused(runner_id=runner_id)
+    match bar:
+        case ClaimBar.RETIRED:
+            registration.refuse_if_retired(action="claim")
+        case ClaimBar.VERSION_REFUSED:
+            refuse_version_refused(registration)
+        case ClaimBar.PAUSED:
+            raise ClaimDeniedPaused(runner_id=runner_id)
     return registration
 
 

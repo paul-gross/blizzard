@@ -549,3 +549,16 @@ def test_a_malformed_commit_pointer_is_refused_on_completion_and_decision(tmp_pa
     detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
     assert detail["status"] == "running" and detail["artifacts"] == []
     assert hub.client.get("/api/decisions").json()["decisions"] == []
+
+
+def test_a_decisions_choices_say_whether_taking_them_would_override_a_red_check(tmp_path: Path) -> None:
+    (tmp_path / "red").mkdir()
+    (tmp_path / "green").mkdir()
+    _, _, over_red = _gate_with_checks(build_hub(tmp_path / "red"), passed=False)
+    _, _, over_green = _gate_with_checks(build_hub(tmp_path / "green"), passed=True)
+
+    red = {c["name"]: c["would_override_red_checks"] for c in over_red["choices"]}
+    green = {c["name"]: c["would_override_red_checks"] for c in over_green["choices"]}
+
+    assert red == {"pass": True, "fail": False}
+    assert green == {"pass": False, "fail": False}

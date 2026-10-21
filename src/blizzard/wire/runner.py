@@ -44,13 +44,15 @@ class ServedProjectView(BaseModel):
     """One entry of the projects a runner serves: the ``entry`` as declared — a project id or slug — and the project
     it resolves to in the runner's tenant, with its palette ``color`` — a palette name or a ``#rrggbb``.
     ``project_id``, ``slug``, ``name`` and ``color`` are ``None`` for an entry that resolves to no project, which
-    serves nothing until a project answers to it."""
+    serves nothing until a project answers to it. ``claimable``, set on the runners read, is the hub's judgment that the
+    runner can claim the project now."""
 
     entry: str
     project_id: str | None = None
     slug: str | None = None
     name: str | None = None
     color: str | None = None
+    claimable: bool = False
 
 
 class RunnerBinding(BaseModel):

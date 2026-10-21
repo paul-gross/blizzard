@@ -1,11 +1,11 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 
-import { ArtifactKind, type ArtifactView, type FindingDelta, type FindingSurvey } from '../../api/hub';
+import { ArtifactKind, type ArtifactView, type BounceEnvelope, type FindingDelta, type FindingSurvey } from '../../api/hub';
 import { FleetWhen } from '../../core/when-display/fleet-when';
 import { ChunkArtifactBounce } from './chunk-artifact-bounce';
 import { ChunkArtifactDelta } from './chunk-artifact-delta';
 import { ChunkArtifactSurvey } from './chunk-artifact-survey';
-import { type BounceEnvelope, parseBounceEnvelope } from './parse-bounce-envelope';
+import { parseBounceEnvelope } from './parse-bounce-envelope';
 import { parseFindingDelta } from './parse-finding-delta';
 import { parseFindingSurvey } from './parse-finding-survey';
 
@@ -92,7 +92,7 @@ export class ChunkArtifactBody {
   });
 
   /** The `bounce-envelope` asset's content, parsed — `null` for any other artifact or an
-   * envelope that is not a JSON object, which falls through to the verbatim `<pre>`.
+   * envelope that does not validate, which falls through to the verbatim `<pre>`.
    * Unlike the garden shapes this one is keyed by name: an envelope's `cause`/`detail`
    * carry no shape that tells it from any other small JSON asset. */
   protected readonly parsedBounce = computed<BounceEnvelope | null>(() => {
