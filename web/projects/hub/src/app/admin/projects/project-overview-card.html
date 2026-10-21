@@ -1,11 +1,14 @@
-<section class="card" [attr.data-testid]="testid()">
-  <header class="hdr">
-    <h3 class="section">{{ heading() }}</h3>
-    @if (opens()) {
-      <fleet-kit-button variant="primary" [testid]="testid() + '-open'" (click)="open.emit()">open</fleet-kit-button>
-    }
-  </header>
-  @if (lines().length > 0) {
+<fleet-kit-panel [label]="heading()" [attr.data-testid]="testid()">
+  @if (opens()) {
+    <fleet-kit-button fleetKitPanelHeader variant="primary" [testid]="testid() + '-open'" (click)="open.emit()">open</fleet-kit-button>
+  }
+  <fleet-kit-async-state
+    [state]="state()"
+    placement="inline"
+    loadingText="Loading…"
+    errorText="Failed to load."
+    [emptyText]="none()"
+  >
     <ul class="lines">
       @for (line of lines(); track line.name) {
         <li>
@@ -14,7 +17,5 @@
         </li>
       }
     </ul>
-  } @else {
-    <p class="no-lines">{{ none() }}</p>
-  }
-</section>
+  </fleet-kit-async-state>
+</fleet-kit-panel>

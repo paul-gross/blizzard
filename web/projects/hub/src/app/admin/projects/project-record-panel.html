@@ -1,0 +1,103 @@
+<ng-template #createdFact>
+  <fleet-when [iso]="project().created_at" [relative]="true" />
+</ng-template>
+<ng-template #colorFact>
+  <fleet-kit-swatch class="fact-swatch" [color]="project().color" />{{ project().color }}
+</ng-template>
+<ng-template #revisionFact>
+  r{{ project().revision }}
+  @if (lastChange(); as last) {
+    <span class="dim" data-testid="admin-projects-last-change">
+      · <fleet-when [iso]="last.at" [relative]="true" /> by {{ last.actor }} via {{ last.door }}
+    </span>
+  }
+</ng-template>
+<article class="record" data-testid="admin-projects-detail">
+  <header class="hdr">
+    <fleet-kit-swatch class="name-swatch" [color]="project().color" />
+    <h2 class="name">{{ project().name }}</h2>
+    @if (project().description) {
+      <span class="desc" data-testid="admin-projects-description">{{ project().description }}</span>
+    }
+    <span class="grow"></span>
+    @if (canEdit()) {
+      <fleet-kit-button testid="admin-projects-color-open" (click)="color.emit()">Color</fleet-kit-button>
+      <fleet-kit-button testid="admin-projects-edit" (click)="edit.emit()">Edit</fleet-kit-button>
+    }
+  </header>
+  <fleet-kit-tabs variant="sub" [options]="tabs()" [activeValue]="tab()" (choose)="tabChange.emit($event)" />
+
+  <div class="body">
+    @switch (tab()) {
+      @case ('overview') {
+        @if (callout(); as text) {
+          <p class="callout" role="status" data-testid="admin-projects-callout">{{ text }}</p>
+        }
+        <fleet-kit-fact-list [rows]="facts()" testid="admin-projects-facts" />
+
+        <div class="cards">
+          <app-project-overview-card
+            heading="Draws work from"
+            [lines]="sourceRows()"
+            [state]="sourcesState()"
+            none="No work source is linked."
+            testid="admin-projects-draws"
+            [opens]="true"
+            (open)="tabChange.emit('sources')"
+          />
+          <app-project-overview-card
+            heading="May land in"
+            [lines]="repositoryRows()"
+            [state]="repositoriesState()"
+            none="No repository is linked, so nothing this project does can land."
+            testid="admin-projects-lands"
+            [opens]="true"
+            (open)="tabChange.emit('repositories')"
+          />
+          <app-project-overview-card
+            heading="Served by"
+            [lines]="servedLines()"
+            [state]="servedState()"
+            none="No runner serves this project."
+            testid="admin-projects-served-by"
+          />
+        </div>
+
+        <h3 class="section">Revisions</h3>
+        <app-config-revisions [rows]="revisions()" [state]="revisionsState()" [relative]="true" testidPrefix="admin-projects" />
+      }
+      @case ('sources') {
+        <app-project-link-panel
+          heading="Linked"
+          explainer="Work sources belong to the tenant and are shared. Unlinking stops new ingest into this project from that source; nothing already ingested moves."
+          [rows]="sourceRows()"
+          [state]="sourcesState()"
+          emptyText="No work source is linked."
+          linkLabel="+ Link a source"
+          [canEdit]="canEdit()"
+          [pendingKeys]="pendingSourceKeys()"
+          [error]="sourceError()"
+          testid="admin-projects-sources"
+          (link)="link.emit('source')"
+          (unlink)="unlink.emit({ kind: 'source', row: $event })"
+        />
+      }
+      @case ('repositories') {
+        <app-project-link-panel
+          heading="Linked"
+          explainer="Repositories belong to the tenant. A chunk of this project may land only in the repositories linked here. Unlinking stops landings from the next step; nothing already landed moves."
+          [rows]="repositoryRows()"
+          [state]="repositoriesState()"
+          emptyText="No repository is linked, so nothing this project does can land."
+          linkLabel="+ Link a repository"
+          [canEdit]="canEdit()"
+          [pendingKeys]="pendingRepositoryKeys()"
+          [error]="repositoryError()"
+          testid="admin-projects-repositories"
+          (link)="link.emit('repository')"
+          (unlink)="unlink.emit({ kind: 'repository', row: $event })"
+        />
+      }
+    }
+  </div>
+</article>

@@ -18,8 +18,7 @@
           <span class="top">
             <span
               class="light"
-              [class.wired]="row.wired"
-              [class.missing]="row.needs !== null"
+              [style.background]="lightColor(row)"
               role="img"
               [attr.aria-label]="lightLabel(row)"
               [attr.data-testid]="'projects-table-light-' + row.key"

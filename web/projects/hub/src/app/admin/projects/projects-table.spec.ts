@@ -29,12 +29,11 @@ describe('ProjectsTable', () => {
     const light = (key: string) => el.querySelector(`[data-testid="projects-table-light-${key}"]`)!;
     expect(el.querySelector('[data-testid="projects-table-row-proj_b"]')!.textContent).toContain('Blizzard');
     expect(light('proj_b').getAttribute('aria-label')).toBe('wired');
-    expect(light('proj_b').classList).toContain('wired');
+    expect(light('proj_b').getAttribute('style')).toContain('var(--green)');
     expect(light('proj_c').getAttribute('aria-label')).toBe('missing wiring');
-    expect(light('proj_c').classList).toContain('missing');
+    expect(light('proj_c').getAttribute('style')).toContain('var(--red)');
     expect(light('proj_d').getAttribute('aria-label')).toBe('not yet judged');
-    expect(light('proj_d').classList).not.toContain('wired');
-    expect(light('proj_d').classList).not.toContain('missing');
+    expect(light('proj_d').getAttribute('style')).toContain('var(--label-dim)');
     expect(el.querySelector('[data-testid="projects-table-needs-proj_b"]')).toBeNull();
     expect(el.querySelector('[data-testid="projects-table-needs-proj_c"]')!.textContent).toContain('needs a runner');
     expect(el.querySelector('[data-testid="projects-table-ref-proj_b"]')!.textContent).toBe('PROJ-YZ12');

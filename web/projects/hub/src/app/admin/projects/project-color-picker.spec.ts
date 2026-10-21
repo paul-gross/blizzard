@@ -72,4 +72,10 @@ describe('ProjectColorPicker', () => {
     const chips = [...root.querySelectorAll<HTMLButtonElement>('button[data-testid^="project-color-"]')];
     expect(chips.every((chip) => chip.disabled)).toBe(true);
   });
+
+  it('disables the custom color input along with the chips while an edit is pending', async () => {
+    const root: HTMLElement = (await mount(true, '#ff8800')).nativeElement;
+    expect(root.querySelector<HTMLInputElement>('[data-testid="project-color-custom-input"]')?.disabled).toBe(true);
+    expect(root.querySelector<HTMLButtonElement>('[data-testid="project-color-pink"]')?.disabled).toBe(true);
+  });
 });

@@ -22,6 +22,7 @@
   <fleet-kit-color-input
     class="custom-input"
     [value]="current()"
+    [disabled]="disabled()"
     testid="project-color-custom-input"
     (valueChange)="choose.emit($event)"
   />

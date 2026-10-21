@@ -8,12 +8,14 @@ import type {
   RepositorySummary,
   RunnerRegistryView,
   SourceLinkView,
+  Tone,
   WorkSourceSummary,
 } from 'fleet';
 
 import { servingRunners } from '../../core/project-serving';
 import type { ConfigFieldDef, ConfigFormValues } from '../config-edit.model';
 import { workSourceKey, workSourceSlug } from '../work-sources/work-sources.model';
+import type { ProjectLinkKind, ProjectLinkVars } from './projects.mutations';
 
 /** A project's form: its handle, its display name and what it is for. Every field stays
  * editable — a slug change keeps the old one resolving until another project takes it. A create
@@ -340,4 +342,23 @@ export function repositoryChoices(
 export function lensedListState(failed: boolean, pending: boolean, list: KitAsyncStateValue): KitAsyncStateValue {
   if (failed) return 'error';
   return pending ? 'loading' : list;
+}
+
+/** The tone a project row's status light takes: green once wired, red while wanting, neutral while not yet judged. */
+export function projectLightTone(row: Pick<ProjectRowVm, 'wired' | 'needs'>): Tone {
+  if (row.wired) return 'done';
+  return row.needs !== null ? 'needs' : 'idle';
+}
+
+/** The names of the `kind` links of `projectId` an unlink is in flight for — the rows whose Unlink waits. */
+export function pendingUnlinkNames(
+  pending: readonly ProjectLinkVars[],
+  projectId: string | null,
+  kind: ProjectLinkKind,
+): ReadonlySet<string> {
+  return new Set(
+    pending
+      .filter((vars) => !vars.linked && vars.kind === kind && vars.projectId === projectId)
+      .map((vars) => vars.name),
+  );
 }
