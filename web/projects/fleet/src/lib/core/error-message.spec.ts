@@ -1,3 +1,4 @@
+import type { ProjectRequiredBody } from '../api/hub';
 import { errorMessage } from './error-message';
 
 describe('errorMessage', () => {
@@ -29,16 +30,14 @@ describe('errorMessage', () => {
   });
 
   it('names every project a project_required refusal asks to choose from', () => {
-    const error = {
-      detail: {
-        code: 'project_required',
-        message: 'This tenant holds several projects; name one.',
-        projects: [
-          { project_id: 'proj_a', slug: 'blizzard', name: 'Blizzard' },
-          { project_id: 'proj_b', slug: 'winter', name: 'winter' },
-        ],
-      },
+    const detail: ProjectRequiredBody = {
+      message: 'This tenant holds several projects; name one.',
+      projects: [
+        { project_id: 'proj_a', slug: 'blizzard', name: 'Blizzard' },
+        { project_id: 'proj_b', slug: 'winter', name: 'winter' },
+      ],
     };
+    const error = { detail };
     expect(errorMessage(error, 'failed')).toBe(
       'This tenant holds several projects; name one. Projects: Blizzard (blizzard), winter.',
     );
@@ -48,6 +47,6 @@ describe('errorMessage', () => {
     expect(errorMessage(undefined, 'failed')).toBe('failed');
     expect(errorMessage({ detail: [] }, 'failed')).toBe('failed');
     expect(errorMessage({ detail: [{ nope: 1 }] }, 'failed')).toBe('failed');
-    expect(errorMessage({ detail: { code: 'project_required' } }, 'failed')).toBe('failed');
+    expect(errorMessage({ detail: { projects: [] } }, 'failed')).toBe('failed');
   });
 });

@@ -17,7 +17,6 @@ import secrets
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from enum import StrEnum
 
 from blizzard.auth_core import Role
 from blizzard.foundation.clock import IClock
@@ -25,6 +24,7 @@ from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.invitations import InvitationState
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import domain_model
+from blizzard.foundation.sign_in_refusal import SignInRefusal
 from blizzard.hub.auth import hub_admins, memberships
 from blizzard.hub.auth.auth_state import IWriteAuthStateRepository
 from blizzard.hub.auth.facts import AuthFactsService
@@ -75,20 +75,6 @@ class InvitationAccepted:
     user: User
     session_id: str
     tenant: TenantId
-
-
-class SignInRefusal(StrEnum):
-    """Why a sign-in admitted nobody — the code the board's login page shows its text for. Every refusal writes
-    nothing: no user, identity link, membership, invitation fact or session."""
-
-    #: A first sign-in by an identity linked to no user, with no invitation — a person the hub does not know, or one
-    #: whose provider does not vouch for the address that names them.
-    INVITE_ONLY = "invite_only"
-    #: The invitation is expired, revoked or already used — or names nothing.
-    INVITATION_UNUSABLE = "invitation_unusable"
-    #: No verified email on the account matches the invitation's, or the provider does not vouch for every address
-    #: it reports; the invitation stays live.
-    INVITATION_EMAIL_MISMATCH = "invitation_email_mismatch"
 
 
 def principal(user: User, *, tenant: TenantId | None, role: Role | None, hub_admin: bool) -> ResolvedIdentity:

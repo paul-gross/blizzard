@@ -1,19 +1,42 @@
 import { bounceReason, parseBounceEnvelope } from './parse-bounce-envelope';
 
 describe('parseBounceEnvelope', () => {
-  it('reads cause, detail and every further key', () => {
-    expect(parseBounceEnvelope('{"cause":"failure","detail":"d","waited_s":600,"node":"x"}')).toEqual({
+  it('reads cause, detail, the unlanded rows and the failed step', () => {
+    const raw = JSON.stringify({
       cause: 'failure',
       detail: 'd',
-      extras: [
-        ['waited_s', '600'],
-        ['node', 'x'],
+      unlanded: [
+        { repo: 'acme/one', branch: 'feat/x', commit: 'a1', pr: { number: 7, url: 'https://forge/pull/7' } },
+        { repo: 'acme/two', branch: 'feat/x', commit: 'b2', pr: null },
       ],
+      step: { name: 'tests', exit_code: 2, output_tail: 'boom', log_artifact: 'hub-log.tests' },
+    });
+    expect(parseBounceEnvelope(raw)).toEqual({
+      cause: 'failure',
+      detail: 'd',
+      unlanded: [
+        { repo: 'acme/one', branch: 'feat/x', commit: 'a1', pr: { number: 7, url: 'https://forge/pull/7' } },
+        { repo: 'acme/two', branch: 'feat/x', commit: 'b2', pr: null },
+      ],
+      step: { name: 'tests', exit_code: 2, output_tail: 'boom', log_artifact: 'hub-log.tests' },
     });
   });
 
-  it('returns null for text that is not a JSON object', () => {
-    for (const raw of ['not json', '[1]', '"s"', 'null', '']) expect(parseBounceEnvelope(raw)).toBeNull();
+  it('defaults an absent unlanded and step, and ignores a key it does not know', () => {
+    expect(parseBounceEnvelope('{"cause":"c","detail":"d","waited_s":600}')).toEqual({
+      cause: 'c',
+      detail: 'd',
+      unlanded: [],
+      step: null,
+    });
+  });
+
+  it('returns null for text that is not a JSON object, or an object that does not validate', () => {
+    for (const raw of ['not json', '[1]', '"s"', 'null', '', '{}', '{"cause":"c"}', '{"cause":"c","detail":"d","unlanded":{}}']) {
+      expect(parseBounceEnvelope(raw)).toBeNull();
+    }
+    expect(parseBounceEnvelope('{"cause":"c","detail":"d","unlanded":[{"repo":"r"}]}')).toBeNull();
+    expect(parseBounceEnvelope('{"cause":"c","detail":"d","step":{"name":"t"}}')).toBeNull();
   });
 });
 

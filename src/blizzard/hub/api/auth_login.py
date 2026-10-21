@@ -25,13 +25,14 @@ from pydantic import BaseModel
 
 from blizzard.foundation.origin import Origin
 from blizzard.foundation.return_to import ReturnTo
+from blizzard.foundation.sign_in_refusal import SignInRefusal
 from blizzard.hub.api.auth_session import _SESSION_COOKIE_NAME, PresentedSession
 from blizzard.hub.api.hub_level import hub_services
 from blizzard.hub.auth.facts import AuthFactsService
 from blizzard.hub.auth.invitations import InvitationToken
 from blizzard.hub.auth.models import AuthStateEntry, ProviderIdentity, User
 from blizzard.hub.auth.oauth.provider import IOAuthProvider, OAuthExchangeError
-from blizzard.hub.auth.service import ABSOLUTE_MAX_AGE, PROVIDER_LOGIN_STATE_KIND, SignInRefusal
+from blizzard.hub.auth.service import ABSOLUTE_MAX_AGE, PROVIDER_LOGIN_STATE_KIND
 from blizzard.hub.composition import HubServices
 from blizzard.hub.config import AUTH_MODE_NONE
 from blizzard.hub.tenancy import TenantClosed

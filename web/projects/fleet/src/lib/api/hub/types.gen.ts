@@ -826,6 +826,90 @@ export type BlockedView = {
 };
 
 /**
+ * BounceEnvelope
+ *
+ * Why delivery did not complete: the ``cause``, a readable ``detail``, the repositories not yet landed, and the
+ * failed ``step`` when a ``run:`` step caused the bounce.
+ */
+export type BounceEnvelope = {
+    /**
+     * Cause
+     */
+    cause: string;
+    /**
+     * Detail
+     */
+    detail: string;
+    step: BounceFailedStep | null;
+    /**
+     * Unlanded
+     */
+    unlanded: Array<BounceUnlandedRepo>;
+};
+
+/**
+ * BounceFailedStep
+ *
+ * The ``run:`` step the bounce is attributed to — one that exited non-zero. ``output_tail`` is bounded;
+ * ``log_artifact`` names the asset holding the full log.
+ */
+export type BounceFailedStep = {
+    /**
+     * Exit Code
+     */
+    exit_code: number;
+    /**
+     * Log Artifact
+     */
+    log_artifact: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Output Tail
+     */
+    output_tail: string;
+};
+
+/**
+ * BouncePullRequest
+ *
+ * The pull request an unlanded repository's branch is open or closed under.
+ */
+export type BouncePullRequest = {
+    /**
+     * Number
+     */
+    number: number;
+    /**
+     * Url
+     */
+    url: string;
+};
+
+/**
+ * BounceUnlandedRepo
+ *
+ * A repository whose branch had not landed when delivery bounced; ``pr`` is ``null`` where none was raised.
+ */
+export type BounceUnlandedRepo = {
+    /**
+     * Branch
+     */
+    branch: string;
+    /**
+     * Commit
+     */
+    commit: string;
+    pr: BouncePullRequest | null;
+    /**
+     * Repo
+     */
+    repo: string;
+};
+
+/**
  * BounceView
  *
  * One recorded delivery kick-back (#64) — contention, not failure, and never itself a status.
@@ -5798,6 +5882,47 @@ export type ProjectPatchRequest = {
 };
 
 /**
+ * ProjectRef
+ *
+ * A project as a refusal names it — its id, current slug and display name.
+ */
+export type ProjectRef = {
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Project Id
+     */
+    project_id: string;
+    /**
+     * Slug
+     */
+    slug: string;
+};
+
+/**
+ * ProjectRequiredBody
+ *
+ * The ``detail`` of a ``422``: the call needs a project, named none, and the tenant does not hold exactly one —
+ * or the project could not be inferred. ``projects`` lists the ones to choose from.
+ */
+export type ProjectRequiredBody = {
+    /**
+     * Code
+     */
+    code?: 'project_required';
+    /**
+     * Message
+     */
+    message: string;
+    /**
+     * Projects
+     */
+    projects: Array<ProjectRef>;
+};
+
+/**
  * ProjectView
  *
  * One project — the ``GET /api/projects`` listing row and every project verb's view.
@@ -8305,6 +8430,26 @@ export type SidechainSegmentViewOutput = {
      */
     turns: Array<TurnSegmentViewOutput>;
 };
+
+/**
+ * SignInRefusal
+ *
+ * Why a sign-in admitted nobody — the code the board's login page shows its text for. Every refusal writes
+ * nothing: no user, identity link, membership, invitation fact or session.
+ */
+export const SignInRefusal = {
+    INVITE_ONLY: 'invite_only',
+    INVITATION_UNUSABLE: 'invitation_unusable',
+    INVITATION_EMAIL_MISMATCH: 'invitation_email_mismatch'
+} as const;
+
+/**
+ * SignInRefusal
+ *
+ * Why a sign-in admitted nobody — the code the board's login page shows its text for. Every refusal writes
+ * nothing: no user, identity link, membership, invitation fact or session.
+ */
+export type SignInRefusal = typeof SignInRefusal[keyof typeof SignInRefusal];
 
 /**
  * SourceLinkView

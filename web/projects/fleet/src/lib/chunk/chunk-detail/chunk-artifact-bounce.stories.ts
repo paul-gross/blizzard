@@ -1,18 +1,19 @@
 import type { Meta, StoryObj } from '@storybook/angular-vite';
 
+import type { BounceEnvelope } from '../../api/hub';
 import { ChunkArtifactBounce } from './chunk-artifact-bounce';
-import type { BounceEnvelope } from './parse-bounce-envelope';
 
 const causeAndDetail: BounceEnvelope = {
-  cause: 'missing_artifact',
-  detail: 'The step ended without declaring `commit`.',
-  extras: [],
+  cause: 'failure',
+  detail: 'PR #7 in acme/one did not land: `tests` exited 2',
+  unlanded: [],
+  step: null,
 };
 
 const meta: Meta<ChunkArtifactBounce> = {
   title: 'Chunk/Artifact bounce',
   component: ChunkArtifactBounce,
-  args: { envelope: causeAndDetail, raw: JSON.stringify({ cause: causeAndDetail.cause, detail: causeAndDetail.detail }), testid: 'artifact' },
+  args: { envelope: causeAndDetail, raw: JSON.stringify(causeAndDetail), testid: 'artifact' },
   render: (args) => ({
     props: args,
     template: `<fleet-chunk-artifact-bounce [envelope]="envelope" [raw]="raw" [testid]="testid" />`,
@@ -23,19 +24,18 @@ export default meta;
 type Story = StoryObj<ChunkArtifactBounce>;
 
 export const CauseAndDetail: Story = {};
-export const ExtraKeys: Story = {
-  args: {
-    envelope: {
-      ...causeAndDetail,
-      extras: [
-        ['node', 'build'],
-        ['attempts', '3'],
-        ['missing', '["commit","retrospective"]'],
-      ],
-    },
-    raw: '{"cause":"missing_artifact","detail":"The step ended without declaring `commit`.","node":"build","attempts":3,"missing":["commit","retrospective"]}',
-  },
+
+const failedStep: BounceEnvelope = {
+  ...causeAndDetail,
+  step: { name: 'tests', exit_code: 2, output_tail: '2 failed, 40 passed', log_artifact: 'hub-log.tests' },
 };
-export const Neither: Story = {
-  args: { envelope: { cause: null, detail: null, extras: [] }, raw: '{}' },
+export const FailedStep: Story = { args: { envelope: failedStep, raw: JSON.stringify(failedStep) } };
+
+const unlanded: BounceEnvelope = {
+  ...failedStep,
+  unlanded: [
+    { repo: 'acme/one', branch: 'feat/x', commit: 'a1b2c3d', pr: { number: 7, url: 'https://forge.example/acme/one/pull/7' } },
+    { repo: 'acme/two', branch: 'feat/x', commit: 'e4f5a6b', pr: null },
+  ],
 };
+export const UnlandedRepos: Story = { args: { envelope: unlanded, raw: JSON.stringify(unlanded) } };

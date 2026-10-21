@@ -175,7 +175,12 @@ describe('ChunkArtifactBody', () => {
   });
 
   it('renders a bounce-envelope as labelled fields with the raw JSON behind the disclosure', async () => {
-    const raw = '{"cause":"poll-timeout","detail":"no verdict","waited_s":600}';
+    const raw = JSON.stringify({
+      cause: 'poll-timeout',
+      detail: 'no verdict',
+      unlanded: [{ repo: 'acme/one', branch: 'feat/x', commit: 'a1', pr: null }],
+      step: { name: 'tests', exit_code: 600, output_tail: 'boom', log_artifact: 'hub-log.tests' },
+    });
     const fixture = TestBed.createComponent(ChunkArtifactBody);
     fixture.componentRef.setInput('artifact', { ...ASSET, key: 'bounce-envelope', name: 'bounce-envelope', content: raw });
     await fixture.whenStable();
@@ -186,6 +191,14 @@ describe('ChunkArtifactBody', () => {
     el.querySelector<HTMLElement>('[data-testid="artifact-bounce-raw-toggle"]')!.click();
     await fixture.whenStable();
     expect(el.querySelector('[data-testid="artifact-bounce-raw"]')?.textContent).toBe(raw);
+  });
+
+  it('renders a bounce-envelope that does not validate verbatim', async () => {
+    const raw = '{"cause":"poll-timeout","detail":"no verdict","step":{"name":"tests"}}';
+    const fixture = TestBed.createComponent(ChunkArtifactBody);
+    fixture.componentRef.setInput('artifact', { ...ASSET, key: 'bounce-envelope', name: 'bounce-envelope', content: raw });
+    await fixture.whenStable();
+    expect(fixture.nativeElement.querySelector('[data-testid="artifact-content"]')?.textContent).toBe(raw);
   });
 
   it('renders an unparseable bounce-envelope verbatim', async () => {
