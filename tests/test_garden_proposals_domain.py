@@ -14,6 +14,7 @@ import pytest
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.garden_proposals import GardenProposalClosureKind, GardenProposalOrigin
+from blizzard.foundation.project_colors import ProjectColor
 from blizzard.hub.domain.garden.findings.model import Finding
 from blizzard.hub.domain.garden.proposals.closure import GardenProposalClosure
 from blizzard.hub.domain.garden.proposals.model import (
@@ -27,12 +28,14 @@ from blizzard.hub.domain.garden.proposals.model import (
     GardenProposalFindingAlreadyLinkedError,
     GardenProposalFindingExitedError,
     GardenProposalFindingNotLinkedError,
+    GardenProposalRoutineOtherProjectError,
     IWriteGardenProposalRepository,
     RoutineGardenProposalReader,
     RoutineProposalState,
 )
 from blizzard.hub.domain.garden.routines import Routine
 from blizzard.hub.domain.kernel.unset import UnsetType
+from blizzard.hub.domain.projects.model import Project, ProjectId
 
 pytestmark = pytest.mark.unit
 
@@ -162,14 +165,26 @@ def _as_write_repo(repo: _FakeGardenProposalRepo) -> IWriteGardenProposalReposit
     return cast(IWriteGardenProposalRepository, repo)
 
 
-def _routine(name: str = "nightly") -> Routine:
+def _project() -> Project:
+    return Project(
+        project_id=ProjectId(_PROJECT),
+        slug="test",
+        name="test",
+        description="",
+        color=ProjectColor.TEAL,
+        revision=1,
+        created_at=_T0,
+    )
+
+
+def _routine(name: str = "nightly", *, project_id: str = _PROJECT) -> Routine:
     return Routine(
         routine_id="routine_1",
         name=name,
         graph_name="g",
         default_scope_slug="runner",
         created_at=_T0,
-        project_id=_PROJECT,
+        project_id=project_id,
     )
 
 
@@ -182,7 +197,7 @@ def test_create_operator_mints_with_operator_origin_no_routine_and_the_callers_i
     )
 
     proposal = authoring.create_operator(
-        project_id=_PROJECT,
+        project=_project(),
         created_by="operator",
         routine=None,
         class_="c",
@@ -209,7 +224,7 @@ def test_create_operator_names_the_resolved_routine() -> None:
     )
 
     proposal = authoring.create_operator(
-        project_id=_PROJECT,
+        project=_project(),
         created_by="operator",
         routine=_routine("nightly"),
         class_="c",
@@ -219,6 +234,28 @@ def test_create_operator_names_the_resolved_routine() -> None:
     )
 
     assert proposal.routine_name == "nightly"
+
+
+def test_create_operator_rejects_a_routine_of_another_project() -> None:
+    repo = _FakeGardenProposalRepo()
+    authoring = GardenProposalAuthoring(
+        proposals=_as_write_repo(repo),
+        closures=cast(Any, _FakeGardenProposalClosureRepo()),
+        clock=FixedClock(instant=_T0),
+    )
+
+    with pytest.raises(GardenProposalRoutineOtherProjectError, match="nightly"):
+        authoring.create_operator(
+            project=_project(),
+            created_by="operator",
+            routine=_routine("nightly", project_id="proj_other"),
+            class_="c",
+            title="t",
+            body="b",
+            findings=[],
+        )
+
+    assert repo.created == []
 
 
 def test_create_operator_rejects_an_exited_finding() -> None:
@@ -232,7 +269,7 @@ def test_create_operator_rejects_an_exited_finding() -> None:
 
     with pytest.raises(GardenProposalFindingExitedError):
         authoring.create_operator(
-            project_id=_PROJECT, created_by="operator", routine=None, class_="c", title="t", body="b", findings=[gone]
+            project=_project(), created_by="operator", routine=None, class_="c", title="t", body="b", findings=[gone]
         )
 
     assert repo.created == []
@@ -248,7 +285,7 @@ def test_create_operator_rejects_the_same_finding_named_twice() -> None:
 
     with pytest.raises(DuplicateProposalFindingError):
         authoring.create_operator(
-            project_id=_PROJECT,
+            project=_project(),
             created_by="operator",
             routine=None,
             class_="c",
@@ -270,7 +307,7 @@ def test_create_operator_rejects_a_blank_class() -> None:
 
     with pytest.raises(GardenProposalBlankFieldError):
         authoring.create_operator(
-            project_id=_PROJECT, created_by="operator", routine=None, class_=" ", title="t", body="b", findings=[]
+            project=_project(), created_by="operator", routine=None, class_=" ", title="t", body="b", findings=[]
         )
 
     assert repo.created == []

@@ -41,6 +41,7 @@ from blizzard.hub.domain.garden.proposals.model import (
     GardenProposalFindingNotLinkedError,
     GardenProposalFindingOtherProjectError,
     GardenProposalNoFindingsError,
+    GardenProposalRoutineOtherProjectError,
     GardenProposalVerb,
 )
 from blizzard.hub.domain.garden.proposals.resolution import resolve_proposal_findings
@@ -283,7 +284,7 @@ def _create(
     findings = _resolve_findings_or_422(request.findings, services)
     try:
         proposal = services.garden_proposal_authoring.create_operator(
-            project_id=project.project_id,
+            project=project,
             created_by=identity.user_id,
             routine=routine,
             class_=request.class_,
@@ -295,6 +296,7 @@ def _create(
         DuplicateProposalFindingError,
         GardenProposalFindingExitedError,
         GardenProposalFindingOtherProjectError,
+        GardenProposalRoutineOtherProjectError,
         GardenProposalBlankFieldError,
     ) as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc

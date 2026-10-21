@@ -13,7 +13,7 @@ from blizzard.foundation.run_mode import RunMode
 from blizzard.hub.domain.chunk.model import WorkItemAuthor
 from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.domain.garden.scopes import ScopeSlug
-from tests.support import HubHarness, build_hub
+from tests.support import HubHarness, build_hub, project_record
 
 pytestmark = pytest.mark.component
 
@@ -47,8 +47,8 @@ def _routine(hub: HubHarness, project: str, name: str = "nightly") -> dict:  # t
 
 def _run(hub: HubHarness, project: str) -> str:
     """A routine run minted in ``project``, its chunk promoted."""
-    project_id = hub.services.projects.resolve(project)
-    assert project_id is not None
+    resolved = hub.services.projects.resolve(project)
+    assert resolved is not None
     routine = hub.services.routine_authoring.create(
         ctx=_CTX,
         name=f"{project}-sweep",
@@ -56,7 +56,7 @@ def _run(hub: HubHarness, project: str) -> str:
         default_scope_slug=ScopeSlug.parse("blizzard"),
         default_model=None,
         default_effort=None,
-        project_id=project_id.project_id,
+        project=project_record(hub, resolved.project_id),
     )
     scope = hub.services.scopes.get(routine.project_id, routine.default_scope_slug)
     assert scope is not None

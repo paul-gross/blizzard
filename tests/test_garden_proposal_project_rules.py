@@ -108,7 +108,7 @@ def test_an_operator_proposal_refuses_a_finding_of_another_project_naming_it(tmp
             "gprop_1",
             project_id=own,
             created_by="operator",
-            routine_name=None,
+            routine=None,
             class_="c",
             title="t",
             body="b",

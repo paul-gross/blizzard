@@ -14,7 +14,16 @@ from blizzard.auth_core import Role
 from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.domain.garden.scopes import ScopeSlug
 from blizzard.hub.store.schema import config_changes
-from tests.support import HubHarness, build_hub, default_project, hub_scoped, seed_project, seed_session, seed_user
+from tests.support import (
+    HubHarness,
+    build_hub,
+    default_project,
+    hub_scoped,
+    project_record,
+    seed_project,
+    seed_session,
+    seed_user,
+)
 
 pytestmark = pytest.mark.component
 
@@ -216,7 +225,7 @@ def test_the_change_row_carries_the_door_and_the_authenticated_actor_not_by(tmp_
 def test_a_slug_another_project_holds_resolves_within_the_routines_project(hub: HubHarness) -> None:
     routine_id = _create(hub)["routine_id"]
     own = default_project(hub.engine)
-    other = seed_project(hub.engine, "other")
+    other = project_record(hub, seed_project(hub.engine, "other"))
     theirs = hub.services.scope_registry.ensure(other, ScopeSlug.parse("web"), ChangeContext(actor="op", door=Door.API))
 
     linked = hub.client.put(f"/api/routines/{routine_id}/scopes/web")
@@ -232,4 +241,4 @@ def test_a_slug_another_project_holds_resolves_within_the_routines_project(hub: 
         rows = conn.execute(
             hub_scoped(sa.select(config_changes.c.record_key, config_changes.c.project_id).where(kinds))
         )
-        assert {project for key, project in rows if key != "web" or project != other} == {own}
+        assert {project for key, project in rows if key != "web" or project != other.project_id} == {own}

@@ -53,9 +53,13 @@ rule:
         field: body
         has:
           stopBy: end
-          pattern:
-            context: "self.$OBJ.$VERB($ID)"
-            selector: call
+          any:
+            - pattern:
+                context: "self.$OBJ.$VERB($ID)"
+                selector: call
+            - pattern:
+                context: "self.$OBJ.$VERB($ID, $$$REST)"
+                selector: call
 constraints:
   VERB:
     regex: "^(get|load)_"
