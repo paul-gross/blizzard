@@ -7,8 +7,6 @@ model."""
 
 from __future__ import annotations
 
-from typing import Literal
-
 from pydantic import BaseModel
 
 from blizzard.wire.base import WireModel
@@ -18,9 +16,11 @@ from blizzard.wire.chunk import BounceView, MigrationView, RequeueView, Resoluti
 class HistoryRowView(WireModel):
     """One row of a chunk's own timeline. ``from_node``/``to_node`` are node labels (a migration's
     is a ``graph/node`` hop); ``cause``/``detail`` carry a bounce's kick-back or a migration
-    source; ``by``/``note`` are the person behind a resolution, requeue or restart, and their note."""
+    source; ``by``/``note`` are the person behind a resolution, requeue or restart, and their note.
+    ``kind`` is ``transition``, ``migration``, ``bounce``, ``resolution``, ``requeue`` or ``restart`` —
+    a plain string, so a new kind never breaks an older reader."""
 
-    kind: Literal["transition", "migration", "bounce", "resolution", "requeue", "restart"]
+    kind: str
     from_node: str | None = None
     to_node: str | None = None
     choice: str | None = None

@@ -456,8 +456,7 @@ export const getHistoryRunnersRunnerIdApiLeasesLeaseIdHistoryGet = <ThrowOnError
 /**
  * Get Chunk Notes
  *
- * Every note a person left on the worker's own chunk, oldest-first. A resolution, requeue or
- * restart without a note has no row.
+ * Every note a person left on the worker's own chunk, oldest-first; a fact without one has no row.
  */
 export const getChunkNotesRunnersRunnerIdApiLeasesLeaseIdNotesGet = <ThrowOnError extends boolean = false>(options: Options<GetChunkNotesRunnersRunnerIdApiLeasesLeaseIdNotesGetData, ThrowOnError>): RequestResult<GetChunkNotesRunnersRunnerIdApiLeasesLeaseIdNotesGetResponses, GetChunkNotesRunnersRunnerIdApiLeasesLeaseIdNotesGetErrors, ThrowOnError> => (options.client ?? client).get<GetChunkNotesRunnersRunnerIdApiLeasesLeaseIdNotesGetResponses, GetChunkNotesRunnersRunnerIdApiLeasesLeaseIdNotesGetErrors, ThrowOnError>({ url: '/runners/{runner_id}/api/leases/{lease_id}/notes', ...options });
 

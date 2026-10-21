@@ -1923,11 +1923,10 @@ export type HeartbeatResponse = {
 /**
  * HistoryRowView
  *
- * One row of a chunk's own timeline — a transition, a cross-graph migration, a delivery
- * bounce, a gate resolution, a hub requeue, or a restart, merged oldest-first by ``recorded_at``.
- * ``from_node``/``to_node`` are node labels (a migration's is a ``graph/node`` hop), both null for
- * a bounce or requeue; ``cause``/``detail`` carry a bounce's kick-back or a migration source;
- * ``by``/``note`` are the person behind a resolution, requeue or restart, and their note.
+ * One row of a chunk's own timeline. ``from_node``/``to_node`` are node labels (a migration's
+ * is a ``graph/node`` hop); ``cause``/``detail`` carry a bounce's kick-back or a migration
+ * source; ``kind`` is ``transition``, ``migration``, ``bounce``, ``resolution``, ``requeue`` or
+ * ``restart`` — a plain string, so a new kind never breaks an older reader; ``by``/``note`` are the person behind a resolution, requeue or restart, and their note.
  */
 export type HistoryRowView = {
     /**
@@ -1961,7 +1960,7 @@ export type HistoryRowView = {
     /**
      * Kind
      */
-    kind: 'transition' | 'migration' | 'bounce' | 'resolution' | 'requeue' | 'restart';
+    kind: string;
     /**
      * Note
      */
