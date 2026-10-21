@@ -5,7 +5,7 @@ retired), and a project's source and repository links (list, link, retire to unl
 
 ``{project}`` is the project's id or slug, a slug it left among them (:func:`path_project`). The built-in ``hub``
 source is linked to every project without a stored link: a listing reports it, linking it changes nothing, and
-unlinking it is refused."""
+unlinking it is refused ``409``, as is any write on it."""
 
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ from blizzard.hub.api.deps import Services
 from blizzard.hub.api.door import RequestDoor, change_context
 from blizzard.hub.api.project_params import PathProject
 from blizzard.hub.api.repository_params import PathRepository
-from blizzard.hub.api.work_source_params import resolved_work_source
+from blizzard.hub.api.work_source_params import path_work_source, resolved_work_source
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.domain.config.repositories import ConfiguredRepository
 from blizzard.hub.domain.config.work_sources import (
@@ -184,12 +184,6 @@ def patch_project(
 # --- Source links ------------------------------------------------------------------------------------------------
 
 
-def _built_in_source_refused(source: str) -> HTTPException:
-    return _unprocessable(
-        "source", f"work source {source} is built in: every project draws from it", "built_in_source", where="path"
-    )
-
-
 @router.get("/projects/{project}/source-links", response_model=SourceLinksView, dependencies=[_VIEW])
 def list_source_links(project: PathProject, services: Services) -> SourceLinksView:
     """The project's standing source links by source id, each with the source's current slug, the built-in ``hub``
@@ -235,11 +229,9 @@ def unlink_source(
     if_match: IfMatch = None,
 ) -> SourceLinkView:
     """Unlink the project from a work source, named by its id or slug, by retiring the link; unlinking an unlinked
-    link changes nothing. 422 for the built-in ``hub`` source; 404 for an unknown project or source, or a source it
-    never linked; 409 for a stale `If-Match`."""
-    if is_built_in(source):
-        raise _built_in_source_refused(source)
-    record = resolved_work_source(source, services)
+    link changes nothing. 404 for an unknown project or source, or a source it never linked; 409 for the built-in
+    ``hub`` source, which every project draws from, and for a stale `If-Match`."""
+    record = path_work_source(source, services)
     link = services.project_links.source_link(project.project_id, record.work_source_id)
     if link is None:
         raise _not_found(f"project {project.slug} has no link to work source {record.slug!r}")

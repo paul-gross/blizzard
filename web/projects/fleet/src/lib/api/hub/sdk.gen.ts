@@ -1772,9 +1772,9 @@ export const revokeMembershipApiMembersUserIdDelete = <ThrowOnError extends bool
  * Grant Membership
  *
  * Grant ``user_id`` ``role`` in the request's tenant, or change the role they hold there. A role equal to the one
- * in force writes nothing. Refused: a role that is no membership role (``422``), a user that does not exist or —
- * without ``membership:grant-any`` — is no member (``404``, alike), your own role (``403``), and demoting the
- * tenant's last admin (``409``).
+ * in force writes nothing. Refused: a user that does not exist or — without ``membership:grant-any`` — is no member
+ * (``404``, alike), a role that is no membership role (``422``, after the user is found), your own role (``403``),
+ * and demoting the tenant's last admin (``409``).
  */
 export const grantMembershipApiMembersUserIdPut = <ThrowOnError extends boolean = false>(options: Options<GrantMembershipApiMembersUserIdPutData, ThrowOnError>): RequestResult<GrantMembershipApiMembersUserIdPutResponses, GrantMembershipApiMembersUserIdPutErrors, ThrowOnError> => (options.client ?? client).put<GrantMembershipApiMembersUserIdPutResponses, GrantMembershipApiMembersUserIdPutErrors, ThrowOnError>({
     url: '/api/members/{user_id}',
@@ -2037,8 +2037,8 @@ export const linkSourceApiProjectsProjectSourceLinksSourcePut = <ThrowOnError ex
  * Unlink Source
  *
  * Unlink the project from a work source, named by its id or slug, by retiring the link; unlinking an unlinked
- * link changes nothing. 422 for the built-in ``hub`` source; 404 for an unknown project or source, or a source it
- * never linked; 409 for a stale `If-Match`.
+ * link changes nothing. 404 for an unknown project or source, or a source it never linked; 409 for the built-in
+ * ``hub`` source, which every project draws from, and for a stale `If-Match`.
  */
 export const unlinkSourceApiProjectsProjectSourceLinksSourceRetirePost = <ThrowOnError extends boolean = false>(options: Options<UnlinkSourceApiProjectsProjectSourceLinksSourceRetirePostData, ThrowOnError>): RequestResult<UnlinkSourceApiProjectsProjectSourceLinksSourceRetirePostResponses, UnlinkSourceApiProjectsProjectSourceLinksSourceRetirePostErrors, ThrowOnError> => (options.client ?? client).post<UnlinkSourceApiProjectsProjectSourceLinksSourceRetirePostResponses, UnlinkSourceApiProjectsProjectSourceLinksSourceRetirePostErrors, ThrowOnError>({ url: '/api/projects/{project}/source-links/{source}/retire', ...options });
 

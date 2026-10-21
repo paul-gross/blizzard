@@ -17,8 +17,16 @@ from datetime import datetime
 from typing import TypeVar
 
 from blizzard.foundation.roles import collaborator, domain_model
-from blizzard.hub.domain.config.apply import PROJECTS_SECTION, ApplyEntryRefused, ApplyPlan, EntryOutcome, PlannedWrite
-from blizzard.hub.domain.config.carry_over import LegacyImportRefused
+from blizzard.hub.domain.config.apply import (
+    PROJECTS_SECTION,
+    ApplyEntryRefused,
+    ApplyPlan,
+    EntryOutcome,
+    LinkRecord,
+    PlannedWrite,
+    ProjectRecord,
+)
+from blizzard.hub.domain.config.carry_over import IImportLinks, LegacyImportRefused
 from blizzard.hub.domain.config.changes import ChangeContext, ConfigChange, RecordKind
 from blizzard.hub.domain.config.repositories import REPOSITORY_KIND, RepositoryId, RepositoryRef
 from blizzard.hub.domain.config.work_sources import (
@@ -315,7 +323,12 @@ class _Entry:
             self._write(moved.KIND, f"{project.slug}/{shown}", moved, link.revision, change)
 
     def _write(
-        self, kind: RecordKind, key: str, record: object, from_revision: int | None, change: ConfigChange
+        self,
+        kind: RecordKind,
+        key: str,
+        record: Project | SourceLink | RepositoryLink,
+        from_revision: int | None,
+        change: ConfigChange,
     ) -> None:
         self.writes.append(PlannedWrite(PROJECTS_SECTION, self.index, record, from_revision, change))
         self.outcomes.append(EntryOutcome(kind, key, change.op, change.diff))
@@ -369,7 +382,7 @@ class ImportLinks:
         ctx: ChangeContext,
         *,
         at: datetime,
-    ) -> tuple[tuple[object, ConfigChange], ...]:
+    ) -> tuple[tuple[SourceLink | RepositoryLink, ConfigChange], ...]:
         try:
             project = sole_project(self._projects.list_all())
         except ProjectRequired as exc:
@@ -381,3 +394,19 @@ class ImportLinks:
             *(SourceLink.new(project, work_source_id, ctx, at=at) for work_source_id in work_sources),
             *(RepositoryLink.new(project, name, ctx, at=at) for name in repositories),
         )
+
+
+def _conforms_project_record(x: Project) -> ProjectRecord:
+    return x
+
+
+def _conforms_source_link_record(x: SourceLink) -> LinkRecord:
+    return x
+
+
+def _conforms_repository_link_record(x: RepositoryLink) -> LinkRecord:
+    return x
+
+
+def _conforms_import_links(x: ImportLinks) -> IImportLinks:
+    return x

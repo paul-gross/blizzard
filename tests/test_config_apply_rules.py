@@ -3,7 +3,7 @@ stored records (unit tier)."""
 
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 
 import pytest
@@ -389,11 +389,18 @@ def test_a_routine_may_name_only_a_scope_of_its_own_project() -> None:
     assert isinstance(refused.value.cause, ConfigFieldError) and refused.value.cause.field == "default_scope_slug"
 
 
+@dataclass(frozen=True)
+class _StoodInProject:
+    project_id: str = "proj_web"
+    slug: str = "web"
+    revision: int = 1
+
+
 def test_a_planned_section_commits_after_the_repositories_and_before_the_scopes() -> None:
     repository = _declared_repo("r")
     change = _plan(ConfigDeclaration(repositories=(repository,)), _stored()).writes[0].change
     planned = ApplyPlan(
-        (PlannedWrite("projects", 0, object(), None, change),),
+        (PlannedWrite("projects", 0, _StoodInProject(), None, change),),
         (EntryOutcome(RecordKind.PROJECT, "web", ChangeOp.CREATE),),
     )
     declaration = ConfigDeclaration(repositories=(repository,), projects=planned, scopes=(_scope_entry(),))

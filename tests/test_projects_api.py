@@ -255,7 +255,7 @@ def test_an_unlinked_source_leaves_the_listing(hub: HubHarness) -> None:
     assert [link["slug"] for link in listed] == ["hub"]
 
 
-def test_unlinking_the_hub_source_answers_422_and_linking_it_changes_nothing(hub: HubHarness) -> None:
+def test_unlinking_the_hub_source_answers_409_and_linking_it_changes_nothing(hub: HubHarness) -> None:
     project_id = _create(hub.client, "widgets")["project_id"]
     before = _changes(hub.client)
 
@@ -270,9 +270,8 @@ def test_unlinking_the_hub_source_answers_422_and_linking_it_changes_nothing(hub
         "revision": None,
         "built_in": True,
     }
-    assert refused.status_code == 422, refused.text
-    assert refused.json()["detail"][0]["loc"] == ["path", "source"]
-    assert refused.json()["detail"][0]["type"] == "built_in_source"
+    assert refused.status_code == 409, refused.text
+    assert "built in" in refused.json()["detail"]
     assert _changes(hub.client) == before
 
 

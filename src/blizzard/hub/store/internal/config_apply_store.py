@@ -14,6 +14,7 @@ from sqlalchemy.exc import IntegrityError
 from blizzard.hub.domain.config.apply import (
     ApplyEntryRefused,
     IConfigApplyWriter,
+    LinkRecord,
     PlannedWrite,
 )
 from blizzard.hub.domain.config.changes import ChangeOp, ConfigChange
@@ -104,8 +105,10 @@ class ConfigApplyStore:
             _run_scope(conn, record, from_revision, change, lifecycle=lifecycle, retired=retired)
         elif isinstance(record, Routine):
             _run_routine(conn, record, from_revision, change, lifecycle=lifecycle, retired=retired)
-        elif isinstance(record, Project | SourceLink | RepositoryLink):
+        elif isinstance(record, Project):
             _run_project(conn, record, from_revision, change)
+        elif isinstance(record, SourceLink | RepositoryLink):
+            _run_link(conn, record, from_revision, change)
         elif isinstance(record, ConfiguredWorkSource):
             if from_revision is None:
                 work_source_writes.insert_record(conn, record, change)
@@ -201,17 +204,17 @@ def _run_routine(
             routine_writes.set_linked_scopes(conn, record, linked, from_revision=from_revision, change=change)
 
 
-def _run_project(
-    conn: Connection, record: Project | SourceLink | RepositoryLink, from_revision: int | None, change: ConfigChange
-) -> None:
-    """A project is created or edited — an apply never moves its slug —, and a link created, unlinked or relinked."""
-    if isinstance(record, Project):
-        if from_revision is None:
-            project_writes.insert_project(conn, record, change)
-        else:
-            project_writes.update_project(conn, record, from_revision, None, change)
-        return
-    kind = link_writes._SOURCES if isinstance(record, SourceLink) else link_writes._REPOSITORIES
+def _run_project(conn: Connection, record: Project, from_revision: int | None, change: ConfigChange) -> None:
+    """A project is created or edited — an apply never moves its slug."""
+    if from_revision is None:
+        project_writes.insert_project(conn, record, change)
+    else:
+        project_writes.update_project(conn, record, from_revision, None, change)
+
+
+def _run_link(conn: Connection, record: LinkRecord, from_revision: int | None, change: ConfigChange) -> None:
+    """A link is created, unlinked or relinked."""
+    kind = link_writes.LINK_KINDS[record.KIND]
     if from_revision is None:
         link_writes.insert_link(conn, kind, record.project_id, record.target(), change)
     else:

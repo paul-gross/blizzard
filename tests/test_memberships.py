@@ -202,6 +202,13 @@ _GRANT_ANY = ResolvedIdentity("usr_h", "h", "usr_h", _OTHER, None, frozenset({Pe
         pytest.param(_GRANT_ANY, _subject("usr_h", None), Role.ADMIN, 0, MembershipChangeRefused, id="grant-any-self"),
         pytest.param(_GRANT_ANY, _subject("usr_b", Role.ADMIN), Role.GUEST, 1, LastAdminKept, id="demote-last-admin"),
         pytest.param(_GRANT_ANY, _subject("usr_b", Role.ADMIN), None, 1, LastAdminKept, id="revoke-last-admin"),
+        pytest.param(_ADMIN, _subject("usr_b", Role.GUEST), Role.PENDING, 1, MembershipRoleRefused, id="pending"),
+        pytest.param(
+            _ADMIN, _subject("usr_a", Role.ADMIN), Role.SUPERUSER, 1, MembershipRoleRefused, id="role-before-self"
+        ),
+        pytest.param(
+            _ADMIN, _subject("usr_b", None), Role.SUPERUSER, 1, MembershipRoleRefused, id="role-before-non-member"
+        ),
     ],
 )
 def test_the_membership_change_rules(
@@ -293,6 +300,8 @@ def test_a_refused_change_writes_nothing(engine: sa.Engine, members: TenantMembe
         members.change(actor=_ADMIN, subject=members.member(_user("usr_c"), tenant=_OTHER), to_role=Role.GUEST)
     with pytest.raises(LastAdminKept):
         members.change(actor=_GRANT_ANY, subject=members.member(_user("usr_a"), tenant=_OTHER), to_role=None)
+    with pytest.raises(MembershipRoleRefused, match="superuser"):
+        members.change(actor=_ADMIN, subject=members.member(_user("usr_b"), tenant=_OTHER), to_role=Role.SUPERUSER)
 
     assert _facts(engine) == before
 

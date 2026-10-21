@@ -9,11 +9,17 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
+from fastapi.responses import JSONResponse
 
 from blizzard.hub.api.deps import Services
 from blizzard.hub.composition import TenantServices
-from blizzard.hub.domain.config.work_sources import BuiltInWorkSource, ConfiguredWorkSource, is_built_in
+from blizzard.hub.domain.config.work_sources import (
+    BuiltInWorkSource,
+    ConfiguredWorkSource,
+    is_built_in,
+    require_configurable,
+)
 from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
 
 #: The validation ``type`` of a ``422`` naming a work source the tenant does not hold.
@@ -53,11 +59,17 @@ def resolved_work_source(value: str, services: TenantServices) -> ConfiguredWork
 
 
 def path_work_source(source: str, services: Services) -> ConfiguredWorkSource:
-    """The configured source a write's ``{source}`` path segment names, by id, slug or former slug; ``409`` for the
-    built-in ``hub``, which is never written, and ``404`` when it names none."""
-    if is_built_in(source):
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(BuiltInWorkSource()))
+    """The configured source a write's ``{source}`` path segment names, by id, slug or former slug; the built-in
+    ``hub``, which is never written, is refused ``409`` by :func:`refuse_built_in_work_source`, and ``404`` when it
+    names none."""
+    require_configurable(source)
     return resolved_work_source(source, services)
+
+
+def refuse_built_in_work_source(request: Request, exc: Exception) -> JSONResponse:
+    """Answer a write on the built-in ``hub`` work source: ``409``."""
+    assert isinstance(exc, BuiltInWorkSource)
+    return JSONResponse(status_code=status.HTTP_409_CONFLICT, content={"detail": str(exc)})
 
 
 PathWorkSource = Annotated[ConfiguredWorkSource, Depends(path_work_source)]
