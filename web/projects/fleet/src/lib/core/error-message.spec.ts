@@ -31,6 +31,7 @@ describe('errorMessage', () => {
 
   it('names every project a project_required refusal asks to choose from', () => {
     const detail: ProjectRequiredBody = {
+      code: 'project_required',
       message: 'This tenant holds several projects; name one.',
       projects: [
         { project_id: 'proj_a', slug: 'blizzard', name: 'Blizzard' },

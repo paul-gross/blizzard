@@ -66,6 +66,8 @@ const WORKER: runnerApi.LeaseView = {
   closed_at: null,
   closure_reason: null,
   stale_after_seconds: 3600,
+  harness_id: null,
+  project_id: null,
 };
 
 async function renderHeader(width: number): Promise<{ root: HTMLElement; fixture: ReturnType<typeof TestBed.createComponent<MachineDetailHeader>> }> {

@@ -7,13 +7,12 @@ the same shape reused across every transcript read path."""
 
 from __future__ import annotations
 
-from pydantic import BaseModel
-
 from blizzard.foundation.transcripts import TranscriptProvenance, TranscriptUnavailable
+from blizzard.wire.base import WireModel
 from blizzard.wire.transcript_segment import TurnSegmentView
 
 
-class TranscriptResponse(BaseModel):
+class TranscriptResponse(WireModel):
     """A lease's parsed transcript — 200 when the lease exists and its recorded harness
     owner is known and available; 503 when that owner is unknown or unavailable."""
 

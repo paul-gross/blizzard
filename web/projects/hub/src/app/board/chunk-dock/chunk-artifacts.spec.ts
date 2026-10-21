@@ -3,18 +3,21 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 
 import type { ChunkDetail } from 'fleet';
+import { assetArtifactView, chunkDetail, commitArtifactView } from 'fleet/testing';
 import { ChunkArtifacts } from './chunk-artifacts';
 
-const REVIEW_FAIL_DETAIL: ChunkDetail = {
+const REVIEW_FAIL_DETAIL: ChunkDetail = chunkDetail({
   chunk_id: 'ch_01review0000000000000000000',
   graph_id: 'gr_1',
+  graph_name: null,
   status: 'running',
   current_node_id: 'nd_build',
+  current_node_name: null,
   latest_epoch: 2,
   work_refs: [],
   history: [],
   artifacts: [
-    {
+    commitArtifactView({
       key: 'build.widget.1',
       kind: 'git_commit',
       name: 'widget',
@@ -24,8 +27,9 @@ const REVIEW_FAIL_DETAIL: ChunkDetail = {
       repo: 'acme/widget',
       branch_name: 'b',
       commit_hash: 'c1',
-    },
-    {
+      branch_url: null,
+    }),
+    assetArtifactView({
       key: 'review.review-findings.2',
       kind: 'asset',
       name: 'review-findings',
@@ -33,13 +37,14 @@ const REVIEW_FAIL_DETAIL: ChunkDetail = {
       node_name: 'review',
       epoch: 2,
       content: 'BLOCKING: the widget endpoint returns 500 on empty input; add a guard.',
-    },
+    }),
   ],
-};
+});
 
-const NAMED_DETAIL: ChunkDetail = {
+const NAMED_DETAIL: ChunkDetail = chunkDetail({
   chunk_id: 'ch_01named000000000000000000000',
   graph_id: 'gr_1',
+  graph_name: null,
   status: 'running',
   current_node_id: 'nd_review',
   current_node_name: 'review',
@@ -47,7 +52,7 @@ const NAMED_DETAIL: ChunkDetail = {
   work_refs: [],
   history: [],
   artifacts: [
-    {
+    commitArtifactView({
       key: 'build.widget.1',
       kind: 'git_commit',
       name: 'widget',
@@ -58,8 +63,8 @@ const NAMED_DETAIL: ChunkDetail = {
       branch_name: 'feature/widget',
       commit_hash: 'c1',
       branch_url: 'https://forge.example/acme/widget/tree/feature/widget',
-    },
-    {
+    }),
+    commitArtifactView({
       key: 'build.orphan.1',
       kind: 'git_commit',
       name: 'orphan',
@@ -70,9 +75,9 @@ const NAMED_DETAIL: ChunkDetail = {
       branch_name: 'feature/orphan',
       commit_hash: 'c2',
       branch_url: null,
-    },
+    }),
   ],
-};
+});
 
 describe('ChunkArtifacts', () => {
   beforeEach(async () => {

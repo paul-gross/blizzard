@@ -3,10 +3,11 @@ import { TestBed } from '@angular/core/testing';
 import { vi } from 'vitest';
 
 import type { ChunkDetail } from '../../api/hub';
+import { chunkDetail } from 'fleet/testing';
 import { ChunkEscalation } from './chunk-escalation';
 
 /** An escalation carrying both forms — the runner-composed shape. */
-const WRAPPED_DETAIL: ChunkDetail = {
+const WRAPPED_DETAIL: ChunkDetail = chunkDetail({
   chunk_id: 'ch_01esc00000000000000000000000',
   graph_id: 'gr_1',
   status: 'needs_human',
@@ -20,8 +21,12 @@ const WRAPPED_DETAIL: ChunkDetail = {
     takeover_command: 'cd /work/ch_01esc00000000000000000000000 && claude --resume se_01',
     wrapped_takeover_command:
       'blizzard runner takeover ch_01esc00000000000000000000000 --dir /var/lib/blizzard/runner',
+    cause: null,
+    detail: null,
   },
-};
+  graph_name: null,
+  current_node_name: null,
+});
 
 /** An escalation carrying only the raw field, populated with a runnable resume
  * command — the shape of a row stored before the wrapped column existed, or written
@@ -33,6 +38,8 @@ const RAW_ONLY_DETAIL: ChunkDetail = {
     epoch: 3,
     takeover_command: 'cd /work/ch_01esc00000000000000000000000 && claude --resume se_01',
     wrapped_takeover_command: '',
+    cause: null,
+    detail: null,
   },
 };
 
@@ -47,6 +54,8 @@ const PROSE_ONLY_DETAIL: ChunkDetail = {
     takeover_command: 'cross-graph target `review` names no enabled graph — mint a graph named `review` '
       + '(or edit the choice), then requeue this chunk',
     wrapped_takeover_command: '',
+    cause: null,
+    detail: null,
   },
 };
 
@@ -58,6 +67,8 @@ const NO_COMMAND_DETAIL: ChunkDetail = {
     epoch: 3,
     takeover_command: '',
     wrapped_takeover_command: '',
+    cause: null,
+    detail: null,
   },
 };
 
@@ -65,7 +76,7 @@ const NO_COMMAND_DETAIL: ChunkDetail = {
 const NO_ESCALATION_DETAIL: ChunkDetail = {
   ...WRAPPED_DETAIL,
   status: 'running',
-  escalation: undefined,
+  escalation: null,
 };
 
 async function render(detail: ChunkDetail, extraProviders: unknown[] = []) {

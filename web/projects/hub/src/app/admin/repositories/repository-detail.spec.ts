@@ -20,6 +20,8 @@ const CORE: RepositorySummary = {
   revision: 3,
   created_at: '2026-10-01T00:00:00Z',
   created_by: 'ada',
+  created_by_name: null,
+  retired: false,
 };
 const HISTORY = {
   changes: [

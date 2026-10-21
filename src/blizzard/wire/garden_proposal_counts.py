@@ -4,12 +4,13 @@ column (`GardenProposalCounts.created`'s own rule)."""
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import ConfigDict, Field
 
 from blizzard.foundation.garden_proposals import GardenProposalOrigin
+from blizzard.wire.base import WireModel
 
 
-class GardenProposalCountsRowView(BaseModel):
+class GardenProposalCountsRowView(WireModel):
     """One origin/routine/class triple's garden-proposal counts over the requested
     window. `routine_name` is nullable for an operator-authored row
     naming no routine."""
@@ -30,7 +31,7 @@ class GardenProposalCountsRowView(BaseModel):
     project_name: str | None = None
 
 
-class GardenProposalCountsView(BaseModel):
+class GardenProposalCountsView(WireModel):
     """`GET /api/routines/proposal-counts`'s own response — `routine` echoes the
     optional routine filter, `origin` the optional origin filter, each `None` when
     unfiltered."""

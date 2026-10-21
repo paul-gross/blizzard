@@ -2,6 +2,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { describe, expect, it } from 'vitest';
 
 import type { WorkRefView } from '../../api/hub';
+import { workRefView } from '../../testing/builders/chunk';
 import { WorkRefLink } from './work-ref-link';
 
 const LINKED: WorkRefView = { source: 'github', ref: '42', label: 'Fix the thing', web_url: 'https://example.test/42' };
@@ -35,7 +36,7 @@ describe('WorkRefLink', () => {
 
   it('falls back to source#ref when there is no label', async () => {
     const withUrl = (await mount({ ...LINKED, label: null })).nativeElement as HTMLElement;
-    const without = (await mount({ source: 'github', ref: '42' })).nativeElement as HTMLElement;
+    const without = (await mount(workRefView({ source: 'github', ref: '42', label: null, web_url: null }))).nativeElement as HTMLElement;
 
     expect(withUrl.querySelector('a')?.textContent).toBe('github#42');
     expect(without.querySelector('span')?.textContent).toBe('github#42');

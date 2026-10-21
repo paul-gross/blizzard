@@ -3,9 +3,12 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 
 import type { ChunkDetail, WorkItemsState } from 'fleet';
+import { chunkDetail, questionView, workItemEntry } from 'fleet/testing';
 import { ChunkDetailPanel } from './chunk-detail-panel';
 
-const ISSUE_DETAIL: ChunkDetail = {
+const ISSUE_DETAIL: ChunkDetail = chunkDetail({
+  graph_name: null,
+  current_node_name: null,
   chunk_id: 'ch_01issue00000000000000000000',
   graph_id: 'gr_1',
   status: 'running',
@@ -18,9 +21,11 @@ const ISSUE_DETAIL: ChunkDetail = {
   ],
   history: [],
   artifacts: [],
-};
+});
 
-const ROUTED_DETAIL: ChunkDetail = {
+const ROUTED_DETAIL: ChunkDetail = chunkDetail({
+  graph_name: null,
+  current_node_name: null,
   chunk_id: 'ch_01routed000000000000000000',
   graph_id: 'gr_1',
   status: 'running',
@@ -31,10 +36,12 @@ const ROUTED_DETAIL: ChunkDetail = {
   work_refs: [],
   history: [],
   artifacts: [],
-  route: { runner_id: 'rn_01', workspace_id: 'ws_01', environment_ids: ['env_01'] },
-};
+  route: { runner_id: 'rn_01', runner_name: null, workspace_id: 'ws_01', environment_ids: ['env_01'] },
+});
 
-const WAITING_QUESTION_DETAIL: ChunkDetail = {
+const WAITING_QUESTION_DETAIL: ChunkDetail = chunkDetail({
+  graph_name: null,
+  current_node_name: null,
   chunk_id: 'ch_01ask00000000000000000000000',
   graph_id: 'gr_1',
   status: 'waiting_on_human',
@@ -46,7 +53,7 @@ const WAITING_QUESTION_DETAIL: ChunkDetail = {
   history: [],
   artifacts: [],
   questions: [
-    {
+    questionView({
       question_id: 'qn_01',
       chunk_id: 'ch_01ask00000000000000000000000',
       question: 'Which API style should the endpoint use?',
@@ -56,9 +63,9 @@ const WAITING_QUESTION_DETAIL: ChunkDetail = {
       session_id: 'se_01',
       asked_at: '2026-07-13T00:00:01Z',
       answered: false,
-    },
+    }),
   ],
-};
+});
 
 describe('ChunkDetailPanel', () => {
   beforeEach(async () => {
@@ -135,7 +142,7 @@ describe('ChunkDetailPanel', () => {
     const workItems: WorkItemsState = {
       status: 'success',
       items: [
-        { source: 'widget', ref: '42', label: 'widget#42', web_url: 'https://github.com/acme/widget/issues/42', fetched_at: 't', body: 'reproduces under load', comments: [] },
+        workItemEntry({ source: 'widget', ref: '42', label: 'widget#42', title: null, web_url: 'https://github.com/acme/widget/issues/42', fetched_at: 't', body: 'reproduces under load', comments: [] }),
       ],
     };
     const fixture = TestBed.createComponent(ChunkDetailPanel);

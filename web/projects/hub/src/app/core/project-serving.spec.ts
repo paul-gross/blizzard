@@ -7,9 +7,9 @@ function runner(id: string, fields: Partial<RunnerRegistryView>): RunnerRegistry
 }
 
 describe('which runners serve a project', () => {
-  const blizzard = { entry: 'blizzard', project_id: 'proj_b', slug: 'blizzard', name: 'Blizzard', claimable: true };
-  const celestial = { entry: 'proj_c', project_id: 'proj_c', slug: 'celestial', name: 'Celestial', claimable: true };
-  const unresolved = { entry: 'gone', project_id: null, slug: null, name: null, claimable: false };
+  const blizzard = { entry: 'blizzard', project_id: 'proj_b', slug: 'blizzard', name: 'Blizzard', claimable: true, color: null };
+  const celestial = { entry: 'proj_c', project_id: 'proj_c', slug: 'celestial', name: 'Celestial', claimable: true, color: null };
+  const unresolved = { entry: 'gone', project_id: null, slug: null, name: null, claimable: false, color: null };
 
   it('reads a runner’s declaration: what it serves, whether it serves nothing, and what resolved to no project', () => {
     const both = runner('r1', { projects: [blizzard, celestial, unresolved] });

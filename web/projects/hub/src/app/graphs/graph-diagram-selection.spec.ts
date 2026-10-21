@@ -1,4 +1,4 @@
-import type { GraphView } from 'fleet';
+import type { GraphView, GraphNodeView } from 'fleet';
 import {
   endpointNodeIds,
   incidentEdgeIds,
@@ -7,6 +7,34 @@ import {
   selectionKey,
 } from './graph-diagram-selection';
 import type { LaidOutGraph } from './graph-layout';
+
+const GRAPH_DEFAULTS: Pick<GraphView, 'artifacts' | 'edges' | 'follow_latest' | 'retired' | 'sessions' | 'warnings'> = {
+  artifacts: [],
+  edges: [],
+  follow_latest: null,
+  retired: false,
+  sessions: [],
+  warnings: [],
+};
+
+const NODE_DEFAULTS: Pick<GraphNodeView, 'checks' | 'checks_cwd' | 'checks_timeout' | 'choices' | 'judgement_prompt' | 'produces' | 'prompt' | 'retries_exhausted' | 'retries_max' | 'session_source'> = {
+  checks: [],
+  checks_cwd: null,
+  checks_timeout: null,
+  choices: [],
+  judgement_prompt: null,
+  produces: [],
+  prompt: null,
+  retries_exhausted: null,
+  retries_max: null,
+  session_source: null,
+};
+
+const EDGE_DEFAULTS: Pick<GraphView['edges'][number], 'prompt_addendum' | 'target_graph' | 'target_kind'> = {
+  prompt_addendum: null,
+  target_graph: null,
+  target_kind: 'node',
+};
 
 /** A minimal three-node layout: `n_a` has only outgoing edges, `n_b` has both an
  * incoming edge and its own self-loop, `n_c` has only an incoming edge and no
@@ -31,42 +59,46 @@ const LAID_OUT: LaidOutGraph = {
 };
 
 const GRAPH: GraphView = {
+  ...GRAPH_DEFAULTS,
   graph_id: 'gr_test',
   name: 'test',
   enabled: true,
   entry_node_id: 'n_a',
   nodes: [
     {
+      ...NODE_DEFAULTS,
       node_id: 'n_a',
       name: 'a',
       executor: 'runner',
       session: 'fresh',
       judged_by: 'worker',
-      choices: [{ choice_id: 'c_pass', name: 'pass', description: 'moves on' }],
+      choices: [{ requires_checks: false, choice_id: 'c_pass', name: 'pass', description: 'moves on' }],
     },
     {
+      ...NODE_DEFAULTS,
       node_id: 'n_b',
       name: 'b',
       executor: 'runner',
       session: 'fresh',
       judged_by: 'worker',
       choices: [
-        { choice_id: 'c_pass2', name: 'pass', description: '' },
-        { choice_id: 'c_fail', name: 'fail', description: '' },
+        { requires_checks: false, choice_id: 'c_pass2', name: 'pass', description: '' },
+        { requires_checks: false, choice_id: 'c_fail', name: 'fail', description: '' },
       ],
     },
     {
+      ...NODE_DEFAULTS,
       node_id: 'n_c',
       name: 'c',
       executor: 'hub',
       session: 'fresh',
       judged_by: 'worker',
-      choices: [{ choice_id: 'c_done', name: 'landed', description: '' }],
+      choices: [{ requires_checks: false, choice_id: 'c_done', name: 'landed', description: '' }],
     },
   ],
   edges: [
-    { from_node_id: 'n_a', choice_id: 'c_pass', to_node_name: 'b', prompt_addendum: 'Focus on the happy path.' },
-    { from_node_id: 'n_b', choice_id: 'c_pass2', to_node_name: 'c', prompt_addendum: null },
+    { ...EDGE_DEFAULTS, from_node_id: 'n_a', choice_id: 'c_pass', to_node_name: 'b', prompt_addendum: 'Focus on the happy path.' },
+    { ...EDGE_DEFAULTS, from_node_id: 'n_b', choice_id: 'c_pass2', to_node_name: 'c', prompt_addendum: null },
   ],
   warnings: [],
 };

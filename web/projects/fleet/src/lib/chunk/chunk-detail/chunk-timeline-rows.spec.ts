@@ -1,7 +1,8 @@
 import type { ChunkDetail } from '../../api/hub';
+import { chunkDetail, transitionView } from 'fleet/testing';
 import { deriveHistoryRows, deriveMultiGraph, rowChoice, rowMark, usageForStep } from './chunk-timeline-rows';
 
-const BASE: ChunkDetail = {
+const BASE: ChunkDetail = chunkDetail({
   chunk_id: 'ch_01rows00000000000000000000000',
   graph_id: 'gr_2',
   graph_name: 'second',
@@ -11,8 +12,8 @@ const BASE: ChunkDetail = {
   work_refs: [],
   artifacts: [],
   history: [
-    { from_node_id: 'nd_build', to_node_id: 'nd_review', choice_name: 'pass', epoch: 1, recorded_at: '2026-07-13T00:00:01Z' },
-    { from_node_id: 'nd_review', to_node_id: 'nd_build', choice_name: 'fail', epoch: 2, recorded_at: '2026-07-13T00:00:05Z' },
+    transitionView({ from_node_id: 'nd_build', to_node_id: 'nd_review', choice_name: 'pass', epoch: 1, recorded_at: '2026-07-13T00:00:01Z', from_node_name: null, to_node_name: null, graph_id: 'gr_2', graph_name: null }),
+    transitionView({ from_node_id: 'nd_review', to_node_id: 'nd_build', choice_name: 'fail', epoch: 2, recorded_at: '2026-07-13T00:00:05Z', from_node_name: null, to_node_name: null, graph_id: 'gr_2', graph_name: null }),
   ],
   migrations: [
     {
@@ -24,6 +25,11 @@ const BASE: ChunkDetail = {
       source: 'authored-edge',
       choice_name: 'escalate',
       recorded_at: '2026-07-13T00:00:03Z',
+      from_graph_name: null,
+      from_node_name: null,
+      landed_node_name: null,
+      model: null,
+      to_graph_name: null,
     },
   ],
   bounces: [{ cause: 'schema-mismatch', envelope: '{"cause":"schema-mismatch","detail":"verdict `???` is not a choice"}', recorded_at: '2026-07-13T00:00:02Z' }],
@@ -38,9 +44,13 @@ const BASE: ChunkDetail = {
       to_node_name: 'plan',
       restarted_by: 'operator@example.test',
       recorded_at: '2026-07-13T00:00:04Z',
+      decision_id: null,
+      from_graph_id: null,
+      from_graph_name: null,
     },
   ],
-} as ChunkDetail;
+  current_node_name: null,
+});
 
 const NOW = new Date(2026, 6, 13, 12, 0);
 
@@ -118,7 +128,7 @@ describe('deriveHistoryRows', () => {
   });
 
   it('renders unchanged when bounces and restarts are absent', () => {
-    const rest = { ...BASE, bounces: undefined, restarts: undefined };
+    const rest = { ...BASE, bounces: [], restarts: [] };
     expect(deriveHistoryRows(rest, NOW).map((r) => r.kind)).toEqual(['transition', 'migration', 'transition']);
   });
 });

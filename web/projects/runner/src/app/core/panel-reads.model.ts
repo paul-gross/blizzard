@@ -51,11 +51,11 @@ export function projectNameFor(projects: readonly PanelProject[], slug: string |
 /** Each runner's projects by runner id. */
 export type RunnerProjects = ReadonlyMap<string, readonly PanelProject[]>;
 
-/** The serving runners on the host that have an id to read under, in wire order — each labeled by its bare name, since
+/** The runners on the host whose routes answer and that have an id to read under, in wire order — each labeled by its bare name, since
  * every runner the panel shows runs on the one host it is served from. */
 export function servingOwners(runners: readonly runnerApi.HostRunnerView[]): readonly RunnerOwner[] {
   return runners.flatMap((runner) =>
-    runner.state === 'serving' && runner.runner_id !== null
+    runner.served && runner.runner_id !== null
       ? [{ runnerId: runner.runner_id, name: runner.name, label: runner.name }]
       : [],
   );

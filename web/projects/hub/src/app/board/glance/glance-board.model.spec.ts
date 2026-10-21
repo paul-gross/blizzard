@@ -1,4 +1,5 @@
 import { type ChunkCountsView, type ChunkSummary, type DecisionView, type QuestionView, type QueuePeekEntry, type RunnerRegistryView } from 'fleet';
+import { chunkUsageTotalView } from 'fleet/testing';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -12,6 +13,33 @@ import {
   upNextRows,
 } from './glance-board.model';
 
+const chunkSummary = (overrides: Pick<ChunkSummary, 'chunk_id' | 'graph_id' | 'status'> & Partial<ChunkSummary>): ChunkSummary => ({
+  awaiting_external_merge: false,
+  blocked: null,
+  closed_prs: [],
+  completed_at: null,
+  cost: chunkUsageTotalView({ input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_create_tokens: 0, cost_usd: 0 }),
+  current_node_id: null,
+  current_node_name: null,
+  default_effort: null,
+  default_harnesses: [],
+  default_model: [],
+  environment_count: 0,
+  landed: false,
+  landed_repos: [],
+  open_prs: [],
+  project_id: null,
+  project_name: null,
+  project_slug: null,
+  promotable: false,
+  runner_id: null,
+  runner_name: null,
+  terminal: false,
+  work_refs: [],
+  ...overrides,
+});
+
+
 /** No runner's host known — every runner keeps its compact-id name. */
 const NO_HOSTS: ReadonlyMap<string, string> = new Map();
 
@@ -19,13 +47,13 @@ const NOW = Date.parse('2026-06-01T12:00:00Z');
 const HOUR = 60 * 60 * 1000;
 const ago = (ms: number): string => new Date(NOW - ms).toISOString();
 
-const chunk = (id: string, status: ChunkSummary['status'], fields: Partial<ChunkSummary> = {}): ChunkSummary => ({
+const chunk = (id: string, status: ChunkSummary['status'], fields: Partial<ChunkSummary> = {}): ChunkSummary => (chunkSummary({
   chunk_id: id,
   graph_id: 'gr_1',
   status,
   current_node_id: 'nd_build',
   ...fields,
-});
+}));
 
 const question = (chunkId: string, text: string, runnerId: string | null = null): QuestionView =>
   ({ chunk_id: chunkId, question: text, runner_id: runnerId }) as QuestionView;

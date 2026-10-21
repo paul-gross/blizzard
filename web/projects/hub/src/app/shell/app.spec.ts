@@ -118,6 +118,7 @@ const MEMBERLESS: MeResponse = {
   permissions: [],
   tenants: [],
   hub_admin: false,
+  assignable_roles: [],
 };
 const ACME_ADMIN: MeTenant = {
   tenant_id: 'ten_a',

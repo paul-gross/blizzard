@@ -4,6 +4,7 @@ import { provideRouter } from '@angular/router';
 import { page } from 'vitest/browser';
 
 import type { ChunkDetail } from '../../api/hub';
+import { chunkDetail, chunkUsageView, transitionView } from 'fleet/testing';
 import { ChunkTimeline } from './chunk-timeline';
 import { ChunkTimelineSelection } from './chunk-timeline-selection';
 
@@ -18,7 +19,7 @@ import { ChunkTimelineSelection } from './chunk-timeline-selection';
  * needs `--browsers=ChromiumHeadless`, not jsdom — run it via `npm run shell-sweep`
  * (`web/scripts/shell-sweep.js`).
  */
-const DETAIL: ChunkDetail = {
+const DETAIL: ChunkDetail = chunkDetail({
   chunk_id: 'ch_01provenance00000000000000000',
   graph_id: 'gr_1',
   graph_name: 'default',
@@ -28,12 +29,12 @@ const DETAIL: ChunkDetail = {
   latest_epoch: 2,
   work_refs: [],
   history: [
-    { from_node_id: 'nd_build', to_node_id: 'nd_review', choice_name: 'pass', epoch: 1, recorded_at: '2026-08-09T00:00:01Z' },
-    { from_node_id: 'nd_review', to_node_id: 'nd_done', choice_name: 'landed', epoch: 2, recorded_at: '2026-08-09T00:00:02Z' },
+    transitionView({ from_node_id: 'nd_build', to_node_id: 'nd_review', choice_name: 'pass', epoch: 1, recorded_at: '2026-08-09T00:00:01Z', from_node_name: null, to_node_name: null, graph_id: 'gr_1', graph_name: null }),
+    transitionView({ from_node_id: 'nd_review', to_node_id: 'nd_done', choice_name: 'landed', epoch: 2, recorded_at: '2026-08-09T00:00:02Z', from_node_name: null, to_node_name: null, graph_id: 'gr_1', graph_name: null }),
   ],
   artifacts: [],
   usage: [
-    {
+    chunkUsageView({
       node_id: 'nd_build',
       epoch: 1,
       kind: 'spawn',
@@ -45,8 +46,10 @@ const DETAIL: ChunkDetail = {
       cache_read_tokens: 300,
       cache_create_tokens: 100,
       cost_usd: 0.42,
-    },
-    {
+      cost_partial: false,
+      estimated_cost_usd: null,
+    }),
+    chunkUsageView({
       node_id: 'nd_review',
       epoch: 2,
       kind: 'spawn',
@@ -58,9 +61,11 @@ const DETAIL: ChunkDetail = {
       cache_read_tokens: 100,
       cache_create_tokens: 50,
       cost_usd: 0.11,
-    },
+      cost_partial: false,
+      estimated_cost_usd: null,
+    }),
   ],
-};
+});
 
 // The same two-step history, but the second step is a subscription invocation: no
 // billed cost, only a runner-reported estimate (an estimate-only row is kept
@@ -71,7 +76,7 @@ const ESTIMATE_DETAIL: ChunkDetail = {
   chunk_id: 'ch_01estimateprov0000000000000',
   usage: [
     DETAIL.usage![0],
-    { ...DETAIL.usage![1], cost_usd: null, estimated_cost_usd: 0.07 },
+    chunkUsageView({ ...DETAIL.usage![1], cost_usd: null, estimated_cost_usd: 0.07, cost_partial: false, harness_id: null, harness_version: null }),
   ],
 };
 

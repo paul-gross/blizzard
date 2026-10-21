@@ -278,6 +278,11 @@ extend-exclude = ["src/blizzard/*/store/migrations/versions"]
 select = ["E", "F", "I", "UP", "B", "C4", "SIM", "RUF"]
 
 [tool.ruff.lint.per-file-ignores]
+# Wire models subclass `WireModel`, which ruff cannot see is a pydantic model; pydantic copies a field's mutable default
+# per instance, as ruff's own exemption for `BaseModel` subclasses assumes.
+"src/blizzard/wire/*" = ["RUF012"]
+"src/blizzard/hub/api/me.py" = ["RUF012"]
+"src/blizzard/runner/api/readiness.py" = ["RUF012"]
 "tests/*" = ["E501", "B008"]
 "src/blizzard/*/store/migrations/tests/*" = ["E501", "B008"]
 "exemplars/python/exemplar/hub/store/migrations/tests/*" = ["E501", "B008"]

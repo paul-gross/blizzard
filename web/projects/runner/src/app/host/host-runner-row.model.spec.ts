@@ -23,7 +23,7 @@ const STATUS = (overrides: Partial<runnerApi.RunnerStatusView> = {}): runnerApi.
     workspace_id: 'ws',
     pause: { local: false, hub: false, effective: false, local_reason: null },
     capacities: { used: 3, bindings: [{ project: 'console', project_id: 'proj_c', workspace_id: 'ws', agents: 4, used: 3, free: 1 }] },
-    hub: { endpoint: 'http://hub', reachable: true, last_contact_at: '2026-07-16T11:59:00.000Z', buffer_depth: 0 },
+    hub: { endpoint: 'http://hub', reachable: true, last_contact_at: '2026-07-16T11:59:00.000Z', buffer_depth: 0, hub_version: null, window: null },
     last_tick_at: '2026-07-16T11:59:26.000Z',
     gates: [],
     ...overrides,
@@ -76,7 +76,7 @@ describe('hostRunnerRows', () => {
   });
 
   it('reads a runner cut off from its hub red, badged HUB UNREACHABLE', () => {
-    const row = one(RUNNER(), STATUS({ hub: { endpoint: 'http://hub', reachable: false, last_contact_at: null, buffer_depth: 3 } }));
+    const row = one(RUNNER(), STATUS({ hub: { endpoint: 'http://hub', reachable: false, last_contact_at: null, buffer_depth: 3, hub_version: null, window: null } }));
 
     expect(row.tone).toBe('red');
     expect(row.state).toEqual([{ label: 'HUB UNREACHABLE', tone: 'stale', title: 'http://hub' }]);
@@ -184,9 +184,9 @@ describe('hostRunnerRows', () => {
           [
             'rn_1',
             DASHBOARD(STATUS(), [
-              { harness_id: 'claude_code', version: '2.1.0', available: true, admitted_range: '>=2.1', degradations: ['no images'] },
-              { harness_id: 'opencode', available: false, cause: 'binary missing' },
-            ] as runnerApi.HarnessHealthView[]),
+              { harness_id: 'claude_code', version: '2.1.0', available: true, admitted_range: '>=2.1', degradations: ['no images'], cause: null },
+              { harness_id: 'opencode', version: null, available: false, admitted_range: null, cause: 'binary missing', degradations: [] },
+            ]),
           ],
         ]),
       }),

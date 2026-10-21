@@ -33,7 +33,7 @@ export function runnerEnvironmentRows(
 ): readonly EnvironmentRow[] {
   return envs.map((env) => ({
     environmentId: env.environment_id,
-    isHeld: env.held ?? env.chunk_id != null,
+    isHeld: env.held,
     chunkRef: env.chunk_id == null ? '' : compactRef(env.chunk_id),
     heldFor: heldForLabel(env.held_since, now),
     holder: holderLabel(env, runnerName),
@@ -50,7 +50,7 @@ export function runnerWorkspaceRows(
   now: number,
   runnerName: (runnerId: string) => string,
 ): readonly WorkspaceRow[] {
-  const byId = new Map(groups.map((group) => [group.workspace_id, group.items ?? []]));
+  const byId = new Map(groups.map((group) => [group.workspace_id, group.items]));
   const declared = new Set(workspaces.map((ws) => ws.workspace_id));
   const row = (workspaceId: string, capacity: number | null): WorkspaceRow => {
     const environments = runnerEnvironmentRows(byId.get(workspaceId) ?? [], now, runnerName);

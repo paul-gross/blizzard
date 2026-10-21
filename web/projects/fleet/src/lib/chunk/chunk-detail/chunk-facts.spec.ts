@@ -3,9 +3,10 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 
 import type { ChunkDetail } from '../../api/hub';
+import { chunkDetail } from 'fleet/testing';
 import { ChunkFacts } from './chunk-facts';
 
-const ROUTED_DETAIL: ChunkDetail = {
+const ROUTED_DETAIL: ChunkDetail = chunkDetail({
   chunk_id: 'ch_01routed000000000000000000',
   graph_id: 'gr_1',
   status: 'running',
@@ -15,10 +16,12 @@ const ROUTED_DETAIL: ChunkDetail = {
   history: [],
   artifacts: [],
   route: { runner_id: 'rn_01', runner_name: 'r-claude', workspace_id: 'ws_01', environment_ids: ['env_01'] },
-};
+  graph_name: null,
+  current_node_name: null,
+});
 
 // A not_ready chunk the wire calls graph-editable.
-const NOT_READY_DETAIL: ChunkDetail = {
+const NOT_READY_DETAIL: ChunkDetail = chunkDetail({
   chunk_id: 'ch_01ready000000000000000000000',
   graph_id: 'gr_default',
   status: 'not_ready',
@@ -28,7 +31,9 @@ const NOT_READY_DETAIL: ChunkDetail = {
   work_refs: [],
   history: [],
   artifacts: [],
-};
+  graph_name: null,
+  current_node_name: null,
+});
 
 describe('ChunkFacts', () => {
   beforeEach(async () => {

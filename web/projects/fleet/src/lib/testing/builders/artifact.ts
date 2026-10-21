@@ -20,6 +20,10 @@ export function assetArtifactView(overrides: Partial<ArtifactView> = {}): Artifa
     node_name: 'build',
     recorded_at: fixtureInstant(-30),
     content: 'Read the work item, then implement the change.',
+    repo: null,
+    commit_hash: null,
+    branch_name: null,
+    branch_url: null,
     ...overrides,
   };
 }
@@ -38,6 +42,7 @@ export function commitArtifactView(overrides: Partial<ArtifactView> = {}): Artif
     commit_hash: '9f2c4e1a7b3d5860fedcba9876543210abcdef12',
     branch_name: 'feat/fixture',
     branch_url: 'https://github.com/paul-gross/blizzard/tree/feat/fixture',
+    content: null,
     ...overrides,
   };
 }

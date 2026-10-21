@@ -84,13 +84,13 @@ export function hostPanelRunners(
           ? 'amber'
           : 'green',
       halted,
-      haltedReasons: halted ? (runner.halted_reasons ?? []) : [],
-      agentsInUse: runner.agents_in_use ?? 0,
-      maxAgents: runner.max_agents ?? 0,
+      haltedReasons: halted ? runner.halted_reasons : [],
+      agentsInUse: runner.agents_in_use,
+      maxAgents: runner.max_agents,
       bindings: halted
         ? []
         : bindingLines(
-            runner.bindings ?? [],
+            runner.bindings,
             capacities.get(runner.runner_id ?? ''),
           ),
       localPause,

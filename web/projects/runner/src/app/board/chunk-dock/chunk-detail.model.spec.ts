@@ -25,6 +25,8 @@ function lease(overrides: Partial<runnerApi.LeaseView> = {}): runnerApi.LeaseVie
     closed_at: null,
     closure_reason: null,
     stale_after_seconds: 3600,
+    harness_id: null,
+    project_id: null,
     ...overrides,
   };
 }

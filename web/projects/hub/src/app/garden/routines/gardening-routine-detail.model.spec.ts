@@ -1,4 +1,14 @@
-import type { AsyncStateQuery, GardenProposalCountsView, GardenSweepsView, GraphSummaryView, GraphView, RoutineView, RunRowView, TrendView } from 'fleet';
+import type {
+  AsyncStateQuery,
+  GardenProposalCountsView,
+  GardenSweepsView,
+  GraphNodeView,
+  GraphSummaryView,
+  GraphView,
+   RoutineView,
+  RunRowView,
+  TrendView,
+} from 'fleet';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -27,7 +37,13 @@ const ROUTINE: RoutineView = {
   default_scope_slug: 'blizzard',
   default_model: ['claude-sonnet-5'],
   default_effort: 'medium',
+  default_harnesses: [],
   created_at: '2026-01-01T00:00:00Z',
+  project_id: null,
+  project_name: null,
+  project_slug: null,
+  retired: false,
+  revision: null,
 };
 
 const OTHER_ROUTINE: RoutineView = { ...ROUTINE, routine_id: 'rtn_2', name: 'weekly' };
@@ -38,9 +54,30 @@ const EFFECTIVE_GRAPH: GraphSummaryView = {
   entry_node_id: 'nd_1',
   created_at: '2026-01-01T00:00:00Z',
   effective: true,
+  lifecycle: 'effective',
+  retired: false,
 };
 
-const SUPERSEDED_GRAPH: GraphSummaryView = { ...EFFECTIVE_GRAPH, graph_id: 'gr_0', effective: false };
+const SUPERSEDED_GRAPH: GraphSummaryView = { ...EFFECTIVE_GRAPH, graph_id: 'gr_0', effective: false, lifecycle: 'superseded' };
+
+function node(fields: Pick<GraphNodeView, 'node_id' | 'name'> & Partial<GraphNodeView>): GraphNodeView {
+  return {
+    executor: 'runner',
+    session: 'fresh',
+    judged_by: 'worker',
+    prompt: null,
+    checks: [],
+    checks_cwd: null,
+    checks_timeout: null,
+    choices: [],
+    judgement_prompt: null,
+    produces: [],
+    retries_exhausted: null,
+    retries_max: null,
+    session_source: null,
+    ...fields,
+  };
+}
 
 const GRAPH: GraphView = {
   graph_id: 'gr_1',
@@ -48,9 +85,15 @@ const GRAPH: GraphView = {
   entry_node_id: 'nd_1',
   enabled: true,
   nodes: [
-    { node_id: 'nd_1', name: 'survey', executor: 'runner', session: 'fresh', judged_by: 'worker', prompt: 'Survey the repo.' },
-    { node_id: 'nd_2', name: 'report', executor: 'runner', session: 'fresh', judged_by: 'worker' },
+    node({ node_id: 'nd_1', name: 'survey', prompt: 'Survey the repo.' }),
+    node({ node_id: 'nd_2', name: 'report' }),
   ],
+  edges: [],
+  artifacts: [],
+  follow_latest: null,
+  retired: false,
+  sessions: [],
+  warnings: [],
 };
 
 const SWEEPS: GardenSweepsView = {
@@ -85,6 +128,7 @@ const PROPOSAL_COUNTS: GardenProposalCountsView = {
   since: '2026-01-01T00:00:00Z',
   until: '2026-01-29T00:00:00Z',
   routine: 'nightly',
+  origin: null,
   rows: [
     {
       origin: 'routine-run',
@@ -95,6 +139,9 @@ const PROPOSAL_COUNTS: GardenProposalCountsView = {
       accepted_with_item: 3,
       accepted_without_item: 0,
       created: 6,
+      project_id: null,
+      project_name: null,
+      project_slug: null,
     },
   ],
 };
@@ -170,7 +217,7 @@ describe('strategySteps', () => {
   });
 
   it('answers no steps for a graph carrying no nodes', () => {
-    expect(strategySteps({ ...GRAPH, nodes: undefined })).toEqual([]);
+    expect(strategySteps({ ...GRAPH, nodes: [] })).toEqual([]);
   });
 
   it('maps each node to its name and prompt, null when it has none', () => {
@@ -288,7 +335,7 @@ describe('routinePanelVm', () => {
   });
 
   it('defaults an unset model and effort', () => {
-    const vm = routinePanelVm({ ...ROUTINE, default_model: undefined, default_effort: undefined }, PARTS);
+    const vm = routinePanelVm({ ...ROUTINE, default_model: [], default_effort: null }, PARTS);
     expect(vm?.record.modelEffort).toBe('—');
   });
 

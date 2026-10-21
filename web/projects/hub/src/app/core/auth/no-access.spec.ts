@@ -13,6 +13,7 @@ const MEMBERLESS: MeResponse = {
   permissions: [],
   tenants: [],
   hub_admin: false,
+  assignable_roles: [],
 };
 
 describe('NoAccess', () => {

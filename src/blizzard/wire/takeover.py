@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
+from blizzard.wire.base import WireModel
+
 
 class TakeoverRequest(BaseModel):
     """The takeover request body — ``force`` kills a live worker attempt first."""
@@ -15,7 +17,7 @@ class TakeoverRequest(BaseModel):
     force: bool = False
 
 
-class TakeoverOpenResponse(BaseModel):
+class TakeoverOpenResponse(WireModel):
     """``POST /chunks/{id}/takeovers`` — ``command`` is exec'd verbatim in ``workdir``.
     ``env`` is the bounded takeover env — the lease's ``BLIZZARD_*`` identity
     (including the re-minted lease token) plus ``PATH``/``HOME``, never the daemon's full

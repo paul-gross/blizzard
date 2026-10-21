@@ -16,6 +16,7 @@ from blizzard.foundation.invitations import (
     MIN_LIFETIME_DAYS,
     InvitationState,
 )
+from blizzard.wire.base import WireModel
 
 
 class InvitationCreateRequest(BaseModel):
@@ -29,7 +30,7 @@ class InvitationCreateRequest(BaseModel):
     expires_in: Annotated[int, Field(strict=True, ge=MIN_LIFETIME_DAYS, le=MAX_LIFETIME_DAYS)] = DEFAULT_LIFETIME_DAYS
 
 
-class InvitationView(BaseModel):
+class InvitationView(WireModel):
     """One invitation as its tenant's admins see it — never its token."""
 
     invitation_id: str

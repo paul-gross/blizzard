@@ -20,6 +20,7 @@ const GRANTED: PermitView = {
   requested_by: 'usr_grace',
   changed_at: '2026-10-02T09:00:00Z',
   changed_by: 'usr_grace',
+  revocation_note: null,
 };
 
 describe('permit mutations', () => {

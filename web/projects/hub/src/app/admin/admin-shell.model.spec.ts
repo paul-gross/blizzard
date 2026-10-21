@@ -16,8 +16,8 @@ describe('tabCount', () => {
 
 describe('changesTotal', () => {
   it("counts every change the log's filters select, not only the first page's", () => {
-    expect(changesTotal([{ changes: [], total: 120, next_before: 9 }, { changes: [], total: 120 }])).toBe(120);
-    expect(changesTotal([{ changes: [], total: 0 }])).toBe(0);
+    expect(changesTotal([{ changes: [], total: 120, next_before: 9 }, { changes: [], total: 120, next_before: null }])).toBe(120);
+    expect(changesTotal([{ changes: [], total: 0, next_before: null }])).toBe(0);
   });
 
   it('shows no count before the first page answers', () => {

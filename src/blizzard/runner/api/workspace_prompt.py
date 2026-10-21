@@ -12,6 +12,7 @@ from fastapi import APIRouter, Request
 from pydantic import BaseModel
 
 from blizzard.runner.api.wiring import RunnerWiring
+from blizzard.wire.base import WireModel
 
 router = APIRouter(prefix="/api/host/workspaces/{workspace_id}", tags=["host"])
 
@@ -20,7 +21,7 @@ router = APIRouter(prefix="/api/host/workspaces/{workspace_id}", tags=["host"])
 WorkspacePromptSource = Literal["override", "config"]
 
 
-class WorkspacePromptResponse(BaseModel):
+class WorkspacePromptResponse(WireModel):
     """The effective workspace prompt prepended to a worker spawn."""
 
     prompt: str

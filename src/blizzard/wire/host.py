@@ -11,6 +11,7 @@ from typing import Annotated
 from pydantic import BaseModel, Field, StringConstraints
 
 from blizzard.foundation.runner_connection import RunnerConnection
+from blizzard.wire.base import WireModel
 from blizzard.wire.runner import RunnerSubscriptionDeclaration, SubscriptionUsageView
 
 
@@ -35,14 +36,14 @@ class HostReportRequest(BaseModel):
     version: str | None = None
 
 
-class HostRunnerView(BaseModel):
+class HostRunnerView(WireModel):
     """One runner standing under a host."""
 
     runner_id: str
     runner_name: str
 
 
-class HostRecordResponse(BaseModel):
+class HostRecordResponse(WireModel):
     """A host's own record: its id, tenant, held name, and the runners the hub holds under it that are not retired —
     a runner retired or released is one the host should halt."""
 
@@ -72,7 +73,7 @@ class HostAddRequest(BaseModel):
     adopt: list[str] = []
 
 
-class HostAddResponse(BaseModel):
+class HostAddResponse(WireModel):
     """The added host — its hub-minted id, its name, and its plaintext bearer token.
 
     ``token`` is visible only here, once — only its sha256 hash is kept. The host is added but never connected until
@@ -92,7 +93,7 @@ class HostSubscriptionUsageView(SubscriptionUsageView):
     runners: list[str] = Field(default_factory=list)
 
 
-class HostRegistryView(BaseModel):
+class HostRegistryView(WireModel):
     """One host as an operator sees the registry — including one that has never connected."""
 
     host_id: str
@@ -118,7 +119,7 @@ class HostRegistryView(BaseModel):
     subscription_usage: list[HostSubscriptionUsageView] = []
 
 
-class HostRegistryListResponse(BaseModel):
+class HostRegistryListResponse(WireModel):
     """The host registry as operators list it — every added host, oldest first."""
 
     hosts: list[HostRegistryView] = []
@@ -160,7 +161,7 @@ class HostTokenRevocationResponse(BaseModel):
     host: HostRegistryView
 
 
-class HostRetireResponse(BaseModel):
+class HostRetireResponse(WireModel):
     """The retired host, plus every chunk the retire released from the runners under it."""
 
     host: HostRegistryView

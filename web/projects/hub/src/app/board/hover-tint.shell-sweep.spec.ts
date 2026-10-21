@@ -4,6 +4,7 @@ import { provideRouter } from '@angular/router';
 import { commands, page, userEvent } from 'vitest/browser';
 
 import { type ChunkDetail, ChunkTimeline } from 'fleet';
+import { assetArtifactView, chunkDetail, commitArtifactView, transitionView } from 'fleet/testing';
 import type { BoardCard } from './board-card/board-card';
 import { BoardCardComponent } from './board-card/board-card';
 import { ChunkArtifacts } from './chunk-dock/chunk-artifacts';
@@ -182,7 +183,7 @@ describe('board-card hover/selection tint shell sweep (web:shell-sweep)', () => 
   });
 });
 
-const TIMELINE_DETAIL: ChunkDetail = {
+const TIMELINE_DETAIL: ChunkDetail = chunkDetail({
   chunk_id: 'ch_01hover0000000000000000000',
   graph_id: 'gr_1',
   graph_name: 'default',
@@ -192,18 +193,20 @@ const TIMELINE_DETAIL: ChunkDetail = {
   status: 'running',
   work_refs: [],
   history: [
-    {
+    transitionView({
       choice_name: 'pass',
       epoch: 1,
       from_node_id: 'nd_build',
       from_node_name: 'build',
       to_node_id: 'nd_review',
       to_node_name: 'review',
+      graph_id: 'gr_1',
+      graph_name: 'default',
       recorded_at: '2026-08-09T00:00:00.000Z',
-    },
+    }),
   ],
   artifacts: [],
-};
+});
 
 describe('chunk-timeline row hover tint shell sweep (web:shell-sweep)', () => {
   it('washes a hovered history row', async () => {
@@ -316,7 +319,7 @@ describe('chunk-timeline (Quick Reference) full-bleed row shell sweep (web:shell
   });
 });
 
-const ARTIFACTS_DETAIL: ChunkDetail = {
+const ARTIFACTS_DETAIL: ChunkDetail = chunkDetail({
   chunk_id: 'ch_01hover0000000000000000000',
   graph_id: 'gr_1',
   graph_name: 'default',
@@ -327,7 +330,7 @@ const ARTIFACTS_DETAIL: ChunkDetail = {
   work_refs: [],
   history: [],
   artifacts: [
-    {
+    assetArtifactView({
       key: 'build.plan.1',
       node_id: 'nd_build',
       node_name: 'build',
@@ -336,8 +339,8 @@ const ARTIFACTS_DETAIL: ChunkDetail = {
       kind: 'asset',
       content: 'plan content',
       recorded_at: '2026-08-09T00:00:00.000Z',
-    },
-    {
+    }),
+    commitArtifactView({
       key: 'build.commit.1',
       node_id: 'nd_build',
       node_name: 'build',
@@ -346,9 +349,13 @@ const ARTIFACTS_DETAIL: ChunkDetail = {
       kind: 'git_commit',
       content: null,
       recorded_at: '2026-08-09T00:00:01.000Z',
-    },
+      repo: null,
+      commit_hash: null,
+      branch_name: null,
+      branch_url: null,
+    }),
   ],
-};
+});
 
 describe('chunk-artifacts row hover tint shell sweep (web:shell-sweep)', () => {
   it('washes the bordered row of a hovered artifact link', async () => {

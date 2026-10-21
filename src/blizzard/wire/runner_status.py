@@ -10,11 +10,12 @@ from pydantic import BaseModel
 from blizzard.foundation.credential_renewal import RenewalFailureReason, RenewalResult
 from blizzard.foundation.runner_identity_state import IdentityState
 from blizzard.foundation.subscription_miss import SampleMissReason
+from blizzard.wire.base import WireModel
 from blizzard.wire.fleet import FleetSummaryView
 from blizzard.wire.runner import VersionWindowView
 
 
-class PauseStateView(BaseModel):
+class PauseStateView(WireModel):
     """The pause brake's two independent surfaces, plus their effective OR.
 
     ``local_reason`` is the local brake's own reason — a usage limit, the spend ceiling, or
@@ -26,7 +27,7 @@ class PauseStateView(BaseModel):
     local_reason: str | None = None
 
 
-class BindingCapacityView(BaseModel):
+class BindingCapacityView(WireModel):
     """One binding's agent slots: ``used`` plus ``free`` accounts for its ``agents``. ``project`` is the entry as
     configured; ``project_id`` the project it resolved to, ``None`` while it routes nothing."""
 
@@ -38,7 +39,7 @@ class BindingCapacityView(BaseModel):
     free: int
 
 
-class CapacitiesView(BaseModel):
+class CapacitiesView(WireModel):
     """Agent-slot accounting per binding, plus the runner-wide count of open leases. A lease whose project or
     workspace is not yet known counts against every binding it may belong to."""
 
@@ -53,7 +54,7 @@ class RoutingConflictView(BaseModel):
     entries: list[str]
 
 
-class HubConnectivityView(BaseModel):
+class HubConnectivityView(WireModel):
     """Hub reachability (derived, not probed) plus the outbound backlog depth.
 
     ``endpoint`` is the configured hub base URL — connectivity facts, not a probe."""
@@ -68,7 +69,7 @@ class HubConnectivityView(BaseModel):
     window: VersionWindowView | None = None
 
 
-class IdentityVerdictView(BaseModel):
+class IdentityVerdictView(WireModel):
     """Whether the runner's token resolves to the runner its host file configures (``store_runner_id``).
 
     ``unchecked`` until the hub first answers the check, ``matched`` while it does, ``mismatched``
@@ -87,7 +88,7 @@ class IdentityVerdictView(BaseModel):
     reason: str | None = None
 
 
-class ServedProjectStatusView(BaseModel):
+class ServedProjectStatusView(WireModel):
     """One project the runner serves, as its hub last answered: the ``entry`` as configured — a project id
     or slug — and the project it resolved to, with its palette ``color``. ``resolved`` is false for an entry
     no project answers to, and ``answered`` false for a configured entry the hub has not answered yet; either
@@ -112,7 +113,7 @@ class UnmatchedBindingView(BaseModel):
     held_since: str
 
 
-class RunnerStatusView(BaseModel):
+class RunnerStatusView(WireModel):
     """``GET /api/runner`` — identity, pause states, capacities, hub connectivity, last tick."""
 
     #: The hub-minted id of the runner's latest successful registration; ``None`` until it first registers.
@@ -141,7 +142,7 @@ class RunnerStatusView(BaseModel):
     routing_conflicts: list[RoutingConflictView] = []
 
 
-class EnvironmentView(BaseModel):
+class EnvironmentView(WireModel):
     """One environment in a workspace's pool, as ``GET /api/host/environments`` lists it.
     ``chunk_id``/``held_since`` are present only while the environment
     is currently bound; an unused pool environment carries both as ``None``. ``held`` is the
@@ -153,7 +154,7 @@ class EnvironmentView(BaseModel):
     held: bool = False
 
 
-class AskView(BaseModel):
+class AskView(WireModel):
     """One open ask — ``GET /api/asks?open=true``."""
 
     question_id: str
@@ -168,13 +169,13 @@ class AskView(BaseModel):
     project_id: str | None = None
 
 
-class AskListResponse(BaseModel):
+class AskListResponse(WireModel):
     """Every ask still awaiting an answer."""
 
     items: list[AskView] = []
 
 
-class EscalationView(BaseModel):
+class EscalationView(WireModel):
     """One parked escalation, carrying its literal takeover command — ``GET /api/escalations``."""
 
     chunk_id: str
@@ -200,13 +201,13 @@ class EscalationView(BaseModel):
     project_id: str | None = None
 
 
-class EscalationListResponse(BaseModel):
+class EscalationListResponse(WireModel):
     """Every escalation still open — no later lease mint, and the hub has not ended the chunk."""
 
     items: list[EscalationView] = []
 
 
-class OpenTakeoverView(BaseModel):
+class OpenTakeoverView(WireModel):
     """One open operator takeover — ``GET /api/takeovers``, the stranded-takeover
     recovery surface: the chunk it holds, the ``takeover_id`` an
     interrupted terminal never PATCHed closed, and how long it has been held."""
@@ -217,13 +218,13 @@ class OpenTakeoverView(BaseModel):
     harness_id: str | None = None
 
 
-class OpenTakeoverListResponse(BaseModel):
+class OpenTakeoverListResponse(WireModel):
     """Every takeover still open across this runner's held chunks."""
 
     items: list[OpenTakeoverView] = []
 
 
-class FactView(BaseModel):
+class FactView(WireModel):
     """One hub-bound fact off the runner store's outbound buffer — ``GET /api/facts``.
 
     The local fact log: the record itself minus its JSON ``payload``. ``acked_at``
@@ -239,13 +240,13 @@ class FactView(BaseModel):
     project_id: str | None = None
 
 
-class FactListResponse(BaseModel):
+class FactListResponse(WireModel):
     """The most recent hub-bound facts, newest first."""
 
     items: list[FactView] = []
 
 
-class HarnessHealthView(BaseModel):
+class HarnessHealthView(WireModel):
     """One configured harness binding's own computed health —
     ``GET /api/harness-health``, runner-local diagnostics only. ``cause`` is one of
     ``missing_binary``, ``incompatible_version``, ``unknown_version``, ``authentication_failure``,
@@ -262,13 +263,13 @@ class HarnessHealthView(BaseModel):
     admitted_range: str | None = None
 
 
-class HarnessHealthListResponse(BaseModel):
+class HarnessHealthListResponse(WireModel):
     """Every configured harness binding's own computed health."""
 
     items: list[HarnessHealthView] = []
 
 
-class SubscriptionView(BaseModel):
+class SubscriptionView(WireModel):
     """One declared subscription's host-local diagnostics, served by
     ``GET /api/host/subscriptions``. The sampling fields are ``None`` until a first attempt, the
     ``renewal_*`` fields until a first renewal; each ``*_reason`` is set only on a miss or failure."""

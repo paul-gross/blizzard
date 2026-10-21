@@ -4,6 +4,7 @@ import { provideRouter } from '@angular/router';
 import { page } from 'vitest/browser';
 
 import type { ChunkDetail } from '../../api/hub';
+import { chunkDetail, chunkUsageTotalView, routeView } from 'fleet/testing';
 import { ChunkFacts } from './chunk-facts';
 import { ChunkTokenBreakdown } from './chunk-token-breakdown';
 
@@ -42,7 +43,7 @@ class AlignmentHost {
   readonly detail = input<ChunkDetail>(DETAIL);
 }
 
-const DETAIL: ChunkDetail = {
+const DETAIL: ChunkDetail = chunkDetail({
   chunk_id: 'ch_01alignment0000000000000000',
   graph_id: 'gr_1',
   graph_name: 'default',
@@ -55,20 +56,21 @@ const DETAIL: ChunkDetail = {
   artifacts: [],
   // A genuinely long identity — long enough to wrap across several lines at
   // phone width, the content-width stress this guard exists to catch.
-  route: {
+  route: routeView({
     runner_id: 'runner-a-genuinely-long-identity-string-that-wraps-onto-several-lines-0001',
+    runner_name: null,
     workspace_id: 'ws_01',
     environment_ids: ['env_01'],
-  },
-  cost: {
+  }),
+  cost: chunkUsageTotalView({
     input_tokens: 128_000,
     output_tokens: 4_096,
     cache_read_tokens: 900_000,
     cache_create_tokens: 12_000,
     cost_usd: 12.3456,
     cost_partial: false,
-  },
-};
+  }),
+});
 
 describe('chunk-facts / chunk-token-breakdown value-column alignment shell sweep (web:shell-sweep)', () => {
   it("keeps the usage table's value column at the facts table's own horizontal position, even under a long runner identity that wraps", async () => {

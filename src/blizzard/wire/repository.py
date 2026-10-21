@@ -5,8 +5,10 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict
 
+from blizzard.wire.base import WireModel
 
-class RepositorySummary(BaseModel):
+
+class RepositorySummary(WireModel):
     """One repository — the ``GET /api/repositories`` listing row and every record verb's view. ``repository_id`` is
     what every stored reference holds; ``slug`` is the handle people type, and ``name`` a display label."""
 
@@ -57,7 +59,7 @@ class RepositoryPatchRequest(BaseModel):
     secret_name: str | None = None
 
 
-class RepositoriesListView(BaseModel):
+class RepositoriesListView(WireModel):
     """Every stored repository — ``GET /api/repositories``."""
 
     repositories: list[RepositorySummary] = []

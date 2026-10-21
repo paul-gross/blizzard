@@ -3,19 +3,24 @@ import { TestBed } from '@angular/core/testing';
 
 import type { ArtifactView } from '../../api/hub';
 import { formatAbsolute } from '../../core/when';
-import { bounceArtifactView, deltaArtifactView, surveyArtifactView } from 'fleet/testing';
+import {
+  assetArtifactView,
+  bounceArtifactView,
+  commitArtifactView,
+  deltaArtifactView,
+  surveyArtifactView,
+} from 'fleet/testing';
 import { ChunkArtifactBody } from './chunk-artifact-body';
 
-const ASSET: ArtifactView = {
+const ASSET: ArtifactView = assetArtifactView({
   epoch: 1,
   key: 'plan',
-  kind: 'asset',
   name: 'plan',
   node_id: 'nd_build',
   node_name: 'build',
   recorded_at: '2026-07-13T00:00:01Z',
   content: 'the plan',
-};
+});
 
 describe('ChunkArtifactBody', () => {
   beforeEach(async () => {
@@ -66,17 +71,18 @@ describe('ChunkArtifactBody', () => {
   });
 
   it('keeps a git_commit’s ref line in summary mode', async () => {
-    const commit: ArtifactView = {
+    const commit: ArtifactView = commitArtifactView({
       epoch: 1,
       key: 'deliver.commit',
-      kind: 'git_commit',
       name: 'commit',
       node_id: 'nd_deliver',
       node_name: 'deliver',
       repo: 'acme/widget',
       branch_name: 'feat/widget',
+      branch_url: null,
       commit_hash: 'c1',
-    };
+      recorded_at: null,
+    });
     const fixture = TestBed.createComponent(ChunkArtifactBody);
     fixture.componentRef.setInput('artifact', commit);
     fixture.componentRef.setInput('body', 'summary');

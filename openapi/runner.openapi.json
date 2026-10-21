@@ -37,7 +37,9 @@
         },
         "required": [
           "key",
-          "count"
+          "count",
+          "graph_name",
+          "node_name"
         ],
         "title": "AnalyticsCountView",
         "type": "object"
@@ -148,7 +150,10 @@
           "cache_read_tokens",
           "cache_create_tokens",
           "cost_usd",
-          "cost_partial"
+          "cost_partial",
+          "estimated_cost_usd",
+          "graph_name",
+          "node_name"
         ],
         "title": "AnalyticsSpendView",
         "type": "object"
@@ -271,7 +276,13 @@
           "name",
           "node_id",
           "node_name",
-          "epoch"
+          "epoch",
+          "recorded_at",
+          "content",
+          "repo",
+          "branch_name",
+          "commit_hash",
+          "branch_url"
         ],
         "title": "ArtifactView",
         "type": "object"
@@ -333,6 +344,9 @@
             "type": "array"
           }
         },
+        "required": [
+          "items"
+        ],
         "title": "AskListResponse",
         "type": "object"
       },
@@ -452,8 +466,11 @@
           "chunk_id",
           "lease_id",
           "question",
+          "options",
           "session_id",
-          "asked_at"
+          "harness_id",
+          "asked_at",
+          "project_id"
         ],
         "title": "AskView",
         "type": "object"
@@ -543,6 +560,7 @@
         },
         "required": [
           "project",
+          "project_id",
           "workspace_id",
           "agents",
           "used",
@@ -566,7 +584,8 @@
           }
         },
         "required": [
-          "prerequisite_chunk_id"
+          "prerequisite_chunk_id",
+          "unmet_count"
         ],
         "title": "BlockedView",
         "type": "object"
@@ -612,7 +631,8 @@
           }
         },
         "required": [
-          "used"
+          "used",
+          "bindings"
         ],
         "title": "CapacitiesView",
         "type": "object"
@@ -715,9 +735,15 @@
         },
         "required": [
           "question_id",
+          "node",
           "epoch",
           "question",
-          "asked_at"
+          "options",
+          "asked_at",
+          "answered",
+          "answer",
+          "answered_by",
+          "answered_at"
         ],
         "title": "ChunkAskView",
         "type": "object"
@@ -1093,9 +1119,49 @@
         "required": [
           "chunk_id",
           "graph_id",
+          "graph_name",
+          "graph_created_at",
           "status",
           "current_node_id",
-          "latest_epoch"
+          "current_node_name",
+          "latest_epoch",
+          "work_refs",
+          "default_model",
+          "default_effort",
+          "default_harnesses",
+          "intended_migration",
+          "route",
+          "pause",
+          "pausable",
+          "status_if_paused",
+          "completable",
+          "deletable",
+          "delete_refusal",
+          "promotable",
+          "graph_editable",
+          "terminal",
+          "current_node_terminal",
+          "blocked",
+          "neighborhood",
+          "decision",
+          "history",
+          "migrations",
+          "restarts",
+          "artifacts",
+          "questions",
+          "awaiting_external_merge",
+          "open_prs",
+          "closed_prs",
+          "landed_repos",
+          "cost",
+          "usage",
+          "pending",
+          "landed",
+          "bounces",
+          "escalation",
+          "project_id",
+          "project_slug",
+          "project_name"
         ],
         "title": "ChunkDetail",
         "type": "object"
@@ -1141,7 +1207,10 @@
         },
         "required": [
           "epoch",
-          "takeover_command"
+          "takeover_command",
+          "wrapped_takeover_command",
+          "cause",
+          "detail"
         ],
         "title": "ChunkEscalationView",
         "type": "object"
@@ -1170,6 +1239,7 @@
         },
         "required": [
           "chunk_id",
+          "status",
           "satisfied"
         ],
         "title": "ChunkNeighborView",
@@ -1420,7 +1490,28 @@
           "chunk_id",
           "graph_id",
           "status",
-          "current_node_id"
+          "terminal",
+          "promotable",
+          "current_node_id",
+          "current_node_name",
+          "work_refs",
+          "default_model",
+          "default_effort",
+          "default_harnesses",
+          "runner_id",
+          "runner_name",
+          "environment_count",
+          "cost",
+          "completed_at",
+          "blocked",
+          "open_prs",
+          "closed_prs",
+          "awaiting_external_merge",
+          "landed_repos",
+          "landed",
+          "project_id",
+          "project_slug",
+          "project_name"
         ],
         "title": "ChunkSummary",
         "type": "object"
@@ -1475,7 +1566,9 @@
           "cache_read_tokens",
           "cache_create_tokens",
           "cost_usd",
-          "cost_partial"
+          "cost_partial",
+          "estimated_cost_usd",
+          "billed_partial"
         ],
         "title": "ChunkUsageTotalView",
         "type": "object"
@@ -1574,7 +1667,11 @@
           "output_tokens",
           "cache_read_tokens",
           "cache_create_tokens",
-          "cost_usd"
+          "cost_usd",
+          "cost_partial",
+          "harness_id",
+          "harness_version",
+          "estimated_cost_usd"
         ],
         "title": "ChunkUsageView",
         "type": "object"
@@ -1647,7 +1744,9 @@
         },
         "required": [
           "name",
-          "description"
+          "description",
+          "requires_checks",
+          "would_override_red_checks"
         ],
         "title": "DecisionChoiceModel",
         "type": "object"
@@ -1800,7 +1899,19 @@
           "node_id",
           "node_name",
           "epoch",
-          "submitted_at"
+          "choices",
+          "submitted_at",
+          "resolved_choice",
+          "resolved_by",
+          "resolved_at",
+          "transitioned",
+          "imposed_by_runner_id",
+          "imposed_by_runner_name",
+          "project_id",
+          "project_slug",
+          "project_name",
+          "check_results",
+          "overrode_red_checks"
         ],
         "title": "DecisionView",
         "type": "object"
@@ -1899,6 +2010,9 @@
             "type": "array"
           }
         },
+        "required": [
+          "items"
+        ],
         "title": "EscalationListResponse",
         "type": "object"
       },
@@ -2024,7 +2138,15 @@
           "node_id",
           "epoch",
           "closed_at",
-          "resume_command"
+          "resume_command",
+          "session_name",
+          "model",
+          "effort",
+          "harness_id",
+          "harness_version",
+          "wrapped_takeover_command",
+          "cause",
+          "project_id"
         ],
         "title": "EscalationView",
         "type": "object"
@@ -2119,6 +2241,9 @@
             "type": "array"
           }
         },
+        "required": [
+          "items"
+        ],
         "title": "FactListResponse",
         "type": "object"
       },
@@ -2188,7 +2313,8 @@
           "chunk_id",
           "lease_id",
           "created_at",
-          "acked_at"
+          "acked_at",
+          "project_id"
         ],
         "title": "FactView",
         "type": "object"
@@ -2406,14 +2532,26 @@
         },
         "required": [
           "finding_id",
+          "routine_name",
           "scope_slug",
           "class",
           "locus",
           "summary",
+          "introduced",
+          "introduced_at",
+          "first_observed_at",
           "live",
           "state",
+          "note",
           "last_seen_at",
-          "observed_count"
+          "observed_count",
+          "source",
+          "severity",
+          "raised_by_chunk_id",
+          "exit",
+          "project_id",
+          "project_slug",
+          "project_name"
         ],
         "title": "FindingView",
         "type": "object"
@@ -2672,11 +2810,16 @@
           "proposal_id",
           "origin",
           "routine_name",
+          "created_by",
           "class",
           "title",
           "body",
           "findings",
-          "created_at"
+          "created_at",
+          "closure",
+          "project_id",
+          "project_slug",
+          "project_name"
         ],
         "title": "GardenProposalView",
         "type": "object"
@@ -2781,6 +2924,9 @@
             "type": "array"
           }
         },
+        "required": [
+          "items"
+        ],
         "title": "HarnessHealthListResponse",
         "type": "object"
       },
@@ -2839,7 +2985,11 @@
         },
         "required": [
           "harness_id",
-          "available"
+          "version",
+          "available",
+          "cause",
+          "degradations",
+          "admitted_range"
         ],
         "title": "HarnessHealthView",
         "type": "object"
@@ -3027,6 +3177,13 @@
         },
         "required": [
           "kind",
+          "from_node",
+          "to_node",
+          "choice",
+          "epoch",
+          "graph_name",
+          "cause",
+          "detail",
           "recorded_at"
         ],
         "title": "HistoryRowView",
@@ -3044,6 +3201,9 @@
             "type": "array"
           }
         },
+        "required": [
+          "workspaces"
+        ],
         "title": "HostEnvironmentListResponse",
         "type": "object"
       },
@@ -3105,7 +3265,12 @@
           }
         },
         "required": [
-          "environment_id"
+          "environment_id",
+          "chunk_id",
+          "held_since",
+          "held",
+          "runner_id",
+          "project"
         ],
         "title": "HostEnvironmentView",
         "type": "object"
@@ -3199,7 +3364,14 @@
           }
         },
         "required": [
-          "state"
+          "state",
+          "host_id",
+          "tenant_id",
+          "host_name",
+          "answered_at",
+          "held_runner_ids",
+          "detail",
+          "buffered_facts"
         ],
         "title": "HostRegistrationView",
         "type": "object"
@@ -3239,6 +3411,9 @@
             "type": "array"
           }
         },
+        "required": [
+          "items"
+        ],
         "title": "HostRunnerListResponse",
         "type": "object"
       },
@@ -3346,7 +3521,13 @@
         "required": [
           "runner_id",
           "name",
-          "state"
+          "state",
+          "served",
+          "halted_reasons",
+          "pause",
+          "bindings",
+          "agents_in_use",
+          "max_agents"
         ],
         "title": "HostRunnerView",
         "type": "object"
@@ -3362,6 +3543,9 @@
             "type": "array"
           }
         },
+        "required": [
+          "items"
+        ],
         "title": "HostSubscriptionListResponse",
         "type": "object"
       },
@@ -3472,7 +3656,16 @@
         "required": [
           "slug",
           "name",
-          "provider"
+          "provider",
+          "sampled_at",
+          "ok",
+          "miss_reason",
+          "renewal_attempted_at",
+          "renewal_result",
+          "renewal_failure_reason",
+          "spenders",
+          "windows",
+          "windows_sampled_at"
         ],
         "title": "HostSubscriptionView",
         "type": "object"
@@ -3493,7 +3686,8 @@
           }
         },
         "required": [
-          "workspace_id"
+          "workspace_id",
+          "items"
         ],
         "title": "HostWorkspaceEnvironmentsView",
         "type": "object"
@@ -3509,6 +3703,9 @@
             "type": "array"
           }
         },
+        "required": [
+          "items"
+        ],
         "title": "HostWorkspaceListResponse",
         "type": "object"
       },
@@ -3583,7 +3780,9 @@
           "endpoint",
           "reachable",
           "last_contact_at",
-          "buffer_depth"
+          "buffer_depth",
+          "hub_version",
+          "window"
         ],
         "title": "HubConnectivityView",
         "type": "object"
@@ -3662,7 +3861,8 @@
           "store_runner_id",
           "token_runner_id",
           "checked_at",
-          "reset_command"
+          "reset_command",
+          "reason"
         ],
         "title": "IdentityVerdictView",
         "type": "object"
@@ -3702,7 +3902,9 @@
         },
         "required": [
           "mode",
-          "graph_id"
+          "graph_id",
+          "graph_name",
+          "node_name"
         ],
         "title": "IntendedMigrationView",
         "type": "object"
@@ -3732,7 +3934,8 @@
         },
         "required": [
           "repo",
-          "commit_hash"
+          "commit_hash",
+          "url"
         ],
         "title": "LandedRepoView",
         "type": "object"
@@ -3836,6 +4039,9 @@
             "type": "array"
           }
         },
+        "required": [
+          "items"
+        ],
         "title": "LeaseListResponse",
         "type": "object"
       },
@@ -4002,6 +4208,7 @@
           "node_name",
           "epoch",
           "session_id",
+          "harness_id",
           "pid",
           "environment_id",
           "workdir",
@@ -4012,6 +4219,7 @@
           "closure_healthy",
           "closed_at",
           "closure_reason",
+          "project_id",
           "stale_after_seconds"
         ],
         "title": "LeaseView",
@@ -4157,8 +4365,16 @@
         },
         "required": [
           "from_node_id",
+          "from_node_name",
           "from_graph_id",
+          "from_graph_name",
           "to_graph_id",
+          "to_graph_name",
+          "landed_node_id",
+          "landed_node_name",
+          "choice_name",
+          "model",
+          "source",
           "epoch",
           "recorded_at"
         ],
@@ -4177,6 +4393,9 @@
             "type": "array"
           }
         },
+        "required": [
+          "items"
+        ],
         "title": "OpenTakeoverListResponse",
         "type": "object"
       },
@@ -4210,7 +4429,8 @@
         "required": [
           "chunk_id",
           "takeover_id",
-          "held_since"
+          "held_since",
+          "harness_id"
         ],
         "title": "OpenTakeoverView",
         "type": "object"
@@ -4245,7 +4465,8 @@
         "required": [
           "local",
           "hub",
-          "effective"
+          "effective",
+          "local_reason"
         ],
         "title": "PauseStateView",
         "type": "object"
@@ -4482,10 +4703,24 @@
         "required": [
           "question_id",
           "chunk_id",
+          "node_id",
+          "session_id",
+          "harness_id",
           "runner_id",
+          "runner_name",
           "epoch",
           "question",
-          "asked_at"
+          "options",
+          "asked_at",
+          "answered",
+          "answer",
+          "answered_by",
+          "answered_at",
+          "delivered",
+          "delivered_at",
+          "project_id",
+          "project_slug",
+          "project_name"
         ],
         "title": "QuestionView",
         "type": "object"
@@ -4541,7 +4776,8 @@
           "store_reachable",
           "store_revision",
           "expected_revision",
-          "detail"
+          "detail",
+          "runners"
         ],
         "title": "ReadinessResponse",
         "type": "object"
@@ -4707,10 +4943,17 @@
           }
         },
         "required": [
+          "from_node_id",
+          "from_node_name",
+          "from_graph_id",
+          "from_graph_name",
           "to_node_id",
+          "to_node_name",
           "graph_id",
+          "graph_name",
           "epoch",
           "restarted_by",
+          "decision_id",
           "recorded_at"
         ],
         "title": "RestartView",
@@ -4749,7 +4992,9 @@
         },
         "required": [
           "runner_id",
-          "workspace_id"
+          "runner_name",
+          "workspace_id",
+          "environment_ids"
         ],
         "title": "RouteView",
         "type": "object"
@@ -4997,11 +5242,19 @@
         },
         "required": [
           "runner_id",
+          "runner_name",
+          "tenant_id",
+          "tenant_name",
           "workspace_id",
           "pause",
           "capacities",
           "hub",
-          "last_tick_at"
+          "last_tick_at",
+          "gates",
+          "identity",
+          "served_projects",
+          "unmatched_bindings",
+          "routing_conflicts"
         ],
         "title": "RunnerStatusView",
         "type": "object"
@@ -5222,7 +5475,10 @@
           "last_export_span_count",
           "last_error_at",
           "last_error_message",
-          "last_error_ongoing"
+          "last_error_ongoing",
+          "receiver",
+          "replay_max_window_seconds",
+          "harness_telemetry"
         ],
         "title": "RunnerTraceStatusResponse",
         "type": "object"
@@ -5306,7 +5562,12 @@
         "required": [
           "slug",
           "description",
-          "created_at"
+          "created_at",
+          "retired",
+          "revision",
+          "project_id",
+          "project_slug",
+          "project_name"
         ],
         "title": "ScopeView",
         "type": "object"
@@ -5387,7 +5648,8 @@
           "id",
           "harness",
           "status",
-          "checks"
+          "checks",
+          "error"
         ],
         "title": "SelfTestView",
         "type": "object"
@@ -5455,7 +5717,12 @@
         },
         "required": [
           "entry",
-          "resolved"
+          "project_id",
+          "slug",
+          "name",
+          "color",
+          "resolved",
+          "answered"
         ],
         "title": "ServedProjectStatusView",
         "type": "object"
@@ -5652,7 +5919,9 @@
         "required": [
           "takeover_id",
           "command",
-          "workdir"
+          "workdir",
+          "env",
+          "harness_id"
         ],
         "title": "TakeoverOpenResponse",
         "type": "object"
@@ -5841,7 +6110,11 @@
           "lease_id",
           "session_id",
           "available",
-          "reason"
+          "reason",
+          "turns",
+          "truncated",
+          "provenance",
+          "hub_unreachable"
         ],
         "title": "TranscriptResponse",
         "type": "object"
@@ -5873,7 +6146,8 @@
         "required": [
           "segment_id",
           "final",
-          "truncated"
+          "truncated",
+          "turns"
         ],
         "title": "TranscriptSegmentContentView",
         "type": "object"
@@ -5958,6 +6232,7 @@
           "final",
           "truncated",
           "byte_count",
+          "harness_id",
           "normalizer_version",
           "harness_version",
           "received_at"
@@ -5982,7 +6257,8 @@
           }
         },
         "required": [
-          "chunk_id"
+          "chunk_id",
+          "segments"
         ],
         "title": "TranscriptSegmentIndexView",
         "type": "object"
@@ -6071,10 +6347,14 @@
         },
         "required": [
           "from_node_id",
+          "from_node_name",
           "to_node_id",
+          "to_node_name",
           "choice_name",
           "epoch",
-          "recorded_at"
+          "recorded_at",
+          "graph_id",
+          "graph_name"
         ],
         "title": "TransitionView",
         "type": "object"
@@ -6317,7 +6597,13 @@
           }
         },
         "required": [
-          "kind"
+          "kind",
+          "user_id",
+          "login",
+          "runner_id",
+          "runner_name",
+          "chunk_id",
+          "node_name"
         ],
         "title": "WorkItemAuthorView",
         "type": "object"
@@ -6440,7 +6726,17 @@
         "required": [
           "source",
           "ref",
-          "fetched_at"
+          "slug",
+          "label",
+          "web_url",
+          "hub_source",
+          "fetched_at",
+          "title",
+          "body",
+          "comments",
+          "error",
+          "author",
+          "stated_priority"
         ],
         "title": "WorkItemEntry",
         "type": "object"
@@ -6467,6 +6763,9 @@
             "type": "array"
           }
         },
+        "required": [
+          "items"
+        ],
         "title": "WorkItemsView",
         "type": "object"
       },
@@ -6506,7 +6805,9 @@
         },
         "required": [
           "source",
-          "ref"
+          "ref",
+          "label",
+          "web_url"
         ],
         "title": "WorkRefView",
         "type": "object"
@@ -6594,7 +6895,13 @@
         "required": [
           "scope",
           "name",
-          "kind"
+          "kind",
+          "node_name",
+          "epoch",
+          "repo",
+          "branch_name",
+          "commit_hash",
+          "content"
         ],
         "title": "WorkerArtifact",
         "type": "object"
@@ -6631,7 +6938,8 @@
           }
         },
         "required": [
-          "prompt"
+          "prompt",
+          "source"
         ],
         "title": "WorkspacePromptResponse",
         "type": "object"

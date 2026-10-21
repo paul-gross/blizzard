@@ -4,6 +4,7 @@ import { provideRouter } from '@angular/router';
 import { page } from 'vitest/browser';
 
 import type { ChunkDetail } from '../../api/hub';
+import { chunkDetail, transitionView } from 'fleet/testing';
 import { ChunkTimeline } from './chunk-timeline';
 import { ChunkTimelineSelection } from './chunk-timeline-selection';
 
@@ -18,7 +19,7 @@ import { ChunkTimelineSelection } from './chunk-timeline-selection';
  * needs `--browsers=ChromiumHeadless`, not jsdom — run it via `npm run shell-sweep`
  * (`web/scripts/shell-sweep.js`).
  */
-const DETAIL: ChunkDetail = {
+const DETAIL: ChunkDetail = chunkDetail({
   chunk_id: 'ch_01forensicsweep00000000000000',
   graph_id: 'gr_2',
   graph_name: 'second',
@@ -29,7 +30,7 @@ const DETAIL: ChunkDetail = {
   work_refs: [],
   artifacts: [],
   history: [
-    { from_node_id: 'nd_build', from_node_name: 'build', to_node_id: 'nd_review', to_node_name: 'review', choice_name: 'pass', epoch: 1, recorded_at: '2026-08-09T00:00:01Z' },
+    transitionView({ from_node_id: 'nd_build', from_node_name: 'build', to_node_id: 'nd_review', to_node_name: 'review', choice_name: 'pass', epoch: 1, recorded_at: '2026-08-09T00:00:01Z', graph_id: 'gr_2', graph_name: null }),
   ],
   bounces: [
     {
@@ -51,9 +52,10 @@ const DETAIL: ChunkDetail = {
       to_node_name: 'plan',
       restarted_by: 'a-rather-long-operator-name@example.test',
       recorded_at: '2026-08-09T00:00:03Z',
+      decision_id: null,
     },
   ],
-};
+});
 
 describe('chunk timeline bounce and restart rows shell sweep (web:shell-sweep)', () => {
   for (const width of [390, 320]) {

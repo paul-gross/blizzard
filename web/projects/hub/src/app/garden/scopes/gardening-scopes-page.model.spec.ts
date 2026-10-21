@@ -4,8 +4,26 @@ import { describe, expect, it } from 'vitest';
 import { defaultRoutineWindow } from '../core/routine-window';
 import { notSweptLabel, presentScopeSlug, scopeRows, scopeSwept } from './gardening-scopes-page.model';
 
-const BLIZZARD: ScopeView = { slug: 'blizzard', description: 'The whole repo', created_at: '2026-01-01T00:00:00Z' };
-const DOCS: ScopeView = { slug: 'docs', description: 'Docs only', created_at: '2026-01-01T00:00:00Z', retired: true };
+const BLIZZARD: ScopeView = {
+  slug: 'blizzard',
+  description: 'The whole repo',
+  created_at: '2026-01-01T00:00:00Z',
+  retired: false,
+  revision: null,
+  project_id: null,
+  project_name: null,
+  project_slug: null,
+};
+const DOCS: ScopeView = {
+  slug: 'docs',
+  description: 'Docs only',
+  created_at: '2026-01-01T00:00:00Z',
+  retired: true,
+  revision: null,
+  project_id: null,
+  project_name: null,
+  project_slug: null,
+};
 
 describe('presentScopeSlug', () => {
   it('answers null on the bare child route', () => {
@@ -31,6 +49,9 @@ function run(scope_slug: string, minted_at: string): RunRowView {
     outcome: 'done',
     routine_name: 'garden-weekly',
     scope_slug,
+    project_id: null,
+    project_name: null,
+    project_slug: null,
   };
 }
 

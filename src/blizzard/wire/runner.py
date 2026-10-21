@@ -15,6 +15,7 @@ from blizzard.foundation.runner_connection import RunnerConnection
 from blizzard.foundation.runner_tokens import RunnerTokenRefusalReason
 from blizzard.foundation.runner_version import RunnerVersionStanding, VersionRefusalReason
 from blizzard.foundation.subscription_miss import SampleMissReason
+from blizzard.wire.base import WireModel
 
 
 class RunnerCapability(BaseModel):
@@ -40,7 +41,7 @@ class RunnerSubscriptionDeclaration(BaseModel):
     provider: str
 
 
-class ServedProjectView(BaseModel):
+class ServedProjectView(WireModel):
     """One entry of the projects a runner serves: the ``entry`` as declared — a project id or slug — and the project
     it resolves to in the runner's tenant, with its palette ``color`` — a palette name or a ``#rrggbb``.
     ``project_id``, ``slug``, ``name`` and ``color`` are ``None`` for an entry that resolves to no project, which
@@ -64,7 +65,7 @@ class RunnerBinding(BaseModel):
     agents: int
 
 
-class RunnerBindingView(BaseModel):
+class RunnerBindingView(WireModel):
     """A runner's binding as the hub holds it. ``workspace_unreported`` is derived on read: the runner's host has not
     reported the workspace, so the hub offers the runner no work through the binding."""
 
@@ -115,7 +116,7 @@ class VersionWindowView(BaseModel):
     ceiling: str
 
 
-class RunnerVersionRefusal(BaseModel):
+class RunnerVersionRefusal(WireModel):
     """The hub's window refusing a runner's version."""
 
     reason: VersionRefusalReason
@@ -127,7 +128,7 @@ class RunnerVersionRefusal(BaseModel):
     detail: str
 
 
-class RunnerRegistrationResponse(BaseModel):
+class RunnerRegistrationResponse(WireModel):
     """The registered runner's hub-minted id and current name, whether this call was its first
     registration since it was added, and the tenant it serves. Registration doubles as the
     heartbeat, so a renamed tenant reaches the runner on its next tick."""
@@ -190,7 +191,7 @@ class RunnerAddResponse(BaseModel):
     token: str
 
 
-class RunnerIdentityView(BaseModel):
+class RunnerIdentityView(WireModel):
     """Who the presented runner bearer token belongs to — its hub-minted id and current name, and
     the tenant it was added in, and the hub's ``fleet`` flags. Answering records nothing: no registration, no
     liveness."""
@@ -207,7 +208,7 @@ class RunnerIdentityView(BaseModel):
     fleet_flags: dict[str, bool] = {}
 
 
-class RunnerIdentityRefusal(BaseModel):
+class RunnerIdentityRefusal(WireModel):
     """Why the presented runner bearer token names no runner the hub admits. ``runner_id`` names
     the runner a ``revoked`` or ``retired`` token was issued to, and is ``None`` for a ``missing``
     or ``unknown`` one."""
@@ -227,7 +228,7 @@ class ExternalSubscriptionUsageWindowView(BaseModel):
     window_seconds: int
 
 
-class SubscriptionUsageView(BaseModel):
+class SubscriptionUsageView(WireModel):
     """One reported subscription's newest sampled usage, carrying its identity.
     ``slug`` is the runner-unique join key, ``name`` the operator-facing
     label. ``sampled_at`` is ``None`` for a miss-only row — ``condition``
@@ -245,7 +246,7 @@ class SubscriptionUsageView(BaseModel):
     missed_at: str | None = None
 
 
-class RunnerView(BaseModel):
+class RunnerView(WireModel):
     """A registered runner's own view of its registration.
 
     The two brakes stay separate: ``hub_paused`` is claims-only, while
@@ -284,7 +285,7 @@ class RunnerView(BaseModel):
     subscription_unrostered: bool = False
 
 
-class RunnerRegistryView(BaseModel):
+class RunnerRegistryView(WireModel):
     """One runner as an operator sees the registry — including one that has never connected.
 
     A ``never_connected`` runner has no ``workspace_id``, ``registered_at`` or ``last_seen_at``, no
@@ -334,7 +335,7 @@ class RunnerRegistryView(BaseModel):
     version_refusal: VersionRefusalReason | None = None
 
 
-class RunnerRegistryListResponse(BaseModel):
+class RunnerRegistryListResponse(WireModel):
     """The fleet registry as operators list it — every added runner, oldest first, each with its
     connection condition. Two runners may share a name; each is listed under its own id."""
 
@@ -360,7 +361,7 @@ class RunnerLifecycleRequest(BaseModel):
     by: str = "operator"
 
 
-class RunnerRetireResponse(BaseModel):
+class RunnerRetireResponse(WireModel):
     """The retired runner, plus every chunk the retire released."""
 
     runner: RunnerRegistryView

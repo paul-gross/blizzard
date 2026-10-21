@@ -8,11 +8,12 @@ from pydantic import BaseModel, Field
 
 from blizzard.foundation.host_registration_state import HostRegistrationState
 from blizzard.foundation.host_runner_state import HostRunnerState
+from blizzard.wire.base import WireModel
 from blizzard.wire.runner import ExternalSubscriptionUsageWindowView
 from blizzard.wire.runner_status import EnvironmentView, PauseStateView, SubscriptionView
 
 
-class HostRunnerStateView(BaseModel):
+class HostRunnerStateView(WireModel):
     """One runner as the host's readiness names it."""
 
     #: The hub-minted id; ``None`` only for a halted runner configured without one.
@@ -44,11 +45,11 @@ class HostRunnerView(HostRunnerStateView):
     max_agents: int = 0
 
 
-class HostRunnerListResponse(BaseModel):
+class HostRunnerListResponse(WireModel):
     items: list[HostRunnerView] = []
 
 
-class HostRegistrationView(BaseModel):
+class HostRegistrationView(WireModel):
     """The host's registration at its hub, as its latest report found it: the identity its first answered report
     recorded (``host_id``, ``tenant_id``), the name and runners the hub last answered for it, when, and — short of
     registered — why. ``buffered_facts`` counts the facts waiting on the host's own lane."""
@@ -70,7 +71,7 @@ class HostWorkspaceView(BaseModel):
     max_environments: int
 
 
-class HostWorkspaceListResponse(BaseModel):
+class HostWorkspaceListResponse(WireModel):
     items: list[HostWorkspaceView] = []
 
 
@@ -82,12 +83,12 @@ class HostEnvironmentView(EnvironmentView):
     project: str | None = None
 
 
-class HostWorkspaceEnvironmentsView(BaseModel):
+class HostWorkspaceEnvironmentsView(WireModel):
     workspace_id: str
     items: list[HostEnvironmentView] = []
 
 
-class HostEnvironmentListResponse(BaseModel):
+class HostEnvironmentListResponse(WireModel):
     """Every workspace's environments, held or free, grouped by workspace."""
 
     workspaces: list[HostWorkspaceEnvironmentsView] = []
@@ -103,5 +104,5 @@ class HostSubscriptionView(SubscriptionView):
     windows_sampled_at: str | None = None
 
 
-class HostSubscriptionListResponse(BaseModel):
+class HostSubscriptionListResponse(WireModel):
     items: list[HostSubscriptionView] = []

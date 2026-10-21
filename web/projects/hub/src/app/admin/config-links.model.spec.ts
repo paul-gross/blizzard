@@ -29,7 +29,7 @@ describe('recordRoute', () => {
 
 describe('recordLink', () => {
   it('labels and routes a reference', () => {
-    expect(recordLink({ kind: RecordKind.REPOSITORY, key: 'blizzard' })).toEqual({
+    expect(recordLink({ kind: RecordKind.REPOSITORY, key: 'blizzard', label: null })).toEqual({
       kind: 'repository',
       name: 'blizzard',
       route: ['/admin', 'repositories', 'blizzard'],

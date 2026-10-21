@@ -2,9 +2,10 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 
 import type { ChunkDetail } from '../../api/hub';
+import { chunkDetail, chunkUsageTotalView } from 'fleet/testing';
 import { ChunkTokenBreakdown } from './chunk-token-breakdown';
 
-const COST_DETAIL: ChunkDetail = {
+const COST_DETAIL: ChunkDetail = chunkDetail({
   chunk_id: 'ch_01cost00000000000000000000000',
   graph_id: 'gr_1',
   status: 'running',
@@ -13,20 +14,24 @@ const COST_DETAIL: ChunkDetail = {
   work_refs: [],
   history: [],
   artifacts: [],
-  cost: {
+  cost: chunkUsageTotalView({
     input_tokens: 1200,
     output_tokens: 800,
     cache_read_tokens: 300,
     cache_create_tokens: 100,
     cost_usd: 0.42,
     cost_partial: false,
-  },
-};
+    billed_partial: false,
+    estimated_cost_usd: null,
+  }),
+  graph_name: null,
+  current_node_name: null,
+});
 
 const ESTIMATE_COST_DETAIL: ChunkDetail = {
   ...COST_DETAIL,
   chunk_id: 'ch_01estimate0000000000000000000',
-  cost: {
+  cost: chunkUsageTotalView({
     input_tokens: 900,
     output_tokens: 400,
     cache_read_tokens: 0,
@@ -34,20 +39,23 @@ const ESTIMATE_COST_DETAIL: ChunkDetail = {
     cost_usd: 0,
     cost_partial: false,
     estimated_cost_usd: 0.07,
-  },
+    billed_partial: false,
+  }),
 };
 
 const PARTIAL_COST_DETAIL: ChunkDetail = {
   ...COST_DETAIL,
   chunk_id: 'ch_01partial00000000000000000000',
-  cost: {
+  cost: chunkUsageTotalView({
     input_tokens: 100,
     output_tokens: 50,
     cache_read_tokens: 0,
     cache_create_tokens: 0,
     cost_usd: 0.1,
     cost_partial: true,
-  },
+    billed_partial: false,
+    estimated_cost_usd: null,
+  }),
 };
 
 describe('ChunkTokenBreakdown', () => {

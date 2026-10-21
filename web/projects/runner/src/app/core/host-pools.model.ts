@@ -56,7 +56,7 @@ export function hostPanelPools(
   focus: ReadonlySet<string> | null,
 ): readonly HostPanelPool[] {
   const byId = new Map(
-    groups.map((group) => [group.workspace_id, group.items ?? []]),
+    groups.map((group) => [group.workspace_id, group.items]),
   );
   const declared = new Set(workspaces.map((ws) => ws.workspace_id));
   const pool = (
@@ -70,7 +70,7 @@ export function hostPanelPools(
         }),
       )
       .map((env): HostPanelEnv => {
-        const held = env.held ?? env.chunk_id != null;
+        const held = env.held;
         const runnerId = env.runner_id ?? null;
         return {
           environmentId: env.environment_id,

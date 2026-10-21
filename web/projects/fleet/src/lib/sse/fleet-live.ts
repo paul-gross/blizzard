@@ -95,12 +95,13 @@ export type KeyedEvent = Pick<ChunkChangedPayload, 'key'>;
 
 /**
  * The one shape the Activity feed reads a frame through, live or backfilled: the
- * activity read's row (`ActivityView`) less its envelope (`at`, `type`, `key`). Every
- * {@link HubEventPayload} member is assignable to it, so the live tee stores frames
- * unchanged, and a backfilled row — which may lack `status`, or carry a `cause` or
+ * activity read's row (`ActivityView`) less its envelope (`at`, `type`, `key`), every
+ * field optional: a frame omits what it does not carry, where the read always sends the
+ * field. Every {@link HubEventPayload} member is assignable to it, so the live tee stores
+ * frames unchanged, and a backfilled row — which may lack `status`, or carry a `cause` or
  * `kind` from a newer hub — fits without narrowing.
  */
-export type LoggedEventData = Omit<ActivityView, 'at' | 'type' | 'key'> & { readonly key?: string | null };
+export type LoggedEventData = Partial<Omit<ActivityView, 'at' | 'type' | 'key'>> & { readonly key?: string | null };
 
 /**
  * The general rule behind every Activity feed drop: a frame belongs in the ring only when

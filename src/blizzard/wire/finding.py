@@ -11,6 +11,7 @@ from typing import Annotated, Literal
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field
 
 from blizzard.foundation.findings import FindingExit, FindingFactKind, FindingSeverity, FindingSource, FindingState
+from blizzard.wire.base import WireModel
 
 
 def _require_text(value: str) -> str:
@@ -23,13 +24,13 @@ def _require_text(value: str) -> str:
 NonBlankText = Annotated[str, AfterValidator(_require_text)]
 
 
-class FindingCandidate(BaseModel):
+class FindingCandidate(WireModel):
     """A run's survey artifact entry — no id, since identity is minted at delivery (see
     [blizzard-context/domain/findings-and-proposals.md](https://github.com/paul-gross/blizzard-context/blob/master/domain/findings-and-proposals.md)).
     `ref` is stable only within its own submission, so a later node in the same run can
     name it."""
 
-    model_config = ConfigDict(populate_by_name=True, json_schema_serialization_defaults_required=True)
+    model_config = ConfigDict(populate_by_name=True)
 
     ref: str | None = None
     class_: NonBlankText = Field(alias="class")
@@ -38,13 +39,13 @@ class FindingCandidate(BaseModel):
     introduced: str | None = None
 
 
-class AddFindingOp(BaseModel):
+class AddFindingOp(WireModel):
     """The candidate minus its identity — a delta, not a state (see
     [blizzard-context/domain/findings-and-proposals.md](https://github.com/paul-gross/blizzard-context/blob/master/domain/findings-and-proposals.md))
     — the hub mints the `fin_` id, never the run. Optional `ref` names this addition
     within its own submission, for a proposal in the same delivery to cite."""
 
-    model_config = ConfigDict(populate_by_name=True, json_schema_serialization_defaults_required=True)
+    model_config = ConfigDict(populate_by_name=True)
 
     op: Literal["add"] = "add"
     class_: NonBlankText = Field(alias="class")
@@ -54,23 +55,19 @@ class AddFindingOp(BaseModel):
     ref: str | None = None
 
 
-class ObservedFindingOp(BaseModel):
+class ObservedFindingOp(WireModel):
     """The finding named by `id` still reproduces — no payload, since it was true when
     recorded and is true now."""
-
-    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
 
     op: Literal["observed"] = "observed"
     id: str
 
 
-class GoneFindingOp(BaseModel):
+class GoneFindingOp(WireModel):
     """The run looked and could not find the finding named by `id`. Ordinarily this does
     not close the finding — it flags it for a person — except against a `delivered`
     finding, which it settles to `resolved` outright: a delivery
     already carries a person's own claim that the ground moved."""
-
-    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
 
     op: Literal["gone"] = "gone"
     id: str
@@ -80,12 +77,10 @@ class GoneFindingOp(BaseModel):
 FindingOp = Annotated[AddFindingOp | ObservedFindingOp | GoneFindingOp, Field(discriminator="op")]
 
 
-class FindingDelta(BaseModel):
+class FindingDelta(WireModel):
     """A delivered finding list — the scope, the revision read per repository, and the
     routine's measurement, properties of the artifact rather than of any one finding (see
     [blizzard-context/domain/findings-and-proposals.md](https://github.com/paul-gross/blizzard-context/blob/master/domain/findings-and-proposals.md))."""
-
-    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
 
     scope: str
     revisions: dict[str, str] = {}
@@ -93,11 +88,9 @@ class FindingDelta(BaseModel):
     findings: list[FindingOp] = []
 
 
-class FindingSurvey(BaseModel):
+class FindingSurvey(WireModel):
     """A run's survey artifact — the scope, the revision read per repository, the
     routine's measurement, and every `FindingCandidate` the run saw."""
-
-    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
 
     scope: str
     revisions: dict[str, str] = {}
@@ -156,7 +149,7 @@ class ReviewFindingDelta(BaseModel):
     entries: list[ReviewFindingEntry]
 
 
-class FindingView(BaseModel):
+class FindingView(WireModel):
     """A finding. `state` folds the newest fact's kind to `"live"` for
     `add`/`observed`/`reopened`; `note` is that fact's own note. `source`
     is `"routine"` or `"review"`: a review-sourced finding carries no
@@ -189,7 +182,7 @@ class FindingView(BaseModel):
     project_name: str | None = None
 
 
-class FindingsPageView(BaseModel):
+class FindingsPageView(WireModel):
     """``GET /api/findings``'s own bounded page — ``next_cursor`` is
     ``None`` exactly when this page is the last one."""
 
@@ -197,7 +190,7 @@ class FindingsPageView(BaseModel):
     next_cursor: str | None = None
 
 
-class FindingFactView(BaseModel):
+class FindingFactView(WireModel):
     """One entry in a finding's fact chain, oldest-first."""
 
     kind: FindingFactKind

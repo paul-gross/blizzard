@@ -1,8 +1,9 @@
 import type { ArtifactView } from '../../api/hub';
+import { assetArtifactView } from '../../testing/builders/artifact';
 import { parseSelectedKey, stepArtifacts } from './chunk-node-history.model';
 
 function artifact(overrides: Partial<ArtifactView>): ArtifactView {
-  return {
+  return assetArtifactView({
     key: 'k',
     kind: 'asset',
     name: 'n',
@@ -10,7 +11,7 @@ function artifact(overrides: Partial<ArtifactView>): ArtifactView {
     node_name: 'build',
     epoch: 1,
     ...overrides,
-  };
+  });
 }
 
 describe('parseSelectedKey', () => {

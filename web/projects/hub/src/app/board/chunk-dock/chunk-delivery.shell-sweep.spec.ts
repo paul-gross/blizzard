@@ -4,20 +4,25 @@ import { provideRouter } from '@angular/router';
 import { page } from 'vitest/browser';
 
 import { type ChunkDetail, type ChunkSummary, ChunkGeneralTab } from 'fleet';
+import { chunkDetail, chunkUsageTotalView } from 'fleet/testing';
 import { BoardShell } from '../board-shell/board-shell';
 import { ChunkDetailPanel } from './chunk-detail-panel';
 
 /** The chunk's delivery block layout under a real browser — see `blizzard-context:/verification/blizzard/commands/web/shell-sweep.md` §web:shell-sweep. */
 const pr = { repo: 'very-long-repository-name', number: 42, url: 'https://forge.example/repository/pull/42' };
 const landed = { repo: 'other-repository', commit_hash: 'a'.repeat(40), url: 'https://forge.example/other/commit/' + 'a'.repeat(40) };
-const detail: ChunkDetail = {
-  chunk_id: 'ch_delivery', graph_id: 'gr_1', status: 'delivering', current_node_id: null,
-  latest_epoch: null, work_refs: [], history: [], artifacts: [],
+const detail: ChunkDetail = chunkDetail({
+  chunk_id: 'ch_delivery', graph_id: 'gr_1', graph_name: null, status: 'delivering', current_node_id: null,
+  current_node_name: null, latest_epoch: null, work_refs: [], history: [], artifacts: [],
   open_prs: [pr], landed_repos: [landed], awaiting_external_merge: true,
-};
+});
 const summary: ChunkSummary = {
   chunk_id: detail.chunk_id, graph_id: detail.graph_id, status: detail.status,
   current_node_id: null, work_refs: [], open_prs: [pr], landed_repos: [landed], awaiting_external_merge: true,
+  blocked: null, closed_prs: [], completed_at: null, cost: chunkUsageTotalView(), current_node_name: null,
+  default_effort: null, default_harnesses: [], default_model: [], environment_count: 0, landed: false,
+  project_id: null, project_name: null, project_slug: null, promotable: false, runner_id: null, runner_name: null,
+  terminal: false,
 };
 
 describe('delivery links real Chromium shell sweep', () => {

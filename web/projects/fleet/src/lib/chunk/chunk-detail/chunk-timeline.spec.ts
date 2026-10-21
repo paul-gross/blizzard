@@ -4,46 +4,46 @@ import { provideRouter, Router } from '@angular/router';
 
 import type { ChunkDetail } from '../../api/hub';
 import { formatAbsolute } from '../../core/when';
+import { chunkDetail, chunkUsageTotalView, chunkUsageView, transitionView } from 'fleet/testing';
 import { ChunkTimeline } from './chunk-timeline';
 
-const REVIEW_FAIL_DETAIL: ChunkDetail = {
+const REVIEW_FAIL_HISTORY = [
+  transitionView({ from_node_id: 'nd_build', to_node_id: 'nd_review', choice_name: 'pass', epoch: 1, recorded_at: '2026-07-13T00:00:01Z', from_node_name: null, to_node_name: null, graph_id: 'gr_1', graph_name: null }),
+  transitionView({ from_node_id: 'nd_review', to_node_id: 'nd_build', choice_name: 'fail', epoch: 2, recorded_at: '2026-07-13T00:00:02Z', from_node_name: null, to_node_name: null, graph_id: 'gr_1', graph_name: null }),
+];
+
+const REVIEW_FAIL_DETAIL: ChunkDetail = chunkDetail({
   chunk_id: 'ch_01review0000000000000000000',
   graph_id: 'gr_1',
   status: 'running',
   current_node_id: 'nd_build',
   latest_epoch: 2,
   work_refs: [],
-  history: [
-    { from_node_id: 'nd_build', to_node_id: 'nd_review', choice_name: 'pass', epoch: 1, recorded_at: '2026-07-13T00:00:01Z' },
-    { from_node_id: 'nd_review', to_node_id: 'nd_build', choice_name: 'fail', epoch: 2, recorded_at: '2026-07-13T00:00:02Z' },
-  ],
+  history: REVIEW_FAIL_HISTORY,
   artifacts: [],
-};
+  graph_name: null, current_node_name: null,
+});
 
-const COST_DETAIL: ChunkDetail = {
+const COST_DETAIL: ChunkDetail = chunkDetail({
   chunk_id: 'ch_01cost00000000000000000000000',
   graph_id: 'gr_1',
   status: 'running',
   current_node_id: 'nd_review',
   latest_epoch: 2,
   work_refs: [],
-  history: [
-    { from_node_id: 'nd_build', to_node_id: 'nd_review', choice_name: 'pass', epoch: 1, recorded_at: '2026-07-13T00:00:01Z' },
-    { from_node_id: 'nd_review', to_node_id: 'nd_build', choice_name: 'fail', epoch: 2, recorded_at: '2026-07-13T00:00:02Z' },
-  ],
+  history: REVIEW_FAIL_HISTORY,
   artifacts: [],
-  cost: {
+  cost: chunkUsageTotalView({
     input_tokens: 1200,
     output_tokens: 800,
     cache_read_tokens: 300,
     cache_create_tokens: 100,
     cost_usd: 0.42,
-    cost_partial: false,
-  },
+  }),
   // Only the first (nd_build, epoch 1) step recorded usage — the second step
   // (nd_review, epoch 2) has none yet, so its inline usage must stay absent.
   usage: [
-    {
+    chunkUsageView({
       node_id: 'nd_build',
       epoch: 1,
       kind: 'spawn',
@@ -53,15 +53,16 @@ const COST_DETAIL: ChunkDetail = {
       cache_read_tokens: 300,
       cache_create_tokens: 100,
       cost_usd: 0.42,
-    },
+    }),
   ],
-};
+  graph_name: null, current_node_name: null,
+});
 
 const PARTIAL_COST_DETAIL: ChunkDetail = {
   ...COST_DETAIL,
   chunk_id: 'ch_01partial00000000000000000000',
   usage: [
-    {
+    chunkUsageView({
       node_id: 'nd_build',
       epoch: 1,
       kind: 'spawn',
@@ -72,7 +73,7 @@ const PARTIAL_COST_DETAIL: ChunkDetail = {
       cache_create_tokens: 0,
       cost_usd: null,
       cost_partial: true,
-    },
+    }),
   ],
 };
 
@@ -83,7 +84,7 @@ const ESTIMATE_COST_DETAIL: ChunkDetail = {
   ...COST_DETAIL,
   chunk_id: 'ch_01estimate0000000000000000000',
   usage: [
-    {
+    chunkUsageView({
       node_id: 'nd_build',
       epoch: 1,
       kind: 'spawn',
@@ -94,11 +95,11 @@ const ESTIMATE_COST_DETAIL: ChunkDetail = {
       cache_create_tokens: 0,
       cost_usd: null,
       estimated_cost_usd: 0.07,
-    },
+    }),
   ],
 };
 
-const NAMED_DETAIL: ChunkDetail = {
+const NAMED_DETAIL: ChunkDetail = chunkDetail({
   chunk_id: 'ch_01named000000000000000000000',
   graph_id: 'gr_1',
   status: 'running',
@@ -107,7 +108,7 @@ const NAMED_DETAIL: ChunkDetail = {
   latest_epoch: 1,
   work_refs: [],
   history: [
-    {
+    transitionView({
       from_node_id: 'nd_build',
       from_node_name: 'build',
       to_node_id: 'nd_review',
@@ -115,15 +116,18 @@ const NAMED_DETAIL: ChunkDetail = {
       choice_name: 'pass',
       epoch: 1,
       recorded_at: '2026-07-13T00:00:01Z',
-    },
+      graph_id: 'gr_1',
+      graph_name: null,
+    }),
   ],
   artifacts: [],
-};
+  graph_name: null,
+});
 
 // A chunk whose history spans two graphs: a transition in the source graph,
 // then a cross-graph migration into the triage graph. Both sides carry resolved names,
 // so the timeline must not degrade any step to a raw `nd_`/`gr_` id.
-const TWO_GRAPH_DETAIL: ChunkDetail = {
+const TWO_GRAPH_DETAIL: ChunkDetail = chunkDetail({
   chunk_id: 'ch_01twograph0000000000000000000',
   graph_id: 'gr_triage',
   status: 'ready',
@@ -132,7 +136,7 @@ const TWO_GRAPH_DETAIL: ChunkDetail = {
   latest_epoch: 1,
   work_refs: [],
   history: [
-    {
+    transitionView({
       from_node_id: 'nd_s_build',
       from_node_name: 'build',
       to_node_id: 'nd_s_review',
@@ -142,7 +146,7 @@ const TWO_GRAPH_DETAIL: ChunkDetail = {
       recorded_at: '2026-07-13T00:00:01Z',
       graph_id: 'gr_src',
       graph_name: 'source',
-    },
+    }),
   ],
   migrations: [
     {
@@ -158,12 +162,14 @@ const TWO_GRAPH_DETAIL: ChunkDetail = {
       model: 'claude-sonnet-5',
       epoch: 2,
       recorded_at: '2026-07-13T00:00:02Z',
+      source: null,
     },
   ],
   artifacts: [],
-};
+  graph_name: null,
+});
 
-const FORENSICS_DETAIL: ChunkDetail = {
+const FORENSICS_DETAIL: ChunkDetail = chunkDetail({
   chunk_id: 'ch_01forensics000000000000000000',
   graph_id: 'gr_1',
   status: 'done',
@@ -172,7 +178,7 @@ const FORENSICS_DETAIL: ChunkDetail = {
   work_refs: [],
   artifacts: [],
   history: [
-    { from_node_id: 'nd_build', to_node_id: 'nd_review', choice_name: 'pass', epoch: 1, recorded_at: '2026-07-13T00:00:01Z' },
+    transitionView({ from_node_id: 'nd_build', to_node_id: 'nd_review', choice_name: 'pass', epoch: 1, recorded_at: '2026-07-13T00:00:01Z', from_node_name: null, to_node_name: null, graph_id: 'gr_1', graph_name: null }),
   ],
   bounces: [{ cause: 'failure', envelope: '{"cause":"failure","detail":"hub node `deliver` routed `failure` to `resolve` \\u2014 delivery incomplete"}', recorded_at: '2026-07-13T00:00:02Z' }],
   restarts: [
@@ -185,9 +191,14 @@ const FORENSICS_DETAIL: ChunkDetail = {
       to_node_name: 'build',
       restarted_by: 'ops@example.test',
       recorded_at: '2026-07-13T00:00:03Z',
+      decision_id: null,
+      from_graph_id: null,
+      from_graph_name: null,
+      graph_name: null,
     },
   ],
-};
+  graph_name: null, current_node_name: null,
+});
 
 describe('ChunkTimeline', () => {
   beforeEach(async () => {
@@ -238,14 +249,15 @@ describe('ChunkTimeline', () => {
   });
 
   it('reads a poll-timeout envelope and an unparseable one as plain text', async () => {
-    const detail: ChunkDetail = {
+    const detail: ChunkDetail = chunkDetail({
       ...FORENSICS_DETAIL,
       bounces: [
         { cause: 'poll-timeout', envelope: '{"cause":"poll-timeout","detail":"no verdict within 600s"}', recorded_at: '2026-07-13T00:00:02Z' },
         { cause: 'unknown', envelope: 'not json {', recorded_at: '2026-07-13T00:00:03Z' },
       ],
       restarts: [],
-    };
+      graph_name: null, current_node_name: null,
+});
     const fixture = TestBed.createComponent(ChunkTimeline);
     fixture.componentRef.setInput('detail', detail);
     await fixture.whenStable();
@@ -411,11 +423,12 @@ describe('ChunkTimeline', () => {
   });
 
   it("renders a step's recorded harness as a short name beside its usage (blizzard#441)", async () => {
-    const detail: ChunkDetail = {
+    const detail: ChunkDetail = chunkDetail({
       ...COST_DETAIL,
       chunk_id: 'ch_01harness0000000000000000000',
       usage: [{ ...COST_DETAIL.usage![0], harness_id: 'claude_code', harness_version: '1.2.3' }],
-    };
+      graph_name: null, current_node_name: null,
+});
     const fixture = TestBed.createComponent(ChunkTimeline);
     fixture.componentRef.setInput('detail', detail);
     await fixture.whenStable();

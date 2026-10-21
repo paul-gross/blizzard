@@ -1,6 +1,6 @@
 """Permit wire bodies — requesting, moving and reading a project's permits."""
 
-# exemplar: bzh:utc-instants, bzh:frontend-wire-conformist.
+# exemplar: bzh:utc-instants, bzh:frontend-wire-conformist, bzh:wire-sent-is-required.
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ from typing import Annotated
 from pydantic import BaseModel, StringConstraints
 
 from exemplar.foundation.permits import PermitState, PermitVerb
+from exemplar.wire.base import ResponseModel
 
 _Text = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 
@@ -29,7 +30,7 @@ class PermitRevokeRequest(BaseModel):
     note: str
 
 
-class PermitView(BaseModel):
+class PermitView(ResponseModel):
     """One permit, its state, and the verbs legal from it."""
 
     permit_id: str
@@ -53,7 +54,7 @@ class PermitView(BaseModel):
     revocation_note: str | None = None
 
 
-class PermitListResponse(BaseModel):
+class PermitListResponse(ResponseModel):
     """One page of permits, newest requested first; ``next_cursor`` is ``None`` on the last."""
 
     permits: list[PermitView]

@@ -33,7 +33,7 @@ describe('authState', () => {
 
 describe('tenancyOf', () => {
   const resolve = (tenants: readonly MeTenant[]) => resolveTenant(tenants, null, null);
-  const me: MeResponse = { user_id: 'u', username: 'u', display_name: 'u', role: null, permissions: [], tenants: [ACME] };
+  const me: MeResponse = { user_id: 'u', username: 'u', display_name: 'u', role: null, permissions: [], tenants: [ACME], hub_admin: false, assignable_roles: [] };
 
   it('is null without an identity', () => {
     expect(tenancyOf(null, resolve)).toBeNull();
@@ -44,7 +44,7 @@ describe('tenancyOf', () => {
   });
 
   it('reads an identity listing no memberships as holding none', () => {
-    expect(tenancyOf({ ...me, tenants: undefined }, resolve)).toEqual({ kind: 'none' });
+    expect(tenancyOf({ ...me, tenants: [] }, resolve)).toEqual({ kind: 'none' });
   });
 });
 

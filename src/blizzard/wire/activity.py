@@ -7,12 +7,11 @@ A bounded, merged read over the same fact-derived vocabulary a live ``chunk-chan
 
 from __future__ import annotations
 
-from pydantic import BaseModel
-
 from blizzard.foundation.event_log import EventLogSeverity
+from blizzard.wire.base import WireModel
 
 
-class ActivityView(BaseModel):
+class ActivityView(WireModel):
     """One activity-feed row on the wire — present-when-meaningful: a field its source
     doesn't fill is absent, never a placeholder ``None``-as-a-present-field. ``type`` is
     one of ``"chunk-changed"`` / ``"event-logged"`` / ``"runner-changed"``; ``key`` is the
@@ -40,7 +39,7 @@ class ActivityView(BaseModel):
     reason: str | None = None
 
 
-class ActivityResponse(BaseModel):
+class ActivityResponse(WireModel):
     """The activity feed, newest-first (bounded)."""
 
     activity: list[ActivityView] = []

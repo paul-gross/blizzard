@@ -9,6 +9,7 @@ from __future__ import annotations
 from pydantic import BaseModel
 
 from blizzard.foundation.transcripts import TurnKind
+from blizzard.wire.base import WireModel
 
 
 class ToolCallSegmentView(BaseModel):
@@ -102,7 +103,7 @@ class TranscriptSegmentBatch(BaseModel):
     records: list[TranscriptSegmentRecord]
 
 
-class TranscriptSegmentAck(BaseModel):
+class TranscriptSegmentAck(WireModel):
     """The hub's per-batch acknowledgement against the transcript lane's high-water mark.
 
     ``capped`` records are acknowledged and content-dropped, a durable decision never re-adjudicated on
@@ -116,7 +117,7 @@ class TranscriptSegmentAck(BaseModel):
     refused: list[int] = []
 
 
-class TranscriptSegmentIndexEntry(BaseModel):
+class TranscriptSegmentIndexEntry(WireModel):
     """One segment's metadata row — byte counts and completion state, never turn
     content. ``truncated`` is true iff any record was cap-rejected OR the runner
     itself declared ``record_truncated`` on one, so a consumer can tell an incomplete
@@ -137,7 +138,7 @@ class TranscriptSegmentIndexEntry(BaseModel):
     received_at: str
 
 
-class TranscriptSegmentIndexView(BaseModel):
+class TranscriptSegmentIndexView(WireModel):
     """The per-chunk segment discovery read — unreachable content, only what a
     caller needs to then ask for one segment's turns."""
 
@@ -145,7 +146,7 @@ class TranscriptSegmentIndexView(BaseModel):
     segments: list[TranscriptSegmentIndexEntry] = []
 
 
-class TranscriptSegmentContentView(BaseModel):
+class TranscriptSegmentContentView(WireModel):
     """One segment's decompressed turns, concatenated across its stored records in
     turn-range order — the lazy per-segment content read."""
 
@@ -155,7 +156,7 @@ class TranscriptSegmentContentView(BaseModel):
     turns: list[TurnSegmentView] = []
 
 
-class LeaseTranscriptView(BaseModel):
+class LeaseTranscriptView(WireModel):
     """A lease's transcript, concatenated across every segment stored under its
     ``(chunk_id, node_id, epoch)`` — every spawn generation, not one. The fleet-plane
     counterpart to the per-segment content read: a runner's read-back of its own shipped

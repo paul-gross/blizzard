@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
+from blizzard.wire.base import WireModel
+
 
 class QuestionAsked(BaseModel):
     """A ``question.asked`` fact.
@@ -50,7 +52,7 @@ class AnswerResult(BaseModel):
     answered_at: str
 
 
-class QuestionView(BaseModel):
+class QuestionView(WireModel):
     """A question row with its derived answer *and delivery* state.
 
     ``answered`` and the answer fields derive from the presence of the answer row;

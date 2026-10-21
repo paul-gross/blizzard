@@ -13,6 +13,8 @@ const ZERO_USAGE_TOTAL: ChunkUsageTotalView = {
   cache_create_tokens: 0,
   cost_usd: 0,
   cost_partial: false,
+  billed_partial: false,
+  estimated_cost_usd: null,
 };
 
 /**

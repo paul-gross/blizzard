@@ -9,6 +9,14 @@ const NIGHTLY: RoutineView = {
   graph_name: 'garden-routine',
   default_scope_slug: 'blizzard',
   created_at: '2026-01-01T00:00:00Z',
+  default_model: [],
+  default_effort: null,
+  default_harnesses: [],
+  project_id: null,
+  project_name: null,
+  project_slug: null,
+  retired: false,
+  revision: null,
 };
 
 const ORPHAN: RoutineView = { ...NIGHTLY, routine_id: 'rtn_2', name: 'orphan', graph_name: 'unminted', retired: true };
@@ -19,6 +27,8 @@ const EFFECTIVE_GRAPH: GraphSummaryView = {
   entry_node_id: 'nd_1',
   created_at: '2026-01-01T00:00:00Z',
   effective: true,
+  lifecycle: 'effective',
+  retired: false,
 };
 
 describe('presentRoutineName', () => {

@@ -13,6 +13,7 @@ from blizzard.foundation.garden_proposals import (
     GardenProposalItemOutcome,
     GardenProposalOrigin,
 )
+from blizzard.wire.base import WireModel
 
 
 class GardenProposalCandidate(BaseModel):
@@ -43,7 +44,7 @@ class GardenProposalClosureView(BaseModel):
     ref: str | None
 
 
-class GardenProposalView(BaseModel):
+class GardenProposalView(WireModel):
     """A garden proposal, its closure carried alongside it once one exists.
     `routine_name` is nullable — an operator-authored proposal may name
     no routine; `created_by` is set only for one."""
@@ -66,7 +67,7 @@ class GardenProposalView(BaseModel):
     project_name: str | None = None
 
 
-class GardenProposalsPageView(BaseModel):
+class GardenProposalsPageView(WireModel):
     """``GET /api/garden-proposals``'s own bounded page —
     ``next_cursor`` is ``None`` exactly when this page is the last one."""
 

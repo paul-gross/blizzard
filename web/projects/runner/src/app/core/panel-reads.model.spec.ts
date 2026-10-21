@@ -100,6 +100,14 @@ describe('servingOwners', () => {
   });
 });
 
+describe('servingOwners with a runner its hub halted', () => {
+  it('keeps it, since its routes still answer', () => {
+    expect(servingOwners([hostRunner({ runner_id: 'rn_4', name: 'r4', state: 'halted', served: true })])).toEqual([
+      { runnerId: 'rn_4', name: 'r4', label: 'r4' },
+    ]);
+  });
+});
+
 describe('scopedOwners', () => {
   it('keeps every runner for All', () => {
     expect(scopedOwners([R1, R2], null)).toEqual([R1, R2]);

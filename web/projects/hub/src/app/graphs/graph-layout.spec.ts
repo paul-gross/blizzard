@@ -3,6 +3,34 @@ import { META_LINE_HEIGHT } from './graph-box-sizing';
 import { type TextMeasurer } from './graph-box-sizing';
 import { layoutGraph } from './graph-layout';
 
+const NODE_DEFAULTS: Pick<GraphNodeView, 'checks' | 'checks_cwd' | 'checks_timeout' | 'choices' | 'judgement_prompt' | 'produces' | 'prompt' | 'retries_exhausted' | 'retries_max' | 'session_source'> = {
+  checks: [],
+  checks_cwd: null,
+  checks_timeout: null,
+  choices: [],
+  judgement_prompt: null,
+  produces: [],
+  prompt: null,
+  retries_exhausted: null,
+  retries_max: null,
+  session_source: null,
+};
+
+const GRAPH_DEFAULTS: Pick<GraphView, 'artifacts' | 'edges' | 'follow_latest' | 'retired' | 'sessions' | 'warnings'> = {
+  artifacts: [],
+  edges: [],
+  follow_latest: null,
+  retired: false,
+  sessions: [],
+  warnings: [],
+};
+
+const EDGE_DEFAULTS: Pick<GraphView['edges'][number], 'prompt_addendum' | 'target_graph' | 'target_kind'> = {
+  prompt_addendum: null,
+  target_graph: null,
+  target_kind: 'node',
+};
+
 /** Deterministic stand-in for canvas `measureText` — a fixed per-character width so
  * layout math is reproducible without a DOM (the production measurer lives in
  * `graph-diagram.ts` and is exercised there). */
@@ -12,12 +40,14 @@ const measure: TextMeasurer = (text) => text.length * 7;
  * deliver): a self-loop (`build` fail-back into itself), two back edges (`review`'s
  * fail into `build`, `deliver`'s conflict into `build`), and a `done` terminal. */
 const DEFAULT_LIKE: GraphView = {
+  ...GRAPH_DEFAULTS,
   graph_id: 'gr_default_v1',
   name: 'default-delivery',
   enabled: true,
   entry_node_id: 'n_build',
   nodes: [
     {
+      ...NODE_DEFAULTS,
       node_id: 'n_build',
       name: 'build',
       executor: 'runner',
@@ -25,42 +55,44 @@ const DEFAULT_LIKE: GraphView = {
       judged_by: 'worker',
       retries_max: 2,
       choices: [
-        { choice_id: 'c_pass', name: 'pass', description: '' },
-        { choice_id: 'c_fail', name: 'fail', description: '' },
+        { requires_checks: false, choice_id: 'c_pass', name: 'pass', description: '' },
+        { requires_checks: false, choice_id: 'c_fail', name: 'fail', description: '' },
       ],
     },
     {
+      ...NODE_DEFAULTS,
       node_id: 'n_review',
       name: 'review',
       executor: 'runner',
       session: 'fresh',
       judged_by: 'worker',
       retries_max: 2,
-      produces: [{ name: 'review-findings' }],
+      produces: [{ kind: 'asset', name: 'review-findings' }],
       choices: [
-        { choice_id: 'c_pass2', name: 'pass', description: '' },
-        { choice_id: 'c_fail2', name: 'fail', description: '' },
+        { requires_checks: false, choice_id: 'c_pass2', name: 'pass', description: '' },
+        { requires_checks: false, choice_id: 'c_fail2', name: 'fail', description: '' },
       ],
     },
     {
+      ...NODE_DEFAULTS,
       node_id: 'n_deliver',
       name: 'deliver',
       executor: 'hub',
       session: 'fresh',
       judged_by: 'worker',
       choices: [
-        { choice_id: 'c_landed', name: 'landed', description: '' },
-        { choice_id: 'c_conflict', name: 'conflict', description: '' },
+        { requires_checks: false, choice_id: 'c_landed', name: 'landed', description: '' },
+        { requires_checks: false, choice_id: 'c_conflict', name: 'conflict', description: '' },
       ],
     },
   ],
   edges: [
-    { from_node_id: 'n_build', choice_id: 'c_pass', to_node_name: 'review' },
-    { from_node_id: 'n_build', choice_id: 'c_fail', to_node_name: 'build' },
-    { from_node_id: 'n_review', choice_id: 'c_pass2', to_node_name: 'deliver' },
-    { from_node_id: 'n_review', choice_id: 'c_fail2', to_node_name: 'build' },
-    { from_node_id: 'n_deliver', choice_id: 'c_landed', to_node_name: 'done', target_kind: 'done' },
-    { from_node_id: 'n_deliver', choice_id: 'c_conflict', to_node_name: 'build' },
+    { ...EDGE_DEFAULTS, from_node_id: 'n_build', choice_id: 'c_pass', to_node_name: 'review' },
+    { ...EDGE_DEFAULTS, from_node_id: 'n_build', choice_id: 'c_fail', to_node_name: 'build' },
+    { ...EDGE_DEFAULTS, from_node_id: 'n_review', choice_id: 'c_pass2', to_node_name: 'deliver' },
+    { ...EDGE_DEFAULTS, from_node_id: 'n_review', choice_id: 'c_fail2', to_node_name: 'build' },
+    { ...EDGE_DEFAULTS, from_node_id: 'n_deliver', choice_id: 'c_landed', to_node_name: 'done', target_kind: 'done' },
+    { ...EDGE_DEFAULTS, from_node_id: 'n_deliver', choice_id: 'c_conflict', to_node_name: 'build' },
   ],
   warnings: [],
 };
@@ -154,11 +186,12 @@ describe('layoutGraph', () => {
 
   it('lays out a degenerate single-node graph with no edges, no self-loops, no done sink', () => {
     const single: GraphView = {
+      ...GRAPH_DEFAULTS,
       graph_id: 'gr_solo',
       name: 'solo',
       enabled: true,
       entry_node_id: 'n_only',
-      nodes: [{ node_id: 'n_only', name: 'only', executor: 'runner', session: 'fresh', judged_by: 'worker', choices: [] }],
+      nodes: [{ ...NODE_DEFAULTS, node_id: 'n_only', name: 'only', executor: 'runner', session: 'fresh', judged_by: 'worker', choices: [] }],
       edges: [],
       warnings: [],
     };
@@ -190,6 +223,7 @@ describe('layoutGraph', () => {
 
   it('falls back to { ok: false } for an empty graph (no nodes)', () => {
     const empty: GraphView = {
+      ...GRAPH_DEFAULTS,
       graph_id: 'gr_empty',
       name: 'empty',
       enabled: true,
@@ -203,12 +237,13 @@ describe('layoutGraph', () => {
 
   it('falls back to { ok: false } when an edge names a target that matches no node and is not "done"', () => {
     const broken: GraphView = {
+      ...GRAPH_DEFAULTS,
       graph_id: 'gr_broken',
       name: 'broken',
       enabled: true,
       entry_node_id: 'n_a',
-      nodes: [{ node_id: 'n_a', name: 'a', executor: 'runner', session: 'fresh', judged_by: 'worker', choices: [] }],
-      edges: [{ from_node_id: 'n_a', choice_id: 'c_x', to_node_name: 'nonexistent' }],
+      nodes: [{ ...NODE_DEFAULTS, node_id: 'n_a', name: 'a', executor: 'runner', session: 'fresh', judged_by: 'worker', choices: [] }],
+      edges: [{ ...EDGE_DEFAULTS, from_node_id: 'n_a', choice_id: 'c_x', to_node_name: 'nonexistent' }],
       warnings: [],
     };
     expect(layoutGraph(broken, measure)).toEqual({ ok: false });
@@ -218,30 +253,32 @@ describe('layoutGraph', () => {
     /** One node with an edge to `done` and several edges to `graph:<name>`
      * cross-graph migration targets, all of which must resolve. */
     const TRIAGE_LIKE: GraphView = {
+      ...GRAPH_DEFAULTS,
       graph_id: 'gr_triage',
       name: 'default-delivery',
       enabled: true,
       entry_node_id: 'n_triage',
       nodes: [
         {
+          ...NODE_DEFAULTS,
           node_id: 'n_triage',
           name: 'triage',
           executor: 'runner',
           session: 'fresh',
           judged_by: 'worker',
           choices: [
-            { choice_id: 'c_already_done', name: 'already-done', description: '' },
-            { choice_id: 'c_basic', name: 'basic', description: '' },
-            { choice_id: 'c_advanced', name: 'advanced', description: '' },
-            { choice_id: 'c_harness', name: 'harness', description: '' },
+            { requires_checks: false, choice_id: 'c_already_done', name: 'already-done', description: '' },
+            { requires_checks: false, choice_id: 'c_basic', name: 'basic', description: '' },
+            { requires_checks: false, choice_id: 'c_advanced', name: 'advanced', description: '' },
+            { requires_checks: false, choice_id: 'c_harness', name: 'harness', description: '' },
           ],
         },
       ],
       edges: [
-        { from_node_id: 'n_triage', choice_id: 'c_already_done', to_node_name: 'done', target_kind: 'done' },
-        { from_node_id: 'n_triage', choice_id: 'c_basic', to_node_name: 'graph:bas-dwf', target_kind: 'graph', target_graph: 'bas-dwf' },
-        { from_node_id: 'n_triage', choice_id: 'c_advanced', to_node_name: 'graph:adv-dwf', target_kind: 'graph', target_graph: 'adv-dwf' },
-        { from_node_id: 'n_triage', choice_id: 'c_harness', to_node_name: 'graph:bas-hwf', target_kind: 'graph', target_graph: 'bas-hwf' },
+        { ...EDGE_DEFAULTS, from_node_id: 'n_triage', choice_id: 'c_already_done', to_node_name: 'done', target_kind: 'done' },
+        { ...EDGE_DEFAULTS, from_node_id: 'n_triage', choice_id: 'c_basic', to_node_name: 'graph:bas-dwf', target_kind: 'graph', target_graph: 'bas-dwf' },
+        { ...EDGE_DEFAULTS, from_node_id: 'n_triage', choice_id: 'c_advanced', to_node_name: 'graph:adv-dwf', target_kind: 'graph', target_graph: 'adv-dwf' },
+        { ...EDGE_DEFAULTS, from_node_id: 'n_triage', choice_id: 'c_harness', to_node_name: 'graph:bas-hwf', target_kind: 'graph', target_graph: 'bas-hwf' },
       ],
       warnings: [],
     };
@@ -287,11 +324,11 @@ describe('layoutGraph', () => {
             ...TRIAGE_LIKE.nodes![0],
             choices: [
               ...TRIAGE_LIKE.nodes![0].choices!,
-              { choice_id: 'c_basic_2', name: 'basic-again', description: '' },
+              { requires_checks: false, choice_id: 'c_basic_2', name: 'basic-again', description: '' },
             ],
           },
         ],
-        edges: [...TRIAGE_LIKE.edges!, { from_node_id: 'n_triage', choice_id: 'c_basic_2', to_node_name: 'graph:bas-dwf', target_kind: 'graph', target_graph: 'bas-dwf' }],
+        edges: [...TRIAGE_LIKE.edges!, { ...EDGE_DEFAULTS, from_node_id: 'n_triage', choice_id: 'c_basic_2', to_node_name: 'graph:bas-dwf', target_kind: 'graph', target_graph: 'bas-dwf' }],
       };
       const outcome = layoutGraph(shared, measure);
       expect(outcome.ok).toBe(true);
@@ -304,13 +341,13 @@ describe('layoutGraph', () => {
     it('falls back to { ok: false } for a malformed `graph:` target — empty name or a further colon', () => {
       const emptyName: GraphView = {
         ...TRIAGE_LIKE,
-        edges: [{ from_node_id: 'n_triage', choice_id: 'c_basic', to_node_name: 'graph:' }],
+        edges: [{ ...EDGE_DEFAULTS, from_node_id: 'n_triage', choice_id: 'c_basic', to_node_name: 'graph:' }],
       };
       expect(layoutGraph(emptyName, measure)).toEqual({ ok: false });
 
       const extraColon: GraphView = {
         ...TRIAGE_LIKE,
-        edges: [{ from_node_id: 'n_triage', choice_id: 'c_basic', to_node_name: 'graph:bas:dwf' }],
+        edges: [{ ...EDGE_DEFAULTS, from_node_id: 'n_triage', choice_id: 'c_basic', to_node_name: 'graph:bas:dwf' }],
       };
       expect(layoutGraph(extraColon, measure)).toEqual({ ok: false });
     });
@@ -318,22 +355,25 @@ describe('layoutGraph', () => {
 
   it('widens the overall bounding box to fit a self-loop arc + label even with a long node id/label', () => {
     const longLoop: GraphView = {
+      ...GRAPH_DEFAULTS,
       graph_id: 'gr_long',
       name: 'long-loop',
       enabled: true,
       entry_node_id: 'n_01KXTHDJ3AAM439JWADAAPCGP1',
       nodes: [
         {
+          ...NODE_DEFAULTS,
           node_id: 'n_01KXTHDJ3AAM439JWADAAPCGP1',
           name: 'a-node-with-a-very-long-identifier',
           executor: 'runner',
           session: 'fresh',
           judged_by: 'worker',
-          choices: [{ choice_id: 'cho_01KXTHDJ3AAM439JWADAAPCGP1', name: 'a-very-long-retry-choice-name', description: '' }],
+          choices: [{ requires_checks: false, choice_id: 'cho_01KXTHDJ3AAM439JWADAAPCGP1', name: 'a-very-long-retry-choice-name', description: '' }],
         },
       ],
       edges: [
         {
+          ...EDGE_DEFAULTS,
           from_node_id: 'n_01KXTHDJ3AAM439JWADAAPCGP1',
           choice_id: 'cho_01KXTHDJ3AAM439JWADAAPCGP1',
           to_node_name: 'a-node-with-a-very-long-identifier',
@@ -360,12 +400,14 @@ describe('layoutGraph', () => {
      * shape that isolates the box derivation from dagre's edge routing. */
     function soloGraph(overrides: Partial<GraphNodeView>): GraphView {
       return {
+        ...GRAPH_DEFAULTS,
         graph_id: 'gr_solo',
         name: 'solo',
         enabled: true,
         entry_node_id: 'n_only',
         nodes: [
           {
+            ...NODE_DEFAULTS,
             node_id: 'n_only',
             name: 'only',
             executor: 'runner',
@@ -408,7 +450,7 @@ describe('layoutGraph', () => {
         session: 'resume',
         session_source: 'code',
         retries_max: 2,
-        produces: Array.from({ length: 7 }, (_, i) => ({ name: `artifact-number-${i}` })),
+        produces: Array.from({ length: 7 }, (_, i) => ({ kind: 'asset', name: `artifact-number-${i}` })),
       });
 
       expect(node.metaLines.length).toBeGreaterThan(1);
@@ -424,7 +466,7 @@ describe('layoutGraph', () => {
       const node = soloNode({
         session: 'resume',
         retries_max: 2,
-        produces: [{ name: 'plan' }, { name: 'retrospective' }, { name: 'review-findings' }],
+        produces: [{ kind: 'asset', name: 'plan' }, { kind: 'asset', name: 'retrospective' }, { kind: 'asset', name: 'review-findings' }],
       });
 
       const unwrapped = measure(node.metaLines.join(' · '), 'meta');
@@ -437,7 +479,7 @@ describe('layoutGraph', () => {
 
     it('lets one unsplittable segment wider than the max width widen the box rather than clip', () => {
       const long = `x`.repeat(120);
-      const node = soloNode({ session: 'fresh', produces: [{ name: long }] });
+      const node = soloNode({ session: 'fresh', produces: [{ kind: 'asset', name: long }] });
 
       expect(node.metaLines).toEqual(['fresh', `→ ${long}`]);
       expect(node.width).toBeGreaterThanOrEqual(measure(`→ ${long}`, 'meta') + 28);
@@ -446,14 +488,15 @@ describe('layoutGraph', () => {
 
   it('falls back to { ok: false } when a node has more than one self-loop (the spike\'s stated limitation)', () => {
     const doubleLoop: GraphView = {
+      ...GRAPH_DEFAULTS,
       graph_id: 'gr_double',
       name: 'double',
       enabled: true,
       entry_node_id: 'n_a',
-      nodes: [{ node_id: 'n_a', name: 'a', executor: 'runner', session: 'fresh', judged_by: 'worker', choices: [] }],
+      nodes: [{ ...NODE_DEFAULTS, node_id: 'n_a', name: 'a', executor: 'runner', session: 'fresh', judged_by: 'worker', choices: [] }],
       edges: [
-        { from_node_id: 'n_a', choice_id: 'c_x', to_node_name: 'a' },
-        { from_node_id: 'n_a', choice_id: 'c_y', to_node_name: 'a' },
+        { ...EDGE_DEFAULTS, from_node_id: 'n_a', choice_id: 'c_x', to_node_name: 'a' },
+        { ...EDGE_DEFAULTS, from_node_id: 'n_a', choice_id: 'c_y', to_node_name: 'a' },
       ],
       warnings: [],
     };

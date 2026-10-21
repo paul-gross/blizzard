@@ -32,6 +32,8 @@ const LEASE = (overrides: Partial<PanelLease> = {}): PanelLease => ({
   closed_at: null,
   closure_reason: null,
   stale_after_seconds: 3600,
+  harness_id: null,
+  project_id: null,
   // A long runner name, so the card's step row has to hold it inside a phone's width too.
   owner: { runnerId: 'rn_1', name: 'r-claude-with-a-long-host-name', label: 'r-claude-with-a-long-host-name' },
   projectSlug: 'blizzard',
@@ -91,9 +93,9 @@ function dashboardBody(asks: unknown) {
     runner: {
       runner_id: 'runner-local',
       workspace_id: 'workspace-local',
-      pause: { local: false, hub: false, effective: false },
+      pause: { local: false, hub: false, effective: false, local_reason: null },
       capacities: { used: 0, bindings: [{ project: 'p', project_id: 'p', workspace_id: 'ws', agents: 4, used: 0, free: 4 }] },
-      hub: { endpoint: 'http://127.0.0.1:8421', reachable: true, last_contact_at: null, buffer_depth: 0 },
+      hub: { endpoint: 'http://127.0.0.1:8421', reachable: true, last_contact_at: null, buffer_depth: 0, hub_version: null, window: null },
       last_tick_at: null,
     },
     asks,

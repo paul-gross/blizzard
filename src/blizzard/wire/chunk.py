@@ -16,6 +16,7 @@ from blizzard.foundation.chunk_migration import MigrationMode
 from blizzard.foundation.chunk_status import ChunkDeleteRefusal, ChunkStatus
 from blizzard.foundation.migration_source import MigrationSource
 from blizzard.foundation.work_items import WorkItemPriority
+from blizzard.wire.base import WireModel
 from blizzard.wire.decision import DecisionView
 from blizzard.wire.question import QuestionView
 from blizzard.wire.work_source import WorkItemAuthorView
@@ -29,7 +30,7 @@ class WorkRefModel(BaseModel):
     ref: str
 
 
-class WorkRefView(BaseModel):
+class WorkRefView(WireModel):
     """A pointer as the views carry it — the raw pair plus its legible label and browser URL, both
     resolved by the pointer's configured source binding. ``source`` is ``hub`` or the source's id; ``label`` is the
     legible ``{slug}#{ref}``, rendered under the source's current slug; ``web_url`` is its browser-openable address,
@@ -51,7 +52,7 @@ class ChunkIngestRequest(BaseModel):
     project: str | None = None
 
 
-class ChunkIngestResponse(BaseModel):
+class ChunkIngestResponse(WireModel):
     """The minted chunk id."""
 
     chunk_id: str
@@ -87,7 +88,7 @@ class ChunkIngestConflict(BaseModel):
     detail: str = "pointer already held by a live chunk"
 
 
-class ChunkUsageTotalView(BaseModel):
+class ChunkUsageTotalView(WireModel):
     """A chunk's derived usage/cost total, summed over every recorded invocation — never a stored column.
     ``cost_partial`` is ``True`` iff some summed row carries neither a billed nor an estimated amount;
     ``billed_partial`` iff some carries no billed amount, so ``cost_usd`` is then a lower bound of billed
@@ -117,7 +118,7 @@ class ChunkUsageTotalView(BaseModel):
         )
 
 
-class ChunkUsageView(BaseModel):
+class ChunkUsageView(WireModel):
     """One node-step's usage/cost telemetry — one harness invocation's tokens-by-class and
     cost. ``cost_usd`` is ``None`` exactly when no billed figure was
     recorded for this invocation — never fabricated. ``estimated_cost_usd`` is the runner's own reported
@@ -149,7 +150,7 @@ class PrView(BaseModel):
     url: str
 
 
-class LandedRepoView(BaseModel):
+class LandedRepoView(WireModel):
     """One repo's actual merged revision; URL absent without a known PR forge."""
 
     repo: str
@@ -157,7 +158,7 @@ class LandedRepoView(BaseModel):
     url: str | None = None
 
 
-class ChunkSummary(BaseModel):
+class ChunkSummary(WireModel):
     """One row of the fleet chunk list — the derived status and current node. ``current_node_name`` is
     the node's human graph name beside the raw ``nd_`` ULID, null when unresolvable.
     ``runner_id``/``environment_count`` are **in-progress-only**: a terminal chunk reads
@@ -203,7 +204,7 @@ class ChunkSummary(BaseModel):
     project_name: str | None = None
 
 
-class ChunksPageView(BaseModel):
+class ChunksPageView(WireModel):
     """``GET /api/chunks``'s own bounded page — ``next_cursor`` is
     ``None`` exactly when this page is the last one."""
 
@@ -211,7 +212,7 @@ class ChunksPageView(BaseModel):
     next_cursor: str | None = None
 
 
-class ChunkCountsView(BaseModel):
+class ChunkCountsView(WireModel):
     """``GET /api/chunk-counts`` — the all-time fleet count per derived status, over exactly
     the chunks ``GET /api/chunks`` pages over. One field per chunk status, so a new status is a new field,
     plus ``terminal`` — the count over every terminal status, the hub's judgment of which statuses finish."""
@@ -231,7 +232,7 @@ class ChunkCountsView(BaseModel):
     done_since: int | None = None
 
 
-class RouteView(BaseModel):
+class RouteView(WireModel):
     """A chunk's route — where it is being worked."""
 
     runner_id: str
@@ -241,7 +242,7 @@ class RouteView(BaseModel):
     environment_ids: list[str] = []
 
 
-class ChunkEscalationView(BaseModel):
+class ChunkEscalationView(WireModel):
     """An open escalation on a ``needs_human`` chunk — the takeover command(s) for the parked session,
     present only while the escalation is open — a later lease mint, requeue, or completion supersedes it.
     ``wrapped_takeover_command`` is optional, empty when none was composed."""
@@ -253,7 +254,7 @@ class ChunkEscalationView(BaseModel):
     detail: str | None = None
 
 
-class TransitionView(BaseModel):
+class TransitionView(WireModel):
     """One accepted transition in a chunk's history: the edge a node-step took — origin node, the
     judgement choice that routed it, destination — oldest first on the detail.
     ``from_node_name``/``to_node_name`` are the nodes' human graph names, null when unresolvable.
@@ -270,7 +271,7 @@ class TransitionView(BaseModel):
     graph_name: str | None = None
 
 
-class MigrationView(BaseModel):
+class MigrationView(WireModel):
     """One cross-graph migration step: the chunk was re-pinned from ``from_graph`` onto
     ``landed_node`` in ``to_graph`` — its own step, never a transition. A transition-borne source ends
     the attempt and re-queues; ``restart`` preempts it and keeps the route. ``model`` is the
@@ -292,7 +293,7 @@ class MigrationView(BaseModel):
     recorded_at: str
 
 
-class RestartView(BaseModel):
+class RestartView(WireModel):
     """One operator restart (#370, #371): the chunk was forced from ``from_node`` onto ``to_node`` at
     ``epoch``, tearing down whatever attempt was running. Its own step, never a transition — nothing
     judged it. ``graph_id`` is where it landed, a cross-graph move's target, and ``from_graph`` the graph
@@ -312,7 +313,7 @@ class RestartView(BaseModel):
     recorded_at: str
 
 
-class IntendedMigrationView(BaseModel):
+class IntendedMigrationView(WireModel):
     """A chunk's standing migration intent — editable at any non-terminal status and
     consulted, never applied eagerly, at the chunk's next transition. ``graph_name`` is resolved
     server-side from the stored ``graph_id``, null when unresolvable. ``node_name`` is the ``forced``
@@ -334,7 +335,7 @@ class IntendedMigrationPatch(BaseModel):
     node: str | None = None
 
 
-class ArtifactView(BaseModel):
+class ArtifactView(WireModel):
     """One entry of a chunk's inline artifact store. ``key`` is ``{node}.{artifact-name}.{epoch}`` —
     append-only, so latest-by-epoch resolution is the reader's. ``content`` carries an **asset**'s text
     verbatim; ``repo``/``branch_name``/``commit_hash`` carry a ``git_commit``'s pinned reference, never
@@ -363,7 +364,7 @@ class BounceView(BaseModel):
     recorded_at: str
 
 
-class HubAdvanceResponse(BaseModel):
+class HubAdvanceResponse(WireModel):
     """The result of one on-demand hub-advance. A generic hub command node runs ``run:`` to
     completion, one call at a time, behind the fleet-wide serialization slot: ``ran=False`` means the
     slot was held by a different chunk and this call deferred without touching anything — not an
@@ -408,7 +409,7 @@ class GardenDeliveryRequest(BaseModel):
     proposals: list[str] = []
 
 
-class GardenDeliveryResponse(BaseModel):
+class GardenDeliveryResponse(WireModel):
     """The result of one garden delivery — ``recorded`` durably means it, materialized
     now or replayed; ``invalid`` carries the rejection reason in
     ``detail``."""
@@ -417,7 +418,7 @@ class GardenDeliveryResponse(BaseModel):
     detail: str = ""
 
 
-class ReviewFindingsDeliveryResponse(BaseModel):
+class ReviewFindingsDeliveryResponse(WireModel):
     """The result of one `record-findings` materialization — the
     `GardenDeliveryResponse` shape."""
 
@@ -478,7 +479,7 @@ class ChunkPatchRequest(BaseModel):
     intended_migration: IntendedMigrationPatch | None = None
 
 
-class ChunkPatchResponse(BaseModel):
+class ChunkPatchResponse(WireModel):
     """The result of one ``PATCH /chunks/{id}`` — the chunk's
     editable build properties after the edit, carried together since a PATCH can apply more than
     one at once."""
@@ -504,7 +505,7 @@ class PauseView(BaseModel):
     set_at: str
 
 
-class BlockedView(BaseModel):
+class BlockedView(WireModel):
     """A chunk's blocked marking — present iff a pre-claim dependent (``not_ready`` or
     ``ready``) has a standing dependency edge naming a prerequisite that has not reached ``done``.
     Carried beside ``status``, never a status of its own; names the immediate prerequisite only, with
@@ -516,7 +517,7 @@ class BlockedView(BaseModel):
     unmet_count: int = Field(default=1, description="The count of unmet prerequisites, never below 1.")
 
 
-class ChunkNeighborView(BaseModel):
+class ChunkNeighborView(WireModel):
     """One standing-edge neighbor, one hop away. ``status`` is null only for
     the residual race a neighbor's facts fail to resolve — the edge is still drawn,
     unsatisfied, rather than dropped. See BlockedView for the immediate-only, no-transitive
@@ -536,7 +537,7 @@ class ChunkNeighborhoodView(BaseModel):
     dependents: list[ChunkNeighborView]
 
 
-class ChunkDetail(BaseModel):
+class ChunkDetail(WireModel):
     """The whole chunk aggregate: transition history, inline artifact
     store, and the open escalation."""
 
@@ -629,7 +630,7 @@ class ChunkDetail(BaseModel):
     project_name: str | None = None
 
 
-class ChunkDecisionStatusView(BaseModel):
+class ChunkDecisionStatusView(WireModel):
     """A live gate decision's identity and resolution — no ``choices``."""
 
     decision_id: str
@@ -639,7 +640,7 @@ class ChunkDecisionStatusView(BaseModel):
     transitioned: bool = False
 
 
-class ChunkStatusView(BaseModel):
+class ChunkStatusView(WireModel):
     """One chunk's status, pause, latest epoch, restart epochs, cost, and open decision —
     the slim batch projection ``GET /api/fleet/chunk-statuses`` returns."""
 
@@ -659,7 +660,7 @@ class ChunkStatusView(BaseModel):
     project_name: str | None = None
 
 
-class WorkItemEntry(BaseModel):
+class WorkItemEntry(WireModel):
     """One pointer's pass-through work item, vendor-native — title, body, comments, and,
     only when the source has them to give, ``author``/``stated_priority``.
     ``source`` is the pointer's source key — ``hub`` or the source's id — and ``slug`` the source's current slug.
@@ -682,7 +683,7 @@ class WorkItemEntry(BaseModel):
     stated_priority: WorkItemPriority | None = None
 
 
-class WorkItemsView(BaseModel):
+class WorkItemsView(WireModel):
     """A chunk's pass-through work items — one entry per pointer, order preserved.
 
     Empty when the chunk holds no pointers; a grouped chunk carrying many pointers
@@ -707,7 +708,7 @@ class ChunkDependencyReleaseRequest(BaseModel):
     by: str = "operator"
 
 
-class ChunkDependencyEdgeView(BaseModel):
+class ChunkDependencyEdgeView(WireModel):
     """One declared dependency edge — the row a declare or release
     answers with. ``released_at``/``released_by`` are null while the edge stands."""
 

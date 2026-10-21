@@ -3,8 +3,26 @@ import { describe, expect, it } from 'vitest';
 
 import { relatedRoutineRows, sameSlugProjects, scopeBySlug, scopeOverrideRetired, scopePanelVm } from './gardening-scope-detail.model';
 
-const BLIZZARD: ScopeView = { slug: 'blizzard', description: 'The whole repo', created_at: '2026-01-01T00:00:00Z' };
-const DOCS: ScopeView = { slug: 'docs', description: 'Docs only', created_at: '2026-01-01T00:00:00Z' };
+const BLIZZARD: ScopeView = {
+  slug: 'blizzard',
+  description: 'The whole repo',
+  created_at: '2026-01-01T00:00:00Z',
+  retired: false,
+  revision: null,
+  project_id: null,
+  project_name: null,
+  project_slug: null,
+};
+const DOCS: ScopeView = {
+  slug: 'docs',
+  description: 'Docs only',
+  created_at: '2026-01-01T00:00:00Z',
+  retired: false,
+  revision: null,
+  project_id: null,
+  project_name: null,
+  project_slug: null,
+};
 
 const NIGHTLY: RoutineView = {
   routine_id: 'rtn_1',
@@ -12,6 +30,14 @@ const NIGHTLY: RoutineView = {
   graph_name: 'garden-routine',
   default_scope_slug: 'blizzard',
   created_at: '2026-01-01T00:00:00Z',
+  default_model: [],
+  default_effort: null,
+  default_harnesses: [],
+  project_id: null,
+  project_name: null,
+  project_slug: null,
+  retired: false,
+  revision: null,
 };
 const WEEKLY: RoutineView = { ...NIGHTLY, routine_id: 'rtn_2', name: 'weekly', default_scope_slug: 'docs' };
 

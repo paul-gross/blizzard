@@ -21,8 +21,12 @@ const JIRA: WorkSourceSummary = {
   revision: 3,
   created_at: '2026-10-01T00:00:00Z',
   created_by: 'ada',
+  created_by_name: null,
+  built_in: false,
+  retired: false,
+  web_base: null,
 };
-const HUB: WorkSourceSummary = { name: 'hub', slug: 'hub', work_source_id: null, built_in: true, annotate: false, edit: false };
+const HUB: WorkSourceSummary = { name: 'hub', slug: 'hub', work_source_id: null, built_in: true, annotate: false, edit: false, api_base: null, created_at: null, created_by: null, created_by_name: null, locator: null, provider: null, retired: false, revision: null, secret: null, web_base: null };
 const HISTORY = {
   changes: [
     {

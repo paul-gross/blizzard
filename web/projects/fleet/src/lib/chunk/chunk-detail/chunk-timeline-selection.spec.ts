@@ -3,9 +3,10 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 
 import type { ChunkDetail } from '../../api/hub';
+import { chunkDetail, chunkUsageView, transitionView } from 'fleet/testing';
 import { ChunkTimelineSelection } from './chunk-timeline-selection';
 
-const COST_DETAIL: ChunkDetail = {
+const COST_DETAIL: ChunkDetail = chunkDetail({
   chunk_id: 'ch_01cost00000000000000000000000',
   graph_id: 'gr_1',
   status: 'running',
@@ -14,7 +15,7 @@ const COST_DETAIL: ChunkDetail = {
   latest_epoch: 2,
   work_refs: [],
   history: [
-    {
+    transitionView({
       from_node_id: 'nd_build',
       from_node_name: 'build',
       to_node_id: 'nd_review',
@@ -22,11 +23,13 @@ const COST_DETAIL: ChunkDetail = {
       choice_name: 'pass',
       epoch: 1,
       recorded_at: '2026-07-13T00:00:01Z',
-    },
+      graph_id: 'gr_1',
+      graph_name: null,
+    }),
   ],
   artifacts: [],
   usage: [
-    {
+    chunkUsageView({
       node_id: 'nd_build',
       epoch: 1,
       kind: 'spawn',
@@ -36,9 +39,14 @@ const COST_DETAIL: ChunkDetail = {
       cache_read_tokens: 300,
       cache_create_tokens: 100,
       cost_usd: 0.42,
-    },
+      cost_partial: false,
+      estimated_cost_usd: null,
+      harness_id: null,
+      harness_version: null,
+    }),
   ],
-};
+  graph_name: null,
+});
 
 // A subscription step: no billed cost, only a runner-reported estimate — a row
 // carrying only an estimate is not partial, so this step's own line 3 shows no
@@ -47,7 +55,7 @@ const ESTIMATE_DETAIL: ChunkDetail = {
   ...COST_DETAIL,
   chunk_id: 'ch_01estimate0000000000000000000',
   usage: [
-    {
+    chunkUsageView({
       node_id: 'nd_build',
       epoch: 1,
       kind: 'spawn',
@@ -58,13 +66,16 @@ const ESTIMATE_DETAIL: ChunkDetail = {
       cache_create_tokens: 0,
       cost_usd: null,
       estimated_cost_usd: 0.07,
-    },
+      cost_partial: false,
+      harness_id: null,
+      harness_version: null,
+    }),
   ],
 };
 
 // A chunk whose history spans two graphs — the only shape that grows a graph
 // badge to link (`multiGraph()`).
-const TWO_GRAPH_DETAIL: ChunkDetail = {
+const TWO_GRAPH_DETAIL: ChunkDetail = chunkDetail({
   chunk_id: 'ch_01twograph0000000000000000000',
   graph_id: 'gr_triage',
   status: 'ready',
@@ -73,7 +84,7 @@ const TWO_GRAPH_DETAIL: ChunkDetail = {
   latest_epoch: 1,
   work_refs: [],
   history: [
-    {
+    transitionView({
       from_node_id: 'nd_s_build',
       from_node_name: 'build',
       to_node_id: 'nd_s_review',
@@ -83,7 +94,7 @@ const TWO_GRAPH_DETAIL: ChunkDetail = {
       recorded_at: '2026-07-13T00:00:01Z',
       graph_id: 'gr_src',
       graph_name: 'source',
-    },
+    }),
   ],
   migrations: [
     {
@@ -99,12 +110,14 @@ const TWO_GRAPH_DETAIL: ChunkDetail = {
       model: 'claude-sonnet-5',
       epoch: 2,
       recorded_at: '2026-07-13T00:00:02Z',
+      source: null,
     },
   ],
   artifacts: [],
-};
+  graph_name: null,
+});
 
-const FORENSICS_DETAIL: ChunkDetail = {
+const FORENSICS_DETAIL: ChunkDetail = chunkDetail({
   chunk_id: 'ch_01forensics000000000000000000',
   graph_id: 'gr_1',
   status: 'done',
@@ -113,7 +126,7 @@ const FORENSICS_DETAIL: ChunkDetail = {
   work_refs: [],
   artifacts: [],
   history: [
-    { from_node_id: 'nd_build', to_node_id: 'nd_review', choice_name: 'pass', epoch: 1, recorded_at: '2026-07-13T00:00:01Z' },
+    transitionView({ from_node_id: 'nd_build', to_node_id: 'nd_review', choice_name: 'pass', epoch: 1, recorded_at: '2026-07-13T00:00:01Z', from_node_name: null, to_node_name: null, graph_id: 'gr_1', graph_name: null }),
   ],
   bounces: [{ cause: 'failure', envelope: '{"cause":"failure","detail":"hub node `deliver` routed `failure` to `resolve` \\u2014 delivery incomplete"}', recorded_at: '2026-07-13T00:00:02Z' }],
   restarts: [
@@ -126,9 +139,15 @@ const FORENSICS_DETAIL: ChunkDetail = {
       to_node_name: 'build',
       restarted_by: 'ops@example.test',
       recorded_at: '2026-07-13T00:00:03Z',
+      decision_id: null,
+      from_graph_id: null,
+      from_graph_name: null,
+      graph_name: null,
     },
   ],
-};
+  graph_name: null,
+  current_node_name: null,
+});
 
 describe('ChunkTimelineSelection', () => {
   beforeEach(async () => {
@@ -173,14 +192,16 @@ describe('ChunkTimelineSelection', () => {
   });
 
   it('reads a poll-timeout envelope and an unparseable one as plain text', async () => {
-    const detail: ChunkDetail = {
+    const detail: ChunkDetail = chunkDetail({
       ...FORENSICS_DETAIL,
       bounces: [
         { cause: 'poll-timeout', envelope: '{"cause":"poll-timeout","detail":"no verdict within 600s"}', recorded_at: '2026-07-13T00:00:02Z' },
         { cause: 'unknown', envelope: 'not json {', recorded_at: '2026-07-13T00:00:03Z' },
       ],
       restarts: [],
-    };
+      graph_name: null,
+  current_node_name: null,
+});
     const fixture = TestBed.createComponent(ChunkTimelineSelection);
     fixture.componentRef.setInput('detail', detail);
     await fixture.whenStable();

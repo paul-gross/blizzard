@@ -47,7 +47,7 @@ export type ActivityResponse = {
     /**
      * Activity
      */
-    activity?: Array<ActivityView>;
+    activity: Array<ActivityView>;
 };
 
 export const ActivityRunnerChangeKind = {
@@ -75,19 +75,19 @@ export type ActivityView = {
     /**
      * By
      */
-    by?: string | null;
+    by: string | null;
     /**
      * Cause
      */
-    cause?: string | null;
+    cause: string | null;
     /**
      * Chunk Id
      */
-    chunk_id?: string | null;
+    chunk_id: string | null;
     /**
      * Graph Id
      */
-    graph_id?: string | null;
+    graph_id: string | null;
     /**
      * Key
      */
@@ -95,36 +95,36 @@ export type ActivityView = {
     /**
      * Kind
      */
-    kind?: string | null;
+    kind: string | null;
     /**
      * Node
      */
-    node?: string | null;
+    node: string | null;
     /**
      * Prev Node
      */
-    prev_node?: string | null;
+    prev_node: string | null;
     /**
      * Prev Status
      */
-    prev_status?: string | null;
+    prev_status: string | null;
     /**
      * Reason
      */
-    reason?: string | null;
+    reason: string | null;
     /**
      * Runner Id
      */
-    runner_id?: string | null;
+    runner_id: string | null;
     /**
      * Runner Name
      */
-    runner_name?: string | null;
-    severity?: EventLogSeverity | null;
+    runner_name: string | null;
+    severity: EventLogSeverity | null;
     /**
      * Status
      */
-    status?: string | null;
+    status: string | null;
     /**
      * Type
      */
@@ -208,7 +208,7 @@ export type AdminGraphSyncResponse = {
     /**
      * Tenants
      */
-    tenants?: Array<TenantGraphSync>;
+    tenants: Array<TenantGraphSync>;
 };
 
 /**
@@ -261,7 +261,7 @@ export type AnalyticsChunkSpendView = {
     /**
      * Estimated Cost Usd
      */
-    estimated_cost_usd?: number | null;
+    estimated_cost_usd: number | null;
     /**
      * Input Tokens
      */
@@ -290,7 +290,7 @@ export type AnalyticsCountView = {
     /**
      * Graph Name
      */
-    graph_name?: string | null;
+    graph_name: string | null;
     /**
      * Key
      */
@@ -298,7 +298,7 @@ export type AnalyticsCountView = {
     /**
      * Node Name
      */
-    node_name?: string | null;
+    node_name: string | null;
 };
 
 /**
@@ -534,11 +534,11 @@ export type AnalyticsSpendView = {
     /**
      * Estimated Cost Usd
      */
-    estimated_cost_usd?: number | null;
+    estimated_cost_usd: number | null;
     /**
      * Graph Name
      */
-    graph_name?: string | null;
+    graph_name: string | null;
     /**
      * Input Tokens
      */
@@ -550,7 +550,7 @@ export type AnalyticsSpendView = {
     /**
      * Node Name
      */
-    node_name?: string | null;
+    node_name: string | null;
     /**
      * Output Tokens
      */
@@ -635,8 +635,8 @@ export type ApplyResponse = {
     /**
      * Detail
      */
-    detail?: string | null;
-    next_envelope?: NodeEnvelope | null;
+    detail: string | null;
+    next_envelope: NodeEnvelope | null;
     outcome: ApplyOutcome;
 };
 
@@ -666,19 +666,19 @@ export type ArtifactView = {
     /**
      * Branch Name
      */
-    branch_name?: string | null;
+    branch_name: string | null;
     /**
      * Branch Url
      */
-    branch_url?: string | null;
+    branch_url: string | null;
     /**
      * Commit Hash
      */
-    commit_hash?: string | null;
+    commit_hash: string | null;
     /**
      * Content
      */
-    content?: string | null;
+    content: string | null;
     /**
      * Epoch
      */
@@ -703,11 +703,11 @@ export type ArtifactView = {
     /**
      * Recorded At
      */
-    recorded_at?: string | null;
+    recorded_at: string | null;
     /**
      * Repo
      */
-    repo?: string | null;
+    repo: string | null;
 };
 
 /**
@@ -720,11 +720,11 @@ export type BacklogPageView = {
     /**
      * Entries
      */
-    entries?: Array<BacklogPeekEntry>;
+    entries: Array<BacklogPeekEntry>;
     /**
      * Next Cursor
      */
-    next_cursor?: string | null;
+    next_cursor: string | null;
 };
 
 /**
@@ -733,7 +733,7 @@ export type BacklogPageView = {
  * One ``not_ready`` chunk, in backlog order.
  */
 export type BacklogPeekEntry = {
-    blocked?: BlockedView | null;
+    blocked: BlockedView | null;
     /**
      * Chunk Id
      */
@@ -749,19 +749,19 @@ export type BacklogPeekEntry = {
     /**
      * Project Id
      */
-    project_id?: string | null;
+    project_id: string | null;
     /**
      * Project Name
      */
-    project_name?: string | null;
+    project_name: string | null;
     /**
      * Project Slug
      */
-    project_slug?: string | null;
+    project_slug: string | null;
     /**
      * Work Refs
      */
-    work_refs?: Array<WorkRefModel>;
+    work_refs: Array<WorkRefModel>;
 };
 
 /**
@@ -773,7 +773,7 @@ export type BacklogPeekResponse = {
     /**
      * Entries
      */
-    entries?: Array<BacklogPeekEntry>;
+    entries: Array<BacklogPeekEntry>;
 };
 
 /**
@@ -830,7 +830,7 @@ export type BlockedView = {
      *
      * The count of unmet prerequisites, never below 1.
      */
-    unmet_count?: number;
+    unmet_count: number;
 };
 
 /**
@@ -1090,7 +1090,7 @@ export type ChunkCountsView = {
     /**
      * Done Since
      */
-    done_since?: number | null;
+    done_since: number | null;
     /**
      * Needs Human
      */
@@ -1150,11 +1150,11 @@ export type ChunkDecisionStatusView = {
     /**
      * Resolved Choice
      */
-    resolved_choice?: string | null;
+    resolved_choice: string | null;
     /**
      * Transitioned
      */
-    transitioned?: boolean;
+    transitioned: boolean;
 };
 
 /**
@@ -1244,11 +1244,11 @@ export type ChunkDependencyEdgeView = {
     /**
      * Released At
      */
-    released_at?: string | null;
+    released_at: string | null;
     /**
      * Released By
      */
-    released_by?: string | null;
+    released_by: string | null;
 };
 
 /**
@@ -1278,16 +1278,16 @@ export type ChunkDetail = {
     /**
      * Artifacts
      */
-    artifacts?: Array<ArtifactView>;
+    artifacts: Array<ArtifactView>;
     /**
      * Awaiting External Merge
      */
-    awaiting_external_merge?: boolean;
-    blocked?: BlockedView | null;
+    awaiting_external_merge: boolean;
+    blocked: BlockedView | null;
     /**
      * Bounces
      */
-    bounces?: Array<BounceView>;
+    bounces: Array<BounceView>;
     /**
      * Chunk Id
      */
@@ -1295,12 +1295,12 @@ export type ChunkDetail = {
     /**
      * Closed Prs
      */
-    closed_prs?: Array<PrView>;
+    closed_prs: Array<PrView>;
     /**
      * Completable
      */
-    completable?: boolean;
-    cost?: ChunkUsageTotalView;
+    completable: boolean;
+    cost: ChunkUsageTotalView;
     /**
      * Current Node Id
      */
@@ -1308,38 +1308,38 @@ export type ChunkDetail = {
     /**
      * Current Node Name
      */
-    current_node_name?: string | null;
+    current_node_name: string | null;
     /**
      * Current Node Terminal
      */
-    current_node_terminal?: boolean;
-    decision?: DecisionView | null;
+    current_node_terminal: boolean;
+    decision: DecisionView | null;
     /**
      * Default Effort
      */
-    default_effort?: string | null;
+    default_effort: string | null;
     /**
      * Default Harnesses
      */
-    default_harnesses?: Array<string>;
+    default_harnesses: Array<string>;
     /**
      * Default Model
      */
-    default_model?: Array<string>;
+    default_model: Array<string>;
     /**
      * Deletable
      */
-    deletable?: boolean;
-    delete_refusal?: ChunkDeleteRefusal | null;
-    escalation?: ChunkEscalationView | null;
+    deletable: boolean;
+    delete_refusal: ChunkDeleteRefusal | null;
+    escalation: ChunkEscalationView | null;
     /**
      * Graph Created At
      */
-    graph_created_at?: string | null;
+    graph_created_at: string | null;
     /**
      * Graph Editable
      */
-    graph_editable?: boolean;
+    graph_editable: boolean;
     /**
      * Graph Id
      */
@@ -1347,20 +1347,20 @@ export type ChunkDetail = {
     /**
      * Graph Name
      */
-    graph_name?: string | null;
+    graph_name: string | null;
     /**
      * History
      */
-    history?: Array<TransitionView>;
-    intended_migration?: IntendedMigrationView | null;
+    history: Array<TransitionView>;
+    intended_migration: IntendedMigrationView | null;
     /**
      * Landed
      */
-    landed?: boolean;
+    landed: boolean;
     /**
      * Landed Repos
      */
-    landed_repos?: Array<LandedRepoView>;
+    landed_repos: Array<LandedRepoView>;
     /**
      * Latest Epoch
      */
@@ -1368,57 +1368,57 @@ export type ChunkDetail = {
     /**
      * Migrations
      */
-    migrations?: Array<MigrationView>;
-    neighborhood?: ChunkNeighborhoodView;
+    migrations: Array<MigrationView>;
+    neighborhood: ChunkNeighborhoodView;
     /**
      * Open Prs
      */
-    open_prs?: Array<PrView>;
+    open_prs: Array<PrView>;
     /**
      * Pausable
      */
-    pausable?: boolean;
-    pause?: PauseView | null;
-    pending?: PendingView | null;
+    pausable: boolean;
+    pause: PauseView | null;
+    pending: PendingView | null;
     /**
      * Project Id
      */
-    project_id?: string | null;
+    project_id: string | null;
     /**
      * Project Name
      */
-    project_name?: string | null;
+    project_name: string | null;
     /**
      * Project Slug
      */
-    project_slug?: string | null;
+    project_slug: string | null;
     /**
      * Promotable
      */
-    promotable?: boolean;
+    promotable: boolean;
     /**
      * Questions
      */
-    questions?: Array<QuestionView>;
+    questions: Array<QuestionView>;
     /**
      * Restarts
      */
-    restarts?: Array<RestartView>;
-    route?: RouteView | null;
+    restarts: Array<RestartView>;
+    route: RouteView | null;
     status: ChunkStatus;
-    status_if_paused?: ChunkStatus | null;
+    status_if_paused: ChunkStatus | null;
     /**
      * Terminal
      */
-    terminal?: boolean;
+    terminal: boolean;
     /**
      * Usage
      */
-    usage?: Array<ChunkUsageView>;
+    usage: Array<ChunkUsageView>;
     /**
      * Work Refs
      */
-    work_refs?: Array<WorkRefView>;
+    work_refs: Array<WorkRefView>;
 };
 
 /**
@@ -1432,11 +1432,11 @@ export type ChunkEscalationView = {
     /**
      * Cause
      */
-    cause?: string | null;
+    cause: string | null;
     /**
      * Detail
      */
-    detail?: string | null;
+    detail: string | null;
     /**
      * Epoch
      */
@@ -1448,7 +1448,7 @@ export type ChunkEscalationView = {
     /**
      * Wrapped Takeover Command
      */
-    wrapped_takeover_command?: string;
+    wrapped_takeover_command: string;
 };
 
 /**
@@ -1479,11 +1479,11 @@ export type ChunkGroupResponse = {
     /**
      * Merged Chunk Ids
      */
-    merged_chunk_ids?: Array<string>;
+    merged_chunk_ids: Array<string>;
     /**
      * Work Refs
      */
-    work_refs?: Array<WorkRefModel>;
+    work_refs: Array<WorkRefModel>;
 };
 
 /**
@@ -1517,15 +1517,15 @@ export type ChunkIngestResponse = {
     /**
      * Project Id
      */
-    project_id?: string | null;
+    project_id: string | null;
     /**
      * Project Name
      */
-    project_name?: string | null;
+    project_name: string | null;
     /**
      * Project Slug
      */
-    project_slug?: string | null;
+    project_slug: string | null;
 };
 
 /**
@@ -1545,7 +1545,7 @@ export type ChunkNeighborView = {
      * Satisfied
      */
     satisfied: boolean;
-    status?: ChunkStatus | null;
+    status: ChunkStatus | null;
 };
 
 /**
@@ -1609,32 +1609,32 @@ export type ChunkPatchResponse = {
     /**
      * Default Effort
      */
-    default_effort?: string | null;
+    default_effort: string | null;
     /**
      * Default Harnesses
      */
-    default_harnesses?: Array<string>;
+    default_harnesses: Array<string>;
     /**
      * Default Model
      */
-    default_model?: Array<string>;
+    default_model: Array<string>;
     /**
      * Graph Id
      */
     graph_id: string;
-    intended_migration?: IntendedMigrationView | null;
+    intended_migration: IntendedMigrationView | null;
     /**
      * Project Id
      */
-    project_id?: string | null;
+    project_id: string | null;
     /**
      * Project Name
      */
-    project_name?: string | null;
+    project_name: string | null;
     /**
      * Project Slug
      */
-    project_slug?: string | null;
+    project_slug: string | null;
 };
 
 /**
@@ -1726,33 +1726,33 @@ export type ChunkStatusView = {
      * Chunk Id
      */
     chunk_id: string;
-    cost?: ChunkUsageTotalView;
-    decision?: ChunkDecisionStatusView | null;
+    cost: ChunkUsageTotalView;
+    decision: ChunkDecisionStatusView | null;
     /**
      * Latest Epoch
      */
-    latest_epoch?: number | null;
-    pause?: PauseView | null;
+    latest_epoch: number | null;
+    pause: PauseView | null;
     /**
      * Project Id
      */
-    project_id?: string | null;
+    project_id: string | null;
     /**
      * Project Name
      */
-    project_name?: string | null;
+    project_name: string | null;
     /**
      * Project Slug
      */
-    project_slug?: string | null;
+    project_slug: string | null;
     /**
      * Restart Epochs
      */
-    restart_epochs?: Array<number>;
+    restart_epochs: Array<number>;
     /**
      * Route Runner Id
      */
-    route_runner_id?: string | null;
+    route_runner_id: string | null;
     status: ChunkStatus;
 };
 
@@ -1780,8 +1780,8 @@ export type ChunkSummary = {
     /**
      * Awaiting External Merge
      */
-    awaiting_external_merge?: boolean;
-    blocked?: BlockedView | null;
+    awaiting_external_merge: boolean;
+    blocked: BlockedView | null;
     /**
      * Chunk Id
      */
@@ -1789,12 +1789,12 @@ export type ChunkSummary = {
     /**
      * Closed Prs
      */
-    closed_prs?: Array<PrView>;
+    closed_prs: Array<PrView>;
     /**
      * Completed At
      */
-    completed_at?: string | null;
-    cost?: ChunkUsageTotalView;
+    completed_at: string | null;
+    cost: ChunkUsageTotalView;
     /**
      * Current Node Id
      */
@@ -1802,23 +1802,23 @@ export type ChunkSummary = {
     /**
      * Current Node Name
      */
-    current_node_name?: string | null;
+    current_node_name: string | null;
     /**
      * Default Effort
      */
-    default_effort?: string | null;
+    default_effort: string | null;
     /**
      * Default Harnesses
      */
-    default_harnesses?: Array<string>;
+    default_harnesses: Array<string>;
     /**
      * Default Model
      */
-    default_model?: Array<string>;
+    default_model: Array<string>;
     /**
      * Environment Count
      */
-    environment_count?: number;
+    environment_count: number;
     /**
      * Graph Id
      */
@@ -1826,48 +1826,48 @@ export type ChunkSummary = {
     /**
      * Landed
      */
-    landed?: boolean;
+    landed: boolean;
     /**
      * Landed Repos
      */
-    landed_repos?: Array<LandedRepoView>;
+    landed_repos: Array<LandedRepoView>;
     /**
      * Open Prs
      */
-    open_prs?: Array<PrView>;
+    open_prs: Array<PrView>;
     /**
      * Project Id
      */
-    project_id?: string | null;
+    project_id: string | null;
     /**
      * Project Name
      */
-    project_name?: string | null;
+    project_name: string | null;
     /**
      * Project Slug
      */
-    project_slug?: string | null;
+    project_slug: string | null;
     /**
      * Promotable
      */
-    promotable?: boolean;
+    promotable: boolean;
     /**
      * Runner Id
      */
-    runner_id?: string | null;
+    runner_id: string | null;
     /**
      * Runner Name
      */
-    runner_name?: string | null;
+    runner_name: string | null;
     status: ChunkStatus;
     /**
      * Terminal
      */
-    terminal?: boolean;
+    terminal: boolean;
     /**
      * Work Refs
      */
-    work_refs?: Array<WorkRefView>;
+    work_refs: Array<WorkRefView>;
 };
 
 /**
@@ -1882,7 +1882,7 @@ export type ChunkUsageTotalView = {
     /**
      * Billed Partial
      */
-    billed_partial?: boolean;
+    billed_partial: boolean;
     /**
      * Cache Create Tokens
      */
@@ -1902,7 +1902,7 @@ export type ChunkUsageTotalView = {
     /**
      * Estimated Cost Usd
      */
-    estimated_cost_usd?: number | null;
+    estimated_cost_usd: number | null;
     /**
      * Input Tokens
      */
@@ -1933,7 +1933,7 @@ export type ChunkUsageView = {
     /**
      * Cost Partial
      */
-    cost_partial?: boolean;
+    cost_partial: boolean;
     /**
      * Cost Usd
      */
@@ -1945,15 +1945,15 @@ export type ChunkUsageView = {
     /**
      * Estimated Cost Usd
      */
-    estimated_cost_usd?: number | null;
+    estimated_cost_usd: number | null;
     /**
      * Harness Id
      */
-    harness_id?: string | null;
+    harness_id: string | null;
     /**
      * Harness Version
      */
-    harness_version?: string | null;
+    harness_version: string | null;
     /**
      * Input Tokens
      */
@@ -1986,11 +1986,11 @@ export type ChunksPageView = {
     /**
      * Chunks
      */
-    chunks?: Array<ChunkSummary>;
+    chunks: Array<ChunkSummary>;
     /**
      * Next Cursor
      */
-    next_cursor?: string | null;
+    next_cursor: string | null;
 };
 
 /**
@@ -2075,7 +2075,7 @@ export type ConfigApplyOutcome = {
     /**
      * Diff
      */
-    diff?: Array<FieldChangeView>;
+    diff: Array<FieldChangeView>;
     /**
      * Key
      */
@@ -2100,7 +2100,7 @@ export type ConfigApplyResponse = {
     /**
      * Apply Id
      */
-    apply_id?: string | null;
+    apply_id: string | null;
     /**
      * Dry Run
      */
@@ -2124,11 +2124,11 @@ export type ConfigChangeView = {
     /**
      * Actor Name
      */
-    actor_name?: string | null;
+    actor_name: string | null;
     /**
      * Apply Id
      */
-    apply_id?: string | null;
+    apply_id: string | null;
     /**
      * Diff
      */
@@ -2148,7 +2148,7 @@ export type ConfigChangeView = {
     /**
      * Project Id
      */
-    project_id?: string | null;
+    project_id: string | null;
     /**
      * Record Key
      */
@@ -2160,7 +2160,7 @@ export type ConfigChangeView = {
     /**
      * Record Label
      */
-    record_label?: string | null;
+    record_label: string | null;
     /**
      * Recorded At
      */
@@ -2184,11 +2184,11 @@ export type ConfigChangesPage = {
     /**
      * Next Before
      */
-    next_before?: number | null;
+    next_before: number | null;
     /**
      * Total
      */
-    total?: number;
+    total: number;
 };
 
 /**
@@ -2250,11 +2250,11 @@ export type DecisionChoiceModel = {
     /**
      * Requires Checks
      */
-    requires_checks?: boolean;
+    requires_checks: boolean;
     /**
      * Would Override Red Checks
      */
-    would_override_red_checks?: boolean;
+    would_override_red_checks: boolean;
 };
 
 /**
@@ -2296,15 +2296,15 @@ export type DecisionResolutionConflict = {
     /**
      * Detail
      */
-    detail?: string;
+    detail: string;
     /**
      * Resolved At
      */
-    resolved_at?: string;
+    resolved_at: string;
     /**
      * Resolved Choice
      */
-    resolved_choice?: string;
+    resolved_choice: string;
 };
 
 /**
@@ -2340,7 +2340,7 @@ export type DecisionResolutionResponse = {
     /**
      * Overrode Red Checks
      */
-    overrode_red_checks?: boolean;
+    overrode_red_checks: boolean;
     /**
      * Resolved At
      */
@@ -2418,11 +2418,11 @@ export type DecisionView = {
     /**
      * Check Results
      */
-    check_results?: Array<CheckResult>;
+    check_results: Array<CheckResult>;
     /**
      * Choices
      */
-    choices?: Array<DecisionChoiceModel>;
+    choices: Array<DecisionChoiceModel>;
     /**
      * Chunk Id
      */
@@ -2438,11 +2438,11 @@ export type DecisionView = {
     /**
      * Imposed By Runner Id
      */
-    imposed_by_runner_id?: string | null;
+    imposed_by_runner_id: string | null;
     /**
      * Imposed By Runner Name
      */
-    imposed_by_runner_name?: string | null;
+    imposed_by_runner_name: string | null;
     /**
      * Node Id
      */
@@ -2454,31 +2454,31 @@ export type DecisionView = {
     /**
      * Overrode Red Checks
      */
-    overrode_red_checks?: boolean;
+    overrode_red_checks: boolean;
     /**
      * Project Id
      */
-    project_id?: string | null;
+    project_id: string | null;
     /**
      * Project Name
      */
-    project_name?: string | null;
+    project_name: string | null;
     /**
      * Project Slug
      */
-    project_slug?: string | null;
+    project_slug: string | null;
     /**
      * Resolved At
      */
-    resolved_at?: string | null;
+    resolved_at: string | null;
     /**
      * Resolved By
      */
-    resolved_by?: string | null;
+    resolved_by: string | null;
     /**
      * Resolved Choice
      */
-    resolved_choice?: string | null;
+    resolved_choice: string | null;
     /**
      * Submitted At
      */
@@ -2486,7 +2486,7 @@ export type DecisionView = {
     /**
      * Transitioned
      */
-    transitioned?: boolean;
+    transitioned: boolean;
 };
 
 /**
@@ -2783,15 +2783,15 @@ export type EnvelopeArtifact = {
     /**
      * Branch Name
      */
-    branch_name?: string | null;
+    branch_name: string | null;
     /**
      * Commit Hash
      */
-    commit_hash?: string | null;
+    commit_hash: string | null;
     /**
      * Content
      */
-    content?: string | null;
+    content: string | null;
     /**
      * Epoch
      */
@@ -2808,7 +2808,7 @@ export type EnvelopeArtifact = {
     /**
      * Repo
      */
-    repo?: string | null;
+    repo: string | null;
 };
 
 /**
@@ -2828,7 +2828,7 @@ export type EnvelopeChoice = {
     /**
      * Requires Checks
      */
-    requires_checks?: boolean;
+    requires_checks: boolean;
 };
 
 /**
@@ -2909,11 +2909,11 @@ export type EventView = {
     /**
      * Chunk Id
      */
-    chunk_id?: string | null;
+    chunk_id: string | null;
     /**
      * Detail
      */
-    detail?: {
+    detail: {
         [key: string]: unknown;
     } | null;
     /**
@@ -2927,7 +2927,7 @@ export type EventView = {
     /**
      * Lease Id
      */
-    lease_id?: string | null;
+    lease_id: string | null;
     /**
      * Message
      */
@@ -2935,7 +2935,7 @@ export type EventView = {
     /**
      * Node Name
      */
-    node_name?: string | null;
+    node_name: string | null;
     /**
      * Recorded At
      */
@@ -2943,11 +2943,11 @@ export type EventView = {
     /**
      * Runner Id
      */
-    runner_id?: string | null;
+    runner_id: string | null;
     /**
      * Runner Name
      */
-    runner_name?: string | null;
+    runner_name: string | null;
     severity: EventLogSeverity;
 };
 
@@ -2960,7 +2960,7 @@ export type EventsResponse = {
     /**
      * Events
      */
-    events?: Array<EventView>;
+    events: Array<EventView>;
 };
 
 /**
@@ -3016,11 +3016,11 @@ export type FieldChangeView = {
     /**
      * New
      */
-    new?: unknown;
+    new: unknown;
     /**
      * Old
      */
-    old?: unknown;
+    old: unknown;
 };
 
 /**
@@ -3094,7 +3094,7 @@ export type FindingDetailView = {
      * Class
      */
     class: string;
-    exit?: FindingExit | null;
+    exit: FindingExit | null;
     /**
      * Facts
      */
@@ -3106,15 +3106,15 @@ export type FindingDetailView = {
     /**
      * First Observed At
      */
-    first_observed_at?: string | null;
+    first_observed_at: string | null;
     /**
      * Introduced
      */
-    introduced?: string | null;
+    introduced: string | null;
     /**
      * Introduced At
      */
-    introduced_at?: string | null;
+    introduced_at: string | null;
     /**
      * Last Seen At
      */
@@ -3130,7 +3130,7 @@ export type FindingDetailView = {
     /**
      * Note
      */
-    note?: string | null;
+    note: string | null;
     /**
      * Observed Count
      */
@@ -3138,29 +3138,29 @@ export type FindingDetailView = {
     /**
      * Project Id
      */
-    project_id?: string | null;
+    project_id: string | null;
     /**
      * Project Name
      */
-    project_name?: string | null;
+    project_name: string | null;
     /**
      * Project Slug
      */
-    project_slug?: string | null;
+    project_slug: string | null;
     /**
      * Raised By Chunk Id
      */
-    raised_by_chunk_id?: string | null;
+    raised_by_chunk_id: string | null;
     /**
      * Routine Name
      */
-    routine_name?: string | null;
+    routine_name: string | null;
     /**
      * Scope Slug
      */
     scope_slug: string;
-    severity?: FindingSeverity | null;
-    source?: FindingSource;
+    severity: FindingSeverity | null;
+    source: FindingSource;
     state: FindingState;
     /**
      * Summary
@@ -3236,16 +3236,16 @@ export type FindingFactView = {
     /**
      * Actor
      */
-    actor?: string | null;
+    actor: string | null;
     kind: FindingFactKind;
     /**
      * Note
      */
-    note?: string | null;
+    note: string | null;
     /**
      * Proposal Id
      */
-    proposal_id?: string | null;
+    proposal_id: string | null;
     /**
      * Recorded At
      */
@@ -3253,7 +3253,7 @@ export type FindingFactView = {
     /**
      * Superseded By
      */
-    superseded_by?: string | null;
+    superseded_by: string | null;
 };
 
 /**
@@ -3369,7 +3369,7 @@ export type FindingView = {
      * Class
      */
     class: string;
-    exit?: FindingExit | null;
+    exit: FindingExit | null;
     /**
      * Finding Id
      */
@@ -3377,15 +3377,15 @@ export type FindingView = {
     /**
      * First Observed At
      */
-    first_observed_at?: string | null;
+    first_observed_at: string | null;
     /**
      * Introduced
      */
-    introduced?: string | null;
+    introduced: string | null;
     /**
      * Introduced At
      */
-    introduced_at?: string | null;
+    introduced_at: string | null;
     /**
      * Last Seen At
      */
@@ -3401,7 +3401,7 @@ export type FindingView = {
     /**
      * Note
      */
-    note?: string | null;
+    note: string | null;
     /**
      * Observed Count
      */
@@ -3409,29 +3409,29 @@ export type FindingView = {
     /**
      * Project Id
      */
-    project_id?: string | null;
+    project_id: string | null;
     /**
      * Project Name
      */
-    project_name?: string | null;
+    project_name: string | null;
     /**
      * Project Slug
      */
-    project_slug?: string | null;
+    project_slug: string | null;
     /**
      * Raised By Chunk Id
      */
-    raised_by_chunk_id?: string | null;
+    raised_by_chunk_id: string | null;
     /**
      * Routine Name
      */
-    routine_name?: string | null;
+    routine_name: string | null;
     /**
      * Scope Slug
      */
     scope_slug: string;
-    severity?: FindingSeverity | null;
-    source?: FindingSource;
+    severity: FindingSeverity | null;
+    source: FindingSource;
     state: FindingState;
     /**
      * Summary
@@ -3449,11 +3449,11 @@ export type FindingsPageView = {
     /**
      * Findings
      */
-    findings?: Array<FindingView>;
+    findings: Array<FindingView>;
     /**
      * Next Cursor
      */
-    next_cursor?: string | null;
+    next_cursor: string | null;
 };
 
 /**
@@ -3502,7 +3502,7 @@ export type FleetSpendView = {
     /**
      * Estimated Cost Usd
      */
-    estimated_cost_usd?: number | null;
+    estimated_cost_usd: number | null;
     /**
      * Input Tokens
      */
@@ -3518,7 +3518,7 @@ export type FleetSpendView = {
     /**
      * Until
      */
-    until?: string | null;
+    until: string | null;
 };
 
 /**
@@ -3575,7 +3575,7 @@ export type GardenDeliveryResponse = {
     /**
      * Detail
      */
-    detail?: string;
+    detail: string;
     /**
      * Outcome
      */
@@ -3627,7 +3627,7 @@ export type GardenProposalAcceptResponse = {
      * Class
      */
     class: string;
-    closure?: GardenProposalClosureView | null;
+    closure: GardenProposalClosureView | null;
     /**
      * Created At
      */
@@ -3635,7 +3635,7 @@ export type GardenProposalAcceptResponse = {
     /**
      * Created By
      */
-    created_by?: string | null;
+    created_by: string | null;
     /**
      * Findings
      */
@@ -3644,15 +3644,15 @@ export type GardenProposalAcceptResponse = {
     /**
      * Project Id
      */
-    project_id?: string | null;
+    project_id: string | null;
     /**
      * Project Name
      */
-    project_name?: string | null;
+    project_name: string | null;
     /**
      * Project Slug
      */
-    project_slug?: string | null;
+    project_slug: string | null;
     /**
      * Proposal Id
      */
@@ -3750,15 +3750,15 @@ export type GardenProposalCountsRowView = {
     /**
      * Project Id
      */
-    project_id?: string | null;
+    project_id: string | null;
     /**
      * Project Name
      */
-    project_name?: string | null;
+    project_name: string | null;
     /**
      * Project Slug
      */
-    project_slug?: string | null;
+    project_slug: string | null;
     /**
      * Routine Name
      */
@@ -3773,7 +3773,7 @@ export type GardenProposalCountsRowView = {
  * unfiltered.
  */
 export type GardenProposalCountsView = {
-    origin?: GardenProposalOrigin | null;
+    origin: GardenProposalOrigin | null;
     /**
      * Routine
      */
@@ -3918,7 +3918,7 @@ export type GardenProposalView = {
      * Class
      */
     class: string;
-    closure?: GardenProposalClosureView | null;
+    closure: GardenProposalClosureView | null;
     /**
      * Created At
      */
@@ -3926,7 +3926,7 @@ export type GardenProposalView = {
     /**
      * Created By
      */
-    created_by?: string | null;
+    created_by: string | null;
     /**
      * Findings
      */
@@ -3935,15 +3935,15 @@ export type GardenProposalView = {
     /**
      * Project Id
      */
-    project_id?: string | null;
+    project_id: string | null;
     /**
      * Project Name
      */
-    project_name?: string | null;
+    project_name: string | null;
     /**
      * Project Slug
      */
-    project_slug?: string | null;
+    project_slug: string | null;
     /**
      * Proposal Id
      */
@@ -3968,11 +3968,11 @@ export type GardenProposalsPageView = {
     /**
      * Next Cursor
      */
-    next_cursor?: string | null;
+    next_cursor: string | null;
     /**
      * Proposals
      */
-    proposals?: Array<GardenProposalView>;
+    proposals: Array<GardenProposalView>;
 };
 
 /**
@@ -4077,7 +4077,7 @@ export type GraphChoiceView = {
     /**
      * Requires Checks
      */
-    requires_checks?: boolean;
+    requires_checks: boolean;
 };
 
 /**
@@ -4097,12 +4097,12 @@ export type GraphEdgeView = {
     /**
      * Prompt Addendum
      */
-    prompt_addendum?: string | null;
+    prompt_addendum: string | null;
     /**
      * Target Graph
      */
-    target_graph?: string | null;
-    target_kind?: ChoiceTargetKind;
+    target_graph: string | null;
+    target_kind: ChoiceTargetKind;
     /**
      * To Node Name
      */
@@ -4164,25 +4164,25 @@ export type GraphNodeView = {
     /**
      * Checks
      */
-    checks?: Array<string>;
+    checks: Array<string>;
     /**
      * Checks Cwd
      */
-    checks_cwd?: string | null;
+    checks_cwd: string | null;
     /**
      * Checks Timeout
      */
-    checks_timeout?: number | null;
+    checks_timeout: number | null;
     /**
      * Choices
      */
-    choices?: Array<GraphChoiceView>;
+    choices: Array<GraphChoiceView>;
     executor: Executor;
     judged_by: JudgedBy;
     /**
      * Judgement Prompt
      */
-    judgement_prompt?: string | null;
+    judgement_prompt: string | null;
     /**
      * Name
      */
@@ -4194,24 +4194,24 @@ export type GraphNodeView = {
     /**
      * Produces
      */
-    produces?: Array<ProducesEntry>;
+    produces: Array<ProducesEntry>;
     /**
      * Prompt
      */
-    prompt?: string | null;
+    prompt: string | null;
     /**
      * Retries Exhausted
      */
-    retries_exhausted?: string | null;
+    retries_exhausted: string | null;
     /**
      * Retries Max
      */
-    retries_max?: number | null;
+    retries_max: number | null;
     session: SessionMode;
     /**
      * Session Source
      */
-    session_source?: string | null;
+    session_source: string | null;
 };
 
 /**
@@ -4241,24 +4241,24 @@ export type GraphSessionView = {
     /**
      * Compaction Window
      */
-    compaction_window?: string | null;
+    compaction_window: string | null;
     /**
      * Effort
      */
-    effort?: string | null;
+    effort: string | null;
     /**
      * Harnesses
      */
-    harnesses?: Array<string>;
+    harnesses: Array<string>;
     /**
      * Model
      */
-    model?: Array<string>;
+    model: Array<string>;
     /**
      * Name
      */
     name: string;
-    rotate?: RotatePolicyView | null;
+    rotate: RotatePolicyView | null;
 };
 
 /**
@@ -4287,7 +4287,7 @@ export type GraphSummaryView = {
      * Graph Id
      */
     graph_id: string;
-    lifecycle?: GraphLifecycle;
+    lifecycle: GraphLifecycle;
     /**
      * Name
      */
@@ -4295,7 +4295,7 @@ export type GraphSummaryView = {
     /**
      * Retired
      */
-    retired?: boolean;
+    retired: boolean;
 };
 
 /**
@@ -4310,11 +4310,11 @@ export type GraphSyncEntry = {
     /**
      * Detail
      */
-    detail?: string | null;
+    detail: string | null;
     /**
      * Graph Id
      */
-    graph_id?: string | null;
+    graph_id: string | null;
     /**
      * Name
      */
@@ -4337,7 +4337,7 @@ export type GraphSyncResponse = {
     /**
      * Entries
      */
-    entries?: Array<GraphSyncEntry>;
+    entries: Array<GraphSyncEntry>;
     /**
      * Ok
      */
@@ -4356,11 +4356,11 @@ export type GraphView = {
     /**
      * Artifacts
      */
-    artifacts?: Array<string>;
+    artifacts: Array<string>;
     /**
      * Edges
      */
-    edges?: Array<GraphEdgeView>;
+    edges: Array<GraphEdgeView>;
     /**
      * Enabled
      */
@@ -4372,7 +4372,7 @@ export type GraphView = {
     /**
      * Follow Latest
      */
-    follow_latest?: boolean | null;
+    follow_latest: boolean | null;
     /**
      * Graph Id
      */
@@ -4384,19 +4384,19 @@ export type GraphView = {
     /**
      * Nodes
      */
-    nodes?: Array<GraphNodeView>;
+    nodes: Array<GraphNodeView>;
     /**
      * Retired
      */
-    retired?: boolean;
+    retired: boolean;
     /**
      * Sessions
      */
-    sessions?: Array<GraphSessionView>;
+    sessions: Array<GraphSessionView>;
     /**
      * Warnings
      */
-    warnings?: Array<string>;
+    warnings: Array<string>;
 };
 
 /**
@@ -4462,7 +4462,7 @@ export type HostAddResponse = {
     /**
      * Adopted
      */
-    adopted?: Array<string>;
+    adopted: Array<string>;
     /**
      * Host Id
      */
@@ -4534,11 +4534,11 @@ export type HostFactAck = {
     /**
      * Already Applied
      */
-    already_applied?: Array<number>;
+    already_applied: Array<number>;
     /**
      * Applied
      */
-    applied?: Array<number>;
+    applied: Array<number>;
     /**
      * High Water
      */
@@ -4550,7 +4550,7 @@ export type HostFactAck = {
     /**
      * Rejected
      */
-    rejected?: Array<number>;
+    rejected: Array<number>;
 };
 
 /**
@@ -4596,15 +4596,15 @@ export type HostRecordResponse = {
     /**
      * Last Seen At
      */
-    last_seen_at?: string | null;
+    last_seen_at: string | null;
     /**
      * Registered At
      */
-    registered_at?: string | null;
+    registered_at: string | null;
     /**
      * Runners
      */
-    runners?: Array<HostRunnerView>;
+    runners: Array<HostRunnerView>;
     /**
      * Tenant Id
      */
@@ -4620,7 +4620,7 @@ export type HostRegistryListResponse = {
     /**
      * Hosts
      */
-    hosts?: Array<HostRegistryView>;
+    hosts: Array<HostRegistryView>;
 };
 
 /**
@@ -4636,7 +4636,7 @@ export type HostRegistryView = {
     /**
      * Added By
      */
-    added_by?: string | null;
+    added_by: string | null;
     connection: RunnerConnection;
     /**
      * Enrolled
@@ -4653,7 +4653,7 @@ export type HostRegistryView = {
     /**
      * Last Seen At
      */
-    last_seen_at?: string | null;
+    last_seen_at: string | null;
     /**
      * Online
      */
@@ -4661,43 +4661,43 @@ export type HostRegistryView = {
     /**
      * Redirect Uris
      */
-    redirect_uris?: Array<string>;
+    redirect_uris: Array<string>;
     /**
      * Registered At
      */
-    registered_at?: string | null;
+    registered_at: string | null;
     /**
      * Retired
      */
-    retired?: boolean;
+    retired: boolean;
     /**
      * Retired At
      */
-    retired_at?: string | null;
+    retired_at: string | null;
     /**
      * Retired By
      */
-    retired_by?: string | null;
+    retired_by: string | null;
     /**
      * Runner Ids
      */
-    runner_ids?: Array<string>;
+    runner_ids: Array<string>;
     /**
      * Subscription Usage
      */
-    subscription_usage?: Array<HostSubscriptionUsageView>;
+    subscription_usage: Array<HostSubscriptionUsageView>;
     /**
      * Subscriptions
      */
-    subscriptions?: Array<RunnerSubscriptionDeclaration>;
+    subscriptions: Array<RunnerSubscriptionDeclaration>;
     /**
      * Url
      */
-    url?: string | null;
+    url: string | null;
     /**
      * Workspaces
      */
-    workspaces?: Array<HostWorkspace>;
+    workspaces: Array<HostWorkspace>;
 };
 
 /**
@@ -4760,7 +4760,7 @@ export type HostRetireResponse = {
     /**
      * Released Chunk Ids
      */
-    released_chunk_ids?: Array<string>;
+    released_chunk_ids: Array<string>;
 };
 
 /**
@@ -4819,12 +4819,12 @@ export type HostRunnersRequest = {
  * spending it.
  */
 export type HostSubscriptionUsageView = {
-    condition?: SampleMissReason | null;
-    miss_reason?: SampleMissReason | null;
+    condition: SampleMissReason | null;
+    miss_reason: SampleMissReason | null;
     /**
      * Missed At
      */
-    missed_at?: string | null;
+    missed_at: string | null;
     /**
      * Name
      */
@@ -4832,11 +4832,11 @@ export type HostSubscriptionUsageView = {
     /**
      * Runners
      */
-    runners?: Array<string>;
+    runners: Array<string>;
     /**
      * Sampled At
      */
-    sampled_at?: string | null;
+    sampled_at: string | null;
     /**
      * Slug
      */
@@ -4912,11 +4912,11 @@ export type HubAdvanceResponse = {
     /**
      * Detail
      */
-    detail?: string;
+    detail: string;
     /**
      * Outcome Choice
      */
-    outcome_choice?: string | null;
+    outcome_choice: string | null;
     /**
      * Ran
      */
@@ -4925,7 +4925,7 @@ export type HubAdvanceResponse = {
     /**
      * To Node Name
      */
-    to_node_name?: string | null;
+    to_node_name: string | null;
 };
 
 /**
@@ -4961,7 +4961,7 @@ export type HubEventView = {
     /**
      * Detail
      */
-    detail?: {
+    detail: {
         [key: string]: unknown;
     } | null;
     /**
@@ -5102,12 +5102,12 @@ export type IntendedMigrationView = {
     /**
      * Graph Name
      */
-    graph_name?: string | null;
+    graph_name: string | null;
     mode: MigrationMode;
     /**
      * Node Name
      */
-    node_name?: string | null;
+    node_name: string | null;
 };
 
 /**
@@ -5181,7 +5181,7 @@ export type InvitationView = {
     /**
      * Accepted By
      */
-    accepted_by?: string | null;
+    accepted_by: string | null;
     /**
      * Created At
      */
@@ -5237,7 +5237,7 @@ export type LandedRepoView = {
     /**
      * Url
      */
-    url?: string | null;
+    url: string | null;
 };
 
 /**
@@ -5268,7 +5268,7 @@ export type LeaseTranscriptView = {
     /**
      * Turns
      */
-    turns?: Array<TurnSegmentViewOutput>;
+    turns: Array<TurnSegmentViewOutput>;
 };
 
 /**
@@ -5283,7 +5283,7 @@ export type MeResponse = {
     /**
      * Assignable Roles
      */
-    assignable_roles?: Array<Role>;
+    assignable_roles: Array<Role>;
     /**
      * Display Name
      */
@@ -5291,7 +5291,7 @@ export type MeResponse = {
     /**
      * Hub Admin
      */
-    hub_admin?: boolean;
+    hub_admin: boolean;
     /**
      * Permissions
      */
@@ -5300,7 +5300,7 @@ export type MeResponse = {
     /**
      * Tenants
      */
-    tenants?: Array<MeTenant>;
+    tenants: Array<MeTenant>;
     /**
      * User Id
      */
@@ -5370,7 +5370,7 @@ export type MemberView = {
     /**
      * Assignable Roles
      */
-    assignable_roles?: Array<Role>;
+    assignable_roles: Array<Role>;
     /**
      * Created At
      */
@@ -5390,11 +5390,11 @@ export type MemberView = {
     /**
      * Identities
      */
-    identities?: Array<UserIdentityView>;
+    identities: Array<UserIdentityView>;
     /**
      * Revocable
      */
-    revocable?: boolean;
+    revocable: boolean;
     role: Role;
     /**
      * User Id
@@ -5464,7 +5464,7 @@ export type MigrationView = {
     /**
      * Choice Name
      */
-    choice_name?: string | null;
+    choice_name: string | null;
     /**
      * Epoch
      */
@@ -5476,7 +5476,7 @@ export type MigrationView = {
     /**
      * From Graph Name
      */
-    from_graph_name?: string | null;
+    from_graph_name: string | null;
     /**
      * From Node Id
      */
@@ -5484,24 +5484,24 @@ export type MigrationView = {
     /**
      * From Node Name
      */
-    from_node_name?: string | null;
+    from_node_name: string | null;
     /**
      * Landed Node Id
      */
-    landed_node_id?: string | null;
+    landed_node_id: string | null;
     /**
      * Landed Node Name
      */
-    landed_node_name?: string | null;
+    landed_node_name: string | null;
     /**
      * Model
      */
-    model?: string | null;
+    model: string | null;
     /**
      * Recorded At
      */
     recorded_at: string;
-    source?: MigrationSource | null;
+    source: MigrationSource | null;
     /**
      * To Graph Id
      */
@@ -5509,7 +5509,7 @@ export type MigrationView = {
     /**
      * To Graph Name
      */
-    to_graph_name?: string | null;
+    to_graph_name: string | null;
 };
 
 /**
@@ -5521,19 +5521,19 @@ export type NodeConfig = {
     /**
      * Checks
      */
-    checks?: Array<string>;
+    checks: Array<string>;
     /**
      * Checks Cwd
      */
-    checks_cwd?: string | null;
+    checks_cwd: string | null;
     /**
      * Checks Timeout
      */
-    checks_timeout?: number | null;
+    checks_timeout: number | null;
     /**
      * Choices
      */
-    choices?: Array<EnvelopeChoice>;
+    choices: Array<EnvelopeChoice>;
     executor: Executor;
     judged_by: JudgedBy;
     /**
@@ -5547,37 +5547,37 @@ export type NodeConfig = {
     /**
      * Produces
      */
-    produces?: Array<ProducesEntry>;
+    produces: Array<ProducesEntry>;
     /**
      * Retries Max
      */
-    retries_max?: number | null;
+    retries_max: number | null;
     session: SessionMode;
     /**
      * Session Compaction Window
      */
-    session_compaction_window?: string | null;
+    session_compaction_window: string | null;
     /**
      * Session Effort
      */
-    session_effort?: string | null;
+    session_effort: string | null;
     /**
      * Session Harnesses
      */
-    session_harnesses?: Array<string>;
+    session_harnesses: Array<string>;
     /**
      * Session Model
      */
-    session_model?: Array<string>;
+    session_model: Array<string>;
     /**
      * Session Name
      */
-    session_name?: string | null;
-    session_rotate?: RotatePolicyView | null;
+    session_name: string | null;
+    session_rotate: RotatePolicyView | null;
     /**
      * Session Source
      */
-    session_source?: string | null;
+    session_source: string | null;
 };
 
 /**
@@ -5589,7 +5589,7 @@ export type NodeEnvelope = {
     /**
      * Artifacts
      */
-    artifacts?: Array<EnvelopeArtifact>;
+    artifacts: Array<EnvelopeArtifact>;
     /**
      * Chunk Id
      */
@@ -5601,7 +5601,7 @@ export type NodeEnvelope = {
     /**
      * Graph Artifacts
      */
-    graph_artifacts?: Array<GraphArtifact>;
+    graph_artifacts: Array<GraphArtifact>;
     /**
      * Graph Id
      */
@@ -5609,7 +5609,7 @@ export type NodeEnvelope = {
     /**
      * Graph Name
      */
-    graph_name?: string | null;
+    graph_name: string | null;
     /**
      * Judgement Prompt
      */
@@ -5622,7 +5622,7 @@ export type NodeEnvelope = {
     /**
      * Work Refs
      */
-    work_refs?: Array<{
+    work_refs: Array<{
         [key: string]: string;
     }>;
 };
@@ -5675,7 +5675,7 @@ export type OpenDecisionsResponse = {
     /**
      * Decisions
      */
-    decisions?: Array<DecisionView>;
+    decisions: Array<DecisionView>;
 };
 
 /**
@@ -5772,7 +5772,7 @@ export type PrView = {
  * One node's ``produces:`` expectation, kind-carrying.
  */
 export type ProducesEntry = {
-    kind?: ArtifactKind;
+    kind: ArtifactKind;
     /**
      * Name
      */
@@ -5924,7 +5924,7 @@ export type ProjectRequiredBody = {
     /**
      * Code
      */
-    code?: 'project_required';
+    code: 'project_required';
     /**
      * Message
      */
@@ -5980,7 +5980,7 @@ export type ProjectsListView = {
     /**
      * Projects
      */
-    projects?: Array<ProjectView>;
+    projects: Array<ProjectView>;
 };
 
 /**
@@ -6114,19 +6114,19 @@ export type QuestionView = {
     /**
      * Answer
      */
-    answer?: string | null;
+    answer: string | null;
     /**
      * Answered
      */
-    answered?: boolean;
+    answered: boolean;
     /**
      * Answered At
      */
-    answered_at?: string | null;
+    answered_at: string | null;
     /**
      * Answered By
      */
-    answered_by?: string | null;
+    answered_by: string | null;
     /**
      * Asked At
      */
@@ -6138,11 +6138,11 @@ export type QuestionView = {
     /**
      * Delivered
      */
-    delivered?: boolean;
+    delivered: boolean;
     /**
      * Delivered At
      */
-    delivered_at?: string | null;
+    delivered_at: string | null;
     /**
      * Epoch
      */
@@ -6150,27 +6150,27 @@ export type QuestionView = {
     /**
      * Harness Id
      */
-    harness_id?: string | null;
+    harness_id: string | null;
     /**
      * Node Id
      */
-    node_id?: string | null;
+    node_id: string | null;
     /**
      * Options
      */
-    options?: Array<string>;
+    options: Array<string>;
     /**
      * Project Id
      */
-    project_id?: string | null;
+    project_id: string | null;
     /**
      * Project Name
      */
-    project_name?: string | null;
+    project_name: string | null;
     /**
      * Project Slug
      */
-    project_slug?: string | null;
+    project_slug: string | null;
     /**
      * Question
      */
@@ -6186,11 +6186,11 @@ export type QuestionView = {
     /**
      * Runner Name
      */
-    runner_name?: string | null;
+    runner_name: string | null;
     /**
      * Session Id
      */
-    session_id?: string | null;
+    session_id: string | null;
 };
 
 /**
@@ -6210,11 +6210,11 @@ export type QueuePageView = {
     /**
      * Entries
      */
-    entries?: Array<QueuePeekEntry>;
+    entries: Array<QueuePeekEntry>;
     /**
      * Next Cursor
      */
-    next_cursor?: string | null;
+    next_cursor: string | null;
 };
 
 /**
@@ -6223,7 +6223,7 @@ export type QueuePageView = {
  * One ready chunk, in queue order.
  */
 export type QueuePeekEntry = {
-    blocked?: BlockedView | null;
+    blocked: BlockedView | null;
     /**
      * Chunk Id
      */
@@ -6239,19 +6239,19 @@ export type QueuePeekEntry = {
     /**
      * Project Id
      */
-    project_id?: string | null;
+    project_id: string | null;
     /**
      * Project Name
      */
-    project_name?: string | null;
+    project_name: string | null;
     /**
      * Project Slug
      */
-    project_slug?: string | null;
+    project_slug: string | null;
     /**
      * Work Refs
      */
-    work_refs?: Array<WorkRefModel>;
+    work_refs: Array<WorkRefModel>;
 };
 
 /**
@@ -6286,7 +6286,7 @@ export type QueuePeekResponse = {
     /**
      * Entries
      */
-    entries?: Array<QueuePeekEntry>;
+    entries: Array<QueuePeekEntry>;
 };
 
 /**
@@ -6361,7 +6361,7 @@ export type ReDeriveResponse = {
     /**
      * Not Visible
      */
-    not_visible?: boolean;
+    not_visible: boolean;
     /**
      * Remaining
      */
@@ -6458,7 +6458,7 @@ export type RecordRefView = {
     /**
      * Label
      */
-    label?: string | null;
+    label: string | null;
 };
 
 /**
@@ -6470,7 +6470,7 @@ export type RepositoriesListView = {
     /**
      * Repositories
      */
-    repositories?: Array<RepositorySummary>;
+    repositories: Array<RepositorySummary>;
 };
 
 /**
@@ -6553,7 +6553,7 @@ export type RepositoryLinksView = {
     /**
      * Repository Links
      */
-    repository_links?: Array<RepositoryLinkView>;
+    repository_links: Array<RepositoryLinkView>;
 };
 
 /**
@@ -6616,7 +6616,7 @@ export type RepositorySummary = {
     /**
      * Created By Name
      */
-    created_by_name?: string | null;
+    created_by_name: string | null;
     /**
      * Forge Api Url
      */
@@ -6640,7 +6640,7 @@ export type RepositorySummary = {
     /**
      * Retired
      */
-    retired?: boolean;
+    retired: boolean;
     /**
      * Revision
      */
@@ -6667,7 +6667,7 @@ export type RestartView = {
     /**
      * Decision Id
      */
-    decision_id?: string | null;
+    decision_id: string | null;
     /**
      * Epoch
      */
@@ -6675,19 +6675,19 @@ export type RestartView = {
     /**
      * From Graph Id
      */
-    from_graph_id?: string | null;
+    from_graph_id: string | null;
     /**
      * From Graph Name
      */
-    from_graph_name?: string | null;
+    from_graph_name: string | null;
     /**
      * From Node Id
      */
-    from_node_id?: string | null;
+    from_node_id: string | null;
     /**
      * From Node Name
      */
-    from_node_name?: string | null;
+    from_node_name: string | null;
     /**
      * Graph Id
      */
@@ -6695,7 +6695,7 @@ export type RestartView = {
     /**
      * Graph Name
      */
-    graph_name?: string | null;
+    graph_name: string | null;
     /**
      * Recorded At
      */
@@ -6711,7 +6711,7 @@ export type RestartView = {
     /**
      * To Node Name
      */
-    to_node_name?: string | null;
+    to_node_name: string | null;
 };
 
 /**
@@ -6724,7 +6724,7 @@ export type ReviewFindingsDeliveryResponse = {
     /**
      * Detail
      */
-    detail?: string;
+    detail: string;
     /**
      * Outcome
      */
@@ -6775,15 +6775,15 @@ export type RotatePolicyView = {
     /**
      * Max Context Tokens
      */
-    max_context_tokens?: number | null;
+    max_context_tokens: number | null;
     /**
      * Max Invocations
      */
-    max_invocations?: number | null;
+    max_invocations: number | null;
     /**
      * Max Transcript Bytes
      */
-    max_transcript_bytes?: number | null;
+    max_transcript_bytes: number | null;
 };
 
 /**
@@ -6863,7 +6863,7 @@ export type RouteView = {
     /**
      * Environment Ids
      */
-    environment_ids?: Array<string>;
+    environment_ids: Array<string>;
     /**
      * Runner Id
      */
@@ -6871,7 +6871,7 @@ export type RouteView = {
     /**
      * Runner Name
      */
-    runner_name?: string | null;
+    runner_name: string | null;
     /**
      * Workspace Id
      */
@@ -7090,11 +7090,11 @@ export type RoutineRunResponse = {
     /**
      * Baseline Finding Set Id
      */
-    baseline_finding_set_id?: string | null;
+    baseline_finding_set_id: string | null;
     /**
      * Baseline Revisions
      */
-    baseline_revisions?: {
+    baseline_revisions: {
         [key: string]: string;
     } | null;
     /**
@@ -7149,15 +7149,15 @@ export type RoutineView = {
     /**
      * Default Effort
      */
-    default_effort?: string | null;
+    default_effort: string | null;
     /**
      * Default Harnesses
      */
-    default_harnesses?: Array<string>;
+    default_harnesses: Array<string>;
     /**
      * Default Model
      */
-    default_model?: Array<string>;
+    default_model: Array<string>;
     /**
      * Default Scope Slug
      */
@@ -7173,23 +7173,23 @@ export type RoutineView = {
     /**
      * Project Id
      */
-    project_id?: string | null;
+    project_id: string | null;
     /**
      * Project Name
      */
-    project_name?: string | null;
+    project_name: string | null;
     /**
      * Project Slug
      */
-    project_slug?: string | null;
+    project_slug: string | null;
     /**
      * Retired
      */
-    retired?: boolean;
+    retired: boolean;
     /**
      * Revision
      */
-    revision?: number | null;
+    revision: number | null;
     /**
      * Routine Id
      */
@@ -7210,15 +7210,15 @@ export type RunDeltaView = {
     /**
      * Project Id
      */
-    project_id?: string | null;
+    project_id: string | null;
     /**
      * Project Name
      */
-    project_name?: string | null;
+    project_name: string | null;
     /**
      * Project Slug
      */
-    project_slug?: string | null;
+    project_slug: string | null;
     /**
      * Routine Name
      */
@@ -7289,15 +7289,15 @@ export type RunRowView = {
     /**
      * Project Id
      */
-    project_id?: string | null;
+    project_id: string | null;
     /**
      * Project Name
      */
-    project_name?: string | null;
+    project_name: string | null;
     /**
      * Project Slug
      */
-    project_slug?: string | null;
+    project_slug: string | null;
     /**
      * Routine Name
      */
@@ -7395,7 +7395,7 @@ export type RunnerBindingView = {
     /**
      * Workspace Unreported
      */
-    workspace_unreported?: boolean;
+    workspace_unreported: boolean;
 };
 
 /**
@@ -7557,11 +7557,11 @@ export type RunnerFactAck = {
     /**
      * Already Applied
      */
-    already_applied?: Array<number>;
+    already_applied: Array<number>;
     /**
      * Applied
      */
-    applied?: Array<number>;
+    applied: Array<number>;
     /**
      * High Water
      */
@@ -7569,11 +7569,11 @@ export type RunnerFactAck = {
     /**
      * Rejected
      */
-    rejected?: Array<number>;
+    rejected: Array<number>;
     /**
      * Route Ended
      */
-    route_ended?: Array<number>;
+    route_ended: Array<number>;
     /**
      * Runner Id
      */
@@ -7605,7 +7605,7 @@ export type RunnerIdentityRefusal = {
     /**
      * Runner Id
      */
-    runner_id?: string | null;
+    runner_id: string | null;
 };
 
 /**
@@ -7619,7 +7619,7 @@ export type RunnerIdentityView = {
     /**
      * Fleet Flags
      */
-    fleet_flags?: {
+    fleet_flags: {
         [key: string]: boolean;
     };
     /**
@@ -7633,11 +7633,11 @@ export type RunnerIdentityView = {
     /**
      * Tenant Id
      */
-    tenant_id?: string | null;
+    tenant_id: string | null;
     /**
      * Tenant Name
      */
-    tenant_name?: string | null;
+    tenant_name: string | null;
 };
 
 /**
@@ -7733,7 +7733,7 @@ export type RunnerRegistrationResponse = {
     /**
      * Bindings
      */
-    bindings?: Array<RunnerBindingView> | null;
+    bindings: Array<RunnerBindingView> | null;
     /**
      * First Registration
      */
@@ -7741,11 +7741,11 @@ export type RunnerRegistrationResponse = {
     /**
      * Hub Version
      */
-    hub_version?: string | null;
+    hub_version: string | null;
     /**
      * Projects
      */
-    projects?: Array<ServedProjectView> | null;
+    projects: Array<ServedProjectView> | null;
     /**
      * Runner Id
      */
@@ -7753,24 +7753,24 @@ export type RunnerRegistrationResponse = {
     /**
      * Runner Name
      */
-    runner_name?: string | null;
+    runner_name: string | null;
     /**
      * Subscription
      */
-    subscription?: string | null;
+    subscription: string | null;
     /**
      * Subscription Unrostered
      */
-    subscription_unrostered?: boolean;
+    subscription_unrostered: boolean;
     /**
      * Tenant Id
      */
-    tenant_id?: string | null;
+    tenant_id: string | null;
     /**
      * Tenant Name
      */
-    tenant_name?: string | null;
-    window?: VersionWindowView | null;
+    tenant_name: string | null;
+    window: VersionWindowView | null;
 };
 
 /**
@@ -7783,7 +7783,7 @@ export type RunnerRegistryListResponse = {
     /**
      * Runners
      */
-    runners?: Array<RunnerRegistryView>;
+    runners: Array<RunnerRegistryView>;
 };
 
 /**
@@ -7802,28 +7802,28 @@ export type RunnerRegistryView = {
     /**
      * Added By
      */
-    added_by?: string | null;
+    added_by: string | null;
     /**
      * Bindings
      */
-    bindings?: Array<RunnerBindingView> | null;
+    bindings: Array<RunnerBindingView> | null;
     /**
      * Capabilities
      */
-    capabilities?: Array<RunnerCapability>;
+    capabilities: Array<RunnerCapability>;
     connection: RunnerConnection;
     /**
      * Env Capacity
      */
-    env_capacity?: number | null;
+    env_capacity: number | null;
     /**
      * Gates
      */
-    gates?: Array<string>;
+    gates: Array<string>;
     /**
      * Host Id
      */
-    host_id?: string | null;
+    host_id: string | null;
     /**
      * Hub Paused
      */
@@ -7831,19 +7831,19 @@ export type RunnerRegistryView = {
     /**
      * Last Seen At
      */
-    last_seen_at?: string | null;
+    last_seen_at: string | null;
     /**
      * Locally Paused
      */
-    locally_paused?: boolean;
+    locally_paused: boolean;
     /**
      * Locally Paused By
      */
-    locally_paused_by?: string | null;
+    locally_paused_by: string | null;
     /**
      * Locally Paused Reason
      */
-    locally_paused_reason?: string | null;
+    locally_paused_reason: string | null;
     /**
      * Online
      */
@@ -7851,23 +7851,23 @@ export type RunnerRegistryView = {
     /**
      * Projects
      */
-    projects?: Array<ServedProjectView>;
+    projects: Array<ServedProjectView>;
     /**
      * Registered At
      */
-    registered_at?: string | null;
+    registered_at: string | null;
     /**
      * Retired
      */
-    retired?: boolean;
+    retired: boolean;
     /**
      * Retired At
      */
-    retired_at?: string | null;
+    retired_at: string | null;
     /**
      * Retired By
      */
-    retired_by?: string | null;
+    retired_by: string | null;
     /**
      * Runner Id
      */
@@ -7879,25 +7879,25 @@ export type RunnerRegistryView = {
     /**
      * Subscription
      */
-    subscription?: string | null;
+    subscription: string | null;
     /**
      * Subscription Unrostered
      */
-    subscription_unrostered?: boolean;
+    subscription_unrostered: boolean;
     /**
      * Subscriptions
      */
-    subscriptions?: Array<SubscriptionUsageView>;
+    subscriptions: Array<SubscriptionUsageView>;
     /**
      * Version
      */
-    version?: string | null;
-    version_refusal?: VersionRefusalReason | null;
-    version_standing?: RunnerVersionStanding | null;
+    version: string | null;
+    version_refusal: VersionRefusalReason | null;
+    version_standing: RunnerVersionStanding | null;
     /**
      * Workspace Id
      */
-    workspace_id?: string | null;
+    workspace_id: string | null;
 };
 
 /**
@@ -7925,7 +7925,7 @@ export type RunnerRetireResponse = {
     /**
      * Released Chunk Ids
      */
-    released_chunk_ids?: Array<string>;
+    released_chunk_ids: Array<string>;
     runner: RunnerRegistryView;
 };
 
@@ -8006,7 +8006,7 @@ export type RunnerVersionRefusal = {
     /**
      * Runner Version
      */
-    runner_version?: string | null;
+    runner_version: string | null;
 };
 
 /**
@@ -8035,19 +8035,19 @@ export type RunnerView = {
     /**
      * Bindings
      */
-    bindings?: Array<RunnerBindingView> | null;
+    bindings: Array<RunnerBindingView> | null;
     /**
      * Capabilities
      */
-    capabilities?: Array<RunnerCapability>;
+    capabilities: Array<RunnerCapability>;
     /**
      * Env Capacity
      */
-    env_capacity?: number | null;
+    env_capacity: number | null;
     /**
      * Gates
      */
-    gates?: Array<string>;
+    gates: Array<string>;
     /**
      * Hub Paused
      */
@@ -8059,15 +8059,15 @@ export type RunnerView = {
     /**
      * Locally Paused
      */
-    locally_paused?: boolean;
+    locally_paused: boolean;
     /**
      * Locally Paused By
      */
-    locally_paused_by?: string | null;
+    locally_paused_by: string | null;
     /**
      * Locally Paused Reason
      */
-    locally_paused_reason?: string | null;
+    locally_paused_reason: string | null;
     /**
      * Online
      */
@@ -8075,7 +8075,7 @@ export type RunnerView = {
     /**
      * Projects
      */
-    projects?: Array<ServedProjectView>;
+    projects: Array<ServedProjectView>;
     /**
      * Registered At
      */
@@ -8083,15 +8083,15 @@ export type RunnerView = {
     /**
      * Retired
      */
-    retired?: boolean;
+    retired: boolean;
     /**
      * Retired At
      */
-    retired_at?: string | null;
+    retired_at: string | null;
     /**
      * Retired By
      */
-    retired_by?: string | null;
+    retired_by: string | null;
     /**
      * Runner Id
      */
@@ -8099,19 +8099,19 @@ export type RunnerView = {
     /**
      * Runner Name
      */
-    runner_name?: string | null;
+    runner_name: string | null;
     /**
      * Subscription
      */
-    subscription?: string | null;
+    subscription: string | null;
     /**
      * Subscription Unrostered
      */
-    subscription_unrostered?: boolean;
+    subscription_unrostered: boolean;
     /**
      * Subscriptions
      */
-    subscriptions?: Array<SubscriptionUsageView>;
+    subscriptions: Array<SubscriptionUsageView>;
     /**
      * Workspace Id
      */
@@ -8248,23 +8248,23 @@ export type ScopeView = {
     /**
      * Project Id
      */
-    project_id?: string | null;
+    project_id: string | null;
     /**
      * Project Name
      */
-    project_name?: string | null;
+    project_name: string | null;
     /**
      * Project Slug
      */
-    project_slug?: string | null;
+    project_slug: string | null;
     /**
      * Retired
      */
-    retired?: boolean;
+    retired: boolean;
     /**
      * Revision
      */
-    revision?: number | null;
+    revision: number | null;
     /**
      * Slug
      */
@@ -8312,7 +8312,7 @@ export type SecretView = {
     /**
      * References
      */
-    references?: Array<RecordRefView>;
+    references: Array<RecordRefView>;
     /**
      * Replaced At
      */
@@ -8324,15 +8324,15 @@ export type SecretView = {
     /**
      * Replaced By Name
      */
-    replaced_by_name?: string | null;
+    replaced_by_name: string | null;
     /**
      * Retirable
      */
-    retirable?: boolean;
+    retirable: boolean;
     /**
      * Retired
      */
-    retired?: boolean;
+    retired: boolean;
     /**
      * Revision
      */
@@ -8352,11 +8352,11 @@ export type ServedProjectView = {
     /**
      * Claimable
      */
-    claimable?: boolean;
+    claimable: boolean;
     /**
      * Color
      */
-    color?: string | null;
+    color: string | null;
     /**
      * Entry
      */
@@ -8364,15 +8364,15 @@ export type ServedProjectView = {
     /**
      * Name
      */
-    name?: string | null;
+    name: string | null;
     /**
      * Project Id
      */
-    project_id?: string | null;
+    project_id: string | null;
     /**
      * Slug
      */
-    slug?: string | null;
+    slug: string | null;
 };
 
 /**
@@ -8480,7 +8480,7 @@ export type SourceLinkView = {
     /**
      * Built In
      */
-    built_in?: boolean;
+    built_in: boolean;
     /**
      * Linked
      */
@@ -8496,11 +8496,11 @@ export type SourceLinkView = {
     /**
      * Revision
      */
-    revision?: number | null;
+    revision: number | null;
     /**
      * Slug
      */
-    slug?: string | null;
+    slug: string | null;
 };
 
 /**
@@ -8513,7 +8513,7 @@ export type SourceLinksView = {
     /**
      * Source Links
      */
-    source_links?: Array<SourceLinkView>;
+    source_links: Array<SourceLinkView>;
 };
 
 /**
@@ -8562,12 +8562,12 @@ export type SubmittedArtifact = {
  * carries the reason in that case, and ``windows`` is empty.
  */
 export type SubscriptionUsageView = {
-    condition?: SampleMissReason | null;
-    miss_reason?: SampleMissReason | null;
+    condition: SampleMissReason | null;
+    miss_reason: SampleMissReason | null;
     /**
      * Missed At
      */
-    missed_at?: string | null;
+    missed_at: string | null;
     /**
      * Name
      */
@@ -8575,7 +8575,7 @@ export type SubscriptionUsageView = {
     /**
      * Sampled At
      */
-    sampled_at?: string | null;
+    sampled_at: string | null;
     /**
      * Slug
      */
@@ -8629,7 +8629,7 @@ export type TenantDeletionResponse = {
     /**
      * Rows Removed
      */
-    rows_removed?: number | null;
+    rows_removed: number | null;
     state: TenantDeletionState;
     /**
      * Tenant Id
@@ -8660,7 +8660,7 @@ export type TenantGraphSync = {
     /**
      * Entries
      */
-    entries?: Array<GraphSyncEntry>;
+    entries: Array<GraphSyncEntry>;
     /**
      * Name
      */
@@ -8711,7 +8711,7 @@ export type TenantView = {
     /**
      * Closed At
      */
-    closed_at?: string | null;
+    closed_at: string | null;
     /**
      * Created At
      */
@@ -8791,7 +8791,7 @@ export type TraceReplayFailure = {
     /**
      * Chunks
      */
-    chunks?: number;
+    chunks: number;
     /**
      * Detail
      */
@@ -8840,7 +8840,7 @@ export type TraceReplayResponse = {
     /**
      * Chunks
      */
-    chunks?: number;
+    chunks: number;
     /**
      * Dry Run
      */
@@ -8896,7 +8896,7 @@ export type TraceStatusResponse = {
      * Last Export Span Count
      */
     last_export_span_count: number | null;
-    receiver?: ReceiverStatus | null;
+    receiver: ReceiverStatus | null;
     /**
      * Rejected Setting
      */
@@ -8908,7 +8908,7 @@ export type TraceStatusResponse = {
     /**
      * Replay Max Window Seconds
      */
-    replay_max_window_seconds?: number | null;
+    replay_max_window_seconds: number | null;
     /**
      * State
      */
@@ -8927,15 +8927,15 @@ export type TranscriptSegmentAck = {
     /**
      * Already Applied
      */
-    already_applied?: Array<number>;
+    already_applied: Array<number>;
     /**
      * Applied
      */
-    applied?: Array<number>;
+    applied: Array<number>;
     /**
      * Capped
      */
-    capped?: Array<number>;
+    capped: Array<number>;
     /**
      * High Water
      */
@@ -8943,7 +8943,7 @@ export type TranscriptSegmentAck = {
     /**
      * Refused
      */
-    refused?: Array<number>;
+    refused: Array<number>;
     /**
      * Runner Id
      */
@@ -8987,7 +8987,7 @@ export type TranscriptSegmentContentView = {
     /**
      * Turns
      */
-    turns?: Array<TurnSegmentViewOutput>;
+    turns: Array<TurnSegmentViewOutput>;
 };
 
 /**
@@ -9014,7 +9014,7 @@ export type TranscriptSegmentIndexEntry = {
     /**
      * Harness Id
      */
-    harness_id?: string | null;
+    harness_id: string | null;
     /**
      * Harness Version
      */
@@ -9067,7 +9067,7 @@ export type TranscriptSegmentIndexView = {
     /**
      * Segments
      */
-    segments?: Array<TranscriptSegmentIndexEntry>;
+    segments: Array<TranscriptSegmentIndexEntry>;
 };
 
 /**
@@ -9177,15 +9177,15 @@ export type TransitionView = {
     /**
      * From Node Name
      */
-    from_node_name?: string | null;
+    from_node_name: string | null;
     /**
      * Graph Id
      */
-    graph_id?: string | null;
+    graph_id: string | null;
     /**
      * Graph Name
      */
-    graph_name?: string | null;
+    graph_name: string | null;
     /**
      * Recorded At
      */
@@ -9197,7 +9197,7 @@ export type TransitionView = {
     /**
      * To Node Name
      */
-    to_node_name?: string | null;
+    to_node_name: string | null;
 };
 
 /**
@@ -9385,7 +9385,7 @@ export type UserView = {
     /**
      * Assignable Roles
      */
-    assignable_roles?: Array<Role>;
+    assignable_roles: Array<Role>;
     /**
      * Created At
      */
@@ -9401,7 +9401,7 @@ export type UserView = {
     /**
      * Identities
      */
-    identities?: Array<UserIdentityView>;
+    identities: Array<UserIdentityView>;
     role: Role;
     /**
      * User Id
@@ -9483,7 +9483,7 @@ export type WorkItemAuthorView = {
     /**
      * Chunk Id
      */
-    chunk_id?: string | null;
+    chunk_id: string | null;
     /**
      * Kind
      */
@@ -9491,23 +9491,23 @@ export type WorkItemAuthorView = {
     /**
      * Login
      */
-    login?: string | null;
+    login: string | null;
     /**
      * Node Name
      */
-    node_name?: string | null;
+    node_name: string | null;
     /**
      * Runner Id
      */
-    runner_id?: string | null;
+    runner_id: string | null;
     /**
      * Runner Name
      */
-    runner_name?: string | null;
+    runner_name: string | null;
     /**
      * User Id
      */
-    user_id?: string | null;
+    user_id: string | null;
 };
 
 /**
@@ -9585,7 +9585,7 @@ export type WorkItemCreateResponse = {
     /**
      * Slug
      */
-    slug?: string | null;
+    slug: string | null;
     /**
      * Source
      */
@@ -9611,19 +9611,19 @@ export type WorkItemCreateResponse = {
  * source. A per-pointer failure nulls ``title``/``body`` into ``error``.
  */
 export type WorkItemEntry = {
-    author?: WorkItemAuthorView | null;
+    author: WorkItemAuthorView | null;
     /**
      * Body
      */
-    body?: string | null;
+    body: string | null;
     /**
      * Comments
      */
-    comments?: Array<string>;
+    comments: Array<string>;
     /**
      * Error
      */
-    error?: string | null;
+    error: string | null;
     /**
      * Fetched At
      */
@@ -9631,11 +9631,11 @@ export type WorkItemEntry = {
     /**
      * Hub Source
      */
-    hub_source?: boolean;
+    hub_source: boolean;
     /**
      * Label
      */
-    label?: string | null;
+    label: string | null;
     /**
      * Ref
      */
@@ -9643,20 +9643,20 @@ export type WorkItemEntry = {
     /**
      * Slug
      */
-    slug?: string | null;
+    slug: string | null;
     /**
      * Source
      */
     source: string;
-    stated_priority?: WorkItemPriority | null;
+    stated_priority: WorkItemPriority | null;
     /**
      * Title
      */
-    title?: string | null;
+    title: string | null;
     /**
      * Web Url
      */
-    web_url?: string | null;
+    web_url: string | null;
 };
 
 /**
@@ -9733,7 +9733,7 @@ export type WorkItemView = {
     /**
      * Slug
      */
-    slug?: string | null;
+    slug: string | null;
     /**
      * Source
      */
@@ -9758,7 +9758,7 @@ export type WorkItemsListView = {
     /**
      * Items
      */
-    items?: Array<WorkItemView>;
+    items: Array<WorkItemView>;
 };
 
 /**
@@ -9773,7 +9773,7 @@ export type WorkItemsView = {
     /**
      * Items
      */
-    items?: Array<WorkItemEntry>;
+    items: Array<WorkItemEntry>;
 };
 
 /**
@@ -9805,7 +9805,7 @@ export type WorkRefView = {
     /**
      * Label
      */
-    label?: string | null;
+    label: string | null;
     /**
      * Ref
      */
@@ -9817,7 +9817,7 @@ export type WorkRefView = {
     /**
      * Web Url
      */
-    web_url?: string | null;
+    web_url: string | null;
 };
 
 /**
@@ -9923,23 +9923,23 @@ export type WorkSourceSummary = {
     /**
      * Api Base
      */
-    api_base?: string | null;
+    api_base: string | null;
     /**
      * Built In
      */
-    built_in?: boolean;
+    built_in: boolean;
     /**
      * Created At
      */
-    created_at?: string | null;
+    created_at: string | null;
     /**
      * Created By
      */
-    created_by?: string | null;
+    created_by: string | null;
     /**
      * Created By Name
      */
-    created_by_name?: string | null;
+    created_by_name: string | null;
     /**
      * Edit
      */
@@ -9947,7 +9947,7 @@ export type WorkSourceSummary = {
     /**
      * Locator
      */
-    locator?: string | null;
+    locator: string | null;
     /**
      * Name
      */
@@ -9955,31 +9955,31 @@ export type WorkSourceSummary = {
     /**
      * Provider
      */
-    provider?: string | null;
+    provider: string | null;
     /**
      * Retired
      */
-    retired?: boolean;
+    retired: boolean;
     /**
      * Revision
      */
-    revision?: number | null;
+    revision: number | null;
     /**
      * Secret
      */
-    secret?: string | null;
+    secret: string | null;
     /**
      * Slug
      */
-    slug?: string | null;
+    slug: string | null;
     /**
      * Web Base
      */
-    web_base?: string | null;
+    web_base: string | null;
     /**
      * Work Source Id
      */
-    work_source_id?: string | null;
+    work_source_id: string | null;
 };
 
 /**
@@ -9991,7 +9991,7 @@ export type WorkSourcesListView = {
     /**
      * Sources
      */
-    sources?: Array<WorkSourceSummary>;
+    sources: Array<WorkSourceSummary>;
 };
 
 /**

@@ -3,6 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 
 import type { WorkItemAuthorView, WorkItemEntry } from '../../api/hub';
+import { workItemEntry } from '../../testing/builders/chunk';
 import { ChunkIssueList } from './chunk-issue-list';
 
 describe('ChunkIssueList', () => {
@@ -14,7 +15,7 @@ describe('ChunkIssueList', () => {
   });
 
   function item(overrides: Partial<WorkItemEntry> & Pick<WorkItemEntry, 'source' | 'ref'>): WorkItemEntry {
-    return {
+    return workItemEntry({
       label: `${overrides.source}#${overrides.ref}`,
       web_url: `https://forge.example/${overrides.source}/issues/${overrides.ref}`,
       fetched_at: '2026-08-20T00:00:00Z',
@@ -25,7 +26,7 @@ describe('ChunkIssueList', () => {
       author: null,
       stated_priority: null,
       ...overrides,
-    };
+    });
   }
 
   function hubItem(overrides: Partial<WorkItemEntry> & { ref: string; author: WorkItemAuthorView }): WorkItemEntry {
@@ -43,6 +44,7 @@ describe('ChunkIssueList', () => {
     user_id: 'usr_1',
     login: 'alice',
     runner_id: null,
+    runner_name: null,
     chunk_id: null,
     node_name: null,
   };

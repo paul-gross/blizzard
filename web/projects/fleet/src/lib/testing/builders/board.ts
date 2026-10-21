@@ -15,6 +15,7 @@ export function chunkCountsView(overrides: Partial<ChunkCountsView> = {}): Chunk
     done: 12,
     terminal: 12,
     total: 23,
+    done_since: null,
     ...overrides,
   };
 }
@@ -30,6 +31,7 @@ export function fleetSpendView(overrides: Partial<FleetSpendView> = {}): FleetSp
     cache_create_tokens: 640_000,
     cost_usd: 27.5,
     cost_partial: false,
+    estimated_cost_usd: null,
     ...overrides,
   };
 }

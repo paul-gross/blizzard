@@ -15,7 +15,7 @@ describe('formatDiffValue', () => {
 
 describe('fieldDiffRows', () => {
   it('maps each field change', () => {
-    expect(fieldDiffRows([{ field: 'base_branch', old: 'master', new: 'main' }, { field: 'web_base', new: 'x' }])).toEqual([
+    expect(fieldDiffRows([{ field: 'base_branch', old: 'master', new: 'main' }, { field: 'web_base', old: null, new: 'x' }])).toEqual([
       { field: 'base_branch', old: 'master', new: 'main' },
       { field: 'web_base', old: '—', new: 'x' },
     ]);

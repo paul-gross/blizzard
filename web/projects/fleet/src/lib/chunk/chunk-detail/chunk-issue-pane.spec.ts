@@ -1,6 +1,7 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 
+import { workItemEntry } from 'fleet/testing';
 import { ChunkIssuePane } from './chunk-issue-pane';
 import type { WorkItemsState } from './work-items-state';
 
@@ -28,7 +29,7 @@ describe('ChunkIssuePane', () => {
     const el = await renderWithWorkItems({
       status: 'success',
       items: [
-        {
+        workItemEntry({
           source: 'widget',
           ref: '42',
           label: 'widget#42',
@@ -38,8 +39,8 @@ describe('ChunkIssuePane', () => {
           body: 'the widget flake reproduces under load',
           comments: ['seen it too', 'repro attached'],
           error: null,
-        },
-        {
+        }),
+        workItemEntry({
           source: 'widget',
           ref: '43',
           label: 'widget#43',
@@ -49,7 +50,7 @@ describe('ChunkIssuePane', () => {
           body: 'second',
           comments: [],
           error: null,
-        },
+        }),
       ],
     });
     expect(el.querySelector('[data-testid="issue-pane"]')).not.toBeNull();

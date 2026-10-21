@@ -2,16 +2,44 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 
 import type { ChunkSummary, WorkItemsView } from 'fleet';
+import { workItemEntry, workRefView, chunkUsageTotalView } from 'fleet/testing';
 import { BoardShell } from './board-shell';
 
+const chunkSummary = (overrides: Pick<ChunkSummary, 'chunk_id' | 'graph_id' | 'status'> & Partial<ChunkSummary>): ChunkSummary => ({
+  awaiting_external_merge: false,
+  blocked: null,
+  closed_prs: [],
+  completed_at: null,
+  cost: chunkUsageTotalView({ input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_create_tokens: 0, cost_usd: 0 }),
+  current_node_id: null,
+  current_node_name: null,
+  default_effort: null,
+  default_harnesses: [],
+  default_model: [],
+  environment_count: 0,
+  landed: false,
+  landed_repos: [],
+  open_prs: [],
+  project_id: null,
+  project_name: null,
+  project_slug: null,
+  promotable: false,
+  runner_id: null,
+  runner_name: null,
+  terminal: false,
+  work_refs: [],
+  ...overrides,
+});
+
+
 describe('BoardShell layouts', () => {
-  const RUNNING = (suffix: string): ChunkSummary => ({
+  const RUNNING = (suffix: string): ChunkSummary => (chunkSummary({
     chunk_id: `ch_01running${suffix}`,
     graph_id: 'gr_1',
     status: 'running',
     current_node_id: 'nd_build',
-    work_refs: [{ source: 'hub', ref: suffix, label: `hub#${suffix}` }],
-  });
+    work_refs: [workRefView({ source: 'hub', ref: suffix, label: `hub#${suffix}`, web_url: null })],
+  }));
 
   const render = async (
     layout: 'board' | 'list',
@@ -74,7 +102,7 @@ describe('BoardShell layouts', () => {
 
     TestBed.resetTestingModule();
     const read = (
-      await render('board', new Map([['ch_01runninga', { items: [{ source: 'hub', ref: 'a', title: 'Fix the lease', fetched_at: 't', comments: [] }] }]]))
+      await render('board', new Map([['ch_01runninga', { items: [workItemEntry({ source: 'hub', ref: 'a', title: 'Fix the lease', fetched_at: 't', label: null, body: null, web_url: null })] }]]))
     ).nativeElement as HTMLElement;
     expect(read.querySelector('[data-testid="chunk-title"]')?.textContent?.trim()).toBe('Fix the lease');
   });

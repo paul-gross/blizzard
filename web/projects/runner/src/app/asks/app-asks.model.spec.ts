@@ -18,6 +18,9 @@ function ask(overrides: Partial<runnerApi.AskView> = {}, owner: RunnerOwner = R1
     session_id: 'sess-1',
     asked_at: '2026-07-16T11:18:00.000Z',
     question: 'Which branch?',
+    harness_id: null,
+    options: [],
+    project_id: null,
     ...overrides,
   };
 }

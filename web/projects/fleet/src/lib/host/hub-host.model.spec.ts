@@ -12,6 +12,18 @@ function host(over: Partial<HostRegistryView> = {}): HostRegistryView {
     connection: 'online',
     enrolled: true,
     online: true,
+    added_by: null,
+    last_seen_at: null,
+    redirect_uris: [],
+    registered_at: null,
+    retired: false,
+    retired_at: null,
+    retired_by: null,
+    runner_ids: [],
+    subscription_usage: [],
+    subscriptions: [],
+    url: null,
+    workspaces: [],
     ...over,
   };
 }
@@ -23,6 +35,9 @@ describe('hubSubscriptionPaces', () => {
         slug: 'anthropic',
         name: 'Anthropic',
         sampled_at: '2026-07-16T11:55:00.000Z',
+        condition: null,
+        miss_reason: null,
+        missed_at: null,
         windows: [{ window: '5h', utilization_pct: 40, resets_at: '2026-07-16T14:30:00.000Z', window_seconds: 18_000 }],
       },
     ];
@@ -43,7 +58,7 @@ describe('hubSubscriptionPaces', () => {
 
   it('leaves a never-sampled usage without a label or tier, carrying its miss reason', () => {
     const [pace] = hubSubscriptionPaces(
-      [{ slug: 'openai', name: 'OpenAI', windows: [], miss_reason: 'endpoint_unreachable' }],
+      [{ slug: 'openai', name: 'OpenAI', windows: [], miss_reason: 'endpoint_unreachable', condition: null, missed_at: null, sampled_at: null }],
       NOW,
     );
     expect(pace).toMatchObject({ sampledAt: null, refreshedLabel: null, refreshedTag: null, freshness: null, missReason: 'endpoint_unreachable' });
@@ -56,8 +71,8 @@ describe('hostSubscriptionPaces', () => {
     const paces = hostSubscriptionPaces(
       host({
         subscription_usage: [
-          { slug: 'anthropic', name: 'Anthropic', windows: [], runners: ['rn_a', 'rn_b'] },
-          { slug: 'openai', name: 'OpenAI', windows: [] },
+          { slug: 'anthropic', name: 'Anthropic', windows: [], runners: ['rn_a', 'rn_b'], condition: null, miss_reason: null, missed_at: null, sampled_at: null },
+          { slug: 'openai', name: 'OpenAI', windows: [], runners: [], condition: null, miss_reason: null, missed_at: null, sampled_at: null },
         ],
       }),
       NOW,

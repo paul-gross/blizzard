@@ -28,9 +28,9 @@ export function headerStatCells(
   if (hostPending) return [];
   const scoped = (runners ?? []).filter((runner) => runnerName === null || runner.name === runnerName);
   const scopedIds = new Set(scoped.map((runner) => runner.runner_id));
-  const envs = (environments ?? []).flatMap((workspace) => workspace.items ?? []);
+  const envs = (environments ?? []).flatMap((workspace) => workspace.items);
   const envsUsed = envs.filter(
-    (env) => (env.held ?? env.chunk_id != null) && (runnerName === null || scopedIds.has(env.runner_id ?? null)),
+    (env) => env.held && (runnerName === null || scopedIds.has(env.runner_id ?? null)),
   ).length;
   const serving = scoped.filter((runner) => runner.state === 'serving');
   return [
@@ -38,8 +38,8 @@ export function headerStatCells(
     {
       key: 'agents',
       label: 'Agents',
-      value: serving.reduce((sum, runner) => sum + (runner.agents_in_use ?? 0), 0),
-      capacity: serving.reduce((sum, runner) => sum + (runner.max_agents ?? 0), 0),
+      value: serving.reduce((sum, runner) => sum + runner.agents_in_use, 0),
+      capacity: serving.reduce((sum, runner) => sum + runner.max_agents, 0),
     },
   ];
 }

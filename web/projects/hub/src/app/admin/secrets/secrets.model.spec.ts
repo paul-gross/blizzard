@@ -9,9 +9,12 @@ const USED: SecretView = {
   created_at: '2026-01-01T00:00:00Z',
   replaced_at: '2026-01-05T00:00:00Z',
   replaced_by: 'pgross',
+  replaced_by_name: null,
+  retirable: false,
+  retired: false,
   references: [
-    { kind: 'work_source', key: 'blizzard' },
-    { kind: 'repository', key: 'blizzard' },
+    { kind: 'work_source', key: 'blizzard', label: null },
+    { kind: 'repository', key: 'blizzard', label: null },
   ],
 };
 const UNUSED: SecretView = { ...USED, name: 'gh-spare', references: [] };
@@ -20,7 +23,7 @@ const RETIRED: SecretView = { ...USED, name: 'gh-old', references: [], retired: 
 describe('secretBadges', () => {
   it('badges a secret nothing refers to as unused', () => {
     expect(secretBadges(UNUSED).map((b) => b.label)).toEqual(['unused']);
-    expect(secretBadges({ ...UNUSED, references: undefined }).map((b) => b.label)).toEqual(['unused']);
+    expect(secretBadges({ ...UNUSED, references: [] }).map((b) => b.label)).toEqual(['unused']);
   });
 
   it('badges a retired secret as retired only', () => {
@@ -35,7 +38,7 @@ describe('secretBadges', () => {
 describe('referenceCount', () => {
   it('counts with the right plural', () => {
     expect(referenceCount(USED)).toBe('2 references');
-    expect(referenceCount({ ...USED, references: [{ kind: 'repository', key: 'x' }] })).toBe('1 reference');
+    expect(referenceCount({ ...USED, references: [{ kind: 'repository', key: 'x', label: null }] })).toBe('1 reference');
     expect(referenceCount(UNUSED)).toBe('0 references');
   });
 });
