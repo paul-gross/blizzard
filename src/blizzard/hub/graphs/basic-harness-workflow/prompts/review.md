@@ -57,6 +57,7 @@ as a fix would.
 
 ## Submit the findings
 
-Every finding is specific, actionable, and anchored at a file and line; on a `fail` the asset rides back to iterate. Before declaring done you MUST run `blizzard runner artifact create --name review-findings`
-with the findings on stdin, recording the tip judged per repo (`<repo> <branch> <full-sha>`), this round's scope, what
-was checked, what passed, and every finding with its severity and, on a should-fix, its tag.
+Every finding is specific, actionable, and anchored at a file and line; on a `fail` the asset rides back to iterate.
+Before declaring done you MUST run `blizzard runner artifact create --name review-findings` with the findings on stdin,
+recording the tip judged per repo (`<repo> <branch> <full-sha>`), this round's scope, what was checked, what passed, and
+every finding with its severity and, on a should-fix, its tag.
