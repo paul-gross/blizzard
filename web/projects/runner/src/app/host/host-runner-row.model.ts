@@ -109,7 +109,7 @@ function bindings(
   capacities: runnerApi.CapacitiesView | undefined,
   projects: readonly PanelProject[],
 ): readonly HostRunnerBinding[] {
-  return (runner.bindings ?? []).map((binding) => {
+  return runner.bindings.map((binding) => {
     const used = capacities?.bindings?.find(
       (capacity) => capacity.project === binding.project && capacity.workspace_id === binding.workspace_id,
     )?.used;
@@ -155,7 +155,7 @@ function stateBadges(
   held: number | null,
 ): readonly HostRunnerBadge[] {
   if (runner.state !== 'serving') {
-    return [{ label: 'HALTED', tone: 'needs', title: (runner.halted_reasons ?? []).join('; ') || null }];
+    return [{ label: 'HALTED', tone: 'needs', title: runner.halted_reasons.join('; ') || null }];
   }
   const pause = status?.pause ?? runner.pause;
   const badges: HostRunnerBadge[] = [];
@@ -180,8 +180,8 @@ function tone(runner: runnerApi.HostRunnerView, status: runnerApi.RunnerStatusVi
 /** "Claude Code · 24 agents · 7 busy". */
 function summary(runner: runnerApi.HostRunnerView, health: readonly HostRunnerHarness[]): string | null {
   const parts = health.map((harness) => harness.name);
-  const agents = runner.max_agents ?? 0;
-  if (agents > 0) parts.push(`${agents} ${agents === 1 ? 'agent' : 'agents'}`, `${runner.agents_in_use ?? 0} busy`);
+  const agents = runner.max_agents;
+  if (agents > 0) parts.push(`${agents} ${agents === 1 ? 'agent' : 'agents'}`, `${runner.agents_in_use} busy`);
   return parts.length === 0 ? null : parts.join(' · ');
 }
 

@@ -91,6 +91,19 @@ describe('hostPanelPools', () => {
     expect(pool.slots.map((slot) => slot.title)).toEqual([`e1 · ${compactRef(CHUNK)} · blizzard · r1`, 'e2 · free']);
   });
 
+  it('reads held alone: an environment reported unheld is free whatever chunk_id it carries', () => {
+    const [pool] = hostPanelPools(
+      [{ workspace_id: 'ws', max_environments: 1 }],
+      [{ workspace_id: 'ws', items: [hostEnv({ environment_id: 'e1', chunk_id: CHUNK, held: false })] }],
+      names,
+      same,
+      null,
+    );
+
+    expect(pool.envs[0].held).toBe(false);
+    expect(pool.inUse).toBe(0);
+  });
+
   it('leaves out of a held slot’s title whatever the host does not name', () => {
     const [pool] = hostPanelPools(
       [{ workspace_id: 'ws', max_environments: 1 }],

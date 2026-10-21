@@ -69,6 +69,7 @@ describe('runnerFilterChoices', () => {
     const choice = runnerFilterChoices([
       runner('r-broken', {
         runner_id: null,
+        served: false,
         state: 'halted',
         pause: { local: true, hub: false, effective: true, local_reason: null },
       }),
@@ -82,6 +83,14 @@ describe('runnerFilterChoices', () => {
       brake: null,
       color: null,
     });
+  });
+});
+
+describe('runnerFilterChoices with a runner its hub halted', () => {
+  it('offers it enabled, since its pages still answer, and still titled halted', () => {
+    const choice = runnerFilterChoices([runner('r-refused', { state: 'halted', served: true })])[1];
+
+    expect(choice).toMatchObject({ value: 'r-refused', title: 'r-refused is halted', disabled: false });
   });
 });
 

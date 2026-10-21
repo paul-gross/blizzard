@@ -17,7 +17,7 @@ export interface FilterChoice {
   readonly label: string;
   /** Its hover text. */
   readonly title: string;
-  /** Whether it can be chosen — a halted runner cannot. */
+  /** Whether it can be chosen — a runner whose pages do not answer cannot. */
   readonly disabled: boolean;
   /** A runner's brake as a glyph beside its name — `pause` for its own, `stop` for the hub's — `null` while unbraked;
    * the brake's words, its reason among them, ride in {@link title}. */
@@ -45,13 +45,13 @@ export function runnerFilterChoices(
   return [
     ALL,
     ...runners.map((runner) => {
-      const serving = runner.state === 'serving' && runner.runner_id !== null;
-      const words = serving ? brakeLabel(runner.pause) : null;
+      const routable = runner.served && runner.runner_id !== null;
+      const words = routable ? brakeLabel(runner.pause) : null;
       return {
         value: runner.name,
         label: runner.name,
-        title: serving ? (words === null ? runner.name : `${runner.name} · ${words}`) : `${runner.name} is halted`,
-        disabled: !serving,
+        title: runner.state !== 'serving' ? `${runner.name} is halted` : words === null ? runner.name : `${runner.name} · ${words}`,
+        disabled: !routable,
         brake: words === null ? null : runner.pause?.hub ? ('stop' as const) : ('pause' as const),
         color: null,
       };

@@ -79,10 +79,16 @@ describe('runnerEnvironmentRows', () => {
     ]);
   });
 
-  it('treats an absent chunk_id and held flag as unheld', () => {
+  it('reads an environment the host reports unheld as unheld', () => {
     expect(runnerEnvironmentRows([{ ...UNHELD, environment_id: 'e3' }], NOW, runnerName)).toEqual([
       { environmentId: 'e3', isHeld: false, chunkRef: '', heldFor: '', holder: null },
     ]);
+  });
+
+  it('reads held alone: an environment reported unheld is free whatever chunk_id it carries', () => {
+    const [row] = runnerEnvironmentRows([{ ...UNHELD, environment_id: 'e5', chunk_id: 'ch_1' }], NOW, runnerName);
+
+    expect(row.isHeld).toBe(false);
   });
 
   it('names the runner alone when the holding chunk names no project', () => {

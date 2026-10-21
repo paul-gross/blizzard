@@ -53,6 +53,16 @@ describe('headerStatCells', () => {
     ]);
   });
 
+  it('counts an environment by its held flag alone, not by the chunk it names', () => {
+    const environments: runnerApi.HostWorkspaceEnvironmentsView[] = [
+      { workspace_id: 'ws-a', items: [hostEnv({ environment_id: 'e1', chunk_id: 'ch_1', held: false })] },
+    ];
+    expect(headerStatCells(false, [], environments)).toEqual([
+      { key: 'envs', label: 'Envs', value: 0, capacity: 1 },
+      { key: 'agents', label: 'Agents', value: 0, capacity: 0 },
+    ]);
+  });
+
   it('narrows to one runner by name: the environments it holds over every environment, and its own agents', () => {
     const runners: runnerApi.HostRunnerView[] = [
       hostRunner({ runner_id: 'rn_1', name: 'a', state: 'serving', agents_in_use: 2, max_agents: 4 }),
