@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import fcntl
 import os
+from collections.abc import Callable, Iterable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
@@ -102,12 +104,17 @@ class HostLayout:
 
 
 class HostHeld(RuntimeError):
-    """Another process holds the host directory's lock; ``pid`` is the holder's, when it recorded one."""
+    """The host directory is in use: another process holds its lock, or a daemon answers on one of its sockets. The
+    message names which; ``pid`` is the lock holder's, when it recorded one."""
 
-    def __init__(self, lock_path: Path, pid: int | None) -> None:
+    def __init__(self, cause: str, pid: int | None = None) -> None:
         self.pid = pid
+        super().__init__(cause)
+
+    @classmethod
+    def locked(cls, lock_path: Path, pid: int | None) -> HostHeld:
         holder = f"pid {pid}" if pid is not None else "another process"
-        super().__init__(f"the host directory is held by {holder} ({lock_path})")
+        return cls(f"the host directory is held by {holder} ({lock_path})", pid)
 
 
 @collaborator
@@ -129,7 +136,7 @@ class HostLock:
         except BlockingIOError:
             recorded = os.pread(fd, _PID_BYTES, 0).decode(errors="replace").strip()
             os.close(fd)
-            raise HostHeld(layout.lock_path, int(recorded) if recorded.isdigit() else None) from None
+            raise HostHeld.locked(layout.lock_path, int(recorded) if recorded.isdigit() else None) from None
         os.ftruncate(fd, 0)
         os.pwrite(fd, str(os.getpid()).encode(), 0)
         return cls(layout.lock_path, fd)
@@ -146,3 +153,15 @@ class HostLock:
         self, exc_type: type[BaseException] | None, exc: BaseException | None, tb: TracebackType | None
     ) -> None:
         self.release()
+
+
+@contextmanager
+def hold_host(layout: HostLayout, sockets: Iterable[Path], probe: Callable[[Path], str | None]) -> Iterator[None]:
+    """``layout``'s directory held for a write: its lock taken, and no daemon answering on any of ``sockets``, the
+    ones the caller names — ``probe`` answers what holds a socket, else ``None``. Raises :class:`HostHeld` naming the
+    cause; the lock is released on exit."""
+    with HostLock.acquire(layout):
+        for socket in sockets:
+            if (held := probe(socket)) is not None:
+                raise HostHeld(held)
+        yield

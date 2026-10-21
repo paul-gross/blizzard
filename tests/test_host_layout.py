@@ -23,7 +23,7 @@ from blizzard.runner.host_file import (
     write_runner_id,
     write_scaffold,
 )
-from blizzard.runner.host_layout import Graduation, HostHeld, HostLayout, HostLock
+from blizzard.runner.host_layout import Graduation, HostHeld, HostLayout, HostLock, hold_host
 from tests.config_inputs import STRICT
 
 pytestmark = pytest.mark.unit
@@ -369,3 +369,40 @@ def test_runner_values_replace_the_keys_they_name_in_the_runner_and_its_sub_tabl
     assert runner["projects"] == [{"project": "p", "workspace": "w", "agents": 1}]
     with pytest.raises(ConfigError, match="sets none of"):
         with_runner_values(table, {("opencode", "auth_path"): '"/x"'}, strict=STRICT)
+
+
+def test_a_held_lock_refuses_the_hold_naming_the_pid(tmp_path: Path) -> None:
+    layout = HostLayout(tmp_path)
+    with (
+        HostLock.acquire(layout),
+        pytest.raises(HostHeld, match=f"pid {os.getpid()}"),
+        hold_host(layout, (), lambda _: None),
+    ):
+        pass
+
+
+def test_the_hold_refuses_each_named_socket_that_answers_and_probes_no_other(tmp_path: Path) -> None:
+    layout = HostLayout(tmp_path)
+    probed: list[Path] = []
+
+    def probe(sock: Path) -> str | None:
+        probed.append(sock)
+        return f"a daemon answers at {sock}" if sock == layout.legacy_socket_path else None
+
+    with hold_host(layout, (layout.socket_path,), probe):
+        pass
+    assert probed == [layout.socket_path]
+    with (
+        pytest.raises(HostHeld, match=str(layout.legacy_socket_path)),
+        hold_host(layout, (layout.socket_path, layout.legacy_socket_path), probe),
+    ):
+        pass
+
+
+def test_the_hold_releases_the_lock_after_a_refusal_and_a_normal_exit(tmp_path: Path) -> None:
+    layout = HostLayout(tmp_path)
+    with hold_host(layout, (), lambda _: None):
+        pass
+    with pytest.raises(HostHeld), hold_host(layout, (layout.socket_path,), lambda sock: f"answering at {sock}"):
+        pass
+    HostLock.acquire(layout).release()

@@ -30,7 +30,7 @@ from blizzard.runner.host_config import (
     scaffold_runner,
 )
 from blizzard.runner.host_file import append_runner, remove_runner
-from blizzard.runner.host_layout import RUNNERS_DIRNAME, HostHeld, HostLayout, HostLock
+from blizzard.runner.host_layout import RUNNERS_DIRNAME, HostHeld, HostLayout, hold_host
 from blizzard.runner.hub.client import (
     HostRefusalReason,
     HostRefused,
@@ -290,10 +290,9 @@ def _host_refused(answer: HostRefused, hub: str, act: str) -> str:
 
 def _running(ctx: click.Context, layout: HostLayout) -> str | None:
     """Whether a host is running in ``layout``'s directory — its lock held, or its socket answering — in words."""
+    trace = OperatorTrace.source(ctx)
     try:
-        lock = HostLock.acquire(layout)
+        with hold_host(layout, (layout.socket_path,), lambda sock: daemon_holding(sock, trace)):
+            return None
     except HostHeld as exc:
         return f"a running host holds {layout.root} ({exc})"
-    lock.release()
-    held = daemon_holding(layout.socket_path, OperatorTrace.source(ctx))
-    return f"a running host answers at {layout.socket_path}" if held is not None else None

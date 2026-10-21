@@ -32,12 +32,12 @@ from blizzard.runner.cli.daemon import daemon_holding, runner_option
 from blizzard.runner.cli.directory import load_host
 from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
 from blizzard.runner.cli.store import runtime_of
+from blizzard.runner.cli.store_guard import named_runners, store_write_guard
 from blizzard.runner.composition import (
     HostProcess,
     RunnerProcess,
     build_host_process,
     build_host_read_stores,
-    build_host_stores,
     build_identity_forgetter,
     build_identity_writer,
     build_read_stores,
@@ -58,7 +58,7 @@ from blizzard.runner.host_config import (
     TokenSource,
 )
 from blizzard.runner.host_file import write_runner_id
-from blizzard.runner.host_layout import HOST_CONFIG_FILENAME, HostHeld, HostLock
+from blizzard.runner.host_layout import HOST_CONFIG_FILENAME
 from blizzard.runner.hub.bootstrap import (
     BootstrapStop,
     BootstrapStopped,
@@ -105,7 +105,6 @@ from blizzard.runner.listeners import ListenerError, Uds
 from blizzard.runner.loop.periodic_pass_driver import PeriodicPassDriver
 from blizzard.runner.loop_wiring import LoopWiring, PeriodicDriver
 from blizzard.runner.runtime import (
-    IStoreLocation,
     StoreResetRefused,
     ensure_current_revision,
     migration_runner,
@@ -519,27 +518,6 @@ def _init_command(
     )
 
 
-def named_runners(config: IStoreLocation) -> tuple[str, ...]:
-    """The ids of the runners the store's identity rows name, oldest first — read through the cross-runner audit,
-    the one read exempt from a runner's scope."""
-    engine = create_engine_from_url(config.db_url)
-    try:
-        return build_host_stores(
-            engine, errors=RunnerStoreErrorFactory(get_logger("blizzard.runner.store")), clock=SystemClock()
-        ).runner_audit.named_runners()
-    finally:
-        engine.dispose()
-
-
-def configured_ids(config: RunnerConfig) -> tuple[str, ...]:
-    """The ids every ``[[runner]]`` of ``config``'s host file configures — the runners a store it opens may name."""
-    try:
-        host = HostConfig.load(config.root, flag_registry=config.flag_registry, strict=config.strict)
-    except ConfigError:
-        return ()
-    return tuple(entry.id for entry in host.runners if entry.id is not None)
-
-
 class _RuntimeStore:
     """The host's own store, as ``init`` sees it while the host is down. It is set aside at most once per init:
     the host added again and each runner added again share the one fresh store."""
@@ -901,25 +879,21 @@ def host(
     projections = config.projections()
     runners = [built for built in projections if isinstance(built, BuiltRunner)]
     halted = [runner for runner in projections if isinstance(runner, HaltedRunner)]
-    layout = config.layout
-    try:
-        lock = HostLock.acquire(layout)
-    except HostHeld as exc:
-        raise click.ClickException(f"{exc}, so this host cannot start — stop it first") from exc
-    with lock:
-        holding = daemon_holding(layout.legacy_socket_path, OperatorTrace.source(ctx))
-        if holding is not None:
-            raise click.ClickException(f"{holding}, so this host cannot start — stop it first")
-        with click_exception_on(RevisionMismatchError, MigrationConnectionError, StoreBelowFloorError):
-            ensure_current_revision(config)
-        named = named_runners(config)
-        ours = tuple(entry.id for entry in config.runners if entry.id is not None)
-        kept: list[BuiltRunner] = []
-        for built in runners:
-            if (reason := foreign_store_reason(named, built.id, reset_command(config.root), configured=ours)) is None:
-                kept.append(built)
-            else:
-                halted.append(HaltedRunner(name=built.config.name, id=built.id, errors=(reason,)))
+    ours = tuple(entry.id for entry in config.runners if entry.id is not None)
+    with store_write_guard(
+        config,
+        action="start the host",
+        trace=OperatorTrace.source(ctx),
+        runners={built.id: built.config.name for built in runners},
+        configured=ours,
+        refuse_foreign=False,
+    ) as foreign:
+        kept = [built for built in runners if built.id not in foreign]
+        halted += [
+            HaltedRunner(name=built.config.name, id=built.id, errors=(foreign[built.id],))
+            for built in runners
+            if built.id in foreign
+        ]
         _start(config, kept, halted)
 
 
@@ -1182,25 +1156,14 @@ def tick_cmd(ctx: click.Context, directory: str, runner: str | None) -> None:
     if not picked:
         raise click.ClickException(f"runner {entry.name} is not built, so a tick cannot drive it")
     (runner_built,) = picked
-    try:
-        lock = HostLock.acquire(config.layout)
-    except HostHeld as exc:
-        raise click.ClickException(f"{exc}, so this tick cannot run — stop it first") from exc
-    with lock:
-        holding = daemon_holding(config.layout.legacy_socket_path, OperatorTrace.source(ctx))
-        if holding is not None:
-            raise click.ClickException(f"{holding}, so this tick cannot run — stop it first")
-        with click_exception_on(RevisionMismatchError, MigrationConnectionError, StoreBelowFloorError):
-            ensure_current_revision(config)
-        if (
-            reason := foreign_store_reason(
-                named_runners(config),
-                runner_built.id,
-                reset_command(config.root),
-                configured=tuple(entry.id for entry in config.runners if entry.id is not None),
-            )
-        ) is not None:
-            raise click.ClickException(f"runner {runner_built.config.name} ({runner_built.id}): {reason}")
+    with store_write_guard(
+        config,
+        action="run a tick",
+        trace=OperatorTrace.source(ctx),
+        runners={runner_built.id: runner_built.config.name},
+        configured=tuple(entry.id for entry in config.runners if entry.id is not None),
+        refuse_foreign=True,
+    ):
         bundle = _publish_harness_bundle(runner_built.config)
         graph = build_runner_process(
             runner_built.config,
