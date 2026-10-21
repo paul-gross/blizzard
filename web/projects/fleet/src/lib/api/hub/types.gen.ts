@@ -1403,11 +1403,11 @@ export type ChunkDetail = {
     /**
      * Requeues
      */
-    requeues?: Array<RequeueView>;
+    requeues: Array<RequeueView>;
     /**
      * Resolutions
      */
-    resolutions?: Array<ResolutionView>;
+    resolutions: Array<ResolutionView>;
     /**
      * Restarts
      */
@@ -2370,7 +2370,7 @@ export type DecisionResolutionResponse = {
     /**
      * Note
      */
-    note?: string | null;
+    note: string | null;
     /**
      * Overrode Red Checks
      */
@@ -2488,7 +2488,7 @@ export type DecisionView = {
     /**
      * Note
      */
-    note?: string | null;
+    note: string | null;
     /**
      * Overrode Red Checks
      */
@@ -6801,7 +6801,7 @@ export type RestartView = {
     /**
      * Note
      */
-    note?: string | null;
+    note: string | null;
     /**
      * Recorded At
      */

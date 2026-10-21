@@ -678,11 +678,11 @@ export type ChunkDetail = {
     /**
      * Requeues
      */
-    requeues?: Array<RequeueView>;
+    requeues: Array<RequeueView>;
     /**
      * Resolutions
      */
-    resolutions?: Array<ResolutionView>;
+    resolutions: Array<ResolutionView>;
     /**
      * Restarts
      */
@@ -782,11 +782,11 @@ export type ChunkNoteView = {
     /**
      * By
      */
-    by?: string | null;
+    by: string | null;
     /**
      * Choice
      */
-    choice?: string | null;
+    choice: string | null;
     /**
      * Kind
      */
@@ -794,7 +794,7 @@ export type ChunkNoteView = {
     /**
      * Node
      */
-    node?: string | null;
+    node: string | null;
     /**
      * Note
      */
@@ -1129,7 +1129,7 @@ export type DecisionView = {
     /**
      * Note
      */
-    note?: string | null;
+    note: string | null;
     /**
      * Overrode Red Checks
      */
@@ -1933,7 +1933,7 @@ export type HistoryRowView = {
     /**
      * By
      */
-    by?: string | null;
+    by: string | null;
     /**
      * Cause
      */
@@ -1965,7 +1965,7 @@ export type HistoryRowView = {
     /**
      * Note
      */
-    note?: string | null;
+    note: string | null;
     /**
      * Recorded At
      */
@@ -3128,7 +3128,7 @@ export type RestartView = {
     /**
      * Note
      */
-    note?: string | null;
+    note: string | null;
     /**
      * Recorded At
      */

@@ -1163,6 +1163,8 @@
           "history",
           "migrations",
           "restarts",
+          "resolutions",
+          "requeues",
           "artifacts",
           "questions",
           "awaiting_external_merge",
@@ -1343,6 +1345,9 @@
         "required": [
           "kind",
           "note",
+          "by",
+          "node",
+          "choice",
           "recorded_at"
         ],
         "title": "ChunkNoteView",
@@ -2000,7 +2005,8 @@
           "project_slug",
           "project_name",
           "check_results",
-          "overrode_red_checks"
+          "overrode_red_checks",
+          "note"
         ],
         "title": "DecisionView",
         "type": "object"
@@ -3290,6 +3296,8 @@
           "graph_name",
           "cause",
           "detail",
+          "by",
+          "note",
           "recorded_at"
         ],
         "title": "HistoryRowView",
@@ -5167,7 +5175,8 @@
           "epoch",
           "restarted_by",
           "decision_id",
-          "recorded_at"
+          "recorded_at",
+          "note"
         ],
         "title": "RestartView",
         "type": "object"

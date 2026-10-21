@@ -2341,6 +2341,8 @@
           "history",
           "migrations",
           "restarts",
+          "resolutions",
+          "requeues",
           "artifacts",
           "questions",
           "awaiting_external_merge",
@@ -3977,7 +3979,8 @@
           "choice",
           "resolved_by",
           "resolved_at",
-          "overrode_red_checks"
+          "overrode_red_checks",
+          "note"
         ],
         "title": "DecisionResolutionResponse",
         "type": "object"
@@ -4253,7 +4256,8 @@
           "project_slug",
           "project_name",
           "check_results",
-          "overrode_red_checks"
+          "overrode_red_checks",
+          "note"
         ],
         "title": "DecisionView",
         "type": "object"
@@ -11090,7 +11094,8 @@
           "epoch",
           "restarted_by",
           "decision_id",
-          "recorded_at"
+          "recorded_at",
+          "note"
         ],
         "title": "RestartView",
         "type": "object"
