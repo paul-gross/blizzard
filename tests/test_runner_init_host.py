@@ -223,7 +223,7 @@ def test_init_over_a_store_naming_its_runner_and_a_foreign_one_refuses_advising_
 ) -> None:
     root = tmp_path / "host"
     assert _init(fake_init_hub, root).exit_code == 0
-    with closing(sqlite3.connect(sqlite_store_file(HostConfig.load(root).db_url))) as conn, conn:
+    with closing(sqlite3.connect(sqlite_store_file(load_host_config(root).db_url))) as conn, conn:
         conn.execute(
             "INSERT INTO runner_identity (runner_id, runner_name, registered_at) "
             "SELECT 'rn_ghost', runner_name, registered_at FROM runner_identity"

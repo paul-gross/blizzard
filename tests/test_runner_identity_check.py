@@ -483,7 +483,7 @@ def test_a_hub_proxy_wired_with_an_identity_check_but_no_token_reader_forwards_n
         forwarded.append(str(request.url))
         return httpx.Response(200, json={})
 
-    app = create_app(
+    app = create_runner_app(
         config,
         hub_proxy_client=httpx.Client(transport=httpx.MockTransport(handler)),
         hub_retry_clock=no_retry_clock(),
