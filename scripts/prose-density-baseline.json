@@ -6746,7 +6746,7 @@
    "comments": 0,
    "docstrings": 8,
    "over_cap": 0,
-   "total": 79
+   "total": 81
   },
   "blizzard/runner/cli/traces.py": {
    "comments": 2,
@@ -7428,9 +7428,9 @@
   },
   "blizzard/runner/host_layout.py": {
    "comments": 4,
-   "docstrings": 16,
+   "docstrings": 17,
    "over_cap": 0,
-   "total": 167
+   "total": 177
   },
   "blizzard/runner/hub/__init__.py": {
    "comments": 0,
@@ -7556,7 +7556,7 @@
    "comments": 8,
    "docstrings": 54,
    "over_cap": 1,
-   "total": 700
+   "total": 701
   },
   "blizzard/runner/leases/__init__.py": {
    "comments": 0,
@@ -8036,7 +8036,7 @@
    "comments": 10,
    "docstrings": 63,
    "over_cap": 3,
-   "total": 487
+   "total": 488
   },
   "blizzard/runner/selftest/__init__.py": {
    "comments": 0,
@@ -11476,7 +11476,7 @@
    "comments": 12,
    "docstrings": 6,
    "over_cap": 3,
-   "total": 105
+   "total": 107
   },
   "test_close_intent_rules.py": {
    "comments": 0,
@@ -12688,7 +12688,7 @@
    "comments": 1,
    "docstrings": 1,
    "over_cap": 0,
-   "total": 408
+   "total": 423
   },
   "test_host_rename_race.py": {
    "comments": 1,
@@ -13276,7 +13276,7 @@
    "comments": 47,
    "docstrings": 293,
    "over_cap": 16,
-   "total": 4254
+   "total": 4255
   },
   "test_lease_auth.py": {
    "comments": 0,

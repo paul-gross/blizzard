@@ -19,7 +19,7 @@ from blizzard.runner.composition import build_host_stores
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.config_table import ConfigError
 from blizzard.runner.host_config import HostConfig
-from blizzard.runner.host_layout import HostHeld, HostLayout, hold_host
+from blizzard.runner.host_layout import HostLayout, hold_host
 from blizzard.runner.lifecycle.identity_check import foreign_store_reason
 from blizzard.runner.runtime import IStoreLocation, ensure_current_revision, reset_command
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
@@ -60,20 +60,22 @@ def store_write_guard(
     against the store's identity rows; every refusal is a :class:`click.ClickException` naming ``action``. A foreign
     runner refuses when ``refuse_foreign``, else is yielded (id to reason) for the caller to halt."""
     layout = HostLayout(config.root)
-    try:
-        with hold_host(layout, (layout.legacy_socket_path,), lambda sock: daemon_holding(sock, trace)):
-            with click_exception_on(RevisionMismatchError, MigrationConnectionError, StoreBelowFloorError):
-                ensure_current_revision(config)
-            named = named_runners(config)
-            foreign = {
-                runner_id: reason
-                for runner_id in runners
-                if (reason := foreign_store_reason(named, runner_id, reset_command(config.root), configured=configured))
-                is not None
-            }
-            if foreign and refuse_foreign:
-                runner_id, reason = next(iter(foreign.items()))
-                raise click.ClickException(f"runner {runners[runner_id]} ({runner_id}): {reason}")
-            yield foreign
-    except HostHeld as exc:
-        raise click.ClickException(f"{exc}, so this cannot {action} — stop it first") from exc
+    with hold_host(
+        layout,
+        (layout.legacy_socket_path,),
+        lambda sock: daemon_holding(sock, trace),
+        lambda held: click.ClickException(f"{held}, so this cannot {action} — stop it first"),
+    ):
+        with click_exception_on(RevisionMismatchError, MigrationConnectionError, StoreBelowFloorError):
+            ensure_current_revision(config)
+        named = named_runners(config)
+        foreign = {
+            runner_id: reason
+            for runner_id in runners
+            if (reason := foreign_store_reason(named, runner_id, reset_command(config.root), configured=configured))
+            is not None
+        }
+        if foreign and refuse_foreign:
+            runner_id, reason = next(iter(foreign.items()))
+            raise click.ClickException(f"runner {runners[runner_id]} ({runner_id}): {reason}")
+        yield foreign

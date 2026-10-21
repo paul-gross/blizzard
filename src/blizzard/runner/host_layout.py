@@ -156,12 +156,22 @@ class HostLock:
 
 
 @contextmanager
-def hold_host(layout: HostLayout, sockets: Iterable[Path], probe: Callable[[Path], str | None]) -> Iterator[None]:
+def hold_host(
+    layout: HostLayout,
+    sockets: Iterable[Path],
+    probe: Callable[[Path], str | None],
+    refusal: Callable[[HostHeld], Exception] = lambda held: held,
+) -> Iterator[None]:
     """``layout``'s directory held for a write: its lock taken, and no daemon answering on any of ``sockets``, the
-    ones the caller names — ``probe`` answers what holds a socket, else ``None``. Raises :class:`HostHeld` naming the
-    cause; the lock is released on exit."""
-    with HostLock.acquire(layout):
+    ones the caller names — ``probe`` answers what holds a socket, else ``None``. A refusal names its cause as a
+    :class:`HostHeld` and raises what ``refusal`` makes of it; only the hold's own refusals are mapped, never an
+    error the body raises. The lock is released on exit."""
+    try:
+        lock = HostLock.acquire(layout)
+    except HostHeld as exc:
+        raise refusal(exc) from exc
+    with lock:
         for socket in sockets:
             if (held := probe(socket)) is not None:
-                raise HostHeld(held)
+                raise refusal(HostHeld(held))
         yield

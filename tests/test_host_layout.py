@@ -406,3 +406,18 @@ def test_the_hold_releases_the_lock_after_a_refusal_and_a_normal_exit(tmp_path: 
     with pytest.raises(HostHeld), hold_host(layout, (layout.socket_path,), lambda sock: f"answering at {sock}"):
         pass
     HostLock.acquire(layout).release()
+
+
+def test_the_hold_maps_only_its_own_refusals_not_an_error_its_body_raises(tmp_path: Path) -> None:
+    layout = HostLayout(tmp_path)
+    with (
+        pytest.raises(HostHeld, match="from the body"),
+        hold_host(layout, (), lambda _: None, lambda held: ValueError(str(held))),
+    ):
+        raise HostHeld("from the body")
+    with (
+        HostLock.acquire(layout),
+        pytest.raises(ValueError, match="pid"),
+        hold_host(layout, (), lambda _: None, lambda held: ValueError(str(held))),
+    ):
+        pass
