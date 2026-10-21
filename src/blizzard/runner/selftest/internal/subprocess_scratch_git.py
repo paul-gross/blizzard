@@ -1,9 +1,8 @@
 """Git adapter for the selftest scratch-repo seam (package-private).
 
-All git and filesystem usage for the selftest's scratch repo is confined here
-(``bzh:pluggable-seams``), each ``git`` launched through the seam under the tool profile: a real
-``tempfile`` directory, ``git init``-ed and seeded with one baseline commit, torn down on
-context-manager exit.
+All git and filesystem usage for the selftest's scratch repo is confined here (``bzh:pluggable-seams``), each ``git``
+launched through the seam under the tool profile: a real ``tempfile`` directory, ``git init``-ed and seeded with one
+baseline commit, torn down on context-manager exit.
 """
 
 from __future__ import annotations

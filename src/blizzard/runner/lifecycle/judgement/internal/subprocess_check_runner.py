@@ -2,9 +2,8 @@
 :class:`~blizzard.runner.lifecycle.judgement.check_runner.ICheckRunner` binding, running a node's authored ``checks:``
 command in a leased worktree under a timeout and capturing a bounded output tail.
 
-The child environment is the allowlist's tool profile (``bzh:worker-env-allowlist``): a check runs arbitrary repo
-tooling, so a daemon credential must be absent by construction, not filtered. The check leads its own group through the
-launch seam, so a timeout kills every descendant it forked, not just the shell."""
+The child env is the allowlist's tool profile (``bzh:worker-env-allowlist``), so a daemon credential is absent by
+construction; the check leads its own group (``bzh:runner-child-launch``), so a timeout kills every descendant."""
 
 from __future__ import annotations
 
@@ -18,8 +17,7 @@ from blizzard.runner.process.child_processes import IChildProcesses, ShellComman
 
 _log = get_logger("blizzard.runner.checks")
 
-# The captured tail's ceiling — the last N characters of the check's combined stdout+stderr.
-# The tail is evidence, not the full log.
+# The captured tail's ceiling — the last N characters of the check's combined output; evidence, not the full log.
 _TAIL_MAX_CHARS = 4000
 
 

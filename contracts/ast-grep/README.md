@@ -40,6 +40,17 @@ load-bearing: without it a stale `# ast-grep-ignore` comment goes unreported ins
     `src/blizzard/hub/config.py` and `src/blizzard/hub/domain/runners/version_window.py`.
   - Matches `import tomllib`, `import tomllib as …` and `from tomllib import …`.
 
+- **`bzh:runner-child-launch`** (`rules/runner-child-launch.yml`) — every child the runner launches goes through the
+  launch seam in `runner/process`. The rule's own prose home is
+  `blizzard-context:/architecture/system-shape/worker-boundary.md`; this file states none of that prose, only what the
+  rule mechanically checks.
+  - Scoped to `src/blizzard/runner/**`, `src/blizzard/foundation/**` and `src/blizzard/hub/**`, except
+    `src/blizzard/runner/process/**` (the seam and its driver), `src/blizzard/hub/delivery/internal/hub_command_runner.py`
+    (the hub's one launch site) and the colocated `store/migrations/tests/**` trees, which are test code.
+  - Matches `import subprocess`, `import pty` (bare or aliased), and `from subprocess import …` / `from pty import …`.
+    `asyncio.create_subprocess_*`, `os.spawn*`, `os.system` and `os.fork` are not matched — a floor, not a proof.
+  - No exemption stands.
+
 - **`bzh:property-delegates`** (`rules/property-delegates.yml`) — a property body only delegates. The rule's own prose
   home is `blizzard-context:/standards/python.md#a-property-body-only-delegates-bzhproperty-delegates`; this file states
   none of that prose, only what the rule mechanically checks.

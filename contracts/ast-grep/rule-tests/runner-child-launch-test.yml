@@ -1,0 +1,19 @@
+id: bzh:runner-child-launch
+valid:
+  # Launching through the seam.
+  - |
+    from blizzard.runner.process.child_processes import IChildProcesses, ShellCommand
+  # A module merely named like the library.
+  - |
+    from blizzard.runner.lifecycle.judgement.internal import subprocess_check_runner
+invalid:
+  - |
+    import subprocess
+  - |
+    import subprocess as sp
+  - |
+    from subprocess import DEVNULL
+  - |
+    import pty
+  - |
+    from pty import fork

@@ -1,0 +1,25 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ast-grep/ast-grep/main/schemas/rule.json
+
+id: bzh:runner-child-launch
+language: Python
+severity: error
+message: >-
+  Every child the runner launches goes through the launch seam in runner/process (IChildProcesses), which gives it its
+  own process group, kills the group on timeout, closes stdin, and builds its env from the allowlist owner. Inject the
+  seam instead of importing subprocess or pty.
+files:
+  - src/blizzard/runner/**
+  - src/blizzard/foundation/**
+  - src/blizzard/hub/**
+ignores:
+  - src/blizzard/runner/process/**
+  - src/blizzard/hub/delivery/internal/hub_command_runner.py
+  - src/blizzard/**/store/migrations/tests/**
+rule:
+  any:
+    - pattern: import subprocess
+    - pattern: import subprocess as $ALIAS
+    - pattern: from subprocess import $$$NAMES
+    - pattern: import pty
+    - pattern: import pty as $ALIAS
+    - pattern: from pty import $$$NAMES
