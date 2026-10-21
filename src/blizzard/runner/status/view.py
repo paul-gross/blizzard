@@ -19,7 +19,7 @@ from blizzard.runner.environments.repository import (
     OpenLeaseHold,
     group_bindings_by_chunk,
 )
-from blizzard.runner.environments.workspaces import IWorkspaces
+from blizzard.runner.environments.workspaces import IWorkspaceSpawnRoots
 from blizzard.runner.harness.registry import IHarnessLifecycleRegistry, UnavailableHarnessError, UnknownHarnessError
 from blizzard.runner.hub.client import BindingDeclaration
 from blizzard.runner.hub.hub_version import HubVersion, ICurrentHubVersion
@@ -263,7 +263,7 @@ class RunnerStatusService:
         bindings: tuple[BindingDeclaration, ...] = (),
         hub_url: str,
         harnesses: IHarnessLifecycleRegistry,
-        workspaces: IWorkspaces,
+        workspaces: IWorkspaceSpawnRoots,
         gates: tuple[str, ...] = (),
         runner_dir: str = "",
         contact_staleness: timedelta = HUB_CONTACT_STALENESS_THRESHOLD,

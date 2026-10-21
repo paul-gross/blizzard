@@ -16,6 +16,8 @@ from blizzard.runner.transfer.rows import HostIngest
 
 __all__ = [
     "HeldBinding",
+    "IRunnerBoundReads",
+    "IRunnerBoundReadsFactory",
     "IRunnerBoundStores",
     "IRunnerBoundStoresFactory",
     "RunnerStoreView",
@@ -48,8 +50,8 @@ class RunnerStoreView:
     served_projects: tuple[str, ...] = ()
 
 
-class IRunnerBoundStores(Protocol):
-    """One runner's reach into store files: its view, its latest ingest, and its rows copied or removed."""
+class IRunnerBoundReads(Protocol):
+    """One runner's reads of store files: its view and its latest ingest."""
 
     def runner_view(self, url: str) -> RunnerStoreView:
         """What the store at ``url`` holds about the runner."""
@@ -58,6 +60,10 @@ class IRunnerBoundStores(Protocol):
     def latest_host_ingest(self, url: str) -> HostIngest | None:
         """The newest ingest of the runner the store at ``url`` recorded."""
         ...
+
+
+class IRunnerBoundStores(IRunnerBoundReads, Protocol):
+    """One runner's reach into store files: its reads, and its rows copied or removed."""
 
     def copy_runner(
         self,
@@ -74,6 +80,14 @@ class IRunnerBoundStores(Protocol):
 
     def remove_runner_rows(self, url: str, *, keep_counters: bool) -> None:
         """Delete the runner's rows from the store at ``url``, its outbox counters too unless ``keep_counters``."""
+        ...
+
+
+class IRunnerBoundReadsFactory(Protocol):
+    """Binds :class:`IRunnerBoundReads` to one runner."""
+
+    def reads_for(self, runner_id: str) -> IRunnerBoundReads:
+        """The store reads bound to ``runner_id``."""
         ...
 
 

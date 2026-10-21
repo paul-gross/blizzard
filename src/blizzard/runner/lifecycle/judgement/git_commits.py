@@ -14,7 +14,7 @@ from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.repo_ref import pointer_key, repo_identity
 from blizzard.foundation.roles import domain_model
 from blizzard.runner.environments.repository import EnvBinding
-from blizzard.runner.environments.workspaces import IWorkspaces
+from blizzard.runner.environments.workspaces import IWorkspaceProviders
 from blizzard.runner.environments.worktree import IWorktreeGit, WorktreeGitError
 from blizzard.runner.hub.outbound import OutboundContext, OutboundFacts, OutboundStores
 from blizzard.runner.leases.model import Lease
@@ -125,7 +125,7 @@ class GitCommitsContext(OutboundContext, Protocol):
     @property
     def stores(self) -> GitCommitsStores: ...
     @property
-    def workspaces(self) -> IWorkspaces: ...
+    def workspaces(self) -> IWorkspaceProviders: ...
     @property
     def worktree_git(self) -> IWorktreeGit: ...
 

@@ -236,6 +236,10 @@ class _FixedClock:
         return self._now
 
 
+#: The runner every export below arrives under.
+_SENDER = RunnerIdentityHolder(_RUNNER)
+
+
 def _receiver(
     *,
     enabled: bool,
@@ -261,7 +265,6 @@ def _receiver(
         metric_bounds=ReceiverBounds(SpanRateLimiter(clock, capacity=capacity), ReceiverCounter()),
         log_bounds=ReceiverBounds.fresh(clock),
         clock=clock,
-        identity=RunnerIdentityHolder(_RUNNER),
         harness_telemetry=harness,
         telemetry_names=names,
         mapped_services=mapped or {},
@@ -270,16 +273,16 @@ def _receiver(
 
 def test_receiver_off_when_platform_disabled() -> None:
     with pytest.raises(ReceiverOff, match="platform tracing is off"):
-        _receiver(enabled=False).require_traces()
+        _receiver(enabled=False).require_traces(_SENDER)
     with pytest.raises(ReceiverOff, match="harness telemetry is off"):
-        _receiver(enabled=True, harness=False).require_harness_telemetry()
-    _receiver(enabled=True).require_traces()
+        _receiver(enabled=True, harness=False).require_harness_telemetry(_SENDER)
+    _receiver(enabled=True).require_traces(_SENDER)
 
 
 def test_span_rate_refused_counts_every_span_dropped() -> None:
     receiver = _receiver(enabled=True, capacity=1)
     with pytest.raises(RateExceeded, match="span rate exceeded"):
-        receiver.receive_spans(_lease(), [_span(SCOPE_NAME), _span(CLAUDE_CODE_TRACING_SCOPE)])
+        receiver.receive_spans(_SENDER, _lease(), [_span(SCOPE_NAME), _span(CLAUDE_CODE_TRACING_SCOPE)])
     assert (receiver.span_counter.count().dropped, receiver.harness_span_counter.count().dropped) == (1, 1)
 
 
@@ -302,13 +305,13 @@ def _point() -> ReceivedDataPoint:
 def test_metrics_rate_refused() -> None:
     receiver = _receiver(enabled=True, capacity=1)
     with pytest.raises(RateExceeded, match="rate exceeded"):
-        receiver.receive_metrics(_lease(), ReceivedMetrics(points=[_point(), _point()], unsupported=1))
+        receiver.receive_metrics(_SENDER, _lease(), ReceivedMetrics(points=[_point(), _point()], unsupported=1))
     assert receiver.metric_bounds.counter.count() == ReceiverCount(accepted=0, dropped=3)
 
 
 def test_metrics_within_rate_name_the_summary_points_refused() -> None:
     receiver = _receiver(enabled=True)
-    assert receiver.receive_metrics(_lease(), ReceivedMetrics(points=[_point()], unsupported=2)) == 2
+    assert receiver.receive_metrics(_SENDER, _lease(), ReceivedMetrics(points=[_point()], unsupported=2)) == 2
     assert (receiver.metric_bounds.counter.count().accepted, receiver.metric_bounds.counter.count().dropped) == (1, 2)
 
 
@@ -359,7 +362,7 @@ def test_metrics_forward_one_batch_per_service_with_a_mapped_scope_renamed() -> 
         _scoped_point(CLAUDE_CODE_METRICS_SCOPE, "c"),
     ]
 
-    assert receiver.receive_metrics(_lease(), ReceivedMetrics(points=points, unsupported=0)) == 0
+    assert receiver.receive_metrics(_SENDER, _lease(), ReceivedMetrics(points=points, unsupported=0)) == 0
 
     assert [(service, [p.metric_name for p in batch]) for batch, service in export.metrics] == [
         (CLAUDE_CODE_SERVICE_NAME, ["a", "c"]),
@@ -381,7 +384,7 @@ def test_logs_forward_one_batch_per_service_with_a_mapped_scope_renamed() -> Non
         _log(_OTHER_NAMES.logs_scope, "w"),
     ]
 
-    assert receiver.receive_logs(_lease(), records) == 1
+    assert receiver.receive_logs(_SENDER, _lease(), records) == 1
 
     assert [(service, [r.body for r in batch]) for batch, service in export.logs] == [
         (_OTHER_NAMES.service_name, ["x", "w"]),

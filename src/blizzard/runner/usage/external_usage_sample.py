@@ -8,7 +8,7 @@ never holds a runner's tick (``bzh:lane-contract`` clause 5)."""
 from __future__ import annotations
 
 import json
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
@@ -18,14 +18,29 @@ from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.foundation.subscription_miss import SampleMissReason
 from blizzard.foundation.usage_windows import admit_usage_window
+from blizzard.runner.events.publisher import IRunnerEventPublisher
 from blizzard.runner.subscriptions.subscription_sampler import (
     ExternalSubscriptionUsageSnapshot,
     ISubscriptionSampler,
     sample_due,
 )
-from blizzard.runner.usage.repository import IReadExternalUsageRepository, external_usage_attempt
+from blizzard.runner.usage.repository import (
+    IReadExternalUsageRepository,
+    IWriteExternalUsageAttemptRepository,
+    IWriteHostLaneAppendRepository,
+    external_usage_attempt,
+)
 
-__all__ = ["ExternalUsageSamplePass", "IExternalUsageAttemptSink", "SampledSubscription"]
+__all__ = [
+    "ExternalUsageAttemptLane",
+    "ExternalUsageSamplePass",
+    "IAttemptLaneRunner",
+    "IExternalUsageAttemptSink",
+    "IHostLaneStanding",
+    "IRegistrationStanding",
+    "IRunnerRegistration",
+    "SampledSubscription",
+]
 
 _log = get_logger("blizzard.runner.subscriptions")
 
@@ -55,6 +70,97 @@ class IExternalUsageAttemptSink(Protocol):
     ) -> None:
         """Record the attempt and buffer its report, atomically, on whichever lane the host is on."""
         ...
+
+
+class IRegistrationStanding(Protocol):
+    """One reading of the host's registration: whether it holds a host token."""
+
+    def registered(self) -> bool: ...
+
+
+class IHostLaneStanding(Protocol):
+    """The host registration's latest outcome, read afresh on every attempt."""
+
+    def current(self) -> IRegistrationStanding: ...
+
+
+class IRunnerRegistration(Protocol):
+    """A runner's identity holder, read only for whether its identity row exists yet."""
+
+    def current(self) -> object | None: ...
+
+
+class IAttemptLaneRunner(Protocol):
+    """One runner of the host, as the attempt lane reaches it: its identity, its runner-bound attempt handle, and
+    its event publisher."""
+
+    @property
+    def identity(self) -> IRunnerRegistration: ...
+
+    @property
+    def external_usage_attempts(self) -> IWriteExternalUsageAttemptRepository: ...
+
+    @property
+    def events(self) -> IRunnerEventPublisher | None: ...
+
+
+class ExternalUsageAttemptLane:
+    """Where the host's sampling pass records an attempt: a registered host's own lane — one holding a host token,
+    whether or not its hub has answered yet — else, an unregistered host having none, the attempt handle and event
+    publisher of its first runner whose identity row exists, as a runner's own sample did: a runner-scoped row names a
+    registered runner (``runner:rows-name-registered-runner``). With no such runner the attempt is not recorded, and
+    the pass samples again on the next host tick, until a runner registers."""
+
+    def __init__(
+        self,
+        host_lane: IWriteHostLaneAppendRepository,
+        runners: Callable[[], Sequence[IAttemptLaneRunner]],
+        *,
+        registration: IHostLaneStanding,
+    ) -> None:
+        self._host_lane = host_lane
+        self._runners = runners
+        self._registration = registration
+
+    def record(
+        self,
+        *,
+        slug: str,
+        sampled_at: datetime,
+        payload: str | None,
+        report_kind: str,
+        report_payload: str,
+        miss_reason: str | None,
+    ) -> None:
+        if self._registration.current().registered():
+            self._host_lane.record_host_external_usage_attempt(
+                slug=slug,
+                sampled_at=sampled_at,
+                payload=payload,
+                report_kind=report_kind,
+                report_payload=report_payload,
+                miss_reason=miss_reason,
+            )
+            return
+        reporter = next((runner for runner in self._runners() if runner.identity.current() is not None), None)
+        if reporter is None:
+            _log.warning("external usage attempt not recorded: no runner of the host has registered", slug=slug)
+            return
+        seq = reporter.external_usage_attempts.record_external_usage_attempt(
+            slug=slug,
+            sampled_at=sampled_at,
+            payload=payload,
+            report_kind=report_kind,
+            report_payload=report_payload,
+            miss_reason=miss_reason,
+        )
+        events = reporter.events
+        if seq is not None and events is not None:
+            events.publish_fact_changed(seq=seq, kind=report_kind, chunk_id=None, lease_id=None)
+
+
+def _conforms_attempt_lane(x: ExternalUsageAttemptLane) -> IExternalUsageAttemptSink:
+    return x
 
 
 class ExternalUsageSamplePass:

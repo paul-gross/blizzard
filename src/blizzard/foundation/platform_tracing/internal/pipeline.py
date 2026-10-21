@@ -37,10 +37,35 @@ from blizzard.foundation.trace_spans import Attributes
 
 _SQLALCHEMY_SCOPE = "opentelemetry.instrumentation.sqlalchemy"
 
+#: The stamp the opener of a span tree chose, carried in the context every span under it opens in.
+_STAMP_KEY = otel_context.create_key("blizzard.platform.stamp")
+
+
+class _Carried:
+    """The stamp a context carries, boxed so the key's value is recognisably one."""
+
+    def __init__(self, stamp: SpanStamp) -> None:
+        self.stamp = stamp
+
+
+def _carried_stamp(context: Context | None) -> SpanStamp | None:
+    carried = otel_context.get_value(_STAMP_KEY, context)
+    return carried.stamp if isinstance(carried, _Carried) else None
+
+
+@contextmanager
+def _stamping(stamp: SpanStamp) -> Iterator[None]:
+    token = otel_context.attach(otel_context.set_value(_STAMP_KEY, _Carried(stamp)))
+    try:
+        yield
+    finally:
+        otel_context.detach(token)
+
 
 class _Stamping(SpanProcessor):
-    """Stamps each span with what ``stamp`` answers as it starts, then hands it on to ``export``; a span
-    started while ``stamp`` answers ``None`` never reaches ``export``, so it is never exported."""
+    """Stamps each span with what its stamp answers as it starts, then hands it on to ``export``; a span
+    started while its stamp answers ``None`` never reaches ``export``, so it is never exported. A span's stamp is
+    the one its parent context carries — so a span inherits its parent's — else the process's own ``stamp``."""
 
     def __init__(self, stamp: SpanStamp, export: SpanProcessor) -> None:
         self._stamp = stamp
@@ -48,7 +73,7 @@ class _Stamping(SpanProcessor):
         self._withheld: set[int] = set()
 
     def on_start(self, span: Span, parent_context: Context | None = None) -> None:
-        attributes = self._stamp()
+        attributes = (_carried_stamp(parent_context) or self._stamp)()
         if attributes is None:
             self._withheld.add(span.get_span_context().span_id)
             return
@@ -69,19 +94,25 @@ class _Stamping(SpanProcessor):
         return self._export.force_flush(timeout_millis)
 
 
+def _fresh() -> Context:
+    """An empty context — a new trace's, or a remote parent's — still carrying the stamp its opener runs under."""
+    carried = _carried_stamp(None)
+    return Context() if carried is None else otel_context.set_value(_STAMP_KEY, _Carried(carried), Context())
+
+
 class _SdkTracer:
     def __init__(self, tracer: trace.Tracer) -> None:
         self._tracer = tracer
 
     def root(self, name: str, attributes: Attributes | None = None) -> AbstractContextManager[None]:
-        return self._span(name, attributes, Context())
+        return self._span(name, attributes, _fresh())
 
     def child(self, name: str, attributes: Attributes | None = None) -> AbstractContextManager[None]:
         return self._span(name, attributes, None)
 
     @contextmanager
     def under(self, derived: DerivedContext) -> Iterator[None]:
-        parent = trace.set_span_in_context(trace.NonRecordingSpan(span_context(derived, remote=True)), Context())
+        parent = trace.set_span_in_context(trace.NonRecordingSpan(span_context(derived, remote=True)), _fresh())
         token = otel_context.attach(parent)
         try:
             yield
@@ -108,6 +139,32 @@ class _SdkTracer:
             except BaseException:
                 span.set_status(Status(StatusCode.ERROR))
                 raise
+
+
+class _StampedTracer:
+    """A tracer whose every span opens under ``stamp``, so it and its descendants carry what ``stamp`` answers."""
+
+    def __init__(self, tracer: IPlatformTracer, stamp: SpanStamp) -> None:
+        self._tracer = tracer
+        self._stamp = stamp
+
+    @contextmanager
+    def root(self, name: str, attributes: Attributes | None = None) -> Iterator[None]:
+        with _stamping(self._stamp), self._tracer.root(name, attributes):
+            yield
+
+    @contextmanager
+    def child(self, name: str, attributes: Attributes | None = None) -> Iterator[None]:
+        with _stamping(self._stamp), self._tracer.child(name, attributes):
+            yield
+
+    @contextmanager
+    def under(self, derived: DerivedContext) -> Iterator[None]:
+        with self._tracer.under(derived), _stamping(self._stamp):
+            yield
+
+    def link(self, derived: DerivedContext) -> None:
+        self._tracer.link(derived)
 
 
 def _readable(span: ReceivedSpan, resource: Resource) -> ReadableSpan:
@@ -165,6 +222,12 @@ class EnabledPlatformTracing:
     @property
     def tracer(self) -> IPlatformTracer:
         return self._tracer
+
+    def stamping(self, stamp: SpanStamp) -> AbstractContextManager[None]:
+        return _stamping(stamp)
+
+    def stamped(self, stamp: SpanStamp) -> IPlatformTracer:
+        return _StampedTracer(self._tracer, stamp)
 
     @property
     def enabled(self) -> bool:

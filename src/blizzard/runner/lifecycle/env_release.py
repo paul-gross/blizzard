@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from blizzard.foundation.clock import IClock
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.environments.repository import IWriteEnvironmentRepository, release_instants
-from blizzard.runner.environments.workspaces import IWorkspaces
+from blizzard.runner.environments.workspaces import IWorkspaceProviders
 from blizzard.runner.events.publisher import IRunnerEventPublisher
 
 
@@ -19,7 +19,7 @@ class EnvironmentRelease:
     environments: IWriteEnvironmentRepository
     clock: IClock
     #: Each environment goes back to the provider of the workspace its binding names.
-    workspaces: IWorkspaces
+    workspaces: IWorkspaceProviders
     #: The SSE publish seam, typed against the Protocol
     #: (``bzh:dependency-inversion``); ``None`` on a loop-only caller, a no-op there.
     events: IRunnerEventPublisher | None = None

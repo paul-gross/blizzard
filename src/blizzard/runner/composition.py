@@ -14,7 +14,6 @@ import os
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field, replace
-from datetime import datetime
 from pathlib import Path
 
 import httpx
@@ -29,9 +28,11 @@ from blizzard.foundation.platform_tracing.handle import (
     IPlatformTracing,
     build_platform_tracing,
 )
+from blizzard.foundation.platform_tracing.tracer import IPlatformTracer
 from blizzard.foundation.roles import collaborator
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.internal.store_status_reader import SqlAlchemyStoreStatusReader
+from blizzard.foundation.store.migrations import MigrationRunner
 from blizzard.foundation.store.readiness import Readiness, ReadinessService
 from blizzard.foundation.trace_export.exporter import ITraceExporter
 from blizzard.foundation.trace_export.internal.otlp import OtlpTraceExporter
@@ -39,7 +40,13 @@ from blizzard.foundation.trace_export.settings import TracingSettings
 from blizzard.runner.config import HostWorkspace, RunnerConfig, SubscriptionDeclaration
 from blizzard.runner.config_table import ConfigError
 from blizzard.runner.environments.factory import build_workspace_provider
-from blizzard.runner.environments.workspaces import IWorkspaces, WorkspaceEntry, WorkspaceRegistry
+from blizzard.runner.environments.workspaces import (
+    IWorkspaceProviders,
+    IWorkspaces,
+    IWorkspaceSpawnRoots,
+    WorkspaceEntry,
+    WorkspaceRegistry,
+)
 from blizzard.runner.events.broker import EventBroker, RunnerEventPublisher
 from blizzard.runner.events.publisher import IRunnerEventPublisher
 from blizzard.runner.harness.bundle import BundleSnapshot
@@ -81,6 +88,7 @@ from blizzard.runner.listeners import Listeners
 from blizzard.runner.loop.host_tick import HostTick
 from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
 from blizzard.runner.runtime import migration_runner
+from blizzard.runner.store import MIGRATIONS_DIR
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
 from blizzard.runner.store.internal.ask_store import AskStore
 from blizzard.runner.store.internal.attachment_store import AttachmentStore
@@ -131,9 +139,8 @@ from blizzard.runner.tracing.attributes import (
 from blizzard.runner.tracing.platform import (
     PLATFORM_INSTRUMENTATION_SCOPE,
     PLATFORM_INSTRUMENTATION_SCOPE_VERSION,
-    CurrentRunnerIdentity,
+    host_stamp,
     identity_stamp,
-    runner_context_stamp,
 )
 from blizzard.runner.tracing.received_export import (
     DisabledReceivedTelemetryExport,
@@ -147,8 +154,12 @@ from blizzard.runner.tracing.sweep import LeaseTraceSweep
 from blizzard.runner.transfer.rows import HostIngest, IRunnerRowRemoval, IRunnerTransfer
 from blizzard.runner.transfer.runner_stores import HeldBinding, IRunnerBoundStores, RunnerStoreView
 from blizzard.runner.usage.credential_renewal import CredentialRenewalPass, RenewableSubscription
-from blizzard.runner.usage.external_usage_sample import ExternalUsageSamplePass, SampledSubscription
-from blizzard.runner.usage.repository import IWriteHostLaneRepository
+from blizzard.runner.usage.external_usage_sample import (
+    ExternalUsageAttemptLane,
+    ExternalUsageSamplePass,
+    SampledSubscription,
+)
+from blizzard.runner.usage.repository import IWriteExternalUsageAttemptRepository
 
 
 @dataclass
@@ -171,8 +182,8 @@ class HostProcess:
     events: EventBroker | None
     clock: SystemClock
     process: LinuxProcessProbe
-    #: The worker telemetry receiver over the host's limiters, tallies, export and identity resolver — one per host,
-    #: so every reader and writer of those counters shares them.
+    #: The worker telemetry receiver over the host's limiters, tallies and export — one per host, so every reader and
+    #: writer of those counters shares them; each export names the runner it arrived under.
     telemetry_receiver: TelemetryReceiver
     #: The span receiver's per-lease rate bound and its received/dropped tally, one of each per host.
     span_limiter: SpanRateLimiter
@@ -251,8 +262,9 @@ class RunnerProcess:
     #: This runner's connections over the host's engine, bound to the runner it is.
     connections: RunnerStoreConnections
     stores: RunnerStores
-    #: A host-scoped view over ``connections``: the tick's cross-kind write reports through the bound runner.
-    host_stores: HostStores
+    #: The one host-kind write a runner holds, over ``connections``: an unregistered host's sampled attempt, whose
+    #: outbound report is this runner's row.
+    external_usage_attempts: IWriteExternalUsageAttemptRepository
     harnesses: HarnessRegistry
     health: HarnessHealthCache
     executor: ThreadPoolExecutor
@@ -268,6 +280,8 @@ class RunnerProcess:
     identity_verdict: IdentityVerdictHolder
     #: The token every runner->hub client presents — re-read from ``.env`` while the identity mismatches.
     hub_token: HubTokenHolder
+    #: The host's broker, stamping this runner's id on every runner-scoped event; ``None`` on a host with none.
+    events: IRunnerEventPublisher | None
     #: What the enabled bindings together do with each of a worker's telemetry signals, derived once at startup.
     harness_telemetry: HarnessTelemetryPlan = field(default_factory=HarnessTelemetryPlan)
     #: This runner's own resolved flags: its ``runner`` flags at the host's overrides, and its ``fleet`` flags as its
@@ -291,11 +305,6 @@ class RunnerProcess:
     def workspaces(self) -> IWorkspaces:
         return self.host.workspaces
 
-    @functools.cached_property
-    def events(self) -> IRunnerEventPublisher | None:
-        """The host's broker, stamping this runner's id on every runner-scoped event."""
-        return RunnerEventPublisher.over(self.host.events, self.runner_id)
-
     @property
     def clock(self) -> SystemClock:
         return self.host.clock
@@ -307,6 +316,12 @@ class RunnerProcess:
     @property
     def platform_tracing(self) -> IPlatformTracing:
         return self.host.platform_tracing
+
+    @property
+    def tracer(self) -> IPlatformTracer:
+        """The host's platform tracer, each span it opens — and every span opened under one — stamped as this
+        runner."""
+        return self.host.platform_tracing.stamped(identity_stamp(self.identity))
 
     @property
     def received_telemetry(self) -> IReceivedTelemetryExport:
@@ -394,7 +409,7 @@ def build_workspaces(
     return WorkspaceRegistry(entries)
 
 
-def bound_spawn_roots(config: RunnerConfig, workspaces: IWorkspaces) -> tuple[str, ...]:
+def bound_spawn_roots(config: RunnerConfig, workspaces: IWorkspaceSpawnRoots) -> tuple[str, ...]:
     """The distinct spawn roots of the workspaces ``config``'s runner binds — what its health probes and
     ambient-conflict checks run over."""
     return tuple(dict.fromkeys(workspaces.spawn_root(workspace.id) for workspace in config.bound_workspaces))
@@ -416,64 +431,6 @@ def _credential_renewal_pass(
     if not renewable:
         return None
     return CredentialRenewalPass(subscriptions=renewable, renewals=host_stores.external_usage, clock=clock)
-
-
-_log = get_logger("blizzard.runner.composition")
-
-
-class _HostAttemptSink:
-    """Where the host's sampling pass records an attempt: a registered host's own lane — one holding a host token,
-    whether or not its hub has answered yet — else, an unregistered host having none, the bound stores and event
-    publisher of its first runner whose identity row exists, as a runner's own sample did: a runner-scoped row names a
-    registered runner (``runner:rows-name-registered-runner``). With no such runner the attempt is not recorded, and
-    the pass samples again on the next host tick, until a runner registers."""
-
-    def __init__(
-        self,
-        host_lane: IWriteHostLaneRepository,
-        runners: Callable[[], tuple[RunnerProcess, ...]],
-        *,
-        registration: ICurrentHostRegistration,
-    ) -> None:
-        self._host_lane = host_lane
-        self._runners = runners
-        self._registration = registration
-
-    def record(
-        self,
-        *,
-        slug: str,
-        sampled_at: datetime,
-        payload: str | None,
-        report_kind: str,
-        report_payload: str,
-        miss_reason: str | None,
-    ) -> None:
-        if self._registration.current().registered():
-            self._host_lane.record_host_external_usage_attempt(
-                slug=slug,
-                sampled_at=sampled_at,
-                payload=payload,
-                report_kind=report_kind,
-                report_payload=report_payload,
-                miss_reason=miss_reason,
-            )
-            return
-        reporter = next((runner for runner in self._runners() if runner.identity.current() is not None), None)
-        if reporter is None:
-            _log.warning("external usage attempt not recorded: no runner of the host has registered", slug=slug)
-            return
-        seq = reporter.host_stores.external_usage.record_external_usage_attempt(
-            slug=slug,
-            sampled_at=sampled_at,
-            payload=payload,
-            report_kind=report_kind,
-            report_payload=report_payload,
-            miss_reason=miss_reason,
-        )
-        events = reporter.events
-        if seq is not None and events is not None:
-            events.publish_fact_changed(seq=seq, kind=report_kind, chunk_id=None, lease_id=None)
 
 
 def _external_usage_sample_pass(
@@ -502,7 +459,7 @@ def _external_usage_sample_pass(
     return ExternalUsageSamplePass(
         subscriptions=sampled,
         attempts=host_stores.external_usage,
-        sink=_HostAttemptSink(host_stores.host_lane, runners, registration=registration),
+        sink=ExternalUsageAttemptLane(host_stores.host_lane, runners, registration=registration),
         clock=clock,
     )
 
@@ -516,8 +473,8 @@ def build_runner_platform_tracing(
 ) -> IPlatformTracing:
     """The handle ``[tracing]`` and the OTLP environment decide. With ``identity``, every span it records carries
     the id and name ``identity`` answers as it starts, and none is exported before that runner's first
-    registration; without, each span is stamped as the runner whose context opened it, and one opened outside any
-    runner's — the host's own — carries no runner identity."""
+    registration; without, a span carries the runner stamp of what opened it or of its parent — a runner's tick
+    tracer, a request under a runner's prefix — and one with neither, the host's own, carries no runner identity."""
     env = os.environ if environ is None else environ
     return build_platform_tracing(
         config.tracing,
@@ -525,7 +482,7 @@ def build_runner_platform_tracing(
         resource=resource_attributes(env, __version__),
         scope=PLATFORM_INSTRUMENTATION_SCOPE,
         scope_version=PLATFORM_INSTRUMENTATION_SCOPE_VERSION,
-        stamp=identity_stamp(identity) if identity is not None else runner_context_stamp(),
+        stamp=identity_stamp(identity) if identity is not None else host_stamp(),
     )
 
 
@@ -754,7 +711,6 @@ def _build_host_graph(
                 metric_bounds=metric_bounds,
                 log_bounds=log_bounds,
                 clock=clock,
-                identity=CurrentRunnerIdentity(),
                 worker_programs=config.tracing.worker_programs,
                 harness_telemetry=config.tracing.harness_telemetry,
                 mapped_services=config.tracing.worker_program_services,
@@ -818,7 +774,7 @@ _HOST_HUB_TIMEOUT_SECONDS = 10.0
 
 
 def host_report(
-    config: RunnerConfig, workspaces: IWorkspaces, subscriptions: Sequence[SubscriptionDeclaration]
+    config: RunnerConfig, workspaces: IWorkspaceProviders, subscriptions: Sequence[SubscriptionDeclaration]
 ) -> HostReport:
     """What the host reports about itself: its first public URL, the panel's sign-in callback URIs, each workspace
     with the environments it holds, and the subscriptions it declares."""
@@ -898,12 +854,14 @@ def _build_runner(
         default_id = default_harness_id(harnesses)
         if default_id is not None:
             harnesses.transcript_source(default_id)
+        # One corpus for the cache and the probes alike, so both admit against the same committed manifests.
+        corpus = CommittedCorpus()
         health = HarnessHealthCache(
             clock=clock,
             probes=build_production_harness_health_probes(
-                harness_settings, spawn_roots=bound_spawn_roots(config, host.workspaces)
+                harness_settings, spawn_roots=bound_spawn_roots(config, host.workspaces), corpus=corpus
             ),
-            corpus=CommittedCorpus(),
+            corpus=corpus,
             selftest_results=stores.selftest_results,
             configured_tiers=configured_tiers(config.harness_sections),
         )
@@ -928,7 +886,7 @@ def _build_runner(
             config=config,
             connections=connections,
             stores=stores,
-            host_stores=_build_host_stores(connections, clock),
+            external_usage_attempts=ExternalUsageStore(connections),
             harnesses=harnesses,
             health=health,
             executor=executor,
@@ -938,6 +896,7 @@ def _build_runner(
             identity=identity,
             identity_verdict=IdentityVerdictHolder(_identity_remedy(config, runner_id)),
             hub_token=held_hub_token(config, token),
+            events=RunnerEventPublisher.over(host.events, runner_id),
             harness_telemetry=plan,
             flags=FlagsHolder(resolve_flags(host.flag_registry, "runner", config.flags).flags),
             closes_host=closes_host,
@@ -1063,6 +1022,9 @@ class RunnerStoreFiles:
     errors: RunnerStoreErrorFactory
     clock: IClock
 
+    def reads_for(self, runner_id: str) -> RunnerBoundStoreFiles:
+        return RunnerBoundStoreFiles(self, runner_id)
+
     def for_runner(self, runner_id: str) -> RunnerBoundStoreFiles:
         return RunnerBoundStoreFiles(self, runner_id)
 
@@ -1183,10 +1145,21 @@ def _conforms_token_files(x: DotenvTokenFiles) -> ITokenFiles:
     return x
 
 
+def runner_store_migrations(url: str) -> MigrationRunner:
+    """The runner store's own migrations, run against the store at ``url``."""
+    return MigrationRunner(script_location=MIGRATIONS_DIR, url=url)
+
+
 def build_runner_ingest(
-    host: HostConfig, hub: IHostHubClient, *, holder: Callable[[Path], str | None], clock: IClock | None = None
+    host: HostConfig,
+    hub: IHostHubClient,
+    *,
+    holder: Callable[[Path], str | None],
+    clock: IClock | None = None,
+    migrations: Callable[[str], MigrationRunner] = runner_store_migrations,
 ) -> RunnerIngest:
-    """The ingest into the host ``host``, reaching its hub through ``hub`` and probing sockets with ``holder``."""
+    """The ingest into the host ``host``, reaching its hub through ``hub``, probing sockets with ``holder``, and
+    migrating each source copy through ``migrations``."""
     resolved = clock or SystemClock()
     return RunnerIngest(
         host=host,
@@ -1196,4 +1169,5 @@ def build_runner_ingest(
         hub=hub,
         holder=holder,
         clock=resolved,
+        migrations=migrations,
     )

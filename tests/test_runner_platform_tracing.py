@@ -64,9 +64,8 @@ from blizzard.runner.tracing.platform import (
     PLATFORM_INSTRUMENTATION_SCOPE,
     PLATFORM_INSTRUMENTATION_SCOPE_VERSION,
     TICK_STEP,
+    host_stamp,
     identity_stamp,
-    runner_context_stamp,
-    stamping_as,
 )
 from blizzard.runner.tracing.received_export import (
     DisabledReceivedTelemetryExport,
@@ -127,7 +126,7 @@ def _handle(
         resource={"service.name": "blizzard-runner"},
         scope=PLATFORM_INSTRUMENTATION_SCOPE,
         scope_version=PLATFORM_INSTRUMENTATION_SCOPE_VERSION,
-        stamp=runner_context_stamp() if by_context else identity_stamp(identity or registered_identity(_RUNNER, _NAME)),
+        stamp=host_stamp() if by_context else identity_stamp(identity or registered_identity(_RUNNER, _NAME)),
         exporter=exporter,
     )
 
@@ -222,7 +221,6 @@ def _app(  # type: ignore[no-untyped-def]
         metric_bounds=metric_bounds or ReceiverBounds.fresh(clock),
         log_bounds=log_bounds or ReceiverBounds.fresh(clock),
         clock=clock,
-        identity=identity,
         worker_programs=worker_programs,
         harness_telemetry=harness_telemetry,
         mapped_services=services or {},
@@ -290,30 +288,32 @@ def test_no_platform_span_leaves_before_the_first_registration_and_a_rename_show
     assert all(_attr(s, RUNNER_ID) == "rn_01JRUNNER" for s in spans)
 
 
-def test_a_host_stamps_each_span_as_the_runner_whose_context_opened_it_and_its_own_as_none(tmp_path: Path) -> None:
+def test_a_host_stamps_each_span_as_the_runner_that_opened_it_or_its_parent_and_its_own_as_none(
+    tmp_path: Path,
+) -> None:
     exporter = InMemorySpanExporter()
     handle = _handle(exporter, by_context=True)
     with runner_client(_app(tmp_path, handle, [])) as client:
         assert _history(client).status_code == 200
         assert client.get("http://testserver/api/host/workspaces").status_code == 200
     other = registered_identity("rn_other", "runner-other")
-    with stamping_as(other), handle.tracer.root("tick"):
+    with handle.stamped(identity_stamp(other)).root("tick"), handle.tracer.child("step"):
         pass
-    with handle.tracer.root("host-tick"):
+    with handle.tracer.root("host-tick"), handle.tracer.child("host-step"):
         pass
     spans = _finished(handle, exporter)
     runner_server = [s for s in spans if s.name.startswith("GET /runners/{runner_id}/api/leases/")]
     host_server = [s for s in spans if s.name.startswith("GET /api/host/workspaces")]
     assert [_stamped(s) for s in runner_server] == [(_RUNNER, _NAME)]
     assert [_stamped(s) for s in host_server] == [(None, None)]
-    assert [_stamped(s) for s in spans if s.name == "tick"] == [("rn_other", "runner-other")]
-    assert [_stamped(s) for s in spans if s.name == "host-tick"] == [(None, None)]
+    assert [_stamped(s) for s in spans if s.name in ("tick", "step")] == [("rn_other", "runner-other")] * 2
+    assert [_stamped(s) for s in spans if s.name in ("host-tick", "host-step")] == [(None, None)] * 2
 
 
-def test_a_runner_context_before_its_first_registration_exports_nothing() -> None:
+def test_a_runners_span_tree_before_its_first_registration_exports_nothing() -> None:
     exporter = InMemorySpanExporter()
     handle = _handle(exporter, by_context=True)
-    with stamping_as(RunnerIdentityHolder()), handle.tracer.root("tick"):
+    with handle.stamped(identity_stamp(RunnerIdentityHolder())).root("tick"), handle.tracer.child("step"):
         pass
     assert _finished(handle, exporter) == []
 

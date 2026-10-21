@@ -45,7 +45,11 @@ from blizzard.runner.hub.client import (
     HubQuestion,
     HubVersionWindow,
     IdentityRouteMissing,
+    IHostFactPusher,
     IHostHubClient,
+    IHostRecordReader,
+    IHostReporter,
+    IHostRunnerAdder,
     IHubClient,
     IHubRunnerAdmin,
     IncompatibleDenial,
@@ -699,6 +703,22 @@ def _conforms_hub_runner_admin(x: HttpHubRunnerAdmin) -> IHubRunnerAdmin:
 
 
 def _conforms_host_hub_client(x: HttpHostHubClient) -> IHostHubClient:
+    return x
+
+
+def _conforms_host_reporter(x: HttpHostHubClient) -> IHostReporter:
+    return x
+
+
+def _conforms_host_record_reader(x: HttpHostHubClient) -> IHostRecordReader:
+    return x
+
+
+def _conforms_host_fact_pusher(x: HttpHostHubClient) -> IHostFactPusher:
+    return x
+
+
+def _conforms_host_runner_adder(x: HttpHostHubClient) -> IHostRunnerAdder:
     return x
 
 

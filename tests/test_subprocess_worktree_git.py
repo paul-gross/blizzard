@@ -13,8 +13,13 @@ from pathlib import Path
 
 import pytest
 
-from blizzard.runner.environments.internal.subprocess_worktree_git import SubprocessWorktreeGit
+from blizzard.runner.environments.internal.git import SubprocessEnvGit
+from blizzard.runner.environments.internal.subprocess_worktree_git import WORKTREE_GIT_TIMEOUT, SubprocessWorktreeGit
 from blizzard.runner.environments.worktree import IWorktreeGit
+
+
+def _adapter() -> SubprocessWorktreeGit:
+    return SubprocessWorktreeGit(SubprocessEnvGit(WORKTREE_GIT_TIMEOUT))
 
 
 def _git(cwd: Path, *args: str) -> str:
@@ -51,7 +56,7 @@ def test_verify_confirms_a_declared_commit_against_a_detached_head_worktree(tmp_
     _git(workdir, "checkout", "--detach", commit)
     assert _current_branch_name(workdir) == "HEAD"
 
-    verified = SubprocessWorktreeGit().verify(f"file://{origin}", "main", commit)
+    verified = _adapter().verify(f"file://{origin}", "main", commit)
 
     assert verified is True
     # Read-only: verify never checked out a branch, never pushed, never mutated the
@@ -77,7 +82,7 @@ def test_verify_rejects_a_commit_the_branch_does_not_point_at(tmp_path: Path) ->
     _git(workdir, "remote", "add", "origin", f"file://{origin}")
     _git(workdir, "push", "-u", "origin", "main")
 
-    assert SubprocessWorktreeGit().verify(f"file://{origin}", "main", "0" * 40) is False
+    assert _adapter().verify(f"file://{origin}", "main", "0" * 40) is False
 
 
 @pytest.mark.component
@@ -100,7 +105,7 @@ def test_verify_rejects_a_branch_that_was_never_pushed(tmp_path: Path) -> None:
     _git(workdir, "push", "-u", "origin", "main")
     _git(workdir, "checkout", "-b", "feat/never-pushed")
 
-    assert SubprocessWorktreeGit().verify(f"file://{origin}", "feat/never-pushed", commit) is False
+    assert _adapter().verify(f"file://{origin}", "feat/never-pushed", commit) is False
 
 
 @pytest.mark.component
@@ -129,7 +134,7 @@ def test_verify_needs_no_working_directory_at_all(tmp_path: Path) -> None:
     cwd = Path.cwd()
     try:
         os.chdir(elsewhere)
-        assert SubprocessWorktreeGit().verify(f"file://{origin}", "main", commit) is True
+        assert _adapter().verify(f"file://{origin}", "main", commit) is True
     finally:
         os.chdir(cwd)
 
@@ -139,7 +144,7 @@ def test_subprocess_worktree_git_has_no_push_or_head_inference_methods() -> None
     """Structural pin: the push method and ``--abbrev-ref HEAD``
     branch inference exist on neither the real adapter nor the ``IWorktreeGit`` Protocol
     — a re-introduction fails to typecheck and raises ``AttributeError`` when called."""
-    adapter = SubprocessWorktreeGit()
+    adapter = _adapter()
     for missing_attr in ("push", "find_produced_artifacts", "_current_branch"):
         assert not hasattr(IWorktreeGit, missing_attr)
         assert not hasattr(adapter, missing_attr)
@@ -166,7 +171,7 @@ def test_verify_rejects_a_branch_present_only_under_a_longer_ref(tmp_path: Path)
     _git(workdir, "remote", "add", "origin", f"file://{origin}")
     _git(workdir, "push", "origin", "HEAD:refs/heads/other/feat")
 
-    assert SubprocessWorktreeGit().verify(f"file://{origin}", "feat", commit) is False
+    assert _adapter().verify(f"file://{origin}", "feat", commit) is False
 
     _git(workdir, "push", "origin", "HEAD:refs/heads/feat")
-    assert SubprocessWorktreeGit().verify(f"file://{origin}", "feat", commit) is True
+    assert _adapter().verify(f"file://{origin}", "feat", commit) is True

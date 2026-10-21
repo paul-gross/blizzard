@@ -14,7 +14,7 @@ from blizzard.foundation.clock import IClock
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.roles import domain_model
 from blizzard.runner.environments.repository import IReadEnvironmentRepository
-from blizzard.runner.environments.workspaces import IWorkspaces
+from blizzard.runner.environments.workspaces import IWorkspaceProviders
 from blizzard.runner.hub.outbound_buffer import IReadOutboundRepository
 from blizzard.runner.leases.worker_lease import WorkerLease, WorkerVerb
 
@@ -217,7 +217,7 @@ class GitCommitDeclarationService:
         self,
         store: IWriteGitCommitDeclarationRepository,
         clock: IClock,
-        workspaces: IWorkspaces,
+        workspaces: IWorkspaceProviders,
         *,
         environments: IReadEnvironmentRepository,
         outbound: IReadOutboundRepository,

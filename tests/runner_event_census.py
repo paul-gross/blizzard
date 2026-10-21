@@ -280,17 +280,17 @@ WRITE_PROTOCOL_CENSUS: dict[str, Disposition] = {
     ),
     "record_external_usage_attempt": Published(
         RunnerEventType.FACT_CHANGED,
-        "_HostAttemptSink.record (runner/composition.py), called by ExternalUsageSamplePass once per declared "
-        "subscription per cadence on an unregistered host — kind='external_subscription_usage.sampled' or "
+        "ExternalUsageAttemptLane.record (runner/usage/external_usage_sample.py), called by ExternalUsageSamplePass "
+        "once per declared subscription per cadence on an unregistered host, through the first registered runner's "
+        "attempt handle — kind='external_subscription_usage.sampled' or "
         "'.missed', published through the reporting runner's own event publisher. `slug` keys the row to its own "
         "declaration, so one subscription's attempt never announces, or advances the cadence of, another's. D7's "
         "elapsed-time-derived reason covers the sampler's own cadence, not this occasional fact-log row.",
     ),
     "record_host_external_usage_attempt": Silent(
-        "_HostAttemptSink.record (runner/composition.py) on a registered host — the attempt and its report ride the "
+        "ExternalUsageAttemptLane.record (runner/usage/external_usage_sample.py) on a registered host — the attempt and its report ride the "
         "host's own lane, which no runner's board or SSE stream carries."
     ),
-    "pending_host_facts": Silent("the host's lane drain's read of its own buffer — it writes nothing."),
     "record_host_high_water": Silent(
         "HostLaneDrain (runner/lifecycle/host_lane_drain.py), once per answered push — the host's own lane, which "
         "no runner's board or SSE stream carries."

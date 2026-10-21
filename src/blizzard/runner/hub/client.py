@@ -690,25 +690,35 @@ class IHubRunnerAdmin(Protocol):
         ...
 
 
-class IHostHubClient(Protocol):
-    """The calls a host makes under its own bearer token, every one under ``/api/fleet/host``. The hub
-    takes the host from the token alone. Each answers its result, or :class:`HostRefused` when the hub
-    refuses the token (401, 403) or answers 404; an unreachable hub, a 5xx, or any other refusal raises
-    :class:`HubClientError`."""
+class IHostReporter(Protocol):
+    """The host's report alone, narrowed from :class:`IHostHubClient` (``bzh:seam-size-ceiling``)."""
 
     def report(self, report: HostReport) -> HostRecord | HostRefused:
         """``POST /api/fleet/host`` — report the host and its version, and read its record back. Never refused
         over its content — it doubles as the heartbeat — but a refused version answers ``VERSION_REFUSED``."""
         ...
 
+
+class IHostRecordReader(Protocol):
+    """The host's record read alone, narrowed from :class:`IHostHubClient` (``bzh:seam-size-ceiling``)."""
+
     def record(self) -> HostRecord | HostRefused:
         """``GET /api/fleet/host`` — the host's own record, reporting nothing."""
         ...
+
+
+class IHostFactPusher(Protocol):
+    """The host's fact push alone, narrowed from :class:`IHostHubClient` (``bzh:seam-size-ceiling``)."""
 
     def push_facts(self, facts: Sequence[PushedFact]) -> HostFactPushAck | HostRefused:
         """``POST /api/fleet/host/events`` — push the host's own buffered facts, ordered by seq,
         de-duplicated at the hub against the host's own mark."""
         ...
+
+
+class IHostRunnerAdder(Protocol):
+    """The runner add under the host's token alone, narrowed from :class:`IHostHubClient`
+    (``bzh:seam-size-ceiling``)."""
 
     def add_runner(self, name: str, *, projects: tuple[str, ...] | None = None) -> IssuedIdentity | HostRefused:
         """``POST /api/fleet/host/runners`` — add a runner under the host, in its tenant, under the
@@ -716,6 +726,13 @@ class IHostHubClient(Protocol):
         project; the hub mints its id and bearer token together. A named project the tenant does not hold
         raises :class:`RunnerAddRefused`."""
         ...
+
+
+class IHostHubClient(IHostReporter, IHostRecordReader, IHostFactPusher, IHostRunnerAdder, Protocol):
+    """The calls a host makes under its own bearer token, every one under ``/api/fleet/host``. The hub
+    takes the host from the token alone. Each answers its result, or :class:`HostRefused` when the hub
+    refuses the token (401, 403) or answers 404; an unreachable hub, a 5xx, or any other refusal raises
+    :class:`HubClientError`."""
 
     def retire_runner(self, runner_id: str, *, force: bool = False) -> RetiredHostRunner | HostRefused:
         """``POST /api/fleet/host/runners/{runner_id}/retire`` — retire a runner under the host. The hub

@@ -276,7 +276,7 @@ def test_a_tick_with_an_openai_subscription_never_invokes_a_renewer(
         ctx = LoopWiring(config, "", None).context(FakeHub(), graph)
         tick(ctx)
         assert (
-            graph.host_stores.external_usage.last_external_usage_attempt_at("codex") is None
+            graph.host.host_stores.external_usage.last_external_usage_attempt_at("codex") is None
         )  # sampling is the host's
         assert graph.host.host_tick.credential_renewal is not None  # composed for `runner host` alone
 

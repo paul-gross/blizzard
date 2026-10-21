@@ -114,7 +114,7 @@ from blizzard.runner.status.view import RunnerStatusService
 from blizzard.runner.stores import HostReadStores, HostStores, IRunnerBinding, RunnerReadStores, RunnerStores
 from blizzard.runner.throttle.pause import PauseService
 from blizzard.runner.tracing.exclusion import is_excluded
-from blizzard.runner.tracing.platform import identity_stamp, stamping_as
+from blizzard.runner.tracing.platform import identity_stamp
 from blizzard.runner.tracing.receiving import TelemetryReceiver
 from blizzard.runner.tracing.replay import LeaseTraceReplay
 from blizzard.runner.tracing.status import LeaseTraceStatusReader
@@ -482,7 +482,8 @@ def create_app(
 
     # Every platform span a request under a runner's prefix opens is that runner's; one on the host's own routes
     # carries no runner identity.
-    app.add_middleware(_RunnerStampMiddleware)
+    if platform_tracing is not None:
+        app.add_middleware(_RunnerStampMiddleware, platform_tracing=platform_tracing)
 
     # The served shell's half of the human web lane's gate — see :class:`Lane`.
     @app.middleware("http")
@@ -513,21 +514,23 @@ def create_app(
 
 
 class _RunnerStampMiddleware:
-    """Run a request under ``/runners/{runner_id}`` in that runner's stamping context — read from the app's
-    registry, so a runner the host does not serve stamps nothing — and stamp the request's own server span, which
-    opens before any middleware runs."""
+    """Stamp a request under ``/runners/{runner_id}`` as that runner — read from the app's registry, so a runner the
+    host does not serve stamps nothing: its own server span, which opens before any middleware runs, and every span
+    it opens under that."""
 
-    def __init__(self, app: ASGIApp) -> None:
+    def __init__(self, app: ASGIApp, *, platform_tracing: IPlatformTracing) -> None:
         self.app = app
+        self._platform_tracing = platform_tracing
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         identity = _served_identity(scope) if scope["type"] == "http" else None
         if identity is None:
             await self.app(scope, receive, send)
             return
-        if stamped := identity_stamp(identity)():
+        stamp = identity_stamp(identity)
+        if stamped := stamp():
             annotate(stamped)
-        with stamping_as(identity):
+        with self._platform_tracing.stamping(stamp):
             await self.app(scope, receive, send)
 
 
@@ -633,9 +636,7 @@ def _wire_hosted_app(
         process=host.process,
         flags=host.flags,
     )
-    resumes = tuple(
-        ResumeMarking(runner.stores, runner.host_stores, host.clock, host.process) for runner in host.runners
-    )
+    resumes = tuple(ResumeMarking(runner.stores, host.host_stores, host.clock, host.process) for runner in host.runners)
     return HostedApp(
         app,
         resumes,
@@ -711,7 +712,7 @@ def _wire_runner(
     runner_status = RunnerStatusService(
         clock,
         pause=read_stores.pause,
-        daemon_liveness=graph.host_stores.daemon_liveness,
+        daemon_liveness=graph.host.host_stores.daemon_liveness,
         lease_record=read_stores.lease_record,
         outbound=read_stores.outbound,
         environments=read_stores.environments,

@@ -14,6 +14,7 @@ from blizzard.runner.harness.capability_snapshot import capability_snapshot, def
 from blizzard.runner.harness.health import HarnessHealthResult
 from blizzard.runner.harness.health_cache import HarnessHealthCache
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, OPENCODE_HARNESS_ID, SessionReference
+from blizzard.runner.harness.internal.committed_corpus import CommittedCorpus
 from blizzard.runner.harness.opencode.health import OpenCodeHealthProbe
 from blizzard.runner.harness.opencode.transcript.transcript_source import OpenCodeTranscriptSource
 from blizzard.runner.harness.opencode.usage.price_cache import FileOpenCodePriceCatalog
@@ -258,24 +259,32 @@ def test_production_registry_defaults_to_claude_code_with_both_enabled(
 @pytest.mark.unit
 def test_production_health_probes_omit_a_disabled_harness(tmp_path: Path) -> None:
     base = RunnerConfig(root=tmp_path, db_url="sqlite://")
-    assert list(build_production_harness_health_probes(base.harness_settings(NO_TRACING), spawn_roots=("",))) == [
+    assert list(
+        build_production_harness_health_probes(
+            base.harness_settings(NO_TRACING), spawn_roots=("",), corpus=CommittedCorpus()
+        )
+    ) == [
         CLAUDE_CODE_HARNESS_ID,
         OPENCODE_HARNESS_ID,
     ]
     no_claude = with_claude_code(RunnerConfig(root=tmp_path, db_url="sqlite://"), enabled=False)
-    assert list(build_production_harness_health_probes(no_claude.harness_settings(NO_TRACING), spawn_roots=("",))) == [
-        OPENCODE_HARNESS_ID
-    ]
+    assert list(
+        build_production_harness_health_probes(
+            no_claude.harness_settings(NO_TRACING), spawn_roots=("",), corpus=CommittedCorpus()
+        )
+    ) == [OPENCODE_HARNESS_ID]
     no_opencode = with_opencode(RunnerConfig(root=tmp_path, db_url="sqlite://"), enabled=False)
     assert list(
-        build_production_harness_health_probes(no_opencode.harness_settings(NO_TRACING), spawn_roots=("",))
+        build_production_harness_health_probes(
+            no_opencode.harness_settings(NO_TRACING), spawn_roots=("",), corpus=CommittedCorpus()
+        )
     ) == [CLAUDE_CODE_HARNESS_ID]
 
 
 def _probe_auth_path(config: RunnerConfig) -> Path | None:
-    probe = build_production_harness_health_probes(config.harness_settings(NO_TRACING), spawn_roots=("",))[
-        OPENCODE_HARNESS_ID
-    ]
+    probe = build_production_harness_health_probes(
+        config.harness_settings(NO_TRACING), spawn_roots=("",), corpus=CommittedCorpus()
+    )[OPENCODE_HARNESS_ID]
     assert isinstance(probe, OpenCodeHealthProbe)
     return vars(probe)["_auth_path"]
 
@@ -310,3 +319,14 @@ def test_production_opencode_probe_prefers_an_explicit_auth_path(
     config = with_opencode(RunnerConfig(root=tmp_path, db_url="sqlite://"), auth_path=str(explicit))
 
     assert _probe_auth_path(config) == explicit
+
+
+@pytest.mark.component
+def test_the_production_opencode_probe_admits_against_the_injected_corpus(tmp_path: Path) -> None:
+    """The probe holds the very corpus its caller built — the one the health cache reads too — not one of its own."""
+    corpus = CommittedCorpus()
+    probe = build_production_harness_health_probes(
+        RunnerConfig(root=tmp_path, db_url="sqlite://").harness_settings(NO_TRACING), spawn_roots=("",), corpus=corpus
+    )[OPENCODE_HARNESS_ID]
+    assert isinstance(probe, OpenCodeHealthProbe)
+    assert vars(probe)["_corpus"] is corpus

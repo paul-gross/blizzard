@@ -7,6 +7,7 @@ Lease-token authenticated; everything received is untrusted, and
 
 from __future__ import annotations
 
+import functools
 from collections.abc import Callable
 
 from fastapi import APIRouter, HTTPException, Request, Response, status
@@ -43,10 +44,11 @@ async def receive_traces(request: Request) -> Response:
     wiring = RunnerWiring.of(request)
     lease = await run_in_threadpool(lease_for_presented_token, request)
     receiver = wiring.telemetry_receiver()
-    _on(receiver.require_traces)
+    sender = wiring.identity()
+    _on(lambda: receiver.require_traces(sender))
     content_type, body = await _checked_body(request)
     spans = await _decoded(decode_otlp, body, content_type)
-    dropped = await _received(receiver.receive_spans, lease, spans)
+    dropped = await _received(functools.partial(receiver.receive_spans, sender), lease, spans)
     return Response(content=encode_export_response(dropped, content_type), media_type=content_type)
 
 
@@ -58,10 +60,11 @@ async def receive_metrics(request: Request) -> Response:
     wiring = RunnerWiring.of(request)
     lease = await run_in_threadpool(lease_for_presented_token, request)
     receiver = wiring.telemetry_receiver()
-    _on(receiver.require_harness_telemetry)
+    sender = wiring.identity()
+    _on(lambda: receiver.require_harness_telemetry(sender))
     content_type, body = await _checked_body(request)
     decoded = await _decoded(decode_metrics, body, content_type)
-    dropped = await _received(receiver.receive_metrics, lease, decoded)
+    dropped = await _received(functools.partial(receiver.receive_metrics, sender), lease, decoded)
     return Response(content=rejected_data_points(dropped, content_type), media_type=content_type)
 
 
@@ -72,10 +75,11 @@ async def receive_logs(request: Request) -> Response:
     wiring = RunnerWiring.of(request)
     lease = await run_in_threadpool(lease_for_presented_token, request)
     receiver = wiring.telemetry_receiver()
-    _on(receiver.require_harness_telemetry)
+    sender = wiring.identity()
+    _on(lambda: receiver.require_harness_telemetry(sender))
     content_type, body = await _checked_body(request)
     records = await _decoded(decode_logs, body, content_type)
-    dropped = await _received(receiver.receive_logs, lease, records)
+    dropped = await _received(functools.partial(receiver.receive_logs, sender), lease, records)
     return Response(content=rejected_log_records(dropped, content_type), media_type=content_type)
 
 

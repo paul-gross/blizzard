@@ -23,7 +23,7 @@ from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.roles import domain_model
 from blizzard.runner.auth.tokens import IWriteTokenRepository
 from blizzard.runner.environments.provider import AcquiredEnvironment
-from blizzard.runner.environments.workspaces import IWorkspaces
+from blizzard.runner.environments.workspaces import IWorkspaceSpawnRoots
 from blizzard.runner.events.publisher import IRunnerEventPublisher
 from blizzard.runner.harness.adapter import IHarnessWorkerLifecycle, WorkerPreamble
 from blizzard.runner.harness.identity import SessionReference
@@ -481,7 +481,7 @@ class TakeoverService:
         elicitations: IWriteElicitationRepository,
         local_api_url: str,
         harnesses: IHarnessLifecycleRegistry,
-        workspaces: IWorkspaces,
+        workspaces: IWorkspaceSpawnRoots,
         events: IRunnerEventPublisher | None = None,
     ) -> None:
         self._takeover = takeover

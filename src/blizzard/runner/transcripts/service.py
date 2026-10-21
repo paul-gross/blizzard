@@ -6,7 +6,7 @@ its lease. Chunk-scoped segment reads resolve through the same session-file read
 from __future__ import annotations
 
 from blizzard.runner.environments.repository import IReadEnvironmentRepository
-from blizzard.runner.environments.workspaces import IWorkspaces
+from blizzard.runner.environments.workspaces import IWorkspaceSpawnRoots
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.leases.model import Lease
@@ -36,7 +36,7 @@ class TranscriptService:
         environments: IReadEnvironmentRepository,
         transcripts: ITranscriptRepositoryResolver,
         archived: IReadArchivedTranscriptRepository,
-        workspaces: IWorkspaces,
+        workspaces: IWorkspaceSpawnRoots,
     ) -> None:
         self._leases = leases
         self._transcript_ledger = transcript_ledger
