@@ -20,10 +20,11 @@ from pathlib import Path
 from fastapi import FastAPI
 
 from blizzard import __version__
+from blizzard.cli.config_inputs import packaged_flag_registry
 from blizzard.hub.app import create_app_for_export
 from exemplar.hub.api.permits import router
 
-app = create_app_for_export() if sys.argv[2] == "hub" else FastAPI(title="blizzard-hub", version=__version__)
+app = create_app_for_export(packaged_flag_registry()) if sys.argv[2] == "hub" else FastAPI(title="blizzard-hub", version=__version__)
 app.include_router(router)
 Path(sys.argv[1]).write_text(json.dumps(app.openapi(), indent=2, sort_keys=True) + "\n")
 PY
