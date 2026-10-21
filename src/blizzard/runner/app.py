@@ -38,6 +38,7 @@ from blizzard.runner.api.asks import router as asks_router
 from blizzard.runner.api.attachments import router as attachments_router
 from blizzard.runner.api.chunk_asks import router as chunk_asks_router
 from blizzard.runner.api.chunk_detail import router as chunk_detail_router
+from blizzard.runner.api.chunk_notes import router as chunk_notes_router
 from blizzard.runner.api.control import router as control_router
 from blizzard.runner.api.dashboard import router as dashboard_router
 from blizzard.runner.api.escalations import router as escalations_router
@@ -163,6 +164,7 @@ _RUNNER_UNGATED = (
     artifacts_router,
     history_router,
     chunk_asks_router,
+    chunk_notes_router,
     work_items_router,
     garden_router,
     finding_router,

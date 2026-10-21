@@ -91,6 +91,7 @@ _OPEN: set[tuple[str, str]] = {
     ("GET", "/runners/{runner_id}/api/leases/{lease_id}/artifacts/{name:path}"),
     ("GET", "/runners/{runner_id}/api/leases/{lease_id}/history"),
     ("GET", "/runners/{runner_id}/api/leases/{lease_id}/asks"),
+    ("GET", "/runners/{runner_id}/api/leases/{lease_id}/notes"),
     ("GET", "/runners/{runner_id}/api/leases/{lease_id}/garden/findings"),
     ("GET", "/runners/{runner_id}/api/leases/{lease_id}/garden/proposals"),
     ("GET", "/runners/{runner_id}/api/leases/{lease_id}/findings"),

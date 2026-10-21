@@ -604,10 +604,16 @@
           "short_help": "Worker: read every question asked on this chunk, with its answer, as JSON \u2014 oldest-first, open and answered alike, each row naming the asking node."
         },
         "history": {
-          "help": "Worker: read this chunk's own transition history as kind-discriminated JSON \u2014 the\nmerged, oldest-first timeline, one row per accepted transition, cross-graph migration, or delivery\nbounce, each carrying its own ``kind``. The in-flight node-step this call is part of is not\nthere yet: a transition is recorded only once an attempt completes.",
+          "help": "Worker: read this chunk's own transition history as kind-discriminated JSON \u2014 the\nmerged, oldest-first timeline, one row per accepted transition, cross-graph migration, delivery\nbounce, gate resolution, hub requeue, or restart, each carrying its own ``kind``. The in-flight\nnode-step this call is part of is not there yet: a transition is recorded only once an attempt completes.",
           "params": [],
           "path": "runner chunk history",
-          "short_help": "Worker: read this chunk's own transition history as kind-discriminated JSON \u2014 the merged, oldest-first timeline, one row per accepted transition, cross-graph migration, or delivery bounce, each carrying its own ``kind``."
+          "short_help": "Worker: read this chunk's own transition history as kind-discriminated JSON \u2014 the merged, oldest-first timeline, one row per accepted transition, cross-graph migration, delivery bounce, gate resolution, hub requeue, or restart, each carrying its own ``kind``."
+        },
+        "notes": {
+          "help": "Worker: read every note a person left on this chunk resolving a gate, requeueing it, or\nrestarting it, as JSON \u2014 oldest-first, each row carrying its ``kind`` and who left it. A\nperson's note binds every later session on the chunk as an answer does: never contradict one.",
+          "params": [],
+          "path": "runner chunk notes",
+          "short_help": "Worker: read every note a person left on this chunk resolving a gate, requeueing it, or restarting it, as JSON \u2014 oldest-first, each row carrying its ``kind`` and who left it."
         }
       },
       "help": "Worker: read facts about the chunk this node-step belongs to.",

@@ -6394,6 +6394,12 @@
    "over_cap": 0,
    "total": 35
   },
+  "blizzard/runner/api/chunk_notes.py": {
+   "comments": 0,
+   "docstrings": 5,
+   "over_cap": 0,
+   "total": 56
+  },
   "blizzard/runner/api/chunk_scope.py": {
    "comments": 0,
    "docstrings": 8,
@@ -6492,9 +6498,9 @@
   },
   "blizzard/runner/api/history.py": {
    "comments": 0,
-   "docstrings": 14,
+   "docstrings": 15,
    "over_cap": 1,
-   "total": 100
+   "total": 151
   },
   "blizzard/runner/api/host.py": {
    "comments": 1,
@@ -6614,7 +6620,7 @@
    "comments": 65,
    "docstrings": 47,
    "over_cap": 8,
-   "total": 839
+   "total": 841
   },
   "blizzard/runner/auth/__init__.py": {
    "comments": 0,
@@ -6798,9 +6804,9 @@
   },
   "blizzard/runner/cli/worker.py": {
    "comments": 0,
-   "docstrings": 28,
+   "docstrings": 31,
    "over_cap": 0,
-   "total": 115
+   "total": 125
   },
   "blizzard/runner/cli/worker_call.py": {
    "comments": 5,
@@ -9672,9 +9678,9 @@
   },
   "blizzard/wire/chunk_asks.py": {
    "comments": 0,
-   "docstrings": 10,
+   "docstrings": 15,
    "over_cap": 0,
-   "total": 40
+   "total": 64
   },
   "blizzard/wire/completion.py": {
    "comments": 9,
@@ -9786,9 +9792,9 @@
   },
   "blizzard/wire/history.py": {
    "comments": 0,
-   "docstrings": 14,
+   "docstrings": 13,
    "over_cap": 0,
-   "total": 42
+   "total": 46
   },
   "blizzard/wire/host.py": {
    "comments": 7,
@@ -13664,9 +13670,9 @@
   },
   "test_pin_wire.py": {
    "comments": 3,
-   "docstrings": 42,
+   "docstrings": 44,
    "over_cap": 1,
-   "total": 151
+   "total": 160
   },
   "test_pkce.py": {
    "comments": 0,
@@ -14302,7 +14308,13 @@
    "comments": 1,
    "docstrings": 7,
    "over_cap": 0,
-   "total": 161
+   "total": 177
+  },
+  "test_runner_chunk_notes_api.py": {
+   "comments": 1,
+   "docstrings": 9,
+   "over_cap": 0,
+   "total": 197
   },
   "test_runner_chunk_view_cache.py": {
    "comments": 26,
@@ -15052,7 +15064,7 @@
    "comments": 12,
    "docstrings": 24,
    "over_cap": 2,
-   "total": 277
+   "total": 278
   },
   "test_runner_routing_rules.py": {
    "comments": 2,
@@ -16195,10 +16207,10 @@
    "total": 470
   },
   "test_worker_preamble.py": {
-   "comments": 28,
+   "comments": 29,
    "docstrings": 46,
    "over_cap": 0,
-   "total": 460
+   "total": 464
   },
   "test_worker_scratch.py": {
    "comments": 3,

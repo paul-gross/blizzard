@@ -15,7 +15,7 @@ from fastapi import APIRouter, Request
 from blizzard.foundation.roles import dto
 from blizzard.runner.api.hub_proxy import HubProxy
 from blizzard.runner.api.lease_scope import authorized_lease
-from blizzard.wire.chunk import BounceView, MigrationView, TransitionView
+from blizzard.wire.chunk import BounceView, MigrationView, RequeueView, ResolutionView, RestartView, TransitionView
 from blizzard.wire.history import ChunkHistoryView, HistoryRowView
 
 router = APIRouter(prefix="/api", tags=["runner"])
@@ -23,7 +23,8 @@ router = APIRouter(prefix="/api", tags=["runner"])
 
 @router.get("/leases/{lease_id}/history", response_model=list[HistoryRowView])
 def get_history(lease_id: str, request: Request) -> list[HistoryRowView]:
-    """The worker's own chunk's timeline — transitions, migrations, and bounces merged
+    """The worker's own chunk's timeline — transitions, migrations, bounces, gate resolutions,
+    requeues, and restarts merged
     oldest-first into one kind-discriminated read. Excludes the in-flight node-step."""
     lease = authorized_lease(lease_id, request)
     upstream = HubProxy.of(request, "history").get(f"/api/fleet/chunks/{lease.chunk_id}", chunk_id=lease.chunk_id)
@@ -87,14 +88,64 @@ class _BounceEntry(_HistoryEntry):
         return HistoryRowView(kind="bounce", cause=b.cause, detail=b.envelope, recorded_at=b.recorded_at)
 
 
+@dto
+@dataclass(frozen=True)
+class _ResolutionEntry(_HistoryEntry):
+    fact: ResolutionView
+
+    def view(self) -> HistoryRowView:
+        r = self.fact
+        return HistoryRowView(
+            kind="resolution",
+            from_node=r.node_name,
+            choice=r.choice,
+            epoch=r.epoch,
+            by=r.resolved_by,
+            note=r.note,
+            recorded_at=r.resolved_at,
+        )
+
+
+@dto
+@dataclass(frozen=True)
+class _RequeueEntry(_HistoryEntry):
+    fact: RequeueView
+
+    def view(self) -> HistoryRowView:
+        q = self.fact
+        return HistoryRowView(kind="requeue", by=q.requeued_by, note=q.note, recorded_at=q.requeued_at)
+
+
+@dto
+@dataclass(frozen=True)
+class _RestartEntry(_HistoryEntry):
+    fact: RestartView
+
+    def view(self) -> HistoryRowView:
+        s = self.fact
+        return HistoryRowView(
+            kind="restart",
+            from_node=s.from_node_name or s.from_node_id,
+            to_node=s.to_node_name or s.to_node_id,
+            epoch=s.epoch,
+            graph_name=s.graph_name,
+            by=s.restarted_by,
+            note=s.note,
+            recorded_at=s.recorded_at,
+        )
+
+
 def _rows(detail: ChunkHistoryView) -> list[HistoryRowView]:
-    """The chunk's transitions, migrations, and bounces merged into one kind-discriminated
-    timeline, oldest-first by ``recorded_at``. Each input list already arrives oldest-first,
-    so a stable sort on ``recorded_at`` alone preserves each kind's own order and only
+    """The chunk's transitions, migrations, bounces, resolutions, requeues, and restarts merged
+    into one kind-discriminated timeline, oldest-first by ``recorded_at``. Each input list already
+    arrives oldest-first, so a stable sort on ``recorded_at`` alone preserves each kind's own order and only
     interleaves across kinds."""
     facts: list[_HistoryEntry] = [
         *(_TransitionEntry(t) for t in detail.history),
         *(_MigrationEntry(m) for m in detail.migrations),
         *(_BounceEntry(b) for b in detail.bounces),
+        *(_ResolutionEntry(r) for r in detail.resolutions),
+        *(_RequeueEntry(q) for q in detail.requeues),
+        *(_RestartEntry(s) for s in detail.restarts),
     ]
     return sorted((f.view() for f in facts), key=lambda r: r.recorded_at)

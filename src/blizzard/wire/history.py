@@ -1,7 +1,7 @@
 """The worker-facing chunk-history wire shapes.
 
-``HistoryRowView`` is a flat, kind-discriminated row — ``transition`` | ``migration`` |
-``bounce`` — merged oldest-first across a chunk's three hub-side histories. The merge
+``HistoryRowView`` is a flat, kind-discriminated row merged oldest-first across a chunk's
+hub-side histories. The merge
 itself is not here: a wire model declares shape only, never a projection into another
 model."""
 
@@ -12,16 +12,15 @@ from typing import Literal
 from pydantic import BaseModel
 
 from blizzard.wire.base import WireModel
-from blizzard.wire.chunk import BounceView, MigrationView, TransitionView
+from blizzard.wire.chunk import BounceView, MigrationView, RequeueView, ResolutionView, RestartView, TransitionView
 
 
 class HistoryRowView(WireModel):
-    """One row of a chunk's own timeline — a transition, a cross-graph migration, or a
-    delivery bounce, merged oldest-first by ``recorded_at``. ``from_node``/``to_node`` are
-    node labels (a migration's is a ``graph/node`` hop), both null for a bounce; ``epoch``
-    is transition-only; ``cause``/``detail`` carry a bounce's kick-back or a migration source."""
+    """One row of a chunk's own timeline. ``from_node``/``to_node`` are node labels (a migration's
+    is a ``graph/node`` hop); ``cause``/``detail`` carry a bounce's kick-back or a migration
+    source; ``by``/``note`` are the person behind a resolution, requeue or restart, and their note."""
 
-    kind: Literal["transition", "migration", "bounce"]
+    kind: Literal["transition", "migration", "bounce", "resolution", "requeue", "restart"]
     from_node: str | None = None
     to_node: str | None = None
     choice: str | None = None
@@ -29,15 +28,20 @@ class HistoryRowView(WireModel):
     graph_name: str | None = None
     cause: str | None = None
     detail: str | None = None
+    by: str | None = None
+    note: str | None = None
     recorded_at: str
 
 
 class ChunkHistoryView(BaseModel):
     """The history/migrations/bounces slice of a hub ``ChunkDetail`` payload — never a FastAPI
-    ``response_model``, decoded with pydantic's default ``extra="ignore"``. The three fields
-    are **required**, not defaulted to ``[]``, so a rename fails loudly rather
-    than decoding as "no history yet"."""
+    ``response_model``, decoded with pydantic's default ``extra="ignore"``. The first three fields
+    are **required**, not defaulted to ``[]``, so a rename fails loudly rather than decoding as
+    "no history yet"; the person-made lists are defaulted, so a hub without them still decodes."""
 
     history: list[TransitionView]
     migrations: list[MigrationView]
     bounces: list[BounceView]
+    resolutions: list[ResolutionView] = []
+    requeues: list[RequeueView] = []
+    restarts: list[RestartView] = []

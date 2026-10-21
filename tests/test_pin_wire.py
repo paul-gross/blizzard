@@ -73,6 +73,15 @@ def test_chunk_history_view_requires_all_three_history_lists() -> None:
         assert caught.value.errors()[0]["type"] == "missing"
 
 
+def test_chunk_history_view_defaults_the_person_made_lists() -> None:
+    """Resolutions, requeues and restarts are defaulted, unlike the three required lists: a hub
+    that predates them still decodes, as "none recorded"."""
+    view = ChunkHistoryView.model_validate({"history": [], "migrations": [], "bounces": []})
+    assert (view.resolutions, view.requeues, view.restarts) == ([], [], [])
+    for name in ("resolutions", "requeues", "restarts"):
+        assert not ChunkHistoryView.model_fields[name].is_required()
+
+
 def test_graph_policy_request_follow_latest_carries_no_default() -> None:
     """``follow_latest`` is required: clearing the override is asked for by
     naming ``null``, never done by an omitted field."""

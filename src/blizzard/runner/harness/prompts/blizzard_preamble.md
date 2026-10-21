@@ -23,15 +23,17 @@ attempt is a failing one.
 
 Your verbs are the `blizzard` CLI's `runner` commands whose help is labeled **Worker:** — the rest are the operator's.
 
-| `blizzard runner` verb  | Purpose                                              | Read more |
-| ----------------------- | ---------------------------------------------------- | --------- |
-| `work-items <chunk-id>` | The chunk's work items — read them, never guess      | `--help`  |
-| `chunk history`         | The chunk's transition history                       | `--help`  |
-| `chunk asks`            | Every question asked on this chunk, open or answered | `--help`  |
-| `artifact …`            | Read what your step consumes, write what it produces | `--help`  |
-| `finding …`             | The findings your chunk's proposal answers           | `--help`  |
-| `ask "<question>"`      | Ask a human an undecidable choice; resumed on answer | `--help`  |
+| `blizzard runner` verb  | Purpose                                | Read more |
+| ----------------------- | -------------------------------------- | --------- |
+| `work-items <chunk-id>` | The chunk's work items — never guess   | `--help`  |
+| `chunk history`         | The chunk's transition history         | `--help`  |
+| `chunk asks`            | Questions asked here, open or answered | `--help`  |
+| `chunk notes`           | Notes a person left on this chunk      | `--help`  |
+| `artifact …`            | What your step consumes and produces   | `--help`  |
+| `finding …`             | Findings your chunk's proposal answers | `--help`  |
+| `ask "<question>"`      | Ask a human an undecidable choice      | `--help`  |
 
-A person's answer binds every later session on the chunk: read `chunk asks` before asking again; never contradict one.
+A person's answer or note binds every later session on the chunk: read `chunk asks` and `chunk notes` first; never
+contradict either.
 
 `blizzard runner heartbeat` and `blizzard runner session-end` fire from your hooks; never invoke either.
