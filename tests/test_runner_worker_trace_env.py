@@ -10,8 +10,8 @@ import pytest
 from blizzard.foundation.trace_export.settings import TracingSettings
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.adapter import AcquiredEnvironment, WorkerPreamble
-from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.harness_shared import build_identity_env
+from blizzard.runner.process.child_env import AllowlistedEnv
 
 pytestmark = pytest.mark.unit
 

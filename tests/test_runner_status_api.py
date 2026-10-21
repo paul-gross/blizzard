@@ -17,7 +17,6 @@ from blizzard.foundation.runner_identity_state import IdentityState
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.claude_code.adapter import ClaudeCodeAdapter
-from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.internal.process_launcher import ProcessLauncher
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
@@ -32,6 +31,7 @@ from blizzard.runner.hub.identity import (
 )
 from blizzard.runner.hub.served_projects import ServedProject
 from blizzard.runner.leases.model import NewLease
+from blizzard.runner.process.child_env import AllowlistedEnv
 from blizzard.runner.status.view import RunnerStatusService
 from tests.config_inputs import create_runner_app
 from tests.runner_client import runner_client

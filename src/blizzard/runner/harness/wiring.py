@@ -25,13 +25,13 @@ from blizzard.runner.harness.declaration import (
     IHarnessSectionKind,
     SharedHarnessInputs,
 )
-from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.harness_telemetry_plan import HarnessTelemetryNames, HarnessTelemetryPlan
 from blizzard.runner.harness.internal.bundle_publisher import inspect_bundle, publish_bundle, published_snapshot
 from blizzard.runner.harness.internal.process_launcher import ProcessLauncher
 from blizzard.runner.harness.offline_compatibility import ICompatibilityCorpus
 from blizzard.runner.harness.opencode.section import OPENCODE_SECTION
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
+from blizzard.runner.process.child_env import AllowlistedEnv
 from blizzard.runner.process.probe import IProcessProbe
 
 #: The catalog order: Claude Code first.

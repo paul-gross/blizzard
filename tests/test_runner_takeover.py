@@ -23,7 +23,6 @@ from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.environments.workspaces import WorkspaceEntry, WorkspaceRegistry
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.claude_code.adapter import ClaudeCodeAdapter
-from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.harness_telemetry_plan import HarnessTelemetryPlan
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.internal.process_launcher import ProcessLauncher
@@ -45,6 +44,7 @@ from blizzard.runner.lifecycle.takeover import (
 )
 from blizzard.runner.loop.steps import Advance, Fill, Pull, Reap, Resume
 from blizzard.runner.node_steps.chunk_state import ChunkState
+from blizzard.runner.process.child_env import AllowlistedEnv
 from tests.runner_fakes import (
     FakeHarness,
     FakeHub,

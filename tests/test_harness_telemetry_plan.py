@@ -15,11 +15,11 @@ from blizzard.runner.harness.adapter import AcquiredEnvironment, WorkerPreamble
 from blizzard.runner.harness.claude_code.adapter import ClaudeCodeAdapter
 from blizzard.runner.harness.claude_code.section import WORKER_SETTINGS_FILENAME, ClaudeCodeSection
 from blizzard.runner.harness.claude_code.telemetry_plan import CLAUDE_CODE_TELEMETRY_NAMES
-from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.harness_telemetry_plan import HarnessTelemetryPlan
 from blizzard.runner.harness.process_launch import LaunchedProcess
 from blizzard.runner.harness.telemetry_signals import TelemetrySignal
 from blizzard.runner.harness.wiring import combined_telemetry_plan, declared_telemetry_names, publish_harness_bundle
+from blizzard.runner.process.child_env import AllowlistedEnv
 from tests.config_inputs import host_runtime_of
 from tests.harness_sections import sections
 from tests.runner_fakes import NO_TRACING, FakeProbe, make_envelope

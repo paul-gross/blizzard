@@ -32,7 +32,6 @@ from blizzard.runner.harness.autonomy import Autonomy
 from blizzard.runner.harness.claude_code import telemetry
 from blizzard.runner.harness.claude_code.bundle import ClaudeCodeBundleDelivery
 from blizzard.runner.harness.claude_code.settings_compose import PERMISSION_MODES
-from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.harness_telemetry_plan import HarnessTelemetryPlan
 from blizzard.runner.harness.internal import version_probe
 from blizzard.runner.harness.overload import ProviderOverload
@@ -41,6 +40,7 @@ from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource, NullTranscriptSource
 from blizzard.runner.harness.usage import UsageKind, UsageLimit, UsageSample
 from blizzard.runner.node_steps.envelope import Envelope
+from blizzard.runner.process.child_env import AllowlistedEnv
 from blizzard.runner.process.probe import IProcessProbe
 
 _log = get_logger("blizzard.runner.harness")

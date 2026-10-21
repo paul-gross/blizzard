@@ -6,7 +6,7 @@ import contextlib
 import os
 import signal
 
-from blizzard.foundation.process import ProcStat, group_exists, signal_group
+from blizzard.runner.process.groups import ProcStat, group_exists, signal_group
 from blizzard.runner.process.probe import IProcessProbe
 
 

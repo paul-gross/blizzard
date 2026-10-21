@@ -24,9 +24,9 @@ from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.harness.adapter import ResumeHandle, WorkerPreamble
 from blizzard.runner.harness.claude_code.adapter import ClaudeCodeAdapter
-from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.internal.process_launcher import ProcessLauncher
 from blizzard.runner.node_steps.envelope import Envelope, GraphArtifact
+from blizzard.runner.process.child_env import AllowlistedEnv
 from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
 from tests import transcript_fixtures
 from tests.runner_fakes import FakeProbe, make_envelope

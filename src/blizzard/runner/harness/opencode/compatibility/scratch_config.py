@@ -16,7 +16,6 @@ from importlib import resources
 from pathlib import Path
 
 from blizzard.foundation.roles import adapter_model
-from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.opencode.compatibility.proof_script import (
     CONFIG_PERMISSION_COMMAND,
     PERMISSION_AGENT,
@@ -29,6 +28,7 @@ from blizzard.runner.harness.opencode.compatibility.proof_script import (
     TOOL_AGENT,
 )
 from blizzard.runner.harness.opencode.shapes import parse_worker_config
+from blizzard.runner.process.child_env import AllowlistedEnv
 
 RUNNER_CONFIG_USERNAME = "blizzard-runner-config"
 COMPACTION_TAIL_TURNS = 1

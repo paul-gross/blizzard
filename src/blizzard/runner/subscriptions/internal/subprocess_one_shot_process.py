@@ -8,7 +8,7 @@ import time
 from collections.abc import Mapping, Sequence
 
 from blizzard.foundation.logging import get_logger
-from blizzard.foundation.process import terminate_group
+from blizzard.runner.process.groups import terminate_group
 from blizzard.runner.subscriptions.one_shot_process import IOneShotProcess, OneShotResult
 
 _log = get_logger("blizzard.runner.subscriptions")

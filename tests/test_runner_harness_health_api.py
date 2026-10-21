@@ -24,7 +24,6 @@ from blizzard.runner.harness.claude_code.health import (
 )
 from blizzard.runner.harness.claude_code.section import ClaudeCodeSection
 from blizzard.runner.harness.compatibility import CompatibilityProbe
-from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.health import DeclaredDegradation
 from blizzard.runner.harness.health_cache import HarnessHealthCache
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, OPENCODE_HARNESS_ID
@@ -35,6 +34,7 @@ from blizzard.runner.harness.opencode.compatibility.probe import ADMITTED_OPENCO
 from blizzard.runner.harness.opencode.health import OpenCodeHealthProbe
 from blizzard.runner.harness.opencode.section import OpenCodeSection
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
+from blizzard.runner.process.child_env import AllowlistedEnv
 from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
 from tests.config_inputs import create_runner_app
 from tests.harness_sections import claude_code, opencode, sections

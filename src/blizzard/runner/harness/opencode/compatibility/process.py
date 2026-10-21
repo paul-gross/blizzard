@@ -19,13 +19,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import IO, Protocol
 
-from blizzard.foundation.process import group_exists, signal_group, terminate_group
 from blizzard.foundation.roles import collaborator, domain_model
 from blizzard.runner.harness.opencode.compatibility.landlock import (
     LandlockPolicy,
     LandlockUnavailable,
     require_landlock,
 )
+from blizzard.runner.process.groups import group_exists, signal_group, terminate_group
 
 _CAPTURE_LIMIT_BYTES = 4 * 1024 * 1024
 _LINE_QUEUE_LIMIT_BYTES = 256 * 1024

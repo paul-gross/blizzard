@@ -22,7 +22,6 @@ from blizzard.runner.harness.claude_code.adapter import ClaudeCodeAdapter
 from blizzard.runner.harness.claude_code.bundle import ClaudeCodeBundleDelivery
 from blizzard.runner.harness.claude_code.denials import CLAUDE_CODE_DENIED_TOOLS
 from blizzard.runner.harness.claude_code.section import WORKER_SETTINGS_FILENAME
-from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.opencode.adapter import OpenCodeAdapter
 from blizzard.runner.harness.opencode.permissions.permission_resolver import (
     OpenCodeEffectivePermissions,
@@ -32,6 +31,7 @@ from blizzard.runner.harness.opencode.section import OPENCODE_WORKER_CONFIG_FILE
 from blizzard.runner.harness.opencode.shapes import OpenCodePermissionRule
 from blizzard.runner.harness.process_launch import LaunchedProcess
 from blizzard.runner.host_layout import HOST_CONFIG_FILENAME
+from blizzard.runner.process.child_env import AllowlistedEnv
 from tests.config_inputs import host_runtime_of
 from tests.harness_sections import claude_code
 from tests.host_files import load_runner_config, write_minimal_host

@@ -1,4 +1,4 @@
-"""Process-group signalling in ``src/blizzard/foundation/process.py``, against real process groups: the primitive swallows a
+"""Process-group signalling in ``src/blizzard/runner/process/groups.py``, against real process groups: the primitive swallows a
 vanished group, and the TERM, grace, KILL sequence reaches a member that ignores TERM."""
 
 from __future__ import annotations
@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from blizzard.foundation.process import group_exists, signal_group, terminate_group
+from blizzard.runner.process.groups import group_exists, signal_group, terminate_group
 
 pytestmark = pytest.mark.unit
 

@@ -30,7 +30,6 @@ from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.adapter import ResumeHandle, WorkerHandle, WorkerPreamble
 from blizzard.runner.harness.claude_code.adapter import ClaudeCodeAdapter
 from blizzard.runner.harness.claude_code.section import ClaudeCodeSection
-from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, OPENCODE_HARNESS_ID
 from blizzard.runner.harness.internal.process_launcher import ProcessLauncher
 from blizzard.runner.harness.opencode.section import OpenCodeSection
@@ -41,6 +40,7 @@ from blizzard.runner.harness.usage import UsageKind, UsageLimit, UsageSample
 from blizzard.runner.harness.wiring import build_production_harness_registry
 from blizzard.runner.lifecycle.judgement.internal.elicitation_files import ElicitationFiles
 from blizzard.runner.listeners import Listeners, Uds
+from blizzard.runner.process.child_env import AllowlistedEnv
 from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
 from blizzard.runner.selftest.checks import SelfTest
 from blizzard.runner.selftest.internal.subprocess_scratch_git import SubprocessScratchGit

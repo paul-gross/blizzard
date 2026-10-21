@@ -9,7 +9,7 @@ import tempfile
 from pathlib import Path
 from typing import Protocol
 
-from blizzard.runner.harness.env_allowlist import AllowlistedEnv
+from blizzard.runner.process.child_env import AllowlistedEnv
 
 #: Bounds one ``export`` call — a wedged binary costs one failed read, not a hang.
 DEFAULT_EXPORT_TIMEOUT_SECONDS = 30.0

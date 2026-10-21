@@ -10,8 +10,8 @@ from pathlib import Path
 
 import pytest
 
-from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.lifecycle.judgement.internal.subprocess_check_runner import SubprocessCheckRunner
+from blizzard.runner.process.child_env import AllowlistedEnv
 
 pytestmark = pytest.mark.unit
 

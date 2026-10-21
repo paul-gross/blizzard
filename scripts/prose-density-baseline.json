@@ -1792,12 +1792,6 @@
    "over_cap": 0,
    "total": 47
   },
-  "blizzard/foundation/process.py": {
-   "comments": 4,
-   "docstrings": 22,
-   "over_cap": 1,
-   "total": 85
-  },
   "blizzard/foundation/project_colors.py": {
    "comments": 2,
    "docstrings": 2,
@@ -7066,12 +7060,6 @@
    "over_cap": 0,
    "total": 171
   },
-  "blizzard/runner/harness/env_allowlist.py": {
-   "comments": 6,
-   "docstrings": 12,
-   "over_cap": 2,
-   "total": 55
-  },
   "blizzard/runner/harness/fingerprint.py": {
    "comments": 0,
    "docstrings": 10,
@@ -8025,6 +8013,18 @@
    "docstrings": 0,
    "over_cap": 0,
    "total": 0
+  },
+  "blizzard/runner/process/child_env.py": {
+   "comments": 6,
+   "docstrings": 12,
+   "over_cap": 2,
+   "total": 55
+  },
+  "blizzard/runner/process/groups.py": {
+   "comments": 4,
+   "docstrings": 22,
+   "over_cap": 1,
+   "total": 85
   },
   "blizzard/runner/process/internal/__init__.py": {
    "comments": 0,
@@ -12018,12 +12018,6 @@
    "over_cap": 0,
    "total": 478
   },
-  "test_env_allowlist.py": {
-   "comments": 0,
-   "docstrings": 4,
-   "over_cap": 0,
-   "total": 41
-  },
   "test_envelope.py": {
    "comments": 34,
    "docstrings": 8,
@@ -12341,12 +12335,6 @@
    "docstrings": 15,
    "over_cap": 0,
    "total": 208
-  },
-  "test_foundation_process_group.py": {
-   "comments": 0,
-   "docstrings": 3,
-   "over_cap": 0,
-   "total": 63
   },
   "test_foundation_roles.py": {
    "comments": 0,
@@ -14292,6 +14280,12 @@
    "over_cap": 0,
    "total": 508
   },
+  "test_runner_child_env.py": {
+   "comments": 0,
+   "docstrings": 4,
+   "over_cap": 0,
+   "total": 41
+  },
   "test_runner_chunk_asks_api.py": {
    "comments": 8,
    "docstrings": 8,
@@ -14969,6 +14963,12 @@
    "docstrings": 21,
    "over_cap": 0,
    "total": 217
+  },
+  "test_runner_process_groups.py": {
+   "comments": 0,
+   "docstrings": 3,
+   "over_cap": 0,
+   "total": 63
   },
   "test_runner_process_launch.py": {
    "comments": 9,

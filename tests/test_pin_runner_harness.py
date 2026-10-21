@@ -12,8 +12,8 @@ import pytest
 
 from blizzard.runner.harness.claude_code import adapter as adapter_module
 from blizzard.runner.harness.claude_code.adapter import ClaudeCodeAdapter
-from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.internal.process_launcher import ProcessLauncher
+from blizzard.runner.process.child_env import AllowlistedEnv
 from tests.runner_fakes import FakeProbe
 
 

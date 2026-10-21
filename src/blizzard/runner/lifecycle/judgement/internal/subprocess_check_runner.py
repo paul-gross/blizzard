@@ -12,8 +12,8 @@ from dataclasses import dataclass
 
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import domain_model
-from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.lifecycle.judgement.check_runner import CheckOutcome, ICheckRunner
+from blizzard.runner.process.child_env import AllowlistedEnv
 
 _log = get_logger("blizzard.runner.checks")
 

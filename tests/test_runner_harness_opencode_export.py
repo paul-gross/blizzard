@@ -9,8 +9,8 @@ import subprocess
 
 import pytest
 
-from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.opencode.transcript.export import OpenCodeExportError, SubprocessOpenCodeExporter
+from blizzard.runner.process.child_env import AllowlistedEnv
 
 _EMPTY = AllowlistedEnv.of(())
 

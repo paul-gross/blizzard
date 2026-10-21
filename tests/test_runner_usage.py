@@ -18,7 +18,6 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.fact_kinds import USAGE_RECORDED
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.claude_code.adapter import ClaudeCodeAdapter
-from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, OPENCODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.internal.process_launcher import ProcessLauncher
 from blizzard.runner.harness.opencode.adapter import OpenCodeAdapter
@@ -33,6 +32,7 @@ from blizzard.runner.lifecycle.spawn import Spawner
 from blizzard.runner.loop.context import LoopConfig
 from blizzard.runner.loop.steps import Advance, Resume, ResumeIntents
 from blizzard.runner.node_steps.chunk_state import ChunkState
+from blizzard.runner.process.child_env import AllowlistedEnv
 from blizzard.runner.throttle.pause import PausePark
 from blizzard.runner.usage.recorder import UsageRecorder
 from tests.runner_fakes import (

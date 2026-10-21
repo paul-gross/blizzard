@@ -13,7 +13,6 @@ import pytest
 import structlog
 from structlog.testing import capture_logs
 
-from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.internal.committed_corpus import CommittedCorpus
 from blizzard.runner.harness.internal.process_launcher import ProcessLauncher
 from blizzard.runner.harness.offline_compatibility import admitted_corpus_versions
@@ -24,6 +23,7 @@ from blizzard.runner.harness.opencode.transcript.export import IOpenCodeExporter
 from blizzard.runner.harness.opencode.transcript.normalizer import NORMALIZER_VERSION, build_turns
 from blizzard.runner.harness.opencode.transcript.transcript_source import OpenCodeTranscriptSource
 from blizzard.runner.harness.transcript import TranscriptErrorFactory, TranscriptPosition
+from blizzard.runner.process.child_env import AllowlistedEnv
 from tests.repo_files import repo_root
 from tests.runner_fakes import FakeProbe
 

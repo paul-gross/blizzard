@@ -12,7 +12,6 @@ import pytest
 import structlog
 from structlog.testing import capture_logs
 
-from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.internal.process_launcher import ProcessLauncher
 from blizzard.runner.harness.opencode.adapter import OpenCodeAdapter
 from blizzard.runner.harness.opencode.shapes import OpenCodePart, parse_session_export
@@ -22,6 +21,7 @@ from blizzard.runner.harness.opencode.transcript.transcript_source import OpenCo
 from blizzard.runner.harness.opencode.usage.descendant_usage import OpenCodeDescendantUsage
 from blizzard.runner.harness.opencode.usage.price_cache import OpenCodeModelPrice, OpenCodeRate
 from blizzard.runner.harness.transcript import TranscriptErrorFactory
+from blizzard.runner.process.child_env import AllowlistedEnv
 from tests.repo_files import repo_root
 from tests.runner_fakes import FakeProbe
 from tests.test_runner_harness_opencode_transcript import FakeExporter

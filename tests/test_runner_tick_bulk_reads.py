@@ -24,7 +24,6 @@ from blizzard.foundation.store import batching as batching_module
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.claude_code.adapter import ClaudeCodeAdapter
-from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.internal.process_launcher import ProcessLauncher
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
@@ -34,6 +33,7 @@ from blizzard.runner.lifecycle.claim import InterruptedClaims
 from blizzard.runner.loop.context import LoopConfig
 from blizzard.runner.loop.tick import tick
 from blizzard.runner.node_steps.chunk_state import ChunkState
+from blizzard.runner.process.child_env import AllowlistedEnv
 from blizzard.runner.status.view import RunnerStatusService
 from tests import support
 from tests.config_inputs import init_host

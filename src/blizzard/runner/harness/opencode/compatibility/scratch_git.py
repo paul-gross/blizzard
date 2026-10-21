@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Protocol
 
 from blizzard.foundation.roles import domain_model
-from blizzard.runner.harness.env_allowlist import AllowlistedEnv
+from blizzard.runner.process.child_env import AllowlistedEnv
 
 
 @domain_model

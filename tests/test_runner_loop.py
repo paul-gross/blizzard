@@ -35,7 +35,6 @@ from blizzard.runner.environments.worktree import IWorktreeGit
 from blizzard.runner.harness.adapter import HarnessSpawnError, WorkerHandle
 from blizzard.runner.harness.capability_snapshot import HarnessCapability, HarnessVersionCache
 from blizzard.runner.harness.claude_code.adapter import ClaudeCodeAdapter
-from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.health_cache import HARNESS_VERSION_REFRESH_SECONDS, HarnessHealthCache
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.internal.committed_corpus import CommittedCorpus
@@ -72,6 +71,7 @@ from blizzard.runner.loop.tick import tick
 from blizzard.runner.node_steps.chunk_state import ChunkSpend, ChunkState
 from blizzard.runner.node_steps.envelope import ProducesSpec
 from blizzard.runner.node_steps.submissions import ApplyReply, CompletionArtifact
+from blizzard.runner.process.child_env import AllowlistedEnv
 from blizzard.runner.process.internal.worker_scratch_dirs import WorkerScratchDirs
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
 from blizzard.runner.store.schema import lease_spawns

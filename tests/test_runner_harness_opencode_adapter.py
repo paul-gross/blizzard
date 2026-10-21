@@ -21,7 +21,6 @@ import pytest
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.harness.adapter import HarnessSpawnError, ResumeHandle, WorkerIdentityError, WorkerPreamble
-from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.identity import OPENCODE_HARNESS_ID
 from blizzard.runner.harness.internal.committed_corpus import CommittedCorpus
 from blizzard.runner.harness.internal.process_launcher import ProcessLauncher
@@ -43,6 +42,7 @@ from blizzard.runner.harness.opencode.usage.price_cache import (
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.lifecycle.session import HarnessSelection, HarnessSelector, SkippedHarness
 from blizzard.runner.node_steps.envelope import GraphArtifact
+from blizzard.runner.process.child_env import AllowlistedEnv
 from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
 from tests.opencode_usage_limit_fixture import USAGE_LIMIT_EVENT
 from tests.repo_files import repo_root
