@@ -107,8 +107,8 @@ from blizzard.hub.composition import (
     build_services,
 )
 from blizzard.hub.config import AUTH_MODE_OAUTH, ConfigError, HubConfig, read_legacy_keys
-from blizzard.hub.domain.config.work_sources import BuiltInWorkSource
 from blizzard.hub.domain.config.carry_over import ExistingConfig, ImportResult, LegacyStart, LegacyStartRefused
+from blizzard.hub.domain.config.work_sources import BuiltInWorkSource
 from blizzard.hub.domain.observability.egress.config import EgressConfig
 from blizzard.hub.domain.observability.egress.event_rows import missing_key_reason
 from blizzard.hub.domain.observability.tracing.attributes import (

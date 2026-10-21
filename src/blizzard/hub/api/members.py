@@ -63,8 +63,8 @@ def identity_views(identities: list[Identity]) -> list[UserIdentityView]:
 
 def change_membership(services: HubServices, actor: ResolvedIdentity, user_id: str, to_role: Role | None) -> Member:
     """Move ``user_id`` to ``to_role`` (``None`` revokes) in the actor's tenant, answering each refusal: ``404`` for a
-    user that does not exist or is no member, alike; ``422`` for a role no membership holds; ``403`` for changing your own role; ``409`` for the tenant's last
-    admin. A revocation ends the user's open event streams in the tenant."""
+    user that does not exist or is no member, alike; ``422`` for a role no membership holds; ``403`` for changing your
+    own role; ``409`` for the tenant's last admin. A revocation ends the user's open event streams in the tenant."""
     subject = services.users.get(user_id)
     if subject is None:
         raise _unknown(NotAMember(user_id))

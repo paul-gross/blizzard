@@ -14,6 +14,7 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.exc import IntegrityError
 
 from blizzard.foundation.artifacts import ArtifactKind
+from blizzard.hub.domain.config.apply import LinkRecord
 from blizzard.hub.domain.config.carry_over import (
     CommitCoordinate,
     ConfigImportFact,
@@ -33,7 +34,6 @@ from blizzard.hub.domain.config.work_sources import (
     WorkSourceSecretUnavailable,
     WorkSourceSlugTaken,
 )
-from blizzard.hub.domain.projects.links import RepositoryLink, SourceLink
 from blizzard.hub.store.internal import project_link_store as link_writes
 from blizzard.hub.store.internal import repository_record_store as repository_writes
 from blizzard.hub.store.internal import work_source_record_store as work_source_writes
@@ -122,12 +122,8 @@ class ConfigImportStore:
         return True
 
 
-def _insert_link(conn: Connection, link: object, change: ConfigChange) -> None:
-    if isinstance(link, SourceLink):
-        link_writes.insert_link(conn, link_writes._SOURCES, link.project_id, link.work_source_id, change)
-    else:
-        assert isinstance(link, RepositoryLink)
-        link_writes.insert_link(conn, link_writes._REPOSITORIES, link.project_id, link.repository_id, change)
+def _insert_link(conn: Connection, link: LinkRecord, change: ConfigChange) -> None:
+    link_writes.insert_link(conn, link_writes.LINK_KINDS[link.KIND], link.project_id, link.target(), change)
 
 
 def _conforms_config_import_reader(x: ConfigImportStore) -> IReadConfigImports:

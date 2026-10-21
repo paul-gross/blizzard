@@ -13,7 +13,7 @@ from __future__ import annotations
 from collections.abc import Hashable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Protocol, Self
+from typing import ClassVar, Protocol, Self
 
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.config.changes import (
@@ -118,6 +118,43 @@ class DeclarableRecord(Protocol):
     ) -> tuple[DeclarableRecord, ConfigChange] | None: ...
 
 
+class ProjectRecord(Protocol):
+    """A project, as the writer of an apply reads it: a project is created or edited, never retired, so it is no
+    :class:`DeclarableRecord`."""
+
+    @property
+    def project_id(self) -> str: ...
+
+    @property
+    def slug(self) -> str: ...
+
+    @property
+    def revision(self) -> int: ...
+
+
+class LinkRecord(Protocol):
+    """A project's link to a work source or a repository, as the writers of an apply and of an import read it:
+    ``target`` is the linked record's id, and a link is unlinked while ``linked`` is false."""
+
+    KIND: ClassVar[RecordKind]
+    LABEL: ClassVar[str]
+
+    @property
+    def project_id(self) -> str: ...
+
+    @property
+    def revision(self) -> int: ...
+
+    @property
+    def linked(self) -> bool: ...
+
+    def target(self) -> str: ...
+
+
+#: A record of any kind an apply writes, as :class:`PlannedWrite` carries it.
+WrittenRecord = ConfiguredWorkSource | ConfiguredRepository | DeclarableRecord | ProjectRecord | LinkRecord
+
+
 @domain_model
 @dataclass(frozen=True)
 class DeclaredReferences:
@@ -163,12 +200,12 @@ class RecordDeclaration(Protocol):
 @domain_model
 @dataclass(frozen=True)
 class PlannedWrite:
-    """One record write the apply will commit: the record after the write — of any kind the writer knows —, the
+    """One record write the apply will commit: the record after the write, the
     revision it moves from (``None`` for a create) and the change row committed beside it."""
 
     section: str
     index: int
-    record: object
+    record: WrittenRecord
     from_revision: int | None
     change: ConfigChange
 
@@ -262,12 +299,7 @@ class _Accumulator:
         self.outcomes: list[EntryOutcome] = []
 
 
-class _Revised(Protocol):
-    @property
-    def revision(self) -> int: ...
-
-
-class _Section[K: Hashable, D, R: _Revised](Protocol):
+class _Section[K: Hashable, D, R: WrittenRecord](Protocol):
     """One kind's part of the reconcile loop: the entries the document declares for it and the verbs that decide
     each. Every verb returns the record to write with its change, or ``None`` when it changes nothing."""
 
@@ -441,7 +473,7 @@ class _DeclaredRecordSection:
         return entry.settle(record, self._stored.references, self._ctx, at=self._at)
 
 
-def _reconcile_section[K: Hashable, D, R: _Revised](
+def _reconcile_section[K: Hashable, D, R: WrittenRecord](
     kind: _Section[K, D, R], stored: Mapping[K, R], plan: _Accumulator
 ) -> None:
     seen: set[K] = set()
@@ -494,7 +526,7 @@ def _require_unclaimed(
         )
 
 
-def _settle[K: Hashable, D, R: _Revised](
+def _settle[K: Hashable, D, R: WrittenRecord](
     kind: _Section[K, D, R], index: int, entry: D, record: R, plan: _Accumulator
 ) -> bool:
     """Plan the write that settles a record after its create or edit; ``False`` when it needs none."""
@@ -506,7 +538,7 @@ def _settle[K: Hashable, D, R: _Revised](
     return True
 
 
-def _write[K: Hashable, D, R: _Revised](
+def _write[K: Hashable, D, R: WrittenRecord](
     kind: _Section[K, D, R], index: int, record: R, from_revision: int | None, change: ConfigChange, plan: _Accumulator
 ) -> None:
     plan.writes.append(PlannedWrite(kind.section, index, record, from_revision, change))

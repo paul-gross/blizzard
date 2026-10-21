@@ -228,8 +228,8 @@ class TenantMembers:
         on the condition that it is open, so no close or deletion commits between that read and the change: a tenant
         closed or deleted since ``subject`` was named raises :class:`~blizzard.hub.tenancy.TenantClosed` or
         :class:`~blizzard.hub.tenancy.UnknownTenant` and nothing is written. Raises :class:`MembershipRoleRefused`,
-        :class:`NotAMember`, :class:`MembershipChangeRefused` or :class:`LastAdminKept`. A change to the role already in force writes
-        nothing and returns the subject as read."""
+        :class:`NotAMember`, :class:`MembershipChangeRefused` or :class:`LastAdminKept`. A change to the role already in
+        force writes nothing and returns the subject as read."""
         with self._transactions.begin() as writes:
             with writes.tenant_connections(StoreScope(subject.tenant)).write("lock_open_tenant"):
                 pass

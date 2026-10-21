@@ -2,12 +2,12 @@
 
 Whether a link stands derives from its newest fact in ``project_source_link_facts`` /
 ``project_repository_link_facts`` (``bzh:facts-not-status``). Every write appends a fact and its change row in the
-transaction that writes the link. Source links and repository links share every statement; :class:`_Kind` names the
+transaction that writes the link. Source links and repository links share every statement; :class:`LinkKind` names the
 tables and the id column one kind uses."""
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
@@ -17,7 +17,7 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.exc import IntegrityError
 
 from blizzard.foundation.store.batching import id_batches
-from blizzard.hub.domain.config.changes import ConfigChange
+from blizzard.hub.domain.config.changes import ConfigChange, RecordKind
 from blizzard.hub.domain.config.repositories import RepositoryId
 from blizzard.hub.domain.config.work_sources import ConfigRevisionConflict, WorkSourceId, is_built_in
 from blizzard.hub.domain.projects.links import IWriteProjectLinks, RepositoryLink, SourceLink
@@ -34,7 +34,7 @@ from blizzard.hub.store.scoped import ScopedConnections, ScopedStatements, state
 
 
 @dataclass(frozen=True)
-class _Kind:
+class LinkKind:
     """One link kind: its link and fact tables, the column naming the linked record, and its conflict label."""
 
     links: Table
@@ -46,8 +46,14 @@ class _Kind:
         return table.c[self.column]
 
 
-_SOURCES = _Kind(project_source_links, project_source_link_facts, "work_source_id", "source link")
-_REPOSITORIES = _Kind(project_repository_links, project_repository_link_facts, "repository_id", "repository link")
+_SOURCES = LinkKind(project_source_links, project_source_link_facts, "work_source_id", "source link")
+_REPOSITORIES = LinkKind(project_repository_links, project_repository_link_facts, "repository_id", "repository link")
+
+#: The link tables each link record kind writes to.
+LINK_KINDS: Mapping[RecordKind, LinkKind] = {
+    RecordKind.PROJECT_SOURCE_LINK: _SOURCES,
+    RecordKind.PROJECT_REPOSITORY_LINK: _REPOSITORIES,
+}
 
 #: The ``keyed_locks`` namespace of one project's source links, keyed by the project's id. Every source link or
 #: unlink takes its project's key, and an ingest takes the key of the project it mints into before its pointers'
@@ -55,12 +61,14 @@ _REPOSITORIES = _Kind(project_repository_links, project_repository_link_facts, "
 PROJECT_SOURCE_LINKS_LOCK_NAMESPACE = "project-source-links"
 
 
-def _lock_source_links(conn: Connection, kind: _Kind, project_id: str) -> None:
+def _lock_source_links(conn: Connection, kind: LinkKind, project_id: str) -> None:
     if kind is _SOURCES:
         lock_keys(conn, PROJECT_SOURCE_LINKS_LOCK_NAMESPACE, [project_id])
 
 
-def _append_fact(conn: Connection, kind: _Kind, project_id: str, name: str, linked: bool, change: ConfigChange) -> None:
+def _append_fact(
+    conn: Connection, kind: LinkKind, project_id: str, name: str, linked: bool, change: ConfigChange
+) -> None:
     conn.execute(
         statements_of(conn)
         .insert(kind.facts)
@@ -76,7 +84,7 @@ def _append_fact(conn: Connection, kind: _Kind, project_id: str, name: str, link
     )
 
 
-def insert_link(conn: Connection, kind: _Kind, project_id: str, name: str, change: ConfigChange) -> None:
+def insert_link(conn: Connection, kind: LinkKind, project_id: str, name: str, change: ConfigChange) -> None:
     """The first-link body, inside the caller's transaction: the link at revision 1, its linked fact, the change —
     a source link under its project's lock."""
     _lock_source_links(conn, kind, project_id)
@@ -89,7 +97,7 @@ def insert_link(conn: Connection, kind: _Kind, project_id: str, name: str, chang
 
 def record_link(
     conn: Connection,
-    kind: _Kind,
+    kind: LinkKind,
     project_id: str,
     name: str,
     *,
@@ -120,7 +128,7 @@ def record_link(
 
 
 def _newest_linked(
-    stmts: ScopedStatements, conn: Connection, kind: _Kind, project_id: str, name: str, *, at: datetime | None = None
+    stmts: ScopedStatements, conn: Connection, kind: LinkKind, project_id: str, name: str, *, at: datetime | None = None
 ) -> bool:
     """Whether the newest fact of one link — set by ``at``, when given — reads linked; ``False`` with none."""
     facts = kind.facts
@@ -138,7 +146,7 @@ def _newest_linked(
 def _newest(
     stmts: ScopedStatements,
     conn: Connection,
-    kind: _Kind,
+    kind: LinkKind,
     project_ids: Sequence[str],
     names: Sequence[str] | None = None,
     *,
@@ -169,7 +177,7 @@ def _newest(
 def _standing(
     stmts: ScopedStatements,
     conn: Connection,
-    kind: _Kind,
+    kind: LinkKind,
     project_ids: Sequence[str],
     names: Sequence[str] | None = None,
 ) -> set[tuple[str, str]]:
@@ -179,7 +187,7 @@ def _standing(
 
 
 def _revisions(
-    stmts: ScopedStatements, conn: Connection, kind: _Kind, pairs: set[tuple[str, str]]
+    stmts: ScopedStatements, conn: Connection, kind: LinkKind, pairs: set[tuple[str, str]]
 ) -> dict[tuple[str, str], int]:
     """The stored revision of each link of ``pairs``; a pair never linked is dropped. Each batch reads the links of
     its projects by names, kept to the pairs asked for."""
@@ -256,7 +264,7 @@ class ProjectLinkStore:
         )
         return link
 
-    def _create(self, operation: str, kind: _Kind, project_id: str, name: str, change: ConfigChange) -> None:
+    def _create(self, operation: str, kind: LinkKind, project_id: str, name: str, change: ConfigChange) -> None:
         try:
             with self._store.write(operation, expect=(IntegrityError,)) as conn:
                 insert_link(conn, kind, project_id, name, change)
@@ -266,7 +274,7 @@ class ProjectLinkStore:
     def _record(
         self,
         operation: str,
-        kind: _Kind,
+        kind: LinkKind,
         project_id: str,
         name: str,
         linked: bool,
@@ -358,7 +366,7 @@ class ProjectLinkStore:
             return _newest_linked(self._store, conn, _SOURCES, project_id, source, at=at)
 
     def _stored(
-        self, operation: str, kind: _Kind, pairs: Sequence[tuple[str, str]]
+        self, operation: str, kind: LinkKind, pairs: Sequence[tuple[str, str]]
     ) -> dict[tuple[str, str], tuple[int, bool]]:
         """Each stored link of ``pairs`` as its revision and whether it stands; a pair never linked is dropped."""
         if not pairs:
@@ -377,7 +385,9 @@ class ProjectLinkStore:
             )
         return {pair: (revision, linked.get(pair, False)) for pair, revision in revisions.items()}
 
-    def _standing_of(self, operation: str, kind: _Kind, project_ids: Sequence[str]) -> dict[str, list[tuple[str, int]]]:
+    def _standing_of(
+        self, operation: str, kind: LinkKind, project_ids: Sequence[str]
+    ) -> dict[str, list[tuple[str, int]]]:
         """Each project's standing links as ``(name, revision)``, ordered by name — a project with none dropped: the
         links its newest facts read linked, then those links' revisions."""
         if not project_ids:

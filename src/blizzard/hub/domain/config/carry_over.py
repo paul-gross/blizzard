@@ -17,6 +17,7 @@ from typing import Protocol
 
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.config import secret_lifecycle
+from blizzard.hub.domain.config.apply import LinkRecord
 from blizzard.hub.domain.config.changes import ChangeContext, ConfigChange, Door, RecordKind
 from blizzard.hub.domain.config.legacy_keys import (
     ENV_FORGE_BASE_BRANCH,
@@ -142,13 +143,13 @@ class SealedSecretWrite:
 @dataclass(frozen=True)
 class LegacyImport:
     """Every write of one import, in commit order: secrets, then the records naming them, then their links — each a
-    link record of a kind the writer knows, with its change — then the fact."""
+    link record with its change — then the fact."""
 
     secrets: tuple[SealedSecretWrite, ...]
     work_sources: tuple[tuple[ConfiguredWorkSource, ConfigChange], ...]
     repositories: tuple[tuple[ConfiguredRepository, ConfigChange], ...]
     fact: ConfigImportFact
-    links: tuple[tuple[object, ConfigChange], ...] = ()
+    links: tuple[tuple[LinkRecord, ConfigChange], ...] = ()
 
 
 class ImportStatus(StrEnum):
@@ -184,7 +185,7 @@ class IImportLinks(Protocol):
         ctx: ChangeContext,
         *,
         at: datetime,
-    ) -> tuple[tuple[object, ConfigChange], ...]:
+    ) -> tuple[tuple[LinkRecord, ConfigChange], ...]:
         """Each link record with its change. :class:`LegacyImportRefused` when no project can be chosen."""
         ...
 
