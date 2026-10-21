@@ -12,7 +12,7 @@
         <header class="rp-record" data-testid="gardening-routine-record">
           <h3>{{ panel.record.name }}</h3>
           @if (project(); as projectName) {
-            <span class="rp-project" data-testid="gardening-routine-panel-project">{{ projectName }}</span>
+            <fleet-kit-badge tone="running" variant="soft" data-testid="gardening-routine-panel-project">{{ projectName }}</fleet-kit-badge>
           }
           <fleet-kit-badge data-testid="gardening-routine-panel-state" [tone]="lifecycleTone(panel.renderedRetired)">{{
             panel.renderedRetired ? 'retired' : 'enabled'

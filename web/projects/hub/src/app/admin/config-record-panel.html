@@ -67,7 +67,7 @@
           <p class="note" [attr.data-testid]="testidPrefix() + '-retire-blocked'">{{ blocked }}</p>
         }
         @if (actionError(); as failure) {
-          <p class="action-error" [attr.data-testid]="testidPrefix() + '-action-error'">{{ failure }}</p>
+          <fleet-kit-error-line [message]="failure" [testid]="testidPrefix() + '-action-error'" />
         }
       }
       @if (record.links; as group) {

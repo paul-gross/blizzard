@@ -27,8 +27,6 @@
 }
 .error {
   margin: 4px 0;
-  color: var(--red);
-  font-size: var(--fs-sm);
 }
 .rows {
   list-style: none;

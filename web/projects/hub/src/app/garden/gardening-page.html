@@ -44,20 +44,15 @@
     <a
       fleetKitTab
       variant="sub"
+      [count]="tab.count"
+      [countHot]="tab.surface === 'proposals' && (tab.count ?? 0) > 0"
+      [countTestid]="'gardening-tab-count-' + tab.surface"
       [routerLink]="tab.surface | lensLink"
       [class.active]="tab.surface === surface()"
       [attr.aria-current]="tab.surface === surface() ? 'page' : null"
       [attr.data-testid]="'gardening-tab-' + tab.surface"
     >
       {{ tab.label }}
-      @if (tab.count !== null) {
-        <span
-          class="cnt"
-          [class.hot]="tab.surface === 'proposals' && tab.count > 0"
-          [attr.data-testid]="'gardening-tab-count-' + tab.surface"
-          >{{ tab.count }}</span
-        >
-      }
     </a>
   }
 </nav>

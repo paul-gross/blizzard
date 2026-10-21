@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
-import { KitBadge, KitButton } from 'fleet';
+import { KitBadge, KitButton, KitErrorLine } from 'fleet';
 
 import type { ProjectLinkRowVm } from './projects.model';
 
@@ -11,7 +11,7 @@ import type { ProjectLinkRowVm } from './projects.model';
 @Component({
   selector: 'app-project-link-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitBadge, KitButton],
+  imports: [KitBadge, KitButton, KitErrorLine],
   templateUrl: './project-link-panel.html',
   styleUrl: './project-link-panel.css',
 })

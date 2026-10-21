@@ -45,16 +45,6 @@ fleet-kit-panel {
   letter-spacing: 0.02em;
   overflow-wrap: anywhere;
 }
-/* The project chip: the routine's owner, in the lens's own amber. */
-.rp-project {
-  flex: none;
-  padding: 0 6px;
-  border: 1px solid var(--bezel-hi);
-  color: var(--amber);
-  font-size: var(--fs-label);
-  letter-spacing: 0.08em;
-  text-transform: lowercase;
-}
 .rp-grow {
   flex: 1;
 }

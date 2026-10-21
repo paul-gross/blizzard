@@ -10,7 +10,7 @@
       <header class="sp-head">
         <h3>{{ panel.slug }}</h3>
         @if (project(); as projectName) {
-          <span class="sp-project" data-testid="gardening-scope-panel-project">{{ projectName }}</span>
+          <fleet-kit-badge tone="running" variant="soft" data-testid="gardening-scope-panel-project">{{ projectName }}</fleet-kit-badge>
         }
         <fleet-kit-badge data-testid="gardening-scope-panel-state" [tone]="lifecycleTone(panel.renderedRetired)">{{
           panel.renderedRetired ? 'retired' : 'enabled'

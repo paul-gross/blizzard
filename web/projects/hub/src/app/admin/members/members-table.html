@@ -20,7 +20,7 @@
             <td data-testid="members-table-username">
               {{ member.username }}
               @if (member.hub_admin) {
-                <span class="hub-admin" data-testid="members-table-hub-admin" title="Hub administrator">hub admin</span>
+                <fleet-kit-badge class="hub-admin" tone="idle" variant="pill" data-testid="members-table-hub-admin" title="Hub administrator">hub admin</fleet-kit-badge>
               }
             </td>
             <td data-testid="members-table-display-name">{{ member.display_name }}</td>

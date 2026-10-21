@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, signal } from '@angular/core';
 
-import { type hubApi, type MemberView, asyncState, injectPendingMutationVariables, KitAsyncState, KitConfirmDialog } from 'fleet';
+import { type hubApi, type MemberView, asyncState, injectPendingMutationVariables, KitAsyncState, KitConfirmDialog, KitErrorLine } from 'fleet';
 import { injectMeQuery } from '../../core/auth/me.query';
 import { memberRoleMutationKey, revokeMemberMutationKey } from '../../core/mutation-keys';
 import { MembersTable } from './members-table';
@@ -24,7 +24,7 @@ import { LensNote } from '../../core/lens-note';
 @Component({
   selector: 'app-members-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [MembersTable, KitAsyncState, KitConfirmDialog, LensNote],
+  imports: [MembersTable, KitAsyncState, KitConfirmDialog, KitErrorLine, LensNote],
   templateUrl: './members-page.html',
   styleUrl: './members-page.css',
 })

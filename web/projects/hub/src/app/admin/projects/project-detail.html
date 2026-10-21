@@ -136,9 +136,7 @@
           (choose)="onColor($event)"
         />
         <div fleetKitDialogFooter class="color-footer">
-          @if (colorError(); as error) {
-            <p class="color-error" data-testid="admin-projects-color-error">{{ error }}</p>
-          }
+          <fleet-kit-error-line [message]="colorError()" testid="admin-projects-color-error" />
           <fleet-kit-button size="cta" [disabled]="editMutation.isPending()" testid="admin-projects-color-close" (click)="onColorClose()">
             Close
           </fleet-kit-button>

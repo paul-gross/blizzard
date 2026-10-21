@@ -58,10 +58,6 @@ h2 {
 .submit-error {
   flex: 1;
   align-self: center;
-  margin: 0;
-  font-size: var(--fs-sm);
-  color: var(--red);
-  overflow-wrap: anywhere;
 }
 
 .form-note {

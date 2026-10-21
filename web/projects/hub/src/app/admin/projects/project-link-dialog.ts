@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
-import { KitButton, KitDialog, KitSelect } from 'fleet';
+import { KitButton, KitDialog, KitErrorLine, KitSelect } from 'fleet';
 
 import type { LinkChoiceVm } from './projects.model';
 
@@ -11,7 +11,7 @@ import type { LinkChoiceVm } from './projects.model';
 @Component({
   selector: 'app-project-link-dialog',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitButton, KitDialog, KitSelect],
+  imports: [KitButton, KitDialog, KitErrorLine, KitSelect],
   templateUrl: './project-link-dialog.html',
   styleUrl: './project-link-dialog.css',
 })

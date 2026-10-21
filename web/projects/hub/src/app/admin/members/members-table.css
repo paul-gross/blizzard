@@ -27,13 +27,6 @@ td {
 }
 .hub-admin {
   margin-left: 6px;
-  padding: 0 4px;
-  border: 1px solid var(--line);
-  border-radius: 3px;
-  color: var(--label);
-  font-size: var(--fs-label);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
   white-space: nowrap;
 }
 .actions {

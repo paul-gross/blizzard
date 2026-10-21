@@ -8,9 +8,7 @@
     }
   </header>
   <p class="explainer">{{ explainer() }}</p>
-  @if (error(); as failure) {
-    <p class="error" role="alert" [attr.data-testid]="testid() + '-error'">{{ failure }}</p>
-  }
+  <fleet-kit-error-line class="error" [message]="error()" [testid]="testid() + '-error'" />
   @if (rows().length > 0) {
     <ul class="rows" [attr.data-testid]="testid() + '-rows'">
       @for (row of rows(); track row.name) {
