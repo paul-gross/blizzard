@@ -315,7 +315,7 @@ class RestartView(WireModel):
     note: str | None = None
 
 
-class ResolutionView(BaseModel):
+class ResolutionView(WireModel):
     """One gate resolution on the chunk: who chose what at the gate on ``node`` at ``epoch``, and their note."""
 
     decision_id: str
@@ -329,7 +329,7 @@ class ResolutionView(BaseModel):
     note: str | None = None
 
 
-class RequeueView(BaseModel):
+class RequeueView(WireModel):
     """One hub requeue on the chunk. ``requeued_by`` is null on a requeue recorded before it was kept."""
 
     requeued_at: str

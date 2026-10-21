@@ -10905,7 +10905,9 @@
           }
         },
         "required": [
-          "requeued_at"
+          "requeued_at",
+          "requeued_by",
+          "note"
         ],
         "title": "RequeueView",
         "type": "object"
@@ -10965,7 +10967,9 @@
           "epoch",
           "choice",
           "resolved_by",
-          "resolved_at"
+          "resolved_at",
+          "overrode_red_checks",
+          "note"
         ],
         "title": "ResolutionView",
         "type": "object"

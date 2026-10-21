@@ -6702,7 +6702,7 @@ export type RequeueView = {
     /**
      * Note
      */
-    note?: string | null;
+    note: string | null;
     /**
      * Requeued At
      */
@@ -6710,7 +6710,7 @@ export type RequeueView = {
     /**
      * Requeued By
      */
-    requeued_by?: string | null;
+    requeued_by: string | null;
 };
 
 /**
@@ -6742,11 +6742,11 @@ export type ResolutionView = {
     /**
      * Note
      */
-    note?: string | null;
+    note: string | null;
     /**
      * Overrode Red Checks
      */
-    overrode_red_checks?: boolean;
+    overrode_red_checks: boolean;
     /**
      * Resolved At
      */
