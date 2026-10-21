@@ -54,13 +54,14 @@ def test_no_packaged_pool_name_collides_with_a_node_name(name: str) -> None:
     assert not (set(doc.sessions) & {n.name for n in doc.nodes})
 
 
-def test_adv_dwf_declares_the_six_pools_and_bounds_only_the_accumulating_ones() -> None:
+def test_adv_dwf_declares_the_seven_pools_and_bounds_only_the_accumulating_ones() -> None:
     doc = _doc("advanced-development-workflow")
 
-    assert set(doc.sessions) == {"planning", "code", "verification", "measurement", "gate", "retro"}
+    assert set(doc.sessions) == {"planning", "code", "integration", "verification", "measurement", "gate", "retro"}
     assert doc.sessions["planning"].model == ["blizzard:advanced"]
     assert doc.sessions["planning"].effort == "high"
     assert doc.sessions["code"].model == ["blizzard:basic"]
+    assert doc.sessions["integration"].model == ["blizzard:basic"]
     assert doc.sessions["verification"].model == ["blizzard:basic"]
     assert doc.sessions["gate"].model == ["blizzard:basic"]
     assert doc.sessions["measurement"].model == ["blizzard:basic"]
@@ -69,6 +70,7 @@ def test_adv_dwf_declares_the_six_pools_and_bounds_only_the_accumulating_ones() 
     assert doc.sessions["measurement"].rotate is None
     assert doc.sessions["retro"].rotate is None
     assert doc.sessions["code"].rotate is not None
+    assert doc.sessions["integration"].rotate == doc.sessions["code"].rotate
     assert doc.sessions["verification"].rotate is not None
     assert doc.sessions["gate"].rotate is None
     assert doc.sessions["planning"].rotate is None
@@ -84,6 +86,15 @@ def test_adv_dwf_declares_the_six_pools_and_bounds_only_the_accumulating_ones() 
     assert int(declared) > window.max_context_tokens
 
 
+def test_basic_dev_workflow_declares_an_integration_pool_matching_code_but_for_the_window() -> None:
+    doc = _doc("basic-development-workflow")
+
+    assert doc.sessions["integration"].model == ["blizzard:basic"]
+    assert doc.sessions["integration"].rotate == doc.sessions["code"].rotate
+    assert doc.sessions["integration"].compaction_window is None
+    assert {n.name for n in doc.nodes if n.session_source == "code"} == {"build"}
+
+
 def test_adv_dwf_keeps_verify_off_the_pool_build_resumes() -> None:
     """The point of the split: `build` is the later node in the build/verify cycle, so a
     shared id makes every build resume re-read verify's transcript."""
@@ -92,7 +103,8 @@ def test_adv_dwf_keeps_verify_off_the_pool_build_resumes() -> None:
     build, verify = doc.node("build"), doc.node("verify")
     assert build is not None and verify is not None
     assert build.session_source != verify.session_source
-    assert {n.name for n in doc.nodes if n.session_source == "code"} == {"build", "pre-push", "resolve"}
+    assert {n.name for n in doc.nodes if n.session_source == "code"} == {"build"}
+    assert {n.name for n in doc.nodes if n.session_source == "integration"} == {"pre-push", "resolve"}
     assert {n.name for n in doc.nodes if n.session_source == "verification"} == {"verify"}
 
 
@@ -132,8 +144,9 @@ def test_adv_dwf_routes_verify_pass_through_the_advisory_mutation_node() -> None
                 # Advisory and cold, in a pool of its own: it reads declared tips, not a conversation.
                 "mutation": (SessionMode.FRESH, "measurement"),
                 "review": (SessionMode.FRESH, "gate"),
-                "pre-push": (SessionMode.RESUME, "code"),
-                "resolve": (SessionMode.RESUME, "code"),
+                # Its own lineage, so integration does not re-read the build conversation.
+                "pre-push": (SessionMode.RESUME, "integration"),
+                "resolve": (SessionMode.RESUME, "integration"),
                 # Cold and tier-pinned: a bare `resume` declares no model, so an entry that
                 # minted instead of resuming ran on the harness's own default.
                 "retrospective": (SessionMode.FRESH, "retro"),
@@ -152,9 +165,7 @@ def test_adv_dwf_routes_verify_pass_through_the_advisory_mutation_node() -> None
             {
                 "build": (SessionMode.RESUME, "code"),
                 "review": (SessionMode.FRESH, "gate"),
-                # `pre-push` was `resume:build` — the same lineage, differently spelled;
-                # moved onto the pool so the graph carries one vocabulary for it.
-                "pre-push": (SessionMode.RESUME, "code"),
+                "pre-push": (SessionMode.RESUME, "integration"),
                 "retrospective": (SessionMode.FRESH, "retro"),
             },
         ),

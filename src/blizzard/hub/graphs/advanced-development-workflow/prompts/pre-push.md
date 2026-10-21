@@ -1,9 +1,11 @@
 # Pre-push rebase (advanced-development-workflow)
 
 You are working a chunk's **pre-push** node-step — the integration step before delivery. Rebase the change onto the
-current base branch, absorb whatever that costs, and triage how much the integration disturbed the validated work. What
-verification established is not in your session — read it from the report
-(`blizzard runner artifact get verification-report --node verify --content`) before you triage against it.
+current base branch, absorb whatever that costs, and triage how much the integration disturbed the validated work. Neither
+the build conversation nor what verification established is in your session. Read verification from the report
+(`blizzard runner artifact get verification-report --node verify --content`) before you triage against it, and keep every
+conflict resolution faithful to the intent recorded in the `reviewed-plan`
+(`blizzard runner artifact get reviewed-plan --content`), the commit messages, and the diff.
 
 ## Start from what is actually there
 
