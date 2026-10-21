@@ -1624,7 +1624,7 @@
         "type": "object"
       },
       "DecisionChoiceModel": {
-        "description": "One selectable gate outcome; ``requires_checks`` marks a choice that overrides red checks\nwhen a person resolves to it while one is red.",
+        "description": "One selectable gate outcome; ``requires_checks`` marks a choice that overrides red checks\nwhen a person resolves to it while one is red. ``would_override_red_checks`` is the hub's judgment that\nresolving to this choice now would be that override.",
         "properties": {
           "description": {
             "title": "Description",
@@ -1637,6 +1637,11 @@
           "requires_checks": {
             "default": false,
             "title": "Requires Checks",
+            "type": "boolean"
+          },
+          "would_override_red_checks": {
+            "default": false,
+            "title": "Would Override Red Checks",
             "type": "boolean"
           }
         },

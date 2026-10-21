@@ -13,6 +13,7 @@ from blizzard.foundation.escalation_causes import EscalationCause
 from blizzard.foundation.findings import FindingExit, FindingFactKind, FindingSeverity, FindingSource, FindingState
 from blizzard.foundation.hub_event_types import (
     ActivityChunkChangeCause,
+    ActivityHubEventType,
     ActivityRunnerChangeKind,
     ChunkChangeCause,
     HubEventType,
@@ -95,6 +96,7 @@ HUB_SCHEMA_COMPONENTS = SchemaComponents(
     enums={
         "HubEventType": HubEventType,
         "ChunkChangeCause": ChunkChangeCause,
+        "ActivityHubEventType": ActivityHubEventType,
         "ActivityChunkChangeCause": ActivityChunkChangeCause,
         "ActivityRunnerChangeKind": ActivityRunnerChangeKind,
         "RunnerChangeKind": RunnerChangeKind,

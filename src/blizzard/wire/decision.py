@@ -13,11 +13,13 @@ from blizzard.wire.completion import CheckResult, SubmittedArtifact
 
 class DecisionChoiceModel(BaseModel):
     """One selectable gate outcome; ``requires_checks`` marks a choice that overrides red checks
-    when a person resolves to it while one is red."""
+    when a person resolves to it while one is red. ``would_override_red_checks`` is the hub's judgment that
+    resolving to this choice now would be that override."""
 
     name: str
     description: str
     requires_checks: bool = False
+    would_override_red_checks: bool = False
 
 
 class DecisionSubmission(BaseModel):

@@ -1018,7 +1018,8 @@ export type DashboardView = {
  * DecisionChoiceModel
  *
  * One selectable gate outcome; ``requires_checks`` marks a choice that overrides red checks
- * when a person resolves to it while one is red.
+ * when a person resolves to it while one is red. ``would_override_red_checks`` is the hub's judgment that
+ * resolving to this choice now would be that override.
  */
 export type DecisionChoiceModel = {
     /**
@@ -1033,6 +1034,10 @@ export type DecisionChoiceModel = {
      * Requires Checks
      */
     requires_checks?: boolean;
+    /**
+     * Would Override Red Checks
+     */
+    would_override_red_checks?: boolean;
 };
 
 /**

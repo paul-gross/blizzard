@@ -21,6 +21,10 @@ class HubEventType(StrEnum):
     EVENT_LOGGED = "event-logged"
 
 
+#: The frame types that have a row of their own type in ``GET /api/activity`` — the only frames the feed lists, live or
+#: reconstructed. Every other frame type reaches the feed as a ``chunk-changed`` cause or not at all.
+ActivityHubEventType = Literal["chunk-changed", "event-logged", "runner-changed"]
+
 #: The causes the activity read backfills from a durable chunk fact: all but ``edited``, which records none.
 ActivityChunkChangeCause = Literal[
     "minted",

@@ -30,6 +30,14 @@ export const ActivityChunkChangeCause = {
 
 export type ActivityChunkChangeCause = typeof ActivityChunkChangeCause[keyof typeof ActivityChunkChangeCause];
 
+export const ActivityHubEventType = {
+    CHUNK_CHANGED: 'chunk-changed',
+    EVENT_LOGGED: 'event-logged',
+    RUNNER_CHANGED: 'runner-changed'
+} as const;
+
+export type ActivityHubEventType = typeof ActivityHubEventType[keyof typeof ActivityHubEventType];
+
 /**
  * ActivityResponse
  *
@@ -2227,7 +2235,8 @@ export type ConfigDocument = {
  * DecisionChoiceModel
  *
  * One selectable gate outcome; ``requires_checks`` marks a choice that overrides red checks
- * when a person resolves to it while one is red.
+ * when a person resolves to it while one is red. ``would_override_red_checks`` is the hub's judgment that
+ * resolving to this choice now would be that override.
  */
 export type DecisionChoiceModel = {
     /**
@@ -2242,6 +2251,10 @@ export type DecisionChoiceModel = {
      * Requires Checks
      */
     requires_checks?: boolean;
+    /**
+     * Would Override Red Checks
+     */
+    would_override_red_checks?: boolean;
 };
 
 /**

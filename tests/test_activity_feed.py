@@ -12,7 +12,13 @@ from typing import get_args
 import pytest
 
 from blizzard.foundation.event_log import EventLogSeverity
-from blizzard.foundation.hub_event_types import ActivityChunkChangeCause, ActivityRunnerChangeKind, RunnerChangeKind
+from blizzard.foundation.hub_event_types import (
+    ActivityChunkChangeCause,
+    ActivityHubEventType,
+    ActivityRunnerChangeKind,
+    HubEventType,
+    RunnerChangeKind,
+)
 from blizzard.hub.domain.chunk.model import ActivityEntry, ActivityFeed, OperationalEvent
 from blizzard.hub.domain.runners.registration import RecordedPause
 
@@ -63,6 +69,20 @@ def test_merges_all_three_sources() -> None:
     ).rows
     assert {row.type for row in feed} == {"chunk-changed", "event-logged", "runner-changed"}
     assert len(feed) == 3
+
+
+def test_the_activity_frame_vocabulary_is_every_row_type_the_feed_emits_and_a_subset_of_the_frames() -> None:
+    """The board keeps a live frame in the Activity ring only when its type is in the generated
+    ``ActivityHubEventType``, so a row type missing here would never show live."""
+    feed = ActivityFeed.of(
+        [_chunk_changed("chunks:ch_1", at=_at(0))],
+        [_event(1, at=_at(1))],
+        [_runner_changed("runner_pause_facts:1", at=_at(2))],
+        limit=200,
+    ).rows
+    vocabulary = set(get_args(ActivityHubEventType))
+    assert {row.type for row in feed} <= vocabulary
+    assert vocabulary <= {frame.value for frame in HubEventType}
 
 
 def test_sorts_by_at_descending() -> None:
