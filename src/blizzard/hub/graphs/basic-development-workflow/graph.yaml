@@ -50,6 +50,10 @@ entry: build
 #
 #   code   the mechanical build lineage, on the basic tier and BOUNDED — it is the one
 #          that can accumulate indefinitely across a review-fail loop.
+#   integration  the pre-push lineage, on the basic tier and bounded with `code`'s numbers.
+#          Held apart from `code` because every resume re-reads the whole lineage: pre-push
+#          read ~281 cache tokens per output token resuming the build conversation. Its
+#          intent reaches it through the work items, the commit messages, and the diff.
 #   gate   the cold-eyes review, on the basic tier. No `rotate:` block: a gate is only
 #          ever reached through `fresh:gate`, so its head is minted every entry and
 #          rotation never applies.
@@ -70,6 +74,12 @@ sessions:
       # see `advanced-development-workflow` for where these three numbers come from.
       max_context_tokens: 300000
       max_transcript_bytes: 10000000
+  integration:
+    model: ["blizzard:basic"]
+    rotate:
+      max_invocations: 12
+      max_context_tokens: 300000
+      max_transcript_bytes: 10000000
   gate:
     model: ["blizzard:basic"]
   retro:
@@ -80,9 +90,9 @@ nodes:
     executor: runner
     prompt: ./prompts/build.md
     session: resume:code  # explicit: re-entry from review/pre-push should pull
-      # build's own prior context, not whichever node ran last (review/pre-push
-      # are deliberately fresh, so bare `resume` would otherwise hand build their
-      # cold-read session instead of its own)
+      # build's own prior context, not whichever node ran last (review is
+      # deliberately fresh and pre-push resumes its own integration lineage, so bare
+      # `resume` would otherwise hand build one of those sessions instead of its own)
     produces:
       # The refutation channel (see prompts/build.from-review.md): review findings the
       # build declines rather than fixes, with the argument. A `review` re-visit re-checks
@@ -128,9 +138,9 @@ nodes:
   pre-push:
     executor: runner
     prompt: ./prompts/pre-push.md
-    session: resume:code  # integration is mechanical (rebase, lint, targeted
-      # tests), not a judgement call needing cold eyes — build's own context
-      # saves re-learning the codebase from scratch; the default is resume
+    session: resume:integration  # integration is mechanical (rebase, lint, targeted
+      # tests), not a judgement call needing cold eyes — its own lineage persists
+      # across pre-push visits without re-reading the build conversation
     produces:
       - pre-push-summary
       # A rebase REWRITES the branch, so the commit `build` declared is orphaned the

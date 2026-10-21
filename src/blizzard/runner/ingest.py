@@ -43,9 +43,8 @@ from blizzard.runner.host_layout import (
     HOST_CONFIG_FILENAME,
     RUNNERS_DIRNAME,
     Graduation,
-    HostHeld,
     HostLayout,
-    HostLock,
+    hold_host,
 )
 from blizzard.runner.hub.client import HostRecord, HostRefused, HubClientError, IHostHubClient
 from blizzard.runner.hub.host_identity import HostIdentity, HostIdentityAlreadyRecorded, adopted
@@ -272,14 +271,12 @@ class RunnerIngest:
     @contextmanager
     def _held(self, layout: HostLayout, which: str) -> Iterator[None]:
         """``layout``'s directory held for the run: its lock taken, and nothing answering on its sockets."""
-        try:
-            lock = HostLock.acquire(layout)
-        except HostHeld as exc:
-            raise SourceRunning(f"{which} is running ({exc}); stop it, then re-run") from exc
-        with lock:
-            for socket in (layout.socket_path, layout.legacy_socket_path):
-                if (held := self.holder(socket)) is not None:
-                    raise SourceRunning(f"{which} is running ({held}); stop it, then re-run")
+        with hold_host(
+            layout,
+            (layout.socket_path, layout.legacy_socket_path),
+            self.holder,
+            lambda held: SourceRunning(f"{which} is running ({held}); stop it, then re-run"),
+        ):
             yield
 
     @contextmanager

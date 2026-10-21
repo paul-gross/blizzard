@@ -13,6 +13,7 @@ import click
 
 from blizzard.foundation.roles import dto
 from blizzard.foundation.runner_connection import RunnerConnection
+from blizzard.foundation.runner_token_names import HOST_TOKEN_VARIABLE
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
 from blizzard.hub.cli.views import Listing
@@ -80,7 +81,7 @@ class HostDetail:
 
 def _token_lines(token: str) -> tuple[str, str]:
     """A freshly minted host bearer token, printed once as the line a host's ``.env`` takes."""
-    return "bearer token, shown only once — put this line in the host's .env:", f"BZ_HOST_TOKEN={token}"
+    return "bearer token, shown only once — put this line in the host's .env:", f"{HOST_TOKEN_VARIABLE}={token}"
 
 
 @click.group("runner-host")
