@@ -11,6 +11,7 @@ import pytest
 
 from blizzard.cli.collaborators import CliCollaborators
 from blizzard.foundation import cli_spans
+from blizzard.foundation.clock import SystemClock
 from blizzard.foundation.otlp_destination import TRACES_PATH
 from blizzard.foundation.span_clock import Clock
 from blizzard.runner.cli.worker_call import LEASE_TOKEN_HEADER, WorkerCall, WorkerSession
@@ -30,7 +31,7 @@ _ENV = {
 def _collaborators(client: StubClient | None = None) -> CliCollaborators:
     """Collaborators whose client factory hands out ``client`` — a fresh stub when none is given."""
     handed = client or StubClient(None, None)
-    return CliCollaborators(client_factory=lambda: handed, clock=Clock())  # type: ignore[arg-type,return-value]
+    return CliCollaborators(client_factory=lambda: handed, clock=Clock(), wall_clock=SystemClock())  # type: ignore[arg-type,return-value]
 
 
 def _runner_context() -> click.Context:

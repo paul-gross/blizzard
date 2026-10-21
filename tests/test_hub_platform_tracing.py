@@ -21,7 +21,7 @@ from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanE
 from blizzard import __version__
 from blizzard.auth_core import Role
 from blizzard.cli.collaborators import CliCollaborators
-from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.clock import FixedClock, SystemClock
 from blizzard.foundation.operator_sessions.internal.session_file import SessionFile
 from blizzard.foundation.platform_tracing.attributes import TENANT, TENANT_NAME
 from blizzard.foundation.platform_tracing.handle import IPlatformTracing, build_platform_tracing
@@ -432,7 +432,7 @@ def test_an_operator_command_span_parents_the_hubs_server_span_for_an_authentica
             hub_group,
             ["chunk", "list"],
             env={"BZ_HUB_URL": "http://testserver", "OTEL_EXPORTER_OTLP_ENDPOINT": "http://collector.local:4318"},
-            obj=CliCollaborators(client_factory=lambda: cli_exporter, clock=Clock()),
+            obj=CliCollaborators(client_factory=lambda: cli_exporter, clock=Clock(), wall_clock=SystemClock()),
         )
     assert result.exit_code == 0, result.output
     [post] = posted

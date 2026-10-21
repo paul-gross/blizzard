@@ -3,7 +3,8 @@ against closed leases written through the runner store and the in-memory exporte
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from dataclasses import replace
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import httpx
@@ -12,6 +13,7 @@ from click.testing import CliRunner
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from blizzard.cli.collaborators import CliCollaborators
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.harness_telemetry_outcome import HarnessTelemetryOutcome
 from blizzard.foundation.trace_export.config import TracingConfig
@@ -464,3 +466,18 @@ def test_the_status_reports_the_receivers_tally_when_a_counter_is_wired(tmp_path
     assert runner.status.read().receiver is None
     counter.record(accepted=1, dropped=0)
     assert wired.read().receiver == ReceiverCount(4, 2)
+
+
+def test_cli_replay_judges_until_against_the_collaborators_wall_clock(tmp_path: Path) -> None:
+    now = datetime(2026, 7, 12, 12, 0, 0, tzinfo=UTC)
+    collaborators = replace(CliCollaborators.production(), wall_clock=FixedClock(now))
+    until = (now + timedelta(seconds=1)).astimezone().replace(tzinfo=None).isoformat()
+
+    result = CliRunner().invoke(
+        traces_group,
+        ["replay", "--since", "2026-07-12T00:00:00", "--until", until, "--runner-url", "http://127.0.0.1:1"],
+        obj=collaborators,
+    )
+
+    assert result.exit_code != 0
+    assert "--until must not be in the future" in result.output
