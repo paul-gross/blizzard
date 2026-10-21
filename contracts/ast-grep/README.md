@@ -21,8 +21,8 @@ load-bearing: without it a stale `# ast-grep-ignore` comment goes unreported ins
   - A domain *operation* is a public method; a leading-underscore helper is an internal step, not an edge-facing entry
     point, and is exempt even when it shares the same id-in, load-by-id shape.
   - Matches a public method taking a `*_id: str` parameter whose body calls a `get_`/`load_`-prefixed method on `self.*`
-    with that same parameter as its first argument, alone or with further arguments, by exact textual identity — a body that rebinds the identifier to a new name before
-    passing it on slips past. `ast-grep` has no taint mode; this rule is a floor, not a proof.
+    with that same parameter as its first argument, alone or with further arguments, by exact textual identity — a body
+    that rebinds the identifier to a new name before passing it on slips past. `ast-grep` has no taint mode; this rule is a floor, not a proof.
   - One exemption stands, at `ClaimService.claim` (`src/blizzard/hub/domain/execution/claim.py`), reasoned at the site with
     `# ast-grep-ignore: bzh:domain-takes-objects` immediately above the `def`.
 
