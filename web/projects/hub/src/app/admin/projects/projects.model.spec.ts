@@ -36,7 +36,7 @@ function runner(id: string, served: string[], online = true): RunnerRegistryView
     connection: 'online',
     hub_paused: false,
     online,
-    projects: served.map((projectId) => ({ entry: projectId, project_id: projectId })),
+    projects: served.map((projectId) => ({ entry: projectId, project_id: projectId, claimable: true })),
   } as unknown as RunnerRegistryView;
 }
 
@@ -109,6 +109,13 @@ describe('projects model', () => {
     expect([unread.wired, unread.needs]).toEqual([false, null]);
     expect(projectRows([BLIZZARD], new Map(), served, null)[0].needs).toBeNull();
     expect(servedProjectIds([WINTER], undefined)).toBeNull();
+  });
+
+  it('reads a project whose only server the hub judges cannot claim it as served by no one', () => {
+    const paused = { ...runner('r1', ['proj_b']), hub_paused: true } as RunnerRegistryView;
+    paused.projects = (paused.projects ?? []).map((served) => ({ ...served, claimable: false }));
+
+    expect(servedProjectIds([BLIZZARD], [paused])).toEqual(new Set());
   });
 
   it('lists the lensed project alone, and counts only links in force', () => {

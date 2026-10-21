@@ -23,12 +23,17 @@ export function unresolvedEntries(runner: RunnerRegistryView): readonly string[]
 }
 
 /**
- * The live runners that serve the project `projectId`: online by the hub's own clock, not retired, and declaring it.
+ * The live runners that can take a claim on the project `projectId`: online by the hub's own clock, and with the
+ * hub's judgment (`claimable`) that its claim path would take the project — which a paused, retired or
+ * version-refused runner, or one reached only through withheld bindings, is not.
  * An empty answer is a project no live runner serves — its work waits until one does.
  */
 export function servingRunners(
   projectId: string,
   runners: readonly RunnerRegistryView[],
 ): readonly RunnerRegistryView[] {
-  return runners.filter((runner) => runner.online && !runner.retired && runnerServes(runner, projectId));
+  return runners.filter(
+    (runner) =>
+      runner.online && servedProjects(runner).some((served) => served.project_id === projectId && served.claimable),
+  );
 }

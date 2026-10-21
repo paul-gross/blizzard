@@ -231,3 +231,53 @@ def test_two_identical_registrations_publish_one_runner_frame(tmp_path: Path) ->
     world.register(**body)
 
     assert frames() == before
+
+
+def _claimable(world: _World) -> dict[str, bool]:
+    """The ``claimable`` flag of each served entry on the runner's ``GET /api/runners`` row, by entry."""
+    listed = next(
+        r
+        for r in world.hub.client.get("/api/runners", params={"include_retired": True}).json()["runners"]
+        if r["runner_id"] == world.runner_id
+    )
+    return {p["entry"]: p["claimable"] for p in listed["projects"]}
+
+
+def test_the_runners_read_marks_a_served_project_claimable_only_where_the_claim_path_would_take_it(
+    tmp_path: Path,
+) -> None:
+    world = _World(tmp_path)
+    world.report(["ws-a"])
+    world.register(bindings=_bindings(("default", "ws-a"), ("second", "ws-x")), subscription="max")
+
+    assert _claimable(world) == {"default": True, "second": False}
+
+    paused = world.hub.client.post(f"/api/runners/{world.runner_id}/pause", json={})
+    assert paused.status_code == 200, paused.text
+    assert _claimable(world) == {"default": False, "second": False}
+
+    assert world.hub.client.post(f"/api/runners/{world.runner_id}/resume", json={}).status_code == 200
+    assert _claimable(world) == {"default": True, "second": False}
+
+
+def test_the_runners_read_marks_nothing_claimable_under_an_unrostered_subscription(tmp_path: Path) -> None:
+    world = _World(tmp_path)
+    world.report(["ws-a"])
+    world.register(bindings=_bindings(("default", "ws-a")), subscription="other")
+
+    assert _claimable(world) == {"default": False}
+
+
+def test_the_runners_read_marks_nothing_claimable_for_a_runner_that_never_connected_or_is_retired(
+    tmp_path: Path,
+) -> None:
+    world = _World(tmp_path)
+    world.report(["ws-a"])
+    assert _claimable(world) == {}
+
+    world.register(bindings=_bindings(("default", "ws-a")), subscription="max")
+    assert _claimable(world) == {"default": True}
+
+    retired = world.hub.client.post(f"/api/runners/{world.runner_id}/retire", json={})
+    assert retired.status_code == 200, retired.text
+    assert _claimable(world) == {"default": False}

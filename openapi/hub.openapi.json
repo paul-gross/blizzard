@@ -13065,8 +13065,13 @@
         "type": "object"
       },
       "ServedProjectView": {
-        "description": "One entry of the projects a runner serves: the ``entry`` as declared \u2014 a project id or slug \u2014 and the project\nit resolves to in the runner's tenant, with its palette ``color`` \u2014 a palette name or a ``#rrggbb``.\n``project_id``, ``slug``, ``name`` and ``color`` are ``None`` for an entry that resolves to no project, which\nserves nothing until a project answers to it.",
+        "description": "One entry of the projects a runner serves: the ``entry`` as declared \u2014 a project id or slug \u2014 and the project\nit resolves to in the runner's tenant, with its palette ``color`` \u2014 a palette name or a ``#rrggbb``.\n``project_id``, ``slug``, ``name`` and ``color`` are ``None`` for an entry that resolves to no project, which\nserves nothing until a project answers to it. ``claimable`` is the hub's judgment, set on the runners read, that\nthe runner can take a claim on the project now: no runner-level bar stands and the work peek offers the project.",
         "properties": {
+          "claimable": {
+            "default": false,
+            "title": "Claimable",
+            "type": "boolean"
+          },
           "color": {
             "anyOf": [
               {

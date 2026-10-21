@@ -8345,9 +8345,14 @@ export type SecretView = {
  * One entry of the projects a runner serves: the ``entry`` as declared — a project id or slug — and the project
  * it resolves to in the runner's tenant, with its palette ``color`` — a palette name or a ``#rrggbb``.
  * ``project_id``, ``slug``, ``name`` and ``color`` are ``None`` for an entry that resolves to no project, which
- * serves nothing until a project answers to it.
+ * serves nothing until a project answers to it. ``claimable`` is the hub's judgment, set on the runners read, that
+ * the runner can take a claim on the project now: no runner-level bar stands and the work peek offers the project.
  */
 export type ServedProjectView = {
+    /**
+     * Claimable
+     */
+    claimable?: boolean;
     /**
      * Color
      */

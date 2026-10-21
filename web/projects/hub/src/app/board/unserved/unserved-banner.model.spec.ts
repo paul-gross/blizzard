@@ -4,12 +4,14 @@ import { unservedBannerText } from './unserved-banner.model';
 
 const GLACIER = { project_id: 'proj_g', slug: 'glacier', name: 'Glacier' } as ProjectView;
 
+const UNCLAIMABLE = { entry: 'glacier', project_id: 'proj_g', slug: 'glacier', name: 'Glacier', claimable: false };
+
 const runner = (over: Partial<RunnerRegistryView>): RunnerRegistryView =>
   ({
     runner_id: 'rn_1',
     online: true,
     retired: false,
-    projects: [{ entry: 'glacier', project_id: 'proj_g', slug: 'glacier', name: 'Glacier' }],
+    projects: [{ entry: 'glacier', project_id: 'proj_g', slug: 'glacier', name: 'Glacier', claimable: true }],
     ...over,
   }) as RunnerRegistryView;
 
@@ -19,8 +21,12 @@ describe('unservedBannerText', () => {
       'No live runner serves Glacier: its ready work waits in the queue until one does.',
     );
     expect(unservedBannerText(GLACIER, [runner({ online: false })])).not.toBeNull();
-    expect(unservedBannerText(GLACIER, [runner({ retired: true })])).not.toBeNull();
+    expect(unservedBannerText(GLACIER, [runner({ retired: true, projects: [UNCLAIMABLE] })])).not.toBeNull();
     expect(unservedBannerText(GLACIER, [runner({ projects: [] })])).not.toBeNull();
+  });
+
+  it('names a project whose only server is paused by the hub, which the hub judges cannot claim it', () => {
+    expect(unservedBannerText(GLACIER, [runner({ hub_paused: true, projects: [UNCLAIMABLE] })])).not.toBeNull();
   });
 
   it('shows nothing while a live runner serves the project', () => {

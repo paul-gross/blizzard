@@ -169,7 +169,8 @@ tenant answers to serves nothing, and is looked up again at every registration, 
 takes that slug. `blizzard-runner status` reads the hub's latest answer from the runner's own store and prints a
 `serves:` line naming each project served, each entry marked `unresolved`, and each not answered yet. On the board a
 runner that serves nothing reads as unassigned, and a project no live runner serves is marked unserved on Admin →
-Projects.
+Projects and under its lens on the board. A runner that is paused, retired, refused on version, or reached only through
+withheld bindings does not count as serving.
 
 [runner-auth.md](./runner-auth.md#adding-a-runner) owns adding a runner.
 

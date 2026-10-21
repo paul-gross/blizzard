@@ -24,7 +24,7 @@ const serving = (slug: string) => ({
   runner_name: slug,
   online: true,
   retired: false,
-  projects: [{ entry: slug, project_id: `proj_${slug}`, slug, name: null }],
+  projects: [{ entry: slug, project_id: `proj_${slug}`, slug, name: null, claimable: true }],
 });
 
 describe('UnservedBanner', () => {

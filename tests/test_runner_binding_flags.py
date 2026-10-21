@@ -3,11 +3,13 @@ may offer from them (unit tier)."""
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime
 
 import pytest
 
-from blizzard.hub.domain.runners.bindings import BindingFlags, flag_bindings, offered_projects
+from blizzard.foundation.runner_version import VersionRefusalReason
+from blizzard.hub.domain.runners.bindings import BindingFlags, claimable_projects, flag_bindings, offered_projects
 from blizzard.hub.domain.runners.host import Host, HostWorkspace
 from blizzard.hub.domain.runners.registration import (
     DeclaredSubscription,
@@ -41,6 +43,7 @@ def _runner(
         runner_id="rn_1",
         name="r",
         added_at=_AT,
+        registered_at=_AT,
         hub_paused=False,
         host_id="hs_1",
         bindings=bindings,
@@ -120,3 +123,17 @@ def test_project_cannot_widen_what_a_flag_withholds() -> None:
     runner = _runner((_X,), None, _SERVED)
 
     assert offered_projects(runner, _host("ws-a"), project="beta") == frozenset()
+
+
+def test_a_runner_is_claimable_on_what_the_peek_offers_unless_a_runner_level_bar_stands() -> None:
+    runner = _runner((_A, _X), "max", _SERVED)
+    host = _host("ws-a")
+
+    assert claimable_projects(runner, host) == offered_projects(runner, host) == {"prj_a"}
+    for barred in (
+        replace(runner, hub_paused=True),
+        replace(runner, retired=True, retired_at=_AT, retired_by="op"),
+        replace(runner, registered_at=None),
+        replace(runner, version_refusal=VersionRefusalReason.TOO_OLD),
+    ):
+        assert claimable_projects(barred, host) == frozenset()

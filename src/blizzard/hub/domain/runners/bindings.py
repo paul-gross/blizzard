@@ -71,3 +71,12 @@ def offered_projects(
         if entry.project_id and project in (entry.entry, entry.project_id)
     }
     return frozenset(reached & named)
+
+
+def claimable_projects(registration: RunnerRegistration, host: Host | None) -> frozenset[str]:
+    """The ids of the projects ``registration`` can take a claim on now: none while a runner-level bar stands
+    (:meth:`RunnerRegistration.claim_bar`), otherwise the projects the peek offers it. Liveness is not judged — the
+    claim does not."""
+    if registration.claim_bar() is not None:
+        return frozenset()
+    return offered_projects(registration, host)
