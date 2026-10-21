@@ -15,7 +15,7 @@ from blizzard.runner.harness.declaration import SharedHarnessInputs
 from blizzard.runner.harness.harness_telemetry_plan import HarnessTelemetryNames, HarnessTelemetryPlan
 from blizzard.runner.harness.identity import OPENCODE_HARNESS_ID
 from blizzard.runner.harness.internal.bundle_publisher import published_snapshot
-from blizzard.runner.harness.internal.committed_corpus import CommittedCorpus
+from blizzard.runner.harness.offline_compatibility import ICompatibilityCorpus
 from blizzard.runner.harness.opencode.adapter import OpenCodeAdapter
 from blizzard.runner.harness.opencode.bundle import OPENCODE_BUNDLE_LAYOUT, opencode_bundle_layout
 from blizzard.runner.harness.opencode.health import OpenCodeHealthProbe
@@ -106,7 +106,7 @@ class OpenCodeDeclaration:
         return HarnessBinding(adapter=adapter, transcript_source=transcript_source)
 
     def health_probe(
-        self, section: OpenCodeSection, shared: SharedHarnessInputs, *, spawn_root: str
+        self, section: OpenCodeSection, shared: SharedHarnessInputs, *, spawn_root: str, corpus: ICompatibilityCorpus
     ) -> IHarnessHealthProbe:
         # The file a spawned worker would read: its allowlisted env, not the daemon's own.
         auth_path = (
@@ -114,7 +114,7 @@ class OpenCodeDeclaration:
             if section.auth_path is not None
             else resolve_opencode_auth_path(shared.worker_env.variables)
         )
-        return OpenCodeHealthProbe(binary=section.binary, auth_path=auth_path, corpus=CommittedCorpus())
+        return OpenCodeHealthProbe(binary=section.binary, auth_path=auth_path, corpus=corpus)
 
     def publish_layout(self, section: OpenCodeSection, *, autonomy: Autonomy, runtime_root: Path) -> HarnessLayout:
         return opencode_bundle_layout(section.worker_config_at(runtime_root))

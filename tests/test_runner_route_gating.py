@@ -254,6 +254,7 @@ def test_an_absent_expired_or_foreign_session_cookie_is_refused_401(cookie: str 
         (RunnerWiring.jti_cache, "jti_cache", "JTI cache"),
         (RunnerWiring.hub_auth_mode, "hub_auth_mode", "hub auth-mode cache"),
         (RunnerWiring.trusted_proxies, "trusted_proxies", "trusted proxies"),
+        (RunnerWiring.flags, "flags", "flags"),
     ],
 )
 def test_each_auth_seam_resolves_when_wired_and_refuses_503_naming_itself_when_not(
@@ -267,6 +268,17 @@ def test_each_auth_seam_resolves_when_wired_and_refuses_503_naming_itself_when_n
     assert (refused.value.status_code, refused.value.detail) == (
         503,
         f"{named} not wired — start via `blizzard runner host`",
+    )
+
+
+def test_an_app_with_no_flags_wired_answers_its_flags_route_503() -> None:
+    config = RunnerConfig(root=Path("/tmp/runner-gating-guard"), db_url="sqlite://", hub_url="http://hub.example")
+    app = create_runner_app(config, hub_http_client=_oauth_hub_client())
+    del app.state.flags
+    refused = TestClient(app).get("/api/flags")
+    assert (refused.status_code, refused.json()["detail"]) == (
+        503,
+        "flags not wired — start via `blizzard runner host`",
     )
 
 

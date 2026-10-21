@@ -21,8 +21,8 @@ WORKTREE_GIT_TIMEOUT = 60
 class SubprocessWorktreeGit:
     """Read-only confirmation of a declared git commit, via the real ``git`` CLI."""
 
-    def __init__(self) -> None:
-        self._runner = SubprocessEnvGit(WORKTREE_GIT_TIMEOUT)
+    def __init__(self, runner: SubprocessEnvGit) -> None:
+        self._runner = runner
 
     def verify(self, origin_url: str, branch: str, commit: str) -> bool:
         ref = f"refs/heads/{branch}"

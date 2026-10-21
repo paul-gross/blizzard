@@ -20,7 +20,8 @@ from blizzard.foundation.platform_tracing.tracer import IPlatformTracer, NoopPla
 from blizzard.foundation.roles import collaborator
 from blizzard.runner.composition import RunnerProcess, build_runner_process
 from blizzard.runner.config import RunnerConfig
-from blizzard.runner.environments.internal.subprocess_worktree_git import SubprocessWorktreeGit
+from blizzard.runner.environments.internal.git import SubprocessEnvGit
+from blizzard.runner.environments.internal.subprocess_worktree_git import WORKTREE_GIT_TIMEOUT, SubprocessWorktreeGit
 from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.harness.bundle import BundleSnapshot
 from blizzard.runner.harness.capability_snapshot import HarnessVersionCache, default_harness_id
@@ -186,7 +187,7 @@ class LoopWiring:
                 )
             ),
             process=graph.process,
-            worktree_git=SubprocessWorktreeGit(),
+            worktree_git=SubprocessWorktreeGit(SubprocessEnvGit(WORKTREE_GIT_TIMEOUT)),
             # The check-runner seam — see `src/blizzard/runner/lifecycle/judgement/check_runner.py`.
             check_runner=SubprocessCheckRunner(worker_env=config.worker_env(graph.trace_settings)),
             config=loop_config,

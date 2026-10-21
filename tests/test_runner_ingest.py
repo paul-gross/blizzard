@@ -14,11 +14,14 @@ from pathlib import Path
 import pytest
 import sqlalchemy as sa
 
+from blizzard.cli.main import blizzard
 from blizzard.foundation.crash import CrashPoint
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.runner_token_names import HOST_TOKEN_VARIABLE
 from blizzard.foundation.store.engine import create_engine_from_url
+from blizzard.foundation.store.migrations import MigrationRunner
 from blizzard.runner.cli import runners as runners_cli
+from blizzard.runner.cli.runtime import InitCollaborators
 from blizzard.runner.composition import (
     DotenvTokenFiles,
     RunnerBoundStoreFiles,
@@ -53,7 +56,7 @@ from tests.runner_ingest_support import (
     seed_runner,
     two_hosts,
 )
-from tests.runner_init_fakes import FakeInitHub
+from tests.runner_init_fakes import FakeInitHub, init_runner
 from tests.runner_scope_seeding import T0, reflect, seed_tables
 from tests.test_baseline_floor import make_tree
 
@@ -385,20 +388,35 @@ def test_ingest_is_refused_for_a_source_store_ahead_of_this_build(tmp_path: Path
     _refuse(fake_init_hub, hosts, "which this build does not know", "--workspace-id", _NEW_WORKSPACE)
 
 
-def test_ingest_refuses_absorbed_source_before_any_write(
-    tmp_path: Path, fake_init_hub: FakeInitHub, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_ingest_refuses_absorbed_source_before_any_write(tmp_path: Path, fake_init_hub: FakeInitHub) -> None:
     hosts = two_hosts(tmp_path, fake_init_hub)
     store = HostLayout(hosts.there).store_path
     engine = _engine(hosts.there)
     with engine.begin() as conn:
         conn.execute(sa.text("UPDATE alembic_version SET version_num = 'old_rev'"))
     engine.dispose()
-    import blizzard.runner.ingest as ingest_module
-
-    monkeypatch.setattr(ingest_module, "MIGRATIONS_DIR", make_tree(tmp_path))
+    tree = make_tree(tmp_path)
+    collaborators = InitCollaborators(
+        fake_init_hub.clients,
+        fake_init_hub.host_clients,
+        store_migrations=lambda url: MigrationRunner(script_location=tree, url=url),
+    )
     unchanged = _unchanged(hosts)
-    result = _ingest(fake_init_hub, hosts, "--workspace-id", _NEW_WORKSPACE)
+    result = init_runner(fake_init_hub).invoke(
+        blizzard,
+        [
+            "runner",
+            "ingest",
+            str(hosts.there),
+            "--runner",
+            MOVING,
+            "--dir",
+            str(hosts.here),
+            "--workspace-id",
+            _NEW_WORKSPACE,
+        ],
+        obj=collaborators,
+    )
     assert result.exit_code != 0
     assert str(store) in result.output
     assert "old_rev" in result.output

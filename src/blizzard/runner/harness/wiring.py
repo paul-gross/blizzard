@@ -29,6 +29,7 @@ from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.harness_telemetry_plan import HarnessTelemetryNames, HarnessTelemetryPlan
 from blizzard.runner.harness.internal.bundle_publisher import inspect_bundle, publish_bundle, published_snapshot
 from blizzard.runner.harness.internal.process_launcher import ProcessLauncher
+from blizzard.runner.harness.offline_compatibility import ICompatibilityCorpus
 from blizzard.runner.harness.opencode.section import OPENCODE_SECTION
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.process.probe import IProcessProbe
@@ -218,15 +219,17 @@ def build_production_harness_registry(
 
 
 def build_production_harness_health_probes(
-    settings: HarnessSettings, *, spawn_roots: Sequence[str]
+    settings: HarnessSettings, *, spawn_roots: Sequence[str], corpus: ICompatibilityCorpus
 ) -> dict[str, IHarnessHealthProbe]:
     """Every enabled harness binding's own :class:`~blizzard.runner.harness.adapter.
     IHarnessHealthProbe`, symmetric with :func:`build_production_harness_registry` — checking ambient
-    settings once per distinct spawn root in ``spawn_roots``."""
+    settings once per distinct spawn root in ``spawn_roots``, and admitting versions against ``corpus``."""
     shared = shared_inputs(settings)
     roots = tuple(dict.fromkeys(spawn_roots)) or ("",)
     probes = {
-        declaration.harness_id: tuple(declaration.health_probe(section, shared, spawn_root=root) for root in roots)
+        declaration.harness_id: tuple(
+            declaration.health_probe(section, shared, spawn_root=root, corpus=corpus) for root in roots
+        )
         for declaration, section in enabled(settings.sections)
     }
     return {harness_id: each[0] if len(each) == 1 else EverySpawnRootProbe(each) for harness_id, each in probes.items()}

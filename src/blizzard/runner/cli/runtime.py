@@ -25,7 +25,12 @@ from blizzard.foundation.roles import collaborator, dto
 from blizzard.foundation.runner_identity_state import IdentityState
 from blizzard.foundation.runner_token_names import HOST_TOKEN_VARIABLE, hub_token_variable
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.foundation.store.migrations import MigrationConnectionError, RevisionMismatchError, StoreBelowFloorError
+from blizzard.foundation.store.migrations import (
+    MigrationConnectionError,
+    MigrationRunner,
+    RevisionMismatchError,
+    StoreBelowFloorError,
+)
 from blizzard.foundation.trace_export.settings import TracingSettings
 from blizzard.runner.app import HostedApp, build_hosted_app
 from blizzard.runner.cli.daemon import daemon_holding, runner_option
@@ -42,6 +47,7 @@ from blizzard.runner.composition import (
     build_identity_writer,
     build_read_stores,
     build_runner_process,
+    runner_store_migrations,
 )
 from blizzard.runner.config import DEFAULT_RUNNER_NAME, RunnerConfig
 from blizzard.runner.config_table import ConfigError
@@ -155,6 +161,8 @@ class InitCollaborators:
 
     hub_clients: Callable[[str, str, str | None], AbstractContextManager[InitHubClients]]
     host_clients: Callable[[str], AbstractContextManager[HostClients]]
+    #: The runner store's migrations at a URL — what ``runner ingest`` migrates a source copy through.
+    store_migrations: Callable[[str], MigrationRunner] = runner_store_migrations
 
     @classmethod
     def of(cls, ctx: click.Context) -> InitCollaborators:

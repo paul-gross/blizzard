@@ -31,6 +31,7 @@ from blizzard.runner.harness.claude_code.worker_settings import WorkerSettings
 from blizzard.runner.harness.declaration import SharedHarnessInputs
 from blizzard.runner.harness.harness_telemetry_plan import HarnessTelemetryNames, HarnessTelemetryPlan
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID
+from blizzard.runner.harness.offline_compatibility import ICompatibilityCorpus
 from blizzard.runner.harness.process_launch import IProcessLauncher
 from blizzard.runner.harness.registry import HarnessBinding
 from blizzard.runner.harness.transcript import TranscriptErrorFactory
@@ -96,8 +97,9 @@ class ClaudeCodeDeclaration:
         return HarnessBinding(adapter=adapter, transcript_source=transcript_source)
 
     def health_probe(
-        self, section: ClaudeCodeSection, shared: SharedHarnessInputs, *, spawn_root: str
+        self, section: ClaudeCodeSection, shared: SharedHarnessInputs, *, spawn_root: str, corpus: ICompatibilityCorpus
     ) -> IHarnessHealthProbe:
+        # Claude Code admits by its own version range, not a committed corpus — `corpus` goes unread.
         return ClaudeCodeHealthProbe(
             binary=section.binary,
             credentials_path=section.credentials_path,

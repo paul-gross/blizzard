@@ -140,8 +140,8 @@ class RunnerWiring:
 
     def flags(self) -> Flags:
         """The host's resolved flags."""
-        flags: Flags = self._seam("flags")
-        return flags
+        flags: Flags | None = self._seam("flags")
+        return flags if flags is not None else self._refuse("flags")
 
     def workspaces(self) -> tuple[ServedWorkspace, ...]:
         workspaces: tuple[ServedWorkspace, ...] | None = self._seam("workspaces")

@@ -32,6 +32,7 @@ from blizzard.foundation.platform_tracing.handle import (
 from blizzard.foundation.roles import collaborator
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.internal.store_status_reader import SqlAlchemyStoreStatusReader
+from blizzard.foundation.store.migrations import MigrationRunner
 from blizzard.foundation.store.readiness import Readiness, ReadinessService
 from blizzard.foundation.trace_export.exporter import ITraceExporter
 from blizzard.foundation.trace_export.internal.otlp import OtlpTraceExporter
@@ -81,6 +82,7 @@ from blizzard.runner.listeners import Listeners
 from blizzard.runner.loop.host_tick import HostTick
 from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
 from blizzard.runner.runtime import migration_runner
+from blizzard.runner.store import MIGRATIONS_DIR
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
 from blizzard.runner.store.internal.ask_store import AskStore
 from blizzard.runner.store.internal.attachment_store import AttachmentStore
@@ -898,12 +900,14 @@ def _build_runner(
         default_id = default_harness_id(harnesses)
         if default_id is not None:
             harnesses.transcript_source(default_id)
+        # One corpus for the cache and the probes alike, so both admit against the same committed manifests.
+        corpus = CommittedCorpus()
         health = HarnessHealthCache(
             clock=clock,
             probes=build_production_harness_health_probes(
-                harness_settings, spawn_roots=bound_spawn_roots(config, host.workspaces)
+                harness_settings, spawn_roots=bound_spawn_roots(config, host.workspaces), corpus=corpus
             ),
-            corpus=CommittedCorpus(),
+            corpus=corpus,
             selftest_results=stores.selftest_results,
             configured_tiers=configured_tiers(config.harness_sections),
         )
@@ -1183,10 +1187,21 @@ def _conforms_token_files(x: DotenvTokenFiles) -> ITokenFiles:
     return x
 
 
+def runner_store_migrations(url: str) -> MigrationRunner:
+    """The runner store's own migrations, run against the store at ``url``."""
+    return MigrationRunner(script_location=MIGRATIONS_DIR, url=url)
+
+
 def build_runner_ingest(
-    host: HostConfig, hub: IHostHubClient, *, holder: Callable[[Path], str | None], clock: IClock | None = None
+    host: HostConfig,
+    hub: IHostHubClient,
+    *,
+    holder: Callable[[Path], str | None],
+    clock: IClock | None = None,
+    migrations: Callable[[str], MigrationRunner] = runner_store_migrations,
 ) -> RunnerIngest:
-    """The ingest into the host ``host``, reaching its hub through ``hub`` and probing sockets with ``holder``."""
+    """The ingest into the host ``host``, reaching its hub through ``hub``, probing sockets with ``holder``, and
+    migrating each source copy through ``migrations``."""
     resolved = clock or SystemClock()
     return RunnerIngest(
         host=host,
@@ -1196,4 +1211,5 @@ def build_runner_ingest(
         hub=hub,
         holder=holder,
         clock=resolved,
+        migrations=migrations,
     )

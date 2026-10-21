@@ -213,9 +213,13 @@ def ingest(ctx: click.Context, source: Path, directory: str, runner: str, worksp
     interrupted ingest."""
     config = load_host(directory)
     trace = OperatorTrace.source(ctx)
-    with InitCollaborators.of(ctx).host_clients(config.hub_url) as host_clients:
+    collaborators = InitCollaborators.of(ctx)
+    with collaborators.host_clients(config.hub_url) as host_clients:
         service = build_runner_ingest(
-            config, host_clients(config.host_token.value), holder=lambda sock: daemon_holding(sock, trace)
+            config,
+            host_clients(config.host_token.value),
+            holder=lambda sock: daemon_holding(sock, trace),
+            migrations=collaborators.store_migrations,
         )
         try:
             outcome = service.run(IngestRequest(source=source, runner=runner, workspace_id=workspace_id))

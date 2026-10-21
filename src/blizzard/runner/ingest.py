@@ -57,7 +57,6 @@ from blizzard.runner.runtime import (
     sqlite_store_file,
     sqlite_url,
 )
-from blizzard.runner.store import MIGRATIONS_DIR
 from blizzard.runner.transfer.refusals import (
     HostNotHolding,
     SourceRunning,
@@ -252,6 +251,8 @@ class RunnerIngest:
     #: What answers on a socket path, if anything.
     holder: Callable[[Path], str | None]
     clock: IClock
+    #: The migrations of the runner store at a source copy's URL.
+    migrations: Callable[[str], MigrationRunner]
 
     def run(self, request: IngestRequest) -> IngestOutcome:
         """Ingest the runner ``request`` names, or complete an ingest of it interrupted part-way. Raises an
@@ -441,7 +442,7 @@ class RunnerIngest:
         try:
             copy = directory / store.name
             backup_sqlite(store, copy)
-            migrations = MigrationRunner(script_location=MIGRATIONS_DIR, url=sqlite_url(copy))
+            migrations = self.migrations(sqlite_url(copy))
             current = migrations.current_revision()
             migrations.refuse_below_floor(store=str(store), current=current)
             if current is not None and not migrations.knows_revision(current):
