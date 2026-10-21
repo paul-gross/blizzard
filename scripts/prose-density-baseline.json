@@ -2210,7 +2210,7 @@
    "comments": 5,
    "docstrings": 47,
    "over_cap": 1,
-   "total": 420
+   "total": 422
   },
   "blizzard/hub/api/garden_runs.py": {
    "comments": 3,
@@ -2354,7 +2354,7 @@
    "comments": 4,
    "docstrings": 73,
    "over_cap": 4,
-   "total": 656
+   "total": 657
   },
   "blizzard/hub/api/runners.py": {
    "comments": 6,
@@ -3432,7 +3432,7 @@
   },
   "blizzard/hub/domain/garden/findings/trend.py": {
    "comments": 3,
-   "docstrings": 32,
+   "docstrings": 31,
    "over_cap": 2,
    "total": 200
   },
@@ -3456,9 +3456,9 @@
   },
   "blizzard/hub/domain/garden/proposals/model.py": {
    "comments": 8,
-   "docstrings": 125,
+   "docstrings": 127,
    "over_cap": 3,
-   "total": 613
+   "total": 625
   },
   "blizzard/hub/domain/garden/proposals/resolution.py": {
    "comments": 0,
@@ -3494,7 +3494,7 @@
    "comments": 10,
    "docstrings": 99,
    "over_cap": 0,
-   "total": 535
+   "total": 537
   },
   "blizzard/hub/domain/garden/run_context.py": {
    "comments": 2,
@@ -3542,7 +3542,7 @@
    "comments": 3,
    "docstrings": 53,
    "over_cap": 1,
-   "total": 298
+   "total": 299
   },
   "blizzard/hub/domain/graph/__init__.py": {
    "comments": 0,
@@ -10768,7 +10768,7 @@
    "comments": 55,
    "docstrings": 31,
    "over_cap": 2,
-   "total": 2707
+   "total": 2709
   },
   "store_scan_allowlist.py": {
    "comments": 37,
@@ -10784,9 +10784,9 @@
   },
   "support.py": {
    "comments": 62,
-   "docstrings": 336,
+   "docstrings": 337,
    "over_cap": 15,
-   "total": 2336
+   "total": 2343
   },
   "support_chunk_world.py": {
    "comments": 7,
@@ -12400,7 +12400,7 @@
    "comments": 9,
    "docstrings": 3,
    "over_cap": 0,
-   "total": 487
+   "total": 515
   },
   "test_garden_proposal_store.py": {
    "comments": 6,
@@ -12418,7 +12418,7 @@
    "comments": 7,
    "docstrings": 10,
    "over_cap": 1,
-   "total": 737
+   "total": 774
   },
   "test_garden_routine_graph.py": {
    "comments": 50,
@@ -14008,7 +14008,7 @@
    "comments": 4,
    "docstrings": 13,
    "over_cap": 0,
-   "total": 539
+   "total": 555
   },
   "test_routine_lifecycle_api.py": {
    "comments": 4,
@@ -14020,7 +14020,7 @@
    "comments": 2,
    "docstrings": 4,
    "over_cap": 0,
-   "total": 235
+   "total": 244
   },
   "test_routine_retire_enable_api.py": {
    "comments": 3,
@@ -14050,7 +14050,7 @@
    "comments": 0,
    "docstrings": 11,
    "over_cap": 0,
-   "total": 351
+   "total": 363
   },
   "test_routine_scope_rules.py": {
    "comments": 4,
@@ -15370,7 +15370,7 @@
    "comments": 2,
    "docstrings": 6,
    "over_cap": 0,
-   "total": 262
+   "total": 278
   },
   "test_scope_lifecycle_api.py": {
    "comments": 4,
