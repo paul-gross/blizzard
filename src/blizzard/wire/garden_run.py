@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.run_mode import RunMode
+from blizzard.wire.base import WireModel
 
 
 class DeliveredSetView(BaseModel):
@@ -27,7 +28,7 @@ class RunEscalationView(BaseModel):
     wrapped_takeover_command: str
 
 
-class RunRowView(BaseModel):
+class RunRowView(WireModel):
     chunk_id: str
     routine_name: str
     scope_slug: str
@@ -82,7 +83,7 @@ class DeliveredSetDeltaView(BaseModel):
     gone: list[GoneFindingView]
 
 
-class RunDeltaView(BaseModel):
+class RunDeltaView(WireModel):
     chunk_id: str
     routine_name: str
     scope_slug: str

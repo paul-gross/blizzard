@@ -1,18 +1,41 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 
-import type { GraphView } from 'fleet';
+import type { GraphView, GraphNodeView } from 'fleet';
 import type { DiagramSelection } from './graph-diagram-selection';
 import { GRAPH_LAYOUT, GraphDiagram } from './graph-diagram';
 import type { LaidOutGraph, LayoutOutcome } from './graph-layout';
 import { GRAPH_TEXT_MEASURER } from './graph-text-measurer';
 
+const GRAPH_DEFAULTS: Pick<GraphView, 'artifacts' | 'edges' | 'follow_latest' | 'retired' | 'sessions' | 'warnings'> = {
+  artifacts: [],
+  edges: [],
+  follow_latest: null,
+  retired: false,
+  sessions: [],
+  warnings: [],
+};
+
+const NODE_DEFAULTS: Pick<GraphNodeView, 'checks' | 'checks_cwd' | 'checks_timeout' | 'choices' | 'judgement_prompt' | 'produces' | 'prompt' | 'retries_exhausted' | 'retries_max' | 'session_source'> = {
+  checks: [],
+  checks_cwd: null,
+  checks_timeout: null,
+  choices: [],
+  judgement_prompt: null,
+  produces: [],
+  prompt: null,
+  retries_exhausted: null,
+  retries_max: null,
+  session_source: null,
+};
+
 const GRAPH: GraphView = {
+  ...GRAPH_DEFAULTS,
   graph_id: 'gr_build_v2',
   name: 'build',
   enabled: true,
   entry_node_id: 'n_build',
-  nodes: [{ node_id: 'n_build', name: 'build', executor: 'runner', session: 'fresh', judged_by: 'worker', choices: [] }],
+  nodes: [{ ...NODE_DEFAULTS, node_id: 'n_build', name: 'build', executor: 'runner', session: 'fresh', judged_by: 'worker', choices: [] }],
   edges: [],
   warnings: [],
 };

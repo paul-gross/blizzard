@@ -9,6 +9,10 @@ function change(id: number, revision: number, overrides: Partial<ConfigChangeVie
     revision,
     actor: 'pgross',
     door: 'cli',
+    actor_name: null,
+    apply_id: null,
+    project_id: null,
+    record_label: null,
     op: 'edit',
     record_kind: 'work_source',
     record_key: 'winter',
@@ -69,7 +73,7 @@ describe('changeActor', () => {
 
 describe('changesOfPages', () => {
   it('flattens pages in order', () => {
-    expect(changesOfPages([{ changes: [change(5, 2)] }, { changes: [change(4, 1)] }]).map((c) => c.id)).toEqual([5, 4]);
+    expect(changesOfPages([{ changes: [change(5, 2)], total: 2, next_before: 4 }, { changes: [change(4, 1)], total: 2, next_before: null }]).map((c) => c.id)).toEqual([5, 4]);
     expect(changesOfPages(undefined)).toEqual([]);
   });
 });

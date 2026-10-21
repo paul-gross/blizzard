@@ -46,8 +46,8 @@ function tokenColor(token: string): string {
  * (`web/scripts/shell-sweep.js`).
  */
 const SCOPES: ScopeView[] = [
-  { slug: 'web', description: 'the frontend', created_at: '2026-01-01T00:00:00Z', retired: false },
-  { slug: 'blizzard', description: 'the hub itself', created_at: '2026-01-01T00:00:00Z', retired: false },
+  { slug: 'web', description: 'the frontend', created_at: '2026-01-01T00:00:00Z', retired: false, revision: null, project_id: null, project_name: null, project_slug: null },
+  { slug: 'blizzard', description: 'the hub itself', created_at: '2026-01-01T00:00:00Z', retired: false, revision: null, project_id: null, project_name: null, project_slug: null },
 ];
 
 const BASELINES: RoutineBaselineView[] = [

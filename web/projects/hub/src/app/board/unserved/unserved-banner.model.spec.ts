@@ -4,14 +4,14 @@ import { unservedBannerText } from './unserved-banner.model';
 
 const GLACIER = { project_id: 'proj_g', slug: 'glacier', name: 'Glacier' } as ProjectView;
 
-const UNCLAIMABLE = { entry: 'glacier', project_id: 'proj_g', slug: 'glacier', name: 'Glacier', claimable: false };
+const UNCLAIMABLE = { entry: 'glacier', project_id: 'proj_g', slug: 'glacier', name: 'Glacier', claimable: false, color: null };
 
 const runner = (over: Partial<RunnerRegistryView>): RunnerRegistryView =>
   ({
     runner_id: 'rn_1',
     online: true,
     retired: false,
-    projects: [{ entry: 'glacier', project_id: 'proj_g', slug: 'glacier', name: 'Glacier', claimable: true }],
+    projects: [{ entry: 'glacier', project_id: 'proj_g', slug: 'glacier', name: 'Glacier', claimable: true, color: null }],
     ...over,
   }) as RunnerRegistryView;
 

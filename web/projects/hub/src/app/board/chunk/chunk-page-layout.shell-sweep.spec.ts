@@ -4,13 +4,26 @@ import { provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { ChunkPage, ChunkGeneralTab, ChunkTranscriptsTab, hubClient, type hubApi, ViewportService } from 'fleet';
-import { OPERATOR_ME_RESPONSE, settle, stubError, stubRequestClient } from 'fleet/testing';
+import {
+  assetArtifactView,
+  chunkDetail,
+  chunkEscalationView,
+  chunkUsageTotalView,
+  chunkUsageView,
+  OPERATOR_ME_RESPONSE,
+  questionView,
+  settle,
+  stubError,
+  stubRequestClient,
+  transitionView,
+  workRefView,
+} from 'fleet/testing';
 import { page } from 'vitest/browser';
 
 import { HUB_CHUNK_PAGE_PROVIDERS } from './hub-chunk-actions';
 
 /** The chunk page's layout under a real browser — see `blizzard-context:/verification/blizzard/commands/web/shell-sweep.md` §web:shell-sweep. */
-const DETAIL: hubApi.ChunkDetail = {
+const DETAIL: hubApi.ChunkDetail = chunkDetail({
   chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9',
   graph_id: 'gr_1',
   graph_name: 'default',
@@ -18,19 +31,19 @@ const DETAIL: hubApi.ChunkDetail = {
   current_node_name: 'review',
   latest_epoch: 2,
   status: 'running',
-  work_refs: [{ source: 'blizzard', ref: '26', web_url: null }],
+  work_refs: [workRefView({ source: 'blizzard', ref: '26', web_url: null })],
   history: [
-    {
+    transitionView({
       choice_name: null,
       epoch: 1,
       from_node_id: null,
       to_node_id: 'nd_build',
       to_node_name: 'build',
       recorded_at: '2026-07-16T11:00:00.000Z',
-    },
+    }),
   ],
   artifacts: [],
-};
+});
 
 /**
  * The same tab with an open ask, shaped the way agents actually write them: paragraph
@@ -43,7 +56,7 @@ const ASK_DETAIL: hubApi.ChunkDetail = {
   ...DETAIL,
   status: 'waiting_on_human',
   questions: [
-    {
+    questionView({
       question_id: 'qn_long',
       chunk_id: DETAIL.chunk_id,
       question:
@@ -57,7 +70,7 @@ const ASK_DETAIL: hubApi.ChunkDetail = {
       runner_id: 'rn_01',
       asked_at: '2026-07-16T11:30:00.000Z',
       answered: false,
-    },
+    }),
   ],
 };
 
@@ -68,11 +81,11 @@ const ASK_DETAIL: hubApi.ChunkDetail = {
 const ESTIMATE_DETAIL: hubApi.ChunkDetail = {
   ...DETAIL,
   history: [
-    { choice_name: 'pass', epoch: 1, from_node_id: 'nd_build', from_node_name: 'build', to_node_id: 'nd_review', to_node_name: 'review', recorded_at: '2026-07-16T11:00:00.000Z' },
+    transitionView({ choice_name: 'pass', epoch: 1, from_node_id: 'nd_build', from_node_name: 'build', to_node_id: 'nd_review', to_node_name: 'review', recorded_at: '2026-07-16T11:00:00.000Z' }),
   ],
-  cost: { input_tokens: 900, output_tokens: 400, cache_read_tokens: 0, cache_create_tokens: 0, cost_usd: 0, cost_partial: false, estimated_cost_usd: 0.07 },
+  cost: chunkUsageTotalView({ input_tokens: 900, output_tokens: 400, cache_read_tokens: 0, cache_create_tokens: 0, cost_usd: 0, cost_partial: false, estimated_cost_usd: 0.07 }),
   usage: [
-    { node_id: 'nd_build', epoch: 1, kind: 'spawn', model: 'claude-opus-4-8', input_tokens: 900, output_tokens: 400, cache_read_tokens: 0, cache_create_tokens: 0, cost_usd: null, estimated_cost_usd: 0.07 },
+    chunkUsageView({ node_id: 'nd_build', epoch: 1, kind: 'spawn', model: 'claude-opus-4-8', input_tokens: 900, output_tokens: 400, cache_read_tokens: 0, cache_create_tokens: 0, cost_usd: null, estimated_cost_usd: 0.07 }),
   ],
 };
 
@@ -88,14 +101,16 @@ const ESTIMATE_DETAIL: hubApi.ChunkDetail = {
 const NEEDS_HUMAN_DETAIL: hubApi.ChunkDetail = {
   ...DETAIL,
   status: 'needs_human',
-  escalation: {
+  escalation: chunkEscalationView({
     epoch: 2,
+    cause: null,
+    detail: null,
     takeover_command:
       'cd /home/blizzard/runner/work/ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9-nd_review-2 && ' +
       'claude --resume 5f9c2e3a-4b7d-4a1e-9c3f-8d2b6a1e7f4c',
     wrapped_takeover_command:
       'blizzard runner takeover ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9 --dir /home/blizzard/runner/data/runtime',
-  },
+  }),
 };
 
 async function render(detail: hubApi.ChunkDetail = DETAIL) {
@@ -342,7 +357,7 @@ describe('chunk page Transcripts tab layout shell sweep (web:shell-sweep)', () =
     }).compileComponents();
     const fixture = TestBed.createComponent(ChunkTranscriptsTab);
     fixture.componentRef.setInput('history', [
-      { from_node_id: 'nd_build', from_node_name: 'build', to_node_id: 'nd_review', to_node_name: 'review', choice_name: null, epoch: 1, recorded_at: '2026-08-09T00:00:00+00:00' } satisfies hubApi.TransitionView,
+      transitionView({ from_node_id: 'nd_build', from_node_name: 'build', to_node_id: 'nd_review', to_node_name: 'review', choice_name: null, epoch: 1, recorded_at: '2026-08-09T00:00:00+00:00' }),
     ]);
     fixture.componentRef.setInput('segments', [
       {
@@ -431,7 +446,7 @@ async function pumpUntil(fixture: ComponentFixture<unknown>, ready: () => boolea
 
 const CHUNK_ID = 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9';
 
-const CHAIN_DETAIL: hubApi.ChunkDetail = {
+const CHAIN_DETAIL: hubApi.ChunkDetail = chunkDetail({
   chunk_id: CHUNK_ID,
   graph_id: 'gr_1',
   graph_name: 'default',
@@ -442,7 +457,7 @@ const CHAIN_DETAIL: hubApi.ChunkDetail = {
   work_refs: [],
   history: [],
   artifacts: [],
-};
+});
 
 @Component({ selector: 'app-board-stub', template: '' })
 class ChainBoardStub {}
@@ -630,15 +645,15 @@ describe('chunk page Transcripts tab composed-chain layout shell sweep (web:shel
 
 const DRILLDOWN_DETAIL: hubApi.ChunkDetail = {
   ...CHAIN_DETAIL,
-  history: [{
+  history: [transitionView({
     choice_name: 'pass', epoch: 1, from_node_id: 'nd_build', from_node_name: 'build',
     to_node_id: 'nd_review', to_node_name: 'review', recorded_at: '2026-08-09T00:00:00.000Z',
-  }],
-  artifacts: [{
+  })],
+  artifacts: [assetArtifactView({
     key: 'build.plan.1', kind: 'asset', name: 'plan', node_id: 'nd_build', node_name: 'build', epoch: 1,
     content: 'A deliberately long artifact body that must wrap inside the phone detail pane without widening it.',
     recorded_at: '2026-08-09T00:00:00.000Z',
-  }],
+  })],
 };
 
 function expectNoOverflow(element: HTMLElement, label: string): void {

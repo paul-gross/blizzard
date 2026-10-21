@@ -15,6 +15,8 @@ const BLIZZARD: RepositorySummary = {
   revision: 2,
   created_at: '2026-01-01T00:00:00Z',
   created_by: 'pgross',
+  created_by_name: null,
+  retired: false,
 };
 const OLD: RepositorySummary = { ...BLIZZARD, repository_id: 'repo_2', slug: 'old', name: 'Old one', retired: true };
 

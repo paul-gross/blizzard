@@ -113,11 +113,11 @@ export type PermitView = {
     /**
      * Changed At
      */
-    changed_at?: string | null;
+    changed_at: string | null;
     /**
      * Changed By
      */
-    changed_by?: string | null;
+    changed_by: string | null;
     /**
      * Holder
      */
@@ -129,15 +129,15 @@ export type PermitView = {
     /**
      * Project Id
      */
-    project_id?: string | null;
+    project_id: string | null;
     /**
      * Project Name
      */
-    project_name?: string | null;
+    project_name: string | null;
     /**
      * Project Slug
      */
-    project_slug?: string | null;
+    project_slug: string | null;
     /**
      * Requested At
      */
@@ -149,7 +149,7 @@ export type PermitView = {
     /**
      * Revocation Note
      */
-    revocation_note?: string | null;
+    revocation_note: string | null;
     state: PermitState;
     /**
      * Verbs

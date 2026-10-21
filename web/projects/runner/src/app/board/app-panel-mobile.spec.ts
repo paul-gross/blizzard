@@ -28,6 +28,8 @@ const LEASE = (overrides: Partial<PanelLease> = {}): PanelLease => ({
   closed_at: null,
   closure_reason: null,
   stale_after_seconds: 3600,
+  harness_id: null,
+  project_id: null,
   owner: { runnerId: 'rn_1', name: 'r1', label: 'r1' },
   projectSlug: null,
   ...overrides,

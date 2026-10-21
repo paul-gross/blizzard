@@ -15,6 +15,25 @@ import {
 
 const NOW = Date.parse('2026-07-16T12:00:00.000Z');
 
+/** The environment facts an unheld environment reports as empty. */
+const UNHELD = { chunk_id: null, held: false, held_since: null, project: null, runner_id: null } satisfies Omit<
+  runnerApi.HostEnvironmentView,
+  'environment_id'
+>;
+
+/** The subscription facts a never-attempted subscription reports as empty. */
+const UNREPORTED = {
+  miss_reason: null,
+  ok: null,
+  renewal_attempted_at: null,
+  renewal_failure_reason: null,
+  renewal_result: null,
+  sampled_at: null,
+  spenders: [],
+  windows: [],
+  windows_sampled_at: null,
+} satisfies Omit<runnerApi.HostSubscriptionView, 'slug' | 'name' | 'provider'>;
+
 describe('heldForLabel', () => {
   it('renders blank for an unheld environment', () => {
     expect(heldForLabel(null, NOW)).toBe('');
@@ -61,13 +80,13 @@ describe('runnerEnvironmentRows', () => {
   });
 
   it('treats an absent chunk_id and held flag as unheld', () => {
-    expect(runnerEnvironmentRows([{ environment_id: 'e3' }], NOW, runnerName)).toEqual([
+    expect(runnerEnvironmentRows([{ ...UNHELD, environment_id: 'e3' }], NOW, runnerName)).toEqual([
       { environmentId: 'e3', isHeld: false, chunkRef: '', heldFor: '', holder: null },
     ]);
   });
 
   it('names the runner alone when the holding chunk names no project', () => {
-    const [row] = runnerEnvironmentRows([{ environment_id: 'e4', held: true, chunk_id: 'ch_1', runner_id: 'rn_2' }], NOW, runnerName);
+    const [row] = runnerEnvironmentRows([{ ...UNHELD, environment_id: 'e4', held: true, chunk_id: 'ch_1', runner_id: 'rn_2' }], NOW, runnerName);
     expect(row.holder).toBe('r-chatgpt');
   });
 });
@@ -83,8 +102,8 @@ describe('runnerWorkspaceRows', () => {
         {
           workspace_id: 'ws-a',
           items: [
-            { environment_id: 'e1', held: true, chunk_id: 'ch_1', held_since: '2026-07-16T11:59:18.000Z', runner_id: 'rn_1' },
-            { environment_id: 'e2', held: false },
+            { ...UNHELD, environment_id: 'e1', held: true, chunk_id: 'ch_1', held_since: '2026-07-16T11:59:18.000Z', runner_id: 'rn_1' },
+            { ...UNHELD, environment_id: 'e2', held: false },
           ],
         },
       ],
@@ -100,7 +119,7 @@ describe('runnerWorkspaceRows', () => {
   });
 
   it('still renders an environment group whose workspace is not declared, with no capacity', () => {
-    const rows = runnerWorkspaceRows([], [{ workspace_id: 'ws-x', items: [{ environment_id: 'e9' }] }], NOW, runnerName);
+    const rows = runnerWorkspaceRows([], [{ workspace_id: 'ws-x', items: [{ ...UNHELD, environment_id: 'e9' }] }], NOW, runnerName);
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ workspaceId: 'ws-x', capacity: null, inUse: 0 });
   });
@@ -169,6 +188,7 @@ describe('runnerSubscriptionPaces', () => {
   it('carries a missed attempt with no windows as its sample line, a never-attempted one with no sample', () => {
     const subs: runnerApi.HostSubscriptionView[] = [
       {
+        ...UNREPORTED,
         slug: 'claude-max',
         name: 'Claude Max',
         provider: 'anthropic',
@@ -180,7 +200,7 @@ describe('runnerSubscriptionPaces', () => {
         renewal_failure_reason: 'vendor_refused',
         spenders: ['rn_1', 'rn_2'],
       },
-      { slug: 'chatgpt', name: 'ChatGPT', provider: 'openai' },
+      { ...UNREPORTED, slug: 'chatgpt', name: 'ChatGPT', provider: 'openai' },
     ];
     expect(runnerSubscriptionPaces(subs, NOW, runnerName)).toEqual([
       {
@@ -210,6 +230,7 @@ describe('runnerSubscriptionPaces', () => {
     const [pace] = runnerSubscriptionPaces(
       [
         {
+          ...UNREPORTED,
           slug: 'claude-max',
           name: 'Claude Max', provider: 'anthropic',
           ok: true,
@@ -229,7 +250,7 @@ describe('runnerSubscriptionPaces', () => {
 
   it('reads a lapsed credential as lapsed, whatever windows it last carried', () => {
     const [pace] = runnerSubscriptionPaces(
-      [{ slug: 'claude-max', name: 'Claude Max', provider: 'anthropic', ok: false, miss_reason: 'credential_lapsed', sampled_at: '2026-07-16T11:59:00.000Z' }],
+      [{ ...UNREPORTED, slug: 'claude-max', name: 'Claude Max', provider: 'anthropic', ok: false, miss_reason: 'credential_lapsed', sampled_at: '2026-07-16T11:59:00.000Z' }],
       NOW,
       runnerName,
     );
@@ -242,15 +263,16 @@ describe('runnerSubscriptionLines', () => {
     const lines = runnerSubscriptionLines(
       [
         {
+          ...UNREPORTED,
           slug: 'paced',
           name: 'Paced', provider: 'anthropic',
           ok: true,
           windows_sampled_at: '2026-07-16T11:55:00.000Z',
           windows: [{ window: '5h', utilization_pct: 62, resets_at: '2026-07-16T13:30:00.000Z', window_seconds: 5 * 3600 }],
         },
-        { slug: 'lapsed', name: 'Lapsed', provider: 'anthropic', ok: false, miss_reason: 'credential_lapsed' },
-        { slug: 'missed', name: 'Missed', provider: 'anthropic', ok: false, miss_reason: 'endpoint_unreachable', sampled_at: '2026-07-16T11:59:26.000Z' },
-        { slug: 'never', name: 'Never', provider: 'anthropic' },
+        { ...UNREPORTED, slug: 'lapsed', name: 'Lapsed', provider: 'anthropic', ok: false, miss_reason: 'credential_lapsed' },
+        { ...UNREPORTED, slug: 'missed', name: 'Missed', provider: 'anthropic', ok: false, miss_reason: 'endpoint_unreachable', sampled_at: '2026-07-16T11:59:26.000Z' },
+        { ...UNREPORTED, slug: 'never', name: 'Never', provider: 'anthropic' },
       ],
       NOW,
     );

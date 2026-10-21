@@ -3,6 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 
 import type { ChunkDetail } from 'fleet';
+import { chunkDetail, chunkEscalationView } from 'fleet/testing';
 import { ChunkDetailHeader } from './chunk-detail-header';
 
 /**
@@ -11,7 +12,9 @@ import { ChunkDetailHeader } from './chunk-detail-header';
  * own DOM subtree, so these tests query there.
  */
 
-const ISSUE_DETAIL: ChunkDetail = {
+const ISSUE_DETAIL: ChunkDetail = chunkDetail({
+  graph_name: null,
+  current_node_name: null,
   chunk_id: 'ch_01issue00000000000000000000',
   graph_id: 'gr_1',
   status: 'running',
@@ -22,9 +25,11 @@ const ISSUE_DETAIL: ChunkDetail = {
   work_refs: [],
   history: [],
   artifacts: [],
-};
+});
 
-const ROUTED_DETAIL: ChunkDetail = {
+const ROUTED_DETAIL: ChunkDetail = chunkDetail({
+  graph_name: null,
+  current_node_name: null,
   chunk_id: 'ch_01routed000000000000000000',
   graph_id: 'gr_1',
   status: 'running',
@@ -36,9 +41,11 @@ const ROUTED_DETAIL: ChunkDetail = {
   history: [],
   artifacts: [],
   route: { runner_id: 'rn_01', runner_name: 'r-claude', workspace_id: 'ws_01', environment_ids: ['env_01'] },
-};
+});
 
-const ESCALATED_ROUTED_DETAIL: ChunkDetail = {
+const ESCALATED_ROUTED_DETAIL: ChunkDetail = chunkDetail({
+  graph_name: null,
+  current_node_name: null,
   chunk_id: 'ch_01esc00000000000000000000000',
   graph_id: 'gr_1',
   status: 'needs_human',
@@ -49,12 +56,15 @@ const ESCALATED_ROUTED_DETAIL: ChunkDetail = {
   work_refs: [],
   history: [],
   artifacts: [],
-  escalation: {
+  escalation: chunkEscalationView({
     epoch: 3,
     takeover_command: 'cd /work/ch_01esc00000000000000000000000 && claude --resume se_01',
-  },
-  route: { runner_id: 'rn_02', workspace_id: 'ws_01', environment_ids: [] },
-};
+    cause: null,
+    detail: null,
+    wrapped_takeover_command: '',
+  }),
+  route: { runner_id: 'rn_02', runner_name: null, workspace_id: 'ws_01', environment_ids: [] },
+});
 
 /** The CDK renders every menu into an overlay attached to `document.body`, not
  * inside the fixture's own element — so panel assertions query the document

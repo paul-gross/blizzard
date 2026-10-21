@@ -7,6 +7,7 @@ from datetime import datetime
 from pydantic import BaseModel
 
 from blizzard.foundation.trace_export.settings import TracingState
+from blizzard.wire.base import WireModel
 
 
 class ReceiverStatus(BaseModel):
@@ -17,7 +18,7 @@ class ReceiverStatus(BaseModel):
     dropped_spans: int
 
 
-class TraceStatusResponse(BaseModel):
+class TraceStatusResponse(WireModel):
     """Whether fleet tracing runs and how it is doing. ``endpoint`` is the configured origin only; no exporter
     error text is carried. ``lag_seconds`` is the oldest unexported item's age, ``None`` when nothing waits.
     ``receiver`` is the runner's span-receiver tally, ``None`` on the hub. ``replay_max_window_seconds`` is the
@@ -47,7 +48,7 @@ class TraceReplayRequest(BaseModel):
     dry_run: bool = False
 
 
-class TraceReplayResponse(BaseModel):
+class TraceReplayResponse(WireModel):
     """What a replay told, or with ``dry_run`` would have told; ``chunks`` counts finished chunks and markers."""
 
     steps: int
@@ -57,7 +58,7 @@ class TraceReplayResponse(BaseModel):
     chunks: int = 0
 
 
-class TraceReplayFailure(BaseModel):
+class TraceReplayFailure(WireModel):
     """The exporter refused or raised: ``steps``, ``spans`` and ``batches`` count what it accepted before the
     replay stopped. ``detail`` is fixed text, never the exporter's own error."""
 

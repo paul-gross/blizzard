@@ -1,8 +1,9 @@
 import type { TranscriptSegmentIndexEntry, TransitionView } from '../api/hub';
+import { transcriptSegmentIndexEntry } from '../testing/builders/transcript';
 import { deriveTranscriptSteps, resolveSegmentSeams } from './transcript-steps';
 
 function segment(overrides: Partial<TranscriptSegmentIndexEntry> = {}): TranscriptSegmentIndexEntry {
-  return {
+  return transcriptSegmentIndexEntry({
     segment_id: 'seg-1',
     node_id: 'build',
     epoch: 2,
@@ -13,10 +14,11 @@ function segment(overrides: Partial<TranscriptSegmentIndexEntry> = {}): Transcri
     truncated: false,
     byte_count: 100,
     normalizer_version: 'v1',
+    harness_id: null,
     harness_version: null,
     received_at: '2026-08-09T00:00:00+00:00',
     ...overrides,
-  };
+  });
 }
 
 function transition(overrides: Partial<TransitionView> = {}): TransitionView {

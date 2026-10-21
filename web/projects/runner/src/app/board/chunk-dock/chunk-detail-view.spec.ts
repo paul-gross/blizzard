@@ -23,6 +23,8 @@ const LEASE: runnerApi.LeaseView = {
   closed_at: null,
   closure_reason: null,
   stale_after_seconds: 3600,
+  harness_id: null,
+  project_id: null,
 };
 
 async function render(overrides: Partial<{ lease: runnerApi.LeaseView | null; escalation: runnerApi.EscalationView | null }> = {}) {
@@ -73,6 +75,14 @@ describe('MachineDetailView', () => {
         epoch: LEASE.epoch,
         closed_at: '2026-07-16T11:00:00.000Z',
         resume_command: 'blizzard runner resume sess-new',
+        cause: null,
+        effort: null,
+        harness_id: null,
+        harness_version: null,
+        model: null,
+        project_id: null,
+        session_name: null,
+        wrapped_takeover_command: null,
       },
     });
 
@@ -91,6 +101,12 @@ describe('MachineDetailView', () => {
         resume_command: 'blizzard runner resume sess-new',
         harness_id: 'claude_code',
         harness_version: '1.2.3',
+        cause: null,
+        effort: null,
+        model: null,
+        project_id: null,
+        session_name: null,
+        wrapped_takeover_command: null,
       },
     });
 
@@ -110,6 +126,14 @@ describe('MachineDetailView', () => {
         epoch: LEASE.epoch,
         closed_at: '2026-07-16T11:00:00.000Z',
         resume_command: 'blizzard runner resume sess-new',
+        cause: null,
+        effort: null,
+        harness_id: null,
+        harness_version: null,
+        model: null,
+        project_id: null,
+        session_name: null,
+        wrapped_takeover_command: null,
       },
     });
 
@@ -117,7 +141,7 @@ describe('MachineDetailView', () => {
   });
 
   describe('the wrapped takeover command', () => {
-    const escalation = (wrapped?: string | null): runnerApi.EscalationView => ({
+    const escalation = (wrapped: string | null = null): runnerApi.EscalationView => ({
       chunk_id: LEASE.chunk_id,
       lease_id: LEASE.lease_id,
       node_id: LEASE.node_id,
@@ -125,6 +149,13 @@ describe('MachineDetailView', () => {
       closed_at: '2026-07-16T11:00:00.000Z',
       resume_command: 'cd /ws/beta && claude --resume sess-new',
       wrapped_takeover_command: wrapped,
+      cause: null,
+      effort: null,
+      harness_id: null,
+      harness_version: null,
+      model: null,
+      project_id: null,
+      session_name: null,
     });
 
     it('is primary with a copy control, and the raw string moves to the fallback', async () => {

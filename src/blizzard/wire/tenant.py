@@ -13,6 +13,7 @@ from blizzard.foundation.tenants import (
     TenantDeletionState,
     TenantState,
 )
+from blizzard.wire.base import WireModel
 from blizzard.wire.graph import GraphSyncEntry
 
 #: A tenant's name: 1 to 64 characters, no leading or trailing whitespace; inner whitespace, line breaks included, is
@@ -36,7 +37,7 @@ class TenantRenameRequest(BaseModel):
     name: TenantName
 
 
-class TenantView(BaseModel):
+class TenantView(WireModel):
     """One tenant: its id, its name, when and by whom it was created, whether it is ``open`` or ``deleting``, and —
     while it is ``deleting`` — when its deletion began."""
 
@@ -48,7 +49,7 @@ class TenantView(BaseModel):
     closed_at: str | None = None
 
 
-class TenantDeletionResponse(BaseModel):
+class TenantDeletionResponse(WireModel):
     """``DELETE /api/admin/tenants/{tenant_id}``: ``deleted`` with the rows its deletion removed (``200``), or
     ``deleting`` while the ``tenant_teardown`` sweep carries it on (``202``)."""
 
@@ -57,7 +58,7 @@ class TenantDeletionResponse(BaseModel):
     rows_removed: int | None = None
 
 
-class TenantGraphSync(BaseModel):
+class TenantGraphSync(WireModel):
     """One tenant's packaged-graph reconciliation: ``ok`` is false iff any of its entries failed."""
 
     tenant_id: str
@@ -66,7 +67,7 @@ class TenantGraphSync(BaseModel):
     entries: list[GraphSyncEntry] = []
 
 
-class AdminGraphSyncResponse(BaseModel):
+class AdminGraphSyncResponse(WireModel):
     """``POST /api/admin/graphs/sync``'s report — one reconciliation per open tenant. ``ok`` is false iff any tenant's
     is."""
 
@@ -74,7 +75,7 @@ class AdminGraphSyncResponse(BaseModel):
     tenants: list[TenantGraphSync] = []
 
 
-class HubEventView(BaseModel):
+class HubEventView(WireModel):
     """One row of the hub's own event log."""
 
     id: int

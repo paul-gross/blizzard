@@ -1,6 +1,7 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import type { runnerApi } from 'fleet';
+import { workItemEntry } from 'fleet/testing';
 
 import { type MachineChunkRow, machineChunkRows } from '../../core/chunk-rows.model';
 import type { PanelLease } from '../../core/panel-reads.model';
@@ -25,6 +26,8 @@ const LEASE = (overrides: Partial<PanelLease> = {}): PanelLease => ({
   closed_at: null,
   closure_reason: null,
   stale_after_seconds: 3600,
+  harness_id: null,
+  project_id: null,
   owner: { runnerId: 'rn_1', name: 'r-claude', label: 'r-claude' },
   projectSlug: 'blizzard',
   ...overrides,
@@ -123,14 +126,14 @@ describe('ChunkRowView', () => {
   it('renders one line per linked item, its label over its title', async () => {
     const { el } = await render({
       linkedItems: [
-        {
+        workItemEntry({
           source: 'blizzard',
           ref: '61',
           label: 'blizzard#61',
           web_url: 'https://github.com/paul-gross/blizzard/issues/61',
           fetched_at: '2026-07-16T11:00:00.000Z',
           title: 'runner machine panel',
-        },
+        }),
       ],
     });
 

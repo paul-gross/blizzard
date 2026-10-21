@@ -3,25 +3,37 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 
 import type { ChunkDetail } from '../../api/hub';
+import { chunkDetail, decisionView, questionView, transitionView, workItemEntry, workRefView } from '../../testing/builders/chunk';
 import type { WorkItemsState } from '../chunk-detail';
 import { ChunkGeneralTab } from './chunk-general-tab';
 
-const DETAIL: ChunkDetail = {
+const DETAIL: ChunkDetail = chunkDetail({
   chunk_id: 'ch_01general0000000000000000000',
   graph_id: 'gr_1',
+  graph_name: null,
   status: 'not_ready',
   current_node_id: null,
+  current_node_name: null,
   graph_editable: true,
   latest_epoch: null,
-  work_refs: [{ source: 'widget', ref: '42', label: 'widget#42', web_url: 'https://github.com/acme/widget/issues/42' }],
+  work_refs: [workRefView({ source: 'widget', ref: '42', label: 'widget#42', web_url: 'https://github.com/acme/widget/issues/42' })],
   history: [],
   artifacts: [],
-};
+});
 
 const WORK_ITEMS: WorkItemsState = {
   status: 'success',
   items: [
-    { source: 'widget', ref: '42', label: 'widget#42', web_url: 'https://github.com/acme/widget/issues/42', fetched_at: 't', body: 'reproduces under load', comments: [] },
+    workItemEntry({
+      source: 'widget',
+      ref: '42',
+      label: 'widget#42',
+      web_url: 'https://github.com/acme/widget/issues/42',
+      fetched_at: 't',
+      title: null,
+      body: 'reproduces under load',
+      comments: [],
+    }),
   ],
 };
 
@@ -111,7 +123,7 @@ describe('ChunkGeneralTab', () => {
       ...DETAIL,
       status: 'waiting_on_human',
       questions: [
-        {
+        questionView({
           question_id: 'qn_01',
           chunk_id: DETAIL.chunk_id,
           question: 'Which API style should the endpoint use?',
@@ -121,7 +133,7 @@ describe('ChunkGeneralTab', () => {
           session_id: 'se_01',
           asked_at: '2026-07-13T00:00:01Z',
           answered: false,
-        },
+        }),
       ],
     };
     const fixture = TestBed.createComponent(ChunkGeneralTab);
@@ -145,7 +157,7 @@ describe('ChunkGeneralTab', () => {
     const waiting: ChunkDetail = {
       ...DETAIL,
       status: 'waiting_on_human',
-      decision: {
+      decision: decisionView({
         decision_id: 'de_01',
         chunk_id: DETAIL.chunk_id,
         node_id: 'nd_gate',
@@ -153,11 +165,12 @@ describe('ChunkGeneralTab', () => {
         epoch: 1,
         submitted_at: '2026-07-13T00:00:01Z',
         choices: [
-          { name: 'approve', description: 'Ship it.' },
-          { name: 'reject', description: 'Send it back.' },
+          { name: 'approve', description: 'Ship it.', requires_checks: false, would_override_red_checks: false },
+          { name: 'reject', description: 'Send it back.', requires_checks: false, would_override_red_checks: false },
         ],
+        check_results: [],
         transitioned: false,
-      },
+      }),
     };
     const fixture = TestBed.createComponent(ChunkGeneralTab);
     fixture.componentRef.setInput('detail', waiting);
@@ -178,7 +191,7 @@ describe('ChunkGeneralTab', () => {
       ...DETAIL,
       status: 'running',
       history: [
-        {
+        transitionView({
           choice_name: 'pass',
           epoch: 1,
           from_node_id: 'nd_build',
@@ -186,7 +199,9 @@ describe('ChunkGeneralTab', () => {
           to_node_id: 'nd_review',
           to_node_name: 'review',
           recorded_at: '2026-08-09T00:00:00.000Z',
-        },
+          graph_id: null,
+          graph_name: null,
+        }),
       ],
     };
     const fixture = TestBed.createComponent(ChunkGeneralTab);

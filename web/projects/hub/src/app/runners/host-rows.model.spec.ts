@@ -35,8 +35,8 @@ function host(id: string, over: Partial<HostRegistryView> = {}): HostRegistryVie
 }
 
 const SERVING = [
-  { entry: 'default', project_id: 'pj_default', slug: 'default', name: 'Default' },
-  { entry: 'pj_glacier', project_id: 'pj_glacier', slug: 'glacier', name: 'Glacier' },
+  { entry: 'default', project_id: 'pj_default', slug: 'default', name: 'Default', claimable: false, color: null },
+  { entry: 'pj_glacier', project_id: 'pj_glacier', slug: 'glacier', name: 'Glacier', claimable: false, color: null },
 ];
 
 describe('bindingLines', () => {
@@ -44,7 +44,7 @@ describe('bindingLines', () => {
     const rA = runner('rA', {
       projects: SERVING,
       bindings: [
-        { project: 'default', workspace_id: 'ws-1', agents: 3 },
+        { project: 'default', workspace_id: 'ws-1', agents: 3, workspace_unreported: false },
         { project: 'pj_glacier', workspace_id: 'ws-9', agents: 1, workspace_unreported: true },
       ],
     });
@@ -62,7 +62,7 @@ describe('bindingLines', () => {
   });
 
   it('keeps the binding as the runner wrote it when no entry resolves it, and is empty for a host-less runner', () => {
-    expect(bindingLines(runner('rA', { bindings: [{ project: 'gone', workspace_id: 'ws-1', agents: 2 }] }), [])).toEqual([
+    expect(bindingLines(runner('rA', { bindings: [{ project: 'gone', workspace_id: 'ws-1', agents: 2, workspace_unreported: false }] }), [])).toEqual([
       { project: 'gone', workspaceId: 'ws-1', agents: 2, agentsInUse: 0, unreported: false },
     ]);
     expect(bindingLines(runner('rC'), [])).toEqual([]);
@@ -83,13 +83,13 @@ describe('foldHostCards', () => {
   const H1 = host('h1', {
     workspaces: [{ workspace_id: 'ws-1', env_capacity: 3 }, { workspace_id: 'ws-2' }],
     subscription_usage: [
-      { slug: 'anthropic', name: 'Anthropic', windows: [], sampled_at: SEEN, runners: ['rA'] },
-      { slug: 'openai', name: 'OpenAI', windows: [], runners: [] },
+      { slug: 'anthropic', name: 'Anthropic', windows: [], sampled_at: SEEN, runners: ['rA'], condition: null, miss_reason: null, missed_at: null },
+      { slug: 'openai', name: 'OpenAI', windows: [], runners: [], sampled_at: null, condition: null, miss_reason: null, missed_at: null },
     ],
   });
   const RUNNERS = [
-    runner('rA', { host_id: 'h1', projects: SERVING, bindings: [{ project: 'default', workspace_id: 'ws-1', agents: 2 }] }),
-    runner('rB', { host_id: 'h1', projects: SERVING, bindings: [{ project: 'pj_glacier', workspace_id: 'ws-1', agents: 1 }] }),
+    runner('rA', { host_id: 'h1', projects: SERVING, bindings: [{ project: 'default', workspace_id: 'ws-1', agents: 2, workspace_unreported: false }] }),
+    runner('rB', { host_id: 'h1', projects: SERVING, bindings: [{ project: 'pj_glacier', workspace_id: 'ws-1', agents: 1, workspace_unreported: false }] }),
     runner('rC'),
   ];
   const CHUNKS = [chunk('ch_a', 'rA', { id: 'pj_default' }, 2), chunk('ch_b', 'rB', { id: 'pj_glacier' }, 1)];

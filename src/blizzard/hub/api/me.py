@@ -21,6 +21,7 @@ from blizzard.hub.auth.service import ASSIGNABLE_ROLES
 from blizzard.hub.composition import HubServices
 from blizzard.hub.config import AUTH_MODE_NONE
 from blizzard.hub.tenancy import TenantId
+from blizzard.wire.base import WireModel
 
 router = APIRouter(prefix="/api", tags=["auth"])
 
@@ -36,7 +37,7 @@ class MeTenant(BaseModel):
     permissions: list[Permission]
 
 
-class MeResponse(BaseModel):
+class MeResponse(WireModel):
     """The resolved identity's wire view. ``role`` and ``permissions`` are those of the tenant
     the request resolves — the one ``X-Blizzard-Tenant`` names among ``tenants``, else the
     caller's only membership. With no such tenant ``role`` is null and ``permissions`` holds

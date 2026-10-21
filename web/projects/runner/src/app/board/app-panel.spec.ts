@@ -36,6 +36,8 @@ const LEASE = (overrides: Partial<runnerApi.LeaseView> = {}): runnerApi.LeaseVie
   closed_at: null,
   closure_reason: null,
   stale_after_seconds: 3600,
+  harness_id: null,
+  project_id: null,
   ...overrides,
 });
 
@@ -64,10 +66,18 @@ function dashboardBody(runnerId: string, overrides: Partial<runnerApi.DashboardV
     runner: {
       runner_id: runnerId,
       workspace_id: 'ws',
-      pause: { local: false, hub: false, effective: false },
+      pause: { local: false, hub: false, effective: false, local_reason: null },
       capacities: { used: 0, bindings: [] },
-      hub: { endpoint: 'http://127.0.0.1:8421', reachable: true, last_contact_at: null, buffer_depth: 0 },
+      hub: { endpoint: 'http://127.0.0.1:8421', reachable: true, last_contact_at: null, buffer_depth: 0, hub_version: null, window: null },
       last_tick_at: null,
+      gates: [],
+      identity: null,
+      routing_conflicts: [],
+      runner_name: null,
+      served_projects: null,
+      tenant_id: null,
+      tenant_name: null,
+      unmatched_bindings: [],
     },
     asks: { items: [] },
     escalations: { items: [] },
@@ -147,6 +157,14 @@ const ESCALATION = {
   epoch: 2,
   closed_at: '2026-07-16T11:45:00.000Z',
   resume_command: 'cd /ws/beta && claude --resume sess-77',
+  cause: null,
+  effort: null,
+  harness_id: null,
+  harness_version: null,
+  model: null,
+  project_id: null,
+  session_name: null,
+  wrapped_takeover_command: null,
 };
 
 describe('LocalPanel', () => {
@@ -518,6 +536,8 @@ describe('LocalPanel', () => {
                     options: [],
                     session_id: 'sess-77',
                     asked_at: '2026-07-16T11:40:00.000Z',
+                    harness_id: null,
+                    project_id: null,
                   },
                 ],
               },

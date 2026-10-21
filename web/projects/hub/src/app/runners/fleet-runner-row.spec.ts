@@ -1,12 +1,46 @@
+import { RunnerConnection, type RunnerRegistryView } from 'fleet';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 
 import type { RunnerRow } from './runner-rows.model';
 import { FleetRunnerRow } from './fleet-runner-row';
 
+const REGISTRY: RunnerRegistryView = {
+  runner_id: '',
+  runner_name: '',
+  added_at: '',
+  added_by: null,
+  bindings: null,
+  capabilities: [],
+  connection: RunnerConnection.NEVER_CONNECTED,
+  env_capacity: null,
+  gates: [],
+  host_id: null,
+  hub_paused: false,
+  last_seen_at: null,
+  locally_paused: false,
+  locally_paused_by: null,
+  locally_paused_reason: null,
+  online: false,
+  projects: [],
+  registered_at: null,
+  retired: false,
+  retired_at: null,
+  retired_by: null,
+  subscription: null,
+  subscription_unrostered: false,
+  subscriptions: [],
+  version: null,
+  version_refusal: null,
+  version_standing: null,
+  workspace_id: null,
+};
+
+
 const NOW = new Date().toISOString();
 
 const row = (id: string, over: Partial<RunnerRow> = {}): RunnerRow => ({
+  ...REGISTRY,
   runner_id: id,
   runner_name: `${id}-name`,
   added_at: NOW,

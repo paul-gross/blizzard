@@ -8,10 +8,11 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
+from blizzard.wire.base import WireModel
 from blizzard.wire.completion import CheckResult, SubmittedArtifact
 
 
-class DecisionChoiceModel(BaseModel):
+class DecisionChoiceModel(WireModel):
     """One selectable gate outcome; ``requires_checks`` marks a choice that overrides red checks
     when a person resolves to it while one is red. ``would_override_red_checks`` is the hub's judgment that
     resolving to this choice now would be that override."""
@@ -37,7 +38,7 @@ class DecisionSubmission(BaseModel):
     lease_id: str | None = None
 
 
-class DecisionView(BaseModel):
+class DecisionView(WireModel):
     """A gate decision in full.
 
     ``resolved_choice`` is set once a person has decided; ``transitioned`` is true once the
@@ -68,7 +69,7 @@ class DecisionView(BaseModel):
     overrode_red_checks: bool = False
 
 
-class OpenDecisionsResponse(BaseModel):
+class OpenDecisionsResponse(WireModel):
     """The fleet's open (unresolved) decisions."""
 
     decisions: list[DecisionView] = []
@@ -81,7 +82,7 @@ class DecisionResolutionRequest(BaseModel):
     resolved_by: str = "operator"
 
 
-class DecisionResolutionResponse(BaseModel):
+class DecisionResolutionResponse(WireModel):
     """The winning resolution — the choice, who, and when."""
 
     decision_id: str
@@ -92,7 +93,7 @@ class DecisionResolutionResponse(BaseModel):
     overrode_red_checks: bool = False
 
 
-class DecisionResolutionConflict(BaseModel):
+class DecisionResolutionConflict(WireModel):
     """The 409 body: the decision was already resolved (the loser is told who won, with what, and when)."""
 
     decision_id: str

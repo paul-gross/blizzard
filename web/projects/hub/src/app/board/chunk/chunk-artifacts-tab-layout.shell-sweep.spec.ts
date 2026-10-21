@@ -4,7 +4,7 @@ import { provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { ChunkPage, hubClient, type hubApi } from 'fleet';
-import { OPERATOR_ME_RESPONSE, stubRequestClient } from 'fleet/testing';
+import { assetArtifactView, chunkDetail, OPERATOR_ME_RESPONSE, stubRequestClient } from 'fleet/testing';
 import { page } from 'vitest/browser';
 
 import { HUB_CHUNK_PAGE_PROVIDERS } from './hub-chunk-actions';
@@ -30,7 +30,7 @@ const CHUNK_ID = 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9';
  * sweep uses — the load-bearing fixture for "the nav list actually scrolls" rather than
  * merely rendering short enough to never need to. */
 function overflowingArtifacts(): hubApi.ArtifactView[] {
-  return Array.from({ length: 40 }, (_, i) => ({
+  return Array.from({ length: 40 }, (_, i) => assetArtifactView({
     key: `build.artifact-${i}.1`,
     kind: 'asset',
     name: `artifact-${i}`,
@@ -42,7 +42,7 @@ function overflowingArtifacts(): hubApi.ArtifactView[] {
   }));
 }
 
-const CHAIN_DETAIL: hubApi.ChunkDetail = {
+const CHAIN_DETAIL: hubApi.ChunkDetail = chunkDetail({
   chunk_id: CHUNK_ID,
   graph_id: 'gr_1',
   graph_name: 'default',
@@ -53,7 +53,7 @@ const CHAIN_DETAIL: hubApi.ChunkDetail = {
   work_refs: [],
   history: [],
   artifacts: overflowingArtifacts(),
-};
+});
 
 @Component({ selector: 'app-board-stub', template: '' })
 class ChainBoardStub {}

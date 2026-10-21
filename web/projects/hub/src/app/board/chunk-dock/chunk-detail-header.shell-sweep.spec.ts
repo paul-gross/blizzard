@@ -4,6 +4,7 @@ import { provideRouter } from '@angular/router';
 import { page } from 'vitest/browser';
 
 import { type ChunkDetail, runnerDisplayName } from 'fleet';
+import { chunkDetail } from 'fleet/testing';
 import { ChunkDetailHeader } from './chunk-detail-header';
 
 /**
@@ -19,7 +20,9 @@ import { ChunkDetailHeader } from './chunk-detail-header';
  * hard-coded list that silently misses a newly added control is a sweep that stays green
  * over the very control it exists to measure.
  */
-const DETAIL: ChunkDetail = {
+const DETAIL: ChunkDetail = chunkDetail({
+  graph_name: null,
+  current_node_name: null,
   chunk_id: 'ch_01dockwidth0000000000000000',
   graph_id: 'gr_1',
   status: 'ready',
@@ -37,7 +40,7 @@ const DETAIL: ChunkDetail = {
     workspace_id: 'ws_01',
     environment_ids: ['env_01'],
   },
-};
+});
 
 /** The same chunk claimed by a runner with a typical name — 12 characters, inside the 13 the claim line holds whole. */
 const TYPICAL_NAME_DETAIL: ChunkDetail = { ...DETAIL, route: { ...DETAIL.route!, runner_name: 'runner-local' } };

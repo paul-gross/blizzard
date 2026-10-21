@@ -2,10 +2,11 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 
 import { type DecisionView } from 'fleet';
+import { decisionView } from 'fleet/testing';
 import { GatesPanelView } from './gates-view';
 
 const GATES: DecisionView[] = [
-  {
+  decisionView({
     decision_id: 'dc_01',
     chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9',
     node_id: 'nd_01',
@@ -13,11 +14,12 @@ const GATES: DecisionView[] = [
     epoch: 1,
     submitted_at: '2026-07-16T00:00:01Z',
     choices: [
-      { name: 'approve', description: '' },
-      { name: 'reject', description: '' },
+      { name: 'approve', description: '', requires_checks: false, would_override_red_checks: false },
+      { name: 'reject', description: '', requires_checks: false, would_override_red_checks: false },
     ],
-  },
-  {
+    check_results: [],
+  }),
+  decisionView({
     decision_id: 'dc_02',
     chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YAB',
     node_id: 'nd_02',
@@ -27,7 +29,8 @@ const GATES: DecisionView[] = [
     imposed_by_runner_id: 'rn_01KXKVVF1J3D6H6VYZ3XYNABF3',
     imposed_by_runner_name: 'r-claude',
     choices: [],
-  },
+    check_results: [],
+  }),
 ];
 
 describe('GatesPanelView', () => {

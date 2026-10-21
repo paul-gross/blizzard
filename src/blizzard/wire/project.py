@@ -11,6 +11,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict
 
 from blizzard.foundation.project_colors import HexColor, ProjectColor
+from blizzard.wire.base import WireModel
 
 
 class ProjectView(BaseModel):
@@ -25,7 +26,7 @@ class ProjectView(BaseModel):
     created_at: str
 
 
-class ProjectsListView(BaseModel):
+class ProjectsListView(WireModel):
     """Every project of the tenant, by slug — ``GET /api/projects``."""
 
     projects: list[ProjectView] = []
@@ -64,7 +65,7 @@ class ProjectRef(BaseModel):
     name: str
 
 
-class SourceLinkView(BaseModel):
+class SourceLinkView(WireModel):
     """A project's link to a work source: ``name`` is the source's key — its id, or ``hub`` — and ``slug`` its current
     slug. ``linked`` is false once the link is retired (unlinked). The built-in ``hub`` source is linked to every
     project: it has no stored link, so no ``revision``, and cannot be unlinked."""
@@ -77,7 +78,7 @@ class SourceLinkView(BaseModel):
     built_in: bool = False
 
 
-class SourceLinksView(BaseModel):
+class SourceLinksView(WireModel):
     """A project's standing source links by source key, the built-in ``hub`` source among them —
     ``GET /api/projects/{project}/source-links``."""
 
@@ -96,13 +97,13 @@ class RepositoryLinkView(BaseModel):
     revision: int
 
 
-class RepositoryLinksView(BaseModel):
+class RepositoryLinksView(WireModel):
     """A project's standing repository links by repository id — ``GET /api/projects/{project}/repository-links``."""
 
     repository_links: list[RepositoryLinkView] = []
 
 
-class ProjectRequiredBody(BaseModel):
+class ProjectRequiredBody(WireModel):
     """The ``detail`` of a ``422``: the call needs a project, named none, and the tenant does not hold exactly one —
     or the project could not be inferred. ``projects`` lists the ones to choose from."""
 

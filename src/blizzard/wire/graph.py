@@ -13,6 +13,7 @@ from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.graph_lifecycle import GraphLifecycle
 from blizzard.foundation.graph_targets import ChoiceTargetKind
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
+from blizzard.wire.base import WireModel
 
 
 class GraphMintRequest(BaseModel):
@@ -48,14 +49,14 @@ class GraphValidationReport(BaseModel):
     warnings: list[str] = []
 
 
-class ProducesEntry(BaseModel):
+class ProducesEntry(WireModel):
     """One node's ``produces:`` expectation, kind-carrying."""
 
     name: str
     kind: ArtifactKind = ArtifactKind.ASSET
 
 
-class GraphChoiceView(BaseModel):
+class GraphChoiceView(WireModel):
     """One selectable outcome of a node's judgement."""
 
     choice_id: str
@@ -66,7 +67,7 @@ class GraphChoiceView(BaseModel):
     requires_checks: bool = False
 
 
-class GraphEdgeView(BaseModel):
+class GraphEdgeView(WireModel):
     """A directed, choice-keyed connection between two nodes of one graph."""
 
     from_node_id: str
@@ -79,7 +80,7 @@ class GraphEdgeView(BaseModel):
     target_graph: str | None = None
 
 
-class RotatePolicyView(BaseModel):
+class RotatePolicyView(WireModel):
     """One declared session's rotation bounds.
 
     Every threshold is independently optional; ``max_invocations`` counts **harness
@@ -90,7 +91,7 @@ class RotatePolicyView(BaseModel):
     max_invocations: int | None = None
 
 
-class GraphSessionView(BaseModel):
+class GraphSessionView(WireModel):
     """One graph-level named session declaration.
 
     ``model`` is a preference list resolved left-to-right at mint; the hub interprets none
@@ -104,7 +105,7 @@ class GraphSessionView(BaseModel):
     harnesses: list[str] = []
 
 
-class GraphNodeView(BaseModel):
+class GraphNodeView(WireModel):
     """A reified node in a minted graph — the full immutable definition."""
 
     node_id: str
@@ -127,7 +128,7 @@ class GraphNodeView(BaseModel):
     choices: list[GraphChoiceView] = []
 
 
-class GraphView(BaseModel):
+class GraphView(WireModel):
     """A minted graph as served by ``GET /graphs/{graph_id}`` and the mint response.
 
     ``enabled`` and ``retired`` are one lifecycle fact, saying nothing about
@@ -148,7 +149,7 @@ class GraphView(BaseModel):
     warnings: list[str] = []
 
 
-class GraphSyncEntry(BaseModel):
+class GraphSyncEntry(WireModel):
     """One packaged graph's reconciliation outcome.
 
     ``status`` is ``minted``, ``up-to-date``, or ``failed``; ``graph_id`` is present only on
@@ -160,7 +161,7 @@ class GraphSyncEntry(BaseModel):
     detail: str | None = None
 
 
-class GraphSyncResponse(BaseModel):
+class GraphSyncResponse(WireModel):
     """``POST /graphs/sync``'s report — one entry per packaged graph.
 
     ``ok`` is false iff any entry failed, so a caller gates on the field rather than
@@ -170,7 +171,7 @@ class GraphSyncResponse(BaseModel):
     entries: list[GraphSyncEntry] = []
 
 
-class GraphSummaryView(BaseModel):
+class GraphSummaryView(WireModel):
     """One graph's summary row — a name-lineage entry as served by ``GET /graphs``.
 
     ``effective`` marks the newest **non-retired** graph of this ``name``, while

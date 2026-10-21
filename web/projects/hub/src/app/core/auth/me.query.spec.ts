@@ -22,7 +22,7 @@ describe('injectMeQuery', () => {
   it('resolves the identity on 200', async () => {
     stub = stubRequestClient(hubClient, (method, path) =>
       path === '/api/me'
-        ? { user_id: 'usr_1', username: 'op', display_name: 'Op', role: 'contributor', permissions: ['fleet:view'] }
+        ? { user_id: 'usr_1', username: 'op', display_name: 'Op', role: 'contributor', permissions: ['fleet:view'], tenants: [], hub_admin: false, assignable_roles: [] }
         : {},
     );
     TestBed.configureTestingModule({
@@ -41,6 +41,9 @@ describe('injectMeQuery', () => {
       display_name: 'Op',
       role: 'contributor',
       permissions: ['fleet:view'],
+      tenants: [],
+      hub_admin: false,
+      assignable_roles: [],
     });
   });
 
@@ -69,13 +72,13 @@ describe('hasPermission', () => {
     expect(hasPermission(undefined, 'user:manage')).toBe(false);
     expect(
       hasPermission(
-        { user_id: 'u', username: 'u', display_name: 'u', role: 'admin', permissions: ['user:manage'] },
+        { user_id: 'u', username: 'u', display_name: 'u', role: 'admin', permissions: ['user:manage'], tenants: [], hub_admin: false, assignable_roles: [] },
         'user:manage',
       ),
     ).toBe(true);
     expect(
       hasPermission(
-        { user_id: 'u', username: 'u', display_name: 'u', role: 'contributor', permissions: ['fleet:view'] },
+        { user_id: 'u', username: 'u', display_name: 'u', role: 'contributor', permissions: ['fleet:view'], tenants: [], hub_admin: false, assignable_roles: [] },
         'user:manage',
       ),
     ).toBe(false);

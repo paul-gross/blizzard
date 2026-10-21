@@ -3,9 +3,10 @@ import { TestBed } from '@angular/core/testing';
 
 import type { ChunkDetail, DecisionView, QuestionView } from '../../api/hub';
 import { formatWhen } from '../../core/when';
+import { chunkDetail, chunkEscalationView, decisionView, questionView } from 'fleet/testing';
 import { ChunkAwaitingHuman } from './chunk-awaiting-human';
 
-const REVIEW_FAIL_DETAIL: ChunkDetail = {
+const REVIEW_FAIL_DETAIL: ChunkDetail = chunkDetail({
   chunk_id: 'ch_01review0000000000000000000',
   graph_id: 'gr_1',
   status: 'running',
@@ -14,9 +15,11 @@ const REVIEW_FAIL_DETAIL: ChunkDetail = {
   work_refs: [],
   history: [],
   artifacts: [],
-};
+  graph_name: null,
+  current_node_name: null,
+});
 
-const WAITING_QUESTION_DETAIL: ChunkDetail = {
+const WAITING_QUESTION_DETAIL: ChunkDetail = chunkDetail({
   chunk_id: 'ch_01ask00000000000000000000000',
   graph_id: 'gr_1',
   status: 'waiting_on_human',
@@ -26,7 +29,7 @@ const WAITING_QUESTION_DETAIL: ChunkDetail = {
   history: [],
   artifacts: [],
   questions: [
-    {
+    questionView({
       question_id: 'qn_01',
       chunk_id: 'ch_01ask00000000000000000000000',
       question: 'Which API style should the endpoint use?',
@@ -36,11 +39,13 @@ const WAITING_QUESTION_DETAIL: ChunkDetail = {
       session_id: 'se_01',
       asked_at: '2026-07-13T00:00:01Z',
       answered: false,
-    },
+    }),
   ],
-};
+  graph_name: null,
+  current_node_name: null,
+});
 
-const WAITING_DECISION_DETAIL: ChunkDetail = {
+const WAITING_DECISION_DETAIL: ChunkDetail = chunkDetail({
   chunk_id: 'ch_01gate0000000000000000000000',
   graph_id: 'gr_1',
   status: 'waiting_on_human',
@@ -49,7 +54,7 @@ const WAITING_DECISION_DETAIL: ChunkDetail = {
   work_refs: [],
   history: [],
   artifacts: [],
-  decision: {
+  decision: decisionView({
     decision_id: 'de_01',
     chunk_id: 'ch_01gate0000000000000000000000',
     node_id: 'nd_gate',
@@ -57,17 +62,20 @@ const WAITING_DECISION_DETAIL: ChunkDetail = {
     epoch: 1,
     submitted_at: '2026-07-13T00:00:01Z',
     choices: [
-      { name: 'approve', description: 'Ship it.' },
-      { name: 'reject', description: 'Send it back.' },
+      { name: 'approve', description: 'Ship it.', requires_checks: false, would_override_red_checks: false },
+      { name: 'reject', description: 'Send it back.', requires_checks: false, would_override_red_checks: false },
     ],
     transitioned: false,
-  },
-};
+    check_results: [],
+  }),
+  graph_name: null,
+  current_node_name: null,
+});
 
 /** One answered question in the chunk's list — `delivered` says whether the runner has
  * carried it back into the resumed session yet. */
 function answered(overrides: Partial<QuestionView> & Pick<QuestionView, 'question_id'>): QuestionView {
-  return {
+  return questionView({
     chunk_id: 'ch_01trail000000000000000000000',
     question: 'Which API style should the endpoint use?',
     options: [],
@@ -80,11 +88,11 @@ function answered(overrides: Partial<QuestionView> & Pick<QuestionView, 'questio
     answered_at: '2026-07-13T00:01:00Z',
     delivered: false,
     ...overrides,
-  };
+  });
 }
 
 /** A chunk whose question has been answered but not yet carried back to the agent. */
-const ANSWERED_UNDELIVERED_DETAIL: ChunkDetail = {
+const ANSWERED_UNDELIVERED_DETAIL: ChunkDetail = chunkDetail({
   chunk_id: 'ch_01trail000000000000000000000',
   graph_id: 'gr_1',
   status: 'running',
@@ -94,12 +102,14 @@ const ANSWERED_UNDELIVERED_DETAIL: ChunkDetail = {
   history: [],
   artifacts: [],
   questions: [answered({ question_id: 'qn_01' })],
-};
+  graph_name: null,
+  current_node_name: null,
+});
 
 /** An agent's ask as they actually arrive — multi-paragraph prose with a numbered list,
  * alongside an answer that carries its own line break. The shape that read as one
  * run-on wall of text before the dock stopped collapsing its whitespace. */
-const MULTILINE_DETAIL: ChunkDetail = {
+const MULTILINE_DETAIL: ChunkDetail = chunkDetail({
   chunk_id: 'ch_01prose00000000000000000000',
   graph_id: 'gr_1',
   status: 'waiting_on_human',
@@ -109,7 +119,7 @@ const MULTILINE_DETAIL: ChunkDetail = {
   history: [],
   artifacts: [],
   questions: [
-    {
+    questionView({
       question_id: 'qn_open',
       chunk_id: 'ch_01prose00000000000000000000',
       question: 'Issue #214 does not reproduce under any condition I can test. Details:\n\n1. Code trace: the mutation already invalidates both keys.\n2. Live browser test: the board updated within 500ms.\n\nHow should I proceed?',
@@ -118,7 +128,7 @@ const MULTILINE_DETAIL: ChunkDetail = {
       runner_id: 'rn_01',
       asked_at: '2026-07-13T00:00:01Z',
       answered: false,
-    },
+    }),
     answered({
       question_id: 'qn_answered',
       chunk_id: 'ch_01prose00000000000000000000',
@@ -126,9 +136,11 @@ const MULTILINE_DETAIL: ChunkDetail = {
       answer: 'line one\nline two',
     }),
   ],
-};
+  graph_name: null,
+  current_node_name: null,
+});
 
-const ESCALATED_DETAIL: ChunkDetail = {
+const ESCALATED_DETAIL: ChunkDetail = chunkDetail({
   chunk_id: 'ch_01esc00000000000000000000000',
   graph_id: 'gr_1',
   status: 'needs_human',
@@ -137,11 +149,16 @@ const ESCALATED_DETAIL: ChunkDetail = {
   work_refs: [],
   history: [],
   artifacts: [],
-  escalation: {
+  escalation: chunkEscalationView({
     epoch: 3,
     takeover_command: 'cd /work/ch_01esc00000000000000000000000 && claude --resume se_01',
-  },
-};
+    cause: null,
+    detail: null,
+    wrapped_takeover_command: '',
+  }),
+  graph_name: null,
+  current_node_name: null,
+});
 
 describe('ChunkAwaitingHuman', () => {
   beforeEach(async () => {
@@ -248,7 +265,7 @@ describe('ChunkAwaitingHuman', () => {
           ...WAITING_DECISION_DETAIL.decision!,
           choices: [
             { name: 'approve', description: 'Ship it.', requires_checks: true, would_override_red_checks: !passed },
-            { name: 'reject', description: 'Send it back.' },
+            { name: 'reject', description: 'Send it back.', requires_checks: false, would_override_red_checks: false },
           ],
           check_results: [{ command: 'make test', passed }],
           ...overrides,

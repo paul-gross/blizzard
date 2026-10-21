@@ -5,10 +5,12 @@ import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-exper
 import { vi } from 'vitest';
 
 import { type ChunkDetail as ChunkDetailModel, hubClient } from 'fleet';
-import { settle, OPERATOR_ME_RESPONSE, type RequestClientStub, stubRequestClient } from 'fleet/testing';
+import { settle, OPERATOR_ME_RESPONSE, chunkDetail, type RequestClientStub, stubRequestClient } from 'fleet/testing';
 import { ChunkDetail } from './chunk-detail';
 
-const BASE: ChunkDetailModel = {
+const BASE: ChunkDetailModel = chunkDetail({
+  graph_name: null,
+  current_node_name: null,
   chunk_id: 'ch_routed',
   graph_id: 'gr_1',
   status: 'running',
@@ -20,8 +22,8 @@ const BASE: ChunkDetailModel = {
   work_refs: [],
   history: [],
   artifacts: [],
-  route: { runner_id: 'rn_01', workspace_id: 'ws_01', environment_ids: [] },
-};
+  route: { runner_id: 'rn_01', runner_name: null, workspace_id: 'ws_01', environment_ids: [] },
+});
 const DETAILS: Record<string, ChunkDetailModel> = {
   ch_routed: BASE,
   ch_routed_b: { ...BASE, chunk_id: 'ch_routed_b' },

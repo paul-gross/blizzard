@@ -3,6 +3,8 @@ import { TestBed } from '@angular/core/testing';
 import { commands, page } from 'vitest/browser';
 
 import type { TranscriptSegmentIndexEntry, TransitionView } from '../api/hub';
+import { transitionView } from '../testing/builders/chunk';
+import { transcriptSegmentIndexEntry } from '../testing/builders/transcript';
 import { ChunkTranscriptsTab } from './chunk-transcripts-tab';
 
 /** The design tokens are a global stylesheet the app build loads, never a standalone mount —
@@ -36,7 +38,7 @@ function tokenColor(token: string): string {
  * (`web/scripts/shell-sweep.js`).
  */
 const HISTORY: readonly TransitionView[] = [
-  {
+  transitionView({
     from_node_id: 'nd_build',
     from_node_name: 'Build',
     to_node_id: 'nd_review',
@@ -44,11 +46,13 @@ const HISTORY: readonly TransitionView[] = [
     choice_name: 'pass',
     epoch: 1,
     recorded_at: '2026-08-09T00:00:00+00:00',
-  },
+    graph_id: null,
+    graph_name: null,
+  }),
 ];
 
 function segment(overrides: Partial<TranscriptSegmentIndexEntry> = {}): TranscriptSegmentIndexEntry {
-  return {
+  return transcriptSegmentIndexEntry({
     segment_id: 'sg_1',
     node_id: 'nd_build',
     epoch: 1,
@@ -59,10 +63,11 @@ function segment(overrides: Partial<TranscriptSegmentIndexEntry> = {}): Transcri
     truncated: false,
     byte_count: 100,
     normalizer_version: 'v1',
+    harness_id: null,
     harness_version: null,
     received_at: '2026-08-09T00:00:00+00:00',
     ...overrides,
-  };
+  });
 }
 
 const SEGMENTS: readonly TranscriptSegmentIndexEntry[] = [

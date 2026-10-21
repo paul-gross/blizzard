@@ -4,24 +4,52 @@ import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 
 import { type ChunkSummary, compactRef, type KitAsyncStateValue, KitPanel } from 'fleet';
+import { chunkUsageTotalView } from 'fleet/testing';
 import { BoardShell } from './board-shell';
 
-const READY = (suffix: string): ChunkSummary => ({
+const chunkSummary = (overrides: Pick<ChunkSummary, 'chunk_id' | 'graph_id' | 'status'> & Partial<ChunkSummary>): ChunkSummary => ({
+  awaiting_external_merge: false,
+  blocked: null,
+  closed_prs: [],
+  completed_at: null,
+  cost: chunkUsageTotalView({ input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_create_tokens: 0, cost_usd: 0 }),
+  current_node_id: null,
+  current_node_name: null,
+  default_effort: null,
+  default_harnesses: [],
+  default_model: [],
+  environment_count: 0,
+  landed: false,
+  landed_repos: [],
+  open_prs: [],
+  project_id: null,
+  project_name: null,
+  project_slug: null,
+  promotable: false,
+  runner_id: null,
+  runner_name: null,
+  terminal: false,
+  work_refs: [],
+  ...overrides,
+});
+
+
+const READY = (suffix: string): ChunkSummary => (chunkSummary({
   chunk_id: `ch_01ready${suffix}`,
   graph_id: 'gr_1',
   status: 'ready',
   current_node_id: 'nd_build',
   work_refs: [],
-});
+}));
 
-const BACKLOG = (suffix: string): ChunkSummary => ({
+const BACKLOG = (suffix: string): ChunkSummary => (chunkSummary({
   chunk_id: `ch_01backlog${suffix}`,
   graph_id: 'gr_1',
   status: 'not_ready',
   promotable: true,
   current_node_id: 'nd_build',
   work_refs: [],
-});
+}));
 
 describe('BoardShell', () => {
   beforeEach(async () => {
@@ -159,8 +187,8 @@ describe('BoardShell', () => {
 
   it('renders a not-ready chunk in the backlog column with a Promote action that emits its id', async () => {
     const chunks: ChunkSummary[] = [
-      { chunk_id: 'ch_01notready00000000000000000', graph_id: 'gr_1', status: 'not_ready', promotable: true, current_node_id: 'nd_build', work_refs: [] },
-      { chunk_id: 'ch_01running000000000000000000', graph_id: 'gr_1', status: 'running', current_node_id: 'nd_build', work_refs: [] },
+      chunkSummary({ chunk_id: 'ch_01notready00000000000000000', graph_id: 'gr_1', status: 'not_ready', promotable: true, current_node_id: 'nd_build', work_refs: [] }),
+      chunkSummary({ chunk_id: 'ch_01running000000000000000000', graph_id: 'gr_1', status: 'running', current_node_id: 'nd_build', work_refs: [] }),
     ];
     const fixture = TestBed.createComponent(BoardShell);
     fixture.componentRef.setInput('chunks', chunks);
@@ -184,7 +212,7 @@ describe('BoardShell', () => {
 
   it('withholds Promote without chunk:control', async () => {
     const chunks: ChunkSummary[] = [
-      { chunk_id: 'ch_01notready00000000000000000', graph_id: 'gr_1', status: 'not_ready', promotable: true, current_node_id: 'nd_build', work_refs: [] },
+      chunkSummary({ chunk_id: 'ch_01notready00000000000000000', graph_id: 'gr_1', status: 'not_ready', promotable: true, current_node_id: 'nd_build', work_refs: [] }),
     ];
     const fixture = TestBed.createComponent(BoardShell);
     fixture.componentRef.setInput('chunks', chunks);
@@ -198,9 +226,9 @@ describe('BoardShell', () => {
 
   it('renders one card per chunk, in its derived-status column, showing status + current node', async () => {
     const chunks: ChunkSummary[] = [
-      { chunk_id: 'ch_01ready0000000000000000000', graph_id: 'gr_1', status: 'ready', current_node_id: 'nd_build', work_refs: [] },
-      { chunk_id: 'ch_01running000000000000000000', graph_id: 'gr_1', status: 'running', current_node_id: 'nd_build', work_refs: [] },
-      { chunk_id: 'ch_01done00000000000000000000', graph_id: 'gr_1', status: 'done', current_node_id: 'done', work_refs: [] },
+      chunkSummary({ chunk_id: 'ch_01ready0000000000000000000', graph_id: 'gr_1', status: 'ready', current_node_id: 'nd_build', work_refs: [] }),
+      chunkSummary({ chunk_id: 'ch_01running000000000000000000', graph_id: 'gr_1', status: 'running', current_node_id: 'nd_build', work_refs: [] }),
+      chunkSummary({ chunk_id: 'ch_01done00000000000000000000', graph_id: 'gr_1', status: 'done', current_node_id: 'done', work_refs: [] }),
     ];
     const el = (await render(chunks)).nativeElement as HTMLElement;
 
@@ -223,7 +251,7 @@ describe('BoardShell', () => {
 
   it("places a card in DONE off the hub's terminal flag", async () => {
     const chunks: ChunkSummary[] = [
-      { chunk_id: 'ch_01flagged000000000000000000', graph_id: 'gr_1', status: 'running', terminal: true, current_node_id: 'nd_build', work_refs: [] },
+      chunkSummary({ chunk_id: 'ch_01flagged000000000000000000', graph_id: 'gr_1', status: 'running', terminal: true, current_node_id: 'nd_build', work_refs: [] }),
     ];
     const el = (await render(chunks)).nativeElement as HTMLElement;
 
@@ -233,7 +261,7 @@ describe('BoardShell', () => {
 
   it('renders a paused chunk in the WAIT/HUMAN column (issue #46)', async () => {
     const chunks: ChunkSummary[] = [
-      { chunk_id: 'ch_01paused000000000000000000', graph_id: 'gr_1', status: 'paused', current_node_id: 'nd_build', work_refs: [] },
+      chunkSummary({ chunk_id: 'ch_01paused000000000000000000', graph_id: 'gr_1', status: 'paused', current_node_id: 'nd_build', work_refs: [] }),
     ];
     const fixture = TestBed.createComponent(BoardShell);
     fixture.componentRef.setInput('chunks', chunks);
@@ -248,7 +276,7 @@ describe('BoardShell', () => {
 
   it('emits the chunk id when a card is activated (fills the detail dock)', async () => {
     const chunks: ChunkSummary[] = [
-      { chunk_id: 'ch_01running000000000000000000', graph_id: 'gr_1', status: 'running', current_node_id: 'nd_build', work_refs: [] },
+      chunkSummary({ chunk_id: 'ch_01running000000000000000000', graph_id: 'gr_1', status: 'running', current_node_id: 'nd_build', work_refs: [] }),
     ];
     const fixture = TestBed.createComponent(BoardShell);
     fixture.componentRef.setInput('chunks', chunks);
@@ -264,14 +292,14 @@ describe('BoardShell', () => {
 
   it('renders the node name as the visible label with the full name and raw ULID in the tooltip', async () => {
     const chunks: ChunkSummary[] = [
-      {
+      chunkSummary({
         chunk_id: 'ch_01running000000000000000000',
         graph_id: 'gr_1',
         status: 'running',
         current_node_id: 'nd_01KXHKVCWZ1000000000000000',
         current_node_name: 'review',
         work_refs: [],
-      },
+      }),
     ];
     const fixture = TestBed.createComponent(BoardShell);
     fixture.componentRef.setInput('chunks', chunks);
@@ -286,7 +314,7 @@ describe('BoardShell', () => {
 
   it('names each work item as plain text, one chip per line — a card carries no competing link', async () => {
     const chunks: ChunkSummary[] = [
-      {
+      chunkSummary({
         chunk_id: 'ch_01running000000000000000000',
         graph_id: 'gr_1',
         status: 'running',
@@ -296,7 +324,7 @@ describe('BoardShell', () => {
           { source: 'blizzard', ref: '8', label: 'blizzard#8', web_url: 'https://github.com/paul-gross/blizzard/issues/8' },
           { source: 'widget', ref: '9', label: 'widget#9', web_url: 'https://github.com/paul-gross/widget/issues/9' },
         ],
-      },
+      }),
     ];
     const fixture = TestBed.createComponent(BoardShell);
     fixture.componentRef.setInput('chunks', chunks);
@@ -318,14 +346,14 @@ describe('BoardShell', () => {
     const chunks: ChunkSummary[] = [
       // Zero pointers, and a pointer whose URL did not parse (null label) — no chips,
       // the short id carries the identity, and nothing errors.
-      { chunk_id: 'ch_01done00000000000000000000', graph_id: 'gr_1', status: 'done', current_node_id: 'done', work_refs: [] },
-      {
+      chunkSummary({ chunk_id: 'ch_01done00000000000000000000', graph_id: 'gr_1', status: 'done', current_node_id: 'done', work_refs: [] }),
+      chunkSummary({
         chunk_id: 'ch_01running000000000000000000',
         graph_id: 'gr_1',
         status: 'running',
         current_node_id: 'nd_build',
         work_refs: [{ source: 'blizzard', ref: 'wiki', label: null, web_url: null }],
-      },
+      }),
     ];
     const fixture = TestBed.createComponent(BoardShell);
     fixture.componentRef.setInput('chunks', chunks);
@@ -348,21 +376,21 @@ describe('BoardShell', () => {
 
   it("shows the chunk's derived cost total as a badge on its card (issue #60)", async () => {
     const chunks: ChunkSummary[] = [
-      {
+      chunkSummary({
         chunk_id: 'ch_01running000000000000000000',
         graph_id: 'gr_1',
         status: 'running',
         current_node_id: 'nd_build',
         work_refs: [],
-        cost: {
+        cost: chunkUsageTotalView({
           input_tokens: 100,
           output_tokens: 50,
           cache_read_tokens: 0,
           cache_create_tokens: 0,
           cost_usd: 1.23,
           cost_partial: false,
-        },
-      },
+        }),
+      }),
     ];
     const fixture = TestBed.createComponent(BoardShell);
     fixture.componentRef.setInput('chunks', chunks);
@@ -375,21 +403,21 @@ describe('BoardShell', () => {
 
   it("marks a card's cost badge with the lower-bound suffix when the total is PARTIAL (issue #60)", async () => {
     const chunks: ChunkSummary[] = [
-      {
+      chunkSummary({
         chunk_id: 'ch_01running000000000000000000',
         graph_id: 'gr_1',
         status: 'running',
         current_node_id: 'nd_build',
         work_refs: [],
-        cost: {
+        cost: chunkUsageTotalView({
           input_tokens: 100,
           output_tokens: 50,
           cache_read_tokens: 0,
           cache_create_tokens: 0,
           cost_usd: 0.1,
           cost_partial: true,
-        },
-      },
+        }),
+      }),
     ];
     const fixture = TestBed.createComponent(BoardShell);
     fixture.componentRef.setInput('chunks', chunks);
@@ -402,7 +430,7 @@ describe('BoardShell', () => {
 
   it('shows no cost badge for a chunk with zero, non-partial spend', async () => {
     const chunks: ChunkSummary[] = [
-      { chunk_id: 'ch_01running000000000000000000', graph_id: 'gr_1', status: 'running', current_node_id: 'nd_build', work_refs: [] },
+      chunkSummary({ chunk_id: 'ch_01running000000000000000000', graph_id: 'gr_1', status: 'running', current_node_id: 'nd_build', work_refs: [] }),
     ];
     const fixture = TestBed.createComponent(BoardShell);
     fixture.componentRef.setInput('chunks', chunks);
@@ -465,7 +493,7 @@ describe('BoardShell', () => {
       const el = (
         await render([
           A,
-          { chunk_id: 'ch_01running000000000000000000', graph_id: 'gr_1', status: 'running', current_node_id: 'nd_build', work_refs: [] },
+          chunkSummary({ chunk_id: 'ch_01running000000000000000000', graph_id: 'gr_1', status: 'running', current_node_id: 'nd_build', work_refs: [] }),
         ])
       ).nativeElement as HTMLElement;
 
@@ -680,14 +708,14 @@ describe('BoardShell', () => {
    * of the hub's dispatch order.
    */
   describe('the DONE lane', () => {
-    const done = (idSuffix: string, completedAt: string | null): ChunkSummary => ({
+    const done = (idSuffix: string, completedAt: string | null): ChunkSummary => (chunkSummary({
       chunk_id: `ch_01done${idSuffix}`,
       graph_id: 'gr_1',
       status: 'done',
       current_node_id: 'done',
       work_refs: [],
       completed_at: completedAt,
-    });
+    }));
 
     it('orders newest completed_at first', async () => {
       const oldest = done('aaaaaaaaaaaaaaaaaaaa', '2026-07-01T00:00:00+00:00');
@@ -731,7 +759,7 @@ describe('BoardShell', () => {
     it("carries a chunk's blocked prerequisite onto its card", async () => {
       const blocked: ChunkSummary = {
         ...READY('blocked00000000000000'),
-        blocked: { prerequisite_chunk_id: 'ch_01prereq00000000000000000' },
+        blocked: { prerequisite_chunk_id: 'ch_01prereq00000000000000000', unmet_count: 1 },
       };
       const fixture = await render([blocked]);
       const el = fixture.nativeElement as HTMLElement;

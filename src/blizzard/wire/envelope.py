@@ -11,10 +11,11 @@ from pydantic import BaseModel
 
 from blizzard.foundation.artifacts import ArtifactKind, ArtifactScope
 from blizzard.foundation.node_steps import ApplyOutcome, Executor, JudgedBy, SessionMode
+from blizzard.wire.base import WireModel
 from blizzard.wire.graph import ProducesEntry, RotatePolicyView
 
 
-class EnvelopeArtifact(BaseModel):
+class EnvelopeArtifact(WireModel):
     """One artifact carried into a node-step, resolved latest-by-epoch."""
 
     name: str
@@ -38,7 +39,7 @@ class GraphArtifact(BaseModel):
     content: str
 
 
-class WorkerArtifact(BaseModel):
+class WorkerArtifact(WireModel):
     """One artifact, node- or graph-scoped. A node-scope row is resolved latest-by-epoch
     and names its producing node and epoch; a graph-scope row is one of the pinned graph
     mint's own baked-in declarations and carries neither, since no node-step produced it."""
@@ -56,7 +57,7 @@ class WorkerArtifact(BaseModel):
     content: str | None = None
 
 
-class EnvelopeChoice(BaseModel):
+class EnvelopeChoice(WireModel):
     """A selectable outcome the worker's judgement may emit."""
 
     name: str
@@ -65,7 +66,7 @@ class EnvelopeChoice(BaseModel):
     requires_checks: bool = False
 
 
-class NodeConfig(BaseModel):
+class NodeConfig(WireModel):
     """The node's invariant identity for this step."""
 
     node_id: str
@@ -99,7 +100,7 @@ class NodeConfig(BaseModel):
     choices: list[EnvelopeChoice] = []
 
 
-class NodeEnvelope(BaseModel):
+class NodeEnvelope(WireModel):
     """Everything needed to work one node-step."""
 
     chunk_id: str
@@ -119,7 +120,7 @@ class NodeEnvelope(BaseModel):
     graph_artifacts: list[GraphArtifact] = []
 
 
-class ApplyResponse(BaseModel):
+class ApplyResponse(WireModel):
     """The response to a completion submission. Exactly one of ``next_envelope`` (when ``outcome ==
     next``) or ``detail`` (on a non-advancing outcome) is meaningful; ``outcome`` discriminates."""
 

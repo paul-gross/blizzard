@@ -1,9 +1,10 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import type { ArtifactView } from '../../api/hub';
+import { assetArtifactView, commitArtifactView } from '../../testing/builders/artifact';
 import { ChunkArtifactsPanel } from '../chunk-artifacts-panel/chunk-artifacts-panel';
 
-const OLDER: ArtifactView = {
+const OLDER: ArtifactView = commitArtifactView({
   key: 'build.branch.1',
   kind: 'git_commit',
   name: 'branch',
@@ -13,10 +14,11 @@ const OLDER: ArtifactView = {
   repo: 'acme/widget',
   branch_name: 'feature/x',
   commit_hash: 'abc1234',
+  branch_url: null,
   recorded_at: '2026-07-16T11:10:00.000Z',
-};
+});
 
-const NEWER: ArtifactView = {
+const NEWER: ArtifactView = assetArtifactView({
   key: 'review.findings.2',
   kind: 'asset',
   name: 'findings',
@@ -25,7 +27,7 @@ const NEWER: ArtifactView = {
   epoch: 2,
   content: 'THE FINDINGS BODY',
   recorded_at: '2026-07-16T11:30:00.000Z',
-};
+});
 
 /** {@link ChunkArtifactsPanel} under the `artifacts-tab` testid prefix. */
 function createTab() {

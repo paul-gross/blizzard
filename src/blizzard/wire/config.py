@@ -7,13 +7,14 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
+from blizzard.wire.base import WireModel
 from blizzard.wire.repository import RepositoryDocument
 from blizzard.wire.routine import RoutineDocument
 from blizzard.wire.scope import ScopeDocument
 from blizzard.wire.work_source import WorkSourceDocument
 
 
-class FieldChangeView(BaseModel):
+class FieldChangeView(WireModel):
     """One changed field. A secret's value never appears in a diff."""
 
     field: str
@@ -21,7 +22,7 @@ class FieldChangeView(BaseModel):
     new: object = None
 
 
-class ConfigChangeView(BaseModel):
+class ConfigChangeView(WireModel):
     """One row of the change log."""
 
     id: int
@@ -43,7 +44,7 @@ class ConfigChangeView(BaseModel):
     project_id: str | None = None
 
 
-class ConfigChangesPage(BaseModel):
+class ConfigChangesPage(WireModel):
     """A newest-first page; ``next_before`` is the ``before`` that fetches the next, ``None`` at the end."""
 
     changes: list[ConfigChangeView]
@@ -103,7 +104,7 @@ class ConfigDocument(BaseModel):
     routines: list[RoutineEntry] = []
 
 
-class ConfigApplyOutcome(BaseModel):
+class ConfigApplyOutcome(WireModel):
     """One outcome of an apply. ``op`` is ``create``, ``edit`` or ``enable`` for a change written and
     ``unchanged`` for a named record that needed none; ``diff`` is empty for ``unchanged``."""
 
@@ -113,7 +114,7 @@ class ConfigApplyOutcome(BaseModel):
     diff: list[FieldChangeView] = []
 
 
-class ConfigApplyResponse(BaseModel):
+class ConfigApplyResponse(WireModel):
     """What an apply did, or — under ``dry_run`` — would do, with the identical ``outcomes``.
     ``apply_id`` groups the change rows a real apply wrote; ``None`` for a dry run."""
 

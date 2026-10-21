@@ -1,3 +1,4 @@
+import { RunnerConnection, type RunnerRegistryView } from 'fleet';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
@@ -8,6 +9,38 @@ import { FleetView } from './fleet-view';
 import { type HostCard, groupHostRows } from './host-rows.model';
 import { NO_HOST_VERBS } from './host-verbs.model';
 import type { RunnerRow } from './runner-rows.model';
+
+const REGISTRY: RunnerRegistryView = {
+  runner_id: '',
+  runner_name: '',
+  added_at: '',
+  added_by: null,
+  bindings: null,
+  capabilities: [],
+  connection: RunnerConnection.NEVER_CONNECTED,
+  env_capacity: null,
+  gates: [],
+  host_id: null,
+  hub_paused: false,
+  last_seen_at: null,
+  locally_paused: false,
+  locally_paused_by: null,
+  locally_paused_reason: null,
+  online: false,
+  projects: [],
+  registered_at: null,
+  retired: false,
+  retired_at: null,
+  retired_by: null,
+  subscription: null,
+  subscription_unrostered: false,
+  subscriptions: [],
+  version: null,
+  version_refusal: null,
+  version_standing: null,
+  workspace_id: null,
+};
+
 
 /**
  * The desktop Fleet tab (the tooled half of `blizzard-context:/verification/blizzard.md`'s
@@ -29,6 +62,7 @@ async function loadDesignTokens(): Promise<void> {
 const NOW = new Date().toISOString();
 
 const ROW: RunnerRow = {
+  ...REGISTRY,
   runner_id: 'rn_base',
   runner_name: 'base',
   added_at: NOW,

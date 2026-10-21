@@ -3,7 +3,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { runnerClient, type runnerApi } from 'fleet';
-import { type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
+import { chunkDetail, type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
 import { vi } from 'vitest';
 
 import type { PanelLease } from '../../core/panel-reads.model';
@@ -11,17 +11,18 @@ import { MachineDetail } from './chunk-detail';
 
 /** A `ChunkDetail` fixture — the runner's own `GET /api/chunks/{id}` pass-through
  * proxy response the header renders off. */
-const HEADER = (overrides: Partial<runnerApi.ChunkDetail> = {}): runnerApi.ChunkDetail => ({
-  chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9',
-  graph_id: 'gr_1',
-  current_node_id: 'nd_build',
-  latest_epoch: 2,
-  status: 'running',
-  pausable: true,
-  work_refs: [{ source: 'blizzard', ref: '185', label: 'blizzard#185', web_url: 'https://forge.example/issues/185' }],
-  pause: null,
-  ...overrides,
-});
+const HEADER = (overrides: Partial<runnerApi.ChunkDetail> = {}): runnerApi.ChunkDetail =>
+  chunkDetail({
+    chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9',
+    graph_id: 'gr_1',
+    current_node_id: 'nd_build',
+    latest_epoch: 2,
+    status: 'running',
+    pausable: true,
+    work_refs: [{ source: 'blizzard', ref: '185', label: 'blizzard#185', web_url: 'https://forge.example/issues/185' }],
+    pause: null,
+    ...overrides,
+  });
 
 const NEW_LEASE = 'lease_01KXKVVF1J3D6H6VYZ3XYNNEW1';
 const OLD_LEASE = 'lease_01KXKVVF1J3D6H6VYZ3XYNOLD1';
@@ -46,6 +47,8 @@ const NEWEST = (overrides: Partial<PanelLease> = {}): PanelLease => ({
   closed_at: null,
   closure_reason: null,
   stale_after_seconds: 3600,
+  harness_id: null,
+  project_id: null,
   owner: { runnerId: 'rn_1', name: 'r1', label: 'r1' },
   projectSlug: 'p',
   ...overrides,

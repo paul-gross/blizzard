@@ -12,6 +12,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from blizzard.wire.base import WireModel
+
 
 class ExternalSubscriptionUsageWindowFact(BaseModel):
     """One complete subscription-usage window accepted from a runner fact.
@@ -43,7 +45,7 @@ class RunnerFactBatch(BaseModel):
     facts: list[RunnerFact]
 
 
-class RunnerFactAck(BaseModel):
+class RunnerFactAck(WireModel):
     """The hub's per-batch acknowledgement against its high-water mark.
 
     ``high_water`` is the new mark after this batch; ``applied``/``already_applied`` partition
@@ -65,7 +67,7 @@ class HostFactBatch(BaseModel):
     facts: list[RunnerFact]
 
 
-class HostFactAck(BaseModel):
+class HostFactAck(WireModel):
     """The hub's per-batch acknowledgement against the host's own high-water mark.
 
     ``high_water`` is the new mark after this batch; ``applied``/``already_applied`` partition the pushed seqs, and

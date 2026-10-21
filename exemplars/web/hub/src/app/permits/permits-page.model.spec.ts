@@ -14,6 +14,9 @@ const REQUESTED: PermitView = {
   verbs: ['grant', 'revoke'],
   requested_at: '2026-10-01T09:00:00Z',
   requested_by: 'usr_grace',
+  changed_at: null,
+  changed_by: null,
+  revocation_note: null,
 };
 
 const GRANTED: PermitView = { ...REQUESTED, permit_id: 'pmt_2', state: 'granted', verbs: ['suspend', 'revoke'] };

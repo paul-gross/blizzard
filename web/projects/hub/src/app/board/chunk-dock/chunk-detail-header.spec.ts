@@ -3,9 +3,12 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 
 import type { ChunkDetail } from 'fleet';
+import { chunkDetail } from 'fleet/testing';
 import { ChunkDetailHeader } from './chunk-detail-header';
 
-const ISSUE_DETAIL: ChunkDetail = {
+const ISSUE_DETAIL: ChunkDetail = chunkDetail({
+  graph_name: null,
+  current_node_name: null,
   chunk_id: 'ch_01issue00000000000000000000',
   graph_id: 'gr_1',
   status: 'running',
@@ -18,9 +21,11 @@ const ISSUE_DETAIL: ChunkDetail = {
   ],
   history: [],
   artifacts: [],
-};
+});
 
-const ROUTED_DETAIL: ChunkDetail = {
+const ROUTED_DETAIL: ChunkDetail = chunkDetail({
+  graph_name: null,
+  current_node_name: null,
   chunk_id: 'ch_01routed000000000000000000',
   graph_id: 'gr_1',
   status: 'running',
@@ -32,7 +37,7 @@ const ROUTED_DETAIL: ChunkDetail = {
   history: [],
   artifacts: [],
   route: { runner_id: 'rn_01', runner_name: 'r-claude', workspace_id: 'ws_01', environment_ids: ['env_01'] },
-};
+});
 
 /** A chunk carrying an open pause fact, whatever its derived status reads. */
 function pausedDetail(status: ChunkDetail['status'], extra: Partial<ChunkDetail> = {}): ChunkDetail {

@@ -1,4 +1,5 @@
 import type { ChunkNeighborView } from '../../api/hub';
+import { chunkNeighborView } from '../../testing/builders/chunk';
 import { chunkTabOptions, nextFocus, openEdgeIds, preDetailState } from './chunk-page.model';
 
 describe('chunkTabOptions', () => {
@@ -21,9 +22,9 @@ describe('preDetailState', () => {
 describe('openEdgeIds', () => {
   it('names every unsatisfied edge, in order, and leaves satisfied ones off', () => {
     const edges: ChunkNeighborView[] = [
-      { chunk_id: 'ch_a', satisfied: false },
-      { chunk_id: 'ch_b', satisfied: true },
-      { chunk_id: 'ch_c', satisfied: false },
+      chunkNeighborView({ chunk_id: 'ch_a', satisfied: false }),
+      chunkNeighborView({ chunk_id: 'ch_b', satisfied: true }),
+      chunkNeighborView({ chunk_id: 'ch_c', satisfied: false }),
     ];
     expect(openEdgeIds(edges)).toEqual(['ch_a', 'ch_c']);
   });

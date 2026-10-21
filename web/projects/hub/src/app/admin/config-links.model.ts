@@ -32,7 +32,7 @@ export function recordLink(ref: RecordRefView): ConfigLinkVm {
 
 /** A link to the secret `name`, or none when the record names no secret. */
 export function secretLinks(name: string | null | undefined): readonly ConfigLinkVm[] {
-  return name ? [recordLink({ kind: RecordKind.SECRET, key: name })] : [];
+  return name ? [recordLink({ kind: RecordKind.SECRET, key: name, label: null })] : [];
 }
 
 /** A nullable field as text — `—` when unset. */

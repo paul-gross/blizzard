@@ -14,6 +14,7 @@ from pydantic import BaseModel
 from blizzard.runner.api.wiring import RunnerWiring
 from blizzard.runner.harness.registry import UnavailableHarnessError, UnknownHarnessError
 from blizzard.runner.selftest.model import SelfTestRun
+from blizzard.wire.base import WireModel
 
 router = APIRouter(prefix="/api", tags=["runner"])
 
@@ -32,7 +33,7 @@ class SelfTestCheckView(BaseModel):
     detail: str
 
 
-class SelfTestView(BaseModel):
+class SelfTestView(WireModel):
     """A selftest run's current state — ``running`` until every check has resolved."""
 
     id: str

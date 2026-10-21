@@ -27,6 +27,8 @@ function lease(overrides: Partial<PanelLease> = {}): PanelLease {
     closed_at: null,
     closure_reason: null,
     stale_after_seconds: 3600,
+    harness_id: null,
+    project_id: null,
     owner: OWNER,
     projectSlug: null,
     ...overrides,
@@ -42,6 +44,14 @@ function escalation(chunkId: string, runnerId: string): runnerApi.EscalationView
     node_id: 'nd_build',
     resume_command: `blizzard resume ${chunkId}`,
     owner: { runnerId },
+    cause: null,
+    effort: null,
+    harness_id: null,
+    harness_version: null,
+    model: null,
+    project_id: null,
+    session_name: null,
+    wrapped_takeover_command: null,
   };
 }
 

@@ -18,6 +18,7 @@ const ME: MeResponse = {
   permissions: [],
   tenants: [...TENANTS],
   hub_admin: false,
+  assignable_roles: [],
 };
 
 async function render(): Promise<{ el: HTMLElement; picker: TenantPicker }> {

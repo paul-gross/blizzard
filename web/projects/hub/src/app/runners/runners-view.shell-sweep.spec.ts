@@ -1,3 +1,4 @@
+import { RunnerConnection, type RunnerRegistryView } from 'fleet';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { commands, page } from 'vitest/browser';
@@ -5,6 +6,38 @@ import type { HostCard } from './host-rows.model';
 import type { RunnerRow } from './runner-rows.model';
 
 import { RunnersView } from './runners-view';
+
+const REGISTRY: RunnerRegistryView = {
+  runner_id: '',
+  runner_name: '',
+  added_at: '',
+  added_by: null,
+  bindings: null,
+  capabilities: [],
+  connection: RunnerConnection.NEVER_CONNECTED,
+  env_capacity: null,
+  gates: [],
+  host_id: null,
+  hub_paused: false,
+  last_seen_at: null,
+  locally_paused: false,
+  locally_paused_by: null,
+  locally_paused_reason: null,
+  online: false,
+  projects: [],
+  registered_at: null,
+  retired: false,
+  retired_at: null,
+  retired_by: null,
+  subscription: null,
+  subscription_unrostered: false,
+  subscriptions: [],
+  version: null,
+  version_refusal: null,
+  version_standing: null,
+  workspace_id: null,
+};
+
 
 /** The design tokens are a global stylesheet loaded via each app's build `styles`,
  * never by a standalone component test (`board/hover-tint.shell-sweep.spec.ts`'s own
@@ -38,6 +71,7 @@ const NOW = new Date().toISOString();
 
 const ROWS: readonly RunnerRow[] = [
   {
+    ...REGISTRY,
     runner_id: 'rn_online',
     runner_name: 'online',
     added_at: NOW,
@@ -78,6 +112,7 @@ const ROWS: readonly RunnerRow[] = [
     ],
   },
   {
+    ...REGISTRY,
     runner_id: 'rn_paused',
     runner_name: 'paused',
     added_at: NOW,
@@ -114,6 +149,7 @@ const ROWS: readonly RunnerRow[] = [
     ],
   },
   {
+    ...REGISTRY,
     runner_id: 'rn_retired',
     runner_name: 'retired',
     added_at: NOW,
@@ -138,6 +174,7 @@ const ROWS: readonly RunnerRow[] = [
     subscriptionPaces: [],
   },
   {
+    ...REGISTRY,
     runner_id: 'rn_freshness',
     runner_name: 'freshness',
     added_at: NOW,
@@ -193,6 +230,7 @@ const ROWS: readonly RunnerRow[] = [
   },
   // Added at the hub but never started: no workspace, contact, or capabilities yet.
   {
+    ...REGISTRY,
     runner_id: 'rn_01KXKVVF1J3D6H6VYZ3XYNNEW1',
     runner_name: 'runner-with-a-genuinely-long-operator-chosen-name',
     added_at: NOW,
@@ -215,6 +253,7 @@ const ROWS: readonly RunnerRow[] = [
   },
   // The same long name on a second runner: each card keeps its own full id.
   {
+    ...REGISTRY,
     runner_id: 'rn_01KXKVVF1J3D6H6VYZ3XYN7Q2M',
     runner_name: 'runner-with-a-genuinely-long-operator-chosen-name',
     added_at: NOW,

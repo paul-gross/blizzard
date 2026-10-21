@@ -1,33 +1,37 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 
+function fact(fields: Pick<FindingFactView, 'kind' | 'recorded_at'> & Partial<FindingFactView>): FindingFactView {
+  return { actor: null, note: null, proposal_id: null, superseded_by: null, ...fields };
+}
+
 import type { FindingFactView } from 'fleet';
 import { FleetFindingFactTimeline } from './finding-fact-timeline';
 
-const ADD_ONLY: FindingFactView[] = [{ kind: 'add', recorded_at: '2026-01-01T00:00:00Z' }];
+const ADD_ONLY: FindingFactView[] = [fact({ kind: 'add', recorded_at: '2026-01-01T00:00:00Z' })];
 
 const EXIT_THEN_REOPEN: FindingFactView[] = [
-  {
+  fact({
     kind: 'add',
     recorded_at: '2026-01-01T00:00:00Z',
-  },
-  {
+  }),
+  fact({
     kind: 'wont-fix',
     recorded_at: '2026-01-02T00:00:00Z',
     note: 'not worth the churn',
     actor: 'u_1',
-  },
-  {
+  }),
+  fact({
     kind: 'reopened',
     recorded_at: '2026-01-03T00:00:00Z',
     note: 'actually still matters',
     actor: 'u_2',
-  },
+  }),
 ];
 
 const NEWEST_NOTELESS: FindingFactView[] = [
-  { kind: 'add', recorded_at: '2026-01-01T00:00:00Z' },
-  { kind: 'observed', recorded_at: '2026-01-02T00:00:00Z' },
+  fact({ kind: 'add', recorded_at: '2026-01-01T00:00:00Z' }),
+  fact({ kind: 'observed', recorded_at: '2026-01-02T00:00:00Z' }),
 ];
 
 async function mount(facts: readonly FindingFactView[]) {
@@ -84,17 +88,17 @@ describe('FleetFindingFactTimeline', () => {
 
   it('renders the proposal id and the superseding finding when a fact carries them', async () => {
     const fixture = await mount([
-      { kind: 'add', recorded_at: '2026-01-01T00:00:00Z' },
-      {
+      fact({ kind: 'add', recorded_at: '2026-01-01T00:00:00Z' }),
+      fact({
         kind: 'resolved',
         recorded_at: '2026-01-02T00:00:00Z',
         proposal_id: 'gp_1',
-      },
-      {
+      }),
+      fact({
         kind: 'superseded',
         recorded_at: '2026-01-03T00:00:00Z',
         superseded_by: 'fin_9',
-      },
+      }),
     ]);
     const el = fixture.nativeElement as HTMLElement;
 

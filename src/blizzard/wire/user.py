@@ -11,6 +11,7 @@ from __future__ import annotations
 from pydantic import BaseModel
 
 from blizzard.auth_core import Role
+from blizzard.wire.base import WireModel
 
 
 class UserIdentityView(BaseModel):
@@ -20,7 +21,7 @@ class UserIdentityView(BaseModel):
     handle: str
 
 
-class MemberView(BaseModel):
+class MemberView(WireModel):
     """One member of the request's tenant."""
 
     user_id: str
@@ -54,7 +55,7 @@ class HubAdminView(BaseModel):
     email: str | None
 
 
-class UserView(BaseModel):
+class UserView(WireModel):
     """One member as the deprecated ``/api/users`` routes render them — ``role`` is ``superuser`` for a hub
     administrator, else the membership's role, ``pending`` once revoked."""
 

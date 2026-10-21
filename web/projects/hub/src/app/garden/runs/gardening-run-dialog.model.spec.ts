@@ -3,8 +3,17 @@ import { describe, expect, it } from 'vitest';
 
 import { liveRelatedScopes, orderScopesBySwept, sweptScopeSlugs } from './gardening-run-dialog.model';
 
-function scope(slug: string, retired?: boolean): ScopeView {
-  return { slug, description: `${slug} scope`, created_at: '2026-01-01T00:00:00Z', retired };
+function scope(slug: string, retired = false): ScopeView {
+  return {
+    slug,
+    description: `${slug} scope`,
+    created_at: '2026-01-01T00:00:00Z',
+    retired,
+    revision: null,
+    project_id: null,
+    project_name: null,
+    project_slug: null,
+  };
 }
 
 function baseline(scopeSlug: string): RoutineBaselineView {

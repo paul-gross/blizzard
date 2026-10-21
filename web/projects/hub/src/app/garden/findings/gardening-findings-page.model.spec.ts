@@ -14,6 +14,17 @@ function finding(overrides: Partial<FindingView> = {}): FindingView {
     scope_slug: 'blizzard',
     observed_count: 1,
     last_seen_at: '2026-01-05T00:00:00Z',
+    exit: null,
+    first_observed_at: null,
+    introduced: null,
+    introduced_at: null,
+    note: null,
+    project_id: null,
+    project_name: null,
+    project_slug: null,
+    raised_by_chunk_id: null,
+    severity: null,
+    source: 'routine',
     ...overrides,
   };
 }

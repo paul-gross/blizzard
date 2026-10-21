@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict
 
+from blizzard.wire.base import WireModel
+
 
 class ScopeCreateRequest(BaseModel):
     """Mint a scope, or no-op onto the existing one of the same slug."""
@@ -42,7 +44,7 @@ class ScopeLifecycleRequest(BaseModel):
     by: str = "operator"
 
 
-class ScopeView(BaseModel):
+class ScopeView(WireModel):
     """A scope as served by the create/list/read/lifecycle routes."""
 
     slug: str

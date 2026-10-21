@@ -6,6 +6,26 @@ import { type ActivityView, hubClient, FleetLiveUpdates, type LoggedEvent, type 
 import { settle, type RequestClientStub, stubRequestClient } from 'fleet/testing';
 import { ActivityPanel } from './activity-panel';
 
+const activityView = (overrides: Partial<ActivityView>): ActivityView => ({
+  type: 'chunk-changed',
+  key: 'k',
+  at: '2020-01-01T00:00:00Z',
+  by: null,
+  cause: null,
+  chunk_id: null,
+  graph_id: null,
+  kind: null,
+  node: null,
+  prev_node: null,
+  prev_status: null,
+  reason: null,
+  runner_id: null,
+  runner_name: null,
+  severity: null,
+  status: null,
+  ...overrides,
+});
+
 describe('ActivityPanel', () => {
   let log: WritableSignal<readonly LoggedEvent[]>;
   let status: WritableSignal<SseStatus>;
@@ -87,7 +107,7 @@ describe('ActivityPanel', () => {
 
   it('renders the backfilled feed on load, before any live frame arrives', async () => {
     const fixture = await render([
-      { type: 'chunk-changed', key: 'k-old', at: '2020-01-01T00:00:00Z', chunk_id: 'ch_old', status: 'ready' },
+      activityView({ type: 'chunk-changed', key: 'k-old', at: '2020-01-01T00:00:00Z', chunk_id: 'ch_old', status: 'ready' }),
     ]);
     const el = fixture.nativeElement as HTMLElement;
 
@@ -97,7 +117,7 @@ describe('ActivityPanel', () => {
 
   it('dedupes a backfilled row against a live frame naming the same key, preferring the live copy', async () => {
     const fixture = await render([
-      { type: 'chunk-changed', key: 'k1', at: '2020-01-01T00:00:00Z', chunk_id: 'ch_alp', status: 'queued' },
+      activityView({ type: 'chunk-changed', key: 'k1', at: '2020-01-01T00:00:00Z', chunk_id: 'ch_alp', status: 'queued' }),
     ]);
     log.set([{ seq: 1, type: 'chunk-changed', data: { chunk_id: 'ch_alp', status: 'running', key: 'k1' }, at: 5_000, key: 'k1' }]);
     fixture.detectChanges();
@@ -109,8 +129,8 @@ describe('ActivityPanel', () => {
 
   it('renders a claim from its cause rather than the last transition, across live and reload-equivalent backfill', async () => {
     const fixture = await render([
-      { type: 'chunk-changed', key: 'route_created:1', at: '2020-01-01T00:00:01Z', chunk_id: 'ch_alp', cause: 'claimed', runner_id: 'runner-one' },
-      { type: 'chunk-changed', key: 'transitions:1', at: '2020-01-01T00:00:00Z', chunk_id: 'ch_alp', cause: 'node-completed' },
+      activityView({ type: 'chunk-changed', key: 'route_created:1', at: '2020-01-01T00:00:01Z', chunk_id: 'ch_alp', cause: 'claimed', runner_id: 'runner-one' }),
+      activityView({ type: 'chunk-changed', key: 'transitions:1', at: '2020-01-01T00:00:00Z', chunk_id: 'ch_alp', cause: 'node-completed' }),
     ]);
     const el = fixture.nativeElement as HTMLElement;
     expect([...el.querySelectorAll('[data-testid="activity-message"]')].map((node) => node.textContent?.trim()))
@@ -140,7 +160,7 @@ describe('ActivityPanel', () => {
 
   it('orders the merged feed newest-first across backfill and live', async () => {
     const fixture = await render([
-      { type: 'chunk-changed', key: 'k-old', at: '2020-01-01T00:00:00Z', chunk_id: 'ch_old', status: 'ready' },
+      activityView({ type: 'chunk-changed', key: 'k-old', at: '2020-01-01T00:00:00Z', chunk_id: 'ch_old', status: 'ready' }),
     ]);
     // A live frame's `at` is a ms-epoch instant (`Date.now()` at record time), so it must
     // be a realistic, recent instant to sort after the 2020 backfill row — not a small
@@ -163,7 +183,7 @@ describe('ActivityPanel', () => {
 
   it('renders a backfilled row missing status with no placeholder dash', async () => {
     const fixture = await render([
-      { type: 'chunk-changed', key: 'k1', at: '2020-01-01T00:00:00Z', chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN1RJ1', prev_node: 'review', node: 'build' },
+      activityView({ type: 'chunk-changed', key: 'k1', at: '2020-01-01T00:00:00Z', chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN1RJ1', prev_node: 'review', node: 'build' }),
     ]);
     const el = fixture.nativeElement as HTMLElement;
 
@@ -174,7 +194,7 @@ describe('ActivityPanel', () => {
 
   it('renders a deleted-cause backfill row with its actor as line 2, in place of a runner', async () => {
     const fixture = await render([
-      {
+      activityView({
         type: 'chunk-changed',
         key: 'k-del',
         at: '2020-01-01T00:00:00Z',
@@ -182,7 +202,7 @@ describe('ActivityPanel', () => {
         status: 'not_ready',
         cause: 'deleted',
         by: 'operator',
-      },
+      }),
     ]);
     const el = fixture.nativeElement as HTMLElement;
 
@@ -210,7 +230,7 @@ describe('ActivityPanel', () => {
 
   it('still renders the deleting actor from the live frame alone once it dedupes a same-key backfill row', async () => {
     const fixture = await render([
-      {
+      activityView({
         type: 'chunk-changed',
         key: 'k-del-both',
         at: '2020-01-01T00:00:00Z',
@@ -218,7 +238,7 @@ describe('ActivityPanel', () => {
         status: 'not_ready',
         cause: 'deleted',
         by: 'operator',
-      },
+      }),
     ]);
     log.set([
       {

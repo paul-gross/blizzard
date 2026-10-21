@@ -10,9 +10,10 @@ from __future__ import annotations
 from pydantic import BaseModel, ConfigDict
 
 from blizzard.foundation.work_items import WorkItemClosure, WorkItemPriority
+from blizzard.wire.base import WireModel
 
 
-class WorkSourceSummary(BaseModel):
+class WorkSourceSummary(WireModel):
     """One work source — the ``GET /api/work-sources`` listing row and every record verb's
     view. ``readable`` is not a field: every source answers ``fetch``, so it carries no
     information; ``edit`` is the "has browsable items" signal the item routes gate on.
@@ -73,13 +74,13 @@ class WorkSourcePatchRequest(BaseModel):
     secret: str | None = None
 
 
-class WorkSourcesListView(BaseModel):
+class WorkSourcesListView(WireModel):
     """Every configured (plus the built-in ``hub``) source — ``GET /api/work-sources``."""
 
     sources: list[WorkSourceSummary] = []
 
 
-class WorkItemAuthorView(BaseModel):
+class WorkItemAuthorView(WireModel):
     """Who filed a hub-owned work item, legible for display — ``user_id``
     and ``login`` set only for ``kind == "user"``; ``runner_id``/``chunk_id``/``node_name``
     — the proposing runner, chunk, and node — set only for ``kind == "fleet"``, with
@@ -94,7 +95,7 @@ class WorkItemAuthorView(BaseModel):
     node_name: str | None = None
 
 
-class WorkItemView(BaseModel):
+class WorkItemView(WireModel):
     """One hub-owned work item in full — author, stated priority, closure, and the
     last-edit instant, the vocabulary a pass-through ``WorkItemEntry`` cannot answer. ``source`` is the source's key —
     ``hub`` or its id — and ``slug`` its current slug; ``label`` is the rendered ``{slug}#{ref}``."""
@@ -114,7 +115,7 @@ class WorkItemView(BaseModel):
     closure: WorkItemClosure | None
 
 
-class WorkItemsListView(BaseModel):
+class WorkItemsListView(WireModel):
     """A source's items, newest first — ``GET /api/work-sources/{source}/items``."""
 
     items: list[WorkItemView] = []

@@ -35,10 +35,18 @@ function dashboardBody(facts: readonly runnerApi.FactView[]): runnerApi.Dashboar
     runner: {
       runner_id: 'runner-local',
       workspace_id: 'workspace-local',
-      pause: { local: false, hub: false, effective: false },
+      pause: { local: false, hub: false, effective: false, local_reason: null },
       capacities: { used: 0, bindings: [{ project: 'p', project_id: 'p', workspace_id: 'ws', agents: 4, used: 0, free: 4 }] },
-      hub: { endpoint: 'http://127.0.0.1:8421', reachable: true, last_contact_at: null, buffer_depth: 0 },
+      hub: { endpoint: 'http://127.0.0.1:8421', reachable: true, last_contact_at: null, buffer_depth: 0, hub_version: null, window: null },
       last_tick_at: null,
+      gates: [],
+      identity: null,
+      routing_conflicts: [],
+      runner_name: null,
+      served_projects: null,
+      tenant_id: null,
+      tenant_name: null,
+      unmatched_bindings: [],
     },
     asks: { items: [] },
     escalations: { items: [] },
@@ -108,6 +116,7 @@ describe('FactLog', () => {
         chunk_id: null,
         lease_id: null,
         acked_at: null,
+        project_id: null,
       },
     ]);
 
@@ -117,7 +126,7 @@ describe('FactLog', () => {
   });
 
   it('merges every serving runner’s facts newest first, each naming its runner', async () => {
-    const fact = { kind: 'chunk_claimed', chunk_id: null, lease_id: null, acked_at: null };
+    const fact = { kind: 'chunk_claimed', chunk_id: null, lease_id: null, acked_at: null, project_id: null };
     const { el } = await render(
       [{ ...fact, seq: 1, created_at: '2026-07-16T11:00:00+00:00' }],
       [{ ...fact, seq: 1, created_at: '2026-07-16T12:00:00+00:00' }],

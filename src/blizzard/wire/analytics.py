@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
+from blizzard.wire.base import WireModel
+
 
 class AnalyticsEventView(BaseModel):
     """One derived event, wire-shaped — ``payload`` is parsed from its
@@ -41,7 +43,7 @@ class AnalyticsEventsResponse(BaseModel):
     next_cursor: str | None
 
 
-class AnalyticsCountView(BaseModel):
+class AnalyticsCountView(WireModel):
     """One grouping key and how many events fell under it. ``key`` names
     whichever dimension this response is grouped by — a file path, a skill name, an
     agent type, or a node id. ``graph_name`` and ``node_name`` name what a node-keyed row
@@ -81,7 +83,7 @@ class AnalyticsDurationsResponse(BaseModel):
     durations: list[AnalyticsDurationView]
 
 
-class AnalyticsSpendView(BaseModel):
+class AnalyticsSpendView(WireModel):
     """One grouping key's usage/cost rollup — ``key`` is a node id, a graph id or a model name,
     whichever dataset served it. The same contract ``GET /api/spend`` publishes: ``cost_partial`` is ``True``
     iff some summed row carried neither a billed nor an estimated amount, and ``estimated_cost_usd`` is ``None``
@@ -110,7 +112,7 @@ class AnalyticsSpendResponse(BaseModel):
     spend: list[AnalyticsSpendView]
 
 
-class AnalyticsChunkSpendView(BaseModel):
+class AnalyticsChunkSpendView(WireModel):
     """One chunk's own usage/cost rollup — the per-chunk grouping's
     unbounded, cursor-paged row. ``cost_partial`` is ``True`` iff some summed row carried neither a billed
     nor an estimated amount, and ``estimated_cost_usd`` is ``None`` unless some summed row carried one."""
@@ -164,7 +166,7 @@ class ReDeriveRequest(BaseModel):
     limit: int = Field(default=50, ge=1, le=500)
 
 
-class ReDeriveResponse(BaseModel):
+class ReDeriveResponse(WireModel):
     """How many segments this call derived, and how many still-candidate segments
     remain in scope — the caller drives to convergence by calling again while
     ``remaining`` is nonzero. ``not_visible``: the named segment is not visible; nothing derived."""

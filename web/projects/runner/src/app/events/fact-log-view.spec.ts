@@ -46,6 +46,7 @@ describe('FactLogView', () => {
           chunk_id: null,
           lease_id: null,
           acked_at: null,
+          project_id: null,
         },
       ]);
 
@@ -64,6 +65,7 @@ describe('FactLogView', () => {
           chunk_id: null,
           lease_id: null,
           acked_at: null,
+          project_id: null,
         },
       ]);
 
@@ -82,6 +84,7 @@ describe('FactLogView', () => {
         chunk_id: 'ch_01ABCDEF00000000000000000',
         lease_id: 'lease_01ABCDEF00000000000000000',
         acked_at: null,
+        project_id: null,
       },
     ]);
 
@@ -92,7 +95,7 @@ describe('FactLogView', () => {
 
   it('renders the ack marker only once the hub has acked the seq', async () => {
     const { el } = await render([
-      { seq: 1, kind: 'chunk_claimed', created_at: '2026-07-16T11:00:00+00:00', chunk_id: null, lease_id: null, acked_at: null },
+      { seq: 1, kind: 'chunk_claimed', created_at: '2026-07-16T11:00:00+00:00', chunk_id: null, lease_id: null, acked_at: null, project_id: null },
       {
         seq: 2,
         kind: 'chunk_claimed',
@@ -100,6 +103,7 @@ describe('FactLogView', () => {
         chunk_id: null,
         lease_id: null,
         acked_at: '2026-07-16T11:00:01+00:00',
+        project_id: null,
       },
     ]);
 
@@ -109,7 +113,7 @@ describe('FactLogView', () => {
   });
 
   it('names each fact’s runner, keeping two runners’ facts of one seq apart', async () => {
-    const fact = { seq: 7, kind: 'chunk_claimed', created_at: '2026-07-16T11:00:00+00:00', chunk_id: null, lease_id: null, acked_at: null };
+    const fact = { seq: 7, kind: 'chunk_claimed', created_at: '2026-07-16T11:00:00+00:00', chunk_id: null, lease_id: null, acked_at: null, project_id: null };
     const { el } = await render([fact, { ...fact, owner: R2 }]);
 
     const rows = Array.from(el.querySelectorAll('[data-testid="fact-row"]'));

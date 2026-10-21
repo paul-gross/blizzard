@@ -1,25 +1,56 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 
-import type { GraphView } from 'fleet';
+import type { GraphView, GraphNodeView } from 'fleet';
 import { GraphDiagramDetail } from './graph-diagram-detail';
 import type { DiagramSelection } from './graph-diagram-selection';
 
+const GRAPH_DEFAULTS: Pick<GraphView, 'artifacts' | 'edges' | 'follow_latest' | 'retired' | 'sessions' | 'warnings'> = {
+  artifacts: [],
+  edges: [],
+  follow_latest: null,
+  retired: false,
+  sessions: [],
+  warnings: [],
+};
+
+const NODE_DEFAULTS: Pick<GraphNodeView, 'checks' | 'checks_cwd' | 'checks_timeout' | 'choices' | 'judgement_prompt' | 'produces' | 'prompt' | 'retries_exhausted' | 'retries_max' | 'session_source'> = {
+  checks: [],
+  checks_cwd: null,
+  checks_timeout: null,
+  choices: [],
+  judgement_prompt: null,
+  produces: [],
+  prompt: null,
+  retries_exhausted: null,
+  retries_max: null,
+  session_source: null,
+};
+
+const EDGE_DEFAULTS: Pick<GraphView['edges'][number], 'prompt_addendum' | 'target_graph' | 'target_kind'> = {
+  prompt_addendum: null,
+  target_graph: null,
+  target_kind: 'node',
+};
+
 const GRAPH: GraphView = {
+  ...GRAPH_DEFAULTS,
   graph_id: 'gr_test',
   name: 'test',
   enabled: true,
   entry_node_id: 'n_build',
   nodes: [
     {
+      ...NODE_DEFAULTS,
       node_id: 'n_plan',
       name: 'plan',
       executor: 'runner',
       session: 'fresh',
       judged_by: 'worker',
-      choices: [{ choice_id: 'c_advance', name: 'advance', description: '' }],
+      choices: [{ requires_checks: false, choice_id: 'c_advance', name: 'advance', description: '' }],
     },
     {
+      ...NODE_DEFAULTS,
       node_id: 'n_build',
       name: 'build',
       executor: 'runner',
@@ -29,26 +60,27 @@ const GRAPH: GraphView = {
       retries_max: 2,
       retries_exhausted: 'fail',
       checks: ['lint', 'test'],
-      produces: [{ name: 'plan' }, { name: 'retrospective' }],
+      produces: [{ kind: 'asset', name: 'plan' }, { kind: 'asset', name: 'retrospective' }],
       prompt: 'Build the thing.\nDo it well.',
       judgement_prompt: 'Did it pass?',
       choices: [
-        { choice_id: 'c_pass', name: 'pass', description: 'moves on to review' },
-        { choice_id: 'c_fail', name: 'fail', description: '' },
+        { requires_checks: false, choice_id: 'c_pass', name: 'pass', description: 'moves on to review' },
+        { requires_checks: false, choice_id: 'c_fail', name: 'fail', description: '' },
       ],
     },
     {
+      ...NODE_DEFAULTS,
       node_id: 'n_deliver',
       name: 'deliver',
       executor: 'hub',
       session: 'fresh',
       judged_by: 'worker',
-      choices: [{ choice_id: 'c_landed', name: 'landed', description: '' }],
+      choices: [{ requires_checks: false, choice_id: 'c_landed', name: 'landed', description: '' }],
     },
   ],
   edges: [
-    { from_node_id: 'n_plan', choice_id: 'c_advance', to_node_name: 'build', prompt_addendum: 'Arriving fresh from plan.' },
-    { from_node_id: 'n_build', choice_id: 'c_pass', to_node_name: 'deliver', prompt_addendum: 'Watch for flaky tests.' },
+    { ...EDGE_DEFAULTS, from_node_id: 'n_plan', choice_id: 'c_advance', to_node_name: 'build', prompt_addendum: 'Arriving fresh from plan.' },
+    { ...EDGE_DEFAULTS, from_node_id: 'n_build', choice_id: 'c_pass', to_node_name: 'deliver', prompt_addendum: 'Watch for flaky tests.' },
   ],
   warnings: [],
 };
@@ -131,7 +163,7 @@ describe('GraphDiagramDetail', () => {
       ...GRAPH,
       edges: [
         ...GRAPH.edges!,
-        { from_node_id: 'n_plan', choice_id: 'c_advance', to_node_name: 'build', prompt_addendum: 'A second route in.' },
+        { ...EDGE_DEFAULTS, from_node_id: 'n_plan', choice_id: 'c_advance', to_node_name: 'build', prompt_addendum: 'A second route in.' },
       ],
     };
     const fixture = mount(graph, { kind: 'node', nodeId: 'n_build' });

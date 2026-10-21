@@ -9,8 +9,10 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
+from blizzard.wire.base import WireModel
 
-class FleetSpendView(BaseModel):
+
+class FleetSpendView(WireModel):
     """The fleet's usage/cost total since ``since`` and, when the caller bounded the window, strictly
     before ``until`` (``None`` for the open-ended tail). ``cost_partial`` is ``True`` iff some summed row
     carries neither a billed nor an estimated amount, so ``cost_usd`` is then a lower bound;

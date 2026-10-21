@@ -1,5 +1,14 @@
 import type { TemplateRef } from '@angular/core';
-import type { ChunkCountsView, ConfigChangeView, ProjectView, RepositorySummary, RunnerRegistryView, WorkSourceSummary } from 'fleet';
+import type {
+  ChunkCountsView,
+  ConfigChangeView,
+  FieldChangeView,
+  ProjectView,
+  RepositorySummary,
+  RunnerRegistryView,
+  SourceLinkView,
+  WorkSourceSummary,
+} from 'fleet';
 
 import {
   failureFor,
@@ -40,12 +49,16 @@ function runner(id: string, served: string[], online = true): RunnerRegistryView
   } as unknown as RunnerRegistryView;
 }
 
-function change(id: number, diff: { field: string; old?: unknown; new?: unknown }[]): ConfigChangeView {
+function change(id: number, diff: FieldChangeView[]): ConfigChangeView {
   return {
     id,
     actor: 'ada',
+    actor_name: null,
+    apply_id: null,
     door: 'board',
     op: 'edit',
+    project_id: null,
+    record_label: null,
     record_key: 'proj_b',
     record_kind: 'project',
     recorded_at: '2026-10-01T00:00:00Z',
@@ -69,8 +82,12 @@ function counts(ready: number, running: number, done: number): ChunkCountsView {
   } as ChunkCountsView;
 }
 
-const JIRA_LINK = { project_id: 'proj_b', name: 'jira', linked: true, revision: 1 };
-const HUB_LINK = { project_id: 'proj_b', name: 'hub', linked: true, built_in: true };
+function sourceLink(link: Pick<SourceLinkView, 'name' | 'linked'> & Partial<SourceLinkView>): SourceLinkView {
+  return { project_id: 'proj_b', built_in: false, revision: null, slug: null, ...link };
+}
+
+const JIRA_LINK = sourceLink({ name: 'jira', linked: true, revision: 1 });
+const HUB_LINK = sourceLink({ name: 'hub', linked: true, built_in: true });
 const REPO_LINK = {
   project_id: 'proj_b',
   repository_id: 'repo_b',
@@ -79,7 +96,7 @@ const REPO_LINK = {
   linked: true,
   revision: 1,
 };
-const GONE_LINK = { project_id: 'proj_b', name: 'old', linked: false, revision: 2 };
+const GONE_LINK = sourceLink({ name: 'old', linked: false, revision: 2 });
 
 describe('projects model', () => {
   it('lists every project by name on All, and only the lensed one under a lens', () => {
@@ -200,9 +217,9 @@ describe('projects model', () => {
     ] as WorkSourceSummary[];
     const rows = sourceLinkRows(
       [
-        { project_id: 'proj_b', name: 'wsrc_o', slug: 'old', linked: false, revision: 2 },
-        { project_id: 'proj_b', name: 'wsrc_j', slug: 'jira', linked: true, revision: 1 },
-        { project_id: 'proj_b', name: 'hub', slug: 'hub', linked: true, built_in: true },
+        sourceLink({ name: 'wsrc_o', slug: 'old', linked: false, revision: 2 }),
+        sourceLink({ name: 'wsrc_j', slug: 'jira', linked: true, revision: 1 }),
+        sourceLink({ name: 'hub', slug: 'hub', linked: true, built_in: true }),
       ],
       sources,
     );
@@ -225,8 +242,8 @@ describe('projects model', () => {
 
   it('offers only the live records the project does not link yet', () => {
     const linked = linkedKeys([
-      { project_id: 'proj_b', name: 'jira', linked: true, revision: 1 },
-      { project_id: 'proj_b', name: 'gh', linked: false, revision: 2 },
+      sourceLink({ name: 'jira', linked: true, revision: 1 }),
+      sourceLink({ name: 'gh', linked: false, revision: 2 }),
     ]);
     const choices = linkChoices(
       [
@@ -255,7 +272,7 @@ describe('projects model', () => {
   });
 
   it('calls out what a project lacks, and nothing for a wired one', () => {
-    const builtInOnly = [{ project_id: 'proj_b', name: 'hub', linked: true, built_in: true }];
+    const builtInOnly = [sourceLink({ name: 'hub', linked: true, built_in: true })];
     const missing = missingWiring(builtInOnly, [], false);
     expect(missing).toEqual(['work source', 'repository', 'runner']);
     expect(wiringCallout(missing)).toBe(
@@ -269,7 +286,7 @@ describe('projects model', () => {
     );
     expect(wiringCallout(['repository'], 4)).toBe('This project has no repository yet.');
     const wired = missingWiring(
-      [{ project_id: 'proj_b', name: 'jira', linked: true, revision: 1 }],
+      [sourceLink({ name: 'jira', linked: true, revision: 1 })],
       [{ project_id: 'proj_b', repository_id: 'repo_b', slug: 'blizzard', name: 'Blizzard', linked: true, revision: 1 }],
       true,
     );

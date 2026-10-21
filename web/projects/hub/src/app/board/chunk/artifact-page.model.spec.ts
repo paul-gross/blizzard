@@ -1,15 +1,17 @@
 import { type ArtifactView } from 'fleet';
+import { assetArtifactView } from 'fleet/testing';
 import { describe, expect, it } from 'vitest';
 
 import { artifactByKey } from './artifact-page.model';
 
-const artifact = (key: string): ArtifactView => ({
+const artifact = (key: string): ArtifactView => assetArtifactView({
   epoch: 0,
   key,
   kind: 'asset',
   name: key,
   node_id: 'nd_build',
   node_name: 'build',
+  content: null,
 });
 
 describe('artifactByKey', () => {

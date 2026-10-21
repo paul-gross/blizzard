@@ -22,6 +22,7 @@ const me = (tenants: readonly MeTenant[]): MeResponse => ({
   permissions: [],
   tenants: [...tenants],
   hub_admin: false,
+  assignable_roles: [],
 });
 
 /** Lets every pending 404 report and `/api/me` read run to its end — a few macrotask turns. */

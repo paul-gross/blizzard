@@ -3,18 +3,19 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 
 import { type ChunkDetail, ChunkGeneralTab } from 'fleet';
+import { chunkDetail } from 'fleet/testing';
 import { ChunkDetailPanel } from './chunk-detail-panel';
 
-const DETAIL: ChunkDetail = {
-  chunk_id: 'ch_delivery', graph_id: 'gr_1', status: 'delivering', current_node_id: null,
-  latest_epoch: null, work_refs: [], history: [], artifacts: [],
+const DETAIL: ChunkDetail = chunkDetail({
+  chunk_id: 'ch_delivery', graph_id: 'gr_1', graph_name: null, status: 'delivering', current_node_id: null,
+  current_node_name: null, latest_epoch: null, work_refs: [], history: [], artifacts: [],
   open_prs: [{ repo: 'widget', number: 42, url: 'https://forge.example/widget/pull/42' }],
   landed_repos: [
     { repo: 'service', commit_hash: 'abc123', url: 'https://forge.example/service/commit/abc123' },
     { repo: 'local', commit_hash: 'def456', url: null },
   ],
   awaiting_external_merge: true,
-};
+});
 
 describe('chunk delivery in both detail views', () => {
   beforeEach(async () => {

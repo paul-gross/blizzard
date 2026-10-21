@@ -3,6 +3,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import type { TranscriptSegmentContentView, TranscriptSegmentIndexEntry, TurnSegmentViewOutput } from '../api/hub';
 import type { KitAsyncStateValue } from '../kit/kit-async-state';
+import { transcriptSegmentIndexEntry } from '../testing/builders/transcript';
 import { ChunkTranscriptsTab } from './chunk-transcripts-tab';
 
 interface Props {
@@ -75,7 +76,7 @@ function turn(overrides: Partial<TurnSegmentViewOutput> = {}): TurnSegmentViewOu
 }
 
 function segment(overrides: Partial<TranscriptSegmentIndexEntry> = {}): TranscriptSegmentIndexEntry {
-  return {
+  return transcriptSegmentIndexEntry({
     segment_id: 'seg-1',
     node_id: 'build',
     epoch: 1,
@@ -86,10 +87,11 @@ function segment(overrides: Partial<TranscriptSegmentIndexEntry> = {}): Transcri
     truncated: false,
     byte_count: 100,
     normalizer_version: 'v1',
+    harness_id: null,
     harness_version: null,
     received_at: '2026-08-09T00:00:00+00:00',
     ...overrides,
-  };
+  });
 }
 
 describe('ChunkTranscriptsTab', () => {

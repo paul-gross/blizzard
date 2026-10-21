@@ -7,11 +7,12 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
+from blizzard.wire.base import WireModel
 from blizzard.wire.chunk import MigrationView, TransitionView
 from blizzard.wire.question import QuestionView
 
 
-class ChunkAskView(BaseModel):
+class ChunkAskView(WireModel):
     """One question asked on a chunk, open or answered. ``node`` is the asking node's name,
     falling back to its raw id when the payload names no node by that id."""
 

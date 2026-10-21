@@ -50,6 +50,7 @@ describe('inSelectedTenant', () => {
     permissions: [],
     tenants: [ACME, BETA],
     hub_admin: false,
+    assignable_roles: [],
   };
 
   it("reads the selected membership's role and permissions", () => {

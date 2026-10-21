@@ -2,6 +2,7 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import type { TranscriptSegmentIndexEntry } from '../api/hub';
+import { transcriptSegmentIndexEntry } from '../testing/builders/transcript';
 import type { TranscriptTurn } from './transcript-turn';
 import { TranscriptSegmentView } from './transcript-segment-view';
 
@@ -19,7 +20,7 @@ function turn(index: number, text = `turn ${index}`): TranscriptTurn {
 }
 
 function seam(overrides: Partial<TranscriptSegmentIndexEntry> = {}): TranscriptSegmentIndexEntry {
-  return {
+  return transcriptSegmentIndexEntry({
     segment_id: 'sg_prev',
     node_id: 'nd_build',
     epoch: 1,
@@ -30,10 +31,11 @@ function seam(overrides: Partial<TranscriptSegmentIndexEntry> = {}): TranscriptS
     truncated: false,
     byte_count: 100,
     normalizer_version: 'v1',
+    harness_id: null,
     harness_version: null,
     received_at: '2026-08-09T00:00:00+00:00',
     ...overrides,
-  };
+  });
 }
 
 interface RenderOptions {

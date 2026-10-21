@@ -18,6 +18,7 @@ const GRACE: MemberView = {
   role: 'guest',
   hub_admin: false,
   created_at: '2026-07-21T00:00:00Z',
+  identities: [],
   assignable_roles: ['guest', 'contributor', 'admin'],
   revocable: true,
 };
@@ -76,8 +77,8 @@ describe('canChangeRole / canRevoke', () => {
     const lastAdmin = { ...GRACE, role: 'admin' as const, assignable_roles: ['admin' as const], revocable: false };
     expect(canChangeRole(lastAdmin, 'usr_admin')).toBe(false);
     expect(canRevoke(lastAdmin, 'usr_admin')).toBe(false);
-    expect(canChangeRole({ ...GRACE, assignable_roles: undefined }, 'usr_admin')).toBe(false);
-    expect(canRevoke({ ...GRACE, revocable: undefined }, 'usr_admin')).toBe(false);
+    expect(canChangeRole({ ...GRACE, assignable_roles: [] }, 'usr_admin')).toBe(false);
+    expect(canRevoke({ ...GRACE, revocable: false }, 'usr_admin')).toBe(false);
   });
 });
 

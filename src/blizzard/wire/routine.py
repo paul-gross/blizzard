@@ -9,6 +9,7 @@ from __future__ import annotations
 from pydantic import BaseModel, ConfigDict
 
 from blizzard.foundation.run_mode import RunMode
+from blizzard.wire.base import WireModel
 
 
 class RoutineCreateRequest(BaseModel):
@@ -60,7 +61,7 @@ class RoutineLifecycleRequest(BaseModel):
     by: str = "operator"
 
 
-class RoutineView(BaseModel):
+class RoutineView(WireModel):
     """A routine as served by the create/list/read/edit/lifecycle routes."""
 
     routine_id: str
@@ -110,7 +111,7 @@ class RoutineBaselineView(BaseModel):
     repos: list[RoutineBaselineRepoView]
 
 
-class RoutineRunResponse(BaseModel):
+class RoutineRunResponse(WireModel):
     """The minted and ingested run item — the chunk id, the item's own
     pointer, the effective mode and whether it was downgraded from a requested delta,
     and the resolved baseline, when the mode settled on delta."""

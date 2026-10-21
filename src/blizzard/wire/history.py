@@ -11,10 +11,11 @@ from typing import Literal
 
 from pydantic import BaseModel
 
+from blizzard.wire.base import WireModel
 from blizzard.wire.chunk import BounceView, MigrationView, TransitionView
 
 
-class HistoryRowView(BaseModel):
+class HistoryRowView(WireModel):
     """One row of a chunk's own timeline — a transition, a cross-graph migration, or a
     delivery bounce, merged oldest-first by ``recorded_at``. ``from_node``/``to_node`` are
     node labels (a migration's is a ``graph/node`` hop), both null for a bounce; ``epoch``

@@ -12,6 +12,10 @@ function proposal(id: string, closed: boolean): GardenProposalView {
     body: 'b',
     created_at: '2026-01-01T00:00:00Z',
     findings: [],
+    created_by: null,
+    project_id: null,
+    project_name: null,
+    project_slug: null,
     closure: closed
       ? {
           closure: 'passed',

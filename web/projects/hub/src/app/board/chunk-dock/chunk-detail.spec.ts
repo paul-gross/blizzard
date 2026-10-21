@@ -5,10 +5,12 @@ import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-exper
 import { vi } from 'vitest';
 
 import { type ChunkDetail as ChunkDetailModel, formatWhen, hubClient } from 'fleet';
-import { settle, OPERATOR_ME_RESPONSE, type RequestClientStub, stubError, stubRequestClient } from 'fleet/testing';
+import { settle, OPERATOR_ME_RESPONSE, chunkDetail, decisionView, questionView, type RequestClientStub, stubError, stubRequestClient } from 'fleet/testing';
 import { ChunkDetail } from './chunk-detail';
 
-const ROUTED_DETAIL: ChunkDetailModel = {
+const ROUTED_DETAIL: ChunkDetailModel = chunkDetail({
+  graph_name: null,
+  current_node_name: null,
   chunk_id: 'ch_routed',
   graph_id: 'gr_1',
   status: 'running',
@@ -20,10 +22,12 @@ const ROUTED_DETAIL: ChunkDetailModel = {
   work_refs: [],
   history: [],
   artifacts: [],
-  route: { runner_id: 'rn_01', workspace_id: 'ws_01', environment_ids: [] },
-};
+  route: { runner_id: 'rn_01', runner_name: null, workspace_id: 'ws_01', environment_ids: [] },
+});
 
-const GATE_DETAIL: ChunkDetailModel = {
+const GATE_DETAIL: ChunkDetailModel = chunkDetail({
+  graph_name: null,
+  current_node_name: null,
   chunk_id: 'ch_gate',
   graph_id: 'gr_1',
   status: 'waiting_on_human',
@@ -35,7 +39,7 @@ const GATE_DETAIL: ChunkDetailModel = {
   work_refs: [],
   history: [],
   artifacts: [],
-  decision: {
+  decision: decisionView({
     decision_id: 'de_42',
     chunk_id: 'ch_gate',
     node_id: 'nd_gate',
@@ -43,12 +47,13 @@ const GATE_DETAIL: ChunkDetailModel = {
     epoch: 1,
     submitted_at: '2026-07-13T00:00:01Z',
     choices: [
-      { name: 'approve', description: 'Ship it.' },
-      { name: 'reject', description: 'Send it back.' },
+      { name: 'approve', description: 'Ship it.', requires_checks: false, would_override_red_checks: false },
+      { name: 'reject', description: 'Send it back.', requires_checks: false, would_override_red_checks: false },
     ],
+    check_results: [],
     transitioned: false,
-  },
-};
+  }),
+});
 
 // A chunk carrying an open pause fact while its derived status reads waiting_on_human —
 // the overlap PAUSED's position below the human-gated states creates.
@@ -56,11 +61,13 @@ const PAUSED_ASKING_DETAIL: ChunkDetailModel = {
   ...GATE_DETAIL,
   chunk_id: 'ch_paused',
   pause: { by: 'operator', set_at: '2026-07-16T00:00:00Z' },
-  decision: undefined,
+  decision: null,
 };
 
 // A chunk parked on an open question — the answer-race surface.
-const ASK_DETAIL: ChunkDetailModel = {
+const ASK_DETAIL: ChunkDetailModel = chunkDetail({
+  graph_name: null,
+  current_node_name: null,
   chunk_id: 'ch_ask',
   graph_id: 'gr_1',
   status: 'waiting_on_human',
@@ -73,7 +80,7 @@ const ASK_DETAIL: ChunkDetailModel = {
   history: [],
   artifacts: [],
   questions: [
-    {
+    questionView({
       question_id: 'qn_77',
       chunk_id: 'ch_ask',
       question: 'Which API style?',
@@ -82,9 +89,9 @@ const ASK_DETAIL: ChunkDetailModel = {
       runner_id: 'rn_01',
       asked_at: '2026-07-13T00:00:01Z',
       answered: false,
-    },
+    }),
   ],
-};
+});
 
 // The same chunk after somebody else's answer won the CAS — what the re-read returns.
 const ASK_ANSWERED_DETAIL: ChunkDetailModel = {
@@ -97,7 +104,9 @@ const ASK_ANSWERED_DETAIL: ChunkDetailModel = {
 };
 
 // A not_ready chunk — the one window the graph edit is open.
-const NOT_READY_DETAIL: ChunkDetailModel = {
+const NOT_READY_DETAIL: ChunkDetailModel = chunkDetail({
+  graph_name: null,
+  current_node_name: null,
   chunk_id: 'ch_ready',
   graph_id: 'gr_default',
   status: 'not_ready',
@@ -111,7 +120,7 @@ const NOT_READY_DETAIL: ChunkDetailModel = {
   work_refs: [],
   history: [],
   artifacts: [],
-};
+});
 
 // An unacquired chunk Delete reaches, distinct from NOT_READY_DETAIL so the two verbs' calls differ by id.
 const DELETABLE_DETAIL: ChunkDetailModel = { ...NOT_READY_DETAIL, chunk_id: 'ch_deletable' };

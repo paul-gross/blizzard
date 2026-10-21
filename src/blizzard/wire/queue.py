@@ -9,11 +9,12 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
+from blizzard.wire.base import WireModel
 from blizzard.wire.chunk import BlockedView, WorkRefModel
 from blizzard.wire.runner import RunnerCapability
 
 
-class QueuePeekEntry(BaseModel):
+class QueuePeekEntry(WireModel):
     """One ready chunk, in queue order."""
 
     chunk_id: str
@@ -28,7 +29,7 @@ class QueuePeekEntry(BaseModel):
     project_name: str | None = None
 
 
-class QueuePeekResponse(BaseModel):
+class QueuePeekResponse(WireModel):
     """The ready queue's whole order, unpaginated."""
 
     entries: list[QueuePeekEntry] = []
@@ -47,7 +48,7 @@ class QueuePeekRequest(BaseModel):
     project: str | None = None
 
 
-class QueuePageView(BaseModel):
+class QueuePageView(WireModel):
     """``GET /api/queue``'s own bounded page: ``next_cursor`` is
     ``None`` on the last page; ``position`` is each entry's whole-order index, not page-local."""
 
@@ -74,7 +75,7 @@ class QueuePositionRequest(BaseModel):
     after_chunk_id: str | None
 
 
-class BacklogPeekEntry(BaseModel):
+class BacklogPeekEntry(WireModel):
     """One ``not_ready`` chunk, in backlog order."""
 
     chunk_id: str
@@ -89,13 +90,13 @@ class BacklogPeekEntry(BaseModel):
     project_name: str | None = None
 
 
-class BacklogPeekResponse(BaseModel):
+class BacklogPeekResponse(WireModel):
     """The ``not_ready`` list's whole order, unpaginated."""
 
     entries: list[BacklogPeekEntry] = []
 
 
-class BacklogPageView(BaseModel):
+class BacklogPageView(WireModel):
     """``GET /api/backlog``'s own bounded page: ``next_cursor``
     is ``None`` on the last page; ``position`` is each entry's whole-order index, not page-local."""
 
@@ -131,7 +132,7 @@ class ChunkGroupRequest(BaseModel):
     merge_chunk_ids: list[str]
 
 
-class ChunkGroupResponse(BaseModel):
+class ChunkGroupResponse(WireModel):
     """The survivor chunk after a group — its id and the union of work refs it carries."""
 
     chunk_id: str

@@ -1,28 +1,58 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 
-import type { GraphView } from 'fleet';
+import type { GraphView, GraphNodeView } from 'fleet';
 import { GraphDiagramView } from './graph-diagram-view';
 
+const GRAPH_DEFAULTS: Pick<GraphView, 'artifacts' | 'edges' | 'follow_latest' | 'retired' | 'sessions' | 'warnings'> = {
+  artifacts: [],
+  edges: [],
+  follow_latest: null,
+  retired: false,
+  sessions: [],
+  warnings: [],
+};
+
+const NODE_DEFAULTS: Pick<GraphNodeView, 'checks' | 'checks_cwd' | 'checks_timeout' | 'choices' | 'judgement_prompt' | 'produces' | 'prompt' | 'retries_exhausted' | 'retries_max' | 'session_source'> = {
+  checks: [],
+  checks_cwd: null,
+  checks_timeout: null,
+  choices: [],
+  judgement_prompt: null,
+  produces: [],
+  prompt: null,
+  retries_exhausted: null,
+  retries_max: null,
+  session_source: null,
+};
+
+const EDGE_DEFAULTS: Pick<GraphView['edges'][number], 'prompt_addendum' | 'target_graph' | 'target_kind'> = {
+  prompt_addendum: null,
+  target_graph: null,
+  target_kind: 'node',
+};
+
 const GRAPH_A: GraphView = {
+  ...GRAPH_DEFAULTS,
   graph_id: 'gr_a',
   name: 'a',
   enabled: true,
   entry_node_id: 'n_build',
   nodes: [
-    { node_id: 'n_build', name: 'build', executor: 'runner', session: 'fresh', judged_by: 'worker', choices: [{ choice_id: 'c_pass', name: 'pass', description: '' }] },
-    { node_id: 'n_review', name: 'review', executor: 'runner', session: 'fresh', judged_by: 'worker', choices: [] },
+    { ...NODE_DEFAULTS, node_id: 'n_build', name: 'build', executor: 'runner', session: 'fresh', judged_by: 'worker', choices: [{ requires_checks: false, choice_id: 'c_pass', name: 'pass', description: '' }] },
+    { ...NODE_DEFAULTS, node_id: 'n_review', name: 'review', executor: 'runner', session: 'fresh', judged_by: 'worker', choices: [] },
   ],
-  edges: [{ from_node_id: 'n_build', choice_id: 'c_pass', to_node_name: 'review' }],
+  edges: [{ ...EDGE_DEFAULTS, from_node_id: 'n_build', choice_id: 'c_pass', to_node_name: 'review' }],
   warnings: [],
 };
 
 const GRAPH_B: GraphView = {
+  ...GRAPH_DEFAULTS,
   graph_id: 'gr_b',
   name: 'b',
   enabled: true,
   entry_node_id: 'n_only',
-  nodes: [{ node_id: 'n_only', name: 'only', executor: 'runner', session: 'fresh', judged_by: 'worker', choices: [] }],
+  nodes: [{ ...NODE_DEFAULTS, node_id: 'n_only', name: 'only', executor: 'runner', session: 'fresh', judged_by: 'worker', choices: [] }],
   edges: [],
   warnings: [],
 };

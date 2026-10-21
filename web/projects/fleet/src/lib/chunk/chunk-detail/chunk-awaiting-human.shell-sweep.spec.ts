@@ -3,6 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { page } from 'vitest/browser';
 
 import type { ChunkDetail } from '../../api/hub';
+import { chunkDetail, decisionView } from 'fleet/testing';
 import { ChunkAwaitingHuman } from './chunk-awaiting-human';
 
 /**
@@ -13,7 +14,7 @@ import { ChunkAwaitingHuman } from './chunk-awaiting-human';
  * via `npm run shell-sweep`.
  */
 function detail(imposedBy: string | null, resolution: Partial<NonNullable<ChunkDetail['decision']>> = {}): ChunkDetail {
-  return {
+  return chunkDetail({
     chunk_id: 'ch_01gate0000000000000000000000',
     graph_id: 'gr_1',
     status: 'waiting_on_human',
@@ -22,7 +23,7 @@ function detail(imposedBy: string | null, resolution: Partial<NonNullable<ChunkD
     work_refs: [],
     history: [],
     artifacts: [],
-    decision: {
+    decision: decisionView({
       decision_id: 'de_01',
       chunk_id: 'ch_01gate0000000000000000000000',
       node_id: 'nd_gate',
@@ -30,14 +31,17 @@ function detail(imposedBy: string | null, resolution: Partial<NonNullable<ChunkD
       epoch: 1,
       submitted_at: '2026-07-13T00:00:01Z',
       choices: [
-        { name: 'approve', description: 'Ship it.' },
-        { name: 'reject', description: 'Send it back.' },
+        { name: 'approve', description: 'Ship it.', requires_checks: false, would_override_red_checks: false },
+        { name: 'reject', description: 'Send it back.', requires_checks: false, would_override_red_checks: false },
       ],
+      check_results: [],
       transitioned: false,
       imposed_by_runner_id: imposedBy,
       ...resolution,
-    },
-  };
+    }),
+    graph_name: null,
+    current_node_name: null,
+  });
 }
 
 async function mount(imposedBy: string | null, resolution: Partial<NonNullable<ChunkDetail['decision']>> = {}) {

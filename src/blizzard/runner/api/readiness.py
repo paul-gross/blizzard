@@ -8,15 +8,15 @@ readiness service wired, the probe reports ``ready=false`` with a detail rather 
 from __future__ import annotations
 
 from fastapi import APIRouter, Request
-from pydantic import BaseModel
 
 from blizzard.runner.api.wiring import RunnerWiring
+from blizzard.wire.base import WireModel
 from blizzard.wire.runner_host import HostRunnerStateView
 
 router = APIRouter(prefix="/api", tags=["meta"])
 
 
-class ReadinessResponse(BaseModel):
+class ReadinessResponse(WireModel):
     """The wire shape of a readiness reading."""
 
     ready: bool

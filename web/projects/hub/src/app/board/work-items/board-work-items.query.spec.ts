@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 
 import { FLEET_CLOCK, hubChunkWorkItemsKey, hubClient, type WorkItemsView } from 'fleet';
-import { type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
+import { type RequestClientStub, settle, stubError, stubRequestClient, workItemEntry } from 'fleet/testing';
 import { WORK_ITEMS_BATCH_SIZE } from './board-work-items.model';
 import { injectBoardWorkItemsQuery, WORK_ITEMS_READ_CONCURRENCY } from './board-work-items.query';
 
@@ -24,7 +24,9 @@ const ids = (n: number) => Array.from({ length: n }, (_, i) => `ch_${String(i).p
 const chunkOf = (path: string) => path.split('/')[3];
 
 const titled = (chunkId: string): WorkItemsView => ({
-  items: [{ source: 'hub', ref: chunkId, title: chunkId, fetched_at: 't', comments: [] }],
+  items: [
+    workItemEntry({ source: 'hub', ref: chunkId, title: chunkId, fetched_at: 't', label: null, body: null, web_url: null }),
+  ],
 });
 
 describe('injectBoardWorkItemsQuery', () => {

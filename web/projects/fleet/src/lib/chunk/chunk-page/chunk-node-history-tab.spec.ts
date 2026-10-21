@@ -2,10 +2,12 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import type { ArtifactView, ChunkDetail } from '../../api/hub';
+import { assetArtifactView } from '../../testing/builders/artifact';
+import { chunkDetail, transitionView } from '../../testing/builders/chunk';
 
 import { ChunkNodeHistoryTab } from './chunk-node-history-tab';
 
-const DETAIL: ChunkDetail = {
+const DETAIL: ChunkDetail = chunkDetail({
   chunk_id: 'ch_01hover0000000000000000000',
   graph_id: 'gr_1',
   graph_name: 'default',
@@ -15,7 +17,7 @@ const DETAIL: ChunkDetail = {
   status: 'running',
   work_refs: [],
   history: [
-    {
+    transitionView({
       choice_name: 'pass',
       epoch: 1,
       from_node_id: 'nd_build',
@@ -23,12 +25,14 @@ const DETAIL: ChunkDetail = {
       to_node_id: 'nd_review',
       to_node_name: 'review',
       recorded_at: '2026-08-09T00:00:00.000Z',
-    },
+      graph_id: null,
+      graph_name: null,
+    }),
   ],
   artifacts: [],
-};
+});
 
-const STEP_ARTIFACT: ArtifactView = {
+const STEP_ARTIFACT: ArtifactView = assetArtifactView({
   key: 'build.plan.1',
   node_id: 'nd_build',
   node_name: 'build',
@@ -37,7 +41,7 @@ const STEP_ARTIFACT: ArtifactView = {
   kind: 'asset',
   content: 'the plan',
   recorded_at: '2026-08-09T00:00:00.000Z',
-};
+});
 
 interface RenderOptions {
   selectedKey?: string | null;

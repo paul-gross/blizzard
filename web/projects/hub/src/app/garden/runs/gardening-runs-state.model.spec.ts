@@ -15,6 +15,9 @@ const DELIVERED_RUN: RunRowView = {
     { finding_set_id: 'fins_1', revisions: { blizzard: 'abc123' }, measurement: '3 findings', added_count: 1, observed_count: 11, gone_count: 0 },
     { finding_set_id: 'fins_2', revisions: { blizzard: 'def456' }, measurement: null, added_count: 0, observed_count: 0, gone_count: 2 },
   ],
+  project_id: null,
+  project_name: null,
+  project_slug: null,
 };
 
 const ESCALATED_RUN: RunRowView = {
@@ -26,6 +29,9 @@ const ESCALATED_RUN: RunRowView = {
   outcome: 'needs_human',
   escalation: { node_name: 'survey', takeover_command: 'blizzard hub chunk takeover ch_2', wrapped_takeover_command: '' },
   delivered: [],
+  project_id: null,
+  project_name: null,
+  project_slug: null,
 };
 
 describe('summedCounts', () => {

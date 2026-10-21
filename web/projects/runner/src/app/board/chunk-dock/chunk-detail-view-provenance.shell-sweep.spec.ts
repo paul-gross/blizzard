@@ -35,6 +35,8 @@ const LEASE: runnerApi.LeaseView = {
   closed_at: null,
   closure_reason: null,
   stale_after_seconds: 3600,
+  harness_id: null,
+  project_id: null,
 };
 
 const ESCALATION: runnerApi.EscalationView = {
@@ -46,6 +48,12 @@ const ESCALATION: runnerApi.EscalationView = {
   resume_command: 'cd /ws/beta && claude --resume sess-new',
   harness_id: 'claude_code',
   harness_version: '1.2.3',
+  cause: null,
+  effort: null,
+  model: null,
+  project_id: null,
+  session_name: null,
+  wrapped_takeover_command: null,
 };
 
 describe('app-panel escalation harness-provenance layout shell sweep (web:shell-sweep)', () => {

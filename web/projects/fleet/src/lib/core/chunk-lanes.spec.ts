@@ -6,9 +6,9 @@ describe('chunkLane', () => {
   });
 
   it('falls back to the status’s lane when the summary omits terminal', () => {
-    expect(chunkLane({ status: 'running' })).toBe('running');
-    expect(chunkLane({ status: 'stopped' })).toBe('done');
-    expect(chunkLane({ status: 'done' })).toBe('done');
+    expect(chunkLane({ status: 'running', terminal: false })).toBe('running');
+    expect(chunkLane({ status: 'stopped', terminal: true })).toBe('done');
+    expect(chunkLane({ status: 'done', terminal: true })).toBe('done');
   });
 
   it('keeps a live status out of DONE when the hub says it is not terminal', () => {

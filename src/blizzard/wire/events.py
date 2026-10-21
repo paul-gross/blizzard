@@ -9,12 +9,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel
-
 from blizzard.foundation.event_log import EventLogSeverity
+from blizzard.wire.base import WireModel
 
 
-class EventView(BaseModel):
+class EventView(WireModel):
     """One operational event on the wire — an ``event_log`` row or a projected open
     escalation. ``chunk_id``/``lease_id``/``node_name`` are absent for a runner-scoped
     event; ``runner_id`` and ``runner_name`` are absent for a projected escalation (``null``,
@@ -33,7 +32,7 @@ class EventView(BaseModel):
     detail: dict[str, Any] | None = None
 
 
-class EventsResponse(BaseModel):
+class EventsResponse(WireModel):
     """The operational event feed, newest first (bounded)."""
 
     events: list[EventView] = []

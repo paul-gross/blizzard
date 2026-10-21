@@ -8,12 +8,11 @@ are ISO-8601 strings that **always carry an explicit UTC offset**
 
 from __future__ import annotations
 
-from pydantic import BaseModel
-
 from blizzard.foundation.leases import LeaseDisplayStatus, LeaseState
+from blizzard.wire.base import WireModel
 
 
-class LeaseView(BaseModel):
+class LeaseView(WireModel):
     """One lease — active or recently-closed — with its joined binding facts and
     derived state."""
 
@@ -43,7 +42,7 @@ class LeaseView(BaseModel):
     stale_after_seconds: int
 
 
-class LeaseListResponse(BaseModel):
+class LeaseListResponse(WireModel):
     """Active leases, then recently-closed ones."""
 
     items: list[LeaseView] = []

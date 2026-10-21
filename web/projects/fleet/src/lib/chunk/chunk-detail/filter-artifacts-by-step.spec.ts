@@ -1,16 +1,18 @@
 import type { ArtifactView } from '../../api/hub';
+import { assetArtifactView } from 'fleet/testing';
 import { filterArtifactsByStep } from './filter-artifacts-by-step';
 
 function artifact(overrides: Partial<ArtifactView>): ArtifactView {
-  return {
+  return assetArtifactView({
     key: 'k',
-    kind: 'asset',
     name: 'n',
     node_id: 'nd_build',
     node_name: 'build',
     epoch: 1,
+    recorded_at: null,
+    content: null,
     ...overrides,
-  };
+  });
 }
 
 describe('filterArtifactsByStep', () => {

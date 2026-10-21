@@ -4,20 +4,35 @@ import { TestBed } from '@angular/core/testing';
 import type { GraphNodeView } from 'fleet';
 import { GraphNodeTable } from './graph-node-table';
 
+const NODE_DEFAULTS: Pick<GraphNodeView, 'checks' | 'checks_cwd' | 'checks_timeout' | 'choices' | 'judgement_prompt' | 'produces' | 'prompt' | 'retries_exhausted' | 'retries_max' | 'session_source'> = {
+  checks: [],
+  checks_cwd: null,
+  checks_timeout: null,
+  choices: [],
+  judgement_prompt: null,
+  produces: [],
+  prompt: null,
+  retries_exhausted: null,
+  retries_max: null,
+  session_source: null,
+};
+
 const NODES: readonly GraphNodeView[] = [
   {
+    ...NODE_DEFAULTS,
     node_id: 'n_build',
     name: 'build',
     executor: 'runner',
     session: 'fresh',
     judged_by: 'worker',
     checks: ['lint', 'test'],
-    produces: [{ name: 'branch' }],
+    produces: [{ kind: 'asset', name: 'branch' }],
     retries_max: 3,
     retries_exhausted: 'escalate',
     choices: [],
   },
   {
+    ...NODE_DEFAULTS,
     node_id: 'n_review',
     name: 'review',
     executor: 'runner',

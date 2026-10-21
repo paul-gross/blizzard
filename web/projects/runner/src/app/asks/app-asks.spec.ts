@@ -35,10 +35,18 @@ function dashboardBody(asks: readonly runnerApi.AskView[]): runnerApi.DashboardV
     runner: {
       runner_id: 'runner-local',
       workspace_id: 'workspace-local',
-      pause: { local: false, hub: false, effective: false },
+      pause: { local: false, hub: false, effective: false, local_reason: null },
       capacities: { used: 0, bindings: [{ project: 'p', project_id: 'p', workspace_id: 'ws', agents: 4, used: 0, free: 4 }] },
-      hub: { endpoint: 'http://127.0.0.1:8421', reachable: true, last_contact_at: null, buffer_depth: 0 },
+      hub: { endpoint: 'http://127.0.0.1:8421', reachable: true, last_contact_at: null, buffer_depth: 0, hub_version: null, window: null },
       last_tick_at: null,
+      gates: [],
+      identity: null,
+      routing_conflicts: [],
+      runner_name: null,
+      served_projects: null,
+      tenant_id: null,
+      tenant_name: null,
+      unmatched_bindings: [],
     },
     asks: { items: [...asks] },
     escalations: { items: [] },
@@ -85,6 +93,9 @@ const ASK: runnerApi.AskView = {
   session_id: null,
   question: 'Proceed with the migration?',
   asked_at: '2026-07-16T11:59:30.000Z',
+  harness_id: null,
+  options: [],
+  project_id: null,
 };
 
 describe('LocalAsks', () => {

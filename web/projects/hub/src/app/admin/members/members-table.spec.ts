@@ -39,6 +39,7 @@ const MEMBERS: readonly MemberView[] = [
     role: 'admin',
     hub_admin: false,
     created_at: '2026-07-21T00:00:00Z',
+    identities: [],
     assignable_roles: ['admin'],
     revocable: false,
   },

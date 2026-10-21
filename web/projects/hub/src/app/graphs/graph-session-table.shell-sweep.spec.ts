@@ -5,6 +5,14 @@ import { page } from 'vitest/browser';
 import type { GraphSessionView } from 'fleet';
 import { GraphSessionTable } from './graph-session-table';
 
+const SESSION_DEFAULTS: Pick<GraphSessionView, 'compaction_window' | 'effort' | 'harnesses' | 'model' | 'rotate'> = {
+  compaction_window: null,
+  effort: null,
+  harnesses: [],
+  model: [],
+  rotate: null,
+};
+
 /**
  * The session declaration table's six-column layout (the Harnesses column sits between
  * Model and Effort) — a real layout claim jsdom cannot make. jsdom
@@ -23,6 +31,7 @@ import { GraphSessionTable } from './graph-session-table';
  */
 const SESSIONS: readonly GraphSessionView[] = [
   {
+    ...SESSION_DEFAULTS,
     name: 'planning',
     model: ['blizzard:advanced'],
     harnesses: ['claude_code'],
@@ -34,9 +43,10 @@ const SESSIONS: readonly GraphSessionView[] = [
     harnesses: ['claude_code', 'opencode'],
     effort: 'medium',
     compaction_window: '100000',
-    rotate: { max_context_tokens: 120000, max_invocations: 30 },
+    rotate: { max_transcript_bytes: null, max_context_tokens: 120000, max_invocations: 30 },
   },
   {
+    ...SESSION_DEFAULTS,
     name: 'gate',
     model: [],
   },
