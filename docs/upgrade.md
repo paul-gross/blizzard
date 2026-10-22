@@ -19,6 +19,16 @@ gh release view v0.2.0 --repo paul-gross/blizzard
 
 [`docs/versioning.md`](./versioning.md) owns what counts as breaking and the floor a runner may lag its hub down to.
 
+## Upgrading to the next release
+
+### Usage-limit brake carry-over
+
+A usage limit no longer engages a runner's brake; it holds the subscription's usage-limit floor, which opens on its own
+([`docs/deployment/spend.md`](./deployment/spend.md#usage-limits)). Upgrading does not clear a brake a usage limit
+engaged before it: such a runner stays braked, its reason still reading `usage limit: …`, until you run
+`blizzard runner start --runner <id>` for it. From then on the floor holds it while its subscription is exhausted, and
+its parked leases resume when the floor opens.
+
 ## Upgrading to 0.2.0
 
 `0.2.0` is reached from `v0.1.0-rc.1` or any `edge` build, stepping through no intermediate release, since none exists.

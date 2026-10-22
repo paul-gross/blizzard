@@ -68,29 +68,32 @@ runner parks the chunk `needs_human` at the next step boundary with an escalatio
 detail names the cap, the spend, and whether that spend figure is partial, and which carries the usual takeover command.
 A capped chunk is not failed — no retry is consumed; resuming is human: raise or clear the cap, then requeue.
 
-## Usage-limit pause
+## Usage limits
 
 A harness can hit its own subscription's usage limit mid-turn, independently of either cap above — Claude Code and
 OpenCode each report this in a recognizable shape (a synthetic rate-limit transcript record, an OpenCode 429 `error`
 event), never inferred from cost or token figures. The runner classifies an exited worker generation or judge
-elicitation against that shape and, on a match, engages its own local pause brake — the same brake the ceiling and
-`runner pause` set — with a reason naming the subscription the runner spends beside the harness, as
-`usage limit: <slug> via <harness>`, and the reset time where the harness reported one; a runner that spends no
-subscription names the harness alone. Where the harness reported no reset, the reason falls back to the reset of this
-runner's own subscription's latest sampled window already past 100% utilization
-([External subscription usage](#external-subscription-usage) below) — never another subscription's sample — or carries
-no reset time at all.
+elicitation against that shape and, on a match, marks the limit on the subscription it spends, with the harness, its
+detail, and the reset the harness named; a runner that spends no subscription marks its own floor instead. A usage limit
+engages no brake.
 
-The limit belongs to the subscription, so the brake reaches every runner on the host that spends it: the reporting
-runner and each other runner naming the same `[[subscription]]` are braked together, in one write, each with the same
-reason and reset. A fault partway leaves none of them braked and the limited lease unparked. A runner on another
-subscription, or on none, is untouched, and an already-engaged brake keeps its standing reason. Lifting stays per
-runner: `blizzard runner start --runner <id>` clears that runner's brake alone and leaves its neighbours braked.
+The limit belongs to the subscription, so the mark holds back every runner on the host spending it — none of them claims
+or starts work while the floor stands — and no other: a runner on another subscription, or on none, keeps working. Each
+hold has an expected reset: the one the harness named, or, where it named none, the soonest pending reset of an
+exhausted window in the first sample taken after the mark, and thirty minutes after the mark until such a sample exists.
+A sampled window at 100% holds the floor the same way, so a subscription another host ran dry holds this host's runners
+too.
+
+The floor opens on evidence that the held window has turned over, never on a reading merely under 100%: a fresh sample
+showing it in a later period and under 100% opens it, before the expected reset as well as after, and a usage limit asks
+the host for that sample early rather than waiting out the cadence
+([External subscription usage](#external-subscription-usage) below). Where no sample can confirm — a provider binding no
+sampler, or a runner naming no subscription — the floor opens at the expected reset. Where a sample should confirm and
+none comes, the floor opens one hour after the expected reset; a window sampled at 100% in its new period still holds.
+`blizzard runner clear-floor` opens it by hand ([control-verbs.md](./control-verbs.md)).
 
 The limited lease is not failed and consumes no retry: it is parked in place, exactly like a per-chunk pause leaves a
-chunk, and resumes automatically once the brake lifts. As with the ceiling, only an explicit operator act clears it —
-`blizzard runner start`, or the runner panel's Resume — never an elapsed reset time the runner read out of the harness's
-own report.
+chunk, and resumes on its own on the first tick its floor opens.
 
 ## Partial totals
 
@@ -173,8 +176,8 @@ blizzard spends or caps; the host samples it. `blizzard runner host` samples eve
 many of its runners spend that subscription — and a subscription no runner names is still sampled. Sampling runs on the
 host's own thread, apart from every runner's tick, so a slow provider endpoint never holds a runner up;
 `blizzard runner
-tick` never samples. The sampled utilization is advisory only — it never throttles claiming,
-scheduling, or spawning, and no cost cap consults it.
+tick` never samples. The usage-limit floor ([Usage limits](#usage-limits) above) judges by the sampled
+utilization; no cost cap consults it, and the hub decides nothing by it.
 
 Every sample crosses the wire carrying the `slug` of the subscription it belongs to, and the hub rejects one that does
 not. A runner predating per-subscription reporting therefore needs upgrading before the hub that drops the singular

@@ -26,8 +26,7 @@ __all__ = [
     "refuse_runner_floor_clear",
 ]
 
-#: How long past its expected reset a hold waits for a sample that is evidence either way before it clears on the
-#: clock — a sampler that cannot see, or a provider slow to roll its counter, never holds the plan longer.
+#: How long past its expected reset a hold waits for a sample that is evidence either way before it clears on the clock.
 FLOOR_UNCONFIRMED_GRACE = timedelta(hours=1)
 
 #: A mark naming no reset, with no sample since it placing one, expects its reset this long after it was marked.
@@ -95,10 +94,8 @@ def floor_answer(
 ) -> FloorAnswer:
     """The floor over the newest ``mark``, the newest ``sample`` and the newest ``clear`` at ``now``.
 
-    ``sampled`` is whether a sampler reads this floor at all — ``False`` for a provider binding none and for a runner
-    naming no subscription, whose holds then clear at their expected reset alone; ``sample`` is ignored there.
-    ``clear_sample`` is the newest sample taken at or before ``clear`` — the windows the clear set aside; it may be
-    left out when ``sample`` itself was taken by the clear."""
+    ``sampled`` is ``False`` where no sampler reads this floor, whose holds then clear at their expected reset alone.
+    ``clear_sample`` is the newest sample at or before ``clear`` — the windows the clear set aside."""
     newest = sample if sampled else None
     if clear_sample is None and newest is not None and clear is not None and newest.sampled_at <= clear.cleared_at:
         clear_sample = newest

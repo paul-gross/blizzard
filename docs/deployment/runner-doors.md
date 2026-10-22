@@ -26,11 +26,11 @@ document, with `runner_id` a path parameter on every runner operation.
 ## The two listeners
 
 The unix socket `host.sock`, mode 0600 in the host directory, is the CLI local verbs' door (`runner pause`, `start`,
-`takeover`), addressed via `--dir` or `$BZ_RUNNER_DIR` — no port, no config file read. The TCP port (8431 by default) is
-the door for the host's web panel (same-origin on the page's own host) and for worker hooks such as heartbeat and ask,
-which address their runner via the spawn-injected `BLIZZARD_RUNNER_URL`, `http://<host>:<port>/runners/<runner_id>`. The
-TCP listener exists because a browser cannot open a unix socket; the socket exists so operator controls depend on no
-port, filesystem permissions being their access control.
+`clear-floor`, `takeover`), addressed via `--dir` or `$BZ_RUNNER_DIR` — no port, no config file read. The TCP port (8431
+by default) is the door for the host's web panel (same-origin on the page's own host) and for worker hooks such as
+heartbeat and ask, which address their runner via the spawn-injected `BLIZZARD_RUNNER_URL`,
+`http://<host>:<port>/runners/<runner_id>`. The TCP listener exists because a browser cannot open a unix socket; the
+socket exists so operator controls depend on no port, filesystem permissions being their access control.
 
 `--runner-url` (or `$BZ_RUNNER_URL`) points a local verb at the TCP door instead, for a shell that cannot see the
 runtime dir or open the socket; both flags explicitly is an error, an explicit flag beats either variable, and both from
@@ -67,7 +67,8 @@ the host's runners, which `--runner` names by name or by id. The verb resolves i
 `GET /api/host/runners`, over either door, and addresses that runner under its prefix. Omitted on a host of one runner,
 it is that runner. On a host of several runners `--runner` is required: omitted, or naming none the host holds, the verb
 fails naming the host's runners. A runner the host holds halted by its own configuration fails naming why; one its hub
-halts is still served, so `status` reads it and names the halt.
+halts is still served, so `status` reads it and names the halt. `clear-floor` takes `--runner` the same way, but only in
+place of `--subscription`: it names exactly one of the two, so omitting both fails.
 
 The offline verbs — `tick`, `transcript backfill` and `reship`, `harness status`, and the `prompt` verbs — read the host
 file rather than the running host, and take `--runner` the same way: optional on a host of one runner, required on a

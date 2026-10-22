@@ -186,12 +186,13 @@ other spawn site (restart-resume, answer-resume, requeue respawn) but never a wo
 
 A usage limit is no brake: it holds the usage-limit floor of the subscription the runner spends — every runner of the
 host spending it — or, for a runner naming none, that runner's own floor, until a sample shows the window open or its
-reset passes. `blizzard runner clear-floor` opens it sooner, beside `pause` and `start` and taking `--by` as they do, and
-names exactly one target: `--subscription <slug>` clears that subscription's floor through
+reset passes. `blizzard runner clear-floor` opens it sooner, beside `pause` and `start` and taking `--by` as they do,
+and names exactly one target: `--subscription <slug>` clears that subscription's floor through
 `POST /api/host/subscriptions/{slug}/floor/clear` (`404` for a slug the host does not declare), and `--runner <id>`
 clears the floor of a runner naming no subscription through its `POST /api/runner/floor/clear`. A runner that spends a
-subscription refuses `--runner` with a `409` naming the slug to clear instead. A clear sets aside only the holds standing
-when it was made: a limit met again afterwards holds the floor again. It touches no brake — `start` still owns those.
+subscription refuses `--runner` with a `409` naming the slug to clear instead. A clear sets aside only the holds
+standing when it was made: a limit met again afterwards holds the floor again. It touches no brake — `start` still owns
+those.
 
 ### Retire and reinstate
 

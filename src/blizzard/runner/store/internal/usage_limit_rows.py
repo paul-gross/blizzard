@@ -11,8 +11,7 @@ from sqlalchemy import Row, Table, and_
 from blizzard.foundation.store.utc import as_utc
 from blizzard.runner.throttle.usage_limits import FloorClear, UsageLimitMark
 
-# See IWriteSubscriptionUsageLimitRepository.prune_usage_limits's own docstring for the retention contract: a week of
-# marks outlives any window a floor holds on, and a day more keeps the newest week whole.
+# Retention contract: IWriteSubscriptionUsageLimitRepository.prune_usage_limits.
 USAGE_LIMIT_RETENTION_WINDOW = timedelta(days=8)
 
 

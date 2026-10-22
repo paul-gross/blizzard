@@ -1073,9 +1073,7 @@ host_ingests = Table(
 )
 
 # --- Usage-limit marks and floor clears (the floor's facts) --------------------
-# Append-only; a floor is derived from its key's newest mark and newest clear, never stored. A subscription's are host
-# rows, shared by every runner spending it; a runner spending none keeps its own. A mark is unique on the invocation
-# that reported it, so a replayed mark is a no-op. Retention contract: see IWriteSubscriptionUsageLimitRepository.
+# Append-only; a floor derives from its key's newest mark and newest clear. Host rows per slug, runner rows per runner.
 
 subscription_usage_limits = Table(
     "subscription_usage_limits",

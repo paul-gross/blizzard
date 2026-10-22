@@ -1,8 +1,5 @@
-"""usage-limit floor — four new tables holding the floor's facts: ``subscription_usage_limits`` and
-``subscription_floor_clears`` (host-scoped, keyed on the subscription's slug) and their runner-scoped twins
-``runner_usage_limits`` and ``runner_floor_clears`` (keyed on ``runner_id``, for a runner spending no subscription).
-A mark is unique on the invocation that reported it. Created empty; no other table changes, and a rerun skips each
-table already present. ``downgrade()`` drops them: their rows only hold a floor shut until it opens again.
+"""usage-limit floor — four new empty tables: the host-scoped ``subscription_usage_limits`` and
+``subscription_floor_clears`` and their runner-scoped twins; a rerun skips a table already present.
 
 Revision ID: 20261022_1000_usage_limit_floor
 Revises: 20261019_1000_served_project_color
