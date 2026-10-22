@@ -181,11 +181,11 @@ Closure is unconditional per source — there is no per-source `close` flag to s
 completes it by hand) enqueues one durable close intent per still-open work ref, through whichever source owns that ref;
 a fixed drain sweep, on its own short interval and independent of `annotation_interval_seconds`, then attempts up to a
 fixed number of due intents per pass through that source's binding, shared fairly among the tenants with due intents
-(one tenant's backlog never takes another's turn) and leaving the rest to the next pass, and a failed
-attempt stays pending under backoff — the guarantee half of closing delivered work, where a worker's own commit metadata
-is only an opportunistic hint that may beat the drain. Unlike `annotate`, closing carries no *multi-writer* canonical
-constraint: a close is idempotent at the forge, so more than one hub pointed at the same repo closing the same item is
-not a race to coordinate around.
+(one tenant's backlog never takes another's turn) and leaving the rest to the next pass, and a failed attempt stays
+pending under backoff — the guarantee half of closing delivered work, where a worker's own commit metadata is only an
+opportunistic hint that may beat the drain. Unlike `annotate`, closing carries no *multi-writer* canonical constraint: a
+close is idempotent at the forge, so more than one hub pointed at the same repo closing the same item is not a race to
+coordinate around.
 
 It does carry an instance-level one: `close_forge_writes_enabled` (default `true`) gates whether *this hub* writes to
 any configured source's forge at all. A non-canonical hub — dev, staging, or a restored snapshot — set it `false`; the
