@@ -90,13 +90,18 @@ def floor_answer(
     mark: UsageLimitMark | None,
     sample: ExternalUsageSampleSummary | None,
     clear: FloorClear | None,
+    clear_sample: ExternalUsageSampleSummary | None = None,
     now: datetime,
 ) -> FloorAnswer:
     """The floor over the newest ``mark``, the newest ``sample`` and the newest ``clear`` at ``now``.
 
     ``sampled`` is whether a sampler reads this floor at all — ``False`` for a provider binding none and for a runner
-    naming no subscription, whose holds then clear at their expected reset alone; ``sample`` is ignored there."""
+    naming no subscription, whose holds then clear at their expected reset alone; ``sample`` is ignored there.
+    ``clear_sample`` is the newest sample taken at or before ``clear`` — the windows the clear set aside; it may be
+    left out when ``sample`` itself was taken by the clear."""
     newest = sample if sampled else None
+    if clear_sample is None and newest is not None and clear is not None and newest.sampled_at <= clear.cleared_at:
+        clear_sample = newest
     standing: list[FloorHold] = []
     set_aside = False
     if mark is not None:
@@ -111,7 +116,7 @@ def floor_answer(
             window_hold = _window_hold(window, now)
             if window_hold is None:
                 continue
-            if clear is not None and _clear_reaches(clear, newest, window):
+            if clear is not None and _cleared(window, clear_sample if sampled else None):
                 set_aside = True
             else:
                 standing.append(window_hold)
@@ -187,13 +192,16 @@ def _window_hold(window: ExternalSubscriptionUsageWindow, now: datetime) -> Floo
     )
 
 
-def _clear_reaches(
-    clear: FloorClear, sample: ExternalUsageSampleSummary, window: ExternalSubscriptionUsageWindow
-) -> bool:
-    """``clear`` sets aside ``window``'s exhaustion: the window was sampled by the clear, or its period was already
-    running when the clear was made — a period begun after it is new evidence."""
-    period_start = window.resets_at - timedelta(seconds=window.window_seconds)
-    return sample.sampled_at <= clear.cleared_at or period_start <= clear.cleared_at
+def _cleared(window: ExternalSubscriptionUsageWindow, clear_sample: ExternalUsageSampleSummary | None) -> bool:
+    """A clear sets aside ``window``'s exhaustion: the sample standing when the clear was made showed that same window
+    exhausted in that same period. A window exhausted under a later reset, or one not exhausted at the clear, is new
+    evidence and holds again."""
+    if clear_sample is None:
+        return False
+    return any(
+        w.window == window.window and w.resets_at == window.resets_at and w.utilization_pct >= 100.0
+        for w in clear_sample.windows
+    )
 
 
 def _reported(standing: list[FloorHold]) -> FloorHold:

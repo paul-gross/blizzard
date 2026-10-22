@@ -148,7 +148,6 @@ from blizzard.runner.subscriptions.subscription_sampler import (
     SampleMiss,
     SampleMissReason,
 )
-from blizzard.runner.throttle.pause import SpendingRunner
 from blizzard.runner.throttle.usage_limits import UsageLimitMark
 from blizzard.runner.transcripts.archived_repository import ArchivedTranscript
 from blizzard.runner.transcripts.repository import IReadTranscriptRepository
@@ -1575,7 +1574,6 @@ def make_context(
     config: LoopConfig | None = None,
     events: EventBroker | None = None,
     subscriptions: tuple[ResolvedSubscription, ...] = (),
-    slug_spenders: tuple[SpendingRunner, ...] = (),
     chunk_views: IChunkViews | None = None,
     harness_versions: HarnessVersionCache | None = None,
     worker_scratch: WorkerScratchDirs | None = None,
@@ -1665,7 +1663,6 @@ def make_context(
         workspaces=_workspaces,
         process=_probe,
         subscriptions=subscriptions,
-        slug_spenders=slug_spenders,
         worktree_git=_wt,
         check_runner=_check_runner,
         config=resolved_config,

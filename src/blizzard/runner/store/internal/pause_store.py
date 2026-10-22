@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime
@@ -29,12 +29,11 @@ _log = get_logger("blizzard.runner.store")
 
 @dataclass(frozen=True)
 class _LockedBrakes:
-    """The concrete handle — every member's statements run on :attr:`conn`, the transaction each member's identity row
-    was locked on. :class:`~blizzard.runner.throttle.pause.ILockedBrakes` is what the domain holds it as, which
-    declares no connection access."""
+    """The concrete handle — the brake's statements run on :attr:`conn`, the transaction the runner's identity row was
+    locked on. :class:`~blizzard.runner.throttle.pause.ILockedBrakes` is what the domain holds it as, which declares no
+    connection access."""
 
     conn: Connection
-    pauses: tuple[IWritePauseRepository, ...]
 
 
 def _conn_of(handle: ILockedBrakes) -> Connection:
@@ -170,18 +169,12 @@ class PauseStore:
         return seq
 
     @contextmanager
-    def locked_brakes(self, spenders: Sequence[IWritePauseRepository]) -> Iterator[ILockedBrakes]:
-        # Each runner's own builder locks its identity row, in sorted runner-id order, as the first statements: the
-        # first write takes SQLite's writer lock, and Postgres queues every writer of one set on the same rows.
-        members = {_store_of(pause).bound_runner_id(): pause for pause in (self, *spenders)}
+    def locked_brakes(self) -> Iterator[ILockedBrakes]:
+        # The runner's identity row is locked as the first statement: the first write takes SQLite's writer lock, and
+        # Postgres queues every writer of this runner's brake on the same row.
         with self._store.begin() as conn:
-            locked: list[IWritePauseRepository] = []
-            for runner_id in sorted(members):
-                pause = members[runner_id]
-                held = _lock_identity_row(conn, _store_of(pause))
-                if held or pause is self:
-                    locked.append(pause)
-            yield _LockedBrakes(conn, tuple(locked))
+            _lock_identity_row(conn, self._store)
+            yield _LockedBrakes(conn)
 
     def local_brake_locked(self, handle: ILockedBrakes) -> LocalBrake:
         row = (
@@ -243,17 +236,10 @@ class PauseStore:
         _log.info("pause park resumed", lease_id=lease_id)
 
 
-def _store_of(pause: IWritePauseRepository) -> RunnerStoreConnections:
-    """The connections a pause store is bound through — every member of one fan-out is one of this package's own."""
-    assert isinstance(pause, PauseStore)
-    return pause._store
-
-
-def _lock_identity_row(conn: Connection, store: RunnerStoreConnections) -> bool:
-    """A no-op ``UPDATE`` of the bound runner's identity row, built by that runner's own binding: whether the row
-    exists, and — on its first write — the transaction's lock on it."""
-    result = conn.execute(store.update(runner_identity).values(runner_id=runner_identity.c.runner_id))
-    return result.rowcount > 0
+def _lock_identity_row(conn: Connection, store: RunnerStoreConnections) -> None:
+    """A no-op ``UPDATE`` of the bound runner's identity row — on its first write, the transaction's lock on it. A
+    runner holding no identity row yet has no neighbour to race."""
+    conn.execute(store.update(runner_identity).values(runner_id=runner_identity.c.runner_id))
 
 
 def _conforms_pause_store(x: PauseStore) -> IWritePauseRepository:

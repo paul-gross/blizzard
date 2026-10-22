@@ -26,6 +26,7 @@ from blizzard.runner.subscriptions.subscription_sampler import PROVIDER_ANTHROPI
 from blizzard.runner.throttle.floor import FloorAnswer
 from blizzard.runner.throttle.gate import GateVerdict, StartKind, ThrottleGate
 from blizzard.runner.throttle.pause import RunnerBrakes
+from blizzard.runner.throttle.usage_limits import FloorClear
 from tests.runner_fakes import (
     FIXTURE_RUNNER_ID,
     FakeHarness,
@@ -151,6 +152,38 @@ def test_an_unsampled_providers_mark_opens_at_its_reset_alone() -> None:
 def test_a_sampled_providers_mark_past_its_reset_awaits_a_sample() -> None:
     _store, _hub, ctx = _ctx()
     ctx.host_stores.usage_limits.record_usage_limit_mark(_SLUG, usage_limit_mark(_NOW - timedelta(hours=1)))
+
+    assert not ThrottleGate(ctx).floor().admits
+
+
+def _record_sample(ctx: LoopContext, at: datetime, pct: float, resets_at: datetime) -> None:
+    window = {
+        "window": "five_hour",
+        "utilization_pct": pct,
+        "resets_at": resets_at.isoformat(),
+        "window_seconds": 18000,
+    }
+    ctx.host_stores.external_usage.record_external_usage_attempt(
+        slug=_SLUG, sampled_at=at, payload=json.dumps({"windows": [window]}), report_kind="", report_payload=""
+    )
+
+
+def test_a_clear_sets_aside_the_window_the_sample_standing_at_it_showed_exhausted() -> None:
+    _store, _hub, ctx = _ctx()
+    reset = _NOW + timedelta(hours=2)
+    _record_sample(ctx, _NOW - timedelta(minutes=30), 100.0, reset)
+    ctx.host_stores.usage_limits.record_floor_clear(_SLUG, FloorClear(cleared_at=_NOW - timedelta(minutes=20), by="op"))
+    _record_sample(ctx, _NOW - timedelta(minutes=10), 100.0, reset)
+
+    assert ThrottleGate(ctx).floor().admits
+
+
+def test_a_window_under_the_line_at_the_clear_holds_once_exhausted_in_the_same_period() -> None:
+    _store, _hub, ctx = _ctx()
+    reset = _NOW + timedelta(hours=2)
+    _record_sample(ctx, _NOW - timedelta(minutes=30), 95.0, reset)
+    ctx.host_stores.usage_limits.record_floor_clear(_SLUG, FloorClear(cleared_at=_NOW - timedelta(minutes=20), by="op"))
+    _record_sample(ctx, _NOW - timedelta(minutes=10), 100.0, reset)
 
     assert not ThrottleGate(ctx).floor().admits
 

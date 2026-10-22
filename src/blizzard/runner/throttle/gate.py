@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
+from datetime import datetime
 from enum import StrEnum
 from typing import Protocol
 
@@ -29,6 +30,7 @@ __all__ = [
     "GateVerdict",
     "StartKind",
     "ThrottleGate",
+    "subscription_floor",
 ]
 
 
@@ -186,15 +188,36 @@ class ThrottleGate:
                 now=now,
             )
         sampled = any(s.slug == slug and s.provider in SAMPLED_PROVIDERS for s in ctx.subscriptions)
-        host = ctx.host_stores.usage_limits
-        sample = (
-            ctx.host_stores.external_usage.latest_external_usage_samples_by_slug((slug,)).get(slug) if sampled else None
-        )
-        return floor_answer(
-            slug=slug,
+        return subscription_floor(
+            slug,
             sampled=sampled,
-            mark=host.latest_usage_limit_mark(slug),
-            sample=sample,
-            clear=host.latest_floor_clear(slug),
+            usage_limits=ctx.host_stores.usage_limits,
+            external_usage=ctx.host_stores.external_usage,
             now=now,
         )
+
+
+def subscription_floor(
+    slug: str,
+    *,
+    sampled: bool,
+    usage_limits: IReadSubscriptionUsageLimitRepository,
+    external_usage: IReadExternalUsageRepository,
+    now: datetime,
+) -> FloorAnswer:
+    """``slug``'s floor at ``now``, read fresh: its newest mark, newest sample and newest clear — and, when a sample
+    came after the clear, the sample standing at the clear, whose exhausted windows the clear set aside."""
+    sample = external_usage.latest_external_usage_samples_by_slug((slug,)).get(slug) if sampled else None
+    clear = usage_limits.latest_floor_clear(slug)
+    clear_sample = None
+    if clear is not None and sample is not None and sample.sampled_at > clear.cleared_at:
+        clear_sample = external_usage.external_usage_sample_at(slug, clear.cleared_at)
+    return floor_answer(
+        slug=slug,
+        sampled=sampled,
+        mark=usage_limits.latest_usage_limit_mark(slug),
+        sample=sample,
+        clear=clear,
+        clear_sample=clear_sample,
+        now=now,
+    )

@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import pytest
 from structlog.testing import capture_logs
@@ -39,24 +40,28 @@ from blizzard.runner.hub.client import (
 from blizzard.runner.leases.activity import HEARTBEAT_STALENESS_THRESHOLD
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.lifecycle.dormant import DormantSession
+from blizzard.runner.lifecycle.usage_limit import mark_and_park_worker
 from blizzard.runner.loop.context import LoopConfig, ResolvedSubscription
 from blizzard.runner.loop.steps import Advance, Fill, Pull, Reap, Resume, ResumeIntents, SpendCeiling
 from blizzard.runner.loop.tick import tick
 from blizzard.runner.node_steps.chunk_state import ChunkPause, ChunkState
 from blizzard.runner.node_steps.submissions import ApplyReply
-from blizzard.runner.throttle.pause import PauseService
+from blizzard.runner.throttle.pause import ILockedBrakes, LocalBrake, PauseService
+from blizzard.runner.throttle.usage_limits import FloorClear
 from tests.runner_fakes import (
     FIXTURE_RUNNER_ID,
     FakeHarness,
     FakeHub,
     FakeProbe,
     FakeProvider,
+    SqlAlchemyRunnerStore,
     claimed_outcome,
     make_context,
     make_envelope,
     make_store,
     make_stores,
     record_usage,
+    runner_store_errors,
     serving,
     single_workspace,
 )
@@ -1354,35 +1359,67 @@ def test_runner_start_clears_the_ceiling_brake_exactly_like_a_manual_pause(tmp_p
     assert len(hub.claims) == 1  # FILL claims again — work resumed
 
 
-# --- Usage-limit pause ----------------------------------------
+# --- Usage-limit mark ----------------------------------------
 
 
-def test_usage_limited_worker_generation_engages_the_brake_and_parks_no_retry_no_epoch(tmp_path):  # type: ignore[no-untyped-def]
-    """A usage-limited worker engages the brake without judgement or retry."""
-    store = _store(tmp_path)
-    _seed_exited_lease(store)  # no resume intent, no elicitation — a plain exited worker
-
+def _limited_ctx(store, harness, *, clock=None, subscription=None):  # type: ignore[no-untyped-def]
     hub = FakeHub()
     hub.envelopes["ch_1"] = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES)
-    limit = UsageLimit(resets_at=_NOW + timedelta(hours=2), detail="You've hit your session limit")
-    harness = FakeHarness(handle=_HANDLE, verdict="pass", usage_limit=limit)
-    ctx = make_context(
+    subscriptions = (
+        (ResolvedSubscription(slug=subscription, name="Anthropic", provider="anthropic", sample_interval_seconds=60),)
+        if subscription is not None
+        else ()
+    )
+    return make_context(
         store,
         hub=hub,
         provider=FakeProvider({"e1": "/ws/e1"}),
         harness=harness,
         probe=FakeProbe(),
-        clock=FixedClock(_NOW),
+        clock=clock if clock is not None else FixedClock(_NOW),
+        config=LoopConfig(runner_name="r1", runner_id="", bindings=serving(), subscription=subscription),
+        subscriptions=subscriptions,
     )
+
+
+def _clear_runner_floor(store, at):  # type: ignore[no-untyped-def]
+    store.record_floor_clear(FloorClear(cleared_at=at, by="operator"))
+
+
+def _exhausted_sample(store, *, sampled_at, resets_at, payload=True):  # type: ignore[no-untyped-def]
+    window = {"window": "5h", "utilization_pct": 100.0, "resets_at": resets_at.isoformat(), "window_seconds": 18000}
+    store.record_external_usage_attempt(
+        slug="anthropic",
+        sampled_at=sampled_at,
+        payload=json.dumps({"windows": [window]}) if payload else None,
+        report_kind="",
+        report_payload="",
+    )
+
+
+def test_usage_limited_worker_generation_marks_the_runner_and_parks_no_brake_no_retry_no_epoch(tmp_path):  # type: ignore[no-untyped-def]
+    """A usage-limited worker of a runner naming no subscription marks the runner itself — no brake, no judgement,
+    no retry."""
+    store = _store(tmp_path)
+    _seed_exited_lease(store)  # no resume intent, no elicitation — a plain exited worker
+    limit = UsageLimit(resets_at=_NOW + timedelta(hours=2), detail="You've hit your session limit")
+    harness = FakeHarness(handle=_HANDLE, verdict="pass", usage_limit=limit)
+    ctx = _limited_ctx(store, harness)
 
     Advance(ctx).run()
 
-    assert store.local_paused() is True
-    reports = [f for f in store.pending_outbound() if f.kind == RUNNER_LOCALLY_PAUSED]
-    assert len(reports) == 1
-    payload = json.loads(reports[0].payload)
-    assert payload["by"] == "usage-limit"
-    assert payload["reason"] == f"usage limit: {CLAUDE_CODE_HARNESS_ID} (resets 2026-07-13T14:00Z)"
+    assert store.local_paused() is False
+    assert [f for f in store.pending_outbound() if f.kind == RUNNER_LOCALLY_PAUSED] == []
+    mark = store.latest_usage_limit_mark()
+    assert mark is not None
+    assert (mark.marked_at, mark.resets_at, mark.harness_id, mark.detail) == (
+        _NOW,
+        _NOW + timedelta(hours=2),
+        CLAUDE_CODE_HARNESS_ID,
+        limit.detail,
+    )
+    assert (mark.lease_id, mark.epoch, mark.generation, mark.invocation_kind) == ("lease_1", 1, 1, "worker")
+    assert (mark.window, mark.window_resets_at) == (None, None)  # no sample places it
     assert harness.judged == []  # never judged — a usage limit is not a verdict to elicit
     assert [f for f in store.pending_outbound() if f.kind == "completion.submitted"] == []
     assert store.pause_parked_lease_ids() == {"lease_1"}
@@ -1392,22 +1429,11 @@ def test_usage_limited_worker_generation_engages_the_brake_and_parks_no_retry_no
 
 
 def test_usage_limited_worker_generation_logs_the_harnesss_own_detail(tmp_path):  # type: ignore[no-untyped-def]
-    """Keep the harness's free-text detail in the engagement log."""
+    """Keep the harness's free-text detail in the park log."""
     store = _store(tmp_path)
     _seed_exited_lease(store)
-
-    hub = FakeHub()
-    hub.envelopes["ch_1"] = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES)
     limit = UsageLimit(resets_at=None, detail="You've hit your session limit · resets 5:40pm")
-    harness = FakeHarness(handle=_HANDLE, verdict="pass", usage_limit=limit)
-    ctx = make_context(
-        store,
-        hub=hub,
-        provider=FakeProvider({"e1": "/ws/e1"}),
-        harness=harness,
-        probe=FakeProbe(),
-        clock=FixedClock(_NOW),
-    )
+    ctx = _limited_ctx(store, FakeHarness(handle=_HANDLE, verdict="pass", usage_limit=limit))
 
     with capture_logs() as logs:
         Advance(ctx).run()
@@ -1417,75 +1443,87 @@ def test_usage_limited_worker_generation_logs_the_harnesss_own_detail(tmp_path):
     assert warnings[0]["detail"] == limit.detail
 
 
-def test_usage_limited_judge_elicitation_engages_the_brake_and_parks(tmp_path):  # type: ignore[no-untyped-def]
+def test_a_spenders_mark_lands_on_its_subscription_holding_the_window_the_harness_named(tmp_path):  # type: ignore[no-untyped-def]
+    """A runner spending a subscription marks the subscription, not itself, holding the window whose reset in the
+    newest sample at or before the mark is the harness's, to the minute — a failed sample never masking it."""
+    store = _store(tmp_path)
+    _seed_exited_lease(store)
+    window_reset = _NOW + timedelta(hours=3)
+    _exhausted_sample(store, sampled_at=_NOW - timedelta(minutes=5), resets_at=window_reset)
+    _exhausted_sample(store, sampled_at=_NOW, resets_at=window_reset, payload=False)
+    named = window_reset + timedelta(seconds=17)  # the same minute
+    harness = FakeHarness(handle=_HANDLE, verdict="pass", usage_limit=UsageLimit(resets_at=named, detail="limited"))
+    ctx = _limited_ctx(store, harness, subscription="anthropic")
+
+    Advance(ctx).run()
+
+    assert store.latest_usage_limit_mark() is None
+    mark = ctx.host_stores.usage_limits.latest_usage_limit_mark("anthropic")
+    assert mark is not None
+    assert (mark.resets_at, mark.window, mark.window_resets_at) == (named, "5h", window_reset)
+    assert store.local_paused() is False
+    assert store.pause_parked_lease_ids() == {"lease_1"}
+
+
+def test_a_mark_naming_a_reset_no_window_carries_holds_no_window(tmp_path):  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    _seed_exited_lease(store)
+    _exhausted_sample(store, sampled_at=_NOW - timedelta(minutes=5), resets_at=_NOW + timedelta(hours=3))
+    limit = UsageLimit(resets_at=_NOW + timedelta(hours=1), detail="limited")
+    ctx = _limited_ctx(store, FakeHarness(handle=_HANDLE, verdict="pass", usage_limit=limit), subscription="anthropic")
+
+    Advance(ctx).run()
+
+    mark = ctx.host_stores.usage_limits.latest_usage_limit_mark("anthropic")
+    assert mark is not None and (mark.window, mark.window_resets_at) == (None, None)
+
+
+def test_usage_limited_judge_elicitation_marks_and_parks(tmp_path):  # type: ignore[no-untyped-def]
     """A usage-limited judge leaves its elicitation record for unpause to distinguish
     a judge-side park from a worker-side one, without spending an attempt."""
     store = _store(tmp_path)
     _seed_exited_lease(store)
-
-    hub = FakeHub()
-    hub.envelopes["ch_1"] = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES)
     limit = UsageLimit(resets_at=None, detail="You've hit your session limit")
     # 1st classify call: the worker's own, must read unlimited so the judge launches; 2nd: the judge's.
     harness = FakeHarness(handle=_HANDLE, verdict="pass", usage_limit=limit, usage_limit_from_call=2)
-    ctx = make_context(
-        store,
-        hub=hub,
-        provider=FakeProvider({"e1": "/ws/e1"}),
-        harness=harness,
-        probe=FakeProbe(),
-        clock=FixedClock(_NOW),
-    )
+    ctx = _limited_ctx(store, harness)
 
     Advance(ctx).run()  # launches the detached elicitation — not usage-limited yet
     assert store.in_flight_elicitation("lease_1", 1) is not None
-    assert store.local_paused() is False
+    assert store.latest_usage_limit_mark() is None
 
     Advance(ctx).run()  # collects it — the fake judge pid reads dead by default
 
-    assert store.local_paused() is True
-    reports = [f for f in store.pending_outbound() if f.kind == RUNNER_LOCALLY_PAUSED]
-    assert len(reports) == 1
-    payload = json.loads(reports[0].payload)
-    assert payload["by"] == "usage-limit"
-    assert payload["reason"] == f"usage limit: {CLAUDE_CODE_HARNESS_ID}"  # no reset time known
+    mark = store.latest_usage_limit_mark()
+    assert mark is not None and mark.invocation_kind == "judge" and mark.resets_at is None
+    assert store.local_paused() is False
     assert store.in_flight_elicitation("lease_1", 1) is not None  # left standing, not cleared
     assert [f for f in store.pending_outbound() if f.kind == "completion.submitted"] == []
     assert store.pause_parked_lease_ids() == {"lease_1"}
     assert store.attempt_count("ch_1", "nd_build") == 1  # no retry consumed
 
 
-def test_usage_limited_judge_park_relaunches_a_fresh_elicitation_after_unpause(tmp_path):  # type: ignore[no-untyped-def]
-    """Unpausing a judge-side park elicits a fresh verdict, not a worker wake."""
+def test_usage_limited_judge_park_relaunches_a_fresh_elicitation_once_the_floor_opens(tmp_path):  # type: ignore[no-untyped-def]
+    """A judge-side park elicits a fresh verdict once its floor opens, not a worker wake."""
     store = _store(tmp_path)
     _seed_exited_lease(store)
-
-    hub = FakeHub()
-    hub.envelopes["ch_1"] = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES)
     limit = UsageLimit(resets_at=None, detail="You've hit your session limit")
     harness = FakeHarness(handle=_HANDLE, verdict="pass", usage_limit=limit, usage_limit_from_call=2)
-    ctx = make_context(
-        store,
-        hub=hub,
-        provider=FakeProvider({"e1": "/ws/e1"}),
-        harness=harness,
-        probe=FakeProbe(),
-        clock=FixedClock(_NOW),
-    )
+    ctx = _limited_ctx(store, harness)
 
     Advance(ctx).run()  # launches the detached elicitation — not usage-limited yet
     Advance(ctx).run()  # collects it — usage-limited, parks with the record left standing
-    assert store.local_paused() is True
+    assert store.latest_usage_limit_mark() is not None
     assert len(harness.judged) == 1  # the first (limited) elicitation launch
 
-    Advance(ctx).run()  # still paused — re-polled, nothing changes
+    Advance(ctx).run()  # still held — re-polled, nothing changes
     assert harness.resumed == []
     assert len(harness.judged) == 1
 
     # The harness recovered: a resumed classify call must read unlimited now.
     harness.usage_limit = None
-    _pause_locally(store, ctx, paused=False)
-    Advance(ctx).run()  # unpauses — re-runs Judgement, launching a fresh elicitation
+    _clear_runner_floor(store, _NOW)
+    Advance(ctx).run()  # the floor opened — re-runs Judgement, launching a fresh elicitation
 
     assert harness.resumed == []  # never the plain worker wake — nothing left to "continue"
     assert len(harness.judged) == 2  # a fresh elicitation, not a relaunch of the stale one
@@ -1505,19 +1543,9 @@ def test_a_replayed_judge_park_resume_over_the_same_stale_elicitation_records_on
     carries the same superseded identity, so it appends nothing a second time."""
     store = _store(tmp_path)
     _seed_exited_lease(store)
-    hub = FakeHub()
-    hub.envelopes["ch_1"] = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES)
     limit = UsageLimit(resets_at=None, detail="You've hit your session limit")
     harness = FakeHarness(handle=_HANDLE, verdict="pass", usage_limit=limit, usage_limit_from_call=2)
-    clock = FixedClock(_NOW)
-    ctx = make_context(
-        store,
-        hub=hub,
-        provider=FakeProvider({"e1": "/ws/e1"}),
-        harness=harness,
-        probe=FakeProbe(),
-        clock=clock,
-    )
+    ctx = _limited_ctx(store, harness)
     Advance(ctx).run()  # launches the detached elicitation
     Advance(ctx).run()  # collects it — usage-limited, parked with the record left standing
     lease = store.active_lease("lease_1")
@@ -1536,33 +1564,22 @@ def test_a_replayed_judge_park_resume_over_the_same_stale_elicitation_records_on
     assert first.at == _NOW + timedelta(minutes=1)
 
 
-def test_usage_limit_pause_resumes_the_same_lease_in_place_after_unpause(tmp_path):  # type: ignore[no-untyped-def]
-    """Unpause wakes the same session and epoch without consuming a retry."""
+def test_a_usage_limit_park_resumes_the_same_lease_in_place_once_the_floor_opens(tmp_path):  # type: ignore[no-untyped-def]
+    """The floor opening wakes the same session and epoch without consuming a retry."""
     store = _store(tmp_path)
     _seed_exited_lease(store)
-
-    hub = FakeHub()
-    hub.envelopes["ch_1"] = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES)
     limit = UsageLimit(resets_at=_NOW + timedelta(hours=1), detail="limited")
     harness = FakeHarness(handle=_HANDLE, verdict="pass", usage_limit=limit)
-    ctx = make_context(
-        store,
-        hub=hub,
-        provider=FakeProvider({"e1": "/ws/e1"}),
-        harness=harness,
-        probe=FakeProbe(),
-        clock=FixedClock(_NOW),
-    )
+    ctx = _limited_ctx(store, harness)
 
     Advance(ctx).run()
-    assert store.local_paused() is True
     assert store.pause_parked_lease_ids() == {"lease_1"}
 
-    Advance(ctx).run()  # still paused — re-polled, nothing changes
+    Advance(ctx).run()  # still held — re-polled, nothing changes
     assert harness.resumed == []
     assert store.pause_parked_lease_ids() == {"lease_1"}
 
-    _pause_locally(store, ctx, paused=False)
+    _clear_runner_floor(store, _NOW)
     Advance(ctx).run()
 
     assert harness.resumed == [
@@ -1572,11 +1589,12 @@ def test_usage_limit_pause_resumes_the_same_lease_in_place_after_unpause(tmp_pat
     lease = store.active_lease("lease_1")
     assert lease is not None and lease.epoch == 1 and lease.session_id == "sess-a"
     assert store.attempt_count("ch_1", "nd_build") == 1  # still no retry consumed
+    assert store.local_paused() is False
 
 
-def test_a_usage_limit_brake_engaged_earlier_in_the_pass_keeps_a_later_pause_parked_lease_asleep(tmp_path):  # type: ignore[no-untyped-def]
-    """The brakes a pause-parked lease is handed postdate every brake engaged earlier in the pass:
-    lease_1 wakes ahead of the limit, lease_2's exit engages it, lease_3 must stay parked."""
+def test_a_mark_written_earlier_in_the_pass_keeps_a_later_pause_parked_lease_asleep(tmp_path):  # type: ignore[no-untyped-def]
+    """Every park reads the floor fresh: lease_1 wakes ahead of the limit, lease_2's exit marks it, lease_3 must stay
+    parked."""
     store = _store(tmp_path)
     hub = FakeHub()
     for i in (1, 2, 3):
@@ -1621,181 +1639,104 @@ def test_a_usage_limit_brake_engaged_earlier_in_the_pass_keeps_a_later_pause_par
 
     Advance(ctx).run()
 
-    assert store.local_paused() is True
+    assert store.local_paused() is False
     assert [session for _, session, _ in harness.resumed] == ["sess-1"]
     assert store.pause_parked_lease_ids() == {"lease_2", "lease_3"}  # lease_2 parked by its own usage limit
 
 
-def test_usage_limit_already_engaged_brake_keeps_its_original_reason(tmp_path):  # type: ignore[no-untyped-def]
-    """A usage limit does not overwrite an already-engaged brake's reason."""
+def test_a_usage_limit_over_an_operator_pause_marks_and_leaves_the_brake_as_it_stood(tmp_path):  # type: ignore[no-untyped-def]
+    """A usage limit never touches the brake: an operator's standing pause keeps its one fact."""
     store = _store(tmp_path)
     _seed_exited_lease(store)
-
-    hub = FakeHub()
-    hub.envelopes["ch_1"] = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES)
     limit = UsageLimit(resets_at=_NOW, detail="limited")
-    harness = FakeHarness(handle=_HANDLE, verdict="pass", usage_limit=limit)
-    ctx = make_context(
-        store,
-        hub=hub,
-        provider=FakeProvider({"e1": "/ws/e1"}),
-        harness=harness,
-        probe=FakeProbe(),
-        clock=FixedClock(_NOW),
-    )
+    ctx = _limited_ctx(store, FakeHarness(handle=_HANDLE, verdict="pass", usage_limit=limit))
     _pause_locally(store, ctx, paused=True)  # an operator pause, already standing
 
     Advance(ctx).run()
 
     assert store.pause_parked_lease_ids() == {"lease_1"}  # still parks
+    assert store.latest_usage_limit_mark() is not None
     reports = [f for f in store.pending_outbound() if f.kind == RUNNER_LOCALLY_PAUSED]
     assert len(reports) == 1  # the operator's own engagement — no second one
     assert json.loads(reports[0].payload)["by"] == "operator"
 
 
-def test_usage_limit_reason_falls_back_to_the_sampled_resets_at(tmp_path):  # type: ignore[no-untyped-def]
-    """With no classifier reset, use the soonest future exhausted-window reset."""
+def test_a_usage_limit_park_wakes_on_its_own_once_the_reset_passes(tmp_path):  # type: ignore[no-untyped-def]
+    """A runner naming no subscription has no sample to wait on: its hold opens at the reset the harness named, with
+    nobody acting."""
     store = _store(tmp_path)
     _seed_exited_lease(store)
-    store.record_external_usage_attempt(
-        slug="anthropic",
-        sampled_at=_NOW,
-        payload=json.dumps(
-            {
-                "slug": "anthropic",
-                "name": "Anthropic",
-                "sampled_at": _NOW.isoformat(),
-                "windows": [
-                    {
-                        "window": "5h",
-                        "utilization_pct": 100.0,
-                        "resets_at": (_NOW + timedelta(hours=3)).isoformat(),
-                        "window_seconds": 18000,
-                    },
-                    # A partially-used window is never the fallback's own candidate.
-                    {
-                        "window": "7d",
-                        "utilization_pct": 40.0,
-                        "resets_at": (_NOW + timedelta(hours=1)).isoformat(),
-                        "window_seconds": 604800,
-                    },
-                ],
-            }
-        ),
-        report_kind="",
-        report_payload="",
-    )
-
-    hub = FakeHub()
-    hub.envelopes["ch_1"] = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES)
-    limit = UsageLimit(resets_at=None, detail="limited")
-    harness = FakeHarness(handle=_HANDLE, verdict="pass", usage_limit=limit)
-    ctx = make_context(
-        store,
-        hub=hub,
-        provider=FakeProvider({"e1": "/ws/e1"}),
-        harness=harness,
-        probe=FakeProbe(),
-        clock=FixedClock(_NOW),
-        subscriptions=(
-            ResolvedSubscription(
-                slug="anthropic",
-                name="Anthropic",
-                provider="anthropic",
-                sample_interval_seconds=60,
-            ),
-        ),
-    )
-
-    Advance(ctx).run()
-
-    reports = [f for f in store.pending_outbound() if f.kind == RUNNER_LOCALLY_PAUSED]
-    payload = json.loads(reports[0].payload)
-    # The 100%-utilized 5h window's own reset, never the 7d window's earlier-but-partial one.
-    assert payload["reason"] == f"usage limit: anthropic via {CLAUDE_CODE_HARNESS_ID} (resets 2026-07-13T15:00Z)"
-
-
-def test_usage_limit_reason_fallback_skips_a_failed_samples_null_payload(tmp_path):  # type: ignore[no-untyped-def]
-    """A failed sample's NULL payload must not shadow an older valid exhausted window."""
-    store = _store(tmp_path)
-    _seed_exited_lease(store)
-    store.record_external_usage_attempt(
-        slug="anthropic",
-        sampled_at=_NOW - timedelta(minutes=5),
-        payload=json.dumps(
-            {
-                "slug": "anthropic",
-                "name": "Anthropic",
-                "sampled_at": (_NOW - timedelta(minutes=5)).isoformat(),
-                "windows": [
-                    {
-                        "window": "5h",
-                        "utilization_pct": 100.0,
-                        "resets_at": (_NOW + timedelta(hours=3)).isoformat(),
-                        "window_seconds": 18000,
-                    },
-                ],
-            }
-        ),
-        report_kind="",
-        report_payload="",
-    )
-    # The newest attempt is a failed sample — no payload — and must not shadow the older,
-    # still-valid window recorded just above.
-    store.record_external_usage_attempt(
-        slug="anthropic", sampled_at=_NOW, payload=None, report_kind="", report_payload=""
-    )
-
-    hub = FakeHub()
-    hub.envelopes["ch_1"] = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES)
-    limit = UsageLimit(resets_at=None, detail="limited")
-    harness = FakeHarness(handle=_HANDLE, verdict="pass", usage_limit=limit)
-    ctx = make_context(
-        store,
-        hub=hub,
-        provider=FakeProvider({"e1": "/ws/e1"}),
-        harness=harness,
-        probe=FakeProbe(),
-        clock=FixedClock(_NOW),
-        subscriptions=(
-            ResolvedSubscription(
-                slug="anthropic",
-                name="Anthropic",
-                provider="anthropic",
-                sample_interval_seconds=60,
-            ),
-        ),
-    )
-
-    Advance(ctx).run()
-
-    reports = [f for f in store.pending_outbound() if f.kind == RUNNER_LOCALLY_PAUSED]
-    payload = json.loads(reports[0].payload)
-    assert payload["reason"] == f"usage limit: anthropic via {CLAUDE_CODE_HARNESS_ID} (resets 2026-07-13T15:00Z)"
-
-
-def test_a_usage_limit_brake_is_not_lifted_by_the_reset_time_passing(tmp_path):  # type: ignore[no-untyped-def]
-    """Only an operator clears the brake; the runner never lifts it, even once the reset it reported has passed."""
-    store = _store(tmp_path)
-    _seed_exited_lease(store)
-    hub = FakeHub()
-    hub.envelopes["ch_1"] = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES)
     limit = UsageLimit(resets_at=_NOW + timedelta(hours=1), detail="limited")
     harness = FakeHarness(handle=_HANDLE, verdict="pass", usage_limit=limit)
     clock = FixedClock(_NOW)
-    ctx = make_context(
-        store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=FakeProbe(), clock=clock
-    )
+    ctx = _limited_ctx(store, harness, clock=clock)
     Advance(ctx).run()
-    assert store.local_paused() is True
-
-    clock.advance(timedelta(hours=3))
-    harness.usage_limit = None
-    tick(ctx)
-
-    assert store.local_paused() is True
-    assert harness.resumed == []
     assert store.pause_parked_lease_ids() == {"lease_1"}
+
+    clock.advance(timedelta(minutes=59))
+    Advance(ctx).run()
+    assert harness.resumed == []
+
+    clock.advance(timedelta(minutes=1))
+    harness.usage_limit = None
+    Advance(ctx).run()
+
+    assert [session for _, session, _ in harness.resumed] == ["sess-a"]
+    assert store.pause_parked_lease_ids() == set()
+    assert store.local_paused() is False
+
+
+def test_a_replayed_mark_and_park_writes_one_mark(tmp_path):  # type: ignore[no-untyped-def]
+    """A crash between the mark and the park re-classifies the exit and marks again: the invocation is already
+    marked, so the replay writes nothing."""
+    store = _store(tmp_path)
+    _seed_exited_lease(store)
+    limit = UsageLimit(resets_at=_NOW + timedelta(hours=1), detail="limited")
+    clock = FixedClock(_NOW)
+    ctx = _limited_ctx(store, FakeHarness(handle=_HANDLE, verdict="pass", usage_limit=limit), clock=clock)
+    lease = store.active_lease("lease_1")
+    assert lease is not None
+
+    mark_and_park_worker(ctx, lease, limit, generation=1)
+    clock.advance(timedelta(minutes=1))
+    mark_and_park_worker(ctx, lease, limit, generation=1)
+
+    mark = store.latest_usage_limit_mark()
+    assert mark is not None and mark.marked_at == _NOW  # the replay, stamped later, wrote nothing
+
+
+def test_a_reasoned_engage_reads_and_writes_under_the_brake_lock_once(tmp_path):  # type: ignore[no-untyped-def]
+    """The runner's own engagement reads the brake under its lock and writes once: a second engagement finds it
+    engaged and writes nothing."""
+    store = _store(tmp_path)
+    seen: list[str] = []
+
+    class _Spy(SqlAlchemyRunnerStore):
+        def local_brake_locked(self, handle: ILockedBrakes) -> LocalBrake:
+            seen.append("read")
+            return super().local_brake_locked(handle)
+
+        def record_local_pause_locked(self, handle: ILockedBrakes, **fact: Any) -> int:
+            seen.append("write")
+            return super().record_local_pause_locked(handle, **fact)
+
+    spy = _Spy(store._engine, runner_store_errors(), store.connections.runner_id)
+    service = PauseService(spy, FixedClock(_NOW))
+    service.engage(by="runner-ceiling", reason="spend ceiling")
+    service.engage(by="runner-ceiling", reason="spend ceiling")
+
+    assert seen == ["read", "write", "read"]
+    assert [json.loads(f.payload)["reason"] for f in _local_pause_reports(spy)] == ["spend ceiling"]
+
+
+def test_a_reasoned_engage_over_an_operator_pause_keeps_the_operators_fact(tmp_path):  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    PauseService(store, FixedClock(_NOW)).set_local_pause(paused=True, by="operator")
+
+    PauseService(store, FixedClock(_NOW)).engage(by="runner-ceiling", reason="spend ceiling")
+
+    assert store.local_pause_reason() is None
+    assert [json.loads(f.payload)["by"] for f in _local_pause_reports(store)] == ["operator"]
 
 
 def test_ceiling_pause_still_engages_and_behaves_unmodified(tmp_path):  # type: ignore[no-untyped-def]

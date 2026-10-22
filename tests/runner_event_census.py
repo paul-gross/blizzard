@@ -201,9 +201,8 @@ WRITE_PROTOCOL_CENSUS: dict[str, Disposition] = {
     "local_brake_locked": Silent("a read of the brake on a locked transaction."),
     "record_local_pause_locked": Published(
         RunnerEventType.FACT_CHANGED,
-        "UsageLimitBrakes.engage and PauseService.set_local_pause (runner/throttle/pause.py) — kind is the write's "
-        "own report_kind. Announced after the transaction commits, through the publisher of the runner the fact "
-        "belongs to.",
+        "PauseService.engage and PauseService.set_local_pause (runner/throttle/pause.py) — kind is the write's "
+        "own report_kind. Announced after the transaction commits.",
     ),
     # --- escalations -----------------------------------------------------------
     "record_escalation_closure": Published(

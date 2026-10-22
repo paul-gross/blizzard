@@ -28,6 +28,7 @@ from blizzard.runner.lifecycle.dormant import DormantSession
 from blizzard.runner.lifecycle.judgement.judgement import Judgement, KnownElicitation
 from blizzard.runner.lifecycle.spawn import Spawner
 from blizzard.runner.loop.steps import Advance
+from blizzard.runner.throttle.usage_limits import FloorClear
 from tests.runner_fakes import (
     FakeHarness,
     FakeHub,
@@ -239,7 +240,8 @@ def test_usage_limited_judge_elicitation_observed_past_staleness_still_pauses_no
     clock.advance(ELICITATION_STALENESS_THRESHOLD + timedelta(seconds=1))
     Advance(ctx).run()  # collect — exited long ago, but classified before the staleness check
 
-    assert store.local_paused() is True
+    assert store.local_paused() is False  # marked, never braked
+    assert store.latest_usage_limit_mark() is not None
     assert store.pause_parked_lease_ids() == {"lease_1"}
     assert store.in_flight_elicitation("lease_1", 1) is not None  # left standing for on_unpause
     lease = store.active_lease("lease_1")
@@ -485,9 +487,8 @@ def _usage_limit_judge_park(tmp_path):  # type: ignore[no-untyped-def]
     assert elicitation is not None
     lease = store.active_lease("lease_1")
     assert lease is not None
-    ctx.stores.pause.record_local_pause(  # the operator lifts the runner's own brake
-        paused=False, at=_NOW, by="operator", report_kind="runner.locally_resumed", report_payload="{}"
-    )
+    # The runner names no subscription: the operator clears its own floor.
+    ctx.stores.usage_limits.record_floor_clear(FloorClear(cleared_at=_NOW, by="operator"))
     return store, harness, probe, ctx, lease, elicitation
 
 

@@ -35,6 +35,7 @@ __all__ = [
     "ExternalUsageAttemptLane",
     "ExternalUsageSamplePass",
     "IAttemptLaneRunner",
+    "IEarlySampleTriggers",
     "IExternalUsageAttemptSink",
     "IHostLaneStanding",
     "IRegistrationStanding",
@@ -69,6 +70,15 @@ class IExternalUsageAttemptSink(Protocol):
         miss_reason: str | None,
     ) -> None:
         """Record the attempt and buffer its report, atomically, on whichever lane the host is on."""
+        ...
+
+
+class IEarlySampleTriggers(Protocol):
+    """Whether a subscription is due a sample ahead of its cadence — what its exhaustion asks of the pass."""
+
+    def due_early(self, slug: str, *, last_attempt_at: datetime | None, now: datetime) -> bool:
+        """``slug`` should be sampled now although its cadence has not come round, given its newest attempt (a miss
+        included) ``last_attempt_at``. Each early sample fires once: the attempt it records is then the newest."""
         ...
 
 
@@ -164,19 +174,22 @@ def _conforms_attempt_lane(x: ExternalUsageAttemptLane) -> IExternalUsageAttempt
 
 
 class ExternalUsageSamplePass:
-    """Per slug, in order: cadence gate on the newest attempt, due check, sample, record. A sampler a provider binds
-    none of leaves the slug declared and unsampled, with no attempt row. One slug's failure never skips the next."""
+    """Per slug, in order: due check on the newest attempt — its cadence, or an early trigger — sample, record. A
+    sampler a provider binds none of leaves the slug declared and unsampled, with no attempt row. One slug's failure
+    never skips the next."""
 
     def __init__(
         self,
         *,
         subscriptions: Sequence[SampledSubscription],
         attempts: IReadExternalUsageRepository,
+        early: IEarlySampleTriggers,
         sink: IExternalUsageAttemptSink,
         clock: IClock,
     ) -> None:
         self._subscriptions = tuple(subscriptions)
         self._attempts = attempts
+        self._early = early
         self._sink = sink
         self._clock = clock
 
@@ -189,11 +202,15 @@ class ExternalUsageSamplePass:
                 _log.warning("external subscription usage sample pass failed", slug=subscription.slug, detail=str(exc))
 
     def _sample_one(self, subscription: SampledSubscription) -> None:
-        anchor = self._attempts.last_external_usage_attempt_at(subscription.slug)
-        if not sample_due(anchor, self._clock.now(), subscription.sample_interval_seconds):
-            return
         sampler = subscription.sampler
         if sampler is None:
+            return
+        anchor = self._attempts.last_external_usage_attempt_at(subscription.slug)
+        now = self._clock.now()
+        due = sample_due(anchor, now, subscription.sample_interval_seconds) or self._early.due_early(
+            subscription.slug, last_attempt_at=anchor, now=now
+        )
+        if not due:
             return
         attempt = external_usage_attempt(sampler.sample(), slug=subscription.slug, at=self._clock.now())
         result = attempt.result

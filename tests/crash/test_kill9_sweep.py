@@ -43,6 +43,7 @@ from blizzard.runner.hub.internal.token_file import HubTokenFile
 from blizzard.runner.hub.token_file import assigned_token
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.store import schema as runner_schema
+from blizzard.runner.throttle.usage_limits import FloorClear
 from blizzard.tools.invariants import Invariants
 from tests.config_inputs import init_host, load_host_config, load_hub_config
 from tests.crash.support import (
@@ -240,8 +241,8 @@ _PREEMPT_CI_SUBSET = ("preempt.after-kill.before-closure",)
 _CLOSE_CI_SUBSET = ("close.after-close.before-record",)
 
 # The usage-limit CI subset: the worker-side window is the family's
-# recovery-critical member — the brake is durable, the park is not yet.
-_USAGE_LIMIT_CI_SUBSET = ("usagelimit.worker-after-brake.before-park",)
+# recovery-critical member — the mark is durable, the park is not yet.
+_USAGE_LIMIT_CI_SUBSET = ("usagelimit.worker-after-mark.before-park",)
 
 
 # The trace CI subset: the family's lone member is its own CI representative.
@@ -2249,7 +2250,7 @@ def test_kill9_at_pause_park_crash_point(crash_env: CrashEnv, tmp_path: Path, po
         terminate(hub_proc)
 
 
-# --- Usage-limit pause — the usagelimit.* crash points ---
+# --- Usage-limit park — the usagelimit.* crash points ---
 
 
 def _ingest_usage_limited_chunk(hub: httpx.Client, forge: httpx.Client, landed_file: str) -> str:
@@ -2285,11 +2286,30 @@ def _ingest_usage_limited_judge_chunk(hub: httpx.Client, forge: httpx.Client, la
     return chunk_id
 
 
+def _usage_limit_mark_count(runner_dir: Path) -> int:
+    """Every mark on the subscription the runner spends."""
+    with _audit_connection(runner_dir) as conn:
+        return len(conn.execute(select(runner_schema.subscription_usage_limits.c.id)).all())
+
+
+def _clear_subscription_floor(runner_dir: Path) -> None:
+    """Open the floor of the subscription the runner spends by recording a clear through the host store — the
+    subscription-target clear's own write."""
+    slug = load_runner_config(runner_dir).subscriptions[0].slug
+    engine = create_engine_from_url(load_runner_config(runner_dir).db_url)
+    try:
+        host = build_host_stores(engine, errors=runner_store_errors(), clock=SystemClock())
+        host.usage_limits.record_floor_clear(slug, FloorClear(cleared_at=datetime.now(UTC), by="crash-sweep"))
+    finally:
+        engine.dispose()
+
+
 @pytest.mark.parametrize("point", _USAGE_LIMIT_SWEEP)
 def test_kill9_at_usage_limit_crash_point(crash_env: CrashEnv, tmp_path: Path, point: str) -> None:
-    """A ``kill -9`` between the usage-limit brake engaging and its durable park still keeps
-    the claim — recovery re-parks the lease rather than abandoning it, and an
-    operator ``start`` resumes the same lease in place, no retry consumed. Unlike the operator
+    """A ``kill -9`` between the usage-limit mark and its durable park still keeps the claim —
+    recovery replays the mark as a no-op and re-parks the lease rather than abandoning it, no
+    brake is ever engaged, and the floor opening resumes the same lease in place, no retry
+    consumed. Unlike the operator
     pause-park scenario, nothing external triggers this: the runner discovers the limit itself
     from the exited generation's own transcript, with no hub-side pause API call at all. Swept
     over both of the family's members: the worker-side window (an exited worker generation is
@@ -2326,8 +2346,8 @@ def test_kill9_at_usage_limit_crash_point(crash_env: CrashEnv, tmp_path: Path, p
         before = _lease_for_chunk(runner_dir, chunk_id)
         lease_id, epoch, session_id, _pid_before = before
 
-        # The armed runner classifies the usage-limited exit, engages its own local brake,
-        # and self-SIGKILLs before the park is durable — no external pause call at all.
+        # The armed runner classifies the usage-limited exit, marks the limit on the subscription it
+        # spends, and self-SIGKILLs before the park is durable — no external pause call at all.
         code = wait_death(runner_proc)
         assert code == -9, f"armed runner at {point} exited {code}, not SIGKILL (-9); point never reached?"
         _assert_invariants(runner_dir, hub_dir, when=f"immediately after kill at {point}", after_recovery=False)
@@ -2346,25 +2366,25 @@ def test_kill9_at_usage_limit_crash_point(crash_env: CrashEnv, tmp_path: Path, p
         assert _closure_reason(runner_dir, lease_id) is None, (
             "recovery closed the usage-limited lease — the pause became a detach/failure"
         )
-        # This is the runner's own LOCAL brake, not a hub-side per-chunk pause — the hub still
-        # sees the chunk as running, unlike the operator pause-park scenario's `"paused"`.
+        # A usage-limit park, not a hub-side per-chunk pause — the hub still sees the chunk as
+        # running, unlike the operator pause-park scenario's `"paused"`.
         assert hub.get(f"/api/chunks/{chunk_id}").json()["status"] == "running"
         await_host(runner_port, runner_proc)
         runner = runner_api(runner_dir, runner_port)
         view = runner.get("/api/runner").json()
-        assert view["pause"]["local"] is True, "the local brake was not durably engaged"
+        assert view["pause"]["local"] is False, "a usage limit engaged the runner's brake"
+        assert _usage_limit_mark_count(runner_dir) == 1, "the recovered pass marked the limit a second time"
         _assert_invariants(
             runner_dir, hub_dir, when=f"after the usage-limit park recovered past {point}", after_recovery=True
         )
 
-        # The operator clears the local brake — `blizzard runner start`'s own PATCH — and the
-        # SAME session finishes the work it was parked mid-way through.
-        resumed = runner.patch("/api/runner", json={"paused": False, "by": "crash-sweep"})
-        assert resumed.status_code == 200, resumed.text
+        # The limit named no reset, so the floor would hold for its fallback; a clear opens it now and
+        # the SAME session finishes the work it was parked mid-way through.
+        _clear_subscription_floor(runner_dir)
         assert wait_status(hub, chunk_id, {"done"}) == "done", f"chunk did not converge after kill at {point}"
 
         after = _leases_for_chunk(runner_dir, chunk_id)
-        # Nothing worked twice: still exactly one lease, same lease/epoch/session — the pause
+        # Nothing worked twice: still exactly one lease, same lease/epoch/session — the park
         # cost the chunk a process, not an attempt.
         assert len(after) == 1, f"the usage-limit park/resume cycle minted an extra lease (retry, not resume): {after}"
         assert (after[0][0], after[0][1], after[0][2]) == (lease_id, epoch, session_id)

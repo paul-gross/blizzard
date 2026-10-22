@@ -67,10 +67,13 @@ def _floor(
     mark: UsageLimitMark | None = None,
     sample: ExternalUsageSampleSummary | None = None,
     clear: FloorClear | None = None,
+    clear_sample: ExternalUsageSampleSummary | None = None,
     sampled: bool = True,
     slug: str | None = _SLUG,
 ) -> FloorAnswer:
-    return floor_answer(slug=slug, sampled=sampled, mark=mark, sample=sample, clear=clear, now=now)
+    return floor_answer(
+        slug=slug, sampled=sampled, mark=mark, sample=sample, clear=clear, clear_sample=clear_sample, now=now
+    )
 
 
 # --- a mark ----------------------------------------------------------------------------------------------------------
@@ -281,10 +284,32 @@ def test_a_clear_sets_aside_a_window_the_sample_before_it_showed_exhausted() -> 
 
 
 def test_a_later_sample_still_showing_the_cleared_window_shut_does_not_undo_the_clear() -> None:
+    at_clear = _sample(_MARKED, _window(100.0, _RESET))
     still_shut = _sample(_MARKED + timedelta(minutes=20), _window(100.0, _RESET))
     clear = _clear(_MARKED + timedelta(minutes=5))
 
-    assert _floor(now=_MARKED + timedelta(minutes=21), mark=_mark(), sample=still_shut, clear=clear).admits
+    answer = _floor(
+        now=_MARKED + timedelta(minutes=21), mark=_mark(), sample=still_shut, clear=clear, clear_sample=at_clear
+    )
+
+    assert answer.admits
+
+
+def test_a_window_not_exhausted_at_the_clear_holds_once_it_is_in_the_same_period() -> None:
+    at_clear = _sample(_MARKED, _window(90.0, _RESET))
+    shut_since = _sample(_MARKED + timedelta(minutes=20), _window(100.0, _RESET))
+    clear = _clear(_MARKED + timedelta(minutes=5))
+
+    answer = _floor(now=_MARKED + timedelta(minutes=21), sample=shut_since, clear=clear, clear_sample=at_clear)
+
+    assert not answer.admits
+    assert answer.hold is not None and answer.hold.kind is HoldKind.WINDOW
+
+
+def test_a_window_with_no_sample_standing_at_the_clear_holds() -> None:
+    shut_since = _sample(_MARKED + timedelta(minutes=20), _window(100.0, _RESET))
+
+    assert not _floor(now=_MARKED + timedelta(minutes=21), sample=shut_since, clear=_clear(_MARKED)).admits
 
 
 def test_a_window_exhausted_under_a_later_reset_holds_despite_the_clear() -> None:

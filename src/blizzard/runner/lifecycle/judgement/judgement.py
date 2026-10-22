@@ -36,7 +36,7 @@ from blizzard.runner.lifecycle.judgement.judgement_prompt import JudgementPrompt
 from blizzard.runner.lifecycle.judgement.produces import ProducesReconciler
 from blizzard.runner.lifecycle.judgement.verdict import Verdict, VerdictOutcome
 from blizzard.runner.lifecycle.spawn import Spawner
-from blizzard.runner.lifecycle.usage_limit import classify_judge_usage_limit, engage_and_park_judge
+from blizzard.runner.lifecycle.usage_limit import classify_judge_usage_limit, mark_and_park_judge
 from blizzard.runner.node_steps.envelope import Envelope, ProducesSpec
 from blizzard.runner.node_steps.submissions import CheckVerdict, Completion, CompletionArtifact, GateSubmission
 from blizzard.runner.throttle.gate import StartKind
@@ -271,7 +271,7 @@ class Judgement:
         # Classified ahead of both the staleness bound and the lost-output check: a usage-limited harness
         # typically writes its own signal to the session transcript, not this elicitation's captured stdout,
         # so neither an empty `output` nor a long-unobserved exit may fall through to failing or relaunching —
-        # exactly what a usage-limit pause exists to avoid.
+        # exactly what a usage-limit park exists to avoid.
         generation = self.ctx.stores.liveness.lease_generation(lease.lease_id)
         lines = self.ctx.usage.judge_transcript_lines(lease, self.bindings, generation=generation)
         limit = classify_judge_usage_limit(self.ctx, lease, output, lines)
@@ -307,7 +307,7 @@ class Judgement:
                 usable=harness.has_usable_output(output),
             )
         if outcome is CollectOutcome.PARK and limit is not None:
-            engage_and_park_judge(self.ctx, lease, limit)
+            mark_and_park_judge(self.ctx, lease, limit, generation=generation)
         elif outcome is CollectOutcome.FAIL_STALE:
             self._fail_stale(elicitation)
         elif outcome is CollectOutcome.RELAUNCH:

@@ -10,21 +10,11 @@ from pathlib import Path
 
 import pytest
 
-from blizzard.foundation.clock import FixedClock
 from blizzard.runner.api.host import _subscription_list
 from blizzard.runner.config import SubscriptionDeclaration
-from blizzard.runner.lifecycle.usage_limit import _fallback_reset
-from blizzard.runner.loop.context import LoopConfig, ResolvedSubscription
 from blizzard.runner.subscriptions.subscription_sampler import PROVIDER_ANTHROPIC
 from tests.runner_fakes import (
-    FIXTURE_RUNNER_ID,
-    FakeHarness,
-    FakeHub,
-    FakeProbe,
-    FakeProvider,
-    make_context,
     make_store,
-    serving,
 )
 from tests.support import count_queries
 
@@ -143,75 +133,37 @@ def test_subscription_list_statement_count_is_flat_in_the_declared_subscriptions
 
 
 @pytest.mark.parametrize("declared", [1, 3])
-def test_fallback_reset_statement_count_is_flat_in_the_declared_subscriptions(tmp_path: Path, declared: int) -> None:
+def test_the_sample_at_an_instant_is_one_statement_whatever_the_declared_subscriptions(
+    tmp_path: Path, declared: int
+) -> None:
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     for i in range(declared):
         _record(store, f"sub-{i}", 0, payload=_payload(100.0))
-    resolved = tuple(
-        ResolvedSubscription(
-            slug=f"sub-{i}",
-            name=f"Sub {i}",
-            provider=PROVIDER_ANTHROPIC,
-            sample_interval_seconds=300,
-        )
-        for i in range(declared)
-    )
-    ctx = make_context(
-        store,
-        hub=FakeHub(),
-        provider=FakeProvider({}),
-        harness=FakeHarness(handle=None, verdict=None),  # type: ignore[arg-type]
-        probe=FakeProbe(),
-        clock=FixedClock(_NOW),
-        config=LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID, bindings=serving(1)),
-        subscriptions=resolved,
-    )
 
-    count = count_queries(store._engine, lambda: _fallback_reset(ctx))
+    count = count_queries(store._engine, lambda: store.external_usage_sample_at("sub-0", _NOW))
 
     assert count == 1
-    assert _fallback_reset(ctx) == _NOW + timedelta(hours=2)
 
 
-def test_fallback_reset_reads_only_the_runners_own_slug(tmp_path: Path) -> None:
+def test_the_sample_at_an_instant_reads_only_its_own_slug_and_none_newer(tmp_path: Path) -> None:
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     _record(store, "own", 0, payload=_payload(100.0, resets_in=timedelta(hours=4)))
-    # Another slug's sooner reset is never consulted, declared or not.
+    _record(store, "own", 10, payload=_payload(20.0, resets_in=timedelta(hours=9)))
     _record(store, "other", 0, payload=_payload(100.0, resets_in=timedelta(hours=1)))
-    ctx = make_context(
-        store,
-        hub=FakeHub(),
-        provider=FakeProvider({}),
-        harness=FakeHarness(handle=None, verdict=None),  # type: ignore[arg-type]
-        probe=FakeProbe(),
-        clock=FixedClock(_NOW),
-        config=LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID, bindings=serving(1)),
-        subscriptions=(
-            ResolvedSubscription(slug="own", name="own", provider=PROVIDER_ANTHROPIC, sample_interval_seconds=300),
-        ),
-    )
 
-    assert _fallback_reset(ctx) == _NOW + timedelta(hours=4)
+    at = store.external_usage_sample_at("own", _NOW + timedelta(minutes=9))
+
+    assert at is not None
+    assert [w.utilization_pct for w in at.windows] == [100.0]
 
 
-def test_fallback_reset_is_none_for_a_runner_spending_no_slug_or_whose_slug_has_no_sample(tmp_path: Path) -> None:
+def test_the_sample_at_an_instant_skips_a_miss_and_is_none_before_any_sample(tmp_path: Path) -> None:
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
-    _record(store, "other", 0, payload=_payload(100.0, resets_in=timedelta(hours=1)))
+    _record(store, "own", 0, payload=_payload(100.0))
+    _record(store, "own", 1, payload=None, miss_reason="credential_lapsed")
 
-    def ctx_over(*slugs: str):  # type: ignore[no-untyped-def]
-        return make_context(
-            store,
-            hub=FakeHub(),
-            provider=FakeProvider({}),
-            harness=FakeHarness(handle=None, verdict=None),  # type: ignore[arg-type]
-            probe=FakeProbe(),
-            clock=FixedClock(_NOW),
-            config=LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID, bindings=serving(1)),
-            subscriptions=tuple(
-                ResolvedSubscription(slug=slug, name=slug, provider=PROVIDER_ANTHROPIC, sample_interval_seconds=300)
-                for slug in slugs
-            ),
-        )
+    at = store.external_usage_sample_at("own", _NOW + timedelta(minutes=1))
 
-    assert _fallback_reset(ctx_over()) is None
-    assert _fallback_reset(ctx_over("unsampled")) is None
+    assert at is not None and at.sampled_at == _NOW
+    assert store.external_usage_sample_at("own", _NOW - timedelta(seconds=1)) is None
+    assert store.external_usage_sample_at("unsampled", _NOW) is None

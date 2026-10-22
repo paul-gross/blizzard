@@ -117,6 +117,23 @@ class ExternalUsageStore:
             for slug, row in newest.items()
         }
 
+    def external_usage_sample_at(self, slug: str, at: datetime) -> ExternalUsageSampleSummary | None:
+        # Served by `ix_external_usage_samples_slug_sampled_at`: one range-bounded seek, newest first.
+        samples = external_usage_samples
+        stmt = (
+            select(samples.c.sampled_at, samples.c.payload)
+            .where(samples.c.slug == slug, samples.c.sampled_at <= at, samples.c.payload.is_not(None))
+            .order_by(samples.c.sampled_at.desc(), samples.c.id.desc())
+            .limit(1)
+        )
+        with self._store.connect() as conn:
+            row = conn.execute(stmt).one_or_none()
+        if row is None:
+            return None
+        return ExternalUsageSampleSummary(
+            slug=slug, sampled_at=as_utc(row.sampled_at), windows=_decode_windows(row.payload)
+        )
+
     def latest_external_usage_attempt(self, slug: str) -> ExternalUsageAttemptSummary | None:
         stmt = (
             select(

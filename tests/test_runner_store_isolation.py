@@ -233,10 +233,15 @@ def _sample() -> UsageSample:
 
 def _engage_under_lock(w: RunnerWorld) -> None:
     """One locked brake transaction over the world's runner alone: its brake read and its fact written on the handle."""
-    with w.stores.pause.locked_brakes([]) as locked:
+    with w.stores.pause.locked_brakes() as locked:
         w.stores.pause.local_brake_locked(locked)
         w.stores.pause.record_local_pause_locked(
-            locked, paused=True, at=_at(53), by="usage-limit", report_kind="runner.locally_paused", report_payload="{}"
+            locked,
+            paused=True,
+            at=_at(53),
+            by="runner-ceiling",
+            report_kind="runner.locally_paused",
+            report_payload="{}",
         )
 
 

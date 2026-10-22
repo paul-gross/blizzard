@@ -44,7 +44,6 @@ from blizzard.runner.loop.retention_floor import RetentionPasses
 from blizzard.runner.process.probe import IProcessProbe
 from blizzard.runner.process.worker_scratch import IWorkerScratchDirs
 from blizzard.runner.stores import HostStores, RunnerStores
-from blizzard.runner.throttle.pause import SpendingRunner
 from blizzard.runner.usage.recorder import UsageRecorder
 
 _log = get_logger("blizzard.runner.loop")
@@ -194,10 +193,8 @@ class LoopContext:
     #: The SSE publish seam, typed against the Protocol
     #: (``bzh:dependency-inversion``); ``None`` on ``blizzard runner tick``, a no-op there.
     events: IRunnerEventPublisher | None = None
-    #: Every provider subscription this runner declares — what registration reports and the usage-limit brake reads.
+    #: Every provider subscription this runner declares — what registration reports and the floor reads.
     subscriptions: tuple[ResolvedSubscription, ...] = ()
-    #: The other runners of this host spending this runner's subscription — a usage limit reached here brakes them too.
-    slug_spenders: tuple[SpendingRunner, ...] = ()
     #: Opens the tick's root and step spans — the no-op on a standalone ``blizzard runner tick``.
     tracer: IPlatformTracer = field(default_factory=NoopPlatformTracer)
     #: This runner's flags as they stand — its own resolved answer with its hub's ``fleet`` answer applied, which the

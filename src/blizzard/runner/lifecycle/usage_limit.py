@@ -1,10 +1,11 @@
-"""Usage-limit exit classification and pause engagement.
+"""Usage-limit exit classification and the mark.
 
 Shared by a worker generation's own exit (:mod:`blizzard.runner.loop.steps`'s ``Advance``)
 and a judge elicitation's own exit (:mod:`blizzard.runner.lifecycle.judgement.judgement`'s ``Judgement``):
-both react to the same harness fact the same way — engage the local pause brake, and that of every other runner of
-the host spending the same subscription, with a reason naming the subscription, the harness and the reset time, park
-the lease in place, consume no retry, bump no epoch. The classifier is the adapter's own translated fact
+both react to the same harness fact the same way — mark the limit on the subscription the runner spends, or on the
+runner itself when it spends none, so the floor holds back every runner spending it; park the lease in place, consume
+no retry, bump no epoch. No brake is engaged: a usage limit is a throttle, never a breaker. The classifier is the
+adapter's own translated fact
 (:meth:`~blizzard.runner.harness.adapter.IHarnessUsageLimits.classify_usage_limit`); this
 module is where the loop decides what to do with it (``bzh:deterministic-shell``)."""
 
@@ -21,37 +22,46 @@ from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.registry import UnavailableHarnessError, UnknownHarnessError
 from blizzard.runner.harness.usage import UsageLimit
 from blizzard.runner.leases.model import Lease
+from blizzard.runner.leases.overload import InvocationKind
 from blizzard.runner.lifecycle.attempt import Attempt, AttemptContext
-from blizzard.runner.lifecycle.spawn import SpawnHostStores, SpawnStores
+from blizzard.runner.lifecycle.spawn import SpawnConfig, SpawnHostStores, SpawnStores
 from blizzard.runner.throttle.gate import GateSubscription
-from blizzard.runner.throttle.pause import SpendingRunner, UsageLimitBrakes, usage_limit_reason
-from blizzard.runner.usage.repository import IReadExternalUsageRepository, soonest_exhausted_reset
+from blizzard.runner.throttle.usage_limits import (
+    IWriteRunnerUsageLimitRepository,
+    IWriteSubscriptionUsageLimitRepository,
+    UsageLimitMark,
+)
+from blizzard.runner.usage.repository import ExternalUsageSampleSummary, IReadExternalUsageRepository
 
 _log = get_logger("blizzard.runner.loop")
 
-# The brake is written before the park — a crash after the brake but before the park
-# leaves an exited, unparked lease that the next pass classifies again and completes.
-_CP_WORKER_AFTER_BRAKE = crashpoint(
-    "usagelimit.worker-after-brake.before-park",
-    "usage-limit brake engaged for an exited worker generation; its park is not yet durable",
+# The mark is written before the park — a crash after the mark but before the park leaves an exited, unparked lease
+# that the next pass classifies again, replays the mark as a no-op under its invocation, and parks.
+_CP_WORKER_AFTER_MARK = crashpoint(
+    "usagelimit.worker-after-mark.before-park",
+    "usage-limit mark written for an exited worker generation; its park is not yet durable",
 )
 # Same shape for a judge elicitation, whose own record/output files must also clear before
 # the park — a crash mid-way leaves a standing elicitation record the next pass re-reads.
-_CP_JUDGE_AFTER_BRAKE = crashpoint(
-    "usagelimit.judge-after-brake.before-park",
-    "usage-limit brake engaged for an exited judge elicitation; its park is not yet durable",
+_CP_JUDGE_AFTER_MARK = crashpoint(
+    "usagelimit.judge-after-mark.before-park",
+    "usage-limit mark written for an exited judge elicitation; its park is not yet durable",
 )
 
 
 class DeclaredSubscription(GateSubscription, Protocol): ...
 
 
-class UsageLimitStores(SpawnStores, Protocol): ...
+class UsageLimitStores(SpawnStores, Protocol):
+    @property
+    def usage_limits(self) -> IWriteRunnerUsageLimitRepository: ...
 
 
 class UsageLimitHostStores(SpawnHostStores, Protocol):
     @property
     def external_usage(self) -> IReadExternalUsageRepository: ...
+    @property
+    def usage_limits(self) -> IWriteSubscriptionUsageLimitRepository: ...
 
 
 class UsageLimitContext(AttemptContext, Protocol):
@@ -60,11 +70,9 @@ class UsageLimitContext(AttemptContext, Protocol):
     @property
     def host_stores(self) -> UsageLimitHostStores: ...
     @property
-    def subscriptions(self) -> Sequence[DeclaredSubscription]: ...
+    def config(self) -> SpawnConfig: ...
     @property
-    def slug_spenders(self) -> Sequence[SpendingRunner]:
-        """The other runners of this host spending this runner's subscription; none when it spends none."""
-        ...
+    def subscriptions(self) -> Sequence[DeclaredSubscription]: ...
 
 
 def classify_worker_usage_limit(
@@ -83,16 +91,16 @@ def classify_worker_usage_limit(
     return harness.classify_usage_limit(output, lines, ctx.clock.now())
 
 
-def engage_and_park_worker(ctx: UsageLimitContext, lease: Lease, limit: UsageLimit) -> None:
-    """Engage the brake for a limited worker generation, then park the lease in place —
-    the worker has already exited, so there is nothing to kill."""
+def mark_and_park_worker(ctx: UsageLimitContext, lease: Lease, limit: UsageLimit, *, generation: int) -> None:
+    """Mark the limit ``generation`` met, then park the lease in place — the worker has already exited, so there is
+    nothing to kill."""
     session = lease.session
     assert session is not None  # only reached from a limit `classify_worker_usage_limit` returned
-    _engage(ctx, session.harness_id, limit)
-    _CP_WORKER_AFTER_BRAKE.reached()
+    _mark(ctx, lease, session.harness_id, limit, generation=generation, kind="worker")
+    _CP_WORKER_AFTER_MARK.reached()
     Attempt(ctx, lease).park_usage_limited()
     _log.warning(
-        "usage-limit pause — worker generation parked, no retry consumed",
+        "usage-limit mark — worker generation parked, no retry consumed",
         chunk_id=lease.chunk_id,
         lease_id=lease.lease_id,
         harness_id=session.harness_id,
@@ -115,17 +123,17 @@ def classify_judge_usage_limit(
     return harness.classify_usage_limit(output, lines, ctx.clock.now())
 
 
-def engage_and_park_judge(ctx: UsageLimitContext, lease: Lease, limit: UsageLimit) -> None:
-    """Engage the brake for a limited judge elicitation, then park the lease in place (the
-    process has already exited — nothing to kill). The elicitation record is left standing:
-    it marks the park as judge-side. A usage-limit pause never fails the attempt."""
+def mark_and_park_judge(ctx: UsageLimitContext, lease: Lease, limit: UsageLimit, *, generation: int) -> None:
+    """Mark the limit a judge elicitation of ``generation`` met, then park the lease in place (the process has already
+    exited — nothing to kill). The elicitation record is left standing: it marks the park as judge-side. A usage-limit
+    park never fails the attempt."""
     session = lease.session
     assert session is not None  # only reached from a limit `classify_judge_usage_limit` returned
-    _engage(ctx, session.harness_id, limit)
-    _CP_JUDGE_AFTER_BRAKE.reached()
+    _mark(ctx, lease, session.harness_id, limit, generation=generation, kind="judge")
+    _CP_JUDGE_AFTER_MARK.reached()
     Attempt(ctx, lease).park_usage_limited()
     _log.warning(
-        "usage-limit pause — judge elicitation parked, no retry consumed",
+        "usage-limit mark — judge elicitation parked, no retry consumed",
         chunk_id=lease.chunk_id,
         lease_id=lease.lease_id,
         harness_id=session.harness_id,
@@ -133,31 +141,45 @@ def engage_and_park_judge(ctx: UsageLimitContext, lease: Lease, limit: UsageLimi
     )
 
 
-def _engage(ctx: UsageLimitContext, harness_id: str, limit: UsageLimit) -> None:
-    reason = _reason(ctx, harness_id, limit)
-    UsageLimitBrakes(SpendingRunner(ctx.stores.pause, ctx.events), ctx.slug_spenders, ctx.clock).engage(
-        by="usage-limit", reason=reason
+def _mark(
+    ctx: UsageLimitContext, lease: Lease, harness_id: str, limit: UsageLimit, *, generation: int, kind: InvocationKind
+) -> None:
+    """Write one mark — to the subscription the runner spends, else to the runner itself. A replay of an invocation
+    already marked writes nothing, so a crash between the mark and the park re-marks as a no-op."""
+    marked_at = ctx.clock.now()
+    slug = ctx.config.subscription
+    sample = ctx.host_stores.external_usage.external_usage_sample_at(slug, marked_at) if slug is not None else None
+    held = _held_window(sample, limit.resets_at)
+    mark = UsageLimitMark(
+        marked_at=marked_at,
+        resets_at=limit.resets_at,
+        window=held[0] if held is not None else None,
+        window_resets_at=held[1] if held is not None else None,
+        harness_id=harness_id,
+        detail=limit.detail,
+        lease_id=lease.lease_id,
+        epoch=lease.epoch,
+        generation=generation,
+        invocation_kind=kind,
     )
-
-
-def _reason(ctx: UsageLimitContext, harness_id: str, limit: UsageLimit) -> str:
-    return usage_limit_reason(harness_id, limit.resets_at or _fallback_reset(ctx), slug=_own_slug(ctx))
-
-
-def _own_slug(ctx: UsageLimitContext) -> str | None:
-    """The one subscription this runner spends, or ``None`` when it names none."""
-    return ctx.subscriptions[0].slug if ctx.subscriptions else None
-
-
-def _fallback_reset(ctx: UsageLimitContext) -> datetime | None:
-    """The soonest pending reset this runner's own subscription last reported
-    (:func:`~blizzard.runner.usage.repository.soonest_exhausted_reset`) — ``None`` when it spends none, or when
-    that slug has no sample, whatever any other slug last reported."""
-    slug = _own_slug(ctx)
     if slug is None:
+        ctx.stores.usage_limits.record_usage_limit_mark(mark)
+    else:
+        ctx.host_stores.usage_limits.record_usage_limit_mark(slug, mark)
+
+
+def _held_window(sample: ExternalUsageSampleSummary | None, resets_at: datetime | None) -> tuple[str, datetime] | None:
+    """The window the limit fell in, and its period's reset: the one whose reset, in the newest sample at or before the
+    mark, is the reset the harness named, to the minute — ``None`` when the harness named none, no sample stands, or no
+    window carries it."""
+    if sample is None or resets_at is None:
         return None
-    windows = ctx.host_stores.external_usage.latest_external_usage_windows(slug)
-    return soonest_exhausted_reset({slug: windows}, ctx.clock.now())
+    named = _to_minute(resets_at)
+    return next(((w.window, w.resets_at) for w in sample.windows if _to_minute(w.resets_at) == named), None)
+
+
+def _to_minute(at: datetime) -> datetime:
+    return at.replace(second=0, microsecond=0)
 
 
 def _usage_limit_adapter(ctx: UsageLimitContext, session: SessionReference) -> IHarnessUsageLimits | None:

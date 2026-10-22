@@ -65,7 +65,7 @@ from blizzard.runner.lifecycle.model import (
 from blizzard.runner.lifecycle.registration import Registration, registered_runner_id
 from blizzard.runner.lifecycle.spawn import Spawner
 from blizzard.runner.lifecycle.takeover import TakeoverCloser, TakeoverCloseScope
-from blizzard.runner.lifecycle.usage_limit import classify_worker_usage_limit, engage_and_park_worker
+from blizzard.runner.lifecycle.usage_limit import classify_worker_usage_limit, mark_and_park_worker
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.process.probe import IProcessProbe
 from blizzard.runner.stores import RunnerStores
@@ -567,7 +567,7 @@ class Advance(Step):
         backing_off = False
         match exited_worker_classified_move(limit=limit, overload=overload):
             case ParkOnUsageLimit(limit=parked):
-                engage_and_park_worker(ctx, lease, parked)
+                mark_and_park_worker(ctx, lease, parked, generation=generation)
                 return
             case RecordOverload(overload=recorded):
                 # False at the streak limit: fall through to today's ordinary path below.
