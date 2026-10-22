@@ -32,9 +32,9 @@ do the pointing:
   the hub's answer; leave it as written.
 
 A third key, the `[[runner]]`'s `projects`, names the projects the runner serves as bindings, each
-`{ project = "<id or slug>", workspace = "<workspace id>", agents = <n> }`; `init` writes a binding of `default` with
-`agents = 1`. The key is required, and a runner without it is halted; `projects = []` serves none
-([deployment/projects.md](./deployment/projects.md#runners-serve-projects)).
+`{ project = "<id or slug>", workspace = "<workspace id>" }`; `init` writes a binding of `default` and a runner-level
+`agents = 1`, the one count every binding shares. The key is required, and a runner without it is halted;
+`projects = []` serves none ([deployment/projects.md](./deployment/projects.md#runners-serve-projects)).
 
 The file's `hub_url` is authoritative: `BZ_HUB_URL` seeds it only at `blizzard-runner init` time, as `--hub <url>` does
 over it, and a running daemon reads the file alone — re-pointing a runner means editing the file and restarting, not
