@@ -1,5 +1,5 @@
 {
-  "head_revision": "20261021_0900_human_notes",
+  "head_revision": "20261022_1000_runner_agents",
   "store": "hub",
   "tables": {
     "answer_deliveries": {
@@ -6661,6 +6661,12 @@
           "nullable": true,
           "server_default": false,
           "type": "String"
+        },
+        "agents": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "Integer"
         },
         "bindings": {
           "deprecated": null,

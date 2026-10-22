@@ -281,3 +281,37 @@ def test_the_runners_read_marks_nothing_claimable_for_a_runner_that_never_connec
     retired = world.hub.client.post(f"/api/runners/{world.runner_id}/retire", json={})
     assert retired.status_code == 200, retired.text
     assert _claimable(world) == {"default": False}
+
+
+def test_the_declared_agents_are_stored_and_read_back_on_every_runner_view(tmp_path: Path) -> None:
+    world = _World(tmp_path)
+
+    world.register(bindings=_bindings(("default", "ws-a")), agents=3)
+
+    detail = world.hub.client.get(f"/api/runners/{world.runner_id}").json()
+    listed = next(
+        r for r in world.hub.client.get("/api/runners").json()["runners"] if r["runner_id"] == world.runner_id
+    )
+    own = world.hub.client.get(f"/api/fleet/runners/{world.runner_id}", headers=_bearer(world.token)).json()
+    assert [view["agents"] for view in (detail, listed, own)] == [3, 3, 3]
+    assert detail["bindings"][0]["agents"] == 1
+
+
+def test_a_registration_without_agents_reads_back_none_and_a_re_registration_replaces_it(tmp_path: Path) -> None:
+    world = _World(tmp_path)
+
+    world.register(bindings=_bindings(("default", "ws-a")), agents=2)
+    world.register(bindings=_bindings(("default", "ws-a")))
+
+    assert world.hub.client.get(f"/api/runners/{world.runner_id}").json()["agents"] is None
+
+
+@pytest.mark.parametrize("agents", [0, -1])
+def test_a_non_positive_agents_is_refused(tmp_path: Path, agents: int) -> None:
+    world = _World(tmp_path)
+
+    resp = world.hub.client.post(
+        "/api/fleet/runners", json={"workspace_id": "ws-a", "agents": agents}, headers=_bearer(world.token)
+    )
+
+    assert resp.status_code == 422, resp.text
