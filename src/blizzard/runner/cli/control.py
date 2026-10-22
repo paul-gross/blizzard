@@ -14,13 +14,13 @@ from blizzard.foundation.escalation_causes import EscalationCause
 from blizzard.foundation.roles import dto
 from blizzard.foundation.runner_identity_state import IdentityState
 from blizzard.foundation.subscription_miss import SampleMissReason
+from blizzard.runner.cli.children import command_children
 from blizzard.runner.cli.daemon import RunnerDaemon, runner_option
 from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
 from blizzard.runner.cli.traces import harness_telemetry_lines
 from blizzard.runner.hub.identity import IdentityVerdict
 from blizzard.runner.process.child_env import ChildEnv
 from blizzard.runner.process.child_processes import ShellCommand
-from blizzard.runner.process.internal.subprocess_child_processes import SubprocessChildProcesses
 from blizzard.runner.subscriptions.credential_renewer import RENEWAL_FAILURE_TEXT
 from blizzard.runner.subscriptions.subscription_sampler import MISS_REASON_TEXT
 from blizzard.wire.runner_status import IdentityVerdictView
@@ -375,7 +375,7 @@ def takeover(
         try:
             # The takeover env, layered over the terminal env: the forwarded
             # vars deliberately WIN over the terminal's own, and carry the lease token.
-            exit_code = SubprocessChildProcesses().run_foreground(
+            exit_code = command_children(ctx).run_foreground(
                 ShellCommand(view["command"]),
                 cwd=view["workdir"],
                 env=ChildEnv.operator_shell(view.get("env", {})),

@@ -23,7 +23,7 @@ from blizzard.runner.harness.opencode.compatibility.landlock import (
     LandlockUnavailable,
     require_landlock,
 )
-from blizzard.runner.process.child_env import ChildEnv
+from blizzard.runner.process.child_env import AllowlistedEnv, ChildEnv
 from blizzard.runner.process.child_processes import IChildProcesses, ISpawnedChild, Stream
 from blizzard.runner.process.groups import group_exists, signal_group, terminate_group
 
@@ -702,9 +702,9 @@ def _stop_process_group(process: _ProcessHandle, grace_seconds: float = 0.5) -> 
 
 
 def _child_env(env: Mapping[str, str]) -> ChildEnv:
-    """The seam's form of an env the compatibility scratch config already built from the allowlist with its
-    explicit additions."""
-    return ChildEnv(tuple(env.items()))
+    """The tool profile with ``env`` as its explicit additions — ``env`` is already built over the allowlist, so
+    the layering only ever adds or overrides, and never admits an ambient variable the profile would drop."""
+    return AllowlistedEnv.of(()).tool().adding(env)
 
 
 def _wait_for_group_exit(pgid: int, timeout: float) -> None:

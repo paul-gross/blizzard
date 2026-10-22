@@ -26,6 +26,8 @@ from blizzard.runner.process.groups import terminate_group
 
 # A timed-out child's group gets this long after SIGTERM before SIGKILL.
 _TIMEOUT_GRACE_SECONDS = 2.0
+# After the SIGKILL, the pipes get this long to reach EOF before they are abandoned.
+_DRAIN_SECONDS = 1.0
 
 _STREAMS = {
     Stream.DEVNULL: subprocess.DEVNULL,
@@ -94,6 +96,22 @@ def _communicated(process: subprocess.Popen[str]) -> Callable[[float], tuple[str
     return wait
 
 
+def _killed(process: subprocess.Popen[str]) -> tuple[str, str]:
+    """Kill the child's whole group and collect what it wrote. A descendant that left the group can still hold a
+    pipe open after the kill, so the drain is bounded too: past it the pipes are closed and the output is empty."""
+    output = terminate_group(process.pid, grace=_TIMEOUT_GRACE_SECONDS, wait=_communicated(process))
+    if output is None:
+        output = _communicated(process)(_DRAIN_SECONDS)
+    if output is None:
+        for pipe in (process.stdin, process.stdout, process.stderr):
+            if pipe is not None:
+                pipe.close()
+        process.wait()
+        return "", ""
+    out, err = output
+    return out or "", err or ""
+
+
 class SubprocessChildProcesses:
     """Every launch starts a new session, so the child's pid is its pgid and a group kill reaches its descendants."""
 
@@ -109,28 +127,34 @@ class SubprocessChildProcesses:
         stdout: IO[bytes] | None = None,
     ) -> ChildRun:
         deadline = time.monotonic() + timeout
-        process = subprocess.Popen(
-            command.script if isinstance(command, ShellCommand) else list(command),
-            shell=isinstance(command, ShellCommand),
-            cwd=cwd,
-            env=env.variables,
-            stdin=subprocess.PIPE if input is not None else subprocess.DEVNULL,
-            stdout=subprocess.PIPE if stdout is None else stdout,
-            stderr=subprocess.PIPE,
-            text=True,
-            errors="replace",
-            start_new_session=True,
-        )
-        if input is not None and input_settle > 0:
-            _write_unclosed(process, input)
-            time.sleep(max(0.0, min(input_settle, deadline - time.monotonic())))
-            input = None
         try:
+            process = subprocess.Popen(
+                command.script if isinstance(command, ShellCommand) else list(command),
+                shell=isinstance(command, ShellCommand),
+                cwd=cwd,
+                env=env.variables,
+                stdin=subprocess.PIPE if input is not None else subprocess.DEVNULL,
+                stdout=subprocess.PIPE if stdout is None else stdout,
+                stderr=subprocess.PIPE,
+                text=True,
+                errors="replace",
+                start_new_session=True,
+            )
+        except (OSError, subprocess.SubprocessError) as exc:
+            raise ChildLaunchError(str(exc)) from exc
+        try:
+            if input is not None and input_settle > 0:
+                _write_unclosed(process, input)
+                time.sleep(max(0.0, min(input_settle, deadline - time.monotonic())))
+                input = None
             out, err = process.communicate(input, timeout=max(0.0, deadline - time.monotonic()))
         except subprocess.TimeoutExpired:
-            output = terminate_group(process.pid, grace=_TIMEOUT_GRACE_SECONDS, wait=_communicated(process))
-            out, err = output if output is not None else process.communicate()
-            return ChildRun(exit_code=None, stdout=out or "", stderr=err or "", timed_out=True)
+            out, err = _killed(process)
+            return ChildRun(exit_code=None, stdout=out, stderr=err, timed_out=True)
+        except BaseException:
+            # An interrupt or any other failure while the child runs must not strand its group.
+            _killed(process)
+            raise
         return ChildRun(exit_code=process.returncode, stdout=out or "", stderr=err or "", timed_out=False)
 
     def spawn(
@@ -157,7 +181,7 @@ class SubprocessChildProcesses:
                 preexec_fn=child_setup,
                 pass_fds=pass_fds,
             )
-        except subprocess.SubprocessError as exc:
+        except (OSError, subprocess.SubprocessError) as exc:
             raise ChildLaunchError(str(exc)) from exc
         return _PopenChild(process)
 

@@ -106,8 +106,8 @@ class IChildProcesses(Protocol):
         """Run to completion within ``timeout`` seconds; a timeout kills the whole group and is a result, never a
         raise. ``input`` is written at once and stdin closed ``input_settle`` seconds later (within ``timeout``), so
         a reply still in flight when EOF would drop it can land first. A ``stdout`` file receives the child's
-        stdout in place of the result's, which is then empty. Raises :class:`OSError` only when the child cannot
-        be started."""
+        stdout in place of the result's, which is then empty. Any raise while the child runs kills its group
+        first. Raises :class:`ChildLaunchError` only when the child cannot be started."""
         ...
 
     def spawn(

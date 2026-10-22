@@ -10,7 +10,6 @@ from blizzard.foundation.logging import get_logger
 from blizzard.runner.harness.adapter import IHarnessHealthProbe
 from blizzard.runner.harness.compatibility import CompatibilityProbe
 from blizzard.runner.harness.health import DeclaredDegradation
-from blizzard.runner.harness.internal import version_probe
 from blizzard.runner.harness.internal.version_probe import VersionProbe
 from blizzard.runner.harness.offline_compatibility import (
     CorpusConfigurationError,
@@ -75,7 +74,7 @@ class OpenCodeHealthProbe:
             _log.warning("opencode admitted-range corpus is misconfigured", detail=str(exc))
 
     def binary_present(self) -> bool:
-        return version_probe.binary_present(self._binary)
+        return self._versions.binary_present(self._binary)
 
     def probe_authentication(self) -> bool:
         """OpenCode exposes no provider-authentication subcommand, so this combines two free,

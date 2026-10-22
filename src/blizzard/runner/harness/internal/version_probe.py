@@ -15,13 +15,6 @@ _log = get_logger("blizzard.runner.harness")
 VERSION_PROBE_TIMEOUT_SECONDS = 5
 
 
-def binary_present(binary: str) -> bool:
-    """Whether ``binary`` resolves on ``PATH`` right now — bounded and non-raising, the
-    standalone half of :meth:`VersionProbe.observe_version`'s own internal presence check, for a caller
-    (the health-probe seam) that needs presence without paying for a version probe."""
-    return shutil.which(binary) is not None
-
-
 class VersionProbe:
     """Runs a harness binary's ``--version`` through the launch seam under the tool profile ``env``."""
 
@@ -29,13 +22,19 @@ class VersionProbe:
         self._children = children
         self._env = env
 
+    def binary_present(self, binary: str) -> bool:
+        """Whether ``binary`` resolves right now on the tool profile's ``PATH`` — the one its child launches
+        under, not the daemon's — bounded and non-raising, the standalone half of :meth:`observe_version`'s own
+        presence check, for a caller (the health-probe seam) that needs presence without a version probe."""
+        return shutil.which(binary, path=self._env.variables.get("PATH", "")) is not None
+
     def observe_version(self, binary: str) -> str | None:
         """The configured executable's version, observed right now — bounded and non-raising:
         a timeout, a missing binary, or empty output all read as ``None``, logged rather than
         propagated. Uncached; identical for every binding, only ``binary`` differs. Absent from
         ``PATH`` entirely (one of several known bindings, unconfigured here) skips the launch
         and logs at ``debug``, not the genuine-failure ``warning``."""
-        if not binary_present(binary):
+        if not self.binary_present(binary):
             _log.debug("harness binary not found on PATH; skipping version probe", binary=binary)
             return None
         try:

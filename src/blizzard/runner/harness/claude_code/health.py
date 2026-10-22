@@ -12,7 +12,6 @@ from blizzard.runner.harness import harness_shared
 from blizzard.runner.harness.adapter import IHarnessHealthProbe
 from blizzard.runner.harness.claude_code.ambient import AmbientSources, detect_ambient_conflicts
 from blizzard.runner.harness.health import DeclaredDegradation
-from blizzard.runner.harness.internal import version_probe
 from blizzard.runner.harness.internal.version_probe import VersionProbe
 from blizzard.runner.subscriptions.subscription_sampler import ANTHROPIC_DEFAULT_CREDENTIALS_PATH
 
@@ -67,7 +66,7 @@ class ClaudeCodeHealthProbe:
         self._credentials_path = Path(credentials_path or ANTHROPIC_DEFAULT_CREDENTIALS_PATH)
 
     def binary_present(self) -> bool:
-        return version_probe.binary_present(self._binary)
+        return self._versions.binary_present(self._binary)
 
     def probe_authentication(self) -> bool:
         """Authenticated when the binary responds and the OAuth credential file holds an access
