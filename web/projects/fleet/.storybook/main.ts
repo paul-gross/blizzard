@@ -1,6 +1,7 @@
 import type { StorybookConfig } from '@storybook/angular-vite';
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { mergeConfig } from 'vite';
+import { mergeConfig, type Plugin } from 'vite';
 
 const config: StorybookConfig = {
   framework: '@storybook/angular-vite',
@@ -15,6 +16,22 @@ const config: StorybookConfig = {
     mergeConfig(viteConfig, {
       mode: 'development',
       resolve: { alias: { 'fleet/testing': fileURLToPath(new URL('../src/lib/testing/public-api.ts', import.meta.url)) } },
+      // The mocker entry is emitted by static builds; serve its source in development as well.
+      plugins: [{
+        name: 'storybook-mocker-dev-entry',
+        enforce: 'pre',
+        configureServer(server) {
+          server.middlewares.use('/vite-inject-mocker-entry.js', (_request, response, next) => {
+            try {
+              const path = fileURLToPath(import.meta.resolve('storybook/internal/mocking-utils/mocker-runtime'));
+              response.setHeader('Content-Type', 'text/javascript');
+              response.end(readFileSync(path));
+            } catch (error) {
+              next(error);
+            }
+          });
+        },
+      } satisfies Plugin],
     }),
 };
 export default config;
