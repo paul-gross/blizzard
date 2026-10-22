@@ -715,7 +715,6 @@ HUB_ALLOWED_SCANS: list[Allowance] = [
             "requeues",
             "route_created",
             "route_released",
-            "tenant_deletions",
             "transitions",
         ),
         _SIGNATURE_REASON,

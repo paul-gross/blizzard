@@ -6,11 +6,12 @@ Each corpus read answers, beside every row, the tenant the row belongs to, and l
 closed tenant — one with a ``tenant_deletions`` row, whether its drain is still running or done —
 through the one predicate ``corpus_rows.open_tenant``, applied to every tenant-owned table a read
 returns rows of; the same predicate leaves out a row naming no tenant. A probe that gates a pass
-(``bzh:probe-gated-pass``) stays hub-wide: it counts every tenant's rows, closed or not. Chunk ids
-are hub-minted, so a filter on a chunk id needs no tenant beside it; a segment id is runner-minted,
-so a read that matches one segment row against another matches the tenant too. The group reads and
-never writes: whatever a pass then does with a row, it does in that row's tenant. The trace and
-egress reads' statements live in ``corpus_rows`` and run on the marked connection this group opens."""
+(``bzh:probe-gated-pass``) is read hub-wide in one statement and answers per tenant
+(``bzh:pass-isolates-tenants``): it counts every tenant's rows, closed or not. Chunk ids are
+hub-minted, so a filter on a chunk id needs no tenant beside it; a segment id is runner-minted, so a
+read that matches one segment row against another matches the tenant too. The group reads and never
+writes: whatever a pass then does with a row, it does in that row's tenant. The trace and egress
+reads' statements live in ``corpus_rows`` and run on the marked connection this group opens."""
 
 from __future__ import annotations
 
@@ -20,7 +21,7 @@ from contextlib import AbstractContextManager
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Connection, Select, and_, func, select
+from sqlalchemy import Connection, Select, and_, func, literal, null, select, union_all
 
 from blizzard.hub.domain.chunk.model import PendingCloseIntent, WorkRef, WorkRefLabel
 from blizzard.hub.domain.chunk.ports.work_refs import IReadWorkRefsCorpus, TenantWorkRef, WorkRefsSignature
@@ -111,29 +112,33 @@ class SweepCorpusReads:
             for row in rows
         ]
 
-    def live_work_refs_signature(self) -> WorkRefsSignature:
-        """One statement of append-only aggregates over every table :meth:`live_work_refs` and the
-        status derivation read, every tenant's rows counted, plus ``tenant_deletions``, so a tenant's
-        close moves it too: a count each, and the highest ``id`` where the table has one."""
-        tables = sorted(
-            (*status_family_tables(), s.chunk_work_refs, *_EPHEMERAL_TABLES, s.tenant_deletions),
-            key=lambda t: t.name,
-        )
-        columns = []
-        for table in tables:
-            columns.append(select(func.count()).select_from(table).scalar_subquery().label(f"{table.name}__count"))
-            if "id" in table.c:
-                columns.append(
-                    select(func.max(table.c.id)).select_from(table).scalar_subquery().label(f"{table.name}__max_id")
-                )
+    def live_work_refs_signature(self) -> dict[TenantId, WorkRefsSignature]:
+        """One statement of append-only aggregates, grouped by tenant, over every table
+        :meth:`live_work_refs` and the status derivation read: per tenant and table, a count and the
+        highest ``id`` where the table has one. A tenant holding no row of a table counts it zero, and
+        one holding no row of any has no entry. Closed tenants are counted too; the caller reads the
+        open set itself."""
+        tables = sorted((*status_family_tables(), s.chunk_work_refs, *_EPHEMERAL_TABLES), key=lambda t: t.name)
+        per_table = [
+            select(
+                table.c.tenant_id.label("tenant_id"),
+                literal(table.name).label("table_name"),
+                func.count().label("row_count"),
+                (func.max(table.c.id) if "id" in table.c else null()).label("max_id"),
+            ).group_by(table.c.tenant_id)
+            for table in tables
+        ]
         with self._read("corpus live work refs signature") as conn:
-            row = conn.execute(select(*columns)).one()
-        return WorkRefsSignature(
-            marks=tuple(
-                (table.name, row._mapping[f"{table.name}__count"], row._mapping.get(f"{table.name}__max_id"))
-                for table in tables
+            rows = conn.execute(union_all(*per_table)).all()
+        seen: dict[str, dict[str, tuple[int, int | None]]] = {}
+        for row in rows:
+            seen.setdefault(row.tenant_id, {})[row.table_name] = (row.row_count, row.max_id)
+        return {
+            TenantId(tenant): WorkRefsSignature(
+                marks=tuple((table.name, *by_table.get(table.name, (0, None))) for table in tables)
             )
-        )
+            for tenant, by_table in seen.items()
+        }
 
     # --- close drain ------------------------------------------------------------------
 
@@ -175,25 +180,37 @@ class SweepCorpusReads:
 
     # --- event derivation -------------------------------------------------------------
 
-    def derivation_signature(self) -> DerivationSignature:
-        """The derivation probe's aggregates over every tenant's segments and chunks."""
-        segment = s.transcript_segments
-        chunk_count = select(func.count()).select_from(s.chunks).scalar_subquery()
+    def derivation_signature(self) -> dict[TenantId, DerivationSignature]:
+        """The derivation probe's aggregates over each tenant's segments and chunks, grouped by tenant
+        in one statement; a tenant holding neither has no entry."""
+        segment, chunk = s.transcript_segments, s.chunks
+        segments = select(
+            segment.c.tenant_id.label("tenant_id"),
+            func.count(segment.c.id).label("segment_count"),
+            func.max(segment.c.id).label("max_segment_id"),
+            func.max(segment.c.received_at).label("max_received_at"),
+            literal(0).label("chunk_count"),
+        ).group_by(segment.c.tenant_id)
+        chunks = select(
+            chunk.c.tenant_id.label("tenant_id"),
+            literal(0).label("segment_count"),
+            null().label("max_segment_id"),
+            null().label("max_received_at"),
+            func.count().label("chunk_count"),
+        ).group_by(chunk.c.tenant_id)
         with self._read("corpus derivation signature") as conn:
-            row = conn.execute(
-                select(
-                    func.count(segment.c.id).label("segment_count"),
-                    func.max(segment.c.id).label("max_segment_id"),
-                    func.max(segment.c.received_at).label("max_received_at"),
-                    chunk_count.label("chunk_count"),
-                )
-            ).one()
-        return DerivationSignature(
-            segment_count=row.segment_count,
-            max_segment_id=row.max_segment_id,
-            max_received_at=row.max_received_at,
-            chunk_count=row.chunk_count,
-        )
+            rows = conn.execute(union_all(segments, chunks)).all()
+        merged: dict[str, dict[str, Any]] = {}
+        for row in rows:
+            into = merged.setdefault(
+                row.tenant_id, {"segment_count": 0, "max_segment_id": None, "max_received_at": None, "chunk_count": 0}
+            )
+            into["segment_count"] += row.segment_count
+            into["chunk_count"] += row.chunk_count
+            if row.max_segment_id is not None:
+                into["max_segment_id"] = row.max_segment_id
+                into["max_received_at"] = row.max_received_at
+        return {TenantId(tenant): DerivationSignature(**values) for tenant, values in merged.items()}
 
     def candidacy(self, extractor_version: str) -> dict[TenantId, CandidacyRead]:
         """Each open tenant's visible segments, and which of them disagree with their current
