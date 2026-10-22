@@ -67,7 +67,7 @@ describe('HostRunnerRowView', () => {
     expect(binding.querySelector('.project')?.textContent?.trim()).toBe('Console');
     expect(binding.querySelector('fleet-kit-swatch')).not.toBeNull();
     expect(binding.querySelector('.ws')?.textContent?.trim()).toBe('ws');
-    expect(binding.querySelector('.agents')?.textContent?.trim()).toBe('1 / 4 agents');
+    expect(binding.querySelector('.agents')?.textContent?.trim()).toBe('1 working');
     expect(text(el, 'host-runner-spends')).toContain('Claude Max');
   });
 

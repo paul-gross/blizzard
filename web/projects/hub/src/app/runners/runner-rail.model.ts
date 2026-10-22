@@ -1,7 +1,7 @@
 import { isLapsedSubscription as isLapsed, type SubscriptionLine, subscriptionLine, type SubscriptionPace } from 'fleet';
 
 import { type ConnectionLight, runnerLight } from './connection-status.model';
-import type { HostGroups } from './host-rows.model';
+import { busyAgents, declaredAgents, type HostGroups } from './host-rows.model';
 import type { RunnerRow } from './runner-rows.model';
 
 /** A used-over-total gauge, named for what it gauges. */
@@ -75,9 +75,10 @@ export function subscriptionLines(groups: HostGroups<RunnerRow>): readonly Subsc
   return [...chosen.values()].map(subscriptionLine);
 }
 
-/** A runner's agents, one gauge per binding: its project's agents busy of those it allows. */
+/** A runner's agents: one gauge, its agents busy of the count it shares across its bindings; none where it declares none. */
 export function agentGauges(row: RunnerRow): readonly Gauge[] {
-  return row.bindingLines.map((line) => ({ name: line.project, used: line.agentsInUse, total: line.agents }));
+  const declared = declaredAgents([row]);
+  return declared === null ? [] : [{ name: 'agents', used: busyAgents([row]), total: declared }];
 }
 
 /** The rail's view model: the env strips, the subscriptions, then the hosted runners in card order and the host-less after. */

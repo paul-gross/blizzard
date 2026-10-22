@@ -6,6 +6,7 @@ import type { RunnerRow } from './runner-rows.model';
 import { FleetRunnerRow } from './fleet-runner-row';
 
 const REGISTRY: RunnerRegistryView = {
+  agents: null,
   runner_id: '',
   runner_name: '',
   added_at: '',

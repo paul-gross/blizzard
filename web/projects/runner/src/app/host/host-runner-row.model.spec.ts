@@ -22,7 +22,7 @@ const STATUS = (overrides: Partial<runnerApi.RunnerStatusView> = {}): runnerApi.
     runner_id: 'rn_1',
     workspace_id: 'ws',
     pause: { local: false, hub: false, effective: false, local_reason: null },
-    capacities: { used: 3, bindings: [{ project: 'console', project_id: 'proj_c', workspace_id: 'ws', agents: 4, used: 3, free: 1 }] },
+    capacities: { used: 3, agents: 4, free: 1, bindings: [{ project: 'console', project_id: 'proj_c', workspace_id: 'ws', agents: 4, used: 3, free: 1 }] },
     hub: { endpoint: 'http://hub', reachable: true, last_contact_at: '2026-07-16T11:59:00.000Z', buffer_depth: 0, hub_version: null, window: null },
     last_tick_at: '2026-07-16T11:59:26.000Z',
     gates: [],
@@ -151,7 +151,7 @@ describe('hostRunnerRows', () => {
 
   it('resolves each binding to its project by entry, with its colour and the agents its capacity says are used', () => {
     const row = one(RUNNER({ bindings: [{ project: 'proj_c', workspace_id: 'ws', agents: 4 }] }), STATUS({
-      capacities: { used: 3, bindings: [{ project: 'proj_c', project_id: 'proj_c', workspace_id: 'ws', agents: 4, used: 3, free: 1 }] },
+      capacities: { used: 3, agents: 4, free: 1, bindings: [{ project: 'proj_c', project_id: 'proj_c', workspace_id: 'ws', agents: 4, used: 3, free: 1 }] },
     }), { projects: new Map([['rn_1', [CONSOLE]]]) });
 
     expect(row.bindings).toEqual([

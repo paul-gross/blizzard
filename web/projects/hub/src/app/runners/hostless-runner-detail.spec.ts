@@ -7,6 +7,7 @@ import { HostlessRunnerDetail } from './hostless-runner-detail';
 import type { RunnerRow } from './runner-rows.model';
 
 const REGISTRY: RunnerRegistryView = {
+  agents: null,
   runner_id: '',
   runner_name: '',
   added_at: '',

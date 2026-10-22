@@ -11,6 +11,7 @@ import { NO_HOST_VERBS } from './host-verbs.model';
 import type { RunnerRow } from './runner-rows.model';
 
 const REGISTRY: RunnerRegistryView = {
+  agents: null,
   runner_id: '',
   runner_name: '',
   added_at: '',

@@ -309,7 +309,7 @@ describe('RunnerPanel host cards', () => {
     expect([...el.querySelectorAll('[data-testid="runner"]')].map((li) => li.getAttribute('data-runner'))).toEqual(['rA', 'rB', 'rC']);
     const title = (bar: Element) => bar.querySelector('[data-testid="slot-bar-gauge"]')?.getAttribute('title');
     expect([...el.querySelectorAll('[data-testid="runner-env-strip"]')].map(title)).toEqual(['2/3 envs']);
-    expect([...el.querySelectorAll('[data-runner="rA"] [data-testid="runner-agents"]')].map(title)).toEqual(['1/2 agents', '0/1 agents']);
+    expect([...el.querySelectorAll('[data-runner="rA"] [data-testid="runner-agents"]')].map(title)).toEqual(['1/3 agents']);
     expect(el.querySelector('[data-runner="rB"] [data-testid="runner-agents"]')).toBeNull();
   });
 });
