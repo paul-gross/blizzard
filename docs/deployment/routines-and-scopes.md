@@ -10,11 +10,11 @@ it to show one project's records ([projects.md](./projects.md#a-call-that-names-
 
 ## Scopes
 
-`blizzard hub scope create <slug> [--description]`, `list`, `show <slug>`, `edit <slug> --description <text>`, `retire <slug>`, and
-`enable <slug>` are the scope verbs. `create` is a mint-or-no-op: naming an existing slug leaves its stored description
-untouched — `edit` is the only verb that changes it. `retire`/`enable` are a reversible brake: retiring a scope appends
-`scope.retired`, `enable` appends `scope.enabled`, and neither touches the stored slug or description. Retiring a
-retired scope, or enabling an enabled one, writes nothing.
+`blizzard hub scope create <slug> [--description]`, `list`, `show <slug>`, `edit <slug> --description <text>`,
+`retire <slug>`, and `enable <slug>` are the scope verbs. `create` is a mint-or-no-op: naming an existing slug leaves
+its stored description untouched — `edit` is the only verb that changes it. `retire`/`enable` are a reversible brake:
+retiring a scope appends `scope.retired`, `enable` appends `scope.enabled`, and neither touches the stored slug or
+description. Retiring a retired scope, or enabling an enabled one, writes nothing.
 
 The hub board's Gardening tab renders the same reads from its own Scopes sub-tab: every scope beside the selected one's
 own panel, which names the routines related to it — marking which of them default here — edits the description in place,
@@ -28,12 +28,13 @@ list. The selected child route remains in the URL, so a detail can still be open
 ## Routines
 
 `blizzard hub routine create <name> <graph_name> <default_scope_slug> [--model] [--effort] [--harnesses]`, `list`,
-`show <routine_id>`, and `edit <routine_id> [--graph <name>] [--scope <slug>] [--model] [--effort] [--harnesses] [--clear model|effort|harnesses]` are the routine
-verbs. `edit` sends only the options given; anything left out stands. `GRAPH_NAME` must resolve to a currently-enabled
-graph — a create, or an edit that changes the graph, naming one that does not refuses, naming it. Restating the graph
-a routine already points at is accepted even after that graph retires. `DEFAULT_SCOPE_SLUG` is minted through the same
-path `scope create` uses if the slug is unseen, so a routine's default scope never needs a separate `scope create`
-first.
+`show <routine_id>`, and
+`edit <routine_id> [--graph <name>] [--scope <slug>] [--model] [--effort] [--harnesses] [--clear model|effort|harnesses]`
+are the routine verbs. `edit` sends only the options given; anything left out stands. `GRAPH_NAME` must resolve to a
+currently-enabled graph — a create, or an edit that changes the graph, naming one that does not refuses, naming it.
+Restating the graph a routine already points at is accepted even after that graph retires. `DEFAULT_SCOPE_SLUG` is
+minted through the same path `scope create` uses if the slug is unseen, so a routine's default scope never needs a
+separate `scope create` first.
 
 A routine's `name` is its lineage and is immutable once minted: `routine edit` never changes it, and a create naming an
 already-existing routine name is refused rather than duplicating it. `routine_id` is the id every other verb addresses

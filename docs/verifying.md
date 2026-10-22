@@ -10,17 +10,17 @@ A release `vX.Y.Z` (or `vX.Y.Z-rc.N`) is a GitHub release on `paul-gross/blizzar
 carries exactly these files; `<v>` is the version without its `v`, and the wheel alone spells it the PEP 440 way
 (`0.2.0rc2`):
 
-| File                                         | What it is                                                              |
-| -------------------------------------------- | ----------------------------------------------------------------------- |
-| `blizzard-<pep440>-py3-none-any.whl`         | the wheel                                                               |
-| `blizzard-<v>-requirements.txt`              | every dependency pinned with hashes, ending in a line naming the wheel  |
-| `blizzard-<v>-requirements-pg.txt`           | the same for a Postgres-backed hub                                      |
-| `blizzard-<v>.spdx.json`                     | the wheel's bill of materials                                           |
-| `blizzard-hub-<v>-image.txt`                 | one line: `ghcr.io/paul-gross/blizzard-hub@sha256:<digest>`             |
-| `blizzard-hub-<v>-linux-amd64.spdx.json`     | the image's bill of materials, `linux/amd64`                            |
-| `blizzard-hub-<v>-linux-arm64.spdx.json`     | the image's bill of materials, `linux/arm64`                            |
-| `compat-breaks.json`                         | the compatibility report (not `v0.2.0` or `release/0.2`)                |
-| `SHA256SUMS`                                 | the checksum of every other file                                        |
+| File                                     | What it is                                                             |
+| ---------------------------------------- | ---------------------------------------------------------------------- |
+| `blizzard-<pep440>-py3-none-any.whl`     | the wheel                                                              |
+| `blizzard-<v>-requirements.txt`          | every dependency pinned with hashes, ending in a line naming the wheel |
+| `blizzard-<v>-requirements-pg.txt`       | the same for a Postgres-backed hub                                     |
+| `blizzard-<v>.spdx.json`                 | the wheel's bill of materials                                          |
+| `blizzard-hub-<v>-image.txt`             | one line: `ghcr.io/paul-gross/blizzard-hub@sha256:<digest>`            |
+| `blizzard-hub-<v>-linux-amd64.spdx.json` | the image's bill of materials, `linux/amd64`                           |
+| `blizzard-hub-<v>-linux-arm64.spdx.json` | the image's bill of materials, `linux/arm64`                           |
+| `compat-breaks.json`                     | the compatibility report (not `v0.2.0` or `release/0.2`)               |
+| `SHA256SUMS`                             | the checksum of every other file                                       |
 
 The hub image is the multi-arch manifest list at the digest in `blizzard-hub-<v>-image.txt`; its tag `<v>` resolves to
 the same digest. There is no package-index release.
@@ -64,7 +64,8 @@ gh attestation verify oci://ghcr.io/paul-gross/blizzard-hub@sha256:<platform-dig
 gh attestation verify blizzard-<v>-requirements.txt --repo paul-gross/blizzard
 ```
 
-**The wheel's bill of materials.** The same command with the wheel and `--predicate-type
+**The wheel's bill of materials.** The same command with the wheel and
+`--predicate-type
 https://spdx.dev/Document/v2.3`; the `.spdx.json` file is that document.
 
 **The checksums.** Download every file into one directory, then `sha256sum -c SHA256SUMS` from inside it. A requirements
@@ -73,7 +74,7 @@ the wheel and every dependency an install fetches.
 
 ## Running all of it
 
-[`scripts/verify-release.sh`](../scripts/verify-release.sh) `<tag>` runs every check above, plus a fresh install from the
-release's requirements file, against a published release with no checkout; it needs `gh`, `cosign`, `uv`, and `curl`,
-and refuses a tag before `v0.2.0-rc.2`. The release workflow runs it last, as its `verify` job
+[`scripts/verify-release.sh`](../scripts/verify-release.sh) `<tag>` runs every check above, plus a fresh install from
+the release's requirements file, against a published release with no checkout; it needs `gh`, `cosign`, `uv`, and
+`curl`, and refuses a tag before `v0.2.0-rc.2`. The release workflow runs it last, as its `verify` job
 ([ci.md](./ci.md)).

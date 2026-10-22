@@ -38,9 +38,9 @@ draws it adjusted for legibility on its dark surfaces, so a very dark shade show
 
 A create that states no color takes the color the fewest of the tenant's projects hold, and picks at random among
 equally unused ones, so a tenant's first twelve projects get twelve different colors. A create or an edit that states a
-color stores it, and the change log records it like any other field. A value that is neither a palette name nor a `#rrggbb`
-answers `422` naming `color` and both forms. A custom color counts toward no palette name, so the least-used choice
-considers palette names only. A project that existed before colors were introduced was given one when the hub
+color stores it, and the change log records it like any other field. A value that is neither a palette name nor a
+`#rrggbb` answers `422` naming `color` and both forms. A custom color counts toward no palette name, so the least-used
+choice considers palette names only. A project that existed before colors were introduced was given one when the hub
 upgraded, distinct among the first twelve of its tenant. The hub never recomputes a color: it changes only when someone
 edits it.
 
@@ -58,7 +58,7 @@ projects and their links takes `fleet:view`.
 
 | Verb                                                                                                     | Route                                                               |
 | -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
-| `blizzard hub project create <slug> [--name <name>] [--description <text>] [--color <name\|#rrggbb>]`       | `POST /api/projects`                                                |
+| `blizzard hub project create <slug> [--name <name>] [--description <text>] [--color <name\|#rrggbb>]`    | `POST /api/projects`                                                |
 | `blizzard hub project list`                                                                              | `GET /api/projects`                                                 |
 | `blizzard hub project show <project>`                                                                    | `GET /api/projects/{project}`, with its links                       |
 | `blizzard hub project edit <project> [--slug …] [--name …] [--description …] [--color …] [--if-match N]` | `PATCH /api/projects/{project}`                                     |

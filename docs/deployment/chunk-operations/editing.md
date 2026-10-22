@@ -4,20 +4,19 @@ A chunk's pinned graph and its default model, effort, and harness set are editab
 while the chunk is unclaimed — `not_ready`, or `ready` with no runner holding it; any other status refuses 409. The
 PATCH can carry any of `graph_id`, `default_model`, `default_effort`, `default_harnesses`, and `intended_migration`,
 all-or-nothing: a supplied field outside its own editable window refuses the whole request — a 409 naming the field,
-except the already-moved refusal, which names the chunk and points at migration — and nothing is applied. The CLI
-client is `blizzard hub chunk set`, which requires at least one option.
+except the already-moved refusal, which names the chunk and points at migration — and nothing is applied. The CLI client
+is `blizzard hub chunk set`, which requires at least one option.
 
 ## Re-pinning the graph
 
-`blizzard hub chunk set --graph <graph-id>` re-pins the graph; the board's graph view is read-only, so re-pinning is
-the CLI's alone. `--graph`, like `PATCH graph_id`, resolves a graph id
-only — never a name, unlike migration's `--to-graph`. Naming the chunk's current pin is a no-op, even when that graph
-has since retired, so any defaults sent with it still apply. The edit also requires that the chunk has never moved, and
-unclaimed and never-moved are not the same thing: a chunk that was claimed, ran a node, and was detached derives `ready`
-again while standing on a node of its pinned graph, and re-pinning it would strand that node, absent from the new graph
-— so it is refused 409. A retired target graph is the graph edit's other extra 409, named by the retired graph id; the
-already-moved check runs first, so a moved-but-unclaimed chunk aimed at a retired graph reports the move, not the
-retirement.
+`blizzard hub chunk set --graph <graph-id>` re-pins the graph; the board's graph view is read-only, so re-pinning is the
+CLI's alone. `--graph`, like `PATCH graph_id`, resolves a graph id only — never a name, unlike migration's `--to-graph`.
+Naming the chunk's current pin is a no-op, even when that graph has since retired, so any defaults sent with it still
+apply. The edit also requires that the chunk has never moved, and unclaimed and never-moved are not the same thing: a
+chunk that was claimed, ran a node, and was detached derives `ready` again while standing on a node of its pinned graph,
+and re-pinning it would strand that node, absent from the new graph — so it is refused 409. A retired target graph is
+the graph edit's other extra 409, named by the retired graph id; the already-moved check runs first, so a
+moved-but-unclaimed chunk aimed at a retired graph reports the move, not the retirement.
 
 When the window has closed, reach for the operations built for it: moving a chunk that has run is `chunk migrate`
 ([migration.md](./migration.md)), and moving one eagerly right now is `chunk restart`

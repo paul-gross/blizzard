@@ -17,10 +17,10 @@ blocks, a still-open round-one `in-diff` one included: it is deferred on `pass`,
 round. Severity describes the defect and the round decides whether a should-fix blocks — never re-grade or re-tag a
 finding to steer the verdict.
 
-| Outcome | Record it when                                                                              |
-| ------- | ------------------------------------------------------------------------------------------- |
-| `pass`  | The work meets the work item's intent, the end-to-end flows are clean, and nothing blocks.  |
-| `fail`  | Anything blocks.                                                                            |
+| Outcome | Record it when                                                                             |
+| ------- | ------------------------------------------------------------------------------------------ |
+| `pass`  | The work meets the work item's intent, the end-to-end flows are clean, and nothing blocks. |
+| `fail`  | Anything blocks.                                                                           |
 
 On a re-visit, `pass` is judged over the delta and the prior round's findings it resolved.
 

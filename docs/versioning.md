@@ -31,10 +31,10 @@ Mark a breaking commit with a `!` before the colon of its Conventional Commit su
 
 ## The configuration contract
 
-[`contracts/config/`](../contracts/config/README.md) lists every key each daemon reads from its toml file —
-`hub.json` for `blizzard-hub.toml`, `host.json` for `blizzard-host.toml` — and every durable path under its runtime
-root. `blizzard:config-contract` and the merge gate's contract drift step fail when the code and the documents disagree,
-so adding, retiring or retyping a key is always a deliberate edit to the document.
+[`contracts/config/`](../contracts/config/README.md) lists every key each daemon reads from its toml file — `hub.json`
+for `blizzard-hub.toml`, `host.json` for `blizzard-host.toml` — and every durable path under its runtime root.
+`blizzard:config-contract` and the merge gate's contract drift step fail when the code and the documents disagree, so
+adding, retiring or retyping a key is always a deliberate edit to the document.
 
 A key marked `deprecated` is still read, or still refused with a message naming its home; `replaced_by` names the key or
 table that took its place, and is `null` when nothing did. Removing a deprecated key is the breaking change.
@@ -87,10 +87,10 @@ At runtime, every registration carries the runner's version and the hub judges i
 it is refused `409 RunnerVersionRefusal`, whose `detail` names the runner's version, the hub's, and the range to upgrade
 to, and is denied every claim until a later registration is admitted. The refused runner halts alone while its host's
 other runners carry on, and retries registration on its tick; its panel's host page shows the refusal
-([`docs/remote-runner.md`](./remote-runner.md)); a hub whose own line is below `floor` refuses to start.
-What is checked is every committed surface document against every supported release: `blizzard:compat`
-(`bzh:released-surface-additive`) fails a pull request or a push that breaks one unless the break is one the window
-admits, and `release.yml` runs it again at a tag. [`docs/ci.md`](./ci.md) owns where each run happens.
+([`docs/remote-runner.md`](./remote-runner.md)); a hub whose own line is below `floor` refuses to start. What is checked
+is every committed surface document against every supported release: `blizzard:compat` (`bzh:released-surface-additive`)
+fails a pull request or a push that breaks one unless the break is one the window admits, and `release.yml` runs it
+again at a tag. [`docs/ci.md`](./ci.md) owns where each run happens.
 
 Most string-valued wire fields stay open strings, so a value the receiver does not recognize round-trips instead of
 failing. `TurnSegmentView.kind` (`src/blizzard/wire/transcript_segment.py`) is the exception: it is typed as a closed
@@ -125,13 +125,13 @@ version, and its digest where it can hold one — never `latest` or an `X.Y` lin
 [`scripts/image-tags.sh`](../scripts/image-tags.sh) computes the stable fan-out.
 
 `pyproject.toml`'s `[project] version` names the release most recently cut on its branch; the minor counts release
-trains. A cut commit carrying `Release-Cut: X.Y.Z` moves it to `X.Y.Z`. Candidate `vX.Y.Z-rc.N` and stable `vX.Y.Z`
-tags can point to that same commit: [`scripts/check-version-tag.sh`](../scripts/check-version-tag.sh) strips the
-candidate suffix when checking against `pyproject.toml`, while the release wheel stamps the full tag version. On
-`master`, dev wheels and images target the *next* minor as `X.(Y+1).0.dev<run>+<sha>`.
+trains. A cut commit carrying `Release-Cut: X.Y.Z` moves it to `X.Y.Z`. Candidate `vX.Y.Z-rc.N` and stable `vX.Y.Z` tags
+can point to that same commit: [`scripts/check-version-tag.sh`](../scripts/check-version-tag.sh) strips the candidate
+suffix when checking against `pyproject.toml`, while the release wheel stamps the full tag version. On `master`, dev
+wheels and images target the *next* minor as `X.(Y+1).0.dev<run>+<sha>`.
 
-Release notes are assembled from the tag's `changes/<X.Y.Z>/` notes and the Conventional Commits since the previous
-tag by [`blizzard-change-notes render`](../changes/README.md#cutting-and-rendering). A line-opening release leads with
+Release notes are assembled from the tag's `changes/<X.Y.Z>/` notes and the Conventional Commits since the previous tag
+by [`blizzard-change-notes render`](../changes/README.md#cutting-and-rendering). A line-opening release leads with
 **Upgrading to <line>**: promised deprecations, their retiring removals and upgrade instructions, then unrelated
 breaking notes. Run `blizzard-change-notes guide <line>` before cutting to preview the crossing, including pending
 removals in `changes/unreleased/`. Before 1.0 the line is a minor such as `0.12`; from 1.0 it is a major such as `1`.

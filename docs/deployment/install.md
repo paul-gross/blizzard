@@ -5,8 +5,8 @@
 1. Create a system service account named `blizzard` with home `/var/lib/blizzard`, the shared state root the units
    declare as `StateDirectory`.
 2. Install a release into a dedicated node-free virtualenv at `/opt/blizzard/venv`, the path the packaged units'
-   `ExecStart` expects, from that release's hashed requirements file — the only install path; there is no package
-   index. Name the version, fetch the file from the release page, check where it came from, and sync the venv to it
+   `ExecStart` expects, from that release's hashed requirements file — the only install path; there is no package index.
+   Name the version, fetch the file from the release page, check where it came from, and sync the venv to it
    ([verifying.md](../verifying.md) owns the checks):
 
    ```bash
@@ -34,9 +34,11 @@
 4. Install the units by copying [packaging/systemd/blizzard-hub.service](../../packaging/systemd/blizzard-hub.service)
    and [blizzard-runner.service](../../packaging/systemd/blizzard-runner.service) into `/etc/systemd/system`, then
    `systemctl daemon-reload` and `systemctl enable --now blizzard-hub`; `enable` is what starts it at boot.
-5. With the hub answering, seed the runner's runtime directory as the service account: `blizzard-runner init
-   /var/lib/blizzard/runner` scaffolds it the same way, then adds the runner at the hub its config names and writes the
-   runner's token to `/var/lib/blizzard/runner/.env`. Against a hub that requires sign-in, first run `blizzard hub
+5. With the hub answering, seed the runner's runtime directory as the service account:
+   `blizzard-runner init
+   /var/lib/blizzard/runner` scaffolds it the same way, then adds the runner at the hub its
+   config names and writes the runner's token to `/var/lib/blizzard/runner/.env`. Against a hub that requires sign-in,
+   first run `blizzard hub
    runner add runner-local` as an operator — the name a fresh init scaffolds — and put the
    `BZ_HUB_TOKEN_RUNNER_LOCAL=…` line it prints in that `.env`, created owner-only (`0600`) as the service account
    ([remote-runner.md](../remote-runner.md#add)); init then keeps the token
@@ -62,8 +64,8 @@ with a `ConfigError` naming the variable, from `hub init` and from every later l
 Every verb that takes a runtime directory resolves it from three rungs, highest first: the explicit flag or argument,
 then the daemon's environment variable, then the current working directory. `BZ_HUB_DIR` names the hub runtime dir
 (`blizzard-hub.toml` plus `data/hub.db`); `BZ_RUNNER_DIR` names the runner's host directory (`blizzard-host.toml` plus
-`data/host.db` and `host.sock`). The packaged units pass `--dir` explicitly; the variables exist for callers that
-cannot write a flag per invocation. Which runtime-dir flags and positionals each verb takes is that verb's own `--help`
+`data/host.db` and `host.sock`). The packaged units pass `--dir` explicitly; the variables exist for callers that cannot
+write a flag per invocation. Which runtime-dir flags and positionals each verb takes is that verb's own `--help`
 contract.
 
 Selectable is not shareable: the store is single-writer and each daemon migrates on boot, so aiming a second live daemon
@@ -110,8 +112,8 @@ Carry a file-configured hub across with the hub stopped, on the hub host, with i
 1. Run `blizzard hub migrate --dir <hub-dir>`.
 2. Run `blizzard hub config import-legacy --dir <hub-dir>`. It creates a secret per credential, a work source record per
    block, and a repository record per repo the hub has delivered commits to, in one transaction, and lists what it
-   created. It writes into the hub's only tenant; a hub holding several refuses unless `--tenant <tenant_id>` names
-   one. A record the tenant already holds is skipped, never overwritten; a second run writes nothing.
+   created. It writes into the hub's only tenant; a hub holding several refuses unless `--tenant <tenant_id>` names one.
+   A record the tenant already holds is skipped, never overwritten; a second run writes nothing.
 3. Delete the `[[work_source]]` blocks and unset the variables.
 4. Start the hub.
 

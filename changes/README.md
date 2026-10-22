@@ -20,21 +20,20 @@ and the rule it broke.
 `blizzard-change-notes cut <X.Y.Z>` runs at a release's cut. It refuses on any `check` failure, and otherwise moves
 every note in `changes/unreleased/` whose flag is on (or has no flag) into `changes/<X.Y.Z>/`, adding to the directory
 when a candidate already made it. It prints notes held because their flag's registry default is off; a later cut moves
-them when that default turns on. It also moves each `docs/upgrade.md` section the moved notes' `upgrade-guide` names from
-`## Upgrading to the next release` into `## Upgrading to <X.Y.Z>`, creating that heading directly beneath
+them when that default turns on. It also moves each `docs/upgrade.md` section the moved notes' `upgrade-guide` names
+from `## Upgrading to the next release` into `## Upgrading to <X.Y.Z>`, creating that heading directly beneath
 `## Before you pull` when it is absent. A cut that would leave an `upgrade-guide` on another heading refuses and writes
 nothing. It also refuses a new deprecation promised for the cut's line or earlier, or a postponement that does not move
 the promise beyond its latest released line. At a line-opening cut, every promise due on that line must have a retiring
-removal in that line's notes or a postponement in the cut. A refusal names the offending notes and writes nothing; `check`
-still checks format and references, not whether a release is ready to cut.
+removal in that line's notes or a postponement in the cut. A refusal names the offending notes and writes nothing;
+`check` still checks format and references, not whether a release is ready to cut.
 
 `blizzard-change-notes guide <line>` previews the crossing into a major (`1`) or pre-1.0 minor (`0.12`). It reads
 released notes and pending removals and breaking notes whose flags are on (or absent) from `changes/unreleased/`.
 Deprecations appear in the order their releases carried them, followed by their retiring removal's prose and
-`## Upgrade` instructions and any named boundary
-link; unrelated breaking notes follow. It refuses by name when a promise due on that line has no retiring removal in
-that line or in `unreleased/`. A released postponement moves the promise's current line; an unreleased postponement does
-not change the guide until it is cut.
+`## Upgrade` instructions and any named boundary link; unrelated breaking notes follow. It refuses by name when a
+promise due on that line has no retiring removal in that line or in `unreleased/`. A released postponement moves the
+promise's current line; an unreleased postponement does not change the guide until it is cut.
 
 `blizzard-change-notes render <tag>`, or `mise run release-notes <tag>`, prints the notes a tag publishes, read from the
 tag's own tree: an opening release leads with **Upgrading to <line>**, followed by upgrade notes, flags newly on since
@@ -57,12 +56,12 @@ The file opens with a `---` delimited YAML block. A repeated key and an unknown 
 | `kind`          | Required: `added`, `changed`, `deprecated`, `removed`, `fixed` or `security`.                                                   |
 | `surfaces`      | Distinct values from `http-api`, `wire`, `config`, `store`, `trace`, `egress`, `cli`, `board`.                                  |
 | `breaking`      | `true` or `false`, default `false`. `true` only on `changed` or `removed`.                                                      |
-| `breaks`        | A list of strings naming what breaks; `blizzard-compat` matches one equal to a finding's name. Only on `breaking: true`.         |
+| `breaks`        | A list of strings naming what breaks; `blizzard-compat` matches one equal to a finding's name. Only on `breaking: true`.        |
 | `removes-in`    | A quoted major (`"2"`) or pre-1.0 minor (`"0.12"`). Required on `deprecated` and on a note that `postpones`; refused elsewhere. |
 | `postpones`     | The id of a deprecation note. Only on `changed`.                                                                                |
 | `retires`       | The id of a deprecation note. Only on `removed`.                                                                                |
 | `upgrade-guide` | An anchor of a heading in `docs/upgrade.md`, without the `#`, as GitHub renders it.                                             |
-| `flag`          | A live name in `src/blizzard/foundation/flags/registry.toml`; retired and unknown names are refused on unreleased notes.      |
+| `flag`          | A live name in `src/blizzard/foundation/flags/registry.toml`; retired and unknown names are refused on unreleased notes.        |
 
 `retires` and `postpones` must name a `deprecated` note under a released `changes/<X.Y.Z>/` directory; an unreleased
 note, or a note of another kind, does not count.

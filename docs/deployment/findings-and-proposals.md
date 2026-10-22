@@ -6,8 +6,8 @@ behind it — it may name none at all. Both are hub-stored records, and both now
 owns the concept; this covers the verbs only.
 
 Both belong to a project. The listing verbs take `--project <id|slug>` to show one project's records;
-`garden-proposal create`, and a findings read naming a routine or scope, take it when the tenant holds several
-projects ([projects.md](./projects.md#a-call-that-names-no-project)).
+`garden-proposal create`, and a findings read naming a routine or scope, take it when the tenant holds several projects
+([projects.md](./projects.md#a-call-that-names-no-project)).
 
 ## Findings
 
@@ -31,9 +31,9 @@ shape.
 
 A worker whose own chunk an accepted garden-proposal accept minted reads a different bucket the same way:
 `blizzard runner finding list`, flagless, and `finding get <finding_id>` for one — the findings the chunk's own
-accepted, minted proposal answers, resolved server-side from the chunk itself, so neither verb can be pointed at
-another chunk's proposal. An id outside that set 404s the same as a chunk answering no such proposal at all. It needs
-no hub credential in its child environment either, and shares the same endpoint-shape home.
+accepted, minted proposal answers, resolved server-side from the chunk itself, so neither verb can be pointed at another
+chunk's proposal. An id outside that set 404s the same as a chunk answering no such proposal at all. It needs no hub
+credential in its child environment either, and shares the same endpoint-shape home.
 
 A person takes a finding out of the live set for good with one of five exit verbs, each requiring `--note`:
 `blizzard hub finding resolve <finding_id>...`, `confirm-gone <finding_id>...`, `wont-fix <finding_id>...`,
@@ -42,19 +42,19 @@ one or many ids and exits them together, in one call. `blizzard hub finding reop
 whichever exit or `gone` fact was newest, restoring the finding to `live`. Every verb 404s on an unknown finding id and
 422s on a blank note; a hand `resolve` from this verb records no garden proposal of its own.
 
-**The hub board's Gardening tab reaches the same verbs from its own Findings sub-tab: a newest-first triage list over one
-routine/scope bucket, further filterable by class and by state on the hub, beside the selected finding's own panel. It
-starts with live findings; All states includes gone and exited findings. Older loads another page, while the Class
-choices cover the entire routine/scope bucket, including classes not yet loaded. The Findings sub-tab has no count badge:
-the loaded pages are not a total for the project. A finding linked directly by id opens
-its detail even when its row is outside the loaded pages. Every one of
-those four filters, and the selection itself, rides the URL, so a filtered bucket is a link and a row click never
-discards a filter. `GET /api/findings` and the project route accept `state`, `class`, `descending`, `cursor`, and `limit`;
-`GET /api/findings/classes` and its project route return distinct class labels for the bucket. `resolve`, `confirm-gone`, `wont-fix` and `not-a-finding` — or, on a finding that has already exited,
-`reopen` — are dispatched one finding at a time from that panel, with a note. `supersede` is not among them: it needs
-the absorbing finding's id, which the panel collects nowhere, so it stays a CLI and API verb. A `gone`-flagged finding
-renders tinted but stays selectable under All states or Gone; an exited finding is dimmed under All states or its own
-state. A finding named by an accepted-and-minted proposal shows that proposal's linked work item beside it.
+**The hub board's Gardening tab reaches the same verbs from its own Findings sub-tab: a newest-first triage list over
+one routine/scope bucket, further filterable by class and by state on the hub, beside the selected finding's own panel.
+It starts with live findings; All states includes gone and exited findings. Older loads another page, while the Class
+choices cover the entire routine/scope bucket, including classes not yet loaded. The Findings sub-tab has no count
+badge: the loaded pages are not a total for the project. A finding linked directly by id opens its detail even when its
+row is outside the loaded pages. Every one of those four filters, and the selection itself, rides the URL, so a filtered
+bucket is a link and a row click never discards a filter. `GET /api/findings` and the project route accept `state`,
+`class`, `descending`, `cursor`, and `limit`; `GET /api/findings/classes` and its project route return distinct class
+labels for the bucket. `resolve`, `confirm-gone`, `wont-fix` and `not-a-finding` — or, on a finding that has already
+exited, `reopen` — are dispatched one finding at a time from that panel, with a note. `supersede` is not among them: it
+needs the absorbing finding's id, which the panel collects nowhere, so it stays a CLI and API verb. A `gone`-flagged
+finding renders tinted but stays selectable under All states or Gone; an exited finding is dimmed under All states or
+its own state. A finding named by an accepted-and-minted proposal shows that proposal's linked work item beside it.
 Neither the triage actions nor their dialog is offered without `chunk:control`.**
 
 On mobile, the Findings sub-tab opens on its filters and list alone. Selecting a finding replaces both with the
@@ -69,72 +69,77 @@ reading is the mean of seven calls after one warm-up, in milliseconds; the histo
 feature branch's base revision while the paged implementation came from the feature branch. These are adapter read-path
 timings, not HTTP or hosted-fleet latencies.
 
-| Read | Historical | Paged implementation |
-| --- | ---: | ---: |
-| First 50 live findings, ascending | 10.96 | 10.47 |
-| First 1,000 findings, all states, ascending | 31.22 | 29.06 |
-| First 50 live findings, descending | — | 16.39 |
+| Read                                        | Historical | Paged implementation |
+| ------------------------------------------- | ---------: | -------------------: |
+| First 50 live findings, ascending           |      10.96 |                10.47 |
+| First 1,000 findings, all states, ascending |      31.22 |                29.06 |
+| First 50 live findings, descending          |          — |                16.39 |
 
 The board's previous all-states drain paid for every page; its initial read now requests only 50 live findings. The
-descending page costs more than the old ascending first page on this synthetic store, but bounds first-load response size
-independently of the finding count. This local ratio does not predict absolute latency on a hosted volume.
+descending page costs more than the old ascending first page on this synthetic store, but bounds first-load response
+size independently of the finding count. This local ratio does not predict absolute latency on a hosted volume.
 
 ### Review-sourced findings
 
 A delivery lane's review round can raise a finding too, alongside a routine's own — carrying no routine, a `severity`
 (`blocking` or `should-fix`), and the chunk that raised it. `blizzard hub finding list --scope <slug> --source review`
 (and `GET /api/findings?scope=&source=review`) reads only these; omitting `--source` reads both kinds together. A
-routine's own bucket read — `blizzard runner garden findings` above — already includes any review-sourced finding
-filed under that run's own scope, answerable with the same triage verbs as any other. The board's Findings rows
-render one exactly like a routine-sourced row, except the routine chip is replaced by the finding's severity and a link
-to the raising chunk.
+routine's own bucket read — `blizzard runner garden findings` above — already includes any review-sourced finding filed
+under that run's own scope, answerable with the same triage verbs as any other. The board's Findings rows render one
+exactly like a routine-sourced row, except the routine chip is replaced by the finding's severity and a link to the
+raising chunk.
 
 A worker reads the deployment's scope vocabulary with `blizzard runner scope list` — every scope's slug, description,
 and retired flag, as JSON — the read a delivery lane's `review` node uses to name an existing scope on a deferred
-finding rather than guessing at one; an unfamiliar slug is minted, not rejected. It needs no hub credential in its
-child environment, the same shape the other `blizzard runner` reads on this page take.
+finding rather than guessing at one; an unfamiliar slug is minted, not rejected. It needs no hub credential in its child
+environment, the same shape the other `blizzard runner` reads on this page take.
 
 ## Garden proposals
 
 `blizzard hub garden-proposal list [--origin routine-run|operator]` and `show <proposal_id>` read every proposal, or one
-by id, each naming its `origin` — a **routine's run** or an **operator** — the findings it answers (whether it must name any is
+by id, each naming its `origin` — a **routine's run** or an **operator** — the findings it answers (whether it must name
+any is
 [`blizzard-context/domain/findings-and-proposals.md`](https://github.com/paul-gross/blizzard-context/blob/master/domain/findings-and-proposals.md#a-proposals-findings-are-optional)'s
 to say), and the closure it carries once one exists. Every row renders `origin=`; `routine=` appears only when the
 proposal names a routine, and `created_by=` only on an operator-authored row. `list --origin` narrows to one origin.
 
-A proposal can be authored directly, not only raised by a routine's own delivery: `blizzard hub garden-proposal create
---title <text> --class <text> --body-file <path>|- [--routine <name>] [--finding <id>...]` mints an operator-authored
-proposal naming zero or more findings from any routines and scopes at once — a proposal carries no scope of its own —
-and an existing routine when `--routine` names one, or none at all. `edit <proposal_id> [--title <text>] [--class
-<text>] [--body-file <path>|-]` replaces the given fields in place, `attach <proposal_id> <finding_id>...` links more
-findings to it, and `detach <proposal_id> <finding_id>...` unlinks some — all three work on either origin while the
-proposal is still open, and each 409s once it carries a closure, since closure is terminal. `create`/`attach` refuse the
-whole call on an unknown, exited, or duplicate finding id — a `delivered` or `gone` finding is still attachable;
-`attach` also refuses one already linked to that same proposal, and `detach` one that is not linked — a finding may
-otherwise belong to more than one proposal at once.
+A proposal can be authored directly, not only raised by a routine's own delivery:
+`blizzard hub garden-proposal create
+--title <text> --class <text> --body-file <path>|- [--routine <name>] [--finding <id>...]`
+mints an operator-authored proposal naming zero or more findings from any routines and scopes at once — a proposal
+carries no scope of its own — and an existing routine when `--routine` names one, or none at all.
+`edit <proposal_id> [--title <text>] [--class
+<text>] [--body-file <path>|-]` replaces the given fields in place,
+`attach <proposal_id> <finding_id>...` links more findings to it, and `detach <proposal_id> <finding_id>...` unlinks
+some — all three work on either origin while the proposal is still open, and each 409s once it carries a closure, since
+closure is terminal. `create`/`attach` refuse the whole call on an unknown, exited, or duplicate finding id — a
+`delivered` or `gone` finding is still attachable; `attach` also refuses one already linked to that same proposal, and
+`detach` one that is not linked — a finding may otherwise belong to more than one proposal at once.
 
 `blizzard hub garden-proposal pass <proposal_id> --reason <text>` records that the proposal was considered and declined,
 with a reason required.
 `blizzard hub garden-proposal accept <proposal_id> [--reason <text>]
 [--body-file <path>|-] [--no-work-item]` records
-agreement. By default it mints a linked hub work item, resting behind the ordinary promote gate, from the proposal's
-own body — or `--body-file`'s override (`-` for stdin). The body carries a "Related findings" section listing every
-finding the proposal answers (id, class, locus, and state) and naming the worker's own `blizzard runner finding list`/
-`finding get <finding_id>` reads when the proposal answers any, and is minted bare when it answers none. `--no-work-item`
-mints nothing and records the decline. Acceptance itself never promotes the minted
-item and never changes a finding's state — but
-delivering the item it minted does: once that item closes, every finding the proposal named that is still live is
-closed to `delivered`, attributed to the proposal, requiring no verb of its own — unlike a hand `blizzard hub finding
-resolve`, this is provisional: the owning garden routine's next run re-checks it, settling it to `resolved` if it still
-holds or reviving it to `live` if it does not. Re-delivering the same item delivers nothing a second time. Either
-closing verb answers 409, naming the proposal's existing closure, when called again — closure is terminal.
+agreement. By default it mints a linked hub work item, resting behind the ordinary promote gate, from the proposal's own
+body — or `--body-file`'s override (`-` for stdin). The body carries a "Related findings" section listing every finding
+the proposal answers (id, class, locus, and state) and naming the worker's own `blizzard runner finding list`/
+`finding get <finding_id>` reads when the proposal answers any, and is minted bare when it answers none.
+`--no-work-item` mints nothing and records the decline. Acceptance itself never promotes the minted item and never
+changes a finding's state — but delivering the item it minted does: once that item closes, every finding the proposal
+named that is still live is closed to `delivered`, attributed to the proposal, requiring no verb of its own — unlike a
+hand `blizzard hub finding
+resolve`, this is provisional: the owning garden routine's next run re-checks it, settling it
+to `resolved` if it still holds or reviving it to `live` if it does not. Re-delivering the same item delivers nothing a
+second time. Either closing verb answers 409, naming the proposal's existing closure, when called again — closure is
+terminal.
 
-A running pass reads its own routine's proposals a different way: `blizzard runner garden proposals [--state
-open|closed|all]` — the routine is derived server-side from the lease's own chunk, so a worker cannot point this read
-at another routine's docket. `--state` defaults to `open`, excluding any closed proposal exactly as before; `closed`
-and `all` each carry every returned proposal's closure and pass reason, letting a reconcile step compare a new idea
-against what the routine has already had declined. It needs no hub credential in its child environment either, the
-same shape `blizzard runner garden findings` above takes;
+A running pass reads its own routine's proposals a different way:
+`blizzard runner garden proposals [--state
+open|closed|all]` — the routine is derived server-side from the lease's own
+chunk, so a worker cannot point this read at another routine's docket. `--state` defaults to `open`, excluding any
+closed proposal exactly as before; `closed` and `all` each carry every returned proposal's closure and pass reason,
+letting a reconcile step compare a new idea against what the routine has already had declined. It needs no hub
+credential in its child environment either, the same shape `blizzard runner garden findings` above takes;
 [openapi/runner.openapi.json](../../openapi/runner.openapi.json) owns the endpoint shape.
 
 **The hub board's Gardening tab renders a docket sheet on its own Proposals sub-tab, over the same reads: every

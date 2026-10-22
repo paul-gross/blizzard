@@ -102,8 +102,8 @@ sudo -u blizzard sh -c 'umask 077; echo "BZ_HUB_TOKEN_RUNNER_LOCAL=…" >> /var/
 ```
 
 Then run the same `blizzard-runner init … --hub https://hub.example.net` there: it finds the token, confirms the hub
-knows it, and keeps that runner rather than adding another; a host init adds adopts it. It also makes a `.env` that other accounts can read
-owner-only, or warns when it cannot.
+knows it, and keeps that runner rather than adding another; a host init adds adopts it. It also makes a `.env` that
+other accounts can read owner-only, or warns when it cannot.
 
 Give the runner its own session-signing secret too, so board sessions survive a restart: generate one with
 `openssl rand -base64 48` and put it in the environment variable the `session_secret_env` key names (default
@@ -117,10 +117,10 @@ already runs: the daemon reads its token and session secret only at start.
 
 A registered host takes more runners with no sign-in: `blizzard-runner add <name> --project <p> --dir <runtime dir>`
 adds one under the host's token and appends its `[[runner]]`, and the host starts it at its next start.
-`blizzard-runner retire --runner <name|id> --dir <runtime dir>` retires one and removes its entry; a running host halts it
-at its next tick ([runner-auth.md](./deployment/runner-auth.md#adding-and-retiring-a-hosts-runners)).
-`blizzard-runner ingest <source> --runner <name|id> --dir <runtime dir>` moves one in from another host's directory,
-or from a runner directory that has not graduated, with its rows, configuration and token
+`blizzard-runner retire --runner <name|id> --dir <runtime dir>` retires one and removes its entry; a running host halts
+it at its next tick ([runner-auth.md](./deployment/runner-auth.md#adding-and-retiring-a-hosts-runners)).
+`blizzard-runner ingest <source> --runner <name|id> --dir <runtime dir>` moves one in from another host's directory, or
+from a runner directory that has not graduated, with its rows, configuration and token
 ([runner-auth.md](./deployment/runner-auth.md#ingesting-a-runner-from-another-store)).
 
 ## Verify

@@ -40,6 +40,7 @@ Generated from [`contracts/egress/`](../../contracts/egress/README.md), which is
 follow. A value marked `open` is not exhaustive: a consumer must tolerate a value it does not list, which is how a new
 value stays additive. A null in a nullable column means what its meaning says.
 
+<!-- dprint-ignore-start -->
 <!-- egress-dictionary:begin -->
 
 ### `steps`
@@ -250,6 +251,7 @@ WHERE copy_rank = 1
 ```
 
 <!-- egress-dictionary:end -->
+<!-- dprint-ignore-end -->
 
 A row's `work_refs` and `sources` render each work source under its slug when the row is written, as `project_slug`
 does, so a row written after a source's slug changes carries the new slug.
@@ -488,8 +490,8 @@ decimal with scale nine.
 
 Operating the export takes `export:admin`, a hub administrator's permission
 ([tenants.md](./tenants.md#hub-administrators)): it is one export for every tenant. `blizzard hub egress status` reports
-whether the export is on, its directory and format, each dataset's cursor and lag,
-the last pass and file, the last error and the free space. Run it first, and again after either verb below.
+whether the export is on, its directory and format, each dataset's cursor and lag, the last pass and file, the last
+error and the free space. Run it first, and again after either verb below.
 
 - **Backfill** writes the rows of a window again without moving a cursor, narrowed with `--dataset`:
 
@@ -571,9 +573,9 @@ A hub holds its fleets as tenants, and the export stays one stream for all of th
 directory, every tenant's rows in the same partitions and manifests. `steps`, `invocations` and `events` stay at major
 version 1, since the change only adds nullable columns. From the upgrade on:
 
-- **Every row names its tenant**: `tenant_id`, and beside it `tenant_name`, the tenant's name when the copy was
-  written, so a copy written after a rename carries the new name and an earlier copy keeps the old one. A `dropped`
-  row names its tenant like the others.
+- **Every row names its tenant**: `tenant_id`, and beside it `tenant_name`, the tenant's name when the copy was written,
+  so a copy written after a rename carries the new name and an earlier copy keeps the old one. A `dropped` row names its
+  tenant like the others.
 - **A file written before the upgrade has neither column**, which the load recipes read as null. Every row in such a
   file belongs to the tenant the upgrade carried the hub's data into.
 - **`_schema/steps.v1.json`, `_schema/invocations.v1.json` and `_schema/events.v1.json` widen in place**, as
@@ -581,9 +583,9 @@ version 1, since the change only adds nullable columns. From the upgrade on:
 
 A loader that wants one tenant filters on `tenant_id`, or on an events view's `segment_tenant_id`, which also places a
 row written before the upgrade under the carried-over tenant, as [Reading current truth](#reading-current-truth)
-describes, and is null when no row the view reads names a tenant. Filter the view's output, not the relation beneath
-it: a relation narrowed to another tenant gives that tenant the pre-upgrade rows. To give history the columns, backfill
-it window by window, each within `backfill_max_window`; a backfill writes every row with its tenant, without moving a
+describes, and is null when no row the view reads names a tenant. Filter the view's output, not the relation beneath it:
+a relation narrowed to another tenant gives that tenant the pre-upgrade rows. To give history the columns, backfill it
+window by window, each within `backfill_max_window`; a backfill writes every row with its tenant, without moving a
 cursor:
 
 ```sh

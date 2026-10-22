@@ -45,15 +45,15 @@ Sign-in is invite-only. A sign-in is admitted when one of these holds, and refus
 - **The configured superuser.** An address the provider vouches for is the `[auth].superuser` nobody has claimed yet;
   that person needs no invitation ([Roles](#roles)).
 
-A known person who belongs to no tenant still signs in, and the board shows them only *You don't have access to
-anything here yet. Reach out to your administrator for access.*
+A known person who belongs to no tenant still signs in, and the board shows them only *You don't have access to anything
+here yet. Reach out to your administrator for access.*
 
 A refused sign-in lands on the board's login page as `/login?refusal=<code>`, and the page shows the text for the code:
 
-| Code                        | When                                                                                                                                                 | The page says                                                                                                         |
-| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `invite_only`               | A sign-in by a person the hub does not know, with no invitation                                                                                      | *You don't have access to anything here yet. Reach out to your administrator for access.*                             |
-| `invitation_unusable`       | The invitation is expired, revoked or already used, or its tenant was deleted                                                                        | *This invitation is no longer valid. Reach out to your administrator for a new one.*                                  |
+| Code                        | When                                                                                                                                           | The page says                                                                                                                  |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `invite_only`               | A sign-in by a person the hub does not know, with no invitation                                                                                | *You don't have access to anything here yet. Reach out to your administrator for access.*                                      |
+| `invitation_unusable`       | The invitation is expired, revoked or already used, or its tenant was deleted                                                                  | *This invitation is no longer valid. Reach out to your administrator for a new one.*                                           |
 | `invitation_email_mismatch` | No address the provider vouches for matches the invited one, or the provider is not authoritative for its addresses; the invitation stays live | *This invitation is for a different email address. Sign in with the account that uses it, or reach out to your administrator.* |
 
 An unknown code shows the `invite_only` text. A person already signed in who opens an invitation link goes through the
@@ -69,10 +69,10 @@ revokes it at the hub, so a leaked token stops resolving.
 ## Roles
 
 A person's role is per tenant: a membership of `guest`, `contributor` or `admin` in each tenant they belong to.
-[tenants.md](./tenants.md#members-and-roles) owns the roles, a tenant's members, and invitations. A person who belongs to
-no tenant holds nothing beyond the public self routes (`GET /api/me`, login, logout) — no board read, no writes. guest
-reads the tenant's fleet and mutates nothing; reading a chunk's stored transcript segments takes `transcript:read`, held
-at contributor and above, since a transcript carries everything a worker saw.
+[tenants.md](./tenants.md#members-and-roles) owns the roles, a tenant's members, and invitations. A person who belongs
+to no tenant holds nothing beyond the public self routes (`GET /api/me`, login, logout) — no board read, no writes.
+guest reads the tenant's fleet and mutates nothing; reading a chunk's stored transcript segments takes
+`transcript:read`, held at contributor and above, since a transcript carries everything a worker saw.
 
 A tenant's admin changes its members' roles with `blizzard hub member grant <user_id> <role>`
 (`PUT /api/members/{user_id}`, gated on `user:manage`), or on the board's Admin → Members page. Nobody changes their own
@@ -102,8 +102,8 @@ entirely, gated on its runner bearer token ([runner-auth.md](./runner-auth.md)).
 
 ## Federating a runner's web surface
 
-A runner wanting its human web surface reachable via the hub's SSO bounce declares `public_url` in
-the top level of `blizzard-host.toml` — the browser-reachable base URL(s) it answers on, deriving the redirect URIs
+A runner wanting its human web surface reachable via the hub's SSO bounce declares `public_url` in the top level of
+`blizzard-host.toml` — the browser-reachable base URL(s) it answers on, deriving the redirect URIs
 (`<public_url>/api/auth/callback` each) it presents to the hub. `public_url` empty (the scaffold default) registers no
 federation identity, leaving the runner's human surface unreachable via SSO — also the correct state when the hub runs
 mode `"none"`, since there is no IdP to bounce to.
@@ -168,10 +168,10 @@ A host that holds a host token — a registered host ([runner-auth.md](./runner-
 `client` it presents, the audience it requires of the token, and the name of its session cookie,
 `bz_runner_session_<host id>`. One sign-in then reaches every runner's pages under the panel. The host is the client
 only while its latest report was answered with the identity it recorded. Before its first answer, while the hub refuses
-its token or answers as another host or tenant, against a hub that predates hosts, and while the hub is unreachable,
-the panel offers no sign-in: `login` answers 503 and no session is read. Its runners keep working meanwhile, and
-sign-in returns at the next answered report, with any session still inside its TTL. A host with no host token keeps
-signing in as its first runner, as before.
+its token or answers as another host or tenant, against a hub that predates hosts, and while the hub is unreachable, the
+panel offers no sign-in: `login` answers 503 and no session is read. Its runners keep working meanwhile, and sign-in
+returns at the next answered report, with any session still inside its TTL. A host with no host token keeps signing in
+as its first runner, as before.
 
 An unknown host id, a callback the host has not reported, and a person with no membership in the host's tenant all get
 the one undifferentiated 400 a runner client gets. Only a member who presents a reported callback can tell a retired

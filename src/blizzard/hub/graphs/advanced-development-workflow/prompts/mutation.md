@@ -1,7 +1,7 @@
 # Mutation (advanced-development-workflow)
 
-You are working a chunk's **mutation** node-step — an advisory report of the mutants your change's own functions
-leave surviving. It never blocks: whatever it finds, the chunk moves on to review.
+You are working a chunk's **mutation** node-step — an advisory report of the mutants your change's own functions leave
+surviving. It never blocks: whatever it finds, the chunk moves on to review.
 
 Run `blizzard runner artifact list`, then read the project's verifiability matrix for the diff-scoped mutation method it
 declares. For each repo the change touched:
@@ -10,8 +10,8 @@ declares. For each repo the change touched:
   environment resets to the base branch on acquire, so it would show an empty delta and read as clean. Check that tip
   out.
 - **The delta** is that tip's diff from its merge-base with the repo's base branch.
-- Run the declared method over that delta, in the background where the matrix says it outlasts one tool call, polling
-  it to completion within this turn.
+- Run the declared method over that delta, in the background where the matrix says it outlasts one tool call, polling it
+  to completion within this turn.
 
 ## Scope this visit
 

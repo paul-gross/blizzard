@@ -1,7 +1,7 @@
 # Egress contract corpus
 
-The shape of the `steps`, `invocations` and `events` datasets the hub exports to a directory, pinned so that a change
-to it is deliberate.
+The shape of the `steps`, `invocations` and `events` datasets the hub exports to a directory, pinned so that a change to
+it is deliberate.
 
 - `dictionary.json` — the authored contract: per dataset its major version, identity columns, partition column, the
   views it publishes, and each column's name, type, nullability, meaning and enumerated values (`closed` or open). The
@@ -16,8 +16,8 @@ to it is deliberate.
 
 `blizzard:egress-contract` (`uv run pytest tests/test_egress_contract.py`) binds the code's schemas to the dictionary,
 compares the writer's output in both formats to the golden, checks `_schema/` and the generated dictionary block of
-[`docs/deployment/egress.md`](../../docs/deployment/egress.md) for staleness, and runs every
-published view in DuckDB, the events views over the golden's per-segment cases.
+[`docs/deployment/egress.md`](../../docs/deployment/egress.md) for staleness, and runs every published view in DuckDB,
+the events views over the golden's per-segment cases.
 
 Regenerate after an intended change:
 

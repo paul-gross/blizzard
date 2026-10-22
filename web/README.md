@@ -1,13 +1,12 @@
 # blizzard frontend (`web/`)
 
-The Angular workspace for blizzard's two web apps. One workspace, two application entrypoints, one shared
-library:
+The Angular workspace for blizzard's two web apps. One workspace, two application entrypoints, one shared library:
 
-| Project       | Kind    | What it is                                                                                                                                                                    |
-| ------------- | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `hub`         | app     | The mission-control board app. Renders the shared board shell; served by `blizzard hub host`.                                                                                 |
-| `runner`      | app     | The machine-local panel app. Its panel, chunk list, dock, and status feature folders live here. Served by `blizzard runner host`.                                             |
-| `fleet`       | library | Shared fleet layer: the design tokens, the mission-control board shell, the hand-rolled SSE transport, the health read, and the generated API clients. Composed by both apps. |
+| Project  | Kind    | What it is                                                                                                                                                                    |
+| -------- | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `hub`    | app     | The mission-control board app. Renders the shared board shell; served by `blizzard hub host`.                                                                                 |
+| `runner` | app     | The machine-local panel app. Its panel, chunk list, dock, and status feature folders live here. Served by `blizzard runner host`.                                             |
+| `fleet`  | library | Shared fleet layer: the design tokens, the mission-control board shell, the hand-rolled SSE transport, the health read, and the generated API clients. Composed by both apps. |
 
 Placement is by who serves the code: `fleet` holds only what both apps reach, and app-local code (pages, queries,
 components together) lives in its own app. The structural gate's placement sweep enforces it.
@@ -21,18 +20,19 @@ Tailwind, no chart library, and no prettier** (eslint owns formatting).
 
 `package.json` scripts are exactly what CI invokes:
 
-| Script                    | Command                           | Does                                                                            |
-| ------------------------- | --------------------------------- | ------------------------------------------------------------------------------- |
-| install                   | `npm ci`                          | Install pinned dependencies.                                                    |
-| `npm run lint`            | `ng lint`                         | eslint over every project (no prettier).                                        |
-| `npm run test`            | `ng test …`                       | The vitest unit/component tier, all three projects.                              |
-| `npm run build`           | `ng build hub && ng build runner` | Build both apps into `../src/blizzard/static/{hub,runner}` for the wheel embed. |
-| `npm run generate:client` | `openapi-ts -f …`                 | Regenerate the two API clients from `../openapi/*.openapi.json`.                |
-| `npm run storybook`       | `ng run fleet:storybook …`        | Serve the component workshop.                                                   |
-| `npm run storybook:build` | `ng run fleet:build-storybook`    | Build the static workshop into `dist/storybook`.                                |
+| Script                    | Command                           | Does                                                                                     |
+| ------------------------- | --------------------------------- | ---------------------------------------------------------------------------------------- |
+| install                   | `npm ci`                          | Install pinned dependencies.                                                             |
+| `npm run lint`            | `ng lint`                         | eslint over every project (no prettier).                                                 |
+| `npm run test`            | `ng test …`                       | The vitest unit/component tier, all three projects.                                      |
+| `npm run build`           | `ng build hub && ng build runner` | Build both apps into `../src/blizzard/static/{hub,runner}` for the wheel embed.          |
+| `npm run generate:client` | `openapi-ts -f …`                 | Regenerate the two API clients from `../openapi/*.openapi.json`.                         |
+| `npm run storybook`       | `ng run fleet:storybook …`        | Serve the component workshop.                                                            |
+| `npm run storybook:build` | `ng run fleet:build-storybook`    | Build the static workshop into `dist/storybook`.                                         |
 | `npm run story-render`    | `tsc --noEmit … && … && node …`   | Type-check the stories, build the workshop, and render every story in headless Chromium. |
 
-`mise.toml` mirrors these as `web-install`, `web-lint`, `web-test`, `web-build`, `web-generate-client`, `web-storybook`, `web-storybook-build`, `web-story-render`.
+`mise.toml` mirrors these as `web-install`, `web-lint`, `web-test`, `web-build`, `web-generate-client`, `web-storybook`,
+`web-storybook-build`, `web-story-render`.
 
 ## The dev server (`ng serve`)
 
@@ -73,10 +73,10 @@ npm run storybook
 It needs no daemon, no seed, and no environment. It serves on `BZ_STORYBOOK_PORT` when the environment sets one, and
 otherwise on Storybook's own 6006. `npm run storybook:build` writes the static workshop to `dist/storybook`; it is never
 published, deployed, or embedded in the wheel. Stories are for people to open: they are never bundled into either app or
-the library, and they assert nothing. The render check holds them: `npm run story-render` type-checks every story, builds
-the workshop in development mode, and opens each story in headless Chromium, failing on a story that no longer compiles
-or renders. It needs Chromium (`npx playwright install chromium`), and judges that a story renders, never what it shows.
-The structural gate's kit-stories sweep holds every kit part to having stories (`npm run structural-gate`).
+the library, and they assert nothing. The render check holds them: `npm run story-render` type-checks every story,
+builds the workshop in development mode, and opens each story in headless Chromium, failing on a story that no longer
+compiles or renders. It needs Chromium (`npx playwright install chromium`), and judges that a story renders, never what
+it shows. The structural gate's kit-stories sweep holds every kit part to having stories (`npm run structural-gate`).
 
 ## The generated API client (`bzh:generated-client`)
 
@@ -87,8 +87,8 @@ fails on any git diff. Do not edit the generated files, and do not lint them (th
 
 ## The design layer (the mission-control aesthetic)
 
-`projects/fleet/src/lib/core/design/` holds two **global** stylesheets — both listed ahead of each app's own in its build
-`styles`, because component styles are view-encapsulated and these must reach every component:
+`projects/fleet/src/lib/core/design/` holds two **global** stylesheets — both listed ahead of each app's own in its
+build `styles`, because component styles are view-encapsulated and these must reach every component:
 
 | Sheet            | Owns                                                                                               |
 | ---------------- | -------------------------------------------------------------------------------------------------- |

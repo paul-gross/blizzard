@@ -6,10 +6,10 @@ reference compose deployment ([`docs/install.md`](./install.md)).
 
 ## Before you pull
 
-If `init`, `migrate`, `host`, or `runner ingest` says a store is below this build's migration baseline, install the floor
-release named in the error and migrate that store with that release first. Then reinstall the target release and rerun
-the command. The refusal leaves the store's revision untouched; a normal pending-revision mismatch instead names the
-current build's migrate command.
+If `init`, `migrate`, `host`, or `runner ingest` says a store is below this build's migration baseline, install the
+floor release named in the error and migrate that store with that release first. Then reinstall the target release and
+rerun the command. The refusal leaves the store's revision untouched; a normal pending-revision mismatch instead names
+the current build's migrate command.
 
 Read the release's **Upgrade notes** and act on whatever it asks:
 
@@ -23,10 +23,10 @@ gh release view v0.2.0 --repo paul-gross/blizzard
 
 `0.2.0` is reached from `v0.1.0-rc.1` or any `edge` build, stepping through no intermediate release, since none exists.
 Every boundary below therefore applies at once, and one sequence satisfies all of them: let the chunks in flight finish,
-stop every runner, and take a hub store backup ([`docs/backup.md`](./backup.md)); install the `0.2.0` runner software
-on every runner, leaving each stopped; upgrade the hub, which migrates on boot; then start the runners. The runners
-are upgraded before the hub deploys, as the subscription-usage boundary needs, and none runs against the hub until it
-is on `0.2.0`, as the runner-identity boundary needs.
+stop every runner, and take a hub store backup ([`docs/backup.md`](./backup.md)); install the `0.2.0` runner software on
+every runner, leaving each stopped; upgrade the hub, which migrates on boot; then start the runners. The runners are
+upgraded before the hub deploys, as the subscription-usage boundary needs, and none runs against the hub until it is on
+`0.2.0`, as the runner-identity boundary needs.
 
 ### Subscription-usage response boundary
 
@@ -38,8 +38,8 @@ safe to cross.
 
 **Order.** Upgrade every runner to slug-carrying, per-subscription reporting **before** deploying the hub, because the
 hub rejects a slug-less sample rather than defaulting it; a runner left behind is not supported against the upgraded
-hub. API clients must read `subscriptions`; the removed
-field is gone from `openapi/hub.openapi.json` and the generated TypeScript client in the same release.
+hub. API clients must read `subscriptions`; the removed field is gone from `openapi/hub.openapi.json` and the generated
+TypeScript client in the same release.
 
 **If a runner is still pre-boundary.** Its usage samples carry no `slug`, and the hub **rejects** them — it does not
 silently discard them. Each rejected sample is named in the batch ack, and the runner logs `hub rejected buffered fact`
@@ -115,10 +115,10 @@ One release keys every runner by an id the hub mints, and retires `runner_auth_m
 
 **Order.** Across this boundary a runner may not run against the hub until it has been upgraded: the hub takes every
 runner's identity from its bearer token and answers with `rn_` ids that a runner of the previous release cannot follow.
-Let the chunks in flight finish, stop every
-runner, and take a hub store backup ([`docs/backup.md`](./backup.md)). Upgrade the hub, which migrates on boot. Then
-upgrade each runner: its store migration runs offline before the daemon starts, as the packaged unit's `ExecStartPre`
-runs it. Start the runners; each registers with the token it already holds and keeps the id the hub minted for it.
+Let the chunks in flight finish, stop every runner, and take a hub store backup ([`docs/backup.md`](./backup.md)).
+Upgrade the hub, which migrates on boot. Then upgrade each runner: its store migration runs offline before the daemon
+starts, as the packaged unit's `ExecStartPre` runs it. Start the runners; each registers with the token it already holds
+and keeps the id the hub minted for it.
 
 **If a runner is still pre-boundary.** It is not supported against the upgraded hub; keep it stopped until it is
 upgraded.
@@ -218,8 +218,8 @@ whichever is left.
      lists them, and each row's `slug` becomes a binding's `project`. A row with a NULL `slug` is an entry no project
      answered to: use its `project_id` when it has one, and otherwise drop it, since a binding naming no project is
      refused. **Split the old `max_agents` across the bindings, at least 1 agent each.** Each binding's `agents` caps
-     that binding alone, so an old cap below the number of served projects graduates higher than it was, unless you
-     drop projects.
+     that binding alone, so an old cap below the number of served projects graduates higher than it was, unless you drop
+     projects.
    - Its `subscription` names its one `[[subscription]]` declaration. A file with several declarations moves every one
      to the host and names the plan its enabled harness spends. A file with none sampled a plan synthesized from
      `[external_subscription_usage]`; declare it as `[[subscription]]` with `slug = "anthropic"`, `name = "Anthropic"`,
@@ -268,9 +268,8 @@ whichever is left.
 
 The result is an unregistered host of one runner, under the same id and token, with every chunk it held.
 
-To gather several graduated hosts into one registered host, take each runner under it at the hub, then move it in
-with `blizzard runner ingest`
-([runner-auth.md](./deployment/runner-auth.md#ingesting-a-runner-from-another-store)).
+To gather several graduated hosts into one registered host, take each runner under it at the hub, then move it in with
+`blizzard runner ingest` ([runner-auth.md](./deployment/runner-auth.md#ingesting-a-runner-from-another-store)).
 
 **One directory per store.** `data/host.lock` and `host.sock` guard the host directory, not a store named by `db_url`;
 `runner.sock` is only probed for a pre-host daemon left running, in the host directory and beside a configured store

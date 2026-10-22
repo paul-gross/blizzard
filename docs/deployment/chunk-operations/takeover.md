@@ -54,8 +54,8 @@ exclusive. `blizzard runner status` lists every open takeover.
 ## The verb versus the raw resume string
 
 For a runner-composed escalation the takeover verb, not the escalation record's raw resume string, is the supported way
-in; `blizzard runner status` prints the wrapped verb as a `takeover:` line above the raw `resume:` string, and the runner
-panel's chunk dock shows it as the primary command with a Copy button. The raw string resumes the transcript with
+in; `blizzard runner status` prints the wrapped verb as a `takeover:` line above the raw `resume:` string, and the
+runner panel's chunk dock shows it as the primary command with a Copy button. The raw string resumes the transcript with
 neither the permission mode nor the identity env: it runs at the harness's interactive permission default, and its
 `blizzard runner` verbs cannot reach the runner — read and edit only. The board renders the wrapped verb as the primary
 copyable command; the raw string is demoted to a collapsed unwrapped-fallback disclosure, present only when the
@@ -63,8 +63,10 @@ escalation carries one.
 
 Above the commands, the board's escalation panel states why the chunk escalated — a sentence chosen by the escalation's
 cause, followed by its one-line detail. A hub-authored cause (`bounce-cap`, `migration-target-unresolvable`) never names
-a worker, and an escalation with no recorded cause reads as a neutral "Escalated" naming no actor. `blizzard runner
-status` prints, beneath a `no-acceptable-harness` escalation, each harness's id, availability, and health cause.
+a worker, and an escalation with no recorded cause reads as a neutral "Escalated" naming no actor.
+`blizzard runner
+status` prints, beneath a `no-acceptable-harness` escalation, each harness's id, availability, and
+health cause.
 
 Which commands an escalation carries, and whether its session is reachable through takeover at all, is owned by
 blizzard-context's

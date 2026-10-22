@@ -19,8 +19,8 @@ center, six snow-white spokes with branch chevrons, and a cyan agent node cappin
 Hub, halo, and wordmark accent are `--amber` `#f2b25c`; the agent nodes at the spoke tips are `--cyan` `#5cd1e5`; the
 flake's spokes and chevrons are identity-only snow white `#eef4fb`; the ground is `--bg` `#060a12`. Every mark color
 except the snow white is a token from the board's design system
-([`web/projects/fleet/src/lib/core/design/tokens.css`](../../web/projects/fleet/src/lib/core/design/tokens.css)), so the mark
-reads as native beside the board UI.
+([`web/projects/fleet/src/lib/core/design/tokens.css`](../../web/projects/fleet/src/lib/core/design/tokens.css)), so the
+mark reads as native beside the board UI.
 
 ## Wordmark
 

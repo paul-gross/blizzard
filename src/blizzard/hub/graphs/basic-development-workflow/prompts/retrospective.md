@@ -22,9 +22,9 @@ check its PR's merge state from inside that repo's worktree so the query targets
 `gh pr view --json mergeCommit` gives the merged sha) — that predicate specifically, not branch-tip comparison or log
 reading.
 
-Check whether the landing turned the base branch's gate red, querying by the PR's merge commit per repo — not by
-branch. A completed red gate run is a real finding: raise it in the asset with its disposition and leave it there for
-the routine cross-chunk analysis pass to route onward.
+Check whether the landing turned the base branch's gate red, querying by the PR's merge commit per repo — not by branch.
+A completed red gate run is a real finding: raise it in the asset with its disposition and leave it there for the
+routine cross-chunk analysis pass to route onward.
 
 Verify the originating work item closed: `blizzard runner work-items <chunk-id>` gives each work ref's `web_url`; the
 item has no open/closed field — ask the forge for the issue's `state`. Closes-on-merge is opportunistic, never

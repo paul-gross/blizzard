@@ -40,8 +40,9 @@ graphs that say nothing, and `blizzard hub graph follow-latest <graph-id> true|f
 says-nothing is distinguishable from says-false.
 
 Over HTTP, `PATCH /api/graphs/{id}` with `{"follow_latest": true|false|null}` sets the override and answers `200` with
-the graph; `null` is `inherit`, and a body without `follow_latest` changes nothing. `POST /api/graphs/{id}/follow-latest`
-is a deprecated alias for it that still answers `202` with the same view, and is removed after two minor releases.
+the graph; `null` is `inherit`, and a body without `follow_latest` changes nothing.
+`POST /api/graphs/{id}/follow-latest` is a deprecated alias for it that still answers `202` with the same view, and is
+removed after two minor releases.
 
 The policy is per mint, not per name: a chunk consults its pinned graph's policy, so arming a lineage means arming the
 mint its chunks sit on — or the hub default, which covers every name. It is a plain no-op — no error, no fact — when the

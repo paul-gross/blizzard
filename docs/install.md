@@ -39,7 +39,8 @@ BLIZZARD_HUB_IMAGE=ghcr.io/paul-gross/blizzard-hub@sha256:<digest>
 ```
 
 An exact version tag, `ghcr.io/paul-gross/blizzard-hub:<version>`, is the readable pin; `latest` is neither — it follows
-each stable release, and is the evaluation default `.env.example` ships. Before running the image, verify its signature against the release identity:
+each stable release, and is the evaluation default `.env.example` ships. Before running the image, verify its signature
+against the release identity:
 
 ```bash
 cosign verify ghcr.io/paul-gross/blizzard-hub@sha256:<digest> \
