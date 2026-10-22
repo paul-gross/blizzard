@@ -153,7 +153,10 @@ class _RealRunner:
             process=FakeProbe(alive={(200, "start-200")}),
             worktree_git=FakeWorktreeGit(),
             config=LoopConfig(
-                runner_name=runner_id, runner_id=FIXTURE_RUNNER_ID, bindings=serving(project=DEFAULT_PROJECT_SLUG)
+                runner_name=runner_id,
+                runner_id=FIXTURE_RUNNER_ID,
+                bindings=serving(project=DEFAULT_PROJECT_SLUG),
+                agents=1,
             ),
             identity=registered_identity(runner_id, runner_id),
             worker_files=WorkerStdoutFiles("", self.store),

@@ -55,6 +55,7 @@ def test_the_column_matches_the_declared_schema(tmp_path: Path) -> None:
     try:
         s.metadata.create_all(declared)
         assert _columns(engine, "runner_registrations") == _columns(declared, "runner_registrations")
+        assert _columns(declared, "runner_registrations")["agents"] is True
     finally:
         declared.dispose()
 
