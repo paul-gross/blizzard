@@ -7611,6 +7611,58 @@ export const RunnerConnection = {
 export type RunnerConnection = typeof RunnerConnection[keyof typeof RunnerConnection];
 
 /**
+ * RunnerDeclining
+ *
+ * One throttle the runner reports as saying no to new work — the reason, never a setting. ``lever`` names the
+ * throttle and stays a plain string so a lever a newer runner adds never fails an older hub's parse; ``detail`` is the
+ * reading alone, ``subscription`` the subscription it concerns (``None`` when it names none) and ``until`` the instant
+ * the hold expects to lift (``None`` when it names none).
+ */
+export type RunnerDeclining = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Lever
+     */
+    lever: string;
+    /**
+     * Subscription
+     */
+    subscription?: string | null;
+    /**
+     * Until
+     */
+    until?: string | null;
+};
+
+/**
+ * RunnerDecliningView
+ *
+ * One throttle a runner reported as saying no, as the hub holds it — the response-side shape of
+ * :class:`RunnerDeclining`.
+ */
+export type RunnerDecliningView = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Lever
+     */
+    lever: string;
+    /**
+     * Subscription
+     */
+    subscription: string | null;
+    /**
+     * Until
+     */
+    until: string | null;
+};
+
+/**
  * RunnerEnrollmentResponse
  *
  * A rotated bearer token for an existing runner id.
@@ -7795,6 +7847,10 @@ export type RunnerRegistrationRequest = {
      */
     capabilities?: Array<RunnerCapability>;
     /**
+     * Declining
+     */
+    declining?: Array<RunnerDeclining> | null;
+    /**
      * Env Capacity
      */
     env_capacity?: number | null;
@@ -7930,6 +7986,10 @@ export type RunnerRegistryView = {
      */
     capabilities: Array<RunnerCapability>;
     connection: RunnerConnection;
+    /**
+     * Declining
+     */
+    declining: Array<RunnerDecliningView>;
     /**
      * Env Capacity
      */
@@ -8162,6 +8222,10 @@ export type RunnerView = {
      * Capabilities
      */
     capabilities: Array<RunnerCapability>;
+    /**
+     * Declining
+     */
+    declining: Array<RunnerDecliningView>;
     /**
      * Env Capacity
      */

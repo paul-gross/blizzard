@@ -1,4 +1,4 @@
-import { RunnerConnection, type RunnerRegistryView } from 'fleet';
+import { formatWhen, RunnerConnection, type RunnerDecliningView, type RunnerRegistryView } from 'fleet';
 
 import { connectionState, hostLight, runnerLight, runnerStateBadges, runnerTitleState } from './connection-status.model';
 import type { RunnerRow } from './runner-rows.model';
@@ -12,6 +12,7 @@ const REGISTRY: RunnerRegistryView = {
   bindings: null,
   capabilities: [],
   connection: RunnerConnection.NEVER_CONNECTED,
+  declining: [],
   env_capacity: null,
   gates: [],
   host_id: null,
@@ -98,6 +99,37 @@ describe('runnerStateBadges', () => {
   it('reads an online runner as IDLE, or WORKING while it holds a chunk', () => {
     expect(labels(row())).toEqual(['IDLE']);
     expect(labels(row({ claims: [{ chunkId: 'c', shortId: 'c', node: 'build', status: 'running' }] }))).toEqual(['WORKING']);
+  });
+
+  describe('when a throttle says no', () => {
+    const floor: RunnerDecliningView = { lever: 'floor', detail: 'exhausted', subscription: 'anthropic', until: NOW };
+    const pace: RunnerDecliningView = { lever: 'pace', detail: '7d 86% spent, 71% elapsed', subscription: null, until: null };
+    const reset = formatWhen(NOW, new Date(NOW));
+
+    it('words the floor with its subscription and reset, in place of IDLE', () => {
+      expect(labels(row({ declining: [floor] }))).toEqual([`waiting on anthropic — exhausted, resets ${reset}`]);
+    });
+
+    it('words a lever, or one this board has no name for, in the generic form', () => {
+      expect(labels(row({ declining: [pace] }))).toEqual(['declining — pace: 7d 86% spent, 71% elapsed']);
+      expect(labels(row({ declining: [{ ...pace, lever: 'from-a-newer-runner', detail: 'd' }] }))).toEqual([
+        'declining — from-a-newer-runner: d',
+      ]);
+    });
+
+    it('shows the first reason, in the gate\'s order, and lists every one in its title', () => {
+      const [badge] = runnerStateBadges(row({ declining: [pace, floor] }));
+
+      expect(badge.label).toBe('declining — pace: 7d 86% spent, 71% elapsed');
+      expect(badge.title).toContain(`waiting on anthropic — exhausted, resets ${reset}`);
+      expect(badge.testid).toBe('fleet-runner-declining');
+    });
+
+    it('is hidden behind either brake, and for a runner that is offline', () => {
+      expect(labels(row({ declining: [floor], hub_paused: true }))).toEqual(['HUB PAUSED']);
+      expect(labels(row({ declining: [floor], locally_paused: true }))).toEqual(['LOCALLY PAUSED']);
+      expect(labels(row({ declining: [floor], online: false, connection: RunnerConnection.OFFLINE }))).toEqual(['OFFLINE']);
+    });
   });
 
   it('names an offline or never-connected runner by its connection', () => {

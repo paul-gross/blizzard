@@ -12394,6 +12394,91 @@
         "title": "RunnerConnection",
         "type": "string"
       },
+      "RunnerDeclining": {
+        "description": "One throttle the runner reports as saying no to new work \u2014 the reason, never a setting. ``lever`` names the\nthrottle and stays a plain string so a lever a newer runner adds never fails an older hub's parse; ``detail`` is the\nreading alone, ``subscription`` the subscription it concerns (``None`` when it names none) and ``until`` the instant\nthe hold expects to lift (``None`` when it names none).",
+        "properties": {
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "lever": {
+            "title": "Lever",
+            "type": "string"
+          },
+          "subscription": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subscription"
+          },
+          "until": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Until"
+          }
+        },
+        "required": [
+          "lever",
+          "detail"
+        ],
+        "title": "RunnerDeclining",
+        "type": "object"
+      },
+      "RunnerDecliningView": {
+        "description": "One throttle a runner reported as saying no, as the hub holds it \u2014 the response-side shape of\n:class:`RunnerDeclining`.",
+        "properties": {
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "lever": {
+            "title": "Lever",
+            "type": "string"
+          },
+          "subscription": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subscription"
+          },
+          "until": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Until"
+          }
+        },
+        "required": [
+          "lever",
+          "detail",
+          "subscription",
+          "until"
+        ],
+        "title": "RunnerDecliningView",
+        "type": "object"
+      },
       "RunnerEnrollmentResponse": {
         "description": "A rotated bearer token for an existing runner id.\n\n``token`` is the plaintext, visible only here \u2014 only its sha256 hash is kept. The old\ntoken stops resolving the moment this response lands.",
         "properties": {
@@ -12648,6 +12733,20 @@
             },
             "title": "Capabilities",
             "type": "array"
+          },
+          "declining": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/RunnerDeclining"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Declining"
           },
           "env_capacity": {
             "anyOf": [
@@ -12958,6 +13057,14 @@
             "$ref": "#/components/schemas/RunnerConnection",
             "x-blizzard-open": true
           },
+          "declining": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/RunnerDecliningView"
+            },
+            "title": "Declining",
+            "type": "array"
+          },
           "env_capacity": {
             "anyOf": [
               {
@@ -13186,7 +13293,8 @@
           "host_id",
           "version",
           "version_standing",
-          "version_refusal"
+          "version_refusal",
+          "declining"
         ],
         "title": "RunnerRegistryView",
         "type": "object"
@@ -13364,6 +13472,14 @@
             "title": "Capabilities",
             "type": "array"
           },
+          "declining": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/RunnerDecliningView"
+            },
+            "title": "Declining",
+            "type": "array"
+          },
           "env_capacity": {
             "anyOf": [
               {
@@ -13527,7 +13643,8 @@
           "projects",
           "bindings",
           "subscription",
-          "subscription_unrostered"
+          "subscription_unrostered",
+          "declining"
         ],
         "title": "RunnerView",
         "type": "object"

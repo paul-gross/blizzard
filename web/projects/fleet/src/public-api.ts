@@ -171,6 +171,7 @@ export type {
   RunnerCapability,
   ProjectView,
   ProjectsListView,
+  RunnerDecliningView,
   RunnerRegistryView,
   HostRegistryView,
   ServedProjectView,

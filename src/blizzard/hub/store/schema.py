@@ -1956,6 +1956,9 @@ runner_registrations = Table(
     Column("subscription", Text, nullable=True),
     # The agents the runner last declared it runs at once, shared by its bindings; null when it sent none.
     Column("agents", Integer, nullable=True),
+    # The throttles the runner last reported as saying no, a JSON list of {lever, detail, subscription, until}; null
+    # when it sent none, which reads as none declining.
+    Column("declining", Text, nullable=True),
     # The latest judged registration's version, refusal (null when admitted) and time; a refusal writes only these.
     Column("reported_version", Text, nullable=True),
     Column("version_refusal", String, nullable=True),

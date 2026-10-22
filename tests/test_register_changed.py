@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -13,6 +13,7 @@ from blizzard.hub.domain.runners.registration import (
     DeclaredSubscription,
     RunnerBinding,
     RunnerCapability,
+    RunnerDeclining,
 )
 from tests.support import HubHarness, build_hub, seed_runner
 
@@ -62,6 +63,7 @@ _CHANGES: dict[str, dict[str, object]] = {
     "projects": {"projects": ()},
     "bindings": {"bindings": (RunnerBinding("proj", "w1", 2),)},
     "subscription": {"subscription": "s"},
+    "declining": {"declining": (RunnerDeclining("floor", "exhausted", "anthropic"),)},
 }
 
 
@@ -87,3 +89,20 @@ def test_a_registration_from_an_offline_runner_is_a_change(tmp_path: Path) -> No
 
     assert _register(hub).changed
     assert not _register(hub).changed
+
+
+def test_a_runner_that_sends_no_declining_report_and_one_that_sends_none_declining_agree(tmp_path: Path) -> None:
+    hub = _hub(tmp_path)
+    _register(hub, declining=None)
+
+    assert not _register(hub, declining=()).changed
+    assert not _register(hub, declining=None).changed
+
+
+def test_a_repeated_reason_is_not_a_change_and_a_lifted_one_is(tmp_path: Path) -> None:
+    hub = _hub(tmp_path)
+    reason = (RunnerDeclining("floor", "exhausted", "anthropic", datetime(2026, 10, 22, 14, tzinfo=UTC)),)
+    _register(hub, declining=reason)
+
+    assert not _register(hub, declining=reason).changed
+    assert _register(hub, declining=()).changed

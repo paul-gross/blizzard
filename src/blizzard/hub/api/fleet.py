@@ -17,7 +17,7 @@ from fastapi.responses import JSONResponse
 from blizzard.foundation.claim_denials import ClaimDenialReason
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import dto
-from blizzard.foundation.store.utc import iso_utc
+from blizzard.foundation.store.utc import as_utc, iso_utc
 from blizzard.hub.api import chunk_events, node_steps
 from blizzard.hub.api import chunk_statuses as chunk_statuses_api
 from blizzard.hub.api import chunks as chunks_api
@@ -76,6 +76,7 @@ from blizzard.hub.domain.runners.registration import (
     DeclaredSubscription,
     RunnerBinding,
     RunnerCapability,
+    RunnerDeclining,
     RunnerNeverConnected,
     RunnerRetired,
 )
@@ -965,6 +966,14 @@ def register_runner(
             ),
             subscription=request.subscription,
             agents=request.agents,
+            declining=(
+                None
+                if request.declining is None
+                else tuple(
+                    RunnerDeclining(d.lever, d.detail, d.subscription, None if d.until is None else as_utc(d.until))
+                    for d in request.declining
+                )
+            ),
             version=request.version,
         )
     except RunnerVersionRefused as exc:

@@ -2,12 +2,14 @@ import {
   type ChunkStatus,
   type HostRegistryView,
   RunnerConnection,
+  type RunnerDecliningView,
   type RunnerRegistryView,
   RunnerVersionStanding,
   type SubscriptionPace,
   compactRef,
   formatSeenAgo,
   formatSeenTag,
+  formatWhen,
   hubSubscriptionPaces,
   type Tone,
 } from 'fleet';
@@ -98,6 +100,26 @@ export interface RunnerRow extends RunnerRegistryView {
  * falls back to a generic clear-it-yourself hint. */
 export function localPauseHint(row: RunnerRow): string {
   return row.locally_paused_reason ?? 'This runner paused itself. Clear it on the runner: blizzard runner start';
+}
+
+/** One reason a throttle holds a runner back, in words. The floor names the subscription it waits on, with its reading and
+ * expected reset; any other lever — and any lever this board has no wording for — falls to the generic
+ * `declining — <lever>: <detail>` form, its `until` after. The instant is the one the runner named, formatted here
+ * (`bzh:frontend-formatters`). */
+export function decliningLabel(reason: RunnerDecliningView, nowMs: number): string {
+  const when = reason.until == null ? null : formatWhen(reason.until, new Date(nowMs));
+  if (reason.lever === 'floor') {
+    const waiting = reason.subscription == null ? 'waiting' : `waiting on ${reason.subscription}`;
+    return `${waiting} — ${reason.detail}${when ? `, resets ${when}` : ''}`;
+  }
+  return `declining — ${reason.lever}: ${reason.detail}${when ? `, until ${when}` : ''}`;
+}
+
+/** The labels of every throttle holding `row` back, in the gate's order — empty unless the runner is online with no brake,
+ * since a brake already says why it is idle and an offline runner reports nothing current. */
+export function decliningLabels(row: RunnerRow): readonly string[] {
+  if (!row.online || row.hub_paused || row.locally_paused) return [];
+  return (row.declining ?? []).map((reason) => decliningLabel(reason, row.nowMs));
 }
 
 /** Why resuming at the hub may not start a runner: its own brake is not the hub's to

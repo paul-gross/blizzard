@@ -219,6 +219,9 @@ class RunnerRegistration:
     subscription: str | None = None
     #: The agents the runner last declared it runs at once, shared by its bindings; ``None`` when it sent none.
     agents: int | None = None
+    #: The throttles the runner last reported as saying no to new work, one per throttle — empty when it reported none
+    #: or predates the field. Superseded whole on every registration; the runner's assertion, never a setting.
+    declining: tuple[RunnerDeclining, ...] = ()
     #: The version the latest judged registration reported; ``None`` when it reported none.
     reported_version: str | None = None
     #: Why the window refused the latest judged registration; ``None`` when it was admitted, or never judged.
@@ -269,6 +272,7 @@ class RunnerRegistration:
             or report.bindings != self.bindings
             or report.subscription != self.subscription
             or report.agents != self.agents
+            or (report.declining or ()) != self.declining
             or (served is not None and served != self.served)
         )
 
@@ -400,6 +404,7 @@ class RunnerReport:
     bindings: tuple[RunnerBinding, ...] | None
     subscription: str | None
     agents: int | None = None
+    declining: tuple[RunnerDeclining, ...] | None = None
 
 
 @domain_model
@@ -415,6 +420,19 @@ class RunnerCapability:
     tiers: tuple[str, ...] = ()
     default: bool = False
     available: bool = True
+
+
+@domain_model
+@dataclass(frozen=True)
+class RunnerDeclining:
+    """One throttle a registered runner reported as saying no to new work — the hub-domain mirror of the wire shape,
+    kept import-free of it (``bzh:domain-core``). ``lever`` names the throttle, ``detail`` the reading alone;
+    ``subscription`` and ``until`` ride their own fields, ``until`` the instant the hold expects to lift."""
+
+    lever: str
+    detail: str
+    subscription: str | None = None
+    until: datetime | None = None
 
 
 @domain_model
@@ -750,6 +768,7 @@ class IWriteRunnerRegistry(IReadRunnerRegistry, Protocol):
         bindings: tuple[RunnerBinding, ...] | None = None,
         subscription: str | None = None,
         agents: int | None = None,
+        declining: tuple[RunnerDeclining, ...] | None = None,
         version: str | None = None,
         at: datetime,
     ) -> bool:
@@ -758,7 +777,7 @@ class IWriteRunnerRegistry(IReadRunnerRegistry, Protocol):
         True on its first one, which also stamps ``registered_at``. ``name`` replaces the held name
         unless ``None``, and ``projects`` the served declaration unless ``None``; every other field is
         written on **every** registration, absent ones verbatim to null/empty, and ``subscriptions`` and
-        ``bindings`` keep ``None`` vs ``()`` distinct. A ``runner_id``
+        ``bindings`` keep ``None`` vs ``()`` distinct; ``declining`` stores ``None`` as null. A ``runner_id``
         with no row raises :class:`LookupError` — a registration only ever follows an add."""
         ...
 

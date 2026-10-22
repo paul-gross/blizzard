@@ -16,7 +16,7 @@ import { CapabilityBadgeGroup } from './capability-badge-group';
 import { GateBadgeGroup } from './gate-badge-group';
 import { runnerLight, runnerStateBadges } from './connection-status.model';
 import { busyAgents, declaredAgents } from './host-rows.model';
-import { runnerSeenLabel, runnerToggleHint, type RunnerRow, versionStandingBadge } from './runner-rows.model';
+import { decliningLabels, runnerSeenLabel, runnerToggleHint, type RunnerRow, versionStandingBadge } from './runner-rows.model';
 import { RunnerSubscription } from './runner-subscription';
 import { ServedProjectGroup } from './served-project-group';
 import { StatusLight } from './status-light';
@@ -70,10 +70,14 @@ export class FleetRunnerRow {
   private readonly gates = viewChild.required<TemplateRef<unknown>>('gates');
   private readonly state = viewChild.required<TemplateRef<unknown>>('state');
   private readonly version = viewChild.required<TemplateRef<unknown>>('version');
+  private readonly declining = viewChild.required<TemplateRef<unknown>>('declining');
 
   protected readonly light = computed(() => runnerLight(this.row()));
 
   protected readonly stateBadges = computed(() => runnerStateBadges(this.row()));
+
+  /** Every throttle holding the runner back, in the gate's order; empty when none is, or a brake holds it. */
+  protected readonly decliningReasons = computed(() => decliningLabels(this.row()));
 
   protected readonly ref = computed(() => compactRef(this.row().runner_id));
 
@@ -106,6 +110,9 @@ export class FleetRunnerRow {
     { label: 'Gates', template: this.gates() },
     { label: 'Version', template: this.version(), testid: 'fleet-runner-version' },
     { label: 'State', template: this.state() },
+    ...(this.decliningReasons().length > 0
+      ? [{ label: 'Declining', template: this.declining(), testid: 'fleet-runner-declining-reasons' }]
+      : []),
   ]);
 
   protected toneFor(status: ChunkStatus): Tone {

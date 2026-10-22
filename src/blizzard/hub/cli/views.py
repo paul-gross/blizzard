@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any, ClassVar
 
 from blizzard.foundation.roles import collaborator, dto
@@ -63,6 +64,18 @@ class ChunkLine:
         return f"{self.row['chunk_id']}  {self.row['status']:<16} @ {self.node}  {rendered:>10}{marking}"
 
 
+def _declining_reason(reason: dict[str, Any]) -> str:
+    """One declining reason as a line carries it: the floor as ``floor — <subscription> <detail>, resets <instant>``,
+    any other lever, and a lever this CLI has no wording for, as ``<lever> — <detail>`` with its ``until`` after."""
+    until = reason.get("until")
+    clock = datetime.fromisoformat(until).strftime("%H:%MZ") if until else None
+    lever, detail = reason["lever"], reason["detail"]
+    if lever == "floor":
+        named = f"{reason['subscription']} {detail}" if reason.get("subscription") else detail
+        return f"floor — {named}" + (f", resets {clock}" if clock else "")
+    return f"{lever} — {detail}" + (f", until {clock}" if clock else "")
+
+
 @dto
 @dataclass(frozen=True)
 class RunnerLine:
@@ -104,6 +117,15 @@ class RunnerLine:
         return f" [paused: {'+'.join(brakes)}]" if brakes else ""
 
     @property
+    def declining(self) -> str:  # ast-grep-ignore: bzh:property-delegates
+        """The first throttle an online, unbraked runner reported as saying no — the brake wins the slot; nothing for an
+        offline runner or one that reported none."""
+        reasons = self.row.get("declining") or []
+        if not reasons or self.brake or self.connection != "online":
+            return ""
+        return f" [declining: {_declining_reason(reasons[0])}]"
+
+    @property
     def retirement(self) -> str:  # ast-grep-ignore: bzh:property-delegates
         """When and by whom a retired runner was retired; empty for a live one."""
         if not self.row.get("retired"):
@@ -113,7 +135,7 @@ class RunnerLine:
     def line(self) -> str:
         return (
             f"{self.row['runner_id']}  {self.name:<{self.name_width}} {self.connection:<15} ws={self.workspace}"
-            f"{self.brake}{self.retirement}"
+            f"{self.brake}{self.declining}{self.retirement}"
         )
 
 
