@@ -204,6 +204,10 @@ def test_a_copy_appends_a_different_history_renumbered_and_merges_graph_artifact
                 if isinstance(schema.metadata.tables[name].c[c.name].type, UtcDateTime)
             }
             conn.execute(sa.update(shape).values(**stamps))
+        # A mark is unique on its invocation, so another history's mark names an invocation of its own.
+        marks, clears = shapes.tables["subscription_usage_limits"], shapes.tables["subscription_floor_clears"]
+        conn.execute(sa.update(marks).values(lease_id="lease_other", marked_at=later))
+        conn.execute(sa.update(clears).values(cleared_at=later))
         artifacts = shapes.tables["graph_artifacts"]
         conn.execute(
             sa.insert(artifacts).values(
@@ -222,6 +226,8 @@ def test_a_copy_appends_a_different_history_renumbered_and_merges_graph_artifact
     assert set(outcomes) == {held_claims[0]["id"], appended["id"]}
     assert outcomes[appended["id"]]["recorded_at"] > outcomes[held_claims[0]["id"]]["recorded_at"]
     assert len(_rows(here, "external_usage_samples")) == 2
+    assert [r["lease_id"] for r in _rows(here, "subscription_usage_limits")] == ["lease_id-1", "lease_other"]
+    assert len(_rows(here, "subscription_floor_clears")) == 2
     assert {r["graph_id"] for r in _rows(here, "graph_artifacts")} == {"graph_id-1", "gr_other"}
 
 

@@ -14,7 +14,7 @@ import weakref
 from collections.abc import Callable, Iterable, Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import structlog
@@ -112,6 +112,7 @@ from blizzard.runner.store.internal.host_ingest_store import HostIngestStore
 from blizzard.runner.store.internal.host_jti_cache_store import JtiCacheRepository
 from blizzard.runner.store.internal.host_lane_store import HostLaneStore
 from blizzard.runner.store.internal.host_runner_audit import RunnerAudit
+from blizzard.runner.store.internal.host_usage_limit_store import SubscriptionUsageLimitStore
 from blizzard.runner.store.internal.host_workspace_prompt_store import WorkspacePromptStore
 from blizzard.runner.store.internal.identity_store import RunnerIdentityStore
 from blizzard.runner.store.internal.invocation_boundary_store import InvocationBoundaryStore
@@ -129,6 +130,7 @@ from blizzard.runner.store.internal.selftest_result_store import SelfTestResultS
 from blizzard.runner.store.internal.takeover_store import TakeoverStore
 from blizzard.runner.store.internal.token_store import TokenStore
 from blizzard.runner.store.internal.transcript_ledger_store import TranscriptLedgerStore
+from blizzard.runner.store.internal.usage_limit_store import RunnerUsageLimitStore
 from blizzard.runner.store.internal.usage_store import UsageStore
 from blizzard.runner.store.schema import metadata as runner_metadata
 from blizzard.runner.store.schema import transcript_outbound_buffer, transcript_segments
@@ -146,7 +148,7 @@ from blizzard.runner.subscriptions.subscription_sampler import (
     SampleMiss,
     SampleMissReason,
 )
-from blizzard.runner.throttle.pause import SpendingRunner
+from blizzard.runner.throttle.usage_limits import UsageLimitMark
 from blizzard.runner.transcripts.archived_repository import ArchivedTranscript
 from blizzard.runner.transcripts.repository import IReadTranscriptRepository
 from blizzard.runner.usage.recorder import UsageRecorder
@@ -194,6 +196,7 @@ class SqlAlchemyRunnerStore(
     InvocationBoundaryStore,
     SelfTestResultStore,
     LeaseTraceFactsStore,
+    RunnerUsageLimitStore,
 ):
     """The flat, every-concept-at-once runner store — test support only:
     production composes the extracted concept adapters individually via
@@ -236,6 +239,7 @@ class SqlAlchemyRunnerStore(
         InvocationBoundaryStore.__init__(self, store)
         SelfTestResultStore.__init__(self, store)
         LeaseTraceFactsStore.__init__(self, store)
+        RunnerUsageLimitStore.__init__(self, store)
         self._engine = engine
         self._errors = errors
 
@@ -336,6 +340,7 @@ def make_host_stores(store: SqlAlchemyRunnerStore, clock: IClock | None = None) 
         host_lane=store,
         host_identity=store,
         host_ingests=HostIngestStore(store.connections),
+        usage_limits=SubscriptionUsageLimitStore(store.connections),
         runner_audit=RunnerAudit(store.connections),
     )
 
@@ -368,6 +373,7 @@ def make_stores(store: IWriteRunnerStore) -> RunnerStores:
         invocation_boundaries=store,
         selftest_results=store,
         lease_traces=store,
+        usage_limits=store,
     )
 
 
@@ -457,6 +463,30 @@ REGISTERED_AT = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
 def matched_verdict() -> IdentityVerdictHolder:
     """A verdict already matched — the state a hosted runner's check reaches against its own hub."""
     return IdentityVerdictHolder("blizzard runner store reset /runner", state=IdentityState.MATCHED)
+
+
+def usage_limit_mark(
+    marked_at: datetime,
+    *,
+    resets_in: timedelta | None = timedelta(hours=1),
+    window: str | None = None,
+    generation: int = 1,
+) -> UsageLimitMark:
+    """A worker's usage-limit mark at ``marked_at``, naming a reset ``resets_in`` later (none when ``None``) and, with
+    ``window``, holding that window under the same reset."""
+    resets_at = marked_at + resets_in if resets_in is not None else None
+    return UsageLimitMark(
+        marked_at=marked_at,
+        resets_at=resets_at,
+        window=window,
+        window_resets_at=resets_at if window is not None else None,
+        harness_id=CLAUDE_CODE_HARNESS_ID,
+        detail="usage limit reached",
+        lease_id="lease_limited",
+        epoch=1,
+        generation=generation,
+        invocation_kind="worker",
+    )
 
 
 def fixed_hub_token(token: str = FAKE_RUNNER_TOKEN) -> HubTokenHolder:
@@ -1544,7 +1574,6 @@ def make_context(
     config: LoopConfig | None = None,
     events: EventBroker | None = None,
     subscriptions: tuple[ResolvedSubscription, ...] = (),
-    slug_spenders: tuple[SpendingRunner, ...] = (),
     chunk_views: IChunkViews | None = None,
     harness_versions: HarnessVersionCache | None = None,
     worker_scratch: WorkerScratchDirs | None = None,
@@ -1634,7 +1663,6 @@ def make_context(
         workspaces=_workspaces,
         process=_probe,
         subscriptions=subscriptions,
-        slug_spenders=slug_spenders,
         worktree_git=_wt,
         check_runner=_check_runner,
         config=resolved_config,

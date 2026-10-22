@@ -19,7 +19,6 @@ from blizzard.runner.throttle.pause import (
     RunnerBrakes,
     needs_pause_park,
     spend_ceiling_reason,
-    usage_limit_reason,
 )
 
 pytestmark = pytest.mark.unit
@@ -122,21 +121,6 @@ def test_spend_ceiling_reason_names_partial() -> None:
         spend_ceiling_reason(cap=10.0, window_hours=1.5, spend=10.0, partial=False)
         == "spend ceiling $10.00 reached over the trailing 1.5h (spend $10.00)"
     )
-
-
-def test_usage_limit_reason_minute_precision() -> None:
-    resets_at = datetime(2026, 10, 4, 17, 42, 59, tzinfo=UTC)
-    assert usage_limit_reason("claude-code", resets_at) == "usage limit: claude-code (resets 2026-10-04T17:42Z)"
-    assert usage_limit_reason("claude-code", None) == "usage limit: claude-code"
-
-
-def test_usage_limit_reason_names_the_subscription_beside_the_harness() -> None:
-    resets_at = datetime(2026, 10, 4, 17, 42, 31, tzinfo=UTC)
-    assert (
-        usage_limit_reason("claude-code", resets_at, slug="max")
-        == "usage limit: max via claude-code (resets 2026-10-04T17:42Z)"
-    )
-    assert usage_limit_reason("claude-code", None, slug="max") == "usage limit: max via claude-code"
 
 
 def _next(streak: OverloadStreak, *, identity: str = "3") -> OverloadExit:

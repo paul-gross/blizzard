@@ -1071,3 +1071,86 @@ host_ingests = Table(
     Column("ingested_at", UtcDateTime, nullable=False),
     info={"scope": "host", "transfer": HOST_TRANSFER_NONE},
 )
+
+# --- Usage-limit marks and floor clears (the floor's facts) --------------------
+# Append-only; a floor derives from its key's newest mark and newest clear. Host rows per slug, runner rows per runner.
+
+subscription_usage_limits = Table(
+    "subscription_usage_limits",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("slug", String, nullable=False),
+    Column("marked_at", UtcDateTime, nullable=False),
+    Column("resets_at", UtcDateTime, nullable=True),  # the reset the harness named; NULL if it named none
+    Column("window", String, nullable=True),  # the sampled window the limit fell in; NULL if no sample placed it
+    Column("window_resets_at", UtcDateTime, nullable=True),  # that window's reset, as sampled
+    Column("harness_id", String, nullable=False),
+    Column("detail", Text, nullable=False),
+    Column("lease_id", String, nullable=False),
+    Column("epoch", Integer, nullable=False),
+    Column("generation", Integer, nullable=False),
+    Column("invocation_kind", String, nullable=False),  # "worker" or "judge"
+    UniqueConstraint(
+        "lease_id", "epoch", "generation", "invocation_kind", name="uq_subscription_usage_limits_invocation"
+    ),
+    CheckConstraint("invocation_kind IN ('worker', 'judge')", name="ck_subscription_usage_limits_invocation_kind"),
+    info={"scope": "host", "transfer": HOST_TRANSFER_APPEND},
+)
+
+Index(
+    "ix_subscription_usage_limits_slug_marked_at",
+    subscription_usage_limits.c.slug,
+    subscription_usage_limits.c.marked_at,
+)
+
+runner_usage_limits = Table(
+    "runner_usage_limits",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("runner_id", String, nullable=False),
+    Column("marked_at", UtcDateTime, nullable=False),
+    Column("resets_at", UtcDateTime, nullable=True),
+    Column("window", String, nullable=True),
+    Column("window_resets_at", UtcDateTime, nullable=True),
+    Column("harness_id", String, nullable=False),
+    Column("detail", Text, nullable=False),
+    Column("lease_id", String, nullable=False),
+    Column("epoch", Integer, nullable=False),
+    Column("generation", Integer, nullable=False),
+    Column("invocation_kind", String, nullable=False),
+    UniqueConstraint(
+        "runner_id", "lease_id", "epoch", "generation", "invocation_kind", name="uq_runner_usage_limits_invocation"
+    ),
+    CheckConstraint("invocation_kind IN ('worker', 'judge')", name="ck_runner_usage_limits_invocation_kind"),
+    info={"scope": "runner"},
+)
+
+Index("ix_runner_usage_limits_runner_id_marked_at", runner_usage_limits.c.runner_id, runner_usage_limits.c.marked_at)
+
+subscription_floor_clears = Table(
+    "subscription_floor_clears",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("slug", String, nullable=False),
+    Column("cleared_at", UtcDateTime, nullable=False),
+    Column("by", String, nullable=False),  # who opened the floor by hand
+    info={"scope": "host", "transfer": HOST_TRANSFER_APPEND},
+)
+
+Index(
+    "ix_subscription_floor_clears_slug_cleared_at",
+    subscription_floor_clears.c.slug,
+    subscription_floor_clears.c.cleared_at,
+)
+
+runner_floor_clears = Table(
+    "runner_floor_clears",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("runner_id", String, nullable=False),
+    Column("cleared_at", UtcDateTime, nullable=False),
+    Column("by", String, nullable=False),
+    info={"scope": "runner"},
+)
+
+Index("ix_runner_floor_clears_runner_id_cleared_at", runner_floor_clears.c.runner_id, runner_floor_clears.c.cleared_at)

@@ -21,6 +21,7 @@ from blizzard.runner.subscriptions.internal.subscription_sampler_factory import 
 from blizzard.runner.subscriptions.subscription_sampler import (
     PROVIDER_ANTHROPIC,
     PROVIDER_OPENAI,
+    SAMPLED_PROVIDERS,
     SampleMiss,
     SampleMissReason,
 )
@@ -77,3 +78,14 @@ def test_an_unknown_provider_selects_no_sampler() -> None:
     declaration = SubscriptionDeclaration(slug="mystery", name="Mystery Plan", provider="some-unshipped-provider")
 
     assert select_sampler(declaration, clock=FixedClock(_NOW), http_client=_unreachable_client) is None
+
+
+@pytest.mark.parametrize("provider", [PROVIDER_ANTHROPIC, PROVIDER_OPENAI, "some-unshipped-provider"])
+def test_the_sampled_providers_are_exactly_those_selecting_a_sampler(provider: str, tmp_path: Path) -> None:
+    declaration = SubscriptionDeclaration(
+        slug="plan", name="Plan", provider=provider, credentials_path=str(tmp_path / "absent.json")
+    )
+
+    selected = select_sampler(declaration, clock=FixedClock(_NOW), http_client=_unreachable_client)
+
+    assert (selected is not None) is (provider in SAMPLED_PROVIDERS)

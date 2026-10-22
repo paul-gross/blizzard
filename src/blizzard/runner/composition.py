@@ -108,6 +108,7 @@ from blizzard.runner.store.internal.host_ingest_store import HostIngestStore
 from blizzard.runner.store.internal.host_jti_cache_store import JtiCacheRepository
 from blizzard.runner.store.internal.host_lane_store import HostLaneStore
 from blizzard.runner.store.internal.host_runner_audit import RunnerAudit
+from blizzard.runner.store.internal.host_usage_limit_store import SubscriptionUsageLimitStore
 from blizzard.runner.store.internal.host_workspace_prompt_store import WorkspacePromptStore
 from blizzard.runner.store.internal.identity_store import RunnerIdentityStore
 from blizzard.runner.store.internal.invocation_boundary_store import InvocationBoundaryStore
@@ -126,6 +127,7 @@ from blizzard.runner.store.internal.selftest_result_store import SelfTestResultS
 from blizzard.runner.store.internal.takeover_store import TakeoverStore
 from blizzard.runner.store.internal.token_store import TokenStore
 from blizzard.runner.store.internal.transcript_ledger_store import TranscriptLedgerStore
+from blizzard.runner.store.internal.usage_limit_store import RunnerUsageLimitStore
 from blizzard.runner.store.internal.usage_store import UsageStore
 from blizzard.runner.store.runner_guard import install_runner_guard
 from blizzard.runner.store.scoped import RunnerStoreConnections
@@ -134,6 +136,7 @@ from blizzard.runner.subscriptions.internal.credential_renewer_factory import se
 from blizzard.runner.subscriptions.internal.subprocess_one_shot_process import SubprocessOneShotProcess
 from blizzard.runner.subscriptions.internal.subscription_sampler_factory import select_sampler
 from blizzard.runner.subscriptions.internal.usage_http_client import LazyUsageHttpClient
+from blizzard.runner.throttle.resample import FloorResampleTriggers
 from blizzard.runner.tracing.attributes import (
     INSTRUMENTATION_SCOPE,
     INSTRUMENTATION_SCOPE_VERSION,
@@ -229,17 +232,6 @@ class HostProcess:
         """Whether the host holds a host token: it reports itself, and its roster with it, so its runners declare
         no subscriptions of their own."""
         return self.host_registration.current().registered()
-
-    def spenders_of(self, slug: str | None, *, excluding: str) -> tuple[RunnerProcess, ...]:
-        """The runners of this host, other than ``excluding``, that spend ``slug`` — none for a runner that spends no
-        subscription."""
-        if slug is None:
-            return ()
-        return tuple(
-            runner
-            for runner in self.runners
-            if runner.runner_id != excluding and any(declared.slug == slug for declared in runner.config.subscriptions)
-        )
 
     def close(self) -> None:
         with contextlib.ExitStack() as closing:
@@ -479,6 +471,7 @@ def _external_usage_sample_pass(
     return ExternalUsageSamplePass(
         subscriptions=sampled,
         attempts=host_stores.external_usage,
+        early=FloorResampleTriggers(host_stores.usage_limits, host_stores.external_usage),
         sink=ExternalUsageAttemptLane(host_stores.host_lane, runners, registration=registration),
         clock=clock,
     )
@@ -980,6 +973,7 @@ def _build_stores(connections: RunnerStoreConnections) -> RunnerStores:
         invocation_boundaries=InvocationBoundaryStore(connections),
         selftest_results=SelfTestResultStore(connections),
         lease_traces=LeaseTraceFactsStore(connections),
+        usage_limits=RunnerUsageLimitStore(connections),
     )
 
 
@@ -1028,6 +1022,7 @@ def _build_host_stores(connections: RunnerStoreConnections, clock: IClock) -> Ho
         host_lane=HostLaneStore(connections),
         host_identity=HostIdentityStore(connections),
         host_ingests=HostIngestStore(connections),
+        usage_limits=SubscriptionUsageLimitStore(connections),
         runner_audit=RunnerAudit(connections),
     )
 

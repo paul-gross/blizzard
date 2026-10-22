@@ -17,10 +17,13 @@ from blizzard.runner.store import schema
 T0 = datetime(2026, 1, 1, tzinfo=UTC)
 
 #: Every runner-scoped table the additive revision keys, but the identity row, which keys itself by its own
-#: ``runner_id``, and the outbox counters, which only the tightening revision creates.
+#: ``runner_id``, the outbox counters, which only the tightening revision creates, and the tables a later revision
+#: creates already keyed.
 KEYED = frozenset(t.name for t in schema.metadata.sorted_tables if t.info["scope"] == "runner") - {
     "runner_identity",
     "outbox_counters",
+    "runner_usage_limits",
+    "runner_floor_clears",
 }
 
 _ALLOWED_VALUES = re.compile(r"^\s*(\w+)\s+IN\s*\(\s*'([^']*)'")

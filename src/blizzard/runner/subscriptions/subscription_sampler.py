@@ -21,6 +21,7 @@ __all__ = [
     "MISS_REASON_TEXT",
     "PROVIDER_ANTHROPIC",
     "PROVIDER_OPENAI",
+    "SAMPLED_PROVIDERS",
     "ExternalSubscriptionUsageSnapshot",
     "ExternalSubscriptionUsageWindow",
     "ISubscriptionSampler",
@@ -41,6 +42,9 @@ ANTHROPIC_DEFAULT_CREDENTIALS_PATH = str(Path.home() / ".claude" / ".credentials
 
 # The OpenAI (ChatGPT plan) binding's selector — reached only by an explicit `[[subscription]]`.
 PROVIDER_OPENAI = "openai"
+
+#: Every provider a sampler binding exists for; a subscription of any other is declared but never sampled.
+SAMPLED_PROVIDERS = frozenset({PROVIDER_ANTHROPIC, PROVIDER_OPENAI})
 
 
 @domain_model

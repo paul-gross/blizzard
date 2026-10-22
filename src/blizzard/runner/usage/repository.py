@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Protocol
@@ -45,7 +45,6 @@ __all__ = [
     "derive_invocation_cost",
     "effective_model",
     "external_usage_attempt",
-    "soonest_exhausted_reset",
     "usage_kind_for",
 ]
 
@@ -197,17 +196,6 @@ class UsageTotals:
     def reaches(self, cap: float) -> bool:
         """The summed spend is at or past ``cap`` — a lower bound when :attr:`cost_partial`."""
         return self.cost_usd >= cap
-
-
-def soonest_exhausted_reset(
-    windows_by_slug: Mapping[str, Sequence[ExternalSubscriptionUsageWindow]], now: datetime
-) -> datetime | None:
-    """The soonest future reset among every subscription's windows still holding a limit, or
-    ``None`` when none is on record — "no reset time known", not "no limit"."""
-    resets = [
-        window.resets_at for windows in windows_by_slug.values() for window in windows if window.exhausted_pending(now)
-    ]
-    return min(resets, default=None)
 
 
 @domain_model
@@ -398,6 +386,12 @@ class IReadExternalUsageRepository(IReadCredentialRenewalRepository, Protocol):
         """Each slug's own newest sampled snapshot with its instant, in one batched read
         (`bzh:bulk-reconstitution`) — the snapshot :meth:`latest_external_usage_windows_by_slug`
         decodes, a failed attempt never masking it. A slug never sampled is absent."""
+        ...
+
+    def external_usage_sample_at(self, slug: str, at: datetime) -> ExternalUsageSampleSummary | None:
+        """This ``slug``'s newest sampled snapshot taken at or before ``at``, a same-instant tie going to the later
+        row — what the subscription looked like at that instant. A failed attempt never masks it; ``None`` when no
+        sample of the slug is that old."""
         ...
 
     def latest_external_usage_attempt(self, slug: str) -> ExternalUsageAttemptSummary | None:

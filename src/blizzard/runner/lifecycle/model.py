@@ -318,7 +318,7 @@ def interrupted_claim_move(
     ended, nor in a status this build cannot read, the mark left pending meanwhile. A resolved gate
     keeps its route live and is left to ADVANCE. A running chunk routed here is adopted — when FILL
     owns its node entry, a check against local epochs made only for this arm; a ready one is claimed
-    again unless a brake holds new claims. An adopt holds while ``takeover`` holds the chunk at the
+    again unless a brake or the throttle gate holds new claims. An adopt holds while ``takeover`` holds the chunk at the
     hub's latest epoch — it would spawn into the person's workdir; no other arm reads the takeover."""
     ours = view.route_runner_id == runner_id
     if requeued:

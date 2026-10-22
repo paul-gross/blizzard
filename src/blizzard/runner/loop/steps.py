@@ -65,10 +65,11 @@ from blizzard.runner.lifecycle.model import (
 from blizzard.runner.lifecycle.registration import Registration, registered_runner_id
 from blizzard.runner.lifecycle.spawn import Spawner
 from blizzard.runner.lifecycle.takeover import TakeoverCloser, TakeoverCloseScope
-from blizzard.runner.lifecycle.usage_limit import classify_worker_usage_limit, engage_and_park_worker
+from blizzard.runner.lifecycle.usage_limit import classify_worker_usage_limit, mark_and_park_worker
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.process.probe import IProcessProbe
 from blizzard.runner.stores import RunnerStores
+from blizzard.runner.throttle.gate import ThrottleGate
 from blizzard.runner.throttle.overload import (
     classify_worker_overload,
     record_worker_overload,
@@ -432,17 +433,30 @@ class Fill(Step):
 
         Each binding's open slots are its ``agents`` less the open leases counted against it; for each,
         peek the binding's project, acquire the chunk's environments all-or-nothing from the binding's
-        workspace, and claim the route. Either brake stops *new* claims.
+        workspace, and claim the route. Either brake, or the throttle gate declining, stops *new* claims.
         """
         ctx = self.ctx
         brakes = Spawner(ctx).brakes()
-        InterruptedClaims(ctx).reconcile(braked=brakes.blocks_claims)
-        if brakes.blocks_claims:
+        claims = ThrottleGate(ctx).claims(brakes)
+        InterruptedClaims(ctx).reconcile(braked=claims.held_back)
+        if claims.braked:
             _log.info(
                 "paused — no new claims this tick",
                 runner_name=ctx.config.runner_name,
                 hub_paused=brakes.hub,
                 local_paused=brakes.local,
+            )
+            return
+        declining = claims.declining
+        if declining is not None:
+            hold = declining.floor.hold
+            _log.info(
+                "declining — no new claims this tick",
+                runner_name=ctx.config.runner_name,
+                declining=["floor"],
+                subscription=declining.floor.slug,
+                hold=hold.kind if hold is not None else None,
+                expected_reset=iso_utc(hold.expected_reset) if hold is not None else None,
             )
             return
         BindingFill(ctx).fill()
@@ -553,7 +567,7 @@ class Advance(Step):
         backing_off = False
         match exited_worker_classified_move(limit=limit, overload=overload):
             case ParkOnUsageLimit(limit=parked):
-                engage_and_park_worker(ctx, lease, parked)
+                mark_and_park_worker(ctx, lease, parked, generation=generation)
                 return
             case RecordOverload(overload=recorded):
                 # False at the streak limit: fall through to today's ordinary path below.
@@ -600,6 +614,8 @@ class Retention(Step):
             ("heartbeat", lambda: ctx.stores.liveness.prune_heartbeats(now=now)),
             ("external usage sample", lambda: ctx.host_stores.external_usage.prune_external_usage_samples(now=now)),
             ("credential renewal", lambda: ctx.host_stores.external_usage.prune_credential_renewals(now=now)),
+            ("subscription usage limit", lambda: ctx.host_stores.usage_limits.prune_usage_limits(now=now)),
+            ("runner usage limit", lambda: ctx.stores.usage_limits.prune_usage_limits(now=now)),
             (
                 "worker stdout",
                 lambda: ctx.worker_files.sweep(

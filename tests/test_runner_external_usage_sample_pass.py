@@ -19,8 +19,9 @@ from blizzard.runner.subscriptions.subscription_sampler import (
     ExternalSubscriptionUsageWindow,
     SampleMissReason,
 )
+from blizzard.runner.throttle.resample import FloorResampleTriggers
 from blizzard.runner.usage.external_usage_sample import ExternalUsageSamplePass, SampledSubscription
-from tests.runner_fakes import FakeSubscriptionSampler, make_store
+from tests.runner_fakes import FakeSubscriptionSampler, make_host_stores, make_store, usage_limit_mark
 
 pytestmark = pytest.mark.unit
 
@@ -51,7 +52,14 @@ def _declared(
 
 
 def _pass(store, clock: FixedClock, *subscriptions: SampledSubscription) -> ExternalUsageSamplePass:  # type: ignore[no-untyped-def]
-    return ExternalUsageSamplePass(subscriptions=subscriptions, attempts=store, sink=_StoreSink(store), clock=clock)
+    host = make_host_stores(store, clock)
+    return ExternalUsageSamplePass(
+        subscriptions=subscriptions,
+        attempts=store,
+        early=FloorResampleTriggers(host.usage_limits, host.external_usage),
+        sink=_StoreSink(store),
+        clock=clock,
+    )
 
 
 def _snapshot(*, sampled_at: datetime = _NOW) -> ExternalSubscriptionUsageSnapshot:
@@ -427,3 +435,94 @@ def test_a_declared_provider_with_no_sampler_stays_declared_and_unsampled(tmp_pa
     assert known.sample_calls == 1
     assert store.last_external_usage_attempt_at("known") == _NOW
     assert store.last_external_usage_attempt_at("no-binding") is None  # never attempted
+
+
+# The resample — a subscription's exhaustion asking for a sample ahead of its cadence.
+# --------------------------------------------------------------------------- #
+
+
+def _mark(store, at: datetime, *, resets_in: timedelta | None = timedelta(hours=1), generation: int = 1) -> None:  # type: ignore[no-untyped-def]
+    make_host_stores(store).usage_limits.record_usage_limit_mark(
+        _SLUG, usage_limit_mark(at, resets_in=resets_in, generation=generation)
+    )
+
+
+@pytest.mark.unit
+def test_a_mark_newer_than_the_newest_attempt_samples_early_once(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    sampler = FakeSubscriptionSampler(snapshot=_snapshot())
+    clock = FixedClock(_NOW)
+    ctx = _ctx(store, sampler=sampler, clock=clock, interval_seconds=3600)
+    ctx.run()
+    assert sampler.sample_calls == 1
+
+    clock.advance(timedelta(minutes=5))
+    _mark(store, clock.now())
+    clock.advance(timedelta(seconds=1))
+    ctx.run()
+    assert sampler.sample_calls == 2  # the mark is newer than the newest attempt
+
+    clock.advance(timedelta(minutes=1))
+    ctx.run()
+    assert sampler.sample_calls == 2  # the early sample is now the newest attempt — fired once
+
+
+@pytest.mark.unit
+def test_a_mark_older_than_the_newest_attempt_waits_for_the_cadence(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    sampler = FakeSubscriptionSampler(snapshot=_snapshot())
+    clock = FixedClock(_NOW)
+    _mark(store, _NOW - timedelta(seconds=1), resets_in=timedelta(hours=5))
+    ctx = _ctx(store, sampler=sampler, clock=clock, interval_seconds=3600)
+    ctx.run()
+
+    clock.advance(timedelta(minutes=5))
+    ctx.run()
+
+    assert sampler.sample_calls == 1
+
+
+@pytest.mark.unit
+def test_a_passed_reset_with_no_attempt_since_samples_early_once(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    sampler = FakeSubscriptionSampler(snapshot=_snapshot())
+    clock = FixedClock(_NOW)
+    _mark(store, _NOW - timedelta(minutes=1), resets_in=timedelta(minutes=10))  # resets at _NOW + 9 min
+    ctx = _ctx(store, sampler=sampler, clock=clock, interval_seconds=3600)
+    ctx.run()
+    assert sampler.sample_calls == 1  # the first-ever attempt
+
+    clock.advance(timedelta(minutes=8))
+    ctx.run()
+    assert sampler.sample_calls == 1  # the reset is still ahead
+
+    clock.advance(timedelta(minutes=2))
+    ctx.run()
+    assert sampler.sample_calls == 2  # the reset passed with no attempt since
+
+    clock.advance(timedelta(minutes=1))
+    ctx.run()
+    assert sampler.sample_calls == 2  # fired once: the attempt it recorded postdates the reset
+
+
+@pytest.mark.unit
+def test_a_missed_early_sample_counts_as_the_attempt_and_falls_back_to_the_cadence(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    sampler = FakeSubscriptionSampler(miss_reason=SampleMissReason.ENDPOINT_UNREACHABLE)
+    clock = FixedClock(_NOW)
+    ctx = _ctx(store, sampler=sampler, clock=clock, interval_seconds=3600)
+    ctx.run()
+    clock.advance(timedelta(minutes=5))
+    _mark(store, clock.now(), resets_in=timedelta(minutes=1))
+    clock.advance(timedelta(seconds=1))
+
+    ctx.run()
+    assert sampler.sample_calls == 2  # the mark's early sample, missed
+
+    clock.advance(timedelta(minutes=5))  # past the mark's reset — the miss postdates the mark, not the reset
+    ctx.run()
+    assert sampler.sample_calls == 3  # the passed reset's own early sample, missed too
+
+    clock.advance(timedelta(minutes=5))
+    ctx.run()
+    assert sampler.sample_calls == 3  # both misses were attempts: back on the hour's cadence

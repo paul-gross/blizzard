@@ -27,20 +27,22 @@ import pytest
 import uvicorn
 from fastapi import FastAPI
 
+from blizzard.foundation.clock import SystemClock
 from blizzard.foundation.flags import FlagRegistry
 from blizzard.foundation.leases import LeaseClosureReason
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.trace_export.config import TracingConfig
-from blizzard.runner.composition import RunnerProcess, build_runner_process
+from blizzard.runner.composition import RunnerProcess, build_host_stores, build_runner_process
 from blizzard.runner.config import RunnerConfig, SubscriptionDeclaration
 from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.leases.lease_auth import LeaseToken
 from blizzard.runner.loop_wiring import LoopWiring
 from blizzard.runner.store.schema import escalation_closures, outbound_buffer
+from blizzard.runner.throttle.usage_limits import UsageLimitMark
 from tests.fleet_launchers import REPO, await_http, git_bare, runner_api, runner_config, terminate
 from tests.fleet_world import BUILD_BRANCH, REPO_NAME, mint_world
 from tests.host_files import init_runner_environment, write_host_file
-from tests.runner_fakes import daemon_store
+from tests.runner_fakes import daemon_store, runner_store_errors
 from tests.runner_join import fleet_headers, pin_runner, runner_spawn_env, seed_pinned_runner
 from tests.service.support import (
     JUDGEMENT_SCRIPT,
@@ -156,21 +158,30 @@ def test_dropped_ack_reapplies_idempotently_through_to_done(tmp_path: Path) -> N
         assert _status(hub, chunk_id) == "done"
 
 
-def _local_pause_reason(config: RunnerConfig) -> str | None:
-    """The runner's own store, read directly — no local API server is up in this tier."""
+def _subscription_mark(config: RunnerConfig) -> UsageLimitMark | None:
+    """The newest mark on the subscription the runner spends, read from the host store directly."""
     engine = create_engine_from_url(config.db_url)
     try:
-        return daemon_store(engine).local_pause_reason()
+        host = build_host_stores(engine, errors=runner_store_errors(), clock=SystemClock())
+        return host.usage_limits.latest_usage_limit_mark(config.subscriptions[0].slug)
     finally:
         engine.dispose()
 
 
-def test_usage_limit_engages_the_local_brake_and_reports_the_reason_without_failing_the_attempt(
+def _local_paused_and_parked(config: RunnerConfig) -> tuple[bool, set[str]]:
+    engine = create_engine_from_url(config.db_url)
+    try:
+        store = daemon_store(engine)
+        return store.local_paused(), store.pause_parked_lease_ids()
+    finally:
+        engine.dispose()
+
+
+def test_usage_limit_marks_the_subscription_and_parks_without_braking_or_failing_the_attempt(
     tmp_path: Path,
 ) -> None:
-    """A worker generation that exits usage-limited engages the runner's local pause
-    brake, its reason mirrored to the hub, with the chunk still running, unescalated, on
-    its first epoch."""
+    """A worker generation that exits usage-limited marks the subscription its runner spends and parks the lease in
+    place — the runner's brake never engages, and the chunk stays running, unescalated, on its first epoch."""
     bin_dir = require_mock_fleet()
     workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
     fenced = _tick_env()
@@ -184,23 +195,19 @@ def test_usage_limit_engages_the_local_brake_and_reports_the_reason_without_fail
         # Points the transcript read at where the mock harness writes.
         config = dataclasses.replace(config, transcripts_root=str(workspace / ".blizzard-mock-harness" / "transcripts"))
 
-        engaged = poll_until(
-            lambda: _tick_then(config, fenced, lambda: _local_pause_reason(config) is not None), timeout=60.0
+        marked = poll_until(
+            lambda: _tick_then(config, fenced, lambda: _subscription_mark(config) is not None), timeout=60.0
         )
-        assert engaged, "the local brake never engaged"
+        assert marked, "the usage limit was never marked"
 
-        reason = _local_pause_reason(config)
-        assert reason is not None and "claude_code" in reason, f"reason did not name the harness: {reason!r}"
+        mark = _subscription_mark(config)
+        assert mark is not None and mark.harness_id == "claude_code", mark
+        locally_paused, parked = _local_paused_and_parked(config)
+        assert locally_paused is False, "a usage limit engaged the runner's brake"
+        assert parked == {mark.lease_id}
 
-        mirrored = poll_until(
-            lambda: _tick_then(
-                config,
-                fenced,
-                lambda: runner_fleet_view(hub, config).get("locally_paused_reason") == reason,
-            ),
-            timeout=30.0,
-        )
-        assert mirrored, "the hub never mirrored the local pause's own reason"
+        _drive(config, fenced, ticks=1, pause=0.3)
+        assert runner_fleet_view(hub, config).get("locally_paused_reason") is None
 
         # Parked in place, not failed: the lease kept its claim — no escalation, no epoch
         # bump, so no attempt-failure fact was ever sent for it.

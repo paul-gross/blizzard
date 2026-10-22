@@ -8,6 +8,7 @@ modules that start workers for a gated-shaped call also calling the gate.
 from __future__ import annotations
 
 import ast
+from collections.abc import Sequence
 from pathlib import Path
 
 import pytest
@@ -134,6 +135,59 @@ def test_resume_from_rides_the_gated_spawn_funnel() -> None:
         "expected `resume_from` threaded into `ctx.harness.spawn` only from within "
         f"`Spawner.spawn` (the sole gated funnel); found: {carriers}"
     )
+
+
+def _start_is_named(call: ast.Call) -> bool:
+    """The gate call names its ``start`` as an explicit ``start=StartKind.<member>`` keyword — never through
+    ``**kwargs``, never a bare value that could stand for a default."""
+    return any(
+        kw.arg == "start"
+        and isinstance(kw.value, ast.Attribute)
+        and isinstance(kw.value.value, ast.Name)
+        and kw.value.value.id == "StartKind"
+        for kw in call.keywords
+    )
+
+
+def _unnamed_starts(functions: Sequence[ast.FunctionDef | ast.AsyncFunctionDef]) -> list[str]:
+    return [
+        f"{node.name}:{call.lineno}"
+        for node in functions
+        for call in _calls_in_own_scope(node)
+        if _is_gate_call(call) and not _start_is_named(call)
+    ]
+
+
+def test_every_gate_call_names_its_start() -> None:
+    """A new start site cannot slip in under a default kind: every gate call says which start it is."""
+    violations = [
+        f"{path.relative_to(_REPO_ROOT)} {site}" for path in _SCANNED for site in _unnamed_starts(_functions(path))
+    ]
+    assert not violations, (
+        f"`Spawner.{_GATE_NAME}` call(s) without an explicit `start=StartKind.<member>`: {violations}"
+    )
+
+
+@pytest.mark.parametrize(
+    "call",
+    [
+        'Spawner(self.ctx).suppressed(via="planted", chunk_id=chunk_id)',
+        'Spawner(self.ctx).suppressed(**{"start": StartKind.STEP}, via="planted", chunk_id=chunk_id)',
+        'Spawner(self.ctx).suppressed(start=kind, via="planted", chunk_id=chunk_id)',
+    ],
+)
+def test_a_planted_start_without_its_kind_fails_the_rule(call: str) -> None:
+    planted = f"def planted(self, chunk_id, kind):\n    if {call}:\n        return\n"
+    functions = [n for n in ast.walk(ast.parse(planted)) if isinstance(n, ast.FunctionDef)]
+
+    assert _unnamed_starts(functions) == ["planted:2"]
+
+
+def test_a_planted_start_naming_its_kind_passes_the_rule() -> None:
+    planted = 'def planted(self, chunk_id):\n    Spawner(self.ctx).suppressed(start=StartKind.STEP, via="p", chunk_id=chunk_id)\n'
+    functions = [n for n in ast.walk(ast.parse(planted)) if isinstance(n, ast.FunctionDef)]
+
+    assert _unnamed_starts(functions) == []
 
 
 def test_scan_is_not_vacuous() -> None:

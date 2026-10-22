@@ -2393,7 +2393,7 @@ _RUNNER_PACKAGE_LAYERS: dict[str, frozenset[str]] = {
     "leases": frozenset({"environments", "events", "harness", "node_steps"}),
     "hub": frozenset({"auth", "events", "harness", "leases", "node_steps"}),
     "transcripts": frozenset({"environments", "harness", "hub", "leases"}),
-    "throttle": frozenset({"events", "harness", "leases"}),
+    "throttle": frozenset({"events", "harness", "leases", "subscriptions", "usage"}),
     "usage": frozenset({"environments", "events", "harness", "leases", "subscriptions", "transcripts"}),
     "lifecycle": frozenset(
         {

@@ -43,7 +43,6 @@ from blizzard.runner.loop.tick import tick
 from blizzard.runner.process.internal.worker_scratch_dirs import WorkerScratchDirs
 from blizzard.runner.process.probe import IProcessProbe
 from blizzard.runner.stores import HostStores, RunnerStores
-from blizzard.runner.throttle.pause import SpendingRunner
 from blizzard.runner.transcripts.transcript_backfill import (
     TranscriptBackfill,
     TranscriptBackfillReport,
@@ -181,12 +180,6 @@ class LoopWiring:
             chunk_views=ReadThroughChunkViews(verified),
             workspaces=workspaces,
             subscriptions=resolved_subscriptions,
-            slug_spenders=tuple(
-                SpendingRunner(spender.stores.pause, spender.events)
-                for spender in graph.host.spenders_of(
-                    resolved_subscriptions[0].slug if resolved_subscriptions else None, excluding=graph.runner_id
-                )
-            ),
             process=graph.process,
             worktree_git=SubprocessWorktreeGit(
                 SubprocessEnvGit(children=graph.children, env=tool_env, timeout=WORKTREE_GIT_TIMEOUT)

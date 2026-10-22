@@ -444,7 +444,7 @@ class Attempt:
         tear down, and any in-flight elicitation record is the caller's own to clear (its
         own ``relaunch_count`` lives on that record, not here). The claim, route, epoch and
         session all survive; :class:`~blizzard.runner.lifecycle.dormant.DormantSession` resumes it
-        once the local brake the caller engaged ahead of this call lifts."""
+        once its floor opens on the mark the caller wrote ahead of this call."""
         lease = self.lease
         now = self.ctx.clock.now()
         self.ctx.stores.pause.record_pause_park(lease_id=lease.lease_id, chunk_id=lease.chunk_id, parked_at=now)

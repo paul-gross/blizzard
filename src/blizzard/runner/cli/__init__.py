@@ -41,6 +41,7 @@ _COMMANDS = {
     "status": f"{_CLI}.control:status",
     "pause": f"{_CLI}.control:pause",
     "start": f"{_CLI}.control:start",
+    "clear-floor": f"{_CLI}.control:clear_floor",
     "takeover": f"{_CLI}.control:takeover",
     "requeue": f"{_CLI}.control:requeue",
     "selftest": f"{_CLI}.control:selftest",

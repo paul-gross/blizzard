@@ -57,6 +57,12 @@ from blizzard.runner.lifecycle.judgement.git_commit_declaration import (
 )
 from blizzard.runner.lifecycle.takeover import IReadTakeoverRepository, IWriteTakeoverRepository
 from blizzard.runner.throttle.pause import IReadPauseRepository, IWritePauseRepository
+from blizzard.runner.throttle.usage_limits import (
+    IReadRunnerUsageLimitRepository,
+    IReadSubscriptionUsageLimitRepository,
+    IWriteRunnerUsageLimitRepository,
+    IWriteSubscriptionUsageLimitRepository,
+)
 from blizzard.runner.tracing.repository import IReadLeaseTraces, IWriteLeaseTraces
 from blizzard.runner.transcripts.invocation_boundaries import (
     IReadInvocationBoundaryRepository,
@@ -117,6 +123,7 @@ class IReadRunnerStore(
     IReadInvocationBoundaryRepository,
     IReadSelfTestResultRepository,
     IReadLeaseTraces,
+    IReadRunnerUsageLimitRepository,
     Protocol,
 ):
     """Read-only runner-store queries, every concept's read seam composed."""
@@ -147,6 +154,7 @@ class IWriteRunnerStore(
     IWriteInvocationBoundaryRepository,
     IWriteSelfTestResultRepository,
     IWriteLeaseTraces,
+    IWriteRunnerUsageLimitRepository,
     IReadRunnerStore,
     Protocol,
 ):
@@ -181,6 +189,8 @@ class RunnerStores:
     invocation_boundaries: IWriteInvocationBoundaryRepository
     selftest_results: IWriteSelfTestResultRepository
     lease_traces: IWriteLeaseTraces
+    #: The runner's own usage-limit marks and floor clears — its floor when it spends no subscription.
+    usage_limits: IWriteRunnerUsageLimitRepository
 
 
 @dataclass(frozen=True)
@@ -212,6 +222,7 @@ class RunnerReadStores:
     invocation_boundaries: IReadInvocationBoundaryRepository
     selftest_results: IReadSelfTestResultRepository
     lease_traces: IReadLeaseTraces
+    usage_limits: IReadRunnerUsageLimitRepository
 
     @classmethod
     def of(cls, stores: RunnerStores) -> RunnerReadStores:
@@ -242,6 +253,7 @@ class RunnerReadStores:
             invocation_boundaries=stores.invocation_boundaries,
             selftest_results=stores.selftest_results,
             lease_traces=stores.lease_traces,
+            usage_limits=stores.usage_limits,
         )
 
 
@@ -278,6 +290,8 @@ class HostStores:
     host_identity: IWriteHostIdentityRepository
     #: The host half of a runner transfer into this store, and the ingests it recorded.
     host_ingests: IWriteHostIngestRepository
+    #: Each subscription's usage-limit marks and floor clears, shared by every runner spending it.
+    usage_limits: IWriteSubscriptionUsageLimitRepository
     #: Exempt: reads every runner's rows at once — the invariant audit, ``init``'s which-runners read, and a workspace
     #: pool's held read.
     runner_audit: IRunnerAudit
@@ -295,6 +309,7 @@ class HostReadStores:
     host_identity: IReadHostIdentityRepository
     host_lane: IReadHostLaneRepository
     host_ingests: IReadHostIngestRepository
+    usage_limits: IReadSubscriptionUsageLimitRepository
 
     @classmethod
     def of(cls, stores: HostStores) -> HostReadStores:
@@ -306,4 +321,5 @@ class HostReadStores:
             host_identity=stores.host_identity,
             host_lane=stores.host_lane,
             host_ingests=stores.host_ingests,
+            usage_limits=stores.usage_limits,
         )

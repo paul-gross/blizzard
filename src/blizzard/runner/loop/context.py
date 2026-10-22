@@ -44,7 +44,6 @@ from blizzard.runner.loop.retention_floor import RetentionPasses
 from blizzard.runner.process.probe import IProcessProbe
 from blizzard.runner.process.worker_scratch import IWorkerScratchDirs
 from blizzard.runner.stores import HostStores, RunnerStores
-from blizzard.runner.throttle.pause import SpendingRunner
 from blizzard.runner.usage.recorder import UsageRecorder
 
 _log = get_logger("blizzard.runner.loop")
@@ -194,10 +193,8 @@ class LoopContext:
     #: The SSE publish seam, typed against the Protocol
     #: (``bzh:dependency-inversion``); ``None`` on ``blizzard runner tick``, a no-op there.
     events: IRunnerEventPublisher | None = None
-    #: Every provider subscription this runner declares — what registration reports and the usage-limit brake reads.
+    #: Every provider subscription this runner declares — what registration reports and the floor reads.
     subscriptions: tuple[ResolvedSubscription, ...] = ()
-    #: The other runners of this host spending this runner's subscription — a usage limit reached here brakes them too.
-    slug_spenders: tuple[SpendingRunner, ...] = ()
     #: Opens the tick's root and step spans — the no-op on a standalone ``blizzard runner tick``.
     tracer: IPlatformTracer = field(default_factory=NoopPlatformTracer)
     #: This runner's flags as they stand — its own resolved answer with its hub's ``fleet`` answer applied, which the
@@ -268,6 +265,7 @@ if TYPE_CHECKING:
     from blizzard.runner.lifecycle.registration import RegistrationContext
     from blizzard.runner.lifecycle.spawn import SpawnContext
     from blizzard.runner.lifecycle.usage_limit import UsageLimitContext
+    from blizzard.runner.throttle.gate import GateContext
     from blizzard.runner.throttle.overload import OverloadContext
     from blizzard.runner.transcripts.transcript_backfill import TranscriptBackfillContext
     from blizzard.runner.transcripts.transcript_drain import TranscriptDrainContext
@@ -289,6 +287,9 @@ if TYPE_CHECKING:
         return ctx
 
     def _conforms_to_overload(ctx: LoopContext) -> OverloadContext:
+        return ctx
+
+    def _conforms_to_gate(ctx: LoopContext) -> GateContext:
         return ctx
 
     def _conforms_to_spawn(ctx: LoopContext) -> SpawnContext:

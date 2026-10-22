@@ -50,6 +50,13 @@ def _store_at_parent(tmp_path: Path) -> tuple[MigrationRunner, sa.Engine]:
     return migration, create_engine_from_url(config.db_url)
 
 
+def _invariant_violations(migration: MigrationRunner, engine: sa.Engine) -> list[object]:
+    """What the invariant checker finds once the store is carried on to head — the checker judges the head schema, so
+    a store left at this revision would lack the tables later revisions create."""
+    migration.upgrade("head")
+    return list(RunnerInvariants(engine).run())
+
+
 def _seed_identity(engine: sa.Engine, runner_id: str = _RUNNER_ID) -> None:
     with engine.begin() as conn:
         conn.execute(
@@ -313,12 +320,12 @@ def test_a_store_upgrades_with_every_counter_at_or_above_every_seq_it_issued(tmp
             for table in KEYED:
                 owners = set(conn.execute(sa.text(f"SELECT DISTINCT runner_id FROM {table}")).scalars())
                 assert owners <= {_RUNNER_ID}, table
-        assert RunnerInvariants(engine).run() == []
+        assert _invariant_violations(migration, engine) == []
 
         store = SqlAlchemyRunnerStore(engine, runner_store_errors(), _RUNNER_ID)
         issued = store.enqueue_outbound(kind="lease.minted", chunk_id=None, lease_id=None, payload="{}", created_at=T0)
         assert issued == fixture.outbound.issued + 1
-        assert RunnerInvariants(engine).run() == []
+        assert _invariant_violations(migration, engine) == []
     finally:
         engine.dispose()
 
@@ -529,7 +536,7 @@ def test_an_upgrade_stopped_after_an_outbox_rebuild_leaves_the_store_at_the_pare
             (_RUNNER_ID, "transcript"): fixture.transcript.issued,
         }
         assert {table: _seqs(engine, table) for table in _OUTBOXES.values()} == retained
-        assert RunnerInvariants(engine).run() == []
+        assert _invariant_violations(migration, engine) == []
     finally:
         engine.dispose()
 
@@ -557,7 +564,7 @@ def test_an_upgrade_of_a_store_with_no_identity_killed_between_a_table_copy_and_
 
         assert migration.current_revision() == _REVISION
         assert not {name for name in _tables(engine) if name.startswith("_alembic_tmp_")}
-        assert RunnerInvariants(engine).run() == []
+        assert _invariant_violations(migration, engine) == []
     finally:
         engine.dispose()
 
@@ -586,7 +593,7 @@ def test_a_rerun_over_the_empty_counter_table_a_stopped_upgrade_left_finishes_it
             (_RUNNER_ID, "transcript"): fixture.transcript.issued,
         }
         assert {table: _seqs(engine, table) for table in _OUTBOXES.values()} == retained
-        assert RunnerInvariants(engine).run() == []
+        assert _invariant_violations(migration, engine) == []
     finally:
         engine.dispose()
 
