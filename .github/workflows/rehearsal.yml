@@ -1,7 +1,8 @@
 # The upgrade rehearsal (blizzard:rehearsal) as a reusable check suite.
 #
-# `push.yml` calls it on every `master` push and `release.yml` on every `-rc.` tag, before
-# the image push; a pull request never runs it. Each leg installs one supported release's
+# `push.yml` calls it on every `master` push, `release.yml` on every `-rc.` tag before the
+# image push, and `pr.yml` on a release cut's pull request (a `Release-Cut:` commit), against a
+# wheel built from the pull request's head. Each leg installs one supported release's
 # published wheel, seeds it, and upgrades it to the caller's candidate wheel on one store
 # backend. What a leg asserts is owned by the tier itself, `tests/rehearsal/`.
 #

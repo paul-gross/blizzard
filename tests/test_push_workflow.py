@@ -210,3 +210,9 @@ def test_proven_against_uploads_the_record_under_its_name() -> None:
     )
     assert upload["with"]["name"] == "proven-against"
     assert upload["with"]["if-no-files-found"] == "error"
+
+
+def test_push_runs_the_service_tier_and_the_bounded_sweep_only() -> None:
+    job = _jobs()["upper-tiers"]
+    assert job["uses"] == "./.github/workflows/upper-tiers.yml"
+    assert job["with"] == {"crash_sweep_ci": "1"}

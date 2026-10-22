@@ -6,7 +6,7 @@
 # hub's resolved store is the postgres one, and `docker compose down` (no `-v`)
 # followed by `up` loses nothing.
 #
-# Local-only, like image-smoke. Requires a reachable docker daemon and the
+# Runs in CI on every pull request, like image-smoke. Requires a reachable docker daemon and the
 # `docker compose` plugin.
 #
 # Invoke as `mise run compose-smoke` or `./scripts/compose-smoke.sh`.

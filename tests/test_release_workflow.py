@@ -174,9 +174,7 @@ def test_build_waits_for_the_rehearsal_and_runs_past_it_only_when_skipped() -> N
     assert build["needs"] == [
         "gate",
         "compat",
-        "service-tier",
-        "crash-sweep",
-        "e2e",
+        "upper-tiers",
         "wheel",
         "rehearsal",
         "store-baseline",
@@ -203,12 +201,17 @@ def test_release_notes_are_generated_not_auto_generated() -> None:
 
 
 def test_build_job_waits_for_each_full_suite_tier() -> None:
-    """A tag release must not publish ahead of the full suite's three parallel
-    jobs (service tier, FULL crash sweep, e2e) — `gate` alone isn't sufficient
-    for a release the way it is for the master dev channel."""
+    """A tag release must not publish ahead of the full suite — `gate` alone isn't sufficient
+    for a release the way it is for the master dev channel. The tiers are upper-tiers.yml's,
+    called with the whole suite and the FULL crash sweep."""
     needs = _build_job()["needs"]
-    for job in ("gate", "service-tier", "crash-sweep", "e2e"):
+    for job in ("gate", "upper-tiers"):
         assert job in needs
+    tiers = _job("upper-tiers")
+    assert tiers["uses"] == "./.github/workflows/upper-tiers.yml"
+    assert tiers["needs"] == ["gate"]
+    assert tiers["with"] == {"full_suite": True, "crash_sweep_ci": ""}
+    assert not {"service-tier", "crash-sweep", "e2e"} & set(_workflow()["jobs"])
 
 
 def test_tags_are_derived_from_the_image_tags_script_not_hardcoded() -> None:
@@ -399,8 +402,7 @@ def test_every_action_in_verify_is_pinned_by_commit_sha() -> None:
 _WORKFLOWS_DIR = _REPO_ROOT / ".github" / "workflows"
 _MOCK_ACTION = "./blizzard/.github/actions/resolve-mock-ref"
 _TIER_JOBS = {
-    "upper-tiers.yml": ("service-tier", "crash-sweep"),
-    "release.yml": ("service-tier", "crash-sweep", "e2e"),
+    "upper-tiers.yml": ("service-tier", "crash-sweep", "e2e", "journey"),
 }
 
 
@@ -441,7 +443,7 @@ def test_upper_tiers_exposes_the_resolved_mock_commit() -> None:
     assert workflow["jobs"]["mock-ref"]["outputs"]["sha"] == "${{ steps.mock.outputs.sha }}"
 
 
-@pytest.mark.parametrize("job", _TIER_JOBS["release.yml"])
-def test_a_tag_run_resolves_the_tag_itself(job: str) -> None:
-    step = next(s for s in _tier_job("release.yml", job)["steps"] if s.get("uses") == _MOCK_ACTION)
+def test_a_tag_run_resolves_the_tag_itself() -> None:
+    """upper-tiers.yml resolves the mock once without a pinned sha, so a tag run gets the tag's own."""
+    step = next(s for s in _tier_job("upper-tiers.yml", "mock-ref")["steps"] if s.get("uses") == _MOCK_ACTION)
     assert "sha" not in (step.get("with") or {})

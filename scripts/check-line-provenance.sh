@@ -21,10 +21,8 @@ master="${MASTER_REF:-origin/master}"
 git rev-parse --verify --quiet "$master^{commit}" > /dev/null ||
   { echo "check-line-provenance.sh: $master is not available; fetch full history" >&2; exit 2; }
 
-# Does the message carry a trailer with this key and a non-empty value?
-has_trailer() {
-  git interpret-trailers --parse <<< "$2" | grep -Eq "^$1:[[:space:]]*[^[:space:]]"
-}
+# shellcheck source=scripts/trailers.sh
+source "$(dirname "$0")/trailers.sh"
 
 has_master_cherry_pick() {
   local sha

@@ -3,7 +3,7 @@
 Driven end to end over the real fleet, faithfully mock-bound: five issues in, a night of
 autonomous work (grouped multi-repo delivery, a review-fail-then-land cycle, an
 undecidable-choice ask, a genuine escalation), a mid-run ``SIGKILL`` reboot of both
-daemons, and the morning-after resolution. Reproduce with ``BLIZZARD_JOURNEY=1``."""
+daemons, and the morning-after resolution. Reproduce with ``BLIZZARD_JOURNEY=1``. Winter-free: the runner's workspace is the built-in ``basic`` provider over bare origins."""
 
 from __future__ import annotations
 
@@ -32,9 +32,9 @@ from tests.crash.support import (
     wait_status,
     write_runner_config,
 )
+from tests.fleet_world import mint_world
 from tests.host_files import load_runner_config, with_workspace, write_host_file
 from tests.support import fixture_work_source, free_port
-from tests.winter.support import winter_source
 
 pytestmark = [
     pytest.mark.journey,
@@ -47,7 +47,7 @@ pytestmark = [
 FIXTURE_ENV = "journey"
 # A fleet of envs so parked / escalated chunks (which retain their env for resume /
 # takeover) never starve the chunks still building; each binding's agents caps its concurrent workers.
-RUNNER_ENVS = ("e1", "e2", "e3", "e4")
+MAX_ENVIRONMENTS = 4
 MAX_AGENTS = 2
 
 # The two fixture repos (blizzard-mock/fixture_workspace/seed.py); both origins are
@@ -99,7 +99,7 @@ def _push_and_declare(repo):
     subprocess.run(["git", "-C", repo, "push", "origin", branch], check=True)
     subprocess.run(
         ["blizzard", "runner", "artifact", "commit",
-         "--repo", repo, "--branch", branch, "--commit", commit_sha],
+         "--repo", os.path.basename(repo), "--branch", branch, "--commit", commit_sha],
         check=True,
     )
 
@@ -122,7 +122,15 @@ def _field(key, default=""):
 
 
 behavior = _field("BEHAVIOR", "clean")
-repos = [r.strip() for r in _field("REPOS", {API_REPO!r}).split(",") if r.strip()]
+_workdir = pathlib.Path(os.environ["BLIZZARD_ENV_WORKDIRS"].split(",")[0])
+repos = [str(_workdir / r.strip()) for r in _field("REPOS", {API_REPO!r}).split(",") if r.strip()]
+_BRANCH = "feature/" + chunk_id
+
+
+def _switch(repo):
+    # A basic worktree arrives detached at origin/<base>; work on a branch, kept across re-builds.
+    subprocess.run(["git", "-C", repo, "switch", "-C", _BRANCH], check=True, capture_output=True)
+
 fname = _field("FILE", "LANDED.md")
 pathlib.Path(".behavior").write_text(behavior)
 
@@ -134,6 +142,7 @@ elif behavior == "escalate":
     pass  # no work; the judgement below emits no verdict -> every attempt fails
 else:  # clean / review-fail: a real change in each repo (append so a re-build commits again)
     for repo in repos:
+        _switch(repo)
         p = pathlib.Path(repo) / fname
         p.write_text((p.read_text() if p.exists() else "") + "landed " + behavior + "\\n")
         _commit(repo, "feat: " + behavior + " land in " + repo)
@@ -178,8 +187,9 @@ else:
 # The answer the operator types at the hub (criterion 7). It arrives as the resume message
 # the parked session execs, and it is what lands the asked chunk's change on toy-web.
 _ANSWER_SCRIPT = (
-    "import subprocess, pathlib\n"
-    f"repo = {WEB_REPO!r}\n"
+    "import os, subprocess, pathlib\n"
+    f"repo = str(pathlib.Path(os.environ['BLIZZARD_ENV_WORKDIRS'].split(',')[0]) / {WEB_REPO!r})\n"
+    'subprocess.run(["git", "-C", repo, "switch", "-C", "feature/ask"], check=True)\n'
     '(pathlib.Path(repo) / "LANDED-ask.md").write_text("landed after the human answered\\n")\n'
     'subprocess.run(["git", "-C", repo, "add", "-A"], check=True)\n'
     "subprocess.run(\n"
@@ -201,7 +211,7 @@ _ANSWER_SCRIPT = (
     'subprocess.run(["git", "-C", repo, "push", "origin", _branch], check=True)\n'
     "subprocess.run(\n"
     '    ["blizzard", "runner", "artifact", "commit",\n'
-    '     "--repo", repo, "--branch", _branch, "--commit", _commit_sha],\n'
+    '     "--repo", os.path.basename(repo), "--branch", _branch, "--commit", _commit_sha],\n'
     "    check=True,\n"
     ")\n"
 )
@@ -315,24 +325,11 @@ def test_the_acceptance_journey_end_to_end(tmp_path: Path) -> None:
     bin_dir = mock_bin_dir()
     if bin_dir is None:
         pytest.skip("no provisioned sibling blizzard-mock worktree (run `winter provision <env>`)")
-    source = winter_source()
-    if source is None:
-        pytest.skip("no local winter source (set BLIZZARD_MOCK_WINTER_SOURCE)")
 
-    # Mint a fresh, disposable fixture world (bare origins + a real winter workspace).
+    # Mint a fresh, disposable fixture world (bare origins + an empty workspace the basic provider fills).
     # ------------------------------------------------------------------ #
-    scratch = tmp_path / "scratch"
-    subprocess.run(
-        [
-            str(bin_dir / "blizzard-mock-fixture"), "reset",
-            "--env", FIXTURE_ENV, "--scratch-root", str(scratch), "--winter-source", str(source),
-        ],
-        check=True, capture_output=True, text=True,
-    )  # fmt: skip
-    fixture_root = scratch / FIXTURE_ENV
-    workspace = fixture_root / "workspace"
-    origins = fixture_root / "origins"
-    (workspace / ".blizzard-mock-harness-fence").write_text("journey fence marker\n")
+    world = mint_world(bin_dir, tmp_path / "scratch", env=FIXTURE_ENV, fence="journey fence marker\n")
+    workspace, origins = world.workspace, world.origins
 
     hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
     forge_port, hub_port, runner_port = free_port(), free_port(), free_port()
@@ -434,7 +431,10 @@ def test_the_acceptance_journey_end_to_end(tmp_path: Path) -> None:
             # `RunnerConfig.load`'s resolved root, not the raw expression above.
             resolved_runner_dir = runner_dir.resolve()
             wrapped_takeover = escalation["wrapped_takeover_command"]
-            assert wrapped_takeover == f"blizzard runner takeover {esc} --dir {shlex.quote(str(resolved_runner_dir))}"
+            assert wrapped_takeover == (
+                f"blizzard runner takeover {esc} --dir {shlex.quote(str(resolved_runner_dir))}"
+                f" --runner {shlex.quote(load_runner_config(runner_dir).name)}"
+            )
 
             session_before = _session_after_takeover(workspace, takeover, bin_dir)
 
@@ -480,7 +480,7 @@ def _widen_runner_pool(runner_dir: Path) -> None:
     import dataclasses
 
     config = load_runner_config(runner_dir)
-    config = with_workspace(config, provider="winter", envs=RUNNER_ENVS, repos=())
+    config = with_workspace(config, max_environments=MAX_ENVIRONMENTS)
     config = dataclasses.replace(
         config, bindings=tuple(dataclasses.replace(binding, agents=MAX_AGENTS) for binding in config.bindings or ())
     )

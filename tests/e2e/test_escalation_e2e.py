@@ -145,7 +145,10 @@ def test_retries_exhausted_escalates_and_takeover_resumes_session(
         # resolved runtime root, which need not equal the raw `tmp_path / "runner"` expression.
         runner_dir = (tmp_path / "runner").resolve()
         wrapped_takeover = escalation["wrapped_takeover_command"]
-        assert wrapped_takeover == f"blizzard runner takeover {chunk_id} --dir {shlex.quote(str(runner_dir))}"
+        assert wrapped_takeover == (
+            f"blizzard runner takeover {chunk_id} --dir {shlex.quote(str(runner_dir))}"
+            f" --runner {shlex.quote(config.name)}"
+        )
 
         # Fleet truth, as the trace backend sees it: the first verdict-less attempt is superseded by the retry, and
         # the retry's escalation is the one outcome that reads as an error.
