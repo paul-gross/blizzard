@@ -19,6 +19,7 @@ const REGISTRY: RunnerRegistryView = {
   bindings: null,
   capabilities: [],
   connection: RunnerConnection.NEVER_CONNECTED,
+  declining: [],
   env_capacity: null,
   gates: [],
   host_id: null,

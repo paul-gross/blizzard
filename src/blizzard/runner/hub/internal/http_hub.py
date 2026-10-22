@@ -30,6 +30,7 @@ from blizzard.runner.hub.client import (
     ClaimConflict,
     ClaimedRoute,
     ClaimRequest,
+    DecliningDeclaration,
     DependencyDenial,
     FactPushAck,
     HostAddRefusalReason,
@@ -114,6 +115,7 @@ from blizzard.wire.runner import (
     RunnerAddResponse,
     RunnerBinding,
     RunnerCapability,
+    RunnerDeclining,
     RunnerIdentityRefusal,
     RunnerIdentityView,
     RunnerRegistrationRequest,
@@ -338,6 +340,7 @@ class HttpHubClient:
         bindings: tuple[BindingDeclaration, ...] | None = None,
         agents: int | None = None,
         subscription: str | None = None,
+        declining: tuple[DecliningDeclaration, ...] | None = None,
     ) -> RegistrationReply:
         resp = self._post(
             f"{_FLEET_API}/runners",
@@ -366,6 +369,14 @@ class HttpHubClient:
                 agents=agents,
                 subscription=subscription,
                 version=self._version,
+                declining=(
+                    [
+                        RunnerDeclining(lever=d.lever, detail=d.detail, subscription=d.subscription, until=d.until)
+                        for d in declining
+                    ]
+                    if declining is not None
+                    else None
+                ),
             ).model_dump(mode="json"),
             refused=_version_refused,
         )

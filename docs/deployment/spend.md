@@ -84,6 +84,11 @@ exhausted window in the first sample taken after the mark, and thirty minutes af
 A sampled window at 100% holds the floor the same way, so a subscription another host ran dry holds this host's runners
 too.
 
+A held runner says so to the hub: each registration reports the throttles saying no, so on its next registration the
+board's runner row reads `waiting on <subscription> — exhausted, resets <time>` and `blizzard hub status` prints
+`[declining: floor — <subscription> exhausted, resets <time>Z]`. A runner a brake holds shows its brake instead, and an
+offline runner shows neither.
+
 The floor opens on evidence that the held window has turned over, never on a reading merely under 100%: a fresh sample
 showing it in a later period and under 100% opens it, before the expected reset as well as after, and a usage limit asks
 the host for that sample early rather than waiting out the cadence

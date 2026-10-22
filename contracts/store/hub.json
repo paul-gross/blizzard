@@ -1,5 +1,5 @@
 {
-  "head_revision": "20261022_1000_runner_agents",
+  "head_revision": "20261022_1000_runner_declining",
   "store": "hub",
   "tables": {
     "answer_deliveries": {
@@ -6675,6 +6675,12 @@
           "type": "Text"
         },
         "capabilities": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "Text"
+        },
+        "declining": {
           "deprecated": null,
           "nullable": true,
           "server_default": false,

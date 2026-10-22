@@ -104,3 +104,10 @@
     }
   </span>
 </ng-template>
+<ng-template #declining>
+  <ul class="declining">
+    @for (reason of decliningReasons(); track reason) {
+      <li>{{ reason }}</li>
+    }
+  </ul>
+</ng-template>

@@ -24,6 +24,7 @@ from blizzard.runner.environments.workspaces import IWorkspaceHomes
 from blizzard.runner.harness.capability_snapshot import HarnessCapability
 from blizzard.runner.hub.client import (
     BindingDeclaration,
+    DecliningDeclaration,
     HubClientError,
     IHubClient,
     RunnerVersionRefused,
@@ -42,7 +43,9 @@ from blizzard.runner.hub.identity import (
 )
 from blizzard.runner.hub.served_projects import IWriteServedProjectsRepository
 from blizzard.runner.lifecycle.identity_check import log_transition
-from blizzard.runner.throttle.pause import IWritePauseRepository
+from blizzard.runner.throttle.gate import GateConfig, GateContext, GateStores, GateSubscription, ThrottleGate
+from blizzard.runner.throttle.pause import IWritePauseRepository, RunnerBrakes
+from blizzard.runner.throttle.report import declining_report
 
 _log = get_logger("blizzard.runner.loop")
 
@@ -54,7 +57,7 @@ def registered_runner_id(identity: ICurrentRunnerIdentity) -> str | None:
     return current.runner_id if current is not None else None
 
 
-class DeclaredSubscription(Protocol):
+class DeclaredSubscription(GateSubscription, Protocol):
     """One subscription the registration declares to the hub."""
 
     @property
@@ -65,7 +68,7 @@ class DeclaredSubscription(Protocol):
     def provider(self) -> str: ...
 
 
-class RegistrationStores(Protocol):
+class RegistrationStores(GateStores, Protocol):
     @property
     def identity(self) -> IWriteRunnerIdentityRepository: ...
     @property
@@ -74,7 +77,7 @@ class RegistrationStores(Protocol):
     def pause(self) -> IWritePauseRepository: ...
 
 
-class RegistrationConfig(Protocol):
+class RegistrationConfig(GateConfig, Protocol):
     @property
     def runner_id(self) -> str: ...
     @property
@@ -99,8 +102,9 @@ class RegistrationConfig(Protocol):
     def declares_subscriptions(self) -> bool: ...
 
 
-class RegistrationContext(Protocol):
-    """What the registration step reads and writes."""
+class RegistrationContext(GateContext, Protocol):
+    """What the registration step reads and writes — and the throttle gate's readings, from which it reports why the
+    runner is declining."""
 
     @property
     def stores(self) -> RegistrationStores: ...
@@ -136,6 +140,11 @@ class Registration:
         ctx = self.ctx
         workspace_id = ctx.workspaces.home(ctx.config.bound_workspace_ids)
         provider = ctx.workspaces.provider(workspace_id)
+        pause = ctx.stores.pause
+        declining = declining_report(
+            ThrottleGate(ctx).claims(RunnerBrakes(local=pause.local_paused(), hub=pause.hub_paused())),
+            now=ctx.clock.now(),
+        )
         try:
             reply = ctx.hub.register_runner(
                 ctx.config.runner_name,
@@ -158,6 +167,7 @@ class Registration:
                 bindings=ctx.config.bindings,
                 agents=ctx.config.agents or None,
                 subscription=ctx.config.subscription,
+                declining=tuple(DecliningDeclaration(d.lever, d.detail, d.subscription, d.until) for d in declining),
             )
         except RunnerVersionRefused as refused:
             was = ctx.identity_verdict.refuse_version(refused.refusal.detail)

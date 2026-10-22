@@ -1,6 +1,6 @@
 import { type BeaconBlink, type BeaconTone, RunnerConnection, type Tone } from 'fleet';
 
-import { localPauseHint, type RunnerRow } from './runner-rows.model';
+import { decliningLabels, localPauseHint, type RunnerRow } from './runner-rows.model';
 
 /** A status light: a hollow mark for one never connected, else a lit beacon. */
 export type ConnectionLight = { readonly kind: 'never' } | { readonly kind: 'lit'; readonly tone: BeaconTone; readonly blink: BeaconBlink };
@@ -49,7 +49,8 @@ export function runnerTitleState(row: RunnerRow): { readonly label: string; read
   return connectionState(row.online, row.connection);
 }
 
-/** A runner's State fact, stacked: its connection when not online, each brake that holds it, else WORKING or IDLE. */
+/** A runner's State fact, stacked: its connection when not online, each brake that holds it, else the first throttle
+ * saying no (the rest in its title), else WORKING or IDLE. */
 export function runnerStateBadges(row: RunnerRow): readonly StateBadge[] {
   const badges: StateBadge[] = [];
   if (!row.online) {
@@ -58,7 +59,15 @@ export function runnerStateBadges(row: RunnerRow): readonly StateBadge[] {
   }
   if (row.locally_paused) badges.push({ label: 'LOCALLY PAUSED', tone: 'idle', title: localPauseHint(row) });
   if (row.hub_paused) badges.push({ label: 'HUB PAUSED', tone: 'waiting', testid: 'fleet-runner-hub-paused' });
-  if (row.online && !row.hub_paused && !row.locally_paused) {
+  const [declining, ...rest] = decliningLabels(row);
+  if (declining !== undefined) {
+    badges.push({
+      label: declining,
+      tone: 'waiting',
+      title: rest.length > 0 ? [declining, ...rest].join('\n') : undefined,
+      testid: 'fleet-runner-declining',
+    });
+  } else if (row.online && !row.hub_paused && !row.locally_paused) {
     badges.push(row.claims.length > 0 ? { label: 'WORKING', tone: 'running' } : { label: 'IDLE', tone: 'idle' });
   }
   return badges;

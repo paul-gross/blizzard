@@ -7,6 +7,7 @@ bodies that ever carry a runner's plaintext bearer token."""
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Annotated
 
 from pydantic import BaseModel, Field, StringConstraints
@@ -77,6 +78,28 @@ class RunnerBindingView(WireModel):
     workspace_unreported: bool = False
 
 
+class RunnerDeclining(BaseModel):
+    """One throttle the runner reports as saying no to new work — the reason, never a setting. ``lever`` names the
+    throttle and stays a plain string so a lever a newer runner adds never fails an older hub's parse; ``detail`` is the
+    reading alone, ``subscription`` the subscription it concerns (``None`` when it names none) and ``until`` the instant
+    the hold expects to lift (``None`` when it names none)."""
+
+    lever: str
+    detail: str
+    subscription: str | None = None
+    until: datetime | None = None
+
+
+class RunnerDecliningView(WireModel):
+    """One throttle a runner reported as saying no, as the hub holds it: the response-side shape of the registration
+    request's ``declining`` member."""
+
+    lever: str
+    detail: str
+    subscription: str | None = None
+    until: str | None = None
+
+
 class RunnerRegistrationRequest(BaseModel):
     """Register the calling runner — the one its bearer token was issued to; a stray ``runner_id``
     in the body is ignored. ``env_capacity`` is the runner's configured environment-pool size,
@@ -112,6 +135,9 @@ class RunnerRegistrationRequest(BaseModel):
     agents: int | None = Field(default=None, gt=0)
     #: The blizzard version this runner runs; ``None`` from a runner that predates the handshake.
     version: str | None = None
+    #: The throttles saying no to new work right now, one member per throttle — ``[]`` when none is (or the runner is
+    #: braked), ``None`` from a runner that predates the report. Supersedes the earlier report whole.
+    declining: list[RunnerDeclining] | None = None
 
 
 class VersionWindowView(BaseModel):
@@ -290,6 +316,8 @@ class RunnerView(WireModel):
     bindings: list[RunnerBindingView] | None = None
     subscription: str | None = None
     subscription_unrostered: bool = False
+    # The throttles the runner last reported as saying no; empty when none, or when it sent none.
+    declining: list[RunnerDecliningView] = []
 
 
 class RunnerRegistryView(WireModel):
@@ -342,6 +370,8 @@ class RunnerRegistryView(WireModel):
     version_standing: Annotated[RunnerVersionStanding | Unrecognized, OPEN] | None = None
     # Why the window refused it, alongside a `refused` standing only.
     version_refusal: Annotated[VersionRefusalReason | Unrecognized, OPEN] | None = None
+    # The throttles the runner last reported as saying no; empty when none, or when it sent none.
+    declining: list[RunnerDecliningView] = []
 
 
 class RunnerRegistryListResponse(WireModel):

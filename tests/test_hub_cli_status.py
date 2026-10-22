@@ -73,15 +73,18 @@ def _runner(
     locally_paused: bool = False,
     locally_paused_by: str | None = None,
     locally_paused_reason: str | None = None,
+    online: bool = True,
+    declining: list[dict] | None = None,
 ) -> dict:
     return {
         "runner_id": "r1",
         "workspace_id": "ws1",
-        "online": True,
+        "online": online,
         "hub_paused": hub_paused,
         "locally_paused": locally_paused,
         "locally_paused_by": locally_paused_by,
         "locally_paused_reason": locally_paused_reason,
+        "declining": declining or [],
     }
 
 
@@ -236,3 +239,36 @@ def test_status_marks_a_blocked_chunk_naming_the_prerequisite() -> None:
 
     assert result.exit_code == 0, result.output
     assert "[blocked on ch_prereq]" in result.output
+
+
+_FLOOR = {"lever": "floor", "detail": "exhausted", "subscription": "anthropic", "until": "2026-10-22T14:00:00Z"}
+_PACE = {"lever": "pace", "detail": "7d 86% spent, 71% elapsed", "subscription": None, "until": None}
+
+
+def _status_output(runner: dict) -> str:
+    cost = _cost(0.0, partial=False)
+    result = _install(_responses(cost, cost, [runner])).runner.invoke(hub_group, ["status"])
+    assert result.exit_code == 0, result.output
+    return result.output
+
+
+def test_status_names_the_floor_an_online_unbraked_runner_is_held_by() -> None:
+    assert "[declining: floor — anthropic exhausted, resets 14:00Z]" in _status_output(_runner(declining=[_FLOOR]))
+
+
+def test_status_shows_the_first_reason_in_the_gates_order_and_words_a_lever_generically() -> None:
+    output = _status_output(_runner(declining=[_PACE, _FLOOR]))
+
+    assert "[declining: pace — 7d 86% spent, 71% elapsed]" in output
+    assert "floor" not in output
+
+
+def test_status_prints_the_brake_in_place_of_the_declining_segment() -> None:
+    output = _status_output(_runner(hub_paused=True, declining=[_FLOOR]))
+
+    assert "[paused: hub]" in output
+    assert "declining" not in output
+
+
+def test_status_prints_no_declining_segment_for_an_offline_runner() -> None:
+    assert "declining" not in _status_output(_runner(online=False, declining=[_FLOOR]))

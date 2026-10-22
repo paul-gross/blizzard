@@ -15,7 +15,7 @@ from sqlalchemy import Connection
 
 from blizzard.foundation.runner_version import VersionRefusalReason
 from blizzard.foundation.store.batching import id_batches
-from blizzard.foundation.store.utc import as_utc
+from blizzard.foundation.store.utc import as_utc, iso_utc
 from blizzard.hub.domain.runners.registration import (
     DeclaredSubscription,
     IWriteRunnerRegistry,
@@ -23,6 +23,7 @@ from blizzard.hub.domain.runners.registration import (
     RunnerAddition,
     RunnerBinding,
     RunnerCapability,
+    RunnerDeclining,
     RunnerRegistration,
     ServedEntry,
     SubscriptionUsageMiss,
@@ -225,6 +226,7 @@ class RunnerRegistryStore:
         bindings: tuple[RunnerBinding, ...] | None = None,
         subscription: str | None = None,
         agents: int | None = None,
+        declining: tuple[RunnerDeclining, ...] | None = None,
         version: str | None = None,
         at: datetime,
     ) -> bool:
@@ -267,6 +269,7 @@ class RunnerRegistryStore:
             "bindings": _bindings_json(bindings),
             "subscription": subscription,
             "agents": agents,
+            "declining": _declining_json(declining),
             "reported_version": version,
             "version_refusal": None,
             "version_judged_at": at,
@@ -701,6 +704,15 @@ class RunnerRegistryStore:
             ),
             subscription=row.subscription,
             agents=row.agents,
+            declining=tuple(
+                RunnerDeclining(
+                    lever=d["lever"],
+                    detail=d["detail"],
+                    subscription=d.get("subscription"),
+                    until=None if d.get("until") is None else as_utc(datetime.fromisoformat(d["until"])),
+                )
+                for d in (json.loads(row.declining) if row.declining else [])
+            ),
             reported_version=row.reported_version,
             version_refusal=None if row.version_refusal is None else VersionRefusalReason(row.version_refusal),
             version_judged_at=row.version_judged_at,
@@ -722,6 +734,24 @@ def _bindings_json(bindings: tuple[RunnerBinding, ...] | None) -> str | None:
     if bindings is None:
         return None
     return json.dumps([{"project": b.project, "workspace_id": b.workspace_id, "agents": b.agents} for b in bindings])
+
+
+def _declining_json(declining: tuple[RunnerDeclining, ...] | None) -> str | None:
+    """The reported declining reasons as stored: a JSON list of ``{lever, detail, subscription, until}`` with ``until``
+    an ISO UTC instant; ``NULL`` for none sent, which reads back as none declining, as ``[]`` does."""
+    if declining is None:
+        return None
+    return json.dumps(
+        [
+            {
+                "lever": d.lever,
+                "detail": d.detail,
+                "subscription": d.subscription,
+                "until": None if d.until is None else iso_utc(d.until),
+            }
+            for d in declining
+        ]
+    )
 
 
 def _conforms_registry(x: RunnerRegistryStore) -> IWriteRunnerRegistry:

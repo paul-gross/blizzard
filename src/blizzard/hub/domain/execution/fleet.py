@@ -21,6 +21,7 @@ from blizzard.hub.domain.runners.registration import (
     RetiredRunnerGuard,
     RunnerBinding,
     RunnerCapability,
+    RunnerDeclining,
     RunnerLiveness,
     RunnerNotEnrolled,
     RunnerRegistration,
@@ -120,6 +121,7 @@ class FleetService:
         bindings: tuple[RunnerBinding, ...] | None = None,
         subscription: str | None = None,
         agents: int | None = None,
+        declining: tuple[RunnerDeclining, ...] | None = None,
         version: str | None = None,
     ) -> Registered:
         """Register (or refresh) ``held``, a runner the hub added — the one its bearer token names.
@@ -128,7 +130,8 @@ class FleetService:
         null/empty. A declared ``name`` replaces the one held; none, or a blank one, keeps it. A sent
         ``projects`` replaces the served declaration (``[]`` clears it); ``None`` keeps it, re-resolving
         only its unresolved entries. Sent ``bindings`` replace ``projects`` as the declaration, each binding's project
-        in binding order; ``bindings``, ``subscription`` and ``agents`` are stored as sent. No entry is refused: a
+        in binding order; ``bindings``, ``subscription``, ``agents`` and ``declining`` are stored as sent. No entry is
+        refused: a
         registration is also the runner's heartbeat. A retired runner raises
         :class:`~blizzard.hub.domain.runners.registration.RunnerRetired` before any write. A ``version`` the window
         refuses records only the judgement, then raises :class:`RunnerVersionRefused`."""
@@ -167,6 +170,7 @@ class FleetService:
                 bindings=bindings,
                 subscription=subscription,
                 agents=agents,
+                declining=declining,
             ),
             served=served,
             judgement=judgement,
@@ -187,6 +191,7 @@ class FleetService:
             bindings=bindings,
             subscription=subscription,
             agents=agents,
+            declining=declining,
             version=judgement.reported_version,
             at=now,
         )
