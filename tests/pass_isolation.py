@@ -22,15 +22,13 @@ INTERVAL = timedelta(minutes=1)
 
 
 class Poison(Enum):
-    RAISES = "raises"  # the tenant's unit raises on every call
-    UNCONVERGED = "unconverged"  # the tenant's unit reports it did not converge, on every call
-    BURST = "burst"  # the tenant holds more due work than a pass can take
+    RAISES = "raises"
+    UNCONVERGED = "unconverged"
+    BURST = "burst"
 
 
 @dataclass(frozen=True)
 class Scene:
-    """Who is in the run: ``poisoned`` is ``None`` for the run without the poisoned tenant."""
-
     poisoned: TenantId | None
     poison: Poison | None
 
@@ -40,8 +38,6 @@ class Scene:
 
 
 class Recorder:
-    """What a run's passes did, per tenant: each call, beside the pass it was made in."""
-
     def __init__(self) -> None:
         self.pass_no = 0
         self.calls: dict[TenantId, list[tuple[object, ...]]] = {}
@@ -64,9 +60,7 @@ def _run(build: Build, scene: Scene, passes: int) -> Recorder:
 
 
 def assert_pass_isolates(build: Build, poison: Poison, *, passes: int = 14) -> None:
-    """Run ``build``'s pass for ``passes`` one-minute steps with ``POISONED`` poisoned by ``poison`` and without it, and
-    assert every healthy tenant's recorded calls are identical across the two runs, and that the poisoned run did
-    something for each of them."""
+    """Every healthy tenant's calls are identical with ``POISONED`` poisoned and without it."""
     poisoned = _run(build, Scene(POISONED, poison), passes)
     alone = _run(build, Scene(None, None), passes)
     for tenant in HEALTHY:

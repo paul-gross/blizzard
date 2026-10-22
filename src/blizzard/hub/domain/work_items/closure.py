@@ -228,9 +228,7 @@ class CloseDrainTally:
 def fair_share(
     due: Mapping[TenantId, Sequence[PendingCloseIntent]], limit: int, start: int
 ) -> dict[TenantId, list[PendingCloseIntent]]:
-    """Up to ``limit`` of ``due``, taken one intent per tenant in turn — tenants in name order from the
-    ``start``-th, each tenant's own in intent order — until the limit or the intents run out, so a share
-    one tenant leaves unused goes to those still holding due intents (``bzh:pass-isolates-tenants``)."""
+    """Up to ``limit`` of ``due``, one intent per tenant in turn from the ``start``-th tenant by name."""
     tenants = sorted(due)
     if tenants:
         start %= len(tenants)
@@ -266,10 +264,8 @@ class CloseDrainSweep:
         self._rotation = 0
 
     def sweep(self) -> None:
-        """One complete drain pass over up to ``CLOSE_DRAIN_PASS_LIMIT`` due intents. A tenant closed
-        since the corpus read is skipped, its intents left to its teardown; a fault in one tenant's
-        drain is caught at that tenant and the pass goes on. One aggregate INFO summary per pass
-        (``bzh:structlog-logging``)."""
+        """One drain pass over up to ``CLOSE_DRAIN_PASS_LIMIT`` due intents; a closed tenant is skipped and a
+        fault in one tenant is caught there."""
         now = self._clock.now()
         due: dict[TenantId, list[PendingCloseIntent]] = {}
         for row in self._corpus.pending_close_intents():

@@ -113,11 +113,7 @@ class SweepCorpusReads:
         ]
 
     def live_work_refs_signature(self) -> dict[TenantId, WorkRefsSignature]:
-        """One statement of append-only aggregates, grouped by tenant, over every table
-        :meth:`live_work_refs` and the status derivation read: per tenant and table, a count and the
-        highest ``id`` where the table has one. A tenant holding no row of a table counts it zero, and
-        one holding no row of any has no entry. Closed tenants are counted too; the caller reads the
-        open set itself."""
+        """One grouped statement of append-only aggregates per tenant; closed tenants included."""
         tables = sorted((*status_family_tables(), s.chunk_work_refs, *_EPHEMERAL_TABLES), key=lambda t: t.name)
         per_table = [
             select(
@@ -181,8 +177,7 @@ class SweepCorpusReads:
     # --- event derivation -------------------------------------------------------------
 
     def derivation_signature(self) -> dict[TenantId, DerivationSignature]:
-        """The derivation probe's aggregates over each tenant's segments and chunks, grouped by tenant
-        in one statement; a tenant holding neither has no entry."""
+        """One grouped statement of segment and chunk aggregates per tenant."""
         segment, chunk = s.transcript_segments, s.chunks
         segments = select(
             segment.c.tenant_id.label("tenant_id"),
