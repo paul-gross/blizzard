@@ -232,7 +232,7 @@ def test_status_renders_the_full_view_with_the_hub_unreachable(tmp_path: Path) -
     assert "runner runner-local" in out
     assert "running" in out  # not paused
     assert "capacity: 1/1 used" in out  # only lease_1 is active; lease_2 closed
-    assert "default (unresolved) -> workspace-local: 1/1 used, 0 free" in out
+    assert "default (unresolved) -> workspace-local: 1 working" in out
     assert "hub: unreachable" in out  # never synced — honest, not assumed
     assert "held environments (3):" in out
     assert "e1" in out and "e2" in out and "e3" in out

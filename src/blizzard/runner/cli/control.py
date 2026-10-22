@@ -164,13 +164,10 @@ def status(ctx: click.Context, directory: str, runner_url: str | None, runner: s
     click.echo(f"  {brake_state}{reason}")
     cap = view["capacities"]
     bindings = cap.get("bindings", [])
-    total = sum(b["agents"] for b in bindings)
-    click.echo(f"  capacity: {cap['used']}/{total} used")
+    click.echo(f"  capacity: {cap['used']}/{cap['agents']} used")
     for b in bindings:
         resolved = "" if b.get("project_id") else " (unresolved)"
-        click.echo(
-            f"    {b['project']}{resolved} -> {b['workspace_id']}: {b['used']}/{b['agents']} used, {b['free']} free"
-        )
+        click.echo(f"    {b['project']}{resolved} -> {b['workspace_id']}: {b['used']} working")
     for conflict in view.get("routing_conflicts", []):
         click.echo(
             f"  NOT CLAIMING: {', '.join(conflict['entries'])} all resolve to project {conflict['project_id']}"
