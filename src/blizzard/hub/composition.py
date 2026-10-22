@@ -60,6 +60,7 @@ from blizzard.hub.auth.oauth.internal.factory import ProviderEntry
 from blizzard.hub.auth.oauth.registry import IOAuthProviderRegistry
 from blizzard.hub.auth.service import AuthService
 from blizzard.hub.auth.sessions import IReadSessionRepository
+from blizzard.hub.auth.sign_in import SignIn
 from blizzard.hub.auth.signing import SigningKeyService
 from blizzard.hub.auth.throttle import IpThrottle
 from blizzard.hub.auth.users import IReadUserRepository
@@ -472,6 +473,8 @@ class HubServices:
     memberships: IReadMembershipRepository
     #: The identity domain service — sessions, the first-login linking rule, ``state``.
     auth: AuthService
+    #: Whom a provider callback admits — the invitation it accepts, or a plain sign-in.
+    sign_in: SignIn
     #: A tenant's members, and the membership grants, changes and revocations made under the rules.
     members: TenantMembers
     #: The hub administrators, and their grants and revocations.
@@ -1520,6 +1523,7 @@ def build_services(
         users=user_store,
         memberships=memberships,
         auth=auth,
+        sign_in=SignIn(auth=auth, invitations=core.hub_scoped_reads.invitations),
         members=members,
         hub_admins=hub_admins,
         oauth_providers=oauth_registry,

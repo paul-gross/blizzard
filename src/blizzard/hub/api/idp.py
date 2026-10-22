@@ -34,8 +34,7 @@ from blizzard.hub.auth.service import CLI_CLIENT_ID
 from blizzard.hub.auth.signing import SigningKeyService
 from blizzard.hub.composition import HubServices
 from blizzard.hub.config import AUTH_MODE_NONE
-from blizzard.hub.domain.runners.host import Host
-from blizzard.hub.domain.runners.registration import RunnerRegistration
+from blizzard.hub.domain.runners.federation import FederationClient, UnknownFederationClient
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -204,7 +203,7 @@ def authorize(
     signing = surface.signing
 
     is_cli = client == CLI_CLIENT_ID
-    signing_in: RunnerSigningIn | HostSigningIn | None = None
+    federation_client: FederationClient | None = None
     if is_cli:
         if not CliRedirect(redirect_uri).valid:
             raise HTTPException(
@@ -220,9 +219,14 @@ def authorize(
         # One undifferentiated 400 for an unknown client and an unregistered redirect URI, so a caller cannot
         # fingerprint client ids by probing.
         # A runner id and a host id are both hub-minted, so the client alone settles which it names.
-        signing_in = runner_signing_in(services, client) or host_signing_in(services, client)
-        if signing_in is None or not _federation_client(signing_in).is_federation_target(redirect_uri):
+        resolved = runner_signing_in(services, client) or host_signing_in(services, client)
+        if resolved is None:
             raise _unknown_client()
+        federation_client = _federation_client(resolved)
+        try:
+            federation_client.admit(redirect_uri)
+        except UnknownFederationClient:
+            raise _unknown_client() from None
 
     identity = resolve_identity(request, services)
     if identity is None:
@@ -250,14 +254,14 @@ def authorize(
         code = services.auth.mint_cli_code(user, code_challenge=code_challenge, redirect_uri=redirect_uri)
         return Delivery.cli_code(redirect_uri=redirect_uri, code=code, state=state).response()
 
-    assert signing_in is not None  # every client but cli resolved its runner or host above
-    # The client's tenant settles the sign-in, never a header; a person with no membership there — a hub
-    # administrator included — is answered as an unknown client, so probing reveals nothing about it.
-    role = services.memberships.role_in(signing_in.tenant, identity.user_id)
-    if role is None:
-        raise _unknown_client()
-    # Past the membership: only a member can tell a retired client apart (403, the app handler's).
-    _federation_client(signing_in).refuse_federation(redirect_uri)
+    assert federation_client is not None  # every client but cli resolved its runner or host above
+    # The client's tenant settles the sign-in, never a header. Past the redirect and the membership, only a member can
+    # tell a retired client apart (403, the app handler's).
+    role = services.memberships.role_in(federation_client.tenant, identity.user_id)
+    try:
+        role = federation_client.federate(redirect_uri, role=role)
+    except UnknownFederationClient:
+        raise _unknown_client() from None
     email = user.email if user is not None else None
     claims = {
         "sub": identity.user_id,
@@ -274,9 +278,11 @@ def authorize(
     return delivery.response()
 
 
-def _federation_client(signing_in: RunnerSigningIn | HostSigningIn) -> RunnerRegistration | Host:
-    """The registration or host record a sign-in names — both judge a redirect URI and their own retirement."""
-    return signing_in.registration if isinstance(signing_in, RunnerSigningIn) else signing_in.host
+def _federation_client(signing_in: RunnerSigningIn | HostSigningIn) -> FederationClient:
+    """The client a sign-in names, as the domain judges it."""
+    if isinstance(signing_in, RunnerSigningIn):
+        return FederationClient(signing_in.tenant, signing_in.registration)
+    return FederationClient(signing_in.tenant, signing_in.host)
 
 
 def _unknown_client() -> HTTPException:

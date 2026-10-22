@@ -119,11 +119,11 @@ _OIDC_ENTRY = (
 )
 
 
-def test_oauth_provider_emails_authoritative_defaults_to_false(tmp_path: Path) -> None:
+def test_oauth_provider_emails_authoritative_is_unset_unless_configured(tmp_path: Path) -> None:
     root = tmp_path / "hub"
     _write(root, _OIDC_ENTRY)
     config = load_hub_config(root)
-    assert config.auth.oauth_providers[0].emails_authoritative is False
+    assert config.auth.oauth_providers[0].emails_authoritative is None
 
 
 def test_an_oidc_provider_may_be_configured_authoritative_for_its_emails(tmp_path: Path) -> None:
@@ -142,7 +142,7 @@ def test_oauth_provider_emails_authoritative_must_be_a_boolean(tmp_path: Path, v
 
 
 @pytest.mark.parametrize("value", ["true", "false"])
-def test_a_github_provider_refuses_emails_authoritative(tmp_path: Path, value: str) -> None:
+def test_the_loader_accepts_a_boolean_emails_authoritative_whatever_the_type(tmp_path: Path, value: str) -> None:
     root = tmp_path / "hub"
     _write(
         root,
@@ -154,8 +154,8 @@ def test_a_github_provider_refuses_emails_authoritative(tmp_path: Path, value: s
         'client_secret_env = "BZ_OAUTH_GITHUB_SECRET"\n'
         f"emails_authoritative = {value}\n",
     )
-    with pytest.raises(ConfigError, match=r"'github' is type 'github'.*emails_authoritative is an oidc key"):
-        load_hub_config(root)
+    (provider,) = load_hub_config(root).auth.oauth_providers
+    assert provider.emails_authoritative is (value == "true")
 
 
 def test_duplicate_oauth_provider_name_rejected(tmp_path: Path) -> None:
