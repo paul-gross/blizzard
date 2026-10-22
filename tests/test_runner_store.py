@@ -685,9 +685,9 @@ def test_record_usage_with_no_stamped_harness_identity_reads_back_null(tmp_path)
 
 
 @pytest.mark.unit
-def test_record_usage_carries_an_estimate_on_the_payload_but_never_into_the_row(tmp_path):  # type: ignore[no-untyped-def]
-    """``estimated_cost_usd`` rides the outbound payload untransformed, while the row and
-    ``usage_since`` read a ``None``-cost, estimate-bearing sample as if it had none."""
+def test_record_usage_carries_an_estimate_on_the_payload_and_into_the_window(tmp_path):  # type: ignore[no-untyped-def]
+    """``estimated_cost_usd`` rides the outbound payload untransformed, and ``usage_since``
+    sums it: a ``None``-cost, estimate-bearing sample is not PARTIAL."""
     store = _store(tmp_path)
     _mint(store)
     sample = replace(_sample(cost=None), estimated_cost_usd=0.0308)
@@ -706,7 +706,8 @@ def test_record_usage_carries_an_estimate_on_the_payload_but_never_into_the_row(
     assert payload["estimated_cost_usd"] == pytest.approx(0.0308)
     totals = store.usage_since(_NOW)
     assert totals.cost_usd == 0.0
-    assert totals.cost_partial is True
+    assert totals.estimated_cost_usd == pytest.approx(0.0308)
+    assert totals.cost_partial is False
 
 
 @pytest.mark.unit
