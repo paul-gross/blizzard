@@ -1,4 +1,5 @@
-import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { KitPanel } from 'fleet';
 
@@ -12,5 +13,7 @@ import { LocalThrottle } from './throttle';
   templateUrl: './machine-page.html',
 })
 export class MachinePage {
-  protected readonly runnerId = inject(ActivatedRoute).snapshot.paramMap.get('runnerId')!;
+  private readonly route = inject(ActivatedRoute);
+  private readonly params = toSignal(this.route.paramMap, { initialValue: this.route.snapshot.paramMap });
+  protected readonly runnerId = computed(() => this.params().get('runnerId') ?? '');
 }
