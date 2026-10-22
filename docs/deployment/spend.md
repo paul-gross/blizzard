@@ -5,7 +5,8 @@ a `[runner.cost]` table under the runner's `[[runner]]` in `blizzard-host.toml`,
 Every billed cost blizzard records derives from the harness's own reported figure, by subtraction and never by pricing:
 blizzard keeps no pricing table of its own. Where a step's own reported figure is a subscription's literal zero, the
 runner may still read OpenCode's own cached rates and label the result as an estimate ([Estimated cost](#estimated-cost)
-below) — never fabricated, never guessed past what that cache says, and never presented as billed spend.
+below) — never fabricated, never guessed past what that cache says, and never presented as billed spend, though both
+caps count it.
 
 ## The two readings of a reported figure
 
@@ -54,19 +55,24 @@ tokens a session-scoped cost figure covers
 
 ## The two caps
 
+Both caps trip on one figure: billed plus estimated spend, the same amount every surface renders
+([Estimated cost](#estimated-cost) below).
+
 `runner_ceiling_usd`, summed over a rolling window of `window_hours` (default 24, consulted only when the ceiling is
 set), is checked each tick: crossing it engages the runner's local pause brake — the same brake `runner pause` sets:
 spawn sites suppressed, no retries consumed, live workers left to finish — recording the ceiling and spend as the
-pause's reason. The ceiling raises no escalation — runner-scoped, it has no one chunk to park. It does not auto-unpause
-when the rolling window later drops the spend back under it: clearing the brake is always an explicit operator act —
-`blizzard runner start`, or the runner panel's Resume — exactly as for a hand-issued pause. `GET /api/runners` and
-`blizzard hub status` surface the ceiling reason on a paused runner, and `blizzard runner status` prints it on its brake
-line, so it reads differently from a manual pause.
+pause's reason, the spend rendered as that figure —
+`spend ceiling $60.00 reached over the trailing 24h (spend ~$61.37+)`. The ceiling raises no escalation — runner-scoped,
+it has no one chunk to park. It does not auto-unpause when the rolling window later drops the spend back under it:
+clearing the brake is always an explicit operator act — `blizzard runner start`, or the runner panel's Resume — exactly
+as for a hand-issued pause. `GET /api/runners` and `blizzard hub status` surface the ceiling reason on a paused runner,
+and `blizzard runner status` prints it on its brake line, so it reads differently from a manual pause.
 
 `chunk_cap_usd` is checked between attempts, never by killing a live worker: when a chunk's total cost reaches it, the
 runner parks the chunk `needs_human` at the next step boundary with an escalation whose cause is `spend-cap`, whose
-detail names the cap, the spend, and whether that spend figure is partial, and which carries the usual takeover command.
-A capped chunk is not failed — no retry is consumed; resuming is human: raise or clear the cap, then requeue.
+detail names the cap and the spend rendered as that figure — `spend cap $5.00 reached (spend ~$5.20)` — and which
+carries the usual takeover command. A capped chunk is not failed — no retry is consumed; resuming is human: raise or
+clear the cap, then requeue.
 
 ## Usage limits
 
@@ -106,12 +112,10 @@ When a worker dies before the harness emits its final usage envelope, the attemp
 transcript but its cost is genuinely unknown: an absent-cost row contributes its tokens and zero billed dollars. A row
 flags its total PARTIAL (a trailing `+` on its figure, on the board and in `hub status`) only when it carries
 **neither** a billed cost nor a reported estimate — see [Estimated cost](#estimated-cost) below; a row carrying only an
-estimate is not a lower bound and does not flag PARTIAL. The runner's own two caps are a separate reading: both trip on
-the billed lower bound alone, never on an estimate, and each surfaces its own PARTIAL on its own carrier — the
-escalation, or the recorded pause reason — whenever some invocation it summed carried no billed cost. That PARTIAL means
-exactly "no billed cost recorded", unchanged by whether the same invocation also carries an estimate, so a crash-heavy
-chunk never silently reads cheap. A crash is not the only way a row lands cost-absent: a reported figure that runs
-backwards against what its session already banked records no cost either, for the reason
+estimate is not a lower bound and does not flag PARTIAL. This is the one PARTIAL: the runner's two caps read it too, and
+their escalation detail and pause reason carry the same `+`, so a crash-heavy chunk never silently reads cheap. A crash
+is not the only way a row lands cost-absent: a reported figure that runs backwards against what its session already
+banked records no cost either, for the reason
 [The two readings of a reported figure](#the-two-readings-of-a-reported-figure) gives. A graceful restart no longer
 produces a PARTIAL row on its own: the shutdown drain (see [Graceful restart](./recovery.md#graceful-restart)) waits out
 each marked worker's own SIGINT-triggered envelope, so only a worker SIGKILLed at the drain's deadline, one that exits
@@ -167,11 +171,9 @@ billed, and a trailing `+` whenever it is PARTIAL, meaning some row carried neit
 bound. A total therefore reads `$4.00`, `~$4.05`, `$4.00+`, or `~$4.05+`, and a chunk whose cost is entirely estimated
 reads `~$0.07` rather than a bare `$0.00`.
 
-An estimate never feeds either cap. `runner_ceiling_usd` and `chunk_cap_usd` ([The two caps](#the-two-caps) above) are
-both checked against billed cost alone: a chunk or a runner can run up real, uncapped subscription spend while every one
-of its steps shows only an estimate, and the caps stay blind to it — an operator relying on either cap to bound
-subscription spend needs to watch the `~`-marked figure itself, the tilde being the one sign that part of a total never
-reached the caps.
+Every line reads the figure with its `~`: `runner_ceiling_usd` and `chunk_cap_usd` ([The two caps](#the-two-caps) above)
+both compare that same amount, so a runner or chunk spending only subscription estimates still reaches its cap, and the
+pause reason and escalation detail render the figure with the same markers.
 
 ## External subscription usage
 

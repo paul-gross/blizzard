@@ -682,10 +682,23 @@ def test_spend_cap_reached_and_detail() -> None:
     assert not spend_cap_reached(cost, 7.01)
     assert not spend_cap_reached(cost, None)
     assert spend_cap_detail(cost, 5.0) == "spend cap $5.00 reached (spend $7.00)"
-    partial = replace(cost, billed_partial=True)
-    assert (
-        spend_cap_detail(partial, 5.0) == "spend cap $5.00 reached (spend $7.00 (PARTIAL — true spend may be higher))"
-    )
+    partial = replace(cost, cost_partial=True)
+    assert spend_cap_detail(partial, 5.0) == "spend cap $5.00 reached (spend $7.00+)"
+
+
+def test_an_estimate_alone_reaches_the_spend_cap() -> None:
+    estimated = replace(ChunkSpend.zero(), estimated_cost_usd=6.0)
+    assert spend_cap_reached(estimated, 5.0)
+    assert spend_cap_detail(estimated, 5.0) == "spend cap $5.00 reached (spend ~$6.00)"
+    mixed = replace(ChunkSpend.zero(), cost_usd=3.0, estimated_cost_usd=2.0, cost_partial=True)
+    assert spend_cap_reached(mixed, 5.0)
+    assert spend_cap_detail(mixed, 5.0) == "spend cap $5.00 reached (spend ~$5.00+)"
+
+
+def test_a_billed_only_row_set_never_marks_partial() -> None:
+    """A row with an estimate but no billed amount is not PARTIAL; only a row with neither is."""
+    billed = replace(ChunkSpend.zero(), cost_usd=7.0, estimated_cost_usd=0.0)
+    assert spend_cap_detail(billed, 5.0) == "spend cap $5.00 reached (spend ~$7.00)"
 
 
 # --- loop steps ------------------------------------------------------------------------------- #

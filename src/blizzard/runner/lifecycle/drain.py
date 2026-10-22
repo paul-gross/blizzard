@@ -27,7 +27,6 @@ from blizzard.runner.lifecycle.model import (
     completion_move,
     decision_move,
     spend_cap_detail,
-    spend_cap_partial_note,
     spend_cap_reached,
 )
 from blizzard.runner.lifecycle.spawn import SpawnConfig
@@ -220,11 +219,12 @@ class OutboundDrain:
         if not spend_cap_reached(cost, cap):
             return None
         _log.warning(
-            f"chunk parked — spend cap exceeded{spend_cap_partial_note(cost)}",
+            "chunk parked — spend cap exceeded",
             chunk_id=lease.chunk_id,
             cap_usd=cap,
-            spend_usd=cost.cost_usd,
-            cost_partial=cost.billed_partial,
+            spend_usd=cost.figure.amount(),
+            cost_partial=cost.cost_partial,
+            estimated_cost_usd=cost.estimated_cost_usd,
         )
         return cost, cap
 

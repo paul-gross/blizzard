@@ -1195,7 +1195,7 @@ def test_ceiling_under_cap_does_not_engage(tmp_path):  # type: ignore[no-untyped
 @pytest.mark.unit
 def test_ceiling_partial_total_trips_the_lower_bound_and_flags_partial(tmp_path):  # type: ignore[no-untyped-def]
     """A cost-absent row contributes tokens but $0 to the cost sum; the ceiling trips
-    on that lower bound, and both the log line and report say partial."""
+    on that lower bound, and both the log line and report mark the figure ``+``."""
     store = _store(tmp_path)
     _record_usage(store, cost=None, recorded_at=_NOW)  # $0 lower bound, cost_partial=True
     ctx = make_context(
@@ -1214,9 +1214,9 @@ def test_ceiling_partial_total_trips_the_lower_bound_and_flags_partial(tmp_path)
     assert store.local_paused() is True
     warnings = [e for e in logs if "runner locally paused" in e["event"]]
     assert warnings[0]["cost_partial"] is True
-    assert "PARTIAL" in warnings[0]["event"]
+    assert "(spend $0.00+)" in warnings[0]["event"]
     reports = [f for f in store.pending_outbound() if f.kind == RUNNER_LOCALLY_PAUSED]
-    assert "PARTIAL" in json.loads(reports[0].payload)["reason"]
+    assert json.loads(reports[0].payload)["reason"].endswith("(spend $0.00+)")
 
 
 @pytest.mark.unit

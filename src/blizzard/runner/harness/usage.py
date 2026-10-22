@@ -36,7 +36,7 @@ class UsageSample:
     cache_read_tokens: int
     cache_create_tokens: int
     cost_usd: float | None
-    #: Zero-cost steps' estimate (``docs/deployment/spend.md``): never billed, never capped.
+    #: Zero-cost steps' estimate (``docs/deployment/spend.md``): never billed, but counted toward both caps.
     estimated_cost_usd: float | None = None
     #: What ``cost_usd`` covers; ``None`` says the figure is this invocation's alone.
     cost_scope_tokens: int | None = None
@@ -80,9 +80,9 @@ class SessionCostBasis:
 def invocation_cost(sample: UsageSample, prior: SessionCostBasis | None) -> float | None:
     """What ``sample`` alone cost, reading its reported figure against ``prior``.
 
-    ``None`` is cost unknown; the runner's own cap-facing total still flags that as PARTIAL — both caps
-    read billed cost alone, never an estimate. The two readings, and the one shape they cannot be told
-    apart in, are owned by ``docs/deployment/spend.md``."""
+    ``None`` is cost unknown; a row with neither this nor an estimate reads PARTIAL in every total — both
+    caps read billed plus estimated. The two readings, and the one shape they cannot be told apart in,
+    are owned by ``docs/deployment/spend.md``."""
     if sample.cost_usd is None:
         return None
     # Nothing banked yet, or nothing reported to read against: the readings coincide.

@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.roles import domain_model
+from blizzard.foundation.spend import SpendFigure
 from blizzard.foundation.unrecognized import Unrecognized
 
 
@@ -23,8 +24,8 @@ class ChunkPause:
 @domain_model
 @dataclass(frozen=True)
 class ChunkSpend:
-    """The chunk's usage and cost, summed over recorded invocations. For the partial-cost
-    readings, see `src/blizzard/hub/domain/chunk/model.py`'s `UsageTotal`."""
+    """The chunk's usage and cost, summed over recorded invocations and read as the one spend
+    figure. Its PARTIAL reading is owned by `src/blizzard/hub/domain/chunk/model.py`'s `UsageTotal`."""
 
     input_tokens: int
     output_tokens: int
@@ -33,7 +34,10 @@ class ChunkSpend:
     cost_usd: float
     cost_partial: bool
     estimated_cost_usd: float | None = None
-    billed_partial: bool = False
+
+    @property
+    def figure(self) -> SpendFigure:
+        return SpendFigure(self.cost_usd, self.estimated_cost_usd, self.cost_partial)
 
     @classmethod
     def zero(cls) -> ChunkSpend:

@@ -150,16 +150,15 @@ class SpendCeiling(Step):
         totals = ctx.stores.usage.usage_since(now - timedelta(hours=window_hours))
         if not totals.reaches(cap):
             return
-        reason = spend_ceiling_reason(
-            cap=cap, window_hours=window_hours, spend=totals.cost_usd, partial=totals.cost_partial
-        )
+        reason = spend_ceiling_reason(cap=cap, window_hours=window_hours, spend=totals.figure)
         _log.warning(
             f"runner locally paused — {reason}",
             runner_name=ctx.config.runner_name,
             ceiling_usd=cap,
-            spend_usd=totals.cost_usd,
+            spend_usd=totals.spend_usd,
             window_hours=ctx.config.runner_ceiling_window_hours,
             cost_partial=totals.cost_partial,
+            estimated_cost_usd=totals.estimated_cost_usd,
         )
         PauseService(ctx.stores.pause, ctx.clock, events=ctx.events).engage(by="runner-ceiling", reason=reason)
 

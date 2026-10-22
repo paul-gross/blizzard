@@ -50,7 +50,16 @@ class UsageStore:
             func.coalesce(func.sum(usage_facts.c.cache_read_tokens), 0).label("cache_read_tokens"),
             func.coalesce(func.sum(usage_facts.c.cache_create_tokens), 0).label("cache_create_tokens"),
             func.coalesce(func.sum(usage_facts.c.cost_usd), 0.0).label("cost_usd"),
-            func.coalesce(func.sum(case((usage_facts.c.cost_usd.is_(None), 1), else_=0)), 0).label("cost_partial"),
+            func.sum(usage_facts.c.estimated_cost_usd).label("estimated_cost_usd"),
+            func.coalesce(
+                func.sum(
+                    case(
+                        (and_(usage_facts.c.cost_usd.is_(None), usage_facts.c.estimated_cost_usd.is_(None)), 1),
+                        else_=0,
+                    )
+                ),
+                0,
+            ).label("cost_partial"),
         ).where(usage_facts.c.recorded_at >= at)
         with self._store.connect() as conn:
             row = conn.execute(stmt).one()
@@ -61,6 +70,7 @@ class UsageStore:
             cache_create_tokens=int(row.cache_create_tokens),
             cost_usd=float(row.cost_usd),
             cost_partial=bool(row.cost_partial),
+            estimated_cost_usd=float(row.estimated_cost_usd) if row.estimated_cost_usd is not None else None,
         )
 
     def session_cost_basis(self, lease_id: str) -> SessionCostBasis | None:

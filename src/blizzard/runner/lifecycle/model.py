@@ -37,9 +37,6 @@ if TYPE_CHECKING:
     from blizzard.runner.leases.escalations import ParkedEscalation
     from blizzard.runner.lifecycle.takeover import OpenTakeover
 
-_PARTIAL_NOTE = " (PARTIAL — true spend may be higher)"
-
-
 # --------------------------------------------------------------------------------------------- #
 # Lease moves — which move is legal from which lease state, and which wait out the local brake.
 # --------------------------------------------------------------------------------------------- #
@@ -772,19 +769,15 @@ def decision_move(outcome: ApplyOutcome | Unrecognized) -> DecisionMove:
 
 
 def spend_cap_reached(cost: ChunkSpend, cap: float | None) -> bool:
-    """The chunk's hub-derived spend has reached the per-chunk cap. The spend is a lower bound — a
-    row with no billed cost contributes $0, estimate or not — so the cap trips conservatively."""
-    return cap is not None and cost.cost_usd >= cap
-
-
-def spend_cap_partial_note(cost: ChunkSpend) -> str:
-    """Flags a spend total that is only a lower bound."""
-    return _PARTIAL_NOTE if cost.billed_partial else ""
+    """The chunk's hub-derived spend — billed plus estimated, the one figure — has reached the
+    per-chunk cap. A row carrying neither amount contributes $0, so the figure is a lower bound
+    and the cap trips no later than true spend."""
+    return cap is not None and cost.figure.amount() >= cap
 
 
 def spend_cap_detail(cost: ChunkSpend, cap: float) -> str:
-    """The spend-cap escalation's detail line."""
-    return f"spend cap ${cap:.2f} reached (spend ${cost.cost_usd:.2f}{spend_cap_partial_note(cost)})"
+    """The spend-cap escalation's detail line, its spend rendered as the one figure."""
+    return f"spend cap ${cap:.2f} reached (spend {cost.figure.rendered()})"
 
 
 # --------------------------------------------------------------------------------------------- #

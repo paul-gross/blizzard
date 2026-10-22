@@ -29,6 +29,14 @@ engaged before it: such a runner stays braked, its reason still reading `usage l
 `blizzard runner start --runner <id>` for it. From then on the floor holds it while its subscription is exhausted, and
 its parked leases resume when the floor opens.
 
+### Caps count estimated spend
+
+Both `[runner.cost]` caps now trip on billed plus estimated spend
+([`docs/deployment/spend.md`](./deployment/spend.md#the-two-caps)), where they read billed spend alone before. A cap set
+against billed spend only can now trip early on a runner that spends a subscription. Before upgrading, review each
+runner's `runner_ceiling_usd` and `chunk_cap_usd` against its recent `~`-marked spend in `blizzard hub status`, and
+raise any cap that recent figure would cross.
+
 ## Upgrading to 0.2.0
 
 `0.2.0` is reached from `v0.1.0-rc.1` or any `edge` build, stepping through no intermediate release, since none exists.

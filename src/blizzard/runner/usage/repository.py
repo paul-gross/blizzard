@@ -10,6 +10,7 @@ from typing import Protocol
 from blizzard.foundation.credential_renewal import RenewalFailureReason, RenewalResult
 from blizzard.foundation.fact_kinds import EXTERNAL_SUBSCRIPTION_USAGE_MISSED, EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED
 from blizzard.foundation.roles import domain_model
+from blizzard.foundation.spend import SpendFigure
 from blizzard.foundation.subscription_miss import SampleMissReason
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.usage import SessionCostBasis, UsageKind, UsageSample, invocation_cost
@@ -182,9 +183,9 @@ def charge_range(start: _RangeStart | None, end: _RangeStart | None) -> ChargeRa
 @domain_model
 @dataclass(frozen=True)
 class UsageTotals:
-    """A summed window of usage facts. ``cost_partial`` carries the
-    lower-bound contract on ``cost_usd``: a caller must check it before treating
-    ``cost_usd`` as exact."""
+    """A summed window of usage facts, its cost read as the one spend figure. The PARTIAL reading is
+    the hub's ``UsageTotal``'s (``src/blizzard/hub/domain/chunk/model.py``): ``estimated_cost_usd`` is
+    ``None`` when no summed row carried one, and ``cost_partial`` marks a row carrying neither amount."""
 
     input_tokens: int
     output_tokens: int
@@ -192,10 +193,20 @@ class UsageTotals:
     cache_create_tokens: int
     cost_usd: float
     cost_partial: bool
+    estimated_cost_usd: float | None = None
+
+    @property
+    def figure(self) -> SpendFigure:
+        return SpendFigure(self.cost_usd, self.estimated_cost_usd, self.cost_partial)
+
+    @property
+    def spend_usd(self) -> float:
+        """Billed plus estimated — the figure's amount."""
+        return self.figure.amount()
 
     def reaches(self, cap: float) -> bool:
         """The summed spend is at or past ``cap`` — a lower bound when :attr:`cost_partial`."""
-        return self.cost_usd >= cap
+        return self.spend_usd >= cap
 
 
 @domain_model
@@ -299,7 +310,7 @@ class IReadUsageRepository(Protocol):
 
     def usage_since(self, at: datetime) -> UsageTotals:
         """Sum every local usage fact recorded at or after ``at`` — see
-        :class:`UsageTotals` for the lower-bound + PARTIAL contract on ``cost_usd``."""
+        :class:`UsageTotals` for the PARTIAL reading of its figure."""
         ...
 
     def context_sample_state(self, lease_id: str) -> ContextSampleState | None:
