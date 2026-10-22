@@ -110,7 +110,9 @@ def test_bindings_survive_a_round_trip(tmp_path: Path) -> None:
         ("a", "workspace-local"),
         ("b", "workspace-local"),
     ]
-    assert reloaded.sole_runner().own.agents == loaded.sole_runner().own.agents == 4
+    (reloaded_own, loaded_own) = (reloaded.sole_runner().own, loaded.sole_runner().own)
+    assert reloaded_own is not None and loaded_own is not None
+    assert reloaded_own.agents == loaded_own.agents == 4
 
 
 def _agents_host(tmp_path: Path, body: str) -> HostConfig:
