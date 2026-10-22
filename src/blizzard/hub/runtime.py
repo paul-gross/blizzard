@@ -10,20 +10,26 @@ The module-level functions are this short-lived process's composition root
 from __future__ import annotations
 
 import os
+from collections.abc import Callable
+from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from blizzard.foundation.clock import IClock, SystemClock
 from blizzard.foundation.flags import FlagRegistry
 from blizzard.foundation.logging import get_logger
-from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.migrations import MigrationConnectionError, MigrationRunner
-from blizzard.hub.composition import build_process_core
 from blizzard.hub.config import CONFIG_FILENAME, ConfigError, HubConfig
+from blizzard.hub.domain.observability.hub_events import HubEventLogService
+from blizzard.hub.event_log_opener import system_event_log_opener
 from blizzard.hub.secrets import hub_key_provider
 from blizzard.hub.store import MIGRATIONS_DIR, STORE_NAME
 
 MIGRATE_COMMAND = "blizzard hub migrate"
+
+#: Opens the hub's own event log for a resolved config and closes it on exit; the engine URL is known only once the
+#: config has loaded, so the seam is a factory.
+HubEventLogOpener = Callable[[HubConfig], AbstractContextManager[HubEventLogService]]
 
 _log = get_logger("blizzard.hub.runtime")
 
@@ -51,6 +57,8 @@ class Runtime:
 
     root: Path
     clock: IClock
+    #: Opens the hub event log the migrate verb records ``hub-migrated`` in.
+    open_event_log: HubEventLogOpener = field(kw_only=True)
     allow_external_db: bool = False
     #: The registry every load of the root's config resolves its flags against.
     flag_registry: FlagRegistry = field(kw_only=True)
@@ -104,35 +112,41 @@ class Runtime:
             _log.info("hub store upgraded to head", root=str(self.root))
             after = runner.current_revision()
             if after != before:
-                self._record_migrated(config, before, after)
-
-    def _record_migrated(self, config: HubConfig, before: str | None, after: str | None) -> None:
-        engine = create_engine_from_url(config.db_url)
-        try:
-            build_process_core(engine).hub_event_log.record(
-                kind="hub-migrated",
-                message=f"hub store migrated from revision {before or 'none'} to {after}",
-                detail={"from": before, "to": after},
-                at=self.clock.now(),
-            )
-        finally:
-            engine.dispose()
+                with self.open_event_log(config) as event_log:
+                    event_log.record(
+                        kind="hub-migrated",
+                        message=f"hub store migrated from revision {before or 'none'} to {after}",
+                        detail={"from": before, "to": after},
+                        at=self.clock.now(),
+                    )
 
 
 def migration_runner(config: HubConfig) -> MigrationRunner:
     return Migrations(config, SystemClock()).runner
 
 
+def _runtime_of(root: Path, allow_external_db: bool, flag_registry: FlagRegistry, strict: bool) -> Runtime:
+    clock = SystemClock()
+    return Runtime(
+        root,
+        clock,
+        allow_external_db,
+        open_event_log=system_event_log_opener(clock),
+        flag_registry=flag_registry,
+        strict=strict,
+    )
+
+
 def init_environment(
     root: Path, *, allow_external_db: bool = False, flag_registry: FlagRegistry, strict: bool
 ) -> HubConfig:
-    return Runtime(root, SystemClock(), allow_external_db, flag_registry=flag_registry, strict=strict).init()
+    return _runtime_of(root, allow_external_db, flag_registry, strict).init()
 
 
 def migrate(
     root: Path, *, down: str | None = None, allow_external_db: bool = False, flag_registry: FlagRegistry, strict: bool
 ) -> None:
-    Runtime(root, SystemClock(), allow_external_db, flag_registry=flag_registry, strict=strict).migrate(down=down)
+    _runtime_of(root, allow_external_db, flag_registry, strict).migrate(down=down)
 
 
 def ensure_current_revision(config: HubConfig) -> None:
