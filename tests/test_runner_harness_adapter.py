@@ -148,7 +148,7 @@ def test_resume_command_with_an_empty_permission_override_stays_bare(spawn_execu
 def test_observe_version_reads_the_binarys_version_output(
     monkeypatch: pytest.MonkeyPatch, spawn_executor: Executor
 ) -> None:
-    monkeypatch.setattr(shutil, "which", lambda binary: f"/usr/bin/{binary}")
+    monkeypatch.setattr(shutil, "which", lambda binary, path=None: f"/usr/bin/{binary}")
     versions = _scripted_versions(ChildRun(exit_code=0, stdout="claude-code 1.2.3\n", stderr="", timed_out=False))
     assert _adapter(spawn_executor, binary="claude", versions=versions).observe_version() == "claude-code 1.2.3"
 
@@ -158,7 +158,7 @@ def test_observe_version_times_out_to_none_rather_than_raising(
     monkeypatch: pytest.MonkeyPatch, spawn_executor: Executor
 ) -> None:
     # On PATH per `which` — the timeout is the launch's own, not a missing-binary skip.
-    monkeypatch.setattr(shutil, "which", lambda binary: f"/usr/bin/{binary}")
+    monkeypatch.setattr(shutil, "which", lambda binary, path=None: f"/usr/bin/{binary}")
     versions = _scripted_versions(ChildRun(exit_code=None, stdout="", stderr="", timed_out=True))
 
     with capture_logs() as logs:
@@ -174,7 +174,7 @@ def test_observe_version_missing_binary_reads_none_rather_than_raising(
     problem) still reads ``None`` and logs — distinct from never being on ``PATH`` at all
     (below), which skips the subprocess attempt entirely."""
 
-    monkeypatch.setattr(shutil, "which", lambda binary: f"/usr/bin/{binary}")
+    monkeypatch.setattr(shutil, "which", lambda binary, path=None: f"/usr/bin/{binary}")
     versions = _scripted_versions(OSError("no such file or directory: 'claude'"))
 
     with capture_logs() as logs:
@@ -190,7 +190,7 @@ def test_observe_version_absent_from_path_skips_the_subprocess_and_does_not_warn
     """A host that never installed this binding's binary (a runner configured with only
     one of several known harnesses) is an expected shape, not a failure — no subprocess
     attempt, and nothing louder than ``debug``."""
-    monkeypatch.setattr(shutil, "which", lambda binary: None)
+    monkeypatch.setattr(shutil, "which", lambda binary, path=None: None)
 
     versions = _scripted_versions(AssertionError("no launch may be attempted for a binary absent from PATH"))
 
