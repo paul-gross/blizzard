@@ -266,9 +266,8 @@ class OAuthProviderConfig:
     @classmethod
     def providers(cls, oauth: ConfigView) -> tuple[OAuthProviderConfig, ...]:
         """Structurally validate and project ``[[auth.oauth.provider]]`` entries — the required
-        keys, and ``emails_authoritative`` as a boolean when set;
-        ``type``/``issuer`` and the keys only one type takes belongs to whichever consumer first uses a
-        provider."""
+        keys, and ``emails_authoritative`` as a boolean when set; ``type``/``issuer`` and the keys only
+        one type takes are validated by whichever consumer first uses a provider."""
         raw_providers = oauth.get("provider", [])
         if not isinstance(raw_providers, list):
             return ()
