@@ -181,7 +181,7 @@
       "default": null,
       "deprecated": true,
       "path": "max_agents",
-      "replaced_by": "runner[].projects[].agents",
+      "replaced_by": "runner[].agents",
       "required": false,
       "type": "integer"
     },
@@ -304,6 +304,14 @@
       "replaced_by": null,
       "required": false,
       "type": "array of tables"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "runner[].agents",
+      "replaced_by": null,
+      "required": false,
+      "type": "integer"
     },
     {
       "default": null,
@@ -477,7 +485,7 @@
       "default": null,
       "deprecated": true,
       "path": "runner[].max_agents",
-      "replaced_by": "runner[].projects[].agents",
+      "replaced_by": "runner[].agents",
       "required": false,
       "type": "integer"
     },
@@ -587,10 +595,10 @@
     },
     {
       "default": null,
-      "deprecated": false,
+      "deprecated": true,
       "path": "runner[].projects[].agents",
-      "replaced_by": null,
-      "required": true,
+      "replaced_by": "runner[].agents",
+      "required": false,
       "type": "integer"
     },
     {

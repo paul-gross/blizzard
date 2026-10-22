@@ -96,13 +96,13 @@ def load_runner_config(root: Path | str, *, host: str | None = None, port: int |
 
 def host_config_of(config: RunnerConfig) -> HostConfig:
     """The host file one runner's ``config`` stands for: its host keys at the top, its workspaces as the
-    ``[[workspace]]`` entries, and the runner — with the projects it serves bound at its agent count — as the one ``[[runner]]``."""
+    ``[[workspace]]`` entries, and the runner — with the projects it serves bound to its workspace, sharing its agent count — as the one ``[[runner]]``."""
     entry = RunnerEntry(
         name=config.name,
         id=config.runner_id,
         subscription=config.subscriptions[0].slug if config.subscriptions else None,
         bindings=_bindings_of(config),
-        own=config,
+        own=dataclasses.replace(config, agents=config.agents or 1),
     )
     return HostConfig(
         root=config.root,
@@ -174,4 +174,4 @@ def _bindings_of(config: RunnerConfig) -> tuple[ProjectBinding, ...]:
     if config.bindings:
         return config.bindings
     projects = SCAFFOLD_PROJECTS if config.projects is None else config.projects
-    return tuple(ProjectBinding(project, config.home_workspace.id, 1) for project in projects)
+    return tuple(ProjectBinding(project, config.home_workspace.id) for project in projects)

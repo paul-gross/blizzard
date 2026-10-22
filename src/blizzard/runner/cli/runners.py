@@ -75,8 +75,8 @@ _DIR_OPTION = click.option(
     multiple=True,
     type=click.IntRange(min=1),
     metavar="N",
-    help=f"How many agents each --project runs at once: once for all, or once per --project. "
-    f"Default: {SCAFFOLD_AGENTS}.",
+    help=f"How many agents the runner runs at once, shared by every --project: once for the count, or once per "
+    f"--project to sum them into it. Default: {SCAFFOLD_AGENTS}.",
 )
 @click.pass_context
 def add(
@@ -99,7 +99,8 @@ def add(
     except ConfigError as exc:
         raise click.ClickException(str(exc)) from exc
     token_env = hub_token_variable(name)
-    bindings = _bindings(config, projects, workspaces, agents)
+    bindings = _bindings(config, projects, workspaces)
+    runner_agents = _runner_agents(projects, agents)
     hub = config.hub_url
     collaborators = InitCollaborators.of(ctx)
     with collaborators.host_clients(hub) as host_clients:
@@ -125,6 +126,7 @@ def add(
         config.root,
         name,
         bindings=bindings,
+        agents=runner_agents,
         subscription=SCAFFOLD_SUBSCRIPTION.slug if SCAFFOLD_SUBSCRIPTION.slug in declared else None,
         runner_id=answer.runner_id,
     )
@@ -244,11 +246,9 @@ def _host_token(config: HostConfig) -> str:
     return config.host_token.value
 
 
-def _bindings(
-    config: HostConfig, projects: tuple[str, ...], workspaces: tuple[str, ...], agents: tuple[int, ...]
-) -> tuple[ProjectBinding, ...]:
-    """One binding per project, each to its workspace and agent count; refused when a --workspace is not one the
-    host declares, or when either option is given neither once nor once per --project."""
+def _bindings(config: HostConfig, projects: tuple[str, ...], workspaces: tuple[str, ...]) -> tuple[ProjectBinding, ...]:
+    """One binding per project, each to its workspace; refused when a --workspace is not one the host declares, or
+    when it is given neither once nor once per --project."""
     declared = [workspace.id for workspace in config.workspaces]
     if not workspaces:
         if len(declared) != 1:
@@ -262,11 +262,21 @@ def _bindings(
             raise click.ClickException(
                 f"--workspace {workspace!r} is not a workspace this host declares ({', '.join(declared)})"
             )
-    counts = agents or (SCAFFOLD_AGENTS,)
     return tuple(
-        ProjectBinding(project, _nth(workspaces, i, "--workspace", projects), _nth(counts, i, "--agents", projects))
-        for i, project in enumerate(projects)
+        ProjectBinding(project, _nth(workspaces, i, "--workspace", projects)) for i, project in enumerate(projects)
     )
+
+
+def _runner_agents(projects: tuple[str, ...], agents: tuple[int, ...]) -> int:
+    """The runner's agent count: the one --agents, or the sum of one per --project — the rule the host file's
+    loader applies to per-binding counts."""
+    if not agents:
+        return SCAFFOLD_AGENTS
+    if len(agents) == 1:
+        return agents[0]
+    if len(agents) != len(projects):
+        raise click.ClickException(f"give --agents once, or once per --project ({len(projects)})")
+    return sum(agents)
 
 
 def _nth[T](values: tuple[T, ...], index: int, option: str, projects: tuple[str, ...]) -> T:

@@ -701,7 +701,9 @@ def _string_literal(value: str) -> str:
 
 def _bindings_literal(bindings: tuple[ProjectBinding, ...]) -> str:
     entries = (
-        f"{{ project = {_string_literal(b.project)}, workspace = {_string_literal(b.workspace)}, agents = {b.agents} }}"
+        f"{{ project = {_string_literal(b.project)}, workspace = {_string_literal(b.workspace)}"
+        + ("" if b.agents is None else f", agents = {b.agents}")
+        + " }"
         for b in bindings
     )
     return "[" + ", ".join(entries) + "]"

@@ -51,7 +51,7 @@
           "type": "text"
         },
         {
-          "help": "How many agents each --project runs at once: once for all, or once per --project. Default: 1.",
+          "help": "How many agents the runner runs at once, shared by every --project: once for the count, or once per --project to sum them into it. Default: 1.",
           "hidden": false,
           "kind": "option",
           "name": "agents",

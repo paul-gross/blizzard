@@ -281,7 +281,8 @@ def test_every_retired_key_graduates_to_its_placement_and_never_into_the_runner(
     assert {_GRADUATED_WORKSPACE_KEYS[key] for key in _RETIRED_KEYS if key in _GRADUATED_WORKSPACE_KEYS} <= set(
         workspace
     )
-    assert [binding["agents"] for binding in runner["projects"]] == [2]
+    assert runner["agents"] == 2
+    assert all("agents" not in binding for binding in runner["projects"])
     assert runner["subscription"] == "anthropic"
 
 

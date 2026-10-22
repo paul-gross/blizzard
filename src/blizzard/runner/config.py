@@ -50,7 +50,7 @@ ENV_BASE_BRANCH = "BZ_BASE_BRANCH"
 ENV_GATES = "BZ_RUNNER_GATES"  # comma-separated node names this runner gates
 #: What a freshly scaffolded runner serves: the project every tenant holds from its creation.
 SCAFFOLD_PROJECTS: tuple[str, ...] = ("default",)
-#: The agents each scaffolded binding runs at once.
+#: The agents a scaffolded runner runs at once.
 SCAFFOLD_AGENTS = 1
 ENV_WORKSPACE_PROMPT = "BZ_WORKSPACE_PROMPT"  # the runner-owned workspace prompt, inline
 ENV_WORKSPACE_PROMPT_PACKAGE = "BZ_WORKSPACE_PROMPT_PACKAGE"  # a packaged workspace-prompt sample, by name (#344)
@@ -483,11 +483,12 @@ def bound_workspace_ids(bindings: tuple[ProjectBinding, ...] | None) -> tuple[st
 @domain_model
 @dataclass(frozen=True)
 class ProjectBinding:
-    """One ``[[runner]] projects`` binding: a project, the workspace it runs in, and its agent count."""
+    """One ``[[runner]] projects`` binding: a project and the workspace it runs in. ``agents`` is the deprecated
+    per-binding count, ``None`` unless the file declared one; the runner's count is :attr:`RunnerConfig.agents`."""
 
     project: str
     workspace: str
-    agents: int
+    agents: int | None = None
 
 
 @domain_model
@@ -559,6 +560,9 @@ class RunnerConfig:
     #: The projects this runner serves, each bound to a workspace of its host with its agent count, in file order;
     #: sent at every registration beside :attr:`projects`. ``None`` — a config built without a host file — sends none.
     bindings: tuple[ProjectBinding, ...] | None = None
+    #: How many agents this runner runs at once, shared by every binding: ``[[runner]] agents``, else the sum of the
+    #: bindings' deprecated ``agents``. ``0`` — a config built without a host file — runs none.
+    agents: int = 0
     #: The session-context warn line; ``None`` disables the lane — nothing is sampled, nothing gated.
     context_warn_tokens: int | None = None
     #: How often a running lease's context is re-read — unused while the lane is off.
@@ -675,6 +679,10 @@ class RunnerConfig:
             transcripts_root=self.transcripts_root,
             sections=self.harness_sections,
         )
+
+    def binding_agents(self, binding: ProjectBinding) -> int:
+        """The ``agents`` a binding reports: its declared value, or the runner's count when it declares none."""
+        return self.agents if binding.agents is None else binding.agents
 
     @property
     def bound_workspaces(self) -> tuple[HostWorkspace, ...]:
