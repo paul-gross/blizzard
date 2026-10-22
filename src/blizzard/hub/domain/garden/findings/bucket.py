@@ -32,6 +32,19 @@ class FindingBucket:
         return cls(citable=citable)
 
 
+def is_exited_citable(finding: Finding, run: RunContext) -> bool:
+    """Whether `finding` is exited yet one `run` could otherwise have cited: same project, and
+    either the routine's own finding in any scope or a review-sourced finding on the run's scope."""
+    return (
+        finding.exited
+        and finding.project_id == run.project_id
+        and (
+            finding.routine_name == run.routine_name
+            or (finding.source == "review" and finding.scope_slug == run.scope_slug)
+        )
+    )
+
+
 class FindingBucketReader:
     """Reads a run's :class:`FindingBucket`: its routine's own non-exited findings across every
     scope, plus non-exited review-sourced findings on the run's own scope — all within the run's
@@ -55,9 +68,5 @@ class FindingBucketReader:
         if not finding_ids:
             return frozenset()
         return frozenset(
-            f.finding_id
-            for f in self._findings.get_many(sorted(finding_ids)).values()
-            if f.exited
-            and f.project_id == run.project_id
-            and (f.routine_name == run.routine_name or (f.source == "review" and f.scope_slug == run.scope_slug))
+            f.finding_id for f in self._findings.get_many(sorted(finding_ids)).values() if is_exited_citable(f, run)
         )

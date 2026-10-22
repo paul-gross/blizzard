@@ -25,7 +25,13 @@ from blizzard.hub.domain.garden.runs.history import (
     RunWindow,
     run_rows,
 )
-from blizzard.hub.domain.garden.runs.sweeps import SweepFact, SweepWindow, sweep_coverage
+from blizzard.hub.domain.garden.runs.sweeps import (
+    MeasurementReading,
+    SweepFact,
+    SweepWindow,
+    declared_readings,
+    sweep_coverage,
+)
 from blizzard.hub.domain.garden.runs.window import InvalidWindowError
 
 _PROJECT = "proj_test"
@@ -134,6 +140,11 @@ def test_coverage_drops_retired_scopes_and_facts_for_unlinked_ones() -> None:
     )
     assert covered == ["live", "never"]
     assert facts == [live_fact, retired_fact]
+
+
+def test_readings_of_undeclared_scopes_are_dropped() -> None:
+    kept, dropped = (MeasurementReading(scope_slug=slug, produced_at=_T0, measurement="m") for slug in ("live", "gone"))
+    assert declared_readings({"live"}, [kept, dropped]) == [kept]
 
 
 # --- baselines ---------------------------------------------------------------

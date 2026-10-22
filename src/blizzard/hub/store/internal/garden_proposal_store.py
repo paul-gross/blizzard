@@ -183,11 +183,7 @@ class GardenProposalStore:
                     .where(garden_proposals.c.proposal_id == proposal_id)
                     .values(given)
                 )
-            row = conn.execute(
-                self._store.select(garden_proposals).where(garden_proposals.c.proposal_id == proposal_id)
-            ).one()
-            findings = self._findings(conn, proposal_id)
-        return self._of(row, findings)
+            return self._reread(conn, proposal_id)
 
     def attach(self, proposal_id: str, finding_ids: Sequence[str]) -> GardenProposal | None:
         with self._store.write("attach") as conn:
@@ -206,8 +202,7 @@ class GardenProposalStore:
                     self._store.insert(garden_proposal_findings),
                     [{"proposal_id": proposal_id, "finding_id": finding_id} for finding_id in finding_ids],
                 )
-            findings = self._findings(conn, proposal_id)
-        return self._of(row, findings)
+            return self._of(row, self._findings(conn, proposal_id))
 
     def detach(self, proposal_id: str, finding_ids: Sequence[str]) -> GardenProposal | None:
         with self._store.write("detach") as conn:
@@ -220,11 +215,14 @@ class GardenProposalStore:
                         garden_proposal_findings.c.finding_id.in_(finding_ids),
                     )
                 )
-            row = conn.execute(
-                self._store.select(garden_proposals).where(garden_proposals.c.proposal_id == proposal_id)
-            ).one()
-            findings = self._findings(conn, proposal_id)
-        return self._of(row, findings)
+            return self._reread(conn, proposal_id)
+
+    def _reread(self, conn, proposal_id: str) -> GardenProposal:  # type: ignore[no-untyped-def]
+        """The proposal as it now stands — the tail `edit` and `detach` share."""
+        row = conn.execute(
+            self._store.select(garden_proposals).where(garden_proposals.c.proposal_id == proposal_id)
+        ).one()
+        return self._of(row, self._findings(conn, proposal_id))
 
     def get(self, proposal_id: str) -> GardenProposal | None:
         with self._store.read("get") as conn:

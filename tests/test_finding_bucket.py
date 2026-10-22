@@ -4,12 +4,13 @@ scope only, exited findings never read, own scope ordered first."""
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime
 from typing import Any, cast
 
 import pytest
 
-from blizzard.hub.domain.garden.findings.bucket import FindingBucketReader
+from blizzard.hub.domain.garden.findings.bucket import FindingBucketReader, is_exited_citable
 from blizzard.hub.domain.garden.findings.model import Finding
 from blizzard.hub.domain.garden.run_context import RunContext
 
@@ -96,3 +97,11 @@ def test_review_findings_only_on_the_runs_own_scope() -> None:
     ]
     bucket = _reader([], review).for_run(_RUN)
     assert [f.finding_id for f in bucket.citable] == ["fin_r1"]
+
+
+def test_is_exited_citable_scopes_to_the_runs_project_routine_and_review_scope() -> None:
+    exited = _finding("fin_a", scope="other", state="wont-fix")
+    assert is_exited_citable(exited, _RUN)
+    assert not is_exited_citable(_finding("fin_a", scope="other"), _RUN)
+    assert not is_exited_citable(_finding("fin_a", scope="other", state="wont-fix", routine="weekly"), _RUN)
+    assert not is_exited_citable(replace(exited, project_id="proj_other"), _RUN)
