@@ -40,6 +40,7 @@ Generated from [`contracts/egress/`](../../contracts/egress/README.md), which is
 follow. A value marked `open` is not exhaustive: a consumer must tolerate a value it does not list, which is how a new
 value stays additive. A null in a nullable column means what its meaning says.
 
+<!-- dprint-ignore-start -->
 <!-- egress-dictionary:begin -->
 
 ### `steps`
@@ -156,8 +157,7 @@ WHERE copy_rank = 1
 
 ### `events`
 
-Major version 1; identity columns `derivation_id`, `kind`, `turn_path`, `occurrence`; partitioned by the UTC date of
-`step_started_at`.
+Major version 1; identity columns `derivation_id`, `kind`, `turn_path`, `occurrence`; partitioned by the UTC date of `step_started_at`.
 
 | Column              | Type        | On                | Null | Meaning                                                                                                                                                               | Values                                               |
 | ------------------- | ----------- | ----------------- | ---- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
@@ -251,6 +251,7 @@ WHERE copy_rank = 1
 ```
 
 <!-- egress-dictionary:end -->
+<!-- dprint-ignore-end -->
 
 A row's `work_refs` and `sources` render each work source under its slug when the row is written, as `project_slug`
 does, so a row written after a source's slug changes carries the new slug.
