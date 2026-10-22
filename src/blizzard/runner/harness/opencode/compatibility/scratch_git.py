@@ -5,7 +5,6 @@ Creates one initialized repository with a baseline commit and removes the tree o
 
 from __future__ import annotations
 
-import subprocess
 import tempfile
 from collections.abc import Iterator
 from contextlib import AbstractContextManager, contextmanager
@@ -14,7 +13,11 @@ from pathlib import Path
 from typing import Protocol
 
 from blizzard.foundation.roles import domain_model
-from blizzard.runner.harness.env_allowlist import AllowlistedEnv
+from blizzard.runner.process.child_env import ChildEnv
+from blizzard.runner.process.child_processes import IChildProcesses
+
+# Bounds each scratch git call: a wedged git costs one failed compatibility run, not a hang.
+_SCRATCH_GIT_TIMEOUT_SECONDS = 30.0
 
 
 @domain_model
@@ -42,7 +45,12 @@ class OpenCodeScratchGitError(RuntimeError):
 
 
 class SubprocessOpenCodeScratchGit:
-    """Create a throwaway git repository with the real local ``git`` executable."""
+    """Create a throwaway git repository with the real local ``git`` executable, launched through ``children``
+    under the tool profile ``env``."""
+
+    def __init__(self, children: IChildProcesses, env: ChildEnv) -> None:
+        self._children = children
+        self._env = env
 
     @contextmanager
     def new_scratch_repo(self) -> Iterator[OpenCodeScratchRepo]:
@@ -81,26 +89,22 @@ class SubprocessOpenCodeScratchGit:
 
     def _git(self, cwd: Path, *args: str) -> str:
         try:
-            result = subprocess.run(
+            result = self._children.run(
                 ["git", "-c", "core.hooksPath=/dev/null", "-C", str(cwd), *args],
-                capture_output=True,
-                text=True,
+                cwd=None,
                 env=self._git_env(),
-                start_new_session=True,
-                check=False,
+                timeout=_SCRATCH_GIT_TIMEOUT_SECONDS,
             )
         except OSError as exc:
             raise OpenCodeScratchGitError("failed to start git for the compatibility scratch repository") from exc
-        if result.returncode != 0:
+        if result.timed_out or result.exit_code != 0:
             raise OpenCodeScratchGitError("git could not initialize the compatibility scratch repository")
         return result.stdout
 
-    @staticmethod
-    def _git_env() -> dict[str, str]:
+    def _git_env(self) -> ChildEnv:
         """Use only benign process variables; ambient Git controls and hook paths never cross the seam."""
 
-        env = AllowlistedEnv.of(()).variables
-        env.update(
+        return self._env.adding(
             {
                 "GIT_CONFIG_NOSYSTEM": "1",
                 "GIT_CONFIG_GLOBAL": "/dev/null",
@@ -108,7 +112,6 @@ class SubprocessOpenCodeScratchGit:
                 "GIT_TERMINAL_PROMPT": "0",
             }
         )
-        return env
 
 
 def _conforms_scratch_git(x: SubprocessOpenCodeScratchGit) -> IOpenCodeScratchGit:

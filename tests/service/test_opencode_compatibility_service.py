@@ -53,6 +53,7 @@ from blizzard.runner.harness.opencode.compatibility.scratch_git import (
 )
 from blizzard.runner.harness.opencode.compatibility.transcript import TranscriptExportSample
 from tests.service.support import require_mock_fleet, require_opencode_cli_surface, service_gate
+from tests.support_child_launch import CHILDREN, tool_env
 
 pytestmark = [pytest.mark.service, service_gate]
 
@@ -74,7 +75,7 @@ class _RecordingScratchGit:
     """Keep the disposed path observable without changing the real scratch binding."""
 
     def __init__(self) -> None:
-        self.inner = SubprocessOpenCodeScratchGit()
+        self.inner = SubprocessOpenCodeScratchGit(children=CHILDREN, env=tool_env())
         self.path: Path | None = None
 
     @contextmanager
@@ -270,7 +271,7 @@ def _probe(
             model=MODEL,
             variant=VARIANT,
             scratch_git=scratch,
-            process=process or SubprocessOpenCodeProcess(),
+            process=process or SubprocessOpenCodeProcess(children=CHILDREN),
             compactor=compactor if compactor is not None else _FakeCompactor(),
             transport=transport,
             attach_proxy_factory=LoopbackAttachProxyFactory(transport),
@@ -297,7 +298,7 @@ def _stop_compaction_server(child: OpenCodeStartedProcess, *, report_reaped: boo
 def test_subprocess_compactor_cleanup_result_controls_transcript_admission(tmp_path: Path, report_reaped: bool) -> None:
     mock_opencode = _mock_opencode()
     compactor = SubprocessOpenCodeCompactor(
-        SubprocessOpenCodeProcess(),
+        SubprocessOpenCodeProcess(children=CHILDREN),
         lambda child: _stop_compaction_server(child, report_reaped=report_reaped),
         UrllibLoopbackTransport(),
         timeout_seconds=5.0,
@@ -333,7 +334,7 @@ def test_component_fake_cannot_admit_a_preexisting_compaction_marker(tmp_path: P
 @requires_landlock
 def test_real_compactor_requires_a_new_transition_after_successful_summarize(tmp_path: Path) -> None:
     mock_opencode = _mock_opencode()
-    process = SubprocessOpenCodeProcess()
+    process = SubprocessOpenCodeProcess(children=CHILDREN)
     compactor = SubprocessOpenCodeCompactor(
         process,
         lambda child: _stop_compaction_server(child, report_reaped=True),

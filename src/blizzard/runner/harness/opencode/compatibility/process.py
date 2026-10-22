@@ -1,6 +1,6 @@
-"""The subprocess binding for the OpenCode compatibility proof.
+"""The process binding for the OpenCode compatibility proof, over the runner's launch seam.
 
-Only this module owns ``subprocess``; the child environment is built explicitly, never copied
+The child environment is built explicitly by the compatibility scratch config from the allowlist, never copied
 from the runner's own.
 """
 
@@ -9,23 +9,23 @@ from __future__ import annotations
 import contextlib
 import errno
 import os
-import pty
 import select
 import signal
-import subprocess
 import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import IO, Protocol
 
-from blizzard.foundation.process import group_exists, signal_group, terminate_group
 from blizzard.foundation.roles import collaborator, domain_model
 from blizzard.runner.harness.opencode.compatibility.landlock import (
     LandlockPolicy,
     LandlockUnavailable,
     require_landlock,
 )
+from blizzard.runner.process.child_env import AllowlistedEnv, ChildEnv
+from blizzard.runner.process.child_processes import IChildProcesses, ISpawnedChild, Stream
+from blizzard.runner.process.groups import group_exists, signal_group, terminate_group
 
 _CAPTURE_LIMIT_BYTES = 4 * 1024 * 1024
 _LINE_QUEUE_LIMIT_BYTES = 256 * 1024
@@ -53,8 +53,8 @@ class OpenCodeStartedProcess(Protocol):
         """Return the exit code, or ``None`` while the child is running."""
         ...
 
-    def wait(self, timeout: float | None = None) -> int:
-        """Wait for the child and return its exit code."""
+    def wait(self, timeout: float | None = None) -> int | None:
+        """Wait for the child and return its exit code; ``None`` when ``timeout`` runs out first."""
         ...
 
     def terminate(self) -> None:
@@ -140,10 +140,10 @@ class OpenCodeProcessError(RuntimeError):
 
 
 class _ProcessHandle(Protocol):
-    """The Popen-shaped portion shared by pipe and pseudo-terminal processes."""
+    """The portion shared by pipe and pseudo-terminal processes."""
 
-    pid: int
-    returncode: int | None
+    @property
+    def pid(self) -> int: ...
 
     @property
     def stdout(self) -> IO[bytes] | None: ...
@@ -153,13 +153,11 @@ class _ProcessHandle(Protocol):
 
     def poll(self) -> int | None: ...
 
-    def wait(self, timeout: float | None = None) -> int: ...
-
-    def communicate(self, input: bytes | None = None, timeout: float | None = None) -> tuple[bytes, bytes]: ...
+    def wait(self, timeout: float | None) -> int | None: ...
 
 
 class _PtyProcess:
-    """A small Popen-shaped handle around the child returned by ``forkpty``."""
+    """A small process handle around the child the seam forked onto a pseudo-terminal."""
 
     @property
     def stdout(self) -> None:
@@ -170,8 +168,12 @@ class _PtyProcess:
         return None
 
     def __init__(self, pid: int) -> None:
-        self.pid = pid
+        self._pid = pid
         self.returncode: int | None = None
+
+    @property
+    def pid(self) -> int:
+        return self._pid
 
     def poll(self) -> int | None:
         if self.returncode is not None:
@@ -185,7 +187,7 @@ class _PtyProcess:
         self.returncode = os.waitstatus_to_exitcode(status)
         return self.returncode
 
-    def wait(self, timeout: float | None = None) -> int:
+    def wait(self, timeout: float | None) -> int | None:
         if self.returncode is not None:
             return self.returncode
         if timeout is None:
@@ -199,15 +201,8 @@ class _PtyProcess:
                 return result
             remaining = deadline - time.monotonic()
             if remaining <= 0:
-                raise subprocess.TimeoutExpired(str(self.pid), timeout)
+                return None
             time.sleep(min(0.01, remaining))
-
-    def communicate(self, input: bytes | None = None, timeout: float | None = None) -> tuple[bytes, bytes]:
-        """Satisfy the process handle seam; interactive callers read the master directly."""
-
-        del input
-        self.wait(timeout=timeout)
-        return b"", b""
 
 
 @collaborator
@@ -238,8 +233,8 @@ class _SubprocessStartedProcess:
     def poll(self) -> int | None:
         return self.process.poll()
 
-    def wait(self, timeout: float | None = None) -> int:
-        return self.process.wait(timeout=timeout)
+    def wait(self, timeout: float | None = None) -> int | None:
+        return self.process.wait(timeout)
 
     def terminate(self) -> None:
         self._signal(signal.SIGTERM)
@@ -326,8 +321,9 @@ class _SubprocessStartedProcess:
                     )
                 time.sleep(min(0.01, remaining))
             self._drain_interactive()
+            exit_code = self.process.poll()
             result = OpenCodeProcessResult(
-                self.process.returncode if self.process.returncode is not None else -1,
+                exit_code if exit_code is not None else -1,
                 self._stdout_text(),
                 "",
                 output_truncated=self._output_truncated,
@@ -335,12 +331,11 @@ class _SubprocessStartedProcess:
             return self._finalize_group(result)
 
         if not self.capture_output:
-            try:
-                result = OpenCodeProcessResult(self.process.wait(timeout=timeout), "", "")
-            except subprocess.TimeoutExpired:
+            exit_code = self.process.wait(timeout)
+            if exit_code is None:
                 group_reaped = _stop_process_group(self.process)
                 return OpenCodeProcessResult(-1, "", "", timed_out=True, process_group_reaped=group_reaped)
-            return self._finalize_group(result)
+            return self._finalize_group(OpenCodeProcessResult(exit_code, "", ""))
 
         deadline = time.monotonic() + timeout
         timed_out = False
@@ -535,7 +530,11 @@ class _SubprocessStartedProcess:
 
 
 class SubprocessOpenCodeProcess:
-    """Reference process binding: Landlock confinement, no shell, and bounded output."""
+    """Reference process binding: Landlock confinement, no shell, and bounded output, launched through
+    ``children``."""
+
+    def __init__(self, children: IChildProcesses) -> None:
+        self._children = children
 
     def preflight(self, *, cwd: Path, env: Mapping[str, str]) -> None:
         """Fail before provider access when the inherited filesystem boundary is unavailable."""
@@ -546,18 +545,17 @@ class SubprocessOpenCodeProcess:
                 ["/bin/true"],
                 cwd=cwd,
                 env=env,
-                stdin=subprocess.DEVNULL,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
+                stdout=Stream.DEVNULL,
+                stderr=Stream.DEVNULL,
             )
-        except (OSError, subprocess.SubprocessError) as exc:
+        except OSError as exc:
             raise OpenCodeProcessError("OpenCode filesystem confinement preflight failed") from exc
-        try:
-            if process.wait(timeout=5.0) != 0:
-                raise OpenCodeProcessError("OpenCode filesystem confinement preflight failed")
-        except subprocess.TimeoutExpired as exc:
+        exit_code = process.wait(5.0)
+        if exit_code is None:
             _stop_process_group(process)
-            raise OpenCodeProcessError("OpenCode filesystem confinement preflight timed out") from exc
+            raise OpenCodeProcessError("OpenCode filesystem confinement preflight timed out")
+        if exit_code != 0:
+            raise OpenCodeProcessError("OpenCode filesystem confinement preflight failed")
 
     def run(
         self,
@@ -572,11 +570,10 @@ class SubprocessOpenCodeProcess:
                 argv,
                 cwd=cwd,
                 env=env,
-                stdin=subprocess.DEVNULL,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
+                stdout=Stream.PIPE,
+                stderr=Stream.PIPE,
             )
-        except (OSError, subprocess.SubprocessError) as exc:
+        except OSError as exc:
             raise OpenCodeProcessError("OpenCode command could not be started") from exc
 
         started = _SubprocessStartedProcess(process, capture_output=True)
@@ -599,11 +596,10 @@ class SubprocessOpenCodeProcess:
                 argv,
                 cwd=cwd,
                 env=env,
-                stdin=subprocess.DEVNULL,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
+                stdout=Stream.DEVNULL,
+                stderr=Stream.DEVNULL,
             )
-        except (OSError, subprocess.SubprocessError) as exc:
+        except OSError as exc:
             raise OpenCodeProcessError("OpenCode process could not be started") from exc
         try:
             return _SubprocessStartedProcess(process)
@@ -623,11 +619,10 @@ class SubprocessOpenCodeProcess:
                 argv,
                 cwd=cwd,
                 env=env,
-                stdin=subprocess.DEVNULL,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
+                stdout=Stream.PIPE,
+                stderr=Stream.PIPE,
             )
-        except (OSError, subprocess.SubprocessError) as exc:
+        except OSError as exc:
             raise OpenCodeProcessError("OpenCode capture process could not be started") from exc
         try:
             return _SubprocessStartedProcess(process, capture_output=True)
@@ -653,18 +648,11 @@ class SubprocessOpenCodeProcess:
         _require_landlock()
         policy = LandlockPolicy(argv, cwd, env)
         try:
-            child_pid, master_fd = pty.fork()
+            child = self._children.spawn_pty(argv, cwd=cwd, env=_child_env(env), child_setup=policy.apply)
         except (AttributeError, OSError) as exc:
             raise OpenCodeProcessError("OpenCode interactive attach needs a POSIX pseudo-terminal") from exc
-        if child_pid == 0:
-            try:
-                os.chdir(cwd)
-                policy.apply()
-                os.execvpe(str(argv[0]), list(argv), dict(env))
-            except BaseException:
-                os._exit(127)
-
-        process = _PtyProcess(child_pid)
+        master_fd = child.master_fd
+        process = _PtyProcess(child.pid)
         started = _SubprocessStartedProcess(process, interactive_fd=master_fd)
         try:
             os.set_blocking(master_fd, False)
@@ -675,29 +663,19 @@ class SubprocessOpenCodeProcess:
             started.close_streams()
             raise
 
-    @staticmethod
     def _popen(
+        self,
         argv: Sequence[str],
         *,
         cwd: Path,
         env: Mapping[str, str],
-        stdin: int,
-        stdout: int,
-        stderr: int,
-    ) -> subprocess.Popen[bytes]:
+        stdout: Stream,
+        stderr: Stream,
+    ) -> ISpawnedChild:
         _require_landlock()
         policy = LandlockPolicy(argv, cwd, env)
-        return subprocess.Popen(
-            list(argv),
-            cwd=cwd,
-            env=dict(env),
-            stdin=stdin,
-            stdout=stdout,
-            stderr=stderr,
-            text=False,
-            close_fds=True,
-            start_new_session=True,
-            preexec_fn=policy.apply,
+        return self._children.spawn(
+            argv, cwd=cwd, env=_child_env(env), stdout=stdout, stderr=stderr, child_setup=policy.apply
         )
 
 
@@ -706,23 +684,26 @@ def _stop_process_group(process: _ProcessHandle, grace_seconds: float = 0.5) -> 
 
     pid = process.pid
 
-    def wait(grace: float) -> None:
-        # An interrupted caller still gets the group killed; only the grace running out is left to
-        # `terminate_group`, which reads it as "force the group".
+    def wait(grace: float) -> int | None:
+        # An interrupted caller still gets the group killed; the grace running out (`None`) is what
+        # `terminate_group` reads as "force the group".
         try:
-            process.wait(timeout=grace)
-        except subprocess.TimeoutExpired:
-            raise
+            return process.wait(grace)
         except BaseException:
-            return
+            return None
 
     terminate_group(pid, grace=grace_seconds, wait=wait)
     with contextlib.suppress(BaseException):
-        process.wait()
+        process.wait(None)
     if group_exists(pid):
         signal_group(pid, signal.SIGKILL)
         _wait_for_group_exit(pid, grace_seconds)
     return not group_exists(pid)
+
+
+def _child_env(env: Mapping[str, str]) -> ChildEnv:
+    """The tool profile with ``env`` (already built over the allowlist) as additions; no ambient variable enters."""
+    return AllowlistedEnv.of(()).tool().adding(env)
 
 
 def _wait_for_group_exit(pgid: int, timeout: float) -> None:

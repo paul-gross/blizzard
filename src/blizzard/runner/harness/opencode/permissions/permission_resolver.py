@@ -1,13 +1,12 @@
-"""The OpenCode permission-resolution subprocess seam.
+"""The OpenCode permission-resolution child seam.
 
 Asks OpenCode itself what an unattended launch's effective permissions are — built-in defaults, user and
 project config, ``.opencode/`` agents, and env layers included.
-A bare, Landlock-free ``subprocess.run`` like :mod:`opencode.transcript.export`: it reads resolved configuration, it
-does not run agent code."""
+A bare, Landlock-free run through the launch seam like :mod:`opencode.transcript.export`: it reads resolved
+configuration, it does not run agent code."""
 
 from __future__ import annotations
 
-import subprocess
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Protocol
@@ -19,6 +18,8 @@ from blizzard.runner.harness.opencode.shapes import (
     parse_agent_rulesets,
     parse_resolved_config,
 )
+from blizzard.runner.process.child_env import ChildEnv
+from blizzard.runner.process.child_processes import IChildProcesses
 
 #: Bounds one resolver call — a wedged binary costs one failed launch, not a hang.
 DEFAULT_RESOLVE_TIMEOUT_SECONDS = 30.0
@@ -42,7 +43,7 @@ class OpenCodeEffectivePermissions:
 class IOpenCodePermissionResolver(Protocol):
     """The one-method resolution seam (``bzh:seam-size-ceiling``)."""
 
-    def resolve(self, *, cwd: str, env: Mapping[str, str]) -> OpenCodeEffectivePermissions:
+    def resolve(self, *, cwd: str, env: ChildEnv) -> OpenCodeEffectivePermissions:
         """Effective permissions for a launch in ``cwd`` under ``env``. Raises
         :class:`OpenCodePermissionResolveError` on any failure — never returns a partial answer."""
         ...
@@ -51,11 +52,14 @@ class IOpenCodePermissionResolver(Protocol):
 class SubprocessOpenCodePermissionResolver:
     """Runs ``<binary> debug config`` and ``<binary> agent list`` under the launch cwd and env."""
 
-    def __init__(self, binary: str, *, timeout: float = DEFAULT_RESOLVE_TIMEOUT_SECONDS) -> None:
+    def __init__(
+        self, binary: str, *, children: IChildProcesses, timeout: float = DEFAULT_RESOLVE_TIMEOUT_SECONDS
+    ) -> None:
         self._binary = binary
+        self._children = children
         self._timeout = timeout
 
-    def resolve(self, *, cwd: str, env: Mapping[str, str]) -> OpenCodeEffectivePermissions:
+    def resolve(self, *, cwd: str, env: ChildEnv) -> OpenCodeEffectivePermissions:
         config_text = self._run(["debug", "config"], cwd, env)
         agents_text = self._run(["agent", "list"], cwd, env)
         try:
@@ -65,25 +69,20 @@ class SubprocessOpenCodePermissionResolver:
         except OpenCodeShapeError as exc:
             raise OpenCodePermissionResolveError(f"unreadable {self._binary} permission output: {exc}") from exc
 
-    def _run(self, args: list[str], cwd: str, env: Mapping[str, str]) -> str:
+    def _run(self, args: list[str], cwd: str, env: ChildEnv) -> str:
         try:
-            result = subprocess.run(
-                [self._binary, *args],
-                cwd=cwd,
-                # The launch env is already the allowlisted one (`bzh:worker-env-allowlist`).
-                env=dict(env),
-                stdin=subprocess.DEVNULL,
-                capture_output=True,
-                text=True,
-                check=False,
-                timeout=self._timeout,
-            )
-        except (OSError, subprocess.TimeoutExpired) as exc:
+            # The launch env is already the allowlisted one (`bzh:worker-env-allowlist`).
+            result = self._children.run([self._binary, *args], cwd=cwd, env=env, timeout=self._timeout)
+        except OSError as exc:
             raise OpenCodePermissionResolveError(f"failed to run {self._binary} {' '.join(args)}: {exc}") from exc
-        if result.returncode != 0:
-            tail = (result.stderr or "").strip()[-_STDERR_TAIL_BYTES:]
+        if result.timed_out:
+            raise OpenCodePermissionResolveError(
+                f"failed to run {self._binary} {' '.join(args)}: timed out after {self._timeout}s"
+            )
+        if result.exit_code != 0:
+            tail = result.stderr.strip()[-_STDERR_TAIL_BYTES:]
             detail = f" — stderr: {tail}" if tail else ""
-            raise OpenCodePermissionResolveError(f"{self._binary} {' '.join(args)} exited {result.returncode}{detail}")
+            raise OpenCodePermissionResolveError(f"{self._binary} {' '.join(args)} exited {result.exit_code}{detail}")
         return result.stdout
 
 

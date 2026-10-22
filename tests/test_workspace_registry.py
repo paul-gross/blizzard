@@ -20,6 +20,7 @@ from blizzard.runner.environments.workspaces import (
     home_workspace_id,
 )
 from tests.runner_fakes import FakeProvider
+from tests.support_child_launch import workspace_launch
 
 pytestmark = pytest.mark.unit
 
@@ -118,6 +119,7 @@ def test_the_host_builds_one_provider_per_workspace_and_resolves_each_prompt(tmp
             HostWorkspace("ws_b", root=str(tmp_path / "b"), envs=("e1",), prompt_file="b.md"),
         ),
         tmp_path,
+        launch=workspace_launch(),
     )
 
     assert registry.ids() == ("ws_a", "ws_b")
@@ -128,7 +130,7 @@ def test_the_host_builds_one_provider_per_workspace_and_resolves_each_prompt(tmp
 
 def test_a_missing_workspace_prompt_file_fails_the_build(tmp_path: Path) -> None:
     with pytest.raises(ConfigError, match="prompt_file does not exist"):
-        build_workspaces((HostWorkspace("ws_a", prompt_file="absent.md"),), tmp_path)
+        build_workspaces((HostWorkspace("ws_a", prompt_file="absent.md"),), tmp_path, launch=workspace_launch())
 
 
 def test_a_runner_is_addressed_by_the_first_workspace_its_bindings_name(tmp_path: Path) -> None:
@@ -141,7 +143,7 @@ def test_a_runner_is_addressed_by_the_first_workspace_its_bindings_name(tmp_path
     assert unbound.home_workspace.id == "ws_a"
     assert bound_to_b.home_workspace.id == "ws_b"
     assert bound_to_b.bound_workspaces == (workspaces[1],)
-    registry = build_workspaces(workspaces, tmp_path)
+    registry = build_workspaces(workspaces, tmp_path, launch=workspace_launch())
     assert bound_spawn_roots(bound_to_b, registry) == (str(tmp_path / "b"),)
     assert bound_spawn_roots(unbound, registry) == (str(tmp_path / "a"),)
 

@@ -26,10 +26,10 @@ from blizzard.runner.environments.provider import WorkspaceRepo
 from blizzard.runner.environments.workspaces import home_workspace_id
 from blizzard.runner.harness.autonomy import Autonomy
 from blizzard.runner.harness.bundle import HARNESS_CONFIG_DIRNAME
-from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.wiring import HarnessSections, HarnessSettings
 from blizzard.runner.harness.workspace_prompts import PACKAGED, UnknownWorkspacePromptSample
 from blizzard.runner.host_layout import HostLayout
+from blizzard.runner.process.child_env import AllowlistedEnv, ChildEnv
 from blizzard.runner.public_origins import PublicOrigins
 from blizzard.runner.route_paths import runner_prefix
 
@@ -613,6 +613,11 @@ class RunnerConfig:
         }
         passthrough = tuple(name for name in self.worker_env_passthrough if name not in dropped)
         return AllowlistedEnv.of(passthrough, path_prepend=self.worker_path_prepend)
+
+    def tool_env(self, tracing: TracingSettings) -> ChildEnv:
+        """The tool profile every runner-launched tool child (``git``, ``winter``, checks, probes) is built from —
+        :meth:`worker_env`'s allowlist without the per-spawn identity."""
+        return self.worker_env(tracing).tool()
 
     def dropped_otel_passthrough(self, tracing: TracingSettings) -> tuple[str, ...]:
         """The ``OTEL_*`` and ``WINTER_OTEL_*`` names in ``[worker] env_passthrough`` that are withheld from every

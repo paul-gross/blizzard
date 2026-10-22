@@ -17,11 +17,12 @@ from blizzard.foundation.roles import domain_model
 from blizzard.runner.harness.adapter import IHarnessHealthProbe
 from blizzard.runner.harness.autonomy import Autonomy
 from blizzard.runner.harness.bundle import BundleSnapshot, HarnessLayout, HarnessSource
-from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.harness_telemetry_plan import HarnessTelemetryNames, HarnessTelemetryPlan
 from blizzard.runner.harness.offline_compatibility import ICompatibilityCorpus
 from blizzard.runner.harness.process_launch import IProcessLauncher
 from blizzard.runner.harness.registry import HarnessBinding
+from blizzard.runner.process.child_env import AllowlistedEnv
+from blizzard.runner.process.child_processes import IChildProcesses
 from blizzard.runner.process.probe import IProcessProbe
 
 
@@ -142,10 +143,20 @@ class IHarnessDeclaration(Protocol[SectionT_contra]):
         *,
         process: IProcessProbe,
         launcher: IProcessLauncher,
-    ) -> HarnessBinding: ...
+        children: IChildProcesses,
+    ) -> HarnessBinding:
+        """The binding's adapter and transcript source; ``launcher`` starts its worker, judge and resume children,
+        ``children`` every other child it runs (version probes, exports, resolvers)."""
+        ...
 
     def health_probe(
-        self, section: SectionT_contra, shared: SharedHarnessInputs, *, spawn_root: str, corpus: ICompatibilityCorpus
+        self,
+        section: SectionT_contra,
+        shared: SharedHarnessInputs,
+        *,
+        spawn_root: str,
+        corpus: ICompatibilityCorpus,
+        children: IChildProcesses,
     ) -> IHarnessHealthProbe: ...
 
     def publish_layout(self, section: SectionT_contra, *, autonomy: Autonomy, runtime_root: Path) -> HarnessLayout:

@@ -7,13 +7,13 @@ EOF drops a reply still in flight; ``account: null`` is the one no-login signal.
 from __future__ import annotations
 
 import json
-import os
 from datetime import datetime, timedelta
 from pathlib import Path
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.credential_renewal import RenewalFailureReason
 from blizzard.foundation.logging import get_logger
+from blizzard.runner.process.child_env import ChildEnv
 from blizzard.runner.subscriptions.credential_renewer import (
     ICredentialRenewer,
     RenewalOutcome,
@@ -51,11 +51,13 @@ class OpenAICredentialRenewer:
         credentials_path: str | None = None,
         codex_binary: str = DEFAULT_CODEX_BINARY,
         subprocess: IOneShotProcess,
+        env: ChildEnv,
         clock: IClock,
     ) -> None:
         self._credentials_path = credentials_path or DEFAULT_CREDENTIALS_PATH
         self._codex_binary = codex_binary
         self._subprocess = subprocess
+        self._env = env
         self._clock: IClock = clock
 
     def renewal_due(self) -> bool:
@@ -86,9 +88,9 @@ class OpenAICredentialRenewer:
             [self._codex_binary, "app-server"],
             stdin=request,
             timeout=_APP_SERVER_TIMEOUT_SECONDS,
-            # PATH is required for a bare binary name (the common case) to resolve at all;
-            # CODEX_HOME and HOME are the only other names the vendor CLI needs to see.
-            env={"PATH": os.environ.get("PATH", ""), "CODEX_HOME": codex_home, "HOME": str(Path.home())},
+            # The tool profile carries the PATH a bare binary name resolves on; CODEX_HOME and HOME name the
+            # credential home the vendor CLI refreshes.
+            env=self._env.adding({"CODEX_HOME": codex_home, "HOME": str(Path.home())}),
             settle_seconds=_ACCOUNT_READ_SETTLE_SECONDS,
         )
         if result.exit_code is None:

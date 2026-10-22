@@ -22,7 +22,15 @@ import pytest
 import blizzard.runner.harness.internal.process_launcher as process_launch
 from blizzard.runner.harness.internal.process_launcher import ProcessLauncher, _ensure_executable
 from blizzard.runner.harness.process_launch import LaunchedProcess
+from blizzard.runner.process.child_env import ChildEnv
+from blizzard.runner.process.child_processes import Stream
 from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
+from tests.support_child_launch import CHILDREN
+
+
+def _daemon_env() -> ChildEnv:
+    """The test process's whole env — these tests pin process mechanics, not the allowlist."""
+    return ChildEnv(tuple(os.environ.items()))
 
 
 def _is_alive(pid: int) -> bool:
@@ -38,12 +46,12 @@ def _is_alive(pid: int) -> bool:
 
 
 def _launch(launcher: ProcessLauncher) -> LaunchedProcess:
-    return launcher.launch(["sleep", "5"], cwd=None, env=dict(os.environ), stdout=None, stderr=None)
+    return launcher.launch(["sleep", "5"], cwd=None, env=_daemon_env(), stdout=Stream.INHERIT, stderr=Stream.INHERIT)
 
 
 @pytest.mark.unit
 def test_launched_process_gets_its_own_process_group(spawn_executor: Executor) -> None:
-    launcher = ProcessLauncher(LinuxProcessProbe(), executor=spawn_executor)
+    launcher = ProcessLauncher(LinuxProcessProbe(), executor=spawn_executor, children=CHILDREN)
     launched = _launch(launcher)
     try:
         assert launched.pgid == launched.pid
@@ -69,7 +77,7 @@ def test_launch_forks_off_the_calling_thread_onto_a_persistent_one(
         return real_popen(*args, **kwargs)
 
     monkeypatch.setattr(subprocess, "Popen", recording_popen)
-    launched = _launch(ProcessLauncher(LinuxProcessProbe(), executor=executor))
+    launched = _launch(ProcessLauncher(LinuxProcessProbe(), executor=executor, children=CHILDREN))
     try:
         (forker,) = seen
         assert forker is not threading.current_thread()
@@ -90,9 +98,20 @@ from blizzard.runner.harness.internal.process_launcher import ProcessLauncher
 from concurrent.futures import ThreadPoolExecutor
 import os, time
 
-launcher = ProcessLauncher(LinuxProcessProbe(), executor=ThreadPoolExecutor(max_workers=1))
+from blizzard.runner.process.child_env import ChildEnv
+from blizzard.runner.process.child_processes import Stream
+from blizzard.runner.process.internal.subprocess_child_processes import SubprocessChildProcesses
+
+launcher = ProcessLauncher(
+    LinuxProcessProbe(), executor=ThreadPoolExecutor(max_workers=1), children=SubprocessChildProcesses()
+)
 launched = launcher.launch(
-    ["sleep", "30"], cwd=None, env=dict(os.environ), stdout=None, stderr=None, defer_disarm=True
+    ["sleep", "30"],
+    cwd=None,
+    env=ChildEnv(tuple(os.environ.items())),
+    stdout=Stream.INHERIT,
+    stderr=Stream.INHERIT,
+    defer_disarm=True,
 )
 with open(sys.argv[1], "w") as f:
     f.write(f"{{launched.pid}} {{launched.pgid}}")
@@ -141,8 +160,8 @@ def test_confirm_waits_for_child_disarm_before_a_standalone_tick_retires_its_spa
     )
     monkeypatch.setattr(process_launch, "_TRAMPOLINE_SOURCE", trampoline)
     executor = ThreadPoolExecutor(max_workers=1)
-    launched = ProcessLauncher(LinuxProcessProbe(), executor=executor).launch(
-        ["sleep", "30"], cwd=None, env=dict(os.environ), stdout=None, stderr=None, defer_disarm=True
+    launched = ProcessLauncher(LinuxProcessProbe(), executor=executor, children=CHILDREN).launch(
+        ["sleep", "30"], cwd=None, env=_daemon_env(), stdout=Stream.INHERIT, stderr=Stream.INHERIT, defer_disarm=True
     )
     try:
         started = time.monotonic()
@@ -192,13 +211,13 @@ def test_control_pipe_eof_with_no_confirm_byte_kills_the_trampoline_instead_of_e
     apart from a real confirm byte. This test's own process never exits, so the only signal
     reaching the trampoline is the pipe closing in-process, isolated from the PDEATHSIG race."""
     sentinel = tmp_path / "ran"
-    launcher = ProcessLauncher(LinuxProcessProbe(), executor=spawn_executor)
+    launcher = ProcessLauncher(LinuxProcessProbe(), executor=spawn_executor, children=CHILDREN)
     launched = launcher.launch(
         [sys.executable, "-c", f"import time; open({str(sentinel)!r}, 'w').close(); time.sleep(30)"],
         cwd=None,
-        env=dict(os.environ),
-        stdout=None,
-        stderr=None,
+        env=_daemon_env(),
+        stdout=Stream.INHERIT,
+        stderr=Stream.INHERIT,
         defer_disarm=True,
     )
     try:
@@ -224,7 +243,7 @@ def test_control_pipe_eof_with_no_confirm_byte_kills_the_trampoline_instead_of_e
 def test_a_worker_outlives_the_short_lived_thread_that_requested_its_launch(spawn_executor: Executor) -> None:
     """The production scenario: the tick thread requests a launch, then exits on a graceful
     ``driver.stop()`` while the daemon runs on — its healthy worker must still be alive."""
-    launcher = ProcessLauncher(LinuxProcessProbe(), executor=spawn_executor)
+    launcher = ProcessLauncher(LinuxProcessProbe(), executor=spawn_executor, children=CHILDREN)
     launched: list[LaunchedProcess] = []
     requester = threading.Thread(target=lambda: launched.append(_launch(launcher)), name="tick")
     requester.start()
@@ -258,12 +277,12 @@ def test_a_worker_never_inherits_the_daemons_open_stdin(
     os.dup2(read_fd, 0)
     launched: LaunchedProcess | None = None
     try:
-        launched = ProcessLauncher(LinuxProcessProbe(), executor=spawn_executor).launch(
+        launched = ProcessLauncher(LinuxProcessProbe(), executor=spawn_executor, children=CHILDREN).launch(
             [sys.executable, "-c", f"import sys; sys.stdin.read(); open({str(sentinel)!r}, 'w').close()"],
             cwd=None,
-            env=dict(os.environ),
-            stdout=None,
-            stderr=None,
+            env=_daemon_env(),
+            stdout=Stream.INHERIT,
+            stderr=Stream.INHERIT,
             defer_disarm=defer_disarm,
         )
         launched.confirm_durable()
@@ -289,7 +308,7 @@ def test_a_worker_never_inherits_the_daemons_open_stdin(
 def test_ensure_executable_missing_path_raises_file_not_found(tmp_path: Any) -> None:
     missing = str(tmp_path / "does-not-exist")
     with pytest.raises(FileNotFoundError):
-        _ensure_executable(missing, cwd=None, env={})
+        _ensure_executable(missing, cwd=None, env=ChildEnv(()))
 
 
 @pytest.mark.unit
@@ -301,4 +320,4 @@ def test_ensure_executable_existing_but_not_executable_raises_permission_error(t
     not_executable.chmod(0o644)
 
     with pytest.raises(PermissionError):
-        _ensure_executable(str(not_executable), cwd=None, env={})
+        _ensure_executable(str(not_executable), cwd=None, env=ChildEnv(()))

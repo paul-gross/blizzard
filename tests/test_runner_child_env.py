@@ -1,4 +1,4 @@
-"""``src/blizzard/runner/harness/env_allowlist.py`` — the one runner-spawned-child env builder (unit).
+"""``src/blizzard/runner/process/child_env.py`` — the one runner-spawned-child env builder (unit).
 
 ``bzh:worker-env-allowlist``: never a full ``os.environ`` copy, and the ``PATH``
 composition ``[worker] path_prepend`` adds."""
@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import pytest
 
-from blizzard.runner.harness.env_allowlist import AllowlistedEnv
+from blizzard.runner.process.child_env import AllowlistedEnv
 
 pytestmark = pytest.mark.unit
 

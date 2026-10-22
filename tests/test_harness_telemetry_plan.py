@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from collections.abc import Callable, Mapping
 from pathlib import Path
-from typing import IO, NoReturn
+from typing import NoReturn
 
 import pytest
 
@@ -15,14 +15,16 @@ from blizzard.runner.harness.adapter import AcquiredEnvironment, WorkerPreamble
 from blizzard.runner.harness.claude_code.adapter import ClaudeCodeAdapter
 from blizzard.runner.harness.claude_code.section import WORKER_SETTINGS_FILENAME, ClaudeCodeSection
 from blizzard.runner.harness.claude_code.telemetry_plan import CLAUDE_CODE_TELEMETRY_NAMES
-from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.harness_telemetry_plan import HarnessTelemetryPlan
 from blizzard.runner.harness.process_launch import LaunchedProcess
 from blizzard.runner.harness.telemetry_signals import TelemetrySignal
 from blizzard.runner.harness.wiring import combined_telemetry_plan, declared_telemetry_names, publish_harness_bundle
+from blizzard.runner.process.child_env import AllowlistedEnv, ChildEnv
+from blizzard.runner.process.child_processes import StreamTarget
 from tests.config_inputs import host_runtime_of
 from tests.harness_sections import sections
 from tests.runner_fakes import NO_TRACING, FakeProbe, make_envelope
+from tests.support_child_launch import version_probe
 
 pytestmark = pytest.mark.unit
 
@@ -217,6 +219,7 @@ def _adapter(plan: HarnessTelemetryPlan | None) -> ClaudeCodeAdapter:
         process=FakeProbe(),
         launcher=_NeverLaunches(),  # type: ignore[arg-type]
         harness_telemetry=plan,
+        versions=version_probe(),
     )
 
 
@@ -236,12 +239,12 @@ class _RecordingLauncher:
         argv: list[str],
         *,
         cwd: str | None,
-        env: dict[str, str],
-        stdout: IO[bytes] | int | None,
-        stderr: IO[bytes] | int | None,
+        env: ChildEnv,
+        stdout: StreamTarget,
+        stderr: StreamTarget,
         defer_disarm: bool = False,
     ) -> LaunchedProcess:
-        self.envs.append(dict(env))
+        self.envs.append(env.variables)
         return LaunchedProcess(pid=4242, pgid=4242, process_start_time="1", confirm_durable=lambda: None)
 
 
@@ -251,7 +254,11 @@ def _launched_envs(
     """The env each launch kind hands the launcher, keyed by kind."""
     launcher = _RecordingLauncher()
     adapter = ClaudeCodeAdapter(
-        worker_env=AllowlistedEnv.of(()), process=FakeProbe(), launcher=launcher, harness_telemetry=plan
+        worker_env=AllowlistedEnv.of(()),
+        process=FakeProbe(),
+        launcher=launcher,
+        harness_telemetry=plan,
+        versions=version_probe(),
     )
     envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
     kinds: dict[str, Callable[[], object]] = {

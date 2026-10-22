@@ -12,13 +12,14 @@ from concurrent.futures import Executor
 import pytest
 
 from blizzard.runner.harness.claude_code.adapter import ClaudeCodeAdapter
-from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.internal.process_launcher import ProcessLauncher
 from blizzard.runner.harness.transcript import (
     NullTranscriptSource,
     TranscriptPosition,
 )
+from blizzard.runner.process.child_env import AllowlistedEnv
 from tests.runner_fakes import FakeProbe
+from tests.support_child_launch import CHILDREN, version_probe
 
 
 @pytest.mark.unit
@@ -67,7 +68,10 @@ def test_null_transcript_source_size_bytes_is_unknown_not_zero() -> None:
 def test_claude_code_adapter_defaults_to_the_null_transcript_source(spawn_executor: Executor) -> None:
     probe = FakeProbe()
     source = ClaudeCodeAdapter(
-        worker_env=AllowlistedEnv.of(()), process=probe, launcher=ProcessLauncher(probe, executor=spawn_executor)
+        worker_env=AllowlistedEnv.of(()),
+        process=probe,
+        launcher=ProcessLauncher(probe, executor=spawn_executor, children=CHILDREN),
+        versions=version_probe(),
     ).transcript_source()
     assert isinstance(source, NullTranscriptSource)
 
@@ -80,6 +84,7 @@ def test_claude_code_adapter_returns_the_injected_transcript_source(spawn_execut
         worker_env=AllowlistedEnv.of(()),
         transcript_source=injected,
         process=probe,
-        launcher=ProcessLauncher(probe, executor=spawn_executor),
+        launcher=ProcessLauncher(probe, executor=spawn_executor, children=CHILDREN),
+        versions=version_probe(),
     )
     assert adapter.transcript_source() is injected

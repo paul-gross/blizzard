@@ -2,16 +2,17 @@
 
 Two invocation shapes, tried in order: the workspace's **own** ``tools/winter-cli`` via
 ``mise exec -- uv run`` with cwd pinned to it, so winter's cwd-walk-up root resolution
-lands on this workspace; then a global ``winter`` binary. All ``subprocess`` usage is
-confined here (``bzh:dependency-inversion``); a failure is wrapped once and logged."""
+lands on this workspace; then a global ``winter`` binary. Each launch goes through the injected seam under the tool
+profile (``bzh:dependency-inversion``); a failure is wrapped once and logged."""
 
 from __future__ import annotations
 
-import subprocess
 from collections.abc import Sequence
 from pathlib import Path
 
 from blizzard.foundation.logging import get_logger
+from blizzard.runner.process.child_env import ChildEnv
+from blizzard.runner.process.child_processes import IChildProcesses
 
 _log = get_logger("blizzard.runner.winter")
 
@@ -26,6 +27,10 @@ class WinterCliError(RuntimeError):
 
 class SubprocessWinterCli:
     """Run ``winter <args>`` with ``workspace_root`` as the resolved workspace root."""
+
+    def __init__(self, *, children: IChildProcesses, env: ChildEnv) -> None:
+        self._children = children
+        self._env = env
 
     def ensure_ready(self, workspace_root: Path) -> None:
         """One-time prep so ``run`` works against a vendored, freshly-cloned CLI."""
@@ -48,15 +53,13 @@ class SubprocessWinterCli:
             return self._run(cmd, cwd=cli, what=f"winter {' '.join(args)}")
         return self._run(["winter", *args], cwd=workspace_root, what=f"winter {' '.join(args)}")
 
-    @staticmethod
-    def _run(cmd: list[str], *, cwd: Path, what: str) -> str:
-        try:
-            result = subprocess.run(cmd, cwd=str(cwd), capture_output=True, text=True, timeout=WINTER_CLI_TIMEOUT)
-        except subprocess.TimeoutExpired as exc:
+    def _run(self, cmd: list[str], *, cwd: Path, what: str) -> str:
+        result = self._children.run(cmd, cwd=cwd, env=self._env, timeout=WINTER_CLI_TIMEOUT)
+        if result.timed_out:
             _log.error("winter timed out", what=what, timeout=WINTER_CLI_TIMEOUT)
-            raise WinterCliError(f"{what} timed out after {WINTER_CLI_TIMEOUT}s") from exc
-        if result.returncode != 0:
+            raise WinterCliError(f"{what} timed out after {WINTER_CLI_TIMEOUT}s")
+        if result.exit_code != 0:
             tail = (result.stderr or result.stdout).strip()[-2000:]
-            _log.error("winter failed", what=what, exit_code=result.returncode, detail=tail)
-            raise WinterCliError(f"{what} failed ({result.returncode}): {tail}")
+            _log.error("winter failed", what=what, exit_code=result.exit_code, detail=tail)
+            raise WinterCliError(f"{what} failed ({result.exit_code}): {tail}")
         return result.stdout

@@ -33,6 +33,7 @@ from blizzard.runner.harness.wiring import HarnessSections, publish_harness_bund
 from tests.config_inputs import init_host
 from tests.harness_sections import opencode, sections, with_claude_code
 from tests.runner_fakes import NO_TRACING, FakeProbe
+from tests.support_child_launch import CHILDREN
 
 pytestmark = pytest.mark.unit
 
@@ -94,10 +95,14 @@ def test_registry_binds_published_config_and_generated_config_without_bundle(
     native.write_text(json.dumps({"permission": {"bash": "deny"}, "plugin": ["extra@1"]}))
     snapshot = publish_harness_bundle(bundle, config.root, sections=config.harness_sections)
     probe = FakeProbe()
-    launcher = ProcessLauncher(probe, executor=spawn_executor)
+    launcher = ProcessLauncher(probe, executor=spawn_executor, children=CHILDREN)
     bundled = replace(config, harness_config_dir=bundle)
     binding = OPENCODE_DECLARATION.binding(
-        opencode(bundled), shared_inputs(bundled.harness_settings(NO_TRACING)), process=probe, launcher=launcher
+        opencode(bundled),
+        shared_inputs(bundled.harness_settings(NO_TRACING)),
+        process=probe,
+        launcher=launcher,
+        children=CHILDREN,
     )
     assert isinstance(binding.adapter, OpenCodeAdapter)
     env = binding.adapter._config_env()
@@ -108,7 +113,11 @@ def test_registry_binds_published_config_and_generated_config_without_bundle(
     assert composed["plugin"] == ["extra@1", *json.loads(worker.read_text())["plugin"]]
     assert published_snapshot(config.root) == snapshot.path.resolve()
     plain = OPENCODE_DECLARATION.binding(
-        opencode(config), shared_inputs(config.harness_settings(NO_TRACING)), process=probe, launcher=launcher
+        opencode(config),
+        shared_inputs(config.harness_settings(NO_TRACING)),
+        process=probe,
+        launcher=launcher,
+        children=CHILDREN,
     )
     assert isinstance(plain.adapter, OpenCodeAdapter)
     plain_env = plain.adapter._config_env()

@@ -18,7 +18,6 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.fact_kinds import USAGE_RECORDED
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.claude_code.adapter import ClaudeCodeAdapter
-from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, OPENCODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.internal.process_launcher import ProcessLauncher
 from blizzard.runner.harness.opencode.adapter import OpenCodeAdapter
@@ -33,6 +32,7 @@ from blizzard.runner.lifecycle.spawn import Spawner
 from blizzard.runner.loop.context import LoopConfig
 from blizzard.runner.loop.steps import Advance, Resume, ResumeIntents
 from blizzard.runner.node_steps.chunk_state import ChunkState
+from blizzard.runner.process.child_env import AllowlistedEnv
 from blizzard.runner.throttle.pause import PausePark
 from blizzard.runner.usage.recorder import UsageRecorder
 from tests.runner_fakes import (
@@ -48,6 +48,7 @@ from tests.runner_fakes import (
     make_stores,
     single_workspace,
 )
+from tests.support_child_launch import CHILDREN, version_probe
 
 pytestmark = pytest.mark.unit
 
@@ -249,7 +250,8 @@ def test_record_worker_reads_a_real_cost_off_a_sigint_error_during_execution_env
     adapter = ClaudeCodeAdapter(
         worker_env=AllowlistedEnv.of(()),
         process=FakeProbe(),
-        launcher=ProcessLauncher(FakeProbe(), executor=spawn_executor),
+        launcher=ProcessLauncher(FakeProbe(), executor=spawn_executor, children=CHILDREN),
+        versions=version_probe(),
     )
     registry = HarnessRegistry(
         {CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=adapter, transcript_source=adapter.transcript_source())}
@@ -309,8 +311,9 @@ def test_record_attempt_uses_the_judge_transcripts_actual_model_when_result_omit
     adapter = ClaudeCodeAdapter(
         worker_env=AllowlistedEnv.of(()),
         process=probe,
-        launcher=ProcessLauncher(probe, executor=spawn_executor),
+        launcher=ProcessLauncher(probe, executor=spawn_executor, children=CHILDREN),
         transcript_source=transcript,
+        versions=version_probe(),
     )
     registry = HarnessRegistry({CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=adapter, transcript_source=transcript)})
     recorder = UsageRecorder(
@@ -402,10 +405,11 @@ def test_record_worker_carries_a_real_opencode_adapters_estimate_apart_from_its_
     adapter = OpenCodeAdapter(
         worker_env=AllowlistedEnv.of(()),
         process=probe,
-        launcher=ProcessLauncher(probe, executor=spawn_executor),
+        launcher=ProcessLauncher(probe, executor=spawn_executor, children=CHILDREN),
         model="openai/gpt-5.6-luna",
         price_catalog=_LunaPriceCatalog(),
         transcript_source=transcript,
+        versions=version_probe(),
     )
     registry = HarnessRegistry({OPENCODE_HARNESS_ID: HarnessBinding(adapter=adapter, transcript_source=transcript)})
     recorder = UsageRecorder(

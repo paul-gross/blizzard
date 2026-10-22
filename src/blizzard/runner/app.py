@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import os
 import secrets
 from collections.abc import AsyncIterator, Sequence
 from dataclasses import dataclass, replace
@@ -31,6 +32,7 @@ from blizzard.foundation.platform_tracing.attributes import annotate
 from blizzard.foundation.platform_tracing.handle import DISABLED_TELEMETRY, IPlatformTracing
 from blizzard.foundation.roles import collaborator
 from blizzard.foundation.store.readiness import ReadinessService
+from blizzard.foundation.trace_export.settings import TracingSettings
 from blizzard.foundation.web import Frontend, install_schema_components
 from blizzard.runner.api.analytics import router as analytics_router
 from blizzard.runner.api.artifacts import router as artifacts_router
@@ -107,7 +109,9 @@ from blizzard.runner.lifecycle.takeover import TakeoverService
 from blizzard.runner.loop_wiring import ResumeMarking
 from blizzard.runner.operator.attachments import AttachmentService
 from blizzard.runner.operator.requeue import RequeueService
+from blizzard.runner.process.child_processes import IChildProcesses
 from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
+from blizzard.runner.process.internal.subprocess_child_processes import SubprocessChildProcesses
 from blizzard.runner.route_paths import RUNNER_ROUTE_PREFIX, RUNNERS_SEGMENT, is_api_path
 from blizzard.runner.selftest.internal.subprocess_scratch_git import SubprocessScratchGit
 from blizzard.runner.selftest.service import SelfTestService
@@ -206,6 +210,7 @@ def runner_seams(
     *,
     clock: IClock,
     process: LinuxProcessProbe,
+    children: IChildProcesses,
     events: EventBroker | None = None,
     harnesses: IHarnessRegistry | None = None,
     runner_stores: RunnerStores | None = None,
@@ -277,7 +282,7 @@ def runner_seams(
     # The adapter-drift canary: wired unconditionally regardless of `runner_stores` —
     # only `results` needs one, and stays `None` (no durable outcome) without it.
     seams.selftests = selftests or SelfTestService(
-        scratch_git=SubprocessScratchGit(),
+        scratch_git=SubprocessScratchGit(children, config.tool_env(TracingSettings.of(os.environ))),
         process=process,
         elicitation_replies=ElicitationFiles(root=""),
         clock=clock,
@@ -332,6 +337,7 @@ def create_app(
     events: EventBroker | None = None,
     clock: IClock | None = None,
     process: LinuxProcessProbe | None = None,
+    children: IChildProcesses | None = None,
     platform_tracing: IPlatformTracing | None = None,
     identity: ICurrentRunnerIdentity | None = None,
     identity_verdict: ICurrentIdentityVerdict | None = None,
@@ -355,12 +361,14 @@ def create_app(
     log = get_logger("blizzard.runner")
     clock = clock or SystemClock()
     process = process or LinuxProcessProbe()
+    children = children or SubprocessChildProcesses()
     if runners is None:
         runners = (
             runner_seams(
                 config,
                 clock=clock,
                 process=process,
+                children=children,
                 events=events,
                 harnesses=harnesses,
                 runner_stores=runner_stores,
@@ -763,6 +771,7 @@ def _wire_runner(
         config,
         clock=clock,
         process=process,
+        children=graph.children,
         events=events,
         binding=connections,
         identity_verdict=graph.identity_verdict,

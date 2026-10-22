@@ -12,7 +12,6 @@ from __future__ import annotations
 import contextlib
 import os
 import signal
-import subprocess
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -72,14 +71,12 @@ def group_exists(pgid: int) -> bool:
     return True
 
 
-def terminate_group[T](pgid: int, *, grace: float, wait: Callable[[float], T]) -> T | None:
+def terminate_group[T](pgid: int, *, grace: float, wait: Callable[[float], T | None]) -> T | None:
     """SIGTERM the group, let ``wait`` bound the ``grace`` the leader gets to exit, then SIGKILL the group — a
-    member may ignore SIGTERM while the leader exits on it. Returns what ``wait`` returned, or ``None`` when
-    ``grace`` ran out (``wait`` raising :class:`subprocess.TimeoutExpired`)."""
+    member may ignore SIGTERM while the leader exits on it. Returns what ``wait`` returned: ``None`` when ``grace``
+    ran out."""
     signal_group(pgid, signal.SIGTERM)
     try:
         return wait(grace)
-    except subprocess.TimeoutExpired:
-        return None
     finally:
         signal_group(pgid, signal.SIGKILL)

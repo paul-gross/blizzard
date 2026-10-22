@@ -13,7 +13,6 @@ import pytest
 import structlog
 from structlog.testing import capture_logs
 
-from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.internal.committed_corpus import CommittedCorpus
 from blizzard.runner.harness.internal.process_launcher import ProcessLauncher
 from blizzard.runner.harness.offline_compatibility import admitted_corpus_versions
@@ -24,8 +23,10 @@ from blizzard.runner.harness.opencode.transcript.export import IOpenCodeExporter
 from blizzard.runner.harness.opencode.transcript.normalizer import NORMALIZER_VERSION, build_turns
 from blizzard.runner.harness.opencode.transcript.transcript_source import OpenCodeTranscriptSource
 from blizzard.runner.harness.transcript import TranscriptErrorFactory, TranscriptPosition
+from blizzard.runner.process.child_env import AllowlistedEnv
 from tests.repo_files import repo_root
 from tests.runner_fakes import FakeProbe
+from tests.support_child_launch import CHILDREN, version_probe
 
 _PACKAGE_ROOT = repo_root() / "src" / "blizzard" / "runner" / "harness"
 # The oldest committed corpus inside the admitted range — stays correct as corpora are added.
@@ -541,7 +542,8 @@ def test_read_raw_lines_returns_the_range_and_round_trips_through_the_adapter(sp
         worker_env=AllowlistedEnv.of(()),
         binary="opencode",
         process=process,
-        launcher=ProcessLauncher(process, executor=spawn_executor),
+        launcher=ProcessLauncher(process, executor=spawn_executor, children=CHILDREN),
+        versions=version_probe(),
     )
     usage = adapter.sum_transcript_usage(lines, "resume")
     assert usage.input_tokens == 20

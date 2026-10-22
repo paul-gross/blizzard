@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import json
 import re
-import subprocess
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -32,15 +31,16 @@ from blizzard.runner.harness.autonomy import Autonomy
 from blizzard.runner.harness.claude_code import telemetry
 from blizzard.runner.harness.claude_code.bundle import ClaudeCodeBundleDelivery
 from blizzard.runner.harness.claude_code.settings_compose import PERMISSION_MODES
-from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.harness_telemetry_plan import HarnessTelemetryPlan
-from blizzard.runner.harness.internal import version_probe
+from blizzard.runner.harness.internal.version_probe import VersionProbe
 from blizzard.runner.harness.overload import ProviderOverload
 from blizzard.runner.harness.process_launch import IProcessLauncher
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource, NullTranscriptSource
 from blizzard.runner.harness.usage import UsageKind, UsageLimit, UsageSample
 from blizzard.runner.node_steps.envelope import Envelope
+from blizzard.runner.process.child_env import AllowlistedEnv
+from blizzard.runner.process.child_processes import Stream
 from blizzard.runner.process.probe import IProcessProbe
 
 _log = get_logger("blizzard.runner.harness")
@@ -164,9 +164,11 @@ class ClaudeCodeAdapter:
         transcript_source: IHarnessTranscriptSource | None = None,
         process: IProcessProbe,
         launcher: IProcessLauncher,
+        versions: VersionProbe,
         harness_telemetry: HarnessTelemetryPlan | None = None,
     ) -> None:
         self._binary = binary
+        self._versions = versions
         self._harness_telemetry = harness_telemetry or HarnessTelemetryPlan()
         self._settings_path = settings_path
         # The published bundle's composed settings and companion files; it supersedes the
@@ -198,7 +200,7 @@ class ClaudeCodeAdapter:
 
     def observe_version(self) -> str | None:
         """See ``src/blizzard/runner/harness/adapter.py``'s ``IHarnessWorkerLifecycle.observe_version``."""
-        return version_probe.observe_version(self._binary)
+        return self._versions.observe_version(self._binary)
 
     def resolve_model(self, preferences: Sequence[str]) -> str:
         """Left-to-right; first entry that resolves wins; an empty or fully-unresolvable list
@@ -302,7 +304,7 @@ class ClaudeCodeAdapter:
         # the envelope prompt (``bzh:deterministic-shell``).
         cmd.append("\n\n".join(part for part in (preamble.prompt_prefix, envelope.prompt or "") if part))
 
-        env = self._spawn_env(envelope, preamble, session_id)
+        env = self._worker_env.worker(self._spawn_env(envelope, preamble, session_id))
         # Injected per-lease files surviving the process; both go through
         # `harness_shared.stdout_target`, empty meaning DEVNULL.
         with (
@@ -316,8 +318,8 @@ class ClaudeCodeAdapter:
                     cmd,
                     cwd=workdir,
                     env=env,
-                    stdout=stdout_file if stdout_file is not None else subprocess.DEVNULL,
-                    stderr=stderr_file if stderr_file is not None else subprocess.DEVNULL,
+                    stdout=stdout_file if stdout_file is not None else Stream.DEVNULL,
+                    stderr=stderr_file if stderr_file is not None else Stream.DEVNULL,
                     defer_disarm=True,
                 )
             except OSError as exc:
@@ -365,10 +367,8 @@ class ClaudeCodeAdapter:
         cmd += self._settings_args()
         cmd += self._permission_args()
         cmd.append(judgement_prompt)
-        env = (
-            self.identity_env(preamble, chunk_id, session_id, elicitation=True)
-            if preamble is not None
-            else self._worker_env.variables
+        env = self._worker_env.worker(
+            self.identity_env(preamble, chunk_id, session_id, elicitation=True) if preamble is not None else {}
         )
         # Detached: the reply lands in `output_path`, never a pipe this
         # call waits on — the collect half reads it back once the process has exited.
@@ -377,7 +377,7 @@ class ClaudeCodeAdapter:
                 # Deferred — the caller's own `confirm_durable()` (right after ITS durable
                 # `record_elicitation_started`/`record_elicitation_relaunch` lands) disarms it.
                 launched = self._launcher.launch(
-                    cmd, cwd=session_cwd, env=env, stdout=stdout_file, stderr=subprocess.DEVNULL, defer_disarm=True
+                    cmd, cwd=session_cwd, env=env, stdout=stdout_file, stderr=Stream.DEVNULL, defer_disarm=True
                 )
         except OSError as exc:
             _log.error("elicitation launch failed", binary=self._binary, cwd=session_cwd, detail=str(exc))
@@ -420,12 +420,17 @@ class ClaudeCodeAdapter:
         cmd.append(message)
         # Re-supply the per-lease identity: a resume inherits none of the spawn env, and
         # the token plaintext is never persisted, so the caller re-mints it.
-        env = self.identity_env(preamble, chunk_id, session_id) if preamble is not None else self._worker_env.variables
-        # Injected per-lease file (epic #57); unset (``None``) inherits the runner's own.
+        env = self._worker_env.worker(self.identity_env(preamble, chunk_id, session_id) if preamble is not None else {})
+        # Injected per-lease file; unset inherits the runner's own.
         # Deferred like spawn/judge.
         with harness_shared.stdout_target(stdout_path) as stdout_file:
             launched = self._launcher.launch(
-                cmd, cwd=session_cwd, env=env, stdout=stdout_file, stderr=None, defer_disarm=True
+                cmd,
+                cwd=session_cwd,
+                env=env,
+                stdout=stdout_file if stdout_file is not None else Stream.INHERIT,
+                stderr=Stream.INHERIT,
+                defer_disarm=True,
             )
         # `launched.pgid` is the launcher's own recorded group — carried to the
         # caller rather than left for it to assume `pgid == pid`.

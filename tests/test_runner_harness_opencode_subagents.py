@@ -12,7 +12,6 @@ import pytest
 import structlog
 from structlog.testing import capture_logs
 
-from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.internal.process_launcher import ProcessLauncher
 from blizzard.runner.harness.opencode.adapter import OpenCodeAdapter
 from blizzard.runner.harness.opencode.shapes import OpenCodePart, parse_session_export
@@ -22,8 +21,10 @@ from blizzard.runner.harness.opencode.transcript.transcript_source import OpenCo
 from blizzard.runner.harness.opencode.usage.descendant_usage import OpenCodeDescendantUsage
 from blizzard.runner.harness.opencode.usage.price_cache import OpenCodeModelPrice, OpenCodeRate
 from blizzard.runner.harness.transcript import TranscriptErrorFactory
+from blizzard.runner.process.child_env import AllowlistedEnv
 from tests.repo_files import repo_root
 from tests.runner_fakes import FakeProbe
+from tests.support_child_launch import CHILDREN, version_probe
 from tests.test_runner_harness_opencode_transcript import FakeExporter
 
 pytestmark = pytest.mark.unit
@@ -59,9 +60,10 @@ def _adapter(spawn_executor: Executor, exporter: FakeExporter | None = None, **k
     return OpenCodeAdapter(
         worker_env=AllowlistedEnv.of(()),
         process=probe,
-        launcher=ProcessLauncher(probe, executor=spawn_executor),
+        launcher=ProcessLauncher(probe, executor=spawn_executor, children=CHILDREN),
         descendant_usage=OpenCodeDescendantUsage(exporter) if exporter is not None else None,
         **kwargs,
+        versions=version_probe(),
     )
 
 

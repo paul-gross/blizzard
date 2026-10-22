@@ -14,8 +14,8 @@ from typing import IO
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.trace_export.settings import SUPPORTED_PROTOCOL
 from blizzard.runner.harness.adapter import WorkerPreamble
-from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.telemetry_signals import TelemetrySignal
+from blizzard.runner.process.child_env import AllowlistedEnv
 
 _log = get_logger("blizzard.runner.harness")
 

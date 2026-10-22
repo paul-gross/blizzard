@@ -323,10 +323,16 @@ neither number comes from measured compaction data — none exists yet.
 ## The worker environment
 
 `[runner.worker]` `env_passthrough` in `blizzard-host.toml` widens the fixed base allowlist (`PATH`, `HOME`, `USER`,
-`LANG`, `LC_*`, `TERM`, `TMPDIR`) every worker, judge, and resume child environment is built from; empty (the scaffold
-default) means base allowlist only, and a daemon credential such as a runner's `BZ_HUB_TOKEN_<NAME>` is absent from
-every worker child by construction unless deliberately named there. `runner init` seeds the list from
+`LANG`, `LC_*`, `TERM`, `TMPDIR`) every child the runner launches is built from: worker, judge, and resume sessions,
+and also the runner's own `git` and `winter` calls, harness version probes, and node `checks:` commands. Empty (the
+scaffold default) means base allowlist only, and a daemon credential such as a runner's `BZ_HUB_TOKEN_<NAME>` is absent
+from every child by construction unless deliberately named there. `runner init` seeds the list from
 `BZ_RUNNER_ENV_PASSTHROUGH` (comma-separated names), the way it seeds `BZ_RUNNER_GATES`.
+
+The runner's own tool children carry the same allowlist, passthrough, and `path_prepend` as a worker, but none of a
+worker's per-spawn variables — no lease identity, lease token, scratch directory, or tracing exporter. A tool that needs
+a variable from the daemon's environment, such as `SSH_AUTH_SOCK` for a `git` remote over SSH, must be named in
+`env_passthrough`; nothing else is inherited.
 
 Every worker, judge, resume, and takeover environment carries `BLIZZARD_RUNNER_URL`, its runner's base on the host's
 TCP door: `http://<host>:<port>/runners/<runner_id>`. A worker reaches its own runner's hooks and OTLP receiver under it

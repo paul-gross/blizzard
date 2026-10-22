@@ -10,7 +10,7 @@ from contextlib import suppress
 from pathlib import Path
 from typing import Protocol
 
-from blizzard.runner.environments.internal.git import EnvGitError, SubprocessEnvGit
+from blizzard.runner.environments.internal.git import EnvGitError
 from blizzard.runner.environments.provider import (
     AcquiredEnvironment,
     EnvironmentPreparationError,
@@ -24,7 +24,7 @@ _MANAGED = ".blizzard-basic-env"
 _ACTIVE = ".blizzard-active"
 _REPOS_DIR = ".blizzard-manifests"
 # An initial clone can outlast the reset bound without failing preparation.
-_CLONE_TIMEOUT = 300
+CLONE_TIMEOUT = 300
 
 
 class _CaptureGit(Protocol):
@@ -46,14 +46,14 @@ class BasicWorkspaceProvider:
         max_environments: int = 10,
         base_branch: str = "main",
         held_ids: Callable[[], list[str]] | None = None,
-        git: _CaptureGit | None = None,
+        git: _CaptureGit,
     ) -> None:
         self._root = Path(workspace_root).resolve()
         self._repos = tuple(repos)
         self._cap = max_environments
         self._branch = base_branch
         self._held_ids = held_ids
-        self._run_git = git if git is not None else SubprocessEnvGit(timeout=_CLONE_TIMEOUT)
+        self._run_git = git
 
     def _git(self, cwd: Path, *args: str) -> str:
         return self._run_git.capture(cwd, *args).strip()

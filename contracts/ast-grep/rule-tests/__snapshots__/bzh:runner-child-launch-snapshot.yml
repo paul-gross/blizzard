@@ -1,0 +1,37 @@
+id: bzh:runner-child-launch
+snapshots:
+  ? |
+    from pty import fork
+  : labels:
+    - source: from pty import fork
+      style: primary
+      start: 0
+      end: 20
+  ? |
+    from subprocess import DEVNULL
+  : labels:
+    - source: from subprocess import DEVNULL
+      style: primary
+      start: 0
+      end: 30
+  ? |
+    import pty
+  : labels:
+    - source: import pty
+      style: primary
+      start: 0
+      end: 10
+  ? |
+    import subprocess
+  : labels:
+    - source: import subprocess
+      style: primary
+      start: 0
+      end: 17
+  ? |
+    import subprocess as sp
+  : labels:
+    - source: import subprocess as sp
+      style: primary
+      start: 0
+      end: 23

@@ -6,10 +6,11 @@ Removes the previous tenant's **untracked** files. Ignored files stay
 
 from __future__ import annotations
 
-import subprocess
 from pathlib import Path
 
 from blizzard.foundation.logging import get_logger
+from blizzard.runner.process.child_env import ChildEnv
+from blizzard.runner.process.child_processes import IChildProcesses
 
 _log = get_logger("blizzard.runner.env.git")
 
@@ -22,9 +23,12 @@ class EnvGitError(RuntimeError):
 
 
 class SubprocessEnvGit:
-    """Run git for the workspace bindings: clean untracked files, read an origin, or capture any call."""
+    """Run git for the workspace bindings: clean untracked files, read an origin, or capture any call — each under the
+    tool profile ``env``, through the launch seam."""
 
-    def __init__(self, timeout: float = ENV_GIT_TIMEOUT) -> None:
+    def __init__(self, *, children: IChildProcesses, env: ChildEnv, timeout: float = ENV_GIT_TIMEOUT) -> None:
+        self._children = children
+        self._env = env
         self._timeout = timeout
 
     def clean_environment(self, env_workdir: Path) -> None:
@@ -52,12 +56,11 @@ class SubprocessEnvGit:
         where = f" in {cwd}" if cwd is not None else ""
         logged_cwd = str(cwd) if cwd is not None else None
         command = ["git", *(["-C", str(cwd)] if cwd is not None else []), *args]
-        try:
-            result = subprocess.run(command, capture_output=True, text=True, timeout=self._timeout)
-        except subprocess.TimeoutExpired as exc:
+        result = self._children.run(command, cwd=None, env=self._env, timeout=self._timeout)
+        if result.timed_out:
             _log.error("git command timed out", args=list(args), cwd=logged_cwd, timeout=self._timeout)
-            raise EnvGitError(f"git {' '.join(args)} timed out{where} after {self._timeout}s") from exc
-        if result.returncode != 0:
+            raise EnvGitError(f"git {' '.join(args)} timed out{where} after {self._timeout}s")
+        if result.exit_code != 0:
             detail = (result.stderr or result.stdout).strip()
             _log.error("git command failed", args=list(args), cwd=logged_cwd, detail=detail)
             raise EnvGitError(f"git {' '.join(args)} failed{where}: {detail}")

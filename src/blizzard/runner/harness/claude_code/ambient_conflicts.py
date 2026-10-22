@@ -14,8 +14,8 @@ from blizzard.runner.harness.claude_code.ambient import (
     user_config_dir,
 )
 from blizzard.runner.harness.claude_code.settings_compose import resolved_permission_mode
-from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
+from blizzard.runner.process.child_env import AllowlistedEnv
 
 
 def claude_code_ambient_sources(worker_env: AllowlistedEnv, *, spawn_root: str) -> AmbientSources:

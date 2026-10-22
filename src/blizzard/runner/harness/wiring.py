@@ -25,13 +25,14 @@ from blizzard.runner.harness.declaration import (
     IHarnessSectionKind,
     SharedHarnessInputs,
 )
-from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.harness_telemetry_plan import HarnessTelemetryNames, HarnessTelemetryPlan
 from blizzard.runner.harness.internal.bundle_publisher import inspect_bundle, publish_bundle, published_snapshot
 from blizzard.runner.harness.internal.process_launcher import ProcessLauncher
 from blizzard.runner.harness.offline_compatibility import ICompatibilityCorpus
 from blizzard.runner.harness.opencode.section import OPENCODE_SECTION
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
+from blizzard.runner.process.child_env import AllowlistedEnv
+from blizzard.runner.process.child_processes import IChildProcesses
 from blizzard.runner.process.probe import IProcessProbe
 
 #: The catalog order: Claude Code first.
@@ -195,6 +196,7 @@ def build_production_harness_registry(
     *,
     executor: Executor,
     process: IProcessProbe,
+    children: IChildProcesses,
     bundle: BundleSnapshot | None = None,
     harness_telemetry_enabled: bool = False,
     runner_environ: Mapping[str, str] | None = None,
@@ -204,7 +206,7 @@ def build_production_harness_registry(
     lifetime of every child launch. ``bundle`` is the snapshot this process published at startup;
     ``harness_telemetry_enabled`` and ``runner_environ`` are what each binding derives its own telemetry plan from.
     Insertion follows the catalog order."""
-    launcher = ProcessLauncher(process, executor=executor)
+    launcher = ProcessLauncher(process, executor=executor, children=children)
     shared = shared_inputs(
         settings,
         bundle=bundle,
@@ -212,14 +214,16 @@ def build_production_harness_registry(
         runner_environ=runner_environ,
     )
     bindings: dict[str, HarnessBinding] = {
-        declaration.harness_id: declaration.binding(section, shared, process=process, launcher=launcher)
+        declaration.harness_id: declaration.binding(
+            section, shared, process=process, launcher=launcher, children=children
+        )
         for declaration, section in enabled(settings.sections)
     }
     return HarnessRegistry(bindings)
 
 
 def build_production_harness_health_probes(
-    settings: HarnessSettings, *, spawn_roots: Sequence[str], corpus: ICompatibilityCorpus
+    settings: HarnessSettings, *, spawn_roots: Sequence[str], corpus: ICompatibilityCorpus, children: IChildProcesses
 ) -> dict[str, IHarnessHealthProbe]:
     """Every enabled harness binding's own :class:`~blizzard.runner.harness.adapter.
     IHarnessHealthProbe`, symmetric with :func:`build_production_harness_registry` — checking ambient
@@ -228,7 +232,8 @@ def build_production_harness_health_probes(
     roots = tuple(dict.fromkeys(spawn_roots)) or ("",)
     probes = {
         declaration.harness_id: tuple(
-            declaration.health_probe(section, shared, spawn_root=root, corpus=corpus) for root in roots
+            declaration.health_probe(section, shared, spawn_root=root, corpus=corpus, children=children)
+            for root in roots
         )
         for declaration, section in enabled(settings.sections)
     }

@@ -24,13 +24,16 @@ from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.harness.adapter import ResumeHandle, WorkerPreamble
 from blizzard.runner.harness.claude_code.adapter import ClaudeCodeAdapter
-from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.internal.process_launcher import ProcessLauncher
+from blizzard.runner.harness.internal.version_probe import VersionProbe
 from blizzard.runner.node_steps.envelope import Envelope, GraphArtifact
+from blizzard.runner.process.child_env import AllowlistedEnv
+from blizzard.runner.process.child_processes import ChildRun
 from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
 from tests import transcript_fixtures
 from tests.runner_fakes import FakeProbe, make_envelope
 from tests.suite_plugin import _WORKER_IDENTITY_ENV
+from tests.support_child_launch import CHILDREN, tool_env, version_probe
 
 _JSON_PASS = '{"type":"result","subtype":"success","is_error":false,"result":"Looks good. <Choice>pass</Choice>","session_id":"s1"}'
 
@@ -48,9 +51,26 @@ def _adapter(spawn_executor: Executor, **kwargs: Any) -> ClaudeCodeAdapter:
     """A :class:`ClaudeCodeAdapter` helper defaulting ``process`` to a fresh :class:`FakeProbe`
     and ``launcher`` to a real one over it — most cases here don't care which they get."""
     process = kwargs.setdefault("process", FakeProbe())
-    kwargs.setdefault("launcher", ProcessLauncher(process, executor=spawn_executor))
+    kwargs.setdefault("launcher", ProcessLauncher(process, executor=spawn_executor, children=CHILDREN))
     kwargs.setdefault("worker_env", AllowlistedEnv.of(()))
+    kwargs.setdefault("versions", version_probe())
     return ClaudeCodeAdapter(**kwargs)
+
+
+class _ScriptedRuns:
+    """A launch seam whose ``run`` answers ``reply`` (or raises it), recording nothing else."""
+
+    def __init__(self, reply: ChildRun | BaseException) -> None:
+        self._reply = reply
+
+    def run(self, command: Any, **kwargs: Any) -> ChildRun:
+        if isinstance(self._reply, BaseException):
+            raise self._reply
+        return self._reply
+
+
+def _scripted_versions(reply: ChildRun | BaseException) -> VersionProbe:
+    return VersionProbe(_ScriptedRuns(reply), tool_env())  # type: ignore[arg-type]  # `run` alone is reached
 
 
 @pytest.mark.unit
@@ -128,27 +148,21 @@ def test_resume_command_with_an_empty_permission_override_stays_bare(spawn_execu
 def test_observe_version_reads_the_binarys_version_output(
     monkeypatch: pytest.MonkeyPatch, spawn_executor: Executor
 ) -> None:
-    monkeypatch.setattr(
-        subprocess,
-        "run",
-        lambda *a, **kw: subprocess.CompletedProcess(a[0], 0, stdout="claude-code 1.2.3\n", stderr=""),
-    )
-    assert _adapter(spawn_executor, binary="claude").observe_version() == "claude-code 1.2.3"
+    monkeypatch.setattr(shutil, "which", lambda binary, path=None: f"/usr/bin/{binary}")
+    versions = _scripted_versions(ChildRun(exit_code=0, stdout="claude-code 1.2.3\n", stderr="", timed_out=False))
+    assert _adapter(spawn_executor, binary="claude", versions=versions).observe_version() == "claude-code 1.2.3"
 
 
 @pytest.mark.unit
 def test_observe_version_times_out_to_none_rather_than_raising(
     monkeypatch: pytest.MonkeyPatch, spawn_executor: Executor
 ) -> None:
-    def _hung(*args, **kwargs):  # type: ignore[no-untyped-def]
-        raise subprocess.TimeoutExpired(cmd=args[0], timeout=kwargs.get("timeout", 0))
-
-    # On PATH per `which` — the timeout is subprocess.run's own, not a missing-binary skip.
-    monkeypatch.setattr(shutil, "which", lambda binary: f"/usr/bin/{binary}")
-    monkeypatch.setattr(subprocess, "run", _hung)
+    # On PATH per `which` — the timeout is the launch's own, not a missing-binary skip.
+    monkeypatch.setattr(shutil, "which", lambda binary, path=None: f"/usr/bin/{binary}")
+    versions = _scripted_versions(ChildRun(exit_code=None, stdout="", stderr="", timed_out=True))
 
     with capture_logs() as logs:
-        assert _adapter(spawn_executor, binary="claude").observe_version() is None
+        assert _adapter(spawn_executor, binary="claude", versions=versions).observe_version() is None
     assert any(entry["event"] == "harness version probe failed" for entry in logs)
 
 
@@ -160,14 +174,11 @@ def test_observe_version_missing_binary_reads_none_rather_than_raising(
     problem) still reads ``None`` and logs — distinct from never being on ``PATH`` at all
     (below), which skips the subprocess attempt entirely."""
 
-    def _missing(*args, **kwargs):  # type: ignore[no-untyped-def]
-        raise OSError("no such file or directory: 'claude'")
-
-    monkeypatch.setattr(shutil, "which", lambda binary: f"/usr/bin/{binary}")
-    monkeypatch.setattr(subprocess, "run", _missing)
+    monkeypatch.setattr(shutil, "which", lambda binary, path=None: f"/usr/bin/{binary}")
+    versions = _scripted_versions(OSError("no such file or directory: 'claude'"))
 
     with capture_logs() as logs:
-        assert _adapter(spawn_executor, binary="claude").observe_version() is None
+        assert _adapter(spawn_executor, binary="claude", versions=versions).observe_version() is None
     assert any(entry["event"] == "harness version probe failed" for entry in logs)
 
 
@@ -179,15 +190,12 @@ def test_observe_version_absent_from_path_skips_the_subprocess_and_does_not_warn
     """A host that never installed this binding's binary (a runner configured with only
     one of several known harnesses) is an expected shape, not a failure — no subprocess
     attempt, and nothing louder than ``debug``."""
-    monkeypatch.setattr(shutil, "which", lambda binary: None)
+    monkeypatch.setattr(shutil, "which", lambda binary, path=None: None)
 
-    def _unexpected(*args, **kwargs):  # type: ignore[no-untyped-def]
-        raise AssertionError("subprocess.run must not be attempted for a binary absent from PATH")
-
-    monkeypatch.setattr(subprocess, "run", _unexpected)
+    versions = _scripted_versions(AssertionError("no launch may be attempted for a binary absent from PATH"))
 
     with capture_logs() as logs:
-        assert _adapter(spawn_executor, binary="claude").observe_version() is None
+        assert _adapter(spawn_executor, binary="claude", versions=versions).observe_version() is None
     assert not any(entry["log_level"] == "warning" for entry in logs)
 
 
@@ -282,7 +290,8 @@ def test_spawn_stamps_process_start_time_from_the_injected_probe(
         binary="claude",
         worker_env=AllowlistedEnv.of(()),
         process=probe,
-        launcher=ProcessLauncher(probe, executor=spawn_executor),
+        launcher=ProcessLauncher(probe, executor=spawn_executor, children=CHILDREN),
+        versions=version_probe(),
     )
     envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
     preamble = WorkerPreamble(
@@ -307,7 +316,8 @@ def test_judge_stamps_process_start_time_from_the_injected_probe(
         binary="claude",
         worker_env=AllowlistedEnv.of(()),
         process=probe,
-        launcher=ProcessLauncher(probe, executor=spawn_executor),
+        launcher=ProcessLauncher(probe, executor=spawn_executor, children=CHILDREN),
+        versions=version_probe(),
     )
     workdir = tmp_path / "e1"
     workdir.mkdir()
@@ -332,7 +342,8 @@ def test_resume_with_message_stamps_process_start_time_and_a_real_confirm_durabl
         binary="claude",
         worker_env=AllowlistedEnv.of(()),
         process=probe,
-        launcher=ProcessLauncher(probe, executor=spawn_executor),
+        launcher=ProcessLauncher(probe, executor=spawn_executor, children=CHILDREN),
+        versions=version_probe(),
     )
 
     resumed = adapter.resume_with_message("/ws", "sess-123", "continue")

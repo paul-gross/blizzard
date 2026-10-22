@@ -1,14 +1,14 @@
 """``blizzard runner takeover``.
 
 Driven against a live daemon on a real unix socket: a real server, a real store, and
-the CLI wired together. ``subprocess.call`` is monkeypatched so the interactive exec
+the CLI wired together. the seam's foreground entry is monkeypatched so the interactive exec
 never shells out — the point is the CLI's own protocol (open, exec, mark ended).
 """
 
 from __future__ import annotations
 
 import shlex
-import subprocess
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -24,10 +24,22 @@ from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionRefe
 from blizzard.runner.host_layout import HostLayout
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.lifecycle.takeover import TakeoverCommand
+from blizzard.runner.process.child_env import ChildEnv
+from blizzard.runner.process.child_processes import ShellCommand
+from blizzard.runner.process.internal.subprocess_child_processes import SubprocessChildProcesses
 from tests.runner_fakes import SqlAlchemyRunnerStore
 from tests.test_runner_status_cli import _TWO_RUNNERS, _host_of, _init_runner, _registered_store, _serve_local_api
 
 _NOW = datetime(2026, 7, 17, 12, 0, 0, tzinfo=UTC)
+
+
+def _foreground(monkeypatch: pytest.MonkeyPatch, call: Callable[..., int]) -> None:
+    """Stand ``call`` in for the takeover's foreground child, seeing the command, cwd and resolved env."""
+
+    def run_foreground(self: SubprocessChildProcesses, command: ShellCommand, *, cwd: Path | str, env: ChildEnv) -> int:
+        return call(command.script, shell=True, cwd=str(cwd), env=env.variables)
+
+    monkeypatch.setattr(SubprocessChildProcesses, "run_foreground", run_foreground)
 
 
 def _seed_parked_lease(store: SqlAlchemyRunnerStore) -> None:
@@ -106,7 +118,7 @@ def test_takeover_hands_the_resumed_session_a_worker_verb_that_reaches_the_runne
             )
         return 0
 
-    monkeypatch.setattr(subprocess, "call", fake_call)
+    _foreground(monkeypatch, fake_call)
 
     with _serve_local_api(root):
         result = CliRunner().invoke(runner_group, ["takeover", "ch_1", "--dir", str(root)])
@@ -135,7 +147,7 @@ def test_takeover_execs_the_command_and_marks_it_ended(tmp_path: Path, monkeypat
         child_envs.append(env)
         return 0
 
-    monkeypatch.setattr(subprocess, "call", fake_call)
+    _foreground(monkeypatch, fake_call)
     # A sentinel terminal var: the identity env must layer OVER the operator's env,
     # not replace it, so the exec'd child still sees this.
     monkeypatch.setenv("OPERATOR_TERMINAL_SENTINEL", "still-here")
@@ -171,7 +183,7 @@ def test_takeover_propagates_a_nonzero_exit_code(tmp_path: Path, monkeypatch: py
     store = _registered_store(root)
     _seed_parked_lease(store)
 
-    monkeypatch.setattr(subprocess, "call", lambda command, shell=False, cwd=None, env=None: 7)
+    _foreground(monkeypatch, lambda command, **_: 7)
 
     with _serve_local_api(root):
         result = CliRunner().invoke(runner_group, ["takeover", "ch_1", "--dir", str(root)])
@@ -194,7 +206,7 @@ def test_takeover_ends_the_takeover_even_when_the_child_raises_keyboard_interrup
     def fake_call(command: str, shell: bool = False, cwd: str | None = None, env: dict[str, str] | None = None) -> int:
         raise KeyboardInterrupt
 
-    monkeypatch.setattr(subprocess, "call", fake_call)
+    _foreground(monkeypatch, fake_call)
 
     with _serve_local_api(root):
         # click's own `main()` converts an uncaught KeyboardInterrupt into `Abort` —
@@ -231,7 +243,7 @@ def test_takeover_refuses_a_live_worker_without_force(tmp_path: Path, monkeypatc
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
 
     calls: list[str] = []
-    monkeypatch.setattr(subprocess, "call", lambda command, shell=False, cwd=None: calls.append(command) or 0)
+    _foreground(monkeypatch, lambda command, **_: calls.append(command) or 0)
 
     with _serve_local_api(root):
         result = CliRunner().invoke(runner_group, ["takeover", "ch_1", "--dir", str(root)])
@@ -321,7 +333,7 @@ def test_takeover_end_closes_a_stranded_takeover_without_starting_a_session(
     _seed_escalated_lease(store)
     _open_stranded_takeover(store)
     calls: list[str] = []
-    monkeypatch.setattr(subprocess, "call", lambda command, **_: calls.append(command) or 0)
+    _foreground(monkeypatch, lambda command, **_: calls.append(command) or 0)
 
     with _serve_local_api(root):
         first = CliRunner().invoke(runner_group, ["takeover", "ch_1", "--end", "--dir", str(root)])

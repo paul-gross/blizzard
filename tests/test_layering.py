@@ -218,9 +218,7 @@ def test_kernel_imports_no_non_kernel_blizzard_package() -> None:
 
 #: Kernel modules that stay shared despite one side reaching them, each with the reason — an entry the check no longer
 #: needs fails it (``bzh:shared-kernel``).
-_SINGLE_SIDE_KERNEL_ALLOWLIST = {
-    "blizzard.foundation.process": "the runner's child-process launch rule is undecided and may want that seam low",
-}
+_SINGLE_SIDE_KERNEL_ALLOWLIST: dict[str, str] = {}
 
 
 def _defines_nothing(tree: ast.Module) -> bool:
@@ -1196,6 +1194,8 @@ _COMPOSITION_ROOTS = frozenset(
         _RUNNER_DIR / "cli" / "store_guard.py",
         _RUNNER_COMPOSITION_FILE,
         _RUNNER_DIR / "cli" / "opencode.py",
+        _RUNNER_DIR / "cli" / "harness.py",
+        _RUNNER_DIR / "cli" / "children.py",
         _SRC_DIR / "tools" / "invariants.py",
         _SRC_DIR / "tools" / "compat" / "cli.py",
     }
@@ -1855,7 +1855,9 @@ _HARNESS_BINDING_NODES = tuple(f"harness/{harness_id}" for harness_id in _HARNES
 #: admits a package its module no longer imports is stale and fails the gate.
 _DOMAIN_CORE_DRIVER_EXCEPTIONS: dict[Path, tuple[str, ...]] = {
     # The one reader of the daemon's own environment — the single owner ``bzh:worker-env-allowlist`` requires.
-    _RUNNER_DIR / "harness" / "env_allowlist.py": ("os",),
+    _RUNNER_DIR / "process" / "child_env.py": ("os",),
+    # The one home of ``os.killpg``, which its TERM, grace, KILL sequence signals through.
+    _RUNNER_DIR / "process" / "groups.py": ("os",),
     # The canary builds paths in, and reads its resume stdout back from, its own throwaway scratch workdir.
     _RUNNER_DIR / "selftest" / "checks.py": ("os",),
 }
@@ -2383,9 +2385,9 @@ _RUNNER_PACKAGE_LAYERS: dict[str, frozenset[str]] = {
     "process": frozenset(),
     "route_paths": frozenset(),
     "events": frozenset(),
-    "environments": frozenset(),
+    "environments": frozenset({"process"}),
     "harness": frozenset({"config_table", "environments", "node_steps", "process"}),
-    "subscriptions": frozenset(),
+    "subscriptions": frozenset({"process"}),
     "auth": frozenset(),
     "transfer": frozenset({"environments"}),
     "leases": frozenset({"environments", "events", "harness", "node_steps"}),

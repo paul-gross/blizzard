@@ -21,6 +21,7 @@ from blizzard.runner.harness.claude_code.ambient import (
 from blizzard.runner.harness.claude_code.health import ClaudeCodeHealthProbe
 from blizzard.runner.harness.health import HarnessHealthCause, HarnessHealthEvidence, evaluate_harness_health
 from tests.runner_init_fakes import init_runner
+from tests.support_child_launch import version_probe
 
 pytestmark = pytest.mark.component
 
@@ -95,7 +96,7 @@ def test_user_config_dir_follows_the_workers_env() -> None:
 
 def test_the_probe_reports_a_conflict_that_the_evaluator_turns_into_config_conflict(tmp_path: Path) -> None:
     sources = _sources(tmp_path, {"disableAllHooks": True})
-    probe = ClaudeCodeHealthProbe("claude", ambient_sources=sources, permission_mode="auto")
+    probe = ClaudeCodeHealthProbe("claude", ambient_sources=sources, permission_mode="auto", versions=version_probe())
 
     conflicts = probe.config_conflicts()
     result = evaluate_harness_health(
@@ -119,7 +120,7 @@ def test_the_probe_reports_a_conflict_that_the_evaluator_turns_into_config_confl
 
 
 def test_a_probe_without_injected_sources_reports_nothing() -> None:
-    assert ClaudeCodeHealthProbe("claude").config_conflicts() == ()
+    assert ClaudeCodeHealthProbe("claude", versions=version_probe()).config_conflicts() == ()
 
 
 def test_status_names_the_conflicting_file_and_key_without_contents(

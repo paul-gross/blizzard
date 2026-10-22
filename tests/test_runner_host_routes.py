@@ -42,6 +42,7 @@ from tests.runner_fakes import (
     registered_identity,
     single_workspace,
 )
+from tests.support_child_launch import CHILDREN
 
 pytestmark = pytest.mark.component
 
@@ -106,6 +107,7 @@ def _two_runner_app(
             config,
             clock=clock,
             process=None,  # type: ignore[arg-type]
+            children=CHILDREN,
             runner_stores=stores,
             runner_status=_status(stores.lease_record, config),  # type: ignore[arg-type]
             identity_verdict=verdict,

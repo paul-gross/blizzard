@@ -24,6 +24,7 @@ from blizzard.runner.subscriptions.internal.subprocess_one_shot_process import S
 from blizzard.runner.usage.credential_renewal import CredentialRenewalPass, RenewableSubscription
 from tests.runner_fakes import make_store
 from tests.service.support import require_codex_app_server_surface, require_mock_fleet, service_gate
+from tests.support_child_launch import CHILDREN, tool_env
 
 pytestmark = [pytest.mark.service, service_gate]
 
@@ -62,7 +63,8 @@ def test_a_due_renewal_against_the_real_mock_codex_process_rotates_the_credentia
     renewer = OpenAICredentialRenewer(
         credentials_path=str(auth_path),
         codex_binary=str(mock_codex),
-        subprocess=SubprocessOneShotProcess(),
+        subprocess=SubprocessOneShotProcess(CHILDREN),
+        env=tool_env(),
         clock=FixedClock(_NOW),
     )
 
@@ -84,7 +86,8 @@ def test_a_concurrent_vendor_style_writer_never_corrupts_the_file_and_the_rotate
     renewer = OpenAICredentialRenewer(
         credentials_path=str(auth_path),
         codex_binary=str(mock_codex),
-        subprocess=SubprocessOneShotProcess(),
+        subprocess=SubprocessOneShotProcess(CHILDREN),
+        env=tool_env(),
         clock=FixedClock(_NOW),
     )
 
@@ -160,7 +163,8 @@ def test_a_renewal_pass_against_the_real_mock_codex_process_lands_a_claim_and_a_
     renewer = OpenAICredentialRenewer(
         credentials_path=str(auth_path),
         codex_binary=str(mock_codex),
-        subprocess=SubprocessOneShotProcess(),
+        subprocess=SubprocessOneShotProcess(CHILDREN),
+        env=tool_env(),
         clock=clock,
     )
     renewal_pass = CredentialRenewalPass(

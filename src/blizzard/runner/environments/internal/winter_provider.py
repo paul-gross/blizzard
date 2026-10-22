@@ -14,8 +14,6 @@ from pathlib import Path
 from typing import Protocol
 
 from blizzard.foundation.logging import get_logger
-from blizzard.runner.environments.internal.git import SubprocessEnvGit
-from blizzard.runner.environments.internal.winter_cli import SubprocessWinterCli
 from blizzard.runner.environments.provider import (
     AcquiredEnvironment,
     EnvironmentPreparationError,
@@ -55,8 +53,8 @@ class WinterWorkspaceProvider:
         env_pool: Sequence[str],
         base_branch: str = "main",
         spawn_root: str = "",
-        winter: _WinterCli | None = None,
-        git: _EnvGit | None = None,
+        winter: _WinterCli,
+        git: _EnvGit,
     ) -> None:
         self._workspace_root = Path(workspace_root)
         self._pool = tuple(env_pool)
@@ -64,8 +62,8 @@ class WinterWorkspaceProvider:
         # differs from ``workspace_root``, the directory winter itself is driven from.
         self._spawn_root = spawn_root
         self._base_branch = base_branch
-        self._winter = winter if winter is not None else SubprocessWinterCli()
-        self._git = git if git is not None else SubprocessEnvGit()
+        self._winter = winter
+        self._git = git
         self._ready = False
         self._service_bound: bool | None = None
         # Manifest reads cannot overlap a reset: the served API and the loop use

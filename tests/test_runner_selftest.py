@@ -30,7 +30,6 @@ from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.adapter import ResumeHandle, WorkerHandle, WorkerPreamble
 from blizzard.runner.harness.claude_code.adapter import ClaudeCodeAdapter
 from blizzard.runner.harness.claude_code.section import ClaudeCodeSection
-from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, OPENCODE_HARNESS_ID
 from blizzard.runner.harness.internal.process_launcher import ProcessLauncher
 from blizzard.runner.harness.opencode.section import OpenCodeSection
@@ -41,6 +40,7 @@ from blizzard.runner.harness.usage import UsageKind, UsageLimit, UsageSample
 from blizzard.runner.harness.wiring import build_production_harness_registry
 from blizzard.runner.lifecycle.judgement.internal.elicitation_files import ElicitationFiles
 from blizzard.runner.listeners import Listeners, Uds
+from blizzard.runner.process.child_env import AllowlistedEnv
 from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
 from blizzard.runner.selftest.checks import SelfTest
 from blizzard.runner.selftest.internal.subprocess_scratch_git import SubprocessScratchGit
@@ -52,6 +52,7 @@ from tests.host_files import load_runner_config
 from tests.runner_client import runner_client
 from tests.runner_fakes import NO_TRACING
 from tests.runner_init_fakes import init_runner
+from tests.support_child_launch import CHILDREN, tool_env, version_probe
 
 # A fake harness binary mimicking `mock-claude-code`'s CLI surface, extended to actually
 # perform the trivial task: on a fresh spawn it edits and commits a file in its cwd.
@@ -168,7 +169,8 @@ def _app_with_harness(spawn_executor: Executor, tmp_path: Path, binary: str) -> 
         worker_env=AllowlistedEnv.of(()),
         binary=binary,
         process=probe,
-        launcher=ProcessLauncher(probe, executor=spawn_executor),
+        launcher=ProcessLauncher(probe, executor=spawn_executor, children=CHILDREN),
+        versions=version_probe(),
     )
     harnesses = HarnessRegistry({CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=adapter)})
     return runner_client(create_runner_app(config, harnesses=harnesses))
@@ -696,7 +698,9 @@ def test_resume_check_reaps_the_resumed_pid_before_the_scratch_repo_is_torn_down
     probe = _RecordingProcessProbe()
     adapter = _FixedPidAdapter(spawn_pid=111, resume_pid=222)
 
-    checks = SelfTest(adapter, SubprocessScratchGit(), probe, ElicitationFiles(root="")).run()
+    checks = SelfTest(
+        adapter, SubprocessScratchGit(children=CHILDREN, env=tool_env()), probe, ElicitationFiles(root="")
+    ).run()
 
     by_name = {c.name: c for c in checks}
     # `_FixedPidAdapter` never actually edits/commits, so `end_to_end_edit_commit`
@@ -807,7 +811,7 @@ def test_both_production_bindings_pass_every_selftest_check(tmp_path: Path, spaw
         ),
     )
     harnesses = build_production_harness_registry(
-        config.harness_settings(NO_TRACING), process=LinuxProcessProbe(), executor=spawn_executor
+        config.harness_settings(NO_TRACING), process=LinuxProcessProbe(), executor=spawn_executor, children=CHILDREN
     )
     client = runner_client(create_runner_app(config, harnesses=harnesses))
 

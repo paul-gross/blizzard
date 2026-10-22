@@ -14,7 +14,6 @@ import pytest
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.fact_kinds import USAGE_RECORDED
 from blizzard.runner.harness.adapter import WorkerHandle
-from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, OPENCODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.internal.process_launcher import ProcessLauncher
 from blizzard.runner.harness.opencode.adapter import OpenCodeAdapter
@@ -24,6 +23,7 @@ from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.harness.usage import UsageSample
 from blizzard.runner.leases.internal.worker_stdout_files import WorkerStdoutFiles
 from blizzard.runner.leases.model import NewLease
+from blizzard.runner.process.child_env import AllowlistedEnv
 from blizzard.runner.usage.recorder import UsageRecorder
 from tests.repo_files import repo_root
 from tests.runner_fakes import (
@@ -34,6 +34,7 @@ from tests.runner_fakes import (
     make_store,
     single_workspace,
 )
+from tests.support_child_launch import CHILDREN, version_probe
 from tests.test_runner_harness_opencode_transcript import FakeExporter
 
 pytestmark = pytest.mark.component
@@ -144,9 +145,10 @@ def _opencode_recorder(spawn_executor: Executor, tmp_path, store, *, transcripts
     adapter = OpenCodeAdapter(
         worker_env=AllowlistedEnv.of(()),
         process=probe,
-        launcher=ProcessLauncher(probe, executor=spawn_executor),
+        launcher=ProcessLauncher(probe, executor=spawn_executor, children=CHILDREN),
         transcript_source=source,
         price_catalog=_LunaPriceCatalog(),
+        versions=version_probe(),
     )
     registry = HarnessRegistry({OPENCODE_HARNESS_ID: HarnessBinding(adapter=adapter, transcript_source=source)})
     recorder = UsageRecorder(
@@ -321,8 +323,9 @@ def test_an_opencode_generation_records_its_descendant_sessions_steps_in_the_one
     adapter = OpenCodeAdapter(
         worker_env=AllowlistedEnv.of(()),
         process=probe,
-        launcher=ProcessLauncher(probe, executor=spawn_executor),
+        launcher=ProcessLauncher(probe, executor=spawn_executor, children=CHILDREN),
         descendant_usage=OpenCodeDescendantUsage(exporter),
+        versions=version_probe(),
     )
     source = FakeTranscriptSource(lines_by_session={})
     registry = HarnessRegistry({OPENCODE_HARNESS_ID: HarnessBinding(adapter=adapter, transcript_source=source)})
@@ -343,7 +346,10 @@ def test_an_opencode_generation_records_its_descendant_sessions_steps_in_the_one
 
     [payload] = _usage_payloads(store)
     solo = OpenCodeAdapter(
-        worker_env=AllowlistedEnv.of(()), process=probe, launcher=ProcessLauncher(probe, executor=spawn_executor)
+        worker_env=AllowlistedEnv.of(()),
+        process=probe,
+        launcher=ProcessLauncher(probe, executor=spawn_executor, children=CHILDREN),
+        versions=version_probe(),
     )
     root_steps = solo.parse_usage(generation, "spawn")
     assert root_steps is not None
@@ -389,8 +395,9 @@ def test_interrupted_task_is_charged_once_across_recording_replay_and_resume(
     adapter = OpenCodeAdapter(
         worker_env=AllowlistedEnv.of(()),
         process=probe,
-        launcher=ProcessLauncher(probe, executor=spawn_executor),
+        launcher=ProcessLauncher(probe, executor=spawn_executor, children=CHILDREN),
         descendant_usage=OpenCodeDescendantUsage(exporter),
+        versions=version_probe(),
     )
     registry = HarnessRegistry({OPENCODE_HARNESS_ID: HarnessBinding(adapter=adapter)})
     stdout_dir = tmp_path / "stdout"

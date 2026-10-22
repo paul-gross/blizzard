@@ -10,7 +10,7 @@ from blizzard.foundation.logging import get_logger
 from blizzard.runner.harness.adapter import IHarnessHealthProbe
 from blizzard.runner.harness.compatibility import CompatibilityProbe
 from blizzard.runner.harness.health import DeclaredDegradation
-from blizzard.runner.harness.internal import version_probe
+from blizzard.runner.harness.internal.version_probe import VersionProbe
 from blizzard.runner.harness.offline_compatibility import (
     CorpusConfigurationError,
     ICompatibilityCorpus,
@@ -58,8 +58,11 @@ class OpenCodeHealthProbe:
     """The OpenCode binding's :class:`~blizzard.runner.harness.adapter.IHarnessHealthProbe`.
     Dumb, like the adapter it stands beside: reports evidence, never decides availability."""
 
-    def __init__(self, binary: str = "opencode", *, auth_path: Path | None, corpus: ICompatibilityCorpus) -> None:
+    def __init__(
+        self, binary: str = "opencode", *, auth_path: Path | None, corpus: ICompatibilityCorpus, versions: VersionProbe
+    ) -> None:
         self._binary = binary
+        self._versions = versions
         # `None` reads as no credential.
         self._auth_path = auth_path
         self._corpus = corpus
@@ -71,7 +74,7 @@ class OpenCodeHealthProbe:
             _log.warning("opencode admitted-range corpus is misconfigured", detail=str(exc))
 
     def binary_present(self) -> bool:
-        return version_probe.binary_present(self._binary)
+        return self._versions.binary_present(self._binary)
 
     def probe_authentication(self) -> bool:
         """OpenCode exposes no provider-authentication subcommand, so this combines two free,
@@ -79,7 +82,7 @@ class OpenCodeHealthProbe:
         environment, not merely resolves on ``PATH``), and its credential-discovery path
         must hold a non-empty document. Neither reaches a provider, so neither proves a
         held credential is still valid."""
-        if version_probe.observe_version(self._binary) is None:
+        if self._versions.observe_version(self._binary) is None:
             return False
         if self._auth_path is None:
             return False

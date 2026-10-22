@@ -128,6 +128,8 @@ class LoopWiring:
             # A one-shot crash reconciliation — sweeping any orphan a crash left between a
             # directory's `ensure` and its owning lease's row landing.
             _worker_scratch.sweep_orphans(lease.lease_id for lease in stores.lease_record.list_active_leases())
+        # The tool profile the runner's own `git` and check commands launch under: no lease identity.
+        tool_env = config.tool_env(graph.trace_settings)
         loop_config = LoopConfig(
             runner_name=config.name,
             runner_id=graph.runner_id,
@@ -186,9 +188,11 @@ class LoopWiring:
                 )
             ),
             process=graph.process,
-            worktree_git=SubprocessWorktreeGit(SubprocessEnvGit(WORKTREE_GIT_TIMEOUT)),
+            worktree_git=SubprocessWorktreeGit(
+                SubprocessEnvGit(children=graph.children, env=tool_env, timeout=WORKTREE_GIT_TIMEOUT)
+            ),
             # The check-runner seam — see `src/blizzard/runner/lifecycle/judgement/check_runner.py`.
-            check_runner=SubprocessCheckRunner(worker_env=config.worker_env(graph.trace_settings)),
+            check_runner=SubprocessCheckRunner(children=graph.children, env=tool_env),
             config=loop_config,
             worker_files=_worker_files,
             elicitation_files=_elicitation_files,

@@ -10,8 +10,10 @@ from pathlib import Path
 
 import pytest
 
+from blizzard.runner.environments.internal.git import ENV_GIT_TIMEOUT
 from blizzard.runner.environments.internal.winter_cli import SubprocessWinterCli, WinterCliError
 from blizzard.runner.environments.internal.winter_provider import WinterWorkspaceProvider
+from tests.support_child_launch import CHILDREN, env_git, tool_env
 from tests.winter.support import require_winter_source, winter_binding_gate
 
 pytestmark = [pytest.mark.winter_binding, winter_binding_gate]
@@ -56,7 +58,7 @@ def _make_workspace(tmp_path: Path, repos: tuple[str, ...] = ("toy",)) -> Path:
 
 def _init_workspace_or_skip(workspace: Path) -> None:
     """Workspace-level init (source checkouts off the file:// origins) via the vendored CLI."""
-    cli = SubprocessWinterCli()
+    cli = SubprocessWinterCli(children=CHILDREN, env=tool_env())
     try:
         cli.ensure_ready(workspace)
         cli.run(workspace, ["ws", "init"])
@@ -68,7 +70,13 @@ def test_real_winter_acquire_returns_clean_worktree_and_resets(tmp_path: Path) -
     workspace = _make_workspace(tmp_path)
     _init_workspace_or_skip(workspace)
 
-    provider = WinterWorkspaceProvider(str(workspace), env_pool=["e1"], base_branch="main")
+    provider = WinterWorkspaceProvider(
+        str(workspace),
+        env_pool=["e1"],
+        base_branch="main",
+        winter=SubprocessWinterCli(children=CHILDREN, env=tool_env()),
+        git=env_git(ENV_GIT_TIMEOUT),
+    )
     acquired = provider.acquire("ch_1", 1, held_ids=[])
     assert len(acquired) == 1
     repo = Path(acquired[0].workdir) / "toy"
@@ -89,7 +97,13 @@ def test_real_winter_acquire_recovers_stale_feature_branch_tracking(tmp_path: Pa
     workspace = _make_workspace(tmp_path, repos=("toy-a", "toy-b"))
     _init_workspace_or_skip(workspace)
 
-    provider = WinterWorkspaceProvider(str(workspace), env_pool=["e1"], base_branch="main")
+    provider = WinterWorkspaceProvider(
+        str(workspace),
+        env_pool=["e1"],
+        base_branch="main",
+        winter=SubprocessWinterCli(children=CHILDREN, env=tool_env()),
+        git=env_git(ENV_GIT_TIMEOUT),
+    )
     workdir = Path(provider.acquire("ch_1", 1, held_ids=[])[0].workdir)
     repo_a, repo_b = workdir / "toy-a", workdir / "toy-b"
 
