@@ -1,17 +1,17 @@
 # Pre-push
 
-This is a chunk's pre-push node-step: rebase the change onto the current base branch and triage how much the
-integration disturbed the validated work. Entry may follow review, a crash, or a delivery bounce — never assume where
-branches stand. Fetch first in every repo — the worktree's base-branch view is stale since environment acquisition —
-then check what each branch carries and whether it already sits on the current base.
+This is a chunk's pre-push node-step: rebase the change onto the current base branch and triage how much the integration
+disturbed the validated work. Entry may follow review, a crash, or a delivery bounce — never assume where branches
+stand. Fetch first in every repo — the worktree's base-branch view is stale since environment acquisition — then check
+what each branch carries and whether it already sits on the current base.
 
 ## Rebase
 
-Rebase every ahead repo onto the latest base branch — the repo's recorded base branch. For a repo with
-work in several environments, rebase those branches onto each other first, then the surviving branch onto the base.
-Each repo ends with exactly one branch holding all its work, in one environment — always, even with a single
-environment: delivery refuses a repo arriving with two branches, so an un-rolled-up change-set fails there rather than
-landing half of itself. An already-rebased-and-pushed repo needs no second rebase, but still needs its tip declared.
+Rebase every ahead repo onto the latest base branch — the repo's recorded base branch. For a repo with work in several
+environments, rebase those branches onto each other first, then the surviving branch onto the base. Each repo ends with
+exactly one branch holding all its work, in one environment — always, even with a single environment: delivery refuses a
+repo arriving with two branches, so an un-rolled-up change-set fails there rather than landing half of itself. An
+already-rebased-and-pushed repo needs no second rebase, but still needs its tip declared.
 
 Resolve every conflict inside the rebase — never abandon it for a merge, never skip a commit. Keep each resolution
 minimal and faithful to both sides' intent, and note every file a resolution touched. The one exception: a commit that
@@ -20,9 +20,9 @@ as a success, not a lost or skipped commit.
 
 ## Verify the rebased result
 
-Finishing this node requires reading the rebased result back the same way build and review already do: does the rule
-say what it means, does the routing to it land, and does the instruction survive being followed literally, concentrated
-on whatever a resolution touched. With no verify node to fall back on in this lane, a resolution reshaping the change
+Finishing this node requires reading the rebased result back the same way build and review already do: does the rule say
+what it means, does the routing to it land, and does the instruction survive being followed literally, concentrated on
+whatever a resolution touched. With no verify node to fall back on in this lane, a resolution reshaping the change
 beyond what that read settles is declared in the triage, not re-verified here.
 
 ## Push and declare

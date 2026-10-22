@@ -37,8 +37,8 @@ a repair's blast radius included.
 
 After a rebase or a base merge a tip-to-tip diff is mostly the base branch's motion: scope by the change's own commits —
 `git range-diff` across a rebase, `git show --remerge-diff` on a merge, the `pre-push-summary` or `resolve-report`
-naming what integration touched. Restore full per-axis width only when the change moved rather than was repaired: a
-repo new to the change-set, commits that are not repairs of the last round's findings, or an amended plan.
+naming what integration touched. Restore full per-axis width only when the change moved rather than was repaired: a repo
+new to the change-set, commits that are not repairs of the last round's findings, or an amended plan.
 
 ## Submit
 
@@ -56,6 +56,5 @@ delta and what it resolved), what you checked per axis, how you adjudicated ever
   derivation; a fact needed to act on it (a reproduction command, an expected/actual pair) rides a `detail:`
   continuation, at most two lines.
 
-The fields restate the docket; read it in full with
-`blizzard runner artifact get docket --scope graph --content`. If that read fails or comes back empty, proceed on the
-restatement above.
+The fields restate the docket; read it in full with `blizzard runner artifact get docket --scope graph --content`. If
+that read fails or comes back empty, proceed on the restatement above.

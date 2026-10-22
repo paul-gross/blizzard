@@ -20,17 +20,17 @@ Everything that belongs to one runner — its leases, dashboard, asks, control v
 OTLP receiver — answers under `/runners/{runner_id}/`, keyed by the hub-minted id: `/runners/{runner_id}/api/...` and
 `/runners/{runner_id}/v1/{traces,metrics,logs}`. An id the host does not hold answers `404`; a runner it holds halted
 answers `503` naming its reasons. Nothing answers at the unprefixed paths a lone runner once served: an API path no
-route matches answers a JSON `404`, never the panel. `openapi/runner.openapi.json` documents both halves in one document,
-with `runner_id` a path parameter on every runner operation.
+route matches answers a JSON `404`, never the panel. `openapi/runner.openapi.json` documents both halves in one
+document, with `runner_id` a path parameter on every runner operation.
 
 ## The two listeners
 
 The unix socket `host.sock`, mode 0600 in the host directory, is the CLI local verbs' door (`runner pause`, `start`,
 `takeover`), addressed via `--dir` or `$BZ_RUNNER_DIR` — no port, no config file read. The TCP port (8431 by default) is
 the door for the host's web panel (same-origin on the page's own host) and for worker hooks such as heartbeat and ask,
-which address their runner via the spawn-injected `BLIZZARD_RUNNER_URL`, `http://<host>:<port>/runners/<runner_id>`. The TCP listener exists because a browser cannot
-open a unix socket; the socket exists so operator controls depend on no port, filesystem permissions being their access
-control.
+which address their runner via the spawn-injected `BLIZZARD_RUNNER_URL`, `http://<host>:<port>/runners/<runner_id>`. The
+TCP listener exists because a browser cannot open a unix socket; the socket exists so operator controls depend on no
+port, filesystem permissions being their access control.
 
 `--runner-url` (or `$BZ_RUNNER_URL`) points a local verb at the TCP door instead, for a shell that cannot see the
 runtime dir or open the socket; both flags explicitly is an error, an explicit flag beats either variable, and both from
@@ -69,9 +69,9 @@ it is that runner. On a host of several runners `--runner` is required: omitted,
 fails naming the host's runners. A runner the host holds halted by its own configuration fails naming why; one its hub
 halts is still served, so `status` reads it and names the halt.
 
-The offline verbs — `tick`, `transcript backfill` and `reship`, `harness status`, and the `prompt` verbs — read the
-host file rather than the running host, and take `--runner` the same way: optional on a host of one runner, required on
-a host of several. The `prompt` verbs use it only to pick the workspace — the runner's own — whose prompt they read or
+The offline verbs — `tick`, `transcript backfill` and `reship`, `harness status`, and the `prompt` verbs — read the host
+file rather than the running host, and take `--runner` the same way: optional on a host of one runner, required on a
+host of several. The `prompt` verbs use it only to pick the workspace — the runner's own — whose prompt they read or
 clear; the override `prompt clear` drops is the host's, per workspace.
 
 ## The web panel and its stream
@@ -80,9 +80,9 @@ The TCP door also carries `GET /api/events/stream`, a `text/event-stream` route 
 spec (no generated client calls it): it publishes lease, ask, escalation, takeover, environment, and fact changes the
 instant they happen, replaying from `Last-Event-ID` on reconnect like the hub's own stream
 ([observability.md](./observability.md)). Every runner-scoped frame carries its runner's `runner_id`; an
-`environment-changed` frame is the host's and carries none. The panel renders leases, environments, asks, escalations, takeovers, and
-facts live off that stream; dashboard and leases reads keep a one-minute poll only as a backstop, and the session read
-has no poll — a stream 401 routes into the same recovery seam as any read's 401.
+`environment-changed` frame is the host's and carries none. The panel renders leases, environments, asks, escalations,
+takeovers, and facts live off that stream; dashboard and leases reads keep a one-minute poll only as a backstop, and the
+session read has no poll — a stream 401 routes into the same recovery seam as any read's 401.
 
 The panel's top-bar Pause/Resume control issues the identical `PATCH /runners/{runner_id}/api/runner` the CLI's local
 verbs use — the same write path, not a second one.

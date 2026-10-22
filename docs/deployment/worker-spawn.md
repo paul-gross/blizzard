@@ -64,7 +64,8 @@ and the config path.
 Absent, the setting resolves to `dangerous`, and a scaffolded config writes `autonomy = "dangerous"`. The legacy
 `harness_permission_mode` still works alone as a Claude Code-only override: a non-empty value is passed as
 `--permission-mode <value>` with no `--permission-prompts`, an empty one omits the flag, and OpenCode keeps `--auto`.
-Setting it together with `[runner.harness] autonomy` fails config load, naming both and asking you to keep only `autonomy`.
+Setting it together with `[runner.harness] autonomy` fails config load, naming both and asking you to keep only
+`autonomy`.
 
 `dangerous` may skip your own Claude Code deny rules, and blizzard does not compensate for that. The runner-owned
 denials — Claude Code's in the `--settings` file, OpenCode's in its worker config — hold under every value. OpenCode's
@@ -130,8 +131,8 @@ part of the runner's own `worker_settings_path` document too, so a runner with n
 A collision fails `runner host` and `runner tick` startup with an error naming `<config_dir>/claude-code/settings.json`
 and the JSON path, and leaves `current` where it was. The collisions are `disableAllHooks: true`; a `permissions.allow`
 or `permissions.ask` rule naming a tool the runner denies; `permissions.defaultMode`, which `[runner.harness] autonomy`
-owns; `permissions.disableBypassPermissionsMode` while the resolved mode is `bypassPermissions`; and `hooks`, `permissions`,
-or a rule list of the wrong JSON type.
+owns; `permissions.disableBypassPermissionsMode` while the resolved mode is `bypassPermissions`; and `hooks`,
+`permissions`, or a rule list of the wrong JSON type.
 
 Every unattended Claude Code invocation — spawn, resume (including a nudge), and judgement — passes the snapshot's
 composed file as `--settings`, plus `--mcp-config=<snapshot>/claude-code/mcp.json`, `--agents`, and `--plugin-dir` for
@@ -203,10 +204,10 @@ prompt replaced with an empty one is announced as a withdrawal. Whatever became 
 prior node is known and differs from the current one carries a role-change line naming both nodes, first in the render;
 with no recorded prior node there is nothing to name, and no line renders.
 
-That announcement is why `PUT /api/host/workspaces/{workspace_id}/prompt` is trustworthy mid-chunk: a replace applies at the chunk's next
-resumed node-step, and the worker is told it is reading something new. The workspace-prompt override is standing: it
-wins over every config knob until removed, and replacing it with empty text sets a standing empty prompt rather than
-restoring the configured one; `blizzard runner prompt clear` drops the override so config resolves again.
+That announcement is why `PUT /api/host/workspaces/{workspace_id}/prompt` is trustworthy mid-chunk: a replace applies at
+the chunk's next resumed node-step, and the worker is told it is reading something new. The workspace-prompt override is
+standing: it wins over every config knob until removed, and replacing it with empty text sets a standing empty prompt
+rather than restoring the configured one; `blizzard runner prompt clear` drops the override so config resolves again.
 
 ## Workspace prompt sources
 
@@ -290,11 +291,11 @@ authentication, a config conflict, an unmapped configured tier, or a recorded se
 `HarnessSelector` skips an unavailable member with its own `"unhealthy"` reason ([observability.md](./observability.md))
 rather than selecting it, so a node whose acceptable set includes `opencode` falls back to another member instead of
 failing at spawn, and escalates only once every member is exhausted. The binding stays visible, with its cause, in this
-runner's own `GET /runners/{runner_id}/api/harness-health` diagnostics; the hub sees only the boolean flag, never the cause. Claude Code's
-own health check is the same evaluation, membership-only: an incompatible or unobserved version withholds availability
-exactly as OpenCode's does, but since Claude Code declares no compatibility corpus, an admitted version is never itself
-a cause — there is no `unknown_version` an admitted-but-unclassified Claude Code version could read.
-`[runner.opencode.models.aliases]` and `[runner.opencode.effort.aliases]` mirror `[runner.models.aliases]`/
+runner's own `GET /runners/{runner_id}/api/harness-health` diagnostics; the hub sees only the boolean flag, never the
+cause. Claude Code's own health check is the same evaluation, membership-only: an incompatible or unobserved version
+withholds availability exactly as OpenCode's does, but since Claude Code declares no compatibility corpus, an admitted
+version is never itself a cause — there is no `unknown_version` an admitted-but-unclassified Claude Code version could
+read. `[runner.opencode.models.aliases]` and `[runner.opencode.effort.aliases]` mirror `[runner.models.aliases]`/
 `[runner.effort.aliases]` in shape but not in defaults — see "Model and effort tiers" above for why OpenCode's own table
 carries the whole mapping rather than overrides to a built-in one. `worker_config_path` names the runner-owned
 permission/plugin document that `blizzard runner init` scaffolds beside `worker-settings.json` (never inside a project
@@ -323,10 +324,10 @@ neither number comes from measured compaction data — none exists yet.
 ## The worker environment
 
 `[runner.worker]` `env_passthrough` in `blizzard-host.toml` widens the fixed base allowlist (`PATH`, `HOME`, `USER`,
-`LANG`, `LC_*`, `TERM`, `TMPDIR`) every child the runner launches is built from: worker, judge, and resume sessions,
-and also the runner's own `git` and `winter` calls, harness version probes, and node `checks:` commands. Empty (the
-scaffold default) means base allowlist only, and a daemon credential such as a runner's `BZ_HUB_TOKEN_<NAME>` is absent
-from every child by construction unless deliberately named there. `runner init` seeds the list from
+`LANG`, `LC_*`, `TERM`, `TMPDIR`) every child the runner launches is built from: worker, judge, and resume sessions, and
+also the runner's own `git` and `winter` calls, harness version probes, and node `checks:` commands. Empty (the scaffold
+default) means base allowlist only, and a daemon credential such as a runner's `BZ_HUB_TOKEN_<NAME>` is absent from
+every child by construction unless deliberately named there. `runner init` seeds the list from
 `BZ_RUNNER_ENV_PASSTHROUGH` (comma-separated names), the way it seeds `BZ_RUNNER_GATES`.
 
 The runner's own tool children carry the same allowlist, passthrough, and `path_prepend` as a worker, but none of a
@@ -334,11 +335,11 @@ worker's per-spawn variables — no lease identity, lease token, scratch directo
 a variable from the daemon's environment, such as `SSH_AUTH_SOCK` for a `git` remote over SSH, must be named in
 `env_passthrough`; nothing else is inherited.
 
-Every worker, judge, resume, and takeover environment carries `BLIZZARD_RUNNER_URL`, its runner's base on the host's
-TCP door: `http://<host>:<port>/runners/<runner_id>`. A worker reaches its own runner's hooks and OTLP receiver under it
-— `$BLIZZARD_RUNNER_URL/api/heartbeat`, `$BLIZZARD_RUNNER_URL/v1/traces` — never the host's root, so a worker alive
-across a host restart is resumed with the address of the runner whose lease token it carries; an open takeover keeps
-the address it was opened with.
+Every worker, judge, resume, and takeover environment carries `BLIZZARD_RUNNER_URL`, its runner's base on the host's TCP
+door: `http://<host>:<port>/runners/<runner_id>`. A worker reaches its own runner's hooks and OTLP receiver under it —
+`$BLIZZARD_RUNNER_URL/api/heartbeat`, `$BLIZZARD_RUNNER_URL/v1/traces` — never the host's root, so a worker alive across
+a host restart is resumed with the address of the runner whose lease token it carries; an open takeover keeps the
+address it was opened with.
 
 With `[tracing] harness_telemetry` on, a Claude Code worker's environment also carries the variables that point its
 metrics, logs and traces at the runner; [tracing.md](./tracing.md#harness-telemetry) owns them.
@@ -351,11 +352,11 @@ An operator takeover session inverts this: your shell is the base with only a bo
 lease's `BLIZZARD_*` identity vars plus the daemon's `PATH` and `HOME`; `env_passthrough` is not forwarded and no
 allowlist filters your shell ([chunk-operations/takeover.md](./chunk-operations/takeover.md) owns the verb).
 
-`[runner.worker]` `path_prepend` leads every one of those same child environments' `PATH` with the listed absolute directories
-— a mise shims directory, say — ahead of the daemon's own, so a spawned worker resolves the same version-manager tools
-an operator's shell does; entries repeat the daemon's own if already present rather than duplicating, and an empty list
-leaves `PATH` exactly as the daemon's. Each entry may use `~` for the operator's home, expanded once at config load;
-anything still relative after that fails config load, naming the key. A configured directory absent on disk does not
-fail startup — `runner host` warns about it once and still starts, and that entry simply never reaches a child's `PATH`
-until it exists. Because the takeover's own forwarded `PATH` above is the daemon's, an operator taking over a worker's
-session resolves the same prepended tools that worker did.
+`[runner.worker]` `path_prepend` leads every one of those same child environments' `PATH` with the listed absolute
+directories — a mise shims directory, say — ahead of the daemon's own, so a spawned worker resolves the same
+version-manager tools an operator's shell does; entries repeat the daemon's own if already present rather than
+duplicating, and an empty list leaves `PATH` exactly as the daemon's. Each entry may use `~` for the operator's home,
+expanded once at config load; anything still relative after that fails config load, naming the key. A configured
+directory absent on disk does not fail startup — `runner host` warns about it once and still starts, and that entry
+simply never reaches a child's `PATH` until it exists. Because the takeover's own forwarded `PATH` above is the
+daemon's, an operator taking over a worker's session resolves the same prepended tools that worker did.

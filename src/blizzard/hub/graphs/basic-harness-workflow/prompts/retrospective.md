@@ -5,24 +5,26 @@ repo's PR merged. Re-derive that report rather than trusting it, then write the 
 
 Read the chunk's own record first — `blizzard runner chunk history` for its transitions and bounces, then its asset
 trail: the work item(s) the chunk wraps, the review findings, and `pre-push`'s own diary —
-`blizzard runner artifact get retrospective --node pre-push --content` (`--node` required: `pre-push` produces one
-under this same name, so an unqualified read is ambiguous) and `blizzard runner artifact get pre-push-summary
---content`, the only session-local record of the integration leg, since that lineage never saw `build` or `iterate`.
+`blizzard runner artifact get retrospective --node pre-push --content` (`--node` required: `pre-push` produces one under
+this same name, so an unqualified read is ambiguous) and `blizzard runner artifact get pre-push-summary
+--content`, the
+only session-local record of the integration leg, since that lineage never saw `build` or `iterate`.
 
 ## Verify the landing
 
 Fetch each repo's own worktree before checking anything: its view of the base branch was last refreshed when the
 environment was acquired.
 
-`blizzard runner artifact list` returns one `git_commit` entry per repo per node that declared one; in this lane `build`,
-`iterate`, and `pre-push` can each declare, since a rebase or a fresh fix re-pushes and re-declares. It names the branch
-that was pushed, not the merged sha — read each PR's own state rather than assuming from it.
+`blizzard runner artifact list` returns one `git_commit` entry per repo per node that declared one; in this lane
+`build`, `iterate`, and `pre-push` can each declare, since a rebase or a fresh fix re-pushes and re-declares. It names
+the branch that was pushed, not the merged sha — read each PR's own state rather than assuming from it.
 
 Per repo, check its PR's merge state from inside that repo's worktree so the query targets the right forge (on GitHub,
 `gh pr view --json state,mergedAt`), then test the PR merge commit's reachability, not the sha the newest declaration
 carries, with `git merge-base --is-ancestor <merged sha>
-origin/<base>` — `<base>` is the repo's recorded base branch; on GitHub, `gh pr view --json mergeCommit` gives the
-merged sha — exit 0 means reachable; comparing branch tips or log output answers a different question.
+origin/<base>` — `<base>` is the repo's recorded base branch;
+on GitHub, `gh pr view --json mergeCommit` gives the merged sha — exit 0 means reachable; comparing branch tips or log
+output answers a different question.
 
 Check whether the landing turned the base branch's own gate red separately, per repo, by querying the gate by the PR's
 merge commit rather than by branch. A completed red run is a real finding: raise it here and leave it for the standing

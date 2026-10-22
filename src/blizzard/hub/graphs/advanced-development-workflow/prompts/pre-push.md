@@ -1,10 +1,10 @@
 # Pre-push rebase (advanced-development-workflow)
 
 You are working a chunk's **pre-push** node-step — the integration step before delivery. Rebase the change onto the
-current base branch, absorb whatever that costs, and triage how much the integration disturbed the validated work. Neither
-the build conversation nor what verification established is in your session. Read verification from the report
-(`blizzard runner artifact get verification-report --node verify --content`) before you triage against it, and keep every
-conflict resolution faithful to the intent recorded in the `reviewed-plan`
+current base branch, absorb whatever that costs, and triage how much the integration disturbed the validated work.
+Neither the build conversation nor what verification established is in your session. Read verification from the report
+(`blizzard runner artifact get verification-report --node verify --content`) before you triage against it, and keep
+every conflict resolution faithful to the intent recorded in the `reviewed-plan`
 (`blizzard runner artifact get reviewed-plan --content`), the commit messages, and the diff.
 
 ## Start from what is actually there
@@ -18,11 +18,11 @@ needs its tip declared (below).
 **One branch per repo.** Every environment's work for a repo is rolled up into a single branch; delivery refuses a repo
 that arrives with two.
 
-**Every ahead repo is rebased onto the current base** — the repo's recorded base branch. Where a repo
-has work in more than one environment, rebase those onto each other first, then onto the base. Resolve every conflict
-**inside the rebase** — never abandon it for a merge, never skip a commit — and note every file a resolution touched.
-The one exception: a commit that repaired a base failure another chunk already landed the same fix for rebases to an
-empty diff — drop it and report it as a success, not a lost or skipped commit.
+**Every ahead repo is rebased onto the current base** — the repo's recorded base branch. Where a repo has work in more
+than one environment, rebase those onto each other first, then onto the base. Resolve every conflict **inside the
+rebase** — never abandon it for a merge, never skip a commit — and note every file a resolution touched. The one
+exception: a commit that repaired a base failure another chunk already landed the same fix for rebases to an empty diff
+— drop it and report it as a success, not a lost or skipped commit.
 
 **The procedural checks are green on the rebased result.** Run the project's linter and the unit tests covering what the
 change — and any conflict resolution — touched. Targeted, not the entire suite.

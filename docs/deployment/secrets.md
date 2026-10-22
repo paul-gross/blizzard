@@ -5,36 +5,37 @@ outside the store, and no API response, CLI output, log line, trace attribute, o
 
 ## The verbs
 
-`blizzard hub secret create <name>`, `set <name>`, `list [--include-retired]`, `show <name>`, `retire <name>`, `enable <name>`, and
-`rotate-key` are the verbs. A name is lowercase letters, digits, and hyphens.
+`blizzard hub secret create <name>`, `set <name>`, `list [--include-retired]`, `show <name>`, `retire <name>`,
+`enable <name>`, and `rotate-key` are the verbs. A name is lowercase letters, digits, and hyphens.
 
-`create` and `set` read the value from stdin and takes no value argument or option, so the value never lands in shell history or the
-process list:
+`create` and `set` read the value from stdin and takes no value argument or option, so the value never lands in shell
+history or the process list:
 
 ```bash
 printf '%s' "$TOKEN" | blizzard hub secret create gh-token
 ```
 
-Trailing CR/LF is stripped and an empty value is refused. `create` stores a new secret at revision 1 and refuses a name that already exists. `set` replaces an
-existing secret at the next revision and refuses an unknown name. `show` and `list` report the name, revision, who replaced the value and when, and
-whether the secret is retired.
+Trailing CR/LF is stripped and an empty value is refused. `create` stores a new secret at revision 1 and refuses a name
+that already exists. `set` replaces an existing secret at the next revision and refuses an unknown name. `show` and
+`list` report the name, revision, who replaced the value and when, and whether the secret is retired.
 
 `retire` is a reversible brake: a retired secret is hidden from `list` unless `--include-retired` is given, and cannot
 be replaced until `enable` lifts it. Retirement never deletes the stored value.
 
 A work source names the secret it reads with, and a [repository](./repositories.md) names the one it lands with. `show`
-and `list` report the active records that do, as `used by` in `show` and `references` in `--json`. `retire` is refused while any active record still uses the secret, and the refusal
-names them; retire or repoint those records first. A record that is itself retired no longer counts.
+and `list` report the active records that do, as `used by` in `show` and `references` in `--json`. `retire` is refused
+while any active record still uses the secret, and the refusal names them; retire or repoint those records first. A
+record that is itself retired no longer counts.
 
 Every create, replace, retire, and enable is also recorded in the [change log](./config-changes.md), without the value.
 
-Writes need the `config:edit` permission, held by a tenant's `admin`; reads need `fleet:view`. A secret belongs to
-the tenant the call acts in ([tenants.md](./tenants.md#naming-the-tenant-a-call-acts-in)).
+Writes need the `config:edit` permission, held by a tenant's `admin`; reads need `fleet:view`. A secret belongs to the
+tenant the call acts in ([tenants.md](./tenants.md#naming-the-tenant-a-call-acts-in)).
 
 The board's Admin page lists secrets with the records that use each one. On a desktop, a user with `config:edit` can
 create a secret, replace its value, retire it, and enable it there; Retire is unavailable while a record uses the
-secret. The value is typed into a password field and never shown again, and no page of the board displays it. On a
-phone the page is read-only and names the `blizzard hub secret set` command.
+secret. The value is typed into a password field and never shown again, and no page of the board displays it. On a phone
+the page is read-only and names the `blizzard hub secret set` command.
 
 Over HTTP, `POST /api/secrets` creates and `PUT /api/secrets/{name}/value` replaces. A replace carrying an `If-Match`
 header answers 409, naming the current revision, when that revision has moved.

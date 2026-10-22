@@ -229,8 +229,8 @@ An open gate decision shows wherever a waiting chunk does, derived from the deci
 - the Gate panel of a waiting chunk, which reads "gated by runner `R-XXXX.<name>` (runner config)" — the runner's
   compact id and name — or "declared by the graph" when the graph made the node human-judged. On a runner-configured
   gate the panel also lists the step's check results, each as its command and pass or red. Resolving to a choice that
-  requires green checks while one is red is accepted and recorded as an override, and the panel marks such a choice.
-  A note field above the choices sends an optional note with whichever choice is picked; a blank field sends none;
+  requires green checks while one is red is accepted and recorded as an override, and the panel marks such a choice. A
+  note field above the choices sends an optional note with whichever choice is picked; a blank field sends none;
 - the resolved line that replaces the Gate panel's choices once someone resolves it, "`<choice>` by `<who>`, `<when>`",
   until the runner records the transition, noting an override when there was one, with the resolution's note beneath it
   when there is one. A resolve that loses the race to another person shows the same line.

@@ -44,7 +44,8 @@ unattended and stays *on* it. A team grows its fleet by adding machines rather t
 engineer's agents show up on the same board.
 
 📚 **Operator docs:** [`docs/index.md`](./docs/index.md) · 🐳 **Start here:** [`docs/install.md`](./docs/install.md) ·
-🔏 **Verify a release:** [`docs/verifying.md`](./docs/verifying.md) · 🛡️ **Security policy:** [`SECURITY.md`](./SECURITY.md)
+🔏 **Verify a release:** [`docs/verifying.md`](./docs/verifying.md) · 🛡️ **Security policy:**
+[`SECURITY.md`](./SECURITY.md)
 
 ## ✨ Features
 

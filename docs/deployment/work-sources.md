@@ -117,10 +117,11 @@ claims it.
 
 ## Hub-owned items
 
-Creating a hub item mints its resting chunk in the same write, in the project the call names (`blizzard hub item create
---project <id|slug>`, needed only when the tenant holds several projects): POST to the hub source's items pins a fresh
-`not_ready` chunk to the default graph holding the new item's pointer and returns the chunk id alongside the item, so
-nothing separate needs ingesting.
+Creating a hub item mints its resting chunk in the same write, in the project the call names
+(`blizzard hub item create
+--project <id|slug>`, needed only when the tenant holds several projects): POST to the hub
+source's items pins a fresh `not_ready` chunk to the default graph holding the new item's pointer and returns the chunk
+id alongside the item, so nothing separate needs ingesting.
 
 Item mutation (the four verbs under `/api/work-sources/{source}/items`) is served only by the built-in hub source, whose
 own store is a hub-owned item's system of record; a request against a configured forge source refuses with a 409 naming

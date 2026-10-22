@@ -10,8 +10,7 @@ configuration: no runner joins without being added.
 
 A worker's lease token, which it presents to its runner's own API under `/runners/{runner_id}/` on the host, also
 authorizes its `POST /runners/{runner_id}/v1/traces` span export, and under `harness_telemetry` its `/v1/metrics` and
-`/v1/logs` exports under the same prefix;
-[tracing.md](./tracing.md#worker-spans) owns what the runner keeps from them.
+`/v1/logs` exports under the same prefix; [tracing.md](./tracing.md#worker-spans) owns what the runner keeps from them.
 
 A runner reading back its own shipped transcript segments (`GET /api/fleet/chunks/{chunk_id}/transcript-segments`) is
 further held by that route's own ownership check, which refuses another runner's token. The chunk-scoped garden
@@ -52,27 +51,27 @@ several. `blizzard-runner init` writes the runner's `projects` into a fresh host
 each project its own repeated `--project` names, and adds the runner serving them
 ([projects.md](./projects.md#runners-serve-projects)).
 
-`blizzard-runner init <dir>` registers the host at the hub its config names — `--hub <url>` or else `BZ_HUB_URL` sets
-it on a fresh config — then joins each `[[runner]]` under it, writing each token the hub issues as it is issued.
+`blizzard-runner init <dir>` registers the host at the hub its config names — `--hub <url>` or else `BZ_HUB_URL` sets it
+on a fresh config — then joins each `[[runner]]` under it, writing each token the hub issues as it is issued.
 
 It looks for the host's token first, as the host resolves it: `BZ_HOST_TOKEN` in the process environment, the host
 file's `host_token`, then `BZ_HOST_TOKEN` in the directory's `.env`. A held host token is checked with
-`GET /api/fleet/host`, and the host it names is kept. Holding none, init adds a host named after the first
-`[[runner]]` (`POST /api/hosts`) and writes its token to `.env` as `BZ_HOST_TOKEN`; a name a live host of the tenant
-holds stops init, naming the conflict. On a hub with `auth.mode = "none"` that needs no sign-in; on one that requires
-it, the add runs under your `blizzard hub login` session for that hub, and with no session init stops and says so. It
-adds the host in the tenant `--tenant <tenant_id>` names, by id, never by name; without the flag, in the only tenant you
-may enter, and when you may enter several it stops, listing them, ids beside names. A new host adopts each runner whose
-held token the hub knows. A held host token whose host serves another tenant than `--tenant` names stops: a host never
-moves between tenants. A hub that answers the host routes `404` predates hosts, and init stops.
+`GET /api/fleet/host`, and the host it names is kept. Holding none, init adds a host named after the first `[[runner]]`
+(`POST /api/hosts`) and writes its token to `.env` as `BZ_HOST_TOKEN`; a name a live host of the tenant holds stops
+init, naming the conflict. On a hub with `auth.mode = "none"` that needs no sign-in; on one that requires it, the add
+runs under your `blizzard hub login` session for that hub, and with no session init stops and says so. It adds the host
+in the tenant `--tenant <tenant_id>` names, by id, never by name; without the flag, in the only tenant you may enter,
+and when you may enter several it stops, listing them, ids beside names. A new host adopts each runner whose held token
+the hub knows. A held host token whose host serves another tenant than `--tenant` names stops: a host never moves
+between tenants. A hub that answers the host routes `404` predates hosts, and init stops.
 
 Every runner init adds is added under the host's own credential (`POST /api/fleet/host/runners`), in the host's tenant,
-with no sign-in. With a runner token, init first asks the hub whose it is (`GET /api/fleet/identity`, under the
-runner's own token and with no side effects) and acts on the answer:
+with no sign-in. With a runner token, init first asks the hub whose it is (`GET /api/fleet/identity`, under the runner's
+own token and with no side effects) and acts on the answer:
 
 | The hub answers                                             | `init`                                                                                                                                         |
 | ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| the token's runner                                          | keeps the token and adds nothing, when the hub holds the runner under this host; otherwise stops, naming `hub runner-host adopt`                |
+| the token's runner                                          | keeps the token and adds nothing, when the hub holds the runner under this host; otherwise stops, naming `hub runner-host adopt`               |
 | the token's runner, in another tenant than `--tenant` names | stops and adds nothing, naming both tenants: drop `--tenant` to keep that runner, or set up a new runner in that tenant from a fresh directory |
 | an unknown token                                            | stops, adds nothing, and leaves `.env` untouched, naming the hub it asked                                                                      |
 | a revoked token                                             | stops, naming `hub runner enroll <id>` — rotation keeps the runner's id, and an add would not                                                  |
@@ -93,13 +92,14 @@ host afresh, and adds every `[[runner]]` again under it. A host token the proces
 is never replaced: an unknown one stops init even with `--allow-readd`, since a replacement in `.env` would go unread. A
 host token the hub refuses as a retired host's stops init too.
 
-Before it re-adds, init sets the store aside under a timestamped name beside it and migrates a fresh one,
-so the new runner never inherits the old one's leases and buffered facts. Nothing is deleted: the old store keeps them.
-It refuses while the runner's daemon is running. The store is the host's, shared by every runner it configures, so a
-runner is never re-added in place beside another: setting the store aside would drop that runner's backlog. Init
-refuses, naming `blizzard runner retire` and `blizzard runner add`, which replace the one runner and leave the store
-as it is; a host re-added sets the store aside once and adds every runner again over it. A runner holding no token whose store still belongs to a runner stops
-the same way an unknown token does: put that runner's token back, or re-run init with `--allow-readd`.
+Before it re-adds, init sets the store aside under a timestamped name beside it and migrates a fresh one, so the new
+runner never inherits the old one's leases and buffered facts. Nothing is deleted: the old store keeps them. It refuses
+while the runner's daemon is running. The store is the host's, shared by every runner it configures, so a runner is
+never re-added in place beside another: setting the store aside would drop that runner's backlog. Init refuses, naming
+`blizzard runner retire` and `blizzard runner add`, which replace the one runner and leave the store as it is; a host
+re-added sets the store aside once and adds every runner again over it. A runner holding no token whose store still
+belongs to a runner stops the same way an unknown token does: put that runner's token back, or re-run init with
+`--allow-readd`.
 
 A kept runner whose store names a runner that neither it nor another `[[runner]]` of the host is stops before init
 writes anything. When the store also names one of the host's runners, it is the wrong file: stop and restore the right
@@ -120,10 +120,9 @@ replacement that would go unread.
 
 If the hub adds the host but its token cannot be written, init exits naming
 `blizzard hub runner-host retire <id> --hub-url <hub>`. If the hub adds a runner but its token cannot be written, init
-exits naming
-`blizzard hub runner retire <id> --hub-url <hub>`: the hub holds that runner as never connected, under a token nobody
-has. Retire it, then re-run init. An init interrupted between the two leaves the same runner, which `hub runner list`
-shows as never connected.
+exits naming `blizzard hub runner retire <id> --hub-url <hub>`: the hub holds that runner as never connected, under a
+token nobody has. Retire it, then re-run init. An init interrupted between the two leaves the same runner, which
+`hub runner list` shows as never connected.
 
 ## Rotation
 
@@ -152,8 +151,8 @@ followed by a ULID — a name, and its own bearer token, separate from every run
 `blizzard hub runner-host add <name>` mints the id and token together and prints both once, the token as a
 `BZ_HOST_TOKEN=<token>` line; there is no read-back. A host reads its token as `BZ_HOST_TOKEN`, from the process
 environment, the host file's `host_token` key, or the host directory's `.env`, so the printed line goes into the host
-directory's `.env` as it is. The group is `runner-host` because `blizzard hub host` launches the host daemon. Host names are unique among a
-tenant's live hosts, and a taken name refuses the add.
+directory's `.env` as it is. The group is `runner-host` because `blizzard hub host` launches the host daemon. Host names
+are unique among a tenant's live hosts, and a taken name refuses the add.
 
 The host token reaches only the host's own routes, under `/api/fleet/host`: reporting the machine's workspace, reading
 its record back, adding a runner under the host, retiring one of its runners, and pushing the host's own facts (its
@@ -177,12 +176,12 @@ registration answer, never refused; the hub offers the runner no work through a 
 flagged subscription.
 
 `runner-host revoke-token <host_id>` revokes the host's token and leaves the host recorded; `enroll <host_id>` mints a
-new one, printed once as a `BZ_HOST_TOKEN=<token>` line, and records the token it replaces as revoked. A revoked hash stays dead, as for a runner.
-`runner-host retire
-<host_id>` revokes the token and retires the host, then retires each of its runners; it refuses
-while a runner still holds routes unless `--force` is given, and `--by` records who retired it. Between the host's
-retirement and its last runner's, a runner is still held but its host is gone. `enroll` on a retired host refuses with a
-`409`.
+new one, printed once as a `BZ_HOST_TOKEN=<token>` line, and records the token it replaces as revoked. A revoked hash
+stays dead, as for a runner. `runner-host retire
+<host_id>` revokes the token and retires the host, then retires each of
+its runners; it refuses while a runner still holds routes unless `--force` is given, and `--by` records who retired it.
+Between the host's retirement and its last runner's, a runner is still held but its host is gone. `enroll` on a retired
+host refuses with a `409`.
 
 The writes require the `runner:retire` permission and the reads `fleet:view`.
 
@@ -204,13 +203,13 @@ A host that holds a host token is **registered**; one that holds none is unchang
 reports itself as it always has. A registered host:
 
 - **Reports itself on every host tick.** It posts its first `public_url`, the panel's sign-in callback URIs, each
-  workspace with the environments it holds, and the `[[subscription]]` roster it declares to `POST /api/fleet/host`,
-  and its runners stop sending a roster of their own. It reports once before any runner ticks, so a runner the hub has
+  workspace with the environments it holds, and the `[[subscription]]` roster it declares to `POST /api/fleet/host`, and
+  its runners stop sending a roster of their own. It reports once before any runner ticks, so a runner the hub has
   released from the host never claims across a restart while the hub answers; a report that fails or times out starts
   the runners anyway.
-- **Records who it is from the hub's first answer.** The host id and tenant land once in the store's `host_identity`
-  row and are never edited. A later answer naming another host or tenant is a refusal of the host's token, not an
-  update: the runners keep working, the host's facts stay buffered, and the panel shows the refusal.
+- **Records who it is from the hub's first answer.** The host id and tenant land once in the store's `host_identity` row
+  and are never edited. A later answer naming another host or tenant is a refusal of the host's token, not an update:
+  the runners keep working, the host's facts stay buffered, and the panel shows the refusal.
 - **Drains its own fact lane.** Its subscription usage samples and misses ride the host's lane, `host_outbound_buffer`,
   to `POST /api/fleet/host/events`, never a runner's lane, and leave only while the latest report was answered with the
   host's own identity. Against a hub from before hosts, which answers the host routes `404`, the runners keep working
@@ -227,18 +226,19 @@ reports itself as it always has. A registered host:
 
 `blizzard runner add <name> --project <p>` adds a runner to a registered host under the host's own token, with no hub
 sign-in: the hub mints the runner under the host (`POST /api/fleet/host/runners`), then `add` writes its token to the
-host directory's `.env` as `BZ_HUB_TOKEN_<NAME>`, creates `runners/<name>/`, and appends its `[[runner]]` with the id the
-hub minted — in that order, so an entry never exists without its token. `--project` repeats; `--workspace` names the
+host directory's `.env` as `BZ_HUB_TOKEN_<NAME>`, creates `runners/<name>/`, and appends its `[[runner]]` with the id
+the hub minted — in that order, so an entry never exists without its token. `--project` repeats; `--workspace` names the
 host's workspace each project runs in — once for all, or once per `--project` — and defaults to the host's only one;
 `--agents` likewise, defaulting to `1`. A `--workspace` the host file does not declare, or a name a `[[runner]]` already
-holds, refuses the add before it reaches the hub. A running host starts the new runner at its next start, and `add`
-says so.
+holds, refuses the add before it reaches the hub. A running host starts the new runner at its next start, and `add` says
+so.
 
 `blizzard runner retire --runner <name|id>` retires the runner at the hub under the host's token, forgets its identity
 in the host's store, then removes its `[[runner]]`, so the store names only runners the host still configures and the
 next start or `init` serves the rest. A runner still holding chunks refuses the retire, naming them; `--force` releases
 them. A running host halts the runner at its next tick, the hub refusing its token, and `retire` says so; the runner's
-other rows stay in the host's store, inert. Both verbs refuse a host holding no host token, naming `blizzard hub runner-host add`.
+other rows stay in the host's store, inert. Both verbs refuse a host holding no host token, naming
+`blizzard hub runner-host add`.
 
 `GET /api/host/registration` reads where the host stands — `unregistered`, `pending` until its first report,
 `registered` with its host id and tenant, `refused`, `no_hosts`, or `unreachable` — with the facts waiting on its lane.
@@ -247,11 +247,11 @@ naming why, and its own views still read.
 
 ### Ingesting a runner from another store
 
-`blizzard runner ingest <source> --runner <name|id> [--workspace-id <id>] [--dir <host dir>]` moves one runner into
-this host: its rows, its configuration and its token. The source is another host's directory, an archive store that
-`blizzard runner store reset --runner` wrote, or a runner directory that has not graduated to a host.
-Take the runner under this host at the hub first: `blizzard hub runner-host release <host_id> <runner_id>` on the
-host that holds it, then `blizzard hub runner-host adopt <host_id> <runner_id>` on this one.
+`blizzard runner ingest <source> --runner <name|id> [--workspace-id <id>] [--dir <host dir>]` moves one runner into this
+host: its rows, its configuration and its token. The source is another host's directory, an archive store that
+`blizzard runner store reset --runner` wrote, or a runner directory that has not graduated to a host. Take the runner
+under this host at the hub first: `blizzard hub runner-host release <host_id> <runner_id>` on the host that holds it,
+then `blizzard hub runner-host adopt <host_id> <runner_id>` on this one.
 
 The ingest reads the source only through a copy taken with SQLite's backup API over a read-only connection, migrated to
 this build's schema, so the source's store is not written until the runner's rows leave it. Then it:
@@ -270,21 +270,20 @@ An archive carries rows only, so the runner's `[[runner]]` and token must alread
 them; ingest refuses an archive otherwise. The source host keeps the runner's `[[runner]]`, which halts there for want
 of its token.
 
-A runner directory that has not graduated is read as the host of one it would graduate to
-([upgrade.md](../upgrade.md)): its store is `data/runner.db`, its `[[workspace]]` and `[[runner]]` come from
-`blizzard-runner.toml` by graduation's key placement, and the runner takes the id its store records. Its token is read
-from `BZ_HUB_TOKEN`, or the variable the file's `token_env` names, and that variable is what leaves the source's
-`.env`. A runner before hosts takes no lock, so only its `runner.sock` is probed. Its store holds that one runner and
-stays at the schema it ran, so the last step moves it aside whole rather than deleting rows from it. A file declaring
-several `[[subscription]]`s, or a `db_url` naming another store, is refused: graduate that directory by hand, then
-ingest the host it becomes.
+A runner directory that has not graduated is read as the host of one it would graduate to ([upgrade.md](../upgrade.md)):
+its store is `data/runner.db`, its `[[workspace]]` and `[[runner]]` come from `blizzard-runner.toml` by graduation's key
+placement, and the runner takes the id its store records. Its token is read from `BZ_HUB_TOKEN`, or the variable the
+file's `token_env` names, and that variable is what leaves the source's `.env`. A runner before hosts takes no lock, so
+only its `runner.sock` is probed. Its store holds that one runner and stays at the schema it ran, so the last step moves
+it aside whole rather than deleting rows from it. A file declaring several `[[subscription]]`s, or a `db_url` naming
+another store, is refused: graduate that directory by hand, then ingest the host it becomes.
 
 The ingest refuses, changing nothing, when:
 
 - this host or the source is running: its lock is held, or something answers on its `host.sock` or `runner.sock`;
-- this host holds no host token, its hub does not hold the runner under it — the refusal names the `adopt` to run —
-  or the runner's identity in the source names another tenant than this host's. A host that has not recorded its
-  identity yet records the hub's answer;
+- this host holds no host token, its hub does not hold the runner under it — the refusal names the `adopt` to run — or
+  the runner's identity in the source names another tenant than this host's. A host that has not recorded its identity
+  yet records the hub's answer;
 - the runner holds an open elicitation or takeover in the source;
 - this host already declares a runner of that name or id, or its store holds the runner from no ingest of this source;
 - this host gives the runner's workspace id to another root or set of environments. `--workspace-id` names a new id,
@@ -298,9 +297,9 @@ The ingest refuses, changing nothing, when:
   leaves its rows no way to be removed one runner at a time. A source between that revision and this build's head is
   ingested, and the removal deletes only from the tables it has.
 
-Re-running an interrupted ingest completes it: a runner this host's store holds from an ingest of the same source
-skips the copy and finishes the configuration and the removal. If the source has run since the copy, its liveness stamp
-moved, and the ingest refuses, naming both stores.
+Re-running an interrupted ingest completes it: a runner this host's store holds from an ingest of the same source skips
+the copy and finishes the configuration and the removal. If the source has run since the copy, its liveness stamp moved,
+and the ingest refuses, naming both stores.
 
 ## A token that names another runner
 

@@ -56,8 +56,8 @@ command instead, which is what runs the downgrade without booting the daemon.
 
 ## 4. Put the older tag back
 
-Set `BLIZZARD_HUB_IMAGE=ghcr.io/paul-gross/blizzard-hub:0.2.0` in `.env` — the same target tag queried in step 2 —
-then bring the hub up:
+Set `BLIZZARD_HUB_IMAGE=ghcr.io/paul-gross/blizzard-hub:0.2.0` in `.env` — the same target tag queried in step 2 — then
+bring the hub up:
 
 ```bash
 docker compose up -d hub
@@ -95,6 +95,6 @@ upgraded hub. A rolled-back runner whose older config names a different id reads
 older hub also refuses to export into the widened egress `_schema/` documents until they are moved aside
 ([`docs/deployment/egress.md`](./deployment/egress.md#upgrading-to-hub-minted-runner-ids)).
 
-A rollback past the tenants migrations is refused while the hub holds more than one tenant, or while a tenant's
-deletion is underway, and the refusal names them: only a hub that holds `default` alone rolls back past them
+A rollback past the tenants migrations is refused while the hub holds more than one tenant, or while a tenant's deletion
+is underway, and the refusal names them: only a hub that holds `default` alone rolls back past them
 ([`docs/upgrade.md`](./upgrade.md#tenants-boundary)).

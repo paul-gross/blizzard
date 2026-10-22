@@ -30,9 +30,11 @@ For each candidate in the survey, one question: **is this something this routine
 
 A survey that bailed out arrives as a single `excessive-scope` or `undeclared-axis` candidate. Match it as usual: a live
 finding of that class already in this scope makes the candidate an `observed` on it, never a second — repeating a
-bail-out turns one honest fact into fifty. Emit nothing further: a run that could not inventory the scope looked at none of it.
+bail-out turns one honest fact into fifty. Emit nothing further: a run that could not inventory the scope looked at none
+of it.
 
-Otherwise, for each live finding in your scope the survey did not report (`delivered` is handled above), look: no longer reproduces is a `gone`; still reproduces and simply missed is an `observed`.
+Otherwise, for each live finding in your scope the survey did not report (`delivered` is handled above), look: no longer
+reproduces is a `gone`; still reproduces and simply missed is an `observed`.
 
 ## The rule you must not break
 
@@ -42,14 +44,14 @@ gets silence too, its finding keeping its last word.
 
 ## Matching is judgment, and duplicates are cheap
 
-You match by reading, not by key. Two findings naming the same weed at the same place are the same
-finding even worded differently; two at the same file objecting to different things are not. When unsure, add rather
-than merge — a duplicate costs one moment of recognition; a wrong merge hides new drift behind an old finding.
+You match by reading, not by key. Two findings naming the same weed at the same place are the same finding even worded
+differently; two at the same file objecting to different things are not. When unsure, add rather than merge — a
+duplicate costs one moment of recognition; a wrong merge hides new drift behind an old finding.
 
 A `FindingDelta` carries `scope`, `revisions`, `measurement`, and `findings` — each entry an `add` (its `ref` too if it
 has one), an `observed` (`{"op": "observed", "id": "fin_..."}`), or a `gone` (adds a `note`). That shape is read live
 with `blizzard runner artifact get --scope system garden/finding-format --content`; if that fails or comes back empty,
 proceed on the restatement above. Publish with `blizzard runner artifact create --name delta` (content on stdin). Carry
 the survey envelope's `scope` and `revisions` through, and its `measurement` corrected — the survey counted candidates,
-not what opened. Every transformation must name a `fin_` id actually in this routine's bucket, in your scope, or delivery
-rejects it.
+not what opened. Every transformation must name a `fin_` id actually in this routine's bucket, in your scope, or
+delivery rejects it.

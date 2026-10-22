@@ -15,17 +15,17 @@ load-bearing: without it a stale `# ast-grep-ignore` comment goes unreported ins
   never a raw identifier it resolves itself. The rule's own prose home, including its `Detect`/`Scope` boundary, is
   `blizzard-context:/architecture/repository-access.md#domain-operations-take-objects-bzhdomain-takes-objects`; this
   file states none of that prose, only what the rule mechanically checks:
-  - Scoped to `src/blizzard/hub/domain/**` and the runner's domain core — every module of a runner layer node outside
-    an `internal/` package, one `files:` glob per top-level node with `**/internal/**` ignored — a domain operation's
-    own home, not the whole repo. `tests/test_layering.py` holds the runner globs equal to the layer table's nodes.
+  - Scoped to `src/blizzard/hub/domain/**` and the runner's domain core — every module of a runner layer node outside an
+    `internal/` package, one `files:` glob per top-level node with `**/internal/**` ignored — a domain operation's own
+    home, not the whole repo. `tests/test_layering.py` holds the runner globs equal to the layer table's nodes.
   - A domain *operation* is a public method; a leading-underscore helper is an internal step, not an edge-facing entry
     point, and is exempt even when it shares the same id-in, load-by-id shape.
   - Matches a public method taking a `*_id: str` parameter whose body calls a `get_`/`load_`-prefixed method on `self.*`
     with that same parameter as its first argument, alone or with further arguments, by exact textual identity — a body
     that rebinds the identifier to a new name before passing it on slips past. `ast-grep` has no taint mode; this rule
     is a floor, not a proof.
-  - One exemption stands, at `ClaimService.claim` (`src/blizzard/hub/domain/execution/claim.py`), reasoned at the site with
-    `# ast-grep-ignore: bzh:domain-takes-objects` immediately above the `def`.
+  - One exemption stands, at `ClaimService.claim` (`src/blizzard/hub/domain/execution/claim.py`), reasoned at the site
+    with `# ast-grep-ignore: bzh:domain-takes-objects` immediately above the `def`.
 
 - **`bzh:cli-httpx-confined`** (`rules/cli-httpx-confined.yml`) — the CLI trees import httpx only in
   `src/blizzard/cli/collaborators.py`, which builds the client factory and re-exports the httpx types the commands name.
@@ -36,8 +36,8 @@ load-bearing: without it a stale `# ast-grep-ignore` comment goes unreported ins
   - Matches `import httpx`, `import httpx as …`, `from httpx import …` and `from httpx.<module> import …`, including
     under `TYPE_CHECKING`.
 
-- **`bzh:cli-patch-not-seam`** (`rules/cli-patch-not-seam.yml`) — a test does not patch a name inside a CLI module by its
-  dotted path. The rule's own prose home is `blizzard-context:/architecture/clean-architecture.md` § Dependency
+- **`bzh:cli-patch-not-seam`** (`rules/cli-patch-not-seam.yml`) — a test does not patch a name inside a CLI module by
+  its dotted path. The rule's own prose home is `blizzard-context:/architecture/clean-architecture.md` § Dependency
   injection; this file states none of that prose, only what the rule mechanically checks.
   - Scoped to `tests/**`.
   - Matches a `setattr` call whose first argument is a string literal naming a `blizzard.` path with a `cli` segment.
@@ -60,8 +60,9 @@ load-bearing: without it a stale `# ast-grep-ignore` comment goes unreported ins
   `blizzard-context:/architecture/system-shape/worker-boundary.md`; this file states none of that prose, only what the
   rule mechanically checks.
   - Scoped to `src/blizzard/runner/**`, `src/blizzard/foundation/**` and `src/blizzard/hub/**`, except
-    `src/blizzard/runner/process/**` (the seam and its driver), `src/blizzard/hub/delivery/internal/hub_command_runner.py`
-    (the hub's one launch site) and the colocated `store/migrations/tests/**` trees, which are test code.
+    `src/blizzard/runner/process/**` (the seam and its driver),
+    `src/blizzard/hub/delivery/internal/hub_command_runner.py` (the hub's one launch site) and the colocated
+    `store/migrations/tests/**` trees, which are test code.
   - Matches `import subprocess`, `import pty` (bare or aliased), and `from subprocess import …` / `from pty import …`.
     `asyncio.create_subprocess_*`, `os.spawn*`, `os.system` and `os.fork` are not matched — a floor, not a proof.
   - No exemption stands.
@@ -102,8 +103,8 @@ load-bearing: without it a stale `# ast-grep-ignore` comment goes unreported ins
     the row lock and import `threading` no longer.
 
 - **`bzh:store-no-for-update`** (`rules/store-no-for-update.yml`) — a guarded write never takes its lock with
-  `.with_for_update()`: it renders nothing on SQLite. The prose home is the `bzh:store-exclusive-write` rule's **Do**
-  in `blizzard-context:/architecture/system-shape/exclusive-writes.md` (a no-op `UPDATE` as the first statement).
+  `.with_for_update()`: it renders nothing on SQLite. The prose home is the `bzh:store-exclusive-write` rule's **Do** in
+  `blizzard-context:/architecture/system-shape/exclusive-writes.md` (a no-op `UPDATE` as the first statement).
   - Scoped to `src/blizzard/hub/**`; matches any `$X.with_for_update($$$)` call.
 
 - **`bzh:store-newest-read-limited`** (`rules/store-newest-read-limited.yml`) — a newest-per-key store read bounds its
@@ -115,16 +116,17 @@ load-bearing: without it a stale `# ast-grep-ignore` comment goes unreported ins
     matched — a floor, not a proof.
   - No exemption stands.
 
-- **`bzh:seam-answers-binding-facts`** (`rules/seam-answers-binding-facts.yml`) — a binding's config name is compared only at
-  its selection point; every other consumer asks the seam for the binding's fact (`IWorkspaceProvider`, the harness
-  catalog's declarations). The rule's own prose home is `blizzard-context:/architecture/system-shape.md`; this file
-  states none of that prose, only what the rule mechanically checks:
-  - Scoped to `src/blizzard/**`, excluding the selection points, the bindings' own modules and every `migrations/`
-    tree — the rule file's `ignores` list them. The harness ids in its `ignores` and its regexes are held to the
-    catalog's by a unit test (`test_layering.py`), so the rule names no binding this file could drift from.
+- **`bzh:seam-answers-binding-facts`** (`rules/seam-answers-binding-facts.yml`) — a binding's config name is compared
+  only at its selection point; every other consumer asks the seam for the binding's fact (`IWorkspaceProvider`, the
+  harness catalog's declarations). The rule's own prose home is `blizzard-context:/architecture/system-shape.md`; this
+  file states none of that prose, only what the rule mechanically checks:
+  - Scoped to `src/blizzard/**`, excluding the selection points, the bindings' own modules and every `migrations/` tree
+    — the rule file's `ignores` list them. The harness ids in its `ignores` and its regexes are held to the catalog's by
+    a unit test (`test_layering.py`), so the rule names no binding this file could drift from.
   - Matches a comparison (`==`, `!=`, `in`, `not in`, …) with a `workspace_provider` name or attribute as an operand, or
-    with a harness-id string literal as an operand, directly or inside a literal set, tuple or list. A registry lookup keyed by the name is unmatched. A name rebound to another variable before the
-    comparison slips past — a floor, not a proof.
+    with a harness-id string literal as an operand, directly or inside a literal set, tuple or list. A registry lookup
+    keyed by the name is unmatched. A name rebound to another variable before the comparison slips past — a floor, not a
+    proof.
   - No exemption stands.
 
 - **`bzh:statement-scoped-streaming`** (`rules/statement-scoped-streaming.yml`) — streaming is requested per statement,

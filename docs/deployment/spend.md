@@ -77,8 +77,9 @@ elicitation against that shape and, on a match, engages its own local pause brak
 `runner pause` set — with a reason naming the subscription the runner spends beside the harness, as
 `usage limit: <slug> via <harness>`, and the reset time where the harness reported one; a runner that spends no
 subscription names the harness alone. Where the harness reported no reset, the reason falls back to the reset of this
-runner's own subscription's latest sampled window already past 100% utilization ([External subscription
-usage](#external-subscription-usage) below) — never another subscription's sample — or carries no reset time at all.
+runner's own subscription's latest sampled window already past 100% utilization
+([External subscription usage](#external-subscription-usage) below) — never another subscription's sample — or carries
+no reset time at all.
 
 The limit belongs to the subscription, so the brake reaches every runner on the host that spends it: the reporting
 runner and each other runner naming the same `[[subscription]]` are braked together, in one write, each with the same
@@ -86,10 +87,10 @@ reason and reset. A fault partway leaves none of them braked and the limited lea
 subscription, or on none, is untouched, and an already-engaged brake keeps its standing reason. Lifting stays per
 runner: `blizzard runner start --runner <id>` clears that runner's brake alone and leaves its neighbours braked.
 
-The limited lease is not failed and consumes no retry: it is parked in place, exactly like a per-chunk
-pause leaves a chunk, and resumes automatically once the brake lifts. As with the ceiling, only an explicit operator act
-clears it — `blizzard runner start`, or the runner panel's Resume — never an elapsed reset time the runner read out of
-the harness's own report.
+The limited lease is not failed and consumes no retry: it is parked in place, exactly like a per-chunk pause leaves a
+chunk, and resumes automatically once the brake lifts. As with the ceiling, only an explicit operator act clears it —
+`blizzard runner start`, or the runner panel's Resume — never an elapsed reset time the runner read out of the harness's
+own report.
 
 ## Partial totals
 
@@ -170,9 +171,10 @@ A harness on a metered subscription tracks its own account's rate-limit window u
 blizzard spends or caps; the host samples it. `blizzard runner host` samples every `[[subscription]]` that
 `blizzard-host.toml` declares, once per `sample_interval_seconds` (default 300 seconds when the key is absent), however
 many of its runners spend that subscription — and a subscription no runner names is still sampled. Sampling runs on the
-host's own thread, apart from every runner's tick, so a slow provider endpoint never holds a runner up; `blizzard runner
-tick` never samples. The sampled utilization is advisory only — it never throttles claiming, scheduling, or spawning, and no
-cost cap consults it.
+host's own thread, apart from every runner's tick, so a slow provider endpoint never holds a runner up;
+`blizzard runner
+tick` never samples. The sampled utilization is advisory only — it never throttles claiming,
+scheduling, or spawning, and no cost cap consults it.
 
 Every sample crosses the wire carrying the `slug` of the subscription it belongs to, and the hub rejects one that does
 not. A runner predating per-subscription reporting therefore needs upgrading before the hub that drops the singular
@@ -213,18 +215,19 @@ A sample that produces nothing carries one of four reasons: `credential_lapsed` 
 from the provider), `credential_unreadable` (a missing or unparseable credential file), `endpoint_unreachable` (a
 connection failure, a timeout, or any other non-2xx status), and `response_unparseable` (a body the binding could not
 read). Every reason surfaces on the host: `blizzard runner status`, the subscriptions atop the panel's host page — which
-also show each subscription's newest usage windows and when they were sampled — and
-`GET /api/host/subscriptions` (each subscription naming the runners that spend it) show the newest attempt's outcome and its miss reason, and beside it the newest renewal: when
-it was attempted, and whether it renewed, failed (with its reason: vendor CLI unavailable, timed out, vendor refused, or
-an unreadable vendor response), or has no outcome recorded. The probe below prints the miss reason in operator words.
-Every miss crosses to the hub the same way a sample does — reporting `{slug, name, missed_at, reason}`, never a token, a
-refresh token, or a path — but only `credential_lapsed` renders: a slug whose newest lapsed miss postdates its newest
-sample shows on the board as "credential lapsed — log in again on this runner" in place of its pace bars. Its
-refreshed-age label and tier still render alongside the notice — they describe the last good sample, not the lapse — and
-once a runner has declared its roster the notice carries no age gate of its own: it stays until a fresh sample or a
-different miss reason supersedes it, rather than ageing out. A reason this hub does not recognize, as from a newer
-runner, supersedes it too, and its row names no reason. Any other reason leaves the row reading "no sample yet"
-with that reason named, exactly as a never-sampled slug's, even though the hub has stored it.
+also show each subscription's newest usage windows and when they were sampled — and `GET /api/host/subscriptions` (each
+subscription naming the runners that spend it) show the newest attempt's outcome and its miss reason, and beside it the
+newest renewal: when it was attempted, and whether it renewed, failed (with its reason: vendor CLI unavailable, timed
+out, vendor refused, or an unreadable vendor response), or has no outcome recorded. The probe below prints the miss
+reason in operator words. Every miss crosses to the hub the same way a sample does — reporting
+`{slug, name, missed_at, reason}`, never a token, a refresh token, or a path — but only `credential_lapsed` renders: a
+slug whose newest lapsed miss postdates its newest sample shows on the board as "credential lapsed — log in again on
+this runner" in place of its pace bars. Its refreshed-age label and tier still render alongside the notice — they
+describe the last good sample, not the lapse — and once a runner has declared its roster the notice carries no age gate
+of its own: it stays until a fresh sample or a different miss reason supersedes it, rather than ageing out. A reason
+this hub does not recognize, as from a newer runner, supersedes it too, and its row names no reason. Any other reason
+leaves the row reading "no sample yet" with that reason named, exactly as a never-sampled slug's, even though the hub
+has stored it.
 
 Credentials never leave the runner machine: the sample reads the runner's own local OAuth credential file, and only
 derived utilization percentages, window labels, and reset times cross the wire to the hub — the bearer token is never
@@ -248,9 +251,10 @@ provider = "openai"
 sample_interval_seconds = 300
 ```
 
-`blizzard runner external-usage probe <slug>` samples one subscription the host declares, by its slug, once and prints the parsed
-snapshot without writing, ticking, or reporting to the hub — confirming that subscription's credentials and cadence
-without waiting on a scheduled sample. It is also where the two silent outcomes separate: a declaration whose `provider`
-names no binding — a typo, most often — prints that it has no sampler, where a declared-and-bound subscription that got
-nothing back prints its miss reason instead — `credential lapsed: log in again` for a token past its expiry. A runner
-with no `[[subscription]]` declared has exactly one slug to name: `anthropic`, the legacy table's own subscription.
+`blizzard runner external-usage probe <slug>` samples one subscription the host declares, by its slug, once and prints
+the parsed snapshot without writing, ticking, or reporting to the hub — confirming that subscription's credentials and
+cadence without waiting on a scheduled sample. It is also where the two silent outcomes separate: a declaration whose
+`provider` names no binding — a typo, most often — prints that it has no sampler, where a declared-and-bound
+subscription that got nothing back prints its miss reason instead — `credential lapsed: log in again` for a token past
+its expiry. A runner with no `[[subscription]]` declared has exactly one slug to name: `anthropic`, the legacy table's
+own subscription.
