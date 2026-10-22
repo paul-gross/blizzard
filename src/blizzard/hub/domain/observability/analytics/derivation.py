@@ -125,9 +125,9 @@ def stamp_events(
     ]
 
 
-#: A tenant's candidacy when it has no visible segment.
 #: The signature of a tenant holding no segment and no chunk.
 _GONE = DerivationSignature(segment_count=0, max_segment_id=None, max_received_at=None, chunk_count=0)
+#: A tenant's candidacy when it has no visible segment.
 _NOTHING_VISIBLE = CandidacyRead(visible_segment_ids=frozenset(), candidate_segment_ids=[])
 
 #: The change probe's forced floor — bounds how stale a missed signature can leave reality.
@@ -323,6 +323,9 @@ class EventDerivationReconciler:
         self._extractor_version = extractor_version
         self._converged: dict[TenantId, tuple[DerivationSignature, datetime]] = {}
         self._swept = False
+        # Tenants a pass left unconverged: one found only by the fresh-process derived read has no signature
+        # or converged entry, so this alone keeps it known to the next tick.
+        self._unconverged: set[TenantId] = set()
 
     def sweep(self) -> None:
         """One convergence pass over every due tenant (never converged, floor elapsed, or signature
@@ -336,7 +339,7 @@ class EventDerivationReconciler:
             tenant: state for tenant, state in self._converged.items() if tenant in signatures or state[0] != _GONE
         }
         derived: Mapping[TenantId, frozenset[str]] | None = None
-        known = set(signatures) | set(self._converged)
+        known = set(signatures) | set(self._converged) | self._unconverged
         if not self._swept:  # a fresh process also finds tenants whose every segment and chunk is gone
             derived = self._corpus.derived_segment_ids()
             known |= set(derived)
@@ -367,12 +370,14 @@ class EventDerivationReconciler:
                 ok = self._tenant(tenant).converge(candidates, frozenset(stale.get(tenant, ())), tally)
             except (TenantClosed, UnknownTenant):
                 _log.info("transcript event derivation skipped a closed tenant", tenant=tenant)
+                self._unconverged.discard(tenant)
                 continue
             except Exception as exc:
                 ok = False
                 _log.warning("transcript event derivation failed for a tenant", tenant=tenant, fault=repr(exc))
             (converged if ok else unconverged).append(tenant)
 
+        self._unconverged = (self._unconverged - set(due)) | set(unconverged)
         for tenant in converged:
             self._converged[tenant] = (signatures.get(tenant, _GONE), now)
 

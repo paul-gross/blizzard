@@ -520,3 +520,29 @@ def test_a_derivation_pass_still_drops_a_tenant_whose_every_segment_and_chunk_is
     reconciler.sweep()
 
     assert units[_B].handed == [([], frozenset({"sg_9"}))]
+
+
+@pytest.mark.unit
+def test_a_derivation_pass_retries_a_vanished_tenants_drop_that_raised() -> None:
+    read = CandidacyRead(visible_segment_ids=frozenset({"sg_1"}), candidate_segment_ids=["sg_1"])
+    attempts: list[frozenset[str]] = []
+
+    class Flaky(_TenantDerivation):
+        def converge(self, candidates: Sequence[str], stale: frozenset[str], tally: DerivationTally) -> bool:
+            attempts.append(stale)
+            if len(attempts) == 1:
+                raise RuntimeError("the drop failed")
+            return True
+
+    units = {_A: _TenantDerivation(), _B: Flaky()}
+    reconciler = EventDerivationReconciler(
+        corpus=_VanishedTenant({_A: read}, {_A: frozenset({"sg_1"}), _B: frozenset({"sg_9"})}),
+        tenant=lambda tenant: cast(TenantEventDerivation, units[tenant]),
+        clock=FixedClock(_NOW),
+    )
+
+    reconciler.sweep()
+    reconciler.sweep()
+    reconciler.sweep()
+
+    assert attempts == [frozenset({"sg_9"}), frozenset({"sg_9"})]
