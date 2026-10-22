@@ -237,8 +237,8 @@ class Spawner:
     """Every path that puts a worker process behind a lease: the fresh, fresh-epoch spawn, and
     the per-lease identity a resume or a judgement re-supplies.
 
-    The runner's brakes, the chunk's own pause, its unreadable status and the throttle gate are checked here, before any mutation — so a
-    suppressed start writes no fact, kills no pid and mints no lease."""
+    The runner's brakes, the chunk's own pause, its unreadable status and the throttle gate are checked here,
+    before any mutation — so a suppressed start writes no fact, kills no pid and mints no lease."""
 
     ctx: SpawnContext
 
