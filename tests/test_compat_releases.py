@@ -198,14 +198,23 @@ def test_previous_tag_raises_on_a_git_failure_other_than_no_earlier_tag(tmp_path
         Repository(repo).previous_tag("no-such-rev")
 
 
-def test_previous_tag_is_none_for_a_first_tag_under_a_non_english_locale(
+def test_git_runs_under_the_c_locale_whatever_the_callers_locale_is(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     repo = _repo(tmp_path)
     _commit(repo, "chore: one")
     _commit(repo, "chore: two")
     _git(repo, "tag", "v0.1.0")
-    for name in ("LC_ALL", "LC_MESSAGES", "LANGUAGE"):
+    for name in ("LC_ALL", "LC_MESSAGES", "LANGUAGE", "LANG"):
         monkeypatch.setenv(name, "de_DE.UTF-8")
-    monkeypatch.setenv("LANG", "de_DE.UTF-8")
+    seen: list[str] = []
+    real_run = subprocess.run
+
+    def spy(*args, **kwargs):
+        seen.append(kwargs["env"]["LC_ALL"])
+        return real_run(*args, **kwargs)
+
+    monkeypatch.setattr(subprocess, "run", spy)
     assert Repository(repo).previous_tag("v0.1.0") is None
+    assert seen
+    assert set(seen) == {"C"}
