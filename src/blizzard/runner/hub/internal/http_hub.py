@@ -886,7 +886,6 @@ def _chunk_state(wire: ChunkStatusView) -> ChunkState:
             cost_usd=cost.cost_usd,
             cost_partial=cost.cost_partial,
             estimated_cost_usd=cost.estimated_cost_usd,
-            billed_partial=cost.billed_partial,
         ),
         decision=ChunkGate(
             decision_id=decision.decision_id,

@@ -9,6 +9,7 @@ from typing import Any, ClassVar
 
 from blizzard.foundation.roles import collaborator, dto
 from blizzard.foundation.runner_connection import RunnerConnection
+from blizzard.foundation.spend import SpendFigure
 
 
 def pointer_label(row: dict[str, Any]) -> str:
@@ -20,8 +21,8 @@ def pointer_label(row: dict[str, Any]) -> str:
 @dto
 @dataclass(frozen=True)
 class Cost:
-    """The one CLI cost formatter; markers per docs/deployment/spend.md, renderings pinned by
-    tests/test_hub_cli_views.py."""
+    """A response's ``cost`` object read as the one spend figure (:class:`~blizzard.foundation.spend.SpendFigure`),
+    which owns its rendering; renderings pinned by tests/test_hub_cli_views.py."""
 
     cost_usd: float
     estimated_cost_usd: float | None
@@ -37,12 +38,8 @@ class Cost:
         )
 
     @property
-    def rendered(self) -> str:  # ast-grep-ignore: bzh:property-delegates
-        estimated = self.estimated_cost_usd is not None
-        amount = self.cost_usd + (self.estimated_cost_usd or 0.0)
-        prefix = "~" if estimated else ""
-        suffix = "+" if self.partial else ""
-        return f"{prefix}${amount:.2f}{suffix}"
+    def rendered(self) -> str:
+        return SpendFigure(self.cost_usd, self.estimated_cost_usd, self.partial).rendered()
 
 
 @dto

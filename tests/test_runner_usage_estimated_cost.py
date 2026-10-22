@@ -76,13 +76,18 @@ def test_the_row_keeps_the_same_estimate_the_outbound_fact_carries(tmp_path):  #
     assert outbound == [pytest.approx(0.42), None]
 
 
-def test_the_estimate_leaves_the_usage_totals_unchanged(tmp_path):  # type: ignore[no-untyped-def]
+def test_the_estimate_counts_toward_the_usage_totals(tmp_path):  # type: ignore[no-untyped-def]
     with_estimate = make_store(f"sqlite:///{tmp_path / 'a.db'}")
     without_estimate = make_store(f"sqlite:///{tmp_path / 'b.db'}")
     for store, estimate in ((with_estimate, 0.42), (without_estimate, None)):
         _record(store, "lease_billed", _sample(cost=1.5, estimate=None))
         _record(store, "lease_unbilled", _sample(cost=None, estimate=estimate))
 
-    assert with_estimate.usage_since(_NOW) == without_estimate.usage_since(_NOW)
-    assert with_estimate.usage_since(_NOW).cost_usd == pytest.approx(1.5)
-    assert with_estimate.usage_since(_NOW).cost_partial is True
+    estimated, unestimated = with_estimate.usage_since(_NOW), without_estimate.usage_since(_NOW)
+    # The columns stay apart; only the figure sums them.
+    assert estimated.cost_usd == unestimated.cost_usd == pytest.approx(1.5)
+    assert estimated.estimated_cost_usd == pytest.approx(0.42)
+    assert estimated.spend_usd == pytest.approx(1.92)
+    assert estimated.cost_partial is False
+    assert unestimated.estimated_cost_usd is None
+    assert unestimated.cost_partial is True

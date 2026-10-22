@@ -18,6 +18,7 @@ from typing import ClassVar, Protocol
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.fact_kinds import RUNNER_LOCALLY_PAUSED, RUNNER_LOCALLY_RESUMED
 from blizzard.foundation.roles import domain_model
+from blizzard.foundation.spend import SpendFigure
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.events.publisher import IRunnerEventPublisher
 
@@ -187,10 +188,9 @@ def needs_pause_park(lease_id: str, pause_parked: Container[str]) -> bool:
     return lease_id not in pause_parked
 
 
-def spend_ceiling_reason(*, cap: float, window_hours: float, spend: float, partial: bool) -> str:
-    """The spend-ceiling engagement's durable reason, flagging a lower-bound spend."""
-    partial_note = " (PARTIAL — true spend may be higher)" if partial else ""
-    return f"spend ceiling ${cap:.2f} reached over the trailing {window_hours:g}h (spend ${spend:.2f}{partial_note})"
+def spend_ceiling_reason(*, cap: float, window_hours: float, spend: SpendFigure) -> str:
+    """The spend-ceiling engagement's durable reason, its spend rendered as the one figure."""
+    return f"spend ceiling ${cap:.2f} reached over the trailing {window_hours:g}h (spend {spend.rendered()})"
 
 
 @domain_model

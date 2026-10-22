@@ -171,11 +171,11 @@ def test_advance_records_spawn_and_judge_usage_facts(tmp_path):  # type: ignore[
 
 
 @pytest.mark.unit
-def test_advance_carries_an_estimate_on_the_outbound_payload_without_touching_the_runner_row(
+def test_advance_carries_an_estimate_on_the_outbound_payload_and_into_the_runner_window(
     tmp_path,  # type: ignore[no-untyped-def]
 ) -> None:
     """An estimate rides the outbound payload beside, never inside, the billed figure;
-    the row, ``usage_since``, and ``cost_partial`` never see it."""
+    ``usage_since`` sums it as its own column and does not mark the window PARTIAL."""
     store = _store(tmp_path)
     _seed_running_lease(store)
     stdout_dir = tmp_path / "stdout"
@@ -210,11 +210,10 @@ def test_advance_carries_an_estimate_on_the_outbound_payload_without_touching_th
     spawn_payload = next(p for p in payloads if p["kind"] == "spawn")
     assert spawn_payload["cost_usd"] is None
     assert spawn_payload["estimated_cost_usd"] == pytest.approx(0.0308)
-    # The runner-local row and its cap-facing reads never see the estimate: a
-    # cost-less sample reads exactly as one with no estimate at all would.
     totals = store.usage_since(_NOW)
     assert totals.cost_usd == 0.0
-    assert totals.cost_partial is True
+    assert totals.estimated_cost_usd is not None
+    assert totals.cost_partial is False
 
 
 _SIGINT_ENVELOPE = json.dumps(

@@ -138,7 +138,6 @@ def _chunk_with_cost(  # type: ignore[no-untyped-def]
     *,
     cost_usd,
     cost_partial=False,
-    billed_partial=None,
     estimated_cost_usd=None,
     status=ChunkStatus.RUNNING,
     route_runner_id="r1",
@@ -158,8 +157,6 @@ def _chunk_with_cost(  # type: ignore[no-untyped-def]
             cost_usd=cost_usd,
             cost_partial=cost_partial,
             estimated_cost_usd=estimated_cost_usd,
-            # A row with neither amount has no billed one either, so `billed_partial` follows by default.
-            billed_partial=cost_partial if billed_partial is None else billed_partial,
         ),
     )
 
@@ -3895,9 +3892,9 @@ def test_cost_cap_absent_never_parks_regardless_of_spend(tmp_path):  # type: ign
 
 @pytest.mark.unit
 def test_cost_cap_partial_total_trips_the_lower_bound_and_logs_partial(tmp_path):  # type: ignore[no-untyped-def]
-    """A cost-absent row makes the total PARTIAL (a lower bound); the cap still trips on
-    that lower bound, and the escalation log line states PARTIAL so an operator reading
-    the takeover is never told a partial total is the whole spend."""
+    """A row with neither amount makes the total PARTIAL (a lower bound); the cap still trips on
+    that lower bound, and the escalation detail marks it ``+`` so an operator reading the
+    takeover is never told a partial total is the whole spend."""
     from structlog.testing import capture_logs
 
     store = _store(tmp_path)
@@ -3928,19 +3925,18 @@ def test_cost_cap_partial_total_trips_the_lower_bound_and_logs_partial(tmp_path)
     park_events = [e for e in captured if "spend cap exceeded" in e.get("event", "")]
     assert len(park_events) == 1
     assert park_events[0]["cost_partial"] is True
-    assert "PARTIAL" in park_events[0]["event"]
     escalate_events = [e for e in captured if e.get("event", "").startswith("escalated to needs-human")]
     assert len(escalate_events) == 1
-    assert "PARTIAL" in escalate_events[0]["detail"] and "spend cap" in escalate_events[0]["detail"]
+    assert escalate_events[0]["detail"] == "spend cap $5.00 reached (spend $5.00+)"
     payload = json.loads(escalations[0].payload)
-    assert payload["cause"] == "spend-cap" and "PARTIAL" in payload["detail"]
+    assert payload["cause"] == "spend-cap" and payload["detail"] == "spend cap $5.00 reached (spend $5.00+)"
 
 
 @pytest.mark.unit
-def test_cost_cap_marks_partial_when_part_of_the_spend_is_only_estimated(tmp_path):  # type: ignore[no-untyped-def]
-    """A subscription row carries an estimate but no billed cost: the hub total does not read
-    ``cost_partial``, yet the cap still trips on the billed lower bound and states PARTIAL,
-    because its PARTIAL means no billed cost was recorded, estimate or not."""
+def test_cost_cap_trips_on_the_estimate(tmp_path):  # type: ignore[no-untyped-def]
+    """A subscription row carries an estimate but no billed cost: the cap reads billed plus
+    estimated, so an estimate alone carries the spend past it, and the detail marks the
+    figure ``~`` — never ``+``, since every row carries an amount."""
     from structlog.testing import capture_logs
 
     store = _store(tmp_path)
@@ -3949,7 +3945,7 @@ def test_cost_cap_marks_partial_when_part_of_the_spend_is_only_estimated(tmp_pat
     hub.envelopes["ch_1"] = _build_envelope()
     next_env = make_envelope("ch_1", "review", node_id="nd_review", choices=_CHOICES)
     hub.apply_responses = [ApplyReply(outcome=ApplyOutcome.NEXT, next_envelope=next_env)]
-    hub.chunks["ch_1"] = _chunk_with_cost(cost_usd=5.0, cost_partial=False, billed_partial=True, estimated_cost_usd=3.0)
+    hub.chunks["ch_1"] = _chunk_with_cost(cost_usd=2.0, estimated_cost_usd=3.0)
     ctx = make_context(
         store,
         hub=hub,
@@ -3967,9 +3963,7 @@ def test_cost_cap_marks_partial_when_part_of_the_spend_is_only_estimated(tmp_pat
     assert store.active_lease_for_chunk("ch_1") is None
     escalate_events = [e for e in captured if e.get("event", "").startswith("escalated to needs-human")]
     assert len(escalate_events) == 1
-    assert "PARTIAL" in escalate_events[0]["detail"]
-    # The billed figure alone trips and names the cap — the estimate never enters it.
-    assert "$5.00" in escalate_events[0]["detail"]
+    assert escalate_events[0]["detail"] == "spend cap $5.00 reached (spend ~$5.00)"
 
 
 @pytest.mark.unit

@@ -9,6 +9,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from blizzard.foundation.fact_kinds import RUNNER_LOCALLY_PAUSED, RUNNER_LOCALLY_RESUMED
+from blizzard.foundation.spend import SpendFigure
 from blizzard.runner.leases.overload import BACKOFF_LIMIT, OverloadExit, OverloadStreak
 from blizzard.runner.throttle.pause import (
     BRAKE_TRANSITIONS,
@@ -112,13 +113,13 @@ def test_parked_lease_is_not_reparked() -> None:
     assert needs_pause_park("lease-2", {"lease-1"})
 
 
-def test_spend_ceiling_reason_names_partial() -> None:
+def test_spend_ceiling_reason_renders_the_figure() -> None:
     assert (
-        spend_ceiling_reason(cap=10.0, window_hours=24.0, spend=12.5, partial=True)
-        == "spend ceiling $10.00 reached over the trailing 24h (spend $12.50 (PARTIAL — true spend may be higher))"
+        spend_ceiling_reason(cap=60.0, window_hours=24.0, spend=SpendFigure(10.0, 51.37, partial=True))
+        == "spend ceiling $60.00 reached over the trailing 24h (spend ~$61.37+)"
     )
     assert (
-        spend_ceiling_reason(cap=10.0, window_hours=1.5, spend=10.0, partial=False)
+        spend_ceiling_reason(cap=10.0, window_hours=1.5, spend=SpendFigure(10.0, None, partial=False))
         == "spend ceiling $10.00 reached over the trailing 1.5h (spend $10.00)"
     )
 
