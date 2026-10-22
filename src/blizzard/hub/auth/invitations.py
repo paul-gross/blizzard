@@ -115,6 +115,14 @@ class TenantInvitation:
     invitation_id: str
 
 
+class IInvitationTokenReads(Protocol):
+    """Resolving an invitation link's token to its invitation before any tenant is known."""
+
+    def invitation_for_token_hash(self, token_hash: str) -> TenantInvitation | None:
+        """The invitation whose token hashes to ``token_hash``, or ``None`` when none does."""
+        ...
+
+
 class IReadInvitationRepository(Protocol):
     """One tenant's invitations, read."""
 
