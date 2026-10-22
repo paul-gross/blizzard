@@ -21,7 +21,6 @@ from contextlib import contextmanager
 import sqlalchemy as sa
 from sqlalchemy import Connection
 
-from blizzard.foundation.logging import get_logger
 from blizzard.hub.auth.errors import RepoErrorFactory
 from blizzard.hub.auth.identity_transaction import IdentityWrites, IIdentityTransactions
 from blizzard.hub.auth.internal.auth_facts_repository import AuthFactsRepository
@@ -87,10 +86,12 @@ class _ScopedTransactionConnections(ScopedConnections, _TransactionConnections):
 class IdentityTransactions:
     """Opens identity units of work over the hub store."""
 
-    def __init__(self, store: HubStoreConnections, errors: RepoErrorFactory) -> None:
+    def __init__(
+        self, store: HubStoreConnections, errors: RepoErrorFactory, store_errors: HubStoreErrorFactory
+    ) -> None:
         self._store = store
         self._errors = errors
-        self._store_errors = HubStoreErrorFactory(get_logger("blizzard.hub.store"))
+        self._store_errors = store_errors
 
     @contextmanager
     def begin(self) -> Iterator[IdentityWrites]:

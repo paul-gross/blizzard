@@ -30,6 +30,7 @@ from blizzard.hub.auth.internal.identity_transaction import IdentityTransactions
 from blizzard.hub.auth.internal.user_repository import UserRepository
 from blizzard.hub.auth.models import User
 from blizzard.hub.store import schema as s
+from blizzard.hub.store.errors import HubStoreErrorFactory
 from tests.support import hub_level_connections, hub_migration_prototype
 
 pytestmark = pytest.mark.component
@@ -68,7 +69,7 @@ def _administrators(engine: sa.Engine, clock: FixedClock) -> HubAdministrators:
     return HubAdministrators(
         hub_admins=HubAdminRepository(connections),
         users=UserRepository(connections, errors),
-        transactions=IdentityTransactions(connections, errors),
+        transactions=IdentityTransactions(connections, errors, HubStoreErrorFactory(structlog.get_logger("test"))),
         clock=clock,
     )
 

@@ -733,6 +733,8 @@ class HubCore:
     :func:`build_hub_core`. A tenant's stores are opened through :meth:`open`."""
 
     store_connections: HubStoreConnections
+    #: The factory the connections wrap a driver fault through, shared with every adapter that opens its own.
+    store_errors: HubStoreErrorFactory
     hub_scoped_reads: HubScopedReads
     auth_errors: RepoErrorFactory
     users: UserRepository
@@ -827,6 +829,7 @@ def build_hub_core(engine: Engine, *, clock: IClock) -> HubCore:
 
     return HubCore(
         store_connections=store_connections,
+        store_errors=store_errors,
         hub_scoped_reads=hub_scoped_reads,
         auth_errors=auth_errors,
         users=UserRepository(store_connections, auth_errors),
@@ -1440,7 +1443,7 @@ def build_services(
     auth_facts_service = AuthFactsService(facts=AuthFactsRepository(store_connections), clock=clock)
     memberships = MembershipRepository(store_connections)
     hub_admin_store = HubAdminRepository(store_connections)
-    identity_transactions = IdentityTransactions(store_connections, auth_errors)
+    identity_transactions = IdentityTransactions(store_connections, auth_errors, core.store_errors)
     auth = AuthService(
         users=user_store,
         identities=identity_store,

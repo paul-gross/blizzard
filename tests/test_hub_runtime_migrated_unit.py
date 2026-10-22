@@ -57,9 +57,7 @@ class _FakeOpener:
 
 
 def _runtime(root: Path, opener: _FakeOpener) -> hub_runtime.Runtime:
-    return hub_runtime.Runtime(
-        root, FixedClock(_AT), open_event_log=opener, flag_registry=FLAG_REGISTRY, strict=STRICT
-    )
+    return hub_runtime.Runtime(root, FixedClock(_AT), open_event_log=opener, flag_registry=FLAG_REGISTRY, strict=STRICT)
 
 
 def test_a_migrate_that_moved_the_revision_records_one_hub_migrated_at_the_clocks_instant(tmp_path: Path) -> None:
@@ -72,7 +70,11 @@ def test_a_migrate_that_moved_the_revision_records_one_hub_migrated_at_the_clock
     _runtime(tmp_path, opener).migrate()
 
     [row] = opener.events.rows
-    assert (row.kind, row.at, row.detail) == ("hub-migrated", _AT, {"from": "20261008_1500_scope_surrogate", "to": head})
+    assert (row.kind, row.at, row.detail) == (
+        "hub-migrated",
+        _AT,
+        {"from": "20261008_1500_scope_surrogate", "to": head},
+    )
     assert (opener.opened, opener.closed) == (1, 1)
 
 

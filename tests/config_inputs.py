@@ -18,8 +18,8 @@ from blizzard.hub import app as hub_app
 from blizzard.hub import runtime as hub_runtime
 from blizzard.hub.cli.runtime import packaged_version_window
 from blizzard.hub.config import HubConfig
-from blizzard.hub.event_log_opener import system_event_log_opener
 from blizzard.hub.domain.runners.version_window import VersionWindow
+from blizzard.hub.event_log_opener import system_event_log_opener
 from blizzard.runner import app as runner_app
 from blizzard.runner import runtime as runner_runtime
 from blizzard.runner.host_config import HostConfig
