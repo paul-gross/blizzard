@@ -17,4 +17,4 @@ one file that owns it.
 | [`packaging/docker/README.md`](../packaging/docker/README.md) | You need the container image's own mount and environment-variable reference                                                  |
 
 These documents are the deployed-side half of the release cut; the cut sequence itself is owned by
-[`blizzard-context/workflows/release.md`](https://github.com/paul-gross/blizzard-context/blob/master/workflows/release.md).
+[`blizzard-workspace/context/project/workflows/release.md`](https://github.com/paul-gross/blizzard-workspace/blob/master/context/project/workflows/release.md).
